@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 )
@@ -26,7 +27,7 @@ SET n.id = row.entity_id,
     n.lang = row.language,
     n.kind = row.kind,
     n.target_kind = row.target_kind,
-    n.semantic_kind = row.entity_type,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
@@ -44,7 +45,7 @@ SET n.id = row.entity_id,
     n.language = row.language,
     n.lang = row.language,
     n.type = row.type,
-    n.semantic_kind = row.entity_type,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
@@ -63,7 +64,7 @@ SET n.id = row.entity_id,
     n.lang = row.language,
     n.type_alias_kind = row.type_alias_kind,
     n.type_parameters = row.type_parameters,
-    n.semantic_kind = row.entity_type,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
@@ -83,7 +84,7 @@ SET n.id = row.entity_id,
     n.framework = row.framework,
     n.jsx_fragment_shorthand = row.jsx_fragment_shorthand,
     n.component_type_assertion = row.component_type_assertion,
-    n.semantic_kind = row.entity_type,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
@@ -103,7 +104,7 @@ SET n.id = row.entity_id,
     n.kind = row.kind,
     n.trait = row.trait,
     n.target = row.target,
-    n.semantic_kind = row.entity_type,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
@@ -121,7 +122,7 @@ SET n.id = row.entity_id,
     n.language = row.language,
     n.lang = row.language,
     n.module_kind = row.module_kind,
-    n.semantic_kind = row.entity_type,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
@@ -141,7 +142,7 @@ SET n.id = row.entity_id,
     n.module_kind = row.module_kind,
     n.protocol = row.protocol,
     n.implemented_for = row.implemented_for,
-    n.semantic_kind = row.entity_type,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
@@ -161,7 +162,9 @@ SET n.id = row.entity_id,
     n.impl_context = row.impl_context,
     n.docstring = row.docstring,
     n.method_kind = row.method_kind,
-    n.semantic_kind = row.entity_type,
+    n.decorators = row.decorators,
+    n.async = row.async,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
@@ -336,8 +339,8 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		if moduleKind := semanticMetadataString(row.Metadata, "module_kind"); moduleKind != "" {
 			rowMap["module_kind"] = moduleKind
 		}
-		if jsxFragment := semanticMetadataBool(row.Metadata, "jsx_fragment_shorthand"); jsxFragment != nil {
-			rowMap["jsx_fragment_shorthand"] = *jsxFragment
+		if jsxFragment := semanticMetadataBool(row.Metadata, "jsx_fragment_shorthand"); jsxFragment {
+			rowMap["jsx_fragment_shorthand"] = true
 		}
 		if componentAssertion := semanticMetadataString(row.Metadata, "component_type_assertion"); componentAssertion != "" {
 			rowMap["component_type_assertion"] = componentAssertion
@@ -362,6 +365,15 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 		if methodKind := semanticMetadataString(row.Metadata, "method_kind"); methodKind != "" {
 			rowMap["method_kind"] = methodKind
+		}
+		if decorators := semanticMetadataStringSlice(row.Metadata, "decorators"); len(decorators) > 0 {
+			rowMap["decorators"] = decorators
+		}
+		if async := semanticMetadataBool(row.Metadata, "async"); async {
+			rowMap["async"] = true
+		}
+		if semanticKind := semanticMetadataString(row.Metadata, "semantic_kind"); semanticKind != "" {
+			rowMap["semantic_kind"] = semanticKind
 		}
 	}
 	return rowMap, true
@@ -433,18 +445,26 @@ func semanticMetadataStringSlice(metadata map[string]any, key string) []string {
 	}
 	switch typed := value.(type) {
 	case []string:
-		if len(typed) == 0 {
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		if len(out) == 0 {
 			return nil
 		}
-		return append([]string(nil), typed...)
+		return out
 	case []any:
 		out := make([]string, 0, len(typed))
 		for _, item := range typed {
-			str, ok := item.(string)
-			if !ok || str == "" {
+			text, ok := item.(string)
+			if !ok {
 				continue
 			}
-			out = append(out, str)
+			if trimmed := strings.TrimSpace(text); trimmed != "" {
+				out = append(out, trimmed)
+			}
 		}
 		if len(out) == 0 {
 			return nil
@@ -455,21 +475,16 @@ func semanticMetadataStringSlice(metadata map[string]any, key string) []string {
 	}
 }
 
-func semanticMetadataBool(metadata map[string]any, key string) *bool {
+func semanticMetadataBool(metadata map[string]any, key string) bool {
 	if metadata == nil {
-		return nil
+		return false
 	}
 	value, ok := metadata[key]
-	if !ok || value == nil {
-		return nil
+	if !ok {
+		return false
 	}
-	switch typed := value.(type) {
-	case bool:
-		v := typed
-		return &v
-	default:
-		return nil
-	}
+	typed, ok := value.(bool)
+	return ok && typed
 }
 
 func uniqueSemanticRepoIDs(repoIDs []string) []string {

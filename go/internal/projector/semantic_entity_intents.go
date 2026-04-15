@@ -29,7 +29,7 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 		return ReducerIntent{}, false
 	}
 	if _, ok := semanticEntityReducerTypes[entityType]; !ok {
-		if !isJavaScriptCallableSemanticEntity(fact.Payload, entityType) {
+		if !isJavaScriptCallableSemanticEntity(fact.Payload, entityType) && !isPythonCallableSemanticEntity(fact.Payload, entityType) {
 			return ReducerIntent{}, false
 		}
 	}
@@ -71,6 +71,22 @@ func isJavaScriptCallableSemanticEntity(payload map[string]any, entityType strin
 	return payloadMetadataString(payload, "docstring") != "" || payloadMetadataString(payload, "method_kind") != ""
 }
 
+func isPythonCallableSemanticEntity(payload map[string]any, entityType string) bool {
+	if entityType != "Function" {
+		return false
+	}
+	if payloadMetadataString(payload, "language") != "python" {
+		return false
+	}
+	if payloadMetadataString(payload, "semantic_kind") == "lambda" {
+		return true
+	}
+	if payloadMetadataBool(payload, "async") {
+		return true
+	}
+	return len(payloadMetadataStringSlice(payload, "decorators")) > 0
+}
+
 func payloadMetadataString(payload map[string]any, key string) string {
 	if value, ok := payloadString(payload, key); ok {
 		return value
@@ -88,4 +104,81 @@ func payloadMetadataString(payload map[string]any, key string) string {
 		return ""
 	}
 	return value
+}
+
+func payloadMetadataStringSlice(payload map[string]any, key string) []string {
+	if values := payloadStringSlice(payload, key); len(values) > 0 {
+		return values
+	}
+	raw, ok := payload["entity_metadata"]
+	if !ok || raw == nil {
+		return nil
+	}
+	metadata, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	return payloadStringSlice(metadata, key)
+}
+
+func payloadMetadataBool(payload map[string]any, key string) bool {
+	if value, ok := payload[key]; ok {
+		if typed, ok := value.(bool); ok {
+			return typed
+		}
+	}
+	raw, ok := payload["entity_metadata"]
+	if !ok || raw == nil {
+		return false
+	}
+	metadata, ok := raw.(map[string]any)
+	if !ok {
+		return false
+	}
+	value, ok := metadata[key]
+	if !ok {
+		return false
+	}
+	typed, ok := value.(bool)
+	return ok && typed
+}
+
+func payloadStringSlice(payload map[string]any, key string) []string {
+	if len(payload) == 0 {
+		return nil
+	}
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case []string:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				continue
+			}
+			if trimmed := strings.TrimSpace(text); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	default:
+		return nil
+	}
 }

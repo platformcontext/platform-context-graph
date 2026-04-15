@@ -196,10 +196,16 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 			metadata[key] = value
 		}
 	}
-	for _, key := range []string{"docstring", "method_kind"} {
+	for _, key := range []string{"docstring", "method_kind", "semantic_kind"} {
 		if value := semanticPayloadMetadataString(payload, key); value != "" {
 			metadata[key] = value
 		}
+	}
+	if decorators := semanticPayloadMetadataStringSlice(payload, "decorators"); len(decorators) > 0 {
+		metadata["decorators"] = decorators
+	}
+	if async := semanticPayloadMetadataBool(payload, "async"); async {
+		metadata["async"] = true
 	}
 	if len(metadata) == 0 {
 		return nil
@@ -244,12 +250,77 @@ func semanticPayloadMetadataString(payload map[string]any, key string) string {
 	return semanticPayloadString(payloadMap(payload, "entity_metadata"), key)
 }
 
+func semanticPayloadMetadataStringSlice(payload map[string]any, key string) []string {
+	if values := semanticPayloadStringSlice(payload, key); len(values) > 0 {
+		return values
+	}
+	return semanticPayloadStringSlice(payloadMap(payload, "entity_metadata"), key)
+}
+
+func semanticPayloadMetadataBool(payload map[string]any, key string) bool {
+	if value, ok := payload[key]; ok {
+		if typed, ok := value.(bool); ok {
+			return typed
+		}
+	}
+	metadata := payloadMap(payload, "entity_metadata")
+	if metadata == nil {
+		return false
+	}
+	value, ok := metadata[key]
+	if !ok {
+		return false
+	}
+	typed, ok := value.(bool)
+	return ok && typed
+}
+
+func semanticPayloadStringSlice(payload map[string]any, key string) []string {
+	if payload == nil {
+		return nil
+	}
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case []string:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				continue
+			}
+			if trimmed := strings.TrimSpace(text); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
 func isSemanticEntityType(payload map[string]any, entityType string) bool {
 	switch entityType {
 	case "Annotation", "Typedef", "TypeAlias", "Component", "ImplBlock", "Protocol", "ProtocolImplementation":
 		return true
 	case "Function":
-		return isJavaScriptCallableSemanticEntity(payload) || isRustSemanticFunction(payload)
+		return isJavaScriptCallableSemanticEntity(payload) || isPythonSemanticFunction(payload) || isRustSemanticFunction(payload)
 	default:
 		return false
 	}
@@ -260,6 +331,19 @@ func isJavaScriptCallableSemanticEntity(payload map[string]any) bool {
 		return false
 	}
 	return semanticPayloadMetadataString(payload, "docstring") != "" || semanticPayloadMetadataString(payload, "method_kind") != ""
+}
+
+func isPythonSemanticFunction(payload map[string]any) bool {
+	if semanticPayloadString(payload, "language") != "python" {
+		return false
+	}
+	if semanticPayloadMetadataString(payload, "semantic_kind") == "lambda" {
+		return true
+	}
+	if semanticPayloadMetadataBool(payload, "async") {
+		return true
+	}
+	return len(semanticPayloadMetadataStringSlice(payload, "decorators")) > 0
 }
 
 func isRustSemanticFunction(payload map[string]any) bool {

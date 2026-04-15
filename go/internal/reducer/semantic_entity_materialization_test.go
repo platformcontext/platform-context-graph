@@ -192,6 +192,52 @@ func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasComponentAndF
 	}
 }
 
+func TestExtractSemanticEntityRowsIncludesPythonDecoratedAsyncFunctionFacts(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "content_entity",
+			SourceRef: facts.Ref{
+				SourceURI: "/repo/src/app.py",
+			},
+			Payload: map[string]any{
+				"repo_id":       "repo-1",
+				"entity_id":     "function-1",
+				"relative_path": "src/app.py",
+				"entity_type":   "Function",
+				"entity_name":   "handler",
+				"language":      "python",
+				"decorators":    []any{"@route", "@cached"},
+				"async":         true,
+			},
+		},
+	}
+
+	repoIDs, rows := ExtractSemanticEntityRows(envelopes)
+	if got, want := repoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("ExtractSemanticEntityRows() repoIDs = %v, want %v", got, want)
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("ExtractSemanticEntityRows() rows = %d, want %d", got, want)
+	}
+
+	row := rows[0]
+	if got, want := row.EntityType, "Function"; got != want {
+		t.Fatalf("row.EntityType = %q, want %q", got, want)
+	}
+	if got, want := row.Metadata["async"], true; got != want {
+		t.Fatalf("row.Metadata[async] = %#v, want %#v", got, want)
+	}
+	decorators, ok := row.Metadata["decorators"].([]string)
+	if !ok {
+		t.Fatalf("row.Metadata[decorators] type = %T, want []string", row.Metadata["decorators"])
+	}
+	if got, want := len(decorators), 2; got != want || decorators[0] != "@route" || decorators[1] != "@cached" {
+		t.Fatalf("row.Metadata[decorators] = %#v, want [@route @cached]", decorators)
+	}
+}
+
 func TestSemanticEntityMaterializationHandlerWritesAndRetracts(t *testing.T) {
 	t.Parallel()
 

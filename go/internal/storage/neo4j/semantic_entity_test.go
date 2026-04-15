@@ -185,6 +185,94 @@ func TestSemanticEntityWriterWritesAnnotationTypedefTypeAliasComponentAndFunctio
 	}
 }
 
+func TestSemanticEntityWriterWritesPythonFunctionSemanticMetadata(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewSemanticEntityWriter(executor, 0)
+
+	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs: []string{"repo-1"},
+		Rows: []reducer.SemanticEntityRow{
+			{
+				RepoID:       "repo-1",
+				EntityID:     "function-1",
+				EntityType:   "Function",
+				EntityName:   "handler",
+				FilePath:     "/repo/src/app.py",
+				RelativePath: "src/app.py",
+				Language:     "python",
+				StartLine:    10,
+				EndLine:      20,
+				Metadata: map[string]any{
+					"decorators": []any{"@route"},
+					"async":      true,
+				},
+			},
+			{
+				RepoID:       "repo-1",
+				EntityID:     "function-2",
+				EntityType:   "Function",
+				EntityName:   "double",
+				FilePath:     "/repo/src/lambda.py",
+				RelativePath: "src/lambda.py",
+				Language:     "python",
+				StartLine:    30,
+				EndLine:      30,
+				Metadata: map[string]any{
+					"semantic_kind": "lambda",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+	if got, want := result.CanonicalWrites, 2; got != want {
+		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
+	}
+	if got, want := len(executor.calls), 2; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+
+	functionRows := executor.calls[1].Parameters["rows"].([]map[string]any)
+	if got, want := len(functionRows), 2; got != want {
+		t.Fatalf("function row count = %d, want %d", got, want)
+	}
+
+	decorated := functionRows[0]
+	if got, want := decorated["entity_id"], "function-1"; got != want {
+		t.Fatalf("decorated entity_id = %#v, want %#v", got, want)
+	}
+	if got, want := decorated["async"], true; got != want {
+		t.Fatalf("decorated async = %#v, want %#v", got, want)
+	}
+	decorators, ok := decorated["decorators"].([]string)
+	if !ok {
+		t.Fatalf("decorated decorators type = %T, want []string", decorated["decorators"])
+	}
+	if got, want := len(decorators), 1; got != want || decorators[0] != "@route" {
+		t.Fatalf("decorated decorators = %#v, want [@route]", decorators)
+	}
+	if decorated["semantic_kind"] != nil {
+		t.Fatalf("decorated semantic_kind = %#v, want nil", decorated["semantic_kind"])
+	}
+
+	lambda := functionRows[1]
+	if got, want := lambda["entity_id"], "function-2"; got != want {
+		t.Fatalf("lambda entity_id = %#v, want %#v", got, want)
+	}
+	if got, want := lambda["semantic_kind"], "lambda"; got != want {
+		t.Fatalf("lambda semantic_kind = %#v, want %#v", got, want)
+	}
+	if got, ok := lambda["decorators"].([]string); ok && len(got) != 0 {
+		t.Fatalf("lambda decorators = %#v, want empty or absent", got)
+	}
+	if cypher := executor.calls[1].Cypher; !strings.Contains(cypher, "n.decorators = row.decorators") || !strings.Contains(cypher, "n.async = row.async") || !strings.Contains(cypher, "n.semantic_kind = coalesce(row.semantic_kind, row.entity_type)") {
+		t.Fatalf("function cypher missing python metadata assignments: %s", cypher)
+	}
+}
+
 func TestSemanticEntityWriterRetractsWithoutUpserts(t *testing.T) {
 	t.Parallel()
 

@@ -40,3 +40,33 @@ func TestBuildSemanticEntityReducerIntentQueuesRustImplBlockSemanticEntities(t *
 		t.Fatalf("intent.Reason = %q, want %q", got, want)
 	}
 }
+
+func TestBuildSemanticEntityReducerIntentQueuesPythonFunctionSemanticEntities(t *testing.T) {
+	t.Parallel()
+
+	intent, ok := buildSemanticEntityReducerIntent(facts.Envelope{
+		FactID:       "fact-2",
+		ScopeID:      "scope-123",
+		GenerationID: "generation-456",
+		FactKind:     "content_entity",
+		Payload: map[string]any{
+			"entity_type":   "Function",
+			"entity_id":     "function-1",
+			"entity_name":   "handler",
+			"relative_path": "src/app.py",
+			"repo_id":       "repo-1",
+			"language":      "python",
+			"decorators":    []any{"@route"},
+			"async":         true,
+		},
+	})
+	if !ok {
+		t.Fatal("buildSemanticEntityReducerIntent() ok = false, want true")
+	}
+	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
+		t.Fatalf("intent.Domain = %q, want %q", got, want)
+	}
+	if got, want := intent.EntityKey, "function-1"; got != want {
+		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
+	}
+}

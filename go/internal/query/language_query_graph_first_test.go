@@ -275,6 +275,125 @@ func TestHandleLanguageQuery_JavaScriptMethodPrefersGraphPathAndUsesGraphMetadat
 	}
 }
 
+func TestHandleLanguageQuery_PythonDecoratedAsyncFunctionUsesGraphMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":  "graph-py-function-1",
+				"name":       "handler",
+				"labels":     []string{"Function"},
+				"file_path":  "src/app.py",
+				"repo_id":    "repo-1",
+				"repo_name":  "repo-1",
+				"language":   "python",
+				"start_line": int64(10),
+				"end_line":   int64(20),
+				"decorators": []string{"@route"},
+				"async":      true,
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"python","entity_type":"function","query":"handler","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed Python function", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["semantic_summary"], "Function handler is async and uses decorators @route."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "decorated_async_function"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleLanguageQuery_PythonLambdaFunctionUsesGraphMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":     "graph-py-lambda-1",
+				"name":          "double",
+				"labels":        []string{"Function"},
+				"file_path":     "src/lambda.py",
+				"repo_id":       "repo-1",
+				"repo_name":     "repo-1",
+				"language":      "python",
+				"start_line":    int64(4),
+				"end_line":      int64(4),
+				"semantic_kind": "lambda",
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"python","entity_type":"function","query":"double","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed Python lambda", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["semantic_summary"], "Function double is a lambda."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "lambda_function"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
 func TestHandleLanguageQuery_TSXComponentUsesGraphMetadataWithoutContent(t *testing.T) {
 	t.Parallel()
 
