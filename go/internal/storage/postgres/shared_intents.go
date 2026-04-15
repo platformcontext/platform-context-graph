@@ -86,7 +86,7 @@ LIMIT $2
 const markIntentsCompletedSQL = `
 UPDATE shared_projection_intents
 SET completed_at = $1
-WHERE intent_id = $2
+WHERE intent_id = ANY($2)
 `
 
 const listPendingRepoRunIntentsSQL = `
@@ -241,11 +241,9 @@ func (s *SharedIntentStore) MarkIntentsCompleted(ctx context.Context, intentIDs 
 		return nil
 	}
 
-	for _, id := range intentIDs {
-		_, err := s.db.ExecContext(ctx, markIntentsCompletedSQL, completedAt, id)
-		if err != nil {
-			return err
-		}
+	_, err := s.db.ExecContext(ctx, markIntentsCompletedSQL, completedAt, intentIDs)
+	if err != nil {
+		return err
 	}
 
 	return nil

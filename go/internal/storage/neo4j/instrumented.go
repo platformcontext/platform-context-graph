@@ -56,6 +56,18 @@ func (i *InstrumentedExecutor) Execute(ctx context.Context, statement Statement)
 		))
 	}
 
+	// Record batch size if this is a batch operation
+	if i.Instruments != nil {
+		if rows, ok := statement.Parameters["rows"]; ok {
+			if rowSlice, ok := rows.([]map[string]any); ok {
+				i.Instruments.Neo4jBatchSize.Record(ctx, float64(len(rowSlice)))
+				i.Instruments.Neo4jBatchesExecuted.Add(ctx, 1, metric.WithAttributes(
+					attribute.String("operation", string(statement.Operation)),
+				))
+			}
+		}
+	}
+
 	// Set span status on error
 	if err != nil && span != nil {
 		span.SetStatus(codes.Error, err.Error())

@@ -9,17 +9,28 @@ import (
 
 // EdgeWriter implements reducer.SharedProjectionEdgeWriter by dispatching
 // domain-specific canonical Cypher statements through a Neo4j Executor.
+// Writes are batched using UNWIND for efficiency.
 type EdgeWriter struct {
-	executor Executor
+	executor  Executor
+	BatchSize int
 }
 
 // NewEdgeWriter returns an EdgeWriter backed by the given Executor.
-func NewEdgeWriter(executor Executor) *EdgeWriter {
-	return &EdgeWriter{executor: executor}
+// A batchSize of 0 or less uses DefaultBatchSize (500).
+func NewEdgeWriter(executor Executor, batchSize int) *EdgeWriter {
+	return &EdgeWriter{executor: executor, BatchSize: batchSize}
 }
 
-// WriteEdges writes canonical domain edges for the given rows. Each row is
-// converted to a canonical upsert statement and executed individually.
+func (w *EdgeWriter) batchSize() int {
+	if w.BatchSize <= 0 {
+		return DefaultBatchSize
+	}
+	return w.BatchSize
+}
+
+// WriteEdges writes canonical domain edges for the given rows using batched
+// UNWIND statements. Rows with empty required MATCH fields are skipped to
+// avoid silent failures in the batch.
 func (w *EdgeWriter) WriteEdges(
 	ctx context.Context,
 	domain string,
@@ -33,17 +44,130 @@ func (w *EdgeWriter) WriteEdges(
 		return fmt.Errorf("edge writer executor is required")
 	}
 
-	for i, row := range rows {
-		stmt, err := buildWriteStatement(domain, row, evidenceSource)
-		if err != nil {
-			return fmt.Errorf("build write statement %d: %w", i, err)
-		}
-		if err := w.executor.Execute(ctx, stmt); err != nil {
-			return fmt.Errorf("execute write statement %d: %w", i, err)
-		}
+	cypher, err := batchCypherForDomain(domain)
+	if err != nil {
+		return err
 	}
 
+	var validRows []map[string]any
+	for _, row := range rows {
+		rowMap, ok := buildRowMap(domain, row, evidenceSource)
+		if !ok {
+			continue
+		}
+		validRows = append(validRows, rowMap)
+	}
+
+	if len(validRows) == 0 {
+		return nil
+	}
+
+	return w.executeBatched(ctx, cypher, validRows)
+}
+
+// executeBatched executes batched UNWIND operations, mirroring
+// Adapter.executeBatched in writer.go.
+func (w *EdgeWriter) executeBatched(ctx context.Context, cypher string, rows []map[string]any) error {
+	bs := w.batchSize()
+	for start := 0; start < len(rows); start += bs {
+		end := start + bs
+		if end > len(rows) {
+			end = len(rows)
+		}
+		if err := w.executor.Execute(ctx, Statement{
+			Operation:  OperationCanonicalUpsert,
+			Cypher:     cypher,
+			Parameters: map[string]any{"rows": rows[start:end]},
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// batchCypherForDomain returns the batched UNWIND Cypher template for the
+// given shared projection domain.
+func batchCypherForDomain(domain string) (string, error) {
+	switch domain {
+	case reducer.DomainPlatformInfra:
+		return batchCanonicalInfrastructurePlatformUpsertCypher, nil
+	case reducer.DomainRepoDependency:
+		return batchCanonicalRepoDependencyUpsertCypher, nil
+	case reducer.DomainWorkloadDependency:
+		return batchCanonicalWorkloadDependencyUpsertCypher, nil
+	case reducer.DomainCodeCalls:
+		return batchCanonicalCodeCallUpsertCypher, nil
+	default:
+		return "", fmt.Errorf("unsupported domain for write: %q", domain)
+	}
+}
+
+// buildRowMap converts a SharedProjectionIntentRow into a flat parameter map
+// suitable for UNWIND batching. Returns false if required MATCH fields for the
+// domain are empty, indicating the row should be skipped.
+func buildRowMap(
+	domain string,
+	row reducer.SharedProjectionIntentRow,
+	evidenceSource string,
+) (map[string]any, bool) {
+	switch domain {
+	case reducer.DomainPlatformInfra:
+		repoID := payloadString(row.Payload, "repo_id")
+		platformID := payloadString(row.Payload, "platform_id")
+		if repoID == "" || platformID == "" {
+			return nil, false
+		}
+		return map[string]any{
+			"repo_id":              repoID,
+			"platform_id":          platformID,
+			"platform_name":        payloadString(row.Payload, "platform_name"),
+			"platform_kind":        payloadString(row.Payload, "platform_kind"),
+			"platform_provider":    payloadString(row.Payload, "platform_provider"),
+			"platform_environment": payloadString(row.Payload, "platform_environment"),
+			"platform_region":      payloadString(row.Payload, "platform_region"),
+			"platform_locator":     payloadString(row.Payload, "platform_locator"),
+			"evidence_source":      evidenceSource,
+		}, true
+
+	case reducer.DomainRepoDependency:
+		repoID := payloadString(row.Payload, "repo_id")
+		targetRepoID := payloadString(row.Payload, "target_repo_id")
+		if repoID == "" || targetRepoID == "" {
+			return nil, false
+		}
+		return map[string]any{
+			"repo_id":         repoID,
+			"target_repo_id":  targetRepoID,
+			"evidence_source": evidenceSource,
+		}, true
+
+	case reducer.DomainWorkloadDependency:
+		workloadID := payloadString(row.Payload, "workload_id")
+		targetWorkloadID := payloadString(row.Payload, "target_workload_id")
+		if workloadID == "" || targetWorkloadID == "" {
+			return nil, false
+		}
+		return map[string]any{
+			"workload_id":        workloadID,
+			"target_workload_id": targetWorkloadID,
+			"evidence_source":    evidenceSource,
+		}, true
+
+	case reducer.DomainCodeCalls:
+		callerEntityID := payloadString(row.Payload, "caller_entity_id")
+		calleeEntityID := payloadString(row.Payload, "callee_entity_id")
+		if callerEntityID == "" || calleeEntityID == "" {
+			return nil, false
+		}
+		return map[string]any{
+			"caller_entity_id": callerEntityID,
+			"callee_entity_id": calleeEntityID,
+			"evidence_source":  evidenceSource,
+		}, true
+
+	default:
+		return nil, false
+	}
 }
 
 // RetractEdges retracts canonical domain edges for the given rows. Retraction
@@ -68,59 +192,6 @@ func (w *EdgeWriter) RetractEdges(
 	}
 
 	return w.executor.Execute(ctx, stmt)
-}
-
-func buildWriteStatement(
-	domain string,
-	row reducer.SharedProjectionIntentRow,
-	evidenceSource string,
-) (Statement, error) {
-	switch domain {
-	case reducer.DomainPlatformInfra:
-		return BuildCanonicalInfrastructurePlatformUpsert(
-			CanonicalInfrastructurePlatformParams{
-				RepoID:              payloadString(row.Payload, "repo_id"),
-				PlatformID:          payloadString(row.Payload, "platform_id"),
-				PlatformName:        payloadString(row.Payload, "platform_name"),
-				PlatformKind:        payloadString(row.Payload, "platform_kind"),
-				PlatformProvider:    payloadString(row.Payload, "platform_provider"),
-				PlatformEnvironment: payloadString(row.Payload, "platform_environment"),
-				PlatformRegion:      payloadString(row.Payload, "platform_region"),
-				PlatformLocator:     payloadString(row.Payload, "platform_locator"),
-			},
-			evidenceSource,
-		), nil
-
-	case reducer.DomainRepoDependency:
-		return BuildCanonicalRepoDependencyUpsert(
-			CanonicalRepoDependencyParams{
-				RepoID:       payloadString(row.Payload, "repo_id"),
-				TargetRepoID: payloadString(row.Payload, "target_repo_id"),
-			},
-			evidenceSource,
-		), nil
-
-	case reducer.DomainWorkloadDependency:
-		return BuildCanonicalWorkloadDependencyUpsert(
-			CanonicalWorkloadDependencyParams{
-				WorkloadID:       payloadString(row.Payload, "workload_id"),
-				TargetWorkloadID: payloadString(row.Payload, "target_workload_id"),
-			},
-			evidenceSource,
-		), nil
-
-	case reducer.DomainCodeCalls:
-		return BuildCanonicalCodeCallUpsert(
-			CanonicalCodeCallParams{
-				CallerEntityID: payloadString(row.Payload, "caller_entity_id"),
-				CalleeEntityID: payloadString(row.Payload, "callee_entity_id"),
-			},
-			evidenceSource,
-		), nil
-
-	default:
-		return Statement{}, fmt.Errorf("unsupported domain for write: %q", domain)
-	}
 }
 
 func buildRetractStatement(

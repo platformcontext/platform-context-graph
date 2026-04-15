@@ -1,6 +1,10 @@
 package main
 
 import (
+	"runtime"
+	"strconv"
+	"strings"
+
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 )
 
@@ -15,4 +19,20 @@ func loadReducerQueueConfig(getenv func(string) string) (runtimecfg.RetryPolicyC
 	}
 
 	return runtimecfg.LoadRetryPolicyConfig(getenv, "REDUCER")
+}
+
+func loadReducerWorkerCount(getenv func(string) string) int {
+	if raw := strings.TrimSpace(getenv("PCG_REDUCER_WORKERS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	n := runtime.NumCPU()
+	if n > 4 {
+		n = 4
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
 }

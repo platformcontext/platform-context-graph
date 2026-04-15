@@ -26,13 +26,43 @@ type InfrastructurePlatformResult struct {
 // It is the Go equivalent of Python's materialize_infrastructure_platforms
 // orchestrator for the graph-write portion.
 type InfrastructurePlatformMaterializer struct {
-	executor CypherExecutor
+	executor  CypherExecutor
+	BatchSize int
 }
 
 // NewInfrastructurePlatformMaterializer returns an InfrastructurePlatformMaterializer
 // backed by the given CypherExecutor.
 func NewInfrastructurePlatformMaterializer(executor CypherExecutor) *InfrastructurePlatformMaterializer {
 	return &InfrastructurePlatformMaterializer{executor: executor}
+}
+
+// batchSize returns the configured batch size, defaulting to 500 if not set.
+func (m *InfrastructurePlatformMaterializer) batchSize() int {
+	if m.BatchSize <= 0 {
+		return 500
+	}
+	return m.BatchSize
+}
+
+// executeBatched splits rows into batches and executes the given Cypher query
+// with each batch as a "rows" parameter.
+func (m *InfrastructurePlatformMaterializer) executeBatched(
+	ctx context.Context,
+	cypher string,
+	rows []map[string]any,
+) error {
+	batchSize := m.batchSize()
+	for i := 0; i < len(rows); i += batchSize {
+		end := i + batchSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		chunk := rows[i:end]
+		if err := m.executor.ExecuteCypher(ctx, cypher, map[string]any{"rows": chunk}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Materialize writes PROVISIONS_PLATFORM edges for each infrastructure
@@ -49,10 +79,9 @@ func (m *InfrastructurePlatformMaterializer) Materialize(
 		return InfrastructurePlatformResult{}, fmt.Errorf("infrastructure platform materializer executor is required")
 	}
 
-	var result InfrastructurePlatformResult
-
-	for _, row := range rows {
-		if err := m.executor.ExecuteCypher(ctx, infraPlatformUpsertCypher, map[string]any{
+	batchRows := make([]map[string]any, len(rows))
+	for i, row := range rows {
+		batchRows[i] = map[string]any{
 			"repo_id":              row.RepoID,
 			"platform_id":          row.PlatformID,
 			"platform_name":        row.PlatformName,
@@ -62,14 +91,14 @@ func (m *InfrastructurePlatformMaterializer) Materialize(
 			"platform_region":      row.PlatformRegion,
 			"platform_locator":     row.PlatformLocator,
 			"evidence_source":      EvidenceSourceWorkloads,
-		}); err != nil {
-			return result, fmt.Errorf("write infrastructure platform %q for %q: %w",
-				row.PlatformID, row.RepoID, err)
 		}
-		result.PlatformEdgesWritten++
 	}
 
-	return result, nil
+	if err := m.executeBatched(ctx, batchInfraPlatformUpsertCypher, batchRows); err != nil {
+		return InfrastructurePlatformResult{}, fmt.Errorf("write infrastructure platforms: %w", err)
+	}
+
+	return InfrastructurePlatformResult{PlatformEdgesWritten: len(rows)}, nil
 }
 
 // RetractStale removes PROVISIONS_PLATFORM edges for the given repository IDs
@@ -107,6 +136,22 @@ MERGE (repo)-[rel:PROVISIONS_PLATFORM]->(p)
 SET rel.confidence = 0.98,
     rel.reason = 'Terraform cluster and module data declare platform provisioning',
     rel.evidence_source = $evidence_source`
+
+const batchInfraPlatformUpsertCypher = `UNWIND $rows AS row
+MATCH (repo:Repository {id: row.repo_id})
+MERGE (p:Platform {id: row.platform_id})
+ON CREATE SET p.evidence_source = row.evidence_source
+SET p.type = 'platform',
+    p.name = row.platform_name,
+    p.kind = row.platform_kind,
+    p.provider = row.platform_provider,
+    p.environment = row.platform_environment,
+    p.region = row.platform_region,
+    p.locator = row.platform_locator
+MERGE (repo)-[rel:PROVISIONS_PLATFORM]->(p)
+SET rel.confidence = 0.98,
+    rel.reason = 'Terraform cluster and module data declare platform provisioning',
+    rel.evidence_source = row.evidence_source`
 
 const infraPlatformRetractCypher = `MATCH (repo:Repository)-[rel:PROVISIONS_PLATFORM]->(:Platform)
 WHERE repo.id IN $repo_ids

@@ -158,8 +158,8 @@ func projectorWorkerCount(getenv func(string) string) int {
 		}
 	}
 	n := runtime.NumCPU()
-	if n > 4 {
-		n = 4
+	if n > 8 {
+		n = 8
 	}
 	if n < 1 {
 		n = 1
@@ -188,20 +188,41 @@ func buildIngesterProjectorRuntime(
 func openIngesterGraphWriter(
 	parent context.Context,
 	getenv func(string) string,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
 ) (graph.Writer, io.Closer, error) {
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	rawExecutor := ingesterNeo4jExecutor{
+		Driver:       driver,
+		DatabaseName: cfg.DatabaseName,
+	}
+
 	return sourceneo4j.Adapter{
-			Executor: ingesterNeo4jExecutor{
-				Driver:       driver,
-				DatabaseName: cfg.DatabaseName,
+			Executor: &sourceneo4j.InstrumentedExecutor{
+				Inner:       rawExecutor,
+				Tracer:      tracer,
+				Instruments: instruments,
 			},
+			BatchSize: neo4jBatchSize(getenv),
 		},
 		ingesterNeo4jDriverCloser{Driver: driver},
 		nil
+}
+
+func neo4jBatchSize(getenv func(string) string) int {
+	raw := strings.TrimSpace(getenv("PCG_NEO4J_BATCH_SIZE"))
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }
 
 type ingesterNeo4jExecutor struct {

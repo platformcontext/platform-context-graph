@@ -16,6 +16,9 @@ import (
 )
 
 const (
+	// DefaultBatchSize is the default number of records per batch when writing to Neo4j.
+	DefaultBatchSize = 500
+
 	upsertNodeCypher = `MERGE (n:SourceLocalRecord {scope_id: $scope_id, generation_id: $generation_id, record_id: $record_id})
 SET n.source_system = $source_system,
     n.kind = $kind,
@@ -23,6 +26,17 @@ SET n.source_system = $source_system,
     n.deleted = false`
 
 	deleteNodeCypher = `MATCH (n:SourceLocalRecord {scope_id: $scope_id, generation_id: $generation_id, record_id: $record_id})
+DELETE n`
+
+	batchUpsertNodeCypher = `UNWIND $rows AS row
+MERGE (n:SourceLocalRecord {scope_id: row.scope_id, generation_id: row.generation_id, record_id: row.record_id})
+SET n.source_system = row.source_system,
+    n.kind = row.kind,
+    n.attributes_json = row.attributes_json,
+    n.deleted = false`
+
+	batchDeleteNodeCypher = `UNWIND $rows AS row
+MATCH (n:SourceLocalRecord {scope_id: row.scope_id, generation_id: row.generation_id, record_id: row.record_id})
 DELETE n`
 )
 
@@ -57,7 +71,8 @@ type Executor interface {
 
 // Adapter writes source-local graph records through an Executor.
 type Adapter struct {
-	Executor Executor
+	Executor  Executor
+	BatchSize int
 }
 
 // Write builds and executes the source-local write plan for one materialization.
@@ -74,13 +89,62 @@ func (a Adapter) Write(ctx context.Context, materialization graph.Materializatio
 		return graph.Result{}, fmt.Errorf("neo4j executor is required when source-local statements are present")
 	}
 
+	// Separate statements by operation type and collect rows
+	var upsertRows []map[string]any
+	var deleteRows []map[string]any
+
 	for i := range plan.Statements {
-		if err := a.Executor.Execute(ctx, plan.Statements[i]); err != nil {
-			return graph.Result{}, fmt.Errorf("execute source-local graph statement %d: %w", i, err)
+		stmt := plan.Statements[i]
+		switch stmt.Operation {
+		case OperationUpsertNode:
+			upsertRows = append(upsertRows, stmt.Parameters)
+		case OperationDeleteNode:
+			deleteRows = append(deleteRows, stmt.Parameters)
+		}
+	}
+
+	// Execute upserts in batches
+	if len(upsertRows) > 0 {
+		if err := a.executeBatched(ctx, OperationUpsertNode, batchUpsertNodeCypher, upsertRows); err != nil {
+			return graph.Result{}, fmt.Errorf("execute batched upserts: %w", err)
+		}
+	}
+
+	// Execute deletes in batches
+	if len(deleteRows) > 0 {
+		if err := a.executeBatched(ctx, OperationDeleteNode, batchDeleteNodeCypher, deleteRows); err != nil {
+			return graph.Result{}, fmt.Errorf("execute batched deletes: %w", err)
 		}
 	}
 
 	return resultFor(materialization), nil
+}
+
+// executeBatched executes batched operations using UNWIND.
+func (a Adapter) executeBatched(ctx context.Context, op Operation, cypher string, rows []map[string]any) error {
+	batchSize := a.batchSize()
+	for start := 0; start < len(rows); start += batchSize {
+		end := start + batchSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		if err := a.Executor.Execute(ctx, Statement{
+			Operation:  op,
+			Cypher:     cypher,
+			Parameters: map[string]any{"rows": rows[start:end]},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// batchSize returns the configured batch size or the default if unset.
+func (a Adapter) batchSize() int {
+	if a.BatchSize <= 0 {
+		return DefaultBatchSize
+	}
+	return a.BatchSize
 }
 
 // BuildPlan converts a source-local graph materialization into Neo4j statements.

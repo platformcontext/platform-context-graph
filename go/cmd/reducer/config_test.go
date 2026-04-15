@@ -45,3 +45,37 @@ func TestLoadReducerQueueConfigReadsEnvOverrides(t *testing.T) {
 		t.Fatalf("maxAttempts = %d, want %d", got, want)
 	}
 }
+
+func TestLoadReducerWorkerCount_EnvOverride(t *testing.T) {
+	t.Parallel()
+	got := loadReducerWorkerCount(func(k string) string {
+		if k == "PCG_REDUCER_WORKERS" {
+			return "6"
+		}
+		return ""
+	})
+	if got != 6 {
+		t.Fatalf("got %d, want 6", got)
+	}
+}
+
+func TestLoadReducerWorkerCount_DefaultCap(t *testing.T) {
+	t.Parallel()
+	got := loadReducerWorkerCount(func(string) string { return "" })
+	if got < 1 || got > 4 {
+		t.Fatalf("got %d, want 1-4", got)
+	}
+}
+
+func TestLoadReducerWorkerCount_InvalidEnv(t *testing.T) {
+	t.Parallel()
+	got := loadReducerWorkerCount(func(k string) string {
+		if k == "PCG_REDUCER_WORKERS" {
+			return "not-a-number"
+		}
+		return ""
+	})
+	if got < 1 || got > 4 {
+		t.Fatalf("got %d, want 1-4 (fallback)", got)
+	}
+}

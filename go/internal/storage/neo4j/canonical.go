@@ -101,6 +101,48 @@ SET rel.confidence = 0.95,
     rel.reason = 'Parser and symbol analysis resolved a code call edge',
     rel.evidence_source = $evidence_source`
 
+// --- Batched UNWIND Cypher (shared projection) ---
+
+const batchCanonicalInfrastructurePlatformUpsertCypher = `UNWIND $rows AS row
+MATCH (repo:Repository {id: row.repo_id})
+MERGE (p:Platform {id: row.platform_id})
+ON CREATE SET p.evidence_source = row.evidence_source
+SET p.type = 'platform',
+    p.name = row.platform_name,
+    p.kind = row.platform_kind,
+    p.provider = row.platform_provider,
+    p.environment = row.platform_environment,
+    p.region = row.platform_region,
+    p.locator = row.platform_locator
+MERGE (repo)-[rel:PROVISIONS_PLATFORM]->(p)
+SET rel.confidence = 0.98,
+    rel.reason = 'Terraform cluster and module data declare platform provisioning',
+    rel.evidence_source = row.evidence_source`
+
+const batchCanonicalRepoDependencyUpsertCypher = `UNWIND $rows AS row
+MATCH (source_repo:Repository {id: row.repo_id})
+MATCH (target_repo:Repository {id: row.target_repo_id})
+MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = row.evidence_source`
+
+const batchCanonicalWorkloadDependencyUpsertCypher = `UNWIND $rows AS row
+MATCH (source:Workload {id: row.workload_id})
+MATCH (target:Workload {id: row.target_workload_id})
+MERGE (source)-[rel:DEPENDS_ON]->(target)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares workload dependency',
+    rel.evidence_source = row.evidence_source`
+
+const batchCanonicalCodeCallUpsertCypher = `UNWIND $rows AS row
+MATCH (source {id: row.caller_entity_id})
+MATCH (target {id: row.callee_entity_id})
+MERGE (source)-[rel:CALLS]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser and symbol analysis resolved a code call edge',
+    rel.evidence_source = row.evidence_source`
+
 // --- Retraction Cypher ---
 
 const retractInfrastructurePlatformEdgesCypher = `MATCH (repo:Repository)-[rel:PROVISIONS_PLATFORM]->(:Platform)

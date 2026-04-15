@@ -242,8 +242,34 @@ func TestAdapterWriteExecutesPlanInOrder(t *testing.T) {
 	if got, want := executor.calls[0].Operation, OperationUpsertNode; got != want {
 		t.Fatalf("first operation = %q, want %q", got, want)
 	}
+	if got, want := executor.calls[0].Cypher, batchUpsertNodeCypher; got != want {
+		t.Fatalf("first cypher = %q, want batched upsert cypher", got)
+	}
+	rows, ok := executor.calls[0].Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("first statement parameters[rows] type = %T, want []map[string]any", executor.calls[0].Parameters["rows"])
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("len(upsert rows) = %d, want %d", got, want)
+	}
+	if got, want := rows[0]["record_id"], "record-1"; got != want {
+		t.Fatalf("upsert row record_id = %v, want %q", got, want)
+	}
 	if got, want := executor.calls[1].Operation, OperationDeleteNode; got != want {
 		t.Fatalf("second operation = %q, want %q", got, want)
+	}
+	if got, want := executor.calls[1].Cypher, batchDeleteNodeCypher; got != want {
+		t.Fatalf("second cypher = %q, want batched delete cypher", got)
+	}
+	rows, ok = executor.calls[1].Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("second statement parameters[rows] type = %T, want []map[string]any", executor.calls[1].Parameters["rows"])
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("len(delete rows) = %d, want %d", got, want)
+	}
+	if got, want := rows[0]["record_id"], "record-2"; got != want {
+		t.Fatalf("delete row record_id = %v, want %q", got, want)
 	}
 }
 
@@ -265,11 +291,107 @@ func TestAdapterWriteReturnsExecutorErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("Write() error = nil, want non-nil")
 	}
-	if got, want := err.Error(), "execute source-local graph statement 0: boom"; got != want {
+	if got, want := err.Error(), "execute batched upserts: boom"; got != want {
 		t.Fatalf("Write() error = %q, want %q", got, want)
 	}
 	if got, want := len(executor.calls), 1; got != want {
 		t.Fatalf("len(executor.calls) = %d, want %d", got, want)
+	}
+}
+
+func TestAdapterWriteBatchesLargeRecordSets(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	adapter := Adapter{
+		Executor:  executor,
+		BatchSize: 100,
+	}
+
+	records := make([]graph.Record, 250)
+	for i := range records {
+		records[i] = graph.Record{
+			RecordID: "record-" + string(rune(i)),
+			Kind:     "test",
+		}
+	}
+
+	result, err := adapter.Write(context.Background(), graph.Materialization{
+		ScopeID:      "scope-123",
+		GenerationID: "generation-456",
+		SourceSystem: "git",
+		Records:      records,
+	})
+	if err != nil {
+		t.Fatalf("Write() error = %v, want nil", err)
+	}
+	if got, want := result.RecordCount, 250; got != want {
+		t.Fatalf("result.RecordCount = %d, want %d", got, want)
+	}
+
+	if got, want := len(executor.calls), 3; got != want {
+		t.Fatalf("len(executor.calls) = %d, want %d (100+100+50)", got, want)
+	}
+
+	for i, call := range executor.calls {
+		if got, want := call.Operation, OperationUpsertNode; got != want {
+			t.Fatalf("executor.calls[%d].Operation = %q, want %q", i, got, want)
+		}
+		if got, want := call.Cypher, batchUpsertNodeCypher; got != want {
+			t.Fatalf("executor.calls[%d].Cypher = %q, want batched cypher", i, got)
+		}
+		rows, ok := call.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("executor.calls[%d].Parameters[rows] type = %T, want []map[string]any", i, call.Parameters["rows"])
+		}
+		var expectedSize int
+		if i < 2 {
+			expectedSize = 100
+		} else {
+			expectedSize = 50
+		}
+		if got, want := len(rows), expectedSize; got != want {
+			t.Fatalf("len(executor.calls[%d] rows) = %d, want %d", i, got, want)
+		}
+	}
+}
+
+func TestAdapterWriteUsesDefaultBatchSizeWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	adapter := Adapter{Executor: executor}
+
+	records := make([]graph.Record, 1000)
+	for i := range records {
+		records[i] = graph.Record{
+			RecordID: "record-" + string(rune(i)),
+			Kind:     "test",
+		}
+	}
+
+	_, err := adapter.Write(context.Background(), graph.Materialization{
+		ScopeID:      "scope-123",
+		GenerationID: "generation-456",
+		SourceSystem: "git",
+		Records:      records,
+	})
+	if err != nil {
+		t.Fatalf("Write() error = %v, want nil", err)
+	}
+
+	if got, want := len(executor.calls), 2; got != want {
+		t.Fatalf("len(executor.calls) = %d, want %d (500+500 with default batch size)", got, want)
+	}
+
+	for i, call := range executor.calls {
+		rows, ok := call.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("executor.calls[%d].Parameters[rows] type = %T, want []map[string]any", i, call.Parameters["rows"])
+		}
+		if got, want := len(rows), 500; got != want {
+			t.Fatalf("len(executor.calls[%d] rows) = %d, want %d", i, got, want)
+		}
 	}
 }
 

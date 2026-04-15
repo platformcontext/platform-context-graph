@@ -61,7 +61,12 @@ func run(parent context.Context) error {
 		_ = db.Close()
 	}()
 
-	graphWriter, graphCloser, err := openIngesterGraphWriter(parent, os.Getenv)
+	queueObserver := postgres.NewQueueObserverStore(postgres.SQLQueryer{DB: db})
+	if err := telemetry.RegisterObservableGauges(instruments, meter, queueObserver, nil); err != nil {
+		return fmt.Errorf("register observable gauges: %w", err)
+	}
+
+	graphWriter, graphCloser, err := openIngesterGraphWriter(parent, os.Getenv, tracer, instruments)
 	if err != nil {
 		return err
 	}

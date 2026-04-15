@@ -72,6 +72,13 @@ type Instruments struct {
 	LargeRepoClassifications metric.Int64Counter
 	LargeRepoSemaphoreWait   metric.Float64Histogram
 
+	// Neo4j batch write metrics
+	Neo4jBatchSize       metric.Float64Histogram
+	Neo4jBatchesExecuted metric.Int64Counter
+
+	// Pipeline overlap metric — how long collector and projector ran concurrently
+	PipelineOverlapDuration metric.Float64Histogram
+
 	// Observable gauges for autoscaling signals
 	QueueDepth         metric.Int64ObservableGauge
 	QueueOldestAge     metric.Float64ObservableGauge
@@ -205,10 +212,12 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 		return nil, fmt.Errorf("register ReducerRunDuration histogram: %w", err)
 	}
 
+	canonicalWriteBuckets := []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
 	inst.CanonicalWriteDuration, err = meter.Float64Histogram(
 		"pcg_dp_canonical_write_duration_seconds",
 		metric.WithDescription("Canonical graph write duration"),
 		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(canonicalWriteBuckets...),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register CanonicalWriteDuration histogram: %w", err)
@@ -234,10 +243,12 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 		return nil, fmt.Errorf("register PostgresQueryDuration histogram: %w", err)
 	}
 
+	neo4jQueryBuckets := []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
 	inst.Neo4jQueryDuration, err = meter.Float64Histogram(
 		"pcg_dp_neo4j_query_duration_seconds",
 		metric.WithDescription("Neo4j query duration"),
 		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(neo4jQueryBuckets...),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register Neo4jQueryDuration histogram: %w", err)
@@ -350,6 +361,35 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register LargeRepoSemaphoreWait histogram: %w", err)
+	}
+
+	neo4jBatchBuckets := []float64{1, 10, 50, 100, 250, 500, 1000}
+	inst.Neo4jBatchSize, err = meter.Float64Histogram(
+		"pcg_dp_neo4j_batch_size",
+		metric.WithDescription("Number of rows per Neo4j UNWIND batch execution"),
+		metric.WithExplicitBucketBoundaries(neo4jBatchBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register Neo4jBatchSize histogram: %w", err)
+	}
+
+	inst.Neo4jBatchesExecuted, err = meter.Int64Counter(
+		"pcg_dp_neo4j_batches_executed_total",
+		metric.WithDescription("Total Neo4j UNWIND batch executions"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register Neo4jBatchesExecuted counter: %w", err)
+	}
+
+	pipelineOverlapBuckets := []float64{1, 5, 10, 30, 60, 120, 300, 600, 1800}
+	inst.PipelineOverlapDuration, err = meter.Float64Histogram(
+		"pcg_dp_pipeline_overlap_seconds",
+		metric.WithDescription("Time both collector and projector ran concurrently during bootstrap"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(pipelineOverlapBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register PipelineOverlapDuration histogram: %w", err)
 	}
 
 	return inst, nil

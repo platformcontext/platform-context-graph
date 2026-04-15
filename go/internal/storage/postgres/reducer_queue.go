@@ -34,6 +34,7 @@ INSERT INTO fact_work_items (
 ) VALUES (
     $1, $2, $3, 'reducer', $4, 'pending', 0, NULL, NULL, $5, NULL, NULL, NULL, NULL, NULL, $6::jsonb, $5, $5
 )
+ON CONFLICT (work_item_id) DO NOTHING
 `
 
 const claimReducerWorkQuery = `
@@ -164,7 +165,7 @@ func (q ReducerQueue) Enqueue(
 
 	now := q.now()
 	count := 0
-	for index, intent := range intents {
+	for _, intent := range intents {
 		if err := intent.Domain.Validate(); err != nil {
 			return projector.IntentResult{}, fmt.Errorf("enqueue reducer intent: %w", err)
 		}
@@ -181,7 +182,7 @@ func (q ReducerQueue) Enqueue(
 		if _, err := q.db.ExecContext(
 			ctx,
 			enqueueReducerWorkQuery,
-			reducerWorkItemID(intent, now, index),
+			reducerWorkItemID(intent),
 			intent.ScopeID,
 			intent.GenerationID,
 			string(intent.Domain),
@@ -416,17 +417,13 @@ func (q ReducerQueue) failIntent(
 	return nil
 }
 
-func reducerWorkItemID(intent projector.ReducerIntent, now time.Time, index int) string {
+func reducerWorkItemID(intent projector.ReducerIntent) string {
 	parts := []string{
 		intent.ScopeID,
 		intent.GenerationID,
 		string(intent.Domain),
 		intent.EntityKey,
-		intent.FactID,
-		now.UTC().Format("20060102150405.000000000"),
-		fmt.Sprintf("%d", index),
 	}
-
 	sanitized := make([]string, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -437,6 +434,5 @@ func reducerWorkItemID(intent projector.ReducerIntent, now time.Time, index int)
 		part = strings.ReplaceAll(part, "/", "_")
 		sanitized = append(sanitized, part)
 	}
-
 	return "reducer_" + strings.Join(sanitized, "_")
 }

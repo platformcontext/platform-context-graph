@@ -66,7 +66,7 @@ func TestWorkloadMaterializerWritesWorkloads(t *testing.T) {
 	if len(executor.calls) < 1 {
 		t.Fatalf("executor calls = %d, want >= 1", len(executor.calls))
 	}
-	if !containsCypher(executor.calls, "MERGE (w:Workload {id: $workload_id})") {
+	if !containsCypher(executor.calls, "MERGE (w:Workload {id: row.workload_id})") {
 		t.Fatal("missing Workload MERGE cypher")
 	}
 }
@@ -97,7 +97,7 @@ func TestWorkloadMaterializerWritesInstances(t *testing.T) {
 	if result.InstancesWritten != 1 {
 		t.Fatalf("InstancesWritten = %d, want 1", result.InstancesWritten)
 	}
-	if !containsCypher(executor.calls, "MERGE (i:WorkloadInstance {id: $instance_id})") {
+	if !containsCypher(executor.calls, "MERGE (i:WorkloadInstance {id: row.instance_id})") {
 		t.Fatal("missing WorkloadInstance MERGE cypher")
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"time"
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -101,4 +103,16 @@ func openReducerNeo4jAdapters(
 		reducerCypherExecutor{session: runner},
 		reducerNeo4jDriverCloser{Driver: driver},
 		nil
+}
+
+func neo4jBatchSize(getenv func(string) string) int {
+	raw := strings.TrimSpace(getenv("PCG_NEO4J_BATCH_SIZE"))
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }

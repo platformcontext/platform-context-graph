@@ -490,8 +490,8 @@ func (db *sharedIntentTestDB) ExecContext(_ context.Context, query string, args 
 
 	case strings.Contains(query, "UPDATE shared_projection_intents"):
 		completedAt := args[0].(time.Time)
-		for i := 1; i < len(args); i++ {
-			id := args[i].(string)
+		intentIDs := args[1].([]string)
+		for _, id := range intentIDs {
 			if row, ok := db.intents[id]; ok {
 				row.CompletedAt = &completedAt
 				db.intents[id] = row
@@ -708,7 +708,7 @@ func (r *sharedIntentRows) Scan(dest ...any) error {
 	return nil
 }
 
-func (r *sharedIntentRows) Err() error  { return nil }
+func (r *sharedIntentRows) Err() error   { return nil }
 func (r *sharedIntentRows) Close() error { return nil }
 
 // countResultRows implements the Rows interface for COUNT queries.
@@ -736,7 +736,7 @@ func (r *countResultRows) Scan(dest ...any) error {
 	return fmt.Errorf("unsupported scan dest type %T for COUNT", dest[0])
 }
 
-func (r *countResultRows) Err() error  { return nil }
+func (r *countResultRows) Err() error   { return nil }
 func (r *countResultRows) Close() error { return nil }
 
 // -- partition lease tests --
@@ -901,8 +901,8 @@ func TestSharedIntentStoreReleasePartitionLease(t *testing.T) {
 			wantErr:        false,
 		},
 		{
-			name: "release non-existent lease is noop",
-			existingLease: nil,
+			name:           "release non-existent lease is noop",
+			existingLease:  nil,
 			domain:         "dependency-map",
 			partitionID:    2,
 			partitionCount: 8,
@@ -1116,7 +1116,7 @@ func (r *leaseResultRows) Scan(dest ...any) error {
 	return nil
 }
 
-func (r *leaseResultRows) Err() error  { return nil }
+func (r *leaseResultRows) Err() error   { return nil }
 func (r *leaseResultRows) Close() error { return nil }
 
 func stringPtr(s string) *string {

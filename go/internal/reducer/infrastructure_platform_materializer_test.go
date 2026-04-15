@@ -34,23 +34,34 @@ func TestInfrastructurePlatformMaterializerWritesProvisionsPlatformEdges(t *test
 	if len(executor.calls) != 1 {
 		t.Fatalf("executor calls = %d, want 1", len(executor.calls))
 	}
+	if !strings.Contains(executor.calls[0].cypher, "UNWIND") {
+		t.Fatalf("cypher missing UNWIND: %s", executor.calls[0].cypher)
+	}
 	if !strings.Contains(executor.calls[0].cypher, "PROVISIONS_PLATFORM") {
 		t.Fatalf("cypher missing PROVISIONS_PLATFORM: %s", executor.calls[0].cypher)
 	}
-	if !strings.Contains(executor.calls[0].cypher, "MERGE (p:Platform {id: $platform_id})") {
-		t.Fatalf("cypher missing Platform MERGE: %s", executor.calls[0].cypher)
+
+	// Check that rows parameter exists and has correct structure
+	rowsParam, ok := executor.calls[0].params["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows param type = %T, want []map[string]any", executor.calls[0].params["rows"])
 	}
-	if executor.calls[0].params["repo_id"] != "repo:infra-eks" {
-		t.Fatalf("repo_id = %v, want repo:infra-eks", executor.calls[0].params["repo_id"])
+	if len(rowsParam) != 1 {
+		t.Fatalf("rows param len = %d, want 1", len(rowsParam))
 	}
-	if executor.calls[0].params["platform_kind"] != "kubernetes" {
-		t.Fatalf("platform_kind = %v, want kubernetes", executor.calls[0].params["platform_kind"])
+
+	row := rowsParam[0]
+	if row["repo_id"] != "repo:infra-eks" {
+		t.Fatalf("repo_id = %v, want repo:infra-eks", row["repo_id"])
 	}
-	if executor.calls[0].params["platform_provider"] != "aws" {
-		t.Fatalf("platform_provider = %v, want aws", executor.calls[0].params["platform_provider"])
+	if row["platform_kind"] != "kubernetes" {
+		t.Fatalf("platform_kind = %v, want kubernetes", row["platform_kind"])
 	}
-	if executor.calls[0].params["platform_locator"] != "cluster/prod-cluster" {
-		t.Fatalf("platform_locator = %v, want cluster/prod-cluster", executor.calls[0].params["platform_locator"])
+	if row["platform_provider"] != "aws" {
+		t.Fatalf("platform_provider = %v, want aws", row["platform_provider"])
+	}
+	if row["platform_locator"] != "cluster/prod-cluster" {
+		t.Fatalf("platform_locator = %v, want cluster/prod-cluster", row["platform_locator"])
 	}
 }
 
@@ -86,8 +97,18 @@ func TestInfrastructurePlatformMaterializerMultipleRows(t *testing.T) {
 	if result.PlatformEdgesWritten != 2 {
 		t.Fatalf("PlatformEdgesWritten = %d, want 2", result.PlatformEdgesWritten)
 	}
-	if len(executor.calls) != 2 {
-		t.Fatalf("executor calls = %d, want 2", len(executor.calls))
+	// Now expects 1 call since both rows fit in one batch
+	if len(executor.calls) != 1 {
+		t.Fatalf("executor calls = %d, want 1", len(executor.calls))
+	}
+
+	// Verify rows parameter has 2 entries
+	rowsParam, ok := executor.calls[0].params["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows param type = %T, want []map[string]any", executor.calls[0].params["rows"])
+	}
+	if len(rowsParam) != 2 {
+		t.Fatalf("rows param len = %d, want 2", len(rowsParam))
 	}
 }
 
@@ -123,12 +144,15 @@ func TestInfrastructurePlatformMaterializerIdempotent(t *testing.T) {
 			result1.PlatformEdgesWritten, result2.PlatformEdgesWritten)
 	}
 
-	// Both calls should produce identical Cypher statements.
+	// Both calls should produce identical Cypher statements with UNWIND.
 	if len(executor.calls) != 2 {
 		t.Fatalf("executor calls = %d, want 2", len(executor.calls))
 	}
 	if executor.calls[0].cypher != executor.calls[1].cypher {
 		t.Fatal("Cypher statements differ between runs")
+	}
+	if !strings.Contains(executor.calls[0].cypher, "UNWIND") {
+		t.Fatalf("cypher missing UNWIND: %s", executor.calls[0].cypher)
 	}
 }
 

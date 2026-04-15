@@ -58,6 +58,11 @@ func run(parent context.Context) error {
 	}
 	defer func() { _ = db.Close() }()
 
+	queueObserver := postgres.NewQueueObserverStore(postgres.SQLQueryer{DB: db})
+	if err := telemetry.RegisterObservableGauges(instruments, meter, queueObserver, nil); err != nil {
+		return fmt.Errorf("register observable gauges: %w", err)
+	}
+
 	neo4jExecutor, cypherExecutor, neo4jCloser, err := openReducerNeo4jAdapters(parent, os.Getenv)
 	if err != nil {
 		return err
@@ -121,6 +126,8 @@ func buildReducerService(
 	instruments *telemetry.Instruments,
 	logger *slog.Logger,
 ) (reducer.Service, error) {
+	sharedCfg := reducer.LoadSharedProjectionConfig(getenv)
+
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
 		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
 		CloudAssetResolutionWriter:         reducer.PostgresCloudAssetResolutionWriter{DB: database},
@@ -128,13 +135,13 @@ func buildReducerService(
 		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
 		FactLoader:                         postgres.NewFactStore(database),
-		CodeCallEdgeWriter:                 sourceneo4j.NewEdgeWriter(neo4jExec),
+		CodeCallEdgeWriter:                 sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv)),
 	})
 	if err != nil {
 		return reducer.Service{}, err
 	}
 
-	edgeWriter := sourceneo4j.NewEdgeWriter(neo4jExec)
+	edgeWriter := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 
 	retryCfg, err := loadReducerQueueConfig(getenv)
 	if err != nil {
@@ -155,10 +162,12 @@ func buildReducerService(
 			LeaseManager: intentStore,
 			EdgeWriter:   edgeWriter,
 			AcceptedGen:  postgres.NewAcceptedGenerationLookup(database),
+			Config:       sharedCfg,
 			Tracer:       tracer,
 			Instruments:  instruments,
 			Logger:       logger,
 		},
+		Workers:     loadReducerWorkerCount(getenv),
 		Tracer:      tracer,
 		Instruments: instruments,
 		Logger:      logger,
