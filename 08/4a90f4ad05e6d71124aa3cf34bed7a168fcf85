@@ -1,0 +1,66 @@
+go/internal/reducer/code_call_materialization.go
+  1ca5ee6ce936a402 11-14,16-17,46-47,53,66,77-87,94-95,98,102-128,143-151
+go/internal/reducer/shared_projection_runner.go
+  1ca5ee6ce936a402 22,26,111-113,119-120,128-140,142-144,146
+go/internal/telemetry/contract.go
+  1ca5ee6ce936a402 49,94
+go/internal/storage/postgres/reducer_queue_batch.go
+  1ca5ee6ce936a402 1-166
+go/cmd/reducer/config.go
+  1ca5ee6ce936a402 24-39
+go/internal/reducer/service_batch_test.go
+  1ca5ee6ce936a402 1-214
+docker-compose.yaml
+  1ca5ee6ce936a402 308-309,346-350,352
+go/internal/reducer/python_metaclass_materialization.go
+  1ca5ee6ce936a402 1-206
+go/internal/reducer/service.go
+  1ca5ee6ce936a402 36-46,67-68,148-150,152-160,237-250
+go/internal/telemetry/instruments_test.go
+  1ca5ee6ce936a402 38
+go/internal/telemetry/instruments.go
+  1ca5ee6ce936a402 75-77,369-378
+go/cmd/reducer/main.go
+  1ca5ee6ce936a402 154,171-175
+go/internal/reducer/service_batch.go
+  1ca5ee6ce936a402 1-228
+go/internal/telemetry/contract_test.go
+  1ca5ee6ce936a402 45
+go/internal/storage/postgres/reducer_queue_batch_test.go
+  1ca5ee6ce936a402 1-112
+go/internal/reducer/shared_projection_runner_test.go
+  1ca5ee6ce936a402 245-374
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "084a90f4ad05e6d71124aa3cf34bed7a168fcf85",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 2389,
+      "total_deletions": 309,
+      "accepted_lines": 1933,
+      "overriden_lines": 10
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 84,
+      "overriden_lines": 0
+    }
+  }
+}
