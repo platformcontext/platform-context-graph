@@ -92,7 +92,7 @@ func inferPHPReferenceType(
 		if classContext == "" {
 			return ""
 		}
-		return resolvePHPPropertyChainType(classContext, segments[1:], classPropertyTypes)
+		return resolvePHPReferenceChainType(classContext, segments[1:], classPropertyTypes, methodReturnTypes)
 	case strings.HasPrefix(root, "$"):
 		if matches := phpReferenceVariablePattern.FindStringSubmatch(root); len(matches) == 2 {
 			if localVariableTypes == nil {
@@ -102,7 +102,7 @@ func inferPHPReferenceType(
 			if rootType == "" {
 				return ""
 			}
-			return resolvePHPPropertyChainType(rootType, segments[1:], classPropertyTypes)
+			return resolvePHPReferenceChainType(rootType, segments[1:], classPropertyTypes, methodReturnTypes)
 		}
 	}
 
@@ -250,21 +250,38 @@ func collectPHPFunctionSignature(lines []string, startIndex int, rawLine string)
 	return signature
 }
 
-func resolvePHPPropertyChainType(
+func resolvePHPReferenceChainType(
 	rootType string,
 	segments []string,
 	classPropertyTypes map[string]map[string]string,
+	methodReturnTypes map[string]map[string]string,
 ) string {
 	currentType := strings.TrimSpace(rootType)
 	if currentType == "" {
 		return ""
 	}
 	for _, segment := range segments {
-		propertyName := strings.TrimSpace(segment)
-		if propertyName == "" {
+		segmentName := strings.TrimSpace(segment)
+		if segmentName == "" {
 			return ""
 		}
-		nextType := normalizePHPTypeName(classPropertyTypes[currentType][propertyName])
+		if strings.HasSuffix(segmentName, ")") {
+			openIndex := strings.Index(segmentName, "(")
+			if openIndex < 0 {
+				return ""
+			}
+			methodName := strings.TrimSpace(segmentName[:openIndex])
+			if methodName == "" {
+				return ""
+			}
+			nextType := lookupPHPMethodReturnType(currentType, methodName, methodReturnTypes)
+			if nextType == "" {
+				return ""
+			}
+			currentType = nextType
+			continue
+		}
+		nextType := normalizePHPTypeName(classPropertyTypes[currentType][segmentName])
 		if nextType == "" {
 			return ""
 		}

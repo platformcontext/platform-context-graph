@@ -183,6 +183,57 @@ class Config {
 	phpAssertStringFieldValue(t, infoCall, "inferred_obj_type", "Service")
 }
 
+func TestDefaultEngineParsePathPHPInfersMethodReturnPropertyChainReceiverCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "method_return_property_chain.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+class Logger {
+    public function info(): void {}
+}
+
+class Service {
+    public Logger $logger;
+}
+
+class Factory {
+    public function createService(): Service {
+        return new Service();
+    }
+}
+
+class Config {
+    private Factory $factory;
+
+    public function run(): void {
+        $logger = $this->factory->createService()->logger;
+        $logger->info();
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	loggerItem := assertBucketItemByFieldValue(t, got, "variables", "name", "$logger")
+	phpAssertStringFieldValue(t, loggerItem, "type", "Logger")
+
+	infoCall := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "$logger.info")
+	phpAssertStringFieldValue(t, infoCall, "inferred_obj_type", "Logger")
+}
+
 func TestDefaultEngineParsePathPHPInfersChainedStaticFactoryReceiverCalls(t *testing.T) {
 	t.Parallel()
 

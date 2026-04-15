@@ -168,6 +168,62 @@ func TestExtractCodeCallRowsResolvesPHPPropertyChainAliasCallsUsingTypedProperty
 	}
 }
 
+func TestExtractCodeCallRowsResolvesPHPMethodReturnPropertyChainCallsUsingTypedPropertyInference(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-php",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-php",
+				"relative_path": "factory.php",
+				"parsed_file_data": map[string]any{
+					"path": "factory.php",
+					"functions": []any{
+						map[string]any{
+							"name":          "info",
+							"class_context": "Logger",
+							"line_number":   2,
+							"end_line":      4,
+							"uid":           "content-entity:php-logger-info",
+						},
+						map[string]any{
+							"name":          "run",
+							"class_context": "Config",
+							"line_number":   10,
+							"end_line":      14,
+							"uid":           "content-entity:php-config-run",
+						},
+					},
+					"function_calls": []any{
+						map[string]any{
+							"name":              "info",
+							"full_name":         "$logger.info",
+							"inferred_obj_type": "Logger",
+							"line_number":       13,
+							"lang":              "php",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0]["callee_entity_id"], "content-entity:php-logger-info"; got != want {
+		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
+	}
+}
+
 func TestExtractCodeCallRowsResolvesPHPNullsafeReceiverChainsUsingTypedPropertyInference(t *testing.T) {
 	t.Parallel()
 
