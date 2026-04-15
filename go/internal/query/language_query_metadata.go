@@ -70,7 +70,7 @@ func graphLabelToContentEntityType(label string) string {
 	switch label {
 	case "Annotation":
 		return "Annotation"
-	case "Function", "Class", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock":
+	case "Function", "Class", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock", "Typedef":
 		return label
 	default:
 		return ""

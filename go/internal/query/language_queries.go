@@ -50,7 +50,7 @@ var contentBackedEntityTypes = map[string]string{
 	"module_attribute":        "module_attribute",
 }
 
-var graphFirstContentBackedEntityTypes = map[string]string{"annotation": "Annotation", "impl_block": "ImplBlock"}
+var graphFirstContentBackedEntityTypes = map[string]string{"annotation": "Annotation", "impl_block": "ImplBlock", "typedef": "Typedef"}
 
 // Mount registers the language query endpoint on the given mux.
 func (h *LanguageQueryHandler) Mount(mux *http.ServeMux) {
