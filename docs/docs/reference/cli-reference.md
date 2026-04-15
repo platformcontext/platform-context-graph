@@ -103,11 +103,11 @@ These options apply at the root command level.
 | :--- | :--- | :--- |
 | `pcg analyze calls <function>` | Show what a function calls. | Yes |
 | `pcg analyze callers <function>` | Show what calls a function. | Yes |
-| `pcg analyze chain <from> <to>` | Show the call chain between two functions. | Yes |
+| `pcg analyze chain <from> <to>` | Show the call chain between two functions. Supports `--depth`. | Yes |
 | `pcg analyze deps <module>` | Show import and dependency relationships. | Yes |
 | `pcg analyze tree <class>` | Show inheritance hierarchy. | No |
-| `pcg analyze complexity` | Show function complexity. | Yes |
-| `pcg analyze dead-code` | Find potentially unused functions and classes. | Yes |
+| `pcg analyze complexity` | Show relationship-based complexity metrics for one entity. | Yes |
+| `pcg analyze dead-code` | Find potentially unused entities, with optional `--repo-id`, `--exclude`, and `--fail-on-found`. | Yes |
 | `pcg analyze overrides <name>` | Find implementations across classes. | Yes |
 | `pcg analyze variable <name>` | Show variable definitions and usage. | Yes |
 

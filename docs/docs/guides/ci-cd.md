@@ -1,6 +1,8 @@
 # CI/CD Integration
 
-Catch complexity spikes and dead code before they reach main. PCG runs in CI pipelines to flag graph-detectable issues at pull request time — no manual review needed for the mechanical checks.
+Catch dead code before it reaches main. PCG can run in CI pipelines to flag
+graph-detectable issues at pull request time without requiring manual review
+for the mechanical checks.
 
 ## GitHub Actions example
 
@@ -21,27 +23,18 @@ jobs:
           go build -o ../pcg ./cmd/pcg
       - name: Index the repo
         run: ./pcg index .
-      - name: Check complexity
-        run: ./pcg analyze complexity --threshold 20 --fail-on-found
       - name: Check dead code
-        run: ./pcg analyze dead-code --fail-on-found
+        run: ./pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude @app.route --fail-on-found
 ```
 
 ### What each step does
 
 **Index the repo** — `pcg index .` parses source code, builds the call graph, and stores it locally. For a typical service repo this takes 10-30 seconds.
 
-**Check complexity** — `pcg analyze complexity --threshold 20 --fail-on-found` finds functions with cyclomatic complexity above 20. This catches the worst offenders without being noisy on typical codebases. Output:
+**Check dead code** — `pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude @app.route --fail-on-found` finds entities that have no incoming `CALLS`, `IMPORTS`, or `REFERENCES` edges after decorator exclusions are applied. The command exits non-zero when candidates remain, failing the PR check.
 
-```
-Found 2 functions exceeding complexity threshold (20):
-  src/tools/graph_builder.py:build_graph (complexity: 34)
-  src/query/resolver.py:resolve_entity (complexity: 22)
-```
-
-**Check dead code** — `pcg analyze dead-code --fail-on-found` finds functions that are defined but never called from any indexed code. Catches abandoned code before it accumulates.
-
-Both checks exit non-zero when issues are found, failing the PR check.
+Threshold-based complexity gating is still a tracked parity item rather than a
+shipped Go CLI workflow, so this guide does not advertise it as available yet.
 
 ## Excluding paths with .pcgignore
 

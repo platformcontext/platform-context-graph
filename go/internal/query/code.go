@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -205,15 +206,11 @@ func (h *CodeHandler) searchEntityContent(ctx context.Context, repoID, pattern, 
 // handleDeadCode finds entities with no incoming references.
 func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RepoID string `json:"repo_id"`
+		RepoID               string   `json:"repo_id"`
+		ExcludeDecoratedWith []string `json:"exclude_decorated_with"`
 	}
 	if err := ReadJSON(r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	if req.RepoID == "" {
-		WriteError(w, http.StatusBadRequest, "repo_id is required")
 		return
 	}
 
@@ -221,7 +218,14 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 
 	cypher := `
 		MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
-		WHERE r.id = $repo_id AND NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)
+		WHERE NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)
+	`
+	params := map[string]any{}
+	if req.RepoID != "" {
+		cypher += ` AND r.id = $repo_id`
+		params["repo_id"] = req.RepoID
+	}
+	cypher += `
 		RETURN e.id as entity_id, e.name as name, labels(e) as labels,
 		       f.relative_path as file_path,
 		       r.id as repo_id, r.name as repo_name,
@@ -232,7 +236,7 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		LIMIT 100
 	`
 
-	rows, err := h.Neo4j.Run(ctx, cypher, map[string]any{"repo_id": req.RepoID})
+	rows, err := h.Neo4j.Run(ctx, cypher, params)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -252,16 +256,74 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 			"end_line":   IntVal(row, "end_line"),
 		})
 	}
-	results, err = h.enrichGraphSearchResultsWithContentMetadata(ctx, results, req.RepoID, "", 100)
+	results, err = h.enrichGraphResultsWithContentMetadataByEntityID(ctx, results)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	results = filterResultsByDecoratorExclusions(results, req.ExcludeDecoratedWith)
 
 	WriteJSON(w, http.StatusOK, map[string]any{
 		"repo_id": req.RepoID,
 		"results": results,
 	})
+}
+
+func filterResultsByDecoratorExclusions(results []map[string]any, excluded []string) []map[string]any {
+	if len(results) == 0 || len(excluded) == 0 {
+		return results
+	}
+
+	normalizedExcluded := make([]string, 0, len(excluded))
+	for _, decorator := range excluded {
+		if normalized := normalizeDecoratorName(decorator); normalized != "" {
+			normalizedExcluded = append(normalizedExcluded, normalized)
+		}
+	}
+	if len(normalizedExcluded) == 0 {
+		return results
+	}
+
+	filtered := make([]map[string]any, 0, len(results))
+	for _, result := range results {
+		metadata, ok := result["metadata"].(map[string]any)
+		if !ok {
+			filtered = append(filtered, result)
+			continue
+		}
+		if !resultMatchesDecoratorExclusion(metadata, normalizedExcluded) {
+			filtered = append(filtered, result)
+		}
+	}
+
+	return filtered
+}
+
+func resultMatchesDecoratorExclusion(metadata map[string]any, excluded []string) bool {
+	rawDecorators, ok := metadata["decorators"].([]any)
+	if !ok {
+		return false
+	}
+
+	for _, raw := range rawDecorators {
+		decorator, ok := raw.(string)
+		if !ok {
+			continue
+		}
+		if slices.Contains(excluded, normalizeDecoratorName(decorator)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func normalizeDecoratorName(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	return strings.TrimPrefix(trimmed, "@")
 }
 
 // handleCallChain finds the transitive call chain between two functions by

@@ -122,11 +122,13 @@ This now maps to the Go `code/relationships` route using `name=foo`,
 
 > "What is the call chain from `wrapper` to `helper`?"
 
-**Tool:** `analyze_code_relationships`
+**Tool:** `find_function_call_chain`
 
 ```json
-{ "query_type": "call_chain", "target": "wrapper->helper" }
+{ "start": "wrapper", "end": "helper", "max_depth": 5 }
 ```
+
+`analyze_code_relationships` also accepts `{"query_type":"call_chain","target":"wrapper->helper"}` for compatibility, but the dedicated tool is the canonical public contract.
 
 ### Find cross-module calls
 
@@ -195,7 +197,7 @@ This now maps to the Go `code/relationships` route using `name=foo`,
 **Tool:** `find_dead_code`
 
 ```json
-{ "exclude_decorated_with": ["@app.route"] }
+{ "repo_id": "repository:r_ab12cd34", "exclude_decorated_with": ["@app.route"] }
 ```
 
 ### Find dead code (Cypher)

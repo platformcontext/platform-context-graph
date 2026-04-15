@@ -228,7 +228,7 @@ const openAPIPathsCode = `
       "post": {
         "tags": ["code"],
         "summary": "Find dead code",
-        "description": "Finds entities with no incoming references.",
+        "description": "Finds entities with no incoming references and can exclude known decorator-owned entrypoints.",
         "operationId": "findDeadCode",
         "requestBody": {
           "required": true,
@@ -236,9 +236,13 @@ const openAPIPathsCode = `
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["repo_id"],
                 "properties": {
-                  "repo_id": {"type": "string"}
+                  "repo_id": {"type": "string", "description": "Optional repository ID filter"},
+                  "exclude_decorated_with": {
+                    "type": "array",
+                    "description": "Optional list of decorator names to exclude from the results.",
+                    "items": {"type": "string"}
+                  }
                 }
               }
             }

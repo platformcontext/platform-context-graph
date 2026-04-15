@@ -212,6 +212,18 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		t.Fatal("code/call-chain request schema missing max_depth")
 	}
 
+	deadCodePath := mustMapField(t, paths, "/api/v0/code/dead-code")
+	deadCodePost := mustMapField(t, deadCodePath, "post")
+	deadCodeBody := mustMapField(t, mustMapField(t, deadCodePost, "requestBody"), "content")
+	deadCodeJSON := mustMapField(t, deadCodeBody, "application/json")
+	deadCodeSchema := mustMapField(t, mustMapField(t, deadCodeJSON, "schema"), "properties")
+	if _, ok := deadCodeSchema["repo_id"]; !ok {
+		t.Fatal("code/dead-code request schema missing repo_id")
+	}
+	if _, ok := deadCodeSchema["exclude_decorated_with"]; !ok {
+		t.Fatal("code/dead-code request schema missing exclude_decorated_with")
+	}
+
 	relationshipsPath := mustMapField(t, paths, "/api/v0/code/relationships")
 	relationshipsPost := mustMapField(t, relationshipsPath, "post")
 	relationshipsBody := mustMapField(t, mustMapField(t, relationshipsPost, "requestBody"), "content")

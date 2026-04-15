@@ -56,6 +56,33 @@ func (h *CodeHandler) enrichGraphSearchResultsWithContentMetadata(
 	return results, nil
 }
 
+func (h *CodeHandler) enrichGraphResultsWithContentMetadataByEntityID(
+	ctx context.Context,
+	results []map[string]any,
+) ([]map[string]any, error) {
+	if h == nil || h.Content == nil || len(results) == 0 {
+		return results, nil
+	}
+
+	for i := range results {
+		entityID := StringVal(results[i], "entity_id")
+		if entityID == "" {
+			continue
+		}
+		entity, err := h.Content.GetEntityContent(ctx, entityID)
+		if err != nil {
+			return nil, fmt.Errorf("enrich graph results by entity id: %w", err)
+		}
+		if entity == nil || len(entity.Metadata) == 0 {
+			continue
+		}
+		results[i]["metadata"] = entity.Metadata
+		attachSemanticSummary(results[i])
+	}
+
+	return results, nil
+}
+
 func resultContentEntityType(result map[string]any) string {
 	labels := StringSliceVal(result, "labels")
 	for _, label := range labels {

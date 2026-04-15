@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -40,6 +42,7 @@ func init() {
 		RunE:  runAnalyzeChain,
 	}
 	addRemoteFlags(chainCmd)
+	chainCmd.Flags().Int("depth", 5, "Maximum traversal depth")
 	analyzeCmd.AddCommand(chainCmd)
 
 	// analyze deps
@@ -78,6 +81,9 @@ func init() {
 		RunE:  runAnalyzeDeadCode,
 	}
 	addRemoteFlags(deadCodeCmd)
+	deadCodeCmd.Flags().String("repo-id", "", "Optional repository ID filter")
+	deadCodeCmd.Flags().StringSlice("exclude", nil, "Decorator names to exclude from dead-code results")
+	deadCodeCmd.Flags().Bool("fail-on-found", false, "Exit non-zero when any dead-code candidates are found")
 	analyzeCmd.AddCommand(deadCodeCmd)
 
 	// analyze overrides
@@ -133,10 +139,12 @@ func runAnalyzeCallers(cmd *cobra.Command, args []string) error {
 
 func runAnalyzeChain(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
+	depth, _ := cmd.Flags().GetInt("depth")
 	var result any
 	err := client.Post("/api/v0/code/call-chain", map[string]any{
-		"from": args[0],
-		"to":   args[1],
+		"start":     args[0],
+		"end":       args[1],
+		"max_depth": depth,
 	}, &result)
 	if err != nil {
 		return err
@@ -188,10 +196,22 @@ func runAnalyzeComplexity(cmd *cobra.Command, args []string) error {
 
 func runAnalyzeDeadCode(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
-	var result any
-	err := client.Post("/api/v0/code/dead-code", map[string]any{}, &result)
+	repoID, _ := cmd.Flags().GetString("repo-id")
+	exclusions, _ := cmd.Flags().GetStringSlice("exclude")
+	failOnFound, _ := cmd.Flags().GetBool("fail-on-found")
+
+	var result map[string]any
+	err := client.Post("/api/v0/code/dead-code", map[string]any{
+		"repo_id":                repoID,
+		"exclude_decorated_with": exclusions,
+	}, &result)
 	if err != nil {
 		return err
+	}
+	if failOnFound {
+		if rows, ok := result["results"].([]any); ok && len(rows) > 0 {
+			return fmt.Errorf("found %d dead-code candidates", len(rows))
+		}
 	}
 	printJSON(result)
 	return nil

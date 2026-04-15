@@ -51,7 +51,7 @@ These are the most commonly used tools for understanding code.
 | **`analyze_code_relationships`** | The swiss-army knife for call graphs and dependencies. | "Find all callers of `process_payment`." |
 | **`calculate_cyclomatic_complexity`** | Measure function complexity. | "What is the complexity of `main`?" |
 | **`find_most_complex_functions`** | List the hardest-to-maintain functions. | "Show me the 5 most complex functions." |
-| **`find_dead_code`** | Identify unused functions, optionally scoped by canonical `repo_id`. | "Find dead code in this repo, but ignore `@route`." |
+| **`find_dead_code`** | Identify unused entities, optionally scoped by canonical `repo_id`, and filter out known decorator-owned entry points. | "Find dead code in this repo, but ignore `@route`." |
 
 ## Story & Context
 

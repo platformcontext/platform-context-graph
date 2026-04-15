@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
+	"strings"
 )
 
 // dispatchTool routes an MCP tool call to the appropriate internal HTTP endpoint.
@@ -88,6 +90,41 @@ func boolOr(args map[string]any, key string, def bool) bool {
 	return v
 }
 
+func stringSlice(args map[string]any, key string) []any {
+	raw, ok := args[key]
+	if !ok {
+		return nil
+	}
+	values, ok := raw.([]any)
+	if ok {
+		return values
+	}
+	stringValues, ok := raw.([]string)
+	if !ok {
+		return nil
+	}
+	result := make([]any, 0, len(stringValues))
+	for _, value := range stringValues {
+		result = append(result, value)
+	}
+	return result
+}
+
+func parseMaxDepth(args map[string]any, defaultDepth int) int {
+	if depth, ok := args["max_depth"].(float64); ok {
+		return int(depth)
+	}
+	contextValue := str(args, "context")
+	if contextValue == "" {
+		return defaultDepth
+	}
+	depth, err := strconv.Atoi(strings.TrimSpace(contextValue))
+	if err != nil {
+		return defaultDepth
+	}
+	return depth
+}
+
 // resolveRoute maps a tool name and its arguments to an internal HTTP route.
 func resolveRoute(toolName string, args map[string]any) (*route, error) {
 	switch toolName {
@@ -121,11 +158,27 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 				"direction":         "incoming",
 				"relationship_type": "IMPORTS",
 			}
+		case "call_chain":
+			start, end, ok := strings.Cut(str(args, "target"), "->")
+			if !ok {
+				return nil, fmt.Errorf("call_chain target must use start->end format")
+			}
+			return &route{method: "POST", path: "/api/v0/code/call-chain", body: map[string]any{
+				"start":     strings.TrimSpace(start),
+				"end":       strings.TrimSpace(end),
+				"max_depth": parseMaxDepth(args, 5),
+			}}, nil
+		case "dead_code":
+			return &route{method: "POST", path: "/api/v0/code/dead-code", body: map[string]any{
+				"repo_id":                str(args, "repo_id"),
+				"exclude_decorated_with": stringSlice(args, "exclude_decorated_with"),
+			}}, nil
 		}
 		return &route{method: "POST", path: "/api/v0/code/relationships", body: body}, nil
 	case "find_dead_code":
 		return &route{method: "POST", path: "/api/v0/code/dead-code", body: map[string]any{
-			"repo_id": str(args, "repo_id"),
+			"repo_id":                str(args, "repo_id"),
+			"exclude_decorated_with": stringSlice(args, "exclude_decorated_with"),
 		}}, nil
 	case "calculate_cyclomatic_complexity":
 		return &route{method: "POST", path: "/api/v0/code/complexity", body: map[string]any{

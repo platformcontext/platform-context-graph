@@ -13,8 +13,8 @@ pcg index /path/to/repo
 # Find callers of a function
 pcg analyze callers process_payment
 
-# Check complexity
-pcg analyze complexity --threshold 20
+# Find dead code while excluding route handlers
+pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude @app.route --fail-on-found
 ```
 
 **Best for:** local indexing, ad hoc analysis, scripting, debugging. The CLI is the fastest way to get answers when you already know what to ask.

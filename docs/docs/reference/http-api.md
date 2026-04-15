@@ -326,9 +326,13 @@ Example dead-code workflow:
 ```json
 {
   "repo_id": "repository:r_ab12cd34",
-  "scope": "repo"
+  "exclude_decorated_with": ["@route", "@app.route"]
 }
 ```
+
+`repo_id` is optional. When omitted, the Go API returns the first page of
+dead-code candidates across indexed repositories and uses content metadata to
+filter any decorator exclusions.
 
 ## Content API
 
