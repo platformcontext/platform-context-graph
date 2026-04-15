@@ -260,6 +260,9 @@ func attachSemanticSummary(result map[string]any) {
 	if profile := buildEntitySemanticProfile(entity); len(profile) > 0 {
 		result["semantic_profile"] = profile
 	}
+	if story := buildEntityStory(result); story != "" {
+		result["story"] = story
+	}
 }
 
 func primaryEntityLabel(entity map[string]any) string {

@@ -96,6 +96,13 @@ Examples:
 - `GET /api/v0/entities/workload:payments-api/context`
 - `GET /api/v0/entities/workload-instance:payments-api:prod/context`
 
+Entity context responses may also include semantic narrative fields when the
+entity carries normalized semantic metadata:
+
+- `semantic_summary`
+- `semantic_profile`
+- `story`
+
 ### Get workload context
 
 `GET /api/v0/workloads/{id}/context`
@@ -133,6 +140,7 @@ Repository story responses are shaped around:
 - `subject`
 - `story`
 - `story_sections`
+- optional `semantic_overview`
 - `deployment_overview`
 - `gitops_overview`
 - `documentation_overview`
@@ -140,6 +148,13 @@ Repository story responses are shaped around:
 - `coverage_summary`
 - `limitations`
 - `drilldowns`
+
+When repository entities carry semantic signals, repository story responses
+also:
+
+- add a `semantics` entry into `story_sections`
+- embed semantic coverage text into the top-level `story`
+- expose aggregated semantic counts in `semantic_overview`
 
 Workload and service story responses are still shaped around:
 

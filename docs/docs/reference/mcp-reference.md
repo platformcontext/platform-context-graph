@@ -60,7 +60,7 @@ Use these tools when the user is asking for a narrative answer such as
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
-| **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
+| **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, optional `semantic_overview`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
 | **`get_workload_story`** | Return a narrative workload story using canonical workload identity, optionally scoped to one environment. Use `trace_deployment_chain` when you need the richer deployment-mapping fields such as `story_sections`, `deployment_overview`, `controller_overview`, or `deployment_fact_summary`. | "Show me how payments-api is deployed in prod." |
 | **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts; pair it with `trace_deployment_chain` for deployment-mapping detail. | "What can you tell me about payments-api in QA?" |
 | **`investigate_service`** | Orchestrated service investigation that widens across related repos, evidence families, and deployment planes, then reports coverage and recommended next calls. | "Explain the deployment flow for api-node-boats using PCG only." |

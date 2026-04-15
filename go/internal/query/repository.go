@@ -139,6 +139,11 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 	workloadNames := StringSliceVal(row, "workload_names")
 	platformTypes := StringSliceVal(row, "platform_types")
 	dependencyCount := IntVal(row, "dependency_count")
+	semanticOverview, err := loadRepositorySemanticOverview(r.Context(), h.Content, repoID)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("semantic overview failed: %v", err))
+		return
+	}
 
 	WriteJSON(w, http.StatusOK, buildRepositoryStoryResponse(
 		repo,
@@ -147,6 +152,7 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		workloadNames,
 		platformTypes,
 		dependencyCount,
+		semanticOverview,
 	))
 }
 

@@ -180,6 +180,10 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if got, want := entityContextSemanticProfile["type"], "object"; got != want {
 		t.Fatalf("entity context semantic_profile.type = %#v, want %#v", got, want)
 	}
+	entityContextStory := mustMapField(t, entityContextProperties, "story")
+	if got, want := entityContextStory["type"], "string"; got != want {
+		t.Fatalf("entity context story.type = %#v, want %#v", got, want)
+	}
 
 	codeSearchPath := mustMapField(t, paths, "/api/v0/code/search")
 	codeSearchPost := mustMapField(t, codeSearchPath, "post")
@@ -289,6 +293,7 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		"subject",
 		"story",
 		"story_sections",
+		"semantic_overview",
 		"deployment_overview",
 		"gitops_overview",
 		"documentation_overview",

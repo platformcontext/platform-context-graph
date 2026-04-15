@@ -73,6 +73,7 @@ const openAPIPathsEntities = `
                     "metadata": {"type": "object", "additionalProperties": true},
                     "semantic_summary": {"type": "string"},
                     "semantic_profile": {"type": "object", "additionalProperties": true},
+                    "story": {"type": "string"},
                     "repo_id": {"type": "string"},
                     "repo_name": {"type": "string"},
                     "relationships": {"type": "array", "items": {"$ref": "#/components/schemas/Relationship"}}

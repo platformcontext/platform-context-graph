@@ -12,10 +12,12 @@ func buildRepositoryStoryResponse(
 	workloads []string,
 	platforms []string,
 	dependencyCount int,
+	semanticOverview map[string]any,
 ) map[string]any {
 	filteredLanguages := nonEmptyStrings(languages)
 	filteredPlatforms := nonEmptyStrings(platforms)
 	filteredWorkloads := nonEmptyStrings(workloads)
+	semanticStory := buildRepositorySemanticStory(semanticOverview)
 	limitations := []string{"coverage_not_computed"}
 	if len(filteredPlatforms) == 0 {
 		limitations = append(limitations, "deployment_surface_unknown")
@@ -24,7 +26,7 @@ func buildRepositoryStoryResponse(
 		limitations = append(limitations, "workload_surface_unknown")
 	}
 
-	return map[string]any{
+	response := map[string]any{
 		"repository": repo,
 		"subject": map[string]any{
 			"type": "repository",
@@ -37,6 +39,7 @@ func buildRepositoryStoryResponse(
 			filteredLanguages,
 			filteredWorkloads,
 			filteredPlatforms,
+			semanticStory,
 		),
 		"story_sections": []map[string]any{
 			{
@@ -46,10 +49,6 @@ func buildRepositoryStoryResponse(
 			{
 				"title":   "deployment",
 				"summary": fmt.Sprintf("%d workload(s) and %d platform signal(s)", len(filteredWorkloads), len(filteredPlatforms)),
-			},
-			{
-				"title":   "support",
-				"summary": fmt.Sprintf("%d dependency link(s) and remote=%t", dependencyCount, repo.HasRemote),
 			},
 		},
 		"deployment_overview": map[string]any{
@@ -86,6 +85,21 @@ func buildRepositoryStoryResponse(
 			"coverage_path": "/api/v0/repositories/" + repo.ID + "/coverage",
 		},
 	}
+
+	storySections := response["story_sections"].([]map[string]any)
+	if len(semanticOverview) > 0 {
+		storySections = append(storySections, map[string]any{
+			"title":   "semantics",
+			"summary": semanticStory,
+		})
+		response["semantic_overview"] = semanticOverview
+	}
+	storySections = append(storySections, map[string]any{
+		"title":   "support",
+		"summary": fmt.Sprintf("%d dependency link(s) and remote=%t", dependencyCount, repo.HasRemote),
+	})
+	response["story_sections"] = storySections
+	return response
 }
 
 func buildRepositoryStory(
@@ -94,6 +108,7 @@ func buildRepositoryStory(
 	languages []string,
 	workloads []string,
 	platforms []string,
+	semanticStory string,
 ) string {
 	parts := []string{
 		fmt.Sprintf("Repository %s contains %d indexed files.", repo.Name, fileCount),
@@ -107,6 +122,9 @@ func buildRepositoryStory(
 	}
 	if len(platforms) > 0 {
 		parts = append(parts, fmt.Sprintf("Runs on platform signal(s): %s.", strings.Join(platforms, ", ")))
+	}
+	if semanticStory != "" {
+		parts = append(parts, semanticStory)
 	}
 	if repo.HasRemote && repo.RemoteURL != "" {
 		parts = append(parts, fmt.Sprintf("Remote URL: %s.", repo.RemoteURL))

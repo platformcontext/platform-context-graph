@@ -106,6 +106,7 @@ const openAPIPathsRepositories = `
                     "subject": {"type": "object"},
                     "story": {"type": "string"},
                     "story_sections": {"type": "array", "items": {"type": "object"}},
+                    "semantic_overview": {"type": "object"},
                     "deployment_overview": {"type": "object"},
                     "gitops_overview": {"type": "object"},
                     "documentation_overview": {"type": "object"},

@@ -21,6 +21,7 @@ func TestBuildRepositoryStoryResponseIncludesStructuredOverviews(t *testing.T) {
 		[]string{"payments-api"},
 		[]string{"argocd_application"},
 		3,
+		nil,
 	)
 
 	subject, ok := got["subject"].(map[string]any)
