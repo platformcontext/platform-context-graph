@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -88,3 +89,49 @@ func TestCloseProjectorNeo4jDriverAllowsNilDriver(t *testing.T) {
 		t.Fatalf("closeProjectorNeo4jDriver(nil) error = %v, want nil", err)
 	}
 }
+
+func TestNeo4jBatchSizeReturnsZeroWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	getenv := func(string) string { return "" }
+	if got := neo4jBatchSize(getenv); got != 0 {
+		t.Fatalf("neo4jBatchSize() = %d, want 0", got)
+	}
+}
+
+func TestNeo4jBatchSizeParsesValidInteger(t *testing.T) {
+	t.Parallel()
+
+	getenv := func(string) string { return "500" }
+	if got, want := neo4jBatchSize(getenv), 500; got != want {
+		t.Fatalf("neo4jBatchSize() = %d, want %d", got, want)
+	}
+}
+
+func TestNeo4jBatchSizeReturnsZeroForInvalidInput(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{"negative", "-10"},
+		{"zero", "0"},
+		{"non-numeric", "invalid"},
+		{"whitespace", "   "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(string) string { return tt.value }
+			if got := neo4jBatchSize(getenv); got != 0 {
+				t.Fatalf("neo4jBatchSize(%q) = %d, want 0", tt.value, got)
+			}
+		})
+	}
+}
+
+// stubNeo4jExecutor is a no-op executor for tests that don't exercise Neo4j.
+type stubNeo4jExecutor struct{}
+
+func (stubNeo4jExecutor) Execute(_ context.Context, _ sourceneo4j.Statement) error { return nil }

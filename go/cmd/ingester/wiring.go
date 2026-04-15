@@ -125,7 +125,7 @@ func buildIngesterProjectorService(
 	instruments *telemetry.Instruments,
 	logger *slog.Logger,
 ) (projector.Service, error) {
-	projectorQueue := postgres.NewProjectorQueue(database, "ingester", time.Minute)
+	projectorQueue := postgres.NewProjectorQueue(database, "ingester", 5*time.Minute)
 	reducerQueue := postgres.NewReducerQueue(database, "ingester", time.Minute)
 	retryInjector, err := loadIngesterRetryInjector(getenv)
 	if err != nil {
@@ -138,17 +138,22 @@ func buildIngesterProjectorService(
 	projectorQueue.RetryDelay = retryPolicy.RetryDelay
 	projectorQueue.MaxAttempts = retryPolicy.MaxAttempts
 
-	return projector.Service{
-		PollInterval: time.Second,
-		WorkSource:   projectorQueue,
-		FactStore:    postgres.NewFactStore(database),
-		Runner:       buildIngesterProjectorRuntime(database, graphWriter, reducerQueue, retryInjector, tracer, instruments),
-		WorkSink:     projectorQueue,
-		Tracer:       tracer,
-		Instruments:  instruments,
-		Logger:       logger,
-		Workers:      projectorWorkerCount(getenv),
-	}, nil
+	svc := projector.Service{
+		PollInterval:          time.Second,
+		WorkSource:            projectorQueue,
+		FactStore:             postgres.NewFactStore(database),
+		Runner:                buildIngesterProjectorRuntime(database, graphWriter, reducerQueue, retryInjector, tracer, instruments),
+		WorkSink:              projectorQueue,
+		Tracer:                tracer,
+		Instruments:           instruments,
+		Logger:                logger,
+		Workers:               projectorWorkerCount(getenv),
+		FactCounter:           postgres.NewFactStore(database),
+		LargeGenThreshold:     largeGenThreshold(getenv),
+		LargeGenMaxConcurrent: largeGenMaxConcurrent(getenv),
+	}
+	svc.InitLargeGenSemaphore()
+	return svc, nil
 }
 
 func projectorWorkerCount(getenv func(string) string) int {
@@ -165,6 +170,24 @@ func projectorWorkerCount(getenv func(string) string) int {
 		n = 1
 	}
 	return n
+}
+
+func largeGenThreshold(getenv func(string) string) int {
+	if raw := strings.TrimSpace(getenv("PCG_LARGE_GEN_THRESHOLD")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 10000
+}
+
+func largeGenMaxConcurrent(getenv func(string) string) int {
+	if raw := strings.TrimSpace(getenv("PCG_LARGE_GEN_MAX_CONCURRENT")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 2
 }
 
 func buildIngesterProjectorRuntime(

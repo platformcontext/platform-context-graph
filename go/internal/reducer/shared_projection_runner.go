@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -332,8 +333,19 @@ func LoadSharedProjectionConfig(getenv func(string) string) SharedProjectionRunn
 		PollInterval:   durationFromEnv(getenv, "PCG_SHARED_PROJECTION_POLL_INTERVAL", defaultSharedPollInterval),
 		LeaseTTL:       durationFromEnv(getenv, "PCG_SHARED_PROJECTION_LEASE_TTL", defaultLeaseTTL),
 		BatchLimit:     intFromEnvDefault(getenv, "PCG_SHARED_PROJECTION_BATCH_LIMIT", defaultBatchLimit),
-		Workers:        intFromEnvDefault(getenv, "PCG_SHARED_PROJECTION_WORKERS", 1),
+		Workers:        intFromEnvDefault(getenv, "PCG_SHARED_PROJECTION_WORKERS", defaultSharedProjectionWorkers()),
 	}
+}
+
+func defaultSharedProjectionWorkers() int {
+	n := runtime.NumCPU()
+	if n > 4 {
+		n = 4
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
 }
 
 func intFromEnvDefault(getenv func(string) string, key string, defaultValue int) int {

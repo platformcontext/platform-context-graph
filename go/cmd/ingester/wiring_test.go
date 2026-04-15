@@ -99,6 +99,52 @@ func TestCompositeRunnerCancelsOnFirstError(t *testing.T) {
 	}
 }
 
+func TestLargeGenThresholdDefault(t *testing.T) {
+	t.Parallel()
+
+	got := largeGenThreshold(func(string) string { return "" })
+	if got != 10000 {
+		t.Fatalf("largeGenThreshold() = %d, want 10000", got)
+	}
+}
+
+func TestLargeGenThresholdFromEnv(t *testing.T) {
+	t.Parallel()
+
+	got := largeGenThreshold(func(k string) string {
+		if k == "PCG_LARGE_GEN_THRESHOLD" {
+			return "5000"
+		}
+		return ""
+	})
+	if got != 5000 {
+		t.Fatalf("largeGenThreshold() = %d, want 5000", got)
+	}
+}
+
+func TestLargeGenMaxConcurrentDefault(t *testing.T) {
+	t.Parallel()
+
+	got := largeGenMaxConcurrent(func(string) string { return "" })
+	if got != 2 {
+		t.Fatalf("largeGenMaxConcurrent() = %d, want 2", got)
+	}
+}
+
+func TestLargeGenMaxConcurrentFromEnv(t *testing.T) {
+	t.Parallel()
+
+	got := largeGenMaxConcurrent(func(k string) string {
+		if k == "PCG_LARGE_GEN_MAX_CONCURRENT" {
+			return "4"
+		}
+		return ""
+	})
+	if got != 4 {
+		t.Fatalf("largeGenMaxConcurrent() = %d, want 4", got)
+	}
+}
+
 func TestCompositeRunnerExitsOnContextCancel(t *testing.T) {
 	t.Parallel()
 

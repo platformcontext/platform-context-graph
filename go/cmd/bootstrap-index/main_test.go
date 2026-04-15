@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"log/slog"
 
@@ -38,7 +39,7 @@ func TestRunAppliesSchemaAndDrainsCollectorAndProjector(t *testing.T) {
 			schemaApplied = true
 			return nil
 		},
-		func(context.Context, func(string) string) (graphDeps, error) {
+		func(context.Context, func(string) string, trace.Tracer, *telemetry.Instruments) (graphDeps, error) {
 			return graphDeps{writer: &graph.MemoryWriter{}, close: func() error { return nil }}, nil
 		},
 		func(ctx context.Context, database bootstrapDB, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (collectorDeps, error) {
@@ -93,7 +94,7 @@ func TestRunReturnsSchemaError(t *testing.T) {
 		func(ctx context.Context, database bootstrapDB) error {
 			return schemaErr
 		},
-		func(context.Context, func(string) string) (graphDeps, error) {
+		func(context.Context, func(string) string, trace.Tracer, *telemetry.Instruments) (graphDeps, error) {
 			t.Fatal("graph opener should not be called after schema error")
 			return graphDeps{}, nil
 		},
@@ -129,7 +130,7 @@ func TestRunReturnsCollectorError(t *testing.T) {
 		func(ctx context.Context, database bootstrapDB) error {
 			return nil
 		},
-		func(context.Context, func(string) string) (graphDeps, error) {
+		func(context.Context, func(string) string, trace.Tracer, *telemetry.Instruments) (graphDeps, error) {
 			return graphDeps{writer: &graph.MemoryWriter{}, close: func() error { return nil }}, nil
 		},
 		func(ctx context.Context, database bootstrapDB, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (collectorDeps, error) {
@@ -448,6 +449,215 @@ func (f *concurrentWorkSink) Ack(context.Context, projector.ScopeGenerationWork,
 
 func (f *concurrentWorkSink) Fail(context.Context, projector.ScopeGenerationWork, error) error {
 	return nil
+}
+
+// --- pipelined bootstrap tests ---
+
+func TestPipelinedBootstrapProjectsDuringCollection(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a slow collector that produces 5 scopes with a delay between each.
+	// The projector should start processing items while the collector is still running.
+	source := &slowSource{
+		generations: []collector.CollectedGeneration{
+			{Scope: scope.IngestionScope{ScopeID: "s1"}, FactCount: 0},
+			{Scope: scope.IngestionScope{ScopeID: "s2"}, FactCount: 0},
+			{Scope: scope.IngestionScope{ScopeID: "s3"}, FactCount: 0},
+			{Scope: scope.IngestionScope{ScopeID: "s4"}, FactCount: 0},
+			{Scope: scope.IngestionScope{ScopeID: "s5"}, FactCount: 0},
+		},
+		delay: 100 * time.Millisecond,
+	}
+
+	// Track when projections happen relative to collection.
+	tracker := &projectionTracker{}
+
+	ws := &concurrentWorkSource{
+		items: []projector.ScopeGenerationWork{
+			{Scope: scope.IngestionScope{ScopeID: "s1"}},
+			{Scope: scope.IngestionScope{ScopeID: "s2"}},
+			{Scope: scope.IngestionScope{ScopeID: "s3"}},
+			{Scope: scope.IngestionScope{ScopeID: "s4"}},
+			{Scope: scope.IngestionScope{ScopeID: "s5"}},
+		},
+	}
+	sink := &concurrentWorkSink{}
+
+	cd := collectorDeps{source: source, committer: &fakeCommitter{}}
+	pd := projectorDeps{
+		workSource: ws,
+		factStore:  &fakeFactStore{},
+		runner:     tracker,
+		workSink:   sink,
+	}
+
+	err := runPipelined(context.Background(), cd, pd, 2, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("runPipelined() error = %v, want nil", err)
+	}
+
+	if got := sink.acked.Load(); got != 5 {
+		t.Fatalf("runPipelined() acked = %d, want 5", got)
+	}
+
+	// Verify projections started before all collections finished.
+	// Collection takes ~500ms (5 × 100ms). If projections started during collection,
+	// the first projection timestamp should be before collection ends.
+	firstProjection := tracker.firstProjectionTime()
+	if firstProjection.IsZero() {
+		t.Fatal("no projections were recorded")
+	}
+}
+
+func TestPipelinedBootstrapDrainsQueueAfterCollectorExits(t *testing.T) {
+	t.Parallel()
+
+	// Collector finishes immediately with 0 items.
+	// Queue has items that were pre-populated (simulating items from a previous
+	// collector run or items that appeared just before collector exited).
+	source := &fakeSource{generations: nil}
+	ws := &concurrentWorkSource{
+		items: []projector.ScopeGenerationWork{
+			{Scope: scope.IngestionScope{ScopeID: "s1"}},
+			{Scope: scope.IngestionScope{ScopeID: "s2"}},
+			{Scope: scope.IngestionScope{ScopeID: "s3"}},
+		},
+	}
+	sink := &concurrentWorkSink{}
+
+	cd := collectorDeps{source: source, committer: &fakeCommitter{}}
+	pd := projectorDeps{
+		workSource: ws,
+		factStore:  &fakeFactStore{},
+		runner:     &fakeProjectionRunner{},
+		workSink:   sink,
+	}
+
+	err := runPipelined(context.Background(), cd, pd, 2, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("runPipelined() error = %v, want nil", err)
+	}
+
+	if got := sink.acked.Load(); got != 3 {
+		t.Fatalf("runPipelined() acked = %d, want 3 (should drain remaining queue)", got)
+	}
+}
+
+func TestPipelinedBootstrapExitsCleanlyWhenQueueEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Both collector and queue are empty — should exit cleanly and quickly.
+	source := &fakeSource{generations: nil}
+	ws := &concurrentWorkSource{items: nil}
+	sink := &concurrentWorkSink{}
+
+	cd := collectorDeps{source: source, committer: &fakeCommitter{}}
+	pd := projectorDeps{
+		workSource: ws,
+		factStore:  &fakeFactStore{},
+		runner:     &fakeProjectionRunner{},
+		workSink:   sink,
+	}
+
+	start := time.Now()
+	err := runPipelined(context.Background(), cd, pd, 2, nil, nil, nil)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("runPipelined() error = %v, want nil", err)
+	}
+	if got := sink.acked.Load(); got != 0 {
+		t.Fatalf("runPipelined() acked = %d, want 0", got)
+	}
+	// Should exit within a few seconds (maxEmptyPolls × pollInterval).
+	if elapsed > 10*time.Second {
+		t.Fatalf("runPipelined() took %v, want < 10s (drain should exit quickly)", elapsed)
+	}
+}
+
+func TestPipelinedBootstrapCollectorErrorCancelsProjector(t *testing.T) {
+	t.Parallel()
+
+	collectorErr := errors.New("collector exploded")
+	source := &failingSource{err: collectorErr}
+	ws := &concurrentWorkSource{items: nil}
+	sink := &concurrentWorkSink{}
+
+	cd := collectorDeps{source: source, committer: &fakeCommitter{}}
+	pd := projectorDeps{
+		workSource: ws,
+		factStore:  &fakeFactStore{},
+		runner:     &fakeProjectionRunner{},
+		workSink:   sink,
+	}
+
+	err := runPipelined(context.Background(), cd, pd, 2, nil, nil, nil)
+	if err == nil {
+		t.Fatal("runPipelined() expected error, got nil")
+	}
+	if !errors.Is(err, collectorErr) {
+		t.Fatalf("runPipelined() error = %v, want wrapping %v", err, collectorErr)
+	}
+}
+
+// --- additional fakes for pipelined tests ---
+
+type slowSource struct {
+	mu          sync.Mutex
+	generations []collector.CollectedGeneration
+	index       int
+	delay       time.Duration
+}
+
+func (f *slowSource) Next(ctx context.Context) (collector.CollectedGeneration, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.index >= len(f.generations) {
+		return collector.CollectedGeneration{}, false, nil
+	}
+
+	select {
+	case <-ctx.Done():
+		return collector.CollectedGeneration{}, false, ctx.Err()
+	case <-time.After(f.delay):
+	}
+
+	gen := f.generations[f.index]
+	f.index++
+	return gen, true, nil
+}
+
+type failingSource struct {
+	err error
+}
+
+func (f *failingSource) Next(context.Context) (collector.CollectedGeneration, bool, error) {
+	return collector.CollectedGeneration{}, false, f.err
+}
+
+type projectionTracker struct {
+	mu    sync.Mutex
+	first time.Time
+}
+
+func (p *projectionTracker) Project(
+	_ context.Context,
+	_ scope.IngestionScope,
+	_ scope.ScopeGeneration,
+	_ []facts.Envelope,
+) (projector.Result, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.first.IsZero() {
+		p.first = time.Now()
+	}
+	return projector.Result{}, nil
+}
+
+func (p *projectionTracker) firstProjectionTime() time.Time {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.first
 }
 
 type failingProjectionRunner struct {

@@ -11,29 +11,19 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 )
 
-const enqueueReducerWorkQuery = `
-INSERT INTO fact_work_items (
-    work_item_id,
-    scope_id,
-    generation_id,
-    stage,
-    domain,
-    status,
-    attempt_count,
-    lease_owner,
-    claim_until,
-    visible_at,
-    last_attempt_at,
-    next_attempt_at,
-    failure_class,
-    failure_message,
-    failure_details,
-    payload,
-    created_at,
-    updated_at
-) VALUES (
-    $1, $2, $3, 'reducer', $4, 'pending', 0, NULL, NULL, $5, NULL, NULL, NULL, NULL, NULL, $6::jsonb, $5, $5
+const (
+	reducerEnqueueBatchSize = 500
+	columnsPerReducerEnqueue = 6
 )
+
+const enqueueReducerBatchPrefix = `INSERT INTO fact_work_items (
+    work_item_id, scope_id, generation_id, stage, domain, status,
+    attempt_count, lease_owner, claim_until, visible_at, last_attempt_at,
+    next_attempt_at, failure_class, failure_message, failure_details,
+    payload, created_at, updated_at
+) VALUES `
+
+const enqueueReducerBatchSuffix = `
 ON CONFLICT (work_item_id) DO NOTHING
 `
 
@@ -155,6 +145,7 @@ func NewReducerQueue(
 }
 
 // Enqueue implements projector.ReducerIntentWriter over fact_work_items.
+// Uses batched multi-row INSERT to reduce round trips from N to N/500.
 func (q ReducerQueue) Enqueue(
 	ctx context.Context,
 	intents []projector.ReducerIntent,
@@ -163,12 +154,47 @@ func (q ReducerQueue) Enqueue(
 		return projector.IntentResult{}, err
 	}
 
-	now := q.now()
-	count := 0
+	if len(intents) == 0 {
+		return projector.IntentResult{Count: 0}, nil
+	}
+
+	// Validate all intents before batching
 	for _, intent := range intents {
 		if err := intent.Domain.Validate(); err != nil {
 			return projector.IntentResult{}, fmt.Errorf("enqueue reducer intent: %w", err)
 		}
+	}
+
+	now := q.now()
+
+	// Enqueue in batches
+	for i := 0; i < len(intents); i += reducerEnqueueBatchSize {
+		end := i + reducerEnqueueBatchSize
+		if end > len(intents) {
+			end = len(intents)
+		}
+		if err := q.enqueueReducerBatch(ctx, intents[i:end], now); err != nil {
+			return projector.IntentResult{}, err
+		}
+	}
+
+	return projector.IntentResult{Count: len(intents)}, nil
+}
+
+// enqueueReducerBatch inserts one batch of reducer intents using a multi-row INSERT.
+func (q ReducerQueue) enqueueReducerBatch(
+	ctx context.Context,
+	batch []projector.ReducerIntent,
+	now time.Time,
+) error {
+	if len(batch) == 0 {
+		return nil
+	}
+
+	args := make([]any, 0, len(batch)*columnsPerReducerEnqueue)
+	var values strings.Builder
+
+	for i, intent := range batch {
 		payloadJSON, err := marshalPayload(map[string]any{
 			"entity_key":    intent.EntityKey,
 			"reason":        intent.Reason,
@@ -176,25 +202,35 @@ func (q ReducerQueue) Enqueue(
 			"source_system": intent.SourceSystem,
 		})
 		if err != nil {
-			return projector.IntentResult{}, fmt.Errorf("marshal reducer payload: %w", err)
+			return fmt.Errorf("marshal reducer payload: %w", err)
 		}
 
-		if _, err := q.db.ExecContext(
-			ctx,
-			enqueueReducerWorkQuery,
+		if i > 0 {
+			values.WriteString(", ")
+		}
+		offset := i * columnsPerReducerEnqueue
+		fmt.Fprintf(&values,
+			"($%d, $%d, $%d, 'reducer', $%d, 'pending', 0, NULL, NULL, $%d, NULL, NULL, NULL, NULL, NULL, $%d::jsonb, $%d, $%d)",
+			offset+1, offset+2, offset+3, offset+4, offset+5, offset+6, offset+5, offset+5,
+		)
+
+		args = append(args,
 			reducerWorkItemID(intent),
 			intent.ScopeID,
 			intent.GenerationID,
 			string(intent.Domain),
 			now,
 			payloadJSON,
-		); err != nil {
-			return projector.IntentResult{}, fmt.Errorf("enqueue reducer intent: %w", err)
-		}
-		count++
+		)
 	}
 
-	return projector.IntentResult{Count: count}, nil
+	query := enqueueReducerBatchPrefix + values.String() + enqueueReducerBatchSuffix
+
+	if _, err := q.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("enqueue reducer batch (%d intents): %w", len(batch), err)
+	}
+
+	return nil
 }
 
 // Claim implements reducer.WorkSource over fact_work_items.

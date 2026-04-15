@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -98,20 +100,43 @@ func buildBootstrapProjector(
 	}, nil
 }
 
+// neo4jBatchSize reads PCG_NEO4J_BATCH_SIZE from the environment.
+// Returns 0 (use default) if unset or invalid.
+func neo4jBatchSize(getenv func(string) string) int {
+	raw := strings.TrimSpace(getenv("PCG_NEO4J_BATCH_SIZE"))
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
 func openBootstrapGraphWriter(
 	parent context.Context,
 	getenv func(string) string,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
 ) (graph.Writer, io.Closer, error) {
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	rawExecutor := bootstrapNeo4jExecutor{
+		Driver:       driver,
+		DatabaseName: cfg.DatabaseName,
+	}
+
 	return sourceneo4j.Adapter{
-			Executor: bootstrapNeo4jExecutor{
-				Driver:       driver,
-				DatabaseName: cfg.DatabaseName,
+			Executor: &sourceneo4j.InstrumentedExecutor{
+				Inner:       rawExecutor,
+				Tracer:      tracer,
+				Instruments: instruments,
 			},
+			BatchSize: neo4jBatchSize(getenv),
 		},
 		bootstrapNeo4jDriverCloser{Driver: driver},
 		nil

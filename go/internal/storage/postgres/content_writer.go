@@ -13,6 +13,13 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 )
 
+const (
+	contentFileBatchSize    = 500
+	columnsPerContentFile   = 11
+	contentEntityBatchSize  = 300 // 16 columns × 300 = 4800 params, under 65535
+	columnsPerContentEntity = 16
+)
+
 const upsertContentFileQuery = `
 INSERT INTO content_files (
     repo_id, relative_path, commit_sha, content, content_hash,
@@ -21,6 +28,25 @@ INSERT INTO content_files (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
+ON CONFLICT (repo_id, relative_path) DO UPDATE
+SET commit_sha = EXCLUDED.commit_sha,
+    content = EXCLUDED.content,
+    content_hash = EXCLUDED.content_hash,
+    line_count = EXCLUDED.line_count,
+    language = EXCLUDED.language,
+    artifact_type = EXCLUDED.artifact_type,
+    template_dialect = EXCLUDED.template_dialect,
+    iac_relevant = EXCLUDED.iac_relevant,
+    indexed_at = EXCLUDED.indexed_at
+`
+
+const upsertContentFileBatchPrefix = `INSERT INTO content_files (
+    repo_id, relative_path, commit_sha, content, content_hash,
+    line_count, language, artifact_type, template_dialect,
+    iac_relevant, indexed_at
+) VALUES `
+
+const upsertContentFileBatchSuffix = `
 ON CONFLICT (repo_id, relative_path) DO UPDATE
 SET commit_sha = EXCLUDED.commit_sha,
     content = EXCLUDED.content,
@@ -75,6 +101,32 @@ SET repo_id = EXCLUDED.repo_id,
     indexed_at = EXCLUDED.indexed_at
 `
 
+const upsertContentEntityBatchPrefix = `INSERT INTO content_entities (
+    entity_id, repo_id, relative_path, entity_type, entity_name,
+    start_line, end_line, start_byte, end_byte, language,
+    artifact_type, template_dialect, iac_relevant,
+    source_cache, metadata, indexed_at
+) VALUES `
+
+const upsertContentEntityBatchSuffix = `
+ON CONFLICT (entity_id) DO UPDATE
+SET repo_id = EXCLUDED.repo_id,
+    relative_path = EXCLUDED.relative_path,
+    entity_type = EXCLUDED.entity_type,
+    entity_name = EXCLUDED.entity_name,
+    start_line = EXCLUDED.start_line,
+    end_line = EXCLUDED.end_line,
+    start_byte = EXCLUDED.start_byte,
+    end_byte = EXCLUDED.end_byte,
+    language = EXCLUDED.language,
+    artifact_type = EXCLUDED.artifact_type,
+    template_dialect = EXCLUDED.template_dialect,
+    iac_relevant = EXCLUDED.iac_relevant,
+    source_cache = EXCLUDED.source_cache,
+    metadata = EXCLUDED.metadata,
+    indexed_at = EXCLUDED.indexed_at
+`
+
 const deleteContentEntityByIDQuery = `
 DELETE FROM content_entities
 WHERE repo_id = $1
@@ -90,6 +142,39 @@ type ContentWriter struct {
 // NewContentWriter constructs a Postgres-backed canonical content writer.
 func NewContentWriter(db ExecQueryer) ContentWriter {
 	return ContentWriter{db: db}
+}
+
+// preparedFileRow holds prepared file record values for batched insertion.
+type preparedFileRow struct {
+	repoID          string
+	path            string
+	commitSHA       any
+	body            string
+	contentHash     string
+	lineCount       int
+	language        any
+	artifactType    any
+	templateDialect any
+	iacRelevant     any
+}
+
+// preparedEntityRow holds prepared entity record values for batched insertion.
+type preparedEntityRow struct {
+	entityID        string
+	repoID          string
+	path            string
+	entityType      string
+	entityName      string
+	startLine       int
+	endLine         int
+	startByte       any
+	endByte         any
+	language        any
+	artifactType    any
+	templateDialect any
+	iacRelevant     any
+	sourceCache     string
+	metadataJSON    []byte
 }
 
 // Write persists canonical file and entity rows and removes tombstoned rows.
@@ -111,6 +196,8 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 		EntityCount:  len(cloned.Entities),
 	}
 
+	// Process file records: handle deletes first, then batch upserts
+	var fileUpserts []preparedFileRow
 	for _, record := range cloned.Records {
 		if strings.TrimSpace(record.Path) == "" {
 			return content.Result{}, fmt.Errorf("content record path is required")
@@ -127,6 +214,7 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 			continue
 		}
 
+		// Validate and prepare row for batching
 		contentHash, err := fileContentHash(record)
 		if err != nil {
 			return content.Result{}, fmt.Errorf("derive content hash for %q: %w", record.Path, err)
@@ -153,25 +241,27 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 			return content.Result{}, fmt.Errorf("iac_relevant metadata for %q: %w", record.Path, err)
 		}
 
-		if _, err := w.db.ExecContext(
-			ctx,
-			upsertContentFileQuery,
-			cloned.RepoID,
-			record.Path,
-			commitSHA,
-			record.Body,
-			contentHash,
-			lineCount(record.Body),
-			language,
-			artifactType,
-			templateDialect,
-			iacRelevant,
-			indexedAt,
-		); err != nil {
-			return content.Result{}, fmt.Errorf("upsert content_files for %q: %w", record.Path, err)
-		}
+		fileUpserts = append(fileUpserts, preparedFileRow{
+			repoID:          cloned.RepoID,
+			path:            record.Path,
+			commitSHA:       commitSHA,
+			body:            record.Body,
+			contentHash:     contentHash,
+			lineCount:       lineCount(record.Body),
+			language:        language,
+			artifactType:    artifactType,
+			templateDialect: templateDialect,
+			iacRelevant:     iacRelevant,
+		})
 	}
 
+	// Batch upsert file records
+	if err := w.upsertContentFileBatches(ctx, fileUpserts, indexedAt); err != nil {
+		return content.Result{}, err
+	}
+
+	// Process entity records: handle deletes first, then batch upserts
+	var entityUpserts []preparedEntityRow
 	for _, entity := range cloned.Entities {
 		if strings.TrimSpace(entity.EntityID) == "" {
 			return content.Result{}, fmt.Errorf("content entity id is required")
@@ -208,33 +298,34 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 			continue
 		}
 
+		// Validate and prepare row for batching
 		metadataJSON, err := metadataJSON(entity.Metadata)
 		if err != nil {
 			return content.Result{}, fmt.Errorf("marshal content entity metadata for %q: %w", entity.EntityID, err)
 		}
 
-		if _, err := w.db.ExecContext(
-			ctx,
-			upsertContentEntityQuery,
-			entity.EntityID,
-			cloned.RepoID,
-			entity.Path,
-			entity.EntityType,
-			entity.EntityName,
-			entity.StartLine,
-			endLine,
-			optionalInt(entity.StartByte),
-			optionalInt(entity.EndByte),
-			optionalString(entity.Language),
-			optionalString(entity.ArtifactType),
-			optionalString(entity.TemplateDialect),
-			optionalBool(entity.IACRelevant),
-			sourceCache,
-			metadataJSON,
-			indexedAt,
-		); err != nil {
-			return content.Result{}, fmt.Errorf("upsert content_entities for %q: %w", entity.EntityID, err)
-		}
+		entityUpserts = append(entityUpserts, preparedEntityRow{
+			entityID:        entity.EntityID,
+			repoID:          cloned.RepoID,
+			path:            entity.Path,
+			entityType:      entity.EntityType,
+			entityName:      entity.EntityName,
+			startLine:       entity.StartLine,
+			endLine:         endLine,
+			startByte:       optionalInt(entity.StartByte),
+			endByte:         optionalInt(entity.EndByte),
+			language:        optionalString(entity.Language),
+			artifactType:    optionalString(entity.ArtifactType),
+			templateDialect: optionalString(entity.TemplateDialect),
+			iacRelevant:     optionalBool(entity.IACRelevant),
+			sourceCache:     sourceCache,
+			metadataJSON:    metadataJSON,
+		})
+	}
+
+	// Batch upsert entity records
+	if err := w.upsertContentEntityBatches(ctx, entityUpserts, indexedAt); err != nil {
+		return content.Result{}, err
 	}
 
 	return result, nil
@@ -245,6 +336,128 @@ func (w ContentWriter) now() time.Time {
 		return w.Now().UTC()
 	}
 	return time.Now().UTC()
+}
+
+// upsertContentFileBatches persists file records using batched multi-row INSERT statements.
+func (w ContentWriter) upsertContentFileBatches(ctx context.Context, rows []preparedFileRow, indexedAt time.Time) error {
+	for i := 0; i < len(rows); i += contentFileBatchSize {
+		end := i + contentFileBatchSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		if err := w.upsertContentFileBatch(ctx, rows[i:end], indexedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// upsertContentFileBatch inserts one batch of file records using a multi-row INSERT query.
+func (w ContentWriter) upsertContentFileBatch(ctx context.Context, batch []preparedFileRow, indexedAt time.Time) error {
+	if len(batch) == 0 {
+		return nil
+	}
+
+	args := make([]any, 0, len(batch)*columnsPerContentFile)
+	var values strings.Builder
+
+	for i, row := range batch {
+		if i > 0 {
+			values.WriteString(", ")
+		}
+		offset := i * columnsPerContentFile
+		fmt.Fprintf(&values,
+			"($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			offset+1, offset+2, offset+3, offset+4, offset+5,
+			offset+6, offset+7, offset+8, offset+9, offset+10, offset+11,
+		)
+
+		args = append(args,
+			row.repoID,
+			row.path,
+			row.commitSHA,
+			row.body,
+			row.contentHash,
+			row.lineCount,
+			row.language,
+			row.artifactType,
+			row.templateDialect,
+			row.iacRelevant,
+			indexedAt,
+		)
+	}
+
+	query := upsertContentFileBatchPrefix + values.String() + upsertContentFileBatchSuffix
+
+	if _, err := w.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("upsert content_files batch (%d files): %w", len(batch), err)
+	}
+
+	return nil
+}
+
+// upsertContentEntityBatches persists entity records using batched multi-row INSERT statements.
+func (w ContentWriter) upsertContentEntityBatches(ctx context.Context, rows []preparedEntityRow, indexedAt time.Time) error {
+	for i := 0; i < len(rows); i += contentEntityBatchSize {
+		end := i + contentEntityBatchSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		if err := w.upsertContentEntityBatch(ctx, rows[i:end], indexedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// upsertContentEntityBatch inserts one batch of entity records using a multi-row INSERT query.
+func (w ContentWriter) upsertContentEntityBatch(ctx context.Context, batch []preparedEntityRow, indexedAt time.Time) error {
+	if len(batch) == 0 {
+		return nil
+	}
+
+	args := make([]any, 0, len(batch)*columnsPerContentEntity)
+	var values strings.Builder
+
+	for i, row := range batch {
+		if i > 0 {
+			values.WriteString(", ")
+		}
+		offset := i * columnsPerContentEntity
+		fmt.Fprintf(&values,
+			"($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d::jsonb, $%d)",
+			offset+1, offset+2, offset+3, offset+4, offset+5,
+			offset+6, offset+7, offset+8, offset+9, offset+10,
+			offset+11, offset+12, offset+13, offset+14, offset+15, offset+16,
+		)
+
+		args = append(args,
+			row.entityID,
+			row.repoID,
+			row.path,
+			row.entityType,
+			row.entityName,
+			row.startLine,
+			row.endLine,
+			row.startByte,
+			row.endByte,
+			row.language,
+			row.artifactType,
+			row.templateDialect,
+			row.iacRelevant,
+			row.sourceCache,
+			row.metadataJSON,
+			indexedAt,
+		)
+	}
+
+	query := upsertContentEntityBatchPrefix + values.String() + upsertContentEntityBatchSuffix
+
+	if _, err := w.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("upsert content_entities batch (%d entities): %w", len(batch), err)
+	}
+
+	return nil
 }
 
 func fileContentHash(record content.Record) (string, error) {

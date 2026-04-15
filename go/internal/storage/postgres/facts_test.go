@@ -294,3 +294,59 @@ func TestFactStoreListFactsPropagatesQueryErrors(t *testing.T) {
 		t.Fatalf("ListFacts() error = %q, want list facts context", err)
 	}
 }
+
+func TestFactStoreCountFactsReturnsCount(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: [][]any{{42}}},
+		},
+	}
+	store := NewFactStore(db)
+
+	count, err := store.CountFacts(context.Background(), "scope-123", "generation-456")
+	if err != nil {
+		t.Fatalf("CountFacts() error = %v, want nil", err)
+	}
+	if got, want := count, 42; got != want {
+		t.Fatalf("CountFacts() = %d, want %d", got, want)
+	}
+	if got, want := len(db.queries), 1; got != want {
+		t.Fatalf("query count = %d, want %d", got, want)
+	}
+	if !strings.Contains(db.queries[0].query, "COUNT(*)") {
+		t.Fatalf("query = %q, want COUNT(*) query", db.queries[0].query)
+	}
+}
+
+func TestFactStoreCountFactsPropagatesQueryErrors(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{{err: errors.New("boom")}},
+	}
+	store := NewFactStore(db)
+
+	_, err := store.CountFacts(context.Background(), "scope-123", "generation-456")
+	if err == nil {
+		t.Fatal("CountFacts() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "count facts") {
+		t.Fatalf("CountFacts() error = %q, want count facts context", err)
+	}
+}
+
+func TestFactStoreCountFactsNilDB(t *testing.T) {
+	t.Parallel()
+
+	store := NewFactStore(nil)
+
+	_, err := store.CountFacts(context.Background(), "scope-123", "generation-456")
+	if err == nil {
+		t.Fatal("CountFacts() error = nil, want non-nil for nil db")
+	}
+	if !strings.Contains(err.Error(), "database is required") {
+		t.Fatalf("CountFacts() error = %q, want database is required", err)
+	}
+}

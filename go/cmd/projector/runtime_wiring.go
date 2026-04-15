@@ -4,15 +4,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"time"
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 const (
@@ -63,17 +67,28 @@ func buildProjectorRuntime(
 func openProjectorGraphWriter(
 	parent context.Context,
 	getenv func(string) string,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
 ) (graph.Writer, io.Closer, error) {
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	rawExecutor := projectorNeo4jExecutor{
+		Driver:       driver,
+		DatabaseName: cfg.DatabaseName,
+	}
+
+	instrumentedExecutor := &sourceneo4j.InstrumentedExecutor{
+		Inner:       rawExecutor,
+		Tracer:      tracer,
+		Instruments: instruments,
+	}
+
 	return sourceneo4j.Adapter{
-			Executor: projectorNeo4jExecutor{
-				Driver:       driver,
-				DatabaseName: cfg.DatabaseName,
-			},
+			Executor:  instrumentedExecutor,
+			BatchSize: neo4jBatchSize(getenv),
 		},
 		projectorNeo4jDriverCloser{Driver: driver},
 		nil
@@ -121,4 +136,16 @@ func closeProjectorNeo4jDriver(driver neo4jdriver.DriverWithContext) error {
 	closeCtx, cancel := context.WithTimeout(context.Background(), projectorConnectionTimeout)
 	defer cancel()
 	return driver.Close(closeCtx)
+}
+
+func neo4jBatchSize(getenv func(string) string) int {
+	raw := strings.TrimSpace(getenv("PCG_NEO4J_BATCH_SIZE"))
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }

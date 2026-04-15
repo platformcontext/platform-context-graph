@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	defaultPostgresMaxOpenConns              = 20
-	defaultPostgresMaxIdleConns              = 5
+	defaultPostgresMaxOpenConns              = 30
+	defaultPostgresMaxIdleConns              = 10
 	defaultPostgresConnMaxLifetime           = 30 * time.Minute
 	defaultPostgresConnMaxIdleTime           = 10 * time.Minute
 	defaultPostgresPingTimeout               = 10 * time.Second

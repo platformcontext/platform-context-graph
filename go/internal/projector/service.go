@@ -49,6 +49,12 @@ type ProjectorWorkSink interface {
 	Fail(context.Context, ScopeGenerationWork, error) error
 }
 
+// FactCounter returns the fact count for a scope generation without loading data.
+// Used by the large-generation semaphore to classify repos before loading.
+type FactCounter interface {
+	CountFacts(ctx context.Context, scopeID, generationID string) (int, error)
+}
+
 // Service coordinates the projector work loop without owning projection logic.
 type Service struct {
 	PollInterval time.Duration
@@ -61,6 +67,14 @@ type Service struct {
 	Instruments  *telemetry.Instruments // optional
 	Logger       *slog.Logger           // optional
 	Workers      int                    // concurrent worker count; 0 or 1 means sequential
+
+	// Large-generation semaphore: limits how many large repos can be
+	// projected concurrently while letting small/medium repos proceed
+	// without blocking. Mirrors the collector-layer pattern in GitSource.
+	FactCounter           FactCounter // optional; enables large-gen semaphore
+	LargeGenThreshold     int         // fact count above which semaphore is required; 0 = 10000
+	LargeGenMaxConcurrent int         // max concurrent large generations; 0 = 2
+	largeSem              chan struct{}
 }
 
 // Run polls for projector work until the context is canceled.
@@ -184,6 +198,12 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 		defer span.End()
 	}
 
+	// Large-generation semaphore: count facts first, acquire sem if large.
+	releaseSem := s.acquireLargeGenSem(ctx, work, workerID)
+	if releaseSem != nil {
+		defer releaseSem()
+	}
+
 	factsForGeneration, err := s.FactStore.LoadFacts(ctx, work)
 	if err != nil {
 		s.recordProjectionResult(ctx, work, start, "failed", 0, err, workerID)
@@ -241,6 +261,80 @@ func (s Service) recordProjectionResult(ctx context.Context, work ScopeGeneratio
 		} else {
 			s.Logger.InfoContext(ctx, "projection succeeded", logAttrs...)
 		}
+	}
+}
+
+// InitLargeGenSemaphore sets up the large-generation semaphore. Call after
+// setting FactCounter, LargeGenThreshold, and LargeGenMaxConcurrent.
+func (s *Service) InitLargeGenSemaphore() {
+	if s.FactCounter == nil {
+		return
+	}
+	maxConcurrent := s.LargeGenMaxConcurrent
+	if maxConcurrent <= 0 {
+		maxConcurrent = 2
+	}
+	s.largeSem = make(chan struct{}, maxConcurrent)
+}
+
+func (s Service) largeGenThreshold() int {
+	if s.LargeGenThreshold <= 0 {
+		return 10000
+	}
+	return s.LargeGenThreshold
+}
+
+func (s Service) acquireLargeGenSem(ctx context.Context, work ScopeGenerationWork, workerID int) func() {
+	if s.FactCounter == nil || s.largeSem == nil {
+		return nil
+	}
+
+	count, err := s.FactCounter.CountFacts(ctx, work.Scope.ScopeID, work.Generation.GenerationID)
+	if err != nil {
+		// On error, skip semaphore (don't block).
+		if s.Logger != nil {
+			s.Logger.WarnContext(ctx, "fact count failed, skipping large-gen semaphore",
+				slog.String("error", err.Error()),
+				slog.Int("worker_id", workerID),
+			)
+		}
+		return nil
+	}
+
+	if count <= s.largeGenThreshold() {
+		return nil // small/medium repo, no semaphore needed
+	}
+
+	if s.Logger != nil {
+		scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
+		logAttrs := make([]any, 0, len(scopeAttrs)+3)
+		for _, a := range scopeAttrs {
+			logAttrs = append(logAttrs, a)
+		}
+		logAttrs = append(logAttrs,
+			slog.Int("fact_count", count),
+			slog.Int("threshold", s.largeGenThreshold()),
+			slog.Int("worker_id", workerID),
+		)
+		s.Logger.InfoContext(ctx, "large generation detected, acquiring semaphore", logAttrs...)
+	}
+
+	// Record semaphore wait time.
+	waitStart := time.Now()
+	select {
+	case s.largeSem <- struct{}{}:
+		if s.Instruments != nil {
+			s.Instruments.LargeRepoSemaphoreWait.Record(ctx, time.Since(waitStart).Seconds())
+		}
+		if s.Logger != nil {
+			s.Logger.InfoContext(ctx, "large generation semaphore acquired",
+				slog.Int("fact_count", count),
+				slog.Int("worker_id", workerID),
+			)
+		}
+		return func() { <-s.largeSem }
+	case <-ctx.Done():
+		return nil
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func main() {
@@ -22,6 +24,26 @@ func main() {
 }
 
 func run(parent context.Context) error {
+	// Initialize telemetry
+	bootstrap, err := telemetry.NewBootstrap("projector")
+	if err != nil {
+		return fmt.Errorf("telemetry bootstrap: %w", err)
+	}
+	providers, err := telemetry.NewProviders(parent, bootstrap)
+	if err != nil {
+		return fmt.Errorf("telemetry providers: %w", err)
+	}
+	defer func() {
+		_ = providers.Shutdown(context.Background())
+	}()
+
+	tracer := providers.TracerProvider.Tracer(telemetry.DefaultSignalName)
+	meter := providers.MeterProvider.Meter(telemetry.DefaultSignalName)
+	instruments, err := telemetry.NewInstruments(meter)
+	if err != nil {
+		return fmt.Errorf("telemetry instruments: %w", err)
+	}
+
 	db, err := runtimecfg.OpenPostgres(parent, os.Getenv)
 	if err != nil {
 		return err
@@ -30,7 +52,7 @@ func run(parent context.Context) error {
 		_ = db.Close()
 	}()
 
-	graphWriter, graphCloser, err := openProjectorGraphWriter(parent, os.Getenv)
+	graphWriter, graphCloser, err := openProjectorGraphWriter(parent, os.Getenv, tracer, instruments)
 	if err != nil {
 		return err
 	}

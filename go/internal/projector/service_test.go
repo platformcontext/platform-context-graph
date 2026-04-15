@@ -3,6 +3,7 @@ package projector
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -571,5 +572,238 @@ func TestServiceRunConcurrentErrorCancelsWorkers(t *testing.T) {
 	// Should not have processed all 4 items due to cancellation
 	if runCalls >= 4 {
 		t.Logf("warning: runner calls = %d, expected < 4 due to cancellation (may be timing-dependent)", runCalls)
+	}
+}
+
+// stubFactCounter implements FactCounter for testing the large-gen semaphore.
+type stubFactCounter struct {
+	mu     sync.Mutex
+	counts map[string]int // keyed by "scopeID/generationID"
+	err    error
+}
+
+func (s *stubFactCounter) CountFacts(_ context.Context, scopeID, generationID string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return 0, s.err
+	}
+	return s.counts[scopeID+"/"+generationID], nil
+}
+
+// slowProjectionRunner blocks for a configurable duration per call to
+// track concurrent execution for semaphore tests.
+type slowProjectionRunner struct {
+	mu          sync.Mutex
+	maxInFlight int
+	inFlight    int
+	runCalls    int
+	result      Result
+	delay       time.Duration
+}
+
+func (s *slowProjectionRunner) Project(_ context.Context, _ scope.IngestionScope, _ scope.ScopeGeneration, _ []facts.Envelope) (Result, error) {
+	s.mu.Lock()
+	s.runCalls++
+	s.inFlight++
+	if s.inFlight > s.maxInFlight {
+		s.maxInFlight = s.inFlight
+	}
+	s.mu.Unlock()
+
+	time.Sleep(s.delay)
+
+	s.mu.Lock()
+	s.inFlight--
+	s.mu.Unlock()
+
+	return s.result, nil
+}
+
+func TestLargeGenSemaphoreLimitsConcurrency(t *testing.T) {
+	t.Parallel()
+
+	workItems := make([]ScopeGenerationWork, 3)
+	for i := range workItems {
+		sid := fmt.Sprintf("scope-%d", i)
+		gid := fmt.Sprintf("gen-%d", i)
+		workItems[i] = ScopeGenerationWork{
+			Scope: scope.IngestionScope{
+				ScopeID:       sid,
+				SourceSystem:  "git",
+				ScopeKind:     scope.KindRepository,
+				CollectorKind: scope.CollectorGit,
+				PartitionKey:  fmt.Sprintf("repo-%d", i),
+			},
+			Generation: scope.ScopeGeneration{
+				ScopeID:      sid,
+				GenerationID: gid,
+				ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+				IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+				Status:       scope.GenerationStatusPending,
+				TriggerKind:  scope.TriggerKindSnapshot,
+			},
+		}
+	}
+
+	counter := &stubFactCounter{
+		counts: map[string]int{
+			"scope-0/gen-0": 20000,
+			"scope-1/gen-1": 20000,
+			"scope-2/gen-2": 20000,
+		},
+	}
+
+	runner := &slowProjectionRunner{
+		result: Result{ScopeID: "scope-0", GenerationID: "gen-0"},
+		delay:  50 * time.Millisecond,
+	}
+
+	svc := Service{
+		PollInterval:          10 * time.Millisecond,
+		WorkSource:            &stubProjectorWorkSource{workItems: workItems},
+		FactStore:             &stubFactStore{},
+		Runner:                runner,
+		WorkSink:              &stubProjectorWorkSink{},
+		Wait:                  func(context.Context, time.Duration) error { return context.Canceled },
+		Workers:               3,
+		FactCounter:           counter,
+		LargeGenThreshold:     1, // threshold=1 so all repos are "large"
+		LargeGenMaxConcurrent: 1, // only 1 large gen at a time
+	}
+	svc.InitLargeGenSemaphore()
+
+	if err := svc.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	runner.mu.Lock()
+	maxInFlight := runner.maxInFlight
+	runCalls := runner.runCalls
+	runner.mu.Unlock()
+
+	if runCalls != 3 {
+		t.Fatalf("runner calls = %d, want 3", runCalls)
+	}
+	if maxInFlight > 1 {
+		t.Fatalf("max concurrent projections = %d, want <= 1 (semaphore should limit)", maxInFlight)
+	}
+}
+
+func TestSmallGenBypassesSemaphore(t *testing.T) {
+	t.Parallel()
+
+	workItems := make([]ScopeGenerationWork, 3)
+	for i := range workItems {
+		sid := fmt.Sprintf("scope-%d", i)
+		gid := fmt.Sprintf("gen-%d", i)
+		workItems[i] = ScopeGenerationWork{
+			Scope: scope.IngestionScope{
+				ScopeID:       sid,
+				SourceSystem:  "git",
+				ScopeKind:     scope.KindRepository,
+				CollectorKind: scope.CollectorGit,
+				PartitionKey:  fmt.Sprintf("repo-%d", i),
+			},
+			Generation: scope.ScopeGeneration{
+				ScopeID:      sid,
+				GenerationID: gid,
+				ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+				IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+				Status:       scope.GenerationStatusPending,
+				TriggerKind:  scope.TriggerKindSnapshot,
+			},
+		}
+	}
+
+	counter := &stubFactCounter{
+		counts: map[string]int{
+			"scope-0/gen-0": 50,
+			"scope-1/gen-1": 50,
+			"scope-2/gen-2": 50,
+		},
+	}
+
+	runner := &slowProjectionRunner{
+		result: Result{ScopeID: "scope-0", GenerationID: "gen-0"},
+		delay:  50 * time.Millisecond,
+	}
+
+	svc := Service{
+		PollInterval:          10 * time.Millisecond,
+		WorkSource:            &stubProjectorWorkSource{workItems: workItems},
+		FactStore:             &stubFactStore{},
+		Runner:                runner,
+		WorkSink:              &stubProjectorWorkSink{},
+		Wait:                  func(context.Context, time.Duration) error { return context.Canceled },
+		Workers:               3,
+		FactCounter:           counter,
+		LargeGenThreshold:     1000, // threshold=1000, facts=50 so all are "small"
+		LargeGenMaxConcurrent: 1,
+	}
+	svc.InitLargeGenSemaphore()
+
+	if err := svc.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	runner.mu.Lock()
+	maxInFlight := runner.maxInFlight
+	runCalls := runner.runCalls
+	runner.mu.Unlock()
+
+	if runCalls != 3 {
+		t.Fatalf("runner calls = %d, want 3", runCalls)
+	}
+	// Small repos should run concurrently — at least 2 in-flight at once.
+	if maxInFlight < 2 {
+		t.Fatalf("max concurrent projections = %d, want >= 2 (small repos should bypass semaphore)", maxInFlight)
+	}
+}
+
+func TestLargeGenSemaphoreSkipsOnCountError(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+
+	counter := &stubFactCounter{err: errors.New("database error")}
+
+	svc := Service{
+		PollInterval:          10 * time.Millisecond,
+		WorkSource:            &stubProjectorWorkSource{workItems: []ScopeGenerationWork{work}},
+		FactStore:             &stubFactStore{facts: []facts.Envelope{{FactID: "f1", ScopeID: "scope-123", GenerationID: "generation-456", FactKind: "source_node"}}},
+		Runner:                &stubProjectionRunner{result: Result{ScopeID: "scope-123", GenerationID: "generation-456"}},
+		WorkSink:              &stubProjectorWorkSink{},
+		Wait:                  func(context.Context, time.Duration) error { return context.Canceled },
+		FactCounter:           counter,
+		LargeGenThreshold:     1,
+		LargeGenMaxConcurrent: 1,
+		Logger:                slog.Default(),
+	}
+	svc.InitLargeGenSemaphore()
+
+	if err := svc.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil (count error should not block)", err)
+	}
+
+	sink := svc.WorkSink.(*stubProjectorWorkSink)
+	if got, want := sink.ackCalls, 1; got != want {
+		t.Fatalf("ack calls = %d, want %d (should proceed despite count error)", got, want)
 	}
 }

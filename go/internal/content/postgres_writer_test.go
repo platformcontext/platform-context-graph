@@ -88,23 +88,25 @@ func TestPostgresContentWriterUpsertsFileAndEntityRowsAndDeletesTombstones(t *te
 	if got, want := len(db.execs), 5; got != want {
 		t.Fatalf("exec count = %d, want %d", got, want)
 	}
-	if !strings.Contains(db.execs[0].query, "INSERT INTO content_files") {
-		t.Fatalf("upsert query = %q, want content_files insert", db.execs[0].query)
+	// Batched order: file deletes first, then file upsert batch,
+	// then entity deletes, then entity upsert batch.
+	if !strings.Contains(db.execs[0].query, "DELETE FROM content_entities") {
+		t.Fatalf("file tombstone entity cleanup query = %q, want content_entities delete", db.execs[0].query)
 	}
-	if !strings.Contains(db.execs[1].query, "DELETE FROM content_entities") {
-		t.Fatalf("file tombstone entity cleanup query = %q, want content_entities delete", db.execs[1].query)
+	if !strings.Contains(db.execs[1].query, "DELETE FROM content_files") {
+		t.Fatalf("file delete query = %q, want content_files delete", db.execs[1].query)
 	}
-	if !strings.Contains(db.execs[2].query, "DELETE FROM content_files") {
-		t.Fatalf("file delete query = %q, want content_files delete", db.execs[2].query)
+	if !strings.Contains(db.execs[2].query, "INSERT INTO content_files") {
+		t.Fatalf("upsert query = %q, want content_files insert", db.execs[2].query)
 	}
-	if !strings.Contains(db.execs[3].query, "INSERT INTO content_entities") {
-		t.Fatalf("entity query = %q, want content_entities insert", db.execs[3].query)
+	if !strings.Contains(db.execs[3].query, "DELETE FROM content_entities") {
+		t.Fatalf("entity delete query = %q, want content_entities delete", db.execs[3].query)
 	}
-	if !strings.Contains(db.execs[4].query, "DELETE FROM content_entities") {
-		t.Fatalf("entity delete query = %q, want content_entities delete", db.execs[4].query)
+	if !strings.Contains(db.execs[4].query, "INSERT INTO content_entities") {
+		t.Fatalf("entity query = %q, want content_entities insert", db.execs[4].query)
 	}
 
-	args := db.execs[0].args
+	args := db.execs[2].args
 	if got, want := args[0], "repository:r_test"; got != want {
 		t.Fatalf("repo_id arg = %v, want %v", got, want)
 	}
@@ -139,7 +141,7 @@ func TestPostgresContentWriterUpsertsFileAndEntityRowsAndDeletesTombstones(t *te
 		t.Fatalf("indexed_at arg = %v, want %v", got, want)
 	}
 
-	entityArgs := db.execs[3].args
+	entityArgs := db.execs[4].args
 	if got, want := entityArgs[0], "content-entity:e_ab12cd34ef56"; got != want {
 		t.Fatalf("entity_id arg = %v, want %v", got, want)
 	}
@@ -193,22 +195,22 @@ func TestPostgresContentWriterUpsertsFileAndEntityRowsAndDeletesTombstones(t *te
 		t.Fatalf("indexed_at arg = %v, want %v", got, want)
 	}
 
+	if got, want := db.execs[0].args[0], "repository:r_test"; got != want {
+		t.Fatalf("delete repo_id arg = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[1], "old.sql"; got != want {
+		t.Fatalf("delete relative_path arg = %v, want %v", got, want)
+	}
 	if got, want := db.execs[1].args[0], "repository:r_test"; got != want {
 		t.Fatalf("delete repo_id arg = %v, want %v", got, want)
 	}
 	if got, want := db.execs[1].args[1], "old.sql"; got != want {
 		t.Fatalf("delete relative_path arg = %v, want %v", got, want)
 	}
-	if got, want := db.execs[2].args[0], "repository:r_test"; got != want {
-		t.Fatalf("delete repo_id arg = %v, want %v", got, want)
-	}
-	if got, want := db.execs[2].args[1], "old.sql"; got != want {
-		t.Fatalf("delete relative_path arg = %v, want %v", got, want)
-	}
-	if got, want := db.execs[4].args[0], "repository:r_test"; got != want {
+	if got, want := db.execs[3].args[0], "repository:r_test"; got != want {
 		t.Fatalf("entity delete repo_id arg = %v, want %v", got, want)
 	}
-	if got, want := db.execs[4].args[1], "content-entity:e_old"; got != want {
+	if got, want := db.execs[3].args[1], "content-entity:e_old"; got != want {
 		t.Fatalf("entity delete entity_id arg = %v, want %v", got, want)
 	}
 }

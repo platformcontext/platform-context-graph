@@ -222,6 +222,69 @@ func TestSharedIntentStoreEmptyUpsertIsNoop(t *testing.T) {
 	}
 }
 
+func TestSharedIntentStoreUpsertIntentsBatch(t *testing.T) {
+	t.Parallel()
+
+	db := newSharedIntentTestDB()
+	store := NewSharedIntentStore(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	// Create 1200 intents to test batching (should result in 3 batches of 500, 500, 200)
+	rows := make([]reducer.SharedProjectionIntentRow, 1200)
+	for i := 0; i < 1200; i++ {
+		rows[i] = reducer.SharedProjectionIntentRow{
+			IntentID:         fmt.Sprintf("si-batch-%d", i),
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     fmt.Sprintf("pk-%d", i%10),
+			RepositoryID:     "repository:r_batch_test",
+			SourceRunID:      "run-batch",
+			GenerationID:     "gen-batch",
+			Payload:          map[string]any{"index": i},
+			CreatedAt:        now,
+		}
+	}
+
+	// Track exec calls before
+	execCallsBefore := db.execCalls
+
+	if err := store.UpsertIntents(ctx, rows); err != nil {
+		t.Fatalf("UpsertIntents: %v", err)
+	}
+
+	// Verify batching: 1200 intents should use 3 ExecContext calls (batches of 500, 500, 200)
+	// not 1200 calls
+	execCallsAfter := db.execCalls
+	batchCallsUsed := execCallsAfter - execCallsBefore
+
+	expectedBatches := 3 // ceil(1200 / 500) = 3
+	if batchCallsUsed != expectedBatches {
+		t.Errorf("expected %d batch ExecContext calls, got %d (1200 intents should batch)", expectedBatches, batchCallsUsed)
+	}
+
+	// Verify all intents were stored
+	if len(db.intents) != 1200 {
+		t.Errorf("expected 1200 intents stored, got %d", len(db.intents))
+	}
+
+	// Spot-check a few intents
+	for _, idx := range []int{0, 500, 999, 1199} {
+		intentID := fmt.Sprintf("si-batch-%d", idx)
+		intent, ok := db.intents[intentID]
+		if !ok {
+			t.Errorf("intent %q not found", intentID)
+			continue
+		}
+		if intent.RepositoryID != "repository:r_batch_test" {
+			t.Errorf("intent %q: RepositoryID = %q", intentID, intent.RepositoryID)
+		}
+		if payloadIdx, ok := intent.Payload["index"].(float64); !ok || int(payloadIdx) != idx {
+			t.Errorf("intent %q: Payload index = %v, want %d", intentID, intent.Payload["index"], idx)
+		}
+	}
+}
+
 func TestSharedIntentSchemaSQL(t *testing.T) {
 	t.Parallel()
 
@@ -454,7 +517,8 @@ func TestSharedIntentStoreCountPendingGenerationIntents(t *testing.T) {
 // sharedIntentTestDB is an in-memory mock of ExecQueryer that stores shared
 // projection intents for unit testing. Follows the decisionTestDB pattern.
 type sharedIntentTestDB struct {
-	intents map[string]reducer.SharedProjectionIntentRow
+	intents   map[string]reducer.SharedProjectionIntentRow
+	execCalls int
 }
 
 func newSharedIntentTestDB() *sharedIntentTestDB {
@@ -464,28 +528,37 @@ func newSharedIntentTestDB() *sharedIntentTestDB {
 }
 
 func (db *sharedIntentTestDB) ExecContext(_ context.Context, query string, args ...any) (sql.Result, error) {
+	db.execCalls++
+
 	switch {
 	case strings.Contains(query, "INSERT INTO shared_projection_intents"):
-		row := reducer.SharedProjectionIntentRow{
-			IntentID:         args[0].(string),
-			ProjectionDomain: args[1].(string),
-			PartitionKey:     args[2].(string),
-			RepositoryID:     args[3].(string),
-			SourceRunID:      args[4].(string),
-			GenerationID:     args[5].(string),
-			CreatedAt:        args[7].(time.Time),
-		}
-		if b, ok := args[6].([]byte); ok {
-			var m map[string]any
-			if err := json.Unmarshal(b, &m); err == nil {
-				row.Payload = m
+		// Handle batched multi-row INSERT
+		// Each row has 9 columns: intent_id, projection_domain, partition_key,
+		// repository_id, source_run_id, generation_id, payload, created_at, completed_at
+		numRows := len(args) / 9
+		for i := 0; i < numRows; i++ {
+			offset := i * 9
+			row := reducer.SharedProjectionIntentRow{
+				IntentID:         args[offset+0].(string),
+				ProjectionDomain: args[offset+1].(string),
+				PartitionKey:     args[offset+2].(string),
+				RepositoryID:     args[offset+3].(string),
+				SourceRunID:      args[offset+4].(string),
+				GenerationID:     args[offset+5].(string),
+				CreatedAt:        args[offset+7].(time.Time),
 			}
+			if b, ok := args[offset+6].([]byte); ok {
+				var m map[string]any
+				if err := json.Unmarshal(b, &m); err == nil {
+					row.Payload = m
+				}
+			}
+			if args[offset+8] != nil {
+				ca := args[offset+8].(time.Time)
+				row.CompletedAt = &ca
+			}
+			db.intents[row.IntentID] = row
 		}
-		if args[8] != nil {
-			ca := args[8].(time.Time)
-			row.CompletedAt = &ca
-		}
-		db.intents[row.IntentID] = row
 		return sharedIntentResult{}, nil
 
 	case strings.Contains(query, "UPDATE shared_projection_intents"):

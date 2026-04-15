@@ -51,7 +51,7 @@ type projectorDeps struct {
 
 type openBootstrapDBFn func(context.Context, func(string) string) (bootstrapDB, error)
 type applyBootstrapFn func(context.Context, bootstrapDB) error
-type openGraphFn func(context.Context, func(string) string) (graphDeps, error)
+type openGraphFn func(context.Context, func(string) string, trace.Tracer, *telemetry.Instruments) (graphDeps, error)
 type buildCollectorFn func(context.Context, bootstrapDB, func(string) string, trace.Tracer, *telemetry.Instruments, *slog.Logger) (collectorDeps, error)
 type buildProjectorFn func(context.Context, bootstrapDB, graph.Writer, func(string) string, trace.Tracer, *telemetry.Instruments) (projectorDeps, error)
 
@@ -120,7 +120,7 @@ func run(
 		return err
 	}
 
-	gd, err := graphFn(ctx, getenv)
+	gd, err := graphFn(ctx, getenv, tracer, instruments)
 	if err != nil {
 		return err
 	}
@@ -135,21 +135,166 @@ func run(
 		return err
 	}
 
-	if err = drainCollector(ctx, cd.source, cd.committer, tracer, instruments, logger); err != nil {
-		return err
-	}
-
+	// Build projector deps before starting collector so both can run concurrently.
+	// The Postgres projector queue uses FOR UPDATE SKIP LOCKED, so concurrent
+	// collection (producing queue items) and projection (claiming them) is safe.
 	pd, err := projectorFn(ctx, db, gd.writer, getenv, tracer, instruments)
 	if err != nil {
 		return err
 	}
 
 	workers := projectionWorkerCount(getenv)
-	logger.Info("starting bootstrap projection",
-		slog.Int("workers", workers),
-		telemetry.PhaseAttr(telemetry.PhaseProjection),
+	logger.Info("starting pipelined bootstrap",
+		slog.Int("projection_workers", workers),
+		telemetry.PhaseAttr(telemetry.PhaseEmission),
 	)
-	return drainProjector(ctx, pd.workSource, pd.factStore, pd.runner, pd.workSink, workers, tracer, instruments, logger)
+
+	return runPipelined(ctx, cd, pd, workers, tracer, instruments, logger)
+}
+
+// runPipelined runs collection and projection concurrently. The collector is
+// finite (drains all repos then exits). The projector polls the queue, processes
+// items as they arrive, and exits after maxEmptyPolls consecutive empty claims
+// once the collector has finished.
+//
+// This pipelining means small repos are fully projected (including Neo4j writes)
+// while large repos are still being collected — instead of waiting for all 878
+// repos to be collected before any projection begins.
+func runPipelined(
+	ctx context.Context,
+	cd collectorDeps,
+	pd projectorDeps,
+	workers int,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
+	logger *slog.Logger,
+) error {
+	pipelineStart := time.Now()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// collectorDone signals that the collector has finished producing queue items.
+	// The projector uses this to switch from infinite polling to drain mode.
+	collectorDone := make(chan struct{})
+
+	errc := make(chan error, 2)
+
+	// Start collector goroutine
+	go func() {
+		defer close(collectorDone)
+		err := drainCollector(ctx, cd.source, cd.committer, tracer, instruments, logger)
+		errc <- err
+	}()
+
+	// Start projector goroutine — polls for work, projects concurrently.
+	// After collector signals done, drains remaining queue then exits.
+	go func() {
+		err := drainProjectorPipelined(ctx, pd, workers, collectorDone, tracer, instruments, logger)
+		errc <- err
+	}()
+
+	// Wait for collector to finish first.
+	collectorErr := <-errc
+
+	overlapDuration := time.Since(pipelineStart).Seconds()
+
+	if collectorErr != nil {
+		// Collector failed — cancel projector and drain.
+		cancel()
+		projectorErr := <-errc
+		return errors.Join(collectorErr, projectorErr)
+	}
+
+	// Collector succeeded — wait for projector to drain remaining queue.
+	projectorErr := <-errc
+
+	totalDuration := time.Since(pipelineStart).Seconds()
+	if logger != nil {
+		logger.InfoContext(ctx, "bootstrap pipeline complete",
+			slog.Float64("total_seconds", totalDuration),
+			slog.Float64("overlap_seconds", overlapDuration),
+			telemetry.PhaseAttr(telemetry.PhaseProjection),
+		)
+	}
+	if instruments != nil {
+		instruments.PipelineOverlapDuration.Record(ctx, overlapDuration)
+	}
+
+	return projectorErr
+}
+
+// drainProjectorPipelined wraps drainProjector with drain-then-exit behavior.
+// While the collector is running, empty queue claims trigger a short poll wait.
+// After the collector finishes (collectorDone is closed), the projector enters
+// drain mode: maxEmptyPolls consecutive empty claims cause a clean exit.
+func drainProjectorPipelined(
+	ctx context.Context,
+	pd projectorDeps,
+	workers int,
+	collectorDone <-chan struct{},
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
+	logger *slog.Logger,
+) error {
+	const maxEmptyPolls = 5
+	const pollInterval = 500 * time.Millisecond
+
+	// Use a draining work source wrapper that counts consecutive empty polls
+	// and exits cleanly when the collector is done and queue is drained.
+	dws := &drainingWorkSource{
+		inner:         pd.workSource,
+		collectorDone: collectorDone,
+		maxEmptyPolls: maxEmptyPolls,
+		pollInterval:  pollInterval,
+	}
+
+	return drainProjector(ctx, dws, pd.factStore, pd.runner, pd.workSink, workers, tracer, instruments, logger)
+}
+
+// drainingWorkSource wraps a ProjectorWorkSource to add drain-then-exit
+// behavior for pipelined bootstrap. Before the collector finishes, empty
+// claims trigger a poll wait and retry. After the collector finishes,
+// consecutive empty claims are counted and the sentinel errProjectorDrained
+// triggers exit after maxEmptyPolls.
+type drainingWorkSource struct {
+	inner         projector.ProjectorWorkSource
+	collectorDone <-chan struct{}
+	maxEmptyPolls int
+	pollInterval  time.Duration
+	emptyCount    atomic.Int32
+}
+
+func (d *drainingWorkSource) Claim(ctx context.Context) (projector.ScopeGenerationWork, bool, error) {
+	for {
+		work, ok, err := d.inner.Claim(ctx)
+		if err != nil {
+			return work, ok, err
+		}
+		if ok {
+			d.emptyCount.Store(0)
+			return work, true, nil
+		}
+
+		// Queue is empty. Check if collector is done.
+		select {
+		case <-d.collectorDone:
+			// Collector finished — count consecutive empty polls.
+			n := int(d.emptyCount.Add(1))
+			if n >= d.maxEmptyPolls {
+				return projector.ScopeGenerationWork{}, false, nil
+			}
+		default:
+			// Collector still running — wait and retry.
+			d.emptyCount.Store(0)
+		}
+
+		// Wait before retrying.
+		select {
+		case <-ctx.Done():
+			return projector.ScopeGenerationWork{}, false, ctx.Err()
+		case <-time.After(d.pollInterval):
+		}
+	}
 }
 
 // projectionWorkerCount returns the number of concurrent projection workers.
@@ -541,8 +686,8 @@ func applySchema(ctx context.Context, db bootstrapDB) error {
 	return postgres.ApplyBootstrap(ctx, db)
 }
 
-func openBootstrapGraph(ctx context.Context, getenv func(string) string) (graphDeps, error) {
-	writer, closer, err := openBootstrapGraphWriter(ctx, getenv)
+func openBootstrapGraph(ctx context.Context, getenv func(string) string, tracer trace.Tracer, instruments *telemetry.Instruments) (graphDeps, error) {
+	writer, closer, err := openBootstrapGraphWriter(ctx, getenv, tracer, instruments)
 	if err != nil {
 		return graphDeps{}, err
 	}

@@ -23,6 +23,8 @@ const (
 	columnsPerFactRow = 13
 )
 
+const countFactsQuery = `SELECT COUNT(*) FROM fact_records WHERE scope_id = $1 AND generation_id = $2`
+
 const listFactsQuery = `
 SELECT
     fact_id,
@@ -51,6 +53,25 @@ type FactStore struct {
 // NewFactStore constructs a Postgres-backed fact store.
 func NewFactStore(db ExecQueryer) FactStore {
 	return FactStore{db: db}
+}
+
+// CountFacts returns the number of facts for a scope generation without loading them.
+func (s FactStore) CountFacts(ctx context.Context, scopeID, generationID string) (int, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("fact store database is required")
+	}
+	rows, err := s.db.QueryContext(ctx, countFactsQuery, scopeID, generationID)
+	if err != nil {
+		return 0, fmt.Errorf("count facts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var count int
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			return 0, fmt.Errorf("count facts scan: %w", err)
+		}
+	}
+	return count, rows.Err()
 }
 
 // UpsertFacts persists fact envelopes into fact_records.
