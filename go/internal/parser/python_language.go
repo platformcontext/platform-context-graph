@@ -13,6 +13,7 @@ import (
 )
 
 var pythonFunctionSignatureRe = regexp.MustCompile(`(?s)^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)\s*(?:->\s*([^:]+))?:$`)
+var pythonClassHeaderRe = regexp.MustCompile(`(?m)^class\s+[A-Za-z_][A-Za-z0-9_]*\s*\((.*)\)\s*:`)
 
 func (e *Engine) parsePython(
 	path string,
@@ -69,6 +70,9 @@ func (e *Engine) parsePython(
 			}
 			if docstring := pythonDocstring(node, source); docstring != "" {
 				item["docstring"] = docstring
+			}
+			if metaclass := pythonClassMetaclass(node, source); metaclass != "" {
+				item["metaclass"] = metaclass
 			}
 			appendBucket(payload, "classes", item)
 		case "function_definition":
@@ -234,6 +238,22 @@ func pythonDecorators(node *tree_sitter.Node, source []byte) []string {
 
 func pythonFunctionIsAsync(functionSource string) bool {
 	return strings.HasPrefix(strings.TrimSpace(functionSource), "async def ")
+}
+
+func pythonClassMetaclass(node *tree_sitter.Node, source []byte) string {
+	classSource := nodeText(node, source)
+	matches := pythonClassHeaderRe.FindStringSubmatch(classSource)
+	if len(matches) != 2 {
+		return ""
+	}
+	for _, argument := range splitPythonParameters(matches[1]) {
+		name, value, ok := strings.Cut(argument, "=")
+		if !ok || strings.TrimSpace(name) != "metaclass" {
+			continue
+		}
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
 
 func pythonTypeAnnotations(node *tree_sitter.Node, functionSource string, functionName string) []map[string]any {

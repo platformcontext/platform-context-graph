@@ -55,6 +55,9 @@ func buildOutgoingContentRelationships(
 	if relationships, ok, err := buildOutgoingRustImplBlockRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
+	if relationships, ok, err := buildOutgoingPythonMetaclassRelationships(ctx, reader, entity); ok || err != nil {
+		return relationships, err
+	}
 
 	componentNames := metadataStringSlice(entity.Metadata, "jsx_component_usage")
 	if len(componentNames) == 0 {
@@ -101,6 +104,9 @@ func buildIncomingContentRelationships(
 		return relationships, err
 	}
 	if relationships, ok, err := buildIncomingRustImplBlockRelationships(ctx, reader, entity); ok || err != nil {
+		return relationships, err
+	}
+	if relationships, ok, err := buildIncomingPythonMetaclassRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
 
