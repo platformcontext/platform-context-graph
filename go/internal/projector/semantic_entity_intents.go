@@ -30,7 +30,10 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 		return ReducerIntent{}, false
 	}
 	if _, ok := semanticEntityReducerTypes[entityType]; !ok {
-		if !isJavaScriptCallableSemanticEntity(fact.Payload, entityType) && !isPythonCallableSemanticEntity(fact.Payload, entityType) && !isTypeScriptModuleSemanticEntity(fact.Payload, entityType) {
+		if !isJavaScriptCallableSemanticEntity(fact.Payload, entityType) &&
+			!isPythonCallableSemanticEntity(fact.Payload, entityType) &&
+			!isTypeScriptModuleSemanticEntity(fact.Payload, entityType) &&
+			!isElixirModuleAttributeSemanticEntity(fact.Payload, entityType) {
 			return ReducerIntent{}, false
 		}
 	}
@@ -102,6 +105,16 @@ func isPythonCallableSemanticEntity(payload map[string]any, entityType string) b
 		return true
 	}
 	return len(payloadMetadataStringSlice(payload, "decorators")) > 0
+}
+
+func isElixirModuleAttributeSemanticEntity(payload map[string]any, entityType string) bool {
+	if entityType != "Variable" {
+		return false
+	}
+	if payloadMetadataString(payload, "language") != "elixir" {
+		return false
+	}
+	return payloadMetadataString(payload, "attribute_kind") == "module_attribute"
 }
 
 func payloadMetadataString(payload map[string]any, key string) string {

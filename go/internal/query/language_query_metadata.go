@@ -66,17 +66,6 @@ func (h *LanguageQueryHandler) enrichLanguageResultsWithContentMetadata(
 	return results, nil
 }
 
-func graphLabelToContentEntityType(label string) string {
-	switch label {
-	case "Annotation":
-		return "Annotation"
-	case "Function", "Class", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock", "Typedef", "TypeAlias", "Component":
-		return label
-	default:
-		return ""
-	}
-}
-
 func languageResultMatchKey(filePath string, entityType string, name string, startLine int) string {
 	return fmt.Sprintf("%s|%s|%s|%d", filePath, entityType, name, startLine)
 }

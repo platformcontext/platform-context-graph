@@ -39,6 +39,26 @@ func TestBuildSemanticEntityReducerIntentAcceptsElixirProtocolEntities(t *testin
 	}
 }
 
+func TestBuildSemanticEntityReducerIntentAcceptsElixirModuleAttributeEntities(t *testing.T) {
+	t.Parallel()
+
+	intent, ok := buildSemanticEntityReducerIntent(testElixirSemanticEntityFact(
+		"Variable",
+		"@timeout",
+		"elixir",
+		map[string]any{
+			"attribute_kind": "module_attribute",
+			"value":          "5_000",
+		},
+	))
+	if !ok {
+		t.Fatalf("buildSemanticEntityReducerIntent() ok = false, want true")
+	}
+	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
+		t.Fatalf("intent.Domain = %q, want %q", got, want)
+	}
+}
+
 func testElixirSemanticEntityFact(entityType, entityName, language string, metadata map[string]any) facts.Envelope {
 	return facts.Envelope{
 		FactKind:     "content_entity",

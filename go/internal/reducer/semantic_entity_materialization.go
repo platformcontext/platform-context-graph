@@ -35,8 +35,8 @@ type SemanticEntityWriteResult struct {
 }
 
 // SemanticEntityWriter persists Annotation, Typedef, TypeAlias, Component,
-// Module, ImplBlock, Protocol, ProtocolImplementation, and callable Function
-// semantic nodes into Neo4j.
+// Module, ImplBlock, Protocol, ProtocolImplementation, Variable, and callable
+// Function semantic nodes into Neo4j.
 type SemanticEntityWriter interface {
 	WriteSemanticEntities(context.Context, SemanticEntityWrite) (SemanticEntityWriteResult, error)
 }
@@ -201,6 +201,11 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 			metadata[key] = value
 		}
 	}
+	for _, key := range []string{"attribute_kind", "value"} {
+		if value := semanticPayloadMetadataString(payload, key); value != "" {
+			metadata[key] = value
+		}
+	}
 	if count := semanticPayloadMetadataInt(payload, "declaration_merge_count"); count > 0 {
 		metadata["declaration_merge_count"] = count
 	}
@@ -360,6 +365,8 @@ func isSemanticEntityType(payload map[string]any, entityType string) bool {
 	switch entityType {
 	case "Annotation", "Typedef", "TypeAlias", "Component", "Module", "ImplBlock", "Protocol", "ProtocolImplementation":
 		return true
+	case "Variable":
+		return isElixirModuleAttributeSemanticEntity(payload)
 	case "Function":
 		return isJavaScriptCallableSemanticEntity(payload) || isPythonSemanticFunction(payload) || isRustSemanticFunction(payload)
 	default:
@@ -385,6 +392,13 @@ func isPythonSemanticFunction(payload map[string]any) bool {
 		return true
 	}
 	return len(semanticPayloadMetadataStringSlice(payload, "decorators")) > 0
+}
+
+func isElixirModuleAttributeSemanticEntity(payload map[string]any) bool {
+	if semanticPayloadString(payload, "language") != "elixir" {
+		return false
+	}
+	return semanticPayloadMetadataString(payload, "attribute_kind") == "module_attribute"
 }
 
 func isRustSemanticFunction(payload map[string]any) bool {
