@@ -59,7 +59,7 @@ func (h *LanguageQueryHandler) enrichLanguageResultsWithContentMetadata(
 		if !ok || len(metadata) == 0 {
 			continue
 		}
-		results[i]["metadata"] = metadata
+		results[i]["metadata"] = mergeGraphFirstMetadata(results[i]["metadata"], metadata)
 		attachSemanticSummary(results[i])
 	}
 
@@ -79,4 +79,26 @@ func graphLabelToContentEntityType(label string) string {
 
 func languageResultMatchKey(filePath string, entityType string, name string, startLine int) string {
 	return fmt.Sprintf("%s|%s|%s|%d", filePath, entityType, name, startLine)
+}
+
+func mergeGraphFirstMetadata(existing any, fallback map[string]any) map[string]any {
+	if len(fallback) == 0 {
+		if metadata, ok := existing.(map[string]any); ok {
+			return metadata
+		}
+		return nil
+	}
+	merged := make(map[string]any, len(fallback))
+	for key, value := range fallback {
+		merged[key] = value
+	}
+	if current, ok := existing.(map[string]any); ok {
+		for key, value := range current {
+			if value == nil {
+				continue
+			}
+			merged[key] = value
+		}
+	}
+	return merged
 }

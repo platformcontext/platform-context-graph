@@ -397,7 +397,9 @@ func buildEntityCypher(language, label, extFilter, query, repoID string, params 
 		       f.relative_path as file_path,
 		       r.id as repo_id, r.name as repo_name,
 		       coalesce(e.language, f.language) as language,
-		       e.start_line as start_line, e.end_line as end_line
+		       e.start_line as start_line, e.end_line as end_line,
+		       e.docstring as docstring,
+		       e.method_kind as method_kind
 		ORDER BY f.relative_path, e.name
 		LIMIT $limit
 	`
@@ -457,9 +459,27 @@ func buildLanguageResult(row map[string]any, label string) map[string]any {
 		if v := IntVal(row, "end_line"); v != 0 {
 			result["end_line"] = v
 		}
+		if metadata := graphResultMetadata(row); len(metadata) > 0 {
+			result["metadata"] = metadata
+			attachSemanticSummary(result)
+		}
 	}
 
 	return result
+}
+
+func graphResultMetadata(row map[string]any) map[string]any {
+	metadata := map[string]any{}
+	if v := StringVal(row, "docstring"); v != "" {
+		metadata["docstring"] = v
+	}
+	if v := StringVal(row, "method_kind"); v != "" {
+		metadata["method_kind"] = v
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
 }
 
 // joinKeys returns a sorted comma-separated list of map keys.

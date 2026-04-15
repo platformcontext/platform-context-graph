@@ -47,3 +47,42 @@ func TestBuildLanguageResult_Repository(t *testing.T) {
 		t.Errorf("file_count = %v", result["file_count"])
 	}
 }
+
+func TestBuildLanguageResult_AttachesGraphMetadataAndSemanticSummary(t *testing.T) {
+	row := map[string]any{
+		"entity_id":   "func:js:getTab",
+		"name":        "getTab",
+		"labels":      []any{"Function"},
+		"file_path":   "src/app.js",
+		"repo_id":     "repo:js",
+		"repo_name":   "ui",
+		"language":    "javascript",
+		"start_line":  int64(10),
+		"end_line":    int64(24),
+		"docstring":   "Returns the active tab.",
+		"method_kind": "getter",
+	}
+
+	result := buildLanguageResult(row, "Function")
+
+	metadata, ok := result["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata type = %T, want map[string]any", result["metadata"])
+	}
+	if got, want := metadata["docstring"], "Returns the active tab."; got != want {
+		t.Fatalf("metadata[docstring] = %#v, want %#v", got, want)
+	}
+	if got, want := metadata["method_kind"], "getter"; got != want {
+		t.Fatalf("metadata[method_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := result["semantic_summary"], "Function getTab has JavaScript method kind getter and is documented as \"Returns the active tab.\"."; got != want {
+		t.Fatalf("semantic_summary = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("semantic_profile type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "javascript_method"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}
