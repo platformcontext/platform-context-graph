@@ -1,0 +1,31 @@
+go/internal/parser/engine_yaml_semantics_test.go
+  1ca5ee6ce936a402 117-165
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 88
+go/internal/parser/yaml_argocd.go
+  1ca5ee6ce936a402 52-53,61,64-66,75-90
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 62
+docs/docs/languages/argocd.md
+  1ca5ee6ce936a402 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "a55df7c4996169694a88e155a47bb540cee66e14",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 74,
+      "total_deletions": 19,
+      "accepted_lines": 74,
+      "overriden_lines": 0
+    }
+  }
+}
