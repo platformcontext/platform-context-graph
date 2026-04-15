@@ -23,6 +23,8 @@ func TestSchemaStatementsContainsExpectedConstraints(t *testing.T) {
 		"CREATE CONSTRAINT function_unique IF NOT EXISTS",
 		"CREATE CONSTRAINT class_unique IF NOT EXISTS",
 		"CREATE CONSTRAINT parameter_unique IF NOT EXISTS",
+		"CREATE CONSTRAINT platform_id IF NOT EXISTS",
+		"CREATE CONSTRAINT source_local_record_unique IF NOT EXISTS",
 	}
 	for _, want := range expected {
 		found := false

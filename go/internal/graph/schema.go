@@ -73,6 +73,14 @@ var schemaConstraints = []string{
 	"CREATE CONSTRAINT workload_id IF NOT EXISTS FOR (w:Workload) REQUIRE w.id IS UNIQUE",
 	"CREATE CONSTRAINT workload_instance_id IF NOT EXISTS FOR (i:WorkloadInstance) REQUIRE i.id IS UNIQUE",
 
+	// Platform identity
+	"CREATE CONSTRAINT platform_id IF NOT EXISTS FOR (p:Platform) REQUIRE p.id IS UNIQUE",
+
+	// Source-local projection record identity — required for MERGE performance.
+	// Without this constraint, MERGE on SourceLocalRecord does a full label scan
+	// per row, turning large-repo projection into O(n²).
+	"CREATE CONSTRAINT source_local_record_unique IF NOT EXISTS FOR (n:SourceLocalRecord) REQUIRE (n.scope_id, n.generation_id, n.record_id) IS UNIQUE",
+
 	// Parameter constraint
 	"CREATE CONSTRAINT parameter_unique IF NOT EXISTS FOR (p:Parameter) REQUIRE (p.name, p.path, p.function_line_number) IS UNIQUE",
 }
