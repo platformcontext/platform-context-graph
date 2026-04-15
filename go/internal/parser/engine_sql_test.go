@@ -163,6 +163,48 @@ ALTER TABLE public.users ADD COLUMN email TEXT;
 	assertSQLRelationship(t, got, "HAS_COLUMN", "public.users", "public.users.email")
 }
 
+func TestDefaultEngineParsePathSQLMaterializedViewsAndProcedures(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "analytics.sql")
+	writeTestFile(
+		t,
+		filePath,
+		`CREATE MATERIALIZED VIEW public.active_users AS
+SELECT u.id
+FROM public.users u;
+
+CREATE PROCEDURE public.refresh_users()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  UPDATE public.users
+  SET refreshed_at = NOW();
+END;
+$$;
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	view := assertBucketItemByName(t, got, "sql_views", "public.active_users")
+	assertStringFieldValue(t, view, "view_kind", "materialized")
+	assertSQLRelationship(t, got, "READS_FROM", "public.active_users", "public.users")
+
+	procedure := assertBucketItemByName(t, got, "sql_functions", "public.refresh_users")
+	assertStringFieldValue(t, procedure, "routine_kind", "procedure")
+	assertSQLRelationship(t, got, "READS_FROM", "public.refresh_users", "public.users")
+}
+
 func TestDefaultEngineParsePathSQLPartialRecovery(t *testing.T) {
 	t.Parallel()
 
