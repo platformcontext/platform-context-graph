@@ -130,6 +130,7 @@ var uidConstraintLabels = []string{
 	"TerraformResource",
 	"TerraformVariable",
 	"TerragruntConfig",
+	"Typedef",
 	"Trait",
 	"Union",
 	"Variable",

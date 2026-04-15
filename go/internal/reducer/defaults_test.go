@@ -118,8 +118,8 @@ func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
 	t.Parallel()
 
 	got := DefaultDomainDefinitions()
-	if len(got) != 5 {
-		t.Fatalf("len(DefaultDomainDefinitions()) = %d, want 5", len(got))
+	if len(got) != 6 {
+		t.Fatalf("len(DefaultDomainDefinitions()) = %d, want 6", len(got))
 	}
 	if got[0].Domain != DomainWorkloadIdentity {
 		t.Fatalf("DefaultDomainDefinitions()[0].Domain = %q, want %q", got[0].Domain, DomainWorkloadIdentity)
@@ -153,5 +153,11 @@ func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
 	}
 	if got[4].Domain != DomainWorkloadMaterialization {
 		t.Fatalf("DefaultDomainDefinitions()[4].Domain = %q, want %q", got[4].Domain, DomainWorkloadMaterialization)
+	}
+	if got[5].Domain != DomainSemanticEntityMaterialization {
+		t.Fatalf("DefaultDomainDefinitions()[5].Domain = %q, want %q", got[5].Domain, DomainSemanticEntityMaterialization)
+	}
+	if got[5].TruthContract.CanonicalKind != "semantic_entity_materialization" {
+		t.Fatalf("DefaultDomainDefinitions()[5].TruthContract.CanonicalKind = %q, want %q", got[5].TruthContract.CanonicalKind, "semantic_entity_materialization")
 	}
 }

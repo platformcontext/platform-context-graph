@@ -10,6 +10,7 @@ type DefaultHandlers struct {
 	// Neo4j-backed adapters for canonical graph writes.
 	WorkloadMaterializer               *WorkloadMaterializer
 	InfrastructurePlatformMaterializer *InfrastructurePlatformMaterializer
+	SemanticEntityWriter               SemanticEntityWriter
 
 	// FactLoader loads fact envelopes for workload and infrastructure
 	// platform materialization.
@@ -75,6 +76,11 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 				FactLoader:           handlers.FactLoader,
 				EdgeWriter:           handlers.CodeCallEdgeWriter,
 				CanonicalNodeChecker: handlers.CanonicalNodeChecker,
+			}
+		case DomainSemanticEntityMaterialization:
+			def.Handler = SemanticEntityMaterializationHandler{
+				FactLoader: handlers.FactLoader,
+				Writer:     handlers.SemanticEntityWriter,
 			}
 		default:
 			continue

@@ -11,6 +11,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
@@ -307,6 +308,137 @@ func TestRuntimeProjectMaterializesExplicitEntityRecords(t *testing.T) {
 	}
 	if got, want := entity.Metadata["docstring"], "Primary table."; got != want {
 		t.Fatalf("content entity metadata docstring = %#v, want %#v", got, want)
+	}
+}
+
+func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationAndTypedef(t *testing.T) {
+	t.Parallel()
+
+	contentWriter := &recordingContentWriter{result: content.Result{EntityCount: 2}}
+	intentWriter := &recordingIntentWriter{result: IntentResult{Count: 2}}
+	runtime := Runtime{
+		ContentWriter: contentWriter,
+		IntentWriter:  intentWriter,
+	}
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+		Metadata: map[string]string{
+			"repo_id": "repository:r_12345678",
+		},
+	}
+	generationValue := scope.ScopeGeneration{
+		GenerationID: "generation-456",
+		ScopeID:      "scope-123",
+		ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+		IngestedAt:   time.Date(2026, time.April, 12, 11, 35, 0, 0, time.UTC),
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+
+	result, err := runtime.Project(context.Background(), scopeValue, generationValue, []facts.Envelope{
+		{
+			FactID:       "fact-1",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "content_entity",
+			SourceRef: facts.Ref{
+				SourceSystem: "git",
+			},
+			Payload: map[string]any{
+				"entity_id":     "annotation-1",
+				"entity_type":   "Annotation",
+				"entity_name":   "Logged",
+				"relative_path": "src/Logged.java",
+				"repo_id":       "repository:r_12345678",
+				"language":      "java",
+			},
+		},
+		{
+			FactID:       "fact-2",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "content_entity",
+			SourceRef: facts.Ref{
+				SourceSystem: "git",
+			},
+			Payload: map[string]any{
+				"entity_id":     "typedef-1",
+				"entity_type":   "Typedef",
+				"entity_name":   "my_int",
+				"relative_path": "src/types.h",
+				"repo_id":       "repository:r_12345678",
+				"language":      "c",
+			},
+		},
+		{
+			FactID:       "fact-3",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "content_entity",
+			SourceRef: facts.Ref{
+				SourceSystem: "git",
+			},
+			Payload: map[string]any{
+				"entity_id":     "function-1",
+				"entity_type":   "Function",
+				"entity_name":   "Helper",
+				"relative_path": "src/helper.go",
+				"repo_id":       "repository:r_12345678",
+				"language":      "go",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Project() error = %v, want nil", err)
+	}
+
+	if got, want := result.Intents.Count, 2; got != want {
+		t.Fatalf("result.Intents.Count = %d, want %d", got, want)
+	}
+	if got, want := result.Content.EntityCount, 2; got != want {
+		t.Fatalf("result.Content.EntityCount = %d, want %d", got, want)
+	}
+	if got, want := len(intentWriter.calls), 1; got != want {
+		t.Fatalf("intent writer call count = %d, want %d", got, want)
+	}
+	intents := intentWriter.calls[0]
+	if got, want := len(intents), 2; got != want {
+		t.Fatalf("len(intents) = %d, want %d", got, want)
+	}
+	if got, want := intents[0].Domain, reducer.DomainSemanticEntityMaterialization; got != want {
+		t.Fatalf("intents[0].Domain = %q, want %q", got, want)
+	}
+	if got, want := intents[1].Domain, reducer.DomainSemanticEntityMaterialization; got != want {
+		t.Fatalf("intents[1].Domain = %q, want %q", got, want)
+	}
+	if got, want := intents[0].EntityKey, "annotation-1"; got != want {
+		t.Fatalf("intents[0].EntityKey = %q, want %q", got, want)
+	}
+	if got, want := intents[1].EntityKey, "typedef-1"; got != want {
+		t.Fatalf("intents[1].EntityKey = %q, want %q", got, want)
+	}
+}
+
+func TestBuildReducerIntentSkipsNonSemanticContentEntities(t *testing.T) {
+	t.Parallel()
+
+	_, ok := buildReducerIntent(facts.Envelope{
+		FactID:       "fact-1",
+		ScopeID:      "scope-123",
+		GenerationID: "generation-456",
+		FactKind:     "content_entity",
+		Payload: map[string]any{
+			"entity_type": "Function",
+			"entity_id":   "function-1",
+		},
+	})
+	if ok {
+		t.Fatal("buildReducerIntent() ok = true for Function, want false")
 	}
 }
 

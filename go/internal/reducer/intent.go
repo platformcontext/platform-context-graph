@@ -30,6 +30,9 @@ const (
 	DomainWorkloadMaterialization Domain = "workload_materialization"
 	// DomainCodeCallMaterialization materializes canonical code call edges.
 	DomainCodeCallMaterialization Domain = "code_call_materialization"
+	// DomainSemanticEntityMaterialization materializes Annotation and
+	// Typedef semantic nodes.
+	DomainSemanticEntityMaterialization Domain = "semantic_entity_materialization"
 )
 
 // IntentStatus captures the durable reducer intent lifecycle state.

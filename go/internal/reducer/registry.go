@@ -213,5 +213,20 @@ func DefaultDomainDefinitions() []DomainDefinition {
 				},
 			},
 		},
+		{
+			Domain:  DomainSemanticEntityMaterialization,
+			Summary: "materialize annotation and typedef semantic nodes from parser facts",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+			TruthContract: truth.Contract{
+				CanonicalKind: "semantic_entity_materialization",
+				SourceLayers: []truth.Layer{
+					truth.LayerSourceDeclaration,
+				},
+			},
+		},
 	}
 }

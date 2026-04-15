@@ -491,6 +491,63 @@ func TestHandleLanguageQuery_AnnotationFallsBackToContentWhenGraphMissing(t *tes
 	}
 }
 
+func TestHandleLanguageQuery_AnnotationUsesGraphMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":   "graph-annotation-1",
+				"name":        "Logged",
+				"labels":      []string{"Annotation"},
+				"file_path":   "src/Logged.java",
+				"repo_id":     "repo-1",
+				"repo_name":   "repo-1",
+				"language":    "java",
+				"start_line":  int64(2),
+				"end_line":    int64(2),
+				"kind":        "applied",
+				"target_kind": "method_declaration",
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"java","entity_type":"annotation","query":"Logged","repo_id":"repo-1"}`))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed annotation", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["semantic_summary"], "Annotation Logged is applied to a method declaration."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "applied_annotation"; got != want {
+		t.Fatalf("result[semantic_profile][surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
 func TestEnrichLanguageResultsWithContentMetadataPreservesPythonGraphMetadata(t *testing.T) {
 	t.Parallel()
 

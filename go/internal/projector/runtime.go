@@ -225,6 +225,9 @@ func buildProjection(scopeValue scope.IngestionScope, generation scope.ScopeGene
 		if entity, ok := buildContentEntityRecord(contentMaterialization.RepoID, fact); ok {
 			contentMaterialization.Entities = append(contentMaterialization.Entities, entity)
 		}
+		if intent, ok := buildSemanticEntityReducerIntent(fact); ok {
+			intents = append(intents, intent)
+		}
 		if intent, ok := buildReducerIntent(fact); ok {
 			intents = append(intents, intent)
 		}
