@@ -206,6 +206,75 @@ func TestHandleLanguageQuery_TypeAliasPrefersGraphPathAndUsesGraphMetadataWithou
 	}
 }
 
+func TestHandleLanguageQuery_JavaScriptMethodPrefersGraphPathAndUsesGraphMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":   "graph-js-method-1",
+				"name":        "getTab",
+				"labels":      []string{"Function"},
+				"file_path":   "src/app.js",
+				"repo_id":     "repo-1",
+				"repo_name":   "repo-1",
+				"language":    "javascript",
+				"start_line":  int64(10),
+				"end_line":    int64(24),
+				"docstring":   "Returns the active tab.",
+				"method_kind": "getter",
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"javascript","entity_type":"function","query":"getTab","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed JavaScript function", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["entity_id"], "graph-js-method-1"; got != want {
+		t.Fatalf("result[entity_id] = %#v, want %#v", got, want)
+	}
+	if got, want := result["semantic_summary"], "Function getTab has JavaScript method kind getter and is documented as \"Returns the active tab.\"."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "javascript_method"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["method_kind"], "getter"; got != want {
+		t.Fatalf("semantic_profile[method_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["docstring"], "Returns the active tab."; got != want {
+		t.Fatalf("semantic_profile[docstring] = %#v, want %#v", got, want)
+	}
+}
+
 func TestHandleLanguageQuery_TSXComponentUsesGraphMetadataWithoutContent(t *testing.T) {
 	t.Parallel()
 
