@@ -23,9 +23,9 @@ func init() {
 
 	// index-status
 	indexStatusCmd := &cobra.Command{
-		Use:   "index-status [target]",
-		Short: "Show checkpointed indexing status",
-		Args:  cobra.MaximumNArgs(1),
+		Use:   "index-status",
+		Short: "Show the latest checkpointed indexing status",
+		Args:  cobra.NoArgs,
 		RunE:  runIndexStatus,
 	}
 	addRemoteFlags(indexStatusCmd)
@@ -186,7 +186,7 @@ func runIndex(cmd *cobra.Command, args []string) error {
 func runIndexStatus(cmd *cobra.Command, args []string) error {
 	client := apiClient()
 	var result any
-	if err := client.Get("/api/v0/status/index", &result); err != nil {
+	if err := client.Get("/api/v0/index-status", &result); err != nil {
 		return err
 	}
 	printJSON(result)

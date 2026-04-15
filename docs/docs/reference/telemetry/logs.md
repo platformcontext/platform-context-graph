@@ -134,9 +134,9 @@ Why it matters:
 
 Why it matters:
 
-- `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` are read
-  paths, so their breadcrumbs usually come from the HTTP request log plus the
-  underlying finalization events
+- `GET /api/v0/status/index` and `GET /api/v0/index-status` are read paths, so
+  their breadcrumbs usually come from the HTTP request log plus the underlying
+  finalization events
 - graph-safe admin refinalize should emit the admin.refinalize family only
 - unexpected `index.finalization.*` activity without a matching admin repair
   request should be treated as a runtime investigation signal, not a fallback

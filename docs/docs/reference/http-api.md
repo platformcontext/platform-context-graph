@@ -31,17 +31,18 @@ deployment-managed repository ingestion and steady-state sync.
 ## Health, Status, And Completeness
 
 Health checks answer whether a process can serve. Completeness checks answer
-whether a repository or run is finished.
+whether the latest published Go checkpoint is finished.
 
-- `GET /api/v0/health` reports API process health after dependency
+- `GET /health` reports API process health after dependency
   initialization. It does not prove the latest index run finished.
-- `GET /api/v0/index-status` returns checkpointed index status for a local
-  path or run ID.
-- `GET /api/v0/index-runs/{run_id}` returns the same checkpointed status shape
-  for one recorded run.
-- `GET /api/v0/index-runs/{run_id}/coverage` returns durable repository
-  coverage rows for that run and supports `only_incomplete=true` when you are
-  hunting the remaining gaps.
+- `GET /api/v0/status/index` returns the current Go-owned checkpoint summary.
+- `GET /api/v0/index-status` is the legacy compatibility alias for the same
+  Go-owned checkpoint summary.
+- `GET /api/v0/repositories/{repo_id}/coverage` returns durable repository
+  coverage rows for one repository.
+- Run-scoped completeness routes such as `/api/v0/index-runs/{run_id}` are not
+  ported yet on this branch. Keep that gap visible in parity tracking instead
+  of assuming the repository coverage route is run-scoped.
 - `GET /api/v0/ingesters/{ingester}` and `GET /api/v0/ingesters` report the
   hosted ingester's live status and progress, not graph completeness.
 - Recovery operations (refinalize, replay) are owned by the Go ingester admin

@@ -7,7 +7,7 @@ import (
 func TestReadOnlyTools(t *testing.T) {
 	tools := ReadOnlyTools()
 
-	expectedCount := 40
+	expectedCount := 39
 	if len(tools) != expectedCount {
 		t.Errorf("Expected %d tools, got %d", expectedCount, len(tools))
 	}
@@ -56,8 +56,8 @@ func TestCodebaseTools(t *testing.T) {
 
 func TestEcosystemTools(t *testing.T) {
 	tools := ecosystemTools()
-	if len(tools) != 14 {
-		t.Errorf("Expected 14 ecosystem tools, got %d", len(tools))
+	if len(tools) != 13 {
+		t.Errorf("Expected 13 ecosystem tools, got %d", len(tools))
 	}
 }
 
@@ -79,5 +79,14 @@ func TestRuntimeTools(t *testing.T) {
 	tools := runtimeTools()
 	if len(tools) != 3 {
 		t.Errorf("Expected 3 runtime tools, got %d", len(tools))
+	}
+}
+
+func TestReadOnlyToolsDoNotAdvertiseUnsupportedCoverageListing(t *testing.T) {
+	tools := ReadOnlyTools()
+	for _, tool := range tools {
+		if tool.Name == "list_repository_coverage" {
+			t.Fatal("unexpected list_repository_coverage tool in read-only tool set")
+		}
 	}
 }

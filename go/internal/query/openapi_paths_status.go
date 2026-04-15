@@ -106,6 +106,35 @@ const openAPIPathsStatusAndCompare = `
         }
       }
     },
+    "/api/v0/index-status": {
+      "get": {
+        "tags": ["status"],
+        "summary": "Get index status",
+        "description": "Legacy compatibility alias for the Go-owned index status summary.",
+        "operationId": "getIndexStatusLegacy",
+        "responses": {
+          "200": {
+            "description": "Index status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string"},
+                    "reasons": {"type": "array", "items": {"type": "string"}},
+                    "repository_count": {"type": "integer"},
+                    "queue": {"type": "object"},
+                    "scope_activity": {"type": "object"}
+                  }
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"},
+          "503": {"$ref": "#/components/responses/ServiceUnavailable"}
+        }
+      }
+    },
     "/api/v0/compare/environments": {
       "post": {
         "tags": ["compare"],

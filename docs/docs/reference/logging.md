@@ -122,7 +122,7 @@ The most useful `extra_keys` fields for Grafana and Loki correlation are
 [Ingestion Observability](ingestion-observability.md).
 
 Status and recovery reads use the HTTP request log plus those finalization
-families. `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` do
+families. `GET /api/v0/status/index` and `GET /api/v0/index-status` do
 not need a separate log family of their own.
 
 ## Example

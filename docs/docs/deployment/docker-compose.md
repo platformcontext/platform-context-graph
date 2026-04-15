@@ -117,10 +117,10 @@ runs stay aligned.
 Health and completeness are separate checks in Compose, too:
 
 - `curl -fsS http://localhost:8080/health` confirms the API process is alive
-- `curl -fsS http://localhost:8080/api/v0/index-status` reports checkpointed
-  indexing completeness for the latest target or run
-- `curl -fsS http://localhost:8080/api/v0/index-runs/<run_id>` reports a
-  run-specific checkpointed completeness view
+- `curl -fsS http://localhost:8080/api/v0/index-status` reports the latest
+  checkpointed indexing completeness summary
+- `curl -fsS http://localhost:8080/api/v0/repositories/<repo_id>/coverage`
+  reports repository-specific coverage detail
 
 For a real local end-to-end run against a host directory, override the host-side
 source root with an absolute path:

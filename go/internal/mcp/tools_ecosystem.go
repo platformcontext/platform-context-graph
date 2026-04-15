@@ -142,7 +142,7 @@ func ecosystemTools() []ToolDefinition {
 		},
 		{
 			Name:        "get_repository_coverage",
-			Description: "Get durable per-run coverage and completeness data for one canonical repository identifier.",
+			Description: "Get repository-scoped durable coverage and completeness data for one canonical repository identifier.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -150,41 +150,8 @@ func ecosystemTools() []ToolDefinition {
 						"type":        "string",
 						"description": "Canonical repository identifier",
 					},
-					"run_id": map[string]any{
-						"type":        "string",
-						"description": "Optional specific run identifier",
-					},
 				},
 				"required": []string{"repo_id"},
-			},
-		},
-		{
-			Name:        "list_repository_coverage",
-			Description: "List durable repository coverage rows for one run or across runs.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"run_id": map[string]any{
-						"type":        "string",
-						"description": "Optional run identifier to filter by",
-					},
-					"only_incomplete": map[string]any{
-						"type":        "boolean",
-						"description": "Return only incomplete repositories",
-						"default":     false,
-					},
-					"statuses": map[string]any{
-						"type":        "array",
-						"items":       map[string]any{"type": "string"},
-						"description": "Filter by specific statuses",
-					},
-					"limit": map[string]any{
-						"type":        "integer",
-						"description": "Maximum number of results",
-						"default":     100,
-					},
-				},
-				"required": []string{},
 			},
 		},
 		{

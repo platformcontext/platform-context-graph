@@ -24,8 +24,8 @@ Use metrics to detect a problem first, then traces to explain it.
 - `pcg.http.*` request spans from the API runtime
 - `pcg.query.*` spans around shared query operations
 - `pcg.mcp.*` request and tool spans in the MCP runtime
-- `pcg.http.*` request spans also cover `GET /api/v0/index-status`,
-  `GET /api/v0/index-runs/{run_id}`, and the admin refinalize/reindex routes
+- `pcg.http.*` request spans also cover `GET /api/v0/status/index`,
+  `GET /api/v0/index-status`, and the admin refinalize/reindex routes
 
 Investigation-specific query spans continue to use the shared query family:
 

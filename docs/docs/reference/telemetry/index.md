@@ -28,8 +28,8 @@ the reported state is live or inferred.
 ## Health Versus Completeness
 
 - `/health` or `/healthz` proves the process is alive and initialized.
-- `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` prove
-  checkpointed completeness for a repository or run.
+- `GET /api/v0/status/index` and `GET /api/v0/index-status` prove the latest
+  checkpointed completeness view exposed by the Go API.
 - `/admin/status` proves the live stage, backlog, and failure view for a
   runtime.
 - `POST /admin/refinalize` and `POST /admin/replay` are the Go-owned recovery

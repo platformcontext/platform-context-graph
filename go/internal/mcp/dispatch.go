@@ -168,20 +168,7 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 		}
 		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(name) + "/context"}, nil
 	case "get_repository_coverage":
-		q := map[string]string{}
-		if runID := str(args, "run_id"); runID != "" {
-			q["run_id"] = runID
-		}
-		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(str(args, "repo_id")) + "/coverage", query: q}, nil
-	case "list_repository_coverage":
-		q := map[string]string{}
-		if runID := str(args, "run_id"); runID != "" {
-			q["run_id"] = runID
-		}
-		if boolOr(args, "only_incomplete", false) {
-			q["only_incomplete"] = "true"
-		}
-		return &route{method: "GET", path: "/api/v0/repositories/coverage", query: q}, nil
+		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(str(args, "repo_id")) + "/coverage"}, nil
 
 	// ── Entities ──
 	case "resolve_entity":
@@ -276,11 +263,7 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 		}
 		return &route{method: "GET", path: "/api/v0/status/ingesters/" + url.PathEscape(ingester)}, nil
 	case "get_index_status":
-		q := map[string]string{}
-		if target := str(args, "target"); target != "" {
-			q["target"] = target
-		}
-		return &route{method: "GET", path: "/api/v0/status/index", query: q}, nil
+		return &route{method: "GET", path: "/api/v0/index-status"}, nil
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)

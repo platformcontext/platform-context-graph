@@ -66,8 +66,9 @@ Use the operator surface that matches the question you are trying to answer:
 
 - `pcg index-status` is the fastest local or remote checkpointed completeness
   signal.
-- `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` are the
-  deployed completeness views exposed by the public API service.
+- `GET /api/v0/status/index` is the normalized deployed completeness view
+  exposed by the public Go API service.
+- `GET /api/v0/index-status` is the compatibility alias for the same payload.
 - `GET /admin/status` is the live runtime-health and backlog surface for Go
   runtimes and other services that mount the shared runtime admin contract.
 
@@ -77,6 +78,8 @@ Keep the distinction explicit:
   whether a scope, repository, or generation has finished indexing.
 - `index-status` answers checkpointed run completeness, not whether a runtime
   is currently healthy.
+- run-scoped completeness routes are still an open parity gap; use repository
+  coverage plus checkpoint logs when you need narrower evidence today.
 - `POST /admin/refinalize` and `POST /admin/replay` are Go-owned repair
   surfaces. Use them for controlled recovery and backlog repair, not as part of
   the normal indexing path.
@@ -192,7 +195,8 @@ When an operator needs to answer "is the service alive?" versus "did the data
 plane finish the work?", pair the log family with the matching status surface:
 
 - health or readiness questions: runtime probe endpoints and runtime logs
-- completeness questions: `index-status`, run details, and checkpoint logs
+- completeness questions: `index-status`, repository coverage, and checkpoint
+  logs
 - repair-path questions: finalization spans, `index.finalization.*`, and
   `pcg finalize` or `/admin/refinalize` output
 

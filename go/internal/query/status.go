@@ -22,6 +22,7 @@ func (h *StatusHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v0/status/ingesters", h.listIngesters)
 	mux.HandleFunc("GET /api/v0/status/ingesters/{ingester}", h.getIngesterStatus)
 	mux.HandleFunc("GET /api/v0/status/index", h.getIndexStatus)
+	mux.HandleFunc("GET /api/v0/index-status", h.getIndexStatus)
 }
 
 // getPipelineStatus returns the full pipeline status report from Postgres.
@@ -266,10 +267,10 @@ func retryPoliciesToSlice(policies []status.RetryPolicySummary) []map[string]any
 	result := make([]map[string]any, 0, len(policies))
 	for _, p := range policies {
 		result = append(result, map[string]any{
-			"stage":              p.Stage,
-			"max_attempts":       p.MaxAttempts,
-			"retry_delay":        p.RetryDelay.String(),
-			"retry_delay_ms":     p.RetryDelay.Milliseconds(),
+			"stage":               p.Stage,
+			"max_attempts":        p.MaxAttempts,
+			"retry_delay":         p.RetryDelay.String(),
+			"retry_delay_ms":      p.RetryDelay.Milliseconds(),
 			"retry_delay_seconds": p.RetryDelay.Seconds(),
 		})
 	}

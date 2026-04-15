@@ -55,10 +55,12 @@ Current branch reality:
 
 - `/healthz` and `/readyz` answer process health and readiness only.
 - `/admin/status` reports the live runtime stage, backlog, and failure state.
-- `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` answer
-  checkpointed indexing completeness for a path or recorded run.
-- `GET /api/v0/index-runs/{run_id}/coverage` narrows the completeness view to
-  the repository rows that still need attention.
+- `GET /api/v0/status/index` is the normalized Go-owned completeness route.
+- `GET /api/v0/index-status` is the legacy compatibility alias for the same
+  completeness payload.
+- `GET /api/v0/repositories/{repo_id}/coverage` narrows the completeness view
+  to the repository rows that still need attention.
+- Run-scoped completeness routes remain an open parity item on this branch.
 - A service can be healthy while indexing is incomplete. Operators should use
   completeness routes before assuming a full run has finished.
 - `bootstrap-index` remains a one-shot helper for empty or recovered

@@ -31,7 +31,7 @@ the old Python platform feature for feature for that surface.
 | `pcg serve start` contract | `partial` | Command still implies API plus MCP together while MCP is separate | command behavior and docs agree exactly | focused Go CLI tests, docs check | standalone small slice |
 | API admin route mounting | `partial` | Go admin handlers exist but are not fully exposed through shipped API wiring | admin routes are either fully mounted or fully removed from contract/docs | `go test` for `go/cmd/api` and `go/internal/query`, OpenAPI diff | standalone small slice |
 | Status endpoint breadth | `partial` | Current status surface is narrower than parts of the historical operator model | final status surface is intentional, documented, and tested | query/status tests plus compose proof | pair with admin route slice |
-| Run-scoped coverage endpoints | `partial` | Docs mention routes that generated OpenAPI does not expose | endpoints exist and are tested, or they are removed from docs | OpenAPI verification, docs build | pair with API/admin slice |
+| Run-scoped coverage endpoints | `partial` | The Go API now ships `/api/v0/status/index` plus the legacy `/api/v0/index-status` alias, but true run-scoped completeness endpoints are still not ported; only repository-scoped coverage is available today | run-scoped endpoints exist and are tested, or the parity gap stays explicitly documented without overclaiming the public contract | OpenAPI verification, docs build | pair with API/admin slice |
 | CLI behavior breadth | `partial` | Some Go CLI flows are thinner than old Python UX | required historical flows are intentionally matched or intentionally retired | focused `go/cmd/pcg` tests and smoke checks | small follow-on slice |
 
 ## Parser And Graph-Surface Matrix

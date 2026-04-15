@@ -54,7 +54,7 @@ These options apply at the root command level.
 | `pcg version` | Print the installed version. | No |
 | `pcg doctor` | Run local diagnostics. | No |
 | `pcg index [path]` | Index a local path by launching the Go `bootstrap-index` runtime. | No |
-| `pcg index-status [target]` | Show checkpointed index status for a local path, local run, or remote run. This is the completeness signal, not process health. | Yes |
+| `pcg index-status` | Show the latest checkpointed index status. This is the completeness signal, not process health. | Yes |
 | `pcg finalize` | **Removed.** Use the Go ingester admin recovery endpoints `/admin/refinalize` and `/admin/replay`. | No |
 | `pcg clean` | Remove orphaned nodes and relationships. | No |
 | `pcg stats [path]` | Show indexing statistics. | No |
@@ -259,14 +259,14 @@ Check remote workspace status:
 pcg workspace status --service-url https://mcp-pcg.qa.ops.bgrp.io --api-key "$PCG_API_KEY"
 ```
 
-Check checkpointed run status:
+Check checkpointed status:
 
 ```bash
-pcg index-status f53c7855e3a12baf --profile qa
+pcg index-status --profile qa
 ```
 
-Treat `pcg index-status` as the run-completeness view. Use the runtime
-health/admin/status surfaces for liveness and stage progress instead.
+Treat `pcg index-status` as the latest checkpoint-completeness view. Use the
+runtime health/admin/status surfaces for liveness and stage progress instead.
 
 Queue a full workspace rebuild on a deployed ingester:
 

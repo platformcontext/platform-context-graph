@@ -30,14 +30,9 @@ func runtimeTools() []ToolDefinition {
 			Name:        "get_index_status",
 			Description: "Return the latest checkpointed index status.",
 			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"target": map[string]any{
-						"type":        "string",
-						"description": "Optional target to check status for",
-					},
-				},
-				"required": []string{},
+				"type":       "object",
+				"properties": map[string]any{},
+				"required":   []string{},
 			},
 		},
 	}

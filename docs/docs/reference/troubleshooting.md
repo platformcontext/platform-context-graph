@@ -32,8 +32,8 @@ mean the latest repository or run reached a completed checkpoint.
 
 **Fix:**
 
-1. Check checkpointed completeness with `pcg index-status <path-or-run-id>`
-2. Inspect `GET /api/v0/index-status` or `GET /api/v0/index-runs/{run_id}`
+1. Check checkpointed completeness with `pcg index-status`
+2. Inspect `GET /api/v0/status/index` or `GET /api/v0/index-status`
 3. Inspect the ingester `/admin/status` surface if you are debugging a
    recovery or backlog issue
 4. Use `/admin/status` on the long-running runtimes to see live stage and
