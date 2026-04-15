@@ -28,4 +28,4 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 ## Known Limitations
 - `components` are folded into normalized `resource_refs`, but they are not yet broken out as a separate standalone field; `configurations` sections are still not extracted
 - Inline patch bodies within `kustomization.yaml` are not traversed for field-level details
-- Go now surfaces patch targets, the historical patch-link heuristic, and typed deploy-source refs on the normal query path; the remaining gap is graph-first repository/story/MCP surfacing if we decide that still matters beyond Python-era parity
+- Go now surfaces patch targets, the historical patch-link heuristic, and typed deploy-source refs on the normal query path; the remaining limitations here are bounded non-goals rather than Python-era parity blockers
