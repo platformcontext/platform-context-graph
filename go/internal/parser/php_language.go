@@ -242,21 +242,27 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			)
 			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, normalizedRawLine, match[0]), contextName, contextKind, contextLine, inferredObjType)
 		}
-		for _, match := range phpFunctionChainPattern.FindAllStringSubmatch(normalizedTrimmed, -1) {
-			if len(match) != 2 {
+		for _, matchIndexes := range phpFunctionChainPattern.FindAllStringSubmatchIndex(normalizedTrimmed, -1) {
+			if len(matchIndexes) != 4 {
 				continue
 			}
-			callName := lastPathSegment(match[1], "->")
-			fullName := normalizePHPMethodCall(match[1])
+			matchStart := matchIndexes[2]
+			matchEnd := matchIndexes[3]
+			if hasPHPReceiverChainPrefix(normalizedTrimmed, matchStart) {
+				continue
+			}
+			match := normalizedTrimmed[matchStart:matchEnd]
+			callName := lastPathSegment(match, "->")
+			fullName := normalizePHPMethodCall(match)
 			inferredObjType := inferPHPMethodReceiverType(
-				match[1],
+				match,
 				currentClassContext,
 				classPropertyTypes,
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
 				functionReturnTypes,
 			)
-			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, normalizedRawLine, match[0]), contextName, contextKind, contextLine, inferredObjType)
+			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, normalizedRawLine, match), contextName, contextKind, contextLine, inferredObjType)
 		}
 		for _, match := range phpStaticCallPattern.FindAllStringSubmatch(trimmed, -1) {
 			if len(match) != 3 {
@@ -385,4 +391,12 @@ func normalizePHPStaticReceiver(raw string, classContext string) string {
 	}
 
 	return strings.TrimPrefix(receiver, `\`)
+}
+
+func hasPHPReceiverChainPrefix(raw string, start int) bool {
+	if start < 2 || start > len(raw) {
+		return false
+	}
+	prefix := raw[start-2 : start]
+	return prefix == "->" || prefix == "::"
 }
