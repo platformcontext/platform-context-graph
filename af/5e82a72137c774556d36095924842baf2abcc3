@@ -1,0 +1,119 @@
+go/internal/storage/neo4j/writer_test.go
+  1ca5ee6ce936a402 245-257,261-272,294,302-397
+go/internal/storage/neo4j/edge_writer_test.go
+  1ca5ee6ce936a402 6,18,56,88,120,144-151,156,160,171-179,187,202,221,240,266,288,310,335,350,369,387,402-611
+go/internal/storage/postgres/queue_observer_test.go
+  1ca5ee6ce936a402 1-4,6-9,51-53,101-103,129-131,148-150,153-155,159-160,196
+go/cmd/reducer/config.go
+  1ca5ee6ce936a402 4-7,23-38
+go/internal/storage/neo4j/edge_writer.go
+  1ca5ee6ce936a402 12,14-15,19-21,24-28,31-33,47-56,58,61-62,65-84,88-170
+go/internal/reducer/infrastructure_platform_materializer.go
+  1ca5ee6ce936a402 29-30,39-67,82-84,97-98,101,140-155
+go/internal/storage/postgres/shared_intents.go
+  1ca5ee6ce936a402 89,244-246
+go/cmd/reducer/main.go
+  1ca5ee6ce936a402 61-65,129-130,138,144,165,170
+go/internal/storage/postgres/reducer_queue.go
+  1ca5ee6ce936a402 37,168,185,420
+go/internal/reducer/infrastructure_platform_materializer_test.go
+  1ca5ee6ce936a402 37-39,43-47,49-50,52-55,57-58,60-61,63-64,100-111,147,154-155
+go/cmd/reducer/config_test.go
+  1ca5ee6ce936a402 48-81
+go/cmd/ingester/main.go
+  1ca5ee6ce936a402 64-69
+go/cmd/ingester/wiring.go
+  1ca5ee6ce936a402 191-192,199-203,205-208,210,216-227
+go/internal/telemetry/instruments.go
+  1ca5ee6ce936a402 75-81,215,220,246,251,366-394
+go/internal/storage/neo4j/writer.go
+  1ca5ee6ce936a402 19-21,29-39,74-75,92-95,97-116,123-147
+go/internal/storage/postgres/queue_observer.go
+  1ca5ee6ce936a402 1-121
+go/internal/storage/postgres/reducer_queue_test.go
+  1ca5ee6ce936a402 1-40
+go/internal/storage/neo4j/canonical.go
+  1ca5ee6ce936a402 104-145
+go/cmd/reducer/neo4j_wiring.go
+  1ca5ee6ce936a402 7-8,107-118
+go/internal/reducer/workload_materializer_test.go
+  1ca5ee6ce936a402 69,100
+go/internal/storage/neo4j/instrumented.go
+  1ca5ee6ce936a402 59-70
+go/internal/storage/postgres/shared_intents_test.go
+  1ca5ee6ce936a402 493-494,711,739,904-905,1119
+go/internal/reducer/workload_materializer.go
+  1ca5ee6ce936a402 15-17,31-32,41-64,85-95,97-100,103-118,120,123-131,133-136,139-156,158,180-191,193,196-204,206-209,281-351
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "af5e82a72137c774556d36095924842baf2abcc3",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 7513,
+      "total_deletions": 15690,
+      "accepted_lines": 3456,
+      "overriden_lines": 0
+    },
+    "21d0652afb873020": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-260c-7752-ba40-57ff788997eb",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "22a2a4042c410746": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84f1-43ec-7290-9623-acd2dad2ccd7",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 56,
+      "overriden_lines": 0
+    },
+    "b0d410b9f01dc4ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-2326-7162-8155-6de99ff655dd",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  }
+}
