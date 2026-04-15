@@ -12,7 +12,21 @@ func (h *CodeHandler) enrichGraphSearchResultsWithContentMetadata(
 	query string,
 	limit int,
 ) ([]map[string]any, error) {
-	if h == nil || h.Content == nil || len(results) == 0 {
+	if len(results) == 0 {
+		return results, nil
+	}
+
+	allHaveMetadata := true
+	for i := range results {
+		metadata, ok := results[i]["metadata"].(map[string]any)
+		if !ok || len(metadata) == 0 {
+			allHaveMetadata = false
+			continue
+		}
+		attachSemanticSummary(results[i])
+	}
+
+	if allHaveMetadata || h == nil || h.Content == nil {
 		return results, nil
 	}
 
@@ -35,6 +49,9 @@ func (h *CodeHandler) enrichGraphSearchResultsWithContentMetadata(
 	}
 
 	for i := range results {
+		if metadata, ok := results[i]["metadata"].(map[string]any); ok && len(metadata) > 0 {
+			continue
+		}
 		entityType := resultContentEntityType(results[i])
 		if entityType == "" {
 			continue

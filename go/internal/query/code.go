@@ -116,7 +116,9 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 		       r.id as repo_id, r.name as repo_name,
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
-		       e.end_line as end_line
+		       e.end_line as end_line,
+		       e.docstring as docstring,
+		       e.method_kind as method_kind
 		ORDER BY e.name
 		LIMIT $limit
 	`
@@ -128,7 +130,7 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 
 	results := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		results = append(results, map[string]any{
+		result := map[string]any{
 			"entity_id":  StringVal(row, "entity_id"),
 			"name":       StringVal(row, "name"),
 			"labels":     StringSliceVal(row, "labels"),
@@ -138,7 +140,12 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 			"language":   StringVal(row, "language"),
 			"start_line": IntVal(row, "start_line"),
 			"end_line":   IntVal(row, "end_line"),
-		})
+		}
+		if metadata := graphResultMetadata(row); len(metadata) > 0 {
+			result["metadata"] = metadata
+			attachSemanticSummary(result)
+		}
+		results = append(results, result)
 	}
 
 	return h.enrichGraphSearchResultsWithContentMetadata(ctx, results, repoID, query, limit)
