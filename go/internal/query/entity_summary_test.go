@@ -41,6 +41,24 @@ func TestBuildEntitySemanticSummaryPythonFunction(t *testing.T) {
 	}
 }
 
+func TestBuildEntitySemanticSummaryPythonLambdaFunction(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Function"},
+		"name":   "double",
+		"metadata": map[string]any{
+			"semantic_kind": "lambda",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Function double is a lambda."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildEntitySemanticSummaryTypeAnnotation(t *testing.T) {
 	t.Parallel()
 

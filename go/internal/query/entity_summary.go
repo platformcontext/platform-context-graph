@@ -193,6 +193,9 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 
 	fragments := make([]string, 0, 4)
 	pythonProfile := PythonSemanticProfileFromMetadata(label, metadata)
+	if pythonProfile.Lambda {
+		fragments = append(fragments, "is a lambda")
+	}
 	if componentAssertion, _ := metadata["component_type_assertion"].(string); componentAssertion != "" {
 		fragments = append(fragments, "narrows to "+componentAssertion)
 	}
@@ -222,7 +225,7 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 	if constructorKind, _ := metadata["constructor_kind"].(string); constructorKind != "" {
 		fragments = append(fragments, fmt.Sprintf("is a %s constructor", strings.ReplaceAll(constructorKind, "_", " ")))
 	}
-	if semanticKind, _ := metadata["semantic_kind"].(string); semanticKind != "" {
+	if semanticKind, _ := metadata["semantic_kind"].(string); semanticKind != "" && !(pythonProfile.Lambda && semanticKind == "lambda") {
 		fragments = append(fragments, fmt.Sprintf("is a %s", strings.ReplaceAll(semanticKind, "_", " ")))
 	}
 	if moduleKind, _ := metadata["module_kind"].(string); moduleKind != "" {

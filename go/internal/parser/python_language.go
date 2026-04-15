@@ -87,6 +87,7 @@ func (e *Engine) parsePython(
 				"line_number":           nodeLine(nameNode),
 				"end_line":              nodeEndLine(node),
 				"decorators":            pythonDecorators(node, source),
+				"args":                  pythonParameterNames(node.ChildByFieldName("parameters"), source),
 				"lang":                  "python",
 				"async":                 pythonFunctionIsAsync(functionSource),
 				"cyclomatic_complexity": cyclomaticComplexity(node),
@@ -102,6 +103,9 @@ func (e *Engine) parsePython(
 				appendBucket(payload, "type_annotations", annotation)
 			}
 		case "assignment":
+			if lambdaItem, ok := pythonLambdaAssignmentItem(node, source, options); ok {
+				appendBucket(payload, "functions", lambdaItem)
+			}
 			if scope == "module" && !pythonModuleScoped(node) {
 				return
 			}
@@ -240,6 +244,39 @@ func pythonFunctionIsAsync(functionSource string) bool {
 	return strings.HasPrefix(strings.TrimSpace(functionSource), "async def ")
 }
 
+func pythonLambdaAssignmentItem(
+	node *tree_sitter.Node,
+	source []byte,
+	options Options,
+) (map[string]any, bool) {
+	left := node.ChildByFieldName("left")
+	right := node.ChildByFieldName("right")
+	if left == nil || right == nil || left.Kind() != "identifier" || right.Kind() != "lambda" {
+		return nil, false
+	}
+
+	name := nodeText(left, source)
+	if strings.TrimSpace(name) == "" {
+		return nil, false
+	}
+
+	item := map[string]any{
+		"name":                  name,
+		"line_number":           nodeLine(left),
+		"end_line":              nodeEndLine(node),
+		"args":                  pythonParameterNames(right.ChildByFieldName("parameters"), source),
+		"decorators":            []string{},
+		"lang":                  "python",
+		"async":                 false,
+		"cyclomatic_complexity": 1,
+		"semantic_kind":         "lambda",
+	}
+	if options.IndexSource {
+		item["source"] = nodeText(node, source)
+	}
+	return item, true
+}
+
 func pythonClassMetaclass(node *tree_sitter.Node, source []byte) string {
 	classSource := nodeText(node, source)
 	matches := pythonClassHeaderRe.FindStringSubmatch(classSource)
@@ -254,6 +291,41 @@ func pythonClassMetaclass(node *tree_sitter.Node, source []byte) string {
 		return strings.TrimSpace(value)
 	}
 	return ""
+}
+
+func pythonParameterNames(parametersNode *tree_sitter.Node, source []byte) []string {
+	if parametersNode == nil {
+		return nil
+	}
+
+	args := make([]string, 0)
+	cursor := parametersNode.Walk()
+	defer cursor.Close()
+	for _, child := range parametersNode.NamedChildren(cursor) {
+		child := child
+		arg := pythonParameterName(&child, source)
+		if arg == "" {
+			continue
+		}
+		args = append(args, arg)
+	}
+	return args
+}
+
+func pythonParameterName(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	switch node.Kind() {
+	case "identifier":
+		return nodeText(node, source)
+	case "default_parameter", "typed_parameter", "typed_default_parameter":
+		return nodeText(node.ChildByFieldName("name"), source)
+	case "list_splat_pattern", "dictionary_splat_pattern":
+		return nodeText(node, source)
+	default:
+		return ""
+	}
 }
 
 func pythonTypeAnnotations(node *tree_sitter.Node, functionSource string, functionName string) []map[string]any {

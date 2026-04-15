@@ -11,6 +11,8 @@ const (
 	PythonSemanticSignalDecorator PythonSemanticSignal = "decorator"
 	// PythonSemanticSignalAsync marks async function behavior.
 	PythonSemanticSignalAsync PythonSemanticSignal = "async"
+	// PythonSemanticSignalLambda marks lambda-assignment behavior.
+	PythonSemanticSignalLambda PythonSemanticSignal = "lambda"
 	// PythonSemanticSignalTypeAnnotation marks type annotation behavior.
 	PythonSemanticSignalTypeAnnotation PythonSemanticSignal = "type_annotation"
 )
@@ -21,6 +23,7 @@ type PythonSemanticProfile struct {
 	EntityType     string
 	Decorators     []string
 	Async          bool
+	Lambda         bool
 	TypeAnnotation bool
 }
 
@@ -34,6 +37,7 @@ func PythonSemanticProfileFromMetadata(entityType string, metadata map[string]an
 
 	profile.Decorators = stringSliceFromAny(metadata["decorators"])
 	profile.Async = boolValue(metadata["async"])
+	profile.Lambda = metadataString(metadata, "semantic_kind") == "lambda"
 	profile.TypeAnnotation = entityType == "TypeAnnotation" || hasValues(metadata["type_annotations"])
 	return profile
 }
@@ -61,6 +65,9 @@ func (p PythonSemanticProfile) Signals() []PythonSemanticSignal {
 	if p.Async {
 		signals = append(signals, PythonSemanticSignalAsync)
 	}
+	if p.Lambda {
+		signals = append(signals, PythonSemanticSignalLambda)
+	}
 	if p.TypeAnnotation {
 		signals = append(signals, PythonSemanticSignalTypeAnnotation)
 	}
@@ -80,6 +87,8 @@ func (p PythonSemanticProfile) SurfaceKind() string {
 		return "decorated_function"
 	case p.Async:
 		return "async_function"
+	case p.Lambda:
+		return "lambda_function"
 	case p.TypeAnnotation:
 		return "type_annotation"
 	default:

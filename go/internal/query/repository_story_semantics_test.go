@@ -49,12 +49,22 @@ func TestBuildRepositorySemanticOverviewCountsSemanticSignals(t *testing.T) {
 				"target_kind": "method_declaration",
 			},
 		},
+		{
+			EntityID:   "lambda-1",
+			RepoID:     "repo-1",
+			EntityType: "Function",
+			EntityName: "double",
+			Language:   "python",
+			Metadata: map[string]any{
+				"semantic_kind": "lambda",
+			},
+		},
 	})
 
 	if overview == nil {
 		t.Fatal("buildRepositorySemanticOverview() = nil, want non-nil")
 	}
-	if got, want := overview["entity_count"], 4; got != want {
+	if got, want := overview["entity_count"], 5; got != want {
 		t.Fatalf("entity_count = %#v, want %#v", got, want)
 	}
 
@@ -62,7 +72,7 @@ func TestBuildRepositorySemanticOverviewCountsSemanticSignals(t *testing.T) {
 	if !ok {
 		t.Fatalf("language_counts type = %T, want map[string]int", overview["language_counts"])
 	}
-	if got, want := languageCounts["python"], 1; got != want {
+	if got, want := languageCounts["python"], 2; got != want {
 		t.Fatalf("language_counts[python] = %d, want %d", got, want)
 	}
 	if got, want := languageCounts["typescript"], 1; got != want {
@@ -94,6 +104,9 @@ func TestBuildRepositorySemanticOverviewCountsSemanticSignals(t *testing.T) {
 	if got, want := signalCounts["annotation"], 1; got != want {
 		t.Fatalf("signal_counts[annotation] = %d, want %d", got, want)
 	}
+	if got, want := signalCounts["lambda"], 1; got != want {
+		t.Fatalf("signal_counts[lambda] = %d, want %d", got, want)
+	}
 
 	surfaceKinds, ok := overview["surface_kind_counts"].(map[string]int)
 	if !ok {
@@ -110,6 +123,9 @@ func TestBuildRepositorySemanticOverviewCountsSemanticSignals(t *testing.T) {
 	}
 	if got, want := surfaceKinds["applied_annotation"], 1; got != want {
 		t.Fatalf("surface_kind_counts[applied_annotation] = %d, want %d", got, want)
+	}
+	if got, want := surfaceKinds["lambda_function"], 1; got != want {
+		t.Fatalf("surface_kind_counts[lambda_function] = %d, want %d", got, want)
 	}
 }
 
