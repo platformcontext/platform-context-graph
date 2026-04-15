@@ -1,0 +1,33 @@
+go/internal/query/content_relationships_kustomize_deploy_test.go
+  1ca5ee6ce936a402 1-55
+docs/docs/languages/kustomize.md
+  1ca5ee6ce936a402 25-26,29,31
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 90,112
+go/internal/query/content_relationships.go
+  1ca5ee6ce936a402 236
+go/internal/parser/yaml_semantics.go
+  1ca5ee6ce936a402 149-151,175-178
+go/internal/parser/engine_yaml_semantics_test.go
+  1ca5ee6ce936a402 347-411
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "afbb6e526744bfb0a6e7271fd9892697eefbda4e",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 135,
+      "total_deletions": 6,
+      "accepted_lines": 135,
+      "overriden_lines": 0
+    }
+  }
+}
