@@ -1,0 +1,38 @@
+docs/docs/languages/rust.md
+  1ca5ee6ce936a402 26
+go/internal/query/code_call_graph_contract_test.go
+  1ca5ee6ce936a402 240-317
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "be3f5a0f2c15d37380ca0db8f0a1e9e1fe0feb3b",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 2581,
+      "total_deletions": 483,
+      "accepted_lines": 4977,
+      "overriden_lines": 3
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 82,
+      "overriden_lines": 0
+    }
+  }
+}
