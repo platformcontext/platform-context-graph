@@ -108,7 +108,7 @@ func TestBuildEntitySemanticSummaryAnnotation(t *testing.T) {
 	}
 
 	got := buildEntitySemanticSummary(entity)
-	want := "Annotation Logged is applied to a method_declaration."
+	want := "Annotation Logged is applied to a method declaration."
 	if got != want {
 		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
 	}

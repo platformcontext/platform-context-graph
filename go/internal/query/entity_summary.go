@@ -65,7 +65,7 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		kind, _ := metadata["kind"].(string)
 		targetKind, _ := metadata["target_kind"].(string)
 		if kind == "applied" && targetKind != "" {
-			return fmt.Sprintf("%s %s is applied to a %s.", label, name, targetKind)
+			return fmt.Sprintf("%s %s is applied to a %s.", label, name, humanizeSemanticValue(targetKind))
 		}
 		if kind == "declaration" {
 			return fmt.Sprintf("%s %s declares an annotation type.", label, name)
@@ -284,4 +284,11 @@ func joinSentenceFragments(parts []string) string {
 	default:
 		return strings.Join(parts[:len(parts)-1], ", ") + ", and " + parts[len(parts)-1]
 	}
+}
+
+func humanizeSemanticValue(value string) string {
+	if value == "" {
+		return ""
+	}
+	return strings.ReplaceAll(value, "_", " ")
 }

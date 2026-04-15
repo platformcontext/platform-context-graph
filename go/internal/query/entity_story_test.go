@@ -71,6 +71,20 @@ func TestAttachSemanticSummaryAddsStoryForSemanticEntities(t *testing.T) {
 			},
 			want: "Function handler is async and uses decorators @route. Defined in src/app.py (python).",
 		},
+		{
+			name: "java applied annotation",
+			entity: map[string]any{
+				"labels":    []string{"Annotation"},
+				"name":      "Logged",
+				"language":  "java",
+				"file_path": "src/Logged.java",
+				"metadata": map[string]any{
+					"kind":        "applied",
+					"target_kind": "method_declaration",
+				},
+			},
+			want: "Annotation Logged is applied to a method declaration. Defined in src/Logged.java (java).",
+		},
 	}
 
 	for _, tt := range tests {

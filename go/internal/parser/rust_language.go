@@ -2,11 +2,14 @@ package parser
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
+
+var rustLifetimePattern = regexp.MustCompile(`'([A-Za-z_][A-Za-z0-9_]*)`)
 
 func (e *Engine) parseRust(
 	path string,
@@ -95,6 +98,8 @@ func appendRustImplBlock(payload map[string]any, node *tree_sitter.Node, source 
 		header = header[:idx]
 	}
 	header = strings.TrimSpace(strings.TrimPrefix(header, "impl"))
+	lifetimeParameters := rustLeadingLifetimeParameters(header)
+	signatureLifetimes := rustLifetimeNames(header)
 	header = strings.TrimSpace(rustStripTypeParameters(header))
 
 	kind := "inherent_impl"
@@ -121,6 +126,12 @@ func appendRustImplBlock(payload map[string]any, node *tree_sitter.Node, source 
 	if traitName != "" {
 		item["trait"] = rustBaseTypeName(traitName)
 	}
+	if len(lifetimeParameters) > 0 {
+		item["lifetime_parameters"] = lifetimeParameters
+	}
+	if len(signatureLifetimes) > 0 {
+		item["signature_lifetimes"] = signatureLifetimes
+	}
 	appendBucket(payload, "impl_blocks", item)
 }
 
@@ -137,6 +148,16 @@ func appendRustFunction(payload map[string]any, node *tree_sitter.Node, source [
 		"end_line":    nodeEndLine(node),
 		"decorators":  []string{},
 		"lang":        "rust",
+	}
+	signature := rustSignatureHeader(nodeText(node, source))
+	if lifetimeParameters := rustFunctionLifetimeParameters(signature, name); len(lifetimeParameters) > 0 {
+		item["lifetime_parameters"] = lifetimeParameters
+	}
+	if signatureLifetimes := rustLifetimeNames(signature); len(signatureLifetimes) > 0 {
+		item["signature_lifetimes"] = signatureLifetimes
+	}
+	if returnLifetime := rustReturnLifetime(signature); returnLifetime != "" {
+		item["return_lifetime"] = returnLifetime
 	}
 	if implContext := rustImplContext(node, source); implContext != "" {
 		item["impl_context"] = implContext
@@ -238,6 +259,100 @@ func rustBaseTypeName(text string) string {
 		trimmed = trimmed[idx+2:]
 	}
 	return strings.TrimSpace(trimmed)
+}
+
+func rustFunctionLifetimeParameters(signature string, name string) []string {
+	marker := "fn " + name
+	idx := strings.Index(signature, marker)
+	if idx < 0 {
+		return nil
+	}
+	remainder := strings.TrimSpace(signature[idx+len(marker):])
+	if !strings.HasPrefix(remainder, "<") {
+		return nil
+	}
+	segment, ok := rustLeadingAngleSegment(remainder)
+	if !ok {
+		return nil
+	}
+	return rustLifetimeNames(segment)
+}
+
+func rustLeadingLifetimeParameters(signature string) []string {
+	trimmed := strings.TrimSpace(signature)
+	if !strings.HasPrefix(trimmed, "<") {
+		return nil
+	}
+	segment, ok := rustLeadingAngleSegment(trimmed)
+	if !ok {
+		return nil
+	}
+	return rustLifetimeNames(segment)
+}
+
+func rustLeadingAngleSegment(text string) (string, bool) {
+	if !strings.HasPrefix(text, "<") {
+		return "", false
+	}
+	depth := 0
+	for idx, r := range text {
+		switch r {
+		case '<':
+			depth++
+		case '>':
+			depth--
+			if depth == 0 {
+				return text[:idx+1], true
+			}
+		}
+	}
+	return "", false
+}
+
+func rustLifetimeNames(text string) []string {
+	matches := rustLifetimePattern.FindAllStringSubmatch(text, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(matches))
+	seen := make(map[string]struct{}, len(matches))
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		name := match[1]
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return names
+}
+
+func rustReturnLifetime(signature string) string {
+	idx := strings.Index(signature, "->")
+	if idx < 0 {
+		return ""
+	}
+	returnType := strings.TrimSpace(signature[idx+len("->"):])
+	lifetimes := rustLifetimeNames(returnType)
+	if len(lifetimes) == 0 {
+		return ""
+	}
+	return lifetimes[0]
+}
+
+func rustSignatureHeader(text string) string {
+	signature := strings.TrimSpace(text)
+	if idx := strings.Index(signature, "{"); idx >= 0 {
+		signature = signature[:idx]
+	}
+	return strings.TrimSpace(strings.TrimSuffix(signature, ";"))
 }
 
 func rustCallNameNode(node *tree_sitter.Node) *tree_sitter.Node {

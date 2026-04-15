@@ -46,6 +46,16 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 		signals = append(signals, "framework")
 	}
 
+	if label == "Annotation" {
+		if kind, _ := metadata["kind"].(string); kind == "applied" {
+			profile["annotation"] = true
+			signals = append(signals, "annotation")
+			if targetKind, _ := metadata["target_kind"].(string); targetKind != "" {
+				profile["annotation_target_kind"] = targetKind
+			}
+		}
+	}
+
 	pythonProfile := PythonSemanticProfileFromMetadata(label, metadata)
 	if pythonProfile.TypeAnnotation {
 		profile["type_annotation"] = true
@@ -69,6 +79,9 @@ func semanticSurfaceKind(
 ) string {
 	if framework, ok := profile["framework"].(string); ok && framework != "" && label == "Component" {
 		return "framework_component"
+	}
+	if _, ok := profile["annotation"].(bool); ok && label == "Annotation" {
+		return "applied_annotation"
 	}
 	if _, ok := profile["type_annotation"].(bool); ok {
 		return "type_annotation"

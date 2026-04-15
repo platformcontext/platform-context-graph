@@ -38,12 +38,23 @@ func TestBuildRepositorySemanticOverviewCountsSemanticSignals(t *testing.T) {
 				"framework": "react",
 			},
 		},
+		{
+			EntityID:   "annotation-1",
+			RepoID:     "repo-1",
+			EntityType: "Annotation",
+			EntityName: "Logged",
+			Language:   "java",
+			Metadata: map[string]any{
+				"kind":        "applied",
+				"target_kind": "method_declaration",
+			},
+		},
 	})
 
 	if overview == nil {
 		t.Fatal("buildRepositorySemanticOverview() = nil, want non-nil")
 	}
-	if got, want := overview["entity_count"], 3; got != want {
+	if got, want := overview["entity_count"], 4; got != want {
 		t.Fatalf("entity_count = %#v, want %#v", got, want)
 	}
 
@@ -59,6 +70,9 @@ func TestBuildRepositorySemanticOverviewCountsSemanticSignals(t *testing.T) {
 	}
 	if got, want := languageCounts["tsx"], 1; got != want {
 		t.Fatalf("language_counts[tsx] = %d, want %d", got, want)
+	}
+	if got, want := languageCounts["java"], 1; got != want {
+		t.Fatalf("language_counts[java] = %d, want %d", got, want)
 	}
 
 	signalCounts, ok := overview["signal_counts"].(map[string]int)
@@ -77,6 +91,9 @@ func TestBuildRepositorySemanticOverviewCountsSemanticSignals(t *testing.T) {
 	if got, want := signalCounts["framework"], 1; got != want {
 		t.Fatalf("signal_counts[framework] = %d, want %d", got, want)
 	}
+	if got, want := signalCounts["annotation"], 1; got != want {
+		t.Fatalf("signal_counts[annotation] = %d, want %d", got, want)
+	}
 
 	surfaceKinds, ok := overview["surface_kind_counts"].(map[string]int)
 	if !ok {
@@ -91,6 +108,9 @@ func TestBuildRepositorySemanticOverviewCountsSemanticSignals(t *testing.T) {
 	if got, want := surfaceKinds["framework_component"], 1; got != want {
 		t.Fatalf("surface_kind_counts[framework_component] = %d, want %d", got, want)
 	}
+	if got, want := surfaceKinds["applied_annotation"], 1; got != want {
+		t.Fatalf("surface_kind_counts[applied_annotation] = %d, want %d", got, want)
+	}
 }
 
 func TestBuildRepositoryStoryResponseIncludesSemanticOverview(t *testing.T) {
@@ -98,16 +118,19 @@ func TestBuildRepositoryStoryResponseIncludesSemanticOverview(t *testing.T) {
 
 	repo := RepoRef{ID: "repository:payments", Name: "payments"}
 	semanticOverview := map[string]any{
-		"entity_count": 2,
+		"entity_count": 3,
 		"language_counts": map[string]int{
+			"java":       1,
 			"python":     1,
 			"typescript": 1,
 		},
 		"signal_counts": map[string]int{
+			"annotation": 1,
 			"decorators": 1,
 			"async":      1,
 		},
 		"surface_kind_counts": map[string]int{
+			"applied_annotation":       1,
 			"decorated_async_function": 1,
 			"generic_declaration":      1,
 		},
@@ -127,7 +150,7 @@ func TestBuildRepositoryStoryResponseIncludesSemanticOverview(t *testing.T) {
 	if !ok {
 		t.Fatalf("semantic_overview type = %T, want map[string]any", got["semantic_overview"])
 	}
-	if gotValue, want := overview["entity_count"], 2; gotValue != want {
+	if gotValue, want := overview["entity_count"], 3; gotValue != want {
 		t.Fatalf("semantic_overview[entity_count] = %#v, want %#v", gotValue, want)
 	}
 
@@ -142,7 +165,7 @@ func TestBuildRepositoryStoryResponseIncludesSemanticOverview(t *testing.T) {
 		t.Fatalf("story_sections[2][title] = %#v, want %#v", gotValue, want)
 	}
 
-	if gotValue, want := got["story"], "Repository payments contains 42 indexed files. Languages: python, typescript. Defines 1 workload(s): payments-api. Runs on platform signal(s): argocd_application. Semantic signals cover 2 entity(ies) across 2 language(s): async=1, decorators=1, decorated_async_function=1, and generic_declaration=1."; gotValue != want {
+	if gotValue, want := got["story"], "Repository payments contains 42 indexed files. Languages: python, typescript. Defines 1 workload(s): payments-api. Runs on platform signal(s): argocd_application. Semantic signals cover 3 entity(ies) across 3 language(s): annotation=1, async=1, decorators=1, applied_annotation=1, decorated_async_function=1, and generic_declaration=1."; gotValue != want {
 		t.Fatalf("story = %#v, want %#v", gotValue, want)
 	}
 }
