@@ -133,6 +133,36 @@ ALTER TABLE public.users ADD COLUMN email TEXT;
 	}
 }
 
+func TestDefaultEngineParsePathSQLAlterTableAddColumnMaterializesColumn(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "migrations", "V2__add_email.sql")
+	writeTestFile(
+		t,
+		filePath,
+		`CREATE TABLE public.users (
+  id BIGSERIAL PRIMARY KEY
+);
+
+ALTER TABLE public.users ADD COLUMN email TEXT;
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "sql_columns", "public.users.email")
+	assertSQLRelationship(t, got, "HAS_COLUMN", "public.users", "public.users.email")
+}
+
 func TestDefaultEngineParsePathSQLPartialRecovery(t *testing.T) {
 	t.Parallel()
 

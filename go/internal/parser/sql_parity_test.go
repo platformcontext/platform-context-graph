@@ -50,6 +50,26 @@ FOR EACH ROW EXECUTE PROCEDURE public.sync_user_segment();
 	assertSQLRelationship(t, got, "EXECUTES", "users_sync_segment", "public.sync_user_segment")
 }
 
+func TestDefaultEngineParsePathSQLFixtureAlterTableAddColumn(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := repoFixturePath("ecosystems", "sql_comprehensive")
+	filePath := repoFixturePath("ecosystems", "sql_comprehensive", "migrations", "V1__bootstrap.sql")
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "sql_columns", "public.users.created_at")
+	assertSQLRelationship(t, got, "HAS_COLUMN", "public.users", "public.users.created_at")
+}
+
 func TestDetectSQLMigrationTool(t *testing.T) {
 	t.Parallel()
 

@@ -58,7 +58,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   `coalesce(...)` lineage preservation for `orders_expanded.customer_segment` in
   `go/internal/parser/json_dbt_test.go`.
 - The checked-in SQL procedural proof now covers `CREATE OR REPLACE FUNCTION`
-  bodies plus legacy `EXECUTE PROCEDURE` trigger wiring in
+  bodies, legacy `EXECUTE PROCEDURE` trigger wiring, and fixture-backed
+  `ALTER TABLE ... ADD COLUMN ...` column materialization in
   `go/internal/parser/sql_parity_test.go`.
 - Compiled-model lineage still carries explicit unresolved limits for
   unresolved references, truly opaque templated expressions, complex macros,
@@ -87,7 +88,8 @@ service path.
 
 ## Known Limitations
 - Dialect-specific procedural SQL beyond common Postgres-style bodies may surface only partial table references.
-- ALTER/DDL mutation parsing currently prioritizes affected object names over full clause normalization.
+- Broader ALTER/DDL mutation normalization beyond checked-in `ADD COLUMN`
+  materialization still remains partial.
 - Compiled dbt lineage still records partial coverage for unresolved references,
   templated expressions, complex macro expansion, and some derived
   expressions.

@@ -12,6 +12,8 @@ var (
 	createFuncPattern        = regexp.MustCompile(`(?is)\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+(?P<name>` + sqlNamePattern + `)\s*\([^)]*\)\s+RETURNS\b.*?\bAS\s+\$\$(?P<body>.*?)\$\$\s+LANGUAGE\s+(?P<language>[A-Za-z_][\w$]*)`)
 	createTrigPattern        = regexp.MustCompile(`(?is)\bCREATE\s+TRIGGER\s+(?P<trigger>` + sqlNamePattern + `)\b.*?\bON\s+(?P<table>` + sqlNamePattern + `)\b.*?\bEXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(?P<function>` + sqlNamePattern + `)\s*\(`)
 	createIndexPattern       = regexp.MustCompile(`(?is)\bCREATE\s+INDEX\s+(?P<name>` + sqlNamePattern + `)\s+\bON\s+(?P<table>` + sqlNamePattern + `)\b`)
+	alterTablePattern        = regexp.MustCompile(`(?is)\bALTER\s+TABLE\s+(?P<table>` + sqlNamePattern + `)\s+(?P<body>.*?)(?:;|$)`)
+	addColumnClausePattern   = regexp.MustCompile(`(?is)\bADD\s+COLUMN(?:\s+IF\s+NOT\s+EXISTS)?\s+`)
 	columnPattern            = regexp.MustCompile(`(?is)^\s*(?P<name>"[^"]+"|` + "`[^`]+`" + `|\[[^\]]+\]|[A-Za-z_][\w$]*)\s+(?P<type>[A-Za-z_][\w$]*(?:\s*\([^)]*\))?)`)
 	nextCreatePattern        = regexp.MustCompile(`(?is)\bCREATE\s+(?:TABLE|VIEW|FUNCTION|TRIGGER|INDEX)\b`)
 )
@@ -52,6 +54,7 @@ func (e *Engine) parseSQL(
 	seenRelationships := make(map[string]struct{})
 
 	parseSQLTables(payload, text, options, seenEntities, seenRelationships)
+	parseSQLAlterTableColumns(payload, text, options, seenEntities, seenRelationships)
 	parseSQLViews(payload, text, options, seenEntities, seenRelationships)
 	parseSQLFunctions(payload, text, options, seenEntities, seenRelationships)
 	parseSQLTriggers(payload, text, options, seenEntities, seenRelationships)
@@ -168,6 +171,45 @@ func parseSQLViews(
 				mention.name,
 				sqlLineNumberForOffset(source, match[0]+mention.offset),
 			)
+		}
+	}
+}
+
+func parseSQLAlterTableColumns(
+	payload map[string]any,
+	source string,
+	options Options,
+	seenEntities map[string]map[string]struct{},
+	seenRelationships map[string]struct{},
+) {
+	indexes := namedCaptureIndexes(alterTablePattern)
+	columnIndexes := namedCaptureIndexes(columnPattern)
+	for _, match := range alterTablePattern.FindAllStringSubmatchIndex(source, -1) {
+		tableName := normalizeSQLName(submatchValue(source, match, indexes["table"]))
+		body := submatchValue(source, match, indexes["body"])
+		bodyStart := match[indexes["body"]*2]
+		for _, clause := range addColumnClausePattern.FindAllStringIndex(body, -1) {
+			fragmentStart := clause[1]
+			fragment := body[fragmentStart:]
+			fragment = fragment[:sqlClauseBoundary(fragment)]
+			candidate := columnPattern.FindStringSubmatchIndex(strings.TrimSpace(fragment))
+			if candidate == nil {
+				continue
+			}
+			columnName := normalizeSQLName(submatchValue(strings.TrimSpace(fragment), candidate, columnIndexes["name"]))
+			columnType := strings.TrimSpace(submatchValue(strings.TrimSpace(fragment), candidate, columnIndexes["type"]))
+			qualified := tableName + "." + columnName
+			lineNumber := sqlLineNumberForOffset(source, bodyStart+fragmentStart)
+			appendSQLEntity(payload, seenEntities, "sql_columns", qualified, map[string]any{
+				"name":            qualified,
+				"line_number":     lineNumber,
+				"type":            "content_entity",
+				"sql_entity_type": "SqlColumn",
+				"table_name":      tableName,
+				"column_name":     columnName,
+				"data_type":       columnType,
+			}, source, bodyStart+fragmentStart, bodyStart+fragmentStart+len(fragment), options)
+			appendSQLRelationship(payload, seenRelationships, "HAS_COLUMN", tableName, qualified, lineNumber)
 		}
 	}
 }
@@ -374,4 +416,23 @@ func sqlSectionEnd(source string, start int) int {
 	default:
 		return len(source)
 	}
+}
+
+func sqlClauseBoundary(fragment string) int {
+	depth := 0
+	for index, r := range fragment {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				return index
+			}
+		}
+	}
+	return len(fragment)
 }
