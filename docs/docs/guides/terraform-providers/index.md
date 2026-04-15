@@ -21,6 +21,11 @@ detail. They are live runtime inputs used to register schema-driven extractors,
 load provider metadata, infer identity keys, classify service families, and
 emit infrastructure relationship evidence.
 
+On this branch, that evidence path is proven through the Postgres ingestion
+transaction: repository facts are read back into a catalog, Terraform fact
+batches are scanned against that catalog, and matching rows are persisted to
+`relationship_evidence_facts` before the projector queue is enqueued.
+
 ## Why These Schemas Exist
 
 Historically, the old Python platform loaded the output of

@@ -160,31 +160,6 @@ func mustMarshalProofMetadata(metadata map[string]string) []byte {
 	return payload
 }
 
-func proofFactRows(input map[string]facts.Envelope, scopeID, generationID string) [][]any {
-	rows := [][]any{}
-	for _, envelope := range input {
-		if envelope.ScopeID != scopeID || envelope.GenerationID != generationID {
-			continue
-		}
-		payload, _ := json.Marshal(envelope.Payload)
-		rows = append(rows, []any{
-			envelope.FactID,
-			envelope.ScopeID,
-			envelope.GenerationID,
-			envelope.FactKind,
-			envelope.StableFactKey,
-			envelope.SourceRef.SourceSystem,
-			envelope.SourceRef.FactKey,
-			envelope.SourceRef.SourceURI,
-			envelope.SourceRef.SourceRecordID,
-			envelope.ObservedAt.UTC(),
-			envelope.IsTombstone,
-			payload,
-		})
-	}
-	return rows
-}
-
 func proofScopeCountRows(scopeStatuses map[string]string) [][]any {
 	counts := make(map[string]int64)
 	for _, status := range scopeStatuses {

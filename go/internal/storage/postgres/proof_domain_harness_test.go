@@ -46,6 +46,7 @@ type proofState struct {
 	activeGenerations map[string]string
 	generations       map[string]scope.ScopeGeneration
 	facts             map[string]facts.Envelope
+	evidenceFacts     map[string]evidenceRecord
 	workItems         map[string]proofWorkItem
 }
 
@@ -76,6 +77,7 @@ func newProofDomainDB(t *testing.T, now time.Time) *proofDomainDB {
 			activeGenerations: make(map[string]string),
 			generations:       make(map[string]scope.ScopeGeneration),
 			facts:             make(map[string]facts.Envelope),
+			evidenceFacts:     make(map[string]evidenceRecord),
 			workItems:         make(map[string]proofWorkItem),
 		},
 	}
@@ -90,6 +92,7 @@ func (db *proofDomainDB) Begin(context.Context) (Transaction, error) {
 			activeGenerations: cloneStrings(db.state.activeGenerations),
 			generations:       cloneGenerations(db.state.generations),
 			facts:             cloneFacts(db.state.facts),
+			evidenceFacts:     cloneEvidenceFacts(db.state.evidenceFacts),
 			workItems:         cloneWorkItems(db.state.workItems),
 		},
 	}, nil
@@ -400,13 +403,33 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 		}
 		tx.state.workItems[workItem.workItemID] = workItem
 		return proofResult{}, nil
+	case strings.Contains(query, "INSERT INTO relationship_evidence_facts"):
+		details := parseJSONBytes(args[10])
+		tx.state.evidenceFacts[args[0].(string)] = evidenceRecord{
+			generationID:   args[1].(string),
+			evidenceKind:   args[2].(string),
+			relType:        args[3].(string),
+			sourceRepoID:   nullableToString(args[4]),
+			targetRepoID:   nullableToString(args[5]),
+			sourceEntityID: nullableToString(args[6]),
+			targetEntityID: nullableToString(args[7]),
+			confidence:     args[8].(float64),
+			rationale:      args[9].(string),
+			details:        details,
+		}
+		return proofResult{}, nil
 	default:
 		return nil, fmt.Errorf("unexpected tx exec query: %s", query)
 	}
 }
 
-func (tx *proofDomainTx) QueryContext(context.Context, string, ...any) (Rows, error) {
-	return nil, errors.New("unexpected query in transaction")
+func (tx *proofDomainTx) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
+	switch {
+	case strings.Contains(query, "FROM fact_records") && strings.Contains(query, "fact_kind = 'repository'"):
+		return newProofRows(proofRepositoryCatalogRows(tx.state.facts)), nil
+	default:
+		return nil, errors.New("unexpected query in transaction")
+	}
 }
 
 func (tx *proofDomainTx) Commit() error {

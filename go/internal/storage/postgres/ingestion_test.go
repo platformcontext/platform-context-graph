@@ -276,11 +276,12 @@ func (f *fakeTransactionalDB) QueryContext(_ context.Context, query string, args
 }
 
 type fakeTx struct {
-	execs      []fakeExecCall
-	queries    []fakeQueryCall
-	execErrors map[int]error
-	committed  bool
-	rolledBack bool
+	execs          []fakeExecCall
+	queries        []fakeQueryCall
+	execErrors     map[int]error
+	queryResponses []queueFakeRows
+	committed      bool
+	rolledBack     bool
 }
 
 func (f *fakeTx) ExecContext(_ context.Context, query string, args ...any) (sql.Result, error) {
@@ -294,6 +295,17 @@ func (f *fakeTx) ExecContext(_ context.Context, query string, args ...any) (sql.
 
 func (f *fakeTx) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
 	f.queries = append(f.queries, fakeQueryCall{query: query, args: args})
+	if len(f.queryResponses) > 0 {
+		rows := f.queryResponses[0]
+		f.queryResponses = f.queryResponses[1:]
+		if rows.err != nil {
+			return nil, rows.err
+		}
+		return &rows, nil
+	}
+	if strings.Contains(query, "FROM fact_records") && strings.Contains(query, "fact_kind = 'repository'") {
+		return &queueFakeRows{}, nil
+	}
 	return nil, errors.New("unexpected query in transaction")
 }
 

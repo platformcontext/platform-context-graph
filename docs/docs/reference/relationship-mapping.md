@@ -218,6 +218,11 @@ The important constraint is not the tool name itself. The important constraint i
 
 Terraform provider-schema support is now Go-owned on this branch:
 
+The normal Postgres ingestion boundary now proves that runtime ownership in
+practice: repository facts are loaded back into a catalog, Terraform fact
+batches are matched against that catalog, and evidence rows are persisted to
+`relationship_evidence_facts` in the same transaction as the fact commit.
+
 - schema loading, identity-key inference, category classification, and
   schema-driven generic Terraform evidence live in Go under
   `go/internal/terraformschema` and `go/internal/relationships`

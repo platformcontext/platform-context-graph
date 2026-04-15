@@ -301,6 +301,7 @@ func upsertStreamingFacts(
 	factStream <-chan facts.Envelope,
 	scopeID string,
 	generationID string,
+	afterBatch func([]facts.Envelope) error,
 ) error {
 	if db == nil {
 		return fmt.Errorf("fact store database is required")
@@ -332,6 +333,11 @@ func upsertStreamingFacts(
 			if err := upsertFactBatch(ctx, db, batch); err != nil {
 				return err
 			}
+			if afterBatch != nil {
+				if err := afterBatch(batch); err != nil {
+					return err
+				}
+			}
 			for i := range batch {
 				batch[i] = facts.Envelope{}
 			}
@@ -344,6 +350,11 @@ func upsertStreamingFacts(
 		batch = deduplicateEnvelopes(batch)
 		if err := upsertFactBatch(ctx, db, batch); err != nil {
 			return err
+		}
+		if afterBatch != nil {
+			if err := afterBatch(batch); err != nil {
+				return err
+			}
 		}
 	}
 
