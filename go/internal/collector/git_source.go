@@ -335,10 +335,49 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	// Snapshot workers with two-lane select: prefer small repos so they
 	// always flow at full parallelism even when large repos hold the
 	// semaphore. Large repos are processed when no small work is available.
+	//
+	// Key design: the large-repo semaphore is acquired inside the select
+	// statement, NOT inside processRepo. This guarantees a worker never
+	// blocks waiting for the semaphore while small repos are available.
+	// When the semaphore is full, the largeSem case simply doesn't fire
+	// and the worker falls through to smallCh or blocks.
 	var wg sync.WaitGroup
 	var errOnce sync.Once
 	var firstErr error
 	var completed atomic.Int64
+
+	// drainLarge is a helper for drain loops where the small channel is
+	// closed and only large repos remain. Each repo acquires the semaphore
+	// before processing and releases it via the afterSnapshot callback.
+	drainLarge := func(workerID int) {
+		for repo := range largeCh {
+			if workerCtx.Err() != nil {
+				return
+			}
+			semWaitStart := time.Now()
+			select {
+			case largeSem <- struct{}{}:
+			case <-workerCtx.Done():
+				return
+			}
+			if s.Instruments != nil {
+				s.Instruments.LargeRepoSemaphoreWait.Record(workerCtx,
+					time.Since(semWaitStart).Seconds(),
+				)
+			}
+			if s.Logger != nil {
+				s.Logger.InfoContext(workerCtx, "large repo semaphore acquired",
+					slog.String("repo_path", repo.RepoPath),
+					slog.Int("worker_id", workerID),
+					slog.Float64("wait_seconds", time.Since(semWaitStart).Seconds()),
+				)
+			}
+			s.processRepo(workerCtx, repo,
+				func() { <-largeSem },
+				sourceRunID, observedAt, workerID,
+				&errOnce, &firstErr, cancel, &completed)
+		}
+	}
 
 	for i := 0; i < workers; i++ {
 		workerID := i + 1
@@ -350,63 +389,93 @@ func (s *GitSource) startStream(ctx context.Context) error {
 					return
 				}
 
-				var repo SelectedRepository
-				var large bool
-				var ok bool
-
-				// Prefer small repos (non-blocking check).
+				// Priority: always try small repos first (non-blocking).
 				select {
-				case repo, ok = <-smallCh:
+				case repo, ok := <-smallCh:
 					if !ok {
-						// Small channel closed — drain remaining large repos.
-						for repo = range largeCh {
-							if workerCtx.Err() != nil {
-								return
-							}
-							s.processRepo(workerCtx, repo, true, largeSem,
-								sourceRunID, observedAt, workerID,
-								&errOnce, &firstErr, cancel, &completed)
-						}
+						drainLarge(workerID)
 						return
 					}
-					large = false
+					s.processRepo(workerCtx, repo, nil,
+						sourceRunID, observedAt, workerID,
+						&errOnce, &firstErr, cancel, &completed)
+					continue
 				default:
-					// No small repo ready — try large or block on either.
-					select {
-					case repo, ok = <-smallCh:
-						if !ok {
-							for repo = range largeCh {
-								if workerCtx.Err() != nil {
-									return
-								}
-								s.processRepo(workerCtx, repo, true, largeSem,
-									sourceRunID, observedAt, workerID,
-									&errOnce, &firstErr, cancel, &completed)
-							}
-							return
-						}
-						large = false
-					case repo, ok = <-largeCh:
-						if !ok {
-							for repo = range smallCh {
-								if workerCtx.Err() != nil {
-									return
-								}
-								s.processRepo(workerCtx, repo, false, largeSem,
-									sourceRunID, observedAt, workerID,
-									&errOnce, &firstErr, cancel, &completed)
-							}
-							return
-						}
-						large = true
-					case <-workerCtx.Done():
-						return
-					}
 				}
 
-				s.processRepo(workerCtx, repo, large, largeSem,
-					sourceRunID, observedAt, workerID,
-					&errOnce, &firstErr, cancel, &completed)
+				// No small repo immediately available. Try to acquire the
+				// large-repo semaphore alongside checking for small repos.
+				// A worker NEVER blocks waiting for the semaphore — if it's
+				// full, the largeSem case doesn't fire and the worker handles
+				// small repos or waits for either channel.
+				select {
+				case repo, ok := <-smallCh:
+					if !ok {
+						drainLarge(workerID)
+						return
+					}
+					s.processRepo(workerCtx, repo, nil,
+						sourceRunID, observedAt, workerID,
+						&errOnce, &firstErr, cancel, &completed)
+				case largeSem <- struct{}{}:
+					// Acquired semaphore — pull a large repo.
+					semAcquiredAt := time.Now()
+					select {
+					case repo, ok := <-largeCh:
+						if !ok {
+							<-largeSem
+							// Large channel closed, drain remaining small repos.
+							for repo := range smallCh {
+								if workerCtx.Err() != nil {
+									return
+								}
+								s.processRepo(workerCtx, repo, nil,
+									sourceRunID, observedAt, workerID,
+									&errOnce, &firstErr, cancel, &completed)
+							}
+							return
+						}
+						if s.Instruments != nil {
+							s.Instruments.LargeRepoSemaphoreWait.Record(workerCtx, 0)
+						}
+						if s.Logger != nil {
+							s.Logger.InfoContext(workerCtx, "large repo semaphore acquired",
+								slog.String("repo_path", repo.RepoPath),
+								slog.Int("worker_id", workerID),
+								slog.Float64("wait_seconds", 0),
+							)
+						}
+						// Process large repo; afterSnapshot releases semaphore
+						// so it's freed before the (potentially slow) stream send.
+						s.processRepo(workerCtx, repo,
+							func() {
+								<-largeSem
+								if s.Logger != nil {
+									s.Logger.InfoContext(workerCtx, "large repo semaphore released",
+										slog.Int("worker_id", workerID),
+										slog.Float64("held_seconds", time.Since(semAcquiredAt).Seconds()),
+									)
+								}
+							},
+							sourceRunID, observedAt, workerID,
+							&errOnce, &firstErr, cancel, &completed)
+					case repo, ok := <-smallCh:
+						// Got a small repo while waiting for large — release sem.
+						<-largeSem
+						if !ok {
+							drainLarge(workerID)
+							return
+						}
+						s.processRepo(workerCtx, repo, nil,
+							sourceRunID, observedAt, workerID,
+							&errOnce, &firstErr, cancel, &completed)
+					case <-workerCtx.Done():
+						<-largeSem
+						return
+					}
+				case <-workerCtx.Done():
+					return
+				}
 			}
 		}()
 	}
@@ -539,14 +608,14 @@ func (s *GitSource) resolveRepositories(batch SelectionBatch) ([]SelectedReposit
 	return resolved, sourceRunID, nil
 }
 
-// processRepo handles semaphore acquisition for large repos, snapshots a
-// single repository, releases the semaphore, and sends the result downstream.
-// It is the shared body for both lanes of the two-lane worker select.
+// processRepo snapshots a single repository, invokes the afterSnapshot
+// callback (used to release the large-repo semaphore between snapshot and
+// stream send), and sends the result downstream. The semaphore lifecycle
+// is managed by the caller, not by processRepo.
 func (s *GitSource) processRepo(
 	ctx context.Context,
 	repo SelectedRepository,
-	large bool,
-	largeSem chan struct{},
+	afterSnapshot func(),
 	sourceRunID string,
 	observedAt time.Time,
 	workerID int,
@@ -555,24 +624,13 @@ func (s *GitSource) processRepo(
 	cancel context.CancelFunc,
 	completed *atomic.Int64,
 ) {
-	if large {
-		semWaitStart := time.Now()
-		select {
-		case largeSem <- struct{}{}:
-		case <-ctx.Done():
-			return
-		}
-		if s.Instruments != nil {
-			s.Instruments.LargeRepoSemaphoreWait.Record(ctx,
-				time.Since(semWaitStart).Seconds(),
-			)
-		}
-	}
-
 	gen, err := s.snapshotOneRepository(ctx, repo, sourceRunID, observedAt, workerID)
 
-	if large {
-		<-largeSem
+	// Release semaphore (if held) after snapshot completes but before the
+	// potentially-blocking stream send. This lets another worker start a
+	// large repo while this worker waits for buffer space.
+	if afterSnapshot != nil {
+		afterSnapshot()
 	}
 
 	if err != nil {
