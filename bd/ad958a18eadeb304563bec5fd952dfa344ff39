@@ -1,0 +1,57 @@
+docs/docs/reference/http-api.md
+  1ca5ee6ce936a402 184-187
+docs/docs/languages/argocd.md
+  1ca5ee6ce936a402 29,32
+docs/docs/languages/elixir.md
+  1ca5ee6ce936a402 20,24,28
+go/internal/query/language_queries_test.go
+  1ca5ee6ce936a402 41-42,49,391-428
+go/internal/query/entity_content_fallback_test.go
+  1ca5ee6ce936a402 175-225,425-508
+go/internal/query/entity.go
+  1ca5ee6ce936a402 276-278
+go/internal/query/openapi_paths_impact.go
+  1ca5ee6ce936a402 55-63
+go/internal/query/content_reader.go
+  1ca5ee6ce936a402 292,294-297,299-303,525-533
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 86,109
+go/internal/query/elixir_semantic_types.go
+  1ca5ee6ce936a402 1-43
+go/internal/query/entity_summary_test.go
+  1ca5ee6ce936a402 211-228
+go/internal/query/language_queries.go
+  1ca5ee6ce936a402 47-59
+go/internal/query/impact_trace_deployment_controllers.go
+  1ca5ee6ce936a402 1-94
+docs/docs/reference/mcp-reference.md
+  1ca5ee6ce936a402 85-87
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 53,62
+go/internal/query/impact_trace_deployment_argocd_test.go
+  1ca5ee6ce936a402 1-107,112,115,118,124-125
+go/internal/query/impact_trace_deployment.go
+  1ca5ee6ce936a402 56-60,65,77,120
+go/internal/query/openapi_test.go
+  1ca5ee6ce936a402 284-288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "bdad958a18eadeb304563bec5fd952dfa344ff39",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 529,
+      "total_deletions": 4331,
+      "accepted_lines": 521,
+      "overriden_lines": 10
+    }
+  }
+}
