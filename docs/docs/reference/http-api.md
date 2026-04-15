@@ -143,6 +143,8 @@ Deployment-oriented trace responses are shaped around:
 - `runtime_overview`
 - `deployment_sources`
 - `cloud_resources`
+- `controller_driven_paths`
+- `delivery_paths`
 - `deployment_fact_summary`
 - `drilldowns`
 

@@ -44,6 +44,8 @@ const openAPIPathsImpact = `
                     "deployment_sources": {"type": "array", "items": {"type": "object"}},
                     "cloud_resources": {"type": "array", "items": {"type": "object"}},
                     "deployment_facts": {"type": "array", "items": {"type": "object"}},
+                    "controller_driven_paths": {"type": "array", "items": {"type": "object"}},
+                    "delivery_paths": {"type": "array", "items": {"type": "object"}},
                     "story_sections": {"type": "array", "items": {"type": "object"}},
                     "deployment_overview": {"type": "object"},
                     "gitops_overview": {"type": "object"},

@@ -75,6 +75,8 @@ Use these tools when the user is asking for a narrative answer such as
 - `deployment_sources`
 - `cloud_resources`
 - `deployment_facts`
+- `controller_driven_paths`
+- `delivery_paths`
 - `deployment_fact_summary`
 
 `deployment_facts` are normalized, evidence-backed facts such as:

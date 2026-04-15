@@ -173,6 +173,22 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 		t.Fatalf("cloud_resources len = %d, want 1", len(cloudResources))
 	}
 
+	controllerDrivenPaths, ok := got["controller_driven_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("controller_driven_paths type = %T, want []map[string]any", got["controller_driven_paths"])
+	}
+	if len(controllerDrivenPaths) != 1 {
+		t.Fatalf("controller_driven_paths len = %d, want 1", len(controllerDrivenPaths))
+	}
+
+	deliveryPaths, ok := got["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
+	}
+	if len(deliveryPaths) != 2 {
+		t.Fatalf("delivery_paths len = %d, want 2", len(deliveryPaths))
+	}
+
 	drilldowns, ok := got["drilldowns"].(map[string]any)
 	if !ok {
 		t.Fatalf("drilldowns type = %T, want map[string]any", got["drilldowns"])

@@ -77,12 +77,14 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 			"id":   safeStr(workloadContext, "id"),
 			"name": safeStr(workloadContext, "name"),
 		},
-		"instances":          instances,
-		"deployment_sources": deploymentSources,
-		"cloud_resources":    cloudResources,
-		"deployment_facts":   deploymentFacts,
-		"story":              buildWorkloadStory(workloadContext),
-		"story_sections":     buildStorySections(platforms, platformKinds, environments),
+		"instances":               instances,
+		"deployment_sources":      deploymentSources,
+		"cloud_resources":         cloudResources,
+		"deployment_facts":        deploymentFacts,
+		"controller_driven_paths": buildControllerDrivenPaths(platforms, platformKinds),
+		"delivery_paths":          buildDeliveryPaths(deploymentSources, cloudResources),
+		"story":                   buildWorkloadStory(workloadContext),
+		"story_sections":          buildStorySections(platforms, platformKinds, environments),
 		"deployment_overview": map[string]any{
 			"instance_count":          len(instances),
 			"environment_count":       len(environments),
@@ -194,6 +196,41 @@ func buildDeploymentFacts(
 		})
 	}
 	return facts
+}
+
+func buildControllerDrivenPaths(platforms, platformKinds []string) []map[string]any {
+	paths := make([]map[string]any, 0, len(platforms))
+	for i, platform := range platforms {
+		path := map[string]any{
+			"controller": platform,
+		}
+		if i < len(platformKinds) && platformKinds[i] != "" {
+			path["controller_kind"] = platformKinds[i]
+		}
+		paths = append(paths, path)
+	}
+	return paths
+}
+
+func buildDeliveryPaths(deploymentSources, cloudResources []map[string]any) []map[string]any {
+	paths := make([]map[string]any, 0, len(deploymentSources)+len(cloudResources))
+	for _, source := range deploymentSources {
+		paths = append(paths, map[string]any{
+			"type":       "deployment_source",
+			"target":     safeStr(source, "repo_name"),
+			"target_id":  safeStr(source, "repo_id"),
+			"confidence": floatVal(source, "confidence"),
+		})
+	}
+	for _, resource := range cloudResources {
+		paths = append(paths, map[string]any{
+			"type":       "cloud_resource",
+			"target":     safeStr(resource, "name"),
+			"target_id":  safeStr(resource, "id"),
+			"confidence": floatVal(resource, "confidence"),
+		})
+	}
+	return paths
 }
 
 func buildDeploymentDrilldowns(serviceName, workloadID string) map[string]any {

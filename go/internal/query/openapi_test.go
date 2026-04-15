@@ -248,6 +248,8 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		"deployment_sources",
 		"cloud_resources",
 		"deployment_facts",
+		"controller_driven_paths",
+		"delivery_paths",
 		"story_sections",
 		"deployment_overview",
 		"gitops_overview",
