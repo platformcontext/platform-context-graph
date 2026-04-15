@@ -61,6 +61,27 @@ func TestEnrichEntityResultsWithContentMetadata(t *testing.T) {
 	if len(params) != 1 || params[0] != "T" {
 		t.Fatalf("metadata[type_parameters] = %#v, want [T]", params)
 	}
+	semanticProfile, ok := got[0]["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][semantic_profile] type = %T, want map[string]any", got[0]["semantic_profile"])
+	}
+	if gotValue, want := semanticProfile["surface_kind"], "generic_declaration"; gotValue != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
+	}
+	decoratorValues, ok := semanticProfile["decorators"].([]string)
+	if !ok {
+		t.Fatalf("semantic_profile[decorators] type = %T, want []string", semanticProfile["decorators"])
+	}
+	if len(decoratorValues) != 1 || decoratorValues[0] != "@sealed" {
+		t.Fatalf("semantic_profile[decorators] = %#v, want [@sealed]", decoratorValues)
+	}
+	typeParameters, ok := semanticProfile["type_parameters"].([]string)
+	if !ok {
+		t.Fatalf("semantic_profile[type_parameters] type = %T, want []string", semanticProfile["type_parameters"])
+	}
+	if len(typeParameters) != 1 || typeParameters[0] != "T" {
+		t.Fatalf("semantic_profile[type_parameters] = %#v, want [T]", typeParameters)
+	}
 }
 
 func TestEnrichEntityResultsWithContentMetadataSkipsUnmatchedRows(t *testing.T) {
@@ -101,5 +122,8 @@ func TestEnrichEntityResultsWithContentMetadataSkipsUnmatchedRows(t *testing.T) 
 	}
 	if _, ok := got[0]["metadata"]; ok {
 		t.Fatalf("results[0][metadata] = %#v, want metadata to remain absent", got[0]["metadata"])
+	}
+	if _, ok := got[0]["semantic_profile"]; ok {
+		t.Fatalf("results[0][semantic_profile] = %#v, want semantic profile to remain absent", got[0]["semantic_profile"])
 	}
 }

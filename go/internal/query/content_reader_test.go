@@ -242,6 +242,16 @@ func TestCodeHandlerSearchEntityContentIncludesEntityNameMatches(t *testing.T) {
 	if got, want := results[0]["semantic_summary"], "Component Button is associated with the react framework."; got != want {
 		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", got, want)
 	}
+	semanticProfile, ok := results[0]["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][semantic_profile] type = %T, want map[string]any", results[0]["semantic_profile"])
+	}
+	if got, want := semanticProfile["surface_kind"], "framework_component"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := semanticProfile["framework"], "react"; got != want {
+		t.Fatalf("semantic_profile[framework] = %#v, want %#v", got, want)
+	}
 }
 
 func TestContentReaderSearchEntitiesByLanguageAndTypeIncludesLanguageVariants(t *testing.T) {

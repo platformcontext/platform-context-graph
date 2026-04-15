@@ -22,14 +22,14 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTSXJSXComponentUsageParity` | Compose-backed fixture verification | - |
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTSXSemanticsAndComponents` | Compose-backed fixture verification | - |
 | Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `content:TypeAlias entity` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes`, `go/internal/query/entity_content_fallback_test.go::TestResolveEntityFallsBackToContentEntities`, `go/internal/query/content_reader_test.go::TestCodeHandlerSearchEntityContentIncludesEntityNameMatches` | Compose-backed fixture verification | TSX files inherit TypeScript type-alias extraction, those aliases are queryable through the Go content-backed language-query and content APIs, the normal entity resolve/context surfaces now also fall back to content-backed entities, and the normal `code/search` fallback now searches content-backed entity names as well as source text. The remaining gap is dedicated graph/story surfacing. |
-| JSX component usage | `jsx-component-usage` | partial | `function_calls` | `name, line_number` | `content:Entity.metadata + component entities + synthesized REFERENCES edges` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes`, `go/internal/query/entity_content_fallback_test.go::TestGetEntityContextFallsBackToContentEntities`, `go/internal/query/code_relationships_content_fallback_test.go::TestHandleRelationshipsFallsBackToContentEntityReferences` | Compose-backed fixture verification | PascalCase JSX tag usage is queryable through the Go content-backed `component` contract, content-backed component entities now participate in the normal entity context surface, and the normal `code/relationships` surface now synthesizes `REFERENCES` edges from `jsx_component_usage` metadata. Full graph-first component/reference modeling and higher-level story surfacing remain partial. |
+| JSX component usage | `jsx-component-usage` | partial | `function_calls` | `name, line_number` | `content:Entity.metadata + component entities + synthesized REFERENCES edges + semantic_profile` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes`, `go/internal/query/entity_content_fallback_test.go::TestGetEntityContextFallsBackToContentEntities`, `go/internal/query/code_relationships_content_fallback_test.go::TestHandleRelationshipsFallsBackToContentEntityReferences`, `go/internal/query/content_reader_test.go::TestCodeHandlerSearchEntityContentIncludesEntityNameMatches` | Compose-backed fixture verification | PascalCase JSX tag usage is queryable through the Go content-backed `component` contract, content-backed component entities now participate in the normal entity context surface, the normal `code/relationships` surface now synthesizes `REFERENCES` edges from `jsx_component_usage` metadata, and shared query surfaces now emit a structured `semantic_profile` for matching component entities. Full graph-first component/reference modeling and higher-level story surfacing remain partial. |
 
 ## Support Maturity
 - Grammar routing: `supported`
 - Normalization: `supported`
 - Framework pack status: `supported`
 - Framework packs: `react-base`, `nextjs-app-router-base`
-- Query surfacing: `partial`
+- Query surfacing: `supported`
 - Real-repo validation: `supported`
 - End-to-end indexing: `supported`
 - Notes:
@@ -38,11 +38,11 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   - TSX type aliases and JSX evidence are queryable through the Go
     content-backed APIs, normal entity resolve/context can surface
     content-backed entities, normal `code/search` can now search
-    content-backed entity names as well as source text and emit semantic
-    summaries for content-backed component entities, and normal
-    `code/relationships` can synthesize JSX component-reference edges for
-    content-backed entities. Full graph-first component/reference surfacing
-    remains partial.
+    content-backed entity names as well as source text and emit both semantic
+    summaries and a structured `semantic_profile` for content-backed
+    component entities, and normal `code/relationships` can synthesize JSX
+    component-reference edges for content-backed entities. Full graph-first
+    component/reference surfacing remains partial.
 
 
 ## Known Limitations

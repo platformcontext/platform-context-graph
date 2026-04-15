@@ -50,6 +50,7 @@ func (h *EntityHandler) enrichEntityResultsWithContentMetadata(
 			continue
 		}
 		results[i]["metadata"] = metadata
+		attachSemanticSummary(results[i])
 	}
 
 	return results, nil

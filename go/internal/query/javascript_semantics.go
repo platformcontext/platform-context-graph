@@ -3,8 +3,8 @@ package query
 import "maps"
 
 // JavaScriptSemantics captures the JavaScript-specific metadata that the query
-// layer should promote into first-class result surfaces once the shared
-// handlers wire the helper in.
+// layer promotes into first-class shared result surfaces such as
+// semantic_profile.
 type JavaScriptSemantics struct {
 	Docstring  string
 	MethodKind string

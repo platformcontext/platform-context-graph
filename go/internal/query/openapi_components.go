@@ -69,6 +69,11 @@ const openAPIComponents = `  "components": {
             "type": "string",
             "description": "Optional first-class semantic summary synthesized from parser metadata."
           },
+          "semantic_profile": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional structured semantic signals promoted from parser metadata for shared query surfaces."
+          },
           "metadata": {
             "type": "object",
             "additionalProperties": true,
@@ -147,6 +152,11 @@ const openAPIComponents = `  "components": {
           "semantic_summary": {
             "type": "string",
             "description": "Optional first-class semantic summary synthesized from parser metadata."
+          },
+          "semantic_profile": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional structured semantic signals promoted from parser metadata for shared query surfaces."
           },
           "metadata": {
             "type": "object",

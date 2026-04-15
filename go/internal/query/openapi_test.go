@@ -155,6 +155,10 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if got, want := entityRefSemanticSummary["type"], "string"; got != want {
 		t.Fatalf("EntityRef.semantic_summary.type = %#v, want %#v", got, want)
 	}
+	entityRefSemanticProfile := mustMapField(t, entityRefProperties, "semantic_profile")
+	if got, want := entityRefSemanticProfile["type"], "object"; got != want {
+		t.Fatalf("EntityRef.semantic_profile.type = %#v, want %#v", got, want)
+	}
 	entityRefMetadata := mustMapField(t, entityRefProperties, "metadata")
 	if got, want := entityRefMetadata["type"], "object"; got != want {
 		t.Fatalf("EntityRef.metadata.type = %#v, want %#v", got, want)
@@ -171,6 +175,10 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if got, want := entityContextMetadata["type"], "object"; got != want {
 		t.Fatalf("entity context metadata.type = %#v, want %#v", got, want)
 	}
+	entityContextSemanticProfile := mustMapField(t, entityContextProperties, "semantic_profile")
+	if got, want := entityContextSemanticProfile["type"], "object"; got != want {
+		t.Fatalf("entity context semantic_profile.type = %#v, want %#v", got, want)
+	}
 
 	codeSearchPath := mustMapField(t, paths, "/api/v0/code/search")
 	codeSearchPost := mustMapField(t, codeSearchPath, "post")
@@ -180,6 +188,12 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	codeSearchSchema := mustMapField(t, codeSearchContent, "schema")
 	if got, want := codeSearchSchema["$ref"], "#/components/schemas/CodeSearchResponse"; got != want {
 		t.Fatalf("code/search schema ref = %#v, want %#v", got, want)
+	}
+	codeSearchResultSchema := mustMapField(t, schemas, "CodeSearchResult")
+	codeSearchResultProperties := mustMapField(t, codeSearchResultSchema, "properties")
+	codeSearchSemanticProfile := mustMapField(t, codeSearchResultProperties, "semantic_profile")
+	if got, want := codeSearchSemanticProfile["type"], "object"; got != want {
+		t.Fatalf("CodeSearchResult.semantic_profile.type = %#v, want %#v", got, want)
 	}
 
 	callChainPath := mustMapField(t, paths, "/api/v0/code/call-chain")

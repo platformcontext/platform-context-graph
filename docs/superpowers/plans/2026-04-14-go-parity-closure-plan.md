@@ -74,15 +74,18 @@ missing Go parity features.
 
 ### Scope
 
-Close the highest-value missing persisted/queryable semantics for the main
-application languages.
+Close the highest-value remaining graph-first and higher-level surfacing gaps
+for the main application languages after the shared query outputs have already
+become first-class.
 
 ### Families
 
-- TypeScript: type aliases, decorators, generics
-- TypeScript JSX: JSX component usage model, type aliases
-- Python: decorators, async flags, type annotations
-- JavaScript: docstrings and fuller method-kind metadata
+- TypeScript: graph-first promotion for type aliases, decorators, generics
+- TypeScript JSX: graph-first component/reference promotion and remaining alias
+  surfacing
+- Python: graph-first promotion for decorators, async flags, type annotations
+- JavaScript: graph-first promotion for docstrings and fuller method-kind
+  metadata
 - Canonical call edges: broaden the new Go-owned `CALLS` materialization path
   from SCIP-backed edges and same-file generic-call proof into the remaining
   cross-file generic and long-tail parser families, then prove it end to end.

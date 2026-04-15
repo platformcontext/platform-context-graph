@@ -182,9 +182,15 @@ func attachSemanticSummary(result map[string]any) {
 	} else if entityType := StringVal(result, "entity_type"); entityType != "" {
 		entity["labels"] = []string{entityType}
 	}
+	if language := StringVal(result, "language"); language != "" {
+		entity["language"] = language
+	}
 
 	if summary := buildEntitySemanticSummary(entity); summary != "" {
 		result["semantic_summary"] = summary
+	}
+	if profile := buildEntitySemanticProfile(entity); len(profile) > 0 {
+		result["semantic_profile"] = profile
 	}
 }
 

@@ -66,6 +66,23 @@ func TestEnrichGraphSearchResultsWithContentMetadata(t *testing.T) {
 	if gotValue, want := got[0]["semantic_summary"], "Function handler is async and uses decorators @route."; gotValue != want {
 		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", gotValue, want)
 	}
+	semanticProfile, ok := got[0]["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][semantic_profile] type = %T, want map[string]any", got[0]["semantic_profile"])
+	}
+	if gotValue, want := semanticProfile["surface_kind"], "decorated_async_function"; gotValue != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := semanticProfile["async"], true; gotValue != want {
+		t.Fatalf("semantic_profile[async] = %#v, want %#v", gotValue, want)
+	}
+	decoratorValues, ok := semanticProfile["decorators"].([]string)
+	if !ok {
+		t.Fatalf("semantic_profile[decorators] type = %T, want []string", semanticProfile["decorators"])
+	}
+	if len(decoratorValues) != 1 || decoratorValues[0] != "@route" {
+		t.Fatalf("semantic_profile[decorators] = %#v, want [@route]", decoratorValues)
+	}
 }
 
 func TestEnrichGraphSearchResultsWithContentMetadataSkipsUnmatchedRows(t *testing.T) {
@@ -115,5 +132,8 @@ func TestEnrichGraphSearchResultsWithContentMetadataSkipsUnmatchedRows(t *testin
 	}
 	if _, ok := got[0]["semantic_summary"]; ok {
 		t.Fatalf("results[0][semantic_summary] = %#v, want semantic summary to remain absent", got[0]["semantic_summary"])
+	}
+	if _, ok := got[0]["semantic_profile"]; ok {
+		t.Fatalf("results[0][semantic_profile] = %#v, want semantic profile to remain absent", got[0]["semantic_profile"])
 	}
 }

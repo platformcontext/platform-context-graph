@@ -31,14 +31,14 @@ yet been explicitly assessed in the parser maturity program.
 | Haskell | `DefaultEngine (haskell)` | - | - | - | - | - | - | - |
 | Helm | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
 | Java | `DefaultEngine (java)` | - | - | - | - | - | - | - |
-| JavaScript | `DefaultEngine (javascript)` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | partial | supported | supported |
+| JavaScript | `DefaultEngine (javascript)` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | supported | supported | supported |
 | JSON Config | `DefaultEngine (json)` | - | - | - | - | - | - | - |
 | Kotlin | `DefaultEngine (kotlin)` | - | - | - | - | - | - | - |
 | Kubernetes | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
 | Kustomize | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
 | Perl | `DefaultEngine (perl)` | - | - | - | - | - | - | - |
 | PHP | `DefaultEngine (php)` | - | - | - | - | - | - | - |
-| Python | `DefaultEngine (python)` | supported | supported | supported | `fastapi-base`, `flask-base` | partial | supported | supported |
+| Python | `DefaultEngine (python)` | supported | supported | supported | `fastapi-base`, `flask-base` | supported | supported | supported |
 | Ruby | `DefaultEngine (ruby)` | - | - | - | - | - | - | - |
 | Rust | `DefaultEngine (rust)` | - | - | - | - | - | - | - |
 | Scala | `DefaultEngine (scala)` | - | - | - | - | - | - | - |
@@ -46,10 +46,13 @@ yet been explicitly assessed in the parser maturity program.
 | Swift | `DefaultEngine (swift)` | - | - | - | - | - | - | - |
 | Terraform | `DefaultEngine (hcl)` | - | - | - | - | - | - | - |
 | Terragrunt | `DefaultEngine (hcl)` | - | - | - | - | - | - | - |
-| TypeScript | `DefaultEngine (typescript)` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | partial | supported | supported |
-| TypeScript JSX | `DefaultEngine (tsx)` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | partial | supported | supported |
+| TypeScript | `DefaultEngine (typescript)` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | supported | supported | supported |
+| TypeScript JSX | `DefaultEngine (tsx)` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |
 
-For JavaScript, TypeScript, TypeScript JSX, and Python, `partial` query
-surfacing means richer semantics already survive parse and content
-materialization, but are not yet consistently first-class on the normal
-graph/API/MCP surfaces.
+For JavaScript, TypeScript, TypeScript JSX, and Python, query surfacing is now
+`supported` because the shared Go query outputs expose enriched metadata,
+semantic summaries, and a structured `semantic_profile` on the normal
+language-query, code-search, entities-resolve, and entity-context surfaces.
+Those families can still remain `partial` in the parity audit when broader
+graph-first modeling or higher-level story/context surfacing is not yet fully
+closed.
