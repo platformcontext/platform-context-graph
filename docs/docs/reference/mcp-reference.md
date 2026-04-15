@@ -61,14 +61,14 @@ Use these tools when the user is asking for a narrative answer such as
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
 | **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
-| **`get_workload_story`** | Return a structured workload story using canonical workload identity, optionally scoped to one environment. Story payloads may include `gitops_overview`, `documentation_overview`, and `support_overview` when evidence exists. | "Show me how payments-api is deployed in prod." |
-| **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts. | "What can you tell me about payments-api in QA?" |
+| **`get_workload_story`** | Return a narrative workload story using canonical workload identity, optionally scoped to one environment. Use `trace_deployment_chain` when you need the richer deployment-mapping fields such as `story_sections`, `deployment_overview`, `controller_overview`, or `deployment_fact_summary`. | "Show me how payments-api is deployed in prod." |
+| **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts; pair it with `trace_deployment_chain` for deployment-mapping detail. | "What can you tell me about payments-api in QA?" |
 | **`investigate_service`** | Orchestrated service investigation that widens across related repos, evidence families, and deployment planes, then reports coverage and recommended next calls. | "Explain the deployment flow for api-node-boats using PCG only." |
 | **`get_repo_context`** | Durable drill-down for repository details after the story answer. | "Show me the full repo context behind that story." |
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
 | **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
 
-Story responses may now include deployment-mapping fields alongside the narrative:
+`trace_deployment_chain` now exposes the deployment-mapping fields that callers should use for deployment-specific answers:
 
 - `controller_overview`
 - `runtime_overview`
@@ -87,7 +87,7 @@ Story responses may now include deployment-mapping fields alongside the narrativ
 - `EXPOSES_ENTRYPOINT`
 - `DELIVERY_PATH_PRESENT`
 
-`deployment_fact_summary` is the compact interpretation layer:
+Within `trace_deployment_chain`, `deployment_fact_summary` is the compact interpretation layer:
 
 - `mapping_mode=controller` means explicit controller evidence was found
 - `mapping_mode=iac` means explicit infrastructure-as-code evidence was found

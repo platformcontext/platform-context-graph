@@ -35,6 +35,13 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	if got["story"] == "" {
 		t.Fatal("story is empty, want narrative summary")
 	}
+	subject, ok := got["subject"].(map[string]any)
+	if !ok {
+		t.Fatalf("subject type = %T, want map[string]any", got["subject"])
+	}
+	if subject["name"] != "payments-api" {
+		t.Fatalf("subject.name = %#v, want %q", subject["name"], "payments-api")
+	}
 	if got["repo_id"] != "repo-1" {
 		t.Fatalf("repo_id = %#v, want %q", got["repo_id"], "repo-1")
 	}
@@ -80,11 +87,54 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 		t.Fatalf("deployment_overview.environments len = %d, want 2", len(environments))
 	}
 
+	storySections, ok := got["story_sections"].([]map[string]any)
+	if !ok {
+		t.Fatalf("story_sections type = %T, want []map[string]any", got["story_sections"])
+	}
+	if len(storySections) == 0 {
+		t.Fatal("story_sections is empty, want grouped supporting context")
+	}
+
+	controllerOverview, ok := got["controller_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("controller_overview type = %T, want map[string]any", got["controller_overview"])
+	}
+	if controllerOverview["controller_count"] != 1 {
+		t.Fatalf("controller_overview.controller_count = %#v, want 1", controllerOverview["controller_count"])
+	}
+
+	gitopsOverview, ok := got["gitops_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("gitops_overview type = %T, want map[string]any", got["gitops_overview"])
+	}
+	if gitopsOverview["enabled"] != true {
+		t.Fatalf("gitops_overview.enabled = %#v, want true", gitopsOverview["enabled"])
+	}
+
+	runtimeOverview, ok := got["runtime_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime_overview type = %T, want map[string]any", got["runtime_overview"])
+	}
+	if runtimeOverview["environment_count"] != 2 {
+		t.Fatalf("runtime_overview.environment_count = %#v, want 2", runtimeOverview["environment_count"])
+	}
+
 	factSummary, ok := got["deployment_fact_summary"].(map[string]any)
 	if !ok {
 		t.Fatalf("deployment_fact_summary type = %T, want map[string]any", got["deployment_fact_summary"])
 	}
 	if factSummary["has_repository"] != true {
 		t.Fatalf("deployment_fact_summary.has_repository = %#v, want true", factSummary["has_repository"])
+	}
+	if factSummary["mapping_mode"] != "controller" {
+		t.Fatalf("deployment_fact_summary.mapping_mode = %#v, want %q", factSummary["mapping_mode"], "controller")
+	}
+
+	drilldowns, ok := got["drilldowns"].(map[string]any)
+	if !ok {
+		t.Fatalf("drilldowns type = %T, want map[string]any", got["drilldowns"])
+	}
+	if drilldowns["service_context_path"] == "" {
+		t.Fatal("drilldowns.service_context_path is empty, want service context route")
 	}
 }

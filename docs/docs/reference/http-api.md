@@ -123,23 +123,32 @@ Service alias responses include `requested_as=service`.
 Use the story routes when the caller wants a structured narrative first and
 evidence second.
 
+Repository, workload, and service story responses stay narrative-first today. Use the deployment trace route when you need the richer deployment-mapping contract.
+
 Story responses are shaped around:
 
 - `subject`
 - `story`
+- `story`
+- optional lightweight identifiers such as `subject`
+
+Deployment-oriented trace responses are shaped around:
+
+- `subject`
+- `story`
 - `story_sections`
-- `deployment_overview` or `code_overview`
+- `deployment_overview`
 - `gitops_overview`
-- `documentation_overview`
-- `support_overview`
 - `controller_overview`
 - `runtime_overview`
-- `evidence`
-- `limitations`
-- `coverage`
+- `deployment_fact_summary`
 - `drilldowns`
 
-Deployment-oriented story responses may also include:
+The current deployment-oriented trace route is:
+
+- `POST /api/v0/impact/trace-deployment-chain`
+
+Deployment-oriented trace responses may also include:
 
 - `deployment_facts`
 - `deployment_fact_summary`
@@ -166,7 +175,8 @@ Mapping modes are intentionally controller-agnostic:
 That lets the same story contract work across GitOps, IaC-driven, and controller-free estates without fabricating deployment tooling.
 
 HTTP story routes stay canonical-ID based. If the caller starts with a fuzzy
-name or alias, resolve first and then call the story route.
+name or alias, resolve first and then call the story route. Deployment traces
+start from service names because they are the operator-facing entrypoint.
 
 ### Get repository story
 

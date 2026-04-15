@@ -34,14 +34,20 @@ const openAPIPathsImpact = `
                   "properties": {
                     "service_name": {"type": "string"},
                     "workload_id": {"type": "string"},
+                    "subject": {"type": "object"},
                     "name": {"type": "string"},
                     "kind": {"type": "string"},
                     "repo_id": {"type": "string"},
                     "repo_name": {"type": "string"},
                     "story": {"type": "string"},
                     "instances": {"type": "array", "items": {"type": "object"}},
+                    "story_sections": {"type": "array", "items": {"type": "object"}},
                     "deployment_overview": {"type": "object"},
-                    "deployment_fact_summary": {"type": "object"}
+                    "gitops_overview": {"type": "object"},
+                    "controller_overview": {"type": "object"},
+                    "runtime_overview": {"type": "object"},
+                    "deployment_fact_summary": {"type": "object"},
+                    "drilldowns": {"type": "object"}
                   }
                 }
               }

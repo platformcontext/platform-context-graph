@@ -230,6 +230,34 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		t.Fatal("code/relationships request schema missing relationship_type")
 	}
 
+	traceDeploymentPath := mustMapField(t, paths, "/api/v0/impact/trace-deployment-chain")
+	traceDeploymentPost := mustMapField(t, traceDeploymentPath, "post")
+	traceDeploymentBody := mustMapField(t, mustMapField(t, traceDeploymentPost, "requestBody"), "content")
+	traceDeploymentJSON := mustMapField(t, traceDeploymentBody, "application/json")
+	traceDeploymentSchema := mustMapField(t, mustMapField(t, traceDeploymentJSON, "schema"), "properties")
+	if _, ok := traceDeploymentSchema["service_name"]; !ok {
+		t.Fatal("impact/trace-deployment-chain request schema missing service_name")
+	}
+
+	traceDeploymentResponses := mustMapField(t, traceDeploymentPost, "responses")
+	traceDeploymentOK := mustMapField(t, traceDeploymentResponses, "200")
+	traceDeploymentContent := mustMapField(t, mustMapField(t, traceDeploymentOK, "content"), "application/json")
+	traceDeploymentResponse := mustMapField(t, mustMapField(t, traceDeploymentContent, "schema"), "properties")
+	for _, field := range []string{
+		"subject",
+		"story_sections",
+		"deployment_overview",
+		"gitops_overview",
+		"controller_overview",
+		"runtime_overview",
+		"deployment_fact_summary",
+		"drilldowns",
+	} {
+		if _, ok := traceDeploymentResponse[field]; !ok {
+			t.Fatalf("impact/trace-deployment-chain response schema missing %s", field)
+		}
+	}
+
 	languageQueryPath := mustMapField(t, paths, "/api/v0/code/language-query")
 	languageQueryPost := mustMapField(t, languageQueryPath, "post")
 	languageQueryBody := mustMapField(t, mustMapField(t, languageQueryPost, "requestBody"), "content")

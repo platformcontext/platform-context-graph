@@ -87,8 +87,8 @@ For repository and deployment questions, PCG now exposes dedicated story surface
 Use it this way:
 
 1. start with `story`
-2. use `story_sections` for grouped supporting context
-3. use `deployment_overview`, `gitops_overview`, `documentation_overview`, or `support_overview` for structured evidence
+2. for deployment questions, use `trace_deployment_chain` and then read `story_sections` for grouped supporting context
+3. use `deployment_overview`, `gitops_overview`, `controller_overview`, or `deployment_fact_summary` for structured deployment evidence
 4. if the answer needs exact file or docs evidence, follow with Postgres-backed content reads or search
 5. use `drilldowns` to move into `get_repo_context`, `get_workload_context`, `get_service_context`, `trace_deployment_chain`, content reads, or lower-level relationship tools
 
@@ -101,7 +101,7 @@ For documentation-oriented answers, the orchestration order is:
 3. targeted Postgres file reads or content search
 4. exact file or line citations only when the story answer needs them
 
-The deployment-oriented story surfaces now expose three related layers:
+The deployment-oriented trace surface now exposes three related layers:
 
 - `controller_overview` for controller-family evidence such as ArgoCD, Flux, Jenkins, or other automation controllers
 - `runtime_overview` for observed runtime/platform evidence such as EKS, Kubernetes, ECS, or Lambda
