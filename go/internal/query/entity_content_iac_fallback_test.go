@@ -118,6 +118,78 @@ func TestResolveEntityFallsBackToKustomizeOverlayContentEntity(t *testing.T) {
 	}
 }
 
+func TestGetEntityContextFallsBackToKustomizeOverlayContentEntity(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"kustomize-overlay-1", "repo-1", "deploy/kustomization.yaml", "KustomizeOverlay", "kustomization",
+					int64(1), int64(12), "yaml", "resources:\n- ../base", []byte(`{"bases":["../app","../base"],"patch_targets":["Deployment/comprehensive-app"]}`),
+				},
+			},
+		},
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"k8s-resource-1", "repo-1", "deploy/deployment.yaml", "K8sResource", "comprehensive-app",
+					int64(1), int64(18), "yaml", "kind: Deployment", []byte(`{"kind":"Deployment","namespace":"prod","qualified_name":"prod/Deployment/comprehensive-app"}`),
+				},
+			},
+		},
+	})
+
+	handler := &EntityHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/kustomize-overlay-1/context", nil)
+	req.SetPathValue("entity_id", "kustomize-overlay-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := resp["semantic_summary"], "KustomizeOverlay kustomization references bases ../app, ../base and patches Deployment/comprehensive-app."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	relationships, ok := resp["relationships"].([]any)
+	if !ok {
+		t.Fatalf("resp[relationships] type = %T, want []any", resp["relationships"])
+	}
+	if len(relationships) != 1 {
+		t.Fatalf("len(resp[relationships]) = %d, want 1", len(relationships))
+	}
+	relationship, ok := relationships[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[relationships][0] type = %T, want map[string]any", relationships[0])
+	}
+	if got, want := relationship["type"], "PATCHES"; got != want {
+		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["target_name"], "comprehensive-app"; got != want {
+		t.Fatalf("relationship[target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["reason"], "kustomize_patch_target"; got != want {
+		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
+	}
+}
+
 func TestGetEntityContextFallsBackToKubernetesResourceContentEntity(t *testing.T) {
 	t.Parallel()
 

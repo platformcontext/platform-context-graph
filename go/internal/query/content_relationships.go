@@ -43,6 +43,9 @@ func buildOutgoingContentRelationships(
 	if relationships, ok, err := buildOutgoingK8sSelectRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
+	if relationships, ok, err := buildOutgoingKustomizePatchRelationships(ctx, reader, entity); ok || err != nil {
+		return relationships, err
+	}
 
 	componentNames := metadataStringSlice(entity.Metadata, "jsx_component_usage")
 	if len(componentNames) == 0 {
@@ -161,6 +164,54 @@ func buildOutgoingK8sSelectRelationships(
 	return relationships, true, nil
 }
 
+func buildOutgoingKustomizePatchRelationships(
+	ctx context.Context,
+	reader *ContentReader,
+	entity EntityContent,
+) ([]map[string]any, bool, error) {
+	if entity.EntityType != "KustomizeOverlay" {
+		return nil, false, nil
+	}
+
+	patchTargets := metadataStringSlice(entity.Metadata, "patch_targets")
+	if len(patchTargets) == 0 {
+		return nil, true, nil
+	}
+
+	relationships := make([]map[string]any, 0, len(patchTargets))
+	seen := make(map[string]struct{}, len(patchTargets))
+	for _, patchTarget := range patchTargets {
+		kind, name, ok := splitKustomizePatchTarget(patchTarget)
+		if !ok {
+			continue
+		}
+		matches, err := reader.SearchEntitiesByName(
+			ctx, entity.RepoID, "K8sResource", name, contentRelationshipLimit,
+		)
+		if err != nil {
+			return nil, true, fmt.Errorf("search kustomize patch targets: %w", err)
+		}
+		for _, match := range matches {
+			if match.EntityID == entity.EntityID || !isK8sResourceKind(match, kind) {
+				continue
+			}
+			key := match.EntityID + ":" + match.EntityName + ":" + kind
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			relationships = append(relationships, map[string]any{
+				"type":        "PATCHES",
+				"target_name": match.EntityName,
+				"target_id":   match.EntityID,
+				"reason":      "kustomize_patch_target",
+			})
+		}
+	}
+
+	return relationships, true, nil
+}
+
 func buildIncomingK8sSelectRelationships(
 	ctx context.Context,
 	reader *ContentReader,
@@ -217,6 +268,19 @@ func sameK8sNamespace(left EntityContent, right EntityContent) bool {
 func k8sNamespace(metadata map[string]any) string {
 	value, _ := metadata["namespace"].(string)
 	return strings.TrimSpace(value)
+}
+
+func splitKustomizePatchTarget(value string) (string, string, bool) {
+	parts := strings.SplitN(strings.TrimSpace(value), "/", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	kind := strings.TrimSpace(parts[0])
+	name := strings.TrimSpace(parts[1])
+	if kind == "" || name == "" {
+		return "", "", false
+	}
+	return kind, name, true
 }
 
 func metadataStringSlice(metadata map[string]any, key string) []string {
