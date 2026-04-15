@@ -91,6 +91,10 @@ func inferPHPReferenceType(
 		return inferred
 	}
 
+	if inferred := inferPHPCallChainType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes); inferred != "" {
+		return inferred
+	}
+
 	segments := strings.Split(trimmed, "->")
 	if len(segments) == 0 {
 		return ""
@@ -114,6 +118,40 @@ func inferPHPReferenceType(
 			}
 			return resolvePHPReferenceChainType(rootType, segments[1:], classPropertyTypes, methodReturnTypes, functionReturnTypes)
 		}
+	}
+
+	return ""
+}
+
+func inferPHPCallChainType(
+	raw string,
+	classContext string,
+	classPropertyTypes map[string]map[string]string,
+	localVariableTypes map[string]string,
+	methodReturnTypes map[string]map[string]string,
+	functionReturnTypes map[string]string,
+) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	segments := strings.Split(trimmed, "->")
+	if len(segments) < 2 {
+		return ""
+	}
+
+	root := strings.TrimSpace(segments[0])
+	if root == "" {
+		return ""
+	}
+
+	remainder := segments[1:]
+	if inferred := inferPHPFunctionCallType(root, functionReturnTypes); inferred != "" {
+		return resolvePHPReferenceChainType(inferred, remainder, classPropertyTypes, methodReturnTypes, functionReturnTypes)
+	}
+	if inferred := inferPHPMethodCallType(root, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes); inferred != "" {
+		return resolvePHPReferenceChainType(inferred, remainder, classPropertyTypes, methodReturnTypes, functionReturnTypes)
 	}
 
 	return ""
