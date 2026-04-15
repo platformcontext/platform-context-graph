@@ -175,6 +175,12 @@ func collectSupportedFiles(
 	files := make([]string, 0)
 	if err := filepath.WalkDir(scanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if errors.Is(walkErr, fs.ErrPermission) {
+				if entry != nil && entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			return walkErr
 		}
 		if path == scanRoot {
