@@ -123,12 +123,26 @@ Service alias responses include `requested_as=service`.
 Use the story routes when the caller wants a structured narrative first and
 evidence second.
 
-Repository, workload, and service story responses stay narrative-first today. Use the deployment trace route when you need the richer deployment-mapping contract.
+Repository story responses now expose a structured narrative contract. Workload
+and service story responses stay narrative-first today. Use the deployment
+trace route when you need the richer deployment-mapping contract.
 
-Story responses are shaped around:
+Repository story responses are shaped around:
 
 - `subject`
 - `story`
+- `story_sections`
+- `deployment_overview`
+- `gitops_overview`
+- `documentation_overview`
+- `support_overview`
+- `coverage_summary`
+- `limitations`
+- `drilldowns`
+
+Workload and service story responses are still shaped around:
+
+- `subject`
 - `story`
 - optional lightweight identifiers such as `subject`
 
@@ -215,8 +229,9 @@ narratives. Use the context routes, trace routes, and content routes named in
 For documentation generation, use this HTTP flow:
 
 1. call a story route first
-2. read `story_sections`, `deployment_overview`, `gitops_overview`, `documentation_overview`, and `support_overview`
-3. only then call content routes for exact file or snippet evidence
+2. if it is a repository story, read `story_sections`, `deployment_overview`, `gitops_overview`, `documentation_overview`, `support_overview`, `coverage_summary`, and `limitations`
+3. if it is a workload or service story, pair it with `trace_deployment_chain` before you expect deployment overviews
+4. only then call content routes for exact file or snippet evidence
 
 For cross-repo documentation or support flows, phrase the caller intent the same
 way you would through MCP: tell PCG to scan all related repositories,

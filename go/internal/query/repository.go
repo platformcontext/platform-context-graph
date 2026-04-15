@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 // RepositoryHandler exposes HTTP routes for repository queries.
@@ -114,11 +113,14 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		OPTIONAL MATCH (r)-[:DEFINES]->(w:Workload)
 		WITH r, file_count, languages, collect(DISTINCT w.name) as workload_names
 		OPTIONAL MATCH (r)-[:RUNS_ON]->(p:Platform)
+		WITH r, file_count, languages, workload_names, collect(DISTINCT p.type) as platform_types
+		OPTIONAL MATCH (r)-[:DEPENDS_ON]->(dep:Repository)
 		RETURN %s,
 		       file_count,
 		       languages,
 		       workload_names,
-		       collect(DISTINCT p.type) as platform_types
+		       platform_types,
+		       count(DISTINCT dep) as dependency_count
 	`, RepoProjection("r"))
 
 	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_id": repoID})
@@ -136,60 +138,16 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 	languages := StringSliceVal(row, "languages")
 	workloadNames := StringSliceVal(row, "workload_names")
 	platformTypes := StringSliceVal(row, "platform_types")
+	dependencyCount := IntVal(row, "dependency_count")
 
-	story := h.buildRepositoryStory(repo, fileCount, languages, workloadNames, platformTypes)
-
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"repository": repo,
-		"story":      story,
-	})
-}
-
-// buildRepositoryStory constructs a narrative summary.
-func (h *RepositoryHandler) buildRepositoryStory(
-	repo RepoRef,
-	fileCount int,
-	languages []string,
-	workloads []string,
-	platforms []string,
-) string {
-	var parts []string
-
-	parts = append(parts, fmt.Sprintf("Repository %s contains %d indexed files.", repo.Name, fileCount))
-
-	if len(languages) > 0 {
-		filteredLangs := make([]string, 0, len(languages))
-		for _, lang := range languages {
-			if lang != "" {
-				filteredLangs = append(filteredLangs, lang)
-			}
-		}
-		if len(filteredLangs) > 0 {
-			parts = append(parts, fmt.Sprintf("Languages: %s.", strings.Join(filteredLangs, ", ")))
-		}
-	}
-
-	if len(workloads) > 0 {
-		parts = append(parts, fmt.Sprintf("Defines %d workload(s): %s.", len(workloads), strings.Join(workloads, ", ")))
-	}
-
-	if len(platforms) > 0 {
-		filteredPlatforms := make([]string, 0, len(platforms))
-		for _, p := range platforms {
-			if p != "" {
-				filteredPlatforms = append(filteredPlatforms, p)
-			}
-		}
-		if len(filteredPlatforms) > 0 {
-			parts = append(parts, fmt.Sprintf("Runs on platform(s): %s.", strings.Join(filteredPlatforms, ", ")))
-		}
-	}
-
-	if repo.HasRemote && repo.RemoteURL != "" {
-		parts = append(parts, fmt.Sprintf("Remote URL: %s.", repo.RemoteURL))
-	}
-
-	return strings.Join(parts, " ")
+	WriteJSON(w, http.StatusOK, buildRepositoryStoryResponse(
+		repo,
+		fileCount,
+		languages,
+		workloadNames,
+		platformTypes,
+		dependencyCount,
+	))
 }
 
 // getRepositoryStats returns repository statistics including entity counts.

@@ -89,7 +89,7 @@ const openAPIPathsRepositories = `
       "get": {
         "tags": ["repositories"],
         "summary": "Get repository story",
-        "description": "Returns a narrative summary for the repository.",
+        "description": "Returns a structured repository story with deployment and support overviews.",
         "operationId": "getRepositoryStory",
         "parameters": [
           {"$ref": "#/components/parameters/RepoId"}
@@ -103,7 +103,16 @@ const openAPIPathsRepositories = `
                   "type": "object",
                   "properties": {
                     "repository": {"$ref": "#/components/schemas/RepositoryRef"},
-                    "story": {"type": "string"}
+                    "subject": {"type": "object"},
+                    "story": {"type": "string"},
+                    "story_sections": {"type": "array", "items": {"type": "object"}},
+                    "deployment_overview": {"type": "object"},
+                    "gitops_overview": {"type": "object"},
+                    "documentation_overview": {"type": "object"},
+                    "support_overview": {"type": "object"},
+                    "coverage_summary": {"type": "object"},
+                    "limitations": {"type": "array", "items": {"type": "string"}},
+                    "drilldowns": {"type": "object"}
                   }
                 }
               }

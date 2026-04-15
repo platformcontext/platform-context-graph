@@ -265,6 +265,30 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		}
 	}
 
+	repositoryStoryPath := mustMapField(t, paths, "/api/v0/repositories/{repo_id}/story")
+	repositoryStoryGet := mustMapField(t, repositoryStoryPath, "get")
+	repositoryStoryResponses := mustMapField(t, repositoryStoryGet, "responses")
+	repositoryStoryOK := mustMapField(t, repositoryStoryResponses, "200")
+	repositoryStoryContent := mustMapField(t, mustMapField(t, repositoryStoryOK, "content"), "application/json")
+	repositoryStorySchema := mustMapField(t, mustMapField(t, repositoryStoryContent, "schema"), "properties")
+	for _, field := range []string{
+		"repository",
+		"subject",
+		"story",
+		"story_sections",
+		"deployment_overview",
+		"gitops_overview",
+		"documentation_overview",
+		"support_overview",
+		"coverage_summary",
+		"limitations",
+		"drilldowns",
+	} {
+		if _, ok := repositoryStorySchema[field]; !ok {
+			t.Fatalf("repositories/{repo_id}/story response schema missing %s", field)
+		}
+	}
+
 	languageQueryPath := mustMapField(t, paths, "/api/v0/code/language-query")
 	languageQueryPost := mustMapField(t, languageQueryPath, "post")
 	languageQueryBody := mustMapField(t, mustMapField(t, languageQueryPost, "requestBody"), "content")
