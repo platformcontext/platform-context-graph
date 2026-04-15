@@ -13,11 +13,19 @@ const (
 	pythonMetaclassEvidenceSource = "parser/python-metaclass"
 )
 
+// CanonicalNodeChecker checks whether canonical code entity nodes (Function,
+// Class, File) exist in the graph. When no targets exist, code-call
+// materialization can short-circuit to avoid expensive label-free MATCH scans.
+type CanonicalNodeChecker interface {
+	HasCanonicalCodeTargets(ctx context.Context) (bool, error)
+}
+
 // CodeCallMaterializationHandler reduces one parser relationship follow-up into
 // canonical code-edge writes.
 type CodeCallMaterializationHandler struct {
-	FactLoader FactLoader
-	EdgeWriter SharedProjectionEdgeWriter
+	FactLoader           FactLoader
+	EdgeWriter           SharedProjectionEdgeWriter
+	CanonicalNodeChecker CanonicalNodeChecker // optional; nil skips the pre-flight check
 }
 
 // Handle executes the code-call materialization path.
@@ -36,6 +44,22 @@ func (h CodeCallMaterializationHandler) Handle(
 	}
 	if h.EdgeWriter == nil {
 		return Result{}, fmt.Errorf("code call materialization edge writer is required")
+	}
+
+	// Pre-flight: skip expensive fact loading and UNWIND writes when no
+	// canonical code entity nodes (Function, Class, File) exist in the graph.
+	// Without targets the label-free MATCH scans every node for zero results.
+	if h.CanonicalNodeChecker != nil {
+		hasTargets, checkErr := h.CanonicalNodeChecker.HasCanonicalCodeTargets(ctx)
+		if checkErr == nil && !hasTargets {
+			return Result{
+				IntentID:        intent.IntentID,
+				Domain:          DomainCodeCallMaterialization,
+				Status:          ResultStatusSucceeded,
+				EvidenceSummary: "skipped: no canonical code entity nodes exist yet",
+			}, nil
+		}
+		// On error, fall through conservatively to the normal path.
 	}
 
 	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)

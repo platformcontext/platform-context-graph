@@ -63,7 +63,7 @@ func run(parent context.Context) error {
 		return fmt.Errorf("register observable gauges: %w", err)
 	}
 
-	neo4jExecutor, cypherExecutor, neo4jCloser, err := openReducerNeo4jAdapters(parent, os.Getenv)
+	neo4jExecutor, cypherExecutor, neo4jReader, neo4jCloser, err := openReducerNeo4jAdapters(parent, os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func run(parent context.Context) error {
 		Instruments: instruments,
 	}
 	intentStore := postgres.NewSharedIntentStore(instrumentedDB)
-	serviceRunner, err := buildReducerService(instrumentedDB, instrumentedNeo4j, cypherExecutor, intentStore, os.Getenv, tracer, instruments, logger)
+	serviceRunner, err := buildReducerService(instrumentedDB, instrumentedNeo4j, cypherExecutor, intentStore, neo4jReader, os.Getenv, tracer, instruments, logger)
 	if err != nil {
 		return err
 	}
@@ -121,6 +121,7 @@ func buildReducerService(
 	neo4jExec sourceneo4j.Executor,
 	cypherExec reducer.CypherExecutor,
 	intentStore *postgres.SharedIntentStore,
+	neo4jReader sourceneo4j.CypherReader,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
@@ -136,6 +137,7 @@ func buildReducerService(
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
 		FactLoader:                         postgres.NewFactStore(database),
 		CodeCallEdgeWriter:                 sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv)),
+		CanonicalNodeChecker:               sourceneo4j.NewCanonicalNodeChecker(neo4jReader),
 	})
 	if err != nil {
 		return reducer.Service{}, err

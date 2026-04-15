@@ -18,6 +18,10 @@ type DefaultHandlers struct {
 	// CodeCallEdgeWriter writes canonical CALLS edges from reducer-owned parser
 	// follow-ups.
 	CodeCallEdgeWriter SharedProjectionEdgeWriter
+
+	// CanonicalNodeChecker checks whether canonical code entity nodes exist in
+	// the graph. Optional; nil disables the pre-flight check.
+	CanonicalNodeChecker CanonicalNodeChecker
 }
 
 // NewDefaultRegistry constructs the canonical reducer catalog for the domains
@@ -68,8 +72,9 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			}
 		case DomainCodeCallMaterialization:
 			def.Handler = CodeCallMaterializationHandler{
-				FactLoader: handlers.FactLoader,
-				EdgeWriter: handlers.CodeCallEdgeWriter,
+				FactLoader:           handlers.FactLoader,
+				EdgeWriter:           handlers.CodeCallEdgeWriter,
+				CanonicalNodeChecker: handlers.CanonicalNodeChecker,
 			}
 		default:
 			continue

@@ -153,8 +153,8 @@ SET rel.confidence = 0.9,
     rel.evidence_source = row.evidence_source`
 
 const batchCanonicalCodeCallUpsertCypher = `UNWIND $rows AS row
-MATCH (source {id: coalesce(row.caller_entity_id, row.source_entity_id)})
-MATCH (target {id: coalesce(row.callee_entity_id, row.target_entity_id)})
+MATCH (source:Function|Class|File {uid: coalesce(row.caller_entity_id, row.source_entity_id)})
+MATCH (target:Function|Class|File {uid: coalesce(row.callee_entity_id, row.target_entity_id)})
 FOREACH (_ IN CASE WHEN row.relationship_type = 'USES_METACLASS' THEN [1] ELSE [] END |
     MERGE (source)-[rel:USES_METACLASS]->(target)
     SET rel.confidence = 0.95,
@@ -194,7 +194,7 @@ WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`
 
-const retractCodeCallEdgesCypher = `MATCH (source)-[rel:CALLS|REFERENCES|USES_METACLASS]->()
+const retractCodeCallEdgesCypher = `MATCH (source:Function|Class|File)-[rel:CALLS|REFERENCES|USES_METACLASS]->()
 WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`

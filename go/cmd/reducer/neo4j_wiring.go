@@ -68,6 +68,31 @@ func (r neo4jSessionRunner) RunCypher(ctx context.Context, cypher string, params
 	return err
 }
 
+// QueryCypherExists runs a read-only Cypher query and returns true if at
+// least one row is returned. This implements neo4j.CypherReader for the
+// CanonicalNodeChecker pre-flight check.
+func (r neo4jSessionRunner) QueryCypherExists(ctx context.Context, cypher string, params map[string]any) (bool, error) {
+	if r.Driver == nil {
+		return false, fmt.Errorf("neo4j driver is required")
+	}
+
+	session := r.Driver.NewSession(ctx, neo4jdriver.SessionConfig{
+		AccessMode:   neo4jdriver.AccessModeRead,
+		DatabaseName: r.DatabaseName,
+	})
+	defer func() { _ = session.Close(ctx) }()
+
+	result, err := session.Run(ctx, cypher, params)
+	if err != nil {
+		return false, err
+	}
+	hasNext := result.Next(ctx)
+	if err := result.Err(); err != nil {
+		return false, err
+	}
+	return hasNext, nil
+}
+
 // reducerNeo4jDriverCloser wraps driver close with a timeout.
 type reducerNeo4jDriverCloser struct {
 	Driver neo4jdriver.DriverWithContext
@@ -82,16 +107,17 @@ func (c reducerNeo4jDriverCloser) Close() error {
 	return c.Driver.Close(closeCtx)
 }
 
-// openReducerNeo4jAdapters opens a Neo4j driver and returns both executor
-// adapters needed by the reducer: one for EdgeWriter (sourceneo4j.Executor)
-// and one for WorkloadMaterializer (reducer.CypherExecutor).
+// openReducerNeo4jAdapters opens a Neo4j driver and returns the executor
+// adapters needed by the reducer: one for EdgeWriter (sourceneo4j.Executor),
+// one for WorkloadMaterializer (reducer.CypherExecutor), and one for
+// pre-flight canonical node checks (sourceneo4j.CypherReader).
 func openReducerNeo4jAdapters(
 	parent context.Context,
 	getenv func(string) string,
-) (sourceneo4j.Executor, reducer.CypherExecutor, io.Closer, error) {
+) (sourceneo4j.Executor, reducer.CypherExecutor, sourceneo4j.CypherReader, io.Closer, error) {
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	runner := neo4jSessionRunner{
@@ -101,6 +127,7 @@ func openReducerNeo4jAdapters(
 
 	return reducerNeo4jExecutor{session: runner},
 		reducerCypherExecutor{session: runner},
+		runner,
 		reducerNeo4jDriverCloser{Driver: driver},
 		nil
 }
