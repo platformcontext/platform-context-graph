@@ -1,0 +1,35 @@
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 88,110
+go/internal/query/entity.go
+  1ca5ee6ce936a402 240-242,252-269
+go/internal/query/entity_content_argocd_fallback_test.go
+  1ca5ee6ce936a402 1-118
+go/internal/query/entity_summary.go
+  1ca5ee6ce936a402 118-142
+go/internal/query/content_relationships_argocd_test.go
+  1ca5ee6ce936a402 1-197
+go/internal/query/content_relationships.go
+  1ca5ee6ce936a402 49-51,129-182,364-374,379-387,389
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "b8d71788f10ecbf8691e28b0cd992e721edc07f2",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 110,
+      "total_deletions": 3,
+      "accepted_lines": 471,
+      "overriden_lines": 0
+    }
+  }
+}
