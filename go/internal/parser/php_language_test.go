@@ -248,6 +248,50 @@ class Config {
 	phpAssertStringFieldValue(t, namespacedCall, "inferred_obj_type", "Demo\\Logger")
 }
 
+func TestDefaultEngineParsePathPHPEmitsNullsafeReceiverMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "nullsafe_calls.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+class Service {
+    public function info(string $message): void {}
+}
+
+class Session {
+    public Service $service;
+}
+
+class Config {
+    public function run(string $message): void {
+        $session = new Session();
+        $session?->service?->info($message);
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	sessionItem := assertBucketItemByName(t, got, "variables", "$session")
+	phpAssertStringFieldValue(t, sessionItem, "type", "Session")
+
+	infoCall := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "$session->service.info")
+	phpAssertStringFieldValue(t, infoCall, "name", "info")
+	phpAssertStringFieldValue(t, infoCall, "inferred_obj_type", "Service")
+}
+
 func TestDefaultEngineParsePathPHPInfersTypedThisPropertyReceiverCalls(t *testing.T) {
 	t.Parallel()
 

@@ -288,6 +288,80 @@ func TestEnrichLanguageResultsWithContentMetadataRustImplBlock(t *testing.T) {
 	}
 }
 
+func TestHandleLanguageQuery_RustImplBlockPrefersGraphPathAndEnrichesMetadata(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"content-1", "repo-1", "src/point.rs", "ImplBlock", "Point",
+					int64(1), int64(18), "rust", "impl Display for Point {}", []byte(`{"kind":"trait_impl","trait":"Display","target":"Point"}`),
+				},
+			},
+		},
+	})
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":  "graph-1",
+				"name":       "Point",
+				"labels":     []string{"ImplBlock"},
+				"file_path":  "src/point.rs",
+				"repo_id":    "repo-1",
+				"repo_name":  "repo-1",
+				"language":   "rust",
+				"start_line": int64(1),
+				"end_line":   int64(18),
+			},
+		}},
+		Content: NewContentReader(db),
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"rust","entity_type":"impl_block","query":"Point","repo_id":"repo-1"}`))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed impl block", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["entity_id"], "graph-1"; got != want {
+		t.Fatalf("result[entity_id] = %#v, want %#v", got, want)
+	}
+	if got, want := result["semantic_summary"], "ImplBlock Point implements Display for Point."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	metadata, ok := result["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[metadata] type = %T, want map[string]any", result["metadata"])
+	}
+	if got, want := metadata["kind"], "trait_impl"; got != want {
+		t.Fatalf("metadata[kind] = %#v, want %#v", got, want)
+	}
+}
+
 func TestHandleLanguageQuery_AnnotationPrefersGraphPathAndEnrichesMetadata(t *testing.T) {
 	t.Parallel()
 

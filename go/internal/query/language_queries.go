@@ -50,6 +50,8 @@ var contentBackedEntityTypes = map[string]string{
 	"module_attribute":        "module_attribute",
 }
 
+var graphFirstContentBackedEntityTypes = map[string]string{"annotation": "Annotation", "impl_block": "ImplBlock"}
+
 // Mount registers the language query endpoint on the given mux.
 func (h *LanguageQueryHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v0/code/language-query", h.handleLanguageQuery)
@@ -93,38 +95,11 @@ func (h *LanguageQueryHandler) handleLanguageQuery(w http.ResponseWriter, r *htt
 		req.Limit = 50
 	}
 
-	if req.EntityType == "annotation" {
-		var (
-			results []map[string]any
-			err     error
-		)
-		if h.Neo4j != nil {
-			results, err = h.queryByLanguage(
-				r.Context(),
-				req.Language,
-				contentBackedEntityTypes[req.EntityType],
-				req.Query,
-				req.RepoID,
-				req.Limit,
-			)
-			if err != nil {
-				WriteError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-		}
-		if len(results) == 0 {
-			results, err = h.queryContentByLanguage(
-				r.Context(),
-				req.Language,
-				contentBackedEntityTypes[req.EntityType],
-				req.Query,
-				req.RepoID,
-				req.Limit,
-			)
-			if err != nil {
-				WriteError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
+	if label, ok := graphBackedEntityTypes[req.EntityType]; ok {
+		results, err := h.queryByLanguage(r.Context(), req.Language, label, req.Query, req.RepoID, req.Limit)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
 		}
 
 		WriteJSON(w, http.StatusOK, map[string]any{
@@ -136,8 +111,15 @@ func (h *LanguageQueryHandler) handleLanguageQuery(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if label, ok := graphBackedEntityTypes[req.EntityType]; ok {
-		results, err := h.queryByLanguage(r.Context(), req.Language, label, req.Query, req.RepoID, req.Limit)
+	if label, ok := graphFirstContentBackedEntityTypes[req.EntityType]; ok {
+		results, err := h.queryGraphFirstContentByLanguage(
+			r.Context(),
+			req.Language,
+			label,
+			req.Query,
+			req.RepoID,
+			req.Limit,
+		)
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -245,6 +227,23 @@ func (h *LanguageQueryHandler) queryByLanguage(
 		repoID,
 		limit,
 	)
+}
+
+func (h *LanguageQueryHandler) queryGraphFirstContentByLanguage(
+	ctx context.Context,
+	language, label, query, repoID string,
+	limit int,
+) ([]map[string]any, error) {
+	if h.Neo4j != nil {
+		results, err := h.queryByLanguage(ctx, language, label, query, repoID, limit)
+		if err != nil {
+			return nil, err
+		}
+		if len(results) > 0 {
+			return results, nil
+		}
+	}
+	return h.queryContentByLanguage(ctx, language, label, query, repoID, limit)
 }
 
 // buildLanguageCypher constructs the Cypher query and parameters for a

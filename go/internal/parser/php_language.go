@@ -219,7 +219,9 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			appendBucket(payload, "variables", item)
 		}
 
-		for _, match := range phpMethodCallPattern.FindAllStringSubmatch(trimmed, -1) {
+		normalizedTrimmed := strings.ReplaceAll(trimmed, "?->", "->")
+		normalizedRawLine := strings.ReplaceAll(rawLine, "?->", "->")
+		for _, match := range phpMethodCallPattern.FindAllStringSubmatch(normalizedTrimmed, -1) {
 			if len(match) != 2 {
 				continue
 			}
@@ -232,7 +234,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
 			)
-			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, inferredObjType)
+			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, normalizedRawLine, match[0]), contextName, contextKind, contextLine, inferredObjType)
 		}
 		for _, match := range phpStaticCallPattern.FindAllStringSubmatch(trimmed, -1) {
 			if len(match) != 3 {

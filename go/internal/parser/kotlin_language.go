@@ -327,15 +327,16 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			appendBucket(payload, "function_calls", item)
 		}
 
-		for _, match := range kotlinCallPattern.FindAllStringSubmatchIndex(trimmed, -1) {
+		normalizedTrimmed := strings.ReplaceAll(trimmed, "?.", ".")
+		for _, match := range kotlinCallPattern.FindAllStringSubmatchIndex(normalizedTrimmed, -1) {
 			if len(match) != 6 {
 				continue
 			}
 			if functionDeclCutoff >= 0 && match[0] < functionDeclCutoff {
 				continue
 			}
-			receiver := strings.TrimSuffix(strings.TrimSpace(trimmed[match[2]:match[3]]), ".")
-			name := trimmed[match[4]:match[5]]
+			receiver := strings.TrimSuffix(strings.TrimSpace(normalizedTrimmed[match[2]:match[3]]), ".")
+			name := normalizedTrimmed[match[4]:match[5]]
 			if !kotlinCallNameAllowed(name) {
 				continue
 			}
@@ -344,7 +345,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					continue
 				}
 			}
-			fullName := strings.TrimSpace(trimmed[match[2]:match[3]] + trimmed[match[4]:match[5]])
+			fullName := strings.TrimSpace(normalizedTrimmed[match[2]:match[3]] + normalizedTrimmed[match[4]:match[5]])
 			callKey := fullName + "#" + strconv.Itoa(lineNumber)
 			if _, ok := seenLineCalls[callKey]; ok {
 				continue
