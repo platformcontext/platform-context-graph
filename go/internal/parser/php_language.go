@@ -7,17 +7,18 @@ import (
 )
 
 var (
-	phpNamespacePattern     = regexp.MustCompile(`^\s*namespace\s+([^;]+);`)
-	phpUsePattern           = regexp.MustCompile(`^\s*use\s+([^;]+);`)
-	phpTypePattern          = regexp.MustCompile(`^\s*(?:abstract\s+|final\s+)?(class|interface|trait)\s+([A-Za-z_]\w*)(.*)$`)
-	phpFunctionPattern      = regexp.MustCompile(`^\s*(?:public\s+|protected\s+|private\s+|static\s+|abstract\s+|final\s+|readonly\s+)*function\s+([A-Za-z_]\w*)\s*\(`)
-	phpVariablePattern      = regexp.MustCompile(`\$[A-Za-z_]\w*`)
-	phpTypedVariablePattern = regexp.MustCompile(`(?:(?:public|protected|private|readonly|static)\s+)*([?A-Za-z_\\][\w\\|?]*)\s+\$[A-Za-z_]\w*`)
-	phpMethodCallPattern    = regexp.MustCompile(`(\$[A-Za-z_]\w*(?:->\w+)+)\s*\(`)
-	phpStaticCallPattern    = regexp.MustCompile(`\b([A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::([A-Za-z_]\w*)\s*\(`)
-	phpNewCallPattern       = regexp.MustCompile(`\bnew\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
-	phpFunctionCallPattern  = regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
-	phpVariableTypePattern  = regexp.MustCompile(`\$\w+\s*=\s*new\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
+	phpNamespacePattern      = regexp.MustCompile(`^\s*namespace\s+([^;]+);`)
+	phpUsePattern            = regexp.MustCompile(`^\s*use\s+([^;]+);`)
+	phpTypePattern           = regexp.MustCompile(`^\s*(?:abstract\s+|final\s+)?(class|interface|trait)\s+([A-Za-z_]\w*)(.*)$`)
+	phpFunctionPattern       = regexp.MustCompile(`^\s*(?:public\s+|protected\s+|private\s+|static\s+|abstract\s+|final\s+|readonly\s+)*function\s+([A-Za-z_]\w*)\s*\(`)
+	phpFunctionReturnPattern = regexp.MustCompile(`\)\s*:\s*([^{;]+)`)
+	phpVariablePattern       = regexp.MustCompile(`\$[A-Za-z_]\w*`)
+	phpTypedVariablePattern  = regexp.MustCompile(`(?:(?:public|protected|private|readonly|static)\s+)*([?A-Za-z_\\][\w\\|?]*)\s+\$[A-Za-z_]\w*`)
+	phpMethodCallPattern     = regexp.MustCompile(`(\$[A-Za-z_]\w*(?:->\w+)+)\s*\(`)
+	phpStaticCallPattern     = regexp.MustCompile(`\b([A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::([A-Za-z_]\w*)\s*\(`)
+	phpNewCallPattern        = regexp.MustCompile(`\bnew\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
+	phpFunctionCallPattern   = regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
+	phpVariableTypePattern   = regexp.MustCompile(`\$\w+\s*=\s*new\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
 )
 
 type phpScopedContext struct {
@@ -64,6 +65,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 	seenCalls := make(map[string]struct{})
 	classPropertyTypes := make(map[string]map[string]string)
 	localVariableTypes := make(map[string]map[string]string)
+	methodReturnTypes := make(map[string]map[string]string)
 
 	for index, rawLine := range lines {
 		lineNumber := index + 1
@@ -132,6 +134,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			if currentPHPScopedName(stack, "class_declaration", "interface_declaration", "trait_declaration") != "" {
 				functionKind = "method_declaration"
 			}
+			returnType := extractPHPReturnType(lines, index, rawLine)
 			item := map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
@@ -142,6 +145,15 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			}
 			if classContext := currentPHPScopedName(stack, "class_declaration", "interface_declaration", "trait_declaration"); classContext != "" {
 				item["class_context"] = classContext
+				if returnType != "" {
+					if _, ok := methodReturnTypes[classContext]; !ok {
+						methodReturnTypes[classContext] = make(map[string]string)
+					}
+					methodReturnTypes[classContext][name] = returnType
+				}
+			}
+			if returnType != "" {
+				item["return_type"] = returnType
 			}
 			if options.IndexSource {
 				item["source"] = collectPHPBlockSource(lines, index)
@@ -167,7 +179,14 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			if variable == "$this" {
 				continue
 			}
-			variableType := inferPHPVariableType(rawLine, variable, currentClassContext, classPropertyTypes, localVariableTypes[functionScopeKey])
+			variableType := inferPHPVariableType(
+				rawLine,
+				variable,
+				currentClassContext,
+				classPropertyTypes,
+				localVariableTypes[functionScopeKey],
+				methodReturnTypes,
+			)
 			if contextKind == "class_declaration" {
 				if _, ok := classPropertyTypes[contextName]; !ok {
 					classPropertyTypes[contextName] = make(map[string]string)

@@ -28,6 +28,7 @@ func inferPHPVariableType(
 	classContext string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
+	methodReturnTypes map[string]map[string]string,
 ) string {
 	if matches := phpTypedVariablePattern.FindStringSubmatch(rawLine); len(matches) == 2 && strings.Contains(rawLine, variable) {
 		return normalizePHPTypeName(matches[1])
@@ -36,7 +37,7 @@ func inferPHPVariableType(
 		return normalizePHPTypeName(matches[1])
 	}
 	if matches := phpAssignmentPattern.FindStringSubmatch(rawLine); len(matches) == 3 && matches[1] == variable {
-		if inferred := inferPHPReferenceType(matches[2], classContext, classPropertyTypes, localVariableTypes); inferred != "" {
+		if inferred := inferPHPReferenceType(matches[2], classContext, classPropertyTypes, localVariableTypes, methodReturnTypes); inferred != "" {
 			return inferred
 		}
 	}
@@ -56,7 +57,7 @@ func inferPHPMethodReceiverType(
 	if index := strings.LastIndex(trimmed, "->"); index >= 0 {
 		trimmed = trimmed[:index]
 	}
-	return inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes)
+	return inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, nil)
 }
 
 func inferPHPReferenceType(
@@ -64,6 +65,7 @@ func inferPHPReferenceType(
 	classContext string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
+	methodReturnTypes map[string]map[string]string,
 ) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -72,6 +74,10 @@ func inferPHPReferenceType(
 
 	if matches := phpNewCallPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 		return normalizePHPTypeName(matches[1])
+	}
+
+	if inferred := inferPHPMethodCallType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes); inferred != "" {
+		return inferred
 	}
 
 	segments := strings.Split(trimmed, "->")
@@ -100,6 +106,147 @@ func inferPHPReferenceType(
 	}
 
 	return ""
+}
+
+func inferPHPMethodCallType(
+	raw string,
+	classContext string,
+	classPropertyTypes map[string]map[string]string,
+	localVariableTypes map[string]string,
+	methodReturnTypes map[string]map[string]string,
+) string {
+	if len(methodReturnTypes) == 0 {
+		return ""
+	}
+
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || !strings.HasSuffix(trimmed, ")") {
+		return ""
+	}
+
+	openIndex := strings.LastIndex(trimmed, "(")
+	if openIndex < 0 {
+		return ""
+	}
+	callHead := strings.TrimSpace(trimmed[:openIndex])
+	if callHead == "" {
+		return ""
+	}
+
+	separatorIndex := strings.LastIndex(callHead, "->")
+	separator := "->"
+	if staticIndex := strings.LastIndex(callHead, "::"); staticIndex > separatorIndex {
+		separatorIndex = staticIndex
+		separator = "::"
+	}
+	if separatorIndex < 0 {
+		return ""
+	}
+
+	receiverExpr := strings.TrimSpace(callHead[:separatorIndex])
+	methodName := strings.TrimSpace(callHead[separatorIndex+len(separator):])
+	if receiverExpr == "" || methodName == "" {
+		return ""
+	}
+
+	receiverType := resolvePHPReferenceRootType(receiverExpr, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes)
+	if receiverType == "" {
+		return ""
+	}
+
+	return lookupPHPMethodReturnType(receiverType, methodName, methodReturnTypes)
+}
+
+func resolvePHPReferenceRootType(
+	raw string,
+	classContext string,
+	classPropertyTypes map[string]map[string]string,
+	localVariableTypes map[string]string,
+	methodReturnTypes map[string]map[string]string,
+) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	if trimmed == "self" || trimmed == "static" {
+		return classContext
+	}
+
+	if inferred := inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes); inferred != "" {
+		return inferred
+	}
+
+	if strings.HasPrefix(trimmed, "$") {
+		return ""
+	}
+
+	return normalizePHPTypeName(trimmed)
+}
+
+func lookupPHPMethodReturnType(
+	className string,
+	methodName string,
+	methodReturnTypes map[string]map[string]string,
+) string {
+	if className == "" || methodName == "" {
+		return ""
+	}
+
+	normalizedClassName := normalizePHPTypeName(className)
+	if normalizedClassName == "" {
+		return ""
+	}
+
+	for _, candidateClassName := range []string{className, normalizedClassName} {
+		if strings.TrimSpace(candidateClassName) == "" {
+			continue
+		}
+		if returns := normalizePHPTypeName(methodReturnTypes[strings.TrimSpace(candidateClassName)][methodName]); returns != "" {
+			switch returns {
+			case "self", "static":
+				return normalizedClassName
+			case "parent":
+				return ""
+			default:
+				return returns
+			}
+		}
+	}
+
+	return ""
+}
+
+func extractPHPReturnType(lines []string, startIndex int, rawLine string) string {
+	signature := collectPHPFunctionSignature(lines, startIndex, rawLine)
+	matches := phpFunctionReturnPattern.FindStringSubmatch(signature)
+	if len(matches) != 2 {
+		return ""
+	}
+	return normalizePHPTypeName(matches[1])
+}
+
+func collectPHPFunctionSignature(lines []string, startIndex int, rawLine string) string {
+	signature := strings.TrimSpace(rawLine)
+	if signature == "" {
+		return ""
+	}
+	if strings.Contains(signature, "{") || strings.Contains(signature, ";") {
+		return signature
+	}
+
+	for index := startIndex + 1; index < len(lines); index++ {
+		nextLine := strings.TrimSpace(lines[index])
+		if nextLine == "" {
+			continue
+		}
+		signature += " " + nextLine
+		if strings.Contains(nextLine, "{") || strings.Contains(nextLine, ";") {
+			break
+		}
+	}
+
+	return signature
 }
 
 func resolvePHPPropertyChainType(
