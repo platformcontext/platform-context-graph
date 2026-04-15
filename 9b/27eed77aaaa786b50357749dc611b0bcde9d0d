@@ -1,0 +1,31 @@
+go/internal/query/content_relationships_k8s_test.go
+  1ca5ee6ce936a402 1-119
+go/internal/query/content_relationships.go
+  1ca5ee6ce936a402 6,43-46,88-91,123-219
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 87
+docs/docs/languages/kubernetes.md
+  1ca5ee6ce936a402 25,30
+go/internal/query/entity_content_iac_fallback_test.go
+  1ca5ee6ce936a402 137-152,182-200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "9b27eed77aaaa786b50357749dc611b0bcde9d0d",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 266,
+      "total_deletions": 3,
+      "accepted_lines": 266,
+      "overriden_lines": 0
+    }
+  }
+}
