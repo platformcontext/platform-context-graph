@@ -33,10 +33,12 @@ func DiscoverEvidence(envelopes []facts.Envelope, catalog []CatalogEntry) []Evid
 
 // evidenceKey deduplicates evidence within a single discovery pass.
 type evidenceKey struct {
-	EvidenceKind EvidenceKind
-	SourceRepoID string
-	TargetRepoID string
-	Path         string
+	EvidenceKind   EvidenceKind
+	SourceRepoID   string
+	TargetRepoID   string
+	SourceEntityID string
+	TargetEntityID string
+	Path           string
 }
 
 // terraformPattern describes one regex-based Terraform evidence extractor.
@@ -264,10 +266,12 @@ func matchCatalog(
 			continue
 		}
 		key := evidenceKey{
-			EvidenceKind: evidenceKind,
-			SourceRepoID: sourceRepoID,
-			TargetRepoID: entry.RepoID,
-			Path:         filePath,
+			EvidenceKind:   evidenceKind,
+			SourceRepoID:   sourceRepoID,
+			TargetRepoID:   entry.RepoID,
+			SourceEntityID: "",
+			TargetEntityID: "",
+			Path:           filePath,
 		}
 		if _, ok := seen[key]; ok {
 			continue

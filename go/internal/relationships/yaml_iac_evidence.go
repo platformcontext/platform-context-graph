@@ -2,6 +2,7 @@ package relationships
 
 import (
 	"io"
+	"net/url"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -44,12 +45,19 @@ func discoverArgoCDDocumentEvidence(
 	var evidence []EvidenceFact
 
 	for _, repoURL := range argocdApplicationRepoURLs(document) {
-		evidence = append(evidence, matchCatalog(
-			controlRepoID, repoURL, filePath,
-			EvidenceKindArgoCDAppSource, RelDeploysFrom, 0.95,
-			"ArgoCD Application source references the target repository",
-			"argocd", catalog, seen, nil,
-		)...)
+		for _, deployedRepo := range matchingCatalogEntries(repoURL, catalog) {
+			evidence = append(evidence, matchCatalog(
+				controlRepoID, repoURL, filePath,
+				EvidenceKindArgoCDAppSource, RelDeploysFrom, 0.95,
+				"ArgoCD Application source references the target repository",
+				"argocd", catalog, seen, nil,
+			)...)
+			for _, destination := range argocdDocumentDestinations(document) {
+				evidence = append(evidence, appendDestinationPlatformEvidence(
+					deployedRepo.RepoID, filePath, destination, seen,
+				)...)
+			}
+		}
 	}
 
 	discoveryTargets := argocdApplicationSetDiscoveryTargets(document)
@@ -74,6 +82,11 @@ func discoverArgoCDDocumentEvidence(
 					evidence = append(evidence, appendDeploySourceEvidence(
 						controlRepoID, deployedRepo, configRepo, filePath, discovery.path, templateSource, seen,
 					)...)
+					for _, destination := range argocdDocumentDestinations(document) {
+						evidence = append(evidence, appendDestinationPlatformEvidence(
+							deployedRepo.RepoID, filePath, destination, seen,
+						)...)
+					}
 				}
 			}
 		}
@@ -85,6 +98,12 @@ func discoverArgoCDDocumentEvidence(
 type argocdDiscoveryTarget struct {
 	repoURL string
 	path    string
+}
+
+type argocdDestination struct {
+	name      string
+	namespace string
+	server    string
 }
 
 func appendDiscoveryEvidence(
@@ -156,6 +175,44 @@ func appendDeploySourceEvidence(
 	}}
 }
 
+func appendDestinationPlatformEvidence(
+	sourceRepoID, filePath string,
+	destination argocdDestination,
+	seen map[evidenceKey]struct{},
+) []EvidenceFact {
+	platformID := argocdDestinationPlatformID(destination)
+	if platformID == "" {
+		return nil
+	}
+
+	key := evidenceKey{
+		EvidenceKind:   EvidenceKindArgoCDDestinationPlatform,
+		SourceRepoID:   sourceRepoID,
+		TargetEntityID: platformID,
+		Path:           filePath,
+	}
+	if _, ok := seen[key]; ok {
+		return nil
+	}
+	seen[key] = struct{}{}
+
+	return []EvidenceFact{{
+		EvidenceKind:     EvidenceKindArgoCDDestinationPlatform,
+		RelationshipType: RelRunsOn,
+		SourceRepoID:     sourceRepoID,
+		TargetEntityID:   platformID,
+		Confidence:       0.97,
+		Rationale:        "ArgoCD destination points at the runtime platform where the deployed repository runs",
+		Details: map[string]any{
+			"path":                  filePath,
+			"destination_name":      destination.name,
+			"destination_namespace": destination.namespace,
+			"destination_server":    destination.server,
+			"extractor":             "argocd",
+		},
+	}}
+}
+
 func parseYAMLDocuments(content string) []map[string]any {
 	decoder := yaml.NewDecoder(strings.NewReader(content))
 	var documents []map[string]any
@@ -198,6 +255,21 @@ func argocdApplicationRepoURLs(document map[string]any) []string {
 	return uniqueStrings(result)
 }
 
+func argocdDocumentDestinations(document map[string]any) []argocdDestination {
+	spec, _ := nestedMap(document, "spec")
+	if spec == nil {
+		return nil
+	}
+
+	if strings.EqualFold(stringValue(document["kind"]), "ApplicationSet") {
+		template, _ := nestedMap(spec, "template")
+		templateSpec, _ := nestedMap(template, "spec")
+		return uniqueDestinations([]argocdDestination{argocdDestinationFromSpec(templateSpec)})
+	}
+
+	return uniqueDestinations([]argocdDestination{argocdDestinationFromSpec(spec)})
+}
+
 func argocdApplicationSetDiscoveryTargets(document map[string]any) []argocdDiscoveryTarget {
 	if !strings.EqualFold(stringValue(document["kind"]), "ApplicationSet") {
 		return nil
@@ -238,6 +310,21 @@ func argocdApplicationSetTemplateSources(document map[string]any) []string {
 		return nil
 	}
 	return argocdApplicationRepoURLs(map[string]any{"spec": templateSpec})
+}
+
+func argocdDestinationFromSpec(spec map[string]any) argocdDestination {
+	if spec == nil {
+		return argocdDestination{}
+	}
+	destination, _ := nestedMap(spec, "destination")
+	if destination == nil {
+		return argocdDestination{}
+	}
+	return argocdDestination{
+		name:      stringValue(destination["name"]),
+		namespace: stringValue(destination["namespace"]),
+		server:    stringValue(destination["server"]),
+	}
 }
 
 func collectGitGenerators(items []any) []map[string]any {
@@ -299,6 +386,30 @@ func gatherObjectStrings(document map[string]any, listKey string, fieldKeys ...s
 	return uniqueStrings(result)
 }
 
+func argocdDestinationPlatformID(destination argocdDestination) string {
+	clusterName := normalizePlatformToken(destination.name)
+	if clusterName != "" {
+		return "platform:kubernetes:none:cluster/" + clusterName + ":none:none"
+	}
+	host := normalizePlatformToken(argocdDestinationHost(destination.server))
+	if host == "" {
+		return ""
+	}
+	return "platform:kubernetes:none:server/" + host + ":none:none"
+}
+
+func argocdDestinationHost(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err == nil && parsed.Host != "" {
+		return parsed.Host
+	}
+	return strings.TrimPrefix(strings.TrimPrefix(raw, "https://"), "http://")
+}
+
 func matchingCatalogEntries(candidate string, catalog []CatalogEntry) []CatalogEntry {
 	var result []CatalogEntry
 	for _, entry := range catalog {
@@ -342,6 +453,34 @@ func stringValue(value any) string {
 		return ""
 	}
 	return strings.TrimSpace(text)
+}
+
+func normalizePlatformToken(raw string) string {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" {
+		return ""
+	}
+	replacer := strings.NewReplacer(" ", "-", "\t", "-", "\n", "-", "\r", "-")
+	return replacer.Replace(raw)
+}
+
+func uniqueDestinations(values []argocdDestination) []argocdDestination {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[argocdDestination]struct{}, len(values))
+	result := make([]argocdDestination, 0, len(values))
+	for _, value := range values {
+		if value.name == "" && value.server == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func uniqueStrings(values []string) []string {

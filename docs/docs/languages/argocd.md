@@ -25,7 +25,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Sync policy | `sync-policy` | supported | `argocd_applications` | `name, line_number, sync_policy` | `property:Application.sync_policy` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLArgoCDApplication` | Compose-backed fixture verification | `syncPolicy` is normalized into a stable summary string plus normalized sync options. |
 
 ## Known Limitations
-- The parser payload meets or exceeds the old Python parser, but the Go relationship/evidence layer still lacks the historical ApplicationSet discovery/deploy-source/destination-cluster chain
+- The parser payload meets or exceeds the old Python parser, and the Go relationship/evidence layer now emits the historical discovery/deploy-source/destination-platform facts for Applications and ApplicationSets. The remaining parity gap is final graph/query promotion of that full evidence chain.
 - Helm-specific source parameters (`helm.valueFiles`, `helm.parameters`) are not extracted as structured nodes
 - ApplicationSet generator wrappers such as matrix, merge, and plugin are normalized for git source and path summaries, but plugin-specific parameters are not modeled
 - `ignoreDifferences` and custom health checks are not modeled
