@@ -8,17 +8,19 @@ import (
 )
 
 var (
-	kotlinImportPattern      = regexp.MustCompile(`^\s*import\s+([^\s]+)(?:\s+as\s+([A-Za-z_]\w*))?`)
-	kotlinClassPattern       = regexp.MustCompile(`^\s*(?:data\s+|sealed\s+|abstract\s+|open\s+)?class\s+([A-Za-z_]\w*)`)
-	kotlinObjectPattern      = regexp.MustCompile(`^\s*object\s+([A-Za-z_]\w*)`)
-	kotlinCompanionPattern   = regexp.MustCompile(`^\s*companion\s+object(?:\s+([A-Za-z_]\w*))?`)
-	kotlinInterfacePattern   = regexp.MustCompile(`^\s*interface\s+([A-Za-z_]\w*)`)
-	kotlinEnumPattern        = regexp.MustCompile(`^\s*enum\s+class\s+([A-Za-z_]\w*)`)
-	kotlinFunctionPattern    = regexp.MustCompile(`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\(`)
-	kotlinConstructorPattern = regexp.MustCompile(`^\s*(?:(?:public|private|protected|internal)\s+)?constructor\s*\(`)
-	kotlinVariablePattern    = regexp.MustCompile(`^\s*(?:private|public|protected|internal)?\s*(?:const\s+)?(?:val|var)\s+([A-Za-z_]\w*)`)
-	kotlinThisCallPattern    = regexp.MustCompile(`this\.([A-Za-z_]\w*)\s*\(`)
-	kotlinCallPattern        = regexp.MustCompile(`\b((?:[A-Za-z_]\w*\.)*)([A-Za-z_]\w*)\s*\(`)
+	kotlinImportPattern       = regexp.MustCompile(`^\s*import\s+([^\s]+)(?:\s+as\s+([A-Za-z_]\w*))?`)
+	kotlinClassPattern        = regexp.MustCompile(`^\s*(?:data\s+|sealed\s+|abstract\s+|open\s+)?class\s+([A-Za-z_]\w*)`)
+	kotlinObjectPattern       = regexp.MustCompile(`^\s*object\s+([A-Za-z_]\w*)`)
+	kotlinCompanionPattern    = regexp.MustCompile(`^\s*companion\s+object(?:\s+([A-Za-z_]\w*))?`)
+	kotlinInterfacePattern    = regexp.MustCompile(`^\s*interface\s+([A-Za-z_]\w*)`)
+	kotlinEnumPattern         = regexp.MustCompile(`^\s*enum\s+class\s+([A-Za-z_]\w*)`)
+	kotlinFunctionPattern     = regexp.MustCompile(`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\(`)
+	kotlinConstructorPattern  = regexp.MustCompile(`^\s*(?:(?:public|private|protected|internal)\s+)?constructor\s*\(`)
+	kotlinVariablePattern     = regexp.MustCompile(`^\s*(?:private|public|protected|internal)?\s*(?:const\s+)?(?:val|var)\s+([A-Za-z_]\w*)`)
+	kotlinCtorAssignPattern   = regexp.MustCompile(`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*\(`)
+	kotlinStringAssignPattern = regexp.MustCompile(`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*"([^"]*)"`)
+	kotlinThisCallPattern     = regexp.MustCompile(`this\.([A-Za-z_]\w*)\s*\(`)
+	kotlinCallPattern         = regexp.MustCompile(`\b((?:[A-Za-z_]\w*\.)*)([A-Za-z_]\w*)\s*\(`)
 )
 
 func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (map[string]any, error) {
@@ -34,6 +36,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	braceDepth := 0
 	stack := make([]scopedContext, 0)
 	seenVariables := make(map[string]struct{})
+	localVariableTypes := make(map[string]map[string]string)
 
 	for index, rawLine := range lines {
 		lineNumber := index + 1
@@ -141,10 +144,23 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				if classContext := currentScopedName(stack, "class"); classContext != "" {
 					item["class_context"] = classContext
 				}
+				if receiverType := strings.TrimSpace(matches[1]); receiverType != "" {
+					item["extension_receiver"] = receiverType
+					if _, ok := item["class_context"]; !ok {
+						item["class_context"] = receiverType
+					}
+				}
 				if options.IndexSource {
 					item["source"] = rawLine
 				}
 				appendBucket(payload, "functions", item)
+				if strings.Contains(rawLine, "{") {
+					stack = append(stack, scopedContext{
+						kind:       "function",
+						name:       name,
+						braceDepth: braceDepth + max(1, strings.Count(rawLine, "{")),
+					})
+				}
 			}
 		}
 		if kotlinConstructorPattern.MatchString(trimmed) {
@@ -167,6 +183,23 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 
 		if matches := kotlinVariablePattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
+			if functionContext := currentScopedName(stack, "function"); functionContext != "" {
+				if _, ok := localVariableTypes[functionContext]; !ok {
+					localVariableTypes[functionContext] = make(map[string]string)
+				}
+				switch {
+				case kotlinCtorAssignPattern.MatchString(trimmed):
+					assignMatches := kotlinCtorAssignPattern.FindStringSubmatch(trimmed)
+					if len(assignMatches) == 3 && assignMatches[1] == name {
+						localVariableTypes[functionContext][name] = strings.TrimSpace(assignMatches[2])
+					}
+				case kotlinStringAssignPattern.MatchString(trimmed):
+					assignMatches := kotlinStringAssignPattern.FindStringSubmatch(trimmed)
+					if len(assignMatches) == 3 && assignMatches[1] == name {
+						localVariableTypes[functionContext][name] = "String"
+					}
+				}
+			}
 			if _, ok := seenVariables[name]; !ok {
 				seenVariables[name] = struct{}{}
 				appendBucket(payload, "variables", map[string]any{
@@ -246,6 +279,12 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				if classContext := currentScopedName(stack, "class"); classContext != "" {
 					item["class_context"] = classContext
 				}
+			} else if receiver != "" {
+				if functionContext := currentScopedName(stack, "function"); functionContext != "" {
+					if inferredType := kotlinInferReceiverType(receiver, localVariableTypes[functionContext]); inferredType != "" {
+						item["inferred_obj_type"] = inferredType
+					}
+				}
 			}
 			appendBucket(payload, "function_calls", item)
 		}
@@ -272,6 +311,17 @@ func (e *Engine) preScanKotlin(path string) ([]string, error) {
 	names := collectBucketNames(payload, "functions", "classes", "interfaces")
 	slices.Sort(names)
 	return names, nil
+}
+
+func kotlinInferReceiverType(receiver string, variableTypes map[string]string) string {
+	receiver = strings.TrimSpace(receiver)
+	if receiver == "" || len(variableTypes) == 0 {
+		return ""
+	}
+	if index := strings.Index(receiver, "."); index >= 0 {
+		receiver = receiver[:index]
+	}
+	return strings.TrimSpace(variableTypes[receiver])
 }
 
 func kotlinImportAlias(name string) string {

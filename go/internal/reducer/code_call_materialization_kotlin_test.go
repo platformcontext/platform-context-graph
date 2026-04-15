@@ -98,3 +98,107 @@ fun helper(): String = "top-level"
 		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
 	}
 }
+
+func TestExtractCodeCallRowsResolvesKotlinTypedReceiverCallsUsingInferredObjectType(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	callerPath := filepath.Join(repoRoot, "Usage.kt")
+
+	writeFile := func(path string, contents string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v, want nil", path, err)
+		}
+	}
+
+	writeFile(callerPath, `package comprehensive
+
+class User {
+    fun greet(): String = "hi"
+}
+
+class Calculator {
+    fun add(a: Int, b: Int): Int = a + b
+}
+
+fun String.removeSpaces(): String = this.replace(" ", "")
+
+fun usage(): String {
+    val user = User()
+    val calculator = Calculator()
+    val text = "Hello World"
+    calculator.add(5, 10)
+    user.greet()
+    return text.removeSpaces()
+}
+`)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	callerPayload, err := engine.ParsePath(repoRoot, callerPath, false, parser.Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", callerPath, err)
+	}
+	if functions, ok := callerPayload["functions"].([]map[string]any); ok {
+		for _, function := range functions {
+			name, _ := function["name"].(string)
+			classContext, _ := function["class_context"].(string)
+			switch {
+			case name == "usage":
+				function["end_line"] = 19
+				function["uid"] = "content-entity:kotlin-usage"
+			case name == "greet" && classContext == "User":
+				function["uid"] = "content-entity:kotlin-user-greet"
+			case name == "add" && classContext == "Calculator":
+				function["uid"] = "content-entity:kotlin-calculator-add"
+			case name == "removeSpaces" && classContext == "String":
+				function["uid"] = "content-entity:kotlin-string-remove-spaces"
+			}
+		}
+	}
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-kotlin",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repo-kotlin",
+				"relative_path":    "Usage.kt",
+				"parsed_file_data": callerPayload,
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 3 {
+		t.Fatalf("len(rows) = %d, want 3; rows=%#v; function_calls=%#v", len(rows), rows, callerPayload["function_calls"])
+	}
+
+	want := map[string]string{
+		"content-entity:kotlin-calculator-add":       "calculator.add",
+		"content-entity:kotlin-user-greet":           "user.greet",
+		"content-entity:kotlin-string-remove-spaces": "text.removeSpaces",
+	}
+	for _, row := range rows {
+		calleeID, _ := row["callee_entity_id"].(string)
+		fullName, _ := row["full_name"].(string)
+		if expectedFullName, ok := want[calleeID]; ok {
+			if fullName != expectedFullName {
+				t.Fatalf("full_name = %#v, want %#v for callee %#v", fullName, expectedFullName, calleeID)
+			}
+			delete(want, calleeID)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing expected callee rows: %#v; rows=%#v", want, rows)
+	}
+}
