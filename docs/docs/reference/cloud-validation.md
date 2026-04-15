@@ -9,7 +9,7 @@ Treat the runtime health checks and the completeness checks as different
 questions:
 
 - `health` or `healthz` proves the process is alive and initialized
-- `index-status` proves a run or repository checkpoint completed
+- `index-status` proves the latest published checkpointed completeness state
 - `/admin/status` proves the live runtime stage, backlog, and failure state
   when the runtime mounts the shared admin surface
 

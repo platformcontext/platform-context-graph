@@ -15,15 +15,6 @@ type LanguageQueryHandler struct {
 	Content *ContentReader
 }
 
-// supportedLanguages lists every language that has Cypher templates registered.
-var supportedLanguages = map[string]bool{
-	"c": true, "cpp": true, "csharp": true, "dart": true,
-	"elixir": true, "go": true, "haskell": true, "java": true,
-	"javascript": true, "hcl": true, "kotlin": true, "perl": true,
-	"php": true, "python": true, "ruby": true, "rust": true,
-	"scala": true, "swift": true, "typescript": true,
-}
-
 // graphBackedEntityTypes maps the user-facing entity type name to the Neo4j
 // node label used in Cypher queries.
 var graphBackedEntityTypes = map[string]string{
@@ -59,30 +50,6 @@ var contentBackedEntityTypes = map[string]string{
 	"module_attribute":        "module_attribute",
 }
 
-// languageFileExtensions maps language names to their common file extensions
-// for more precise filtering.
-var languageFileExtensions = map[string][]string{
-	"c":          {".c", ".h"},
-	"cpp":        {".cpp", ".cc", ".cxx", ".hpp", ".hxx", ".h"},
-	"csharp":     {".cs"},
-	"dart":       {".dart"},
-	"elixir":     {".ex", ".exs"},
-	"go":         {".go"},
-	"haskell":    {".hs", ".lhs"},
-	"java":       {".java"},
-	"javascript": {".js", ".jsx", ".mjs", ".cjs"},
-	"hcl":        {".hcl"},
-	"kotlin":     {".kt", ".kts"},
-	"perl":       {".pl", ".pm"},
-	"php":        {".php"},
-	"python":     {".py", ".pyi"},
-	"ruby":       {".rb"},
-	"rust":       {".rs"},
-	"scala":      {".scala", ".sc"},
-	"swift":      {".swift"},
-	"typescript": {".ts", ".tsx"},
-}
-
 // Mount registers the language query endpoint on the given mux.
 func (h *LanguageQueryHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v0/code/language-query", h.handleLanguageQuery)
@@ -111,7 +78,7 @@ func (h *LanguageQueryHandler) handleLanguageQuery(w http.ResponseWriter, r *htt
 		return
 	}
 
-	req.Language = strings.ToLower(strings.TrimSpace(req.Language))
+	req.Language = canonicalLanguage(req.Language)
 	req.EntityType = strings.ToLower(strings.TrimSpace(req.EntityType))
 
 	if !supportedLanguages[req.Language] {
@@ -240,6 +207,7 @@ func (h *LanguageQueryHandler) queryByLanguage(
 // buildLanguageCypher constructs the Cypher query and parameters for a
 // language-specific entity lookup.
 func buildLanguageCypher(language, label, query, repoID string, limit int) (string, map[string]any) {
+	language = canonicalLanguage(language)
 	params := map[string]any{
 		"language": language,
 		"limit":    limit,
@@ -475,17 +443,6 @@ func SupportedLanguages() []string {
 // SupportedEntityTypes returns the set of entity type names with query support.
 func SupportedEntityTypes() []string {
 	return mapKeys(allSupportedEntityTypes())
-}
-
-func normalizedLanguageVariants(language string) []string {
-	switch strings.ToLower(strings.TrimSpace(language)) {
-	case "javascript":
-		return []string{"javascript", "jsx"}
-	case "typescript":
-		return []string{"typescript", "tsx"}
-	default:
-		return []string{strings.ToLower(strings.TrimSpace(language))}
-	}
 }
 
 // mapKeys returns sorted keys from a map.

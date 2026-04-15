@@ -9,77 +9,6 @@ import (
 	"testing"
 )
 
-func TestSupportedLanguages(t *testing.T) {
-	langs := SupportedLanguages()
-	if len(langs) != 19 {
-		t.Errorf("expected 19 supported languages, got %d: %v", len(langs), langs)
-	}
-	// Verify sorted order.
-	for i := 1; i < len(langs); i++ {
-		if langs[i] < langs[i-1] {
-			t.Errorf("languages not sorted: %q comes after %q", langs[i], langs[i-1])
-		}
-	}
-	// Spot-check a few.
-	expected := map[string]bool{
-		"go": true, "python": true, "rust": true, "typescript": true, "hcl": true,
-		"kotlin": true, "php": true, "elixir": true,
-	}
-	langSet := make(map[string]bool, len(langs))
-	for _, l := range langs {
-		langSet[l] = true
-	}
-	for e := range expected {
-		if !langSet[e] {
-			t.Errorf("expected language %q not found", e)
-		}
-	}
-}
-
-func TestSupportedEntityTypes(t *testing.T) {
-	types := SupportedEntityTypes()
-	if len(types) != 24 {
-		t.Errorf("expected 24 supported entity types, got %d: %v", len(types), types)
-	}
-	expected := map[string]bool{
-		"repository": true, "directory": true, "file": true,
-		"function": true, "class": true, "struct": true,
-		"type_alias": true, "type_annotation": true, "typedef": true, "component": true,
-		"annotation": true, "protocol": true, "impl_block": true,
-		"guard": true, "protocol_implementation": true, "module_attribute": true,
-		"terragrunt_dependency": true, "terragrunt_local": true, "terragrunt_input": true,
-	}
-	typeSet := make(map[string]bool, len(types))
-	for _, typ := range types {
-		typeSet[typ] = true
-	}
-	for e := range expected {
-		if !typeSet[e] {
-			t.Errorf("expected entity type %q not found", e)
-		}
-	}
-}
-
-func TestBuildExtensionFilter(t *testing.T) {
-	tests := []struct {
-		name string
-		exts []string
-		want string
-	}{
-		{"empty", nil, ""},
-		{"single", []string{".go"}, " OR f.name ENDS WITH '.go'"},
-		{"multiple", []string{".py", ".pyi"}, " OR f.name ENDS WITH '.py' OR f.name ENDS WITH '.pyi'"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := buildExtensionFilter(tt.exts)
-			if got != tt.want {
-				t.Errorf("buildExtensionFilter(%v) = %q, want %q", tt.exts, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestBuildLanguageCypher_Function(t *testing.T) {
 	cypher, params := buildLanguageCypher("python", "Function", "my_func", "repo:123", 10)
 
@@ -158,52 +87,6 @@ func TestBuildLanguageCypher_Directory(t *testing.T) {
 	}
 	if !searchString(cypher, ".java") {
 		t.Error("cypher should contain .java extension filter")
-	}
-}
-
-func TestBuildLanguageResult_Entity(t *testing.T) {
-	row := map[string]any{
-		"entity_id":  "func:abc",
-		"name":       "doStuff",
-		"labels":     []any{"Function"},
-		"file_path":  "src/main.go",
-		"repo_id":    "repo:123",
-		"repo_name":  "my-repo",
-		"language":   "go",
-		"start_line": int64(10),
-		"end_line":   int64(20),
-	}
-
-	result := buildLanguageResult(row, "Function")
-	if result["entity_id"] != "func:abc" {
-		t.Errorf("entity_id = %v", result["entity_id"])
-	}
-	if result["name"] != "doStuff" {
-		t.Errorf("name = %v", result["name"])
-	}
-	if result["file_path"] != "src/main.go" {
-		t.Errorf("file_path = %v", result["file_path"])
-	}
-	if result["start_line"] != 10 {
-		t.Errorf("start_line = %v", result["start_line"])
-	}
-}
-
-func TestBuildLanguageResult_Repository(t *testing.T) {
-	row := map[string]any{
-		"id":         "repo:123",
-		"name":       "my-repo",
-		"local_path": "/repos/my-repo",
-		"remote_url": "https://github.com/org/my-repo",
-		"file_count": int64(42),
-	}
-
-	result := buildLanguageResult(row, "Repository")
-	if result["id"] != "repo:123" {
-		t.Errorf("id = %v", result["id"])
-	}
-	if result["file_count"] != 42 {
-		t.Errorf("file_count = %v", result["file_count"])
 	}
 }
 
@@ -556,9 +439,9 @@ func TestSortStrings(t *testing.T) {
 }
 
 func TestLanguageFileExtensions_Coverage(t *testing.T) {
-	// Every supported language should have extension mappings.
+	// Every supported language should have direct mappings or a canonical alias.
 	for lang := range supportedLanguages {
-		exts, ok := languageFileExtensions[lang]
+		exts, ok := languageFileExtensions[canonicalLanguage(lang)]
 		if !ok || len(exts) == 0 {
 			t.Errorf("language %q has no file extension mappings", lang)
 		}

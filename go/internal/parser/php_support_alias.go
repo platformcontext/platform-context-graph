@@ -49,7 +49,14 @@ func inferPHPMethodReceiverType(
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 ) string {
-	return inferPHPReferenceType(raw, classContext, classPropertyTypes, localVariableTypes)
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	if index := strings.LastIndex(trimmed, "->"); index >= 0 {
+		trimmed = trimmed[:index]
+	}
+	return inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes)
 }
 
 func inferPHPReferenceType(
@@ -67,27 +74,53 @@ func inferPHPReferenceType(
 		return normalizePHPTypeName(matches[1])
 	}
 
-	if strings.HasPrefix(trimmed, "$this->") && classContext != "" {
-		propertyChain := strings.TrimPrefix(trimmed, "$this->")
-		if propertyChain == "" {
-			return ""
-		}
-		propertyName := propertyChain
-		if index := strings.Index(propertyChain, "->"); index >= 0 {
-			propertyName = propertyChain[:index]
-		}
-		propertyName = strings.TrimSpace(propertyName)
-		if propertyName == "" {
-			return ""
-		}
-		return strings.TrimSpace(classPropertyTypes[classContext][propertyName])
+	segments := strings.Split(trimmed, "->")
+	if len(segments) == 0 {
+		return ""
 	}
 
-	if matches := phpReferenceVariablePattern.FindStringSubmatch(trimmed); len(matches) == 2 {
-		if localVariableTypes != nil {
-			return strings.TrimSpace(localVariableTypes[matches[1]])
+	root := strings.TrimSpace(segments[0])
+	switch {
+	case root == "$this":
+		if classContext == "" {
+			return ""
+		}
+		return resolvePHPPropertyChainType(classContext, segments[1:], classPropertyTypes)
+	case strings.HasPrefix(root, "$"):
+		if matches := phpReferenceVariablePattern.FindStringSubmatch(root); len(matches) == 2 {
+			if localVariableTypes == nil {
+				return ""
+			}
+			rootType := strings.TrimSpace(localVariableTypes[matches[1]])
+			if rootType == "" {
+				return ""
+			}
+			return resolvePHPPropertyChainType(rootType, segments[1:], classPropertyTypes)
 		}
 	}
 
 	return ""
+}
+
+func resolvePHPPropertyChainType(
+	rootType string,
+	segments []string,
+	classPropertyTypes map[string]map[string]string,
+) string {
+	currentType := strings.TrimSpace(rootType)
+	if currentType == "" {
+		return ""
+	}
+	for _, segment := range segments {
+		propertyName := strings.TrimSpace(segment)
+		if propertyName == "" {
+			return ""
+		}
+		nextType := normalizePHPTypeName(classPropertyTypes[currentType][propertyName])
+		if nextType == "" {
+			return ""
+		}
+		currentType = nextType
+	}
+	return currentType
 }

@@ -223,7 +223,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 						if inferredType := kotlinInferReceiverType(
 							assignMatches[2],
 							localVariableTypes[functionContext],
-							classPropertyTypes[classContext],
+							classPropertyTypes,
+							classContext,
 						); inferredType != "" {
 							localVariableTypes[functionContext][name] = inferredType
 						}
@@ -270,7 +271,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 						inferredType = kotlinInferReceiverType(
 							receiver,
 							localVariableTypes[functionContext],
-							classPropertyTypes[currentScopedName(stack, "class")],
+							classPropertyTypes,
+							currentScopedName(stack, "class"),
 						)
 					}
 					if inferredType != "" {
@@ -355,7 +357,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					if inferredType := kotlinInferReceiverType(
 						receiver,
 						localVariableTypes[functionContext],
-						classPropertyTypes[currentScopedName(stack, "class")],
+						classPropertyTypes,
+						currentScopedName(stack, "class"),
 					); inferredType != "" {
 						item["inferred_obj_type"] = inferredType
 					}
@@ -396,19 +399,52 @@ func kotlinTypedDeclarationType(line string) string {
 	return strings.TrimSpace(matches[2])
 }
 
-func kotlinInferReceiverType(receiver string, variableTypes map[string]string, classPropertyTypes map[string]string) string {
+func kotlinInferReceiverType(
+	receiver string,
+	variableTypes map[string]string,
+	classPropertyTypes map[string]map[string]string,
+	currentClass string,
+) string {
 	receiver = strings.TrimSpace(receiver)
 	if receiver == "" {
 		return ""
 	}
 	receiver = strings.TrimPrefix(receiver, "this.")
-	if index := strings.Index(receiver, "."); index >= 0 {
-		receiver = receiver[:index]
+	parts := strings.Split(receiver, ".")
+	if len(parts) == 0 {
+		return ""
 	}
-	if inferredType := strings.TrimSpace(variableTypes[receiver]); inferredType != "" {
-		return inferredType
+
+	currentType := ""
+	root := strings.TrimSpace(parts[0])
+	if inferredType := strings.TrimSpace(variableTypes[root]); inferredType != "" {
+		currentType = inferredType
+	} else if currentClass != "" {
+		currentType = strings.TrimSpace(classPropertyTypes[currentClass][root])
 	}
-	return strings.TrimSpace(classPropertyTypes[receiver])
+	if currentType == "" {
+		return ""
+	}
+	if len(parts) == 1 {
+		return currentType
+	}
+
+	for _, segment := range parts[1:] {
+		name := strings.TrimSpace(segment)
+		if name == "" {
+			return ""
+		}
+		properties := classPropertyTypes[currentType]
+		if len(properties) == 0 {
+			return ""
+		}
+		nextType := strings.TrimSpace(properties[name])
+		if nextType == "" {
+			return ""
+		}
+		currentType = nextType
+	}
+	return currentType
 }
 
 func kotlinImportAlias(name string) string {
