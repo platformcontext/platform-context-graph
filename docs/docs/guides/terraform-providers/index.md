@@ -21,6 +21,23 @@ detail. They are live runtime inputs used to register schema-driven extractors,
 load provider metadata, infer identity keys, classify service families, and
 emit infrastructure relationship evidence.
 
+## Why These Schemas Exist
+
+Historically, the old Python platform loaded the output of
+`terraform providers schema -json` so it could reason about provider resource
+shapes instead of hard-coding one extractor per Terraform resource type.
+
+That purpose has not gone away. What changed on this branch is ownership:
+
+- the schema assets are still generated from `terraform providers schema -json`
+- the runtime loader and extractor registration are now Go-owned
+- the normal runtime path uses those assets to emit schema-driven Terraform
+  relationship evidence without any Python bridge
+
+If you see packaged provider schemas in the repository, treat them as a
+required Go runtime dependency for Terraform relationship extraction, not as a
+leftover migration artifact.
+
 ## How It Works
 
 1. **Provider schemas** are generated from official Terraform provider binaries using `terraform providers schema -json`

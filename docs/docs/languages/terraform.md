@@ -27,6 +27,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 ## Parity Notes
 - Python-era Terraform parser parity is already met on this branch.
 - The first-class `terraform_blocks` surface is a Go-only improvement. The old Python parser used `required_providers` metadata to enrich provider rows, but it did not persist a standalone `terraform {}` entity.
+- The packaged Terraform provider schemas are still intentionally present
+  because the Go runtime uses them for schema-driven relationship extraction.
+  They are no longer part of any Python runtime path.
 
 ## Known Limitations
 - `count` and `for_each` meta-arguments are not expanded to model multiple resource instances
