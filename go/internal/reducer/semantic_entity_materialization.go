@@ -35,7 +35,7 @@ type SemanticEntityWriteResult struct {
 }
 
 // SemanticEntityWriter persists Annotation, Typedef, TypeAlias, Component,
-// and JavaScript callable Function semantic nodes into Neo4j.
+// ImplBlock, and JavaScript callable Function semantic nodes into Neo4j.
 type SemanticEntityWriter interface {
 	WriteSemanticEntities(context.Context, SemanticEntityWrite) (SemanticEntityWriteResult, error)
 }
@@ -190,7 +190,7 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 	if metadata == nil {
 		metadata = make(map[string]any)
 	}
-	for _, key := range []string{"kind", "target_kind", "type"} {
+	for _, key := range []string{"kind", "target_kind", "type", "trait", "target", "impl_context"} {
 		if value := semanticPayloadMetadataString(payload, key); value != "" {
 			metadata[key] = value
 		}
@@ -245,10 +245,10 @@ func semanticPayloadMetadataString(payload map[string]any, key string) string {
 
 func isSemanticEntityType(payload map[string]any, entityType string) bool {
 	switch entityType {
-	case "Annotation", "Typedef", "TypeAlias", "Component":
+	case "Annotation", "Typedef", "TypeAlias", "Component", "ImplBlock":
 		return true
 	case "Function":
-		return isJavaScriptCallableSemanticEntity(payload)
+		return isJavaScriptCallableSemanticEntity(payload) || isRustSemanticFunction(payload)
 	default:
 		return false
 	}
@@ -259,6 +259,15 @@ func isJavaScriptCallableSemanticEntity(payload map[string]any) bool {
 		return false
 	}
 	return semanticPayloadMetadataString(payload, "docstring") != "" || semanticPayloadMetadataString(payload, "method_kind") != ""
+}
+
+func isRustSemanticFunction(payload map[string]any) bool {
+	if semanticPayloadString(payload, "language") != "rust" {
+		return false
+	}
+	return semanticPayloadMetadataString(payload, "impl_context") != "" ||
+		semanticPayloadMetadataString(payload, "trait") != "" ||
+		semanticPayloadMetadataString(payload, "target") != ""
 }
 
 func semanticPayloadInt(payload map[string]any, key string) int {

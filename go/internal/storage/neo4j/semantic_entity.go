@@ -87,6 +87,26 @@ SET n.id = row.entity_id,
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
+	semanticImplBlockUpsertCypher = `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
+MERGE (n:ImplBlock {uid: row.entity_id})
+SET n.id = row.entity_id,
+    n.name = row.entity_name,
+    n.path = row.file_path,
+    n.relative_path = row.relative_path,
+    n.line_number = row.start_line,
+    n.start_line = row.start_line,
+    n.end_line = row.end_line,
+    n.repo_id = row.repo_id,
+    n.language = row.language,
+    n.lang = row.language,
+    n.kind = row.kind,
+    n.trait = row.trait,
+    n.target = row.target,
+    n.semantic_kind = row.entity_type,
+    n.evidence_source = row.evidence_source
+MERGE (f)-[:CONTAINS]->(n)`
+
 	semanticFunctionUpsertCypher = `UNWIND $rows AS row
 MATCH (f:File {path: row.file_path})
 MERGE (n:Function {uid: row.entity_id})
@@ -100,20 +120,26 @@ SET n.id = row.entity_id,
     n.repo_id = row.repo_id,
     n.language = row.language,
     n.lang = row.language,
+    n.impl_context = row.impl_context,
     n.docstring = row.docstring,
     n.method_kind = row.method_kind,
     n.semantic_kind = row.entity_type,
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
-	semanticEntityRetractCypher = `MATCH (n:Annotation|Typedef|TypeAlias|Component|Function)
+	semanticRustImplBlockOwnershipCypher = `UNWIND $rows AS row
+MATCH (impl:ImplBlock {uid: row.impl_block_id})
+MATCH (fn:Function {uid: row.function_id})
+MERGE (impl)-[:CONTAINS]->(fn)`
+
+	semanticEntityRetractCypher = `MATCH (n:Annotation|Typedef|TypeAlias|Component|ImplBlock|Function)
 WHERE n.repo_id IN $repo_ids
   AND n.evidence_source = $evidence_source
 DETACH DELETE n`
 )
 
-// SemanticEntityWriter writes Annotation, Typedef, TypeAlias, Component, and
-// JavaScript callable Function semantic nodes into Neo4j.
+// SemanticEntityWriter writes Annotation, Typedef, TypeAlias, Component,
+// ImplBlock, and JavaScript callable Function semantic nodes into Neo4j.
 type SemanticEntityWriter struct {
 	executor  Executor
 	BatchSize int
@@ -159,6 +185,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		"Typedef":    nil,
 		"TypeAlias":  nil,
 		"Component":  nil,
+		"ImplBlock":  nil,
 		"Function":   nil,
 	}
 	for _, row := range write.Rows {
@@ -178,12 +205,20 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		{label: "Typedef", cypher: semanticTypedefUpsertCypher},
 		{label: "TypeAlias", cypher: semanticTypeAliasUpsertCypher},
 		{label: "Component", cypher: semanticComponentUpsertCypher},
+		{label: "ImplBlock", cypher: semanticImplBlockUpsertCypher},
 		{label: "Function", cypher: semanticFunctionUpsertCypher},
 	} {
 		if err := w.executeSemanticEntityRows(ctx, plan.cypher, rowsByLabel[plan.label]); err != nil {
 			return reducer.SemanticEntityWriteResult{}, err
 		}
 		writes += len(rowsByLabel[plan.label])
+	}
+
+	ownershipRows := buildRustImplBlockOwnershipRows(write.Rows)
+	if len(ownershipRows) > 0 {
+		if err := w.executeSemanticEntityRows(ctx, semanticRustImplBlockOwnershipCypher, ownershipRows); err != nil {
+			return reducer.SemanticEntityWriteResult{}, err
+		}
 	}
 
 	return reducer.SemanticEntityWriteResult{CanonicalWrites: writes}, nil
@@ -214,7 +249,7 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 	if row.RepoID == "" || row.EntityID == "" || row.EntityName == "" || row.FilePath == "" {
 		return nil, false
 	}
-	if row.EntityType != "Annotation" && row.EntityType != "Typedef" && row.EntityType != "TypeAlias" && row.EntityType != "Component" && row.EntityType != "Function" {
+	if row.EntityType != "Annotation" && row.EntityType != "Typedef" && row.EntityType != "TypeAlias" && row.EntityType != "Component" && row.EntityType != "ImplBlock" && row.EntityType != "Function" {
 		return nil, false
 	}
 	if row.StartLine <= 0 {
@@ -258,6 +293,15 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		if componentAssertion := semanticMetadataString(row.Metadata, "component_type_assertion"); componentAssertion != "" {
 			rowMap["component_type_assertion"] = componentAssertion
 		}
+		if implContext := semanticMetadataString(row.Metadata, "impl_context"); implContext != "" {
+			rowMap["impl_context"] = implContext
+		}
+		if trait := semanticMetadataString(row.Metadata, "trait"); trait != "" {
+			rowMap["trait"] = trait
+		}
+		if target := semanticMetadataString(row.Metadata, "target"); target != "" {
+			rowMap["target"] = target
+		}
 		if docstring := semanticMetadataString(row.Metadata, "docstring"); docstring != "" {
 			rowMap["docstring"] = docstring
 		}
@@ -266,6 +310,47 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 	}
 	return rowMap, true
+}
+
+func buildRustImplBlockOwnershipRows(rows []reducer.SemanticEntityRow) []map[string]any {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	functionIDsByFileAndContext := make(map[string][]string)
+	for _, row := range rows {
+		if row.EntityType != "Function" {
+			continue
+		}
+		implContext := semanticMetadataString(row.Metadata, "impl_context")
+		if implContext == "" || row.FilePath == "" || row.EntityID == "" {
+			continue
+		}
+		key := row.FilePath + "|" + implContext
+		functionIDsByFileAndContext[key] = append(functionIDsByFileAndContext[key], row.EntityID)
+	}
+
+	seen := make(map[string]struct{})
+	ownershipRows := make([]map[string]any, 0)
+	for _, row := range rows {
+		if row.EntityType != "ImplBlock" || row.FilePath == "" || row.EntityID == "" || row.EntityName == "" {
+			continue
+		}
+		functionIDs := functionIDsByFileAndContext[row.FilePath+"|"+row.EntityName]
+		for _, functionID := range functionIDs {
+			dedupKey := row.EntityID + "->" + functionID
+			if _, ok := seen[dedupKey]; ok {
+				continue
+			}
+			seen[dedupKey] = struct{}{}
+			ownershipRows = append(ownershipRows, map[string]any{
+				"impl_block_id": row.EntityID,
+				"function_id":   functionID,
+			})
+		}
+	}
+
+	return ownershipRows
 }
 
 func semanticMetadataString(metadata map[string]any, key string) string {

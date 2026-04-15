@@ -14,6 +14,7 @@ var semanticEntityReducerTypes = map[string]struct{}{
 	"Typedef":    {},
 	"TypeAlias":  {},
 	"Component":  {},
+	"ImplBlock":  {},
 }
 
 func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool) {
