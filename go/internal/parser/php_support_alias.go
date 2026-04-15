@@ -29,6 +29,7 @@ func inferPHPVariableType(
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
+	functionReturnTypes map[string]string,
 ) string {
 	if matches := phpTypedVariablePattern.FindStringSubmatch(rawLine); len(matches) == 2 && strings.Contains(rawLine, variable) {
 		return normalizePHPTypeName(matches[1])
@@ -37,7 +38,10 @@ func inferPHPVariableType(
 		return normalizePHPTypeName(matches[1])
 	}
 	if matches := phpAssignmentPattern.FindStringSubmatch(rawLine); len(matches) == 3 && matches[1] == variable {
-		if inferred := inferPHPReferenceType(matches[2], classContext, classPropertyTypes, localVariableTypes, methodReturnTypes); inferred != "" {
+		if inferred := inferPHPReferenceType(matches[2], classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes); inferred != "" {
+			return inferred
+		}
+		if inferred := inferPHPFunctionCallType(matches[2], functionReturnTypes); inferred != "" {
 			return inferred
 		}
 	}
@@ -50,6 +54,7 @@ func inferPHPMethodReceiverType(
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
+	functionReturnTypes map[string]string,
 ) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -58,7 +63,7 @@ func inferPHPMethodReceiverType(
 	if index := strings.LastIndex(trimmed, "->"); index >= 0 {
 		trimmed = trimmed[:index]
 	}
-	return inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes)
+	return inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes)
 }
 
 func inferPHPReferenceType(
@@ -67,6 +72,7 @@ func inferPHPReferenceType(
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
+	functionReturnTypes map[string]string,
 ) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -77,7 +83,11 @@ func inferPHPReferenceType(
 		return normalizePHPTypeName(matches[1])
 	}
 
-	if inferred := inferPHPMethodCallType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes); inferred != "" {
+	if inferred := inferPHPFunctionCallType(trimmed, functionReturnTypes); inferred != "" {
+		return inferred
+	}
+
+	if inferred := inferPHPMethodCallType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes); inferred != "" {
 		return inferred
 	}
 
@@ -92,7 +102,7 @@ func inferPHPReferenceType(
 		if classContext == "" {
 			return ""
 		}
-		return resolvePHPReferenceChainType(classContext, segments[1:], classPropertyTypes, methodReturnTypes)
+		return resolvePHPReferenceChainType(classContext, segments[1:], classPropertyTypes, methodReturnTypes, functionReturnTypes)
 	case strings.HasPrefix(root, "$"):
 		if matches := phpReferenceVariablePattern.FindStringSubmatch(root); len(matches) == 2 {
 			if localVariableTypes == nil {
@@ -102,7 +112,7 @@ func inferPHPReferenceType(
 			if rootType == "" {
 				return ""
 			}
-			return resolvePHPReferenceChainType(rootType, segments[1:], classPropertyTypes, methodReturnTypes)
+			return resolvePHPReferenceChainType(rootType, segments[1:], classPropertyTypes, methodReturnTypes, functionReturnTypes)
 		}
 	}
 
@@ -115,6 +125,7 @@ func inferPHPMethodCallType(
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
+	functionReturnTypes map[string]string,
 ) string {
 	if len(methodReturnTypes) == 0 {
 		return ""
@@ -150,7 +161,7 @@ func inferPHPMethodCallType(
 		return ""
 	}
 
-	receiverType := resolvePHPReferenceRootType(receiverExpr, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes)
+	receiverType := resolvePHPReferenceRootType(receiverExpr, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes)
 	if receiverType == "" {
 		return ""
 	}
@@ -164,6 +175,7 @@ func resolvePHPReferenceRootType(
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
+	functionReturnTypes map[string]string,
 ) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -174,7 +186,7 @@ func resolvePHPReferenceRootType(
 		return classContext
 	}
 
-	if inferred := inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes); inferred != "" {
+	if inferred := inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes); inferred != "" {
 		return inferred
 	}
 
@@ -183,6 +195,57 @@ func resolvePHPReferenceRootType(
 	}
 
 	return normalizePHPTypeName(trimmed)
+}
+
+func inferPHPFunctionCallType(
+	raw string,
+	functionReturnTypes map[string]string,
+) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || !strings.HasSuffix(trimmed, ")") {
+		return ""
+	}
+
+	openIndex := strings.LastIndex(trimmed, "(")
+	if openIndex < 0 {
+		return ""
+	}
+
+	callName := strings.TrimSpace(trimmed[:openIndex])
+	if callName == "" || strings.Contains(callName, "->") || strings.Contains(callName, "::") {
+		return ""
+	}
+
+	return lookupPHPFunctionReturnType(callName, functionReturnTypes)
+}
+
+func lookupPHPFunctionReturnType(
+	functionName string,
+	functionReturnTypes map[string]string,
+) string {
+	if functionName == "" {
+		return ""
+	}
+
+	normalizedFunctionName := normalizePHPTypeName(functionName)
+	if normalizedFunctionName == "" {
+		return ""
+	}
+
+	for _, candidateFunctionName := range []string{functionName, normalizedFunctionName} {
+		if returns := normalizePHPTypeName(functionReturnTypes[strings.TrimSpace(candidateFunctionName)]); returns != "" {
+			switch returns {
+			case "self", "static":
+				return normalizedFunctionName
+			case "parent":
+				return ""
+			default:
+				return returns
+			}
+		}
+	}
+
+	return ""
 }
 
 func lookupPHPMethodReturnType(
@@ -255,6 +318,7 @@ func resolvePHPReferenceChainType(
 	segments []string,
 	classPropertyTypes map[string]map[string]string,
 	methodReturnTypes map[string]map[string]string,
+	functionReturnTypes map[string]string,
 ) string {
 	currentType := strings.TrimSpace(rootType)
 	if currentType == "" {

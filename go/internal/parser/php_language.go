@@ -66,6 +66,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 	classPropertyTypes := make(map[string]map[string]string)
 	localVariableTypes := make(map[string]map[string]string)
 	methodReturnTypes := make(map[string]map[string]string)
+	functionReturnTypes := make(map[string]string)
 
 	for index, rawLine := range lines {
 		lineNumber := index + 1
@@ -151,6 +152,8 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 					}
 					methodReturnTypes[classContext][name] = returnType
 				}
+			} else if returnType != "" {
+				functionReturnTypes[name] = returnType
 			}
 			if returnType != "" {
 				item["return_type"] = returnType
@@ -186,6 +189,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				classPropertyTypes,
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
+				functionReturnTypes,
 			)
 			if contextKind == "class_declaration" {
 				if _, ok := classPropertyTypes[contextName]; !ok {
@@ -233,6 +237,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				classPropertyTypes,
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
+				functionReturnTypes,
 			)
 			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, normalizedRawLine, match[0]), contextName, contextKind, contextLine, inferredObjType)
 		}

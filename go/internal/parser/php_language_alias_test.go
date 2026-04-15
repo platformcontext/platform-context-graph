@@ -183,6 +183,52 @@ class Config {
 	phpAssertStringFieldValue(t, infoCall, "inferred_obj_type", "Service")
 }
 
+func TestDefaultEngineParsePathPHPInfersFreeFunctionReturnTypeAliasedReceiverCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "function_return_alias.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+class Service {
+    public function info(string $message): void {}
+}
+
+function createService(): Service {
+    return new Service();
+}
+
+class Config {
+    public function run(string $message): void {
+        $service = createService();
+        $service->info($message);
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	createService := assertBucketItemByName(t, got, "functions", "createService")
+	phpAssertStringFieldValue(t, createService, "return_type", "Service")
+
+	serviceItem := assertBucketItemByFieldValue(t, got, "variables", "name", "$service")
+	phpAssertStringFieldValue(t, serviceItem, "type", "Service")
+
+	infoCall := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "$service.info")
+	phpAssertStringFieldValue(t, infoCall, "inferred_obj_type", "Service")
+}
+
 func TestDefaultEngineParsePathPHPInfersMethodReturnPropertyChainReceiverCalls(t *testing.T) {
 	t.Parallel()
 
