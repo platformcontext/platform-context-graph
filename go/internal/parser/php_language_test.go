@@ -103,6 +103,46 @@ trait Loggable {
 	}
 }
 
+func TestDefaultEngineParsePathPHPEmitsGroupedUseImportMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "grouped_use.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+namespace Demo;
+
+use Demo\Library\{Config as AppConfig, Service, Logger\Stream as StreamLogger};
+
+class Child {
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	configImport := assertBucketItemByName(t, got, "imports", "Demo\\Library\\Config")
+	phpAssertStringFieldValue(t, configImport, "alias", "AppConfig")
+
+	serviceImport := assertBucketItemByName(t, got, "imports", "Demo\\Library\\Service")
+	if alias, ok := serviceImport["alias"]; ok && alias != nil && alias != "" {
+		t.Fatalf("alias = %#v, want nil or empty", alias)
+	}
+
+	streamImport := assertBucketItemByName(t, got, "imports", "Demo\\Library\\Logger\\Stream")
+	phpAssertStringFieldValue(t, streamImport, "alias", "StreamLogger")
+}
+
 func TestDefaultEngineParsePathPHPEmitsVariableAndCallMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -208,6 +248,44 @@ class Config {
 	namespacedCall := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "Demo\\Logger.warn")
 	phpAssertStringFieldValue(t, namespacedCall, "name", "warn")
 	phpAssertStringFieldValue(t, namespacedCall, "inferred_obj_type", "Demo\\Logger")
+}
+
+func TestDefaultEngineParsePathPHPInfersTypedThisPropertyReceiverCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "typed_property_calls.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+class Service {
+    public function info(string $message): void {}
+}
+
+class Config {
+    private Service $service;
+
+    public function run(string $message): void {
+        $this->service->info($message);
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	infoCall := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "$this->service.info")
+	phpAssertStringFieldValue(t, infoCall, "name", "info")
+	phpAssertStringFieldValue(t, infoCall, "inferred_obj_type", "Service")
 }
 
 func TestDefaultEngineParsePathPHPEmitsPropertyTypeInferenceFromDeclaration(t *testing.T) {
