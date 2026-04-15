@@ -14,7 +14,7 @@ var (
 	phpFunctionReturnPattern = regexp.MustCompile(`\)\s*:\s*([^{;]+)`)
 	phpVariablePattern       = regexp.MustCompile(`\$[A-Za-z_]\w*`)
 	phpTypedVariablePattern  = regexp.MustCompile(`(?:(?:public|protected|private|readonly|static)\s+)*([?A-Za-z_\\][\w\\|?]*)\s+\$[A-Za-z_]\w*`)
-	phpMethodCallPattern     = regexp.MustCompile(`(\$[A-Za-z_]\w*(?:->\w+)+)\s*\(`)
+	phpMethodCallPattern     = regexp.MustCompile(`((?:\$[A-Za-z_]\w*(?:->\w+)*|(?:[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::[A-Za-z_]\w*\(\)|new\s+[A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*\(\))(?:->\w+\([^()]*\))*->\w+)\s*\(`)
 	phpStaticCallPattern     = regexp.MustCompile(`\b([A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::([A-Za-z_]\w*)\s*\(`)
 	phpNewCallPattern        = regexp.MustCompile(`\bnew\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
 	phpFunctionCallPattern   = regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
@@ -230,6 +230,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				currentClassContext,
 				classPropertyTypes,
 				localVariableTypes[functionScopeKey],
+				methodReturnTypes,
 			)
 			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, inferredObjType)
 		}

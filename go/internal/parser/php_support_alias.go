@@ -49,6 +49,7 @@ func inferPHPMethodReceiverType(
 	classContext string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
+	methodReturnTypes map[string]map[string]string,
 ) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -57,7 +58,7 @@ func inferPHPMethodReceiverType(
 	if index := strings.LastIndex(trimmed, "->"); index >= 0 {
 		trimmed = trimmed[:index]
 	}
-	return inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, nil)
+	return inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes)
 }
 
 func inferPHPReferenceType(
