@@ -1,0 +1,65 @@
+go/internal/query/openapi_paths_status.go
+  1ca5ee6ce936a402 109-137
+go/internal/query/status.go
+  1ca5ee6ce936a402 25,270-273
+go/internal/mcp/dispatch.go
+  1ca5ee6ce936a402 171,266
+go/internal/mcp/tools_runtime.go
+  1ca5ee6ce936a402 33-35
+go/cmd/pcg/basic.go
+  1ca5ee6ce936a402 26-28,189
+docs/docs/reference/logging.md
+  1ca5ee6ce936a402 125
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 34
+docs/docs/reference/telemetry/index.md
+  1ca5ee6ce936a402 31-32
+docs/docs/reference/telemetry/traces.md
+  1ca5ee6ce936a402 27-28
+docs/docs/reference/ingestion-observability.md
+  1ca5ee6ce936a402 69-71,81-82,198-199
+go/internal/mcp/tools_ecosystem.go
+  1ca5ee6ce936a402 145
+docs/docs/reference/telemetry/logs.md
+  1ca5ee6ce936a402 137-139
+docs/docs/reference/cloud-validation.md
+  1ca5ee6ce936a402 23-27,35-36,70
+docs/docs/reference/troubleshooting.md
+  1ca5ee6ce936a402 35-36
+docs/docs/reference/http-api.md
+  1ca5ee6ce936a402 34,36,38-45
+go/internal/mcp/tools_test.go
+  1ca5ee6ce936a402 10,59-60,84-90
+docs/docs/reference/cli-reference.md
+  1ca5ee6ce936a402 57,262,265,268-269
+go/internal/query/status_handler_test.go
+  1ca5ee6ce936a402 1-55
+go/internal/query/status_openapi_test.go
+  1ca5ee6ce936a402 1-26
+go/internal/mcp/server_test.go
+  1ca5ee6ce936a402 78-79
+docs/docs/deployment/docker-compose.md
+  1ca5ee6ce936a402 120-123
+docs/docs/deployment/service-runtimes.md
+  1ca5ee6ce936a402 58-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "f2d6426c70e990bb4fc2eea67ec180c1d32d1aaa",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 191,
+      "total_deletions": 2083,
+      "accepted_lines": 190,
+      "overriden_lines": 0
+    }
+  }
+}
