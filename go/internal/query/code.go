@@ -7,10 +7,16 @@ import (
 	"strings"
 )
 
+// GraphReader is the read-only graph surface shared by query handlers.
+type GraphReader interface {
+	Run(context.Context, string, map[string]any) ([]map[string]any, error)
+	RunSingle(context.Context, string, map[string]any) (map[string]any, error)
+}
+
 // CodeHandler provides HTTP routes for code-level queries: search, relationships,
 // dead code detection, and complexity metrics.
 type CodeHandler struct {
-	Neo4j   *Neo4jReader
+	Neo4j   GraphReader
 	Content *ContentReader
 }
 

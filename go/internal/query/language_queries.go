@@ -11,7 +11,7 @@ import (
 // graph and content store. Graph-backed entity types use Neo4j. Content-only
 // entity types use the Postgres content store.
 type LanguageQueryHandler struct {
-	Neo4j   *Neo4jReader
+	Neo4j   GraphReader
 	Content *ContentReader
 }
 

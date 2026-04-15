@@ -87,12 +87,34 @@ func (h *CodeHandler) relationshipsGraphRow(
 	entityID string,
 	name string,
 ) (map[string]any, error) {
-	if h == nil || h.Neo4j == nil || strings.TrimSpace(entityID) == "" {
+	if h == nil || h.Neo4j == nil {
 		return nil, nil
 	}
 
-	cypher := `
-		MATCH (e) WHERE e.id = $entity_id
+	if strings.TrimSpace(entityID) != "" {
+		return h.Neo4j.RunSingle(ctx, relationshipGraphRowCypher("e.id = $entity_id"), map[string]any{
+			"entity_id": entityID,
+		})
+	}
+	if strings.TrimSpace(name) == "" {
+		return nil, nil
+	}
+
+	rows, err := h.Neo4j.Run(ctx, relationshipGraphRowCypher("e.name = $name"), map[string]any{
+		"name": name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) != 1 {
+		return nil, nil
+	}
+	return rows[0], nil
+}
+
+func relationshipGraphRowCypher(predicate string) string {
+	return `
+		MATCH (e) WHERE ` + predicate + `
 		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
 		OPTIONAL MATCH (e)-[r]->(target)
 		OPTIONAL MATCH (source)-[r2]->(e)
@@ -104,9 +126,8 @@ func (h *CodeHandler) relationshipsGraphRow(
 		       e.end_line as end_line,
 		       collect(DISTINCT {direction: 'outgoing', type: type(r), target_name: target.name, target_id: target.id}) as outgoing,
 		       collect(DISTINCT {direction: 'incoming', type: type(r2), source_name: source.name, source_id: source.id}) as incoming
+		LIMIT 2
 	`
-
-	return h.Neo4j.RunSingle(ctx, cypher, map[string]any{"entity_id": entityID})
 }
 
 func (h *CodeHandler) relationshipsFromContent(
