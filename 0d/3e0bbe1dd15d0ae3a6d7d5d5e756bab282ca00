@@ -1,0 +1,35 @@
+go/internal/collector/git_snapshot_native_test.go
+  1ca5ee6ce936a402 521-580
+go/internal/telemetry/contract_test.go
+  1ca5ee6ce936a402 20
+go/internal/collector/discovery/discovery.go
+  1ca5ee6ce936a402 23-25,36-71,87-97,100,103,106,108,111,126,128,135,166,168,171-174,191-196,203-207,220,224,366-390
+go/internal/collector/discovery/discovery_test.go
+  1ca5ee6ce936a402 180-267
+go/internal/collector/git_snapshot_native.go
+  1ca5ee6ce936a402 15,119,126-127,208-315,318,325-327,331-383,398-399,408,412,415
+go/internal/telemetry/instruments.go
+  1ca5ee6ce936a402 67-70,320-335,493-497
+go/internal/telemetry/contract.go
+  1ca5ee6ce936a402 37,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "0d3e0bbe1dd15d0ae3a6d7d5d5e756bab282ca00",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 455,
+      "overriden_lines": 0
+    }
+  }
+}
