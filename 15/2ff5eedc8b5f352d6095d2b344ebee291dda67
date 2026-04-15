@@ -1,0 +1,23 @@
+go/internal/collector/git_source.go
+  1ca5ee6ce936a402 338-343,349-381,392,394,396,399-402,404-422,424,426-428,432,438-457,459-464,466,469-471,473,476-477,611-614,618,629-633
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "152ff5eedc8b5f352d6095d2b344ebee291dda67",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1595,
+      "total_deletions": 57,
+      "accepted_lines": 114,
+      "overriden_lines": 0
+    }
+  }
+}
