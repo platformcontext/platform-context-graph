@@ -45,14 +45,18 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   `upper(coalesce(source.segment, 'unknown'))`, are also tracked in the Go dbt
   path.
 - The checked-in dbt parity matrix now explicitly proves cast, `date_trunc`,
-  `concat`, multi-source `case`, multi-source arithmetic, top-level Jinja
-  wrappers around supported lineage-safe expressions, and the key
+  `concat`, `concat_ws`, `md5`, multi-source `case`, multi-source arithmetic,
+  safe scalar wrappers over lineage-preserving qualified macros, top-level
+  Jinja wrappers around supported lineage-safe expressions, and the key
   unresolved-summary paths in
   `go/internal/parser/dbt_sql_lineage_parity_test.go`.
 - The Go query/content path now also has checked-in proof that dbt-derived
   `AnalyticsModel` and `DataAsset` content entities survive materialization and
   show semantic summaries through the normal entity resolve/context fallback
   surfaces.
+- The fixture-backed dbt manifest proof now also covers wildcard expansion plus
+  `coalesce(...)` lineage preservation for `orders_expanded.customer_segment` in
+  `go/internal/parser/json_dbt_test.go`.
 - The checked-in SQL procedural proof now covers `CREATE OR REPLACE FUNCTION`
   bodies plus legacy `EXECUTE PROCEDURE` trigger wiring in
   `go/internal/parser/sql_parity_test.go`.

@@ -66,6 +66,57 @@ from raw.public.customers c`,
 			},
 		},
 		{
+			name: "upper over lineage-preserving macro",
+			sql: `select
+  upper(dbt_utils.identity(o.amount)) as normalized_amount
+from raw.public.orders o`,
+			relations: map[string][]string{
+				"raw.public.orders": {"amount"},
+			},
+			want: []ColumnLineage{
+				{
+					OutputColumn:        "normalized_amount",
+					SourceColumns:       []string{"raw.public.orders.amount"},
+					TransformKind:       "upper",
+					TransformExpression: "upper(dbt_utils.identity(o.amount))",
+				},
+			},
+		},
+		{
+			name: "md5",
+			sql: `select
+  md5(o.id) as hashed_order_id
+from raw.public.orders o`,
+			relations: map[string][]string{
+				"raw.public.orders": {"id"},
+			},
+			want: []ColumnLineage{
+				{
+					OutputColumn:        "hashed_order_id",
+					SourceColumns:       []string{"raw.public.orders.id"},
+					TransformKind:       "md5",
+					TransformExpression: "md5(o.id)",
+				},
+			},
+		},
+		{
+			name: "concat_ws",
+			sql: `select
+  concat_ws('-', c.first_name, c.last_name) as full_name
+from raw.public.customers c`,
+			relations: map[string][]string{
+				"raw.public.customers": {"first_name", "last_name"},
+			},
+			want: []ColumnLineage{
+				{
+					OutputColumn:        "full_name",
+					SourceColumns:       []string{"raw.public.customers.first_name", "raw.public.customers.last_name"},
+					TransformKind:       "concat_ws",
+					TransformExpression: "concat_ws('-', c.first_name, c.last_name)",
+				},
+			},
+		},
+		{
 			name: "macro-heavy wrapper",
 			sql: `select
   dbt_utils.generate_surrogate_key(md5(o.id)) as surrogate_key

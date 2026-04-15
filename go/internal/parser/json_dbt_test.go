@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -72,6 +73,38 @@ func TestApplyDBTManifestDocumentIncludesMacroDependenciesAndLineage(t *testing.
 	dbtAssertCoverageState(t, payload, "complete")
 }
 
+func TestDefaultEngineParsePathJSONDBTManifestWildcardExpansionAndCoalesce(t *testing.T) {
+	t.Parallel()
+
+	filePath := repoFixturePath("ecosystems", "analytics_compiled_comprehensive", "dbt_manifest.json")
+	repoRoot := filepath.Dir(filePath)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	dbtAssertRelationshipPresent(t, got, "COLUMN_DERIVES_FROM", "analytics.public.orders_expanded.id", "raw.public.orders.id")
+	dbtAssertRelationshipPresent(t, got, "COLUMN_DERIVES_FROM", "analytics.public.orders_expanded.customer_id", "raw.public.orders.customer_id")
+	dbtAssertRelationshipPresent(t, got, "COLUMN_DERIVES_FROM", "analytics.public.orders_expanded.created_at", "raw.public.orders.created_at")
+	dbtAssertRelationshipPresent(t, got, "COLUMN_DERIVES_FROM", "analytics.public.orders_expanded.customer_segment", "raw.public.customers.segment")
+
+	relationships := dbtRelationshipsBySourceAndTarget(t, got)
+	relationship := relationships["analytics.public.orders_expanded.customer_segment->raw.public.customers.segment"]
+	if gotValue, want := relationship["transform_kind"], "coalesce"; gotValue != want {
+		t.Fatalf("customer_segment transform_kind = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := relationship["transform_expression"], "coalesce(c.segment, 'unknown')"; gotValue != want {
+		t.Fatalf("customer_segment transform_expression = %#v, want %#v", gotValue, want)
+	}
+	dbtAssertCoverageState(t, got, "complete")
+}
+
 func dbtBucketNames(t *testing.T, payload map[string]any, key string) []string {
 	t.Helper()
 
@@ -131,4 +164,28 @@ func dbtAssertCoverageState(t *testing.T, payload map[string]any, want string) {
 	if got := coverage["state"]; got != want {
 		t.Fatalf("data_intelligence_coverage.state = %#v, want %#v", got, want)
 	}
+}
+
+func dbtRelationshipsBySourceAndTarget(t *testing.T, payload map[string]any) map[string]map[string]any {
+	t.Helper()
+
+	items, ok := payload["data_relationships"].([]map[string]any)
+	if !ok {
+		rawItems, ok := payload["data_relationships"].([]any)
+		if !ok {
+			t.Fatalf("data_relationships = %T, want []map[string]any or []any", payload["data_relationships"])
+		}
+		items = make([]map[string]any, 0, len(rawItems))
+		for _, rawItem := range rawItems {
+			items = append(items, rawItem.(map[string]any))
+		}
+	}
+
+	results := make(map[string]map[string]any, len(items))
+	for _, item := range items {
+		sourceName, _ := item["source_name"].(string)
+		targetName, _ := item["target_name"].(string)
+		results[sourceName+"->"+targetName] = item
+	}
+	return results
 }

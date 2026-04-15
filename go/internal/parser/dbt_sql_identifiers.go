@@ -35,7 +35,7 @@ func unqualifiedIdentifiers(expression string, matchedIdentifiers map[string]str
 		if _, ok := seen[identifier]; ok {
 			continue
 		}
-		if next := nextNonSpaceCharacter(sanitized, match[1]); next == "(" {
+		if next := nextNonSpaceCharacter(sanitized, match[1]); next == "(" || next == "." {
 			continue
 		}
 		seen[identifier] = struct{}{}

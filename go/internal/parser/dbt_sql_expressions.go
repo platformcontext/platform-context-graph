@@ -24,7 +24,7 @@ var (
 
 var (
 	dbtAggregateFunctions          = map[string]struct{}{"avg": {}, "count": {}, "max": {}, "min": {}, "sum": {}}
-	dbtSimpleScalarFunctions       = map[string]struct{}{"upper": {}, "lower": {}, "trim": {}, "ltrim": {}, "rtrim": {}}
+	dbtSimpleScalarFunctions       = map[string]struct{}{"md5": {}, "upper": {}, "lower": {}, "trim": {}, "ltrim": {}, "rtrim": {}}
 	dbtLiteralParameterScalarFuncs = map[string]struct{}{"date_trunc": {}}
 	dbtMultiInputRowLevelFunctions = map[string]struct{}{"concat": {}}
 )
@@ -157,7 +157,7 @@ func isSupportedQualifiedMacroExpression(expression string) bool {
 	if matches == nil {
 		return false
 	}
-	return supportsRowLevelArguments(splitTopLevelArguments(matches[2]))
+	return supportsRowLevelArguments(splitTopLevelArguments(matches[2])) && len(simpleReferenceTokens(matches[2])) > 0
 }
 
 func expressionTransformMetadata(expression string) map[string]string {
@@ -220,7 +220,10 @@ func isSupportedRowLevelExpression(expression string) bool {
 	if normalized == "" {
 		return false
 	}
-	return isSimpleReferenceExpression(normalized) || isLiteralExpression(normalized) || isSupportedScalarWrapper(normalized)
+	return isSimpleReferenceExpression(normalized) ||
+		isLiteralExpression(normalized) ||
+		isSupportedScalarWrapper(normalized) ||
+		isSupportedQualifiedMacroExpression(normalized)
 }
 
 func isSupportedCaseExpression(expression string) bool {
@@ -337,6 +340,9 @@ func supportedFunctionMetadata(expression string) map[string]string {
 	if _, ok := dbtMultiInputRowLevelFunctions[functionName]; ok && len(arguments) >= 2 && supportsRowLevelArguments(arguments) {
 		return map[string]string{"transform_kind": functionName, "transform_expression": expression}
 	}
+	if functionName == "concat_ws" && len(arguments) >= 3 && isLiteralExpression(arguments[0]) && supportsRowLevelArguments(arguments[1:]) {
+		return map[string]string{"transform_kind": functionName, "transform_expression": expression}
+	}
 	return nil
 }
 
@@ -356,10 +362,10 @@ func simpleReferenceTokens(expression string) []string {
 	matchedIdentifiers := make(map[string]struct{})
 	tokens := make([]string, 0)
 	seen := make(map[string]struct{})
-	for _, match := range dbtQualifiedReferenceScanRe.FindAllStringSubmatch(expression, -1) {
-		token := match[0]
-		matchedIdentifiers[match[1]] = struct{}{}
-		matchedIdentifiers[match[2]] = struct{}{}
+	for _, match := range qualifiedReferenceMatches(expression) {
+		token := match.Alias + "." + match.Column
+		matchedIdentifiers[match.Alias] = struct{}{}
+		matchedIdentifiers[match.Column] = struct{}{}
 		if _, ok := seen[token]; ok {
 			continue
 		}
@@ -460,6 +466,29 @@ func splitTopLevelArguments(arguments string) []string {
 		items = append(items, tail)
 	}
 	return items
+}
+
+type qualifiedReferenceMatch struct {
+	Alias  string
+	Column string
+}
+
+func qualifiedReferenceMatches(expression string) []qualifiedReferenceMatch {
+	indexes := dbtQualifiedReferenceScanRe.FindAllStringSubmatchIndex(expression, -1)
+	matches := make([]qualifiedReferenceMatch, 0, len(indexes))
+	for _, indexSet := range indexes {
+		if len(indexSet) < 6 {
+			continue
+		}
+		if next := nextNonSpaceCharacter(expression, indexSet[1]); next == "(" {
+			continue
+		}
+		matches = append(matches, qualifiedReferenceMatch{
+			Alias:  expression[indexSet[2]:indexSet[3]],
+			Column: expression[indexSet[4]:indexSet[5]],
+		})
+	}
+	return matches
 }
 
 func splitCastArguments(arguments string) (string, string, bool) {

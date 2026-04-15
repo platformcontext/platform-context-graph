@@ -245,9 +245,9 @@ func lineageForProjection(selectItem string, bindings map[string]*relationBindin
 	matchedIdentifiers := expressionIgnoredIdentifiers(expression)
 	referenceExpression := referenceScanExpression(expression)
 
-	for _, match := range dbtQualifiedReferenceScanRe.FindAllStringSubmatch(referenceExpression, -1) {
-		alias := match[1]
-		column := match[2]
+	for _, match := range qualifiedReferenceMatches(referenceExpression) {
+		alias := match.Alias
+		column := match.Column
 		matchedIdentifiers[alias] = struct{}{}
 		matchedIdentifiers[column] = struct{}{}
 		columns, expanded, unresolvedRef := resolveQualifiedReference(bindings[alias], alias, column, modelName)
@@ -432,9 +432,9 @@ func transformMetadataForProjection(expression string, bindings map[string]*rela
 func propagatedTransformMetadata(expression string, bindings map[string]*relationBinding) map[string]string {
 	normalized := strings.TrimSpace(expression)
 	if dbtQualifiedReferenceRe.MatchString(normalized) {
-		match := dbtQualifiedReferenceScanRe.FindStringSubmatch(normalized)
-		if len(match) == 3 && match[2] != "*" {
-			return bindingTransformMetadata(bindings[match[1]], match[2])
+		matches := qualifiedReferenceMatches(normalized)
+		if len(matches) == 1 && matches[0].Column != "*" {
+			return bindingTransformMetadata(bindings[matches[0].Alias], matches[0].Column)
 		}
 	}
 	if !dbtBareIdentifierRe.MatchString(normalized) {
