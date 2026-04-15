@@ -72,6 +72,9 @@ type Instruments struct {
 	LargeRepoClassifications metric.Int64Counter
 	LargeRepoSemaphoreWait   metric.Float64Histogram
 
+	// Reducer batch claim metric
+	BatchClaimSize metric.Int64Histogram
+
 	// Neo4j batch write metrics
 	Neo4jBatchSize       metric.Float64Histogram
 	Neo4jBatchesExecuted metric.Int64Counter
@@ -361,6 +364,16 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register LargeRepoSemaphoreWait histogram: %w", err)
+	}
+
+	batchClaimBuckets := []float64{1, 4, 8, 16, 32, 64, 128}
+	inst.BatchClaimSize, err = meter.Int64Histogram(
+		"pcg_dp_reducer_batch_claim_size",
+		metric.WithDescription("Number of work items claimed per batch claim call"),
+		metric.WithExplicitBucketBoundaries(batchClaimBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register BatchClaimSize histogram: %w", err)
 	}
 
 	neo4jBatchBuckets := []float64{1, 10, 50, 100, 250, 500, 1000}

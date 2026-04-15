@@ -42,6 +42,7 @@ func TestSpanNames(t *testing.T) {
 		"projector.run",
 		"reducer_intent.enqueue",
 		"reducer.run",
+		"reducer.batch_claim",
 		"canonical.write",
 		"postgres.exec",
 		"postgres.query",

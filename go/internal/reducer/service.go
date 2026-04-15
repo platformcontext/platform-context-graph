@@ -33,6 +33,17 @@ type WorkSink interface {
 	Fail(context.Context, Intent, error) error
 }
 
+// BatchWorkSource claims up to N reducer intents in a single Postgres
+// round-trip. Implementations MUST use FOR UPDATE SKIP LOCKED semantics.
+type BatchWorkSource interface {
+	ClaimBatch(ctx context.Context, limit int) ([]Intent, error)
+}
+
+// BatchWorkSink acknowledges multiple intents in one round-trip.
+type BatchWorkSink interface {
+	AckBatch(ctx context.Context, intents []Intent, results []Result) error
+}
+
 // Service coordinates reducer polling and one-intent-at-a-time execution.
 type Service struct {
 	PollInterval time.Duration
@@ -53,7 +64,8 @@ type Service struct {
 	Tracer      trace.Tracer
 	Instruments *telemetry.Instruments
 	Logger      *slog.Logger
-	Workers     int // concurrent worker count; 0 or 1 means sequential
+	Workers        int // concurrent worker count; 0 or 1 means sequential
+	BatchClaimSize int // items per ClaimBatch call; 0 uses default (Workers * 4, max 64)
 }
 
 // Run polls for reducer work until the context is canceled. If a
@@ -133,10 +145,19 @@ func (s Service) runSequential(ctx context.Context) error {
 }
 
 // runConcurrent spawns N worker goroutines that compete for reducer intents.
-// Each worker independently claims, executes, and acknowledges work. On first
-// fatal error (Claim or Ack failure), the shared context is canceled to drain
-// siblings promptly.
+// If the WorkSource implements BatchWorkSource (and WorkSink implements
+// BatchWorkSink), it uses batch claiming to reduce Postgres round-trips.
+// Otherwise each worker independently claims, executes, and acknowledges work.
 func (s Service) runConcurrent(ctx context.Context) error {
+	batchSource, canBatch := s.WorkSource.(BatchWorkSource)
+	batchSink, canBatchAck := s.WorkSink.(BatchWorkSink)
+	if canBatch && canBatchAck {
+		return s.runBatchConcurrent(ctx, batchSource, batchSink)
+	}
+	return s.runPerItemConcurrent(ctx)
+}
+
+func (s Service) runPerItemConcurrent(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -211,6 +232,20 @@ func (s Service) validate() error {
 	}
 
 	return nil
+}
+
+func (s Service) batchClaimSize() int {
+	if s.BatchClaimSize > 0 {
+		return s.BatchClaimSize
+	}
+	n := s.Workers * 4
+	if n > 64 {
+		n = 64
+	}
+	if n < 4 {
+		n = 4
+	}
+	return n
 }
 
 func (s Service) pollInterval() time.Duration {

@@ -19,10 +19,11 @@ import (
 
 const (
 	defaultPartitionCount     = 8
-	defaultSharedPollInterval = 5 * time.Second
+	defaultSharedPollInterval = 500 * time.Millisecond
 	defaultLeaseTTL           = 60 * time.Second
 	defaultBatchLimit         = 100
 	defaultEvidenceSource     = "finalization/workloads"
+	maxSharedPollInterval     = 5 * time.Second
 )
 
 // sharedProjectionDomains lists the shared projection domains processed
@@ -107,11 +108,15 @@ type SharedProjectionRunner struct {
 
 // Run processes shared projection intents until the context is cancelled.
 // Each cycle iterates over all domains and partitions, calling
-// ProcessPartitionOnce for each combination.
+// ProcessPartitionOnce for each combination. When no work is found, the
+// poll interval doubles on each consecutive empty cycle (up to 5s) to
+// avoid sustained high-frequency polling during idle periods.
 func (r *SharedProjectionRunner) Run(ctx context.Context) error {
 	if err := r.validate(); err != nil {
 		return err
 	}
+
+	consecutiveEmpty := 0
 
 	for {
 		if ctx.Err() != nil {
@@ -120,13 +125,25 @@ func (r *SharedProjectionRunner) Run(ctx context.Context) error {
 
 		didWork := r.runOneCycle(ctx)
 
-		if !didWork {
-			if err := r.wait(ctx, r.Config.pollInterval()); err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
-					return nil
-				}
-				return fmt.Errorf("wait for shared projection work: %w", err)
+		if didWork {
+			consecutiveEmpty = 0
+			continue // immediately re-poll
+		}
+
+		consecutiveEmpty++
+		backoff := r.Config.pollInterval()
+		for i := 1; i < consecutiveEmpty && i < 4; i++ {
+			backoff *= 2
+		}
+		if backoff > maxSharedPollInterval {
+			backoff = maxSharedPollInterval
+		}
+
+		if err := r.wait(ctx, backoff); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+				return nil
 			}
+			return fmt.Errorf("wait for shared projection work: %w", err)
 		}
 	}
 }

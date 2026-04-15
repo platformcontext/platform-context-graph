@@ -46,6 +46,7 @@ const (
 	SpanProjectorRun         = "projector.run"
 	SpanReducerIntentEnqueue = "reducer_intent.enqueue"
 	SpanReducerRun           = "reducer.run"
+	SpanReducerBatchClaim    = "reducer.batch_claim"
 	SpanCanonicalWrite       = "canonical.write"
 
 	// Dependency service spans — track external call performance.
@@ -90,6 +91,7 @@ var spanNames = []string{
 	SpanProjectorRun,
 	SpanReducerIntentEnqueue,
 	SpanReducerRun,
+	SpanReducerBatchClaim,
 	SpanCanonicalWrite,
 	SpanPostgresExec,
 	SpanPostgresQuery,

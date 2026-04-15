@@ -8,10 +8,13 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 )
 
-const codeCallEvidenceSource = "parser/code-calls"
+const (
+	codeCallEvidenceSource         = "parser/code-calls"
+	pythonMetaclassEvidenceSource = "parser/python-metaclass"
+)
 
-// CodeCallMaterializationHandler reduces one parser call-graph follow-up into
-// canonical CALLS edge writes.
+// CodeCallMaterializationHandler reduces one parser relationship follow-up into
+// canonical code-edge writes.
 type CodeCallMaterializationHandler struct {
 	FactLoader FactLoader
 	EdgeWriter SharedProjectionEdgeWriter
@@ -40,13 +43,14 @@ func (h CodeCallMaterializationHandler) Handle(
 		return Result{}, fmt.Errorf("load facts for code call materialization: %w", err)
 	}
 
-	repositoryIDs, rows := ExtractCodeCallRows(envelopes)
+	codeCallRepoIDs, codeCallRows, metaclassRepoIDs, metaclassRows := ExtractAllCodeRelationshipRows(envelopes)
+	repositoryIDs := mergeCodeRelationshipRepositoryIDs(codeCallRepoIDs, metaclassRepoIDs)
 	if len(repositoryIDs) == 0 {
 		return Result{
 			IntentID:        intent.IntentID,
 			Domain:          DomainCodeCallMaterialization,
 			Status:          ResultStatusSucceeded,
-			EvidenceSummary: "no repositories available for code-call materialization",
+			EvidenceSummary: "no repositories available for code relationship materialization",
 		}, nil
 	}
 
@@ -59,7 +63,7 @@ func (h CodeCallMaterializationHandler) Handle(
 		return Result{}, fmt.Errorf("retract canonical code calls: %w", err)
 	}
 
-	writeRows := buildCodeCallIntentRows(rows)
+	writeRows := buildCodeRelationshipIntentRows(codeCallRows)
 	if len(writeRows) > 0 {
 		if err := h.EdgeWriter.WriteEdges(
 			ctx,
@@ -70,18 +74,56 @@ func (h CodeCallMaterializationHandler) Handle(
 			return Result{}, fmt.Errorf("write canonical code calls: %w", err)
 		}
 	}
+	metaclassWriteRows := buildCodeRelationshipIntentRows(metaclassRows)
+	if len(metaclassWriteRows) > 0 {
+		if err := h.EdgeWriter.WriteEdges(
+			ctx,
+			DomainCodeCalls,
+			metaclassWriteRows,
+			pythonMetaclassEvidenceSource,
+		); err != nil {
+			return Result{}, fmt.Errorf("write canonical python metaclass edges: %w", err)
+		}
+	}
 
 	return Result{
 		IntentID: intent.IntentID,
 		Domain:   DomainCodeCallMaterialization,
 		Status:   ResultStatusSucceeded,
 		EvidenceSummary: fmt.Sprintf(
-			"materialized %d canonical code call edges across %d repositories",
-			len(writeRows),
+			"materialized %d canonical code relationship edges across %d repositories",
+			len(writeRows)+len(metaclassWriteRows),
 			len(repositoryIDs),
 		),
-		CanonicalWrites: len(writeRows),
+		CanonicalWrites: len(writeRows) + len(metaclassWriteRows),
 	}, nil
+}
+
+// ExtractAllCodeRelationshipRows builds both code-call and metaclass edge rows
+// from a single entity index pass. This eliminates the duplicate
+// buildCodeEntityIndex call that occurs when ExtractCodeCallRows and
+// ExtractPythonMetaclassRows are called separately.
+func ExtractAllCodeRelationshipRows(envelopes []facts.Envelope) (
+	codeCallRepoIDs []string,
+	codeCallRows []map[string]any,
+	metaclassRepoIDs []string,
+	metaclassRows []map[string]any,
+) {
+	if len(envelopes) == 0 {
+		return nil, nil, nil, nil
+	}
+
+	repositoryIDs := collectCodeCallRepositoryIDs(envelopes)
+	if len(repositoryIDs) == 0 {
+		return nil, nil, nil, nil
+	}
+
+	entityIndex := buildCodeEntityIndex(envelopes)
+	repositoryImports := collectCodeCallRepositoryImports(envelopes)
+
+	ccRepoIDs, ccRows := extractCodeCallRowsWithIndex(envelopes, repositoryIDs, entityIndex, repositoryImports)
+	mcRepoIDs, mcRows := extractPythonMetaclassRowsWithIndex(envelopes, repositoryIDs, entityIndex, repositoryImports)
+	return ccRepoIDs, ccRows, mcRepoIDs, mcRows
 }
 
 // ExtractCodeCallRows builds canonical caller/callee edge rows from repository
@@ -98,6 +140,15 @@ func ExtractCodeCallRows(envelopes []facts.Envelope) ([]string, []map[string]any
 
 	entityIndex := buildCodeEntityIndex(envelopes)
 	repositoryImports := collectCodeCallRepositoryImports(envelopes)
+	return extractCodeCallRowsWithIndex(envelopes, repositoryIDs, entityIndex, repositoryImports)
+}
+
+func extractCodeCallRowsWithIndex(
+	envelopes []facts.Envelope,
+	repositoryIDs []string,
+	entityIndex codeEntityIndex,
+	repositoryImports map[string]map[string][]string,
+) ([]string, []map[string]any) {
 	seenRows := make(map[string]struct{})
 	rows := make([]map[string]any, 0)
 

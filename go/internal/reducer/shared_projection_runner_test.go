@@ -242,6 +242,136 @@ func TestSharedProjectionRunnerValidation(t *testing.T) {
 	}
 }
 
+func TestSharedProjectionRunnerBackoffOnEmptyCycles(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var waits []time.Duration
+
+	runner := SharedProjectionRunner{
+		IntentReader: &fakeSharedIntentReader{},
+		LeaseManager: &fakeLeaseManager{granted: false},
+		EdgeWriter:   &fakeEdgeWriter{},
+		AcceptedGen:  func(_, _ string) (string, bool) { return "", false },
+		Config: SharedProjectionRunnerConfig{
+			PartitionCount: 1,
+			PollInterval:   500 * time.Millisecond,
+		},
+		Wait: func(_ context.Context, d time.Duration) error {
+			mu.Lock()
+			waits = append(waits, d)
+			mu.Unlock()
+			if len(waits) >= 5 {
+				return context.Canceled
+			}
+			return nil
+		},
+	}
+
+	_ = runner.Run(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Expected backoff sequence with base=500ms, doubling up to 5s cap:
+	// consecutiveEmpty=1 → 500ms (no doubling)
+	// consecutiveEmpty=2 → 1s (1 double)
+	// consecutiveEmpty=3 → 2s (2 doubles)
+	// consecutiveEmpty=4 → 4s (3 doubles, capped at i<4)
+	// consecutiveEmpty=5 → 4s (still 3 doubles, i<4 cap)
+	// consecutiveEmpty with higher base would hit the 5s maxSharedPollInterval cap.
+	expected := []time.Duration{
+		500 * time.Millisecond,
+		1 * time.Second,
+		2 * time.Second,
+		4 * time.Second,
+		4 * time.Second,
+	}
+	if len(waits) < len(expected) {
+		t.Fatalf("wait calls = %d, want at least %d", len(waits), len(expected))
+	}
+	for i, want := range expected {
+		if waits[i] != want {
+			t.Errorf("wait[%d] = %v, want %v", i, waits[i], want)
+		}
+	}
+}
+
+func TestSharedProjectionRunnerBackoffResetsOnWork(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var waits []time.Duration
+	waitCount := 0
+
+	reader := &fakeSharedIntentReader{}
+	leaseManager := &fakeLeaseManager{granted: true}
+
+	runner := SharedProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: leaseManager,
+		EdgeWriter:   &fakeEdgeWriter{},
+		AcceptedGen:  func(_, _ string) (string, bool) { return "gen-1", true },
+		Config: SharedProjectionRunnerConfig{
+			PartitionCount: 1,
+			PollInterval:   500 * time.Millisecond,
+		},
+		Wait: func(_ context.Context, d time.Duration) error {
+			mu.Lock()
+			waits = append(waits, d)
+			waitCount++
+			wc := waitCount
+			mu.Unlock()
+
+			// After 2 empty waits, inject work so backoff resets.
+			if wc == 2 {
+				reader.mu.Lock()
+				reader.intents = append(reader.intents, SharedProjectionIntentRow{
+					IntentID:         "intent-reset",
+					ProjectionDomain: DomainPlatformInfra,
+					PartitionKey:     "platform:test",
+					RepositoryID:     "repo-b",
+					SourceRunID:      "run-1",
+					GenerationID:     "gen-1",
+					Payload:          map[string]any{"action": "upsert", "repo_id": "repo-b", "platform_id": "p2"},
+					CreatedAt:        time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC),
+				})
+				reader.mu.Unlock()
+			}
+			// Stop after enough waits to see the reset.
+			if wc >= 4 {
+				return context.Canceled
+			}
+			return nil
+		},
+	}
+
+	_ = runner.Run(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	// First two waits should show increasing backoff: 500ms, 1s.
+	// After work resets, the next wait should be back to 500ms base.
+	if len(waits) < 3 {
+		t.Fatalf("wait calls = %d, want at least 3", len(waits))
+	}
+	if waits[0] != 500*time.Millisecond {
+		t.Errorf("wait[0] = %v, want 500ms", waits[0])
+	}
+	if waits[1] != 1*time.Second {
+		t.Errorf("wait[1] = %v, want 1s", waits[1])
+	}
+	// After work was done, backoff should reset. The next empty cycle
+	// should wait at the base interval again.
+	for i := 2; i < len(waits); i++ {
+		if waits[i] == 500*time.Millisecond {
+			return // found the reset — pass
+		}
+	}
+	t.Errorf("backoff never reset to base interval after work; waits = %v", waits)
+}
+
 func TestSharedProjectionRunnerWithTelemetry(t *testing.T) {
 	t.Parallel()
 

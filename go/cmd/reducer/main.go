@@ -151,6 +151,7 @@ func buildReducerService(
 	workQueue.RetryDelay = retryCfg.RetryDelay
 	workQueue.MaxAttempts = retryCfg.MaxAttempts
 
+	workers := loadReducerWorkerCount(getenv)
 	return reducer.Service{
 		PollInterval:               time.Second,
 		WorkSource:                 workQueue,
@@ -167,9 +168,10 @@ func buildReducerService(
 			Instruments:  instruments,
 			Logger:       logger,
 		},
-		Workers:     loadReducerWorkerCount(getenv),
-		Tracer:      tracer,
-		Instruments: instruments,
-		Logger:      logger,
+		Workers:        workers,
+		BatchClaimSize: loadReducerBatchClaimSize(getenv, workers),
+		Tracer:         tracer,
+		Instruments:    instruments,
+		Logger:         logger,
 	}, nil
 }
