@@ -134,6 +134,22 @@ func TestGetEntityContextFallsBackToKubernetesResourceContentEntity(t *testing.T
 				},
 			},
 		},
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"service-1", "repo-1", "deploy/service.yaml", "K8sResource", "demo",
+					int64(1), int64(12), "yaml", "kind: Service", []byte(`{"kind":"Service","namespace":"prod","qualified_name":"prod/Service/demo"}`),
+				},
+				{
+					"k8s-resource-1", "repo-1", "deploy/deployment.yaml", "K8sResource", "demo",
+					int64(1), int64(18), "yaml", "kind: Deployment", []byte(`{"kind":"Deployment","namespace":"prod","qualified_name":"prod/Deployment/demo","labels":"app=demo,tier=backend"}`),
+				},
+			},
+		},
 	})
 
 	handler := &EntityHandler{Content: NewContentReader(db)}
@@ -162,5 +178,25 @@ func TestGetEntityContextFallsBackToKubernetesResourceContentEntity(t *testing.T
 	}
 	if got, want := metadata["qualified_name"], "prod/Deployment/demo"; got != want {
 		t.Fatalf("resp[metadata][qualified_name] = %#v, want %#v", got, want)
+	}
+	relationships, ok := resp["relationships"].([]any)
+	if !ok {
+		t.Fatalf("resp[relationships] type = %T, want []any", resp["relationships"])
+	}
+	if len(relationships) != 1 {
+		t.Fatalf("len(resp[relationships]) = %d, want 1", len(relationships))
+	}
+	relationship, ok := relationships[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[relationships][0] type = %T, want map[string]any", relationships[0])
+	}
+	if got, want := relationship["type"], "SELECTS"; got != want {
+		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["source_name"], "demo"; got != want {
+		t.Fatalf("relationship[source_name] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["reason"], "k8s_service_name_namespace"; got != want {
+		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
 	}
 }
