@@ -21,6 +21,7 @@ var (
 	kotlinStringAssignPattern = regexp.MustCompile(`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*"([^"]*)"`)
 	kotlinThisCallPattern     = regexp.MustCompile(`this\.([A-Za-z_]\w*)\s*\(`)
 	kotlinCallPattern         = regexp.MustCompile(`\b((?:[A-Za-z_]\w*\.)*)([A-Za-z_]\w*)\s*\(`)
+	kotlinInfixCallPattern    = regexp.MustCompile(`^(?:return\s+)?([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s+(.+)$`)
 )
 
 func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (map[string]any, error) {
@@ -222,6 +223,44 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		}
 
 		seenLineCalls := make(map[string]struct{})
+		if matches := kotlinInfixCallPattern.FindStringSubmatch(trimmed); len(matches) == 4 {
+			receiver := matches[1]
+			name := matches[2]
+			if kotlinCallNameAllowed(name) {
+				if functionContext := currentScopedName(stack, "function"); functionContext != "" {
+					var (
+						inferredType string
+						classContext string
+					)
+					if receiver == "this" {
+						if currentClass := currentScopedName(stack, "class"); currentClass != "" {
+							classContext = currentClass
+							inferredType = currentClass
+						}
+					} else {
+						inferredType = kotlinInferReceiverType(receiver, localVariableTypes[functionContext])
+					}
+					if inferredType != "" {
+						fullName := strings.TrimSpace(receiver + " " + name)
+						callKey := fullName + "#" + strconv.Itoa(lineNumber)
+						if _, ok := seenLineCalls[callKey]; !ok {
+							seenLineCalls[callKey] = struct{}{}
+							item := map[string]any{
+								"name":              name,
+								"full_name":         fullName,
+								"line_number":       lineNumber,
+								"lang":              "kotlin",
+								"inferred_obj_type": inferredType,
+							}
+							if classContext != "" {
+								item["class_context"] = classContext
+							}
+							appendBucket(payload, "function_calls", item)
+						}
+					}
+				}
+			}
+		}
 		for _, match := range kotlinThisCallPattern.FindAllStringSubmatch(trimmed, -1) {
 			if len(match) != 2 {
 				continue
@@ -254,8 +293,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			}
 			receiver := strings.TrimSuffix(strings.TrimSpace(trimmed[match[2]:match[3]]), ".")
 			name := trimmed[match[4]:match[5]]
-			switch name {
-			case "fun", "if", "for", "while", "when", "return", "class", "interface":
+			if !kotlinCallNameAllowed(name) {
 				continue
 			}
 			if receiver == "" {
@@ -333,4 +371,13 @@ func kotlinImportAlias(name string) string {
 		return strings.TrimSpace(trimmed[idx+1:])
 	}
 	return trimmed
+}
+
+func kotlinCallNameAllowed(name string) bool {
+	switch name {
+	case "fun", "if", "for", "while", "when", "return", "class", "interface":
+		return false
+	default:
+		return true
+	}
 }

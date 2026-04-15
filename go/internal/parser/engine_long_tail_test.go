@@ -70,6 +70,16 @@ func TestDefaultEngineParsePathPHPFixtures(t *testing.T) {
 	assertBucketItemStringSliceContains(t, classesPayload, "classes", "Circle", "Shape")
 	assertBucketItemStringSliceContains(t, classesPayload, "classes", "Rectangle", "Shape")
 
+	staticCallsPath := filepath.Join(repoRoot, "static_calls.php")
+	staticCallsPayload, err := engine.ParsePath(repoRoot, staticCallsPath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", staticCallsPath, err)
+	}
+	assertNamedBucketContains(t, staticCallsPayload, "classes", "Logger")
+	assertNamedBucketContains(t, staticCallsPayload, "functions", "warn")
+	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "full_name", "Logger.warn")
+	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "inferred_obj_type", "Logger")
+
 	traitsPath := filepath.Join(repoRoot, "traits.php")
 	traitsPayload, err := engine.ParsePath(repoRoot, traitsPath, false, Options{})
 	if err != nil {
