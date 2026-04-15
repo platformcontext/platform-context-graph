@@ -1,10 +1,12 @@
 package query
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -163,5 +165,70 @@ func TestGetEntityContextFallsBackToContentEntitiesIncludesStory(t *testing.T) {
 
 	if got, want := resp["story"], "Component Button is associated with the react framework. Defined in src/Button.tsx (tsx)."; got != want {
 		t.Fatalf("resp[story] = %#v, want %#v", got, want)
+	}
+}
+
+func TestGetEntityContextUsesGraphJavaScriptMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if got, want := params["entity_id"], "function-1"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				if want := "e.docstring as docstring"; !strings.Contains(cypher, want) {
+					t.Fatalf("cypher = %q, want %q", cypher, want)
+				}
+				return map[string]any{
+					"id":            "function-1",
+					"labels":        []any{"Function"},
+					"name":          "getTab",
+					"file_path":     "src/app.js",
+					"language":      "javascript",
+					"start_line":    int64(10),
+					"end_line":      int64(24),
+					"repo_id":       "repo-1",
+					"repo_name":     "repo-1",
+					"docstring":     "Returns the active tab.",
+					"method_kind":   "getter",
+					"relationships": []any{},
+				}, nil
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/function-1/context", nil)
+	req.SetPathValue("entity_id", "function-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	if got, want := resp["semantic_summary"], "Function getTab has JavaScript method kind getter and is documented as \"Returns the active tab.\"."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["story"], "Function getTab has JavaScript method kind getter and is documented as \"Returns the active tab.\". Defined in src/app.js (javascript)."; got != want {
+		t.Fatalf("resp[story] = %#v, want %#v", got, want)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "javascript_method"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["method_kind"], "getter"; got != want {
+		t.Fatalf("semantic_profile[method_kind] = %#v, want %#v", got, want)
 	}
 }

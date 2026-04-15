@@ -8,7 +8,7 @@ import (
 
 // EntityHandler exposes HTTP routes for entity queries.
 type EntityHandler struct {
-	Neo4j   *Neo4jReader
+	Neo4j   GraphReader
 	Content *ContentReader
 }
 
@@ -135,6 +135,8 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line,
+		       e.docstring as docstring,
+		       e.method_kind as method_kind,
 		       r.id as repo_id, r.name as repo_name,
 		       collect(DISTINCT {type: type(rel), target_name: target.name, target_id: target.id}) as relationships
 	`
@@ -175,6 +177,9 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 		"start_line":    IntVal(row, "start_line"),
 		"end_line":      IntVal(row, "end_line"),
 		"relationships": extractRelationships(row),
+	}
+	if metadata := graphResultMetadata(row); len(metadata) > 0 {
+		response["metadata"] = metadata
 	}
 	enriched, err := h.enrichEntityResultsWithContentMetadata(r.Context(), []map[string]any{response}, StringVal(row, "repo_id"), StringVal(row, "name"), 1)
 	if err != nil {
