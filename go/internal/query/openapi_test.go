@@ -211,6 +211,24 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		t.Fatal("code/call-chain request schema missing max_depth")
 	}
 
+	relationshipsPath := mustMapField(t, paths, "/api/v0/code/relationships")
+	relationshipsPost := mustMapField(t, relationshipsPath, "post")
+	relationshipsBody := mustMapField(t, mustMapField(t, relationshipsPost, "requestBody"), "content")
+	relationshipsJSON := mustMapField(t, relationshipsBody, "application/json")
+	relationshipsSchema := mustMapField(t, mustMapField(t, relationshipsJSON, "schema"), "properties")
+	if _, ok := relationshipsSchema["entity_id"]; !ok {
+		t.Fatal("code/relationships request schema missing entity_id")
+	}
+	if _, ok := relationshipsSchema["name"]; !ok {
+		t.Fatal("code/relationships request schema missing name")
+	}
+	if _, ok := relationshipsSchema["direction"]; !ok {
+		t.Fatal("code/relationships request schema missing direction")
+	}
+	if _, ok := relationshipsSchema["relationship_type"]; !ok {
+		t.Fatal("code/relationships request schema missing relationship_type")
+	}
+
 	languageQueryPath := mustMapField(t, paths, "/api/v0/code/language-query")
 	languageQueryPost := mustMapField(t, languageQueryPath, "post")
 	languageQueryBody := mustMapField(t, mustMapField(t, languageQueryPost, "requestBody"), "content")

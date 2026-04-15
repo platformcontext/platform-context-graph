@@ -114,9 +114,25 @@ const openAPIPathsCode = `
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["entity_id"],
+                "anyOf": [
+                  {"required": ["entity_id"]},
+                  {"required": ["name"]}
+                ],
                 "properties": {
-                  "entity_id": {"type": "string"}
+                  "entity_id": {"type": "string"},
+                  "name": {
+                    "type": "string",
+                    "description": "Optional entity name fragment when entity_id is not available."
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": ["incoming", "outgoing"],
+                    "description": "Optional relationship direction filter."
+                  },
+                  "relationship_type": {
+                    "type": "string",
+                    "description": "Optional relationship type filter such as CALLS, IMPORTS, or REFERENCES."
+                  }
                 }
               }
             }

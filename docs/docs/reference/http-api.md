@@ -268,6 +268,11 @@ Public code-query requests use canonical `repo_id` whenever a repository scope
 is part of the request. Results should be interpreted using `repo_id +
 relative_path`, not absolute server-local paths.
 
+`POST /api/v0/code/relationships` prefers `entity_id` when the caller already
+has a canonical entity. It also accepts `name` for fallback lookup, plus
+optional `direction` (`incoming` or `outgoing`) and `relationship_type`
+filters when the caller only needs one edge class.
+
 Example code-only workflow:
 
 `POST /api/v0/code/search`

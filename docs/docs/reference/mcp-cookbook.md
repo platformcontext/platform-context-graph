@@ -82,6 +82,9 @@ If you want shorter, role-based prompts before you drop into tool names and JSON
 { "query_type": "find_callers", "target": "helper" }
 ```
 
+This now maps to the Go `code/relationships` route using `name=helper`,
+`direction=incoming`, and `relationship_type=CALLS`.
+
 ### Find what a function calls
 
 > "What functions are called inside `foo`?"
@@ -91,6 +94,9 @@ If you want shorter, role-based prompts before you drop into tool names and JSON
 ```json
 { "query_type": "find_callees", "target": "foo" }
 ```
+
+This now maps to the Go `code/relationships` route using `name=foo`,
+`direction=outgoing`, and `relationship_type=CALLS`.
 
 ### Find indirect callers
 

@@ -98,9 +98,31 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 			"limit": intOr(args, "limit", 10), "exact": boolOr(args, "exact", false),
 		}}, nil
 	case "analyze_code_relationships":
-		return &route{method: "POST", path: "/api/v0/code/relationships", body: map[string]any{
-			"entity_id": str(args, "target"), "query_type": str(args, "query_type"),
-		}}, nil
+		body := map[string]any{
+			"entity_id":  str(args, "target"),
+			"query_type": str(args, "query_type"),
+		}
+		switch str(args, "query_type") {
+		case "find_callers":
+			body = map[string]any{
+				"name":              str(args, "target"),
+				"direction":         "incoming",
+				"relationship_type": "CALLS",
+			}
+		case "find_callees":
+			body = map[string]any{
+				"name":              str(args, "target"),
+				"direction":         "outgoing",
+				"relationship_type": "CALLS",
+			}
+		case "find_importers":
+			body = map[string]any{
+				"name":              str(args, "target"),
+				"direction":         "incoming",
+				"relationship_type": "IMPORTS",
+			}
+		}
+		return &route{method: "POST", path: "/api/v0/code/relationships", body: body}, nil
 	case "find_dead_code":
 		return &route{method: "POST", path: "/api/v0/code/dead-code", body: map[string]any{
 			"repo_id": str(args, "repo_id"),

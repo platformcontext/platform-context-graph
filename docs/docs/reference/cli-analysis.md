@@ -6,7 +6,10 @@ Commands for extracting insights from indexed code.
 
 ### `analyze callers`
 
-Find every function that calls a given function. Use this before refactoring to understand who depends on it.
+Find every function that calls a given function. Use this before refactoring to
+understand who depends on it. Under the hood this routes to
+`POST /api/v0/code/relationships` with `direction=incoming` and
+`relationship_type=CALLS`.
 
 ```bash
 pcg analyze callers process_payment
@@ -14,7 +17,9 @@ pcg analyze callers process_payment
 
 ### `analyze calls`
 
-The reverse — show what a function calls (its callees).
+The reverse — show what a function calls (its callees). Under the hood this
+routes to `POST /api/v0/code/relationships` with `direction=outgoing` and
+`relationship_type=CALLS`.
 
 ```bash
 pcg analyze calls process_payment
