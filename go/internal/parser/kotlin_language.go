@@ -41,6 +41,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	seenVariables := make(map[string]struct{})
 	localVariableTypes := make(map[string]map[string]string)
 	classPropertyTypes := make(map[string]map[string]string)
+	functionReturnTypes := make(map[string]string)
 
 	for index, rawLine := range lines {
 		lineNumber := index + 1
@@ -166,6 +167,15 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					item["source"] = rawLine
 				}
 				appendBucket(payload, "functions", item)
+				if receiverType, functionName, returnType := kotlinFunctionDeclarationReturnType(trimmed); functionName != "" && returnType != "" {
+					key := functionName
+					if receiverType != "" {
+						key = receiverType + "." + functionName
+					} else if classContext := currentScopedName(stack, "class"); classContext != "" {
+						key = classContext + "." + functionName
+					}
+					functionReturnTypes[key] = returnType
+				}
 				if strings.Contains(rawLine, "{") {
 					stack = append(stack, scopedContext{
 						kind:       "function",
@@ -214,29 +224,16 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				if _, ok := localVariableTypes[functionContext]; !ok {
 					localVariableTypes[functionContext] = make(map[string]string)
 				}
-				switch {
-				case kotlinCtorAssignPattern.MatchString(trimmed):
-					assignMatches := kotlinCtorAssignPattern.FindStringSubmatch(trimmed)
-					if len(assignMatches) == 3 && assignMatches[1] == name {
-						localVariableTypes[functionContext][name] = strings.TrimSpace(assignMatches[2])
-					}
-				case kotlinStringAssignPattern.MatchString(trimmed):
-					assignMatches := kotlinStringAssignPattern.FindStringSubmatch(trimmed)
-					if len(assignMatches) == 3 && assignMatches[1] == name {
-						localVariableTypes[functionContext][name] = "String"
-					}
-				case kotlinAliasAssignPattern.MatchString(trimmed):
-					assignMatches := kotlinAliasAssignPattern.FindStringSubmatch(trimmed)
-					if len(assignMatches) == 3 && assignMatches[1] == name {
-						if inferredType := kotlinInferReceiverType(
-							assignMatches[2],
-							localVariableTypes[functionContext],
-							classPropertyTypes,
-							classContext,
-						); inferredType != "" {
-							localVariableTypes[functionContext][name] = inferredType
-						}
-					}
+				if inferredType := kotlinInferAssignedVariableType(
+					trimmed,
+					name,
+					functionContext,
+					classContext,
+					localVariableTypes,
+					classPropertyTypes,
+					functionReturnTypes,
+				); inferredType != "" {
+					localVariableTypes[functionContext][name] = inferredType
 				}
 			}
 			if _, ok := seenVariables[name]; !ok {
