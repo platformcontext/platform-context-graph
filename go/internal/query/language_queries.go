@@ -51,11 +51,13 @@ var contentBackedEntityTypes = map[string]string{
 }
 
 var graphFirstContentBackedEntityTypes = map[string]string{
-	"annotation": "Annotation",
-	"component":  "Component",
-	"impl_block": "ImplBlock",
-	"type_alias": "TypeAlias",
-	"typedef":    "Typedef",
+	"annotation":              "Annotation",
+	"component":               "Component",
+	"impl_block":              "ImplBlock",
+	"protocol":                "Protocol",
+	"protocol_implementation": "ProtocolImplementation",
+	"type_alias":              "TypeAlias",
+	"typedef":                 "Typedef",
 }
 
 // Mount registers the language query endpoint on the given mux.
@@ -505,6 +507,12 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	}
 	if v := StringVal(row, "component_type_assertion"); v != "" {
 		metadata["component_type_assertion"] = v
+	}
+	if v := StringVal(row, "protocol"); v != "" {
+		metadata["protocol"] = v
+	}
+	if v := StringVal(row, "implemented_for"); v != "" {
+		metadata["implemented_for"] = v
 	}
 	if v := StringVal(row, "declaration_merge_group"); v != "" {
 		metadata["declaration_merge_group"] = v

@@ -35,7 +35,8 @@ type SemanticEntityWriteResult struct {
 }
 
 // SemanticEntityWriter persists Annotation, Typedef, TypeAlias, Component,
-// ImplBlock, and JavaScript callable Function semantic nodes into Neo4j.
+// ImplBlock, Protocol, ProtocolImplementation, and JavaScript callable
+// Function semantic nodes into Neo4j.
 type SemanticEntityWriter interface {
 	WriteSemanticEntities(context.Context, SemanticEntityWrite) (SemanticEntityWriteResult, error)
 }
@@ -245,7 +246,7 @@ func semanticPayloadMetadataString(payload map[string]any, key string) string {
 
 func isSemanticEntityType(payload map[string]any, entityType string) bool {
 	switch entityType {
-	case "Annotation", "Typedef", "TypeAlias", "Component", "ImplBlock":
+	case "Annotation", "Typedef", "TypeAlias", "Component", "ImplBlock", "Protocol", "ProtocolImplementation":
 		return true
 	case "Function":
 		return isJavaScriptCallableSemanticEntity(payload) || isRustSemanticFunction(payload)

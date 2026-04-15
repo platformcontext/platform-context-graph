@@ -107,6 +107,44 @@ SET n.id = row.entity_id,
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
+	semanticProtocolUpsertCypher = `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
+MERGE (n:Protocol {uid: row.entity_id})
+SET n.id = row.entity_id,
+    n.name = row.entity_name,
+    n.path = row.file_path,
+    n.relative_path = row.relative_path,
+    n.line_number = row.start_line,
+    n.start_line = row.start_line,
+    n.end_line = row.end_line,
+    n.repo_id = row.repo_id,
+    n.language = row.language,
+    n.lang = row.language,
+    n.module_kind = row.module_kind,
+    n.semantic_kind = row.entity_type,
+    n.evidence_source = row.evidence_source
+MERGE (f)-[:CONTAINS]->(n)`
+
+	semanticProtocolImplementationUpsertCypher = `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
+MERGE (n:ProtocolImplementation {uid: row.entity_id})
+SET n.id = row.entity_id,
+    n.name = row.entity_name,
+    n.path = row.file_path,
+    n.relative_path = row.relative_path,
+    n.line_number = row.start_line,
+    n.start_line = row.start_line,
+    n.end_line = row.end_line,
+    n.repo_id = row.repo_id,
+    n.language = row.language,
+    n.lang = row.language,
+    n.module_kind = row.module_kind,
+    n.protocol = row.protocol,
+    n.implemented_for = row.implemented_for,
+    n.semantic_kind = row.entity_type,
+    n.evidence_source = row.evidence_source
+MERGE (f)-[:CONTAINS]->(n)`
+
 	semanticFunctionUpsertCypher = `UNWIND $rows AS row
 MATCH (f:File {path: row.file_path})
 MERGE (n:Function {uid: row.entity_id})
@@ -132,14 +170,15 @@ MATCH (impl:ImplBlock {uid: row.impl_block_id})
 MATCH (fn:Function {uid: row.function_id})
 MERGE (impl)-[:CONTAINS]->(fn)`
 
-	semanticEntityRetractCypher = `MATCH (n:Annotation|Typedef|TypeAlias|Component|ImplBlock|Function)
+	semanticEntityRetractCypher = `MATCH (n:Annotation|Typedef|TypeAlias|Component|ImplBlock|Protocol|ProtocolImplementation|Function)
 WHERE n.repo_id IN $repo_ids
   AND n.evidence_source = $evidence_source
 DETACH DELETE n`
 )
 
 // SemanticEntityWriter writes Annotation, Typedef, TypeAlias, Component,
-// ImplBlock, and JavaScript callable Function semantic nodes into Neo4j.
+// ImplBlock, Protocol, ProtocolImplementation, and JavaScript callable
+// Function semantic nodes into Neo4j.
 type SemanticEntityWriter struct {
 	executor  Executor
 	BatchSize int
@@ -181,12 +220,14 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 	}
 
 	rowsByLabel := map[string][]map[string]any{
-		"Annotation": nil,
-		"Typedef":    nil,
-		"TypeAlias":  nil,
-		"Component":  nil,
-		"ImplBlock":  nil,
-		"Function":   nil,
+		"Annotation":             nil,
+		"Typedef":                nil,
+		"TypeAlias":              nil,
+		"Component":              nil,
+		"ImplBlock":              nil,
+		"Protocol":               nil,
+		"ProtocolImplementation": nil,
+		"Function":               nil,
 	}
 	for _, row := range write.Rows {
 		rowMap, ok := buildSemanticEntityRowMap(row)
@@ -206,6 +247,8 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		{label: "TypeAlias", cypher: semanticTypeAliasUpsertCypher},
 		{label: "Component", cypher: semanticComponentUpsertCypher},
 		{label: "ImplBlock", cypher: semanticImplBlockUpsertCypher},
+		{label: "Protocol", cypher: semanticProtocolUpsertCypher},
+		{label: "ProtocolImplementation", cypher: semanticProtocolImplementationUpsertCypher},
 		{label: "Function", cypher: semanticFunctionUpsertCypher},
 	} {
 		if err := w.executeSemanticEntityRows(ctx, plan.cypher, rowsByLabel[plan.label]); err != nil {
@@ -249,7 +292,10 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 	if row.RepoID == "" || row.EntityID == "" || row.EntityName == "" || row.FilePath == "" {
 		return nil, false
 	}
-	if row.EntityType != "Annotation" && row.EntityType != "Typedef" && row.EntityType != "TypeAlias" && row.EntityType != "Component" && row.EntityType != "ImplBlock" && row.EntityType != "Function" {
+	if row.EntityType != "Annotation" && row.EntityType != "Typedef" && row.EntityType != "TypeAlias" &&
+		row.EntityType != "Component" && row.EntityType != "ImplBlock" &&
+		row.EntityType != "Protocol" && row.EntityType != "ProtocolImplementation" &&
+		row.EntityType != "Function" {
 		return nil, false
 	}
 	if row.StartLine <= 0 {
@@ -287,6 +333,9 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		if framework := semanticMetadataString(row.Metadata, "framework"); framework != "" {
 			rowMap["framework"] = framework
 		}
+		if moduleKind := semanticMetadataString(row.Metadata, "module_kind"); moduleKind != "" {
+			rowMap["module_kind"] = moduleKind
+		}
 		if jsxFragment := semanticMetadataBool(row.Metadata, "jsx_fragment_shorthand"); jsxFragment != nil {
 			rowMap["jsx_fragment_shorthand"] = *jsxFragment
 		}
@@ -301,6 +350,12 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 		if target := semanticMetadataString(row.Metadata, "target"); target != "" {
 			rowMap["target"] = target
+		}
+		if protocol := semanticMetadataString(row.Metadata, "protocol"); protocol != "" {
+			rowMap["protocol"] = protocol
+		}
+		if implementedFor := semanticMetadataString(row.Metadata, "implemented_for"); implementedFor != "" {
+			rowMap["implemented_for"] = implementedFor
 		}
 		if docstring := semanticMetadataString(row.Metadata, "docstring"); docstring != "" {
 			rowMap["docstring"] = docstring

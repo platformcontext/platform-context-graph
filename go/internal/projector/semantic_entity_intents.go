@@ -10,11 +10,13 @@ import (
 )
 
 var semanticEntityReducerTypes = map[string]struct{}{
-	"Annotation": {},
-	"Typedef":    {},
-	"TypeAlias":  {},
-	"Component":  {},
-	"ImplBlock":  {},
+	"Annotation":             {},
+	"Typedef":                {},
+	"TypeAlias":              {},
+	"Component":              {},
+	"ImplBlock":              {},
+	"Protocol":               {},
+	"ProtocolImplementation": {},
 }
 
 func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool) {
