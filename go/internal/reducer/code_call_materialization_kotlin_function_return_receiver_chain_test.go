@@ -9,7 +9,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/parser"
 )
 
-func TestExtractCodeCallRowsResolvesKotlinSameFileFunctionReturnTypeAliasCallsUsingInferredObjectType(t *testing.T) {
+func TestExtractCodeCallRowsResolvesKotlinFunctionReturnReceiverChainsUsingInferredObjectType(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -20,11 +20,13 @@ class Service {
     fun info(): String = "ok"
 }
 
-fun createService(): Service = Service()
+class Factory {
+    fun createService(): Service = Service()
+}
 
 fun usage(): String {
-    val provider = createService()
-    return provider.info()
+    val factory = Factory()
+    return factory.createService().info()
 }
 `), 0o600); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", callerPath, err)
@@ -45,20 +47,10 @@ fun usage(): String {
 			classContext, _ := function["class_context"].(string)
 			switch {
 			case name == "usage":
-				function["end_line"] = 11
+				function["end_line"] = 13
 				function["uid"] = "content-entity:kotlin-usage"
-			case name == "createService" && classContext == "":
-				function["uid"] = "content-entity:kotlin-create-service"
 			case name == "info" && classContext == "Service":
 				function["uid"] = "content-entity:kotlin-service-info"
-			}
-		}
-	}
-	if classes, ok := callerPayload["classes"].([]map[string]any); ok {
-		for _, classItem := range classes {
-			name, _ := classItem["name"].(string)
-			if name == "Service" {
-				classItem["uid"] = "content-entity:kotlin-service-class"
 			}
 		}
 	}
@@ -81,17 +73,14 @@ fun usage(): String {
 	}
 
 	_, rows := ExtractCodeCallRows(envelopes)
-	if len(rows) != 2 {
-		t.Fatalf("len(rows) = %d, want 2; rows=%#v; function_calls=%#v", len(rows), rows, callerPayload["function_calls"])
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1; rows=%#v; function_calls=%#v", len(rows), rows, callerPayload["function_calls"])
 	}
 
-	for _, row := range rows {
-		if got, want := row["callee_entity_id"], "content-entity:kotlin-service-info"; got == want {
-			if gotName, wantName := row["full_name"], "provider.info"; gotName != wantName {
-				t.Fatalf("full_name = %#v, want %#v", gotName, wantName)
-			}
-			return
-		}
+	if got, want := rows[0]["callee_entity_id"], "content-entity:kotlin-service-info"; got != want {
+		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
 	}
-	t.Fatalf("rows=%#v, want callee_entity_id content-entity:kotlin-service-info", rows)
+	if got, want := rows[0]["full_name"], "factory.createService().info"; got != want {
+		t.Fatalf("full_name = %#v, want %#v", got, want)
+	}
 }

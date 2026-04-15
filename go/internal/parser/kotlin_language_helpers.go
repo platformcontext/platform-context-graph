@@ -2,6 +2,7 @@ package parser
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -16,6 +17,7 @@ var (
 	kotlinFunctionCallAssignPattern = regexp.MustCompile(
 		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\([^)]*\)\s*$`,
 	)
+	kotlinConstructorCallPattern = regexp.MustCompile(`\b([A-Z][A-Za-z_]\w*)\s*\(`)
 )
 
 func kotlinPrimaryConstructorPropertyTypes(line string) map[string]string {
@@ -117,6 +119,7 @@ func kotlinInferAssignedVariableType(
 				localVariableTypes[functionContext],
 				classPropertyTypes,
 				classContext,
+				functionReturnTypes,
 			)
 		}
 	}
@@ -165,11 +168,50 @@ func kotlinInferFunctionCallReturnType(
 		return ""
 	}
 
+	if strings.Contains(callExpression, "(") && strings.HasSuffix(callExpression, ")") {
+		return kotlinInferMethodCallReturnType(
+			callExpression,
+			variableTypes,
+			classPropertyTypes,
+			currentClass,
+			functionReturnTypes,
+		)
+	}
+
+	return kotlinInferMethodCallReturnType(
+		callExpression+"()",
+		variableTypes,
+		classPropertyTypes,
+		currentClass,
+		functionReturnTypes,
+	)
+}
+
+func kotlinInferMethodCallReturnType(
+	callExpression string,
+	variableTypes map[string]string,
+	classPropertyTypes map[string]map[string]string,
+	currentClass string,
+	functionReturnTypes map[string]string,
+) string {
+	callExpression = strings.TrimSpace(callExpression)
+	if callExpression == "" {
+		return ""
+	}
+
+	callHead := callExpression
+	if idx := strings.LastIndex(callExpression, "("); idx >= 0 && strings.HasSuffix(callExpression, ")") {
+		callHead = strings.TrimSpace(callExpression[:idx])
+	}
+	if callHead == "" {
+		return ""
+	}
+
 	receiver := ""
-	name := callExpression
-	if idx := strings.LastIndex(callExpression, "."); idx >= 0 {
-		receiver = strings.TrimSpace(callExpression[:idx])
-		name = strings.TrimSpace(callExpression[idx+1:])
+	name := callHead
+	if idx := strings.LastIndex(callHead, "."); idx >= 0 {
+		receiver = strings.TrimSpace(callHead[:idx])
+		name = strings.TrimSpace(callHead[idx+1:])
 	}
 	if name == "" {
 		return ""
@@ -184,7 +226,13 @@ func kotlinInferFunctionCallReturnType(
 		return strings.TrimSpace(functionReturnTypes[name])
 	}
 
-	inferredReceiverType := kotlinInferReceiverType(receiver, variableTypes, classPropertyTypes, currentClass)
+	inferredReceiverType := kotlinInferReceiverType(
+		receiver,
+		variableTypes,
+		classPropertyTypes,
+		currentClass,
+		functionReturnTypes,
+	)
 	if inferredReceiverType == "" {
 		return ""
 	}
@@ -197,4 +245,104 @@ func kotlinInferFunctionCallReturnType(
 		}
 	}
 	return strings.TrimSpace(functionReturnTypes[inferredReceiverType+"."+name])
+}
+
+func kotlinInferReceiverSegmentType(
+	segment string,
+	variableTypes map[string]string,
+	classPropertyTypes map[string]map[string]string,
+	currentClass string,
+	functionReturnTypes map[string]string,
+) string {
+	segment = strings.TrimSpace(segment)
+	if segment == "" {
+		return ""
+	}
+
+	if strings.Contains(segment, "(") && strings.HasSuffix(segment, ")") {
+		return kotlinInferMethodCallReturnType(
+			segment,
+			variableTypes,
+			classPropertyTypes,
+			currentClass,
+			functionReturnTypes,
+		)
+	}
+
+	if inferredType := strings.TrimSpace(variableTypes[segment]); inferredType != "" {
+		return inferredType
+	}
+	if currentClass != "" {
+		return strings.TrimSpace(classPropertyTypes[currentClass][segment])
+	}
+	return ""
+}
+
+func kotlinAppendConstructorCalls(
+	payload map[string]any,
+	trimmed string,
+	lineNumber int,
+	functionDeclCutoff int,
+	seenLineCalls map[string]struct{},
+	knownTypeNames map[string]struct{},
+	skip bool,
+) {
+	if skip {
+		return
+	}
+
+	for _, match := range kotlinConstructorCallPattern.FindAllStringSubmatchIndex(trimmed, -1) {
+		if len(match) != 4 {
+			continue
+		}
+		if functionDeclCutoff >= 0 && match[0] < functionDeclCutoff {
+			continue
+		}
+		name := trimmed[match[2]:match[3]]
+		if _, ok := knownTypeNames[name]; !ok {
+			continue
+		}
+		callKey := name + "#" + strconv.Itoa(lineNumber)
+		if _, ok := seenLineCalls[callKey]; ok {
+			continue
+		}
+		seenLineCalls[callKey] = struct{}{}
+		appendBucket(payload, "function_calls", map[string]any{
+			"name":        name,
+			"full_name":   name,
+			"line_number": lineNumber,
+			"lang":        "kotlin",
+		})
+	}
+}
+
+func kotlinAppendThisCalls(
+	payload map[string]any,
+	trimmed string,
+	lineNumber int,
+	seenLineCalls map[string]struct{},
+	classContext string,
+) {
+	for _, match := range kotlinThisCallPattern.FindAllStringSubmatch(trimmed, -1) {
+		if len(match) != 2 {
+			continue
+		}
+		name := match[1]
+		fullName := "this." + name
+		callKey := fullName + "#" + strconv.Itoa(lineNumber)
+		if _, ok := seenLineCalls[callKey]; ok {
+			continue
+		}
+		seenLineCalls[callKey] = struct{}{}
+		item := map[string]any{
+			"name":        name,
+			"full_name":   fullName,
+			"line_number": lineNumber,
+			"lang":        "kotlin",
+		}
+		if classContext != "" {
+			item["class_context"] = classContext
+		}
+		appendBucket(payload, "function_calls", item)
+	}
 }

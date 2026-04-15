@@ -22,7 +22,7 @@ var (
 	kotlinStringAssignPattern  = regexp.MustCompile(`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*"([^"]*)"`)
 	kotlinAliasAssignPattern   = regexp.MustCompile(`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*((?:this\.)?[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*$`)
 	kotlinThisCallPattern      = regexp.MustCompile(`this\.([A-Za-z_]\w*)\s*\(`)
-	kotlinCallPattern          = regexp.MustCompile(`\b((?:[A-Za-z_]\w*\.)*)([A-Za-z_]\w*)\s*\(`)
+	kotlinCallPattern          = regexp.MustCompile(`\b((?:[A-Za-z_]\w*(?:\([^)]*\))?)(?:\.(?:[A-Za-z_]\w*(?:\([^)]*\))?))*)\.([A-Za-z_]\w*)\s*\(`)
 	kotlinInfixCallPattern     = regexp.MustCompile(`^(?:return\s+)?([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s+(.+)$`)
 )
 
@@ -42,6 +42,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	localVariableTypes := make(map[string]map[string]string)
 	classPropertyTypes := make(map[string]map[string]string)
 	functionReturnTypes := make(map[string]string)
+	knownTypeNames := make(map[string]struct{})
 
 	for index, rawLine := range lines {
 		lineNumber := index + 1
@@ -65,6 +66,9 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				alias = strings.TrimSpace(matches[2])
 				importType = "alias"
 			}
+			if alias != "" {
+				knownTypeNames[alias] = struct{}{}
+			}
 			appendBucket(payload, "imports", map[string]any{
 				"name":             importedName,
 				"source":           importedName,
@@ -79,6 +83,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		declaredTypeNames := make(map[string]struct{})
 		if matches := kotlinClassPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
+			knownTypeNames[name] = struct{}{}
 			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "classes", map[string]any{
 				"name":        name,
@@ -98,6 +103,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		}
 		if matches := kotlinObjectPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
+			knownTypeNames[name] = struct{}{}
 			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "classes", map[string]any{
 				"name":        name,
@@ -112,6 +118,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			if len(matches) == 2 && strings.TrimSpace(matches[1]) != "" {
 				name = matches[1]
 			}
+			knownTypeNames[name] = struct{}{}
 			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "classes", map[string]any{
 				"name":        name,
@@ -123,6 +130,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		}
 		if matches := kotlinInterfacePattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
+			knownTypeNames[name] = struct{}{}
 			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "interfaces", map[string]any{
 				"name":        name,
@@ -134,6 +142,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		}
 		if matches := kotlinEnumPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
+			knownTypeNames[name] = struct{}{}
 			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "classes", map[string]any{
 				"name":        name,
@@ -278,6 +287,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 							localVariableTypes[functionContext],
 							classPropertyTypes,
 							currentScopedName(stack, "class"),
+							functionReturnTypes,
 						)
 					}
 					if inferredType != "" {
@@ -301,28 +311,21 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				}
 			}
 		}
-		for _, match := range kotlinThisCallPattern.FindAllStringSubmatch(trimmed, -1) {
-			if len(match) != 2 {
-				continue
-			}
-			name := match[1]
-			fullName := "this." + name
-			callKey := fullName + "#" + strconv.Itoa(lineNumber)
-			if _, ok := seenLineCalls[callKey]; ok {
-				continue
-			}
-			seenLineCalls[callKey] = struct{}{}
-			item := map[string]any{
-				"name":        name,
-				"full_name":   fullName,
-				"line_number": lineNumber,
-				"lang":        "kotlin",
-			}
-			if classContext := currentScopedName(stack, "class"); classContext != "" {
-				item["class_context"] = classContext
-			}
-			appendBucket(payload, "function_calls", item)
-		}
+		kotlinAppendThisCalls(payload, trimmed, lineNumber, seenLineCalls, currentScopedName(stack, "class"))
+
+		kotlinAppendConstructorCalls(
+			payload,
+			trimmed,
+			lineNumber,
+			functionDeclCutoff,
+			seenLineCalls,
+			knownTypeNames,
+			kotlinClassPattern.MatchString(trimmed) ||
+				kotlinObjectPattern.MatchString(trimmed) ||
+				kotlinCompanionPattern.MatchString(trimmed) ||
+				kotlinInterfacePattern.MatchString(trimmed) ||
+				kotlinEnumPattern.MatchString(trimmed),
+		)
 
 		normalizedTrimmed := strings.ReplaceAll(trimmed, "?.", ".")
 		for _, match := range kotlinCallPattern.FindAllStringSubmatchIndex(normalizedTrimmed, -1) {
@@ -342,7 +345,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					continue
 				}
 			}
-			fullName := strings.TrimSpace(normalizedTrimmed[match[2]:match[3]] + normalizedTrimmed[match[4]:match[5]])
+			fullName := strings.TrimSpace(normalizedTrimmed[match[2]:match[3]] + "." + normalizedTrimmed[match[4]:match[5]])
 			callKey := fullName + "#" + strconv.Itoa(lineNumber)
 			if _, ok := seenLineCalls[callKey]; ok {
 				continue
@@ -365,6 +368,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 						localVariableTypes[functionContext],
 						classPropertyTypes,
 						currentScopedName(stack, "class"),
+						functionReturnTypes,
 					); inferredType != "" {
 						item["inferred_obj_type"] = inferredType
 					}
@@ -410,6 +414,7 @@ func kotlinInferReceiverType(
 	variableTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	currentClass string,
+	functionReturnTypes map[string]string,
 ) string {
 	receiver = strings.TrimSpace(receiver)
 	if receiver == "" {
@@ -423,11 +428,13 @@ func kotlinInferReceiverType(
 
 	currentType := ""
 	root := strings.TrimSpace(parts[0])
-	if inferredType := strings.TrimSpace(variableTypes[root]); inferredType != "" {
-		currentType = inferredType
-	} else if currentClass != "" {
-		currentType = strings.TrimSpace(classPropertyTypes[currentClass][root])
-	}
+	currentType = kotlinInferReceiverSegmentType(
+		root,
+		variableTypes,
+		classPropertyTypes,
+		currentClass,
+		functionReturnTypes,
+	)
 	if currentType == "" {
 		return ""
 	}
@@ -439,6 +446,19 @@ func kotlinInferReceiverType(
 		name := strings.TrimSpace(segment)
 		if name == "" {
 			return ""
+		}
+		if strings.Contains(name, "(") && strings.HasSuffix(name, ")") {
+			currentType = kotlinInferReceiverSegmentType(
+				name,
+				variableTypes,
+				classPropertyTypes,
+				currentType,
+				functionReturnTypes,
+			)
+			if currentType == "" {
+				return ""
+			}
+			continue
 		}
 		properties := classPropertyTypes[currentType]
 		if len(properties) == 0 {
