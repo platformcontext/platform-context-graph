@@ -368,7 +368,7 @@ func isSemanticEntityType(payload map[string]any, entityType string) bool {
 	case "Variable":
 		return isElixirModuleAttributeSemanticEntity(payload)
 	case "Function":
-		return isJavaScriptCallableSemanticEntity(payload) || isPythonSemanticFunction(payload) || isRustSemanticFunction(payload)
+		return isJavaScriptCallableSemanticEntity(payload) || isPythonSemanticFunction(payload) || isElixirSemanticFunction(payload) || isRustSemanticFunction(payload)
 	default:
 		return false
 	}
@@ -392,6 +392,13 @@ func isPythonSemanticFunction(payload map[string]any) bool {
 		return true
 	}
 	return len(semanticPayloadMetadataStringSlice(payload, "decorators")) > 0
+}
+
+func isElixirSemanticFunction(payload map[string]any) bool {
+	if semanticPayloadString(payload, "language") != "elixir" {
+		return false
+	}
+	return semanticPayloadMetadataString(payload, "semantic_kind") == "guard"
 }
 
 func isElixirModuleAttributeSemanticEntity(payload map[string]any) bool {

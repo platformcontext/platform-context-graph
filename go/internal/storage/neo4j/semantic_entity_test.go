@@ -273,6 +273,53 @@ func TestSemanticEntityWriterWritesPythonFunctionSemanticMetadata(t *testing.T) 
 	}
 }
 
+func TestSemanticEntityWriterWritesElixirGuardFunctionMetadata(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewSemanticEntityWriter(executor, 0)
+
+	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs: []string{"repo-1"},
+		Rows: []reducer.SemanticEntityRow{
+			{
+				RepoID:       "repo-1",
+				EntityID:     "function-guard-1",
+				EntityType:   "Function",
+				EntityName:   "is_even",
+				FilePath:     "/repo/lib/demo/macros.ex",
+				RelativePath: "lib/demo/macros.ex",
+				Language:     "elixir",
+				StartLine:    10,
+				EndLine:      10,
+				Metadata: map[string]any{
+					"semantic_kind": "guard",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+	if got, want := result.CanonicalWrites, 1; got != want {
+		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
+	}
+	if got, want := len(executor.calls), 2; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+
+	functionRows := executor.calls[1].Parameters["rows"].([]map[string]any)
+	if got, want := len(functionRows), 1; got != want {
+		t.Fatalf("function row count = %d, want %d", got, want)
+	}
+	if got, want := functionRows[0]["semantic_kind"], "guard"; got != want {
+		t.Fatalf("function semantic_kind = %#v, want %#v", got, want)
+	}
+	if !strings.Contains(executor.calls[1].Cypher, "MERGE (n:Function {uid: row.entity_id})") {
+		t.Fatalf("function cypher missing Function merge: %s", executor.calls[1].Cypher)
+	}
+}
+
 func TestSemanticEntityWriterWritesTypeScriptModuleSemanticMetadata(t *testing.T) {
 	t.Parallel()
 

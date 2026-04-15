@@ -2,12 +2,28 @@ package query
 
 import (
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+type mockEntityGraphReader struct {
+	rows []map[string]any
+}
+
+func (m *mockEntityGraphReader) Run(context.Context, string, map[string]any) ([]map[string]any, error) {
+	return m.rows, nil
+}
+
+func (m *mockEntityGraphReader) RunSingle(context.Context, string, map[string]any) (map[string]any, error) {
+	if len(m.rows) == 0 {
+		return nil, nil
+	}
+	return m.rows[0], nil
+}
 
 func TestResolveEntityFallsBackToElixirProtocolContentEntity(t *testing.T) {
 	t.Parallel()
@@ -176,6 +192,64 @@ func TestResolveEntityFallsBackToElixirGuardContentEntity(t *testing.T) {
 	entities, ok := resp["entities"].([]any)
 	if !ok || len(entities) != 1 {
 		t.Fatalf("entities = %#v, want one content-backed entity", resp["entities"])
+	}
+	entity, ok := entities[0].(map[string]any)
+	if !ok {
+		t.Fatalf("entity type = %T, want map[string]any", entities[0])
+	}
+	if got, want := entity["semantic_summary"], "Function is_even is a guard."; got != want {
+		t.Fatalf("entity[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := entity["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity[semantic_profile] type = %T, want map[string]any", entity["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "guard"; got != want {
+		t.Fatalf("entity[semantic_profile][surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveEntityUsesElixirGuardGraphEntity(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: &mockEntityGraphReader{rows: []map[string]any{
+			{
+				"id":            "guard-1",
+				"labels":        []string{"Function"},
+				"name":          "is_even",
+				"file_path":     "lib/demo/macros.ex",
+				"repo_id":       "repo-1",
+				"repo_name":     "repo-1",
+				"language":      "elixir",
+				"start_line":    int64(10),
+				"end_line":      int64(10),
+				"semantic_kind": "guard",
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/entities/resolve",
+		bytes.NewBufferString(`{"name":"is_even","type":"guard","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	entities, ok := resp["entities"].([]any)
+	if !ok || len(entities) != 1 {
+		t.Fatalf("entities = %#v, want one graph-backed guard entity", resp["entities"])
 	}
 	entity, ok := entities[0].(map[string]any)
 	if !ok {

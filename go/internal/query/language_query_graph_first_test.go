@@ -394,6 +394,68 @@ func TestHandleLanguageQuery_PythonLambdaFunctionUsesGraphMetadataWithoutContent
 	}
 }
 
+func TestHandleLanguageQuery_ElixirGuardUsesGraphMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":     "graph-elixir-guard-1",
+				"name":          "is_even",
+				"labels":        []string{"Function"},
+				"file_path":     "lib/demo/macros.ex",
+				"repo_id":       "repo-1",
+				"repo_name":     "repo-1",
+				"language":      "elixir",
+				"start_line":    int64(10),
+				"end_line":      int64(10),
+				"semantic_kind": "guard",
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"elixir","entity_type":"guard","query":"is_even","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed Elixir guard", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["semantic_summary"], "Function is_even is a guard."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "guard"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["guard"], true; got != want {
+		t.Fatalf("semantic_profile[guard] = %#v, want %#v", got, want)
+	}
+}
+
 func TestHandleLanguageQuery_TSXComponentUsesGraphMetadataWithoutContent(t *testing.T) {
 	t.Parallel()
 

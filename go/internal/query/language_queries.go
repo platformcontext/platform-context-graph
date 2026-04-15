@@ -58,6 +58,31 @@ func (h *LanguageQueryHandler) handleLanguageQuery(w http.ResponseWriter, r *htt
 		req.Limit = 50
 	}
 
+	if req.EntityType == "guard" {
+		results, err := h.queryGraphFirstContentByLanguageWithSemanticFilter(
+			r.Context(),
+			req.Language,
+			"Function",
+			req.Query,
+			req.RepoID,
+			req.Limit,
+			"semantic_kind",
+			"guard",
+		)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"language":    req.Language,
+			"entity_type": req.EntityType,
+			"query":       req.Query,
+			"results":     results,
+		})
+		return
+	}
+
 	if label, ok := graphBackedEntityTypes[req.EntityType]; ok {
 		results, err := h.queryByLanguage(r.Context(), req.Language, label, req.Query, req.RepoID, req.Limit)
 		if err != nil {
@@ -154,8 +179,11 @@ func (h *LanguageQueryHandler) queryContentByLanguage(
 }
 
 func allSupportedEntityTypes() map[string]string {
-	merged := make(map[string]string, len(graphBackedEntityTypes)+len(contentBackedEntityTypes))
+	merged := make(map[string]string, len(graphBackedEntityTypes)+len(graphFirstContentBackedEntityTypes)+len(contentBackedEntityTypes))
 	for key, value := range graphBackedEntityTypes {
+		merged[key] = value
+	}
+	for key, value := range graphFirstContentBackedEntityTypes {
 		merged[key] = value
 	}
 	for key, value := range contentBackedEntityTypes {
@@ -170,7 +198,25 @@ func (h *LanguageQueryHandler) queryByLanguage(
 	language, label, query, repoID string,
 	limit int,
 ) ([]map[string]any, error) {
-	cypher, params := buildLanguageCypher(language, label, query, repoID, limit)
+	return h.queryByLanguageWithSemanticFilter(ctx, language, label, query, repoID, limit, "", "")
+}
+
+func (h *LanguageQueryHandler) queryByLanguageWithSemanticFilter(
+	ctx context.Context,
+	language, label, query, repoID string,
+	limit int,
+	semanticFilterKey string,
+	semanticFilterValue string,
+) ([]map[string]any, error) {
+	cypher, params := buildLanguageCypherWithSemanticFilter(
+		language,
+		label,
+		query,
+		repoID,
+		limit,
+		semanticFilterKey,
+		semanticFilterValue,
+	)
 
 	rows, err := h.Neo4j.Run(ctx, cypher, params)
 	if err != nil {
@@ -197,8 +243,27 @@ func (h *LanguageQueryHandler) queryGraphFirstContentByLanguage(
 	language, label, query, repoID string,
 	limit int,
 ) ([]map[string]any, error) {
+	return h.queryGraphFirstContentByLanguageWithSemanticFilter(ctx, language, label, query, repoID, limit, "", "")
+}
+
+func (h *LanguageQueryHandler) queryGraphFirstContentByLanguageWithSemanticFilter(
+	ctx context.Context,
+	language, label, query, repoID string,
+	limit int,
+	semanticFilterKey string,
+	semanticFilterValue string,
+) ([]map[string]any, error) {
 	if h.Neo4j != nil {
-		results, err := h.queryByLanguage(ctx, language, label, query, repoID, limit)
+		results, err := h.queryByLanguageWithSemanticFilter(
+			ctx,
+			language,
+			label,
+			query,
+			repoID,
+			limit,
+			semanticFilterKey,
+			semanticFilterValue,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -212,6 +277,18 @@ func (h *LanguageQueryHandler) queryGraphFirstContentByLanguage(
 // buildLanguageCypher constructs the Cypher query and parameters for a
 // language-specific entity lookup.
 func buildLanguageCypher(language, label, query, repoID string, limit int) (string, map[string]any) {
+	return buildLanguageCypherWithSemanticFilter(language, label, query, repoID, limit, "", "")
+}
+
+func buildLanguageCypherWithSemanticFilter(
+	language,
+	label,
+	query,
+	repoID string,
+	limit int,
+	semanticFilterKey string,
+	semanticFilterValue string,
+) (string, map[string]any) {
 	language = canonicalLanguage(language)
 	params := map[string]any{
 		"language": language,
@@ -230,7 +307,16 @@ func buildLanguageCypher(language, label, query, repoID string, limit int) (stri
 	case "File":
 		return buildFileCypher(language, extFilter, query, repoID, params)
 	default:
-		return buildEntityCypher(language, label, extFilter, query, repoID, params)
+		return buildEntityCypherWithSemanticFilter(
+			language,
+			label,
+			extFilter,
+			query,
+			repoID,
+			params,
+			semanticFilterKey,
+			semanticFilterValue,
+		)
 	}
 }
 
@@ -330,9 +416,12 @@ func buildFileCypher(language, extFilter, query, repoID string, params map[strin
 	return cypher, params
 }
 
-// buildEntityCypher returns a query for code entities (Function, Class, etc.)
-// in the given language.
-func buildEntityCypher(language, label, extFilter, query, repoID string, params map[string]any) (string, map[string]any) {
+func buildEntityCypherWithSemanticFilter(
+	language, label, extFilter, query, repoID string,
+	params map[string]any,
+	semanticFilterKey string,
+	semanticFilterValue string,
+) (string, map[string]any) {
 	params["language_title"] = strings.Title(language) //nolint:staticcheck
 
 	cypher := fmt.Sprintf(`
@@ -340,6 +429,11 @@ func buildEntityCypher(language, label, extFilter, query, repoID string, params 
 		WHERE (e.language = $language OR e.language = $language_title
 		       OR f.language = $language OR f.language = $language_title%s)
 	`, label, extFilter)
+
+	if semanticFilterKey != "" {
+		cypher += fmt.Sprintf(" AND coalesce(e.%s, '') = $semantic_filter", semanticFilterKey)
+		params["semantic_filter"] = semanticFilterValue
+	}
 
 	if repoID != "" {
 		cypher += " AND r.id = $repo_id"

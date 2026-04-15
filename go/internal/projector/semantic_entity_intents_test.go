@@ -71,6 +71,38 @@ func TestBuildSemanticEntityReducerIntentQueuesPythonFunctionSemanticEntities(t 
 	}
 }
 
+func TestBuildSemanticEntityReducerIntentQueuesElixirGuardSemanticEntities(t *testing.T) {
+	t.Parallel()
+
+	intent, ok := buildSemanticEntityReducerIntent(facts.Envelope{
+		FactID:       "fact-3",
+		ScopeID:      "scope-123",
+		GenerationID: "generation-456",
+		FactKind:     "content_entity",
+		Payload: map[string]any{
+			"entity_type":   "Function",
+			"entity_id":     "function-guard-1",
+			"entity_name":   "is_even",
+			"relative_path": "lib/demo/macros.ex",
+			"repo_id":       "repo-1",
+			"language":      "elixir",
+			"semantic_kind": "guard",
+		},
+	})
+	if !ok {
+		t.Fatal("buildSemanticEntityReducerIntent() ok = false, want true")
+	}
+	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
+		t.Fatalf("intent.Domain = %q, want %q", got, want)
+	}
+	if got, want := intent.EntityKey, "function-guard-1"; got != want {
+		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
+	}
+	if got, want := intent.Reason, "semantic entity follow-up for Function"; got != want {
+		t.Fatalf("intent.Reason = %q, want %q", got, want)
+	}
+}
+
 func TestBuildSemanticEntityReducerIntentQueuesTypeScriptModuleSemanticEntities(t *testing.T) {
 	t.Parallel()
 

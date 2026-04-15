@@ -46,8 +46,15 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 	params := map[string]any{"name": req.Name}
 
 	if req.Type != "" {
-		cypher += " AND $type IN labels(e)"
-		params["type"] = req.Type
+		graphLabel, semanticKey, semanticValue, ok := resolveGraphEntityType(req.Type)
+		if ok {
+			cypher += " AND $type IN labels(e)"
+			params["type"] = graphLabel
+			if semanticKey != "" {
+				cypher += fmt.Sprintf(" AND coalesce(e.%s, '') = $semantic_filter", semanticKey)
+				params["semantic_filter"] = semanticValue
+			}
+		}
 	}
 
 	if req.RepoID != "" {
@@ -84,7 +91,7 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 
 	entities := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		entities = append(entities, map[string]any{
+		entity := map[string]any{
 			"id":         StringVal(row, "id"),
 			"labels":     StringSliceVal(row, "labels"),
 			"name":       StringVal(row, "name"),
@@ -94,7 +101,11 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 			"language":   StringVal(row, "language"),
 			"start_line": IntVal(row, "start_line"),
 			"end_line":   IntVal(row, "end_line"),
-		})
+		}
+		if metadata := graphResultMetadata(row); len(metadata) > 0 {
+			entity["metadata"] = metadata
+		}
+		entities = append(entities, entity)
 	}
 	entities, err = h.enrichEntityResultsWithContentMetadata(r.Context(), entities, req.RepoID, req.Name, 20)
 	if err != nil {
@@ -252,6 +263,19 @@ func contentEntityTypeForResolve(typeName string) string {
 		return entityType
 	}
 	return typeName
+}
+
+func resolveGraphEntityType(typeName string) (string, string, string, bool) {
+	if graphLabel, semanticKey, semanticValue, ok := elixirGraphSemanticEntityType(typeName); ok {
+		return graphLabel, semanticKey, semanticValue, true
+	}
+	if graphLabel, ok := graphBackedEntityTypes[typeName]; ok {
+		return graphLabel, "", "", true
+	}
+	if graphLabel, ok := graphFirstContentBackedEntityTypes[typeName]; ok {
+		return graphLabel, "", "", true
+	}
+	return "", "", "", false
 }
 
 var resolveContentBackedEntityTypes = map[string]string{

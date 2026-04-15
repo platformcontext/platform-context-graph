@@ -238,6 +238,46 @@ func TestExtractSemanticEntityRowsIncludesPythonDecoratedAsyncFunctionFacts(t *t
 	}
 }
 
+func TestExtractSemanticEntityRowsIncludesElixirGuardFacts(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "content_entity",
+			SourceRef: facts.Ref{
+				SourceURI: "/repo/lib/demo/macros.ex",
+			},
+			Payload: map[string]any{
+				"repo_id":       "repo-1",
+				"entity_id":     "function-guard-1",
+				"relative_path": "lib/demo/macros.ex",
+				"entity_type":   "Function",
+				"entity_name":   "is_even",
+				"language":      "elixir",
+				"start_line":    10,
+				"end_line":      10,
+				"semantic_kind": "guard",
+			},
+		},
+	}
+
+	repoIDs, rows := ExtractSemanticEntityRows(envelopes)
+	if got, want := repoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("ExtractSemanticEntityRows() repoIDs = %v, want %v", got, want)
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("ExtractSemanticEntityRows() rows = %d, want %d", got, want)
+	}
+
+	row := rows[0]
+	if got, want := row.EntityType, "Function"; got != want {
+		t.Fatalf("row.EntityType = %q, want %q", got, want)
+	}
+	if got, want := row.Metadata["semantic_kind"], "guard"; got != want {
+		t.Fatalf("row.Metadata[semantic_kind] = %#v, want %#v", got, want)
+	}
+}
+
 func TestSemanticEntityMaterializationHandlerWritesAndRetracts(t *testing.T) {
 	t.Parallel()
 
