@@ -25,6 +25,15 @@ func javaScriptTypeAliasItem(
 	return item
 }
 
+func javaScriptFunctionSemantics(node *tree_sitter.Node, lang string) map[string]any {
+	if lang != "tsx" || !javaScriptContainsJSXFragmentShorthand(node) {
+		return nil
+	}
+	return map[string]any{
+		"jsx_fragment_shorthand": true,
+	}
+}
+
 func javaScriptTypeAliasKind(node *tree_sitter.Node) string {
 	if node == nil {
 		return ""

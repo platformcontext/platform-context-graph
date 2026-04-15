@@ -23,6 +23,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTSXSemanticsAndComponents` | Compose-backed fixture verification | - |
 | Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `content:TypeAlias entity + code/language/entity_context.story` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes`, `go/internal/query/language_query_alias_test.go::TestBuildLanguageCypher_TSXUsesTypeScriptExtensions`, `go/internal/query/entity_content_fallback_test.go::TestResolveEntityFallsBackToContentEntities`, `go/internal/query/content_reader_test.go::TestCodeHandlerSearchEntityContentIncludesEntityNameMatches` | Compose-backed fixture verification | TSX files inherit TypeScript type-alias extraction, those aliases are queryable through the Go content-backed language-query and content APIs, the normal entity resolve/context surfaces now also fall back to content-backed entities, `code/language-query` now also accepts direct `tsx` requests, the normal `code/search` fallback now searches content-backed entity names as well as source text, and entity-context can now emit a first-class `story` for matching semantic entities. The remaining gap is dedicated graph-first modeling beyond the shared query/story surfaces. |
 | JSX component usage | `jsx-component-usage` | partial | `function_calls` | `name, line_number` | `content:Entity.metadata + component entities + synthesized REFERENCES edges + semantic_profile + story` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes`, `go/internal/query/language_query_alias_test.go::TestSupportedLanguages_ExplicitJSXAndTSX`, `go/internal/query/language_query_alias_test.go::TestBuildLanguageCypher_TSXUsesTypeScriptExtensions`, `go/internal/query/entity_content_fallback_test.go::TestGetEntityContextFallsBackToContentEntities`, `go/internal/query/code_relationships_content_fallback_test.go::TestHandleRelationshipsFallsBackToContentEntityReferences`, `go/internal/query/content_reader_test.go::TestCodeHandlerSearchEntityContentIncludesEntityNameMatches`, `go/internal/query/entity_story_test.go::TestGetEntityContextFallsBackToContentEntitiesIncludesStory`, `go/internal/query/repository_story_semantics_test.go::TestBuildRepositoryStoryResponseIncludesSemanticOverview` | Compose-backed fixture verification | PascalCase JSX tag usage is queryable through the Go content-backed `component` contract, `code/language-query` now also accepts direct `tsx` requests, content-backed component entities now participate in the normal entity context surface, the normal `code/relationships` surface now synthesizes `REFERENCES` edges from `jsx_component_usage` metadata, shared query surfaces now emit a structured `semantic_profile`, entity-context now also emits a first-class `story`, and repository stories now carry a semantic overview derived from those same entities. Full graph-first component/reference modeling remains partial. |
+| JSX fragment shorthand | `jsx-fragment-shorthand` | partial | `functions, components` | `name, line_number, jsx_fragment_shorthand=true` | `content:Entity.metadata.jsx_fragment_shorthand + semantic_summary + semantic_profile + repository_story.semantic_overview` | `go/internal/parser/engine_tsx_advanced_semantics_test.go::TestDefaultEngineParsePathTSXCapturesFragmentAndComponentTypeAssertion`, `go/internal/query/entity_metadata_tsx_semantics_test.go::TestEnrichEntityResultsWithContentMetadataTSXFragmentComponent`, `go/internal/query/repository_story_tsx_semantics_test.go::TestBuildRepositorySemanticOverviewCountsTSXAdvancedSignals` | Compose-backed fixture verification | The Go parser now preserves fragment shorthand usage on TSX function and component entities, and the normal query/context/story surfaces promote that metadata into semantic summaries, structured semantic profiles, and repository-story semantic counts. First-class graph persistence remains partial. |
+| ComponentType narrowing | `component-type-narrowing` | partial | `variables` | `name, line_number, component_type_assertion` | `content:Variable.metadata.component_type_assertion + semantic_summary + semantic_profile + repository_story.semantic_overview` | `go/internal/parser/engine_tsx_advanced_semantics_test.go::TestDefaultEngineParsePathTSXCapturesFragmentAndComponentTypeAssertion`, `go/internal/query/entity_metadata_tsx_semantics_test.go::TestEnrichEntityResultsWithContentMetadataTSXComponentTypeAssertion`, `go/internal/query/repository_story_tsx_semantics_test.go::TestBuildRepositorySemanticOverviewCountsTSXAdvancedSignals` | Compose-backed fixture verification | TSX `as ComponentType<...>` narrowing now survives on the Go parser/content/query path through variable metadata and semantic promotion. First-class graph persistence remains partial. |
 
 ## Support Maturity
 - Grammar routing: `supported`
@@ -41,14 +43,20 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     content-backed entities, normal `code/search` can now search
     content-backed entity names as well as source text and emit both semantic
     summaries and a structured `semantic_profile` for content-backed
-    component entities, entity-context now also emits a first-class `story`,
-    repository stories now expose a semantic overview derived from those same
-    entities, and normal `code/relationships` can synthesize JSX
-    component-reference edges for content-backed entities. Full graph-first
-    component/reference surfacing remains partial.
+    component entities, fragment shorthand and `as ComponentType<...>`
+    narrowing now also surface through semantic summaries, structured
+    `semantic_profile` payloads, and repository-story semantic counts,
+    entity-context now also emits a first-class `story`, repository stories
+    now expose a semantic overview derived from those same entities, and
+    normal `code/relationships` can synthesize JSX component-reference edges
+    for content-backed entities. Full graph-first component/reference
+    surfacing remains partial.
 
 
 ## Known Limitations
 - JSX element tag names are not yet persisted as first-class graph nodes
-- Fragment shorthand (`<>...</>`) is not separately tracked
-- TSX-specific type narrowing patterns (e.g., `as ComponentType`) are not captured
+- Fragment shorthand now has content-backed semantic parity, but first-class
+  graph persistence is still partial
+- TSX-specific type narrowing patterns such as `as ComponentType<...>` now have
+  content-backed semantic parity, but first-class graph persistence is still
+  partial

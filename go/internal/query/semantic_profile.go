@@ -34,6 +34,14 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 		profile["type_alias_kind"] = typeAliasKind
 		signals = append(signals, typeAliasKind)
 	}
+	if jsxFragment := boolValue(metadata["jsx_fragment_shorthand"]); jsxFragment {
+		profile["jsx_fragment_shorthand"] = true
+		signals = append(signals, "jsx_fragment")
+	}
+	if componentAssertion, _ := metadata["component_type_assertion"].(string); componentAssertion != "" {
+		profile["component_type_assertion"] = componentAssertion
+		signals = append(signals, "component_type_assertion")
+	}
 
 	jsSemantics := ExtractJavaScriptSemantics(metadata)
 	if jsSemantics.MethodKind != "" {
@@ -106,6 +114,9 @@ func semanticSurfaceKind(
 ) string {
 	if framework, ok := profile["framework"].(string); ok && framework != "" && label == "Component" {
 		return "framework_component"
+	}
+	if _, ok := profile["component_type_assertion"].(string); ok {
+		return "component_type_assertion"
 	}
 	if aliasKind, _ := profile["type_alias_kind"].(string); aliasKind != "" {
 		switch aliasKind {

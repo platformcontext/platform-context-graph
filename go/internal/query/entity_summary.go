@@ -102,6 +102,9 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		if framework == "" {
 			return ""
 		}
+		if boolValue(metadata["jsx_fragment_shorthand"]) {
+			return fmt.Sprintf("%s %s is associated with the %s framework and uses JSX fragment shorthand.", label, name, framework)
+		}
 		return fmt.Sprintf("%s %s is associated with the %s framework.", label, name, framework)
 	case "KustomizeOverlay":
 		bases := metadataStringSlice(metadata, "bases")
@@ -190,6 +193,9 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 
 	fragments := make([]string, 0, 4)
 	pythonProfile := PythonSemanticProfileFromMetadata(label, metadata)
+	if componentAssertion, _ := metadata["component_type_assertion"].(string); componentAssertion != "" {
+		fragments = append(fragments, "narrows to "+componentAssertion)
+	}
 	if pythonProfile.Async {
 		fragments = append(fragments, "is async")
 	}
@@ -209,6 +215,9 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 	}
 	if jsSemantics.Docstring != "" {
 		fragments = append(fragments, fmt.Sprintf("is documented as %q", jsSemantics.Docstring))
+	}
+	if boolValue(metadata["jsx_fragment_shorthand"]) {
+		fragments = append(fragments, "uses JSX fragment shorthand")
 	}
 	if constructorKind, _ := metadata["constructor_kind"].(string); constructorKind != "" {
 		fragments = append(fragments, fmt.Sprintf("is a %s constructor", strings.ReplaceAll(constructorKind, "_", " ")))

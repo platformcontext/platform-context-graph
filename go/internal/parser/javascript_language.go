@@ -126,12 +126,18 @@ func (e *Engine) parseJavaScriptLike(
 			if scope == "module" && javaScriptInsideFunction(node) {
 				return
 			}
-			appendBucket(payload, "variables", map[string]any{
+			item := map[string]any{
 				"name":        name,
 				"line_number": nodeLine(nameNode),
 				"end_line":    nodeEndLine(node),
 				"lang":        outputLanguage,
-			})
+			}
+			if outputLanguage == "tsx" {
+				if assertion := javaScriptComponentTypeAssertion(valueNode, source); assertion != "" {
+					item["component_type_assertion"] = assertion
+				}
+			}
+			appendBucket(payload, "variables", item)
 		case "import_statement":
 			for _, item := range javaScriptImportEntries(node, source, outputLanguage) {
 				appendBucket(payload, "imports", item)
@@ -236,6 +242,9 @@ func appendFunctionDeclaration(
 	}
 	if docstring := javaScriptDocstring(node, source); docstring != "" {
 		item["docstring"] = docstring
+	}
+	for key, value := range javaScriptFunctionSemantics(node, lang) {
+		item[key] = value
 	}
 	if options.IndexSource {
 		item["source"] = nodeText(node, source)

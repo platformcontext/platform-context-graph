@@ -36,12 +36,16 @@ func maybeAppendJavaScriptComponent(
 	if !javaScriptLooksLikeComponent(node, source, outputLanguage) {
 		return
 	}
-	appendBucket(payload, "components", map[string]any{
+	item := map[string]any{
 		"name":        name,
 		"line_number": nodeLine(nameNode),
 		"end_line":    nodeEndLine(node),
 		"lang":        outputLanguage,
-	})
+	}
+	if outputLanguage == "tsx" && javaScriptContainsJSXFragmentShorthand(node) {
+		item["jsx_fragment_shorthand"] = true
+	}
+	appendBucket(payload, "components", item)
 }
 
 func javaScriptLooksLikeComponent(node *tree_sitter.Node, source []byte, outputLanguage string) bool {
@@ -231,6 +235,71 @@ func detectReactSemantics(path string, source string, payload map[string]any) (m
 		"component_exports": componentExports,
 		"hooks_used":        hooksUsed,
 	}, true
+}
+
+func javaScriptContainsJSXFragmentShorthand(node *tree_sitter.Node) bool {
+	if node == nil {
+		return false
+	}
+	if node.Kind() == "jsx_element" {
+		openTag := node.ChildByFieldName("open_tag")
+		if openTag != nil && openTag.ChildByFieldName("name") == nil {
+			return true
+		}
+	}
+	cursor := node.Walk()
+	children := node.NamedChildren(cursor)
+	cursor.Close()
+	for i := range children {
+		child := children[i]
+		if javaScriptContainsJSXFragmentShorthand(&child) {
+			return true
+		}
+	}
+	return false
+}
+
+func javaScriptComponentTypeAssertion(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	switch node.Kind() {
+	case "as_expression", "type_assertion":
+		if typeName := javaScriptAssertionTypeName(node.ChildByFieldName("type"), source); typeName != "" {
+			return typeName
+		}
+		cursor := node.Walk()
+		children := node.NamedChildren(cursor)
+		cursor.Close()
+		if len(children) >= 2 {
+			return javaScriptAssertionTypeName(&children[1], source)
+		}
+	case "parenthesized_expression":
+		cursor := node.Walk()
+		children := node.NamedChildren(cursor)
+		cursor.Close()
+		for i := range children {
+			child := children[i]
+			if typeName := javaScriptComponentTypeAssertion(&child, source); typeName != "" {
+				return typeName
+			}
+		}
+	}
+	return ""
+}
+
+func javaScriptAssertionTypeName(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	switch node.Kind() {
+	case "generic_type":
+		return strings.TrimSpace(nodeText(node.ChildByFieldName("name"), source))
+	case "type_identifier", "identifier", "nested_type_identifier":
+		return strings.TrimSpace(nodeText(node, source))
+	default:
+		return ""
+	}
 }
 
 func componentNames(payload map[string]any) []string {
