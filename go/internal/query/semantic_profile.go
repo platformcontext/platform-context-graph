@@ -30,6 +30,10 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 		profile["type_parameters"] = typeParameters
 		signals = append(signals, "type_parameters")
 	}
+	if typeAliasKind, _ := metadata["type_alias_kind"].(string); typeAliasKind != "" {
+		profile["type_alias_kind"] = typeAliasKind
+		signals = append(signals, typeAliasKind)
+	}
 
 	jsSemantics := ExtractJavaScriptSemantics(metadata)
 	if jsSemantics.MethodKind != "" {
@@ -44,6 +48,10 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 	if framework, ok := metadata["framework"].(string); ok && framework != "" {
 		profile["framework"] = framework
 		signals = append(signals, "framework")
+	}
+	if moduleKind, _ := metadata["module_kind"].(string); moduleKind == "namespace" {
+		profile["namespace"] = true
+		signals = append(signals, "namespace")
 	}
 
 	if language == "elixir" {
@@ -98,6 +106,17 @@ func semanticSurfaceKind(
 ) string {
 	if framework, ok := profile["framework"].(string); ok && framework != "" && label == "Component" {
 		return "framework_component"
+	}
+	if aliasKind, _ := profile["type_alias_kind"].(string); aliasKind != "" {
+		switch aliasKind {
+		case "mapped_type":
+			return "mapped_type_alias"
+		case "conditional_type":
+			return "conditional_type_alias"
+		}
+	}
+	if _, ok := profile["namespace"].(bool); ok && label == "Module" {
+		return "namespace_module"
 	}
 	if _, ok := profile["protocol"].(bool); ok {
 		return "protocol"

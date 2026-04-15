@@ -43,6 +43,17 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		case kind != "":
 			return fmt.Sprintf("%s %s is a %s.", label, name, kind)
 		}
+	case "TypeAlias":
+		fragments := make([]string, 0, 2)
+		if typeAliasKind, _ := metadata["type_alias_kind"].(string); typeAliasKind != "" {
+			fragments = append(fragments, "is a "+humanizeSemanticValue(typeAliasKind))
+		}
+		if params := metadataStringSlice(metadata, "type_parameters"); len(params) > 0 {
+			fragments = append(fragments, "declares type parameters "+strings.Join(params, ", "))
+		}
+		if len(fragments) > 0 {
+			return fmt.Sprintf("%s %s %s.", label, name, joinSentenceFragments(fragments))
+		}
 	case "TypeAnnotation":
 		typeName, _ := metadata["type"].(string)
 		if typeName == "" {

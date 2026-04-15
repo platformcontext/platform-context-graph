@@ -95,13 +95,7 @@ func (e *Engine) parseJavaScriptLike(
 			if strings.TrimSpace(name) == "" {
 				return
 			}
-			appendBucket(payload, "type_aliases", map[string]any{
-				"name":            name,
-				"line_number":     nodeLine(nameNode),
-				"end_line":        nodeEndLine(node),
-				"lang":            outputLanguage,
-				"type_parameters": javaScriptTypeParameters(node, source),
-			})
+			appendBucket(payload, "type_aliases", javaScriptTypeAliasItem(node, nameNode, source, outputLanguage))
 		case "enum_declaration":
 			if outputLanguage == "javascript" {
 				return
@@ -171,12 +165,20 @@ func (e *Engine) parseJavaScriptLike(
 				"line_number": nodeLine(node),
 				"lang":        outputLanguage,
 			})
+		case "internal_module":
+			if outputLanguage != "typescript" {
+				return
+			}
+			if item := javaScriptNamespaceModuleItem(node, source, outputLanguage); item != nil {
+				appendBucket(payload, "modules", item)
+			}
 		}
 	})
 
 	sortNamedBucket(payload, "functions")
 	sortNamedBucket(payload, "classes")
 	sortNamedBucket(payload, "variables")
+	sortNamedBucket(payload, "modules")
 	sortNamedBucket(payload, "imports")
 	sortNamedBucket(payload, "function_calls")
 	sortNamedBucket(payload, "components")
