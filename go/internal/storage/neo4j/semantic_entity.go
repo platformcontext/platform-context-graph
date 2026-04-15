@@ -201,12 +201,12 @@ SET n.id = row.entity_id,
     n.impl_context = row.impl_context,
     n.docstring = row.docstring,
     n.method_kind = row.method_kind,
+    n.jsx_fragment_shorthand = row.jsx_fragment_shorthand,
     n.decorators = row.decorators,
     n.async = row.async,
     n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
-
 	semanticRustImplBlockOwnershipCypher = `UNWIND $rows AS row
 MATCH (impl:ImplBlock {uid: row.impl_block_id})
 MATCH (fn:Function {uid: row.function_id})
@@ -423,6 +423,9 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 		if methodKind := semanticMetadataString(row.Metadata, "method_kind"); methodKind != "" {
 			rowMap["method_kind"] = methodKind
+		}
+		if jsxFragment := semanticMetadataBool(row.Metadata, "jsx_fragment_shorthand"); jsxFragment {
+			rowMap["jsx_fragment_shorthand"] = true
 		}
 		if decorators := semanticMetadataStringSlice(row.Metadata, "decorators"); len(decorators) > 0 {
 			rowMap["decorators"] = decorators
