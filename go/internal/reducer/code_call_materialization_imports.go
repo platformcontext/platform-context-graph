@@ -96,6 +96,13 @@ func resolveGenericCallee(
 			return entityID, index.entityFileByID[entityID]
 		}
 	}
+	if !codeCallHasQualifiedScope(call, language) {
+		for _, name := range codeCallBroadCandidateNames(call, language) {
+			if entityID := index.uniqueNameByRepo[repositoryID][name]; entityID != "" {
+				return entityID, index.entityFileByID[entityID]
+			}
+		}
+	}
 
 	return resolveImportedCrossFileCallee(
 		index,

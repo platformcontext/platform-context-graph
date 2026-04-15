@@ -95,8 +95,11 @@ become first-class.
   matching. The current cross-file reducer proof now also covers JS/TS/TSX
   import-driven generic calls plus exact-qualified Swift/Ruby/Elixir/PHP
   static-style calls; Python module and `from` imports now close cross-file
-  generic call proof honestly. The remaining call-edge gap is the parser-first
-  bare-name families that still cannot identify truthful cross-file callees
+  generic call proof honestly, and reducer proof now also covers repo-unique
+  cross-file bare-name calls across the remaining parser-first long-tail
+  families. The remaining call-edge gap is end-to-end query proof for those
+  edges, especially `dead-code`, `call-chain`, and the still-stale
+  `code/relationships` CLI/MCP contract
 
 ### Validation
 
