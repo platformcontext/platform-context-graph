@@ -237,3 +237,81 @@ func TestHandleCallChainSupportsEntityIDAndRepoScopedLookup(t *testing.T) {
 		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
 	}
 }
+
+func TestHandleCallChainSupportsRustImplContextQualifiedLookup(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if !strings.Contains(cypher, "shortestPath") {
+					t.Fatalf("cypher = %q, want shortestPath query", cypher)
+				}
+				if strings.Contains(cypher, "CALLS_FUNCTION") {
+					t.Fatalf("cypher = %q, want canonical CALLS edges only", cypher)
+				}
+				if !strings.Contains(cypher, "[:CALLS*1..3]") {
+					t.Fatalf("cypher = %q, want bounded CALLS traversal", cypher)
+				}
+				if !strings.Contains(cypher, "start.id = $start_entity_id") {
+					t.Fatalf("cypher = %q, want exact start entity-id predicate", cypher)
+				}
+				if !strings.Contains(cypher, "end.id = $end_entity_id") {
+					t.Fatalf("cypher = %q, want exact end entity-id predicate", cypher)
+				}
+				if got, want := params["start_entity_id"], "fn-new"; got != want {
+					t.Fatalf("params[start_entity_id] = %#v, want %#v", got, want)
+				}
+				if got, want := params["end_entity_id"], "fn-x"; got != want {
+					t.Fatalf("params[end_entity_id] = %#v, want %#v", got, want)
+				}
+				if got, want := params["repo_id"], "repo-rust"; got != want {
+					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{
+					{
+						"chain": []any{
+							map[string]any{"id": "fn-new", "name": "new", "labels": []any{"Function"}},
+							map[string]any{"id": "fn-x", "name": "x", "labels": []any{"Function"}},
+						},
+						"depth": int64(1),
+					},
+				}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/call-chain",
+		bytes.NewBufferString(`{"start_entity_id":"fn-new","end_entity_id":"fn-x","repo_id":"repo-rust","max_depth":3}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	chains, ok := resp["chains"].([]any)
+	if !ok {
+		t.Fatalf("resp[chains] type = %T, want []any", resp["chains"])
+	}
+	if got, want := len(chains), 1; got != want {
+		t.Fatalf("len(resp[chains]) = %d, want %d", got, want)
+	}
+	chain, ok := chains[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[chains][0] type = %T, want map[string]any", chains[0])
+	}
+	nodes, ok := chain["chain"].([]any)
+	if !ok || len(nodes) != 2 {
+		t.Fatalf("resp[chains][0][chain] = %#v, want two Rust impl-method nodes", chain["chain"])
+	}
+}
