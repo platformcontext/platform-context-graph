@@ -344,6 +344,71 @@ patches:
 	}
 }
 
+func TestDefaultEngineParsePathYAMLKustomizeTypedDeployReferences(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "kustomization.yaml")
+	writeTestFile(
+		t,
+		filePath,
+		`apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+  - https://github.com/myorg/shared-manifests.git//payments?ref=main
+components:
+  - shared/component
+helmCharts:
+  - name: nginx
+    repo: https://charts.bitnami.com/bitnami
+    releaseName: ingress-nginx
+images:
+  - name: nginx
+    newName: ghcr.io/example/nginx
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	payload, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", filePath, err)
+	}
+
+	overlays := payload["kustomize_overlays"].([]map[string]any)
+	if len(overlays) != 1 {
+		t.Fatalf("kustomize_overlays = %#v, want one overlay", overlays)
+	}
+
+	resourceRefs, ok := overlays[0]["resource_refs"].([]string)
+	if !ok {
+		t.Fatalf("kustomize_overlays[0].resource_refs = %T, want []string", overlays[0]["resource_refs"])
+	}
+	if len(resourceRefs) != 2 || resourceRefs[0] != "https://github.com/myorg/shared-manifests.git//payments?ref=main" || resourceRefs[1] != "shared/component" {
+		t.Fatalf("kustomize_overlays[0].resource_refs = %#v, want [https://github.com/myorg/shared-manifests.git//payments?ref=main shared/component]", resourceRefs)
+	}
+
+	helmRefs, ok := overlays[0]["helm_refs"].([]string)
+	if !ok {
+		t.Fatalf("kustomize_overlays[0].helm_refs = %T, want []string", overlays[0]["helm_refs"])
+	}
+	if len(helmRefs) != 3 || helmRefs[0] != "https://charts.bitnami.com/bitnami" || helmRefs[1] != "ingress-nginx" || helmRefs[2] != "nginx" {
+		t.Fatalf("kustomize_overlays[0].helm_refs = %#v, want [https://charts.bitnami.com/bitnami ingress-nginx nginx]", helmRefs)
+	}
+
+	imageRefs, ok := overlays[0]["image_refs"].([]string)
+	if !ok {
+		t.Fatalf("kustomize_overlays[0].image_refs = %T, want []string", overlays[0]["image_refs"])
+	}
+	if len(imageRefs) != 2 || imageRefs[0] != "ghcr.io/example/nginx" || imageRefs[1] != "nginx" {
+		t.Fatalf("kustomize_overlays[0].image_refs = %#v, want [ghcr.io/example/nginx nginx]", imageRefs)
+	}
+}
+
 func TestDefaultEngineParsePathYAMLCloudFormation(t *testing.T) {
 	t.Parallel()
 

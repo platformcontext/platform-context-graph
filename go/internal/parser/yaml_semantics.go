@@ -18,12 +18,16 @@ func isKustomization(apiVersion string, kind string, filename string) bool {
 }
 
 func parseKustomization(document map[string]any, path string, lineNumber int) map[string]any {
+	bases := collectKustomizeBaseRefs(document)
 	return map[string]any{
 		"name":          "kustomization",
 		"line_number":   lineNumber,
 		"namespace":     strings.TrimSpace(fmt.Sprint(document["namespace"])),
 		"resources":     document["resources"],
-		"bases":         collectKustomizeBaseRefs(document),
+		"bases":         bases,
+		"resource_refs": collectKustomizeResourceRefs(document, bases),
+		"helm_refs":     collectKustomizeObjectRefs(document, "helmCharts", "name", "repo", "releaseName"),
+		"image_refs":    collectKustomizeObjectRefs(document, "images", "name", "newName"),
 		"patches":       collectPatchPaths(document["patches"]),
 		"patch_targets": collectPatchTargets(document["patches"]),
 		"path":          path,
@@ -90,11 +94,59 @@ func collectKustomizeBaseRefs(document map[string]any) []string {
 	return bases
 }
 
+func collectKustomizeResourceRefs(document map[string]any, bases []string) []string {
+	baseSet := make(map[string]struct{}, len(bases))
+	for _, base := range bases {
+		baseSet[base] = struct{}{}
+	}
+
+	refs := make([]string, 0)
+	for _, value := range append(
+		collectKustomizeStringValues(document["resources"]),
+		collectKustomizeStringValues(document["components"])...,
+	) {
+		if _, isBase := baseSet[value]; isBase {
+			continue
+		}
+		refs = append(refs, value)
+	}
+	refs = dedupeNonEmptyStrings(refs)
+	sort.Strings(refs)
+	return refs
+}
+
+func collectKustomizeObjectRefs(document map[string]any, listKey string, fieldKeys ...string) []string {
+	refs := make([]string, 0)
+	items, ok := document[listKey].([]any)
+	if !ok {
+		return nil
+	}
+	for _, item := range items {
+		object, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, fieldKey := range fieldKeys {
+			value := strings.TrimSpace(fmt.Sprint(object[fieldKey]))
+			if value == "" || value == "<nil>" {
+				continue
+			}
+			refs = append(refs, value)
+		}
+	}
+	refs = dedupeNonEmptyStrings(refs)
+	sort.Strings(refs)
+	return refs
+}
+
 func collectKustomizePathRefs(values []any) []string {
 	refs := make([]string, 0, len(values))
 	for _, value := range values {
 		path := strings.TrimSpace(fmt.Sprint(value))
 		if path == "" || path == "<nil>" {
+			continue
+		}
+		if isRemoteKustomizeRef(path) {
 			continue
 		}
 		lower := strings.ToLower(path)
@@ -104,6 +156,26 @@ func collectKustomizePathRefs(values []any) []string {
 		refs = append(refs, path)
 	}
 	return refs
+}
+
+func collectKustomizeStringValues(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	refs := make([]string, 0, len(items))
+	for _, item := range items {
+		path := strings.TrimSpace(fmt.Sprint(item))
+		if path == "" || path == "<nil>" {
+			continue
+		}
+		refs = append(refs, path)
+	}
+	return refs
+}
+
+func isRemoteKustomizeRef(value string) bool {
+	return strings.Contains(value, "://")
 }
 
 func dedupeNonEmptyStrings(values []string) []string {

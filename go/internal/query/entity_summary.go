@@ -94,8 +94,22 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		return fmt.Sprintf("%s %s is associated with the %s framework.", label, name, framework)
 	case "KustomizeOverlay":
 		bases := metadataStringSlice(metadata, "bases")
+		resourceRefs := metadataStringSlice(metadata, "resource_refs")
+		helmRefs := metadataStringSlice(metadata, "helm_refs")
+		imageRefs := metadataStringSlice(metadata, "image_refs")
 		patchTargets := metadataStringSlice(metadata, "patch_targets")
+		deployRefs := append([]string{}, resourceRefs...)
+		deployRefs = append(deployRefs, helmRefs...)
+		deployRefs = append(deployRefs, imageRefs...)
 		switch {
+		case len(bases) > 0 && len(deployRefs) > 0 && len(patchTargets) > 0:
+			return fmt.Sprintf("%s %s references bases %s, deploys from %s, and patches %s.",
+				label, name, strings.Join(bases, ", "), strings.Join(deployRefs, ", "), strings.Join(patchTargets, ", "))
+		case len(deployRefs) > 0 && len(patchTargets) > 0:
+			return fmt.Sprintf("%s %s deploys from %s and patches %s.",
+				label, name, strings.Join(deployRefs, ", "), strings.Join(patchTargets, ", "))
+		case len(deployRefs) > 0:
+			return fmt.Sprintf("%s %s deploys from %s.", label, name, strings.Join(deployRefs, ", "))
 		case len(bases) > 0 && len(patchTargets) > 0:
 			return fmt.Sprintf("%s %s references bases %s and patches %s.",
 				label, name, strings.Join(bases, ", "), strings.Join(patchTargets, ", "))

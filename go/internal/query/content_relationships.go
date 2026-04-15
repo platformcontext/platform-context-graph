@@ -43,7 +43,7 @@ func buildOutgoingContentRelationships(
 	if relationships, ok, err := buildOutgoingK8sSelectRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
-	if relationships, ok, err := buildOutgoingKustomizePatchRelationships(ctx, reader, entity); ok || err != nil {
+	if relationships, ok, err := buildOutgoingKustomizeRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
 	if relationships, ok, err := buildOutgoingArgoCDRelationships(entity); ok || err != nil {
@@ -223,7 +223,7 @@ func buildOutgoingK8sSelectRelationships(
 	return relationships, true, nil
 }
 
-func buildOutgoingKustomizePatchRelationships(
+func buildOutgoingKustomizeRelationships(
 	ctx context.Context,
 	reader *ContentReader,
 	entity EntityContent,
@@ -233,11 +233,7 @@ func buildOutgoingKustomizePatchRelationships(
 	}
 
 	patchTargets := metadataStringSlice(entity.Metadata, "patch_targets")
-	if len(patchTargets) == 0 {
-		return nil, true, nil
-	}
-
-	relationships := make([]map[string]any, 0, len(patchTargets))
+	relationships := make([]map[string]any, 0, len(patchTargets)+8)
 	seen := make(map[string]struct{}, len(patchTargets))
 	for _, patchTarget := range patchTargets {
 		kind, name, ok := splitKustomizePatchTarget(patchTarget)
@@ -266,6 +262,28 @@ func buildOutgoingKustomizePatchRelationships(
 				"reason":      "kustomize_patch_target",
 			})
 		}
+	}
+
+	for _, value := range metadataStringSlice(entity.Metadata, "resource_refs") {
+		relationships = append(relationships, map[string]any{
+			"type":        "DEPLOYS_FROM",
+			"target_name": value,
+			"reason":      "kustomize_resource_reference",
+		})
+	}
+	for _, value := range metadataStringSlice(entity.Metadata, "helm_refs") {
+		relationships = append(relationships, map[string]any{
+			"type":        "DEPLOYS_FROM",
+			"target_name": value,
+			"reason":      "kustomize_helm_chart_reference",
+		})
+	}
+	for _, value := range metadataStringSlice(entity.Metadata, "image_refs") {
+		relationships = append(relationships, map[string]any{
+			"type":        "DEPLOYS_FROM",
+			"target_name": value,
+			"reason":      "kustomize_image_reference",
+		})
 	}
 
 	return relationships, true, nil
