@@ -66,6 +66,7 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 		"outgoing":   filterNullRelationships(row["outgoing"]),
 		"incoming":   filterNullRelationships(row["incoming"]),
 	}
+	normalizeGraphRelationships(response)
 	response = filterRelationshipResponse(response, direction, relationshipType)
 	enriched, err := h.enrichGraphSearchResultsWithContentMetadata(
 		ctx,
@@ -124,10 +125,34 @@ func relationshipGraphRowCypher(predicate string) string {
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line,
-		       collect(DISTINCT {direction: 'outgoing', type: type(r), target_name: target.name, target_id: target.id}) as outgoing,
-		       collect(DISTINCT {direction: 'incoming', type: type(r2), source_name: source.name, source_id: source.id}) as incoming
+		       collect(DISTINCT {direction: 'outgoing', type: type(r), call_kind: r.call_kind, target_name: target.name, target_id: target.id}) as outgoing,
+		       collect(DISTINCT {direction: 'incoming', type: type(r2), call_kind: r2.call_kind, source_name: source.name, source_id: source.id}) as incoming
 		LIMIT 2
 	`
+}
+
+func normalizeGraphRelationships(response map[string]any) {
+	response["outgoing"] = normalizeGraphRelationshipSlice(mapRelationships(response["outgoing"]))
+	response["incoming"] = normalizeGraphRelationshipSlice(mapRelationships(response["incoming"]))
+}
+
+func normalizeGraphRelationshipSlice(relationships []map[string]any) []map[string]any {
+	if len(relationships) == 0 {
+		return relationships
+	}
+	normalized := make([]map[string]any, 0, len(relationships))
+	for _, relationship := range relationships {
+		item := make(map[string]any, len(relationship)+1)
+		for key, value := range relationship {
+			item[key] = value
+		}
+		if StringVal(item, "type") == "CALLS" && StringVal(item, "call_kind") == "jsx_component" {
+			item["type"] = "REFERENCES"
+			item["reason"] = "jsx_component_call_kind"
+		}
+		normalized = append(normalized, item)
+	}
+	return normalized
 }
 
 func (h *CodeHandler) relationshipsFromContent(

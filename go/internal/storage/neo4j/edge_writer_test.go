@@ -127,6 +127,7 @@ func TestEdgeWriterWriteEdgesCodeCallDispatch(t *testing.T) {
 				"repo_id":          "repo-a",
 				"caller_entity_id": "entity:function:caller",
 				"callee_entity_id": "entity:function:callee",
+				"call_kind":        "jsx_component",
 			},
 		},
 	}
@@ -150,6 +151,9 @@ func TestEdgeWriterWriteEdgesCodeCallDispatch(t *testing.T) {
 	}
 	if got, want := batchRows[0]["caller_entity_id"], "entity:function:caller"; got != want {
 		t.Fatalf("caller_entity_id = %v, want %v", got, want)
+	}
+	if got, want := batchRows[0]["call_kind"], "jsx_component"; got != want {
+		t.Fatalf("call_kind = %v, want %v", got, want)
 	}
 }
 

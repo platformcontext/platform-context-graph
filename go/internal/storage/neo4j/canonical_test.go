@@ -186,6 +186,7 @@ func TestBuildCanonicalCodeCallUpsertStatement(t *testing.T) {
 	stmt := BuildCanonicalCodeCallUpsert(CanonicalCodeCallParams{
 		CallerEntityID: "entity:function:caller",
 		CalleeEntityID: "entity:function:callee",
+		CallKind:       "jsx_component",
 	}, "parser/code-calls")
 
 	if stmt.Operation != OperationCanonicalUpsert {
@@ -194,11 +195,17 @@ func TestBuildCanonicalCodeCallUpsertStatement(t *testing.T) {
 	if !strings.Contains(stmt.Cypher, "MERGE (source)-[rel:CALLS]->(target)") {
 		t.Fatalf("Cypher missing CALLS edge: %s", stmt.Cypher)
 	}
+	if !strings.Contains(stmt.Cypher, "rel.call_kind = $call_kind") {
+		t.Fatalf("Cypher missing call_kind write: %s", stmt.Cypher)
+	}
 	if stmt.Parameters["caller_entity_id"] != "entity:function:caller" {
 		t.Fatalf("caller_entity_id = %v, want entity:function:caller", stmt.Parameters["caller_entity_id"])
 	}
 	if stmt.Parameters["callee_entity_id"] != "entity:function:callee" {
 		t.Fatalf("callee_entity_id = %v, want entity:function:callee", stmt.Parameters["callee_entity_id"])
+	}
+	if stmt.Parameters["call_kind"] != "jsx_component" {
+		t.Fatalf("call_kind = %v, want jsx_component", stmt.Parameters["call_kind"])
 	}
 }
 

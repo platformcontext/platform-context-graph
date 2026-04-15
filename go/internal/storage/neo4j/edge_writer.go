@@ -159,11 +159,15 @@ func buildRowMap(
 		if callerEntityID == "" || calleeEntityID == "" {
 			return nil, false
 		}
-		return map[string]any{
+		rowMap := map[string]any{
 			"caller_entity_id": callerEntityID,
 			"callee_entity_id": calleeEntityID,
 			"evidence_source":  evidenceSource,
-		}, true
+		}
+		if callKind := payloadString(row.Payload, "call_kind"); callKind != "" {
+			rowMap["call_kind"] = callKind
+		}
+		return rowMap, true
 
 	default:
 		return nil, false

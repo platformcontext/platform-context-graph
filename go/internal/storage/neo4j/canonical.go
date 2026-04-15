@@ -99,7 +99,8 @@ MATCH (target {id: $callee_entity_id})
 MERGE (source)-[rel:CALLS]->(target)
 SET rel.confidence = 0.95,
     rel.reason = 'Parser and symbol analysis resolved a code call edge',
-    rel.evidence_source = $evidence_source`
+    rel.evidence_source = $evidence_source,
+    rel.call_kind = $call_kind`
 
 // --- Batched UNWIND Cypher (shared projection) ---
 
@@ -141,7 +142,8 @@ MATCH (target {id: row.callee_entity_id})
 MERGE (source)-[rel:CALLS]->(target)
 SET rel.confidence = 0.95,
     rel.reason = 'Parser and symbol analysis resolved a code call edge',
-    rel.evidence_source = row.evidence_source`
+    rel.evidence_source = row.evidence_source,
+    rel.call_kind = row.call_kind`
 
 // --- Retraction Cypher ---
 
@@ -243,6 +245,7 @@ type CanonicalWorkloadDependencyParams struct {
 type CanonicalCodeCallParams struct {
 	CallerEntityID string
 	CalleeEntityID string
+	CallKind       string
 }
 
 // --- Builders ---
@@ -371,6 +374,7 @@ func BuildCanonicalCodeCallUpsert(p CanonicalCodeCallParams, evidenceSource stri
 		Parameters: map[string]any{
 			"caller_entity_id": p.CallerEntityID,
 			"callee_entity_id": p.CalleeEntityID,
+			"call_kind":        p.CallKind,
 			"evidence_source":  evidenceSource,
 		},
 	}
