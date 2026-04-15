@@ -497,11 +497,27 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	if v := StringVal(row, "framework"); v != "" {
 		metadata["framework"] = v
 	}
+	if v := StringVal(row, "module_kind"); v != "" {
+		metadata["module_kind"] = v
+	}
 	if v, ok := row["jsx_fragment_shorthand"].(bool); ok {
 		metadata["jsx_fragment_shorthand"] = v
 	}
 	if v := StringVal(row, "component_type_assertion"); v != "" {
 		metadata["component_type_assertion"] = v
+	}
+	if v := StringVal(row, "declaration_merge_group"); v != "" {
+		metadata["declaration_merge_group"] = v
+	}
+	if v := IntVal(row, "declaration_merge_count"); v > 0 {
+		metadata["declaration_merge_count"] = v
+	}
+	if values := StringSliceVal(row, "declaration_merge_kinds"); len(values) > 0 {
+		declarationMergeKinds := make([]any, 0, len(values))
+		for _, value := range values {
+			declarationMergeKinds = append(declarationMergeKinds, value)
+		}
+		metadata["declaration_merge_kinds"] = declarationMergeKinds
 	}
 	if v := StringVal(row, "kind"); v != "" {
 		metadata["kind"] = v
