@@ -1,0 +1,41 @@
+go/internal/parser/cloudformation_support_test.go
+  1ca5ee6ce936a402 107-146
+go/internal/parser/yaml_language.go
+  1ca5ee6ce936a402 188-192,219-269
+go/internal/content/shape/materialize_test.go
+  1ca5ee6ce936a402 375-417
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 89,111
+go/internal/parser/cloudformation_support.go
+  1ca5ee6ce936a402 16-21,93-105,120-122,175
+go/internal/parser/json_language.go
+  1ca5ee6ce936a402 54,100
+go/internal/query/entity_summary.go
+  1ca5ee6ce936a402 157-177
+go/internal/query/content_relationships.go
+  1ca5ee6ce936a402 46-48,143-144,147-155
+go/internal/query/entity.go
+  1ca5ee6ce936a402 253-275
+go/internal/query/entity_content_cloudformation_fallback_test.go
+  1ca5ee6ce936a402 1-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "80ad935a608eca429d210a5280fc83c07a38b106",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 300,
+      "total_deletions": 24,
+      "accepted_lines": 300,
+      "overriden_lines": 0
+    }
+  }
+}
