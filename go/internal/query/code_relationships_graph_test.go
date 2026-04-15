@@ -241,3 +241,84 @@ func TestHandleRelationshipsReturnsGraphBackedTSXComponentReferences(t *testing.
 		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
 	}
 }
+
+func TestHandleRelationshipsReturnsGraphBackedPythonMetaclassUsesMetaclass(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, _ string, _ map[string]any) (map[string]any, error) {
+				return map[string]any{
+					"id":         "class-logged",
+					"name":       "Logged",
+					"labels":     []any{"Class"},
+					"file_path":  "src/models.py",
+					"repo_id":    "repo-1",
+					"repo_name":  "service",
+					"language":   "python",
+					"start_line": int64(4),
+					"end_line":   int64(8),
+					"outgoing": []any{
+						map[string]any{
+							"direction":   "outgoing",
+							"type":        "USES_METACLASS",
+							"reason":      "Parser and symbol analysis resolved a Python metaclass edge",
+							"target_name": "MetaLogger",
+							"target_id":   "class-meta",
+						},
+					},
+					"incoming": []any{},
+				}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"entity_id":"class-logged","direction":"outgoing","relationship_type":"USES_METACLASS"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := resp["entity_id"], "class-logged"; got != want {
+		t.Fatalf("resp[entity_id] = %#v, want %#v", got, want)
+	}
+	outgoing, ok := resp["outgoing"].([]any)
+	if !ok || len(outgoing) != 1 {
+		t.Fatalf("resp[outgoing] = %#v, want one graph-backed relationship", resp["outgoing"])
+	}
+	relationship, ok := outgoing[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[outgoing][0] type = %T, want map[string]any", outgoing[0])
+	}
+	if got, want := relationship["type"], "USES_METACLASS"; got != want {
+		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["reason"], "Parser and symbol analysis resolved a Python metaclass edge"; got != want {
+		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["target_name"], "MetaLogger"; got != want {
+		t.Fatalf("relationship[target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["target_id"], "class-meta"; got != want {
+		t.Fatalf("relationship[target_id] = %#v, want %#v", got, want)
+	}
+	incoming, ok := resp["incoming"].([]any)
+	if !ok {
+		t.Fatalf("resp[incoming] type = %T, want []any", resp["incoming"])
+	}
+	if len(incoming) != 0 {
+		t.Fatalf("len(resp[incoming]) = %d, want 0", len(incoming))
+	}
+}

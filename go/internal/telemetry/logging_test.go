@@ -19,7 +19,7 @@ func TestNewLoggerOutputsJSON(t *testing.T) {
 	b, err := NewBootstrap("test-service")
 	require.NoError(t, err)
 
-	logger := newTestLogger(b, "api", "api", &buf)
+	logger := NewLoggerWithWriter(b, "api", "api", &buf)
 
 	logger.Info("test message", slog.String("key", "value"))
 
@@ -52,28 +52,12 @@ func TestNewLoggerOutputsJSON(t *testing.T) {
 	assert.Equal(t, "api", logEntry["runtime_role"])
 }
 
-// newTestLogger builds a logger using the same wiring as NewLogger but writing
-// to the given buffer instead of stderr.
-func newTestLogger(b Bootstrap, component, runtimeRole string, buf *bytes.Buffer) *slog.Logger {
-	handler := slog.NewJSONHandler(buf, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-		ReplaceAttr: unifiedReplaceAttr,
-	})
-	tracingHandler := &TraceHandler{inner: handler}
-	return slog.New(tracingHandler).With(
-		slog.String("service_name", b.ServiceName),
-		slog.String("service_namespace", b.ServiceNamespace),
-		slog.String("component", component),
-		slog.String("runtime_role", runtimeRole),
-	)
-}
-
 func TestTraceHandlerInjectsTraceIDAndSeverityNumber(t *testing.T) {
 	var buf bytes.Buffer
 
 	b, err := NewBootstrap("test-service")
 	require.NoError(t, err)
-	logger := newTestLogger(b, "collector", "ingester", &buf)
+	logger := NewLoggerWithWriter(b, "collector", "ingester", &buf)
 
 	// Create mock span context
 	traceID, err := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
@@ -110,7 +94,7 @@ func TestTraceHandlerNoSpanOmitsTraceID(t *testing.T) {
 
 	b, err := NewBootstrap("test-service")
 	require.NoError(t, err)
-	logger := newTestLogger(b, "api", "api", &buf)
+	logger := NewLoggerWithWriter(b, "api", "api", &buf)
 
 	// Log without span context
 	logger.InfoContext(context.Background(), "test without trace")

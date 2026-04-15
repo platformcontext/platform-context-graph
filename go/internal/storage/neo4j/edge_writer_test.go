@@ -160,6 +160,50 @@ func TestEdgeWriterWriteEdgesCodeCallDispatch(t *testing.T) {
 	}
 }
 
+func TestEdgeWriterWriteEdgesPythonMetaclassDispatch(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewEdgeWriter(executor, 0)
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:     "i1",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"repo_id":           "repo-a",
+				"source_entity_id":  "entity:class:logged",
+				"target_entity_id":  "entity:class:meta",
+				"relationship_type": "USES_METACLASS",
+			},
+		},
+	}
+
+	err := writer.WriteEdges(context.Background(), reducer.DomainCodeCalls, rows, "parser/python-metaclass")
+	if err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.calls), 1; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "USES_METACLASS") {
+		t.Fatalf("cypher missing USES_METACLASS branch: %s", executor.calls[0].Cypher)
+	}
+	batchRows, ok := executor.calls[0].Parameters["rows"].([]map[string]any)
+	if !ok || len(batchRows) != 1 {
+		t.Fatalf("expected 1 row in batch, got %v", executor.calls[0].Parameters["rows"])
+	}
+	if got, want := batchRows[0]["source_entity_id"], "entity:class:logged"; got != want {
+		t.Fatalf("source_entity_id = %v, want %v", got, want)
+	}
+	if got, want := batchRows[0]["target_entity_id"], "entity:class:meta"; got != want {
+		t.Fatalf("target_entity_id = %v, want %v", got, want)
+	}
+	if got, want := batchRows[0]["relationship_type"], "USES_METACLASS"; got != want {
+		t.Fatalf("relationship_type = %v, want %v", got, want)
+	}
+}
+
 func TestEdgeWriterWriteEdgesMultipleRowsBatched(t *testing.T) {
 	t.Parallel()
 

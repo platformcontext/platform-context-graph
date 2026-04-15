@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -13,9 +13,10 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
 	pgstatus "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
-func wireAPI(ctx context.Context, getenv func(string) string) (http.Handler, func(), error) {
+func wireAPI(ctx context.Context, getenv func(string) string, logger *slog.Logger) (http.Handler, func(), error) {
 	// Open Neo4j
 	neo4jURI := envOrDefault(getenv, "NEO4J_URI", "bolt://localhost:7687")
 	neo4jUser := envOrDefault(getenv, "NEO4J_USERNAME", "neo4j")
@@ -34,7 +35,9 @@ func wireAPI(ctx context.Context, getenv func(string) string) (http.Handler, fun
 		_ = driver.Close(ctx)
 		return nil, nil, fmt.Errorf("verify neo4j: %w", err)
 	}
-	log.Printf("neo4j connected: %s", neo4jURI)
+	if logger != nil {
+		logger.Info("neo4j connected", telemetry.EventAttr("runtime.neo4j.connected"), slog.String("neo4j_uri", neo4jURI))
+	}
 
 	// Open Postgres using pgx driver
 	pgDSN := envOrDefault(getenv, "PCG_POSTGRES_DSN",
@@ -54,7 +57,9 @@ func wireAPI(ctx context.Context, getenv func(string) string) (http.Handler, fun
 		_ = driver.Close(ctx)
 		return nil, nil, fmt.Errorf("ping postgres: %w", err)
 	}
-	log.Printf("postgres connected")
+	if logger != nil {
+		logger.Info("postgres connected", telemetry.EventAttr("runtime.postgres.connected"))
+	}
 
 	// Build query layer
 	neo4jReader := query.NewNeo4jReader(driver, neo4jDB)

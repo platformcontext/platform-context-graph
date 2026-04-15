@@ -229,6 +229,32 @@ func TestBuildCanonicalCodeCallUpsertStatementUsesCallsForRegularFunctions(t *te
 	}
 }
 
+func TestBuildCanonicalCodeCallUpsertStatementUsesMetaclassEdges(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalCodeCallUpsert(CanonicalCodeCallParams{
+		CallerEntityID:  "entity:class:logged",
+		CalleeEntityID:  "entity:class:meta",
+		RelationshipType: "USES_METACLASS",
+	}, "parser/python-metaclass")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (source)-[rel:USES_METACLASS]->(target)") {
+		t.Fatalf("Cypher missing USES_METACLASS edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["caller_entity_id"] != "entity:class:logged" {
+		t.Fatalf("caller_entity_id = %v, want entity:class:logged", stmt.Parameters["caller_entity_id"])
+	}
+	if stmt.Parameters["callee_entity_id"] != "entity:class:meta" {
+		t.Fatalf("callee_entity_id = %v, want entity:class:meta", stmt.Parameters["callee_entity_id"])
+	}
+	if stmt.Parameters["relationship_type"] != "USES_METACLASS" {
+		t.Fatalf("relationship_type = %v, want USES_METACLASS", stmt.Parameters["relationship_type"])
+	}
+}
+
 func TestBuildRetractInfrastructurePlatformEdgesStatement(t *testing.T) {
 	t.Parallel()
 

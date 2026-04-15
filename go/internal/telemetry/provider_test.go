@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
 )
 
 func TestNewProvidersNoEndpoint(t *testing.T) {
@@ -74,6 +75,31 @@ func TestNewProvidersResourceAttributes(t *testing.T) {
 	attrs := b.ResourceAttributes()
 	assert.Equal(t, "my-test-service", attrs["service.name"])
 	assert.Equal(t, DefaultServiceNamespace, attrs["service.namespace"])
+}
+
+func TestNewProvidersRegistersGlobalProviders(t *testing.T) {
+	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+
+	previousTracerProvider := otel.GetTracerProvider()
+	previousMeterProvider := otel.GetMeterProvider()
+	defer func() {
+		otel.SetTracerProvider(previousTracerProvider)
+		otel.SetMeterProvider(previousMeterProvider)
+	}()
+
+	b, err := NewBootstrap("global-provider-test")
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	providers, err := NewProviders(ctx, b)
+	require.NoError(t, err)
+	require.NotNil(t, providers)
+	defer func() {
+		_ = providers.Shutdown(ctx)
+	}()
+
+	assert.Same(t, providers.TracerProvider, otel.GetTracerProvider())
+	assert.Same(t, providers.MeterProvider, otel.GetMeterProvider())
 }
 
 func TestNewProvidersRequiresValidBootstrap(t *testing.T) {

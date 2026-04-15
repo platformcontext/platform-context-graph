@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,30 +11,36 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	shutdownTracer, err := initTracer(ctx)
+	bootstrap, err := telemetry.NewBootstrap("platform-context-graph-api")
 	if err != nil {
-		log.Fatalf("init tracer: %v", err)
+		fallback := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+		fallback.Error("api bootstrap failed", "event_name", "runtime.startup.failed", "error", err)
+		os.Exit(1)
+	}
+	logger := newLogger(bootstrap, os.Stderr)
+	providers, err := telemetry.NewProviders(ctx, bootstrap)
+	if err != nil {
+		logger.Error("api telemetry providers failed", telemetry.EventAttr("runtime.startup.failed"), "error", err)
+		os.Exit(1)
 	}
 	defer func() {
-		if err := shutdownTracer(context.Background()); err != nil {
-			log.Printf("shutdown tracer: %v", err)
+		if err := providers.Shutdown(context.Background()); err != nil {
+			logger.Error("telemetry shutdown failed", telemetry.EventAttr("runtime.shutdown.failed"), "error", err)
 		}
 	}()
 
-	mux, cleanup, err := wireAPI(ctx, os.Getenv)
+	mux, cleanup, err := wireAPI(ctx, os.Getenv, logger)
 	if err != nil {
-		log.Fatalf("wire api: %v", err)
+		logger.Error("wire api failed", telemetry.EventAttr("runtime.startup.failed"), "error", err)
+		os.Exit(1)
 	}
 	defer cleanup()
 
@@ -62,40 +68,14 @@ func main() {
 		_ = srv.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("pcg-api listening on %s", addr)
+	logger.Info("pcg-api listening on address", telemetry.EventAttr("runtime.server.listening"), "address", addr)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("listen: %v", err)
+		logger.Error("api listen failed", telemetry.EventAttr("runtime.server.failed"), "error", err, "address", addr)
+		os.Exit(1)
 	}
-	log.Println("pcg-api shutdown complete")
+	logger.Info("pcg-api shutdown complete", telemetry.EventAttr("runtime.server.stopped"))
 }
 
-func initTracer(ctx context.Context) (func(context.Context) error, error) {
-	// If no OTEL endpoint configured, use noop (safe for local dev)
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		return func(context.Context) error { return nil }, nil
-	}
-
-	exporter, err := otlptracegrpc.New(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("create trace exporter: %w", err)
-	}
-
-	serviceName := os.Getenv("OTEL_SERVICE_NAME")
-	if serviceName == "" {
-		serviceName = "pcg-api"
-	}
-
-	res := resource.NewWithAttributes("",
-		attribute.String("service.name", serviceName),
-		attribute.String("service.namespace", "platform-context-graph"),
-	)
-
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(res),
-	)
-	otel.SetTracerProvider(tp)
-
-	return tp.Shutdown, nil
+func newLogger(bootstrap telemetry.Bootstrap, writer io.Writer) *slog.Logger {
+	return telemetry.NewLoggerWithWriter(bootstrap, "api", "api", writer)
 }

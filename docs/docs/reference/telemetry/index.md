@@ -207,6 +207,11 @@ to differentiate from the Python `pcg_` namespace. Hand-rolled `pcg_runtime_*`
 status gauges are preserved alongside the new OTEL metrics on the same `/metrics`
 endpoint via a composite handler.
 
+The long-running Go entrypoints and the one-shot bootstrap-data-plane helper
+all use the same JSON logger wiring. The service name and runtime role labels
+are what operators should use to separate API, ingester, reducer, and bootstrap
+log streams.
+
 ### Metrics
 
 #### Counters

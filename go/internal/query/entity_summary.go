@@ -232,7 +232,7 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 	if constructorKind, _ := metadata["constructor_kind"].(string); constructorKind != "" {
 		fragments = append(fragments, fmt.Sprintf("is a %s constructor", strings.ReplaceAll(constructorKind, "_", " ")))
 	}
-	if semanticKind, _ := metadata["semantic_kind"].(string); semanticKind != "" && !(pythonProfile.Lambda && semanticKind == "lambda") {
+	if semanticKind, _ := metadata["semantic_kind"].(string); semanticKind != "" && (!pythonProfile.Lambda || semanticKind != "lambda") {
 		fragments = append(fragments, fmt.Sprintf("is a %s", strings.ReplaceAll(semanticKind, "_", " ")))
 	}
 	if moduleKind, _ := metadata["module_kind"].(string); moduleKind != "" {

@@ -1,13 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"testing"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func noopNeo4j(_ context.Context, _ func(string) string) (neo4jDeps, error) {
@@ -21,16 +27,45 @@ func noopApplyNeo4j(_ context.Context, _ graph.CypherExecutor, _ *slog.Logger) e
 	return nil
 }
 
+func testLogger(t *testing.T) *slog.Logger {
+	t.Helper()
+
+	bootstrap, err := telemetry.NewBootstrap("platform-context-graph-bootstrap-data-plane")
+	require.NoError(t, err)
+
+	return newLogger(bootstrap, io.Discard)
+}
+
+func TestNewLoggerOutputsJSON(t *testing.T) {
+	var buf bytes.Buffer
+
+	bootstrap, err := telemetry.NewBootstrap("platform-context-graph-bootstrap-data-plane")
+	require.NoError(t, err)
+
+	logger := newLogger(bootstrap, &buf)
+	logger.Info("bootstrap schema migration started", slog.String("phase", "bootstrap"))
+
+	var logEntry map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &logEntry))
+	assert.Equal(t, "platform-context-graph-bootstrap-data-plane", logEntry["service_name"])
+	assert.Equal(t, "bootstrap", logEntry["component"])
+	assert.Equal(t, "bootstrap-data-plane", logEntry["runtime_role"])
+	assert.Equal(t, "bootstrap schema migration started", logEntry["message"])
+	assert.Equal(t, "INFO", logEntry["severity_text"])
+}
+
 func TestRunAppliesPostgresAndNeo4jSchemas(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeBootstrapDB{}
 	pgApplied := false
 	neo4jApplied := false
+	logger := testLogger(t)
 
 	err := run(
 		context.Background(),
 		func(string) string { return "" },
+		logger,
 		func(context.Context, func(string) string) (bootstrapDB, error) {
 			return db, nil
 		},
@@ -69,10 +104,12 @@ func TestRunReturnsCloseErrorWhenBootstrapSucceeds(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeBootstrapDB{closeErr: errors.New("close failed")}
+	logger := testLogger(t)
 
 	err := run(
 		context.Background(),
 		func(string) string { return "" },
+		logger,
 		func(context.Context, func(string) string) (bootstrapDB, error) {
 			return db, nil
 		},
@@ -98,10 +135,12 @@ func TestRunJoinsBootstrapAndCloseErrors(t *testing.T) {
 
 	db := &fakeBootstrapDB{closeErr: errors.New("close failed")}
 	bootstrapErr := errors.New("bootstrap failed")
+	logger := testLogger(t)
 
 	err := run(
 		context.Background(),
 		func(string) string { return "" },
+		logger,
 		func(context.Context, func(string) string) (bootstrapDB, error) {
 			return db, nil
 		},
@@ -129,10 +168,12 @@ func TestRunReturnsNeo4jOpenError(t *testing.T) {
 	t.Parallel()
 
 	neo4jErr := errors.New("neo4j connection refused")
+	logger := testLogger(t)
 
 	err := run(
 		context.Background(),
 		func(string) string { return "" },
+		logger,
 		func(context.Context, func(string) string) (bootstrapDB, error) {
 			return &fakeBootstrapDB{}, nil
 		},
@@ -153,10 +194,12 @@ func TestRunReturnsNeo4jSchemaError(t *testing.T) {
 	t.Parallel()
 
 	schemaErr := errors.New("neo4j schema failed")
+	logger := testLogger(t)
 
 	err := run(
 		context.Background(),
 		func(string) string { return "" },
+		logger,
 		func(context.Context, func(string) string) (bootstrapDB, error) {
 			return &fakeBootstrapDB{}, nil
 		},
@@ -177,10 +220,12 @@ func TestRunJoinsNeo4jCloseError(t *testing.T) {
 	t.Parallel()
 
 	closeErr := errors.New("neo4j close failed")
+	logger := testLogger(t)
 
 	err := run(
 		context.Background(),
 		func(string) string { return "" },
+		logger,
 		func(context.Context, func(string) string) (bootstrapDB, error) {
 			return &fakeBootstrapDB{}, nil
 		},

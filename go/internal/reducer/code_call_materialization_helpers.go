@@ -390,11 +390,17 @@ func buildCodeCallRetractRows(repositoryIDs []string) []SharedProjectionIntentRo
 	return rows
 }
 
-func buildCodeCallIntentRows(rows []map[string]any) []SharedProjectionIntentRow {
+func buildCodeRelationshipIntentRows(rows []map[string]any) []SharedProjectionIntentRow {
 	intents := make([]SharedProjectionIntentRow, 0, len(rows))
 	for _, row := range rows {
 		callerID := anyToString(row["caller_entity_id"])
+		if callerID == "" {
+			callerID = anyToString(row["source_entity_id"])
+		}
 		calleeID := anyToString(row["callee_entity_id"])
+		if calleeID == "" {
+			calleeID = anyToString(row["target_entity_id"])
+		}
 		intents = append(intents, SharedProjectionIntentRow{
 			ProjectionDomain: DomainCodeCalls,
 			PartitionKey:     callerID + "->" + calleeID,

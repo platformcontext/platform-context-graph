@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"io"
 	"log/slog"
 	"os"
 	"time"
@@ -14,6 +14,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 type bootstrapExecutor interface {
@@ -36,9 +37,17 @@ type openNeo4jFn func(context.Context, func(string) string) (neo4jDeps, error)
 type applyNeo4jFn func(context.Context, graph.CypherExecutor, *slog.Logger) error
 
 func main() {
+	bootstrap, err := telemetry.NewBootstrap("platform-context-graph-bootstrap-data-plane")
+	if err != nil {
+		fallback := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+		fallback.Error("bootstrap-data-plane bootstrap failed", "event_name", "runtime.startup.failed", "error", err)
+		os.Exit(1)
+	}
+	logger := newLogger(bootstrap, os.Stderr)
 	if err := run(
 		context.Background(),
 		os.Getenv,
+		logger,
 		openBootstrapDB,
 		func(ctx context.Context, exec bootstrapExecutor) error {
 			return postgres.ApplyBootstrap(ctx, exec)
@@ -46,20 +55,25 @@ func main() {
 		openNeo4j,
 		graph.EnsureSchema,
 	); err != nil {
-		log.Fatal(err)
+		logger.Error("bootstrap-data-plane failed", telemetry.EventAttr("runtime.startup.failed"), "error", err)
+		os.Exit(1)
 	}
+}
+
+func newLogger(bootstrap telemetry.Bootstrap, writer io.Writer) *slog.Logger {
+	return telemetry.NewLoggerWithWriter(bootstrap, "bootstrap", "bootstrap-data-plane", writer)
 }
 
 func run(
 	ctx context.Context,
 	getenv func(string) string,
+	logger *slog.Logger,
 	openDBFn openBootstrapDBFn,
 	applyPgFn applyPostgresFn,
 	openNeo4jFn openNeo4jFn,
 	applyNeo4jFn applyNeo4jFn,
 ) (err error) {
-	logger := slog.Default()
-	logger.Info("starting data-plane schema migration")
+	logger.Info("starting data-plane schema migration", telemetry.EventAttr("bootstrap.schema.started"))
 
 	// Postgres schema
 	db, err := openDBFn(ctx, getenv)
@@ -75,7 +89,7 @@ func run(
 	if err = applyPgFn(ctx, db); err != nil {
 		return err
 	}
-	logger.Info("postgres schema applied")
+	logger.Info("postgres schema applied", telemetry.EventAttr("bootstrap.postgres.applied"))
 
 	// Neo4j schema
 	nd, err := openNeo4jFn(ctx, getenv)
@@ -91,7 +105,7 @@ func run(
 	if err = applyNeo4jFn(ctx, nd.executor, logger); err != nil {
 		return err
 	}
-	logger.Info("neo4j schema applied")
+	logger.Info("neo4j schema applied", telemetry.EventAttr("bootstrap.neo4j.applied"))
 
 	return nil
 }

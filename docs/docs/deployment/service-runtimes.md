@@ -39,6 +39,9 @@ Current branch reality:
 - Terraform provider-schema assets are packaged and loaded from
   `go/internal/terraformschema/schemas/*.json.gz`
 - Python no longer owns any deployed or long-running runtime on this branch
+- the API runtime and bootstrap-data-plane helper emit structured JSON logs
+  through the shared Go telemetry logger, matching the ingester and reducer
+  logging contract
 
 ## Runtime Contract
 

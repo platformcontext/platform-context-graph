@@ -3,6 +3,7 @@ package telemetry
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"time"
@@ -30,7 +31,18 @@ func unifiedReplaceAttr(_ []string, a slog.Attr) slog.Attr {
 // NewLogger creates a JSON logger with base service attributes following the
 // unified logging standard.
 func NewLogger(b Bootstrap, component, runtimeRole string) *slog.Logger {
-	handler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	return NewLoggerWithWriter(b, component, runtimeRole, os.Stderr)
+}
+
+// NewLoggerWithWriter creates a JSON logger with base service attributes and
+// writes records to the provided destination.
+func NewLoggerWithWriter(b Bootstrap, component, runtimeRole string, writer io.Writer) *slog.Logger {
+	output := io.Writer(os.Stderr)
+	if writer != nil {
+		output = writer
+	}
+
+	handler := slog.NewJSONHandler(output, &slog.HandlerOptions{
 		Level:       slog.LevelInfo,
 		ReplaceAttr: unifiedReplaceAttr,
 	})

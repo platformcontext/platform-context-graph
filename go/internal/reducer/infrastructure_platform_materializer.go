@@ -120,23 +120,6 @@ func (m *InfrastructurePlatformMaterializer) RetractStale(
 	})
 }
 
-// Canonical Cypher templates — duplicated from storage/neo4j/canonical.go to
-// avoid a circular import. These strings are identical.
-const infraPlatformUpsertCypher = `MATCH (repo:Repository {id: $repo_id})
-MERGE (p:Platform {id: $platform_id})
-ON CREATE SET p.evidence_source = $evidence_source
-SET p.type = 'platform',
-    p.name = $platform_name,
-    p.kind = $platform_kind,
-    p.provider = $platform_provider,
-    p.environment = $platform_environment,
-    p.region = $platform_region,
-    p.locator = $platform_locator
-MERGE (repo)-[rel:PROVISIONS_PLATFORM]->(p)
-SET rel.confidence = 0.98,
-    rel.reason = 'Terraform cluster and module data declare platform provisioning',
-    rel.evidence_source = $evidence_source`
-
 const batchInfraPlatformUpsertCypher = `UNWIND $rows AS row
 MATCH (repo:Repository {id: row.repo_id})
 MERGE (p:Platform {id: row.platform_id})

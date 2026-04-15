@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -20,10 +21,10 @@ import (
 
 // Providers holds the initialized OTEL SDK providers and their shutdown function.
 type Providers struct {
-	TracerProvider     *sdktrace.TracerProvider
-	MeterProvider      *sdkmetric.MeterProvider
-	PrometheusHandler  http.Handler
-	Shutdown           func(context.Context) error
+	TracerProvider    *sdktrace.TracerProvider
+	MeterProvider     *sdkmetric.MeterProvider
+	PrometheusHandler http.Handler
+	Shutdown          func(context.Context) error
 }
 
 // ProviderOption configures provider creation.
@@ -88,6 +89,9 @@ func NewProviders(ctx context.Context, b Bootstrap, opts ...ProviderOption) (*Pr
 		}
 		return errors.Join(errs...)
 	}
+
+	otel.SetTracerProvider(traceProvider)
+	otel.SetMeterProvider(meterProvider)
 
 	return &Providers{
 		TracerProvider:    traceProvider,

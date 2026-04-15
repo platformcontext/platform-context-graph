@@ -154,6 +154,20 @@ func buildRowMap(
 		}, true
 
 	case reducer.DomainCodeCalls:
+		if relationshipType := payloadString(row.Payload, "relationship_type"); relationshipType == "USES_METACLASS" {
+			sourceEntityID := payloadString(row.Payload, "source_entity_id")
+			targetEntityID := payloadString(row.Payload, "target_entity_id")
+			if sourceEntityID == "" || targetEntityID == "" {
+				return nil, false
+			}
+			return map[string]any{
+				"source_entity_id":  sourceEntityID,
+				"target_entity_id":  targetEntityID,
+				"relationship_type": relationshipType,
+				"evidence_source":   evidenceSource,
+			}, true
+		}
+
 		callerEntityID := payloadString(row.Payload, "caller_entity_id")
 		calleeEntityID := payloadString(row.Payload, "callee_entity_id")
 		if callerEntityID == "" || calleeEntityID == "" {

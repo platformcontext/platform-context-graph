@@ -110,6 +110,14 @@ SET rel.confidence = 0.95,
     rel.evidence_source = $evidence_source,
     rel.call_kind = $call_kind`
 
+const canonicalMetaclassUpsertCypher = `MATCH (source {id: $caller_entity_id})
+MATCH (target {id: $callee_entity_id})
+MERGE (source)-[rel:USES_METACLASS]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser and symbol analysis resolved a Python metaclass edge',
+    rel.evidence_source = $evidence_source,
+    rel.relationship_type = $relationship_type`
+
 // --- Batched UNWIND Cypher (shared projection) ---
 
 const batchCanonicalInfrastructurePlatformUpsertCypher = `UNWIND $rows AS row
@@ -145,16 +153,23 @@ SET rel.confidence = 0.9,
     rel.evidence_source = row.evidence_source`
 
 const batchCanonicalCodeCallUpsertCypher = `UNWIND $rows AS row
-MATCH (source {id: row.caller_entity_id})
-MATCH (target {id: row.callee_entity_id})
-FOREACH (_ IN CASE WHEN row.call_kind = 'jsx_component' THEN [1] ELSE [] END |
+MATCH (source {id: coalesce(row.caller_entity_id, row.source_entity_id)})
+MATCH (target {id: coalesce(row.callee_entity_id, row.target_entity_id)})
+FOREACH (_ IN CASE WHEN row.relationship_type = 'USES_METACLASS' THEN [1] ELSE [] END |
+    MERGE (source)-[rel:USES_METACLASS]->(target)
+    SET rel.confidence = 0.95,
+        rel.reason = 'Parser and symbol analysis resolved a Python metaclass edge',
+        rel.evidence_source = row.evidence_source,
+        rel.relationship_type = row.relationship_type
+)
+FOREACH (_ IN CASE WHEN row.relationship_type IS NULL AND row.call_kind = 'jsx_component' THEN [1] ELSE [] END |
     MERGE (source)-[rel:REFERENCES]->(target)
     SET rel.confidence = 0.95,
         rel.reason = 'Parser and symbol analysis resolved a TSX component reference edge',
         rel.evidence_source = row.evidence_source,
         rel.call_kind = row.call_kind
 )
-FOREACH (_ IN CASE WHEN row.call_kind IS NULL OR row.call_kind <> 'jsx_component' THEN [1] ELSE [] END |
+FOREACH (_ IN CASE WHEN row.relationship_type IS NULL AND (row.call_kind IS NULL OR row.call_kind <> 'jsx_component') THEN [1] ELSE [] END |
     MERGE (source)-[rel:CALLS]->(target)
     SET rel.confidence = 0.95,
         rel.reason = 'Parser and symbol analysis resolved a code call edge',
@@ -179,7 +194,7 @@ WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`
 
-const retractCodeCallEdgesCypher = `MATCH (source)-[rel:CALLS|REFERENCES]->()
+const retractCodeCallEdgesCypher = `MATCH (source)-[rel:CALLS|REFERENCES|USES_METACLASS]->()
 WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`
@@ -260,9 +275,10 @@ type CanonicalWorkloadDependencyParams struct {
 // CanonicalCodeCallParams holds the parameters for a code-level CALLS edge
 // upsert between two canonical entities.
 type CanonicalCodeCallParams struct {
-	CallerEntityID string
-	CalleeEntityID string
-	CallKind       string
+	CallerEntityID   string
+	CalleeEntityID   string
+	CallKind         string
+	RelationshipType string
 }
 
 // --- Builders ---
@@ -382,22 +398,30 @@ func BuildCanonicalWorkloadDependencyUpsert(p CanonicalWorkloadDependencyParams,
 	}
 }
 
-// BuildCanonicalCodeCallUpsert builds a CALLS edge statement between two
-// canonical code entities.
+// BuildCanonicalCodeCallUpsert builds a code relationship statement between
+// two canonical code entities.
 func BuildCanonicalCodeCallUpsert(p CanonicalCodeCallParams, evidenceSource string) Statement {
 	cypher := canonicalCodeCallUpsertCypher
-	if p.CallKind == "jsx_component" {
+	if p.RelationshipType == "USES_METACLASS" {
+		cypher = canonicalMetaclassUpsertCypher
+	} else if p.CallKind == "jsx_component" {
 		cypher = canonicalJSXComponentReferenceUpsertCypher
 	}
+	params := map[string]any{
+		"caller_entity_id": p.CallerEntityID,
+		"callee_entity_id": p.CalleeEntityID,
+		"evidence_source":  evidenceSource,
+	}
+	if p.CallKind != "" {
+		params["call_kind"] = p.CallKind
+	}
+	if p.RelationshipType != "" {
+		params["relationship_type"] = p.RelationshipType
+	}
 	return Statement{
-		Operation: OperationCanonicalUpsert,
-		Cypher:    cypher,
-		Parameters: map[string]any{
-			"caller_entity_id": p.CallerEntityID,
-			"callee_entity_id": p.CalleeEntityID,
-			"call_kind":        p.CallKind,
-			"evidence_source":  evidenceSource,
-		},
+		Operation:  OperationCanonicalUpsert,
+		Cypher:     cypher,
+		Parameters: params,
 	}
 }
 
