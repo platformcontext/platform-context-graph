@@ -25,6 +25,25 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 				"environment":   "stage",
 			},
 		},
+		"deployment_sources": []map[string]any{
+			{
+				"repo_id":    "repo-deploy",
+				"repo_name":  "payments-deploy",
+				"confidence": 0.98,
+				"reason":     "Deployment manifests for workload instance live in deployment repository",
+			},
+		},
+		"cloud_resources": []map[string]any{
+			{
+				"id":          "cloud-1",
+				"name":        "payments-db",
+				"kind":        "rds_instance",
+				"provider":    "aws",
+				"environment": "prod",
+				"confidence":  0.91,
+				"reason":      "Runtime instance uses backing database",
+			},
+		},
 	}
 
 	got := buildDeploymentTraceResponse("payments-api", ctx)
@@ -128,6 +147,30 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	}
 	if factSummary["mapping_mode"] != "controller" {
 		t.Fatalf("deployment_fact_summary.mapping_mode = %#v, want %q", factSummary["mapping_mode"], "controller")
+	}
+
+	deploymentFacts, ok := got["deployment_facts"].([]map[string]any)
+	if !ok {
+		t.Fatalf("deployment_facts type = %T, want []map[string]any", got["deployment_facts"])
+	}
+	if len(deploymentFacts) < 3 {
+		t.Fatalf("deployment_facts len = %d, want at least 3", len(deploymentFacts))
+	}
+
+	deploymentSources, ok := got["deployment_sources"].([]map[string]any)
+	if !ok {
+		t.Fatalf("deployment_sources type = %T, want []map[string]any", got["deployment_sources"])
+	}
+	if len(deploymentSources) != 1 {
+		t.Fatalf("deployment_sources len = %d, want 1", len(deploymentSources))
+	}
+
+	cloudResources, ok := got["cloud_resources"].([]map[string]any)
+	if !ok {
+		t.Fatalf("cloud_resources type = %T, want []map[string]any", got["cloud_resources"])
+	}
+	if len(cloudResources) != 1 {
+		t.Fatalf("cloud_resources len = %d, want 1", len(cloudResources))
 	}
 
 	drilldowns, ok := got["drilldowns"].(map[string]any)

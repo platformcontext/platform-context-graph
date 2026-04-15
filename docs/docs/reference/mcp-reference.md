@@ -72,6 +72,8 @@ Use these tools when the user is asking for a narrative answer such as
 
 - `controller_overview`
 - `runtime_overview`
+- `deployment_sources`
+- `cloud_resources`
 - `deployment_facts`
 - `deployment_fact_summary`
 

@@ -141,6 +141,8 @@ Deployment-oriented trace responses are shaped around:
 - `gitops_overview`
 - `controller_overview`
 - `runtime_overview`
+- `deployment_sources`
+- `cloud_resources`
 - `deployment_fact_summary`
 - `drilldowns`
 

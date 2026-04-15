@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -36,16 +37,33 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 		WriteError(w, http.StatusNotFound, "service not found")
 		return
 	}
+	if workloadID := safeStr(ctx, "id"); workloadID != "" {
+		deploymentSources, err := h.fetchDeploymentSources(r.Context(), workloadID)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query deployment sources: %v", err))
+			return
+		}
+		cloudResources, err := h.fetchCloudResources(r.Context(), workloadID)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query cloud resources: %v", err))
+			return
+		}
+		ctx["deployment_sources"] = deploymentSources
+		ctx["cloud_resources"] = cloudResources
+	}
 
 	WriteJSON(w, http.StatusOK, buildDeploymentTraceResponse(req.ServiceName, ctx))
 }
 
 func buildDeploymentTraceResponse(serviceName string, workloadContext map[string]any) map[string]any {
 	instances, _ := workloadContext["instances"].([]map[string]any)
+	deploymentSources, _ := workloadContext["deployment_sources"].([]map[string]any)
+	cloudResources, _ := workloadContext["cloud_resources"].([]map[string]any)
 	platforms := distinctSortedInstanceField(instances, "platform_name")
 	platformKinds := distinctSortedInstanceField(instances, "platform_kind")
 	environments := distinctSortedInstanceField(instances, "environment")
 	mappingMode := deploymentMappingMode(platformKinds)
+	deploymentFacts := buildDeploymentFacts(platforms, platformKinds, environments, deploymentSources)
 
 	response := map[string]any{
 		"service_name": serviceName,
@@ -59,16 +77,21 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 			"id":   safeStr(workloadContext, "id"),
 			"name": safeStr(workloadContext, "name"),
 		},
-		"instances":      instances,
-		"story":          buildWorkloadStory(workloadContext),
-		"story_sections": buildStorySections(platforms, platformKinds, environments),
+		"instances":          instances,
+		"deployment_sources": deploymentSources,
+		"cloud_resources":    cloudResources,
+		"deployment_facts":   deploymentFacts,
+		"story":              buildWorkloadStory(workloadContext),
+		"story_sections":     buildStorySections(platforms, platformKinds, environments),
 		"deployment_overview": map[string]any{
-			"instance_count":    len(instances),
-			"environment_count": len(environments),
-			"platform_count":    len(platforms),
-			"platforms":         platforms,
-			"platform_kinds":    platformKinds,
-			"environments":      environments,
+			"instance_count":          len(instances),
+			"environment_count":       len(environments),
+			"platform_count":          len(platforms),
+			"deployment_source_count": len(deploymentSources),
+			"cloud_resource_count":    len(cloudResources),
+			"platforms":               platforms,
+			"platform_kinds":          platformKinds,
+			"environments":            environments,
 		},
 		"controller_overview": buildControllerOverview(platforms, platformKinds),
 		"gitops_overview":     buildGitOpsOverview(platforms, platformKinds),
@@ -77,6 +100,9 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 			"instance_count":            len(instances),
 			"environment_count":         len(environments),
 			"platform_count":            len(platforms),
+			"deployment_source_count":   len(deploymentSources),
+			"cloud_resource_count":      len(cloudResources),
+			"fact_count":                len(deploymentFacts),
 			"has_repository":            safeStr(workloadContext, "repo_id") != "",
 			"mapping_mode":              mappingMode,
 			"overall_confidence_reason": "platform_instances_observed",
@@ -133,6 +159,43 @@ func buildRuntimeOverview(environments []string) map[string]any {
 	}
 }
 
+func buildDeploymentFacts(
+	platforms []string,
+	platformKinds []string,
+	environments []string,
+	deploymentSources []map[string]any,
+) []map[string]any {
+	facts := make([]map[string]any, 0, len(platforms)+len(environments)+len(deploymentSources))
+	for i, platform := range platforms {
+		fact := map[string]any{
+			"type":       "RUNS_ON_PLATFORM",
+			"target":     platform,
+			"confidence": 1.0,
+		}
+		if i < len(platformKinds) {
+			fact["kind"] = platformKinds[i]
+		}
+		facts = append(facts, fact)
+	}
+	for _, environment := range environments {
+		facts = append(facts, map[string]any{
+			"type":       "OBSERVED_IN_ENVIRONMENT",
+			"target":     environment,
+			"confidence": 1.0,
+		})
+	}
+	for _, source := range deploymentSources {
+		facts = append(facts, map[string]any{
+			"type":       "DEPLOYS_FROM",
+			"target":     safeStr(source, "repo_name"),
+			"target_id":  safeStr(source, "repo_id"),
+			"confidence": floatVal(source, "confidence"),
+			"reason":     safeStr(source, "reason"),
+		})
+	}
+	return facts
+}
+
 func buildDeploymentDrilldowns(serviceName, workloadID string) map[string]any {
 	return map[string]any{
 		"service_context_path":  "/api/v0/services/" + serviceName + "/context",
@@ -158,6 +221,52 @@ func joinOrNone(values []string) string {
 		return "none"
 	}
 	return fmt.Sprintf("%v", values)
+}
+
+func (h *ImpactHandler) fetchDeploymentSources(ctx context.Context, workloadID string) ([]map[string]any, error) {
+	rows, err := h.Neo4j.Run(ctx, `
+		MATCH (w:Workload {id: $workload_id})<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:DEPLOYMENT_SOURCE]->(repo:Repository)
+		RETURN DISTINCT repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence, rel.reason as reason
+		ORDER BY repo.name
+	`, map[string]any{"workload_id": workloadID})
+	if err != nil {
+		return nil, err
+	}
+	sources := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		sources = append(sources, map[string]any{
+			"repo_id":    StringVal(row, "repo_id"),
+			"repo_name":  StringVal(row, "repo_name"),
+			"confidence": floatVal(row, "confidence"),
+			"reason":     StringVal(row, "reason"),
+		})
+	}
+	return sources, nil
+}
+
+func (h *ImpactHandler) fetchCloudResources(ctx context.Context, workloadID string) ([]map[string]any, error) {
+	rows, err := h.Neo4j.Run(ctx, `
+		MATCH (w:Workload {id: $workload_id})<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:USES]->(c:CloudResource)
+		RETURN DISTINCT c.id as id, c.name as name, c.kind as kind, c.provider as provider, c.environment as environment,
+		       rel.confidence as confidence, rel.reason as reason
+		ORDER BY c.name
+	`, map[string]any{"workload_id": workloadID})
+	if err != nil {
+		return nil, err
+	}
+	resources := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		resources = append(resources, map[string]any{
+			"id":          StringVal(row, "id"),
+			"name":        StringVal(row, "name"),
+			"kind":        StringVal(row, "kind"),
+			"provider":    StringVal(row, "provider"),
+			"environment": StringVal(row, "environment"),
+			"confidence":  floatVal(row, "confidence"),
+			"reason":      StringVal(row, "reason"),
+		})
+	}
+	return resources, nil
 }
 
 func distinctSortedInstanceField(instances []map[string]any, key string) []string {
