@@ -1,0 +1,82 @@
+go/internal/telemetry/provider_test.go
+  1ca5ee6ce936a402 10,80-102
+go/internal/telemetry/logging.go
+  1ca5ee6ce936a402 6,34-45
+docs/docs/reference/telemetry/index.md
+  1ca5ee6ce936a402 210-214
+go/internal/reducer/code_call_materialization_helpers.go
+  1ca5ee6ce936a402 393,397-399,401-403
+go/internal/storage/neo4j/canonical_test.go
+  1ca5ee6ce936a402 232-257
+go/cmd/api/main_test.go
+  1ca5ee6ce936a402 1,4-6,8-11,14,17-18,20-21,23,25-26,28-34
+go/cmd/api/main.go
+  1ca5ee6ce936a402 6,14-15,23,26-27,29,32,35,40,43,74
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 47
+go/cmd/bootstrap-data-plane/main.go
+  1ca5ee6ce936a402 17,43,58-59,76,92,108
+go/internal/storage/neo4j/canonical.go
+  1ca5ee6ce936a402 422-423
+docs/docs/deployment/service-runtimes.md
+  1ca5ee6ce936a402 42-44
+go/internal/storage/neo4j/edge_writer.go
+  1ca5ee6ce936a402 157-170
+docs/docs/languages/python.md
+  1ca5ee6ce936a402 26,49-50,56-57
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 80,102
+go/internal/storage/neo4j/edge_writer_test.go
+  1ca5ee6ce936a402 163-206
+go/internal/query/entity_summary.go
+  1ca5ee6ce936a402 235
+go/internal/query/code_relationships_graph_test.go
+  1ca5ee6ce936a402 244-324
+go/internal/telemetry/logging_test.go
+  1ca5ee6ce936a402 22,60,97
+go/cmd/api/wiring.go
+  1ca5ee6ce936a402 7,16,19,38-40,60-61
+docs/docs/services/ingester.md
+  1ca5ee6ce936a402 1-166
+docs/docs/services/bootstrap-index.md
+  1ca5ee6ce936a402 1-92
+docs/docs/services/resolution-engine.md
+  1ca5ee6ce936a402 1-213
+go/cmd/bootstrap-data-plane/main_test.go
+  1ca5ee6ce936a402 4,7,9,14-16,30-56,63,68,107,112,138,143,171,176,197,202,223,228
+go/internal/telemetry/provider.go
+  1ca5ee6ce936a402 12,24-27,93-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "1fcb97d0658292d3f08f88d6c99ea177e0562644",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 114,
+      "total_deletions": 292,
+      "accepted_lines": 973,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 84,
+      "overriden_lines": 0
+    }
+  }
+}
