@@ -15,7 +15,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 ## Capability Checklist
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Resource blocks | `resource-blocks` | supported | `terraform_resources` | `name, line_number, resources` | `node:TerraformResource` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerraform` | Compose-backed fixture verification | - |
+| Resource blocks | `resource-blocks` | supported | `terraform_resources` | `name, line_number, resource_type, resource_name` | `node:TerraformResource` | `go/internal/parser/hcl_terraform_test.go::TestDefaultEngineParsePathHCLTerraformResourceMultiplicityMetadata` | Compose-backed fixture verification | Resource rows now preserve raw `count` and `for_each` expressions when present, alongside the block identity fields. |
 | Variable blocks | `variable-blocks` | supported | `terraform_variables` | `name, line_number` | `node:TerraformVariable` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerraform` | Compose-backed fixture verification | - |
 | Output blocks | `output-blocks` | supported | `terraform_outputs` | `name, line_number` | `node:TerraformOutput` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerraform` | Compose-backed fixture verification | - |
 | Module blocks | `module-blocks` | supported | `terraform_modules` | `name, line_number` | `node:TerraformModule` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerraform` | Compose-backed fixture verification | - |
@@ -32,6 +32,6 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   They are no longer part of any Python runtime path.
 
 ## Known Limitations
-- `count` and `for_each` meta-arguments are not expanded to model multiple resource instances
+- `count` and `for_each` meta-arguments are captured on resource rows, but are not expanded to model multiple resource instances
 - `dynamic` blocks within resources are not traversed for nested attribute extraction
 - Cross-file variable references (`var.name`, `module.name.output`) are not resolved at parse time

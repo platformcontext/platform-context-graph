@@ -8,7 +8,7 @@ import (
 
 var (
 	createTableHeaderPattern = regexp.MustCompile(`(?is)\bCREATE\s+TABLE\s+(?P<name>` + sqlNamePattern + `)\s*\(`)
-	createViewPattern        = regexp.MustCompile(`(?is)\bCREATE\s+(?P<kind>MATERIALIZED\s+)?VIEW\s+(?P<name>` + sqlNamePattern + `)\s+AS\s+(?P<body>.*?)(?:;|$)`)
+	createViewPattern        = regexp.MustCompile(`(?is)\bCREATE(?:\s+OR\s+REPLACE)?\s+(?P<kind>MATERIALIZED\s+)?VIEW\s+(?P<name>` + sqlNamePattern + `)\s+AS\s+(?P<body>.*?)(?:;|$)`)
 	createFuncPattern        = regexp.MustCompile(`(?is)\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+(?P<name>` + sqlNamePattern + `)\s*\([^)]*\)\s+RETURNS\b.*?\bAS\s+\$\$(?P<body>.*?)\$\$\s+LANGUAGE\s+(?P<language>[A-Za-z_][\w$]*)`)
 	createProcedurePattern   = regexp.MustCompile(`(?is)\bCREATE(?:\s+OR\s+REPLACE)?\s+PROCEDURE\s+(?P<name>` + sqlNamePattern + `)\s*\([^)]*\)\s+LANGUAGE\s+(?P<language>[A-Za-z_][\w$]*)\s+AS\s+\$\$(?P<body>.*?)\$\$`)
 	createTrigPattern        = regexp.MustCompile(`(?is)\bCREATE\s+TRIGGER\s+(?P<trigger>` + sqlNamePattern + `)\b.*?\bON\s+(?P<table>` + sqlNamePattern + `)\b.*?\bEXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(?P<function>` + sqlNamePattern + `)\s*\(`)

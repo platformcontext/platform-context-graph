@@ -96,14 +96,27 @@ func parseTerraformBlocks(payload map[string]any, body *hclsyntax.Body, source [
 			if len(block.Labels) < 2 {
 				continue
 			}
-			appendBucket(payload, "terraform_resources", map[string]any{
+			row := map[string]any{
 				"name":          block.Labels[0] + "." + block.Labels[1],
 				"line_number":   block.TypeRange.Start.Line,
 				"resource_type": block.Labels[0],
 				"resource_name": block.Labels[1],
 				"path":          path,
 				"lang":          "hcl",
-			})
+			}
+			if countAttr := block.Body.Attributes["count"]; countAttr != nil {
+				count := strings.TrimSpace(sourceRange(source, countAttr.Expr.Range()))
+				if count != "" {
+					row["count"] = count
+				}
+			}
+			if forEachAttr := block.Body.Attributes["for_each"]; forEachAttr != nil {
+				forEach := strings.TrimSpace(sourceRange(source, forEachAttr.Expr.Range()))
+				if forEach != "" {
+					row["for_each"] = forEach
+				}
+			}
+			appendBucket(payload, "terraform_resources", row)
 		case "variable":
 			if len(block.Labels) == 0 {
 				continue

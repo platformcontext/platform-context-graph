@@ -49,3 +49,50 @@ func TestDefaultEngineParsePathHCLTerraformBlockMetadata(t *testing.T) {
 		t.Fatalf("terraform_blocks[0].required_provider_count = %#v, want %#v", got, want)
 	}
 }
+
+func TestDefaultEngineParsePathHCLTerraformResourceMultiplicityMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "main.tf")
+	writeTestFile(
+		t,
+		filePath,
+		`resource "aws_s3_bucket" "logs" {
+  count = 2
+}
+
+resource "aws_iam_user" "writer" {
+  for_each = { alice = "reader" }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	resources, ok := got["terraform_resources"].([]map[string]any)
+	if !ok {
+		t.Fatalf("terraform_resources = %T, want []map[string]any", got["terraform_resources"])
+	}
+	if len(resources) != 2 {
+		t.Fatalf("len(terraform_resources) = %d, want 2", len(resources))
+	}
+
+	bucket := findNamedBucketItem(t, got, "terraform_resources", "aws_s3_bucket.logs")
+	if got, want := bucket["count"], "2"; got != want {
+		t.Fatalf("terraform_resources[aws_s3_bucket.logs].count = %#v, want %#v", got, want)
+	}
+
+	user := findNamedBucketItem(t, got, "terraform_resources", "aws_iam_user.writer")
+	if got, want := user["for_each"], `{ alice = "reader" }`; got != want {
+		t.Fatalf("terraform_resources[aws_iam_user.writer].for_each = %#v, want %#v", got, want)
+	}
+}

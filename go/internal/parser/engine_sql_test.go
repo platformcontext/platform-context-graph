@@ -133,6 +133,35 @@ ALTER TABLE public.users ADD COLUMN email TEXT;
 	}
 }
 
+func TestDefaultEngineParsePathSQLCreateOrReplaceView(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "views.sql")
+	writeTestFile(
+		t,
+		filePath,
+		`CREATE OR REPLACE VIEW public.active_users AS
+SELECT u.id, u.email
+FROM public.users u
+JOIN public.orgs o ON o.id = u.org_id;
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "sql_views", "public.active_users")
+	assertSQLRelationship(t, got, "READS_FROM", "public.active_users", "public.users")
+}
+
 func TestDefaultEngineParsePathSQLAlterTableAddColumnMaterializesColumn(t *testing.T) {
 	t.Parallel()
 
@@ -161,6 +190,40 @@ ALTER TABLE public.users ADD COLUMN email TEXT;
 
 	assertNamedBucketContains(t, got, "sql_columns", "public.users.email")
 	assertSQLRelationship(t, got, "HAS_COLUMN", "public.users", "public.users.email")
+}
+
+func TestDefaultEngineParsePathSQLAlterTableNormalizesMultipleAddColumnClauses(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "migrations", "V3__expand_users.sql")
+	writeTestFile(
+		t,
+		filePath,
+		`CREATE TABLE public.users (
+  id BIGSERIAL PRIMARY KEY
+);
+
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS email TEXT,
+  ADD COLUMN created_at TIMESTAMP;
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "sql_columns", "public.users.email")
+	assertNamedBucketContains(t, got, "sql_columns", "public.users.created_at")
+	assertSQLRelationship(t, got, "HAS_COLUMN", "public.users", "public.users.email")
+	assertSQLRelationship(t, got, "HAS_COLUMN", "public.users", "public.users.created_at")
 }
 
 func TestDefaultEngineParsePathSQLMaterializedViewsAndProcedures(t *testing.T) {
