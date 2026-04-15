@@ -16,6 +16,19 @@ func (h *EntityHandler) enrichEntityResultsWithContentMetadata(
 		return results, nil
 	}
 
+	allHaveMetadata := true
+	for i := range results {
+		if metadata, ok := results[i]["metadata"].(map[string]any); ok && len(metadata) > 0 {
+			attachSemanticSummary(results[i])
+			continue
+		}
+		allHaveMetadata = false
+	}
+
+	if allHaveMetadata {
+		return results, nil
+	}
+
 	rows, err := h.Content.SearchEntityContent(ctx, repoID, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("enrich entity results with content metadata: %w", err)
@@ -35,6 +48,9 @@ func (h *EntityHandler) enrichEntityResultsWithContentMetadata(
 	}
 
 	for i := range results {
+		if metadata, ok := results[i]["metadata"].(map[string]any); ok && len(metadata) > 0 {
+			continue
+		}
 		entityType := resultContentEntityType(results[i])
 		if entityType == "" {
 			continue
