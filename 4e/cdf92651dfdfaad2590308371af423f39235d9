@@ -1,0 +1,31 @@
+go/internal/query/code_relationships_graph_test.go
+  1ca5ee6ce936a402 1-109
+go/internal/query/code.go
+  1ca5ee6ce936a402 10-15,19
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 43
+go/internal/query/code_relationships.go
+  1ca5ee6ce936a402 90,94-117,129
+go/internal/query/language_queries.go
+  1ca5ee6ce936a402 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "4ecdf92651dfdfaad2590308371af423f39235d9",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1404,
+      "total_deletions": 1268,
+      "accepted_lines": 144,
+      "overriden_lines": 0
+    }
+  }
+}
