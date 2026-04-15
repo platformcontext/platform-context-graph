@@ -170,6 +170,13 @@ func TestResolveEntityFallsBackToElixirProtocolContentEntity(t *testing.T) {
 	if got, want := entity["semantic_summary"], "Protocol Demo.Serializable is a protocol."; got != want {
 		t.Fatalf("entity[semantic_summary] = %#v, want %#v", got, want)
 	}
+	profile, ok := entity["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity[semantic_profile] type = %T, want map[string]any", entity["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "protocol"; got != want {
+		t.Fatalf("entity[semantic_profile][surface_kind] = %#v, want %#v", got, want)
+	}
 }
 
 func TestResolveEntityFallsBackToElixirGuardContentEntity(t *testing.T) {
@@ -220,6 +227,13 @@ func TestResolveEntityFallsBackToElixirGuardContentEntity(t *testing.T) {
 	}
 	if got, want := entity["semantic_summary"], "Function is_even is a guard."; got != want {
 		t.Fatalf("entity[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := entity["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity[semantic_profile] type = %T, want map[string]any", entity["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "guard"; got != want {
+		t.Fatalf("entity[semantic_profile][surface_kind] = %#v, want %#v", got, want)
 	}
 }
 
@@ -421,6 +435,13 @@ func TestGetEntityContextFallsBackToElixirProtocolContentEntity(t *testing.T) {
 	if got, want := resp["semantic_summary"], "Protocol Demo.Serializable is a protocol."; got != want {
 		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
 	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "protocol"; got != want {
+		t.Fatalf("resp[semantic_profile][surface_kind] = %#v, want %#v", got, want)
+	}
 }
 
 func TestGetEntityContextFallsBackToElixirModuleAttributeContentEntity(t *testing.T) {
@@ -460,6 +481,13 @@ func TestGetEntityContextFallsBackToElixirModuleAttributeContentEntity(t *testin
 	}
 	if got, want := resp["semantic_summary"], "Variable @timeout is a module attribute."; got != want {
 		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "module_attribute"; got != want {
+		t.Fatalf("resp[semantic_profile][surface_kind] = %#v, want %#v", got, want)
 	}
 	metadata, ok := resp["metadata"].(map[string]any)
 	if !ok {
@@ -507,5 +535,12 @@ func TestGetEntityContextFallsBackToElixirProtocolImplementationContentEntity(t 
 	}
 	if got, want := resp["semantic_summary"], "Module Demo.Serializable is a protocol implementation for Demo.Worker via Demo.Serializable."; got != want {
 		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "protocol_implementation"; got != want {
+		t.Fatalf("resp[semantic_profile][surface_kind] = %#v, want %#v", got, want)
 	}
 }

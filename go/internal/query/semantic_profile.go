@@ -46,6 +46,25 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 		signals = append(signals, "framework")
 	}
 
+	if language == "elixir" {
+		if moduleKind, _ := metadata["module_kind"].(string); moduleKind == "protocol" {
+			profile["protocol"] = true
+			signals = append(signals, "protocol")
+		}
+		if semanticKind, _ := metadata["semantic_kind"].(string); semanticKind == "guard" {
+			profile["guard"] = true
+			signals = append(signals, "guard")
+		}
+		if attributeKind, _ := metadata["attribute_kind"].(string); attributeKind == "module_attribute" {
+			profile["module_attribute"] = true
+			signals = append(signals, "module_attribute")
+		}
+		if moduleKind, _ := metadata["module_kind"].(string); moduleKind == "protocol_implementation" {
+			profile["protocol_implementation"] = true
+			signals = append(signals, "protocol_implementation")
+		}
+	}
+
 	if label == "Annotation" {
 		if kind, _ := metadata["kind"].(string); kind == "applied" {
 			profile["annotation"] = true
@@ -79,6 +98,18 @@ func semanticSurfaceKind(
 ) string {
 	if framework, ok := profile["framework"].(string); ok && framework != "" && label == "Component" {
 		return "framework_component"
+	}
+	if _, ok := profile["protocol"].(bool); ok {
+		return "protocol"
+	}
+	if _, ok := profile["guard"].(bool); ok {
+		return "guard"
+	}
+	if _, ok := profile["module_attribute"].(bool); ok {
+		return "module_attribute"
+	}
+	if _, ok := profile["protocol_implementation"].(bool); ok {
+		return "protocol_implementation"
 	}
 	if _, ok := profile["annotation"].(bool); ok && label == "Annotation" {
 		return "applied_annotation"

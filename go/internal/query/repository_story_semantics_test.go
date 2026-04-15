@@ -113,6 +113,93 @@ func TestBuildRepositorySemanticOverviewCountsSemanticSignals(t *testing.T) {
 	}
 }
 
+func TestBuildRepositorySemanticOverviewCountsElixirSemanticSignals(t *testing.T) {
+	t.Parallel()
+
+	overview := buildRepositorySemanticOverview([]EntityContent{
+		{
+			EntityID:   "protocol-1",
+			RepoID:     "repo-1",
+			EntityType: "Protocol",
+			EntityName: "Demo.Serializable",
+			Language:   "elixir",
+			Metadata: map[string]any{
+				"module_kind": "protocol",
+			},
+		},
+		{
+			EntityID:   "guard-1",
+			RepoID:     "repo-1",
+			EntityType: "Function",
+			EntityName: "is_even",
+			Language:   "elixir",
+			Metadata: map[string]any{
+				"semantic_kind": "guard",
+			},
+		},
+		{
+			EntityID:   "attr-1",
+			RepoID:     "repo-1",
+			EntityType: "Variable",
+			EntityName: "@timeout",
+			Language:   "elixir",
+			Metadata: map[string]any{
+				"attribute_kind": "module_attribute",
+			},
+		},
+		{
+			EntityID:   "impl-1",
+			RepoID:     "repo-1",
+			EntityType: "Module",
+			EntityName: "Demo.Serializable",
+			Language:   "elixir",
+			Metadata: map[string]any{
+				"module_kind":     "protocol_implementation",
+				"protocol":        "Demo.Serializable",
+				"implemented_for": "Demo.Worker",
+			},
+		},
+	})
+
+	if overview == nil {
+		t.Fatal("buildRepositorySemanticOverview() = nil, want non-nil")
+	}
+
+	signalCounts, ok := overview["signal_counts"].(map[string]int)
+	if !ok {
+		t.Fatalf("signal_counts type = %T, want map[string]int", overview["signal_counts"])
+	}
+	if got, want := signalCounts["protocol"], 1; got != want {
+		t.Fatalf("signal_counts[protocol] = %d, want %d", got, want)
+	}
+	if got, want := signalCounts["guard"], 1; got != want {
+		t.Fatalf("signal_counts[guard] = %d, want %d", got, want)
+	}
+	if got, want := signalCounts["module_attribute"], 1; got != want {
+		t.Fatalf("signal_counts[module_attribute] = %d, want %d", got, want)
+	}
+	if got, want := signalCounts["protocol_implementation"], 1; got != want {
+		t.Fatalf("signal_counts[protocol_implementation] = %d, want %d", got, want)
+	}
+
+	surfaceKinds, ok := overview["surface_kind_counts"].(map[string]int)
+	if !ok {
+		t.Fatalf("surface_kind_counts type = %T, want map[string]int", overview["surface_kind_counts"])
+	}
+	if got, want := surfaceKinds["protocol"], 1; got != want {
+		t.Fatalf("surface_kind_counts[protocol] = %d, want %d", got, want)
+	}
+	if got, want := surfaceKinds["guard"], 1; got != want {
+		t.Fatalf("surface_kind_counts[guard] = %d, want %d", got, want)
+	}
+	if got, want := surfaceKinds["module_attribute"], 1; got != want {
+		t.Fatalf("surface_kind_counts[module_attribute] = %d, want %d", got, want)
+	}
+	if got, want := surfaceKinds["protocol_implementation"], 1; got != want {
+		t.Fatalf("surface_kind_counts[protocol_implementation] = %d, want %d", got, want)
+	}
+}
+
 func TestBuildRepositoryStoryResponseIncludesSemanticOverview(t *testing.T) {
 	t.Parallel()
 

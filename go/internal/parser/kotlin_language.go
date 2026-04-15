@@ -85,6 +85,14 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				"end_line":    lineNumber,
 				"lang":        "kotlin",
 			})
+			if properties := kotlinPrimaryConstructorPropertyTypes(rawLine); len(properties) > 0 {
+				if _, ok := classPropertyTypes[name]; !ok {
+					classPropertyTypes[name] = make(map[string]string, len(properties))
+				}
+				for propertyName, propertyType := range properties {
+					classPropertyTypes[name][propertyName] = propertyType
+				}
+			}
 			stack = append(stack, scopedContext{kind: "class", name: name, braceDepth: braceDepth + max(1, strings.Count(rawLine, "{"))})
 		}
 		if matches := kotlinObjectPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
