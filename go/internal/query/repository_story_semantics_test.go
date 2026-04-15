@@ -282,3 +282,41 @@ func TestBuildRepositoryStoryResponseOmitsSemanticOverviewWhenEmpty(t *testing.T
 		t.Fatalf("len(story_sections) = %d, want 3", len(storySections))
 	}
 }
+
+func TestBuildRepositorySemanticOverviewCountsJavaScriptMethodSignals(t *testing.T) {
+	t.Parallel()
+
+	overview := buildRepositorySemanticOverview([]EntityContent{
+		{
+			EntityID:   "js-fn-1",
+			RepoID:     "repo-1",
+			EntityType: "Function",
+			EntityName: "getTab",
+			Language:   "javascript",
+			Metadata: map[string]any{
+				"docstring":   "Returns the active tab.",
+				"method_kind": "getter",
+			},
+		},
+	})
+
+	if overview == nil {
+		t.Fatal("buildRepositorySemanticOverview() = nil, want non-nil")
+	}
+
+	signalCounts, ok := overview["signal_counts"].(map[string]int)
+	if !ok {
+		t.Fatalf("signal_counts type = %T, want map[string]int", overview["signal_counts"])
+	}
+	if got, want := signalCounts["method_kind"], 1; got != want {
+		t.Fatalf("signal_counts[method_kind] = %d, want %d", got, want)
+	}
+
+	surfaceKinds, ok := overview["surface_kind_counts"].(map[string]int)
+	if !ok {
+		t.Fatalf("surface_kind_counts type = %T, want map[string]int", overview["surface_kind_counts"])
+	}
+	if got, want := surfaceKinds["javascript_method"], 1; got != want {
+		t.Fatalf("surface_kind_counts[javascript_method] = %d, want %d", got, want)
+	}
+}

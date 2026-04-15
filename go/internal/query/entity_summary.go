@@ -190,7 +190,11 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 	}
 	jsSemantics := ExtractJavaScriptSemantics(metadata)
 	if jsSemantics.MethodKind != "" {
-		fragments = append(fragments, "has method kind "+jsSemantics.MethodKind)
+		if StringVal(entity, "language") == "javascript" {
+			fragments = append(fragments, "has JavaScript method kind "+jsSemantics.MethodKind)
+		} else {
+			fragments = append(fragments, "has method kind "+jsSemantics.MethodKind)
+		}
 	}
 	if jsSemantics.Docstring != "" {
 		fragments = append(fragments, fmt.Sprintf("is documented as %q", jsSemantics.Docstring))

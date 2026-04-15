@@ -53,6 +53,8 @@ For JavaScript, TypeScript, TypeScript JSX, and Python, query surfacing is now
 `supported` because the shared Go query outputs expose enriched metadata,
 semantic summaries, and a structured `semantic_profile` on the normal
 language-query, code-search, entities-resolve, and entity-context surfaces.
+JavaScript method-kind rows now also get a dedicated `javascript_method`
+surface kind in those shared query outputs.
 Those families can still remain `partial` in the parity audit when broader
 graph-first modeling or higher-level story/context surfacing is not yet fully
 closed.

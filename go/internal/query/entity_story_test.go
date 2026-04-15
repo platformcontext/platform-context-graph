@@ -28,7 +28,7 @@ func TestAttachSemanticSummaryAddsStoryForSemanticEntities(t *testing.T) {
 					"method_kind": "getter",
 				},
 			},
-			want: "Function getTab has method kind getter and is documented as \"Returns the active tab.\". Defined in src/app.js (javascript).",
+			want: "Function getTab has JavaScript method kind getter and is documented as \"Returns the active tab.\". Defined in src/app.js (javascript).",
 		},
 		{
 			name: "typescript generic class",

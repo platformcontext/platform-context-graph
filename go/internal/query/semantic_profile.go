@@ -120,6 +120,11 @@ func semanticSurfaceKind(
 	if _, ok := profile["type_parameters"].([]string); ok {
 		return "generic_declaration"
 	}
+	if language == "javascript" {
+		if _, ok := profile["method_kind"].(string); ok {
+			return "javascript_method"
+		}
+	}
 	if language == "python" && pythonProfile.HasSignals() {
 		return pythonProfile.SurfaceKind()
 	}

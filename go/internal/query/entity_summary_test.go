@@ -230,8 +230,9 @@ func TestBuildEntitySemanticSummaryJavaScriptFunction(t *testing.T) {
 	t.Parallel()
 
 	entity := map[string]any{
-		"labels": []string{"Function"},
-		"name":   "getTab",
+		"labels":   []string{"Function"},
+		"name":     "getTab",
+		"language": "javascript",
 		"metadata": map[string]any{
 			"docstring":   "Returns the active tab.",
 			"method_kind": "getter",
@@ -239,7 +240,7 @@ func TestBuildEntitySemanticSummaryJavaScriptFunction(t *testing.T) {
 	}
 
 	got := buildEntitySemanticSummary(entity)
-	want := "Function getTab has method kind getter and is documented as \"Returns the active tab.\"."
+	want := "Function getTab has JavaScript method kind getter and is documented as \"Returns the active tab.\"."
 	if got != want {
 		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
 	}
