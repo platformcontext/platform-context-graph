@@ -141,8 +141,8 @@ Close the documented long-tail graph-surface gaps.
 - Elixir: guards, protocols, protocol implementations, module attributes
 - Rust: impl blocks
 - Java: applied annotations
-- Kotlin: secondary constructors
-- PHP: static method call parity proof
+- Kotlin: broader receiver inference plus graph/story promotion
+- PHP: broader object-call parity beyond static and bounded local alias proof
 - C: typedef persistence
 
 ### Validation

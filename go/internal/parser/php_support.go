@@ -225,41 +225,6 @@ func currentPHPContext(stack []phpScopedContext) (string, string, int) {
 	return "", "", 0
 }
 
-func inferPHPVariableType(rawLine string, variable string) string {
-	if matches := phpTypedVariablePattern.FindStringSubmatch(rawLine); len(matches) == 2 && strings.Contains(rawLine, variable) {
-		return normalizePHPTypeName(matches[1])
-	}
-	if matches := phpVariableTypePattern.FindStringSubmatch(rawLine); len(matches) == 2 {
-		return normalizePHPTypeName(matches[1])
-	}
-	return "mixed"
-}
-
-func inferPHPMethodReceiverType(
-	raw string,
-	classContext string,
-	classPropertyTypes map[string]map[string]string,
-) string {
-	if classContext == "" || !strings.HasPrefix(strings.TrimSpace(raw), "$this->") {
-		return ""
-	}
-
-	propertyChain := strings.TrimPrefix(strings.TrimSpace(raw), "$this->")
-	if propertyChain == "" {
-		return ""
-	}
-	propertyName := propertyChain
-	if index := strings.Index(propertyChain, "->"); index >= 0 {
-		propertyName = propertyChain[:index]
-	}
-	propertyName = strings.TrimSpace(propertyName)
-	if propertyName == "" {
-		return ""
-	}
-
-	return strings.TrimSpace(classPropertyTypes[classContext][propertyName])
-}
-
 func extractPHPCallArgs(lines []string, startIndex int, rawLine string, callText string) []string {
 	start := strings.Index(rawLine, callText)
 	if start < 0 {

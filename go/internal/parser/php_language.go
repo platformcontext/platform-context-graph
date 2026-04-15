@@ -63,6 +63,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 	seenVariables := make(map[string]struct{})
 	seenCalls := make(map[string]struct{})
 	classPropertyTypes := make(map[string]map[string]string)
+	localVariableTypes := make(map[string]map[string]string)
 
 	for index, rawLine := range lines {
 		lineNumber := index + 1
@@ -153,17 +154,28 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			}
 		}
 
+		contextName, contextKind, contextLine := currentPHPContext(stack)
+		currentClassContext := currentPHPScopedName(stack, "class_declaration", "interface_declaration", "trait_declaration")
+		functionScopeKey := currentPHPFunctionScopeKey(stack)
+		if functionScopeKey != "" {
+			if _, ok := localVariableTypes[functionScopeKey]; !ok {
+				localVariableTypes[functionScopeKey] = make(map[string]string)
+			}
+		}
+
 		for _, variable := range phpVariablePattern.FindAllString(rawLine, -1) {
 			if variable == "$this" {
 				continue
 			}
-			contextName, contextKind, _ := currentPHPContext(stack)
-			variableType := inferPHPVariableType(rawLine, variable)
+			variableType := inferPHPVariableType(rawLine, variable, currentClassContext, classPropertyTypes, localVariableTypes[functionScopeKey])
 			if contextKind == "class_declaration" {
 				if _, ok := classPropertyTypes[contextName]; !ok {
 					classPropertyTypes[contextName] = make(map[string]string)
 				}
 				classPropertyTypes[contextName][strings.TrimPrefix(variable, "$")] = variableType
+			}
+			if functionScopeKey != "" && variableType != "" && variableType != "mixed" {
+				localVariableTypes[functionScopeKey][strings.TrimPrefix(variable, "$")] = variableType
 			}
 			if _, ok := seenVariables[variable]; ok {
 				continue
@@ -188,8 +200,6 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			appendBucket(payload, "variables", item)
 		}
 
-		contextName, contextKind, contextLine := currentPHPContext(stack)
-		currentClassContext := currentPHPScopedName(stack, "class_declaration", "interface_declaration", "trait_declaration")
 		for _, match := range phpMethodCallPattern.FindAllStringSubmatch(trimmed, -1) {
 			if len(match) != 2 {
 				continue
@@ -200,6 +210,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				match[1],
 				currentClassContext,
 				classPropertyTypes,
+				localVariableTypes[functionScopeKey],
 			)
 			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, inferredObjType)
 		}

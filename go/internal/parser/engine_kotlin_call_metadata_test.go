@@ -165,3 +165,54 @@ fun usage(): Int {
 	}
 	t.Fatalf("function_calls missing full_name=%q in %#v", "calc add", items)
 }
+
+func TestDefaultEngineParsePathKotlinInfersTypedPropertyAliasChainsForDotCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Worker.kt")
+	writeTestFile(
+		t,
+		filePath,
+		`package comprehensive
+
+class Service {
+    fun info(): String = "ok"
+}
+
+class Worker {
+    private val service: Service = Service()
+
+    fun run(): String {
+        val logger = service
+        val active = logger
+        return active.info()
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if fullName != "active.info" {
+			continue
+		}
+		assertStringFieldValue(t, item, "inferred_obj_type", "Service")
+		return
+	}
+	t.Fatalf("function_calls missing full_name=%q in %#v", "active.info", items)
+}
