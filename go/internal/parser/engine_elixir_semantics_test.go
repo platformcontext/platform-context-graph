@@ -39,15 +39,15 @@ end
 	}
 
 	assertNamedBucketContains(t, got, "modules", "Demo.Worker")
-	assertNamedBucketContains(t, got, "modules", "Demo.Serializable")
+	assertNamedBucketContains(t, got, "protocols", "Demo.Serializable")
 	assertBucketContainsFieldValue(t, got, "modules", "type", "defmodule")
-	assertBucketContainsFieldValue(t, got, "modules", "type", "defprotocol")
 	assertBucketContainsFieldValue(t, got, "modules", "type", "defimpl")
 	assertBucketContainsFieldValue(t, got, "modules", "module_kind", "module")
-	assertBucketContainsFieldValue(t, got, "modules", "module_kind", "protocol")
 	assertBucketContainsFieldValue(t, got, "modules", "module_kind", "protocol_implementation")
 	assertBucketContainsFieldValue(t, got, "modules", "protocol", "Demo.Serializable")
 	assertBucketContainsFieldValue(t, got, "modules", "implemented_for", "Demo.Worker")
+	assertBucketContainsFieldValue(t, got, "protocols", "type", "defprotocol")
+	assertBucketContainsFieldValue(t, got, "protocols", "module_kind", "protocol")
 	assertBucketContainsFieldValue(t, got, "functions", "type", "def")
 }
 

@@ -52,6 +52,9 @@ func buildOutgoingContentRelationships(
 	if relationships, ok, err := buildOutgoingArgoCDRelationships(entity); ok || err != nil {
 		return relationships, err
 	}
+	if relationships, ok, err := buildOutgoingRustImplBlockRelationships(ctx, reader, entity); ok || err != nil {
+		return relationships, err
+	}
 
 	componentNames := metadataStringSlice(entity.Metadata, "jsx_component_usage")
 	if len(componentNames) == 0 {
@@ -95,6 +98,9 @@ func buildIncomingContentRelationships(
 	entity EntityContent,
 ) ([]map[string]any, error) {
 	if relationships, ok, err := buildIncomingK8sSelectRelationships(ctx, reader, entity); ok || err != nil {
+		return relationships, err
+	}
+	if relationships, ok, err := buildIncomingRustImplBlockRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
 
