@@ -38,14 +38,15 @@ func TestSupportedLanguages(t *testing.T) {
 
 func TestSupportedEntityTypes(t *testing.T) {
 	types := SupportedEntityTypes()
-	if len(types) != 21 {
-		t.Errorf("expected 21 supported entity types, got %d: %v", len(types), types)
+	if len(types) != 24 {
+		t.Errorf("expected 24 supported entity types, got %d: %v", len(types), types)
 	}
 	expected := map[string]bool{
 		"repository": true, "directory": true, "file": true,
 		"function": true, "class": true, "struct": true,
 		"type_alias": true, "type_annotation": true, "typedef": true, "component": true,
 		"annotation": true, "protocol": true, "impl_block": true,
+		"guard": true, "protocol_implementation": true, "module_attribute": true,
 		"terragrunt_dependency": true, "terragrunt_local": true, "terragrunt_input": true,
 	}
 	typeSet := make(map[string]bool, len(types))
@@ -386,6 +387,45 @@ func TestHandleLanguageQuery_ContentBackedEntityTypes(t *testing.T) {
 			wantName:  "Runnable",
 			wantKey:   "module_kind",
 			wantValue: "protocol",
+		},
+		{
+			name:       "guard from elixir content store",
+			language:   "elixir",
+			entityType: "guard",
+			query:      "is_even",
+			row: []driver.Value{
+				"guard-1", "repo-1", "lib/demo/macros.ex", "Function", "is_even",
+				int64(10), int64(10), "elixir", "defguard is_even(value) when rem(value, 2) == 0", []byte(`{"semantic_kind":"guard"}`),
+			},
+			wantName:  "is_even",
+			wantKey:   "semantic_kind",
+			wantValue: "guard",
+		},
+		{
+			name:       "protocol implementation from elixir content store",
+			language:   "elixir",
+			entityType: "protocol_implementation",
+			query:      "Demo.Serializable",
+			row: []driver.Value{
+				"impl-1", "repo-1", "lib/demo/serializable.ex", "Module", "Demo.Serializable",
+				int64(1), int64(4), "elixir", "defimpl Demo.Serializable, for: Demo.Worker do\nend", []byte(`{"module_kind":"protocol_implementation","protocol":"Demo.Serializable","implemented_for":"Demo.Worker"}`),
+			},
+			wantName:  "Demo.Serializable",
+			wantKey:   "module_kind",
+			wantValue: "protocol_implementation",
+		},
+		{
+			name:       "module attribute from elixir content store",
+			language:   "elixir",
+			entityType: "module_attribute",
+			query:      "@timeout",
+			row: []driver.Value{
+				"attr-1", "repo-1", "lib/demo/worker.ex", "Variable", "@timeout",
+				int64(2), int64(2), "elixir", "@timeout 5_000", []byte(`{"attribute_kind":"module_attribute","value":"5_000"}`),
+			},
+			wantName:  "@timeout",
+			wantKey:   "attribute_kind",
+			wantValue: "module_attribute",
 		},
 		{
 			name:       "impl block from rust content store",

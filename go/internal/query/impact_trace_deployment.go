@@ -53,10 +53,16 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query k8s resources: %v", err))
 			return
 		}
+		controllerEntities, err := h.fetchControllerEntities(r.Context(), deploymentSources)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query controller entities: %v", err))
+			return
+		}
 		ctx["deployment_sources"] = deploymentSources
 		ctx["cloud_resources"] = cloudResources
 		ctx["k8s_resources"] = k8sResources
 		ctx["image_refs"] = imageRefs
+		ctx["controller_entities"] = controllerEntities
 	}
 
 	WriteJSON(w, http.StatusOK, buildDeploymentTraceResponse(req.ServiceName, ctx))
@@ -68,6 +74,7 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	cloudResources, _ := workloadContext["cloud_resources"].([]map[string]any)
 	k8sResources, _ := workloadContext["k8s_resources"].([]map[string]any)
 	imageRefs, _ := workloadContext["image_refs"].([]string)
+	controllerEntities, _ := workloadContext["controller_entities"].([]map[string]any)
 	k8sRelationships := buildK8sRelationships(k8sResources)
 	platforms := distinctSortedInstanceField(instances, "platform_name")
 	platformKinds := distinctSortedInstanceField(instances, "platform_kind")
@@ -110,7 +117,7 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 			"platform_kinds":          platformKinds,
 			"environments":            environments,
 		},
-		"controller_overview": buildControllerOverview(platforms, platformKinds),
+		"controller_overview": buildControllerOverview(platforms, platformKinds, controllerEntities),
 		"gitops_overview":     buildGitOpsOverview(platforms, platformKinds),
 		"runtime_overview":    buildRuntimeOverview(environments),
 		"deployment_fact_summary": map[string]any{
@@ -146,14 +153,6 @@ func buildStorySections(platforms, platformKinds, environments []string) []map[s
 		})
 	}
 	return sections
-}
-
-func buildControllerOverview(platforms, platformKinds []string) map[string]any {
-	return map[string]any{
-		"controller_count": len(platforms),
-		"controllers":      platforms,
-		"controller_kinds": platformKinds,
-	}
 }
 
 func buildGitOpsOverview(platforms, platformKinds []string) map[string]any {

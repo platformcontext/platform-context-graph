@@ -281,6 +281,11 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 			t.Fatalf("impact/trace-deployment-chain response schema missing %s", field)
 		}
 	}
+	controllerOverview := mustMapField(t, traceDeploymentResponse, "controller_overview")
+	controllerOverviewProperties := mustMapField(t, controllerOverview, "properties")
+	if _, ok := controllerOverviewProperties["entities"]; !ok {
+		t.Fatal("impact/trace-deployment-chain controller_overview schema missing entities")
+	}
 
 	repositoryStoryPath := mustMapField(t, paths, "/api/v0/repositories/{repo_id}/story")
 	repositoryStoryGet := mustMapField(t, repositoryStoryPath, "get")

@@ -208,6 +208,24 @@ func TestBuildEntitySemanticSummaryElixirFunctionKinds(t *testing.T) {
 	}
 }
 
+func TestBuildEntitySemanticSummaryElixirModuleAttribute(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Variable"},
+		"name":   "@timeout",
+		"metadata": map[string]any{
+			"attribute_kind": "module_attribute",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Variable @timeout is a module attribute."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildEntitySemanticSummaryJavaScriptFunction(t *testing.T) {
 	t.Parallel()
 

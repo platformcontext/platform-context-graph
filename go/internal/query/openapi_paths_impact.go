@@ -52,7 +52,15 @@ const openAPIPathsImpact = `
                     "story_sections": {"type": "array", "items": {"type": "object"}},
                     "deployment_overview": {"type": "object"},
                     "gitops_overview": {"type": "object"},
-                    "controller_overview": {"type": "object"},
+                    "controller_overview": {
+                      "type": "object",
+                      "properties": {
+                        "controller_count": {"type": "integer"},
+                        "controllers": {"type": "array", "items": {"type": "string"}},
+                        "controller_kinds": {"type": "array", "items": {"type": "string"}},
+                        "entities": {"type": "array", "items": {"type": "object"}}
+                      }
+                    },
                     "runtime_overview": {"type": "object"},
                     "deployment_fact_summary": {"type": "object"},
                     "drilldowns": {"type": "object"}

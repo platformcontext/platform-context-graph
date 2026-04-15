@@ -181,6 +181,10 @@ Deployment-oriented trace responses are shaped around:
 - `deployment_fact_summary`
 - `drilldowns`
 
+When controller evidence is recoverable from the deployment repositories,
+`controller_overview` may also include concrete controller entity records in
+`entities`.
+
 The current deployment-oriented trace route is:
 
 - `POST /api/v0/impact/trace-deployment-chain`

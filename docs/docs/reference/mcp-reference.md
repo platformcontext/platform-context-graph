@@ -82,6 +82,9 @@ Use these tools when the user is asking for a narrative answer such as
 - `delivery_paths`
 - `deployment_fact_summary`
 
+When the deployment repos contain ArgoCD controller entities, `controller_overview`
+also includes those concrete controller records under `entities`.
+
 `deployment_facts` are normalized, evidence-backed facts such as:
 
 - `MANAGED_BY_CONTROLLER`

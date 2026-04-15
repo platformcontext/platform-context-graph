@@ -44,16 +44,19 @@ var graphBackedEntityTypes = map[string]string{
 // labels that are already materialized in Postgres but not yet first-class in
 // the graph query surface.
 var contentBackedEntityTypes = map[string]string{
-	"type_alias":            "TypeAlias",
-	"type_annotation":       "TypeAnnotation",
-	"typedef":               "Typedef",
-	"annotation":            "Annotation",
-	"protocol":              "Protocol",
-	"impl_block":            "ImplBlock",
-	"component":             "Component",
-	"terragrunt_dependency": "TerragruntDependency",
-	"terragrunt_local":      "TerragruntLocal",
-	"terragrunt_input":      "TerragruntInput",
+	"type_alias":              "TypeAlias",
+	"type_annotation":         "TypeAnnotation",
+	"typedef":                 "Typedef",
+	"annotation":              "Annotation",
+	"protocol":                "Protocol",
+	"impl_block":              "ImplBlock",
+	"component":               "Component",
+	"terragrunt_dependency":   "TerragruntDependency",
+	"terragrunt_local":        "TerragruntLocal",
+	"terragrunt_input":        "TerragruntInput",
+	"guard":                   "guard",
+	"protocol_implementation": "protocol_implementation",
+	"module_attribute":        "module_attribute",
 }
 
 // languageFileExtensions maps language names to their common file extensions

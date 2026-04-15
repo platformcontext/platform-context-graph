@@ -273,6 +273,9 @@ var resolveContentBackedEntityTypes = map[string]string{
 	"type_alias":               "TypeAlias",
 	"type_annotation":          "TypeAnnotation",
 	"typedef":                  "Typedef",
+	"guard":                    "guard",
+	"protocol_implementation":  "protocol_implementation",
+	"module_attribute":         "module_attribute",
 }
 
 func contentEntityToMap(entity EntityContent) map[string]any {

@@ -289,21 +289,18 @@ func (cr *ContentReader) SearchEntitiesByName(
 		WHERE repo_id = $1 AND entity_name ILIKE '%' || $2 || '%'
 	`
 	args := []any{repoID, name}
+	nextArg := 3
 	if entityType != "" {
-		query += ` AND entity_type = $3`
-		args = append(args, entityType)
-		query += `
-			ORDER BY relative_path, start_line
-			LIMIT $4
-		`
-		args = append(args, limit)
-	} else {
-		query += `
-			ORDER BY relative_path, start_line
-			LIMIT $3
-		`
-		args = append(args, limit)
+		filter, filterArgs, next := contentEntityTypeFilter(entityType, nextArg)
+		query += ` AND ` + filter
+		args = append(args, filterArgs...)
+		nextArg = next
 	}
+	query += fmt.Sprintf(`
+		ORDER BY relative_path, start_line
+		LIMIT $%d
+	`, nextArg)
+	args = append(args, limit)
 
 	rows, err := cr.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -525,9 +522,15 @@ func (cr *ContentReader) SearchEntitiesByLanguageAndType(
 	}
 
 	languageVariants := normalizedLanguageVariants(language)
-	filters := []string{"entity_type = $1"}
-	args := []any{entityType}
-	nextArg := 2
+	filters := make([]string, 0, 4)
+	args := make([]any, 0, 4)
+	nextArg := 1
+	if entityType != "" {
+		filter, filterArgs, next := contentEntityTypeFilter(entityType, nextArg)
+		filters = append(filters, filter)
+		args = append(args, filterArgs...)
+		nextArg = next
+	}
 
 	if repoID != "" {
 		filters = append(filters, fmt.Sprintf("repo_id = $%d", nextArg))
