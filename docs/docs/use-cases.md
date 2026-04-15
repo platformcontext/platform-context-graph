@@ -34,7 +34,7 @@ A database is unhealthy. Which services use it, and how are they deployed?
   ← Workloads: payment-service (ArgoCD), billing-service (ArgoCD)
 ```
 
-`trace_deployment_chain` goes the other direction — from a service name through ArgoCD, K8s resources, images, and backing infrastructure.
+`trace_deployment_chain` goes the other direction — from a service name through controller/platform evidence, deployment-source repositories, and backing infrastructure evidence.
 
 For MCP and API callers, start with the top-level `story` field from `trace_deployment_chain` or `get_repo_summary`, then drill into `deployment_overview` and the detailed fields if you need the exact evidence rows.
 

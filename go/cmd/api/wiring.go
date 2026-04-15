@@ -80,7 +80,8 @@ func wireAPI(ctx context.Context, getenv func(string) string) (http.Handler, fun
 			Neo4j: neo4jReader,
 		},
 		Impact: &query.ImpactHandler{
-			Neo4j: neo4jReader,
+			Neo4j:   neo4jReader,
+			Content: contentReader,
 		},
 		Status: &query.StatusHandler{
 			Neo4j:        neo4jReader,

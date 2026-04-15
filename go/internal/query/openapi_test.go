@@ -247,6 +247,8 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		"subject",
 		"deployment_sources",
 		"cloud_resources",
+		"k8s_resources",
+		"image_refs",
 		"deployment_facts",
 		"controller_driven_paths",
 		"delivery_paths",

@@ -48,8 +48,15 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query cloud resources: %v", err))
 			return
 		}
+		k8sResources, imageRefs, err := h.fetchK8sResources(r.Context(), safeStr(ctx, "repo_id"), safeStr(ctx, "name"))
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query k8s resources: %v", err))
+			return
+		}
 		ctx["deployment_sources"] = deploymentSources
 		ctx["cloud_resources"] = cloudResources
+		ctx["k8s_resources"] = k8sResources
+		ctx["image_refs"] = imageRefs
 	}
 
 	WriteJSON(w, http.StatusOK, buildDeploymentTraceResponse(req.ServiceName, ctx))
@@ -59,6 +66,8 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	instances, _ := workloadContext["instances"].([]map[string]any)
 	deploymentSources, _ := workloadContext["deployment_sources"].([]map[string]any)
 	cloudResources, _ := workloadContext["cloud_resources"].([]map[string]any)
+	k8sResources, _ := workloadContext["k8s_resources"].([]map[string]any)
+	imageRefs, _ := workloadContext["image_refs"].([]string)
 	platforms := distinctSortedInstanceField(instances, "platform_name")
 	platformKinds := distinctSortedInstanceField(instances, "platform_kind")
 	environments := distinctSortedInstanceField(instances, "environment")
@@ -80,9 +89,11 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		"instances":               instances,
 		"deployment_sources":      deploymentSources,
 		"cloud_resources":         cloudResources,
+		"k8s_resources":           k8sResources,
+		"image_refs":              imageRefs,
 		"deployment_facts":        deploymentFacts,
 		"controller_driven_paths": buildControllerDrivenPaths(platforms, platformKinds),
-		"delivery_paths":          buildDeliveryPaths(deploymentSources, cloudResources),
+		"delivery_paths":          buildDeliveryPaths(deploymentSources, cloudResources, k8sResources, imageRefs),
 		"story":                   buildWorkloadStory(workloadContext),
 		"story_sections":          buildStorySections(platforms, platformKinds, environments),
 		"deployment_overview": map[string]any{
@@ -91,6 +102,8 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 			"platform_count":          len(platforms),
 			"deployment_source_count": len(deploymentSources),
 			"cloud_resource_count":    len(cloudResources),
+			"k8s_resource_count":      len(k8sResources),
+			"image_ref_count":         len(imageRefs),
 			"platforms":               platforms,
 			"platform_kinds":          platformKinds,
 			"environments":            environments,
@@ -104,6 +117,8 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 			"platform_count":            len(platforms),
 			"deployment_source_count":   len(deploymentSources),
 			"cloud_resource_count":      len(cloudResources),
+			"k8s_resource_count":        len(k8sResources),
+			"image_ref_count":           len(imageRefs),
 			"fact_count":                len(deploymentFacts),
 			"has_repository":            safeStr(workloadContext, "repo_id") != "",
 			"mapping_mode":              mappingMode,
@@ -212,8 +227,13 @@ func buildControllerDrivenPaths(platforms, platformKinds []string) []map[string]
 	return paths
 }
 
-func buildDeliveryPaths(deploymentSources, cloudResources []map[string]any) []map[string]any {
-	paths := make([]map[string]any, 0, len(deploymentSources)+len(cloudResources))
+func buildDeliveryPaths(
+	deploymentSources []map[string]any,
+	cloudResources []map[string]any,
+	k8sResources []map[string]any,
+	imageRefs []string,
+) []map[string]any {
+	paths := make([]map[string]any, 0, len(deploymentSources)+len(cloudResources)+len(k8sResources)+len(imageRefs))
 	for _, source := range deploymentSources {
 		paths = append(paths, map[string]any{
 			"type":       "deployment_source",
@@ -228,6 +248,20 @@ func buildDeliveryPaths(deploymentSources, cloudResources []map[string]any) []ma
 			"target":     safeStr(resource, "name"),
 			"target_id":  safeStr(resource, "id"),
 			"confidence": floatVal(resource, "confidence"),
+		})
+	}
+	for _, resource := range k8sResources {
+		paths = append(paths, map[string]any{
+			"type":      "k8s_resource",
+			"target":    safeStr(resource, "entity_name"),
+			"target_id": safeStr(resource, "entity_id"),
+			"kind":      safeStr(resource, "kind"),
+		})
+	}
+	for _, imageRef := range imageRefs {
+		paths = append(paths, map[string]any{
+			"type":   "image_ref",
+			"target": imageRef,
 		})
 	}
 	return paths
@@ -304,6 +338,50 @@ func (h *ImpactHandler) fetchCloudResources(ctx context.Context, workloadID stri
 		})
 	}
 	return resources, nil
+}
+
+func (h *ImpactHandler) fetchK8sResources(
+	ctx context.Context,
+	repoID string,
+	workloadName string,
+) ([]map[string]any, []string, error) {
+	if h == nil || h.Content == nil || repoID == "" || workloadName == "" {
+		return nil, nil, nil
+	}
+
+	rows, err := h.Content.SearchEntitiesByName(ctx, repoID, "K8sResource", workloadName, 50)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resources := make([]map[string]any, 0, len(rows))
+	imageSet := make(map[string]struct{})
+	for _, row := range rows {
+		if row.EntityName != workloadName {
+			continue
+		}
+		kind, _ := metadataNonEmptyString(row.Metadata, "kind")
+		qualifiedName, _ := metadataNonEmptyString(row.Metadata, "qualified_name")
+		images := metadataStringSlice(row.Metadata, "container_images")
+		for _, image := range images {
+			imageSet[image] = struct{}{}
+		}
+		resources = append(resources, map[string]any{
+			"entity_id":        row.EntityID,
+			"entity_name":      row.EntityName,
+			"kind":             kind,
+			"qualified_name":   qualifiedName,
+			"relative_path":    row.RelativePath,
+			"container_images": images,
+		})
+	}
+
+	imageRefs := make([]string, 0, len(imageSet))
+	for image := range imageSet {
+		imageRefs = append(imageRefs, image)
+	}
+	sort.Strings(imageRefs)
+	return resources, imageRefs, nil
 }
 
 func distinctSortedInstanceField(instances []map[string]any, key string) []string {

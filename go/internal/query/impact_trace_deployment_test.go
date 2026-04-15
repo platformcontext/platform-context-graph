@@ -44,6 +44,17 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 				"reason":      "Runtime instance uses backing database",
 			},
 		},
+		"k8s_resources": []map[string]any{
+			{
+				"entity_id":        "k8s-1",
+				"entity_name":      "payments-api",
+				"kind":             "Deployment",
+				"qualified_name":   "payments/Deployment/payments-api",
+				"relative_path":    "deploy/payments.yaml",
+				"container_images": []string{"ghcr.io/acme/payments-api:1.2.3"},
+			},
+		},
+		"image_refs": []string{"ghcr.io/acme/payments-api:1.2.3"},
 	}
 
 	got := buildDeploymentTraceResponse("payments-api", ctx)
@@ -173,6 +184,22 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 		t.Fatalf("cloud_resources len = %d, want 1", len(cloudResources))
 	}
 
+	k8sResources, ok := got["k8s_resources"].([]map[string]any)
+	if !ok {
+		t.Fatalf("k8s_resources type = %T, want []map[string]any", got["k8s_resources"])
+	}
+	if len(k8sResources) != 1 {
+		t.Fatalf("k8s_resources len = %d, want 1", len(k8sResources))
+	}
+
+	imageRefs, ok := got["image_refs"].([]string)
+	if !ok {
+		t.Fatalf("image_refs type = %T, want []string", got["image_refs"])
+	}
+	if len(imageRefs) != 1 {
+		t.Fatalf("image_refs len = %d, want 1", len(imageRefs))
+	}
+
 	controllerDrivenPaths, ok := got["controller_driven_paths"].([]map[string]any)
 	if !ok {
 		t.Fatalf("controller_driven_paths type = %T, want []map[string]any", got["controller_driven_paths"])
@@ -185,8 +212,8 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	if !ok {
 		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
 	}
-	if len(deliveryPaths) != 2 {
-		t.Fatalf("delivery_paths len = %d, want 2", len(deliveryPaths))
+	if len(deliveryPaths) != 4 {
+		t.Fatalf("delivery_paths len = %d, want 4", len(deliveryPaths))
 	}
 
 	drilldowns, ok := got["drilldowns"].(map[string]any)

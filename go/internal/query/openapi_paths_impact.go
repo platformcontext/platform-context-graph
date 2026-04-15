@@ -43,6 +43,8 @@ const openAPIPathsImpact = `
                     "instances": {"type": "array", "items": {"type": "object"}},
                     "deployment_sources": {"type": "array", "items": {"type": "object"}},
                     "cloud_resources": {"type": "array", "items": {"type": "object"}},
+                    "k8s_resources": {"type": "array", "items": {"type": "object"}},
+                    "image_refs": {"type": "array", "items": {"type": "string"}},
                     "deployment_facts": {"type": "array", "items": {"type": "object"}},
                     "controller_driven_paths": {"type": "array", "items": {"type": "object"}},
                     "delivery_paths": {"type": "array", "items": {"type": "object"}},

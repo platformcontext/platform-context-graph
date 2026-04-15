@@ -28,7 +28,7 @@ Unlike code-only search tools, PCG treats infrastructure as a first-class citize
 Key capabilities no other open source tool combines:
 
 - **`find_blast_radius`** — transitive dependency analysis across repos and infrastructure boundaries
-- **`trace_deployment_chain`** — follow a service from ArgoCD through K8s resources to the repos and code that define them
+- **`trace_deployment_chain`** — follow a service through controller/platform evidence, deployment-source repositories, and backing infrastructure
 - **`trace_resource_to_code`** — trace a cloud resource back to the Terraform module and repository that owns it
 - **`compare_environments`** — diff the dependency surface of a workload between prod and staging
 - **`find_change_surface`** — see what is impacted before you merge
@@ -42,7 +42,7 @@ Before modifying a service, you need to understand callers, callees, dependencie
 
 ### Platform / DevOps / SRE
 
-Platform teams are constantly asked how workloads connect to infrastructure, what is shared, and what differs between environments. PCG gives you — and the AI assistants your developers use — a real answer instead of tribal knowledge. `trace_deployment_chain` walks from ArgoCD apps through K8s resources to the repos and code that define them. `compare_environments` diffs the dependency surface between prod and staging. `find_infra_resources` and `analyze_infra_relationships` show what workloads share a database, queue, or secret — before someone changes it.
+Platform teams are constantly asked how workloads connect to infrastructure, what is shared, and what differs between environments. PCG gives you — and the AI assistants your developers use — a real answer instead of tribal knowledge. `trace_deployment_chain` walks from controller/platform evidence through deployment-source repositories and backing infrastructure. `compare_environments` diffs the dependency surface between prod and staging. `find_infra_resources` and `analyze_infra_relationships` show what workloads share a database, queue, or secret — before someone changes it.
 
 ### Security & compliance
 
@@ -81,7 +81,7 @@ Questions that work today:
 **Scenario:** You need to refactor the payment service's API contract.
 
 1. **Scope the change** — `find_blast_radius payment-service` shows 4 downstream repos, 2 shared Terraform modules, and a Crossplane claim.
-2. **Understand the deployment** — `trace_deployment_chain payment-service` shows the ArgoCD app, K8s Deployment, and backing resources.
+2. **Understand the deployment** — `trace_deployment_chain payment-service` shows the controller/platform evidence, deployment-source repositories, and backing resources currently linked to that workload.
 3. **Check environment differences** — `compare_environments payment-service prod staging` reveals a config divergence in the SQS queue policy.
 4. **Trace a shared resource** — `trace_resource_to_code payment-db` shows the RDS module in `terraform-modules/rds` is also used by `billing-service` and `analytics-pipeline`.
 5. **Ship with confidence** — you know the blast radius before you open the PR, not after the page.
