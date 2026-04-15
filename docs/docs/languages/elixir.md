@@ -7,7 +7,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Language: `elixir`
 - Family: `language`
 - Parser: `DefaultEngine (elixir)`
-- Entrypoint: `go/internal/parser/elixir_dart_language.go`
+- Entrypoint: `go/internal/parser/elixir_language.go`
 - Fixture repo: `tests/fixtures/ecosystems/elixir_comprehensive/`
 - Unit test suite: `go/internal/parser/engine_elixir_semantics_test.go`
 - Integration validation: compose-backed fixture verification (see `../reference/local-testing.md`)

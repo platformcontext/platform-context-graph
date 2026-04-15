@@ -7,7 +7,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Language: `dart`
 - Family: `language`
 - Parser: `DefaultEngine (dart)`
-- Entrypoint: `go/internal/parser/elixir_dart_language.go`
+- Entrypoint: `go/internal/parser/dart_language.go`
 - Fixture repo: `tests/fixtures/ecosystems/dart_comprehensive/`
 - Unit test suite: `go/internal/parser/engine_long_tail_test.go`
 - Integration validation: compose-backed fixture verification (see `../reference/local-testing.md`)

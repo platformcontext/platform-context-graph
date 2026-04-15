@@ -43,7 +43,7 @@ func buildOutgoingContentRelationships(
 	if relationships, ok, err := buildOutgoingK8sSelectRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
-	if relationships, ok, err := buildOutgoingCloudFormationRelationships(entity); ok || err != nil {
+	if relationships, ok, err := buildOutgoingCloudFormationRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
 	if relationships, ok, err := buildOutgoingKustomizeRelationships(ctx, reader, entity); ok || err != nil {
@@ -144,21 +144,6 @@ func buildOutgoingArgoCDRelationships(entity EntityContent) ([]map[string]any, b
 	default:
 		return nil, false, nil
 	}
-}
-
-func buildOutgoingCloudFormationRelationships(entity EntityContent) ([]map[string]any, bool, error) {
-	if entity.EntityType != "CloudFormationResource" {
-		return nil, false, nil
-	}
-	templateURL, ok := metadataNonEmptyString(entity.Metadata, "template_url")
-	if !ok {
-		return nil, true, nil
-	}
-	return []map[string]any{{
-		"type":        "DEPLOYS_FROM",
-		"target_name": templateURL,
-		"reason":      "cloudformation_nested_stack_template",
-	}}, true, nil
 }
 
 func buildOutgoingArgoCDApplicationRelationships(entity EntityContent) []map[string]any {

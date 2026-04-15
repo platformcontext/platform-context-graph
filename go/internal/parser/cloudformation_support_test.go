@@ -144,3 +144,61 @@ func TestParseCloudFormationTemplateCapturesConditionsAndNestedStackMetadata(t *
 		t.Fatalf("resource condition = %#v, want %#v", got, want)
 	}
 }
+
+func TestParseCloudFormationTemplateEvaluatesResolvableConditions(t *testing.T) {
+	t.Parallel()
+
+	document := map[string]any{
+		"AWSTemplateFormatVersion": "2010-09-09",
+		"Parameters": map[string]any{
+			"Env": map[string]any{
+				"Type":    "String",
+				"Default": "prod",
+			},
+		},
+		"Conditions": map[string]any{
+			"CreateNested": map[string]any{
+				"Fn::Equals": []any{
+					map[string]any{"Ref": "Env"},
+					"prod",
+				},
+			},
+			"SkipNested": map[string]any{
+				"Fn::Equals": []any{
+					map[string]any{"Ref": "Env"},
+					"dev",
+				},
+			},
+		},
+		"Resources": map[string]any{
+			"NestedStack": map[string]any{
+				"Type":      "AWS::CloudFormation::Stack",
+				"Condition": "CreateNested",
+				"Properties": map[string]any{
+					"TemplateURL": "nested/network.yaml",
+				},
+			},
+		},
+	}
+
+	result := parseCloudFormationTemplate(document, "/test/stack.yaml", 1, "yaml")
+	if len(result.conditions) != 2 {
+		t.Fatalf("len(conditions) = %d, want 2", len(result.conditions))
+	}
+
+	if got, want := result.conditions[0]["evaluated"], true; got != want {
+		t.Fatalf("conditions[0][evaluated] = %#v, want %#v", got, want)
+	}
+	if got, want := result.conditions[0]["evaluated_value"], true; got != want {
+		t.Fatalf("conditions[0][evaluated_value] = %#v, want %#v", got, want)
+	}
+	if got, want := result.conditions[1]["evaluated_value"], false; got != want {
+		t.Fatalf("conditions[1][evaluated_value] = %#v, want %#v", got, want)
+	}
+	if got, want := result.resources[0]["condition_evaluated"], true; got != want {
+		t.Fatalf("resource condition_evaluated = %#v, want %#v", got, want)
+	}
+	if got, want := result.resources[0]["condition_value"], true; got != want {
+		t.Fatalf("resource condition_value = %#v, want %#v", got, want)
+	}
+}

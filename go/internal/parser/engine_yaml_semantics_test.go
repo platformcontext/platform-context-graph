@@ -463,6 +463,30 @@ Outputs:
 	assertNamedBucketContains(t, got, "cloudformation_parameters", "Env")
 	assertNamedBucketContains(t, got, "cloudformation_outputs", "BucketArn")
 	assertNamedBucketContains(t, got, "cloudformation_conditions", "EnableNested")
+	conditions := got["cloudformation_conditions"].([]map[string]any)
+	if gotValue, want := conditions[0]["evaluated"], true; gotValue != want {
+		t.Fatalf("cloudformation_conditions[0][evaluated] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := conditions[0]["evaluated_value"], false; gotValue != want {
+		t.Fatalf("cloudformation_conditions[0][evaluated_value] = %#v, want %#v", gotValue, want)
+	}
+	resources := got["cloudformation_resources"].([]map[string]any)
+	var nestedStack map[string]any
+	for _, resource := range resources {
+		if resource["name"] == "NestedStack" {
+			nestedStack = resource
+			break
+		}
+	}
+	if nestedStack == nil {
+		t.Fatal("NestedStack resource not found")
+	}
+	if gotValue, want := nestedStack["condition_evaluated"], true; gotValue != want {
+		t.Fatalf("NestedStack condition_evaluated = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := nestedStack["condition_value"], false; gotValue != want {
+		t.Fatalf("NestedStack condition_value = %#v, want %#v", gotValue, want)
+	}
 	assertNamedBucketContains(t, got, "cloudformation_cross_stack_imports", "SharedVpcId")
 	assertNamedBucketContains(t, got, "cloudformation_cross_stack_exports", "Stack-BucketArn")
 	assertBucketContainsFieldValue(t, got, "cloudformation_outputs", "export_name", "Stack-BucketArn")

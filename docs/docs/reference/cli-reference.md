@@ -139,7 +139,7 @@ These options apply at the root command level.
 | `pcg mcp start` | Start the MCP server. |
 | `pcg mcp tools` | List MCP tools. |
 | `pcg api start` | Start the HTTP API server. |
-| `pcg serve start` | Start the combined HTTP API and MCP service in one convenience process. |
+| `pcg serve start` | Start the HTTP API runtime convenience process. Use `pcg mcp start` for MCP. |
 | `pcg neo4j setup` | Configure a Neo4j connection. |
 | `pcg config show` | Show current config values. |
 | `pcg config set <key> <value>` | Set one config value. |

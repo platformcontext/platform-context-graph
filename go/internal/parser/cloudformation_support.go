@@ -65,6 +65,7 @@ func parseCloudFormationTemplate(
 	lang string,
 ) cloudFormationParseResult {
 	result := cloudFormationParseResult{}
+	conditionEvaluations := evaluateCloudFormationConditions(document)
 	withFormat := func(row map[string]any) map[string]any {
 		row["file_format"] = lang
 		return row
@@ -99,6 +100,10 @@ func parseCloudFormationTemplate(
 				"lang":        lang,
 				"expression":  fmt.Sprint(conditions[name]),
 			})
+			if evaluation, ok := conditionEvaluations[name]; ok && evaluation.Resolved {
+				row["evaluated"] = true
+				row["evaluated_value"] = evaluation.Value
+			}
 			result.conditions = append(result.conditions, row)
 		}
 	}
@@ -117,6 +122,12 @@ func parseCloudFormationTemplate(
 				row["resource_type"] = resourceType
 			}
 			setOptionalString(row, "condition", body["Condition"])
+			if conditionName, ok := row["condition"].(string); ok {
+				if evaluation, ok := conditionEvaluations[conditionName]; ok && evaluation.Resolved {
+					row["condition_evaluated"] = true
+					row["condition_value"] = evaluation.Value
+				}
+			}
 			if properties, ok := body["Properties"].(map[string]any); ok {
 				setOptionalString(row, "template_url", properties["TemplateURL"])
 			}
@@ -165,6 +176,12 @@ func parseCloudFormationTemplate(
 				}
 			}
 			setOptionalString(row, "condition", body["Condition"])
+			if conditionName, ok := row["condition"].(string); ok {
+				if evaluation, ok := conditionEvaluations[conditionName]; ok && evaluation.Resolved {
+					row["condition_evaluated"] = true
+					row["condition_value"] = evaluation.Value
+				}
+			}
 			result.outputs = append(result.outputs, row)
 		}
 	}
