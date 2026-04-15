@@ -115,6 +115,31 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		case qualifiedName != "":
 			return fmt.Sprintf("%s %s is identified as %s.", label, name, qualifiedName)
 		}
+	case "ArgoCDApplication":
+		sourceRepo, _ := metadata["source_repo"].(string)
+		sourcePath, _ := metadata["source_path"].(string)
+		destServer, _ := metadata["dest_server"].(string)
+		destNamespace, _ := metadata["dest_namespace"].(string)
+		switch {
+		case sourceRepo != "" && sourcePath != "" && destServer != "" && destNamespace != "":
+			return fmt.Sprintf("%s %s deploys from %s at %s and targets %s namespace %s.",
+				label, name, sourceRepo, sourcePath, destServer, destNamespace)
+		case sourceRepo != "" && destServer != "":
+			return fmt.Sprintf("%s %s deploys from %s and targets %s.", label, name, sourceRepo, destServer)
+		}
+	case "ArgoCDApplicationSet":
+		generatorRepos := metadataStringSlice(metadata, "generator_source_repos")
+		templateRepos := metadataStringSlice(metadata, "template_source_repos")
+		destServer, _ := metadata["dest_server"].(string)
+		destNamespace, _ := metadata["dest_namespace"].(string)
+		switch {
+		case len(generatorRepos) > 0 && len(templateRepos) > 0 && destServer != "" && destNamespace != "":
+			return fmt.Sprintf("%s %s discovers config in %s, deploys templates from %s, and targets %s namespace %s.",
+				label, name, strings.Join(generatorRepos, ", "), strings.Join(templateRepos, ", "), destServer, destNamespace)
+		case len(generatorRepos) > 0 && len(templateRepos) > 0:
+			return fmt.Sprintf("%s %s discovers config in %s and deploys templates from %s.",
+				label, name, strings.Join(generatorRepos, ", "), strings.Join(templateRepos, ", "))
+		}
 	}
 
 	fragments := make([]string, 0, 4)

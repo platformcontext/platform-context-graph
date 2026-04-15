@@ -46,6 +46,9 @@ func buildOutgoingContentRelationships(
 	if relationships, ok, err := buildOutgoingKustomizePatchRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
+	if relationships, ok, err := buildOutgoingArgoCDRelationships(entity); ok || err != nil {
+		return relationships, err
+	}
 
 	componentNames := metadataStringSlice(entity.Metadata, "jsx_component_usage")
 	if len(componentNames) == 0 {
@@ -121,6 +124,62 @@ func buildIncomingContentRelationships(
 	}
 
 	return relationships, nil
+}
+
+func buildOutgoingArgoCDRelationships(entity EntityContent) ([]map[string]any, bool, error) {
+	switch entity.EntityType {
+	case "ArgoCDApplication":
+		return buildOutgoingArgoCDApplicationRelationships(entity), true, nil
+	case "ArgoCDApplicationSet":
+		return buildOutgoingArgoCDApplicationSetRelationships(entity), true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+func buildOutgoingArgoCDApplicationRelationships(entity EntityContent) []map[string]any {
+	relationships := make([]map[string]any, 0, 2)
+	if sourceRepo, ok := metadataNonEmptyString(entity.Metadata, "source_repo"); ok {
+		relationships = append(relationships, map[string]any{
+			"type":        "DEPLOYS_FROM",
+			"target_name": sourceRepo,
+			"reason":      "argocd_application_source",
+		})
+	}
+	if destination, ok := metadataNonEmptyString(entity.Metadata, "dest_server"); ok {
+		relationships = append(relationships, map[string]any{
+			"type":        "RUNS_ON",
+			"target_name": destination,
+			"reason":      "argocd_destination_server",
+		})
+	}
+	return relationships
+}
+
+func buildOutgoingArgoCDApplicationSetRelationships(entity EntityContent) []map[string]any {
+	relationships := make([]map[string]any, 0, 3)
+	for _, repoURL := range metadataStringSlice(entity.Metadata, "generator_source_repos") {
+		relationships = append(relationships, map[string]any{
+			"type":        "DISCOVERS_CONFIG_IN",
+			"target_name": repoURL,
+			"reason":      "argocd_applicationset_generator",
+		})
+	}
+	for _, repoURL := range metadataStringSlice(entity.Metadata, "template_source_repos") {
+		relationships = append(relationships, map[string]any{
+			"type":        "DEPLOYS_FROM",
+			"target_name": repoURL,
+			"reason":      "argocd_applicationset_template",
+		})
+	}
+	if destination, ok := metadataNonEmptyString(entity.Metadata, "dest_server"); ok {
+		relationships = append(relationships, map[string]any{
+			"type":        "RUNS_ON",
+			"target_name": destination,
+			"reason":      "argocd_destination_server",
+		})
+	}
+	return relationships
 }
 
 func buildOutgoingK8sSelectRelationships(
@@ -302,7 +361,30 @@ func metadataStringSlice(metadata map[string]any, key string) []string {
 			items = append(items, value)
 		}
 		return items
+	case string:
+		items := strings.Split(typed, ",")
+		result := make([]string, 0, len(items))
+		for _, item := range items {
+			value := strings.TrimSpace(item)
+			if value == "" {
+				continue
+			}
+			result = append(result, value)
+		}
+		return result
 	default:
 		return nil
 	}
+}
+
+func metadataNonEmptyString(metadata map[string]any, key string) (string, bool) {
+	value, ok := metadata[key].(string)
+	if !ok {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+	return value, true
 }

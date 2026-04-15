@@ -237,6 +237,9 @@ func contentEntityTypeForResolve(typeName string) string {
 	if typeName == "" {
 		return ""
 	}
+	if entityType, ok := resolveContentBackedEntityTypes[typeName]; ok {
+		return entityType
+	}
 	if entityType, ok := contentBackedEntityTypes[typeName]; ok {
 		return entityType
 	}
@@ -244,6 +247,26 @@ func contentEntityTypeForResolve(typeName string) string {
 		return entityType
 	}
 	return typeName
+}
+
+var resolveContentBackedEntityTypes = map[string]string{
+	"analytics_model":       "AnalyticsModel",
+	"annotation":            "Annotation",
+	"argocd_application":    "ArgoCDApplication",
+	"argocd_applicationset": "ArgoCDApplicationSet",
+	"component":             "Component",
+	"data_asset":            "DataAsset",
+	"impl_block":            "ImplBlock",
+	"k8s_resource":          "K8sResource",
+	"kustomize_overlay":     "KustomizeOverlay",
+	"protocol":              "Protocol",
+	"terraform_block":       "TerraformBlock",
+	"terragrunt_dependency": "TerragruntDependency",
+	"terragrunt_input":      "TerragruntInput",
+	"terragrunt_local":      "TerragruntLocal",
+	"type_alias":            "TypeAlias",
+	"type_annotation":       "TypeAnnotation",
+	"typedef":               "Typedef",
 }
 
 func contentEntityToMap(entity EntityContent) map[string]any {
