@@ -1,0 +1,56 @@
+go/internal/query/python_semantics_promotion.go
+  1ca5ee6ce936a402 14-15,26,40,68-70,90-91
+go/internal/query/python_semantics_promotion_test.go
+  1ca5ee6ce936a402 46-55
+go/internal/query/repository_story_semantics_test.go
+  1ca5ee6ce936a402 52-61,67,75,107-109,127-128
+go/internal/query/entity_summary.go
+  1ca5ee6ce936a402 196-198
+go/internal/query/semantic_profile.go
+  1ca5ee6ce936a402 95-98
+go/internal/parser/engine_python_metaclass_test.go
+  1ca5ee6ce936a402 5,38-80
+go/internal/parser/python_language.go
+  1ca5ee6ce936a402 90,106-108,247-277,296-328
+go/internal/query/entity_summary_test.go
+  1ca5ee6ce936a402 44-61
+docs/docs/languages/python.md
+  1ca5ee6ce936a402 25,54-56,63-64
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 47
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 80,102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "fcfdd8a11de9280fc4942e3a943ed6de9faa1027",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 206,
+      "total_deletions": 24,
+      "accepted_lines": 718,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 85,
+      "overriden_lines": 0
+    }
+  }
+}
