@@ -19,10 +19,10 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Namespace | `namespace` | supported | `variables` | `name, line_number, namespace` | `property:Overlay.property` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm` | Compose-backed fixture verification | - |
 | Resources list | `resources-list` | supported | `kustomize_overlays` | `name, line_number, resources` | `property:Overlay.resources` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm` | Compose-backed fixture verification | - |
 | Patches list | `patches-list` | supported | `kustomize_overlays` | `name, line_number, patches` | `property:Overlay.patches` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm` | Compose-backed fixture verification | - |
+| Patch targets (`patches[].target.kind/name`) | `patch-targets` | supported | `kustomize_overlays` | `name, line_number, patch_targets` | `property:KustomizeOverlay.patch_targets` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizePatchTargets` | Compose-backed fixture verification | Inline Kustomize patch targets are normalized into stable `Kind/name` strings and now surface through Go query summaries. |
 | Base references | `base-references` | supported | `kustomize_overlays` | `name, line_number, bases` | `property:KustomizeOverlay.bases` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm` | Compose-backed fixture verification | `bases` is normalized into a stable, sorted list of base paths on the Kustomize payload, so the relation stays first-class instead of being flattened into a comma-delimited string. |
 
 ## Known Limitations
-- Strategic merge patches are not parsed for the target resource they modify
 - `components` and `configurations` sections are not extracted
 - Inline patch bodies within `kustomization.yaml` are not traversed for field-level details
-- The parser payload is ahead of Python, but the Go relationship/evidence layer still lacks the old Python typed Kustomize evidence split for resources vs Helm vs images and the historical patch-link heuristic
+- The parser payload is ahead of Python, and Go now surfaces patch targets plus typed Kustomize evidence for resources vs Helm vs images, but the historical patch-link heuristic is still not promoted through the final graph/query surfaces

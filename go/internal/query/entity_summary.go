@@ -94,10 +94,18 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		return fmt.Sprintf("%s %s is associated with the %s framework.", label, name, framework)
 	case "KustomizeOverlay":
 		bases := metadataStringSlice(metadata, "bases")
-		if len(bases) == 0 {
+		patchTargets := metadataStringSlice(metadata, "patch_targets")
+		switch {
+		case len(bases) > 0 && len(patchTargets) > 0:
+			return fmt.Sprintf("%s %s references bases %s and patches %s.",
+				label, name, strings.Join(bases, ", "), strings.Join(patchTargets, ", "))
+		case len(bases) > 0:
+			return fmt.Sprintf("%s %s references bases %s.", label, name, strings.Join(bases, ", "))
+		case len(patchTargets) > 0:
+			return fmt.Sprintf("%s %s patches %s.", label, name, strings.Join(patchTargets, ", "))
+		default:
 			return ""
 		}
-		return fmt.Sprintf("%s %s references bases %s.", label, name, strings.Join(bases, ", "))
 	case "K8sResource":
 		qualifiedName, _ := metadata["qualified_name"].(string)
 		labels, _ := metadata["labels"].(string)

@@ -19,14 +19,15 @@ func isKustomization(apiVersion string, kind string, filename string) bool {
 
 func parseKustomization(document map[string]any, path string, lineNumber int) map[string]any {
 	return map[string]any{
-		"name":        "kustomization",
-		"line_number": lineNumber,
-		"namespace":   strings.TrimSpace(fmt.Sprint(document["namespace"])),
-		"resources":   document["resources"],
-		"bases":       collectKustomizeBaseRefs(document),
-		"patches":     collectPatchPaths(document["patches"]),
-		"path":        path,
-		"lang":        "yaml",
+		"name":          "kustomization",
+		"line_number":   lineNumber,
+		"namespace":     strings.TrimSpace(fmt.Sprint(document["namespace"])),
+		"resources":     document["resources"],
+		"bases":         collectKustomizeBaseRefs(document),
+		"patches":       collectPatchPaths(document["patches"]),
+		"patch_targets": collectPatchTargets(document["patches"]),
+		"path":          path,
+		"lang":          "yaml",
 	}
 }
 
@@ -48,6 +49,32 @@ func collectPatchPaths(value any) []string {
 	}
 	sort.Strings(paths)
 	return paths
+}
+
+func collectPatchTargets(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	targets := make([]string, 0, len(items))
+	for _, item := range items {
+		object, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		target, ok := object["target"].(map[string]any)
+		if !ok {
+			continue
+		}
+		kind := strings.TrimSpace(fmt.Sprint(target["kind"]))
+		name := strings.TrimSpace(fmt.Sprint(target["name"]))
+		if kind == "" || kind == "<nil>" || name == "" || name == "<nil>" {
+			continue
+		}
+		targets = append(targets, kind+"/"+name)
+	}
+	sort.Strings(targets)
+	return dedupeNonEmptyStrings(targets)
 }
 
 func collectKustomizeBaseRefs(document map[string]any) []string {

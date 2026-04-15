@@ -79,7 +79,7 @@ func TestResolveEntityFallsBackToKustomizeOverlayContentEntity(t *testing.T) {
 			rows: [][]driver.Value{
 				{
 					"kustomize-overlay-1", "repo-1", "deploy/kustomization.yaml", "KustomizeOverlay", "kustomization",
-					int64(1), int64(12), "yaml", "resources:\n- ../base", []byte(`{"bases":["../app","../base"]}`),
+					int64(1), int64(12), "yaml", "resources:\n- ../base", []byte(`{"bases":["../app","../base"],"patch_targets":["Deployment/comprehensive-app"]}`),
 				},
 			},
 		},
@@ -113,7 +113,7 @@ func TestResolveEntityFallsBackToKustomizeOverlayContentEntity(t *testing.T) {
 	if !ok {
 		t.Fatalf("entity type = %T, want map[string]any", entities[0])
 	}
-	if got, want := entity["semantic_summary"], "KustomizeOverlay kustomization references bases ../app, ../base."; got != want {
+	if got, want := entity["semantic_summary"], "KustomizeOverlay kustomization references bases ../app, ../base and patches Deployment/comprehensive-app."; got != want {
 		t.Fatalf("entity[semantic_summary] = %#v, want %#v", got, want)
 	}
 }

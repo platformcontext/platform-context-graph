@@ -236,7 +236,6 @@ image:
 	if len(bases) != 2 || bases[0] != "../app" || bases[1] != "../base" {
 		t.Fatalf("kustomize_overlays[0].bases = %#v, want [../app ../base]", bases)
 	}
-
 	chartPayload, err := engine.ParsePath(repoRoot, chartPath, false, Options{})
 	if err != nil {
 		t.Fatalf("ParsePath(%q) error = %v, want nil", chartPath, err)
@@ -250,6 +249,50 @@ image:
 	}
 	assertNamedBucketContains(t, valuesPayload, "helm_values", "values")
 	assertBucketContainsFieldValue(t, valuesPayload, "helm_values", "top_level_keys", "image,replicaCount")
+}
+
+func TestDefaultEngineParsePathYAMLKustomizePatchTargets(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "kustomization.yaml")
+	writeTestFile(
+		t,
+		filePath,
+		`apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+patches:
+  - target:
+      kind: Deployment
+      name: comprehensive-app
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	payload, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", filePath, err)
+	}
+
+	overlays := payload["kustomize_overlays"].([]map[string]any)
+	if len(overlays) != 1 {
+		t.Fatalf("kustomize_overlays = %#v, want one overlay", overlays)
+	}
+	patchTargets, ok := overlays[0]["patch_targets"].([]string)
+	if !ok {
+		t.Fatalf("kustomize_overlays[0].patch_targets = %T, want []string", overlays[0]["patch_targets"])
+	}
+	if len(patchTargets) != 1 || patchTargets[0] != "Deployment/comprehensive-app" {
+		t.Fatalf("kustomize_overlays[0].patch_targets = %#v, want [Deployment/comprehensive-app]", patchTargets)
+	}
 }
 
 func TestDefaultEngineParsePathYAMLCloudFormation(t *testing.T) {
