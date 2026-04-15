@@ -49,8 +49,8 @@ func parseArgoCDApplicationSet(document map[string]any, metadata map[string]any,
 	template, _ := spec["template"].(map[string]any)
 	templateSpec, _ := template["spec"].(map[string]any)
 	generatorTypes := make([]string, 0)
-	sourceRepos := make([]string, 0)
-	sourcePaths := make([]string, 0)
+	generatorSourceRepos := make([]string, 0)
+	generatorSourcePaths := make([]string, 0)
 	if generators, ok := spec["generators"].([]any); ok {
 		for _, rawGenerator := range generators {
 			generator, ok := rawGenerator.(map[string]any)
@@ -58,12 +58,12 @@ func parseArgoCDApplicationSet(document map[string]any, metadata map[string]any,
 				continue
 			}
 			collectArgoGeneratorKinds(generator, &generatorTypes)
-			collectArgoGeneratorSources(generator, &sourceRepos, &sourcePaths)
+			collectArgoGeneratorSources(generator, &generatorSourceRepos, &generatorSourcePaths)
 		}
 	}
-	templateRepos, templatePaths := extractArgoTemplateSources(templateSpec)
-	sourceRepos = append(sourceRepos, templateRepos...)
-	sourcePaths = append(sourcePaths, templatePaths...)
+	templateSourceRepos, templateSourcePaths := extractArgoTemplateSources(templateSpec)
+	sourceRepos := append(append([]string(nil), generatorSourceRepos...), templateSourceRepos...)
+	sourcePaths := append(append([]string(nil), generatorSourcePaths...), templateSourcePaths...)
 	dedupedPaths := dedupeNonEmptyStrings(sourcePaths)
 	sourceRoots := make([]string, 0, len(dedupedPaths))
 	for _, sourcePath := range dedupedPaths {
@@ -72,17 +72,22 @@ func parseArgoCDApplicationSet(document map[string]any, metadata map[string]any,
 		}
 	}
 	return map[string]any{
-		"name":           strings.TrimSpace(fmt.Sprint(metadata["name"])),
-		"line_number":    lineNumber,
-		"namespace":      strings.TrimSpace(fmt.Sprint(metadata["namespace"])),
-		"generators":     strings.Join(dedupeAndSortStrings(generatorTypes), ","),
-		"project":        strings.TrimSpace(fmt.Sprint(templateSpec["project"])),
-		"dest_namespace": strings.TrimSpace(fmt.Sprint(nestedMapValue(templateSpec, "destination", "namespace"))),
-		"source_repos":   strings.Join(dedupeNonEmptyStrings(sourceRepos), ","),
-		"source_paths":   strings.Join(dedupedPaths, ","),
-		"source_roots":   strings.Join(dedupeNonEmptyStrings(sourceRoots), ","),
-		"path":           path,
-		"lang":           "yaml",
+		"name":                   strings.TrimSpace(fmt.Sprint(metadata["name"])),
+		"line_number":            lineNumber,
+		"namespace":              strings.TrimSpace(fmt.Sprint(metadata["namespace"])),
+		"generators":             strings.Join(dedupeAndSortStrings(generatorTypes), ","),
+		"project":                strings.TrimSpace(fmt.Sprint(templateSpec["project"])),
+		"dest_server":            strings.TrimSpace(fmt.Sprint(nestedMapValue(templateSpec, "destination", "server"))),
+		"dest_namespace":         strings.TrimSpace(fmt.Sprint(nestedMapValue(templateSpec, "destination", "namespace"))),
+		"source_repos":           strings.Join(dedupeNonEmptyStrings(sourceRepos), ","),
+		"source_paths":           strings.Join(dedupedPaths, ","),
+		"generator_source_repos": strings.Join(dedupeNonEmptyStrings(generatorSourceRepos), ","),
+		"generator_source_paths": strings.Join(dedupeNonEmptyStrings(generatorSourcePaths), ","),
+		"template_source_repos":  strings.Join(dedupeNonEmptyStrings(templateSourceRepos), ","),
+		"template_source_paths":  strings.Join(dedupeNonEmptyStrings(templateSourcePaths), ","),
+		"source_roots":           strings.Join(dedupeNonEmptyStrings(sourceRoots), ","),
+		"path":                   path,
+		"lang":                   "yaml",
 	}
 }
 

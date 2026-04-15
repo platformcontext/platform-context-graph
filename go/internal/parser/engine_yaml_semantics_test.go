@@ -114,6 +114,55 @@ spec:
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "generators", "git,list,matrix,merge,plugin")
 }
 
+func TestDefaultEngineParsePathYAMLArgoCDApplicationSetPreservesGeneratorAndTemplateSources(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "applicationset-sources.yaml")
+	writeTestFile(
+		t,
+		filePath,
+		`apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-appset
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/myorg/platform-config.git
+        files:
+          - path: argocd/platform/*/config.yaml
+  template:
+    spec:
+      project: platform
+      source:
+        repoURL: https://github.com/myorg/platform-runtime.git
+        path: deploy/overlays/prod
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: platform
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "argocd_applicationsets", "platform-appset")
+	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "generator_source_repos", "https://github.com/myorg/platform-config.git")
+	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "generator_source_paths", "argocd/platform/*/config.yaml")
+	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "template_source_repos", "https://github.com/myorg/platform-runtime.git")
+	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "template_source_paths", "deploy/overlays/prod")
+	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "dest_server", "https://kubernetes.default.svc")
+}
+
 func TestDefaultEngineParsePathYAMLCrossplaneResources(t *testing.T) {
 	t.Parallel()
 
