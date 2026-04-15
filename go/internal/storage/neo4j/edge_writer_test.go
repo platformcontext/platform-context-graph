@@ -139,8 +139,11 @@ func TestEdgeWriterWriteEdgesCodeCallDispatch(t *testing.T) {
 	if got, want := len(executor.calls), 1; got != want {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
+	if !strings.Contains(executor.calls[0].Cypher, "REFERENCES") {
+		t.Fatalf("cypher missing REFERENCES branch: %s", executor.calls[0].Cypher)
+	}
 	if !strings.Contains(executor.calls[0].Cypher, "CALLS") {
-		t.Fatalf("cypher missing CALLS: %s", executor.calls[0].Cypher)
+		t.Fatalf("cypher missing CALLS branch: %s", executor.calls[0].Cypher)
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "UNWIND") {
 		t.Fatalf("cypher missing UNWIND: %s", executor.calls[0].Cypher)
@@ -324,8 +327,8 @@ func TestEdgeWriterRetractEdgesCodeCallDispatch(t *testing.T) {
 	if got, want := len(executor.calls), 1; got != want {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
-	if !strings.Contains(executor.calls[0].Cypher, "CALLS") {
-		t.Fatalf("cypher missing CALLS: %s", executor.calls[0].Cypher)
+	if !strings.Contains(executor.calls[0].Cypher, "CALLS|REFERENCES") {
+		t.Fatalf("cypher missing CALLS|REFERENCES retract: %s", executor.calls[0].Cypher)
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "source.repo_id IN $repo_ids") {
 		t.Fatalf("cypher missing repo_id filter: %s", executor.calls[0].Cypher)

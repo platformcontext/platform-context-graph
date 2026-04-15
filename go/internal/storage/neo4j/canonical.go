@@ -102,6 +102,14 @@ SET rel.confidence = 0.95,
     rel.evidence_source = $evidence_source,
     rel.call_kind = $call_kind`
 
+const canonicalJSXComponentReferenceUpsertCypher = `MATCH (source {id: $caller_entity_id})
+MATCH (target {id: $callee_entity_id})
+MERGE (source)-[rel:REFERENCES]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser and symbol analysis resolved a TSX component reference edge',
+    rel.evidence_source = $evidence_source,
+    rel.call_kind = $call_kind`
+
 // --- Batched UNWIND Cypher (shared projection) ---
 
 const batchCanonicalInfrastructurePlatformUpsertCypher = `UNWIND $rows AS row
@@ -139,11 +147,20 @@ SET rel.confidence = 0.9,
 const batchCanonicalCodeCallUpsertCypher = `UNWIND $rows AS row
 MATCH (source {id: row.caller_entity_id})
 MATCH (target {id: row.callee_entity_id})
-MERGE (source)-[rel:CALLS]->(target)
-SET rel.confidence = 0.95,
-    rel.reason = 'Parser and symbol analysis resolved a code call edge',
-    rel.evidence_source = row.evidence_source,
-    rel.call_kind = row.call_kind`
+FOREACH (_ IN CASE WHEN row.call_kind = 'jsx_component' THEN [1] ELSE [] END |
+    MERGE (source)-[rel:REFERENCES]->(target)
+    SET rel.confidence = 0.95,
+        rel.reason = 'Parser and symbol analysis resolved a TSX component reference edge',
+        rel.evidence_source = row.evidence_source,
+        rel.call_kind = row.call_kind
+)
+FOREACH (_ IN CASE WHEN row.call_kind IS NULL OR row.call_kind <> 'jsx_component' THEN [1] ELSE [] END |
+    MERGE (source)-[rel:CALLS]->(target)
+    SET rel.confidence = 0.95,
+        rel.reason = 'Parser and symbol analysis resolved a code call edge',
+        rel.evidence_source = row.evidence_source,
+        rel.call_kind = row.call_kind
+)`
 
 // --- Retraction Cypher ---
 
@@ -162,7 +179,7 @@ WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`
 
-const retractCodeCallEdgesCypher = `MATCH (source)-[rel:CALLS]->()
+const retractCodeCallEdgesCypher = `MATCH (source)-[rel:CALLS|REFERENCES]->()
 WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`
@@ -368,9 +385,13 @@ func BuildCanonicalWorkloadDependencyUpsert(p CanonicalWorkloadDependencyParams,
 // BuildCanonicalCodeCallUpsert builds a CALLS edge statement between two
 // canonical code entities.
 func BuildCanonicalCodeCallUpsert(p CanonicalCodeCallParams, evidenceSource string) Statement {
+	cypher := canonicalCodeCallUpsertCypher
+	if p.CallKind == "jsx_component" {
+		cypher = canonicalJSXComponentReferenceUpsertCypher
+	}
 	return Statement{
 		Operation: OperationCanonicalUpsert,
-		Cypher:    canonicalCodeCallUpsertCypher,
+		Cypher:    cypher,
 		Parameters: map[string]any{
 			"caller_entity_id": p.CallerEntityID,
 			"callee_entity_id": p.CalleeEntityID,

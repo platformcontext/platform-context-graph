@@ -125,8 +125,8 @@ func relationshipGraphRowCypher(predicate string) string {
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line,
-		       collect(DISTINCT {direction: 'outgoing', type: type(r), call_kind: r.call_kind, target_name: target.name, target_id: target.id}) as outgoing,
-		       collect(DISTINCT {direction: 'incoming', type: type(r2), call_kind: r2.call_kind, source_name: source.name, source_id: source.id}) as incoming
+		       collect(DISTINCT {direction: 'outgoing', type: type(r), call_kind: r.call_kind, reason: r.reason, target_name: target.name, target_id: target.id}) as outgoing,
+		       collect(DISTINCT {direction: 'incoming', type: type(r2), call_kind: r2.call_kind, reason: r2.reason, source_name: source.name, source_id: source.id}) as incoming
 		LIMIT 2
 	`
 }
@@ -148,7 +148,9 @@ func normalizeGraphRelationshipSlice(relationships []map[string]any) []map[strin
 		}
 		if StringVal(item, "type") == "CALLS" && StringVal(item, "call_kind") == "jsx_component" {
 			item["type"] = "REFERENCES"
-			item["reason"] = "jsx_component_call_kind"
+			if StringVal(item, "reason") == "" {
+				item["reason"] = "jsx_component_call_kind"
+			}
 		}
 		normalized = append(normalized, item)
 	}
