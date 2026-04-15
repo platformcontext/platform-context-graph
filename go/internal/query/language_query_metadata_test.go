@@ -225,6 +225,69 @@ func TestEnrichLanguageResultsWithContentMetadataAnnotation(t *testing.T) {
 	}
 }
 
+func TestEnrichLanguageResultsWithContentMetadataRustImplBlock(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"impl-1", "repo-1", "src/point.rs", "ImplBlock", "Point",
+					int64(1), int64(18), "rust", "impl Display for Point {}", []byte(`{"kind":"trait_impl","trait":"Display","target":"Point"}`),
+				},
+			},
+		},
+	})
+
+	handler := &LanguageQueryHandler{Content: NewContentReader(db)}
+	graphResults := []map[string]any{
+		{
+			"entity_id":  "graph-1",
+			"name":       "Point",
+			"labels":     []string{"ImplBlock"},
+			"file_path":  "src/point.rs",
+			"repo_id":    "repo-1",
+			"language":   "rust",
+			"start_line": 1,
+			"end_line":   18,
+		},
+	}
+
+	got, err := handler.enrichLanguageResultsWithContentMetadata(
+		context.Background(),
+		graphResults,
+		"rust",
+		"ImplBlock",
+		"Point",
+		"repo-1",
+		10,
+	)
+	if err != nil {
+		t.Fatalf("enrichLanguageResultsWithContentMetadata() error = %v, want nil", err)
+	}
+
+	metadata, ok := got[0]["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][metadata] type = %T, want map[string]any", got[0]["metadata"])
+	}
+	if gotValue, want := metadata["kind"], "trait_impl"; gotValue != want {
+		t.Fatalf("metadata[kind] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := metadata["trait"], "Display"; gotValue != want {
+		t.Fatalf("metadata[trait] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := metadata["target"], "Point"; gotValue != want {
+		t.Fatalf("metadata[target] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := got[0]["semantic_summary"], "ImplBlock Point implements Display for Point."; gotValue != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", gotValue, want)
+	}
+}
+
 func TestHandleLanguageQuery_AnnotationPrefersGraphPathAndEnrichesMetadata(t *testing.T) {
 	t.Parallel()
 
