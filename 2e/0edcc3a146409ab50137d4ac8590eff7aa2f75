@@ -1,0 +1,37 @@
+docs/docs/languages/argocd.md
+  1ca5ee6ce936a402 32
+docs/docs/reference/http-api.md
+  1ca5ee6ce936a402 126-128,130,134-145,232-234
+go/internal/query/repository_story_test.go
+  1ca5ee6ce936a402 1-104
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 62
+go/internal/query/repository.go
+  1ca5ee6ce936a402 116-117,122-123,141-150
+go/internal/query/repository_story.go
+  1ca5ee6ce936a402 1-137
+go/internal/query/openapi_paths_repositories.go
+  1ca5ee6ce936a402 92,106-115
+go/internal/query/openapi_test.go
+  1ca5ee6ce936a402 268-291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "2e0edcc3a146409ab50137d4ac8590eff7aa2f75",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 956,
+      "total_deletions": 1131,
+      "accepted_lines": 311,
+      "overriden_lines": 0
+    }
+  }
+}
