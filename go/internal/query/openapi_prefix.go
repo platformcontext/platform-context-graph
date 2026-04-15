@@ -24,6 +24,7 @@ const openAPISpecPrefix = `{
     {"name": "content", "description": "Content store access"},
     {"name": "infrastructure", "description": "Infrastructure resource queries"},
     {"name": "impact", "description": "Impact analysis and dependency tracing"},
+    {"name": "admin", "description": "Administrative control and inspection routes"},
     {"name": "status", "description": "Pipeline and ingester status"},
     {"name": "compare", "description": "Environment comparison"}
   ],

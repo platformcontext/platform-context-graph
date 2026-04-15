@@ -35,26 +35,43 @@ whether the latest published Go checkpoint is finished.
 
 - `GET /health` reports API process health after dependency
   initialization. It does not prove the latest index run finished.
+- The hosted API runtime also mounts the shared service-local admin surface on
+  the same listener:
+    - `GET /healthz`
+    - `GET /readyz`
+    - `GET /admin/status`
+    - `GET /metrics`
+  Those routes are documented by `docs/openapi/runtime-admin-v1.yaml`, not the
+  public `/api/v0` OpenAPI schema.
 - `GET /api/v0/status/index` returns the current Go-owned checkpoint summary.
 - `GET /api/v0/index-status` is the legacy compatibility alias for the same
   Go-owned checkpoint summary.
+- `GET /api/v0/status/ingesters` is the canonical ingester-status list route.
+- `GET /api/v0/status/ingesters/{ingester}` is the canonical ingester-status
+  detail route.
+- `GET /api/v0/ingesters` and `GET /api/v0/ingesters/{ingester}` remain
+  supported legacy `GET` aliases for the same ingester-status payloads.
 - `GET /api/v0/repositories/{repo_id}/coverage` returns durable repository
   coverage rows for one repository.
 - Run-scoped completeness routes such as `/api/v0/index-runs/{run_id}` are not
-  ported yet on this branch. Keep that gap visible in parity tracking instead
-  of assuming the repository coverage route is run-scoped.
-- `GET /api/v0/ingesters/{ingester}` and `GET /api/v0/ingesters` report the
-  hosted ingester's live status and progress, not graph completeness.
-- Recovery operations (refinalize, replay) are owned by the Go ingester admin
-  surface, not the Python API. See:
-    - `POST http://<ingester>:8080/admin/refinalize` — re-enqueue active scope
-      generations for re-projection.
-    - `POST http://<ingester>:8080/admin/replay` — replay failed work items
-      back to pending.
-- `POST /api/v0/admin/reindex` persists an asynchronous ingester reindex
-  request; the API process does not run the full reindex inline.
+  part of the shipped public contract on this branch. Do not assume the
+  repository coverage route is run-scoped.
+- `POST /api/v0/admin/refinalize` re-enqueues active scope generations for
+  re-projection through the durable Go work queue.
+- `POST /api/v0/admin/reindex` persists an asynchronous reindex request; the
+  API process does not run the full reindex inline.
 - `GET /api/v0/admin/shared-projection/tuning-report` returns the operator
   tuning report for shared-projection backlog behavior.
+- `POST /api/v0/admin/replay`, `POST /api/v0/admin/dead-letter`,
+  `POST /api/v0/admin/skip`, `POST /api/v0/admin/backfill`,
+  `POST /api/v0/admin/work-items/query`, `POST /api/v0/admin/decisions/query`,
+  and `POST /api/v0/admin/replay-events/query` expose the durable admin queue
+  and decision controls.
+- The service-local runtime admin surface remains separate from the public
+  `/api/v0` contract even when it is mounted on the same listener. Use
+  `/admin/status`, `/admin/replay`, and `/admin/refinalize` when you need the
+  runtime-local probe and recovery surface described by
+  `docs/openapi/runtime-admin-v1.yaml`.
 
 ## Model Basics
 
@@ -435,13 +452,17 @@ For local or deployed indexing workflows, use the CLI and deployment runtime:
 - local: `pcg index <path>`
 - Kubernetes: repository ingestion is deployment-managed through the ingester runtime
 
-## Ingester API
+## Ingester Status API
 
-Use these routes to inspect or control the deployed ingester runtime without reaching into Kubernetes directly.
+Use these routes to inspect the deployed ingester runtime without reaching into
+Kubernetes directly.
 
-- `GET /api/v0/ingesters`
-- `GET /api/v0/ingesters/{ingester}`
-- `POST /api/v0/ingesters/{ingester}/scan`
+- Canonical:
+  - `GET /api/v0/status/ingesters`
+  - `GET /api/v0/status/ingesters/{ingester}`
+- Legacy `GET` aliases:
+  - `GET /api/v0/ingesters`
+  - `GET /api/v0/ingesters/{ingester}`
 
 The default ingester is `repository`.
 
@@ -455,7 +476,9 @@ Status responses are designed for remote operation and include:
 - repository progress counts
 - failure counts and last error details
 
-Manual scan requests are persisted for the ingester runtime to claim asynchronously; the API does not perform the scan inline.
+The shipped public API does not include a `POST /api/v0/ingesters/{ingester}/scan`
+route on this branch. Use `POST /api/v0/admin/reindex` or deployment-managed
+ingestion instead of assuming a per-ingester public scan endpoint exists.
 
 ## Bundle Import API
 

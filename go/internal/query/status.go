@@ -21,6 +21,8 @@ func (h *StatusHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v0/status/pipeline", h.getPipelineStatus)
 	mux.HandleFunc("GET /api/v0/status/ingesters", h.listIngesters)
 	mux.HandleFunc("GET /api/v0/status/ingesters/{ingester}", h.getIngesterStatus)
+	mux.HandleFunc("GET /api/v0/ingesters", h.listIngesters)
+	mux.HandleFunc("GET /api/v0/ingesters/{ingester}", h.getIngesterStatus)
 	mux.HandleFunc("GET /api/v0/status/index", h.getIndexStatus)
 	mux.HandleFunc("GET /api/v0/index-status", h.getIndexStatus)
 }

@@ -6,8 +6,8 @@ info:
   description: >
     This contract describes the mounted runtime admin surface used by the Go
     data-plane services. It is separate from the public `/api/v0` query API
-    schema and applies to service-local admin endpoints such as the ingester,
-    projector, and reducer runtimes.
+    schema and the public `/api/v0/admin/*` API-admin surface, and applies to service-local admin endpoints such as the API,
+    ingester, projector, and reducer runtimes.
 servers:
   - url: http://localhost:8080
     description: Example local runtime admin surface

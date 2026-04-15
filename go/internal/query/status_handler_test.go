@@ -53,3 +53,42 @@ func TestStatusHandlerLegacyIndexStatusAlias(t *testing.T) {
 		t.Fatalf("payload[status] = %#v, want %#v", got, want)
 	}
 }
+
+func TestStatusHandlerLegacyIngesterAliases(t *testing.T) {
+	t.Parallel()
+
+	handler := &StatusHandler{
+		StatusReader: fakeStatusReader{
+			snapshot: statuspkg.RawSnapshot{
+				AsOf: time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v0/ingesters", nil)
+	listRec := httptest.NewRecorder()
+	mux.ServeHTTP(listRec, listReq)
+
+	if got, want := listRec.Code, http.StatusOK; got != want {
+		t.Fatalf("GET /api/v0/ingesters status = %d, want %d", got, want)
+	}
+
+	detailReq := httptest.NewRequest(http.MethodGet, "/api/v0/ingesters/repository", nil)
+	detailRec := httptest.NewRecorder()
+	mux.ServeHTTP(detailRec, detailReq)
+
+	if got, want := detailRec.Code, http.StatusOK; got != want {
+		t.Fatalf("GET /api/v0/ingesters/repository status = %d, want %d", got, want)
+	}
+
+	var detailPayload map[string]any
+	if err := json.Unmarshal(detailRec.Body.Bytes(), &detailPayload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := detailPayload["ingester"], "repository"; got != want {
+		t.Fatalf("payload[ingester] = %#v, want %#v", got, want)
+	}
+}

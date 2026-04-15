@@ -181,10 +181,12 @@ const openAPIPathsCode = `
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["start", "end"],
                 "properties": {
-                  "start": {"type": "string", "description": "Caller function name or fragment"},
-                  "end": {"type": "string", "description": "Callee function name or fragment"},
+                  "start": {"type": "string", "description": "Exact caller function name when start_entity_id is omitted"},
+                  "end": {"type": "string", "description": "Exact callee function name when end_entity_id is omitted"},
+                  "start_entity_id": {"type": "string", "description": "Canonical caller entity id. Takes precedence over start when provided."},
+                  "end_entity_id": {"type": "string", "description": "Canonical callee entity id. Takes precedence over end when provided."},
+                  "repo_id": {"type": "string", "description": "Optional repository id to scope both endpoints to one repository."},
                   "max_depth": {"type": "integer", "description": "Maximum traversal depth (default 5, max 10)", "default": 5}
                 }
               }
@@ -201,6 +203,9 @@ const openAPIPathsCode = `
                   "properties": {
                     "start": {"type": "string"},
                     "end": {"type": "string"},
+                    "start_entity_id": {"type": "string"},
+                    "end_entity_id": {"type": "string"},
+                    "repo_id": {"type": "string"},
                     "chains": {
                       "type": "array",
                       "items": {

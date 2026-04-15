@@ -2,7 +2,6 @@ package query
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -324,71 +323,6 @@ func normalizeDecoratorName(value string) string {
 		return ""
 	}
 	return strings.TrimPrefix(trimmed, "@")
-}
-
-// handleCallChain finds the transitive call chain between two functions by
-// following CALLS_FUNCTION / CALLS edges up to a configurable depth.
-func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Start    string `json:"start"`
-		End      string `json:"end"`
-		MaxDepth int    `json:"max_depth"`
-	}
-	if err := ReadJSON(r, &req); err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	if req.Start == "" {
-		WriteError(w, http.StatusBadRequest, "start is required")
-		return
-	}
-	if req.End == "" {
-		WriteError(w, http.StatusBadRequest, "end is required")
-		return
-	}
-	if req.MaxDepth <= 0 {
-		req.MaxDepth = 5
-	}
-	if req.MaxDepth > 10 {
-		req.MaxDepth = 10
-	}
-
-	ctx := r.Context()
-
-	cypher := `
-		MATCH path = shortestPath(
-			(start)-[:CALLS_FUNCTION|CALLS*1..` + fmt.Sprintf("%d", req.MaxDepth) + `]->(end)
-		)
-		WHERE start.name CONTAINS $start AND end.name CONTAINS $end
-		UNWIND nodes(path) as n
-		RETURN [node IN nodes(path) | {id: node.id, name: node.name, labels: labels(node)}] as chain,
-		       length(path) as depth
-		LIMIT 5
-	`
-
-	rows, err := h.Neo4j.Run(ctx, cypher, map[string]any{
-		"start": req.Start,
-		"end":   req.End,
-	})
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	chains := make([]map[string]any, 0, len(rows))
-	for _, row := range rows {
-		chains = append(chains, map[string]any{
-			"chain": row["chain"],
-			"depth": IntVal(row, "depth"),
-		})
-	}
-
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"start":  req.Start,
-		"end":    req.End,
-		"chains": chains,
-	})
 }
 
 // handleComplexity returns relationship-based complexity metrics for an entity.

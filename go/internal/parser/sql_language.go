@@ -7,12 +7,10 @@ import (
 )
 
 var (
-	createTableHeaderPattern = regexp.MustCompile(`(?is)\bCREATE\s+TABLE\s+(?P<name>` + sqlNamePattern + `)\s*\(`)
+	createTableHeaderPattern = regexp.MustCompile(`(?is)\bCREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+(?P<name>` + sqlNamePattern + `)\s*\(`)
 	createViewPattern        = regexp.MustCompile(`(?is)\bCREATE(?:\s+OR\s+REPLACE)?\s+(?P<kind>MATERIALIZED\s+)?VIEW\s+(?P<name>` + sqlNamePattern + `)\s+AS\s+(?P<body>.*?)(?:;|$)`)
-	createFuncPattern        = regexp.MustCompile(`(?is)\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+(?P<name>` + sqlNamePattern + `)\s*\([^)]*\)\s+RETURNS\b.*?\bAS\s+\$\$(?P<body>.*?)\$\$\s+LANGUAGE\s+(?P<language>[A-Za-z_][\w$]*)`)
-	createProcedurePattern   = regexp.MustCompile(`(?is)\bCREATE(?:\s+OR\s+REPLACE)?\s+PROCEDURE\s+(?P<name>` + sqlNamePattern + `)\s*\([^)]*\)\s+LANGUAGE\s+(?P<language>[A-Za-z_][\w$]*)\s+AS\s+\$\$(?P<body>.*?)\$\$`)
 	createTrigPattern        = regexp.MustCompile(`(?is)\bCREATE\s+TRIGGER\s+(?P<trigger>` + sqlNamePattern + `)\b.*?\bON\s+(?P<table>` + sqlNamePattern + `)\b.*?\bEXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(?P<function>` + sqlNamePattern + `)\s*\(`)
-	createIndexPattern       = regexp.MustCompile(`(?is)\bCREATE\s+INDEX\s+(?P<name>` + sqlNamePattern + `)\s+\bON\s+(?P<table>` + sqlNamePattern + `)\b`)
+	createIndexPattern       = regexp.MustCompile(`(?is)\bCREATE(?:\s+UNIQUE)?\s+INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+(?P<name>` + sqlNamePattern + `)\s+\bON\s+(?P<table>` + sqlNamePattern + `)\b`)
 	alterTablePattern        = regexp.MustCompile(`(?is)\bALTER\s+TABLE\s+(?P<table>` + sqlNamePattern + `)\s+(?P<body>.*?)(?:;|$)`)
 	addColumnClausePattern   = regexp.MustCompile(`(?is)\bADD\s+COLUMN(?:\s+IF\s+NOT\s+EXISTS)?\s+`)
 	columnPattern            = regexp.MustCompile(`(?is)^\s*(?P<name>"[^"]+"|` + "`[^`]+`" + `|\[[^\]]+\]|[A-Za-z_][\w$]*)\s+(?P<type>[A-Za-z_][\w$]*(?:\s*\([^)]*\))?)`)
@@ -230,52 +228,14 @@ func parseSQLFunctions(
 	seenEntities map[string]map[string]struct{},
 	seenRelationships map[string]struct{},
 ) {
-	indexes := namedCaptureIndexes(createFuncPattern)
-	for _, match := range createFuncPattern.FindAllStringSubmatchIndex(source, -1) {
-		appendSQLRoutine(payload, source, options, seenEntities, seenRelationships, match, indexes, "function")
+	indexes := namedCaptureIndexes(createFunctionHeaderPattern)
+	for _, match := range createFunctionHeaderPattern.FindAllStringSubmatchIndex(source, -1) {
+		appendSQLRoutineFromHeader(payload, source, options, seenEntities, seenRelationships, match, indexes, "function")
 	}
 
-	indexes = namedCaptureIndexes(createProcedurePattern)
-	for _, match := range createProcedurePattern.FindAllStringSubmatchIndex(source, -1) {
-		appendSQLRoutine(payload, source, options, seenEntities, seenRelationships, match, indexes, "procedure")
-	}
-}
-
-func appendSQLRoutine(
-	payload map[string]any,
-	source string,
-	options Options,
-	seenEntities map[string]map[string]struct{},
-	seenRelationships map[string]struct{},
-	match []int,
-	indexes map[string]int,
-	routineKind string,
-) {
-	name := normalizeSQLName(submatchValue(source, match, indexes["name"]))
-	body := submatchValue(source, match, indexes["body"])
-	lineNumber := sqlLineNumberForOffset(source, match[0])
-	item := map[string]any{
-		"name":              name,
-		"line_number":       lineNumber,
-		"type":              "content_entity",
-		"sql_entity_type":   "SqlFunction",
-		"schema":            sqlSchema(name),
-		"qualified_name":    name,
-		"function_language": strings.TrimSpace(submatchValue(source, match, indexes["language"])),
-	}
-	if routineKind != "function" {
-		item["routine_kind"] = routineKind
-	}
-	appendSQLEntity(payload, seenEntities, "sql_functions", name, item, source, match[0], match[1], options)
-	for _, mention := range collectSQLTableMentions(body, true) {
-		appendSQLRelationship(
-			payload,
-			seenRelationships,
-			"READS_FROM",
-			name,
-			mention.name,
-			sqlLineNumberForOffset(source, match[0]+mention.offset),
-		)
+	indexes = namedCaptureIndexes(createProcedureHeaderPattern)
+	for _, match := range createProcedureHeaderPattern.FindAllStringSubmatchIndex(source, -1) {
+		appendSQLRoutineFromHeader(payload, source, options, seenEntities, seenRelationships, match, indexes, "procedure")
 	}
 }
 

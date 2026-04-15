@@ -9,6 +9,8 @@ PCG currently has two HTTP contract families:
 
 - Public query API:
   served by the Go API runtime and published at `/api/v0/openapi.json`
+- Public API admin routes:
+  served by the same API runtime under `/api/v0/admin/*`
 - Runtime admin API:
   a separate mounted runtime surface for probes and operator status
 
@@ -19,6 +21,11 @@ as the ingester, projector, and reducer processes.
 The checked-in OpenAPI contract for that runtime surface lives at:
 
 `docs/openapi/runtime-admin-v1.yaml`
+
+The runtime admin API is distinct from the public API admin routes. The public
+API exposes the Go-owned `/api/v0/admin/*` control and inspection surface in
+`/api/v0/openapi.json`, while this page covers the service-local `/admin/*`
+endpoints mounted by a long-running runtime itself.
 
 ## Mounted Endpoints
 
@@ -39,6 +46,20 @@ listing the methods supported by that endpoint. For GET/HEAD-only endpoints
 (`/healthz`, `/readyz`, `/admin/status`), the header is `Allow: GET, HEAD`.
 For POST-only endpoints (`/admin/replay`, `/admin/refinalize`), the header is
 `Allow: POST`.
+
+If you need the public API admin surface instead of the runtime-local one, use
+the `/api/v0/openapi.json` contract for:
+
+- `POST /api/v0/admin/refinalize`
+- `POST /api/v0/admin/reindex`
+- `GET /api/v0/admin/shared-projection/tuning-report`
+- `POST /api/v0/admin/replay`
+- `POST /api/v0/admin/dead-letter`
+- `POST /api/v0/admin/skip`
+- `POST /api/v0/admin/backfill`
+- `POST /api/v0/admin/work-items/query`
+- `POST /api/v0/admin/decisions/query`
+- `POST /api/v0/admin/replay-events/query`
 
 ## Response Shape
 

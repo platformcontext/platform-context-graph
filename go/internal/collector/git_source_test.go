@@ -195,6 +195,19 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 	if sharedFollowupKinds[0] != "shared_followup" || sharedFollowupKinds[1] != "shared_followup" {
 		t.Fatalf("empty repo followup kinds = %v, want both shared_followup", sharedFollowupKinds)
 	}
+	followupDomains := make(map[string]struct{}, 2)
+	for _, fact := range emptyFacts[1:] {
+		domain, _ := fact.Payload["reducer_domain"].(string)
+		if domain != "" {
+			followupDomains[domain] = struct{}{}
+		}
+	}
+	if _, ok := followupDomains["workload_identity"]; !ok {
+		t.Fatalf("empty repo followups missing workload_identity domain: %#v", emptyFacts[1:])
+	}
+	if _, ok := followupDomains["code_call_materialization"]; !ok {
+		t.Fatalf("empty repo followups missing code_call_materialization domain: %#v", emptyFacts[1:])
+	}
 
 	// Validate empty repo has repo + workload/code-call followups.
 	if got, want := len(emptyFacts), 3; got != want {
@@ -733,7 +746,7 @@ func TestLargeRepoSemaphoreLimitsConcurrency(t *testing.T) {
 	source := &GitSource{
 		Component:              "collector-git",
 		SnapshotWorkers:        4,
-		LargeRepoThreshold:    1, // all repos are "large"
+		LargeRepoThreshold:     1, // all repos are "large"
 		LargeRepoMaxConcurrent: 2,
 		Selector: &stubRepositorySelector{
 			batches: []SelectionBatch{{
@@ -787,8 +800,8 @@ func TestSmallReposBypassSemaphore(t *testing.T) {
 	source := &GitSource{
 		Component:              "collector-git",
 		SnapshotWorkers:        4,
-		LargeRepoThreshold:    500, // all repos are small
-		LargeRepoMaxConcurrent: 1,  // sem=1, but small repos should bypass
+		LargeRepoThreshold:     500, // all repos are small
+		LargeRepoMaxConcurrent: 1,   // sem=1, but small repos should bypass
 		Selector: &stubRepositorySelector{
 			batches: []SelectionBatch{{
 				ObservedAt:   observedAt,
@@ -878,16 +891,16 @@ func TestTwoLaneSmallReposFlowWhileLargeBlocked(t *testing.T) {
 	var completedPaths []string
 
 	orderSnapshotter := &orderTrackingSnapshotter{
-		inner:      &stubRepositorySnapshotter{snapshots: snapshots},
-		delays:     largeDelay,
-		mu:         &completionOrder,
-		completed:  &completedPaths,
+		inner:     &stubRepositorySnapshotter{snapshots: snapshots},
+		delays:    largeDelay,
+		mu:        &completionOrder,
+		completed: &completedPaths,
 	}
 
 	source := &GitSource{
 		Component:              "collector-git",
 		SnapshotWorkers:        4,
-		LargeRepoThreshold:    1,  // repos with >1 file are "large"
+		LargeRepoThreshold:     1, // repos with >1 file are "large"
 		LargeRepoMaxConcurrent: 1, // only 1 large at a time
 		Selector: &stubRepositorySelector{
 			batches: []SelectionBatch{{
@@ -959,7 +972,7 @@ func TestTwoLaneDrainsLargeAfterSmallExhausted(t *testing.T) {
 	source := &GitSource{
 		Component:              "collector-git",
 		SnapshotWorkers:        2,
-		LargeRepoThreshold:    1,
+		LargeRepoThreshold:     1,
 		LargeRepoMaxConcurrent: 1,
 		Selector: &stubRepositorySelector{
 			batches: []SelectionBatch{{

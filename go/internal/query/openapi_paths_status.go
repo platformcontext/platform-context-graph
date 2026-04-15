@@ -77,6 +77,62 @@ const openAPIPathsStatusAndCompare = `
         }
       }
     },
+    "/api/v0/ingesters": {
+      "get": {
+        "tags": ["status"],
+        "summary": "List ingesters",
+        "description": "Legacy compatibility alias for the Go-owned ingester status list.",
+        "operationId": "listIngestersLegacy",
+        "responses": {
+          "200": {
+            "description": "List of ingesters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ingesters": {"type": "array", "items": {"type": "object"}},
+                    "count": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v0/ingesters/{ingester}": {
+      "get": {
+        "tags": ["status"],
+        "summary": "Get ingester status",
+        "description": "Legacy compatibility alias for the Go-owned ingester status detail route.",
+        "operationId": "getIngesterStatusLegacy",
+        "parameters": [
+          {
+            "name": "ingester",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Ingester name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ingester status",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"},
+          "503": {"$ref": "#/components/responses/ServiceUnavailable"}
+        }
+      }
+    },
     "/api/v0/status/index": {
       "get": {
         "tags": ["status"],

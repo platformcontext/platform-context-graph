@@ -14,6 +14,11 @@ type RecoveryService interface {
 	ReplayFailed(ctx context.Context, filter recovery.ReplayFilter) (recovery.ReplayResult, error)
 }
 
+// ReindexRequester is the subset of the reindex surface used by admin routes.
+type ReindexRequester interface {
+	RequestReindex(ctx context.Context, ingester string) error
+}
+
 // AdminDecisionRow is a query-layer view of a projection decision row,
 // avoiding a direct dependency on the projector package.
 type AdminDecisionRow struct {
@@ -146,16 +151,16 @@ type DecisionQueryFilter struct {
 // AdminHandler provides HTTP endpoints for administrative operations
 // including recovery, work-item inspection, and fact-queue management.
 type AdminHandler struct {
-	Neo4j    *Neo4jReader
-	Recovery RecoveryService
-	Store    AdminStore
+	Neo4j     *Neo4jReader
+	Recovery  RecoveryService
+	Reindexer ReindexRequester
+	Store     AdminStore
 }
 
 // Mount registers all admin routes on the given mux.
 func (h *AdminHandler) Mount(mux *http.ServeMux) {
 	// Core admin endpoints (from admin.py)
 	mux.HandleFunc("POST /api/v0/admin/refinalize", h.refinalize)
-	mux.HandleFunc("GET /api/v0/admin/refinalize/status", h.refinalizeStatus)
 	mux.HandleFunc("GET /api/v0/admin/shared-projection/tuning-report", h.tuningReport)
 	mux.HandleFunc("POST /api/v0/admin/reindex", h.reindex)
 
@@ -203,22 +208,6 @@ func (h *AdminHandler) refinalize(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// refinalizeStatus returns whether the refinalize capability is available.
-// GET /api/v0/admin/refinalize/status
-func (h *AdminHandler) refinalizeStatus(w http.ResponseWriter, _ *http.Request) {
-	available := h.Recovery != nil
-	status := "available"
-	if !available {
-		status = "unavailable"
-	}
-
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"status":    status,
-		"available": available,
-		"detail":    "Refinalization is served by the Go write plane via the durable work queue.",
-	})
-}
-
 // tuningReport returns shared-projection tuning information.
 // GET /api/v0/admin/shared-projection/tuning-report
 func (h *AdminHandler) tuningReport(w http.ResponseWriter, _ *http.Request) {
@@ -248,6 +237,14 @@ func (h *AdminHandler) reindex(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Scope == "" {
 		req.Scope = "workspace"
+	}
+	if h.Reindexer == nil {
+		WriteError(w, http.StatusServiceUnavailable, "reindex handler not configured")
+		return
+	}
+	if err := h.Reindexer.RequestReindex(r.Context(), req.Ingester); err != nil {
+		WriteError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 
 	WriteJSON(w, http.StatusAccepted, map[string]any{

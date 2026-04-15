@@ -6,17 +6,29 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
+	"github.com/platformcontext/platform-context-graph/go/internal/recovery"
+	internalruntime "github.com/platformcontext/platform-context-graph/go/internal/runtime"
+	"github.com/platformcontext/platform-context-graph/go/internal/status"
 	pgstatus "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
-func wireAPI(ctx context.Context, getenv func(string) string, logger *slog.Logger) (http.Handler, func(), error) {
+const statusReadinessTimeout = 3 * time.Second
+
+func wireAPI(
+	ctx context.Context,
+	getenv func(string) string,
+	logger *slog.Logger,
+	prometheusHandler http.Handler,
+) (http.Handler, func(), error) {
 	// Open Neo4j
 	neo4jURI := envOrDefault(getenv, "NEO4J_URI", "bolt://localhost:7687")
 	neo4jUser := envOrDefault(getenv, "NEO4J_USERNAME", "neo4j")
@@ -64,7 +76,45 @@ func wireAPI(ctx context.Context, getenv func(string) string, logger *slog.Logge
 	// Build query layer
 	neo4jReader := query.NewNeo4jReader(driver, neo4jDB)
 	contentReader := query.NewContentReader(db)
+	statusReader := pgstatus.NewStatusStore(pgstatus.SQLQueryer{DB: db})
+	router, err := newRouter(db, neo4jReader, contentReader)
+	if err != nil {
+		_ = db.Close()
+		_ = driver.Close(ctx)
+		return nil, nil, fmt.Errorf("new router: %w", err)
+	}
 
+	apiMux := http.NewServeMux()
+	router.Mount(apiMux)
+
+	mux, err := mountRuntimeSurface(apiMux, "platform-context-graph-api", statusReader, prometheusHandler)
+	if err != nil {
+		_ = db.Close()
+		_ = driver.Close(ctx)
+		return nil, nil, fmt.Errorf("mount runtime surface: %w", err)
+	}
+
+	// Wrap with auth middleware
+	apiKey := strings.TrimSpace(getenv("PCG_API_KEY"))
+	authedMux := query.AuthMiddleware(apiKey, mux)
+
+	cleanup := func() {
+		_ = db.Close()
+		_ = driver.Close(context.Background())
+	}
+
+	return authedMux, cleanup, nil
+}
+
+func envOrDefault(getenv func(string) string, key, fallback string) string {
+	v := strings.TrimSpace(getenv(key))
+	if v == "" {
+		return fallback
+	}
+	return v
+}
+
+func newRouter(db *sql.DB, neo4jReader *query.Neo4jReader, contentReader *query.ContentReader) (*query.APIRouter, error) {
 	router := &query.APIRouter{
 		Repositories: &query.RepositoryHandler{
 			Neo4j:   neo4jReader,
@@ -96,27 +146,96 @@ func wireAPI(ctx context.Context, getenv func(string) string, logger *slog.Logge
 		Compare: &query.CompareHandler{
 			Neo4j: neo4jReader,
 		},
+		Admin: &query.AdminHandler{
+			Store: query.NewPostgresAdminStore(db),
+		},
+	}
+	if db == nil {
+		return router, nil
 	}
 
-	mux := http.NewServeMux()
-	router.Mount(mux)
-
-	// Wrap with auth middleware
-	apiKey := strings.TrimSpace(getenv("PCG_API_KEY"))
-	authedMux := query.AuthMiddleware(apiKey, mux)
-
-	cleanup := func() {
-		_ = db.Close()
-		_ = driver.Close(context.Background())
+	recoveryHandler, err := recovery.NewHandler(pgstatus.NewRecoveryStore(pgstatus.SQLDB{DB: db}))
+	if err != nil {
+		return nil, fmt.Errorf("new recovery handler: %w", err)
 	}
-
-	return authedMux, cleanup, nil
+	reindexer, err := internalruntime.NewStatusRequestHandler(pgstatus.NewStatusRequestStore(pgstatus.SQLDB{DB: db}))
+	if err != nil {
+		return nil, fmt.Errorf("new status request handler: %w", err)
+	}
+	router.Admin.Recovery = recoveryHandler
+	router.Admin.Reindexer = reindexer
+	return router, nil
 }
 
-func envOrDefault(getenv func(string) string, key, fallback string) string {
-	v := strings.TrimSpace(getenv(key))
-	if v == "" {
-		return fallback
+func mountRuntimeSurface(
+	apiHandler http.Handler,
+	serviceName string,
+	reader status.Reader,
+	prometheusHandler http.Handler,
+) (http.Handler, error) {
+	statusHandler, err := status.NewHTTPHandler(reader, status.HTTPHandlerOptions{})
+	if err != nil {
+		return nil, err
 	}
-	return v
+
+	metricsHandler, err := internalruntime.NewStatusMetricsHandler(serviceName, reader)
+	if err != nil {
+		return nil, err
+	}
+	if prometheusHandler != nil {
+		metricsHandler = compositeMetricsHandler{
+			statusHandler:     metricsHandler,
+			prometheusHandler: prometheusHandler,
+		}
+	}
+
+	adminMux, err := internalruntime.NewAdminMux(internalruntime.AdminMuxConfig{
+		ServiceName:    serviceName,
+		Ready:          statusReadinessCheck(reader),
+		StatusHandler:  statusHandler,
+		MetricsHandler: metricsHandler,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	adminMux.Handle("/", apiHandler)
+	return adminMux, nil
+}
+
+func statusReadinessCheck(reader status.Reader) internalruntime.AdminCheck {
+	return func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), statusReadinessTimeout)
+		defer cancel()
+
+		_, err := reader.ReadStatusSnapshot(ctx, time.Now().UTC())
+		if err != nil {
+			return fmt.Errorf("read status snapshot: %w", err)
+		}
+		return nil
+	}
+}
+
+type compositeMetricsHandler struct {
+	statusHandler     http.Handler
+	prometheusHandler http.Handler
+}
+
+func (h compositeMetricsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	promRec := httptest.NewRecorder()
+	h.prometheusHandler.ServeHTTP(promRec, r)
+
+	statusRec := httptest.NewRecorder()
+	h.statusHandler.ServeHTTP(statusRec, r)
+
+	for key, values := range promRec.Header() {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(promRec.Body.Bytes())
+	_, _ = w.Write([]byte("\n"))
+	_, _ = w.Write(statusRec.Body.Bytes())
 }

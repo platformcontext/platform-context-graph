@@ -21,12 +21,22 @@ type stubRecoveryHandler struct {
 	replayErr        error
 }
 
+type stubReindexRequester struct {
+	ingesters []string
+	err       error
+}
+
 func (s *stubRecoveryHandler) Refinalize(_ context.Context, _ recovery.RefinalizeFilter) (recovery.RefinalizeResult, error) {
 	return s.refinalizeResult, s.refinalizeErr
 }
 
 func (s *stubRecoveryHandler) ReplayFailed(_ context.Context, _ recovery.ReplayFilter) (recovery.ReplayResult, error) {
 	return s.replayResult, s.replayErr
+}
+
+func (s *stubReindexRequester) RequestReindex(_ context.Context, ingester string) error {
+	s.ingesters = append(s.ingesters, ingester)
+	return s.err
 }
 
 type stubAdminStore struct {
@@ -163,19 +173,14 @@ func TestAdminHandler_Refinalize_MissingBody(t *testing.T) {
 	}
 }
 
-func TestAdminHandler_RefinalizeStatus(t *testing.T) {
+func TestAdminHandler_RefinalizeStatusRouteRemovedFromPublicMount(t *testing.T) {
 	h := &AdminHandler{Recovery: &stubRecoveryHandler{}}
 	mux := newAdminMux(h)
 
 	w := getJSON(mux, "/api/v0/admin/refinalize/status")
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	got := decodeBody(t, w)
-	if got["status"] != "available" {
-		t.Errorf("status = %q, want %q", got["status"], "available")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
 	}
 }
 
@@ -196,7 +201,8 @@ func TestAdminHandler_TuningReport(t *testing.T) {
 }
 
 func TestAdminHandler_Reindex(t *testing.T) {
-	h := &AdminHandler{}
+	requester := &stubReindexRequester{}
+	h := &AdminHandler{Reindexer: requester}
 	mux := newAdminMux(h)
 
 	w := postJSON(mux, "/api/v0/admin/reindex", map[string]any{
@@ -213,6 +219,12 @@ func TestAdminHandler_Reindex(t *testing.T) {
 	if got["status"] != "accepted" {
 		t.Errorf("status = %q, want %q", got["status"], "accepted")
 	}
+	if got, want := len(requester.ingesters), 1; got != want {
+		t.Fatalf("RequestReindex call count = %d, want %d", got, want)
+	}
+	if got, want := requester.ingesters[0], "repository"; got != want {
+		t.Fatalf("RequestReindex ingester = %q, want %q", got, want)
+	}
 }
 
 func TestAdminHandler_Mount_RegistersAllRoutes(t *testing.T) {
@@ -226,7 +238,6 @@ func TestAdminHandler_Mount_RegistersAllRoutes(t *testing.T) {
 		path   string
 	}{
 		{http.MethodPost, "/api/v0/admin/refinalize"},
-		{http.MethodGet, "/api/v0/admin/refinalize/status"},
 		{http.MethodGet, "/api/v0/admin/shared-projection/tuning-report"},
 		{http.MethodPost, "/api/v0/admin/reindex"},
 		{http.MethodPost, "/api/v0/admin/work-items/query"},

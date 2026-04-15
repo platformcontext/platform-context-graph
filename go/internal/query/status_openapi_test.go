@@ -17,6 +17,12 @@ func TestOpenAPISpecStatusPathsMatchCurrentContract(t *testing.T) {
 	if _, ok := paths["/api/v0/index-status"]; !ok {
 		t.Fatal("OpenAPI paths missing /api/v0/index-status")
 	}
+	if _, ok := paths["/api/v0/ingesters"]; !ok {
+		t.Fatal("OpenAPI paths missing /api/v0/ingesters")
+	}
+	if _, ok := paths["/api/v0/ingesters/{ingester}"]; !ok {
+		t.Fatal("OpenAPI paths missing /api/v0/ingesters/{ingester}")
+	}
 	if _, ok := paths["/api/v0/index-runs/{run_id}"]; ok {
 		t.Fatal("OpenAPI paths unexpectedly advertise /api/v0/index-runs/{run_id}")
 	}

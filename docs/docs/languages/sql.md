@@ -15,12 +15,12 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 ## Capability Checklist
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Tables | `sql-tables` | supported | `sql_tables` | `name, line_number` | `node:SqlTable` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
+| Tables | `sql-tables` | supported | `sql_tables` | `name, line_number` | `node:SqlTable` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships`, `go/internal/parser/sql_core_parity_test.go::TestDefaultEngineParsePathSQLCoreDDLVariants` | Compose-backed fixture verification | Includes bounded `CREATE TABLE IF NOT EXISTS` support. |
 | Columns | `sql-columns` | supported | `sql_columns` | `name, line_number` | `node:SqlColumn` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
 | Views | `sql-views` | supported | `sql_views` | `name, line_number` | `node:SqlView` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships`, `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLCreateOrReplaceView`, `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLMaterializedViewsAndProcedures` | Compose-backed fixture verification | Includes bounded `CREATE OR REPLACE VIEW` and `CREATE MATERIALIZED VIEW` support via `view_kind=materialized`. |
-| Functions | `sql-functions` | supported | `sql_functions` | `name, line_number` | `node:SqlFunction` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships`, `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLMaterializedViewsAndProcedures` | Compose-backed fixture verification | Includes bounded `CREATE PROCEDURE` support via `routine_kind=procedure`. |
+| Functions | `sql-functions` | supported | `sql_functions` | `name, line_number` | `node:SqlFunction` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships`, `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLMaterializedViewsAndProcedures`, `go/internal/parser/sql_core_parity_test.go::TestDefaultEngineParsePathSQLCoreRoutineVariants` | Compose-backed fixture verification | Includes bounded `CREATE PROCEDURE` support via `routine_kind=procedure`, plus tagged dollar-quoted procedural bodies with `LANGUAGE` before or after `AS`. |
 | Triggers | `sql-triggers` | supported | `sql_triggers` | `name, line_number` | `node:SqlTrigger` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
-| Indexes | `sql-indexes` | supported | `sql_indexes` | `name, line_number` | `node:SqlIndex` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
+| Indexes | `sql-indexes` | supported | `sql_indexes` | `name, line_number` | `node:SqlIndex` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships`, `go/internal/parser/sql_core_parity_test.go::TestDefaultEngineParsePathSQLCoreDDLVariants` | Compose-backed fixture verification | Includes bounded `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS` support. |
 | SQL relationships | `sql-relationships` | supported | `sql_relationships` | `type, source_name, target_name, line_number` | `relationship:HAS_COLUMN/REFERENCES_TABLE/READS_FROM/TRIGGERS_ON/EXECUTES/INDEXES` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
 | Migration intelligence | `sql-migrations` | supported | `sql_migrations` | `tool, target_kind, target_name, line_number` | `relationship:MIGRATES` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLMigrationMetadata` | Compose-backed fixture verification | - |
 
@@ -58,12 +58,18 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   `coalesce(...)` lineage preservation for `orders_expanded.customer_segment` in
   `go/internal/parser/json_dbt_test.go`.
 - The checked-in SQL procedural proof now covers `CREATE OR REPLACE FUNCTION`
-  bodies, `CREATE OR REPLACE VIEW`, `CREATE PROCEDURE`, legacy
-  `EXECUTE PROCEDURE` trigger wiring, `CREATE MATERIALIZED VIEW`, and
-  fixture-backed `ALTER TABLE ... ADD COLUMN ...` column materialization,
-  including bounded multi-clause `ADD COLUMN` normalization, in
-  `go/internal/parser/engine_sql_test.go` and
+  bodies, tagged dollar-quoted routine bodies with `LANGUAGE` before or after
+  `AS`, `CREATE OR REPLACE VIEW`, `CREATE PROCEDURE`, legacy `EXECUTE
+  PROCEDURE` trigger wiring, `CREATE MATERIALIZED VIEW`, `CREATE TABLE IF NOT
+  EXISTS`, `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS`, and fixture-backed
+  `ALTER TABLE ... ADD COLUMN ...` column materialization, including bounded
+  multi-clause `ADD COLUMN` normalization, in
+  `go/internal/parser/engine_sql_test.go`,
+  `go/internal/parser/sql_core_parity_test.go`, and
   `go/internal/parser/sql_parity_test.go`.
+- The Go-owned content and query fallback path now also has checked-in SQL-core
+  proof in `go/internal/content/shape/materialize_sql_test.go` and
+  `go/internal/query/entity_content_sql_core_fallback_test.go`.
 - Compiled-model lineage still carries explicit unresolved limits for
   unresolved references, truly opaque templated expressions, complex macros,
   and some derived expressions.
@@ -90,11 +96,14 @@ service path.
 
 
 ## Known Limitations
-- Dialect-specific procedural SQL beyond common Postgres-style function and
-  procedure bodies may surface only partial table references.
+- Dialect-specific procedural SQL beyond the common Postgres-style
+  dollar-quoted function and procedure bodies proven above remains a bounded
+  non-goal. The old Python path did not provide reliable parity for those
+  forms either.
 - Broader ALTER/DDL mutation normalization beyond checked-in `ADD COLUMN`
-  materialization and bounded multi-clause `ADD COLUMN` normalization still
-  remains partial.
+  materialization, bounded multi-clause `ADD COLUMN` normalization, and the
+  core table/index variants proven above remains a bounded non-goal rather
+  than a Python-era parity gap.
 - Compiled dbt lineage still records partial coverage for unresolved references,
   templated expressions, complex macro expansion, and some derived
   expressions.

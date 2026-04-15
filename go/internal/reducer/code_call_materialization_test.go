@@ -360,8 +360,14 @@ func TestCodeCallMaterializationHandlerWritesCanonicalCalls(t *testing.T) {
 	if writer.retractDomain != DomainCodeCalls {
 		t.Fatalf("retractDomain = %q, want %q", writer.retractDomain, DomainCodeCalls)
 	}
+	if writer.retractEvidenceSource != codeCallEvidenceSource {
+		t.Fatalf("retractEvidenceSource = %q, want %q", writer.retractEvidenceSource, codeCallEvidenceSource)
+	}
 	if writer.writeDomain != DomainCodeCalls {
 		t.Fatalf("writeDomain = %q, want %q", writer.writeDomain, DomainCodeCalls)
+	}
+	if writer.writeEvidenceSource != codeCallEvidenceSource {
+		t.Fatalf("writeEvidenceSource = %q, want %q", writer.writeEvidenceSource, codeCallEvidenceSource)
 	}
 	if len(writer.writeRows) != 1 {
 		t.Fatalf("len(writeRows) = %d, want 1", len(writer.writeRows))
@@ -375,19 +381,22 @@ func TestCodeCallMaterializationHandlerWritesCanonicalCalls(t *testing.T) {
 }
 
 type recordingCodeCallEdgeWriter struct {
-	retractDomain string
-	retractRows   []SharedProjectionIntentRow
-	writeDomain   string
-	writeRows     []SharedProjectionIntentRow
+	retractDomain         string
+	retractEvidenceSource string
+	retractRows           []SharedProjectionIntentRow
+	writeDomain           string
+	writeEvidenceSource   string
+	writeRows             []SharedProjectionIntentRow
 }
 
 func (r *recordingCodeCallEdgeWriter) RetractEdges(
 	_ context.Context,
 	domain string,
 	rows []SharedProjectionIntentRow,
-	_ string,
+	evidenceSource string,
 ) error {
 	r.retractDomain = domain
+	r.retractEvidenceSource = evidenceSource
 	r.retractRows = append(r.retractRows, rows...)
 	return nil
 }
@@ -396,9 +405,10 @@ func (r *recordingCodeCallEdgeWriter) WriteEdges(
 	_ context.Context,
 	domain string,
 	rows []SharedProjectionIntentRow,
-	_ string,
+	evidenceSource string,
 ) error {
 	r.writeDomain = domain
+	r.writeEvidenceSource = evidenceSource
 	r.writeRows = append(r.writeRows, rows...)
 	return nil
 }

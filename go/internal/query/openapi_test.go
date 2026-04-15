@@ -212,6 +212,15 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if _, ok := callChainSchema["end"]; !ok {
 		t.Fatal("code/call-chain request schema missing end")
 	}
+	if _, ok := callChainSchema["start_entity_id"]; !ok {
+		t.Fatal("code/call-chain request schema missing start_entity_id")
+	}
+	if _, ok := callChainSchema["end_entity_id"]; !ok {
+		t.Fatal("code/call-chain request schema missing end_entity_id")
+	}
+	if _, ok := callChainSchema["repo_id"]; !ok {
+		t.Fatal("code/call-chain request schema missing repo_id")
+	}
 	if _, ok := callChainSchema["max_depth"]; !ok {
 		t.Fatal("code/call-chain request schema missing max_depth")
 	}

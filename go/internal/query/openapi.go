@@ -8,6 +8,7 @@ const OpenAPISpec = openAPISpecPrefix +
 	openAPIPathsEntities +
 	openAPIPathsCode +
 	openAPIPathsContent +
+	openAPIPathsAdmin +
 	openAPIPathsInfrastructure +
 	openAPIPathsImpact +
 	openAPIPathsStatusAndCompare +

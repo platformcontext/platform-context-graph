@@ -37,7 +37,7 @@ func main() {
 		}
 	}()
 
-	mux, cleanup, err := wireAPI(ctx, os.Getenv, logger)
+	mux, cleanup, err := wireAPI(ctx, os.Getenv, logger, providers.PrometheusHandler)
 	if err != nil {
 		logger.Error("wire api failed", telemetry.EventAttr("runtime.startup.failed"), "error", err)
 		os.Exit(1)
