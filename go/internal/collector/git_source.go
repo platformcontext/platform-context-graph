@@ -291,8 +291,14 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	// them to separate channels so workers can prefer small repos. This
 	// prevents head-of-line blocking when large repos cluster together
 	// (the "convoy" problem observed in production).
-	smallCh := make(chan SelectedRepository, workers)
-	largeCh := make(chan SelectedRepository, workers)
+	//
+	// Channels are buffered at len(resolved) so the discovery goroutine
+	// sends all repos immediately without blocking on either lane. This
+	// prevents a large-repo cluster from stalling discovery and starving
+	// smallCh of repos that come later in alphabetical order. The memory
+	// cost is ~500 bytes per SelectedRepository — negligible at 878 repos.
+	smallCh := make(chan SelectedRepository, len(resolved))
+	largeCh := make(chan SelectedRepository, len(resolved))
 
 	// Discovery goroutine: classify once per repo and route to the
 	// appropriate lane. Classification (isLargeRepository) is a fast
