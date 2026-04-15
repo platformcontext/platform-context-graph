@@ -1,0 +1,90 @@
+package query
+
+import "testing"
+
+func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
+	t.Parallel()
+
+	ctx := map[string]any{
+		"id":        "workload-1",
+		"name":      "payments-api",
+		"kind":      "service",
+		"repo_id":   "repo-1",
+		"repo_name": "payments",
+		"instances": []map[string]any{
+			{
+				"instance_id":   "inst-1",
+				"platform_name": "payments-argocd",
+				"platform_kind": "argocd_application",
+				"environment":   "prod",
+			},
+			{
+				"instance_id":   "inst-2",
+				"platform_name": "payments-argocd",
+				"platform_kind": "argocd_application",
+				"environment":   "stage",
+			},
+		},
+	}
+
+	got := buildDeploymentTraceResponse("payments-api", ctx)
+
+	if got["service_name"] != "payments-api" {
+		t.Fatalf("service_name = %#v, want %q", got["service_name"], "payments-api")
+	}
+	if got["story"] == "" {
+		t.Fatal("story is empty, want narrative summary")
+	}
+	if got["repo_id"] != "repo-1" {
+		t.Fatalf("repo_id = %#v, want %q", got["repo_id"], "repo-1")
+	}
+	if got["repo_name"] != "payments" {
+		t.Fatalf("repo_name = %#v, want %q", got["repo_name"], "payments")
+	}
+
+	overview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	if gotCount, want := overview["instance_count"], 2; gotCount != want {
+		t.Fatalf("deployment_overview.instance_count = %#v, want %#v", gotCount, want)
+	}
+	if gotCount, want := overview["environment_count"], 2; gotCount != want {
+		t.Fatalf("deployment_overview.environment_count = %#v, want %#v", gotCount, want)
+	}
+	if gotCount, want := overview["platform_count"], 1; gotCount != want {
+		t.Fatalf("deployment_overview.platform_count = %#v, want %#v", gotCount, want)
+	}
+
+	platforms, ok := overview["platforms"].([]string)
+	if !ok {
+		t.Fatalf("deployment_overview.platforms type = %T, want []string", overview["platforms"])
+	}
+	if len(platforms) != 1 || platforms[0] != "payments-argocd" {
+		t.Fatalf("deployment_overview.platforms = %#v, want [payments-argocd]", platforms)
+	}
+
+	kinds, ok := overview["platform_kinds"].([]string)
+	if !ok {
+		t.Fatalf("deployment_overview.platform_kinds type = %T, want []string", overview["platform_kinds"])
+	}
+	if len(kinds) != 1 || kinds[0] != "argocd_application" {
+		t.Fatalf("deployment_overview.platform_kinds = %#v, want [argocd_application]", kinds)
+	}
+
+	environments, ok := overview["environments"].([]string)
+	if !ok {
+		t.Fatalf("deployment_overview.environments type = %T, want []string", overview["environments"])
+	}
+	if len(environments) != 2 {
+		t.Fatalf("deployment_overview.environments len = %d, want 2", len(environments))
+	}
+
+	factSummary, ok := got["deployment_fact_summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_fact_summary type = %T, want map[string]any", got["deployment_fact_summary"])
+	}
+	if factSummary["has_repository"] != true {
+		t.Fatalf("deployment_fact_summary.has_repository = %#v, want true", factSummary["has_repository"])
+	}
+}

@@ -246,6 +246,13 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 		return &route{method: "GET", path: "/api/v0/ecosystem/overview"}, nil
 
 	// ── Impact ──
+	case "trace_deployment_chain":
+		return &route{method: "POST", path: "/api/v0/impact/trace-deployment-chain", body: map[string]any{
+			"service_name":                 str(args, "service_name"),
+			"direct_only":                  boolOr(args, "direct_only", true),
+			"max_depth":                    intOr(args, "max_depth", 8),
+			"include_related_module_usage": boolOr(args, "include_related_module_usage", false),
+		}}, nil
 	case "find_blast_radius":
 		return &route{method: "POST", path: "/api/v0/impact/blast-radius", body: args}, nil
 	case "find_change_surface":

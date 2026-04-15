@@ -1,6 +1,58 @@
 package query
 
 const openAPIPathsImpact = `
+    "/api/v0/impact/trace-deployment-chain": {
+      "post": {
+        "tags": ["impact"],
+        "summary": "Trace deployment chain",
+        "description": "Returns a story-first deployment trace for a service, including deployment overview and normalized deployment fact summary.",
+        "operationId": "traceDeploymentChain",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["service_name"],
+                "properties": {
+                  "service_name": {"type": "string", "description": "Service or workload name to trace"},
+                  "direct_only": {"type": "boolean", "default": true},
+                  "max_depth": {"type": "integer", "default": 8, "minimum": 1},
+                  "include_related_module_usage": {"type": "boolean", "default": false}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deployment trace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service_name": {"type": "string"},
+                    "workload_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "kind": {"type": "string"},
+                    "repo_id": {"type": "string"},
+                    "repo_name": {"type": "string"},
+                    "story": {"type": "string"},
+                    "instances": {"type": "array", "items": {"type": "object"}},
+                    "deployment_overview": {"type": "object"},
+                    "deployment_fact_summary": {"type": "object"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
     "/api/v0/impact/blast-radius": {
       "post": {
         "tags": ["impact"],

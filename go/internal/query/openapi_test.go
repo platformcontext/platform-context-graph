@@ -57,6 +57,7 @@ func TestServeOpenAPI(t *testing.T) {
 		"/api/v0/code/language-query",
 		"/api/v0/content/files/read",
 		"/api/v0/infra/resources/search",
+		"/api/v0/impact/trace-deployment-chain",
 		"/api/v0/impact/blast-radius",
 		"/api/v0/status/pipeline",
 		"/api/v0/compare/environments",
