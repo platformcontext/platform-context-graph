@@ -70,6 +70,9 @@ func (e *Engine) parseYAML(
 		"cloudformation_resources",
 		"cloudformation_parameters",
 		"cloudformation_outputs",
+		"cloudformation_conditions",
+		"cloudformation_cross_stack_imports",
+		"cloudformation_cross_stack_exports",
 	} {
 		sortNamedBucket(payload, bucket)
 	}
@@ -93,6 +96,9 @@ func yamlBasePayload(path string, isDependency bool) map[string]any {
 	payload["cloudformation_resources"] = []map[string]any{}
 	payload["cloudformation_parameters"] = []map[string]any{}
 	payload["cloudformation_outputs"] = []map[string]any{}
+	payload["cloudformation_conditions"] = []map[string]any{}
+	payload["cloudformation_cross_stack_imports"] = []map[string]any{}
+	payload["cloudformation_cross_stack_exports"] = []map[string]any{}
 	return payload
 }
 
@@ -107,6 +113,9 @@ func appendYAMLDocument(payload map[string]any, path string, filename string, do
 		payload["cloudformation_resources"] = append(payload["cloudformation_resources"].([]map[string]any), result.resources...)
 		payload["cloudformation_parameters"] = append(payload["cloudformation_parameters"].([]map[string]any), result.params...)
 		payload["cloudformation_outputs"] = append(payload["cloudformation_outputs"].([]map[string]any), result.outputs...)
+		payload["cloudformation_conditions"] = append(payload["cloudformation_conditions"].([]map[string]any), result.conditions...)
+		payload["cloudformation_cross_stack_imports"] = append(payload["cloudformation_cross_stack_imports"].([]map[string]any), result.imports...)
+		payload["cloudformation_cross_stack_exports"] = append(payload["cloudformation_cross_stack_exports"].([]map[string]any), result.exports...)
 		return
 	}
 
@@ -176,6 +185,11 @@ func yamlNodeToAny(node *yaml.Node) any {
 	if node == nil {
 		return nil
 	}
+
+	if intrinsicKey, ok := cloudFormationYAMLIntrinsicKey(node.Tag); ok {
+		return map[string]any{intrinsicKey: yamlNodeValue(node)}
+	}
+
 	switch node.Kind {
 	case yaml.DocumentNode:
 		if len(node.Content) == 0 {
@@ -199,6 +213,60 @@ func yamlNodeToAny(node *yaml.Node) any {
 		return yamlScalarString(node)
 	default:
 		return nil
+	}
+}
+
+func yamlNodeValue(node *yaml.Node) any {
+	switch node.Kind {
+	case yaml.DocumentNode:
+		if len(node.Content) == 0 {
+			return nil
+		}
+		return yamlNodeToAny(node.Content[0])
+	case yaml.MappingNode:
+		result := make(map[string]any, len(node.Content)/2)
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			key := yamlScalarString(node.Content[index])
+			result[key] = yamlNodeToAny(node.Content[index+1])
+		}
+		return result
+	case yaml.SequenceNode:
+		result := make([]any, 0, len(node.Content))
+		for _, child := range node.Content {
+			result = append(result, yamlNodeToAny(child))
+		}
+		return result
+	case yaml.ScalarNode:
+		return yamlScalarString(node)
+	default:
+		return nil
+	}
+}
+
+func cloudFormationYAMLIntrinsicKey(tag string) (string, bool) {
+	switch tag {
+	case "!And":
+		return "Fn::And", true
+	case "!Condition":
+		return "Condition", true
+	case "!Equals":
+		return "Fn::Equals", true
+	case "!GetAtt":
+		return "Fn::GetAtt", true
+	case "!If":
+		return "Fn::If", true
+	case "!ImportValue":
+		return "Fn::ImportValue", true
+	case "!Join":
+		return "Fn::Join", true
+	case "!Or":
+		return "Fn::Or", true
+	case "!Ref":
+		return "Ref", true
+	case "!Sub":
+		return "Fn::Sub", true
+	default:
+		return "", false
 	}
 }
 

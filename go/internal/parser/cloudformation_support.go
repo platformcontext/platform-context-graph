@@ -13,11 +13,12 @@ var (
 )
 
 type cloudFormationParseResult struct {
-	resources []map[string]any
-	params    []map[string]any
-	outputs   []map[string]any
-	imports   []map[string]any
-	exports   []map[string]any
+	resources  []map[string]any
+	params     []map[string]any
+	outputs    []map[string]any
+	conditions []map[string]any
+	imports    []map[string]any
+	exports    []map[string]any
 }
 
 func isCloudFormationTemplate(document map[string]any) bool {
@@ -89,6 +90,19 @@ func parseCloudFormationTemplate(
 		}
 	}
 
+	if conditions, ok := document["Conditions"].(map[string]any); ok {
+		for _, name := range sortedMapKeys(conditions) {
+			row := withFormat(map[string]any{
+				"name":        name,
+				"line_number": lineNumber,
+				"path":        path,
+				"lang":        lang,
+				"expression":  fmt.Sprint(conditions[name]),
+			})
+			result.conditions = append(result.conditions, row)
+		}
+	}
+
 	if resources, ok := document["Resources"].(map[string]any); ok {
 		for _, name := range sortedMapKeys(resources) {
 			body, _ := resources[name].(map[string]any)
@@ -103,6 +117,9 @@ func parseCloudFormationTemplate(
 				row["resource_type"] = resourceType
 			}
 			setOptionalString(row, "condition", body["Condition"])
+			if properties, ok := body["Properties"].(map[string]any); ok {
+				setOptionalString(row, "template_url", properties["TemplateURL"])
+			}
 			if dependsOn := body["DependsOn"]; dependsOn != nil {
 				switch typed := dependsOn.(type) {
 				case []any:
@@ -155,6 +172,7 @@ func parseCloudFormationTemplate(
 	sortNamedMaps(result.resources)
 	sortNamedMaps(result.params)
 	sortNamedMaps(result.outputs)
+	sortNamedMaps(result.conditions)
 	sortNamedMaps(result.imports)
 	sortNamedMaps(result.exports)
 	return result

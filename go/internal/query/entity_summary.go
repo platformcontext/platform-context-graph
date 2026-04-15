@@ -154,6 +154,27 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 			return fmt.Sprintf("%s %s discovers config in %s and deploys templates from %s.",
 				label, name, strings.Join(generatorRepos, ", "), strings.Join(templateRepos, ", "))
 		}
+	case "CloudFormationCondition":
+		expression, _ := metadata["expression"].(string)
+		if expression != "" {
+			return fmt.Sprintf("%s %s evaluates %s.", label, name, expression)
+		}
+	case "CloudFormationResource":
+		resourceType, _ := metadata["resource_type"].(string)
+		templateURL, _ := metadata["template_url"].(string)
+		condition, _ := metadata["condition"].(string)
+		switch {
+		case resourceType == "AWS::CloudFormation::Stack" && templateURL != "" && condition != "":
+			return fmt.Sprintf("%s %s is an AWS::CloudFormation::Stack nested stack sourced from %s and guarded by condition %s.",
+				label, name, templateURL, condition)
+		case resourceType == "AWS::CloudFormation::Stack" && templateURL != "":
+			return fmt.Sprintf("%s %s is an AWS::CloudFormation::Stack nested stack sourced from %s.",
+				label, name, templateURL)
+		case resourceType != "" && condition != "":
+			return fmt.Sprintf("%s %s is an %s guarded by condition %s.", label, name, resourceType, condition)
+		case resourceType != "":
+			return fmt.Sprintf("%s %s is an %s.", label, name, resourceType)
+		}
 	}
 
 	fragments := make([]string, 0, 4)

@@ -418,6 +418,8 @@ func TestDefaultEngineParsePathYAMLCloudFormation(t *testing.T) {
 		t,
 		filePath,
 		`AWSTemplateFormatVersion: "2010-09-09"
+Conditions:
+  EnableNested: !Equals [!Ref Env, prod]
 Parameters:
   Env:
     Type: String
@@ -429,6 +431,13 @@ Resources:
     Type: AWS::IAM::Policy
     DependsOn:
       - DataBucket
+  NestedStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: EnableNested
+    Properties:
+      TemplateURL: https://example.com/nested-stack.yaml
+      Parameters:
+        ImportedValue: !ImportValue SharedVpcId
 Outputs:
   BucketArn:
     Value: !GetAtt DataBucket.Arn
@@ -450,7 +459,11 @@ Outputs:
 	assertNamedBucketContains(t, got, "cloudformation_resources", "DataBucket")
 	assertBucketContainsFieldValue(t, got, "cloudformation_resources", "resource_type", "AWS::S3::Bucket")
 	assertBucketContainsFieldValue(t, got, "cloudformation_resources", "depends_on", "DataBucket")
+	assertBucketContainsFieldValue(t, got, "cloudformation_resources", "template_url", "https://example.com/nested-stack.yaml")
 	assertNamedBucketContains(t, got, "cloudformation_parameters", "Env")
 	assertNamedBucketContains(t, got, "cloudformation_outputs", "BucketArn")
+	assertNamedBucketContains(t, got, "cloudformation_conditions", "EnableNested")
+	assertNamedBucketContains(t, got, "cloudformation_cross_stack_imports", "SharedVpcId")
+	assertNamedBucketContains(t, got, "cloudformation_cross_stack_exports", "Stack-BucketArn")
 	assertBucketContainsFieldValue(t, got, "cloudformation_outputs", "export_name", "Stack-BucketArn")
 }

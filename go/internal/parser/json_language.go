@@ -51,6 +51,7 @@ func (e *Engine) parseJSON(
 		payload["cloudformation_resources"] = result.resources
 		payload["cloudformation_parameters"] = result.params
 		payload["cloudformation_outputs"] = result.outputs
+		payload["cloudformation_conditions"] = result.conditions
 		payload["cloudformation_cross_stack_imports"] = result.imports
 		payload["cloudformation_cross_stack_exports"] = result.exports
 		if options.IndexSource {
@@ -96,6 +97,7 @@ func jsonBasePayload(path string, isDependency bool) map[string]any {
 	payload["cloudformation_resources"] = []map[string]any{}
 	payload["cloudformation_parameters"] = []map[string]any{}
 	payload["cloudformation_outputs"] = []map[string]any{}
+	payload["cloudformation_conditions"] = []map[string]any{}
 	payload["cloudformation_cross_stack_imports"] = []map[string]any{}
 	payload["cloudformation_cross_stack_exports"] = []map[string]any{}
 	payload["analytics_models"] = []map[string]any{}

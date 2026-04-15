@@ -372,6 +372,49 @@ func TestMaterializeCarriesRustImplBlockEntities(t *testing.T) {
 	}
 }
 
+func TestMaterializeCarriesCloudFormationExtendedBuckets(t *testing.T) {
+	t.Parallel()
+
+	got, err := Materialize(Input{
+		RepoID: "repository:r_12345678",
+		Files: []File{
+			{
+				Path: "infra/stack.yaml",
+				Body: "AWSTemplateFormatVersion: \"2010-09-09\"\n",
+				EntityBuckets: map[string][]Entity{
+					"cloudformation_conditions": {
+						{Name: "EnableNested", LineNumber: 1, Metadata: map[string]any{"expression": "map[Fn::Equals:[prod prod]]"}},
+					},
+					"cloudformation_cross_stack_imports": {
+						{Name: "SharedVpcId", LineNumber: 2},
+					},
+					"cloudformation_cross_stack_exports": {
+						{Name: "Stack-BucketArn", LineNumber: 3},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Materialize() error = %v, want nil", err)
+	}
+
+	if len(got.Entities) != 3 {
+		t.Fatalf("len(Materialize().Entities) = %d, want 3", len(got.Entities))
+	}
+
+	wantTypes := []string{
+		"CloudFormationCondition",
+		"CloudFormationImport",
+		"CloudFormationExport",
+	}
+	for index, want := range wantTypes {
+		if got.Entities[index].EntityType != want {
+			t.Fatalf("entity[%d].EntityType = %q, want %q", index, got.Entities[index].EntityType, want)
+		}
+	}
+}
+
 type EntityRecordExpectation struct {
 	entityType  string
 	entityName  string
