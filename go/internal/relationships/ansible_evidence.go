@@ -13,6 +13,9 @@ func discoverAnsibleEvidence(
 	catalog []CatalogEntry,
 	seen map[evidenceKey]struct{},
 ) []EvidenceFact {
+	if !isAnsibleRelationshipEvidenceSource(filePath) {
+		return nil
+	}
 	var evidence []EvidenceFact
 	for _, document := range parseAnsibleDocuments(content) {
 		evidence = append(evidence, discoverAnsibleDocumentEvidence(
@@ -139,6 +142,27 @@ func uniqueAnsibleCandidates(candidates []ansibleRoleCandidate) []ansibleRoleCan
 		result = append(result, candidate)
 	}
 	return result
+}
+
+func isAnsibleRelationshipEvidenceSource(filePath string) bool {
+	lower := strings.ToLower(filepath.ToSlash(filePath))
+	if lower == "" {
+		return false
+	}
+
+	switch {
+	case strings.Contains(lower, "/inventories/"), strings.Contains(lower, "/inventory/"):
+		return false
+	case strings.Contains(lower, "/group_vars/"), strings.Contains(lower, "/host_vars/"):
+		return false
+	case strings.Contains(lower, "/roles/"), strings.HasPrefix(lower, "roles/"):
+		return false
+	case strings.Contains(lower, "/playbooks/"), strings.Contains(lower, "playbooks/"):
+		return true
+	}
+
+	lowerBase := strings.ToLower(filepath.Base(lower))
+	return lowerBase == "site.yml" || lowerBase == "site.yaml"
 }
 
 func isAnsibleArtifact(artifactType, filePath string) bool {

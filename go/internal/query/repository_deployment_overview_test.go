@@ -177,6 +177,51 @@ func TestBuildRepositoryDeploymentOverviewIncludesDeliveryPathsAndWorkflows(t *t
 	}
 }
 
+func TestBuildRepositoryDeploymentOverviewIncludesDockerfileRuntimeStory(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		[]string{"ecs_service"},
+		[]string{"docker"},
+		map[string]any{
+			"deployment_artifacts": map[string]any{
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "Dockerfile",
+						"artifact_type": "dockerfile",
+						"artifact_name": "runtime",
+						"base_image":    "alpine",
+						"signals":       []string{"base_image", "copy_from", "ports"},
+					},
+				},
+			},
+		},
+	)
+
+	deliveryPaths, ok := got["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
+	}
+	if len(deliveryPaths) != 1 {
+		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
+	}
+	if got, want := deliveryPaths[0]["artifact_name"], "runtime"; got != want {
+		t.Fatalf("delivery_paths[0].artifact_name = %#v, want %#v", got, want)
+	}
+
+	topologyStory, ok := got["topology_story"].([]string)
+	if !ok {
+		t.Fatalf("topology_story type = %T, want []string", got["topology_story"])
+	}
+	if len(topologyStory) != 1 {
+		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Runtime artifacts include dockerfile stage runtime in Dockerfile based on alpine (base_image, copy_from, ports)."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+}
+
 func TestBuildRepositoryDeploymentOverviewIncludesSingleSourceConfigPathsInDeliveryPaths(t *testing.T) {
 	t.Parallel()
 

@@ -551,6 +551,18 @@ func TestDiscoverJenkinsSharedLibraryEvidence(t *testing.T) {
 				"content":       "@Library('pipelines') _\n",
 				"parsed_file_data": map[string]any{
 					"shared_libraries": []any{"pipelines"},
+					"pipeline_calls":   []any{"deployService"},
+					"entry_points":     []any{"dist/api.js"},
+					"shell_commands":   []any{"ansible-playbook playbooks/deploy.yml -i inventories/prod.yml"},
+					"ansible_playbook_hints": []any{
+						map[string]any{
+							"playbook":  "playbooks/deploy.yml",
+							"inventory": "inventories/prod.yml",
+							"command":   "ansible-playbook playbooks/deploy.yml -i inventories/prod.yml",
+						},
+					},
+					"use_configd":    true,
+					"has_pre_deploy": true,
 				},
 			},
 		},
@@ -571,6 +583,28 @@ func TestDiscoverJenkinsSharedLibraryEvidence(t *testing.T) {
 	}
 	if evidence[0].TargetRepoID != "repo-pipelines" {
 		t.Fatalf("target = %q, want %q", evidence[0].TargetRepoID, "repo-pipelines")
+	}
+	if got, want := evidence[0].Details["pipeline_calls"], []string{"deployService"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("pipeline_calls = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["entry_points"], []string{"dist/api.js"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("entry_points = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["shell_commands"], []string{"ansible-playbook playbooks/deploy.yml -i inventories/prod.yml"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("shell_commands = %#v, want %#v", got, want)
+	}
+	hints, ok := evidence[0].Details["ansible_playbook_hints"].([]map[string]any)
+	if !ok || len(hints) != 1 {
+		t.Fatalf("ansible_playbook_hints = %#v, want 1 hint", evidence[0].Details["ansible_playbook_hints"])
+	}
+	if got, want := hints[0]["playbook"], "playbooks/deploy.yml"; got != want {
+		t.Fatalf("ansible_playbook_hints[0].playbook = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["use_configd"], true; got != want {
+		t.Fatalf("use_configd = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["has_pre_deploy"], true; got != want {
+		t.Fatalf("has_pre_deploy = %#v, want %#v", got, want)
 	}
 }
 
@@ -617,9 +651,12 @@ func TestDiscoverJenkinsGitHubRepositoryEvidence(t *testing.T) {
   git url: "https://github.com/boatsgroup/terraform-modules-aws.git"
 }`,
 				"parsed_file_data": map[string]any{
+					"pipeline_calls": []any{"deployService"},
+					"entry_points":   []any{"dist/api.js"},
 					"shell_commands": []any{
 						`git clone https://github.com/boatsgroup/terraform-modules-aws.git`,
 					},
+					"use_configd": true,
 				},
 			},
 		},
@@ -641,6 +678,31 @@ func TestDiscoverJenkinsGitHubRepositoryEvidence(t *testing.T) {
 	if evidence[0].TargetRepoID != "repo-modules" {
 		t.Fatalf("target = %q, want %q", evidence[0].TargetRepoID, "repo-modules")
 	}
+	if got, want := evidence[0].Details["pipeline_calls"], []string{"deployService"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("pipeline_calls = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["entry_points"], []string{"dist/api.js"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("entry_points = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["use_configd"], true; got != want {
+		t.Fatalf("use_configd = %#v, want %#v", got, want)
+	}
+}
+
+func stringSlicesEqual(got any, want []string) bool {
+	values, ok := got.([]string)
+	if !ok {
+		return false
+	}
+	if len(values) != len(want) {
+		return false
+	}
+	for index := range values {
+		if values[index] != want[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestIsTerraformArtifactIncludesVariableFiles(t *testing.T) {

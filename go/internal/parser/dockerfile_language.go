@@ -18,15 +18,34 @@ func (e *Engine) parseDockerfile(
 	}
 
 	payload := basePayload(path, "dockerfile", isDependency)
-	payload["modules"] = []map[string]any{}
-	payload["module_inclusions"] = []map[string]any{}
-	payload["dockerfile_stages"] = []map[string]any{}
-	payload["dockerfile_ports"] = []map[string]any{}
-	payload["dockerfile_args"] = []map[string]any{}
-	payload["dockerfile_envs"] = []map[string]any{}
-	payload["dockerfile_labels"] = []map[string]any{}
+	for key, value := range buildDockerfilePayload(string(source)) {
+		payload[key] = value
+	}
+	if options.IndexSource {
+		payload["source"] = string(source)
+	}
+	return payload, nil
+}
 
-	instructions := dockerfileInstructions(string(source))
+// ExtractDockerfileRuntimeMetadata returns the parser-backed Dockerfile payload
+// without repository-specific metadata so read-side query code can surface the
+// same stage/runtime signals the parser already proves during ingestion.
+func ExtractDockerfileRuntimeMetadata(sourceText string) map[string]any {
+	return buildDockerfilePayload(sourceText)
+}
+
+func buildDockerfilePayload(sourceText string) map[string]any {
+	payload := map[string]any{
+		"modules":           []map[string]any{},
+		"module_inclusions": []map[string]any{},
+		"dockerfile_stages": []map[string]any{},
+		"dockerfile_ports":  []map[string]any{},
+		"dockerfile_args":   []map[string]any{},
+		"dockerfile_envs":   []map[string]any{},
+		"dockerfile_labels": []map[string]any{},
+	}
+
+	instructions := dockerfileInstructions(sourceText)
 	var currentStage map[string]any
 	stageIndex := 0
 	for _, instruction := range instructions {
@@ -71,10 +90,7 @@ func (e *Engine) parseDockerfile(
 	sortNamedBucket(payload, "dockerfile_args")
 	sortNamedBucket(payload, "dockerfile_envs")
 	sortNamedBucket(payload, "dockerfile_labels")
-	if options.IndexSource {
-		payload["source"] = string(source)
-	}
-	return payload, nil
+	return payload
 }
 
 type dockerfileInstruction struct {

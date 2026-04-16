@@ -87,15 +87,10 @@ func TestBuildRepositoryRuntimeArtifactsSurfacesDockerComposeRuntimeSignals(t *t
 	}
 }
 
-func TestBuildRepositoryRuntimeArtifactsIgnoresNonComposeFiles(t *testing.T) {
+func TestBuildRepositoryRuntimeArtifactsIgnoresNonRuntimeFiles(t *testing.T) {
 	t.Parallel()
 
 	got := buildRepositoryRuntimeArtifacts([]FileContent{
-		{
-			RelativePath: "Dockerfile",
-			ArtifactType: "dockerfile",
-			Content:      "FROM scratch",
-		},
 		{
 			RelativePath: "service.yaml",
 			ArtifactType: "yaml",
@@ -108,6 +103,67 @@ metadata:
 
 	if got != nil {
 		t.Fatalf("buildRepositoryRuntimeArtifacts() = %#v, want nil", got)
+	}
+}
+
+func TestBuildRepositoryRuntimeArtifactsSurfacesDockerfileRuntimeSignals(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryRuntimeArtifacts([]FileContent{
+		{
+			RelativePath: "Dockerfile",
+			ArtifactType: "dockerfile",
+			Content: `FROM golang:1.24 AS builder
+ENV CGO_ENABLED=0
+FROM alpine:3.20 AS runtime
+COPY --from=builder /out/app /app
+EXPOSE 8080
+ENTRYPOINT ["/app"]
+HEALTHCHECK CMD /app --healthz
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryRuntimeArtifacts() = nil, want deployment artifacts")
+	}
+
+	artifacts, ok := got["deployment_artifacts"].([]map[string]any)
+	if !ok {
+		t.Fatalf("deployment_artifacts type = %T, want []map[string]any", got["deployment_artifacts"])
+	}
+	if len(artifacts) != 2 {
+		t.Fatalf("len(deployment_artifacts) = %d, want 2", len(artifacts))
+	}
+
+	builder := artifacts[0]
+	if got, want := builder["artifact_type"], "dockerfile"; got != want {
+		t.Fatalf("builder.artifact_type = %#v, want %#v", got, want)
+	}
+	if got, want := builder["artifact_name"], "builder"; got != want {
+		t.Fatalf("builder.artifact_name = %#v, want %#v", got, want)
+	}
+	if got, want := builder["base_image"], "golang"; got != want {
+		t.Fatalf("builder.base_image = %#v, want %#v", got, want)
+	}
+	if got, want := builder["signals"], []string{"base_image", "environment"}; !stringSliceEqual(got, want) {
+		t.Fatalf("builder.signals = %#v, want %#v", got, want)
+	}
+
+	runtime := artifacts[1]
+	if got, want := runtime["artifact_name"], "runtime"; got != want {
+		t.Fatalf("runtime.artifact_name = %#v, want %#v", got, want)
+	}
+	if got, want := runtime["base_image"], "alpine"; got != want {
+		t.Fatalf("runtime.base_image = %#v, want %#v", got, want)
+	}
+	if got, want := runtime["copy_from"], []string{"builder"}; !stringSliceEqual(got, want) {
+		t.Fatalf("runtime.copy_from = %#v, want %#v", got, want)
+	}
+	if got, want := runtime["ports"], []string{"8080/tcp"}; !stringSliceEqual(got, want) {
+		t.Fatalf("runtime.ports = %#v, want %#v", got, want)
+	}
+	if got, want := runtime["signals"], []string{"base_image", "copy_from", "entrypoint", "healthcheck", "ports"}; !stringSliceEqual(got, want) {
+		t.Fatalf("runtime.signals = %#v, want %#v", got, want)
 	}
 }
 

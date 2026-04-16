@@ -7,40 +7,41 @@ import (
 )
 
 // buildRepositoryRuntimeArtifacts derives compact runtime-artifact summaries
-// from repo-local Docker Compose files. It stays on the read side and only
-// surfaces service-local artifacts.
+// from repo-local runtime assets. It stays on the read side and only surfaces
+// parser-proven local runtime artifacts.
 func buildRepositoryRuntimeArtifacts(files []FileContent) map[string]any {
 	artifacts := make([]map[string]any, 0)
 	for _, file := range files {
-		if !isDockerComposeArtifact(file) {
-			continue
-		}
+		switch {
+		case isDockerComposeArtifact(file):
+			services := parseDockerComposeRuntimeArtifacts(file.Content)
+			if len(services) == 0 {
+				continue
+			}
 
-		services := parseDockerComposeRuntimeArtifacts(file.Content)
-		if len(services) == 0 {
-			continue
-		}
-
-		for _, service := range services {
-			row := map[string]any{
-				"relative_path": file.RelativePath,
-				"artifact_type": composeArtifactType(file),
-				"service_name":  service.ServiceName,
-				"signals":       service.signals(),
+			for _, service := range services {
+				row := map[string]any{
+					"relative_path": file.RelativePath,
+					"artifact_type": composeArtifactType(file),
+					"service_name":  service.ServiceName,
+					"signals":       service.signals(),
+				}
+				if service.BuildContext != "" {
+					row["build_context"] = service.BuildContext
+				}
+				if ports := composeRuntimeValues(service.Ports); len(ports) > 0 {
+					row["ports"] = ports
+				}
+				if environment := composeRuntimeValues(service.Environment); len(environment) > 0 {
+					row["environment"] = environment
+				}
+				if volumes := composeRuntimeValues(service.Volumes); len(volumes) > 0 {
+					row["volumes"] = volumes
+				}
+				artifacts = append(artifacts, row)
 			}
-			if service.BuildContext != "" {
-				row["build_context"] = service.BuildContext
-			}
-			if ports := composeRuntimeValues(service.Ports); len(ports) > 0 {
-				row["ports"] = ports
-			}
-			if environment := composeRuntimeValues(service.Environment); len(environment) > 0 {
-				row["environment"] = environment
-			}
-			if volumes := composeRuntimeValues(service.Volumes); len(volumes) > 0 {
-				row["volumes"] = volumes
-			}
-			artifacts = append(artifacts, row)
+		case isDockerfileArtifact(file):
+			artifacts = append(artifacts, buildDockerfileRuntimeArtifacts(file)...)
 		}
 	}
 
@@ -74,7 +75,7 @@ func loadRepositoryRuntimeArtifacts(
 
 	contentFiles := make([]FileContent, 0, len(candidates))
 	for _, file := range candidates {
-		if !isDockerComposeArtifact(file) {
+		if !isDockerComposeArtifact(file) && !isDockerfileArtifact(file) {
 			continue
 		}
 		fileContent, err := reader.GetFileContent(ctx, repoID, file.RelativePath)

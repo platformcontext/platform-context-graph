@@ -232,3 +232,47 @@ func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *test
 		t.Fatalf("direct_story[3] = %q, want %q", got, want)
 	}
 }
+
+func TestBuildRepositoryStoryResponseIncludesDockerfileRuntimeArtifactsInDirectStory(t *testing.T) {
+	t.Parallel()
+
+	repo := RepoRef{ID: "repository:payments", Name: "payments"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		42,
+		[]string{"go"},
+		[]string{"payments-api"},
+		[]string{"ecs_service"},
+		1,
+		map[string]any{
+			"families": []string{"docker"},
+			"deployment_artifacts": map[string]any{
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "Dockerfile",
+						"artifact_type": "dockerfile",
+						"artifact_name": "runtime",
+						"base_image":    "alpine",
+						"signals":       []string{"base_image", "copy_from", "ports"},
+					},
+				},
+			},
+		},
+		nil,
+	)
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	if len(directStory) != 1 {
+		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
+	}
+	if got, want := directStory[0], "Runtime artifacts include dockerfile stage runtime in Dockerfile based on alpine (base_image, copy_from, ports)."; got != want {
+		t.Fatalf("direct_story[0] = %q, want %q", got, want)
+	}
+}

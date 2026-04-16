@@ -84,6 +84,12 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 			"kind":          "runtime_artifact",
 			"artifact_type": artifactType,
 		}
+		if artifactName := strings.TrimSpace(StringVal(row, "artifact_name")); artifactName != "" {
+			entry["artifact_name"] = artifactName
+		}
+		if baseImage := strings.TrimSpace(StringVal(row, "base_image")); baseImage != "" {
+			entry["base_image"] = baseImage
+		}
 		if buildContext := strings.TrimSpace(StringVal(row, "build_context")); buildContext != "" {
 			entry["build_context"] = buildContext
 		}
@@ -271,14 +277,19 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 		case "runtime_artifact":
 			path := strings.TrimSpace(StringVal(row, "path"))
 			artifactType := strings.TrimSpace(StringVal(row, "artifact_type"))
+			artifactName := strings.TrimSpace(StringVal(row, "artifact_name"))
 			serviceName := strings.TrimSpace(StringVal(row, "service_name"))
+			baseImage := strings.TrimSpace(StringVal(row, "base_image"))
 			buildContext := strings.TrimSpace(StringVal(row, "build_context"))
 			signals := stringSliceValue(row, "signals")
-			if path == "" || artifactType == "" || serviceName == "" {
+			if path == "" || artifactType == "" {
 				continue
 			}
-			line := fmt.Sprintf("Runtime artifacts include %s service %s in %s", artifactType, serviceName, path)
-			if buildContext != "" {
+			line := buildRuntimeArtifactStoryLine(artifactType, artifactName, serviceName, path, baseImage)
+			if line == "" {
+				continue
+			}
+			if buildContext != "" && serviceName != "" {
 				line += fmt.Sprintf(" built from %s", buildContext)
 			}
 			if len(signals) > 0 {
@@ -319,6 +330,21 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 	}
 
 	return story
+}
+
+func buildRuntimeArtifactStoryLine(artifactType, artifactName, serviceName, path, baseImage string) string {
+	switch {
+	case serviceName != "":
+		return fmt.Sprintf("Runtime artifacts include %s service %s in %s", artifactType, serviceName, path)
+	case artifactName != "":
+		line := fmt.Sprintf("Runtime artifacts include %s stage %s in %s", artifactType, artifactName, path)
+		if baseImage != "" {
+			line += fmt.Sprintf(" based on %s", baseImage)
+		}
+		return line
+	default:
+		return ""
+	}
 }
 
 func mapValue(value map[string]any, key string) map[string]any {
