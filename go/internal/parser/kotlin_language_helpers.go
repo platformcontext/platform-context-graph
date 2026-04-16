@@ -95,6 +95,7 @@ func kotlinInferAssignedVariableType(
 	functionReturnTypes map[string]string,
 ) string {
 	trimmed = strings.ReplaceAll(trimmed, "?.", ".")
+	trimmed = kotlinStripReceiverPreservingScopeFunctions(trimmed)
 	switch {
 	case kotlinCtorAssignPattern.MatchString(trimmed):
 		assignMatches := kotlinCtorAssignPattern.FindStringSubmatch(trimmed)
