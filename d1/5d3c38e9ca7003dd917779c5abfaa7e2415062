@@ -1,0 +1,25 @@
+go/internal/projector/canonical_builder.go
+  1ca5ee6ce936a402 56-60,62-64,285-325,330-334
+go/internal/projector/canonical_builder_test.go
+  1ca5ee6ce936a402 971-1045
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "d15d3c38e9ca7003dd917779c5abfaa7e2415062",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1264,
+      "total_deletions": 11,
+      "accepted_lines": 202,
+      "overriden_lines": 0
+    }
+  }
+}
