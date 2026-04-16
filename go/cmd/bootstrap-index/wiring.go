@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -70,7 +69,7 @@ func buildBootstrapCollector(
 func buildBootstrapProjector(
 	ctx context.Context,
 	database bootstrapDB,
-	graphWriter graph.Writer,
+	canonicalWriter projector.CanonicalWriter,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
@@ -85,11 +84,11 @@ func buildBootstrapProjector(
 	projectorQueue := postgres.NewProjectorQueue(instrumentedDB, "bootstrap-index", time.Minute)
 	reducerQueue := postgres.NewReducerQueue(instrumentedDB, "bootstrap-index", time.Minute)
 	runtime := projector.Runtime{
-		GraphWriter:   graphWriter,
-		ContentWriter: postgres.NewContentWriter(instrumentedDB),
-		IntentWriter:  reducerQueue,
-		Tracer:        tracer,
-		Instruments:   instruments,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   postgres.NewContentWriter(instrumentedDB),
+		IntentWriter:    reducerQueue,
+		Tracer:          tracer,
+		Instruments:     instruments,
 	}
 
 	return projectorDeps{
@@ -114,12 +113,12 @@ func neo4jBatchSize(getenv func(string) string) int {
 	return n
 }
 
-func openBootstrapGraphWriter(
+func openBootstrapCanonicalWriter(
 	parent context.Context,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
-) (graph.Writer, io.Closer, error) {
+) (projector.CanonicalWriter, io.Closer, error) {
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err
@@ -130,16 +129,17 @@ func openBootstrapGraphWriter(
 		DatabaseName: cfg.DatabaseName,
 	}
 
-	return sourceneo4j.Adapter{
-			Executor: &sourceneo4j.InstrumentedExecutor{
-				Inner:       rawExecutor,
-				Tracer:      tracer,
-				Instruments: instruments,
-			},
-			BatchSize: neo4jBatchSize(getenv),
+	writer := sourceneo4j.NewCanonicalNodeWriter(
+		&sourceneo4j.InstrumentedExecutor{
+			Inner:       rawExecutor,
+			Tracer:      tracer,
+			Instruments: instruments,
 		},
-		bootstrapNeo4jDriverCloser{Driver: driver},
-		nil
+		neo4jBatchSize(getenv),
+		instruments,
+	)
+
+	return writer, bootstrapNeo4jDriverCloser{Driver: driver}, nil
 }
 
 type bootstrapNeo4jExecutor struct {

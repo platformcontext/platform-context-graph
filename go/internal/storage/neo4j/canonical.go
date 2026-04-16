@@ -177,7 +177,52 @@ FOREACH (_ IN CASE WHEN row.relationship_type IS NULL AND (row.call_kind IS NULL
         rel.call_kind = row.call_kind
 )`
 
+// --- Batched UNWIND Cypher (inheritance edges) ---
+
+const batchCanonicalInheritanceEdgeUpsertCypher = `UNWIND $rows AS row
+MATCH (child {uid: row.child_entity_id})
+MATCH (parent {uid: row.parent_entity_id})
+MERGE (child)-[rel:INHERITS]->(parent)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser entity bases metadata resolved an inheritance edge',
+    rel.evidence_source = row.evidence_source,
+    rel.relationship_type = row.relationship_type`
+
+// --- Batched UNWIND Cypher (SQL relationship edges) ---
+
+const batchCanonicalSQLRelationshipUpsertCypher = `UNWIND $rows AS row
+MATCH (source {uid: row.source_entity_id})
+MATCH (target {uid: row.target_entity_id})
+FOREACH (_ IN CASE WHEN row.relationship_type = 'REFERENCES_TABLE' THEN [1] ELSE [] END |
+    MERGE (source)-[rel:REFERENCES_TABLE]->(target)
+    SET rel.confidence = 0.95,
+        rel.reason = 'SQL entity metadata resolved a table reference edge',
+        rel.evidence_source = row.evidence_source
+)
+FOREACH (_ IN CASE WHEN row.relationship_type = 'HAS_COLUMN' THEN [1] ELSE [] END |
+    MERGE (source)-[rel:HAS_COLUMN]->(target)
+    SET rel.confidence = 0.95,
+        rel.reason = 'SQL entity metadata resolved a table-column containment edge',
+        rel.evidence_source = row.evidence_source
+)
+FOREACH (_ IN CASE WHEN row.relationship_type = 'TRIGGERS' THEN [1] ELSE [] END |
+    MERGE (source)-[rel:TRIGGERS]->(target)
+    SET rel.confidence = 0.95,
+        rel.reason = 'SQL entity metadata resolved a trigger edge',
+        rel.evidence_source = row.evidence_source
+)`
+
 // --- Retraction Cypher ---
+
+const retractInheritanceEdgesCypher = `MATCH (child)-[rel:INHERITS]->()
+WHERE child.repo_id IN $repo_ids
+  AND rel.evidence_source = $evidence_source
+DELETE rel`
+
+const retractSQLRelationshipEdgesCypher = `MATCH (source)-[rel:REFERENCES_TABLE|HAS_COLUMN|TRIGGERS]->()
+WHERE source.repo_id IN $repo_ids
+  AND rel.evidence_source = $evidence_source
+DELETE rel`
 
 const retractInfrastructurePlatformEdgesCypher = `MATCH (repo:Repository)-[rel:PROVISIONS_PLATFORM]->(:Platform)
 WHERE repo.id IN $repo_ids
@@ -472,6 +517,31 @@ func BuildRetractCodeCallEdges(repoIDs []string, evidenceSource string) Statemen
 	return Statement{
 		Operation: OperationCanonicalRetract,
 		Cypher:    retractCodeCallEdgesCypher,
+		Parameters: map[string]any{
+			"repo_ids":        repoIDs,
+			"evidence_source": evidenceSource,
+		},
+	}
+}
+
+// BuildRetractInheritanceEdges builds an INHERITS edge retraction statement.
+func BuildRetractInheritanceEdges(repoIDs []string, evidenceSource string) Statement {
+	return Statement{
+		Operation: OperationCanonicalRetract,
+		Cypher:    retractInheritanceEdgesCypher,
+		Parameters: map[string]any{
+			"repo_ids":        repoIDs,
+			"evidence_source": evidenceSource,
+		},
+	}
+}
+
+// BuildRetractSQLRelationshipEdges builds a SQL relationship edge retraction
+// statement for REFERENCES_TABLE, HAS_COLUMN, and TRIGGERS edges.
+func BuildRetractSQLRelationshipEdges(repoIDs []string, evidenceSource string) Statement {
+	return Statement{
+		Operation: OperationCanonicalRetract,
+		Cypher:    retractSQLRelationshipEdgesCypher,
 		Parameters: map[string]any{
 			"repo_ids":        repoIDs,
 			"evidence_source": evidenceSource,

@@ -15,7 +15,6 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -56,7 +55,7 @@ func (c compositeRunner) Run(ctx context.Context) error {
 
 func buildIngesterService(
 	database postgres.ExecQueryer,
-	graphWriter graph.Writer,
+	canonicalWriter projector.CanonicalWriter,
 	getenv func(string) string,
 	getwd func() (string, error),
 	environ func() []string,
@@ -69,7 +68,7 @@ func buildIngesterService(
 		return compositeRunner{}, fmt.Errorf("build ingester collector: %w", err)
 	}
 
-	projectorSvc, err := buildIngesterProjectorService(database, graphWriter, getenv, tracer, instruments, logger)
+	projectorSvc, err := buildIngesterProjectorService(database, canonicalWriter, getenv, tracer, instruments, logger)
 	if err != nil {
 		return compositeRunner{}, fmt.Errorf("build ingester projector: %w", err)
 	}
@@ -119,7 +118,7 @@ func buildIngesterCollectorService(
 
 func buildIngesterProjectorService(
 	database postgres.ExecQueryer,
-	graphWriter graph.Writer,
+	canonicalWriter projector.CanonicalWriter,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
@@ -142,7 +141,7 @@ func buildIngesterProjectorService(
 		PollInterval:          time.Second,
 		WorkSource:            projectorQueue,
 		FactStore:             postgres.NewFactStore(database),
-		Runner:                buildIngesterProjectorRuntime(database, graphWriter, reducerQueue, retryInjector, tracer, instruments),
+		Runner:                buildIngesterProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, tracer, instruments),
 		WorkSink:              projectorQueue,
 		Tracer:                tracer,
 		Instruments:           instruments,
@@ -192,28 +191,28 @@ func largeGenMaxConcurrent(getenv func(string) string) int {
 
 func buildIngesterProjectorRuntime(
 	database postgres.ExecQueryer,
-	graphWriter graph.Writer,
+	canonicalWriter projector.CanonicalWriter,
 	intentWriter projector.ReducerIntentWriter,
 	retryInjector projector.RetryInjector,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) projector.Runtime {
 	return projector.Runtime{
-		GraphWriter:   graphWriter,
-		ContentWriter: postgres.NewContentWriter(database),
-		IntentWriter:  intentWriter,
-		RetryInjector: retryInjector,
-		Tracer:        tracer,
-		Instruments:   instruments,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   postgres.NewContentWriter(database),
+		IntentWriter:    intentWriter,
+		RetryInjector:   retryInjector,
+		Tracer:          tracer,
+		Instruments:     instruments,
 	}
 }
 
-func openIngesterGraphWriter(
+func openIngesterCanonicalWriter(
 	parent context.Context,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
-) (graph.Writer, io.Closer, error) {
+) (projector.CanonicalWriter, io.Closer, error) {
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err
@@ -224,16 +223,17 @@ func openIngesterGraphWriter(
 		DatabaseName: cfg.DatabaseName,
 	}
 
-	return sourceneo4j.Adapter{
-			Executor: &sourceneo4j.InstrumentedExecutor{
-				Inner:       rawExecutor,
-				Tracer:      tracer,
-				Instruments: instruments,
-			},
-			BatchSize: neo4jBatchSize(getenv),
+	writer := sourceneo4j.NewCanonicalNodeWriter(
+		&sourceneo4j.InstrumentedExecutor{
+			Inner:       rawExecutor,
+			Tracer:      tracer,
+			Instruments: instruments,
 		},
-		ingesterNeo4jDriverCloser{Driver: driver},
-		nil
+		neo4jBatchSize(getenv),
+		instruments,
+	)
+
+	return writer, ingesterNeo4jDriverCloser{Driver: driver}, nil
 }
 
 func neo4jBatchSize(getenv func(string) string) int {

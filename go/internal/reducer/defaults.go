@@ -1,5 +1,11 @@
 package reducer
 
+import (
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
+)
+
 // DefaultHandlers captures the reducer-owned backend adapters available for the
 // default domain catalog.
 type DefaultHandlers struct {
@@ -20,9 +26,32 @@ type DefaultHandlers struct {
 	// follow-ups.
 	CodeCallEdgeWriter SharedProjectionEdgeWriter
 
+	// SQLRelationshipEdgeWriter writes canonical SQL relationship edges
+	// (REFERENCES_TABLE, HAS_COLUMN, TRIGGERS) from reducer-owned SQL entity
+	// metadata.
+	SQLRelationshipEdgeWriter SharedProjectionEdgeWriter
+
+	// InheritanceEdgeWriter writes canonical INHERITS edges from reducer-owned
+	// parser entity bases metadata.
+	InheritanceEdgeWriter SharedProjectionEdgeWriter
+
 	// CanonicalNodeChecker checks whether canonical code entity nodes exist in
 	// the graph. Optional; nil disables the pre-flight check.
 	CanonicalNodeChecker CanonicalNodeChecker
+
+	// Cross-repo relationship resolution adapters. All optional; nil disables
+	// cross-repo resolution during deployment_mapping reduction.
+	EvidenceFactLoader EvidenceFactLoader
+	AssertionLoader    AssertionLoader
+	ResolutionPersister ResolutionPersister
+
+	// RepoDependencyEdgeWriter writes cross-repo dependency edges resolved
+	// from evidence facts. Optional; nil disables cross-repo edge writes.
+	RepoDependencyEdgeWriter SharedProjectionEdgeWriter
+
+	// Tracer and Instruments for cross-repo resolution telemetry.
+	Tracer      trace.Tracer
+	Instruments *telemetry.Instruments
 }
 
 // NewDefaultRegistry constructs the canonical reducer catalog for the domains
@@ -61,10 +90,22 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 		case DomainCloudAssetResolution:
 			def.Handler = CloudAssetResolutionHandler{Writer: handlers.CloudAssetResolutionWriter}
 		case DomainDeploymentMapping:
+			var crossRepoResolver *CrossRepoRelationshipHandler
+			if handlers.EvidenceFactLoader != nil && handlers.RepoDependencyEdgeWriter != nil {
+				crossRepoResolver = &CrossRepoRelationshipHandler{
+					EvidenceLoader: handlers.EvidenceFactLoader,
+					Assertions:     handlers.AssertionLoader,
+					Persister:      handlers.ResolutionPersister,
+					EdgeWriter:     handlers.RepoDependencyEdgeWriter,
+					Tracer:         handlers.Tracer,
+					Instruments:    handlers.Instruments,
+				}
+			}
 			def.Handler = PlatformMaterializationHandler{
 				Writer:                     handlers.PlatformMaterializationWriter,
 				FactLoader:                 handlers.FactLoader,
 				InfrastructureMaterializer: handlers.InfrastructurePlatformMaterializer,
+				CrossRepoResolver:          crossRepoResolver,
 			}
 		case DomainWorkloadMaterialization:
 			def.Handler = WorkloadMaterializationHandler{
@@ -81,6 +122,16 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			def.Handler = SemanticEntityMaterializationHandler{
 				FactLoader: handlers.FactLoader,
 				Writer:     handlers.SemanticEntityWriter,
+			}
+		case DomainSQLRelationshipMaterialization:
+			def.Handler = SQLRelationshipMaterializationHandler{
+				FactLoader: handlers.FactLoader,
+				EdgeWriter: handlers.SQLRelationshipEdgeWriter,
+			}
+		case DomainInheritanceMaterialization:
+			def.Handler = InheritanceMaterializationHandler{
+				FactLoader: handlers.FactLoader,
+				EdgeWriter: handlers.InheritanceEdgeWriter,
 			}
 		default:
 			continue

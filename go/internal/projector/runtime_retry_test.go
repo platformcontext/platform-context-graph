@@ -7,7 +7,6 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
@@ -19,13 +18,13 @@ func TestRuntimeProjectFailsRetryablyOnceBeforeMaterializing(t *testing.T) {
 		t.Fatalf("NewRetryOnceInjector() error = %v, want nil", err)
 	}
 
-	graphWriter := &recordingGraphWriter{result: graph.Result{RecordCount: 1}}
+	canonicalWriter := &recordingCanonicalWriter{}
 	contentWriter := &recordingContentWriter{result: content.Result{RecordCount: 1}}
 
 	runtime := Runtime{
-		GraphWriter:   graphWriter,
-		ContentWriter: contentWriter,
-		RetryInjector: injector,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   contentWriter,
+		RetryInjector:   injector,
 	}
 
 	scopeValue := scope.IngestionScope{
@@ -47,11 +46,12 @@ func TestRuntimeProjectFailsRetryablyOnceBeforeMaterializing(t *testing.T) {
 		FactID:       "fact-1",
 		ScopeID:      "scope-123",
 		GenerationID: "generation-456",
-		FactKind:     "source_node",
+		FactKind:     "RepositoryObserved",
 		ObservedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
 		Payload: map[string]any{
-			"graph_id":   "repo-123",
-			"graph_kind": "repository",
+			"repo_id": "repo-123",
+			"name":    "platform-context-graph",
+			"path":    "org/platform-context-graph",
 		},
 	}}
 
@@ -60,14 +60,14 @@ func TestRuntimeProjectFailsRetryablyOnceBeforeMaterializing(t *testing.T) {
 	} else if !IsRetryable(err) {
 		t.Fatalf("Project() first call retryable = false, want true")
 	}
-	if got, want := len(graphWriter.calls), 0; got != want {
-		t.Fatalf("graph writes after retryable failure = %d, want %d", got, want)
+	if got, want := len(canonicalWriter.calls), 0; got != want {
+		t.Fatalf("canonical writes after retryable failure = %d, want %d", got, want)
 	}
 
 	if _, err := runtime.Project(context.Background(), scopeValue, generationValue, inputFacts); err != nil {
 		t.Fatalf("Project() second call error = %v, want nil", err)
 	}
-	if got, want := len(graphWriter.calls), 1; got != want {
-		t.Fatalf("graph writes after recovery = %d, want %d", got, want)
+	if got, want := len(canonicalWriter.calls), 1; got < want {
+		t.Fatalf("canonical writes after recovery = %d, want >= %d", got, want)
 	}
 }

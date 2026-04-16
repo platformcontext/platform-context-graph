@@ -228,5 +228,35 @@ func DefaultDomainDefinitions() []DomainDefinition {
 				},
 			},
 		},
+		{
+			Domain:  DomainSQLRelationshipMaterialization,
+			Summary: "materialize canonical SQL relationship edges from parser SQL entity metadata",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+			TruthContract: truth.Contract{
+				CanonicalKind: "sql_relationship_materialization",
+				SourceLayers: []truth.Layer{
+					truth.LayerSourceDeclaration,
+				},
+			},
+		},
+		{
+			Domain:  DomainInheritanceMaterialization,
+			Summary: "materialize canonical inheritance edges from parser entity bases metadata",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+			TruthContract: truth.Contract{
+				CanonicalKind: "inheritance_materialization",
+				SourceLayers: []truth.Layer{
+					truth.LayerSourceDeclaration,
+				},
+			},
+		},
 	}
 }

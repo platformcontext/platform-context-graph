@@ -8,7 +8,6 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
@@ -24,7 +23,7 @@ func TestBuildIngesterServiceProducesCompositeRunner(t *testing.T) {
 
 	runner, err := buildIngesterService(
 		postgres.SQLDB{},
-		&graph.MemoryWriter{},
+		&noopCanonicalWriter{},
 		func(string) string { return "" },
 		func() (string, error) { return t.TempDir(), nil },
 		func() []string { return []string{"PATH=/usr/bin"} },

@@ -20,7 +20,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
@@ -33,7 +32,7 @@ type bootstrapDB interface {
 }
 
 type graphDeps struct {
-	writer graph.Writer
+	writer projector.CanonicalWriter
 	close  func() error
 }
 
@@ -53,7 +52,7 @@ type openBootstrapDBFn func(context.Context, func(string) string) (bootstrapDB, 
 type applyBootstrapFn func(context.Context, bootstrapDB) error
 type openGraphFn func(context.Context, func(string) string, trace.Tracer, *telemetry.Instruments) (graphDeps, error)
 type buildCollectorFn func(context.Context, bootstrapDB, func(string) string, trace.Tracer, *telemetry.Instruments, *slog.Logger) (collectorDeps, error)
-type buildProjectorFn func(context.Context, bootstrapDB, graph.Writer, func(string) string, trace.Tracer, *telemetry.Instruments) (projectorDeps, error)
+type buildProjectorFn func(context.Context, bootstrapDB, projector.CanonicalWriter, func(string) string, trace.Tracer, *telemetry.Instruments) (projectorDeps, error)
 
 func main() {
 	if err := run(
@@ -687,7 +686,7 @@ func applySchema(ctx context.Context, db bootstrapDB) error {
 }
 
 func openBootstrapGraph(ctx context.Context, getenv func(string) string, tracer trace.Tracer, instruments *telemetry.Instruments) (graphDeps, error) {
-	writer, closer, err := openBootstrapGraphWriter(ctx, getenv, tracer, instruments)
+	writer, closer, err := openBootstrapCanonicalWriter(ctx, getenv, tracer, instruments)
 	if err != nil {
 		return graphDeps{}, err
 	}

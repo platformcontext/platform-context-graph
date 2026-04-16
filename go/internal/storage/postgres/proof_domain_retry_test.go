@@ -47,7 +47,7 @@ func TestProofDomainReplayRetryReplacesStaleProjectionState(t *testing.T) {
 		FreshnessHint: "fingerprint-bbb",
 	}
 
-	graphWriter := &recordingGraphWriter{}
+	canonicalWriter := &recordingCanonicalWriter{}
 	contentWriter := &recordingContentWriter{}
 
 	if err := store.CommitScopeGeneration(
@@ -58,7 +58,7 @@ func TestProofDomainReplayRetryReplacesStaleProjectionState(t *testing.T) {
 	); err != nil {
 		t.Fatalf("CommitScopeGeneration() generation A error = %v, want nil", err)
 	}
-	runProofProjectorCycleWithWriters(t, db, now, nil, graphWriter, contentWriter)
+	runProofProjectorCycleWithWriters(t, db, now, nil, canonicalWriter, contentWriter)
 
 	if got, want := db.activeGenerationID(scopeValue.ScopeID), generationA.GenerationID; got != want {
 		t.Fatalf("active generation after generation A = %q, want %q", got, want)
@@ -89,7 +89,7 @@ func TestProofDomainReplayRetryReplacesStaleProjectionState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRetryOnceInjector() error = %v, want nil", err)
 	}
-	runProofProjectorCycleWithWriters(t, db, now.Add(2*time.Second), injector, graphWriter, contentWriter)
+	runProofProjectorCycleWithWriters(t, db, now.Add(2*time.Second), injector, canonicalWriter, contentWriter)
 
 	if got, want := db.activeGenerationID(scopeValue.ScopeID), generationA.GenerationID; got != want {
 		t.Fatalf("active generation after injected retry = %q, want %q", got, want)
@@ -103,7 +103,7 @@ func TestProofDomainReplayRetryReplacesStaleProjectionState(t *testing.T) {
 		db,
 		now.Add(4*time.Second),
 		nil,
-		graphWriter,
+		canonicalWriter,
 		contentWriter,
 	)
 

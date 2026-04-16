@@ -129,6 +129,9 @@ func buildReducerService(
 ) (reducer.Service, error) {
 	sharedCfg := reducer.LoadSharedProjectionConfig(getenv)
 
+	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
+	relationshipStore := postgres.NewRelationshipStore(database)
+
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
 		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
 		CloudAssetResolutionWriter:         reducer.PostgresCloudAssetResolutionWriter{DB: database},
@@ -136,8 +139,14 @@ func buildReducerService(
 		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
 		FactLoader:                         postgres.NewFactStore(database),
-		CodeCallEdgeWriter:                 sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv)),
+		CodeCallEdgeWriter:                 edgeWriterForHandlers,
 		CanonicalNodeChecker:               sourceneo4j.NewCanonicalNodeChecker(neo4jReader),
+		EvidenceFactLoader:                 relationshipStore,
+		AssertionLoader:                    relationshipStore,
+		ResolutionPersister:                relationshipStore,
+		RepoDependencyEdgeWriter:           edgeWriterForHandlers,
+		Tracer:                             tracer,
+		Instruments:                        instruments,
 	})
 	if err != nil {
 		return reducer.Service{}, err

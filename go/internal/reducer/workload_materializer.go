@@ -38,6 +38,15 @@ func NewWorkloadMaterializer(executor CypherExecutor) *WorkloadMaterializer {
 	return &WorkloadMaterializer{executor: executor}
 }
 
+// CypherExecutor returns the underlying reducer Cypher executor.
+func (m *WorkloadMaterializer) CypherExecutor() CypherExecutor {
+	if m == nil {
+		return nil
+	}
+
+	return m.executor
+}
+
 // batchSize returns the configured batch size or DefaultMaterializerBatchSize if zero.
 func (m *WorkloadMaterializer) batchSize() int {
 	if m.BatchSize <= 0 {

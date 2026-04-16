@@ -170,6 +170,47 @@ func (s *RelationshipStore) UpsertEvidenceFacts(
 	return nil
 }
 
+// ListEvidenceFacts returns stored evidence facts for a generation.
+func (s *RelationshipStore) ListEvidenceFacts(
+	ctx context.Context,
+	generationID string,
+) ([]relationships.EvidenceFact, error) {
+	sqlRows, err := s.db.QueryContext(ctx, listEvidenceFactsByGenerationSQL, generationID)
+	if err != nil {
+		return nil, fmt.Errorf("list evidence facts: %w", err)
+	}
+	defer func() { _ = sqlRows.Close() }()
+
+	var result []relationships.EvidenceFact
+	for sqlRows.Next() {
+		var f relationships.EvidenceFact
+		var evidenceKind, relType string
+		var detailsBytes []byte
+		if err := sqlRows.Scan(
+			&evidenceKind,
+			&relType,
+			&f.SourceRepoID,
+			&f.TargetRepoID,
+			&f.SourceEntityID,
+			&f.TargetEntityID,
+			&f.Confidence,
+			&f.Rationale,
+			&detailsBytes,
+		); err != nil {
+			return nil, fmt.Errorf("scan evidence fact: %w", err)
+		}
+		f.EvidenceKind = relationships.EvidenceKind(evidenceKind)
+		f.RelationshipType = relationships.RelationshipType(relType)
+		if len(detailsBytes) > 0 {
+			if err := json.Unmarshal(detailsBytes, &f.Details); err != nil {
+				return nil, fmt.Errorf("unmarshal evidence details: %w", err)
+			}
+		}
+		result = append(result, f)
+	}
+	return result, sqlRows.Err()
+}
+
 // UpsertCandidates persists relationship candidates for a generation.
 func (s *RelationshipStore) UpsertCandidates(
 	ctx context.Context,

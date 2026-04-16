@@ -177,6 +177,18 @@ INSERT INTO resolved_relationships (
 ON CONFLICT (resolved_id) DO NOTHING
 `
 
+const listEvidenceFactsByGenerationSQL = `
+SELECT evidence_kind, relationship_type,
+       COALESCE(source_repo_id, ''),
+       COALESCE(target_repo_id, ''),
+       COALESCE(source_entity_id, ''),
+       COALESCE(target_entity_id, ''),
+       confidence, rationale, details
+FROM relationship_evidence_facts
+WHERE generation_id = $1
+ORDER BY observed_at ASC, evidence_id ASC
+`
+
 const listResolvedSQL = `
 SELECT r.source_repo_id, r.target_repo_id,
        COALESCE(r.source_entity_id, r.source_repo_id),

@@ -402,7 +402,7 @@ func runProofProjectorCycleWithInjector(
 		db,
 		now,
 		retryInjector,
-		&recordingGraphWriter{},
+		&recordingCanonicalWriter{},
 		&recordingContentWriter{},
 	)
 }
@@ -412,13 +412,13 @@ func runProofProjectorCycleWithWriters(
 	db *proofDomainDB,
 	now time.Time,
 	retryInjector projector.RetryInjector,
-	graphWriter *recordingGraphWriter,
+	canonicalWriter *recordingCanonicalWriter,
 	contentWriter *recordingContentWriter,
 ) {
 	t.Helper()
 
-	if graphWriter == nil {
-		graphWriter = &recordingGraphWriter{}
+	if canonicalWriter == nil {
+		canonicalWriter = &recordingCanonicalWriter{}
 	}
 	if contentWriter == nil {
 		contentWriter = &recordingContentWriter{}
@@ -436,10 +436,10 @@ func runProofProjectorCycleWithWriters(
 		WorkSource:   projectorQueue,
 		FactStore:    NewFactStore(db),
 		Runner: projector.Runtime{
-			GraphWriter:   graphWriter,
-			ContentWriter: contentWriter,
-			IntentWriter:  ReducerQueue{db: db, LeaseOwner: "reducer-1", LeaseDuration: time.Minute, Now: func() time.Time { return now }},
-			RetryInjector: retryInjector,
+			CanonicalWriter: canonicalWriter,
+			ContentWriter:   contentWriter,
+			IntentWriter:    ReducerQueue{db: db, LeaseOwner: "reducer-1", LeaseDuration: time.Minute, Now: func() time.Time { return now }},
+			RetryInjector:   retryInjector,
 		},
 		WorkSink: projectorQueue,
 		Wait:     func(context.Context, time.Duration) error { return context.Canceled },

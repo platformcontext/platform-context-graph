@@ -199,7 +199,9 @@ func TestNewDefaultRegistryRegistersImplementedDomainsOnly(t *testing.T) {
 		DomainCloudAssetResolution,
 		DomainCodeCallMaterialization,
 		DomainDeploymentMapping,
+		DomainInheritanceMaterialization,
 		DomainSemanticEntityMaterialization,
+		DomainSQLRelationshipMaterialization,
 		DomainWorkloadIdentity,
 		DomainWorkloadMaterialization,
 	}; !slices.Equal(got, want) {

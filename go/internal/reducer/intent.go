@@ -33,6 +33,12 @@ const (
 	// DomainSemanticEntityMaterialization materializes Annotation, Typedef,
 	// TypeAlias, and Component semantic nodes.
 	DomainSemanticEntityMaterialization Domain = "semantic_entity_materialization"
+	// DomainSQLRelationshipMaterialization materializes canonical SQL
+	// relationship edges (REFERENCES_TABLE, HAS_COLUMN, TRIGGERS).
+	DomainSQLRelationshipMaterialization Domain = "sql_relationship_materialization"
+	// DomainInheritanceMaterialization materializes canonical inheritance edges
+	// from parser entity bases metadata.
+	DomainInheritanceMaterialization Domain = "inheritance_materialization"
 )
 
 // IntentStatus captures the durable reducer intent lifecycle state.

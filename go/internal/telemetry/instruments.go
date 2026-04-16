@@ -79,6 +79,19 @@ type Instruments struct {
 	Neo4jBatchSize       metric.Float64Histogram
 	Neo4jBatchesExecuted metric.Int64Counter
 
+	// Canonical projection metrics
+	CanonicalNodesWritten      metric.Int64Counter
+	CanonicalEdgesWritten      metric.Int64Counter
+	CanonicalProjectionDuration metric.Float64Histogram
+	CanonicalRetractDuration   metric.Float64Histogram
+	CanonicalBatchSize         metric.Float64Histogram
+	CanonicalPhaseDuration     metric.Float64Histogram
+
+	// Cross-repo resolution metrics
+	CrossRepoResolutionDuration metric.Float64Histogram
+	CrossRepoEvidenceLoaded     metric.Int64Counter
+	CrossRepoEdgesResolved      metric.Int64Counter
+
 	// Pipeline overlap metric — how long collector and projector ran concurrently
 	PipelineOverlapDuration metric.Float64Histogram
 
@@ -394,6 +407,94 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 		return nil, fmt.Errorf("register Neo4jBatchesExecuted counter: %w", err)
 	}
 
+	// Canonical projection instruments
+	inst.CanonicalNodesWritten, err = meter.Int64Counter(
+		"pcg_dp_canonical_nodes_written_total",
+		metric.WithDescription("Total canonical nodes written to Neo4j, labeled by node type"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CanonicalNodesWritten counter: %w", err)
+	}
+
+	inst.CanonicalEdgesWritten, err = meter.Int64Counter(
+		"pcg_dp_canonical_edges_written_total",
+		metric.WithDescription("Total canonical edges written to Neo4j, labeled by edge type"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CanonicalEdgesWritten counter: %w", err)
+	}
+
+	canonicalProjectionBuckets := []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
+	inst.CanonicalProjectionDuration, err = meter.Float64Histogram(
+		"pcg_dp_canonical_projection_duration_seconds",
+		metric.WithDescription("Total canonical projection duration per repository"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(canonicalProjectionBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CanonicalProjectionDuration histogram: %w", err)
+	}
+
+	canonicalRetractBuckets := []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5}
+	inst.CanonicalRetractDuration, err = meter.Float64Histogram(
+		"pcg_dp_canonical_retract_duration_seconds",
+		metric.WithDescription("Duration of canonical node retraction per repository"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(canonicalRetractBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CanonicalRetractDuration histogram: %w", err)
+	}
+
+	canonicalBatchBuckets := []float64{1, 10, 50, 100, 250, 500, 1000}
+	inst.CanonicalBatchSize, err = meter.Float64Histogram(
+		"pcg_dp_canonical_batch_size",
+		metric.WithDescription("Rows per canonical UNWIND batch execution"),
+		metric.WithExplicitBucketBoundaries(canonicalBatchBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CanonicalBatchSize histogram: %w", err)
+	}
+
+	canonicalPhaseBuckets := []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
+	inst.CanonicalPhaseDuration, err = meter.Float64Histogram(
+		"pcg_dp_canonical_phase_duration_seconds",
+		metric.WithDescription("Duration of each canonical write phase (repository, directories, files, entities, etc.)"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(canonicalPhaseBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CanonicalPhaseDuration histogram: %w", err)
+	}
+
+	// Cross-repo resolution instruments
+	crossRepoBuckets := []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
+	inst.CrossRepoResolutionDuration, err = meter.Float64Histogram(
+		"pcg_dp_cross_repo_resolution_duration_seconds",
+		metric.WithDescription("Duration of cross-repo relationship resolution per generation"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(crossRepoBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CrossRepoResolutionDuration histogram: %w", err)
+	}
+
+	inst.CrossRepoEvidenceLoaded, err = meter.Int64Counter(
+		"pcg_dp_cross_repo_evidence_loaded_total",
+		metric.WithDescription("Total evidence facts loaded for cross-repo resolution"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CrossRepoEvidenceLoaded counter: %w", err)
+	}
+
+	inst.CrossRepoEdgesResolved, err = meter.Int64Counter(
+		"pcg_dp_cross_repo_edges_resolved_total",
+		metric.WithDescription("Total dependency edges resolved from cross-repo evidence"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CrossRepoEdgesResolved counter: %w", err)
+	}
+
 	pipelineOverlapBuckets := []float64{1, 5, 10, 30, 60, 120, 300, 600, 1800}
 	inst.PipelineOverlapDuration, err = meter.Float64Histogram(
 		"pcg_dp_pipeline_overlap_seconds",
@@ -546,6 +647,21 @@ func AttrRepoSizeTier(v string) attribute.KeyValue {
 // AttrSkipReason returns a skip_reason attribute for discovery skip metrics.
 func AttrSkipReason(v string) attribute.KeyValue {
 	return attribute.String(MetricDimensionSkipReason, v)
+}
+
+// AttrNodeType returns a node_type attribute for canonical write metrics.
+func AttrNodeType(v string) attribute.KeyValue {
+	return attribute.String(MetricDimensionNodeType, v)
+}
+
+// AttrEdgeType returns an edge_type attribute for canonical write metrics.
+func AttrEdgeType(v string) attribute.KeyValue {
+	return attribute.String(MetricDimensionEdgeType, v)
+}
+
+// AttrWritePhase returns a write_phase attribute for canonical phase metrics.
+func AttrWritePhase(v string) attribute.KeyValue {
+	return attribute.String(MetricDimensionWritePhase, v)
 }
 
 // RecordGOMEMLIMIT registers and records the applied GOMEMLIMIT as a gauge.

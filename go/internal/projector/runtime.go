@@ -14,19 +14,23 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
+// CanonicalWriter writes canonical Neo4j nodes from a CanonicalMaterialization.
+type CanonicalWriter interface {
+	Write(context.Context, CanonicalMaterialization) error
+}
+
 type Runtime struct {
-	GraphWriter   graph.Writer
-	ContentWriter content.Writer
-	IntentWriter  ReducerIntentWriter
-	RetryInjector RetryInjector
-	Tracer        trace.Tracer           // optional
-	Instruments   *telemetry.Instruments // optional
+	CanonicalWriter CanonicalWriter        // replaces GraphWriter — canonical graph projection
+	ContentWriter   content.Writer
+	IntentWriter    ReducerIntentWriter
+	RetryInjector   RetryInjector
+	Tracer          trace.Tracer           // optional
+	Instruments     *telemetry.Instruments // optional
 }
 
 type ReducerIntent struct {
@@ -54,7 +58,6 @@ type ReducerIntentWriter interface {
 type Result struct {
 	ScopeID      string
 	GenerationID string
-	Graph        graph.Result
 	Content      content.Result
 	Intents      IntentResult
 }
@@ -103,37 +106,36 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 		}
 	}
 
-	if len(projection.graphMaterialization.Records) > 0 {
-		if r.GraphWriter == nil {
-			return Result{}, errors.New("graph writer is required when graph records are present")
+	// Stage: Canonical graph projection (replaces SourceLocalRecord)
+	if !projection.canonical.IsEmpty() {
+		if r.CanonicalWriter == nil {
+			return Result{}, errors.New("canonical writer is required when canonical data is present")
 		}
 
-		writeStart := time.Now()
+		canonicalStart := time.Now()
 		if r.Tracer != nil {
-			var writeSpan trace.Span
-			ctx, writeSpan = r.Tracer.Start(ctx, telemetry.SpanCanonicalWrite)
-			defer writeSpan.End()
+			var canonicalSpan trace.Span
+			ctx, canonicalSpan = r.Tracer.Start(ctx, telemetry.SpanCanonicalProjection)
+			defer canonicalSpan.End()
 		}
 
-		graphResult, err := r.GraphWriter.Write(ctx, projection.graphMaterialization)
-		if err != nil {
-			return Result{}, fmt.Errorf("write graph materialization: %w", err)
+		if err := r.CanonicalWriter.Write(ctx, projection.canonical); err != nil {
+			return Result{}, fmt.Errorf("write canonical projection: %w", err)
 		}
 
 		if r.Instruments != nil {
-			r.Instruments.CanonicalWriteDuration.Record(ctx, time.Since(writeStart).Seconds(), metric.WithAttributes(
+			canonicalDur := time.Since(canonicalStart).Seconds()
+			r.Instruments.CanonicalProjectionDuration.Record(ctx, canonicalDur, metric.WithAttributes(
 				telemetry.AttrScopeID(scopeValue.ScopeID),
 			))
 			r.Instruments.CanonicalWrites.Add(ctx, 1, metric.WithAttributes(
 				telemetry.AttrScopeID(scopeValue.ScopeID),
 			))
-			r.Instruments.ProjectorStageDuration.Record(ctx, time.Since(writeStart).Seconds(), metric.WithAttributes(
+			r.Instruments.ProjectorStageDuration.Record(ctx, canonicalDur, metric.WithAttributes(
 				telemetry.AttrScopeID(scopeValue.ScopeID),
-				attribute.String("stage", "graph_write"),
+				attribute.String("stage", "canonical_write"),
 			))
 		}
-
-		result.Graph = graphResult
 	}
 
 	if len(projection.contentMaterialization.Records) > 0 || len(projection.contentMaterialization.Entities) > 0 {
@@ -191,17 +193,12 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 }
 
 type projection struct {
-	graphMaterialization   graph.Materialization
+	canonical              CanonicalMaterialization
 	contentMaterialization content.Materialization
 	reducerIntents         []ReducerIntent
 }
 
 func buildProjection(scopeValue scope.IngestionScope, generation scope.ScopeGeneration, inputFacts []facts.Envelope) (projection, error) {
-	graphMaterialization := graph.Materialization{
-		ScopeID:      scopeValue.ScopeID,
-		GenerationID: generation.GenerationID,
-		SourceSystem: scopeValue.SourceSystem,
-	}
 	contentMaterialization := content.Materialization{
 		RepoID:       scopeRepoID(scopeValue),
 		ScopeID:      scopeValue.ScopeID,
@@ -216,9 +213,6 @@ func buildProjection(scopeValue scope.IngestionScope, generation scope.ScopeGene
 			return projection{}, err
 		}
 
-		if record, ok := buildGraphRecord(fact); ok {
-			graphMaterialization.Records = append(graphMaterialization.Records, record)
-		}
 		if record, ok := buildContentRecord(fact); ok {
 			contentMaterialization.Records = append(contentMaterialization.Records, record)
 		}
@@ -245,8 +239,11 @@ func buildProjection(scopeValue scope.IngestionScope, generation scope.ScopeGene
 		return left.FactID < right.FactID
 	})
 
+	// Build canonical materialization for Neo4j graph writes.
+	canonical := buildCanonicalMaterialization(scopeValue, generation, inputFacts)
+
 	return projection{
-		graphMaterialization:   graphMaterialization,
+		canonical:              canonical,
 		contentMaterialization: contentMaterialization,
 		reducerIntents:         intents,
 	}, nil
@@ -269,25 +266,6 @@ func validateFactBoundary(scopeValue scope.IngestionScope, generation scope.Scop
 	}
 
 	return nil
-}
-
-func buildGraphRecord(fact facts.Envelope) (graph.Record, bool) {
-	graphID, ok := payloadString(fact.Payload, "graph_id")
-	if !ok {
-		return graph.Record{}, false
-	}
-
-	kind, _ := payloadString(fact.Payload, "graph_kind")
-	if kind == "" {
-		kind = fact.FactKind
-	}
-
-	return graph.Record{
-		RecordID:   graphID,
-		Kind:       kind,
-		Deleted:    fact.IsTombstone,
-		Attributes: payloadAttributes(fact.Payload, "graph_id", "graph_kind"),
-	}, true
 }
 
 func buildContentRecord(fact facts.Envelope) (content.Record, bool) {

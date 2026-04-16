@@ -11,7 +11,6 @@ import (
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -25,7 +24,7 @@ const (
 
 func buildProjectorService(
 	database postgres.SQLDB,
-	graphWriter graph.Writer,
+	canonicalWriter projector.CanonicalWriter,
 	getenv func(string) string,
 ) (projector.Service, error) {
 	projectorQueue := postgres.NewProjectorQueue(database, "projector", time.Minute)
@@ -45,31 +44,31 @@ func buildProjectorService(
 		PollInterval: time.Second,
 		WorkSource:   projectorQueue,
 		FactStore:    postgres.NewFactStore(database),
-		Runner:       buildProjectorRuntime(database, graphWriter, reducerQueue, retryInjector),
+		Runner:       buildProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector),
 		WorkSink:     projectorQueue,
 	}, nil
 }
 
 func buildProjectorRuntime(
 	database postgres.SQLDB,
-	graphWriter graph.Writer,
+	canonicalWriter projector.CanonicalWriter,
 	intentWriter projector.ReducerIntentWriter,
 	retryInjector projector.RetryInjector,
 ) projector.Runtime {
 	return projector.Runtime{
-		GraphWriter:   graphWriter,
-		ContentWriter: postgres.NewContentWriter(database),
-		IntentWriter:  intentWriter,
-		RetryInjector: retryInjector,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   postgres.NewContentWriter(database),
+		IntentWriter:    intentWriter,
+		RetryInjector:   retryInjector,
 	}
 }
 
-func openProjectorGraphWriter(
+func openProjectorCanonicalWriter(
 	parent context.Context,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
-) (graph.Writer, io.Closer, error) {
+) (projector.CanonicalWriter, io.Closer, error) {
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err
@@ -86,10 +85,7 @@ func openProjectorGraphWriter(
 		Instruments: instruments,
 	}
 
-	return sourceneo4j.Adapter{
-			Executor:  instrumentedExecutor,
-			BatchSize: neo4jBatchSize(getenv),
-		},
+	return sourceneo4j.NewCanonicalNodeWriter(instrumentedExecutor, neo4jBatchSize(getenv), instruments),
 		projectorNeo4jDriverCloser{Driver: driver},
 		nil
 }

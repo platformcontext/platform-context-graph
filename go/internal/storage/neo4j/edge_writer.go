@@ -97,6 +97,10 @@ func batchCypherForDomain(domain string) (string, error) {
 		return batchCanonicalWorkloadDependencyUpsertCypher, nil
 	case reducer.DomainCodeCalls:
 		return batchCanonicalCodeCallUpsertCypher, nil
+	case reducer.DomainInheritanceEdges:
+		return batchCanonicalInheritanceEdgeUpsertCypher, nil
+	case reducer.DomainSQLRelationships:
+		return batchCanonicalSQLRelationshipUpsertCypher, nil
 	default:
 		return "", fmt.Errorf("unsupported domain for write: %q", domain)
 	}
@@ -183,6 +187,32 @@ func buildRowMap(
 		}
 		return rowMap, true
 
+	case reducer.DomainInheritanceEdges:
+		childEntityID := payloadString(row.Payload, "child_entity_id")
+		parentEntityID := payloadString(row.Payload, "parent_entity_id")
+		if childEntityID == "" || parentEntityID == "" {
+			return nil, false
+		}
+		return map[string]any{
+			"child_entity_id":  childEntityID,
+			"parent_entity_id": parentEntityID,
+			"relationship_type": payloadString(row.Payload, "relationship_type"),
+			"evidence_source":  evidenceSource,
+		}, true
+
+	case reducer.DomainSQLRelationships:
+		sourceEntityID := payloadString(row.Payload, "source_entity_id")
+		targetEntityID := payloadString(row.Payload, "target_entity_id")
+		if sourceEntityID == "" || targetEntityID == "" {
+			return nil, false
+		}
+		return map[string]any{
+			"source_entity_id":  sourceEntityID,
+			"target_entity_id":  targetEntityID,
+			"relationship_type": payloadString(row.Payload, "relationship_type"),
+			"evidence_source":   evidenceSource,
+		}, true
+
 	default:
 		return nil, false
 	}
@@ -226,6 +256,10 @@ func buildRetractStatement(
 		return BuildRetractWorkloadDependencyEdges(repoIDs, evidenceSource), nil
 	case reducer.DomainCodeCalls:
 		return BuildRetractCodeCallEdges(repoIDs, evidenceSource), nil
+	case reducer.DomainInheritanceEdges:
+		return BuildRetractInheritanceEdges(repoIDs, evidenceSource), nil
+	case reducer.DomainSQLRelationships:
+		return BuildRetractSQLRelationshipEdges(repoIDs, evidenceSource), nil
 	default:
 		return Statement{}, fmt.Errorf("unsupported domain for retract: %q", domain)
 	}

@@ -11,17 +11,17 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
+	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
-type recordingGraphWriter struct {
-	calls []graph.Materialization
+type recordingCanonicalWriter struct {
+	calls []projector.CanonicalMaterialization
 }
 
-func (w *recordingGraphWriter) Write(_ context.Context, materialization graph.Materialization) (graph.Result, error) {
-	w.calls = append(w.calls, materialization.Clone())
-	return graph.Result{RecordCount: len(materialization.Records)}, nil
+func (w *recordingCanonicalWriter) Write(_ context.Context, mat projector.CanonicalMaterialization) error {
+	w.calls = append(w.calls, mat)
+	return nil
 }
 
 type recordingContentWriter struct {

@@ -16,7 +16,6 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
@@ -40,7 +39,7 @@ func TestRunAppliesSchemaAndDrainsCollectorAndProjector(t *testing.T) {
 			return nil
 		},
 		func(context.Context, func(string) string, trace.Tracer, *telemetry.Instruments) (graphDeps, error) {
-			return graphDeps{writer: &graph.MemoryWriter{}, close: func() error { return nil }}, nil
+			return graphDeps{writer: &noopCanonicalWriter{}, close: func() error { return nil }}, nil
 		},
 		func(ctx context.Context, database bootstrapDB, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (collectorDeps, error) {
 			return collectorDeps{
@@ -55,7 +54,7 @@ func TestRunAppliesSchemaAndDrainsCollectorAndProjector(t *testing.T) {
 				committer: &fakeCommitter{},
 			}, nil
 		},
-		func(ctx context.Context, database bootstrapDB, graphWriter graph.Writer, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
+		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
 			return projectorDeps{
 				workSource: &fakeWorkSource{
 					items: []projector.ScopeGenerationWork{
@@ -102,7 +101,7 @@ func TestRunReturnsSchemaError(t *testing.T) {
 			t.Fatal("collector builder should not be called after schema error")
 			return collectorDeps{}, nil
 		},
-		func(ctx context.Context, database bootstrapDB, graphWriter graph.Writer, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
+		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
 			t.Fatal("projector builder should not be called after schema error")
 			return projectorDeps{}, nil
 		},
@@ -131,12 +130,12 @@ func TestRunReturnsCollectorError(t *testing.T) {
 			return nil
 		},
 		func(context.Context, func(string) string, trace.Tracer, *telemetry.Instruments) (graphDeps, error) {
-			return graphDeps{writer: &graph.MemoryWriter{}, close: func() error { return nil }}, nil
+			return graphDeps{writer: &noopCanonicalWriter{}, close: func() error { return nil }}, nil
 		},
 		func(ctx context.Context, database bootstrapDB, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (collectorDeps, error) {
 			return collectorDeps{}, collectorErr
 		},
-		func(ctx context.Context, database bootstrapDB, graphWriter graph.Writer, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
+		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
 			t.Fatal("projector builder should not be called after collector error")
 			return projectorDeps{}, nil
 		},
@@ -680,4 +679,10 @@ func (f *failingProjectionRunner) Project(
 		return projector.Result{}, f.err
 	}
 	return projector.Result{}, nil
+}
+
+type noopCanonicalWriter struct{}
+
+func (*noopCanonicalWriter) Write(_ context.Context, _ projector.CanonicalMaterialization) error {
+	return nil
 }

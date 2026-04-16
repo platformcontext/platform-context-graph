@@ -66,12 +66,12 @@ func run(parent context.Context) error {
 		return fmt.Errorf("register observable gauges: %w", err)
 	}
 
-	graphWriter, graphCloser, err := openIngesterGraphWriter(parent, os.Getenv, tracer, instruments)
+	canonicalWriter, canonicalCloser, err := openIngesterCanonicalWriter(parent, os.Getenv, tracer, instruments)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = graphCloser.Close()
+		_ = canonicalCloser.Close()
 	}()
 
 	instrumentedDB := &postgres.InstrumentedDB{
@@ -83,7 +83,7 @@ func run(parent context.Context) error {
 
 	runner, err := buildIngesterService(
 		instrumentedDB,
-		graphWriter,
+		canonicalWriter,
 		os.Getenv,
 		os.Getwd,
 		os.Environ,

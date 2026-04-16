@@ -142,7 +142,7 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 		Now:           func() time.Time { return now },
 	}
 	factStore := NewFactStore(db)
-	graphWriter := &recordingGraphWriter{}
+	canonicalWriter := &recordingCanonicalWriter{}
 	contentWriter := &recordingContentWriter{}
 	reducerQueue := ReducerQueue{
 		db:            db,
@@ -151,9 +151,9 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 		Now:           func() time.Time { return now },
 	}
 	projectorRuntime := projector.Runtime{
-		GraphWriter:   graphWriter,
-		ContentWriter: contentWriter,
-		IntentWriter:  reducerQueue,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   contentWriter,
+		IntentWriter:    reducerQueue,
 	}
 	projectorService := projector.Service{
 		PollInterval: time.Millisecond,
@@ -205,14 +205,8 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 		t.Fatalf("reducer service Run() error = %v, want nil", err)
 	}
 
-	if got, want := len(graphWriter.calls), 1; got != want {
-		t.Fatalf("graph writes = %d, want %d", got, want)
-	}
 	if got, want := len(contentWriter.calls), 1; got != want {
 		t.Fatalf("content writes = %d, want %d", got, want)
-	}
-	if got, want := len(graphWriter.calls[0].Records), 1; got != want {
-		t.Fatalf("graph record count = %d, want %d", got, want)
 	}
 	if got, want := len(contentWriter.calls[0].Records), 1; got != want {
 		t.Fatalf("content record count = %d, want %d", got, want)

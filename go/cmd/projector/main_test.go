@@ -6,17 +6,16 @@ import (
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
 func TestBuildProjectorRuntimeWiresPersistentStorageAdapters(t *testing.T) {
 	t.Parallel()
 
-	runtime := buildProjectorRuntime(postgres.SQLDB{}, sourceneo4j.Adapter{}, nil, nil)
+	runtime := buildProjectorRuntime(postgres.SQLDB{}, &noopCanonicalWriter{}, nil, nil)
 
-	if _, ok := runtime.GraphWriter.(sourceneo4j.Adapter); !ok {
-		t.Fatalf("GraphWriter type = %T, want %T", runtime.GraphWriter, sourceneo4j.Adapter{})
+	if runtime.CanonicalWriter == nil {
+		t.Fatal("CanonicalWriter = nil, want non-nil")
 	}
 	if _, ok := runtime.ContentWriter.(postgres.ContentWriter); !ok {
 		t.Fatalf("ContentWriter type = %T, want %T", runtime.ContentWriter, postgres.ContentWriter{})
@@ -28,7 +27,7 @@ func TestBuildProjectorServiceWiresRetryInjectorFromEnv(t *testing.T) {
 
 	service, err := buildProjectorService(
 		postgres.SQLDB{},
-		sourceneo4j.Adapter{},
+		&noopCanonicalWriter{},
 		func(name string) string {
 			if name == projectorRetryOnceScopeGenerationEnv {
 				return "scope-123:generation-456"
@@ -54,7 +53,7 @@ func TestBuildProjectorServiceWiresRetryPolicyFromEnv(t *testing.T) {
 
 	service, err := buildProjectorService(
 		postgres.SQLDB{},
-		sourceneo4j.Adapter{},
+		&noopCanonicalWriter{},
 		func(name string) string {
 			switch name {
 			case "PCG_PROJECTOR_MAX_ATTEMPTS":
@@ -131,7 +130,9 @@ func TestNeo4jBatchSizeReturnsZeroForInvalidInput(t *testing.T) {
 	}
 }
 
-// stubNeo4jExecutor is a no-op executor for tests that don't exercise Neo4j.
-type stubNeo4jExecutor struct{}
+// noopCanonicalWriter is a no-op canonical writer for tests.
+type noopCanonicalWriter struct{}
 
-func (stubNeo4jExecutor) Execute(_ context.Context, _ sourceneo4j.Statement) error { return nil }
+func (*noopCanonicalWriter) Write(_ context.Context, _ projector.CanonicalMaterialization) error {
+	return nil
+}

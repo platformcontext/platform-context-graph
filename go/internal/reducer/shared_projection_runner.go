@@ -33,6 +33,8 @@ var sharedProjectionDomains = []string{
 	DomainRepoDependency,
 	DomainWorkloadDependency,
 	DomainCodeCalls,
+	DomainInheritanceEdges,
+	DomainSQLRelationships,
 }
 
 // SharedProjectionRunnerConfig holds configuration for the shared projection

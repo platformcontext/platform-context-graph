@@ -13,6 +13,8 @@ const (
 	DomainRepoDependency     = "repo_dependency"
 	DomainWorkloadDependency = "workload_dependency"
 	DomainCodeCalls          = "code_calls"
+	DomainSQLRelationships   = "sql_relationships"
+	DomainInheritanceEdges   = "inheritance_edges"
 )
 
 // SharedProjectionIntentRow is one durable shared-domain projection intent.

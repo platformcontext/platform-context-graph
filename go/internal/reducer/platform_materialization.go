@@ -36,11 +36,14 @@ type PlatformMaterializationWriter interface {
 // PlatformMaterializationHandler reduces one platform materialization intent
 // into a bounded canonical write request. When FactLoader and
 // InfrastructureMaterializer are set, the handler also writes
-// PROVISIONS_PLATFORM edges to the canonical graph.
+// PROVISIONS_PLATFORM edges to the canonical graph. When CrossRepoResolver
+// is set, the handler also resolves cross-repo dependency edges from
+// persisted evidence facts after platform materialization completes.
 type PlatformMaterializationHandler struct {
 	Writer                     PlatformMaterializationWriter
 	FactLoader                 FactLoader
 	InfrastructureMaterializer *InfrastructurePlatformMaterializer
+	CrossRepoResolver          *CrossRepoRelationshipHandler
 }
 
 // Handle executes the platform materialization reduction path.
@@ -85,6 +88,16 @@ func (h PlatformMaterializationHandler) Handle(
 			}
 			canonicalWrites += infraResult.PlatformEdgesWritten
 		}
+	}
+
+	// When CrossRepoResolver is provided, resolve cross-repo dependency edges
+	// from persisted evidence facts after platform materialization completes.
+	if h.CrossRepoResolver != nil {
+		crossRepoWrites, err := h.CrossRepoResolver.Resolve(ctx, intent.ScopeID, intent.GenerationID)
+		if err != nil {
+			return Result{}, fmt.Errorf("cross-repo relationship resolution: %w", err)
+		}
+		canonicalWrites += crossRepoWrites
 	}
 
 	evidenceSummary := strings.TrimSpace(writeResult.EvidenceSummary)

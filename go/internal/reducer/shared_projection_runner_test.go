@@ -372,6 +372,104 @@ func TestSharedProjectionRunnerBackoffResetsOnWork(t *testing.T) {
 	t.Errorf("backoff never reset to base interval after work; waits = %v", waits)
 }
 
+func TestSharedProjectionDomainsIncludesAllExpected(t *testing.T) {
+	t.Parallel()
+
+	expected := map[string]bool{
+		DomainPlatformInfra:      false,
+		DomainRepoDependency:     false,
+		DomainWorkloadDependency: false,
+		DomainCodeCalls:          false,
+		DomainInheritanceEdges:   false,
+		DomainSQLRelationships:   false,
+	}
+
+	for _, domain := range sharedProjectionDomains {
+		if _, ok := expected[domain]; !ok {
+			t.Errorf("unexpected domain in sharedProjectionDomains: %q", domain)
+		}
+		expected[domain] = true
+	}
+
+	for domain, found := range expected {
+		if !found {
+			t.Errorf("expected domain %q not found in sharedProjectionDomains", domain)
+		}
+	}
+
+	if got, want := len(sharedProjectionDomains), len(expected); got != want {
+		t.Errorf("sharedProjectionDomains length = %d, want %d", got, want)
+	}
+}
+
+func TestSharedProjectionRunnerProcessesNewDomainIntents(t *testing.T) {
+	t.Parallel()
+
+	reader := &fakeSharedIntentReader{
+		intents: []SharedProjectionIntentRow{
+			{
+				IntentID:         "intent-inh-1",
+				ProjectionDomain: DomainInheritanceEdges,
+				PartitionKey:     "child->parent",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				Payload: map[string]any{
+					"action":            "upsert",
+					"child_entity_id":   "entity:class:child",
+					"parent_entity_id":  "entity:class:parent",
+					"repo_id":           "repo-a",
+					"relationship_type": "INHERITS",
+				},
+				CreatedAt: time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC),
+			},
+			{
+				IntentID:         "intent-sql-1",
+				ProjectionDomain: DomainSQLRelationships,
+				PartitionKey:     "view->table",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				Payload: map[string]any{
+					"action":            "upsert",
+					"source_entity_id":  "entity:sql_view:v1",
+					"target_entity_id":  "entity:sql_table:t1",
+					"repo_id":           "repo-a",
+					"relationship_type": "REFERENCES_TABLE",
+				},
+				CreatedAt: time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	leaseManager := &fakeLeaseManager{granted: true}
+	edgeWriter := &fakeEdgeWriter{}
+
+	runner := SharedProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: leaseManager,
+		EdgeWriter:   edgeWriter,
+		AcceptedGen:  func(_, _ string) (string, bool) { return "gen-1", true },
+		Config: SharedProjectionRunnerConfig{
+			PartitionCount: 1,
+			LeaseOwner:     "test-runner",
+			PollInterval:   10 * time.Millisecond,
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_ = runner.Run(ctx)
+
+	reader.mu.Lock()
+	markedCount := len(reader.marked)
+	reader.mu.Unlock()
+
+	if markedCount < 2 {
+		t.Fatalf("expected at least 2 intents marked completed, got %d", markedCount)
+	}
+}
+
 func TestSharedProjectionRunnerWithTelemetry(t *testing.T) {
 	t.Parallel()
 

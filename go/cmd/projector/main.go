@@ -52,15 +52,15 @@ func run(parent context.Context) error {
 		_ = db.Close()
 	}()
 
-	graphWriter, graphCloser, err := openProjectorGraphWriter(parent, os.Getenv, tracer, instruments)
+	canonicalWriter, canonicalCloser, err := openProjectorCanonicalWriter(parent, os.Getenv, tracer, instruments)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = graphCloser.Close()
+		_ = canonicalCloser.Close()
 	}()
 
-	runner, err := buildProjectorService(postgres.SQLDB{DB: db}, graphWriter, os.Getenv)
+	runner, err := buildProjectorService(postgres.SQLDB{DB: db}, canonicalWriter, os.Getenv)
 	if err != nil {
 		return err
 	}

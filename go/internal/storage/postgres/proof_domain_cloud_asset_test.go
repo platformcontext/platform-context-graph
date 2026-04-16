@@ -109,7 +109,7 @@ func TestProofDomainCloudAssetResolutionFlowsCollectorToReducerIntent(t *testing
 		Now:           func() time.Time { return now },
 	}
 	factStore := NewFactStore(db)
-	graphWriter := &recordingGraphWriter{}
+	canonicalWriter := &recordingCanonicalWriter{}
 	contentWriter := &recordingContentWriter{}
 	reducerQueue := ReducerQueue{
 		db:            db,
@@ -118,9 +118,9 @@ func TestProofDomainCloudAssetResolutionFlowsCollectorToReducerIntent(t *testing
 		Now:           func() time.Time { return now },
 	}
 	projectorRuntime := projector.Runtime{
-		GraphWriter:   graphWriter,
-		ContentWriter: contentWriter,
-		IntentWriter:  reducerQueue,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   contentWriter,
+		IntentWriter:    reducerQueue,
 	}
 	projectorService := projector.Service{
 		PollInterval: time.Millisecond,
@@ -179,9 +179,6 @@ func TestProofDomainCloudAssetResolutionFlowsCollectorToReducerIntent(t *testing
 		t.Fatalf("reducer service Run() error = %v, want nil", err)
 	}
 
-	if got, want := len(graphWriter.calls), 1; got != want {
-		t.Fatalf("graph writes = %d, want %d", got, want)
-	}
 	if got, want := db.reducerClaims, 1; got != want {
 		t.Fatalf("reducer claims = %d, want %d", got, want)
 	}

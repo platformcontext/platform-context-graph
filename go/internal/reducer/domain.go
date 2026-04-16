@@ -14,7 +14,9 @@ var knownDomains = map[Domain]struct{}{
 	DomainGovernance:                    {},
 	DomainWorkloadMaterialization:       {},
 	DomainCodeCallMaterialization:       {},
-	DomainSemanticEntityMaterialization: {},
+	DomainSemanticEntityMaterialization:      {},
+	DomainSQLRelationshipMaterialization: {},
+	DomainInheritanceMaterialization:     {},
 }
 
 // ParseDomain converts one raw string into a known reducer domain.

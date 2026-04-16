@@ -18,6 +18,9 @@ func TestMetricDimensionKeys(t *testing.T) {
 		"partition_key",
 		"repo_size_tier",
 		"skip_reason",
+		"node_type",
+		"edge_type",
+		"write_phase",
 	}
 
 	got := MetricDimensionKeys()
@@ -44,6 +47,11 @@ func TestSpanNames(t *testing.T) {
 		"reducer.run",
 		"reducer.batch_claim",
 		"canonical.write",
+		"canonical.projection",
+		"canonical.retract",
+		"reducer.sql_relationship_materialization",
+		"reducer.inheritance_materialization",
+		"reducer.cross_repo_resolution",
 		"postgres.exec",
 		"postgres.query",
 		"neo4j.execute",

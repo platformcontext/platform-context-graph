@@ -10,7 +10,6 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
-	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
@@ -19,14 +18,14 @@ import (
 func TestRuntimeProjectMaterializesSourceLocalTruthAndReducerIntents(t *testing.T) {
 	t.Parallel()
 
-	graphWriter := &recordingGraphWriter{result: graph.Result{RecordCount: 1}}
+	canonicalWriter := &recordingCanonicalWriter{}
 	contentWriter := &recordingContentWriter{result: content.Result{RecordCount: 1}}
 	intentWriter := &recordingIntentWriter{result: IntentResult{Count: 1}}
 
 	runtime := Runtime{
-		GraphWriter:   graphWriter,
-		ContentWriter: contentWriter,
-		IntentWriter:  intentWriter,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   contentWriter,
+		IntentWriter:    intentWriter,
 	}
 
 	scopeValue := scope.IngestionScope{
@@ -46,6 +45,18 @@ func TestRuntimeProjectMaterializesSourceLocalTruthAndReducerIntents(t *testing.
 	}
 
 	result, err := runtime.Project(context.Background(), scopeValue, generationValue, []facts.Envelope{
+		{
+			FactID:       "fact-0",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "RepositoryObserved",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"repo_id": "repo-123",
+				"name":    "platform-context-graph",
+				"path":    "org/platform-context-graph",
+			},
+		},
 		{
 			FactID:       "fact-1",
 			ScopeID:      "scope-123",
@@ -93,17 +104,14 @@ func TestRuntimeProjectMaterializesSourceLocalTruthAndReducerIntents(t *testing.
 	if got, want := runtime.TraceSpanName(), telemetry.SpanProjectorRun; got != want {
 		t.Fatalf("TraceSpanName() = %q, want %q", got, want)
 	}
-	if got, want := graphWriter.calls[0].ScopeGenerationKey(), "scope-123:generation-456"; got != want {
-		t.Fatalf("graph write scope-generation key = %q, want %q", got, want)
+	if got, want := len(canonicalWriter.calls), 1; got < want {
+		t.Fatalf("canonical writer call count = %d, want >= %d", got, want)
 	}
 	if got, want := contentWriter.calls[0].ScopeGenerationKey(), "scope-123:generation-456"; got != want {
 		t.Fatalf("content write scope-generation key = %q, want %q", got, want)
 	}
 	if got, want := intentWriter.calls[0][0].ScopeGenerationKey(), "scope-123:generation-456"; got != want {
 		t.Fatalf("intent scope-generation key = %q, want %q", got, want)
-	}
-	if got, want := result.Graph.RecordCount, 1; got != want {
-		t.Fatalf("result.Graph.RecordCount = %d, want %d", got, want)
 	}
 	if got, want := result.Content.RecordCount, 1; got != want {
 		t.Fatalf("result.Content.RecordCount = %d, want %d", got, want)
@@ -533,14 +541,13 @@ func TestBuildReducerIntentQueuesJavaScriptCallableSemanticEntities(t *testing.T
 	}
 }
 
-type recordingGraphWriter struct {
-	calls  []graph.Materialization
-	result graph.Result
+type recordingCanonicalWriter struct {
+	calls []CanonicalMaterialization
 }
 
-func (w *recordingGraphWriter) Write(_ context.Context, materialization graph.Materialization) (graph.Result, error) {
-	w.calls = append(w.calls, materialization.Clone())
-	return w.result, nil
+func (w *recordingCanonicalWriter) Write(_ context.Context, mat CanonicalMaterialization) error {
+	w.calls = append(w.calls, mat)
+	return nil
 }
 
 type recordingContentWriter struct {
@@ -575,16 +582,16 @@ func TestRuntimeProjectWithTelemetry(t *testing.T) {
 		t.Fatalf("NewInstruments() error = %v, want nil", err)
 	}
 
-	graphWriter := &recordingGraphWriter{result: graph.Result{RecordCount: 1}}
+	canonicalWriter := &recordingCanonicalWriter{}
 	contentWriter := &recordingContentWriter{result: content.Result{RecordCount: 1}}
 	intentWriter := &recordingIntentWriter{result: IntentResult{Count: 1}}
 
 	runtime := Runtime{
-		GraphWriter:   graphWriter,
-		ContentWriter: contentWriter,
-		IntentWriter:  intentWriter,
-		Tracer:        tracer,
-		Instruments:   instruments,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   contentWriter,
+		IntentWriter:    intentWriter,
+		Tracer:          tracer,
+		Instruments:     instruments,
 	}
 
 	scopeValue := scope.IngestionScope{
@@ -604,6 +611,18 @@ func TestRuntimeProjectWithTelemetry(t *testing.T) {
 	}
 
 	result, err := runtime.Project(context.Background(), scopeValue, generationValue, []facts.Envelope{
+		{
+			FactID:       "fact-0",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "RepositoryObserved",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"repo_id": "repo-123",
+				"name":    "platform-context-graph",
+				"path":    "org/platform-context-graph",
+			},
+		},
 		{
 			FactID:       "fact-1",
 			ScopeID:      "scope-123",
@@ -648,17 +667,14 @@ func TestRuntimeProjectWithTelemetry(t *testing.T) {
 	if got, want := result.ScopeGenerationKey(), "scope-123:generation-456"; got != want {
 		t.Fatalf("Result.ScopeGenerationKey() = %q, want %q", got, want)
 	}
-	if got, want := len(graphWriter.calls), 1; got != want {
-		t.Fatalf("graph writer call count = %d, want %d", got, want)
+	if got, want := len(canonicalWriter.calls), 1; got < want {
+		t.Fatalf("canonical writer call count = %d, want >= %d", got, want)
 	}
 	if got, want := len(contentWriter.calls), 1; got != want {
 		t.Fatalf("content writer call count = %d, want %d", got, want)
 	}
 	if got, want := len(intentWriter.calls), 1; got != want {
 		t.Fatalf("intent writer call count = %d, want %d", got, want)
-	}
-	if got, want := result.Graph.RecordCount, 1; got != want {
-		t.Fatalf("result.Graph.RecordCount = %d, want %d", got, want)
 	}
 	if got, want := result.Content.RecordCount, 1; got != want {
 		t.Fatalf("result.Content.RecordCount = %d, want %d", got, want)

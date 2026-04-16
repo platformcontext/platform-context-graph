@@ -35,6 +35,9 @@ const (
 	MetricDimensionPartitionKey  = "partition_key"
 	MetricDimensionRepoSizeTier  = "repo_size_tier"
 	MetricDimensionSkipReason    = "skip_reason"
+	MetricDimensionNodeType      = "node_type"
+	MetricDimensionEdgeType      = "edge_type"
+	MetricDimensionWritePhase    = "write_phase"
 )
 
 // Span names define the stable data-plane tracing contract.
@@ -48,6 +51,12 @@ const (
 	SpanReducerRun           = "reducer.run"
 	SpanReducerBatchClaim    = "reducer.batch_claim"
 	SpanCanonicalWrite       = "canonical.write"
+	SpanCanonicalProjection  = "canonical.projection"
+	SpanCanonicalRetract     = "canonical.retract"
+
+	SpanSQLRelationshipMaterialization  = "reducer.sql_relationship_materialization"
+	SpanInheritanceMaterialization      = "reducer.inheritance_materialization"
+	SpanCrossRepoResolution             = "reducer.cross_repo_resolution"
 
 	// Dependency service spans — track external call performance.
 	SpanPostgresExec  = "postgres.exec"
@@ -81,6 +90,9 @@ var metricDimensionKeys = []string{
 	MetricDimensionPartitionKey,
 	MetricDimensionRepoSizeTier,
 	MetricDimensionSkipReason,
+	MetricDimensionNodeType,
+	MetricDimensionEdgeType,
+	MetricDimensionWritePhase,
 }
 
 var spanNames = []string{
@@ -93,6 +105,11 @@ var spanNames = []string{
 	SpanReducerRun,
 	SpanReducerBatchClaim,
 	SpanCanonicalWrite,
+	SpanCanonicalProjection,
+	SpanCanonicalRetract,
+	SpanSQLRelationshipMaterialization,
+	SpanInheritanceMaterialization,
+	SpanCrossRepoResolution,
 	SpanPostgresExec,
 	SpanPostgresQuery,
 	SpanNeo4jExecute,
