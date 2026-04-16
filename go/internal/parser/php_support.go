@@ -59,6 +59,13 @@ func parsePHPImports(raw string) []phpImportSpec {
 	return imports
 }
 
+func phpSemanticKindForMethod(name string) string {
+	if strings.HasPrefix(name, "__") {
+		return "magic_method"
+	}
+	return ""
+}
+
 func parsePHPSingleImport(raw string, prefixKeyword string) (string, string) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

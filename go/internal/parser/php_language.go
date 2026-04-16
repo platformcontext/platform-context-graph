@@ -148,6 +148,9 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			}
 			if classContext := currentPHPScopedName(stack, "class_declaration", "interface_declaration", "trait_declaration"); classContext != "" {
 				item["class_context"] = classContext
+				if semanticKind := phpSemanticKindForMethod(name); semanticKind != "" {
+					item["semantic_kind"] = semanticKind
+				}
 				if returnType != "" {
 					if _, ok := methodReturnTypes[classContext]; !ok {
 						methodReturnTypes[classContext] = make(map[string]string)

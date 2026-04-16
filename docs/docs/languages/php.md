@@ -16,7 +16,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
 | Functions | `functions` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsFunctionParametersSourceAndContext` | Compose-backed fixture verification | - |
-| Methods | `methods` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsFunctionParametersSourceAndContext` | Compose-backed fixture verification | - |
+| Methods | `methods` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsFunctionParametersSourceAndContext`, `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsMagicMethodClassification` | Compose-backed fixture verification | Methods whose names begin with `__` are tagged as `magic_method` in parser metadata and flow through the shared semantic profile. |
 | Classes | `classes` | supported | `classes` | `name, line_number` | `node:Class` | `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsInheritanceAndImportMetadata` | Compose-backed fixture verification | - |
 | Interfaces | `interfaces` | supported | `interfaces` | `name, line_number` | `node:Interface` | `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsInheritanceAndImportMetadata` | Compose-backed fixture verification | - |
 | Traits | `traits` | supported | `traits` | `name, line_number` | `node:Trait` | `go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPHPFixtures` | Compose-backed fixture verification | - |
@@ -30,5 +30,4 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 ## Known Limitations
 - Trait `use` inside class bodies is not linked as an INHERITS relationship
 - Anonymous classes are not modeled as distinct nodes
-- Magic methods (`__get`, `__call`) are captured as regular methods without special classification
 - Arbitrary receiver chains and broader interprocedural aliasing still require stronger end-to-end proof and type propagation beyond the bounded same-file forms, cross-file method-return property-dereference proof, declared method-return-type aliases, method-return property chains, chained static factory-return receivers, and nullsafe receiver chains

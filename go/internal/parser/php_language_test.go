@@ -186,6 +186,46 @@ use Demo\Library\Service;
 	phpAssertStringFieldValue(t, serviceImport, "import_type", "use")
 }
 
+func TestDefaultEngineParsePathPHPEmitsMagicMethodClassification(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "magic_methods.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+class MagicBox {
+    public function __get(string $name): mixed {
+        return null;
+    }
+
+    public function __call(string $name, array $arguments): mixed {
+        return null;
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	getMethod := assertBucketItemByName(t, got, "functions", "__get")
+	phpAssertStringFieldValue(t, getMethod, "class_context", "MagicBox")
+	phpAssertStringFieldValue(t, getMethod, "semantic_kind", "magic_method")
+
+	callMethod := assertBucketItemByName(t, got, "functions", "__call")
+	phpAssertStringFieldValue(t, callMethod, "class_context", "MagicBox")
+	phpAssertStringFieldValue(t, callMethod, "semantic_kind", "magic_method")
+}
+
 func TestDefaultEngineParsePathPHPEmitsVariableAndCallMetadata(t *testing.T) {
 	t.Parallel()
 
