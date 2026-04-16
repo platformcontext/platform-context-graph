@@ -335,7 +335,7 @@ func TestBuildLanguageResult_AttachesCombinedPythonDecoratorAsyncAndTypeAnnotati
 	if !ok {
 		t.Fatalf("semantic_profile type = %T, want map[string]any", result["semantic_profile"])
 	}
-	if got, want := profile["surface_kind"], "type_annotation"; got != want {
+	if got, want := profile["surface_kind"], "decorated_async_function"; got != want {
 		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
 	}
 	if got, want := profile["async"], true; got != want {
@@ -349,5 +349,12 @@ func TestBuildLanguageResult_AttachesCombinedPythonDecoratorAsyncAndTypeAnnotati
 	}
 	if got, want := profile["type_annotation_kinds"], []string{"parameter", "return"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("semantic_profile[type_annotation_kinds] = %#v, want %#v", got, want)
+	}
+	pythonSemantics, ok := result["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("python_semantics type = %T, want map[string]any", result["python_semantics"])
+	}
+	if got, want := pythonSemantics["surface_kind"], "decorated_async_function"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
 	}
 }

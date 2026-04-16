@@ -187,6 +187,9 @@ func semanticSurfaceKind(
 	if _, ok := profile["annotation"].(bool); ok && label == "Annotation" {
 		return "applied_annotation"
 	}
+	if language == "python" && (pythonProfile.HasSignals() || pythonProfile.Docstring != "") {
+		return pythonProfile.SurfaceKind()
+	}
 	if _, ok := profile["type_annotation"].(bool); ok {
 		if kind, _ := profile["annotation_kind"].(string); kind != "" {
 			return kind + "_type_annotation"
@@ -203,9 +206,6 @@ func semanticSurfaceKind(
 		if _, ok := profile["method_kind"].(string); ok {
 			return "javascript_method"
 		}
-	}
-	if language == "python" && (pythonProfile.HasSignals() || pythonProfile.Docstring != "") {
-		return pythonProfile.SurfaceKind()
 	}
 	if _, decorated := profile["decorators"].([]string); decorated {
 		if _, async := profile["async"].(bool); async {
