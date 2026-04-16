@@ -1,6 +1,7 @@
 package reducer
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
@@ -178,7 +179,7 @@ func extractSCIPCodeCallRows(
 			continue
 		}
 
-		key := repositoryID + "|" + callerID + "|" + calleeID
+		key := repositoryID + "|" + callerID + "|" + calleeID + "|" + fmt.Sprintf("%d", codeCallInt(edge["ref_line"]))
 		if _, exists := seenRows[key]; exists {
 			continue
 		}
@@ -233,7 +234,7 @@ func extractGenericCodeCallRows(
 			continue
 		}
 
-		key := repositoryID + "|" + callerID + "|" + calleeID
+		key := repositoryID + "|" + callerID + "|" + calleeID + "|" + fmt.Sprintf("%d", callLine)
 		if _, exists := seenRows[key]; exists {
 			continue
 		}

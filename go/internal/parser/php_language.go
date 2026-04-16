@@ -3,6 +3,7 @@ package parser
 import (
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -412,10 +413,11 @@ func appendUniquePHPCall(
 	if strings.TrimSpace(fullName) == "" {
 		return
 	}
-	if _, ok := seen[fullName]; ok {
+	seenKey := fullName + "#" + strconv.Itoa(lineNumber)
+	if _, ok := seen[seenKey]; ok {
 		return
 	}
-	seen[fullName] = struct{}{}
+	seen[seenKey] = struct{}{}
 	item := map[string]any{
 		"name":          name,
 		"full_name":     fullName,
