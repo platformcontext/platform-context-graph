@@ -86,6 +86,43 @@ func TestExtractSemanticEntityRowsIncludesTSXComponentTypeAssertionFacts(t *test
 	}
 }
 
+func TestExtractSemanticEntityRowsIncludesTSXReactFunctionComponentTypeAssertionFacts(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "content_entity",
+			SourceRef: facts.Ref{
+				SourceURI: "/repo/src/Screen.tsx",
+			},
+			Payload: map[string]any{
+				"repo_id":                  "repo-1",
+				"entity_id":                "variable-tsx-2",
+				"relative_path":            "src/Screen.tsx",
+				"entity_type":              "Variable",
+				"entity_name":              "Screen",
+				"language":                 "tsx",
+				"start_line":               6,
+				"end_line":                 6,
+				"component_type_assertion": "React.FunctionComponent",
+			},
+		},
+	}
+
+	repoIDs, rows := ExtractSemanticEntityRows(envelopes)
+	if got, want := repoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("ExtractSemanticEntityRows() repoIDs = %v, want %v", got, want)
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("ExtractSemanticEntityRows() rows = %d, want %d", got, want)
+	}
+
+	row := rows[0]
+	if got, want := row.Metadata["component_type_assertion"], "React.FunctionComponent"; got != want {
+		t.Fatalf("row.Metadata[component_type_assertion] = %#v, want %#v", got, want)
+	}
+}
+
 func TestExtractSemanticEntityRowsIncludesTSXComponentWrapperFacts(t *testing.T) {
 	t.Parallel()
 
