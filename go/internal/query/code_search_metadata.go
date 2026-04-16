@@ -93,7 +93,7 @@ func (h *CodeHandler) enrichGraphResultsWithContentMetadataByEntityID(
 		if entity == nil || len(entity.Metadata) == 0 {
 			continue
 		}
-		results[i]["metadata"] = entity.Metadata
+		results[i]["metadata"] = mergeGraphAndContentMetadata(results[i]["metadata"], entity.Metadata)
 		attachSemanticSummary(results[i])
 	}
 
@@ -108,4 +108,39 @@ func resultContentEntityType(result map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func mergeGraphAndContentMetadata(existing any, content map[string]any) map[string]any {
+	if len(content) == 0 {
+		merged, _ := existing.(map[string]any)
+		if len(merged) == 0 {
+			return nil
+		}
+		return cloneQueryAnyMap(merged)
+	}
+
+	merged, _ := existing.(map[string]any)
+	if len(merged) == 0 {
+		return cloneQueryAnyMap(content)
+	}
+
+	result := cloneQueryAnyMap(merged)
+	for key, value := range content {
+		if _, ok := result[key]; ok {
+			continue
+		}
+		result[key] = value
+	}
+	return result
+}
+
+func cloneQueryAnyMap(input map[string]any) map[string]any {
+	if input == nil {
+		return nil
+	}
+	cloned := make(map[string]any, len(input))
+	for key, value := range input {
+		cloned[key] = value
+	}
+	return cloned
 }

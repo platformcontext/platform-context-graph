@@ -134,6 +134,77 @@ func TestEnrichGraphSearchResultsWithContentMetadataPrefersExistingJavaScriptMet
 	}
 }
 
+func TestEnrichGraphResultsWithContentMetadataByEntityIDPreservesPythonGraphMetadata(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"func:py:handler", "repo-1", "src/app.py", "Function", "handler",
+					int64(10), int64(24), "python", "async def handler(): ...",
+					[]byte(`{"docstring":"Handles incoming requests.","decorators":["@content"],"async":false}`),
+				},
+			},
+		},
+	})
+
+	handler := &CodeHandler{Content: NewContentReader(db)}
+	results := []map[string]any{
+		{
+			"entity_id":  "func:py:handler",
+			"name":       "handler",
+			"labels":     []string{"Function"},
+			"file_path":  "src/app.py",
+			"repo_id":    "repo-1",
+			"language":   "python",
+			"start_line": 10,
+			"end_line":   24,
+			"metadata": map[string]any{
+				"decorators": []string{"@route"},
+				"async":      true,
+			},
+		},
+	}
+
+	got, err := handler.enrichGraphResultsWithContentMetadataByEntityID(context.Background(), results)
+	if err != nil {
+		t.Fatalf("enrichGraphResultsWithContentMetadataByEntityID() error = %v, want nil", err)
+	}
+
+	metadata, ok := got[0]["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][metadata] type = %T, want map[string]any", got[0]["metadata"])
+	}
+	decorators, ok := metadata["decorators"].([]string)
+	if !ok {
+		t.Fatalf("metadata[decorators] type = %T, want []string", metadata["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@route" {
+		t.Fatalf("metadata[decorators] = %#v, want [@route]", decorators)
+	}
+	if gotValue, want := metadata["async"], true; gotValue != want {
+		t.Fatalf("metadata[async] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := metadata["docstring"], "Handles incoming requests."; gotValue != want {
+		t.Fatalf("metadata[docstring] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := got[0]["semantic_summary"], "Function handler is async, uses decorators @route, and is documented as \"Handles incoming requests.\"."; gotValue != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", gotValue, want)
+	}
+	semanticProfile, ok := got[0]["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][semantic_profile] type = %T, want map[string]any", got[0]["semantic_profile"])
+	}
+	if gotValue, want := semanticProfile["surface_kind"], "decorated_async_function"; gotValue != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
+	}
+}
+
 func TestEnrichGraphSearchResultsWithContentMetadataSkipsUnmatchedRows(t *testing.T) {
 	t.Parallel()
 

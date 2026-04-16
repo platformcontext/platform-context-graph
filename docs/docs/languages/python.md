@@ -61,6 +61,10 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     `USES_METACLASS` relationship on the normal `code/relationships` path,
     and graph-backed entity-context/story now preserves the graph row when
     metaclass metadata is already present.
+  - Graph-backed Python metadata is now also preserved on the entity-ID
+    enrichment path used by `code/dead-code` and `code/complexity`, so those
+    responses keep graph-owned decorators, async flags, and annotation signals
+    when content fallback is available for the same entity.
   - Identifier-assigned lambdas now materialize as Python function entities
     with `semantic_kind=lambda`, and the normal semantic/profile/story
     surfaces promote them as `lambda_function`.
