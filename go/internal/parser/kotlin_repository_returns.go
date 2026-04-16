@@ -3,8 +3,11 @@ package parser
 import (
 	"io/fs"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+var kotlinPackagePattern = regexp.MustCompile(`^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*$`)
 
 func kotlinCollectSiblingFunctionReturnTypes(currentPath string) (map[string]string, error) {
 	root := filepath.Dir(currentPath)
@@ -77,6 +80,7 @@ func kotlinCollectFunctionReturnTypesFromFile(path string) (map[string]string, e
 	if err != nil {
 		return nil, err
 	}
+	packageName := kotlinFilePackage(string(source))
 
 	lines := strings.Split(string(source), "\n")
 	braceDepth := 0
@@ -120,7 +124,7 @@ func kotlinCollectFunctionReturnTypesFromFile(path string) (map[string]string, e
 				} else if classContext := kotlinCurrentTypeScopeName(stack); classContext != "" {
 					key = classContext + "." + functionName
 				}
-				results[key] = returnType
+				kotlinStoreFunctionReturnType(results, packageName, key, returnType)
 			}
 			if strings.Contains(rawLine, "{") {
 				stack = append(stack, scopedContext{
@@ -136,4 +140,72 @@ func kotlinCollectFunctionReturnTypesFromFile(path string) (map[string]string, e
 	}
 
 	return results, nil
+}
+
+func kotlinFilePackage(source string) string {
+	for _, rawLine := range strings.Split(source, "\n") {
+		trimmed := strings.TrimSpace(rawLine)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		matches := kotlinPackagePattern.FindStringSubmatch(trimmed)
+		if len(matches) == 2 {
+			return strings.TrimSpace(matches[1])
+		}
+		break
+	}
+	return ""
+}
+
+func kotlinQualifiedFunctionReturnKey(packageName string, key string) string {
+	packageName = strings.TrimSpace(packageName)
+	key = strings.TrimSpace(key)
+	if packageName == "" || key == "" {
+		return ""
+	}
+	return packageName + "::" + key
+}
+
+func kotlinStoreFunctionReturnType(functionReturnTypes map[string]string, packageName string, key string, returnType string) {
+	key = strings.TrimSpace(key)
+	returnType = strings.TrimSpace(returnType)
+	if key == "" || returnType == "" {
+		return
+	}
+	functionReturnTypes[key] = returnType
+	if qualified := kotlinQualifiedFunctionReturnKey(packageName, key); qualified != "" {
+		functionReturnTypes[qualified] = returnType
+	}
+}
+
+func kotlinLookupFunctionReturnType(
+	functionReturnTypes map[string]string,
+	packageName string,
+	currentClass string,
+	name string,
+) string {
+	packageName = strings.TrimSpace(packageName)
+	currentClass = strings.TrimSpace(currentClass)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+
+	if packageName != "" {
+		if currentClass != "" {
+			if returnType := strings.TrimSpace(functionReturnTypes[kotlinQualifiedFunctionReturnKey(packageName, currentClass+"."+name)]); returnType != "" {
+				return returnType
+			}
+		}
+		if returnType := strings.TrimSpace(functionReturnTypes[kotlinQualifiedFunctionReturnKey(packageName, name)]); returnType != "" {
+			return returnType
+		}
+	}
+
+	if currentClass != "" {
+		if returnType := strings.TrimSpace(functionReturnTypes[currentClass+"."+name]); returnType != "" {
+			return returnType
+		}
+	}
+	return strings.TrimSpace(functionReturnTypes[name])
 }

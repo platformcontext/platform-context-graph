@@ -76,11 +76,20 @@ func kotlinCurrentTypeScopeName(stack []scopedContext) string {
 	return currentScopedName(stack, "class", "interface")
 }
 
+func kotlinTypedDeclarationType(line string) string {
+	matches := kotlinTypedVariablePattern.FindStringSubmatch(line)
+	if len(matches) != 3 {
+		return ""
+	}
+	return strings.TrimSpace(matches[2])
+}
+
 func kotlinInferAssignedVariableType(
 	trimmed string,
 	name string,
 	functionContext string,
 	classContext string,
+	packageName string,
 	localVariableTypes map[string]map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	functionReturnTypes map[string]string,
@@ -101,6 +110,7 @@ func kotlinInferAssignedVariableType(
 				localVariableTypes[functionContext],
 				classPropertyTypes,
 				classContext,
+				packageName,
 				functionReturnTypes,
 			)
 		}
@@ -112,6 +122,7 @@ func kotlinInferAssignedVariableType(
 				localVariableTypes[functionContext],
 				classPropertyTypes,
 				classContext,
+				packageName,
 				functionReturnTypes,
 			)
 		}
@@ -128,6 +139,7 @@ func kotlinInferAssignedVariableType(
 				localVariableTypes[functionContext],
 				classPropertyTypes,
 				classContext,
+				packageName,
 				functionReturnTypes,
 			)
 		}
@@ -170,6 +182,7 @@ func kotlinInferFunctionCallReturnType(
 	variableTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	currentClass string,
+	packageName string,
 	functionReturnTypes map[string]string,
 ) string {
 	callExpression = strings.TrimSpace(callExpression)
@@ -183,6 +196,7 @@ func kotlinInferFunctionCallReturnType(
 			variableTypes,
 			classPropertyTypes,
 			currentClass,
+			packageName,
 			functionReturnTypes,
 		)
 	}
@@ -192,6 +206,7 @@ func kotlinInferFunctionCallReturnType(
 		variableTypes,
 		classPropertyTypes,
 		currentClass,
+		packageName,
 		functionReturnTypes,
 	)
 }
@@ -201,6 +216,7 @@ func kotlinInferMethodCallReturnType(
 	variableTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	currentClass string,
+	packageName string,
 	functionReturnTypes map[string]string,
 ) string {
 	callExpression = strings.TrimSpace(callExpression)
@@ -227,12 +243,7 @@ func kotlinInferMethodCallReturnType(
 	}
 
 	if receiver == "" {
-		if currentClass != "" {
-			if returnType := strings.TrimSpace(functionReturnTypes[currentClass+"."+name]); returnType != "" {
-				return returnType
-			}
-		}
-		return strings.TrimSpace(functionReturnTypes[name])
+		return kotlinLookupFunctionReturnType(functionReturnTypes, packageName, currentClass, name)
 	}
 
 	inferredReceiverType := kotlinInferReceiverType(
@@ -240,20 +251,13 @@ func kotlinInferMethodCallReturnType(
 		variableTypes,
 		classPropertyTypes,
 		currentClass,
+		packageName,
 		functionReturnTypes,
 	)
 	if inferredReceiverType == "" {
 		return ""
 	}
-	if returnType := strings.TrimSpace(functionReturnTypes[inferredReceiverType+"."+name]); returnType != "" {
-		return returnType
-	}
-	if currentClass != "" {
-		if returnType := strings.TrimSpace(functionReturnTypes[currentClass+"."+name]); returnType != "" {
-			return returnType
-		}
-	}
-	return strings.TrimSpace(functionReturnTypes[inferredReceiverType+"."+name])
+	return kotlinLookupFunctionReturnType(functionReturnTypes, packageName, inferredReceiverType, name)
 }
 
 func kotlinInferReceiverSegmentType(
@@ -261,6 +265,7 @@ func kotlinInferReceiverSegmentType(
 	variableTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	currentClass string,
+	packageName string,
 	functionReturnTypes map[string]string,
 ) string {
 	segment = strings.TrimSpace(segment)
@@ -274,6 +279,7 @@ func kotlinInferReceiverSegmentType(
 			variableTypes,
 			classPropertyTypes,
 			currentClass,
+			packageName,
 			functionReturnTypes,
 		)
 	}
@@ -285,6 +291,26 @@ func kotlinInferReceiverSegmentType(
 		return strings.TrimSpace(classPropertyTypes[currentClass][segment])
 	}
 	return ""
+}
+
+func kotlinImportAlias(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(trimmed, "."); idx >= 0 {
+		return strings.TrimSpace(trimmed[idx+1:])
+	}
+	return trimmed
+}
+
+func kotlinCallNameAllowed(name string) bool {
+	switch name {
+	case "fun", "if", "for", "while", "when", "return", "class", "interface":
+		return false
+	default:
+		return true
+	}
 }
 
 func kotlinAppendConstructorCalls(

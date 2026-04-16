@@ -31,6 +31,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	if err != nil {
 		return nil, err
 	}
+	packageName := kotlinFilePackage(string(source))
 
 	payload := basePayload(path, "kotlin", isDependency)
 	payload["interfaces"] = []map[string]any{}
@@ -194,7 +195,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					} else if typeContext := kotlinCurrentTypeScopeName(stack); typeContext != "" {
 						key = typeContext + "." + functionName
 					}
-					functionReturnTypes[key] = returnType
+					kotlinStoreFunctionReturnType(functionReturnTypes, packageName, key, returnType)
 				}
 				if strings.Contains(rawLine, "{") {
 					stack = append(stack, scopedContext{
@@ -249,6 +250,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					name,
 					functionContext,
 					typeContext,
+					packageName,
 					localVariableTypes,
 					classPropertyTypes,
 					functionReturnTypes,
@@ -298,6 +300,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 							localVariableTypes[functionContext],
 							classPropertyTypes,
 							kotlinCurrentTypeScopeName(stack),
+							packageName,
 							functionReturnTypes,
 						)
 					}
@@ -379,6 +382,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 						localVariableTypes[functionContext],
 						classPropertyTypes,
 						kotlinCurrentTypeScopeName(stack),
+						packageName,
 						functionReturnTypes,
 					); inferredType != "" {
 						item["inferred_obj_type"] = inferredType
@@ -412,19 +416,12 @@ func (e *Engine) preScanKotlin(path string) ([]string, error) {
 	return names, nil
 }
 
-func kotlinTypedDeclarationType(line string) string {
-	matches := kotlinTypedVariablePattern.FindStringSubmatch(line)
-	if len(matches) != 3 {
-		return ""
-	}
-	return strings.TrimSpace(matches[2])
-}
-
 func kotlinInferReceiverType(
 	receiver string,
 	variableTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	currentClass string,
+	packageName string,
 	functionReturnTypes map[string]string,
 ) string {
 	receiver = strings.TrimSpace(receiver)
@@ -444,6 +441,7 @@ func kotlinInferReceiverType(
 		variableTypes,
 		classPropertyTypes,
 		currentClass,
+		packageName,
 		functionReturnTypes,
 	)
 	if currentType == "" {
@@ -464,6 +462,7 @@ func kotlinInferReceiverType(
 				variableTypes,
 				classPropertyTypes,
 				currentType,
+				packageName,
 				functionReturnTypes,
 			)
 			if currentType == "" {
@@ -482,24 +481,4 @@ func kotlinInferReceiverType(
 		currentType = nextType
 	}
 	return currentType
-}
-
-func kotlinImportAlias(name string) string {
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" {
-		return ""
-	}
-	if idx := strings.LastIndex(trimmed, "."); idx >= 0 {
-		return strings.TrimSpace(trimmed[idx+1:])
-	}
-	return trimmed
-}
-
-func kotlinCallNameAllowed(name string) bool {
-	switch name {
-	case "fun", "if", "for", "while", "when", "return", "class", "interface":
-		return false
-	default:
-		return true
-	}
 }
