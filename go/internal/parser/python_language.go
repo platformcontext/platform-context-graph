@@ -150,6 +150,10 @@ func (e *Engine) parsePython(
 				item["full_name"] = fullName
 			}
 			appendBucket(payload, "function_calls", item)
+		case "lambda":
+			if lambdaItem, ok := pythonAnonymousLambdaItem(node, source, options); ok {
+				appendBucket(payload, "functions", lambdaItem)
+			}
 		}
 	})
 
@@ -244,52 +248,6 @@ func pythonFunctionIsAsync(functionSource string) bool {
 	return strings.HasPrefix(strings.TrimSpace(functionSource), "async def ")
 }
 
-func pythonLambdaAssignmentItem(
-	node *tree_sitter.Node,
-	source []byte,
-	options Options,
-) (map[string]any, bool) {
-	left := node.ChildByFieldName("left")
-	right := node.ChildByFieldName("right")
-	if left == nil || right == nil || right.Kind() != "lambda" {
-		return nil, false
-	}
-
-	name := pythonLambdaAssignmentTargetName(left, source)
-	if strings.TrimSpace(name) == "" {
-		return nil, false
-	}
-
-	item := map[string]any{
-		"name":                  name,
-		"line_number":           nodeLine(left),
-		"end_line":              nodeEndLine(node),
-		"args":                  pythonParameterNames(right.ChildByFieldName("parameters"), source),
-		"decorators":            []string{},
-		"lang":                  "python",
-		"async":                 false,
-		"cyclomatic_complexity": 1,
-		"semantic_kind":         "lambda",
-	}
-	if options.IndexSource {
-		item["source"] = nodeText(node, source)
-	}
-	return item, true
-}
-
-func pythonLambdaAssignmentTargetName(node *tree_sitter.Node, source []byte) string {
-	if node == nil {
-		return ""
-	}
-
-	switch node.Kind() {
-	case "identifier", "attribute":
-		return nodeText(node, source)
-	default:
-		return ""
-	}
-}
-
 func pythonClassMetaclass(node *tree_sitter.Node, source []byte) string {
 	classSource := nodeText(node, source)
 	matches := pythonClassHeaderRe.FindStringSubmatch(classSource)
@@ -304,41 +262,6 @@ func pythonClassMetaclass(node *tree_sitter.Node, source []byte) string {
 		return strings.TrimSpace(value)
 	}
 	return ""
-}
-
-func pythonParameterNames(parametersNode *tree_sitter.Node, source []byte) []string {
-	if parametersNode == nil {
-		return nil
-	}
-
-	args := make([]string, 0)
-	cursor := parametersNode.Walk()
-	defer cursor.Close()
-	for _, child := range parametersNode.NamedChildren(cursor) {
-		child := child
-		arg := pythonParameterName(&child, source)
-		if arg == "" {
-			continue
-		}
-		args = append(args, arg)
-	}
-	return args
-}
-
-func pythonParameterName(node *tree_sitter.Node, source []byte) string {
-	if node == nil {
-		return ""
-	}
-	switch node.Kind() {
-	case "identifier":
-		return nodeText(node, source)
-	case "default_parameter", "typed_parameter", "typed_default_parameter":
-		return nodeText(node.ChildByFieldName("name"), source)
-	case "list_splat_pattern", "dictionary_splat_pattern":
-		return nodeText(node, source)
-	default:
-		return ""
-	}
 }
 
 func pythonTypeAnnotations(node *tree_sitter.Node, functionSource string, functionName string) []map[string]any {
