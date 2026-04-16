@@ -1066,6 +1066,148 @@ func TestExtractRepositoryNoRemoteURL(t *testing.T) {
 	}
 }
 
+func TestExtractEntitiesHandlesPascalCaseEntityTypes(t *testing.T) {
+	t.Parallel()
+
+	// The Go parser emits PascalCase entity_type values (e.g. "Function",
+	// "Variable", "Class") while entityTypeLabelMap keys are lowercase.
+	// EntityTypeLabel must normalize the lookup.
+	sc := testScope()
+	gen := testGeneration()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "r-1",
+			ScopeID:  "scope-1",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-abc",
+				"path":    "/repos/my-project",
+			},
+		},
+		{
+			FactID:   "f-1",
+			ScopeID:  "scope-1",
+			FactKind: "file",
+			Payload: map[string]any{
+				"relative_path": "src/handler.go",
+				"language":      "go",
+			},
+		},
+		{
+			FactID:   "e-1",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_id":     "eid-1",
+				"entity_type":   "Function", // PascalCase from parser
+				"entity_name":   "handleRequest",
+				"relative_path": "src/handler.go",
+				"start_line":    10,
+				"end_line":      42,
+				"language":      "go",
+				"repo_id":       "repo-abc",
+			},
+		},
+		{
+			FactID:   "e-2",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_id":     "eid-2",
+				"entity_type":   "Variable", // PascalCase from parser
+				"entity_name":   "config",
+				"relative_path": "src/handler.go",
+				"start_line":    5,
+				"end_line":      5,
+				"language":      "go",
+				"repo_id":       "repo-abc",
+			},
+		},
+		{
+			FactID:   "e-3",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_id":     "eid-3",
+				"entity_type":   "K8sResource", // PascalCase infra type
+				"entity_name":   "my-deployment",
+				"relative_path": "deploy/app.yaml",
+				"start_line":    1,
+				"end_line":      30,
+				"language":      "yaml",
+				"repo_id":       "repo-abc",
+			},
+		},
+		{
+			FactID:   "e-4",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_id":     "eid-4",
+				"entity_type":   "TerraformResource", // PascalCase terraform
+				"entity_name":   "aws_s3_bucket.data",
+				"relative_path": "infra/main.tf",
+				"start_line":    1,
+				"end_line":      10,
+				"language":      "hcl",
+				"repo_id":       "repo-abc",
+			},
+		},
+	}
+
+	result := buildCanonicalMaterialization(sc, gen, envelopes)
+
+	if len(result.Entities) != 4 {
+		var labels []string
+		for _, e := range result.Entities {
+			labels = append(labels, e.Label)
+		}
+		t.Fatalf("len(Entities) = %d, want 4; labels=%v", len(result.Entities), labels)
+	}
+
+	// Verify all PascalCase types resolved to the correct Neo4j labels.
+	expectedLabels := []string{"Function", "Variable", "K8sResource", "TerraformResource"}
+	for i, want := range expectedLabels {
+		if result.Entities[i].Label != want {
+			t.Errorf("Entities[%d].Label = %q, want %q", i, result.Entities[i].Label, want)
+		}
+	}
+}
+
+func TestEntityTypeLabelHandlesBothCases(t *testing.T) {
+	t.Parallel()
+
+	// Both lowercase and PascalCase lookups must resolve to the same label.
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"function", "Function"},
+		{"Function", "Function"},
+		{"class", "Class"},
+		{"Class", "Class"},
+		{"variable", "Variable"},
+		{"Variable", "Variable"},
+		{"k8s_resource", "K8sResource"},
+		{"K8sResource", "K8sResource"},
+		{"terraform_resource", "TerraformResource"},
+		{"TerraformResource", "TerraformResource"},
+		{"sql_table", "SqlTable"},
+		{"SqlTable", "SqlTable"},
+	}
+
+	for _, tc := range cases {
+		label, ok := EntityTypeLabel(tc.input)
+		if !ok {
+			t.Errorf("EntityTypeLabel(%q) not found", tc.input)
+			continue
+		}
+		if label != tc.want {
+			t.Errorf("EntityTypeLabel(%q) = %q, want %q", tc.input, label, tc.want)
+		}
+	}
+}
+
 func TestBuildCanonicalMaterializationFallsBackToScopeMetadata(t *testing.T) {
 	t.Parallel()
 

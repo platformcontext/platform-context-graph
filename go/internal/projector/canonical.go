@@ -183,13 +183,47 @@ var entityTypeLabelMap = map[string]string{
 	"query_execution":    "QueryExecution",
 	"data_contract":      "DataContract",
 	"data_owner":         "DataOwner",
+
+	// Terragrunt extended types (emitted by parser as PascalCase, added as
+	// lowercase aliases for completeness).
+	"terragrunt_dependency": "TerragruntDependency",
+	"terragrunt_input":      "TerragruntInput",
+	"terragrunt_local":      "TerragruntLocal",
+
+	// Type annotation entities
+	"type_annotation": "TypeAnnotation",
+}
+
+// entityTypeLabelValues is the reverse set of entityTypeLabelMap — every
+// distinct Neo4j label that appears as a value. Initialised at package init
+// so that EntityTypeLabel can recognise PascalCase inputs from the parser.
+var entityTypeLabelValues map[string]struct{}
+
+func init() {
+	entityTypeLabelValues = make(map[string]struct{}, len(entityTypeLabelMap))
+	for _, label := range entityTypeLabelMap {
+		entityTypeLabelValues[label] = struct{}{}
+	}
 }
 
 // EntityTypeLabel returns the Neo4j label for a content store entity type.
-// Returns the label and true if found, empty string and false otherwise.
+// Handles both lowercase keys ("function") used in the map definition and
+// PascalCase values ("Function") emitted by the Go parser. Returns the
+// label and true if found, empty string and false otherwise.
 func EntityTypeLabel(entityType string) (string, bool) {
-	label, ok := entityTypeLabelMap[entityType]
-	return label, ok
+	// Try exact match first (lowercase keys).
+	if label, ok := entityTypeLabelMap[entityType]; ok {
+		return label, true
+	}
+
+	// The Go parser emits PascalCase entity types that match Neo4j labels
+	// directly (e.g. "Function", "K8sResource"). Check if the input is
+	// itself a valid label value.
+	if _, isLabel := entityTypeLabelValues[entityType]; isLabel {
+		return entityType, true
+	}
+
+	return "", false
 }
 
 // EntityTypeLabelMap returns a copy of the entity type to Neo4j label mapping.

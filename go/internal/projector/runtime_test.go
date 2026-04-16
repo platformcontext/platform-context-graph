@@ -225,8 +225,10 @@ func TestRuntimeProjectMaterializesExplicitEntityRecords(t *testing.T) {
 	t.Parallel()
 
 	contentWriter := &recordingContentWriter{result: content.Result{EntityCount: 1}}
+	canonicalWriter := &recordingCanonicalWriter{}
 	runtime := Runtime{
-		ContentWriter: contentWriter,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   contentWriter,
 	}
 
 	scopeValue := scope.IngestionScope{
@@ -324,9 +326,11 @@ func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedef
 
 	contentWriter := &recordingContentWriter{result: content.Result{EntityCount: 2}}
 	intentWriter := &recordingIntentWriter{result: IntentResult{Count: 5}}
+	canonicalWriter := &recordingCanonicalWriter{}
 	runtime := Runtime{
-		ContentWriter: contentWriter,
-		IntentWriter:  intentWriter,
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   contentWriter,
+		IntentWriter:    intentWriter,
 	}
 
 	scopeValue := scope.IngestionScope{

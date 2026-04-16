@@ -61,6 +61,12 @@ var schemaConstraints = []string{
 	"CREATE CONSTRAINT tf_provider_unique IF NOT EXISTS FOR (p:TerraformProvider) REQUIRE (p.name, p.path, p.line_number) IS UNIQUE",
 	"CREATE CONSTRAINT tf_local_unique IF NOT EXISTS FOR (l:TerraformLocal) REQUIRE (l.name, l.path, l.line_number) IS UNIQUE",
 	"CREATE CONSTRAINT tg_config_unique IF NOT EXISTS FOR (tg:TerragruntConfig) REQUIRE tg.path IS UNIQUE",
+	"CREATE CONSTRAINT tg_dependency_unique IF NOT EXISTS FOR (td:TerragruntDependency) REQUIRE (td.name, td.path, td.line_number) IS UNIQUE",
+	"CREATE CONSTRAINT tg_input_unique IF NOT EXISTS FOR (ti:TerragruntInput) REQUIRE (ti.name, ti.path, ti.line_number) IS UNIQUE",
+	"CREATE CONSTRAINT tg_local_unique IF NOT EXISTS FOR (tl:TerragruntLocal) REQUIRE (tl.name, tl.path, tl.line_number) IS UNIQUE",
+
+	// Type annotation constraint
+	"CREATE CONSTRAINT type_annotation_unique IF NOT EXISTS FOR (ta:TypeAnnotation) REQUIRE (ta.name, ta.path, ta.line_number) IS UNIQUE",
 
 	// CloudFormation entity constraints
 	"CREATE CONSTRAINT cf_resource_unique IF NOT EXISTS FOR (r:CloudFormationResource) REQUIRE (r.name, r.path, r.line_number) IS UNIQUE",
@@ -130,7 +136,11 @@ var uidConstraintLabels = []string{
 	"TerraformResource",
 	"TerraformVariable",
 	"TerragruntConfig",
+	"TerragruntDependency",
+	"TerragruntInput",
+	"TerragruntLocal",
 	"TypeAlias",
+	"TypeAnnotation",
 	"Typedef",
 	"Trait",
 	"Union",
