@@ -44,6 +44,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	lines := strings.Split(string(source), "\n")
 	braceDepth := 0
 	stack := make([]scopedContext, 0)
+	smartCastScopes := make([]kotlinTypeFlowScope, 0)
+	whenSubjectScopes := make([]kotlinWhenSubjectScope, 0)
 	classTypeParameters := make(map[string][]string)
 	seenVariables := make(map[string]struct{})
 	localVariableTypes := make(map[string]map[string]string)
@@ -56,6 +58,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 
 	for index, rawLine := range lines {
 		lineNumber := index + 1
+		smartCastScopes = popKotlinTypeFlowScopes(smartCastScopes, braceDepth)
+		whenSubjectScopes = popKotlinWhenSubjectScopes(whenSubjectScopes, braceDepth)
 		trimmed := strings.TrimSpace(rawLine)
 		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
 			braceDepth += braceDelta(rawLine)
@@ -235,6 +239,14 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			name := matches[1]
 			functionContext := currentScopedName(stack, "function")
 			typeContext := kotlinCurrentTypeScopeName(stack)
+			effectiveVariableTypes := localVariableTypes[functionContext]
+			if functionContext != "" {
+				effectiveVariableTypes = kotlinMergeVariableTypes(
+					localVariableTypes[functionContext],
+					kotlinActiveSmartCastTypes(smartCastScopes, functionContext),
+					kotlinInlineSmartCastTypes(trimmed, functionContext, whenSubjectScopes),
+				)
+			}
 			if typedType := kotlinTypedDeclarationType(trimmed); typedType != "" {
 				switch {
 				case functionContext != "":
@@ -259,7 +271,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					typeContext,
 					packageName,
 					classTypeParameters,
-					localVariableTypes,
+					map[string]map[string]string{functionContext: effectiveVariableTypes},
 					classPropertyTypes,
 					functionReturnTypes,
 				); inferredType != "" {
@@ -287,27 +299,38 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			}
 		}
 
+		functionContext := currentScopedName(stack, "function")
+		currentTypeContext := kotlinCurrentTypeScopeName(stack)
+		effectiveVariableTypes := localVariableTypes[functionContext]
+		if functionContext != "" {
+			effectiveVariableTypes = kotlinMergeVariableTypes(
+				localVariableTypes[functionContext],
+				kotlinActiveSmartCastTypes(smartCastScopes, functionContext),
+				kotlinInlineSmartCastTypes(trimmed, functionContext, whenSubjectScopes),
+			)
+		}
+
 		seenLineCalls := make(map[string]struct{})
 		if matches := kotlinInfixCallPattern.FindStringSubmatch(trimmed); len(matches) == 4 {
 			receiver := matches[1]
 			name := matches[2]
 			if kotlinCallNameAllowed(name) {
-				if functionContext := currentScopedName(stack, "function"); functionContext != "" {
+				if functionContext != "" {
 					var (
 						inferredType string
 						classContext string
 					)
 					if receiver == "this" {
-						if currentType := kotlinCurrentTypeScopeName(stack); currentType != "" {
+						if currentType := currentTypeContext; currentType != "" {
 							classContext = currentType
 							inferredType = currentType
 						}
 					} else {
 						inferredType = kotlinInferReceiverType(
 							receiver,
-							localVariableTypes[functionContext],
+							effectiveVariableTypes,
 							classPropertyTypes,
-							kotlinCurrentTypeScopeName(stack),
+							currentTypeContext,
 							packageName,
 							functionReturnTypes,
 							classTypeParameters,
@@ -334,7 +357,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				}
 			}
 		}
-		kotlinAppendThisCalls(payload, trimmed, lineNumber, seenLineCalls, kotlinCurrentTypeScopeName(stack))
+		kotlinAppendThisCalls(payload, trimmed, lineNumber, seenLineCalls, currentTypeContext)
 
 		kotlinAppendConstructorCalls(
 			payload,
@@ -386,16 +409,16 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					"lang":        "kotlin",
 				}
 				if receiver == "this" {
-					if typeContext := kotlinCurrentTypeScopeName(stack); typeContext != "" {
+					if typeContext := currentTypeContext; typeContext != "" {
 						item["class_context"] = typeContext
 					}
 				} else if receiver != "" {
-					if functionContext := currentScopedName(stack, "function"); functionContext != "" {
+					if functionContext != "" {
 						if inferredType := kotlinInferReceiverType(
 							receiver,
-							localVariableTypes[functionContext],
+							effectiveVariableTypes,
 							classPropertyTypes,
-							kotlinCurrentTypeScopeName(stack),
+							currentTypeContext,
 							packageName,
 							functionReturnTypes,
 							classTypeParameters,
@@ -405,6 +428,23 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					}
 				}
 				appendBucket(payload, "function_calls", item)
+			}
+		}
+
+		if functionContext != "" {
+			if scopedTypes := kotlinScopedSmartCastTypes(trimmed); len(scopedTypes) > 0 && strings.Contains(rawLine, "{") {
+				smartCastScopes = append(smartCastScopes, kotlinTypeFlowScope{
+					functionName:  functionContext,
+					braceDepth:    braceDepth + max(1, strings.Count(rawLine, "{")),
+					variableTypes: scopedTypes,
+				})
+			}
+			if subject := kotlinWhenSubject(trimmed); subject != "" && strings.Contains(rawLine, "{") {
+				whenSubjectScopes = append(whenSubjectScopes, kotlinWhenSubjectScope{
+					functionName: functionContext,
+					braceDepth:   braceDepth + max(1, strings.Count(rawLine, "{")),
+					subject:      subject,
+				})
 			}
 		}
 
