@@ -507,6 +507,10 @@ Go-backed sources are:
 
 - Kustomize-reachable policy documents that reference SSM parameter families
 - Terragrunt `dependency.config_path` values
+- Terragrunt `read_terragrunt_config(...)` and `include` / `find_in_parent_folders(...)`
+  config references
+- local Terraform and Terragrunt `file(...)` / `templatefile(...)` config
+  assets when the path is repo-local and not a remote module source
 
 Broader Terraform and Terragrunt local asset/config-file surfacing remains a
 separate parity lane.

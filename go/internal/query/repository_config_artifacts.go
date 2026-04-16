@@ -13,6 +13,9 @@ import (
 
 var (
 	terragruntDependencyConfigPathPattern = regexp.MustCompile(`(?i)\bconfig_path\s*=\s*"([^"]+)"`)
+	terragruntReadConfigPattern           = regexp.MustCompile(`(?i)read_terragrunt_config\((?:find_in_parent_folders\()?"([^"]+)"`)
+	terragruntIncludePathPattern          = regexp.MustCompile(`(?i)\bpath\s*=\s*find_in_parent_folders\("([^"]+)"\)`)
+	localFileFunctionPattern              = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(\s*"([^"]+)"`)
 	ssmConfigPathPattern                  = regexp.MustCompile(`(?i)((?:/(?:configd|api)/[A-Za-z0-9._*/-]+))`)
 	ssmParameterARNPattern                = regexp.MustCompile(`(?i):parameter((?:/(?:configd|api)/[A-Za-z0-9._*/-]+))`)
 )
@@ -172,10 +175,23 @@ func loadRepositoryConfigArtifactsForSources(
 func buildRepositoryConfigArtifacts(repoName string, files []FileContent) map[string]any {
 	configPaths := make([]map[string]any, 0)
 	configPaths = append(configPaths, extractKustomizeConfigPathRows(repoName, files)...)
-	configPaths = append(configPaths, extractTerragruntConfigPathRows(repoName, files)...)
+	configPaths = append(configPaths, extractHCLConfigAssetRows(repoName, files)...)
 	if len(configPaths) == 0 {
 		return nil
 	}
+	sort.Slice(configPaths, func(i, j int) bool {
+		leftPath := StringVal(configPaths[i], "path")
+		rightPath := StringVal(configPaths[j], "path")
+		if leftPath != rightPath {
+			return leftPath < rightPath
+		}
+		leftKind := StringVal(configPaths[i], "evidence_kind")
+		rightKind := StringVal(configPaths[j], "evidence_kind")
+		if leftKind != rightKind {
+			return leftKind < rightKind
+		}
+		return StringVal(configPaths[i], "relative_path") < StringVal(configPaths[j], "relative_path")
+	})
 	return map[string]any{"config_paths": configPaths}
 }
 
@@ -191,6 +207,8 @@ func isConfigArtifactCandidate(file FileContent) bool {
 		return true
 	case lowerBase == "terragrunt.hcl":
 		return true
+	case strings.HasSuffix(lowerBase, ".tf"), strings.HasSuffix(lowerBase, ".hcl"):
+		return true
 	case strings.HasPrefix(lowerBase, "docker-compose"):
 		return false
 	case strings.HasSuffix(lowerBase, ".yaml"), strings.HasSuffix(lowerBase, ".yml"), strings.HasSuffix(lowerBase, ".json"):
@@ -200,10 +218,11 @@ func isConfigArtifactCandidate(file FileContent) bool {
 	}
 }
 
-func extractTerragruntConfigPathRows(repoName string, files []FileContent) []map[string]any {
+func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[string]any {
 	rows := make([]map[string]any, 0)
 	for _, file := range files {
-		if !strings.EqualFold(path.Base(file.RelativePath), "terragrunt.hcl") {
+		lowerBase := strings.ToLower(path.Base(file.RelativePath))
+		if lowerBase != "terragrunt.hcl" && !strings.HasSuffix(lowerBase, ".tf") && !strings.HasSuffix(lowerBase, ".hcl") {
 			continue
 		}
 		for _, match := range terragruntDependencyConfigPathPattern.FindAllStringSubmatch(file.Content, -1) {
@@ -219,6 +238,42 @@ func extractTerragruntConfigPathRows(repoName string, files []FileContent) []map
 				"source_repo":   repoName,
 				"relative_path": file.RelativePath,
 				"evidence_kind": "terragrunt_dependency_config_path",
+			})
+		}
+		for _, match := range terragruntReadConfigPattern.FindAllStringSubmatch(file.Content, -1) {
+			configPath := normalizeLocalConfigAssetPath(match)
+			if configPath == "" {
+				continue
+			}
+			rows = append(rows, map[string]any{
+				"path":          configPath,
+				"source_repo":   repoName,
+				"relative_path": file.RelativePath,
+				"evidence_kind": "terragrunt_read_config",
+			})
+		}
+		for _, match := range terragruntIncludePathPattern.FindAllStringSubmatch(file.Content, -1) {
+			configPath := normalizeLocalConfigAssetPath(match)
+			if configPath == "" {
+				continue
+			}
+			rows = append(rows, map[string]any{
+				"path":          configPath,
+				"source_repo":   repoName,
+				"relative_path": file.RelativePath,
+				"evidence_kind": "terragrunt_include_path",
+			})
+		}
+		for _, match := range localFileFunctionPattern.FindAllStringSubmatch(file.Content, -1) {
+			configPath := normalizeLocalConfigAssetPath(match)
+			if configPath == "" {
+				continue
+			}
+			rows = append(rows, map[string]any{
+				"path":          configPath,
+				"source_repo":   repoName,
+				"relative_path": file.RelativePath,
+				"evidence_kind": "local_config_asset",
 			})
 		}
 	}
@@ -502,6 +557,32 @@ func normalizeConfigPath(value string) string {
 		return match[1]
 	}
 	return ""
+}
+
+func normalizeLocalConfigAssetPath(match []string) string {
+	if len(match) < 2 {
+		return ""
+	}
+	value := strings.TrimSpace(match[1])
+	if value == "" {
+		return ""
+	}
+	if strings.Contains(value, "://") || strings.HasPrefix(strings.ToLower(value), "git::") || strings.HasPrefix(strings.ToLower(value), "tfr:///") {
+		return ""
+	}
+	replacer := strings.NewReplacer(
+		"${path.module}/", "",
+		"${get_repo_root()}/", "",
+		"${get_parent_terragrunt_dir()}/", "",
+		"${get_terragrunt_dir()}/", "",
+	)
+	value = replacer.Replace(value)
+	value = strings.TrimPrefix(value, "./")
+	value = strings.TrimSpace(value)
+	if value == "" || value == "." {
+		return ""
+	}
+	return cleanRepositoryRelativePath(value)
 }
 
 func cleanRepositoryRelativePath(relativePath string) string {

@@ -104,3 +104,54 @@ dependency "network" {
 		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildRepositoryConfigArtifactsExtractsTerragruntAndTerraformConfigAssets(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-stack-payments", []FileContent{
+		{
+			RelativePath: "env/prod/terragrunt.hcl",
+			Content: `include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+locals {
+  env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+}
+
+inputs = yamldecode(file("${get_repo_root()}/config/runtime.yaml"))
+`,
+		},
+		{
+			RelativePath: "modules/build/main.tf",
+			Content: `resource "aws_codebuild_project" "build" {
+  buildspec = file("${path.module}/buildspec.yaml")
+}
+
+locals {
+  rendered = templatefile("${path.module}/templates/runtime.json", {})
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	wantPaths := []string{
+		"buildspec.yaml",
+		"config/runtime.yaml",
+		"env.hcl",
+		"root.hcl",
+		"templates/runtime.json",
+	}
+	if len(configPaths) != len(wantPaths) {
+		t.Fatalf("len(config_paths) = %d, want %d", len(configPaths), len(wantPaths))
+	}
+	for index, want := range wantPaths {
+		if got, ok := configPaths[index]["path"].(string); !ok || got != want {
+			t.Fatalf("config_paths[%d].path = %#v, want %#v", index, configPaths[index]["path"], want)
+		}
+	}
+}
