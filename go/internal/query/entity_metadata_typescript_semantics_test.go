@@ -7,6 +7,77 @@ import (
 	"testing"
 )
 
+func TestAttachTypeScriptSemanticsClonesResult(t *testing.T) {
+	t.Parallel()
+
+	result := map[string]any{
+		"entity_id": "class-ts-1",
+		"language":  "typescript",
+	}
+
+	got := AttachTypeScriptSemantics(result, map[string]any{
+		"decorators":               []any{"@sealed"},
+		"type_parameters":          []any{"T"},
+		"type_alias_kind":          "mapped_type",
+		"declaration_merge_group":  "Service",
+		"declaration_merge_count":  2,
+		"declaration_merge_kinds":  []any{"class", "namespace"},
+		"component_type_assertion": "ComponentType",
+		"jsx_fragment_shorthand":   true,
+	})
+
+	if _, ok := result["typescript_semantics"]; ok {
+		t.Fatal("result was mutated, want original map unchanged")
+	}
+
+	semantics, ok := got["typescript_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("typescript_semantics type = %T, want map[string]any", got["typescript_semantics"])
+	}
+	if got, want := semantics["decorators"], []string{"@sealed"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("typescript_semantics[decorators] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["type_parameters"], []string{"T"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("typescript_semantics[type_parameters] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["type_alias_kind"], "mapped_type"; got != want {
+		t.Fatalf("typescript_semantics[type_alias_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["declaration_merge_group"], "Service"; got != want {
+		t.Fatalf("typescript_semantics[declaration_merge_group] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["declaration_merge_count"], 2; got != want {
+		t.Fatalf("typescript_semantics[declaration_merge_count] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["declaration_merge_kinds"], []string{"class", "namespace"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("typescript_semantics[declaration_merge_kinds] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["component_type_assertion"], "ComponentType"; got != want {
+		t.Fatalf("typescript_semantics[component_type_assertion] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["jsx_fragment_shorthand"], true; got != want {
+		t.Fatalf("typescript_semantics[jsx_fragment_shorthand] = %#v, want %#v", got, want)
+	}
+}
+
+func TestAttachTypeScriptSemanticsReturnsOriginalWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	result := map[string]any{
+		"entity_id": "class-ts-1",
+		"language":  "typescript",
+	}
+
+	got := AttachTypeScriptSemantics(result, map[string]any{})
+
+	if _, ok := got["typescript_semantics"]; ok {
+		t.Fatal("typescript_semantics present, want absent")
+	}
+	if got["entity_id"] != "class-ts-1" {
+		t.Fatalf("entity_id = %#v, want class-ts-1", got["entity_id"])
+	}
+}
+
 func TestEnrichEntityResultsWithContentMetadataTypeScriptMappedTypeAlias(t *testing.T) {
 	t.Parallel()
 

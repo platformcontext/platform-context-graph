@@ -50,6 +50,12 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   metadata directly from Neo4j rows. Mapped and conditional aliases are now
   first-class graph-backed entities on this branch, including wrapped
   conditional aliases that the parser normalizes.
+- Graph-backed TypeScript query surfaces now also attach a dedicated
+  `typescript_semantics` bundle when class-family or TSX rows already carry
+  decorators, type parameters, declaration-merge metadata, fragment shorthand,
+  or `ComponentType` assertions. That bundle now shows up on the shared
+  `code/search`, `entities/resolve`, `code/relationships`, `code/complexity`,
+  `code/language-query`, and entity-context/story paths.
 - Canonical TypeScript `Class`, `Interface`, and `Enum` rows now preserve
   `decorators`, `type_parameters`, and `declaration_merge_*` metadata through
   the Go projector and Neo4j writer when those values are present in the
@@ -61,6 +67,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   entities were persisted by the graph writer. Class-level decorator and
   generic coverage on the canonical class-family path is now first-class,
   while broader graph-first promotion remains partial.
+- The same graph-backed rows now also attach `typescript_semantics`, which
+  keeps the TypeScript and TSX query surfaces aligned when the graph already
+  has the canonical class-family or TSX narrowing metadata.
 
 
 ## Known Limitations

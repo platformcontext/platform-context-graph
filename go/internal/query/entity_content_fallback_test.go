@@ -2,10 +2,13 @@ package query
 
 import (
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -67,6 +70,90 @@ func TestResolveEntityFallsBackToContentEntities(t *testing.T) {
 	}
 	if got, want := metadata["type"], "string"; got != want {
 		t.Fatalf("entity[metadata][type] = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveEntityReturnsGraphBackedTypeScriptClassWithTypeScriptSemantics(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if got, want := params["name"], "Service"; got != want {
+					t.Fatalf("params[name] = %#v, want %#v", got, want)
+				}
+				for _, fragment := range []string{
+					"e.type_parameters as type_parameters",
+					"e.declaration_merge_group as declaration_merge_group",
+					"e.declaration_merge_count as declaration_merge_count",
+					"e.declaration_merge_kinds as declaration_merge_kinds",
+					"e.decorators as decorators",
+				} {
+					if !strings.Contains(cypher, fragment) {
+						t.Fatalf("cypher = %q, want %q", cypher, fragment)
+					}
+				}
+				return []map[string]any{
+					{
+						"id":                      "class-ts-1",
+						"labels":                  []any{"Class"},
+						"name":                    "Service",
+						"file_path":               "src/service.ts",
+						"repo_id":                 "repo-1",
+						"repo_name":               "repo-1",
+						"language":                "typescript",
+						"start_line":              int64(1),
+						"end_line":                int64(12),
+						"decorators":              []any{"@sealed"},
+						"type_parameters":         []any{"T"},
+						"declaration_merge_group": "Service",
+						"declaration_merge_count": int64(2),
+						"declaration_merge_kinds": []any{"class", "namespace"},
+					},
+				}, nil
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/entities/resolve",
+		bytes.NewBufferString(`{"name":"Service","type":"class","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	entities, ok := resp["entities"].([]any)
+	if !ok || len(entities) != 1 {
+		t.Fatalf("entities = %#v, want one graph-backed entity", resp["entities"])
+	}
+	entity, ok := entities[0].(map[string]any)
+	if !ok {
+		t.Fatalf("entity type = %T, want map[string]any", entities[0])
+	}
+	if got, want := entity["semantic_summary"], "Class Service participates in TypeScript declaration merging with namespace Service."; got != want {
+		t.Fatalf("entity[semantic_summary] = %#v, want %#v", got, want)
+	}
+	semantics, ok := entity["typescript_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity[typescript_semantics] type = %T, want map[string]any", entity["typescript_semantics"])
+	}
+	if got, want := semantics["decorators"], []any{"@sealed"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("typescript_semantics[decorators] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["type_parameters"], []any{"T"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("typescript_semantics[type_parameters] = %#v, want %#v", got, want)
 	}
 }
 

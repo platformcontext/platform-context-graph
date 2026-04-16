@@ -66,6 +66,9 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 		"outgoing":   filterNullRelationships(row["outgoing"]),
 		"incoming":   filterNullRelationships(row["incoming"]),
 	}
+	if metadata := graphResultMetadata(row); len(metadata) > 0 {
+		response["metadata"] = metadata
+	}
 	normalizeGraphRelationships(response)
 	response = filterRelationshipResponse(response, direction, relationshipType)
 	enriched, err := h.enrichGraphSearchResultsWithContentMetadata(
@@ -125,6 +128,7 @@ func relationshipGraphRowCypher(predicate string) string {
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line,
+` + graphSemanticMetadataProjection() + `
 		       collect(DISTINCT {direction: 'outgoing', type: type(r), call_kind: r.call_kind, reason: r.reason, target_name: target.name, target_id: target.id}) as outgoing,
 		       collect(DISTINCT {direction: 'incoming', type: type(r2), call_kind: r2.call_kind, reason: r2.reason, source_name: source.name, source_id: source.id}) as incoming
 		LIMIT 2

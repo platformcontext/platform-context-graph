@@ -45,18 +45,20 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     graph row. `entities/{entity_id}/context` now also promotes graph-provided
     JavaScript function metadata into `semantic_summary`, `semantic_profile`,
     `javascript_semantics`, and `story` when the graph row already has it.
-    `dead-code`, `code/relationships`, `code/complexity`, `entities/resolve`,
-    and the remaining non-JavaScript entity-context/story paths still surface
-    the matching metadata through content enrichment when the graph does not
-    already have it. `language-query`, `code/search`, and JavaScript
-    entity-context now emit semantic summaries and a structured
+    `dead-code`, `code/relationships`, and `code/complexity` now also carry
+    the same graph-backed JavaScript semantic bundle when the graph row
+    already has it, while the remaining non-JavaScript entity-context/story
+    paths still surface the matching metadata through content enrichment when
+    the graph does not already have it. `language-query`, `code/search`, and
+    JavaScript entity-context now emit semantic summaries and a structured
     `semantic_profile` for JavaScript functions when docstring or
     method-kind metadata is present, JavaScript method-kind rows now get a
     dedicated `javascript_method` surface kind, entity-context still emits a
     first-class `story`, and repository stories still expose a semantic
     overview derived from those entities. Dedicated graph-first promotion
-    beyond `language-query`, `code/search`, and JavaScript entity-context/story
-    is still partial.
+    beyond `language-query`, `code/search`, JavaScript entity-context/story,
+    and the shared `dead-code`/`code/relationships`/`code/complexity`
+    surfaces is still partial.
 
 
 ## Known Limitations

@@ -60,6 +60,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     `language-query`, `code/search`, and entity-context surfaces now project
     `jsx_fragment_shorthand` and `component_type_assertion` directly from
     Neo4j rows when present.
+  - Those same graph-backed TSX rows now also attach `typescript_semantics`,
+    which keeps the structured fragment and narrowing signals available on the
+    shared query path without reconstructing them from content fallback.
 
 
 ## Known Limitations

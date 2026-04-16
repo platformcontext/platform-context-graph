@@ -13,6 +13,11 @@ func (h *EntityHandler) enrichEntityResultsWithContentMetadata(
 	limit int,
 ) ([]map[string]any, error) {
 	if h == nil || h.Content == nil || len(results) == 0 {
+		for i := range results {
+			if metadata, ok := results[i]["metadata"].(map[string]any); ok && len(metadata) > 0 {
+				attachSemanticSummary(results[i])
+			}
+		}
 		return results, nil
 	}
 

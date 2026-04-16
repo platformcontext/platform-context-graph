@@ -345,6 +345,11 @@ func attachSemanticSummary(result map[string]any) {
 	if jsSemantics := ExtractJavaScriptSemantics(metadata); jsSemantics.Present() {
 		result["javascript_semantics"] = jsSemantics.Fields()
 	}
+	if language := StringVal(entity, "language"); language == "typescript" || language == "tsx" {
+		if tsSemantics := TypeScriptSemanticProfileFromMetadata(metadata); tsSemantics.Present() {
+			result["typescript_semantics"] = tsSemantics.Fields()
+		}
+	}
 	if story := buildEntityStory(result); story != "" {
 		result["story"] = story
 	}

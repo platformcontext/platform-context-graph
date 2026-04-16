@@ -241,6 +241,7 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line
+` + graphSemanticMetadataProjection() + `
 		ORDER BY f.relative_path, e.name
 		LIMIT 100
 	`
@@ -253,7 +254,7 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 
 	results := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		results = append(results, map[string]any{
+		result := map[string]any{
 			"entity_id":  StringVal(row, "entity_id"),
 			"name":       StringVal(row, "name"),
 			"labels":     StringSliceVal(row, "labels"),
@@ -263,7 +264,11 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 			"language":   StringVal(row, "language"),
 			"start_line": IntVal(row, "start_line"),
 			"end_line":   IntVal(row, "end_line"),
-		})
+		}
+		if metadata := graphResultMetadata(row); len(metadata) > 0 {
+			result["metadata"] = metadata
+		}
+		results = append(results, result)
 	}
 	results, err = h.enrichGraphResultsWithContentMetadataByEntityID(ctx, results)
 	if err != nil {
@@ -367,6 +372,7 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 		       count(DISTINCT r) as outgoing_count,
 		       count(DISTINCT r2) as incoming_count,
 		       count(DISTINCT r) + count(DISTINCT r2) as total_relationships
+` + graphSemanticMetadataProjection() + `
 	`
 
 	row, err := h.Neo4j.RunSingle(ctx, cypher, map[string]any{"entity_id": req.EntityID})
@@ -392,6 +398,9 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 		"outgoing_count":      IntVal(row, "outgoing_count"),
 		"incoming_count":      IntVal(row, "incoming_count"),
 		"total_relationships": IntVal(row, "total_relationships"),
+	}
+	if metadata := graphResultMetadata(row); len(metadata) > 0 {
+		response["metadata"] = metadata
 	}
 	enriched, err := h.enrichGraphSearchResultsWithContentMetadata(
 		ctx,
