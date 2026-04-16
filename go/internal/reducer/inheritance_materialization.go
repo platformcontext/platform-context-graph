@@ -24,7 +24,8 @@ var inheritableEntityTypes = map[string]struct{}{
 }
 
 // InheritanceMaterializationHandler reduces one inheritance follow-up into
-// canonical INHERITS edge writes using parser entity bases metadata.
+// canonical INHERITS and OVERRIDES edge writes using parser entity bases and
+// PHP trait adaptation metadata.
 type InheritanceMaterializationHandler struct {
 	FactLoader FactLoader
 	EdgeWriter SharedProjectionEdgeWriter
@@ -111,8 +112,8 @@ func (h InheritanceMaterializationHandler) Handle(
 }
 
 // ExtractInheritanceRows builds canonical child/parent edge rows from content
-// entity facts that carry bases metadata. It performs intra-repo name matching
-// only; cross-repo inheritance is out of scope.
+// entity facts that carry bases or trait adaptation metadata. It performs
+// intra-repo name matching only; cross-repo inheritance is out of scope.
 func ExtractInheritanceRows(envelopes []facts.Envelope) ([]string, []map[string]any) {
 	if len(envelopes) == 0 {
 		return nil, nil
@@ -146,7 +147,8 @@ func ExtractInheritanceRows(envelopes []facts.Envelope) ([]string, []map[string]
 		}
 
 		bases := inheritancePayloadBases(env.Payload)
-		if len(bases) == 0 {
+		traitAdaptations := inheritancePayloadTraitAdaptations(env.Payload)
+		if len(bases) == 0 && len(traitAdaptations) == 0 {
 			continue
 		}
 
@@ -168,6 +170,32 @@ func ExtractInheritanceRows(envelopes []facts.Envelope) ([]string, []map[string]
 				"repo_id":           repoID,
 				"relationship_type": "INHERITS",
 			})
+		}
+
+		if entityType != "Class" {
+			continue
+		}
+
+		for _, adaptation := range traitAdaptations {
+			for _, overriddenTrait := range inheritanceTraitOverrideTargets(adaptation) {
+				parentEntityID, ok := entityIndex[inheritanceIndexKey{repoID: repoID, name: overriddenTrait}]
+				if !ok {
+					continue
+				}
+
+				edgeKey := childEntityID + "->" + parentEntityID + ":OVERRIDES"
+				if _, dup := seenEdges[edgeKey]; dup {
+					continue
+				}
+				seenEdges[edgeKey] = struct{}{}
+
+				rows = append(rows, map[string]any{
+					"child_entity_id":   childEntityID,
+					"parent_entity_id":  parentEntityID,
+					"repo_id":           repoID,
+					"relationship_type": "OVERRIDES",
+				})
+			}
 		}
 	}
 

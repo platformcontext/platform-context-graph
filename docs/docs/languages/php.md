@@ -28,5 +28,5 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsVariableAndCallMetadata` | Compose-backed fixture verification | - |
 
 ## Known Limitations
-- Trait adaptation blocks inside class-body `use` statements (`insteadof` / `as`) are now preserved as `trait_adaptations` metadata, but the reducer still does not emit separate override edges from them
+- Trait adaptation blocks inside class-body `use` statements now emit `OVERRIDES` edges for `insteadof` clauses. `as` aliases are still preserved as `trait_adaptations` metadata only and do not materialize as a standalone graph edge.
 - Arbitrary receiver chains and broader interprocedural aliasing still require stronger end-to-end proof and type propagation beyond the bounded same-file forms, cross-file method-return property-dereference proof, declared method-return-type aliases, method-return property chains, chained static factory-return receivers, and nullsafe receiver chains

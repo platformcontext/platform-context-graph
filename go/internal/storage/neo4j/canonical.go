@@ -182,11 +182,20 @@ FOREACH (_ IN CASE WHEN row.relationship_type IS NULL AND (row.call_kind IS NULL
 const batchCanonicalInheritanceEdgeUpsertCypher = `UNWIND $rows AS row
 MATCH (child {uid: row.child_entity_id})
 MATCH (parent {uid: row.parent_entity_id})
-MERGE (child)-[rel:INHERITS]->(parent)
-SET rel.confidence = 0.95,
-    rel.reason = 'Parser entity bases metadata resolved an inheritance edge',
-    rel.evidence_source = row.evidence_source,
-    rel.relationship_type = row.relationship_type`
+FOREACH (_ IN CASE WHEN row.relationship_type = 'OVERRIDES' THEN [1] ELSE [] END |
+    MERGE (child)-[rel:OVERRIDES]->(parent)
+    SET rel.confidence = 0.95,
+        rel.reason = 'Parser trait adaptation metadata resolved an override edge',
+        rel.evidence_source = row.evidence_source,
+        rel.relationship_type = row.relationship_type
+)
+FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type = 'INHERITS' THEN [1] ELSE [] END |
+    MERGE (child)-[rel:INHERITS]->(parent)
+    SET rel.confidence = 0.95,
+        rel.reason = 'Parser entity bases metadata resolved an inheritance edge',
+        rel.evidence_source = row.evidence_source,
+        rel.relationship_type = row.relationship_type
+)`
 
 // --- Batched UNWIND Cypher (SQL relationship edges) ---
 
@@ -214,7 +223,7 @@ FOREACH (_ IN CASE WHEN row.relationship_type = 'TRIGGERS' THEN [1] ELSE [] END 
 
 // --- Retraction Cypher ---
 
-const retractInheritanceEdgesCypher = `MATCH (child)-[rel:INHERITS]->()
+const retractInheritanceEdgesCypher = `MATCH (child)-[rel:INHERITS|OVERRIDES]->()
 WHERE child.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`

@@ -245,7 +245,7 @@ func DefaultDomainDefinitions() []DomainDefinition {
 		},
 		{
 			Domain:  DomainInheritanceMaterialization,
-			Summary: "materialize canonical inheritance edges from parser entity bases metadata",
+			Summary: "materialize canonical inheritance and override edges from parser entity bases and trait adaptation metadata",
 			Ownership: OwnershipShape{
 				CrossSource:    true,
 				CrossScope:     true,

@@ -36,8 +36,8 @@ const (
 	// DomainSQLRelationshipMaterialization materializes canonical SQL
 	// relationship edges (REFERENCES_TABLE, HAS_COLUMN, TRIGGERS).
 	DomainSQLRelationshipMaterialization Domain = "sql_relationship_materialization"
-	// DomainInheritanceMaterialization materializes canonical inheritance edges
-	// from parser entity bases metadata.
+	// DomainInheritanceMaterialization materializes canonical inheritance and
+	// override edges from parser entity bases and trait adaptation metadata.
 	DomainInheritanceMaterialization Domain = "inheritance_materialization"
 )
 

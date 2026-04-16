@@ -31,8 +31,8 @@ type DefaultHandlers struct {
 	// metadata.
 	SQLRelationshipEdgeWriter SharedProjectionEdgeWriter
 
-	// InheritanceEdgeWriter writes canonical INHERITS edges from reducer-owned
-	// parser entity bases metadata.
+	// InheritanceEdgeWriter writes canonical INHERITS and OVERRIDES edges from
+	// reducer-owned parser entity bases and trait adaptation metadata.
 	InheritanceEdgeWriter SharedProjectionEdgeWriter
 
 	// CanonicalNodeChecker checks whether canonical code entity nodes exist in
@@ -41,8 +41,8 @@ type DefaultHandlers struct {
 
 	// Cross-repo relationship resolution adapters. All optional; nil disables
 	// cross-repo resolution during deployment_mapping reduction.
-	EvidenceFactLoader EvidenceFactLoader
-	AssertionLoader    AssertionLoader
+	EvidenceFactLoader  EvidenceFactLoader
+	AssertionLoader     AssertionLoader
 	ResolutionPersister ResolutionPersister
 
 	// RepoDependencyEdgeWriter writes cross-repo dependency edges resolved

@@ -194,10 +194,10 @@ func buildRowMap(
 			return nil, false
 		}
 		return map[string]any{
-			"child_entity_id":  childEntityID,
-			"parent_entity_id": parentEntityID,
+			"child_entity_id":   childEntityID,
+			"parent_entity_id":  parentEntityID,
 			"relationship_type": payloadString(row.Payload, "relationship_type"),
-			"evidence_source":  evidenceSource,
+			"evidence_source":   evidenceSource,
 		}, true
 
 	case reducer.DomainSQLRelationships:
