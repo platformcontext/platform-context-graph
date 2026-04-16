@@ -582,6 +582,74 @@ func TestGetEntityContextUsesGraphPythonDecoratedClassWithoutContent(t *testing.
 	}
 }
 
+func TestGetEntityContextUsesGraphPythonLambdaWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if got, want := params["entity_id"], "lambda-1"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				if want := "e.semantic_kind as semantic_kind"; !strings.Contains(cypher, want) {
+					t.Fatalf("cypher = %q, want %q", cypher, want)
+				}
+				return map[string]any{
+					"id":            "lambda-1",
+					"labels":        []any{"Function"},
+					"name":          "double",
+					"file_path":     "src/lambda.py",
+					"language":      "python",
+					"start_line":    int64(4),
+					"end_line":      int64(4),
+					"repo_id":       "repo-1",
+					"repo_name":     "repo-1",
+					"semantic_kind": "lambda",
+					"relationships": []any{},
+				}, nil
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/lambda-1/context", nil)
+	req.SetPathValue("entity_id", "lambda-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	if got, want := resp["semantic_summary"], "Function double is a lambda function."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["story"], "Function double is a lambda function. Defined in src/lambda.py (python)."; got != want {
+		t.Fatalf("resp[story] = %#v, want %#v", got, want)
+	}
+	pythonSemantics, ok := resp["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[python_semantics] type = %T, want map[string]any", resp["python_semantics"])
+	}
+	if got, want := pythonSemantics["surface_kind"], "lambda_function"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
+	}
+	signals, ok := pythonSemantics["signals"].([]any)
+	if !ok {
+		t.Fatalf("python_semantics[signals] type = %T, want []any", pythonSemantics["signals"])
+	}
+	if len(signals) != 1 || signals[0] != "lambda" {
+		t.Fatalf("python_semantics[signals] = %#v, want [lambda]", signals)
+	}
+}
+
 func TestGetEntityContextUsesGraphPythonTypeAnnotationsWithoutContent(t *testing.T) {
 	t.Parallel()
 

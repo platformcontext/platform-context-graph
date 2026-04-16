@@ -393,7 +393,7 @@ func TestHandleLanguageQuery_PythonLambdaFunctionUsesGraphMetadataWithoutContent
 	if !ok {
 		t.Fatalf("result type = %T, want map[string]any", results[0])
 	}
-	if got, want := result["semantic_summary"], "Function double is a lambda."; got != want {
+	if got, want := result["semantic_summary"], "Function double is a lambda function."; got != want {
 		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
 	}
 	profile, ok := result["semantic_profile"].(map[string]any)
@@ -402,6 +402,20 @@ func TestHandleLanguageQuery_PythonLambdaFunctionUsesGraphMetadataWithoutContent
 	}
 	if got, want := profile["surface_kind"], "lambda_function"; got != want {
 		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	pythonSemantics, ok := result["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[python_semantics] type = %T, want map[string]any", result["python_semantics"])
+	}
+	if got, want := pythonSemantics["surface_kind"], "lambda_function"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
+	}
+	signals, ok := pythonSemantics["signals"].([]any)
+	if !ok {
+		t.Fatalf("python_semantics[signals] type = %T, want []any", pythonSemantics["signals"])
+	}
+	if len(signals) != 1 || signals[0] != "lambda" {
+		t.Fatalf("python_semantics[signals] = %#v, want [lambda]", signals)
 	}
 }
 

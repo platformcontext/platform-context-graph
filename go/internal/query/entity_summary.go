@@ -211,7 +211,7 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 	fragments := make([]string, 0, 4)
 	pythonProfile := PythonSemanticProfileFromMetadata(label, metadata)
 	if pythonProfile.Lambda {
-		fragments = append(fragments, "is a lambda")
+		fragments = append(fragments, "is a lambda function")
 	}
 	if componentAssertion, _ := metadata["component_type_assertion"].(string); componentAssertion != "" {
 		fragments = append(fragments, "narrows to "+componentAssertion)

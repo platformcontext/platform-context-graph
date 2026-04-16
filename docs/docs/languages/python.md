@@ -78,7 +78,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     decorator, async, lambda, metaclass, and type-annotation fields.
   - Identifier-assigned lambdas now materialize as Python function entities
     with `semantic_kind=lambda`, and the normal semantic/profile/story
-    surfaces promote them as `lambda_function`.
+    surfaces promote them as `lambda_function` and describe them as lambda
+    functions.
   - Python metaclass ownership is now preserved on class entities, surfaced
     directly on the graph-backed `code/language-query` path, and exposed
     through persisted `USES_METACLASS` relationships on the normal

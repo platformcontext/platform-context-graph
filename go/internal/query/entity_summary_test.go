@@ -91,7 +91,7 @@ func TestBuildEntitySemanticSummaryPythonLambdaFunction(t *testing.T) {
 	}
 
 	got := buildEntitySemanticSummary(entity)
-	want := "Function double is a lambda."
+	want := "Function double is a lambda function."
 	if got != want {
 		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
 	}
