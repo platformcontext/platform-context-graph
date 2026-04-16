@@ -374,6 +374,15 @@ func collectSemanticRepoIDs(envelopes []facts.Envelope) []string {
 	return repoIDs
 }
 
+func uniqueSemanticRepoIDs(repoIDs []string) []string {
+	deduped := dedupeNonEmptyStrings(repoIDs)
+	if len(deduped) == 0 {
+		return nil
+	}
+	sort.Strings(deduped)
+	return deduped
+}
+
 func dedupeNonEmptyStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil

@@ -53,26 +53,29 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Graph-backed TypeScript query surfaces now also attach a dedicated
   `typescript_semantics` bundle when class-family or TSX rows already carry
   decorators, type parameters, declaration-merge metadata, fragment shorthand,
-  or `ComponentType` assertions. That bundle now shows up on the shared
-  `code/search`, `code/dead-code`, `entities/resolve`, `code/relationships`,
-  `code/complexity`, `code/language-query`, and entity-context/story paths.
-- Canonical TypeScript `Class`, `Interface`, and `Enum` rows now preserve
-  `decorators`, `type_parameters`, and `declaration_merge_*` metadata through
-  the Go projector and Neo4j writer when those values are present in the
-  entity payloads. Broader TypeScript graph-first promotion beyond that
-  canonical class-family path remains partial.
+  or `ComponentType` / `React.FC` assertions. That bundle now shows up on the
+  shared `code/search`, `code/dead-code`, `entities/resolve`,
+  `code/relationships`, `code/complexity`, `code/language-query`, and
+  entity-context/story paths.
+- Canonical TypeScript `Class`, `Interface`, `Enum`, and decorated/generic
+  `Function` rows now preserve `decorators`, `type_parameters`, and
+  `declaration_merge_*` metadata through the Go projector and Neo4j writer
+  when those values are present in the entity payloads. Broad graph-first
+  promotion is still partial for exotic surfaces, but the canonical
+  class-family and TypeScript function paths are now first-class.
 - Graph-backed `language-query`, `code/search`, and entity-context results
-  now also surface `decorators`, `jsx_fragment_shorthand`, and
-  `component_type_assertion` directly from Neo4j rows when those semantic
+  now also surface `decorators`, `type_parameters`, `jsx_fragment_shorthand`,
+  and `component_type_assertion` directly from Neo4j rows when those semantic
   entities were persisted by the graph writer. Class-level decorator and
   generic coverage on the canonical class-family path is now first-class,
-  while broader graph-first promotion remains partial.
+  while the remaining gap is limited to other exotic graph-first promotion
+  surfaces.
 - The same graph-backed rows now also attach `typescript_semantics`, which
   keeps the TypeScript and TSX query surfaces aligned when the graph already
   has the canonical class-family or TSX narrowing metadata.
 
 
 ## Known Limitations
-- Broader TypeScript graph-first promotion beyond the canonical
-  class/interface/enum path is still partial, especially for decorator and
-  generic surfaces outside the nodes now persisted by the Go graph writer
+- Broader TypeScript graph-first promotion is still partial outside the
+  canonical class/interface/enum/function surfaces now persisted by the Go
+  graph writer
