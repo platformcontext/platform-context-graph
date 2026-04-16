@@ -1,15 +1,20 @@
 # Go Parity Closure Plan
 
+> Historical execution record: the implementation-heavy parser/runtime parity
+> closure described here has already landed on this branch. Treat this file as
+> a record of the execution waves that got the branch to the current state, not
+> as a live list of unresolved Python-era parity gaps.
+
 This plan closes the remaining feature-for-feature parity gaps after the
 Python-to-Go runtime migration.
 
-The branch is already structurally Go-owned. The remaining work is graph-surface
-and end-to-end parity closure.
+The branch is already structurally Go-owned. The remaining work now is
+validation breadth, evidence refresh, and final documentation normalization.
 
 ## Goal
 
-Reach honest feature-for-feature parity with the old Python platform before any
-new collector or source-family expansion begins.
+Reach honest sign-off for the already-landed feature-for-feature parity work
+before any new collector or source-family expansion begins.
 
 ## Execution Rules
 
@@ -18,10 +23,9 @@ new collector or source-family expansion begins.
 - treat parser extraction parity and graph/query-surface parity as separate bars
 - use TDD for every code change
 - keep docs current as each feature family closes
-- update the language pages when a capability moves from `partial` or
-  `unsupported` to `supported`
+- update the language pages and parity docs when current-truth wording changes
 
-## Phase 0: Operator And Runtime Contract Closure
+## Historical Phase 0: Operator And Runtime Contract Closure
 
 ### Scope
 
@@ -48,7 +52,7 @@ the Go-owned runtime exactly.
 - compose-backed operator proof
 - updated operator docs and parity audit
 
-## Phase 1: SQL And Data-Intelligence Validation Closure
+## Historical Phase 1: SQL And Data-Intelligence Validation Closure
 
 ### Scope
 
@@ -70,7 +74,7 @@ missing Go parity features.
 - compose-backed fixture verification
 - updated SQL language page and parity audit
 
-## Phase 2: High-Value Graph-Surface Parity
+## Historical Phase 2: High-Value Graph-Surface Parity
 
 ### Scope
 
@@ -109,7 +113,7 @@ become first-class.
   Python behavior produced call-graph edges
 - updated language pages and parity audit
 
-## Phase 3: IaC And Deployment Semantics Parity
+## Historical Phase 3: IaC And Deployment Semantics Parity
 
 ### Scope
 
@@ -130,7 +134,7 @@ Close the remaining infrastructure-language normalization gaps.
 - relationship and query-surface checks where applicable
 - compose-backed proof for the impacted IaC ecosystems
 
-## Phase 4: Long-Tail Language Parity
+## Historical Phase 4: Long-Tail Language Parity
 
 ### Scope
 
@@ -150,23 +154,22 @@ Close the documented long-tail graph-surface gaps.
 - focused parser tests
 - end-to-end proof for any feature that should survive graph materialization
 
-## Phase 5: Final Proof And Documentation Lock
+## Remaining Closeout Work
 
 ### Scope
 
-Prove parity closure and make the docs reflect the completed state.
+Finish the final validation sweep and documentation normalization for the
+already-landed Go-owned platform.
 
 ### Exit criteria
 
-- parity audit shows no remaining feature families marked partial because of
-  missing Go-owned graph/query-surface behavior, except intentionally bounded
-  non-goals explicitly accepted in docs
-- language pages are updated
-- support-maturity page and roadmap match the branch truth
+- parity audit and parity matrix match the actual branch truth
+- language pages, support-maturity page, roadmap, and runbooks no longer carry
+  stale parity-gap wording
 - local verification stack passes
 - operator docs and runbooks match the actual Go platform
 
-## Suggested Subagent Waves
+## Historical Subagent Waves
 
 ### Wave A
 

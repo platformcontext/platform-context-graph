@@ -33,8 +33,10 @@ jobs:
 
 **Check dead code** — `pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude @app.route --fail-on-found` finds entities that have no incoming `CALLS`, `IMPORTS`, or `REFERENCES` edges after decorator exclusions are applied. The command exits non-zero when candidates remain, failing the PR check.
 
-Threshold-based complexity gating is still a tracked parity item rather than a
-shipped Go CLI workflow, so this guide does not advertise it as available yet.
+Threshold-based complexity gating is available through the Go CLI today via
+`pcg analyze complexity`. If you want CI to enforce a threshold, treat that as
+an optional policy layer on top of the shipped command rather than a missing
+runtime-parity feature.
 
 ## Excluding paths with .pcgignore
 

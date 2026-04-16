@@ -31,9 +31,9 @@ runtime-ownership conversion is now effectively complete:
 - no deployed runtime or write service starts from a Python runtime entrypoint
 - only fixture Python files remain under `tests/fixtures/`
 
-The remaining work is feature-for-feature parity closure, proof hardening, docs
-cleanup, and branch completion. No new ingestors should start until those
-parity and validation steps are closed.
+The remaining work is final validation breadth, evidence refresh, docs cleanup,
+and branch completion. No new ingestors should start until those closeout steps
+are closed.
 
 Hard merge bar for the branch:
 

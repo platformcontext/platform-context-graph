@@ -92,7 +92,7 @@ Each trace tree is independent, but the shared `scope_id` lets you correlate the
 ## End-to-End Correlation Diagram
 
 ```text
-API Request (Python)
+API Request (Go API runtime)
   service.name: platform-context-graph-api
   trace_id: A, request_id: R1
   └── pcg.http.* (HTTP handler)

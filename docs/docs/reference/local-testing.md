@@ -322,19 +322,19 @@ curl -s http://localhost:8080/healthz
 curl -s http://localhost:8080/readyz
 
 # Pipeline summary (scopes, facts, work items, failures)
-curl -s http://localhost:8080/admin/status | python3 -m json.tool
+curl -s http://localhost:8080/admin/status | jq .
 
 # Content store stats
-curl -s http://localhost:8080/api/v0/content/stats | python3 -m json.tool
+curl -s http://localhost:8080/api/v0/content/stats | jq .
 
 # Query the graph for repositories
-curl -s http://localhost:8080/api/v0/repositories | python3 -m json.tool
+curl -s http://localhost:8080/api/v0/repositories | jq .
 
 # Query relationships (if any were built)
 curl -s 'http://localhost:8080/api/v0/query' \
   -H 'Content-Type: application/json' \
   -d '{"query": "MATCH (n)-[r]->(m) RETURN labels(n)[0] AS from_type, type(r) AS rel, labels(m)[0] AS to_type, count(*) AS cnt ORDER BY cnt DESC LIMIT 20"}' \
-  | python3 -m json.tool
+  | jq .
 ```
 
 ## Docs And Hygiene

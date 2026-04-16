@@ -213,8 +213,9 @@ operator/admin status shape even when the counters differ by role.
 ## Current Branch Note
 
 The runtime migration described by this PRD is now complete on the active
-rewrite branch. The remaining work is feature-for-feature parity closure across
-parser families, graph materialization, query surfaces, and operator breadth.
+rewrite branch. The remaining work is final validation breadth, evidence
+refresh, and documentation lock so the already-shipped Go-owned surfaces can be
+signed off honestly.
 
 ## Resiliency And Concurrency Model
 

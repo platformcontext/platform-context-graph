@@ -55,6 +55,7 @@ semantic summaries, and a structured `semantic_profile` on the normal
 language-query, code-search, entities-resolve, and entity-context surfaces.
 JavaScript method-kind rows now also get a dedicated `javascript_method`
 surface kind in those shared query outputs.
-Those families can still remain `partial` in the parity audit when broader
-graph-first modeling or higher-level story/context surfacing is not yet fully
-closed.
+The parity audit is still the stricter merge gate for end-to-end evidence,
+validation breadth, and final documentation lock. This matrix stays
+intentionally coarse and should not be read as the canonical branch closeout
+checklist.

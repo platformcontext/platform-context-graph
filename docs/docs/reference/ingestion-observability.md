@@ -78,8 +78,9 @@ Keep the distinction explicit:
   whether a scope, repository, or generation has finished indexing.
 - `index-status` answers checkpointed run completeness, not whether a runtime
   is currently healthy.
-- run-scoped completeness routes are still an open parity gap; use repository
-  coverage plus checkpoint logs when you need narrower evidence today.
+- run-scoped completeness routes are intentionally not part of the shipped
+  public contract on this branch; use repository coverage plus checkpoint logs
+  when you need narrower evidence today.
 - `POST /admin/refinalize` and `POST /admin/replay` are Go-owned repair
   surfaces. Use them for controlled recovery and backlog repair, not as part of
   the normal indexing path.
