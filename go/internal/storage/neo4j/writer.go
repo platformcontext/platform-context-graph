@@ -69,6 +69,14 @@ type Executor interface {
 	Execute(context.Context, Statement) error
 }
 
+// GroupExecutor executes multiple Cypher statements in a single atomic
+// transaction. Implementations should retry on transient errors (deadlock,
+// leader switch). If the executor does not support grouping, callers fall
+// back to sequential Execute calls.
+type GroupExecutor interface {
+	ExecuteGroup(ctx context.Context, stmts []Statement) error
+}
+
 // Adapter writes source-local graph records through an Executor.
 type Adapter struct {
 	Executor  Executor

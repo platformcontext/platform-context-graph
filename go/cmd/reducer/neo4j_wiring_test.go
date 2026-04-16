@@ -24,6 +24,15 @@ func (s *fakeNeo4jSession) RunCypher(ctx context.Context, cypher string, params 
 	return s.err
 }
 
+func (s *fakeNeo4jSession) RunCypherGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+	for _, stmt := range stmts {
+		if err := s.RunCypher(ctx, stmt.Cypher, stmt.Parameters); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func TestReducerNeo4jExecutorExecutesStatement(t *testing.T) {
 	t.Parallel()
 

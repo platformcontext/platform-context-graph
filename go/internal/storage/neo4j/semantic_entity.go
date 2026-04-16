@@ -267,7 +267,9 @@ func (w *SemanticEntityWriter) batchSize() int {
 }
 
 // WriteSemanticEntities retracts stale semantic nodes for the touched
-// repositories and upserts the current rows.
+// repositories and upserts the current rows. When the executor supports
+// GroupExecutor, all statements run in a single atomic transaction so
+// concurrent workers never see partially retracted or partially written state.
 func (w *SemanticEntityWriter) WriteSemanticEntities(
 	ctx context.Context,
 	write reducer.SemanticEntityWrite,
@@ -280,14 +282,6 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 	}
 
 	repoIDs := uniqueSemanticRepoIDs(write.RepoIDs)
-
-	if err := w.executor.Execute(ctx, Statement{
-		Operation:  OperationCanonicalRetract,
-		Cypher:     semanticEntityRetractCypher,
-		Parameters: map[string]any{"repo_ids": repoIDs, "evidence_source": semanticEntityEvidenceSource},
-	}); err != nil {
-		return reducer.SemanticEntityWriteResult{}, err
-	}
 
 	rowsByLabel := map[string][]map[string]any{
 		"Annotation":             nil,
@@ -310,7 +304,16 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		rowsByLabel[row.EntityType] = append(rowsByLabel[row.EntityType], rowMap)
 	}
 
+	// Build the full statement list: retract first, then all upserts.
+	var stmts []Statement
+	stmts = append(stmts, Statement{
+		Operation:  OperationCanonicalRetract,
+		Cypher:     semanticEntityRetractCypher,
+		Parameters: map[string]any{"repo_ids": repoIDs, "evidence_source": semanticEntityEvidenceSource},
+	})
+
 	writes := 0
+	batchSize := w.batchSize()
 	for _, plan := range []struct {
 		label  string
 		cypher string
@@ -327,41 +330,49 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		{label: "Variable", cypher: semanticVariableUpsertCypher},
 		{label: "Function", cypher: semanticFunctionUpsertCypher},
 	} {
-		if err := w.executeSemanticEntityRows(ctx, plan.cypher, rowsByLabel[plan.label]); err != nil {
-			return reducer.SemanticEntityWriteResult{}, err
+		rows := rowsByLabel[plan.label]
+		for start := 0; start < len(rows); start += batchSize {
+			end := start + batchSize
+			if end > len(rows) {
+				end = len(rows)
+			}
+			stmts = append(stmts, Statement{
+				Operation:  OperationCanonicalUpsert,
+				Cypher:     plan.cypher,
+				Parameters: map[string]any{"rows": rows[start:end]},
+			})
 		}
-		writes += len(rowsByLabel[plan.label])
+		writes += len(rows)
 	}
 
 	ownershipRows := buildRustImplBlockOwnershipRows(write.Rows)
-	if len(ownershipRows) > 0 {
-		if err := w.executeSemanticEntityRows(ctx, semanticRustImplBlockOwnershipCypher, ownershipRows); err != nil {
-			return reducer.SemanticEntityWriteResult{}, err
+	for start := 0; start < len(ownershipRows); start += batchSize {
+		end := start + batchSize
+		if end > len(ownershipRows) {
+			end = len(ownershipRows)
+		}
+		stmts = append(stmts, Statement{
+			Operation:  OperationCanonicalUpsert,
+			Cypher:     semanticRustImplBlockOwnershipCypher,
+			Parameters: map[string]any{"rows": ownershipRows[start:end]},
+		})
+	}
+
+	// Prefer atomic grouped execution; fall back to sequential for
+	// executors that don't support transactions (e.g., test stubs).
+	if ge, ok := w.executor.(GroupExecutor); ok {
+		if err := ge.ExecuteGroup(ctx, stmts); err != nil {
+			return reducer.SemanticEntityWriteResult{}, fmt.Errorf("write semantic entities: %w", err)
+		}
+	} else {
+		for _, stmt := range stmts {
+			if err := w.executor.Execute(ctx, stmt); err != nil {
+				return reducer.SemanticEntityWriteResult{}, fmt.Errorf("write semantic entities: %w", err)
+			}
 		}
 	}
 
 	return reducer.SemanticEntityWriteResult{CanonicalWrites: writes}, nil
-}
-
-func (w *SemanticEntityWriter) executeSemanticEntityRows(ctx context.Context, cypher string, rows []map[string]any) error {
-	if len(rows) == 0 {
-		return nil
-	}
-	batchSize := w.batchSize()
-	for start := 0; start < len(rows); start += batchSize {
-		end := start + batchSize
-		if end > len(rows) {
-			end = len(rows)
-		}
-		if err := w.executor.Execute(ctx, Statement{
-			Operation:  OperationCanonicalUpsert,
-			Cypher:     cypher,
-			Parameters: map[string]any{"rows": rows[start:end]},
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, bool) {

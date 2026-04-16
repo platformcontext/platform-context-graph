@@ -20,6 +20,7 @@ const reducerNeo4jCloseTimeout = 10 * time.Second
 // cypherRunner is the narrow interface shared by both executor adapters.
 type cypherRunner interface {
 	RunCypher(ctx context.Context, cypher string, params map[string]any) error
+	RunCypherGroup(ctx context.Context, stmts []sourceneo4j.Statement) error
 }
 
 // reducerNeo4jExecutor adapts a cypherRunner to the sourceneo4j.Executor
@@ -30,6 +31,12 @@ type reducerNeo4jExecutor struct {
 
 func (e reducerNeo4jExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
 	return e.session.RunCypher(ctx, stmt.Cypher, stmt.Parameters)
+}
+
+// ExecuteGroup runs all statements in a single Neo4j transaction with
+// automatic retry on transient errors (deadlocks, leader switches).
+func (e reducerNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+	return e.session.RunCypherGroup(ctx, stmts)
 }
 
 // reducerCypherExecutor adapts a cypherRunner to the reducer.CypherExecutor
@@ -65,6 +72,39 @@ func (r neo4jSessionRunner) RunCypher(ctx context.Context, cypher string, params
 		return err
 	}
 	_, err = result.Consume(ctx)
+	return err
+}
+
+// RunCypherGroup executes multiple Cypher statements inside a single write
+// transaction. session.ExecuteWrite automatically retries the entire function
+// on transient errors (deadlocks, leader switches), giving us atomic
+// retract+upsert with built-in resilience.
+func (r neo4jSessionRunner) RunCypherGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+	if r.Driver == nil {
+		return fmt.Errorf("neo4j driver is required")
+	}
+	if len(stmts) == 0 {
+		return nil
+	}
+
+	session := r.Driver.NewSession(ctx, neo4jdriver.SessionConfig{
+		AccessMode:   neo4jdriver.AccessModeWrite,
+		DatabaseName: r.DatabaseName,
+	})
+	defer func() { _ = session.Close(ctx) }()
+
+	_, err := session.ExecuteWrite(ctx, func(tx neo4jdriver.ManagedTransaction) (any, error) {
+		for _, stmt := range stmts {
+			result, runErr := tx.Run(ctx, stmt.Cypher, stmt.Parameters)
+			if runErr != nil {
+				return nil, runErr
+			}
+			if _, consumeErr := result.Consume(ctx); consumeErr != nil {
+				return nil, consumeErr
+			}
+		}
+		return nil, nil
+	})
 	return err
 }
 
