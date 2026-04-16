@@ -42,13 +42,11 @@ func javaScriptTypeAliasKind(node *tree_sitter.Node) string {
 	if valueNode == nil {
 		return ""
 	}
-	switch valueNode.Kind() {
-	case "conditional_type":
+	if javaScriptNodeContainsKind(valueNode, "conditional_type") {
 		return "conditional_type"
-	case "object_type":
-		if javaScriptNodeContainsKind(valueNode, "mapped_type_clause") {
-			return "mapped_type"
-		}
+	}
+	if javaScriptNodeContainsKind(valueNode, "mapped_type_clause") {
+		return "mapped_type"
 	}
 	return ""
 }

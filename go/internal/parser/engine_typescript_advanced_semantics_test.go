@@ -121,3 +121,30 @@ interface Response {
 		assertStringSliceFieldValue(t, responseInterface, "declaration_merge_kinds", []string{"interface"})
 	}
 }
+
+func TestDefaultEngineParsePathTypeScriptCapturesWrappedConditionalTypeSemantics(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "src", "wrapped.ts")
+	writeTestFile(
+		t,
+		filePath,
+		`type Wrapped<T> = (T extends string ? { value: T } : { value: never });
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	wrappedAlias := findNamedBucketItem(t, got, "type_aliases", "Wrapped")
+	assertStringFieldValue(t, wrappedAlias, "type_alias_kind", "conditional_type")
+	assertStringSliceFieldValue(t, wrappedAlias, "type_parameters", []string{"T"})
+}

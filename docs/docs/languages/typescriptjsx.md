@@ -59,7 +59,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 ## Known Limitations
 - TSX-specific type narrowing patterns such as `as ComponentType<...>` now have
-  content-backed semantic parity, but first-class graph persistence is still
+  content-backed semantic parity, including qualified component types such as
+  `React.ComponentType<...>`, but first-class graph persistence is still
   partial
 - JSX component-reference edges now persist as first-class graph
   `REFERENCES` edges during normal Go writes; the query layer still

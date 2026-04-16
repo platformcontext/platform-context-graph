@@ -49,7 +49,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     entity resolve/context surfaces still fall back to content-backed entities,
     and the normal `code/search` fallback still searches entity names as well
     as source text. Mapped types and conditional types still carry dedicated
-    semantic metadata through the normal Go parser/content/query/story path.
+    semantic metadata through the normal Go parser/content/query/story path,
+    including wrapped conditional aliases that are normalized by the parser.
     Graph-backed `language-query`, `code/search`, `dead-code`,
     `code/relationships`, `code/complexity`, `entities/resolve`, and
     entity-context results also enrich matching class/function rows with
