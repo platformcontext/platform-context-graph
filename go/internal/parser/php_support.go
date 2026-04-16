@@ -174,6 +174,50 @@ func appendPHPBaseList(raw string) []string {
 	return bases
 }
 
+func parsePHPClassTraitUses(raw string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || !strings.HasPrefix(trimmed, "use ") || !strings.HasSuffix(trimmed, ";") {
+		return nil
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.Contains(trimmed, "{") || strings.Contains(lower, " insteadof ") || strings.Contains(lower, " as ") {
+		return nil
+	}
+	body := strings.TrimSpace(strings.TrimSuffix(trimmed[len("use "):], ";"))
+	if body == "" {
+		return nil
+	}
+	segments := strings.Split(body, ",")
+	traits := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		trait := strings.TrimSpace(segment)
+		if trait == "" {
+			continue
+		}
+		traits = append(traits, lastPathSegment(trait, `\`))
+	}
+	return dedupeNonEmptyStrings(traits)
+}
+
+func appendPHPClassBases(payload map[string]any, className string, additionalBases []string) {
+	if className == "" || len(additionalBases) == 0 {
+		return
+	}
+	items, _ := payload["classes"].([]map[string]any)
+	for _, item := range items {
+		name, _ := item["name"].(string)
+		if name != className {
+			continue
+		}
+		existing, _ := item["bases"].([]string)
+		merged := dedupeNonEmptyStrings(append(existing, additionalBases...))
+		if len(merged) > 0 {
+			item["bases"] = merged
+		}
+		return
+	}
+}
+
 func extractPHPParameters(lines []string, startIndex int, rawLine string) []string {
 	signature := rawLine
 	for index := startIndex; index < len(lines) && !strings.Contains(signature, ")"); index++ {

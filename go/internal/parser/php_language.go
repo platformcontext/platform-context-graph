@@ -104,6 +104,10 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 					"is_dependency":    false,
 				})
 			}
+		} else if contextName, contextKind, _ := currentPHPContext(stack); contextKind == "class_declaration" {
+			if bases := parsePHPClassTraitUses(trimmed); len(bases) > 0 {
+				appendPHPClassBases(payload, contextName, bases)
+			}
 		}
 
 		if matches := phpTypePattern.FindStringSubmatch(trimmed); len(matches) == 4 {

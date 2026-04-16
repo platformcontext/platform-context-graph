@@ -63,12 +63,16 @@ use Demo\Library\Config as AppConfig;
 use Demo\Library\Service;
 
 class Child extends ParentClass implements Runnable, JsonSerializable {
+    use Loggable, Auditable;
 }
 
 interface Repository extends Identifiable, Countable {
 }
 
 trait Loggable {
+}
+
+trait Auditable {
 }
 `,
 	)
@@ -84,7 +88,7 @@ trait Loggable {
 	}
 
 	classItem := assertBucketItemByName(t, got, "classes", "Child")
-	phpAssertStringSliceFieldValue(t, classItem, "bases", []string{"ParentClass", "Runnable", "JsonSerializable"})
+	phpAssertStringSliceFieldValue(t, classItem, "bases", []string{"ParentClass", "Runnable", "JsonSerializable", "Loggable", "Auditable"})
 
 	interfaceItem := assertBucketItemByName(t, got, "interfaces", "Repository")
 	phpAssertStringSliceFieldValue(t, interfaceItem, "bases", []string{"Identifiable", "Countable"})
