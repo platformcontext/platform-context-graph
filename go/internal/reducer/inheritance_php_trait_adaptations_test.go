@@ -22,6 +22,22 @@ func TestInheritanceTraitOverrideTargetsParsesNamespacedMultiTargetInsteadof(t *
 	}
 }
 
+func TestInheritanceTraitAliasTargetsParsesNamespacedAliasClause(t *testing.T) {
+	t.Parallel()
+
+	got := inheritanceTraitAliasTargets(`Vendor\Features\Loggable::record as private logRecord`)
+
+	want := []string{"Loggable"}
+	if len(got) != len(want) {
+		t.Fatalf("len(got) = %d, want %d; got=%v", len(got), len(want), got)
+	}
+	for i, target := range want {
+		if got[i] != target {
+			t.Fatalf("got[%d] = %q, want %q (got=%v)", i, got[i], target, got)
+		}
+	}
+}
+
 func TestExtractInheritanceRowsMaterializesPHPTraitAdaptationOverrides(t *testing.T) {
 	t.Parallel()
 
@@ -76,7 +92,7 @@ func TestExtractInheritanceRowsMaterializesPHPTraitAdaptationOverrides(t *testin
 		t.Fatalf("repoIDs = %v, want [repo-php]", repoIDs)
 	}
 
-	var inheritsCount, overridesCount int
+	var inheritsCount, overridesCount, aliasesCount int
 	for _, row := range rows {
 		switch row["relationship_type"] {
 		case "INHERITS":
@@ -86,6 +102,11 @@ func TestExtractInheritanceRowsMaterializesPHPTraitAdaptationOverrides(t *testin
 			if got, want := row["parent_entity_id"], "content-entity:loggable"; got != want && got != "content-entity:traceable" {
 				t.Fatalf("override parent_entity_id = %#v, want loggable or traceable", got)
 			}
+		case "ALIASES":
+			aliasesCount++
+			if got, want := row["parent_entity_id"], "content-entity:loggable"; got != want {
+				t.Fatalf("alias parent_entity_id = %#v, want %#v", got, want)
+			}
 		}
 	}
 
@@ -94,5 +115,8 @@ func TestExtractInheritanceRowsMaterializesPHPTraitAdaptationOverrides(t *testin
 	}
 	if got, want := overridesCount, 2; got != want {
 		t.Fatalf("overridesCount = %d, want %d", got, want)
+	}
+	if got, want := aliasesCount, 1; got != want {
+		t.Fatalf("aliasesCount = %d, want %d", got, want)
 	}
 }

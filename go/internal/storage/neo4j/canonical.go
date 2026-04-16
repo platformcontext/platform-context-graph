@@ -189,6 +189,13 @@ FOREACH (_ IN CASE WHEN row.relationship_type = 'OVERRIDES' THEN [1] ELSE [] END
         rel.evidence_source = row.evidence_source,
         rel.relationship_type = row.relationship_type
 )
+FOREACH (_ IN CASE WHEN row.relationship_type = 'ALIASES' THEN [1] ELSE [] END |
+    MERGE (child)-[rel:ALIASES]->(parent)
+    SET rel.confidence = 0.95,
+        rel.reason = 'Parser trait adaptation metadata resolved an alias edge',
+        rel.evidence_source = row.evidence_source,
+        rel.relationship_type = row.relationship_type
+)
 FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type = 'INHERITS' THEN [1] ELSE [] END |
     MERGE (child)-[rel:INHERITS]->(parent)
     SET rel.confidence = 0.95,
@@ -223,7 +230,7 @@ FOREACH (_ IN CASE WHEN row.relationship_type = 'TRIGGERS' THEN [1] ELSE [] END 
 
 // --- Retraction Cypher ---
 
-const retractInheritanceEdgesCypher = `MATCH (child)-[rel:INHERITS|OVERRIDES]->()
+const retractInheritanceEdgesCypher = `MATCH (child)-[rel:INHERITS|OVERRIDES|ALIASES]->()
 WHERE child.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`

@@ -551,3 +551,67 @@ func TestHandleRelationshipsReturnsGraphBackedPythonMetaclassUsesMetaclass(t *te
 		t.Fatalf("len(resp[incoming]) = %d, want 0", len(incoming))
 	}
 }
+
+func TestHandleRelationshipsReturnsGraphBackedPHPTraitAliases(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, _ string, _ map[string]any) (map[string]any, error) {
+				return map[string]any{
+					"id":         "class-php-1",
+					"name":       "Child",
+					"labels":     []any{"Class"},
+					"file_path":  "src/Child.php",
+					"repo_id":    "repo-1",
+					"repo_name":  "php-fixture",
+					"language":   "php",
+					"start_line": int64(3),
+					"end_line":   int64(14),
+					"outgoing": []any{
+						map[string]any{
+							"direction":   "outgoing",
+							"type":        "ALIASES",
+							"target_name": "Loggable",
+							"target_id":   "trait-php-1",
+						},
+					},
+					"incoming": []any{},
+				}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"entity_id":"class-php-1","direction":"outgoing","relationship_type":"ALIASES"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	outgoing, ok := resp["outgoing"].([]any)
+	if !ok || len(outgoing) != 1 {
+		t.Fatalf("resp[outgoing] = %#v, want one graph-backed alias relationship", resp["outgoing"])
+	}
+	relationship, ok := outgoing[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[outgoing][0] type = %T, want map[string]any", outgoing[0])
+	}
+	if got, want := relationship["type"], "ALIASES"; got != want {
+		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["target_name"], "Loggable"; got != want {
+		t.Fatalf("relationship[target_name] = %#v, want %#v", got, want)
+	}
+}

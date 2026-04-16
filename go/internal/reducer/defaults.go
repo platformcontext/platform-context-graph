@@ -31,8 +31,9 @@ type DefaultHandlers struct {
 	// metadata.
 	SQLRelationshipEdgeWriter SharedProjectionEdgeWriter
 
-	// InheritanceEdgeWriter writes canonical INHERITS and OVERRIDES edges from
-	// reducer-owned parser entity bases and trait adaptation metadata.
+	// InheritanceEdgeWriter writes canonical INHERITS, OVERRIDES, and ALIASES
+	// edges from reducer-owned parser entity bases and trait adaptation
+	// metadata.
 	InheritanceEdgeWriter SharedProjectionEdgeWriter
 
 	// CanonicalNodeChecker checks whether canonical code entity nodes exist in

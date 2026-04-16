@@ -34,6 +34,37 @@ func inheritanceTraitOverrideTargets(adaptation string) []string {
 	return dedupeNonEmptyStrings(targets)
 }
 
+func inheritanceTraitAliasTargets(adaptation string) []string {
+	trimmed := strings.TrimSpace(adaptation)
+	if trimmed == "" {
+		return nil
+	}
+
+	lower := strings.ToLower(trimmed)
+	key := " as "
+	index := strings.Index(lower, key)
+	if index < 0 {
+		return nil
+	}
+
+	head := strings.TrimSpace(trimmed[:index])
+	if head == "" {
+		return nil
+	}
+
+	parts := strings.Split(head, "::")
+	if len(parts) == 0 {
+		return nil
+	}
+
+	traitName := inheritanceTraitName(parts[0])
+	if traitName == "" {
+		return nil
+	}
+
+	return []string{traitName}
+}
+
 func inheritanceTraitName(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

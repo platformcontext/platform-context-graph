@@ -24,8 +24,8 @@ var inheritableEntityTypes = map[string]struct{}{
 }
 
 // InheritanceMaterializationHandler reduces one inheritance follow-up into
-// canonical INHERITS and OVERRIDES edge writes using parser entity bases and
-// PHP trait adaptation metadata.
+// canonical INHERITS, OVERRIDES, and ALIASES edge writes using parser entity
+// bases and PHP trait adaptation metadata.
 type InheritanceMaterializationHandler struct {
 	FactLoader FactLoader
 	EdgeWriter SharedProjectionEdgeWriter
@@ -194,6 +194,26 @@ func ExtractInheritanceRows(envelopes []facts.Envelope) ([]string, []map[string]
 					"parent_entity_id":  parentEntityID,
 					"repo_id":           repoID,
 					"relationship_type": "OVERRIDES",
+				})
+			}
+
+			for _, aliasedTrait := range inheritanceTraitAliasTargets(adaptation) {
+				parentEntityID, ok := entityIndex[inheritanceIndexKey{repoID: repoID, name: aliasedTrait}]
+				if !ok {
+					continue
+				}
+
+				edgeKey := childEntityID + "->" + parentEntityID + ":ALIASES"
+				if _, dup := seenEdges[edgeKey]; dup {
+					continue
+				}
+				seenEdges[edgeKey] = struct{}{}
+
+				rows = append(rows, map[string]any{
+					"child_entity_id":   childEntityID,
+					"parent_entity_id":  parentEntityID,
+					"repo_id":           repoID,
+					"relationship_type": "ALIASES",
 				})
 			}
 		}
