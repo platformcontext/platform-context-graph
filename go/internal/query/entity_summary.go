@@ -236,6 +236,19 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 			}
 		}
 	}
+	if pythonProfile.TypeAnnotation && label != "TypeAnnotation" {
+		switch {
+		case len(pythonProfile.TypeAnnotationKinds) == 1:
+			fragments = append(fragments, fmt.Sprintf("has %s type annotations", pythonProfile.TypeAnnotationKinds[0]))
+		case len(pythonProfile.TypeAnnotationKinds) > 1:
+			fragments = append(fragments, fmt.Sprintf(
+				"has %s type annotations",
+				joinSentenceFragments(pythonProfile.TypeAnnotationKinds),
+			))
+		case pythonProfile.TypeAnnotationCount > 0:
+			fragments = append(fragments, fmt.Sprintf("has %d type annotations", pythonProfile.TypeAnnotationCount))
+		}
+	}
 	if params := metadataStringSlice(metadata, "type_parameters"); len(params) > 0 {
 		fragments = append(fragments, "declares type parameters "+strings.Join(params, ", "))
 	}

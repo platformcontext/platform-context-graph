@@ -108,6 +108,16 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	if v := StringVal(row, "context"); v != "" {
 		metadata["context"] = v
 	}
+	if v := IntVal(row, "type_annotation_count"); v > 0 {
+		metadata["type_annotation_count"] = v
+	}
+	if values := StringSliceVal(row, "type_annotation_kinds"); len(values) > 0 {
+		typeAnnotationKinds := make([]any, 0, len(values))
+		for _, value := range values {
+			typeAnnotationKinds = append(typeAnnotationKinds, value)
+		}
+		metadata["type_annotation_kinds"] = typeAnnotationKinds
+	}
 	if values := StringSliceVal(row, "type_parameters"); len(values) > 0 {
 		typeParameters := make([]any, 0, len(values))
 		for _, value := range values {

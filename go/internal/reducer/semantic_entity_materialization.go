@@ -222,6 +222,12 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 	if async := semanticPayloadMetadataBool(payload, "async"); async {
 		metadata["async"] = true
 	}
+	if count, kinds := semanticPayloadTypeAnnotationSummary(payload); count > 0 {
+		metadata["type_annotation_count"] = count
+		if len(kinds) > 0 {
+			metadata["type_annotation_kinds"] = kinds
+		}
+	}
 	if len(metadata) == 0 {
 		return nil
 	}
@@ -288,6 +294,43 @@ func semanticPayloadMetadataBool(payload map[string]any, key string) bool {
 	}
 	typed, ok := value.(bool)
 	return ok && typed
+}
+
+func semanticPayloadTypeAnnotationSummary(payload map[string]any) (int, []string) {
+	raw := payload["type_annotations"]
+	switch typed := raw.(type) {
+	case []map[string]any:
+		return typeAnnotationSummaryFromMaps(typed)
+	case []any:
+		annotations := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			annotation, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			annotations = append(annotations, annotation)
+		}
+		return typeAnnotationSummaryFromMaps(annotations)
+	default:
+		return 0, nil
+	}
+}
+
+func typeAnnotationSummaryFromMaps(annotations []map[string]any) (int, []string) {
+	if len(annotations) == 0 {
+		return 0, nil
+	}
+
+	kinds := make([]string, 0, len(annotations))
+	for _, annotation := range annotations {
+		if kind, _ := annotation["annotation_kind"].(string); strings.TrimSpace(kind) != "" {
+			kinds = append(kinds, strings.TrimSpace(kind))
+		}
+	}
+	if len(kinds) == 0 {
+		return len(annotations), nil
+	}
+	return len(annotations), kinds
 }
 
 func semanticPayloadMetadataInt(payload map[string]any, key string) int {
@@ -399,7 +442,11 @@ func isPythonSemanticFunction(payload map[string]any) bool {
 	if semanticPayloadMetadataBool(payload, "async") {
 		return true
 	}
-	return len(semanticPayloadMetadataStringSlice(payload, "decorators")) > 0
+	if len(semanticPayloadMetadataStringSlice(payload, "decorators")) > 0 {
+		return true
+	}
+	count, kinds := semanticPayloadTypeAnnotationSummary(payload)
+	return count > 0 || len(kinds) > 0
 }
 
 func isElixirSemanticFunction(payload map[string]any) bool {

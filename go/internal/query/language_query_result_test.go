@@ -180,3 +180,53 @@ func TestBuildLanguageResult_AttachesPythonTypeAnnotationGraphMetadata(t *testin
 		t.Fatalf("semantic_profile[annotation_kind] = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildLanguageResult_AttachesPythonTypeAnnotationProjection(t *testing.T) {
+	row := map[string]any{
+		"entity_id":             "func:py:greet",
+		"name":                  "greet",
+		"labels":                []any{"Function"},
+		"file_path":             "src/app.py",
+		"repo_id":               "repo:py",
+		"repo_name":             "service",
+		"language":              "python",
+		"start_line":            int64(10),
+		"end_line":              int64(24),
+		"type_annotation_count": int64(2),
+		"type_annotation_kinds": []any{"parameter", "return"},
+	}
+
+	result := buildLanguageResult(row, "Function")
+
+	metadata, ok := result["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata type = %T, want map[string]any", result["metadata"])
+	}
+	if got, want := metadata["type_annotation_count"], 2; got != want {
+		t.Fatalf("metadata[type_annotation_count] = %#v, want %#v", got, want)
+	}
+	kinds, ok := metadata["type_annotation_kinds"].([]any)
+	if !ok {
+		t.Fatalf("metadata[type_annotation_kinds] type = %T, want []any", metadata["type_annotation_kinds"])
+	}
+	if len(kinds) != 2 || kinds[0] != "parameter" || kinds[1] != "return" {
+		t.Fatalf("metadata[type_annotation_kinds] = %#v, want [parameter return]", kinds)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("semantic_profile type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "type_annotation"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["type_annotation_count"], 2; got != want {
+		t.Fatalf("semantic_profile[type_annotation_count] = %#v, want %#v", got, want)
+	}
+	typeAnnotationKinds, ok := profile["type_annotation_kinds"].([]string)
+	if !ok {
+		t.Fatalf("semantic_profile[type_annotation_kinds] type = %T, want []string", profile["type_annotation_kinds"])
+	}
+	if len(typeAnnotationKinds) != 2 || typeAnnotationKinds[0] != "parameter" || typeAnnotationKinds[1] != "return" {
+		t.Fatalf("semantic_profile[type_annotation_kinds] = %#v, want [parameter return]", typeAnnotationKinds)
+	}
+}

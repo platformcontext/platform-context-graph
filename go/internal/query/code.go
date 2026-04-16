@@ -124,7 +124,9 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 		       e.docstring as docstring,
 		       e.method_kind as method_kind,
 		       e.annotation_kind as annotation_kind,
-		       e.context as context
+		       e.context as context,
+		       e.type_annotation_count as type_annotation_count,
+		       e.type_annotation_kinds as type_annotation_kinds
 		ORDER BY e.name
 		LIMIT $limit
 	`

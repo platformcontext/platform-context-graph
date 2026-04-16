@@ -109,6 +109,12 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 		profile["metaclass"] = pythonProfile.Metaclass
 		signals = append(signals, "metaclass")
 	}
+	if pythonProfile.TypeAnnotationCount > 0 {
+		profile["type_annotation_count"] = pythonProfile.TypeAnnotationCount
+	}
+	if len(pythonProfile.TypeAnnotationKinds) > 0 {
+		profile["type_annotation_kinds"] = pythonProfile.TypeAnnotationKinds
+	}
 	if pythonProfile.AnnotationKind != "" {
 		profile["annotation_kind"] = pythonProfile.AnnotationKind
 		signals = append(signals, "annotation_kind")
@@ -175,6 +181,9 @@ func semanticSurfaceKind(
 		if kind, _ := profile["annotation_kind"].(string); kind != "" {
 			return kind + "_type_annotation"
 		}
+		return "type_annotation"
+	}
+	if count, ok := profile["type_annotation_count"].(int); ok && count > 0 {
 		return "type_annotation"
 	}
 	if _, ok := profile["type_parameters"].([]string); ok {

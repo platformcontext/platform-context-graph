@@ -22,14 +22,16 @@ const (
 // PythonSemanticProfile summarizes the highest-signal Python metadata a query
 // result carries so callers can promote it consistently.
 type PythonSemanticProfile struct {
-	EntityType     string
-	Decorators     []string
-	Async          bool
-	Lambda         bool
-	Metaclass      string
-	TypeAnnotation bool
-	AnnotationKind string
-	Context        string
+	EntityType          string
+	Decorators          []string
+	Async               bool
+	Lambda              bool
+	Metaclass           string
+	TypeAnnotation      bool
+	TypeAnnotationCount int
+	TypeAnnotationKinds []string
+	AnnotationKind      string
+	Context             string
 }
 
 // PythonSemanticProfileFromMetadata builds a promotion profile from a content
@@ -44,9 +46,14 @@ func PythonSemanticProfileFromMetadata(entityType string, metadata map[string]an
 	profile.Async = boolValue(metadata["async"])
 	profile.Lambda = metadataString(metadata, "semantic_kind") == "lambda"
 	profile.Metaclass = metadataString(metadata, "metaclass")
+	profile.TypeAnnotationCount = IntVal(metadata, "type_annotation_count")
+	profile.TypeAnnotationKinds = stringSliceFromAny(metadata["type_annotation_kinds"])
 	profile.AnnotationKind = metadataString(metadata, "annotation_kind")
 	profile.Context = metadataString(metadata, "context")
-	profile.TypeAnnotation = entityType == "TypeAnnotation" || hasValues(metadata["type_annotations"])
+	profile.TypeAnnotation = entityType == "TypeAnnotation" ||
+		hasValues(metadata["type_annotations"]) ||
+		profile.TypeAnnotationCount > 0 ||
+		len(profile.TypeAnnotationKinds) > 0
 	return profile
 }
 

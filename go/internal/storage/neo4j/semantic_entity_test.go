@@ -205,8 +205,10 @@ func TestSemanticEntityWriterWritesPythonFunctionSemanticMetadata(t *testing.T) 
 				StartLine:    10,
 				EndLine:      20,
 				Metadata: map[string]any{
-					"decorators": []any{"@route"},
-					"async":      true,
+					"decorators":            []any{"@route"},
+					"async":                 true,
+					"type_annotation_count": 2,
+					"type_annotation_kinds": []string{"parameter", "return"},
 				},
 			},
 			{
@@ -246,6 +248,16 @@ func TestSemanticEntityWriterWritesPythonFunctionSemanticMetadata(t *testing.T) 
 	}
 	if got, want := decorated["async"], true; got != want {
 		t.Fatalf("decorated async = %#v, want %#v", got, want)
+	}
+	if got, want := decorated["type_annotation_count"], 2; got != want {
+		t.Fatalf("decorated type_annotation_count = %#v, want %#v", got, want)
+	}
+	kinds, ok := decorated["type_annotation_kinds"].([]string)
+	if !ok {
+		t.Fatalf("decorated type_annotation_kinds type = %T, want []string", decorated["type_annotation_kinds"])
+	}
+	if got, want := len(kinds), 2; got != want || kinds[0] != "parameter" || kinds[1] != "return" {
+		t.Fatalf("decorated type_annotation_kinds = %#v, want [parameter return]", kinds)
 	}
 	decorators, ok := decorated["decorators"].([]string)
 	if !ok {

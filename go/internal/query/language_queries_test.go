@@ -44,6 +44,12 @@ func TestBuildLanguageCypher_Function(t *testing.T) {
 	if !searchString(cypher, "$query") {
 		t.Error("cypher should reference $query parameter")
 	}
+	if !searchString(cypher, "e.type_annotation_count as type_annotation_count") {
+		t.Error("cypher should project type_annotation_count")
+	}
+	if !searchString(cypher, "e.type_annotation_kinds as type_annotation_kinds") {
+		t.Error("cypher should project type_annotation_kinds")
+	}
 }
 
 func TestBuildLanguageCypher_Repository(t *testing.T) {

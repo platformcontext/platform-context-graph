@@ -76,7 +76,9 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 		       e.start_line as start_line,
 		       e.end_line as end_line,
 		       e.annotation_kind as annotation_kind,
-		       e.context as context
+		       e.context as context,
+		       e.type_annotation_count as type_annotation_count,
+		       e.type_annotation_kinds as type_annotation_kinds
 		ORDER BY e.name
 		LIMIT 20
 	`
@@ -152,6 +154,8 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 		       e.context as context,
 		       e.docstring as docstring,
 		       e.method_kind as method_kind,
+		       e.type_annotation_count as type_annotation_count,
+		       e.type_annotation_kinds as type_annotation_kinds,
 		       r.id as repo_id, r.name as repo_name,
 		       collect(DISTINCT {type: type(rel), target_name: target.name, target_id: target.id}) as relationships
 	`

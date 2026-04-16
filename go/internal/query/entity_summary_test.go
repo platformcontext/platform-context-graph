@@ -41,6 +41,25 @@ func TestBuildEntitySemanticSummaryPythonFunction(t *testing.T) {
 	}
 }
 
+func TestBuildEntitySemanticSummaryPythonFunctionTypeAnnotations(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Function"},
+		"name":   "greet",
+		"metadata": map[string]any{
+			"type_annotation_count": 2,
+			"type_annotation_kinds": []any{"parameter", "return"},
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Function greet has parameter and return type annotations."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildEntitySemanticSummaryPythonLambdaFunction(t *testing.T) {
 	t.Parallel()
 

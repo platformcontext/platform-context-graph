@@ -31,6 +31,18 @@ func TestPythonSemanticProfileFromMetadata(t *testing.T) {
 			wantKind: "decorated_async_function",
 		},
 		{
+			name:       "function with compact type annotation projection",
+			entityType: "Function",
+			metadata: map[string]any{
+				"type_annotation_count": 2,
+				"type_annotation_kinds": []any{"parameter", "return"},
+			},
+			wantSignals: []PythonSemanticSignal{
+				PythonSemanticSignalTypeAnnotation,
+			},
+			wantKind: "type_annotation",
+		},
+		{
 			name:       "type annotation entity",
 			entityType: "TypeAnnotation",
 			metadata: map[string]any{

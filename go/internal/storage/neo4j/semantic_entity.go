@@ -223,6 +223,8 @@ SET n.id = row.entity_id,
     n.method_kind = row.method_kind,
     n.annotation_kind = row.annotation_kind,
     n.context = row.context,
+    n.type_annotation_count = row.type_annotation_count,
+    n.type_annotation_kinds = row.type_annotation_kinds,
     n.jsx_fragment_shorthand = row.jsx_fragment_shorthand,
     n.decorators = row.decorators,
     n.async = row.async,
@@ -453,6 +455,12 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 		if context := semanticMetadataString(row.Metadata, "context"); context != "" {
 			rowMap["context"] = context
+		}
+		if count := semanticMetadataInt(row.Metadata, "type_annotation_count"); count > 0 {
+			rowMap["type_annotation_count"] = count
+		}
+		if kinds := semanticMetadataStringSlice(row.Metadata, "type_annotation_kinds"); len(kinds) > 0 {
+			rowMap["type_annotation_kinds"] = kinds
 		}
 		if jsxFragment := semanticMetadataBool(row.Metadata, "jsx_fragment_shorthand"); jsxFragment {
 			rowMap["jsx_fragment_shorthand"] = true
