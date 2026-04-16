@@ -341,7 +341,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				kotlinEnumPattern.MatchString(trimmed),
 		)
 
-		normalizedTrimmed := strings.ReplaceAll(trimmed, "?.", ".")
+		normalizedTrimmed := kotlinNormalizeParenthesizedReceivers(strings.ReplaceAll(trimmed, "?.", "."))
 		for _, match := range kotlinCallPattern.FindAllStringSubmatchIndex(normalizedTrimmed, -1) {
 			if len(match) != 6 {
 				continue
@@ -351,45 +351,49 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			}
 			receiver := strings.TrimSuffix(strings.TrimSpace(normalizedTrimmed[match[2]:match[3]]), ".")
 			name := normalizedTrimmed[match[4]:match[5]]
-			if !kotlinCallNameAllowed(name) {
-				continue
-			}
-			if receiver == "" {
-				if _, declared := declaredTypeNames[name]; declared {
+			fullName := strings.TrimSpace(normalizedTrimmed[match[2]:match[3]] + "." + normalizedTrimmed[match[4]:match[5]])
+			for _, chainedCall := range kotlinExpandChainedCalls(receiver, name, fullName) {
+				receiver := chainedCall.Receiver
+				name := chainedCall.Name
+				if !kotlinCallNameAllowed(name) {
 					continue
 				}
-			}
-			fullName := strings.TrimSpace(normalizedTrimmed[match[2]:match[3]] + "." + normalizedTrimmed[match[4]:match[5]])
-			callKey := fullName + "#" + strconv.Itoa(lineNumber)
-			if _, ok := seenLineCalls[callKey]; ok {
-				continue
-			}
-			seenLineCalls[callKey] = struct{}{}
-			item := map[string]any{
-				"name":        name,
-				"full_name":   fullName,
-				"line_number": lineNumber,
-				"lang":        "kotlin",
-			}
-			if receiver == "this" {
-				if typeContext := kotlinCurrentTypeScopeName(stack); typeContext != "" {
-					item["class_context"] = typeContext
-				}
-			} else if receiver != "" {
-				if functionContext := currentScopedName(stack, "function"); functionContext != "" {
-					if inferredType := kotlinInferReceiverType(
-						receiver,
-						localVariableTypes[functionContext],
-						classPropertyTypes,
-						kotlinCurrentTypeScopeName(stack),
-						packageName,
-						functionReturnTypes,
-					); inferredType != "" {
-						item["inferred_obj_type"] = inferredType
+				if receiver == "" {
+					if _, declared := declaredTypeNames[name]; declared {
+						continue
 					}
 				}
+				callKey := chainedCall.FullName + "#" + strconv.Itoa(lineNumber)
+				if _, ok := seenLineCalls[callKey]; ok {
+					continue
+				}
+				seenLineCalls[callKey] = struct{}{}
+				item := map[string]any{
+					"name":        name,
+					"full_name":   chainedCall.FullName,
+					"line_number": lineNumber,
+					"lang":        "kotlin",
+				}
+				if receiver == "this" {
+					if typeContext := kotlinCurrentTypeScopeName(stack); typeContext != "" {
+						item["class_context"] = typeContext
+					}
+				} else if receiver != "" {
+					if functionContext := currentScopedName(stack, "function"); functionContext != "" {
+						if inferredType := kotlinInferReceiverType(
+							receiver,
+							localVariableTypes[functionContext],
+							classPropertyTypes,
+							kotlinCurrentTypeScopeName(stack),
+							packageName,
+							functionReturnTypes,
+						); inferredType != "" {
+							item["inferred_obj_type"] = inferredType
+						}
+					}
+				}
+				appendBucket(payload, "function_calls", item)
 			}
-			appendBucket(payload, "function_calls", item)
 		}
 
 		braceDepth += braceDelta(rawLine)
@@ -428,6 +432,7 @@ func kotlinInferReceiverType(
 	if receiver == "" {
 		return ""
 	}
+	receiver = kotlinNormalizeParenthesizedReceivers(receiver)
 	receiver = strings.TrimPrefix(receiver, "this.")
 	parts := strings.Split(receiver, ".")
 	if len(parts) == 0 {

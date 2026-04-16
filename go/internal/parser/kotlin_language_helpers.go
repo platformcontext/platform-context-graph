@@ -21,7 +21,10 @@ var (
 	kotlinLazyDelegatedAssignPattern = regexp.MustCompile(
 		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s+by\s+lazy(?:\s*\([^)]*\))?\s*\{\s*(.+?)\s*\}\s*$`,
 	)
-	kotlinConstructorCallPattern = regexp.MustCompile(`\b([A-Z][A-Za-z_]\w*)\s*\(`)
+	kotlinConstructorCallPattern       = regexp.MustCompile(`\b([A-Z][A-Za-z_]\w*)\s*\(`)
+	kotlinParenthesizedReceiverPattern = regexp.MustCompile(
+		`\(([A-Za-z_]\w*(?:\([^()]*\))?(?:\.[A-Za-z_]\w*(?:\([^()]*\))?)*?)\)\.`,
+	)
 )
 
 func kotlinPrimaryConstructorPropertyTypes(line string) map[string]string {
@@ -194,6 +197,46 @@ func kotlinLooksLikeTypeName(name string) bool {
 	return first >= 'A' && first <= 'Z'
 }
 
+func kotlinNormalizeParenthesizedReceivers(value string) string {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return ""
+	}
+
+	for {
+		next := kotlinParenthesizedReceiverPattern.ReplaceAllString(normalized, "$1.")
+		if next == normalized {
+			return normalized
+		}
+		normalized = next
+	}
+}
+
+func kotlinStripWrappingParentheses(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) < 2 || trimmed[0] != '(' || trimmed[len(trimmed)-1] != ')' {
+		return trimmed
+	}
+
+	depth := 0
+	for index, char := range trimmed {
+		switch char {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 && index != len(trimmed)-1 {
+				return trimmed
+			}
+		}
+	}
+	if depth != 0 {
+		return trimmed
+	}
+
+	return strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+}
+
 func kotlinInferFunctionCallReturnType(
 	callExpression string,
 	variableTypes map[string]string,
@@ -239,6 +282,14 @@ func kotlinInferMethodCallReturnType(
 	callExpression = strings.TrimSpace(callExpression)
 	if callExpression == "" {
 		return ""
+	}
+	callExpression = kotlinNormalizeParenthesizedReceivers(callExpression)
+	for {
+		trimmedCallExpression := kotlinStripWrappingParentheses(callExpression)
+		if trimmedCallExpression == callExpression {
+			break
+		}
+		callExpression = trimmedCallExpression
 	}
 
 	callHead := callExpression
@@ -292,6 +343,8 @@ func kotlinInferReceiverSegmentType(
 	if segment == "" {
 		return ""
 	}
+	segment = kotlinNormalizeParenthesizedReceivers(segment)
+	segment = kotlinStripWrappingParentheses(segment)
 
 	if strings.Contains(segment, "(") && strings.HasSuffix(segment, ")") {
 		return kotlinInferMethodCallReturnType(
@@ -331,6 +384,62 @@ func kotlinCallNameAllowed(name string) bool {
 	default:
 		return true
 	}
+}
+
+type kotlinChainedCall struct {
+	Receiver string
+	Name     string
+	FullName string
+}
+
+func kotlinExpandChainedCalls(receiver string, name string, fullName string) []kotlinChainedCall {
+	if receiver == "" || name == "" || fullName == "" {
+		return nil
+	}
+
+	entries := []kotlinChainedCall{{
+		Receiver: receiver,
+		Name:     name,
+		FullName: fullName,
+	}}
+
+	current := receiver
+	for {
+		nestedReceiver, nestedName, ok := kotlinSplitChainedCall(current)
+		if !ok {
+			break
+		}
+		nestedFullName := strings.TrimSpace(strings.TrimSuffix(current, "()"))
+		entries = append([]kotlinChainedCall{{
+			Receiver: nestedReceiver,
+			Name:     nestedName,
+			FullName: nestedFullName,
+		}}, entries...)
+		current = nestedReceiver
+	}
+
+	return entries
+}
+
+func kotlinSplitChainedCall(expression string) (string, string, bool) {
+	normalized := kotlinStripWrappingParentheses(
+		kotlinNormalizeParenthesizedReceivers(strings.TrimSpace(expression)),
+	)
+	if !strings.Contains(normalized, "(") || !strings.HasSuffix(normalized, ")") {
+		return "", "", false
+	}
+
+	lastDot := strings.LastIndex(normalized, ".")
+	if lastDot <= 0 || lastDot >= len(normalized)-1 {
+		return "", "", false
+	}
+
+	receiver := strings.TrimSpace(normalized[:lastDot])
+	name := strings.TrimSuffix(strings.TrimSpace(normalized[lastDot+1:]), "()")
+	if receiver == "" || name == "" {
+		return "", "", false
+	}
+	return receiver, name, true
 }
 
 func kotlinAppendConstructorCalls(
