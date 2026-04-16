@@ -240,6 +240,130 @@ func TestCanonicalNodeWriterEntityGroupsByLabel(t *testing.T) {
 	}
 }
 
+func TestCanonicalNodeWriterProjectsTypeScriptClassFamilyMetadata(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-ts-1",
+		GenerationID: "gen-ts-1",
+		RepoID:       "repo-ts-1",
+		RepoPath:     "/repos/ts",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-ts-1",
+			Name:   "ts-repo",
+			Path:   "/repos/ts",
+		},
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "class-1",
+				Label:        "Class",
+				EntityName:   "Service",
+				FilePath:     "/repos/ts/src/service.ts",
+				RelativePath: "src/service.ts",
+				StartLine:    3,
+				EndLine:      18,
+				Language:     "typescript",
+				RepoID:       "repo-ts-1",
+				Metadata: map[string]any{
+					"decorators":              []any{"@sealed"},
+					"type_parameters":         []any{"T"},
+					"declaration_merge_group": "Service",
+					"declaration_merge_count": 2,
+					"declaration_merge_kinds": []any{"class", "namespace"},
+				},
+			},
+			{
+				EntityID:     "interface-1",
+				Label:        "Interface",
+				EntityName:   "Service",
+				FilePath:     "/repos/ts/src/service.ts",
+				RelativePath: "src/service.ts",
+				StartLine:    20,
+				EndLine:      32,
+				Language:     "typescript",
+				RepoID:       "repo-ts-1",
+				Metadata: map[string]any{
+					"declaration_merge_group": "Service",
+					"declaration_merge_count": 2,
+					"declaration_merge_kinds": []any{"class", "interface"},
+				},
+			},
+			{
+				EntityID:     "enum-1",
+				Label:        "Enum",
+				EntityName:   "ServiceKind",
+				FilePath:     "/repos/ts/src/service.ts",
+				RelativePath: "src/service.ts",
+				StartLine:    34,
+				EndLine:      42,
+				Language:     "typescript",
+				RepoID:       "repo-ts-1",
+				Metadata: map[string]any{
+					"declaration_merge_group": "ServiceKind",
+					"declaration_merge_count": 2,
+					"declaration_merge_kinds": []any{"enum", "namespace"},
+				},
+			},
+		},
+	}
+
+	err := writer.Write(context.Background(), mat)
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var entityCalls []Statement
+	for _, call := range exec.calls {
+		if call.Operation == OperationCanonicalUpsert &&
+			(strings.Contains(call.Cypher, "MERGE (n:Class") ||
+				strings.Contains(call.Cypher, "MERGE (n:Interface") ||
+				strings.Contains(call.Cypher, "MERGE (n:Enum")) {
+			entityCalls = append(entityCalls, call)
+		}
+	}
+	if len(entityCalls) != 3 {
+		t.Fatalf("expected 3 TS class-family entity groups, got %d", len(entityCalls))
+	}
+
+	for _, call := range entityCalls {
+		if !strings.Contains(call.Cypher, "n.decorators = row.decorators") ||
+			!strings.Contains(call.Cypher, "n.type_parameters = row.type_parameters") ||
+			!strings.Contains(call.Cypher, "n.declaration_merge_group = row.declaration_merge_group") ||
+			!strings.Contains(call.Cypher, "n.declaration_merge_count = row.declaration_merge_count") ||
+			!strings.Contains(call.Cypher, "n.declaration_merge_kinds = row.declaration_merge_kinds") {
+			t.Fatalf("TS class-family cypher missing metadata assignments: %s", call.Cypher)
+		}
+	}
+
+	var classRows []map[string]any
+	for _, call := range entityCalls {
+		if strings.Contains(call.Cypher, "MERGE (n:Class") {
+			classRows = call.Parameters["rows"].([]map[string]any)
+			break
+		}
+	}
+	if len(classRows) == 0 {
+		t.Fatal("missing Class rows in TS class-family entity calls")
+	}
+	decorators, ok := classRows[0]["decorators"].([]string)
+	if !ok {
+		t.Fatalf("class rows[0][decorators] type = %T, want []string", classRows[0]["decorators"])
+	}
+	if got, want := len(decorators), 1; got != want || decorators[0] != "@sealed" {
+		t.Fatalf("class rows[0][decorators] = %#v, want [@sealed]", decorators)
+	}
+	typeParameters, ok := classRows[0]["type_parameters"].([]string)
+	if !ok {
+		t.Fatalf("class rows[0][type_parameters] type = %T, want []string", classRows[0]["type_parameters"])
+	}
+	if got, want := len(typeParameters), 1; got != want || typeParameters[0] != "T" {
+		t.Fatalf("class rows[0][type_parameters] = %#v, want [T]", typeParameters)
+	}
+}
+
 func TestCanonicalNodeWriterBatching(t *testing.T) {
 	t.Parallel()
 

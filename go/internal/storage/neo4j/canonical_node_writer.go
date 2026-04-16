@@ -236,16 +236,18 @@ func (w *CanonicalNodeWriter) phaseEntities(ctx context.Context, mat projector.C
 	byLabel := map[string][]map[string]any{}
 	for _, e := range mat.Entities {
 		row := map[string]any{
-			"entity_id":     e.EntityID,
-			"entity_name":   e.EntityName,
-			"file_path":     e.FilePath,
-			"relative_path": e.RelativePath,
-			"start_line":    e.StartLine,
-			"end_line":      e.EndLine,
-			"language":      e.Language,
-			"repo_id":       e.RepoID,
-			"scope_id":      mat.ScopeID,
-			"generation_id": mat.GenerationID,
+			"entity_id":       e.EntityID,
+			"entity_name":     e.EntityName,
+			"label":           e.Label,
+			"file_path":       e.FilePath,
+			"relative_path":   e.RelativePath,
+			"start_line":      e.StartLine,
+			"end_line":        e.EndLine,
+			"language":        e.Language,
+			"repo_id":         e.RepoID,
+			"entity_metadata": e.Metadata,
+			"scope_id":        mat.ScopeID,
+			"generation_id":   mat.GenerationID,
 		}
 		byLabel[e.Label] = append(byLabel[e.Label], row)
 	}
@@ -259,6 +261,14 @@ func (w *CanonicalNodeWriter) phaseEntities(ctx context.Context, mat projector.C
 
 	for _, label := range labels {
 		rows := byLabel[label]
+		for i := range rows {
+			if metadata := canonicalTypeScriptClassFamilyMetadata(rows[i]); len(metadata) > 0 {
+				for key, value := range metadata {
+					rows[i][key] = value
+				}
+			}
+			delete(rows[i], "entity_metadata")
+		}
 		cypher := fmt.Sprintf(canonicalNodeEntityUpsertTemplate, label)
 		if err := w.executeBatched(ctx, cypher, rows); err != nil {
 			return err

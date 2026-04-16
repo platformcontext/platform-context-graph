@@ -74,7 +74,7 @@ type EntityRow struct {
 	EndLine      int
 	Language     string
 	RepoID       string
-	Metadata     map[string]string
+	Metadata     map[string]any
 }
 
 // ModuleRow carries the canonical properties for a Module node.
@@ -141,15 +141,15 @@ var entityTypeLabelMap = map[string]string{
 	"component":  "Component",
 
 	// Infrastructure entities
-	"k8s_resource":             "K8sResource",
-	"argocd_application":       "ArgoCDApplication",
-	"argocd_application_set":   "ArgoCDApplicationSet",
-	"crossplane_xrd":           "CrossplaneXRD",
-	"crossplane_composition":   "CrossplaneComposition",
-	"crossplane_claim":         "CrossplaneClaim",
-	"kustomize_overlay":        "KustomizeOverlay",
-	"helm_chart":               "HelmChart",
-	"helm_values":              "HelmValues",
+	"k8s_resource":           "K8sResource",
+	"argocd_application":     "ArgoCDApplication",
+	"argocd_application_set": "ArgoCDApplicationSet",
+	"crossplane_xrd":         "CrossplaneXRD",
+	"crossplane_composition": "CrossplaneComposition",
+	"crossplane_claim":       "CrossplaneClaim",
+	"kustomize_overlay":      "KustomizeOverlay",
+	"helm_chart":             "HelmChart",
+	"helm_values":            "HelmValues",
 
 	// Terraform entities
 	"terraform_resource":   "TerraformResource",
@@ -175,14 +175,14 @@ var entityTypeLabelMap = map[string]string{
 	"sql_column":   "SqlColumn",
 
 	// Data entities
-	"data_asset":          "DataAsset",
-	"data_column":         "DataColumn",
-	"analytics_model":     "AnalyticsModel",
-	"dashboard_asset":     "DashboardAsset",
-	"data_quality_check":  "DataQualityCheck",
-	"query_execution":     "QueryExecution",
-	"data_contract":       "DataContract",
-	"data_owner":          "DataOwner",
+	"data_asset":         "DataAsset",
+	"data_column":        "DataColumn",
+	"analytics_model":    "AnalyticsModel",
+	"dashboard_asset":    "DashboardAsset",
+	"data_quality_check": "DataQualityCheck",
+	"query_execution":    "QueryExecution",
+	"data_contract":      "DataContract",
+	"data_owner":         "DataOwner",
 }
 
 // EntityTypeLabel returns the Neo4j label for a content store entity type.

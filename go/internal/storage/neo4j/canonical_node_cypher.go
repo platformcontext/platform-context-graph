@@ -98,6 +98,11 @@ SET n.id = row.entity_id, n.name = row.entity_name,
     n.line_number = row.start_line, n.start_line = row.start_line,
     n.end_line = row.end_line, n.repo_id = row.repo_id,
     n.language = row.language, n.lang = row.language,
+    n.decorators = row.decorators,
+    n.type_parameters = row.type_parameters,
+    n.declaration_merge_group = row.declaration_merge_group,
+    n.declaration_merge_count = row.declaration_merge_count,
+    n.declaration_merge_kinds = row.declaration_merge_kinds,
     n.scope_id = row.scope_id, n.generation_id = row.generation_id,
     n.evidence_source = 'projector/canonical'
 MERGE (f)-[:CONTAINS]->(n)`

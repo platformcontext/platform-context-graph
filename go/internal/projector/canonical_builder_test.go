@@ -52,7 +52,7 @@ func TestBuildCanonicalMaterializationExtractsRepository(t *testing.T) {
 				"local_path": "/home/user/repos/my-project",
 				"remote_url": "https://github.com/org/my-project.git",
 				"repo_slug":  "org/my-project",
-				"has_remote":  "true",
+				"has_remote": "true",
 			},
 		},
 	}
@@ -356,6 +356,123 @@ func TestBuildCanonicalMaterializationExtractsEntities(t *testing.T) {
 	}
 }
 
+func TestBuildCanonicalMaterializationPreservesTypeScriptClassFamilyMetadata(t *testing.T) {
+	t.Parallel()
+
+	sc := testScope()
+	gen := testGeneration()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "r-1",
+			ScopeID:  "scope-1",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-abc",
+				"path":    "/repos/my-project",
+			},
+		},
+		{
+			FactID:   "class-1",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"repo_id":       "repo-abc",
+				"entity_type":   "class",
+				"entity_name":   "Service",
+				"relative_path": "src/service.ts",
+				"start_line":    4,
+				"end_line":      18,
+				"language":      "typescript",
+				"entity_metadata": map[string]any{
+					"decorators":              []any{"@sealed"},
+					"type_parameters":         []any{"T"},
+					"declaration_merge_group": "Service",
+					"declaration_merge_count": 2,
+					"declaration_merge_kinds": []any{"class", "namespace"},
+				},
+			},
+		},
+		{
+			FactID:   "interface-1",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"repo_id":       "repo-abc",
+				"entity_type":   "interface",
+				"entity_name":   "Service",
+				"relative_path": "src/service.ts",
+				"start_line":    20,
+				"end_line":      32,
+				"language":      "typescript",
+				"entity_metadata": map[string]any{
+					"declaration_merge_group": "Service",
+					"declaration_merge_count": 2,
+					"declaration_merge_kinds": []any{"class", "interface"},
+				},
+			},
+		},
+		{
+			FactID:   "enum-1",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"repo_id":       "repo-abc",
+				"entity_type":   "enum",
+				"entity_name":   "ServiceKind",
+				"relative_path": "src/service.ts",
+				"start_line":    34,
+				"end_line":      41,
+				"language":      "typescript",
+				"entity_metadata": map[string]any{
+					"declaration_merge_group": "ServiceKind",
+					"declaration_merge_count": 2,
+					"declaration_merge_kinds": []any{"enum", "namespace"},
+				},
+			},
+		},
+	}
+
+	result := buildCanonicalMaterialization(sc, gen, envelopes)
+	if len(result.Entities) != 3 {
+		t.Fatalf("len(Entities) = %d, want 3", len(result.Entities))
+	}
+
+	class := result.Entities[0]
+	decorators, ok := class.Metadata["decorators"].([]any)
+	if !ok {
+		t.Fatalf("class.Metadata[decorators] type = %T, want []any", class.Metadata["decorators"])
+	}
+	if got, want := len(decorators), 1; got != want || decorators[0] != "@sealed" {
+		t.Fatalf("class.Metadata[decorators] = %#v, want [@sealed]", decorators)
+	}
+	typeParameters, ok := class.Metadata["type_parameters"].([]any)
+	if !ok {
+		t.Fatalf("class.Metadata[type_parameters] type = %T, want []any", class.Metadata["type_parameters"])
+	}
+	if got, want := len(typeParameters), 1; got != want || typeParameters[0] != "T" {
+		t.Fatalf("class.Metadata[type_parameters] = %#v, want [T]", typeParameters)
+	}
+	if got, want := class.Metadata["declaration_merge_group"], "Service"; got != want {
+		t.Fatalf("class.Metadata[declaration_merge_group] = %#v, want %#v", got, want)
+	}
+
+	interfaceRow := result.Entities[1]
+	if got, want := interfaceRow.Metadata["declaration_merge_group"], "Service"; got != want {
+		t.Fatalf("interface.Metadata[declaration_merge_group] = %#v, want %#v", got, want)
+	}
+	if got, want := interfaceRow.Metadata["declaration_merge_count"], 2; got != want {
+		t.Fatalf("interface.Metadata[declaration_merge_count] = %#v, want %#v", got, want)
+	}
+
+	enumRow := result.Entities[2]
+	if got, want := enumRow.Metadata["declaration_merge_group"], "ServiceKind"; got != want {
+		t.Fatalf("enum.Metadata[declaration_merge_group] = %#v, want %#v", got, want)
+	}
+	if got, want := enumRow.Metadata["declaration_merge_count"], 2; got != want {
+		t.Fatalf("enum.Metadata[declaration_merge_count] = %#v, want %#v", got, want)
+	}
+}
+
 func TestBuildCanonicalMaterializationExtractsModules(t *testing.T) {
 	t.Parallel()
 
@@ -378,7 +495,7 @@ func TestBuildCanonicalMaterializationExtractsModules(t *testing.T) {
 			Payload: map[string]any{
 				"module_name":     "requests",
 				"imported_module": "requests",
-				"relative_path":  "src/client.py",
+				"relative_path":   "src/client.py",
 				"language":        "python",
 			},
 		},
@@ -415,11 +532,11 @@ func TestBuildCanonicalMaterializationExtractsImports(t *testing.T) {
 			FactKind: "content_entity",
 			Payload: map[string]any{
 				"imported_module": "requests",
-				"module_name":    "requests",
-				"imported_name":  "Session",
-				"alias":          "req",
-				"relative_path":  "src/client.py",
-				"line_number":    3,
+				"module_name":     "requests",
+				"imported_name":   "Session",
+				"alias":           "req",
+				"relative_path":   "src/client.py",
+				"line_number":     3,
 			},
 		},
 	}

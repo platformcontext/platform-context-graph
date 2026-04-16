@@ -43,20 +43,27 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     TSX-specific framework evidence.
   - TypeScript participates in the same declarative Node HTTP and provider-pack
     program as JavaScript.
-  - Type aliases now persist as first-class `TypeAlias` graph nodes through
-    the Go projector/reducer/Neo4j path, and the graph-backed `code/language-query`,
-    `code/search`, `entities/resolve`, and entity-context surfaces now project
-    `type_alias_kind`, `type_parameters`, and related declaration-merge
-    metadata directly from Neo4j rows. Mapped and conditional aliases are now
-    first-class graph-backed entities on this branch, including wrapped
-    conditional aliases that the parser normalizes.
-  - Graph-backed `language-query`, `code/search`, and entity-context results
-    now also surface `decorators`, `jsx_fragment_shorthand`, and
-    `component_type_assertion` directly from Neo4j rows when those semantic
-    entities were persisted by the graph writer. Class-level decorator and
-    generic coverage remains partial.
+- Type aliases now persist as first-class `TypeAlias` graph nodes through
+  the Go projector/reducer/Neo4j path, and the graph-backed `code/language-query`,
+  `code/search`, `entities/resolve`, and entity-context surfaces now project
+  `type_alias_kind`, `type_parameters`, and related declaration-merge
+  metadata directly from Neo4j rows. Mapped and conditional aliases are now
+  first-class graph-backed entities on this branch, including wrapped
+  conditional aliases that the parser normalizes.
+- Canonical TypeScript `Class`, `Interface`, and `Enum` rows now preserve
+  `decorators`, `type_parameters`, and `declaration_merge_*` metadata through
+  the Go projector and Neo4j writer when those values are present in the
+  entity payloads. Broader TypeScript graph-first promotion beyond that
+  canonical class-family path remains partial.
+- Graph-backed `language-query`, `code/search`, and entity-context results
+  now also surface `decorators`, `jsx_fragment_shorthand`, and
+  `component_type_assertion` directly from Neo4j rows when those semantic
+  entities were persisted by the graph writer. Class-level decorator and
+  generic coverage on the canonical class-family path is now first-class,
+  while broader graph-first promotion remains partial.
 
 
 ## Known Limitations
-- Mapped types and conditional types now have content-backed semantic parity,
-  but first-class graph persistence is still partial
+- Broader TypeScript graph-first promotion beyond the canonical
+  class/interface/enum path is still partial, especially for decorator and
+  generic surfaces outside the nodes now persisted by the Go graph writer

@@ -246,9 +246,9 @@ func extractEntities(envelopes []facts.Envelope, repoID string) []EntityRow {
 	return rows
 }
 
-// extractEntityMetadata pulls the entity_metadata sub-map from a fact
-// payload and converts it to map[string]string.
-func extractEntityMetadata(payload map[string]any) map[string]string {
+// extractEntityMetadata pulls the entity_metadata sub-map from a fact payload
+// and preserves its native JSON-compatible values.
+func extractEntityMetadata(payload map[string]any) map[string]any {
 	raw, ok := payload["entity_metadata"]
 	if !ok {
 		return nil
@@ -259,20 +259,7 @@ func extractEntityMetadata(payload map[string]any) map[string]string {
 		return nil
 	}
 
-	result := make(map[string]string, len(typed))
-	for key, value := range typed {
-		if text, ok := value.(string); ok {
-			trimmed := strings.TrimSpace(text)
-			if trimmed != "" {
-				result[key] = trimmed
-			}
-		}
-	}
-
-	if len(result) == 0 {
-		return nil
-	}
-	return result
+	return cloneAnyMap(typed)
 }
 
 // extractRelationships scans all non-tombstoned facts for module, import,
