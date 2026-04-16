@@ -1,0 +1,23 @@
+docs/docs/languages/javascript.md
+  1ca5ee6ce936a402 27-28,48-49,53-54,60-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "e5cd4d9a07fe016f24769b6390d757b21b243583",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 691,
+      "total_deletions": 366,
+      "accepted_lines": 691,
+      "overriden_lines": 0
+    }
+  }
+}
