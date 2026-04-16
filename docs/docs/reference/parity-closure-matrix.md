@@ -22,7 +22,7 @@ the old Python platform feature for feature for that surface.
 | Runtime ownership | `pass` | Long-running and one-shot services are Go-owned end to end | keep Go-only ownership intact |
 | Deployment ownership | `pass` | Dockerfile, Compose, and Helm run the Go platform | keep docs and validation aligned |
 | Python normal-path ownership | `pass` | No normal-path Python runtime code remains | do not reintroduce mixed-runtime ownership |
-| Feature-for-feature parity | `pass` | All parser/graph families, operator/runtime contract rows, API/MCP query surfacing, IaC validation, and documentation rows now pass | keep all rows aligned as features evolve |
+| Feature-for-feature parity | `partial` | The branch is Go-owned, but queue-hardening, typed relationship fidelity, and parser-family relationship promotion are still open | only mark `pass` when implementation, proof, and docs all agree |
 
 ## Operator And Runtime Contract Matrix
 
@@ -33,6 +33,7 @@ the old Python platform feature for feature for that surface.
 | Status endpoint breadth | `pass` | The API runtime now mounts the shared `/healthz`, `/readyz`, `/admin/status`, and `/metrics` surface, while public ingester status is available on canonical `/api/v0/status/ingesters*` routes with legacy `GET /api/v0/ingesters*` aliases | keep the mounted runtime surface and public status aliases documented and tested | `go test` for `./internal/status ./internal/query ./cmd/api`, docs build | validation sweep only |
 | Run-scoped coverage endpoints | `bounded` | The shipped Go contract is checkpoint status plus repository-scoped coverage only: `/api/v0/status/index`, `/api/v0/index-status`, and `/api/v0/repositories/{repo_id}/coverage`. Run-scoped completeness routes are intentionally not part of the public OpenAPI contract on this branch | docs and OpenAPI keep that bounded contract explicit without implying `/api/v0/index-runs/*` support | OpenAPI verification, docs build | no implementation slice unless the product contract changes |
 | CLI behavior breadth | `pass` | The supported Go CLI contract is now explicit in both code and docs: historical commands are either supported, deprecated with guidance, or intentionally removed with compatibility errors instead of silently drifting from the Python-era UX | keep command metadata, docs, and focused `go/cmd/pcg` tests aligned | focused `go/cmd/pcg` tests and smoke checks | validation sweep only |
+| Queue lease recovery and ack visibility | `partial` | projector/reducer runtime ownership is Go-only, but lease reclaim, poison handling, and ack-failure instrumentation still need to be hardened and proven | queue work can be reclaimed safely, poison work is surfaced clearly, and telemetry/logging show ack failures without manual inference | `go test` for `./internal/projector ./internal/reducer ./internal/storage/postgres ./internal/telemetry` plus compose-backed runtime proof | hardening chunk |
 
 ## Parser And Graph-Surface Matrix
 
@@ -63,23 +64,30 @@ the old Python platform feature for feature for that surface.
 | CloudFormation parity | `pass` | YAML and JSON templates now share the same parser materialization, including `file_format`, cross-stack import/export buckets, first-class condition definitions, evaluated condition results when expressions are template-local, and nested-stack `template_url` metadata that now also resolves obvious repo-local nested-stack targets on the Go entity-context path | JSON and YAML templates reach the same materialization and query-proof bar for the currently modeled CloudFormation semantics | parser tests plus end-to-end proof | validation sweep only |
 | Kustomize parity | `pass` | parser payload parity is met and now exceeds Python with first-class sorted `bases`, inline patch-target extraction, normalized `resource_refs`/`helm_refs`/`image_refs`, and typed Kustomize evidence for resources vs Helm vs images. The historical patch-link heuristic plus typed `DEPLOYS_FROM` query fallback now survive on the Go-owned query path | Kustomize parser payloads plus the historical typed evidence/link behavior survive parse, relationships, and normal query proof | parser tests, relationship tests, query proof | validation sweep only |
 | Generic JSON | `bounded` | arbitrary JSON is intentionally quiet to avoid graph noise | accepted bounded behavior is documented and unchanged | docs build only unless scope changes | do not schedule unless requirement changes |
+| Typed relationship fidelity | `partial` | strong relationship evidence still needs end-to-end protection so the canonical graph keeps `PROVISIONS_DEPENDENCY_FOR`, `DEPLOYS_FROM`, `DISCOVERS_CONFIG_IN`, and `RUNS_ON` where the extractor found them instead of flattening back to generic dependencies | typed edges survive reducer writes, query read models, and story shaping without lossy fallback | `go test` for `./internal/relationships ./internal/reducer ./internal/query ./internal/storage/neo4j` plus compose-backed proof | hardening chunk |
+| Workflow and automation relationship mapping | `partial` | GitHub Actions must be first-class in relationship mapping, and Jenkins/Groovy still needs current-truth promotion proof beyond summary-only surfacing | workflow families emit canonical evidence and query-visible relationships with docs and tests to match | parser tests, relationship tests, query proof | parser-family chunk |
+| Docker and compose relationship mapping | `partial` | Dockerfile and Compose parsing exist, but canonical relationship promotion and query proof still need to be locked down | image/build/runtime relationships survive parse, graph materialization, and query proof | parser tests, relationship tests, query proof | parser-family chunk |
+| Terraform variable-file relationship mapping | `partial` | `.tfvars` and `.tfvars.json` need normal-path relationship promotion proof through the Go runtime | Terraform variable-file evidence participates in canonical relationship resolution and query surfacing | parser tests, relationship tests, end-to-end proof | parser-family chunk |
+| Ansible relationship mapping | `partial` | Ansible is still more path-family than first-class relationship family today | inventories, playbooks, and role/use relationships are queryable and documented with proof | parser tests, relationship tests, query proof | parser-family chunk |
 
 ## Query-Surface And Documentation Matrix
 
 | Workstream | Status | Gap now | Done means | Validation gate | Recommended split |
 | --- | --- | --- | --- | --- | --- |
-| API/MCP query surfacing | `pass` | every `pass` parser/graph family now has checked-in query-level proof across entity resolve/context, graph-backed `code/language-query`, `code/relationships`, `code/search`, `code/dead-code`, `code/complexity`, `code/call-chain`, content fallback, semantic enrichment (summaries, profiles, stories), and repository story surfaces; the MCP dispatch maps all 39 registered tools 1:1 to HTTP API routes; the OpenAPI spec covers all public routes | keep query proof and public docs aligned as the final validation sweep lands | API tests, MCP proof | validation sweep only |
-| Language pages | `pass` | language pages now match implementation truth: SQL real-repo and end-to-end status updated to `supported (bounded)`, Kotlin and PHP pages reflect closed graph parity, and remaining documented limitations are bounded non-goals rather than stale parity claims | keep language pages aligned as features evolve | docs build | closed |
+| API/MCP query surfacing | `partial` | the broad query contract is Go-owned and mostly proven, but the relationship-heavy families above still need current-truth proof so the docs stop overstating their canonical graph coverage | only return this row to `pass` when the open relationship-family rows are closed and verified | API tests, MCP proof, relationship query proof | final lock sweep |
+| Language pages | `partial` | many language pages are current, but the relationship-heavy workflow/IaC pages still need updates as the hardening work lands | docs must match the actual parser and relationship surfaces, not the hoped-for end state | docs build | update as chunks land |
 | Support maturity matrix | `pass` | the matrix now matches the parity audit: SQL real-repo and end-to-end moved from `partial` to `supported`, and no matrix row contradicts the parity closure state | keep the matrix aligned with the parity audit | docs build | closed |
-| Roadmap and architecture docs | `pass` | architecture.md now reflects all parser/graph families passing parity, roadmap.md reflects Phase 5 validation evidence is refreshed and all families pass, and the remaining close-out is documentation lock only | keep docs aligned with branch truth | docs build | closed |
+| Roadmap and architecture docs | `partial` | these docs still need to reflect that runtime ownership is complete but relationship hardening and parser-family promotion are still open | branch-truth docs no longer claim full parity before the hardening work is done | docs build | docs truth-reset chunk |
 
 ## Suggested Execution Waves
 
 | Wave | Includes | Why this grouping works |
 | --- | --- | --- |
-| Wave 0 | operator/runtime contract rows | independent of parser work and unblocks cleaner operator truth |
-| Wave 1 | Terraform, Terragrunt, Kubernetes, ArgoCD, CloudFormation, Kustomize | mostly validation-sweep work now that the shared IaC parser/query parity rows are Go-owned and passing; use this wave to keep docs, proof, and end-to-end validation aligned rather than reopening parser work without evidence |
-| Wave 2 | docs lock, full validation, and evidence refresh | closes the branch honestly now that the Kotlin and PHP long-tail graph rows are closed |
+| Wave 0 | docs truth reset | remove stale “parity complete” claims before landing more code |
+| Wave 1 | queue lease recovery and ack observability | hardens projector/reducer correctness and telemetry |
+| Wave 2 | typed relationship fidelity and ArgoCD `RUNS_ON` | repairs canonical edge truth and read-model consumers |
+| Wave 3 | workflow and IaC parser-family promotion | closes GitHub Actions, Terraform variable-file, Jenkins/Groovy, Ansible, Docker, and Compose relationship gaps |
+| Wave 4 | docs lock, validation, and evidence refresh | closes the branch honestly after the implementation work lands |
 
 ## Approval Gate
 

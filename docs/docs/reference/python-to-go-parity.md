@@ -28,9 +28,18 @@ The runtime migration is complete:
   explicitly offline-only docs/CI toolchains, not normal runtime or developer
   verification flow
 
-Feature parity is complete. All parser/graph families, operator/runtime
-contract rows, API/MCP query surfacing, IaC validation, and documentation
-alignment rows now pass in the parity closure matrix.
+Feature-for-feature parity is not fully closed yet. The branch still has active
+Go-owned parity work in the normal runtime path:
+
+- projector and reducer queue-hardening work, especially lease recovery,
+  crash-safety, and ack-failure visibility
+- typed relationship fidelity so strong relationship evidence is not flattened
+  back to generic `DEPENDS_ON`
+- ArgoCD destination-to-platform `RUNS_ON` materialization and the repo
+  read-model counts that depend on those canonical edges
+- parser-family relationship promotion for Terraform variable files, GitHub
+  Actions, Jenkins/Groovy, Ansible, Docker, and Docker Compose
+- end-to-end validation and instrumentation proof for those flows
 
 The API/MCP query surfacing infrastructure is parity-complete: every
 parser/graph family has checked-in query-level proof across entity
@@ -65,15 +74,17 @@ The current branch truth is backed by these checks:
 
 ## Non-Parser Platform Parity Gaps
 
-These are the currently known branch-level gaps outside parser family work.
+These are the currently known branch-level gaps outside parser-family promotion.
 
 | Area | Status | Current truth | Remaining work |
 | --- | --- | --- | --- |
 | `pcg serve start` runtime composition | pass | it starts the HTTP API binary, while MCP is intentionally separate on `pcg mcp start` | keep command behavior and docs aligned exactly |
-| API admin route mounting | pass | the shipped Go API now exposes the public `/api/v0/admin/*` control surface while the same process also mounts the shared service-local runtime admin probes and status routes | keep OpenAPI, docs, and query wiring aligned with the mounted admin contract |
-| Status endpoint breadth | pass | the API runtime now mounts the shared `/healthz`, `/readyz`, `/admin/status`, and `/metrics` surface, while the public query API exposes canonical `/api/v0/status/*` routes plus legacy `GET /api/v0/ingesters*` aliases for ingester status | keep docs, OpenAPI, and tests aligned with the shipped surface |
+| API admin route mounting | pass | the shipped Go API exposes the public `/api/v0/admin/*` control surface while the same process also mounts the shared service-local runtime admin probes and status routes | keep OpenAPI, docs, and query wiring aligned with the mounted admin contract |
+| Status endpoint breadth | pass | the API runtime mounts the shared `/healthz`, `/readyz`, `/admin/status`, and `/metrics` surface, while the public query API exposes canonical `/api/v0/status/*` routes plus legacy `GET /api/v0/ingesters*` aliases for ingester status | keep docs, OpenAPI, and tests aligned with the shipped surface |
 | Run-scoped index coverage endpoints | bounded | the shipped completeness contract is `GET /api/v0/status/index`, legacy `GET /api/v0/index-status`, and repository-scoped `GET /api/v0/repositories/{repo_id}/coverage`; run-scoped coverage endpoints are intentionally not part of the public OpenAPI contract on this branch | keep that bounded contract explicit instead of reintroducing stale run-scoped claims |
 | CLI parity breadth | pass | the supported Go CLI contract is now explicit in both code and docs: historical commands are either supported, deprecated with guidance, or intentionally removed with compatibility errors instead of silently drifting from the Python-era UX | keep command metadata, docs, and focused CLI tests aligned |
+| Projector/reducer queue safety | partial | the queue is Go-owned, but lease recovery, poison handling, and ack-failure observability still need to be hardened to match the desired operator contract | land queue recovery, crash-safety, and telemetry proof |
+| Relationship fidelity | partial | typed relationship evidence exists, but some flows still collapse strong signals into generic dependencies and some read models still miss canonical edge shapes | preserve typed edges and repair read models end to end |
 
 ## Feature Parity Status
 
@@ -104,12 +115,16 @@ parity from persisted graph and query-surface parity.
 
 ## Documented Gap Inventory
 
-These are the currently documented partial or unsupported graph-surface
-capabilities in the checked-in language pages:
-- Rust: impl ownership parity is closed; the only remaining documented limitation is bounded lifetime semantics beyond the Python baseline.
-- Elixir: protocol and guard parity is closed; the remaining documented limitations are parser-shape constraints already captured in the language page.
-- JSON: generic JSON intentionally remains partial to avoid graph noise, pending any explicit decision to promote additional JSON families.
-- SQL/dbt: Python-era feature parity is met; the remaining dbt lineage limits are historical Python limitations or bounded non-goals, and focused parser, content, and query tests now all pass.
+These are the currently documented branch-level gaps that still matter for
+honest signoff:
+
+- queue-hardening work in projector/reducer is still active
+- typed relationship fidelity is not fully closed for all IaC and workflow
+  families
+- GitHub Actions, Jenkins/Groovy, Ansible, Docker, Docker Compose, and
+  Terraform variable-file relationship promotion still need current-truth proof
+- JSON remains intentionally partial to avoid graph noise unless a specific
+  JSON family is promoted on purpose
 
 The IaC validation sweep is now backed by current evidence: Terraform,
 Terragrunt, Kubernetes, ArgoCD, CloudFormation, Kustomize, and SQL/dbt rows
@@ -117,8 +132,9 @@ all pass their focused parser, relationship, content, and query tests. The
 API/MCP query surfacing infrastructure is also now parity-complete with
 checked-in proof across all `pass` parser/graph families.
 
-The remaining parity work is documentation lock only: all parser/graph
-families, API/MCP query surfaces, and IaC validation rows are now `pass`.
+The remaining parity work is implementation plus validation work, not just doc
+lock. Use the parity matrix and the 2026-04-16 hardening plan to track those
+open rows honestly.
 
 ## What Counts As Parity Complete
 
@@ -138,15 +154,17 @@ If any of those are missing, the feature is not parity complete.
 
 ## Recommended Closure Order
 
-1. Finish the remaining validation sweep for IaC, SQL/dbt, and runtime/operator rows already marked `pass`
-2. Remove stale references and lock the docs to current branch truth
-3. Refresh compose-backed and real-repo evidence where the current docs claim it
-4. Run the final release gate and parity sign-off checks
+1. Close projector/reducer queue-hardening gaps and add missing telemetry proof
+2. Preserve typed relationship fidelity and land ArgoCD `RUNS_ON` plus read-model fixes
+3. Finish parser-family relationship promotion for GitHub Actions, Terraform
+   variable files, Jenkins/Groovy, Ansible, Docker, and Docker Compose
+4. Refresh compose-backed and real-repo evidence, then lock docs to current truth
 
 ## Companion Checklist
 
 Use [parity-closure-matrix.md](parity-closure-matrix.md) as the execution
-checklist for the remaining validation and documentation lock work.
+checklist for the remaining implementation, validation, and documentation
+closure work.
 
 Use [merge-readiness-signoff.md](merge-readiness-signoff.md) for the final
 closed-versus-deferred branch signoff record.

@@ -9,8 +9,8 @@ It runs in two practical modes:
 - **deployed mode** for the shared API, ingester, and resolution-engine
 
 Phase 1 clarified package ownership, Phase 2 switched Git indexing to a
-facts-first write path, and Phase 3 added durable recovery and explainability on
-top of that runtime.
+facts-first write path, and Phase 3 added durable recovery and explainability
+on top of that runtime.
 
 The current write-domain architecture keeps repo-local graph refresh parallel
 while routing shared platform and dependency mutation through durable,
@@ -21,16 +21,27 @@ dense shared nodes.
 That runtime is now the active baseline for this branch. The normal platform
 path runs as a schema-first Go data plane built around scoped ingestion,
 snapshot generations, source-local projectors, and shared reducers. The goal
-is to let Git, AWS, Kubernetes, SQL, and future collectors all feed one
-canonical knowledge graph without inheriting Git-shaped storage or
-finalization assumptions. Each collector family owns its own service boundary
-and emits the same shared fact contract, so the platform can scale by source
-instead of forcing every update through one generic ingester.
+is to let Git, AWS, Kubernetes, SQL, workflow automation, and future
+collectors all feed one canonical knowledge graph without inheriting
+Git-shaped storage or finalization assumptions. Each collector family owns its
+own service boundary and emits the same shared fact contract, so the platform
+can scale by source instead of forcing every update through one generic
+ingester.
 
 The rewrite also favors incremental ingestion and reconciliation over full
 re-indexing. Normal updates should touch the affected scope or shard, produce a
 new generation, and reconcile only the changed unit of truth. Full rebuilds
 remain available as explicit bootstrap or recovery operations.
+
+The remaining architecture work on this branch is not about Python runtime
+ownership anymore. It is about correctness and parity inside the Go data plane:
+
+- queue lease recovery and poison handling in projector/reducer
+- typed relationship fidelity in canonical graph writes and read models
+- first-class workflow and IaC relationship promotion for the remaining
+  families such as GitHub Actions, Terraform variable files, Jenkins/Groovy,
+  Ansible, Docker, and Docker Compose
+- telemetry, tracing, and logging proof for those same paths
 
 For new source families, use the
 [Collector Authoring Guide](guides/collector-authoring.md) as the guardrail for

@@ -1,14 +1,15 @@
 # Go Parity Closure Plan
 
-> Historical execution record: the implementation-heavy parser/runtime parity
-> closure described here has already landed on this branch. Treat this file as
-> a record of the execution waves that got the branch to the current state, not
-> as a live list of unresolved Python-era parity gaps.
+> Historical execution record: most of the implementation-heavy parser/runtime
+> parity closure described here has already landed on this branch. Treat this
+> file as background context, not as the current source of truth for remaining
+> work.
 
 This plan closes the remaining feature-for-feature parity gaps after the
 Python-to-Go runtime migration.
 
-The branch is already structurally Go-owned. The remaining work now is
+The branch is already structurally Go-owned. The remaining work now is queue
+hardening, typed relationship fidelity, parser-family relationship promotion,
 validation breadth, evidence refresh, and final documentation normalization.
 
 ## Goal
@@ -164,6 +165,10 @@ already-landed Go-owned platform.
 ### Exit criteria
 
 - parity audit and parity matrix match the actual branch truth
+- projector/reducer queue-hardening gaps are closed with telemetry proof
+- typed relationship fidelity gaps are closed with query/read-model proof
+- workflow/IaC parser-family relationship promotion is closed for the remaining
+  families called out in the current parity matrix
 - language pages, support-maturity page, roadmap, and runbooks no longer carry
   stale parity-gap wording
 - local verification stack passes

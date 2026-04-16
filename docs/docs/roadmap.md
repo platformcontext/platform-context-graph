@@ -11,17 +11,16 @@ Go-owned. There is no Python runtime code left in the repository — only Python
 fixture files used as parser test data under `tests/fixtures/`. The Dockerfile
 builds a single Go-only image and docker-compose runs exclusively Go binaries.
 
-The remaining work is final validation breadth, evidence refresh, and
-documentation normalization before the branch can be signed off as
-feature-for-feature parity complete. No new collector expansion should begin
-until that closeout work is finished.
+The remaining work is relationship and queue hardening plus the final parser-
+family promotion needed for honest feature-for-feature parity. No new
+collector expansion should begin until that closeout work is finished.
 
 The rewrite contract for the completed cutover is captured in:
 
 - [Architecture](architecture.md)
 - [Architecture Decision Records](adrs/index.md)
 
-The project is now in **Phase 5: Validation And Documentation Lock**.
+The project is now in **Phase 5: Parity Hardening And Signoff**.
 
 ## Rewrite Milestones
 
@@ -32,14 +31,14 @@ The project is now in **Phase 5: Validation And Documentation Lock**.
 | 2 | Scope-first ingestion and incremental refresh | Large | scope/generation lifecycle, replay-safe refresh, no full re-index dependency |
 | 3 | Canonical truth layers and reducer ownership | Large | cross-source correlation, layered truth, canonical-first query behavior |
 | 4 | Legacy runtime and bridge retirement | Medium | proof bridge removal, regression coverage, no new logic on the old seam |
-| 5 | Documentation and operator guidance | Medium | locked runbooks, traversal maps, collector onboarding, and truthful operator surfaces |
+| 5 | Parity hardening and signoff | Medium | queue safety, relationship fidelity, workflow/IaC promotion, truthful docs, and validation evidence |
 
 ## Rewrite Status Notes
 
-The Python-to-Go runtime conversion is complete, and the required implementation
-parity for the documented Python-era runtime and query surfaces is now in
-place. The branch still needs final validation and documentation lock before
-that parity can be called fully signed off.
+The Python-to-Go runtime conversion is complete. The branch still needs queue
+hardening, relationship-fidelity fixes, workflow/IaC relationship promotion,
+and final validation before feature-for-feature parity can be called fully
+signed off.
 
 The branch has met the runtime ownership bar:
 
@@ -52,23 +51,24 @@ The branch has met the runtime ownership bar:
 - the Dockerfile is a single Go-only multi-stage build
 - the CLI (`pcg`) is a native Go binary using Cobra
 
-The remaining closeout work is tracked in the parity audit and parity-closure
-plan:
+The remaining closeout work is tracked in the parity audit, parity matrix, and
+the active hardening plan:
 
 - [Python-To-Go Parity Audit](reference/python-to-go-parity.md)
-- `docs/superpowers/plans/2026-04-14-go-parity-closure-plan.md`
+- [Parity Closure Matrix](reference/parity-closure-matrix.md)
+- `docs/superpowers/plans/2026-04-16-projector-reducer-parser-relationship-hardening-plan.md`
 
 ## After That
 
-### Phase 5: Validation And Documentation Lock
+### Phase 5: Parity Hardening And Signoff
 
-Before new collectors begin, finish the remaining documentation lock for
-the Go graph and query surfaces.
+Before new collectors begin, finish the remaining correctness and parity work
+for the Go graph and query surfaces.
 
-- validation evidence for rows marked `pass` has been refreshed
-- API/MCP query surfacing infrastructure is parity-complete
-- all parser and graph-surface families now pass parity
-- lock the docs to current branch truth and finalize the close-out
+- land queue lease recovery, poison handling, and ack-failure observability
+- preserve typed relationship fidelity and repair affected read models
+- finish workflow/IaC relationship promotion for the remaining families
+- refresh validation evidence and lock the docs to current branch truth
 
 ### Phase 6: Multi-Collector Expansion
 

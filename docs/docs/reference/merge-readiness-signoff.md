@@ -22,8 +22,8 @@ These migration goals are complete on this branch:
 - no active Python command invocations remain in normal developer verification
   scripts
 - no checked-in `.py` files remain outside `tests/fixtures/`
-- parity audit and closure matrix rows are marked `pass` or intentionally
-  `bounded`
+- runtime-ownership rows in the parity audit and closure matrix are marked
+  `pass` or intentionally `bounded`
 
 ## Intentionally Fixture-Only
 
@@ -77,10 +77,22 @@ The honest branch-level statement is:
 - runtime and service migration is complete
 - active developer-path migration is complete
 - remaining Python is fixture-only or offline-only
+- feature-for-feature parity is not yet fully signed off because queue
+  hardening, typed relationship fidelity, and several workflow/IaC
+  relationship families still need implementation and proof
 
 ## Verification Snapshot
 
-At signoff time, the branch truth is supported by:
+Use this record only when the open parity rows are actually closed. The current
+readiness gate still depends on:
+
+- projector/reducer queue-hardening proof
+- typed relationship fidelity proof
+- GitHub Actions, Terraform variable-file, Jenkins/Groovy, Ansible, Docker,
+  and Docker Compose relationship proof
+- docs, telemetry, and compose-backed evidence refresh
+
+At final signoff time, the branch truth should be supported by:
 
 ```bash
 rg --files . -g '*.py' | rg -v '^(\\./)?tests/fixtures/'
@@ -96,4 +108,3 @@ ownership.
 
 - [Python-To-Go Parity Audit](python-to-go-parity.md)
 - [Parity Closure Matrix](parity-closure-matrix.md)
-
