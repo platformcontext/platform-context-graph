@@ -32,37 +32,37 @@ type WorkerObserver interface {
 // Python pcg_ metrics.
 type Instruments struct {
 	// Counters track cumulative totals
-	FactsEmitted              metric.Int64Counter
-	FactsCommitted            metric.Int64Counter
-	ProjectionsCompleted      metric.Int64Counter
-	ReducerIntentsEnqueued    metric.Int64Counter
-	ReducerExecutions         metric.Int64Counter
-	CanonicalWrites           metric.Int64Counter
-	SharedProjectionCycles    metric.Int64Counter
+	FactsEmitted           metric.Int64Counter
+	FactsCommitted         metric.Int64Counter
+	ProjectionsCompleted   metric.Int64Counter
+	ReducerIntentsEnqueued metric.Int64Counter
+	ReducerExecutions      metric.Int64Counter
+	CanonicalWrites        metric.Int64Counter
+	SharedProjectionCycles metric.Int64Counter
 
 	// Histograms track distributions
-	CollectorObserveDuration  metric.Float64Histogram
-	ScopeAssignDuration       metric.Float64Histogram
-	FactEmitDuration          metric.Float64Histogram
-	ProjectorRunDuration      metric.Float64Histogram
-	ProjectorStageDuration    metric.Float64Histogram
-	ReducerRunDuration        metric.Float64Histogram
-	CanonicalWriteDuration    metric.Float64Histogram
-	QueueClaimDuration        metric.Float64Histogram
-	PostgresQueryDuration     metric.Float64Histogram
-	Neo4jQueryDuration        metric.Float64Histogram
+	CollectorObserveDuration metric.Float64Histogram
+	ScopeAssignDuration      metric.Float64Histogram
+	FactEmitDuration         metric.Float64Histogram
+	ProjectorRunDuration     metric.Float64Histogram
+	ProjectorStageDuration   metric.Float64Histogram
+	ReducerRunDuration       metric.Float64Histogram
+	CanonicalWriteDuration   metric.Float64Histogram
+	QueueClaimDuration       metric.Float64Histogram
+	PostgresQueryDuration    metric.Float64Histogram
+	Neo4jQueryDuration       metric.Float64Histogram
 
 	// Collector concurrency histograms and counters
-	RepoSnapshotDuration  metric.Float64Histogram
-	FileParseDuration     metric.Float64Histogram
-	ReposSnapshotted      metric.Int64Counter
-	FilesParsed           metric.Int64Counter
+	RepoSnapshotDuration metric.Float64Histogram
+	FileParseDuration    metric.Float64Histogram
+	ReposSnapshotted     metric.Int64Counter
+	FilesParsed          metric.Int64Counter
 
 	// Streaming fact production metrics
-	FactBatchesCommitted  metric.Int64Counter
-	GenerationFactCount   metric.Float64Histogram
-	ContentReReads        metric.Int64Counter
-	ContentReReadSkips    metric.Int64Counter
+	FactBatchesCommitted metric.Int64Counter
+	GenerationFactCount  metric.Float64Histogram
+	ContentReReads       metric.Int64Counter
+	ContentReReadSkips   metric.Int64Counter
 
 	// Discovery skip counters — per-name breakdown of what discovery prunes
 	DiscoveryDirsSkipped  metric.Int64Counter
@@ -80,12 +80,16 @@ type Instruments struct {
 	Neo4jBatchesExecuted metric.Int64Counter
 
 	// Canonical projection metrics
-	CanonicalNodesWritten      metric.Int64Counter
-	CanonicalEdgesWritten      metric.Int64Counter
+	CanonicalNodesWritten       metric.Int64Counter
+	CanonicalEdgesWritten       metric.Int64Counter
 	CanonicalProjectionDuration metric.Float64Histogram
-	CanonicalRetractDuration   metric.Float64Histogram
-	CanonicalBatchSize         metric.Float64Histogram
-	CanonicalPhaseDuration     metric.Float64Histogram
+	CanonicalRetractDuration    metric.Float64Histogram
+	CanonicalBatchSize          metric.Float64Histogram
+	CanonicalPhaseDuration      metric.Float64Histogram
+
+	// Canonical atomic write metrics
+	CanonicalAtomicWrites    metric.Int64Counter
+	CanonicalAtomicFallbacks metric.Int64Counter
 
 	// Neo4j transient error retry metrics
 	Neo4jDeadlockRetries metric.Int64Counter
@@ -102,9 +106,9 @@ type Instruments struct {
 	PipelineOverlapDuration metric.Float64Histogram
 
 	// Observable gauges for autoscaling signals
-	QueueDepth         metric.Int64ObservableGauge
-	QueueOldestAge     metric.Float64ObservableGauge
-	WorkerPoolActive   metric.Int64ObservableGauge
+	QueueDepth       metric.Int64ObservableGauge
+	QueueOldestAge   metric.Float64ObservableGauge
+	WorkerPoolActive metric.Int64ObservableGauge
 }
 
 // NewInstruments creates and registers all OTEL metric instruments using the
@@ -411,6 +415,22 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register Neo4jBatchesExecuted counter: %w", err)
+	}
+
+	inst.CanonicalAtomicWrites, err = meter.Int64Counter(
+		"pcg_dp_canonical_atomic_writes_total",
+		metric.WithDescription("Total canonical writes dispatched as a single atomic transaction"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CanonicalAtomicWrites counter: %w", err)
+	}
+
+	inst.CanonicalAtomicFallbacks, err = meter.Int64Counter(
+		"pcg_dp_canonical_atomic_fallbacks_total",
+		metric.WithDescription("Total canonical writes falling back to sequential execution"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CanonicalAtomicFallbacks counter: %w", err)
 	}
 
 	inst.Neo4jDeadlockRetries, err = meter.Int64Counter(

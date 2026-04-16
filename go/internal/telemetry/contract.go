@@ -54,10 +54,10 @@ const (
 	SpanCanonicalProjection  = "canonical.projection"
 	SpanCanonicalRetract     = "canonical.retract"
 
-	SpanEvidenceDiscovery               = "ingestion.evidence_discovery"
-	SpanSQLRelationshipMaterialization  = "reducer.sql_relationship_materialization"
-	SpanInheritanceMaterialization      = "reducer.inheritance_materialization"
-	SpanCrossRepoResolution             = "reducer.cross_repo_resolution"
+	SpanEvidenceDiscovery              = "ingestion.evidence_discovery"
+	SpanSQLRelationshipMaterialization = "reducer.sql_relationship_materialization"
+	SpanInheritanceMaterialization     = "reducer.inheritance_materialization"
+	SpanCrossRepoResolution            = "reducer.cross_repo_resolution"
 
 	// Dependency service spans — track external call performance.
 	SpanPostgresExec  = "postgres.exec"

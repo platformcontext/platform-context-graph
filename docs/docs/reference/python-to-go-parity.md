@@ -37,8 +37,12 @@ Go-owned parity work in the normal runtime path:
   back to generic `DEPENDS_ON`
 - ArgoCD destination-to-platform `RUNS_ON` materialization and the repo
   read-model counts that depend on those canonical edges
-- parser-family relationship promotion for Terraform variable files, GitHub
-  Actions, Jenkins/Groovy, Ansible, Docker, and Docker Compose
+- explicit repo-bearing GitHub Actions inputs, reusable workflow refs, Jenkins
+  shared-library refs and repo URLs, Ansible inventories/playbooks/roles/task
+  entrypoints, and Docker Compose build/dependency/runtime hints are already
+  Go-owned and query-visible, but broader controller-driven promotion and
+  end-to-end proof still need current-truth evidence; Terraform variable-file
+  promotion is already proven on the normal Go path
 - end-to-end validation and instrumentation proof for those flows
 
 The API/MCP query surfacing infrastructure is parity-complete: every
@@ -121,8 +125,11 @@ honest signoff:
 - queue-hardening work in projector/reducer is still active
 - typed relationship fidelity is not fully closed for all IaC and workflow
   families
-- GitHub Actions, Jenkins/Groovy, Ansible, Docker, Docker Compose, and
-  Terraform variable-file relationship promotion still need current-truth proof
+- explicit repo-bearing GitHub Actions, Jenkins/Groovy, Ansible, Docker, and
+  Docker Compose subfamilies already have Go-owned parser/query proof, while
+  broader controller-driven relationship promotion and compose-backed evidence
+  still need current-truth validation; Terraform variable-file promotion is
+  already proven on the normal Go path
 - JSON remains intentionally partial to avoid graph noise unless a specific
   JSON family is promoted on purpose
 
@@ -156,8 +163,8 @@ If any of those are missing, the feature is not parity complete.
 
 1. Close projector/reducer queue-hardening gaps and add missing telemetry proof
 2. Preserve typed relationship fidelity and land ArgoCD `RUNS_ON` plus read-model fixes
-3. Finish parser-family relationship promotion for GitHub Actions, Terraform
-   variable files, Jenkins/Groovy, Ansible, Docker, and Docker Compose
+3. Finish broader workflow/controller relationship coverage for GitHub
+   Actions, Jenkins/Groovy, Ansible, Docker, and Docker Compose
 4. Refresh compose-backed and real-repo evidence, then lock docs to current truth
 
 ## Companion Checklist

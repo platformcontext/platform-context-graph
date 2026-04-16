@@ -1126,9 +1126,9 @@ func TestEntityTypeLabelMapCoversAllSchemaLabels(t *testing.T) {
 			strings.Join(missing, ", "))
 	}
 
-	// Every label in entityTypeLabelMap must have SOME constraint in schema
-	// (uid, node-key, or name-unique). Collect all constrained labels from
-	// the full schema statement set.
+	// Every label in entityTypeLabelMap must have some explicit schema support
+	// in graph/schema.go. Most labels are protected by constraints; a small
+	// number are intentionally backed by indexes instead of uniqueness.
 	allConstrainedRe := regexp.MustCompile(`FOR \(\w+:(\w+)\) REQUIRE`)
 	allConstrained := make(map[string]struct{})
 	for _, stmt := range stmts {
@@ -1138,10 +1138,21 @@ func TestEntityTypeLabelMapCoversAllSchemaLabels(t *testing.T) {
 		}
 	}
 
+	allIndexedRe := regexp.MustCompile(`FOR \(\w+:(\w+)\) ON`)
+	allIndexed := make(map[string]struct{})
+	for _, stmt := range stmts {
+		matches := allIndexedRe.FindStringSubmatch(stmt)
+		if len(matches) == 2 {
+			allIndexed[matches[1]] = struct{}{}
+		}
+	}
+
 	var unconstrained []string
 	for entityType, label := range labelMap {
 		if _, ok := allConstrained[label]; !ok {
-			unconstrained = append(unconstrained, fmt.Sprintf("%s->%s", entityType, label))
+			if _, ok := allIndexed[label]; !ok {
+				unconstrained = append(unconstrained, fmt.Sprintf("%s->%s", entityType, label))
+			}
 		}
 	}
 

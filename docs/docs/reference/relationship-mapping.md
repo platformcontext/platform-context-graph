@@ -282,16 +282,16 @@ The current mapping and enrichment flow understands these families:
 
 | Family | What it reads | What it is used for |
 | :--- | :--- | :--- |
-| Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR` and platform/runtime context |
-| Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config | Same semantic family as Terraform, with the same emphasis on truthful direction; `terraform.source` now also materializes through the normal `TerraformModule` surface, while `read_terragrunt_config()` remains intentionally opaque |
-| GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Reusable workflow refs, explicit cross-repo checkout, and explicit repo-bearing workflow inputs such as `automation-repo` and `workflow_input_repository` now emit canonical repo evidence on both the relationship and query paths from source or metadata; broader workflow relationship promotion is still active parity work on this branch |
-| Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Explicit shared-library refs, including `library(...)` step forms, and explicit GitHub repository URLs now emit canonical repo evidence, while the Go query path also surfaces controller-artifact summaries for `Jenkinsfile` inputs plus typed controller/workflow relationship overviews in repository context and story outputs; broader controller-driven promotion is still active parity work on this branch |
-| Ansible | playbooks, inventories, `group_vars`, `host_vars`, targeted roles, task entrypoints | The Go path now classifies inventories, vars, playbooks, role roots, and task entrypoints explicitly, and playbooks emit truthful role-reference evidence; broader controller-driven deployment meaning is still active parity work on this branch |
-| Docker / Compose | Dockerfile build/runtime hints, Compose services, image wiring, env/config links, dependency hints | Docker Compose build contexts, including shorthand `build: ../repo`, and image refs now emit canonical deploy-source evidence, explicit `depends_on` service names now emit canonical dependency evidence when they resolve truthfully through the repo catalog, and the Go read side now surfaces runtime artifact summaries for Compose `build`, `healthcheck`, `ports`, `environment`, and `volumes`; broader Docker and controller/runtime promotion is still active parity work on this branch |
+| Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR`, `PROVISIONS_PLATFORM`, and platform/runtime context |
+| Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config, local config assets | Same semantic family as Terraform; parser output keeps `read_terragrunt_config()` opaque, while the read path now surfaces `dependency.config_path`, `read_terragrunt_config`, `include`, `file`, `templatefile`, `*.tfvars`, and local module-source assets plus `terraform.source` on the normal `TerraformModule` surface |
+| GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Reusable workflow refs, explicit cross-repo checkout, and explicit repo-bearing workflow inputs such as `automation-repo` and `workflow_input_repository` now emit canonical repo evidence on both the relationship and query paths from source or metadata; broader workflow delivery-path promotion beyond those explicit cases remains active parity work on this branch |
+| Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Explicit shared-library refs, including `library(...)` step forms, and explicit GitHub repository URLs now emit canonical repo evidence, while the Go query path also surfaces controller-artifact summaries for `Jenkinsfile` inputs; broader controller-driven promotion remains active parity work on this branch |
+| Ansible | playbooks, inventories, `group_vars`, `host_vars`, targeted roles, task entrypoints | The Go path now classifies inventories, vars, playbooks, role roots, and task entrypoints explicitly, playbooks emit truthful role-reference evidence, and the query path surfaces those config assets; broader controller-driven deployment meaning and stronger verb promotion remain active parity work on this branch |
+| Docker / Compose | Dockerfile build/runtime hints, Compose services, image wiring, env/config links, dependency hints | Docker Compose build contexts, including shorthand `build: ../repo`, and image refs now emit canonical deploy-source evidence, explicit `depends_on` service names now emit canonical dependency evidence when they resolve truthfully through the repo catalog, and the Go read side now surfaces runtime artifact summaries for Compose `build`, `healthcheck`, `ports`, `environment`, and `volumes`; broader Docker and controller/runtime promotion remains active parity work on this branch |
 | ArgoCD | ApplicationSet discovery targets, deploy-source repo URLs, destination clusters | `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, and `RUNS_ON` |
 | Helm | chart metadata, values files, chart dependency references | `DEPLOYS_FROM` |
 | Kustomize | `resources`, base references, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
-| Platform / runtime context | workload and platform modeling resolved through mixed entity ids | `PROVISIONS_PLATFORM` and `RUNS_ON` |
+| Platform / runtime context | workload and platform modeling resolved through mixed entity ids | `PROVISIONS_PLATFORM` and `RUNS_ON`, with repository query surfaces now also partitioning typed relationship summaries into controller-driven, workflow-driven, and IaC-driven buckets when the evidence supports it |
 
 The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repository or platform meaning.
 
@@ -474,7 +474,9 @@ The minimum proof shape is:
 The remaining open corpus families on this branch are:
 
 - broader Terraform and Terragrunt config-asset extraction beyond the current
-  Kustomize policy-document and Terragrunt `dependency.config_path` read path,
+  Kustomize policy-document, Terragrunt `dependency.config_path`, Terragrunt
+  `read_terragrunt_config()` / `include`, local `file()` / `templatefile()`,
+  `*.tfvars` / `*.tfvars.json`, and local module-source read paths,
   plus shared-infra runtime-chain proof
 - broader GitHub Actions delivery-path evidence beyond reusable workflows, explicit checkout, and explicit repo-bearing workflow inputs
 - broader Jenkins / Groovy controller evidence beyond explicit shared-library and GitHub repository refs plus repository-context controller artifacts and typed relationship summaries
@@ -515,9 +517,8 @@ Go-backed sources are:
 - local Terraform `module.source = "./..."` style module-asset paths when the
   source is repo-local and not a registry or remote module ref
 
-Broader Terraform and Terragrunt local asset/config-file surfacing remains a
-separate parity lane for unresolved helper forms and any path that cannot be
-proven exactly from the checked-in source.
+Broader Terraform and Terragrunt helper forms remain a separate parity lane
+for any path that cannot be proven exactly from the checked-in source.
 
 ### Story Ordering
 

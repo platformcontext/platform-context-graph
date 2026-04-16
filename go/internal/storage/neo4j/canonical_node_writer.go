@@ -43,40 +43,67 @@ func NewCanonicalNodeWriter(executor Executor, batchSize int, instruments *telem
 //	E: entities (per-label)
 //	F: modules
 //	G: structural edges
+//
+// When the executor implements GroupExecutor, all statements are dispatched as
+// a single atomic transaction. Otherwise, statements execute sequentially.
 func (w *CanonicalNodeWriter) Write(ctx context.Context, mat projector.CanonicalMaterialization) error {
 	if mat.IsEmpty() {
 		return nil
 	}
 
-	phases := []struct {
+	builders := []struct {
 		name string
-		fn   func(context.Context, projector.CanonicalMaterialization) error
+		fn   func(projector.CanonicalMaterialization) []Statement
 	}{
-		{"retract", w.phaseRetract},
-		{"repository", w.phaseRepository},
-		{"directories", w.phaseDirectories},
-		{"files", w.phaseFiles},
-		{"entities", w.phaseEntities},
-		{"modules", w.phaseModules},
-		{"structural_edges", w.phaseStructuralEdges},
+		{"retract", w.buildRetractStatements},
+		{"repository", w.buildRepositoryStatements},
+		{"directories", w.buildDirectoryStatements},
+		{"files", w.buildFileStatements},
+		{"entities", w.buildEntityStatements},
+		{"modules", w.buildModuleStatements},
+		{"structural_edges", w.buildStructuralEdgeStatements},
 	}
 
-	for _, p := range phases {
+	var allStatements []Statement
+	for _, b := range builders {
+		allStatements = append(allStatements, b.fn(mat)...)
+	}
+
+	if len(allStatements) == 0 {
+		return nil
+	}
+
+	// Atomic path: single transaction for all phases.
+	if ge, ok := w.executor.(GroupExecutor); ok {
 		start := time.Now()
-		if err := p.fn(ctx, mat); err != nil {
-			return fmt.Errorf("canonical write phase %s: %w", p.name, err)
+		if err := ge.ExecuteGroup(ctx, allStatements); err != nil {
+			return fmt.Errorf("canonical atomic write: %w", err)
 		}
 		dur := time.Since(start).Seconds()
-		slog.Info("canonical phase completed", "phase", p.name, "scope_id", mat.ScopeID, "duration_s", dur)
-		w.recordPhaseDuration(ctx, p.name, dur)
+		slog.Info("canonical atomic write completed",
+			"scope_id", mat.ScopeID, "statements", len(allStatements), "duration_s", dur)
+		w.recordAtomicWrite(ctx, "atomic_group", dur, mat)
+		return nil
 	}
 
+	// Fallback: sequential execution (existing behavior).
+	w.recordAtomicFallback(ctx)
+	start := time.Now()
+	for _, stmt := range allStatements {
+		if err := w.executor.Execute(ctx, stmt); err != nil {
+			return fmt.Errorf("canonical sequential write: %w", err)
+		}
+	}
+	dur := time.Since(start).Seconds()
+	slog.Info("canonical sequential write completed",
+		"scope_id", mat.ScopeID, "statements", len(allStatements), "duration_s", dur)
+	w.recordAtomicWrite(ctx, "sequential_group", dur, mat)
 	return nil
 }
 
 // --- Phase A: Retract stale nodes ---
 
-func (w *CanonicalNodeWriter) phaseRetract(ctx context.Context, mat projector.CanonicalMaterialization) error {
+func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMaterialization) []Statement {
 	retractParams := map[string]any{
 		"repo_id":       mat.RepoID,
 		"generation_id": mat.GenerationID,
@@ -93,14 +120,13 @@ func (w *CanonicalNodeWriter) phaseRetract(ctx context.Context, mat projector.Ca
 		canonicalNodeRetractDirectoriesCypher,
 	}
 
+	stmts := make([]Statement, 0, len(retractions)+1)
 	for _, cypher := range retractions {
-		if err := w.executor.Execute(ctx, Statement{
+		stmts = append(stmts, Statement{
 			Operation:  OperationCanonicalRetract,
 			Cypher:     cypher,
 			Parameters: retractParams,
-		}); err != nil {
-			return err
-		}
+		})
 	}
 
 	// Parameter retraction uses file_paths
@@ -109,28 +135,26 @@ func (w *CanonicalNodeWriter) phaseRetract(ctx context.Context, mat projector.Ca
 		filePaths[i] = f.Path
 	}
 	if len(filePaths) > 0 {
-		if err := w.executor.Execute(ctx, Statement{
+		stmts = append(stmts, Statement{
 			Operation: OperationCanonicalRetract,
 			Cypher:    canonicalNodeRetractParametersCypher,
 			Parameters: map[string]any{
 				"file_paths": filePaths,
 			},
-		}); err != nil {
-			return err
-		}
+		})
 	}
 
-	return nil
+	return stmts
 }
 
 // --- Phase B: Repository ---
 
-func (w *CanonicalNodeWriter) phaseRepository(ctx context.Context, mat projector.CanonicalMaterialization) error {
+func (w *CanonicalNodeWriter) buildRepositoryStatements(mat projector.CanonicalMaterialization) []Statement {
 	if mat.Repository == nil {
 		return nil
 	}
 	r := mat.Repository
-	if err := w.executor.Execute(ctx, Statement{
+	return []Statement{{
 		Operation: OperationCanonicalUpsert,
 		Cypher:    canonicalNodeRepositoryUpsertCypher,
 		Parameters: map[string]any{
@@ -144,16 +168,12 @@ func (w *CanonicalNodeWriter) phaseRepository(ctx context.Context, mat projector
 			"scope_id":      mat.ScopeID,
 			"generation_id": mat.GenerationID,
 		},
-	}); err != nil {
-		return err
-	}
-	w.recordNodesWritten(ctx, "Repository", 1)
-	return nil
+	}}
 }
 
 // --- Phase C: Directories (depth-ordered) ---
 
-func (w *CanonicalNodeWriter) phaseDirectories(ctx context.Context, mat projector.CanonicalMaterialization) error {
+func (w *CanonicalNodeWriter) buildDirectoryStatements(mat projector.CanonicalMaterialization) []Statement {
 	if len(mat.Directories) == 0 {
 		return nil
 	}
@@ -170,15 +190,18 @@ func (w *CanonicalNodeWriter) phaseDirectories(ctx context.Context, mat projecto
 	}
 	sort.Ints(depths)
 
+	var stmts []Statement
 	for _, depth := range depths {
 		dirs := byDepth[depth]
 		rows := make([]map[string]any, len(dirs))
 		for i, d := range dirs {
 			rows[i] = map[string]any{
-				"path":        d.Path,
-				"name":        d.Name,
-				"parent_path": d.ParentPath,
-				"repo_id":     d.RepoID,
+				"path":          d.Path,
+				"name":          d.Name,
+				"parent_path":   d.ParentPath,
+				"repo_id":       d.RepoID,
+				"scope_id":      mat.ScopeID,
+				"generation_id": mat.GenerationID,
 			}
 		}
 
@@ -187,17 +210,14 @@ func (w *CanonicalNodeWriter) phaseDirectories(ctx context.Context, mat projecto
 			cypher = canonicalNodeDirectoryDepth0Cypher
 		}
 
-		if err := w.executeBatched(ctx, cypher, rows); err != nil {
-			return err
-		}
-		w.recordNodesWritten(ctx, "Directory", int64(len(dirs)))
+		stmts = append(stmts, buildBatchedStatements(cypher, rows, w.batchSize)...)
 	}
-	return nil
+	return stmts
 }
 
 // --- Phase D: Files ---
 
-func (w *CanonicalNodeWriter) phaseFiles(ctx context.Context, mat projector.CanonicalMaterialization) error {
+func (w *CanonicalNodeWriter) buildFileStatements(mat projector.CanonicalMaterialization) []Statement {
 	if len(mat.Files) == 0 {
 		return nil
 	}
@@ -216,18 +236,12 @@ func (w *CanonicalNodeWriter) phaseFiles(ctx context.Context, mat projector.Cano
 		}
 	}
 
-	if err := w.executeBatched(ctx, canonicalNodeFileUpsertCypher, rows); err != nil {
-		return err
-	}
-	w.recordNodesWritten(ctx, "File", int64(len(mat.Files)))
-	w.recordEdgesWritten(ctx, "REPO_CONTAINS", int64(len(mat.Files)))
-	w.recordEdgesWritten(ctx, "CONTAINS", int64(len(mat.Files)))
-	return nil
+	return buildBatchedStatements(canonicalNodeFileUpsertCypher, rows, w.batchSize)
 }
 
 // --- Phase E: Entities (per-label UNWIND) ---
 
-func (w *CanonicalNodeWriter) phaseEntities(ctx context.Context, mat projector.CanonicalMaterialization) error {
+func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMaterialization) []Statement {
 	if len(mat.Entities) == 0 {
 		return nil
 	}
@@ -259,6 +273,7 @@ func (w *CanonicalNodeWriter) phaseEntities(ctx context.Context, mat projector.C
 	}
 	sort.Strings(labels)
 
+	var stmts []Statement
 	for _, label := range labels {
 		rows := byLabel[label]
 		for i := range rows {
@@ -270,18 +285,14 @@ func (w *CanonicalNodeWriter) phaseEntities(ctx context.Context, mat projector.C
 			delete(rows[i], "entity_metadata")
 		}
 		cypher := fmt.Sprintf(canonicalNodeEntityUpsertTemplate, label)
-		if err := w.executeBatched(ctx, cypher, rows); err != nil {
-			return err
-		}
-		w.recordNodesWritten(ctx, label, int64(len(rows)))
-		w.recordEdgesWritten(ctx, "CONTAINS", int64(len(rows)))
+		stmts = append(stmts, buildBatchedStatements(cypher, rows, w.batchSize)...)
 	}
-	return nil
+	return stmts
 }
 
 // --- Phase F: Modules ---
 
-func (w *CanonicalNodeWriter) phaseModules(ctx context.Context, mat projector.CanonicalMaterialization) error {
+func (w *CanonicalNodeWriter) buildModuleStatements(mat projector.CanonicalMaterialization) []Statement {
 	if len(mat.Modules) == 0 {
 		return nil
 	}
@@ -294,16 +305,14 @@ func (w *CanonicalNodeWriter) phaseModules(ctx context.Context, mat projector.Ca
 		}
 	}
 
-	if err := w.executeBatched(ctx, canonicalNodeModuleUpsertCypher, rows); err != nil {
-		return err
-	}
-	w.recordNodesWritten(ctx, "Module", int64(len(mat.Modules)))
-	return nil
+	return buildBatchedStatements(canonicalNodeModuleUpsertCypher, rows, w.batchSize)
 }
 
 // --- Phase G: Structural edges ---
 
-func (w *CanonicalNodeWriter) phaseStructuralEdges(ctx context.Context, mat projector.CanonicalMaterialization) error {
+func (w *CanonicalNodeWriter) buildStructuralEdgeStatements(mat projector.CanonicalMaterialization) []Statement {
+	var stmts []Statement
+
 	// IMPORTS edges
 	if len(mat.Imports) > 0 {
 		rows := make([]map[string]any, len(mat.Imports))
@@ -316,10 +325,7 @@ func (w *CanonicalNodeWriter) phaseStructuralEdges(ctx context.Context, mat proj
 				"line_number":   imp.LineNumber,
 			}
 		}
-		if err := w.executeBatched(ctx, canonicalNodeImportEdgeCypher, rows); err != nil {
-			return err
-		}
-		w.recordEdgesWritten(ctx, "IMPORTS", int64(len(mat.Imports)))
+		stmts = append(stmts, buildBatchedStatements(canonicalNodeImportEdgeCypher, rows, w.batchSize)...)
 	}
 
 	// HAS_PARAMETER edges
@@ -333,10 +339,7 @@ func (w *CanonicalNodeWriter) phaseStructuralEdges(ctx context.Context, mat proj
 				"param_name": p.ParamName,
 			}
 		}
-		if err := w.executeBatched(ctx, canonicalNodeHasParameterEdgeCypher, rows); err != nil {
-			return err
-		}
-		w.recordEdgesWritten(ctx, "HAS_PARAMETER", int64(len(mat.Parameters)))
+		stmts = append(stmts, buildBatchedStatements(canonicalNodeHasParameterEdgeCypher, rows, w.batchSize)...)
 	}
 
 	// Class CONTAINS Function edges
@@ -350,10 +353,7 @@ func (w *CanonicalNodeWriter) phaseStructuralEdges(ctx context.Context, mat proj
 				"func_line":  cm.FunctionLine,
 			}
 		}
-		if err := w.executeBatched(ctx, canonicalNodeClassContainsFuncEdgeCypher, rows); err != nil {
-			return err
-		}
-		w.recordEdgesWritten(ctx, "CONTAINS", int64(len(mat.ClassMembers)))
+		stmts = append(stmts, buildBatchedStatements(canonicalNodeClassContainsFuncEdgeCypher, rows, w.batchSize)...)
 	}
 
 	// Nested Function CONTAINS edges
@@ -367,68 +367,55 @@ func (w *CanonicalNodeWriter) phaseStructuralEdges(ctx context.Context, mat proj
 				"inner_line": nf.InnerLine,
 			}
 		}
-		if err := w.executeBatched(ctx, canonicalNodeNestedFuncEdgeCypher, rows); err != nil {
-			return err
-		}
-		w.recordEdgesWritten(ctx, "CONTAINS", int64(len(mat.NestedFuncs)))
+		stmts = append(stmts, buildBatchedStatements(canonicalNodeNestedFuncEdgeCypher, rows, w.batchSize)...)
 	}
 
-	return nil
+	return stmts
 }
 
-// --- Batch execution ---
+// --- Batch statement building ---
 
-func (w *CanonicalNodeWriter) executeBatched(ctx context.Context, cypher string, rows []map[string]any) error {
+// buildBatchedStatements splits rows into batches and returns one Statement per batch.
+func buildBatchedStatements(cypher string, rows []map[string]any, batchSize int) []Statement {
 	if len(rows) == 0 {
 		return nil
 	}
-	for start := 0; start < len(rows); start += w.batchSize {
-		end := start + w.batchSize
+	var stmts []Statement
+	for start := 0; start < len(rows); start += batchSize {
+		end := start + batchSize
 		if end > len(rows) {
 			end = len(rows)
 		}
-		batch := rows[start:end]
-		if err := w.executor.Execute(ctx, Statement{
+		stmts = append(stmts, Statement{
 			Operation:  OperationCanonicalUpsert,
 			Cypher:     cypher,
-			Parameters: map[string]any{"rows": batch},
-		}); err != nil {
-			return err
-		}
-		w.recordBatchSize(ctx, float64(len(batch)))
+			Parameters: map[string]any{"rows": rows[start:end]},
+		})
 	}
-	return nil
+	return stmts
 }
 
 // --- Telemetry helpers ---
 
-func (w *CanonicalNodeWriter) recordPhaseDuration(ctx context.Context, phase string, seconds float64) {
-	if w.instruments == nil || w.instruments.CanonicalPhaseDuration == nil {
+func (w *CanonicalNodeWriter) recordAtomicWrite(ctx context.Context, mode string, seconds float64, mat projector.CanonicalMaterialization) {
+	if w.instruments == nil {
 		return
 	}
-	w.instruments.CanonicalPhaseDuration.Record(ctx, seconds,
-		metric.WithAttributes(telemetry.AttrWritePhase(phase)))
+	attrs := metric.WithAttributes(
+		telemetry.AttrWritePhase(mode),
+		telemetry.AttrScopeID(mat.ScopeID),
+	)
+	if w.instruments.CanonicalAtomicWrites != nil {
+		w.instruments.CanonicalAtomicWrites.Add(ctx, 1, attrs)
+	}
+	if w.instruments.CanonicalWriteDuration != nil {
+		w.instruments.CanonicalWriteDuration.Record(ctx, seconds, attrs)
+	}
 }
 
-func (w *CanonicalNodeWriter) recordNodesWritten(ctx context.Context, nodeType string, count int64) {
-	if w.instruments == nil || w.instruments.CanonicalNodesWritten == nil {
+func (w *CanonicalNodeWriter) recordAtomicFallback(ctx context.Context) {
+	if w.instruments == nil || w.instruments.CanonicalAtomicFallbacks == nil {
 		return
 	}
-	w.instruments.CanonicalNodesWritten.Add(ctx, count,
-		metric.WithAttributes(telemetry.AttrNodeType(nodeType)))
-}
-
-func (w *CanonicalNodeWriter) recordEdgesWritten(ctx context.Context, edgeType string, count int64) {
-	if w.instruments == nil || w.instruments.CanonicalEdgesWritten == nil {
-		return
-	}
-	w.instruments.CanonicalEdgesWritten.Add(ctx, count,
-		metric.WithAttributes(telemetry.AttrEdgeType(edgeType)))
-}
-
-func (w *CanonicalNodeWriter) recordBatchSize(ctx context.Context, size float64) {
-	if w.instruments == nil || w.instruments.CanonicalBatchSize == nil {
-		return
-	}
-	w.instruments.CanonicalBatchSize.Record(ctx, size)
+	w.instruments.CanonicalAtomicFallbacks.Add(ctx, 1)
 }

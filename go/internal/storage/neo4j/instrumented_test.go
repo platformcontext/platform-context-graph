@@ -260,3 +260,57 @@ func (s *slowExecutor) Execute(_ context.Context, _ Statement) error {
 	time.Sleep(s.delay)
 	return nil
 }
+
+func TestInstrumentedExecutorForwardsExecuteGroup(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableExecutor{}
+	ie := &InstrumentedExecutor{Inner: inner}
+
+	stmts := []Statement{
+		{Operation: OperationCanonicalRetract, Cypher: "MATCH (d) DETACH DELETE d"},
+		{Operation: OperationCanonicalUpsert, Cypher: "MERGE (f:File {path: $path})"},
+	}
+
+	err := ie.ExecuteGroup(context.Background(), stmts)
+	if err != nil {
+		t.Fatalf("ExecuteGroup() error = %v", err)
+	}
+
+	if got := int(inner.executeGroupCalls.Load()); got != 1 {
+		t.Errorf("executeGroupCalls = %d, want 1", got)
+	}
+	if got := int(inner.executeCalls.Load()); got != 0 {
+		t.Errorf("executeCalls = %d, want 0", got)
+	}
+	if len(inner.groupStmts) != 2 {
+		t.Errorf("forwarded stmts = %d, want 2", len(inner.groupStmts))
+	}
+}
+
+func TestInstrumentedExecutorExecuteGroupErrorsWithoutGroupExecutor(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingExecutor{}
+	ie := &InstrumentedExecutor{Inner: inner}
+
+	err := ie.ExecuteGroup(context.Background(), []Statement{{Cypher: "test"}})
+	if err == nil {
+		t.Fatal("expected error when Inner does not implement GroupExecutor")
+	}
+}
+
+func TestInstrumentedExecutorExecuteGroupPropagatesErrors(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableExecutor{groupErr: errors.New("neo4j transaction failed")}
+	ie := &InstrumentedExecutor{Inner: inner}
+
+	err := ie.ExecuteGroup(context.Background(), []Statement{{Cypher: "test"}})
+	if err == nil {
+		t.Fatal("expected error to propagate from inner ExecuteGroup")
+	}
+	if err.Error() != "neo4j transaction failed" {
+		t.Fatalf("error = %v, want 'neo4j transaction failed'", err)
+	}
+}

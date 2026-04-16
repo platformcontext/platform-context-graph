@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -106,5 +107,32 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 	}
 	if got, want := workflowRow["evidence_type"], "github_actions_reusable_workflow_ref"; got != want {
 		t.Fatalf("workflow_driven[0].evidence_type = %#v, want %#v", got, want)
+	}
+
+	iacDriven, ok := overview["iac_driven"].([]any)
+	if !ok {
+		t.Fatalf("iac_driven type = %T, want []any", overview["iac_driven"])
+	}
+	if len(iacDriven) != 1 {
+		t.Fatalf("len(iac_driven) = %d, want 1", len(iacDriven))
+	}
+	iacRow, ok := iacDriven[0].(map[string]any)
+	if !ok {
+		t.Fatalf("iac_driven[0] type = %T, want map[string]any", iacDriven[0])
+	}
+	if got, want := iacRow["evidence_type"], "terraform_module_source"; got != want {
+		t.Fatalf("iac_driven[0].evidence_type = %#v, want %#v", got, want)
+	}
+
+	if otherRelationships, ok := overview["other_relationships"].([]any); ok && len(otherRelationships) != 0 {
+		t.Fatalf("len(other_relationships) = %d, want 0 after family partitioning", len(otherRelationships))
+	}
+
+	story, ok := overview["story"].(string)
+	if !ok {
+		t.Fatalf("story type = %T, want string", overview["story"])
+	}
+	if !strings.Contains(strings.ToLower(story), "iac-driven") {
+		t.Fatalf("story = %q, want IaC-driven relationship narrative", story)
 	}
 }

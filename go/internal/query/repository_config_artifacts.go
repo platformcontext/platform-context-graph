@@ -13,6 +13,7 @@ import (
 var (
 	terragruntDependencyConfigPathPattern = regexp.MustCompile(`(?i)\bconfig_path\s*=\s*"([^"]+)"`)
 	terragruntReadConfigPattern           = regexp.MustCompile(`(?i)read_terragrunt_config\((?:find_in_parent_folders\()?"([^"]+)"`)
+	terragruntFindInParentFoldersPattern  = regexp.MustCompile(`(?i)find_in_parent_folders\("([^"]+)"\)`)
 	terragruntIncludePathPattern          = regexp.MustCompile(`(?i)\bpath\s*=\s*find_in_parent_folders\("([^"]+)"\)`)
 	localFileFunctionPattern              = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(\s*"([^"]+)"`)
 	localTerraformModuleSourcePattern     = regexp.MustCompile(`(?is)module\s+"[^"]+"\s*\{[^}]*?\bsource\b\s*=\s*"((?:\./|\.\./)[^"]+)"`)
@@ -71,15 +72,11 @@ func isConfigArtifactCandidate(file FileContent) bool {
 
 func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[string]any {
 	rows := make([]map[string]any, 0)
+	seen := map[string]struct{}{}
 	for _, file := range files {
 		lowerBase := strings.ToLower(path.Base(file.RelativePath))
 		if strings.HasSuffix(lowerBase, ".tfvars") || strings.HasSuffix(lowerBase, ".tfvars.json") {
-			rows = append(rows, map[string]any{
-				"path":          cleanRepositoryRelativePath(file.RelativePath),
-				"source_repo":   repoName,
-				"relative_path": file.RelativePath,
-				"evidence_kind": "terraform_var_file",
-			})
+			rows = appendConfigArtifactRow(rows, seen, cleanRepositoryRelativePath(file.RelativePath), repoName, file.RelativePath, "terraform_var_file")
 			continue
 		}
 		if lowerBase != "terragrunt.hcl" && !strings.HasSuffix(lowerBase, ".tf") && !strings.HasSuffix(lowerBase, ".hcl") {
@@ -93,63 +90,63 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 			if configPath == "" {
 				continue
 			}
-			rows = append(rows, map[string]any{
-				"path":          configPath,
-				"source_repo":   repoName,
-				"relative_path": file.RelativePath,
-				"evidence_kind": "terragrunt_dependency_config_path",
-			})
+			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "terragrunt_dependency_config_path")
 		}
 		for _, match := range terragruntReadConfigPattern.FindAllStringSubmatch(file.Content, -1) {
 			configPath := normalizeLocalConfigAssetPath(match)
 			if configPath == "" {
 				continue
 			}
-			rows = append(rows, map[string]any{
-				"path":          configPath,
-				"source_repo":   repoName,
-				"relative_path": file.RelativePath,
-				"evidence_kind": "terragrunt_read_config",
-			})
+			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "terragrunt_read_config")
 		}
 		for _, match := range terragruntIncludePathPattern.FindAllStringSubmatch(file.Content, -1) {
 			configPath := normalizeLocalConfigAssetPath(match)
 			if configPath == "" {
 				continue
 			}
-			rows = append(rows, map[string]any{
-				"path":          configPath,
-				"source_repo":   repoName,
-				"relative_path": file.RelativePath,
-				"evidence_kind": "terragrunt_include_path",
-			})
+			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "terragrunt_include_path")
+		}
+		for _, match := range terragruntFindInParentFoldersPattern.FindAllStringSubmatch(file.Content, -1) {
+			configPath := normalizeLocalConfigAssetPath(match)
+			if configPath == "" {
+				continue
+			}
+			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "terragrunt_find_in_parent_folders")
 		}
 		for _, match := range localFileFunctionPattern.FindAllStringSubmatch(file.Content, -1) {
 			configPath := normalizeLocalConfigAssetPath(match)
 			if configPath == "" {
 				continue
 			}
-			rows = append(rows, map[string]any{
-				"path":          configPath,
-				"source_repo":   repoName,
-				"relative_path": file.RelativePath,
-				"evidence_kind": "local_config_asset",
-			})
+			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "local_config_asset")
 		}
 		for _, match := range localTerraformModuleSourcePattern.FindAllStringSubmatch(file.Content, -1) {
 			configPath := normalizeLocalConfigAssetPath(match)
 			if configPath == "" {
 				continue
 			}
-			rows = append(rows, map[string]any{
-				"path":          configPath,
-				"source_repo":   repoName,
-				"relative_path": file.RelativePath,
-				"evidence_kind": "terraform_module_source_path",
-			})
+			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "terraform_module_source_path")
 		}
 	}
 	return rows
+}
+
+func appendConfigArtifactRow(rows []map[string]any, seen map[string]struct{}, pathValue, repoName, relativePath, evidenceKind string) []map[string]any {
+	pathValue = strings.TrimSpace(pathValue)
+	if pathValue == "" {
+		return rows
+	}
+	key := strings.Join([]string{pathValue, repoName, relativePath, evidenceKind}, "|")
+	if _, ok := seen[key]; ok {
+		return rows
+	}
+	seen[key] = struct{}{}
+	return append(rows, map[string]any{
+		"path":          pathValue,
+		"source_repo":   repoName,
+		"relative_path": relativePath,
+		"evidence_kind": evidenceKind,
+	})
 }
 
 func extractKustomizeConfigPathRows(repoName string, files []FileContent) []map[string]any {
@@ -444,6 +441,8 @@ func normalizeLocalConfigAssetPath(match []string) string {
 	}
 	replacer := strings.NewReplacer(
 		"${path.module}/", "",
+		"${path_relative_to_include()}/", "",
+		"${path_relative_to_include()}", "",
 		"${get_repo_root()}/", "",
 		"${get_parent_terragrunt_dir()}/", "",
 		"${get_terragrunt_dir()}/", "",

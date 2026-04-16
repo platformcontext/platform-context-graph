@@ -11,11 +11,10 @@ import (
 func buildRepositoryControllerArtifacts(repoName string, files []FileContent) map[string]any {
 	artifacts := make([]map[string]any, 0)
 	for _, file := range files {
-		if !isJenkinsGroovyArtifact(file) {
+		metadata := parser.ExtractGroovyPipelineMetadata(file.Content)
+		if !isJenkinsGroovyArtifact(file, metadata) {
 			continue
 		}
-
-		metadata := parser.ExtractGroovyPipelineMetadata(file.Content)
 		row := map[string]any{
 			"path":            cleanRepositoryRelativePath(file.RelativePath),
 			"source_repo":     repoName,
@@ -64,7 +63,7 @@ func buildRepositoryControllerArtifacts(repoName string, files []FileContent) ma
 	return map[string]any{"controller_artifacts": artifacts}
 }
 
-func isJenkinsGroovyArtifact(file FileContent) bool {
+func isJenkinsGroovyArtifact(file FileContent, metadata map[string]any) bool {
 	base := strings.TrimSpace(file.RelativePath)
 	if base == "" {
 		return false
@@ -73,5 +72,36 @@ func isJenkinsGroovyArtifact(file FileContent) bool {
 	if name == "jenkinsfile" {
 		return true
 	}
-	return strings.HasPrefix(name, "jenkinsfile.")
+	if strings.HasPrefix(name, "jenkinsfile.") {
+		return true
+	}
+	if !strings.HasSuffix(name, ".groovy") {
+		return false
+	}
+	return groovyPipelineMetadataPresent(metadata)
+}
+
+func groovyPipelineMetadataPresent(metadata map[string]any) bool {
+	if len(metadata) == 0 {
+		return false
+	}
+	if values := stringSliceValue(metadata, "shared_libraries"); len(values) > 0 {
+		return true
+	}
+	if values := stringSliceValue(metadata, "pipeline_calls"); len(values) > 0 {
+		return true
+	}
+	if values := stringSliceValue(metadata, "shell_commands"); len(values) > 0 {
+		return true
+	}
+	if values := stringSliceValue(metadata, "entry_points"); len(values) > 0 {
+		return true
+	}
+	if useConfigd, ok := metadata["use_configd"].(bool); ok && useConfigd {
+		return true
+	}
+	if hasPreDeploy, ok := metadata["has_pre_deploy"].(bool); ok && hasPreDeploy {
+		return true
+	}
+	return false
 }

@@ -22,6 +22,11 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Inputs block | `inputs-block` | supported | `terragrunt_inputs` | `name, line_number, value` | `node:TerragruntInput` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragruntBuildsFirstClassDependencyLocalAndInputEntities` | Snapshot-backed entity proof | Inputs are now independently queryable through the Go content/query surface. |
 | Source attribute in `terraform` block | `source-attribute-in-terraform-block` | supported | `source-attribute-in-terraform-block` | `terraform_source` | `property:TerragruntConfig.source` and `node:TerraformModule.source` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt` | Compose-backed fixture verification | The Terragrunt `terraform.source` value now also materializes through the normal `TerraformModule` surface. |
 
+## Parity Notes
+- Python-era Terragrunt parser parity is met on this branch.
+- Repository-context read surfaces now also include `dependency.config_path`, `read_terragrunt_config`, `include`, `file`, `templatefile`, `*.tfvars`, and local module-source paths, while `terraform.source` also materializes through `TerraformModule`.
+- `read_terragrunt_config()` itself remains opaque in parser output.
+
 ## Known Limitations
 - `read_terragrunt_config()` calls remain opaque expression text, matching the historical Python parser contract
 - HCL function calls within `locals` are not evaluated; values are captured as raw text, matching the historical Python parser contract

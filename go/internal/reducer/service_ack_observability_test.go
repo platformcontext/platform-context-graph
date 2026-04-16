@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
-	metricnoop "go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
@@ -33,7 +35,9 @@ func TestServiceRunLogsAckFailureWithQueueContext(t *testing.T) {
 
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
-	instruments, err := telemetry.NewInstruments(metricnoop.NewMeterProvider().Meter("reducer-ack"))
+	metricReader := metric.NewManualReader()
+	meterProvider := metric.NewMeterProvider(metric.WithReader(metricReader))
+	instruments, err := telemetry.NewInstruments(meterProvider.Meter("reducer-ack"))
 	if err != nil {
 		t.Fatalf("NewInstruments() error = %v", err)
 	}
@@ -82,4 +86,57 @@ func TestServiceRunLogsAckFailureWithQueueContext(t *testing.T) {
 			t.Fatalf("logs missing %s in %s", want, logOutput)
 		}
 	}
+
+	var rm metricdata.ResourceMetrics
+	if err := metricReader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+
+	if got := reducerCounterValue(t, rm, "pcg_dp_reducer_executions_total", map[string]string{
+		"queue":  "reducer",
+		"status": "ack_failed",
+		"domain": string(intent.Domain),
+	}); got != 1 {
+		t.Fatalf("pcg_dp_reducer_executions_total ack_failed value = %d, want 1", got)
+	}
+}
+
+func reducerCounterValue(t *testing.T, rm metricdata.ResourceMetrics, metricName string, wantAttrs map[string]string) int64 {
+	t.Helper()
+
+	for _, scopeMetrics := range rm.ScopeMetrics {
+		for _, m := range scopeMetrics.Metrics {
+			if m.Name != metricName {
+				continue
+			}
+
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if !ok {
+				t.Fatalf("metric %s data = %T, want metricdata.Sum[int64]", metricName, m.Data)
+			}
+
+			for _, dp := range sum.DataPoints {
+				if hasAttrs(dp.Attributes.ToSlice(), wantAttrs) {
+					return dp.Value
+				}
+			}
+		}
+	}
+
+	t.Fatalf("metric %s with attrs %v not found", metricName, wantAttrs)
+	return 0
+}
+
+func hasAttrs(actual []attribute.KeyValue, want map[string]string) bool {
+	if len(actual) != len(want) {
+		return false
+	}
+
+	for _, attr := range actual {
+		if want[string(attr.Key)] != attr.Value.AsString() {
+			return false
+		}
+	}
+
+	return true
 }

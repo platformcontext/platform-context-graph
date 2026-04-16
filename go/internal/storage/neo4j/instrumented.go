@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"fmt"
+
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -69,6 +71,43 @@ func (i *InstrumentedExecutor) Execute(ctx context.Context, statement Statement)
 	}
 
 	// Set span status on error
+	if err != nil && span != nil {
+		span.SetStatus(codes.Error, err.Error())
+	}
+
+	return err
+}
+
+// ExecuteGroup forwards to Inner.ExecuteGroup when the inner executor
+// implements GroupExecutor. Returns an error if it does not.
+func (i *InstrumentedExecutor) ExecuteGroup(ctx context.Context, stmts []Statement) error {
+	ge, ok := i.Inner.(GroupExecutor)
+	if !ok {
+		return fmt.Errorf("inner executor does not support ExecuteGroup")
+	}
+
+	start := time.Now()
+
+	var span trace.Span
+	if i.Tracer != nil {
+		ctx, span = i.Tracer.Start(ctx, "neo4j.execute_group",
+			trace.WithAttributes(
+				attribute.String("db.system", "neo4j"),
+				attribute.Int("db.statement_count", len(stmts)),
+			),
+		)
+		defer span.End()
+	}
+
+	err := ge.ExecuteGroup(ctx, stmts)
+
+	if i.Instruments != nil && i.Instruments.Neo4jQueryDuration != nil {
+		duration := time.Since(start).Seconds()
+		i.Instruments.Neo4jQueryDuration.Record(ctx, duration, metric.WithAttributes(
+			attribute.String("operation", "write_group"),
+		))
+	}
+
 	if err != nil && span != nil {
 		span.SetStatus(codes.Error, err.Error())
 	}

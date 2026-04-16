@@ -118,8 +118,8 @@ type NestedFunctionRow struct {
 }
 
 // entityTypeLabelMap maps content store entity_type strings to their canonical
-// Neo4j node labels. Every label listed here must have a corresponding
-// uniqueness constraint in graph/schema.go.
+// Neo4j node labels. Every label listed here must have corresponding schema
+// support in graph/schema.go, either a constraint or an intentional index.
 var entityTypeLabelMap = map[string]string{
 	// Code entities
 	"function":   "Function",

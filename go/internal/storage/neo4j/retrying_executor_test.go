@@ -22,6 +22,25 @@ func (f *failingExecutor) Execute(_ context.Context, _ Statement) error {
 	return nil
 }
 
+// groupCapableExecutor implements both Executor and GroupExecutor for testing.
+type groupCapableExecutor struct {
+	executeCalls      atomic.Int32
+	executeGroupCalls atomic.Int32
+	groupStmts        []Statement
+	groupErr          error
+}
+
+func (g *groupCapableExecutor) Execute(_ context.Context, _ Statement) error {
+	g.executeCalls.Add(1)
+	return nil
+}
+
+func (g *groupCapableExecutor) ExecuteGroup(_ context.Context, stmts []Statement) error {
+	g.executeGroupCalls.Add(1)
+	g.groupStmts = stmts
+	return g.groupErr
+}
+
 func TestRetryingExecutorRetriesOnDeadlock(t *testing.T) {
 	t.Parallel()
 
@@ -132,6 +151,53 @@ func TestRetryingExecutorRespectsContextCancellation(t *testing.T) {
 	err := r.Execute(ctx, Statement{Operation: OperationCanonicalUpsert})
 	if err == nil {
 		t.Fatal("expected error on cancelled context")
+	}
+}
+
+func TestRetryingExecutorForwardsExecuteGroup(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableExecutor{}
+	r := &RetryingExecutor{
+		Inner:      inner,
+		MaxRetries: 3,
+		BaseDelay:  1 * time.Millisecond,
+	}
+
+	stmts := []Statement{
+		{Operation: OperationCanonicalRetract, Cypher: "MATCH (d) DETACH DELETE d"},
+		{Operation: OperationCanonicalUpsert, Cypher: "MERGE (f:File {path: $path})"},
+	}
+
+	err := r.ExecuteGroup(context.Background(), stmts)
+	if err != nil {
+		t.Fatalf("ExecuteGroup() error = %v", err)
+	}
+
+	if got := int(inner.executeGroupCalls.Load()); got != 1 {
+		t.Errorf("executeGroupCalls = %d, want 1", got)
+	}
+	if got := int(inner.executeCalls.Load()); got != 0 {
+		t.Errorf("executeCalls = %d, want 0 (should not fall back to Execute)", got)
+	}
+	if len(inner.groupStmts) != 2 {
+		t.Errorf("forwarded stmts = %d, want 2", len(inner.groupStmts))
+	}
+}
+
+func TestRetryingExecutorExecuteGroupErrorsWithoutGroupExecutor(t *testing.T) {
+	t.Parallel()
+
+	inner := &failingExecutor{failFor: 0} // only implements Executor, not GroupExecutor
+	r := &RetryingExecutor{
+		Inner:      inner,
+		MaxRetries: 3,
+		BaseDelay:  1 * time.Millisecond,
+	}
+
+	err := r.ExecuteGroup(context.Background(), []Statement{{Cypher: "test"}})
+	if err == nil {
+		t.Fatal("expected error when Inner does not implement GroupExecutor")
 	}
 }
 

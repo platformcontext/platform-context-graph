@@ -20,7 +20,7 @@ These migration goals are complete on this branch:
 - no `src/` Python runtime tree remains
 - no normal-path Python bridge or runtime ownership remains
 - no active Python command invocations remain in normal developer verification
-  scripts
+  paths outside offline-only docs or fixture tooling
 - no checked-in `.py` files remain outside `tests/fixtures/`
 - runtime-ownership rows in the parity audit and closure matrix are marked
   `pass` or intentionally `bounded`
@@ -78,8 +78,10 @@ The honest branch-level statement is:
 - active developer-path migration is complete
 - remaining Python is fixture-only or offline-only
 - feature-for-feature parity is not yet fully signed off because queue
-  hardening, typed relationship fidelity, and several workflow/IaC
-  relationship families still need implementation and proof
+  hardening, typed relationship fidelity, and broader workflow/controller
+  relationship coverage still need implementation and proof, even though the
+  explicit repo-bearing GitHub Actions, Jenkins, Ansible, Docker, and IaC
+  subfamilies are already Go-owned at the parser/query layer
 
 ## Verification Snapshot
 
@@ -88,8 +90,10 @@ readiness gate still depends on:
 
 - projector/reducer queue-hardening proof
 - typed relationship fidelity proof
-- GitHub Actions, Terraform variable-file, Jenkins/Groovy, Ansible, Docker,
-  and Docker Compose relationship proof
+- broader workflow/controller relationship proof for GitHub Actions,
+  Jenkins/Groovy, Ansible, Docker, and Docker Compose beyond the already
+  implemented explicit repo-bearing subfamilies; Terraform variable-file
+  promotion is already proven
 - docs, telemetry, and compose-backed evidence refresh
 
 At final signoff time, the branch truth should be supported by:

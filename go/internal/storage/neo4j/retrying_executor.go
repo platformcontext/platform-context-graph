@@ -78,6 +78,17 @@ func (r *RetryingExecutor) Execute(ctx context.Context, stmt Statement) error {
 	return fmt.Errorf("neo4j transient error after %d retries: %w", maxRetries, lastErr)
 }
 
+// ExecuteGroup forwards to Inner.ExecuteGroup without a retry loop.
+// session.ExecuteWrite (used by GroupExecutor implementations) already retries
+// transient errors (deadlocks, leader switches) internally.
+func (r *RetryingExecutor) ExecuteGroup(ctx context.Context, stmts []Statement) error {
+	ge, ok := r.Inner.(GroupExecutor)
+	if !ok {
+		return fmt.Errorf("inner executor does not support ExecuteGroup")
+	}
+	return ge.ExecuteGroup(ctx, stmts)
+}
+
 // isTransientNeo4jError returns true for Neo4j errors that are safe to retry:
 // deadlocks, lock acquisition timeouts, and other transient failures.
 func isTransientNeo4jError(err error) bool {

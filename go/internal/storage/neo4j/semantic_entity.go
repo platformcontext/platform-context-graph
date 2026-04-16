@@ -362,12 +362,12 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 	// executors that don't support transactions (e.g., test stubs).
 	if ge, ok := w.executor.(GroupExecutor); ok {
 		if err := ge.ExecuteGroup(ctx, stmts); err != nil {
-			return reducer.SemanticEntityWriteResult{}, fmt.Errorf("write semantic entities: %w", err)
+			return reducer.SemanticEntityWriteResult{}, fmt.Errorf("write semantic entities: %w", WrapRetryableNeo4jError(err))
 		}
 	} else {
 		for _, stmt := range stmts {
 			if err := w.executor.Execute(ctx, stmt); err != nil {
-				return reducer.SemanticEntityWriteResult{}, fmt.Errorf("write semantic entities: %w", err)
+				return reducer.SemanticEntityWriteResult{}, fmt.Errorf("write semantic entities: %w", WrapRetryableNeo4jError(err))
 			}
 		}
 	}

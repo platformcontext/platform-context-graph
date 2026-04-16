@@ -43,8 +43,8 @@ func buildBootstrapCollector(
 	}
 
 	source := &collector.GitSource{
-		Component:   "bootstrap-index",
-		Selector:    collector.NativeRepositorySelector{Config: config},
+		Component: "bootstrap-index",
+		Selector:  collector.NativeRepositorySelector{Config: config},
 		Snapshotter: collector.NativeRepositorySnapshotter{
 			ParseWorkers: config.ParseWorkers,
 			Tracer:       tracer,
@@ -149,6 +149,37 @@ func openBootstrapCanonicalWriter(
 type bootstrapNeo4jExecutor struct {
 	Driver       neo4jdriver.DriverWithContext
 	DatabaseName string
+}
+
+func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+	if e.Driver == nil {
+		return fmt.Errorf("neo4j driver is required")
+	}
+	if len(stmts) == 0 {
+		return nil
+	}
+
+	session := e.Driver.NewSession(ctx, neo4jdriver.SessionConfig{
+		AccessMode:   neo4jdriver.AccessModeWrite,
+		DatabaseName: e.DatabaseName,
+	})
+	defer func() {
+		_ = session.Close(ctx)
+	}()
+
+	_, err := session.ExecuteWrite(ctx, func(tx neo4jdriver.ManagedTransaction) (any, error) {
+		for _, stmt := range stmts {
+			result, runErr := tx.Run(ctx, stmt.Cypher, stmt.Parameters)
+			if runErr != nil {
+				return nil, runErr
+			}
+			if _, consumeErr := result.Consume(ctx); consumeErr != nil {
+				return nil, consumeErr
+			}
+		}
+		return nil, nil
+	})
+	return err
 }
 
 func (e bootstrapNeo4jExecutor) Execute(ctx context.Context, statement sourceneo4j.Statement) error {

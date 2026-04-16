@@ -156,9 +156,11 @@ module "service" {
 		"buildspec.yaml",
 		"config/runtime.yaml",
 		"env.hcl",
+		"env.hcl",
 		"env/prod/terraform.tfvars",
 		"env/prod/terraform.tfvars.json",
 		"modules/service",
+		"root.hcl",
 		"root.hcl",
 		"templates/runtime.json",
 	}
@@ -169,6 +171,91 @@ module "service" {
 		if got, ok := configPaths[index]["path"].(string); !ok || got != want {
 			t.Fatalf("config_paths[%d].path = %#v, want %#v", index, configPaths[index]["path"], want)
 		}
+	}
+}
+
+func TestBuildRepositoryConfigArtifactsExtractsTerragruntFindInParentFoldersSidecars(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("iac-terragrunt-core-infra", []FileContent{
+		{
+			RelativePath: "aws/accounts/ops-qa/us-east-1/ops-qa.network-us-east-1/root.hcl",
+			Content: `locals {
+  global_vars = try(
+    yamldecode(file("${path_relative_to_include()}/global.yaml")),
+    yamldecode(file(find_in_parent_folders("global.yaml"))),
+    {}
+  )
+  account_vars = try(
+    yamldecode(file(find_in_parent_folders("account.yaml"))),
+    {}
+  )
+  region_vars = try(
+    yamldecode(file(find_in_parent_folders("region.yaml"))),
+    {}
+  )
+  env_vars = try(
+    yamldecode(file(find_in_parent_folders("env.yaml"))),
+    {}
+  )
+}
+`,
+		},
+		{
+			RelativePath: "aws/accounts/ops-qa/us-east-1/ops-qa.network-us-east-1/services/ops-qa-eks/terragrunt.hcl",
+			Content: `include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 7 {
+		t.Fatalf("len(config_paths) = %d, want 7", len(configPaths))
+	}
+
+	pathCounts := map[string]int{}
+	evidenceKinds := map[string]map[string]int{}
+	for _, row := range configPaths {
+		if got, want := row["source_repo"], "iac-terragrunt-core-infra"; got != want {
+			t.Fatalf("config_paths row source_repo = %#v, want %#v", got, want)
+		}
+		path, _ := row["path"].(string)
+		kind, _ := row["evidence_kind"].(string)
+		pathCounts[path]++
+		if evidenceKinds[path] == nil {
+			evidenceKinds[path] = map[string]int{}
+		}
+		evidenceKinds[path][kind]++
+	}
+
+	wantCounts := map[string]int{
+		"account.yaml": 1,
+		"env.yaml":     1,
+		"global.yaml":  2,
+		"region.yaml":  1,
+		"root.hcl":     2,
+	}
+	for path, want := range wantCounts {
+		if got := pathCounts[path]; got != want {
+			t.Fatalf("pathCounts[%q] = %d, want %d", path, got, want)
+		}
+	}
+	if got := evidenceKinds["global.yaml"]["local_config_asset"]; got != 1 {
+		t.Fatalf("global.yaml local_config_asset count = %d, want 1", got)
+	}
+	if got := evidenceKinds["global.yaml"]["terragrunt_find_in_parent_folders"]; got != 1 {
+		t.Fatalf("global.yaml terragrunt_find_in_parent_folders count = %d, want 1", got)
+	}
+	if got := evidenceKinds["root.hcl"]["terragrunt_find_in_parent_folders"]; got != 1 {
+		t.Fatalf("root.hcl terragrunt_find_in_parent_folders count = %d, want 1", got)
+	}
+	if got := evidenceKinds["root.hcl"]["terragrunt_include_path"]; got != 1 {
+		t.Fatalf("root.hcl terragrunt_include_path count = %d, want 1", got)
 	}
 }
 

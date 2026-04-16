@@ -40,7 +40,7 @@ WHERE n.repo_id = $repo_id AND n.evidence_source = 'projector/canonical' AND n.g
 DETACH DELETE n`
 
 const canonicalNodeRetractDirectoriesCypher = `MATCH (d:Directory)
-WHERE d.repo_id = $repo_id
+WHERE d.repo_id = $repo_id AND d.generation_id <> $generation_id
 DETACH DELETE d`
 
 const canonicalNodeRetractParametersCypher = `MATCH (p:Parameter)
@@ -61,13 +61,15 @@ SET r.name = $name, r.path = $path, r.local_path = $local_path,
 const canonicalNodeDirectoryDepth0Cypher = `UNWIND $rows AS row
 MATCH (r:Repository {id: row.repo_id})
 MERGE (d:Directory {path: row.path})
-SET d.name = row.name, d.repo_id = row.repo_id
+SET d.name = row.name, d.repo_id = row.repo_id,
+    d.scope_id = row.scope_id, d.generation_id = row.generation_id
 MERGE (r)-[:CONTAINS]->(d)`
 
 const canonicalNodeDirectoryDepthNCypher = `UNWIND $rows AS row
 MATCH (p:Directory {path: row.parent_path})
 MERGE (d:Directory {path: row.path})
-SET d.name = row.name, d.repo_id = row.repo_id
+SET d.name = row.name, d.repo_id = row.repo_id,
+    d.scope_id = row.scope_id, d.generation_id = row.generation_id
 MERGE (p)-[:CONTAINS]->(d)`
 
 // --- Phase D: File Cypher ---

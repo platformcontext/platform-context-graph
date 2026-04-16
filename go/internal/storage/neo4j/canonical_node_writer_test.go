@@ -20,6 +20,26 @@ func (m *mockExecutor) Execute(_ context.Context, stmt Statement) error {
 	return m.err
 }
 
+// mockGroupExecutor implements both Executor and GroupExecutor for testing
+// the atomic canonical write path.
+type mockGroupExecutor struct {
+	executeCalls []Statement // calls via Execute()
+	groupCalls   int         // number of ExecuteGroup() invocations
+	groupStmts   []Statement // statements from the last ExecuteGroup() call
+	groupErr     error       // error to return from ExecuteGroup()
+}
+
+func (m *mockGroupExecutor) Execute(_ context.Context, stmt Statement) error {
+	m.executeCalls = append(m.executeCalls, stmt)
+	return nil
+}
+
+func (m *mockGroupExecutor) ExecuteGroup(_ context.Context, stmts []Statement) error {
+	m.groupCalls++
+	m.groupStmts = stmts
+	return m.groupErr
+}
+
 func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 	t.Parallel()
 
@@ -638,5 +658,206 @@ func TestCanonicalNodeWriterDefaultBatchSize(t *testing.T) {
 
 	if writer.batchSize != DefaultBatchSize {
 		t.Fatalf("batchSize = %d, want %d", writer.batchSize, DefaultBatchSize)
+	}
+}
+
+func TestCanonicalNodeWriterDirectoryGenerationID(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-dir",
+		GenerationID: "gen-dir",
+		RepoID:       "repo-dir",
+		RepoPath:     "/repos/dir-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-dir",
+			Name:   "dir-repo",
+			Path:   "/repos/dir-repo",
+		},
+		Directories: []projector.DirectoryRow{
+			{Path: "/repos/dir-repo/src", Name: "src", ParentPath: "/repos/dir-repo", RepoID: "repo-dir", Depth: 0},
+			{Path: "/repos/dir-repo/src/pkg", Name: "pkg", ParentPath: "/repos/dir-repo/src", RepoID: "repo-dir", Depth: 1},
+		},
+	}
+
+	err := writer.Write(context.Background(), mat)
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	// Verify directory row maps include generation_id and scope_id
+	for _, call := range exec.calls {
+		if call.Operation != OperationCanonicalUpsert || !strings.Contains(call.Cypher, "MERGE (d:Directory") {
+			continue
+		}
+		rows, ok := call.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatal("directory upsert missing rows parameter")
+		}
+		for i, row := range rows {
+			if row["generation_id"] != "gen-dir" {
+				t.Fatalf("directory row[%d] generation_id = %v, want gen-dir", i, row["generation_id"])
+			}
+			if row["scope_id"] != "scope-dir" {
+				t.Fatalf("directory row[%d] scope_id = %v, want scope-dir", i, row["scope_id"])
+			}
+		}
+	}
+
+	// Verify directory MERGE Cypher sets generation_id
+	for _, call := range exec.calls {
+		if call.Operation == OperationCanonicalUpsert && strings.Contains(call.Cypher, "MERGE (d:Directory") {
+			if !strings.Contains(call.Cypher, "d.generation_id") {
+				t.Fatalf("directory MERGE Cypher missing generation_id: %s", call.Cypher)
+			}
+			if !strings.Contains(call.Cypher, "d.scope_id") {
+				t.Fatalf("directory MERGE Cypher missing scope_id: %s", call.Cypher)
+			}
+		}
+	}
+
+	// Verify directory retract Cypher includes generation_id filter
+	for _, call := range exec.calls {
+		if call.Operation == OperationCanonicalRetract && strings.Contains(call.Cypher, "Directory") {
+			if !strings.Contains(call.Cypher, "generation_id") {
+				t.Fatalf("directory retract Cypher missing generation_id filter: %s", call.Cypher)
+			}
+		}
+	}
+}
+
+func TestCanonicalNodeWriterAtomicGroupExecutor(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockGroupExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "my-repo",
+			Path:   "/repos/my-repo",
+		},
+		Directories: []projector.DirectoryRow{
+			{Path: "/repos/my-repo/src", Name: "src", ParentPath: "/repos/my-repo", RepoID: "repo-1", Depth: 0},
+		},
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", Name: "main.go", Language: "go", RepoID: "repo-1", DirPath: "/repos/my-repo/src"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "e1", Label: "Function", EntityName: "main", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 5, EndLine: 10, Language: "go", RepoID: "repo-1"},
+		},
+	}
+
+	err := writer.Write(context.Background(), mat)
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	// When GroupExecutor is available, ALL statements go through a single ExecuteGroup call
+	if exec.groupCalls != 1 {
+		t.Fatalf("ExecuteGroup calls = %d, want 1", exec.groupCalls)
+	}
+	if len(exec.executeCalls) != 0 {
+		t.Fatalf("Execute calls = %d, want 0 (should use atomic path)", len(exec.executeCalls))
+	}
+
+	// Verify statements include all phases in order: retract, repository, directories, files, entities
+	stmts := exec.groupStmts
+	if len(stmts) == 0 {
+		t.Fatal("expected grouped statements, got 0")
+	}
+
+	// First statements should be retractions
+	if stmts[0].Operation != OperationCanonicalRetract {
+		t.Fatalf("first statement operation = %q, want %q", stmts[0].Operation, OperationCanonicalRetract)
+	}
+
+	// Last statements should be upserts
+	last := stmts[len(stmts)-1]
+	if last.Operation != OperationCanonicalUpsert {
+		t.Fatalf("last statement operation = %q, want %q", last.Operation, OperationCanonicalUpsert)
+	}
+
+	// Verify phase ordering within the group: retracts before upserts
+	lastRetractIdx := -1
+	firstUpsertIdx := -1
+	for i, stmt := range stmts {
+		if stmt.Operation == OperationCanonicalRetract {
+			lastRetractIdx = i
+		}
+		if stmt.Operation == OperationCanonicalUpsert && firstUpsertIdx == -1 {
+			firstUpsertIdx = i
+		}
+	}
+	if firstUpsertIdx >= 0 && lastRetractIdx >= firstUpsertIdx {
+		t.Fatalf("retraction at index %d came after upsert at index %d", lastRetractIdx, firstUpsertIdx)
+	}
+}
+
+func TestCanonicalNodeWriterFallsBackToSequential(t *testing.T) {
+	t.Parallel()
+
+	// mockExecutor only implements Executor, NOT GroupExecutor
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "my-repo",
+			Path:   "/repos/my-repo",
+		},
+		Files: []projector.FileRow{
+			{Path: "/f1.go", RelativePath: "f1.go", Name: "f1.go", Language: "go", RepoID: "repo-1", DirPath: "/src"},
+		},
+	}
+
+	err := writer.Write(context.Background(), mat)
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	// Sequential path: all calls go through Execute()
+	if len(exec.calls) == 0 {
+		t.Fatal("expected Execute() calls for sequential fallback, got 0")
+	}
+}
+
+func TestCanonicalNodeWriterAtomicGroupExecutorError(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockGroupExecutor{groupErr: errors.New("neo4j transaction too large")}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "my-repo",
+			Path:   "/repos/my-repo",
+		},
+	}
+
+	err := writer.Write(context.Background(), mat)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "neo4j transaction too large") {
+		t.Fatalf("error = %v, want to contain 'neo4j transaction too large'", err)
 	}
 }

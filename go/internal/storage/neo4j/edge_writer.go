@@ -66,7 +66,7 @@ func (w *EdgeWriter) WriteEdges(
 
 	for _, cypher := range routeOrder {
 		if err := w.executeBatched(ctx, cypher, routedRows[cypher]); err != nil {
-			return err
+			return WrapRetryableNeo4jError(err)
 		}
 	}
 
@@ -278,7 +278,7 @@ func (w *EdgeWriter) RetractEdges(
 		return err
 	}
 
-	return w.executor.Execute(ctx, stmt)
+	return WrapRetryableNeo4jError(w.executor.Execute(ctx, stmt))
 }
 
 func buildRetractStatement(

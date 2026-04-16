@@ -42,7 +42,8 @@ func buildRepositoryRelationshipOverview(relationships []map[string]any) map[str
 
 	controllerDriven := filterRepositoryRelationshipsByEvidence(rows, "argocd_")
 	workflowDriven := filterRepositoryRelationshipsByEvidence(rows, "github_actions_")
-	otherTyped := excludeRepositoryRelationships(rows, controllerDriven, workflowDriven)
+	iacDriven := filterRepositoryRelationshipsByEvidencePrefix(rows, iacEvidenceTypePrefixes...)
+	otherTyped := excludeRepositoryRelationships(rows, controllerDriven, workflowDriven, iacDriven)
 
 	overview := map[string]any{
 		"relationship_count": len(rows),
@@ -55,6 +56,9 @@ func buildRepositoryRelationshipOverview(relationships []map[string]any) map[str
 	}
 	if len(workflowDriven) > 0 {
 		overview["workflow_driven"] = workflowDriven
+	}
+	if len(iacDriven) > 0 {
+		overview["iac_driven"] = iacDriven
 	}
 	if len(otherTyped) > 0 {
 		overview["other_relationships"] = otherTyped
@@ -78,6 +82,9 @@ func buildRepositoryRelationshipStory(overview map[string]any) string {
 	if workflowDriven := mapSliceValue(overview, "workflow_driven"); len(workflowDriven) > 0 {
 		parts = append(parts, "Workflow-driven relationships: "+joinSentenceFragments(relationshipSummaries(workflowDriven))+".")
 	}
+	if iacDriven := mapSliceValue(overview, "iac_driven"); len(iacDriven) > 0 {
+		parts = append(parts, "IaC-driven relationships: "+joinSentenceFragments(relationshipSummaries(iacDriven))+".")
+	}
 	if otherRelationships := mapSliceValue(overview, "other_relationships"); len(otherRelationships) > 0 {
 		parts = append(parts, "Other typed relationships: "+joinSentenceFragments(relationshipSummaries(otherRelationships))+".")
 	}
@@ -85,10 +92,18 @@ func buildRepositoryRelationshipStory(overview map[string]any) string {
 }
 
 func filterRepositoryRelationshipsByEvidence(rows []map[string]any, prefix string) []map[string]any {
+	return filterRepositoryRelationshipsByEvidencePrefix(rows, prefix)
+}
+
+func filterRepositoryRelationshipsByEvidencePrefix(rows []map[string]any, prefixes ...string) []map[string]any {
 	filtered := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		if strings.HasPrefix(StringVal(row, "evidence_type"), prefix) {
-			filtered = append(filtered, row)
+		evidenceType := StringVal(row, "evidence_type")
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(evidenceType, prefix) {
+				filtered = append(filtered, row)
+				break
+			}
 		}
 	}
 	return filtered
@@ -162,4 +177,14 @@ func uniqueRelationshipStrings(rows []map[string]any, key string) []string {
 	}
 	slices.Sort(values)
 	return values
+}
+
+var iacEvidenceTypePrefixes = []string{
+	"ansible_",
+	"docker_compose_",
+	"helm_",
+	"jenkins_",
+	"kustomize_",
+	"terraform_",
+	"terragrunt_",
 }
