@@ -1,0 +1,33 @@
+go/internal/reducer/code_call_materialization_kotlin_safe_call_test.go
+  1ca5ee6ce936a402 93-175
+docs/docs/languages/kotlin.md
+  1ca5ee6ce936a402 26,37
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 86,108
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 49
+go/internal/parser/kotlin_language_helpers.go
+  1ca5ee6ce936a402 97
+go/internal/parser/engine_kotlin_call_metadata_test.go
+  1ca5ee6ce936a402 322-373
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "cb38a753b5ca70ddda74f5628a8b93f24596023e",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 141,
+      "total_deletions": 5,
+      "accepted_lines": 144,
+      "overriden_lines": 0
+    }
+  }
+}
