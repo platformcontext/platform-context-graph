@@ -1,0 +1,41 @@
+docs/docs/languages/php.md
+  1ca5ee6ce936a402 31
+go/internal/storage/neo4j/edge_writer_inheritance_override_test.go
+  1ca5ee6ce936a402 1-67
+go/internal/storage/neo4j/edge_writer.go
+  1ca5ee6ce936a402 197-198,200
+go/internal/reducer/intent.go
+  1ca5ee6ce936a402 39-40
+go/internal/storage/neo4j/canonical.go
+  1ca5ee6ce936a402 185-198,226
+go/internal/reducer/inheritance_materialization.go
+  1ca5ee6ce936a402 27-28,115-116,150-151,174-198
+go/internal/reducer/defaults.go
+  1ca5ee6ce936a402 34-35,44-45
+go/internal/reducer/inheritance_php_trait_adaptations.go
+  1ca5ee6ce936a402 1-48
+go/internal/reducer/registry.go
+  1ca5ee6ce936a402 248
+go/internal/reducer/inheritance_php_trait_adaptations_test.go
+  1ca5ee6ce936a402 1-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "6827a18c1785507f2f81e5a1d066c94368c5bd7b",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 165,
+      "total_deletions": 9,
+      "accepted_lines": 308,
+      "overriden_lines": 0
+    }
+  }
+}
