@@ -138,7 +138,7 @@ If any of those are missing, the feature is not parity complete.
 ## Recommended Closure Order
 
 1. Fix the remaining non-parser platform gaps that still distort the operator contract
-2. TypeScript, TSX, JavaScript, and Python graph-surface parity
+2. TSX, JavaScript, and Python graph-surface parity
 3. Infra normalization validation sweep for Terraform, Terragrunt, Kubernetes,
   ArgoCD, CloudFormation, and Kustomize
 4. Long-tail graph-surface parity for Kotlin and PHP
