@@ -397,14 +397,11 @@ func buildBatchedStatements(cypher string, rows []map[string]any, batchSize int)
 
 // --- Telemetry helpers ---
 
-func (w *CanonicalNodeWriter) recordAtomicWrite(ctx context.Context, mode string, seconds float64, mat projector.CanonicalMaterialization) {
+func (w *CanonicalNodeWriter) recordAtomicWrite(ctx context.Context, mode string, seconds float64, _ projector.CanonicalMaterialization) {
 	if w.instruments == nil {
 		return
 	}
-	attrs := metric.WithAttributes(
-		telemetry.AttrWritePhase(mode),
-		telemetry.AttrScopeID(mat.ScopeID),
-	)
+	attrs := metric.WithAttributes(telemetry.AttrWritePhase(mode))
 	if w.instruments.CanonicalAtomicWrites != nil {
 		w.instruments.CanonicalAtomicWrites.Add(ctx, 1, attrs)
 	}

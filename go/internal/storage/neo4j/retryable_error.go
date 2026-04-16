@@ -1,13 +1,10 @@
 package neo4j
 
-import "errors"
+import (
+	"errors"
 
-// neo4jCodeError is the structural interface for Neo4j driver errors that
-// carry a server error code. This matches the driver's error type without
-// importing the driver package, relying on Go's structural typing.
-type neo4jCodeError interface {
-	Neo4jCode() string
-}
+	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+)
 
 // retryableNeo4jCodes lists Neo4j error codes that are safe to retry in
 // reducer materialization paths. Scoped narrowly to codes evidenced as
@@ -32,20 +29,20 @@ func (e *neo4jRetryableError) Unwrap() error   { return e.inner }
 func (e *neo4jRetryableError) Retryable() bool { return true }
 
 // WrapRetryableNeo4jError inspects err for known retryable Neo4j error codes.
-// If the error (or any wrapped error in the chain) carries a code listed in
-// retryableNeo4jCodes, the error is wrapped in a type implementing
-// reducer.RetryableError. Otherwise the original error is returned unchanged.
+// If the error (or any wrapped error in the chain) is a *neo4j.Neo4jError
+// with a code listed in retryableNeo4jCodes, the error is wrapped in a type
+// implementing reducer.RetryableError. Otherwise the original error is
+// returned unchanged.
 func WrapRetryableNeo4jError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var codeErr neo4jCodeError
-	if !errors.As(err, &codeErr) {
+	var neo4jErr *neo4jdriver.Neo4jError
+	if !errors.As(err, &neo4jErr) {
 		return err
 	}
-	code := codeErr.Neo4jCode()
-	if retryableNeo4jCodes[code] {
-		return &neo4jRetryableError{inner: err, code: code}
+	if retryableNeo4jCodes[neo4jErr.Code] {
+		return &neo4jRetryableError{inner: err, code: neo4jErr.Code}
 	}
 	return err
 }

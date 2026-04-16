@@ -5,19 +5,16 @@ import (
 	"fmt"
 	"testing"
 
+	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// fakeNeo4jError simulates a Neo4j driver error carrying a server error code.
-type fakeNeo4jError struct {
-	code    string
-	message string
+// newNeo4jError constructs a real driver Neo4jError for testing.
+func newNeo4jError(code, msg string) *neo4jdriver.Neo4jError {
+	return &neo4jdriver.Neo4jError{Code: code, Msg: msg}
 }
-
-func (e *fakeNeo4jError) Error() string     { return e.message }
-func (e *fakeNeo4jError) Neo4jCode() string { return e.code }
 
 func TestWrapRetryableNeo4jError(t *testing.T) {
 	t.Parallel()
@@ -37,42 +34,44 @@ func TestWrapRetryableNeo4jError(t *testing.T) {
 		},
 		{
 			name:          "EntityNotFound is retryable",
-			err:           &fakeNeo4jError{code: "Neo.ClientError.Statement.EntityNotFound", message: "Unable to load NODE 4:abc:123"},
+			err:           newNeo4jError("Neo.ClientError.Statement.EntityNotFound", "Unable to load NODE 4:abc:123"),
 			wantRetryable: true,
 			wantWrapped:   true,
 			wantMessage:   "Unable to load NODE 4:abc:123",
 		},
 		{
 			name:          "DeadlockDetected is retryable",
-			err:           &fakeNeo4jError{code: "Neo.TransientError.Transaction.DeadlockDetected", message: "deadlock detected"},
+			err:           newNeo4jError("Neo.TransientError.Transaction.DeadlockDetected", "deadlock detected"),
 			wantRetryable: true,
 			wantWrapped:   true,
 			wantMessage:   "deadlock detected",
 		},
 		{
 			name:          "other Neo4j code is not retryable",
-			err:           &fakeNeo4jError{code: "Neo.ClientError.Schema.ConstraintValidationFailed", message: "constraint failed"},
+			err:           newNeo4jError("Neo.ClientError.Schema.ConstraintValidationFailed", "constraint failed"),
 			wantRetryable: false,
 			wantWrapped:   false,
 			wantMessage:   "constraint failed",
 		},
 		{
-			name:          "plain error without Neo4jCode is not retryable",
+			name:          "plain error without Neo4j type is not retryable",
 			err:           errors.New("connection reset"),
 			wantRetryable: false,
 			wantWrapped:   false,
 			wantMessage:   "connection reset",
 		},
 		{
-			name:          "wrapped EntityNotFound preserves retryable through chain",
-			err:           fmt.Errorf("write semantic entities: %w", &fakeNeo4jError{code: "Neo.ClientError.Statement.EntityNotFound", message: "node gone"}),
+			name: "wrapped EntityNotFound preserves retryable through chain",
+			err: fmt.Errorf("write semantic entities: %w",
+				newNeo4jError("Neo.ClientError.Statement.EntityNotFound", "node gone")),
 			wantRetryable: true,
 			wantWrapped:   true,
 			wantMessage:   "node gone",
 		},
 		{
-			name:          "wrapped DeadlockDetected preserves retryable through chain",
-			err:           fmt.Errorf("retract edges: %w", &fakeNeo4jError{code: "Neo.TransientError.Transaction.DeadlockDetected", message: "deadlock"}),
+			name: "wrapped DeadlockDetected preserves retryable through chain",
+			err: fmt.Errorf("retract edges: %w",
+				newNeo4jError("Neo.TransientError.Transaction.DeadlockDetected", "deadlock")),
 			wantRetryable: true,
 			wantWrapped:   true,
 			wantMessage:   "deadlock",
@@ -102,9 +101,9 @@ func TestWrapRetryableNeo4jError(t *testing.T) {
 			assert.True(t, reducer.IsRetryable(result), "wrapped error should satisfy reducer.IsRetryable()")
 			assert.Contains(t, result.Error(), tt.wantMessage, "error message should be preserved")
 
-			// Original error should be accessible via Unwrap
-			var codeErr neo4jCodeError
-			assert.True(t, errors.As(result, &codeErr), "original Neo4j error should be reachable via errors.As")
+			// Original Neo4j error should be accessible via Unwrap
+			var neo4jErr *neo4jdriver.Neo4jError
+			assert.True(t, errors.As(result, &neo4jErr), "original Neo4j error should be reachable via errors.As")
 		})
 	}
 }
@@ -112,10 +111,7 @@ func TestWrapRetryableNeo4jError(t *testing.T) {
 func TestNeo4jRetryableErrorImplementsInterface(t *testing.T) {
 	t.Parallel()
 
-	inner := &fakeNeo4jError{
-		code:    "Neo.ClientError.Statement.EntityNotFound",
-		message: "node gone",
-	}
+	inner := newNeo4jError("Neo.ClientError.Statement.EntityNotFound", "node gone")
 	wrapped := WrapRetryableNeo4jError(inner)
 
 	// Verify it implements reducer.RetryableError
