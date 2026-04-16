@@ -8,6 +8,7 @@ import (
 var (
 	phpAssignmentPattern        = regexp.MustCompile(`^\s*(\$[A-Za-z_]\w*)\s*=\s*([^;]+)`)
 	phpReferenceVariablePattern = regexp.MustCompile(`^\$([A-Za-z_]\w*)`)
+	phpStaticPropertyPattern    = regexp.MustCompile(`^([A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::\$([A-Za-z_]\w*)$`)
 )
 
 func currentPHPFunctionScopeKey(stack []phpScopedContext) string {
@@ -112,6 +113,9 @@ func inferPHPReferenceType(
 	if inferred := inferPHPCallChainType(trimmed, classContext, classParentTypes, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
 		return inferred
 	}
+	if inferred := resolvePHPStaticPropertyRootType(trimmed, classContext, classParentTypes, classPropertyTypes, importAliases); inferred != "" {
+		return inferred
+	}
 
 	segments := strings.Split(trimmed, "->")
 	if len(segments) == 0 {
@@ -171,6 +175,9 @@ func inferPHPCallChainType(
 		return resolvePHPReferenceChainType(inferred, remainder, classPropertyTypes, methodReturnTypes, functionReturnTypes, importAliases)
 	}
 	if inferred := inferPHPMethodCallType(root, classContext, classParentTypes, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
+		return resolvePHPReferenceChainType(inferred, remainder, classPropertyTypes, methodReturnTypes, functionReturnTypes, importAliases)
+	}
+	if inferred := resolvePHPStaticPropertyRootType(root, classContext, classParentTypes, classPropertyTypes, importAliases); inferred != "" {
 		return resolvePHPReferenceChainType(inferred, remainder, classPropertyTypes, methodReturnTypes, functionReturnTypes, importAliases)
 	}
 
@@ -267,6 +274,30 @@ func resolvePHPParentClassType(classContext string, classParentTypes map[string]
 		return ""
 	}
 	return strings.TrimSpace(classParentTypes[classContext])
+}
+
+func resolvePHPStaticPropertyRootType(
+	raw string,
+	classContext string,
+	classParentTypes map[string]string,
+	classPropertyTypes map[string]map[string]string,
+	importAliases map[string]string,
+) string {
+	matches := phpStaticPropertyPattern.FindStringSubmatch(strings.TrimSpace(raw))
+	if len(matches) != 3 {
+		return ""
+	}
+
+	ownerType := normalizePHPStaticReceiver(matches[1], classContext, classParentTypes, importAliases)
+	if ownerType == "" {
+		return ""
+	}
+
+	propertyType := strings.TrimSpace(classPropertyTypes[ownerType][matches[2]])
+	if propertyType == "" {
+		return ""
+	}
+	return normalizePHPImportedTypeName(propertyType, importAliases)
 }
 
 func inferPHPFunctionCallType(

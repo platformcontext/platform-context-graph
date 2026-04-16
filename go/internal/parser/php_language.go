@@ -8,19 +8,20 @@ import (
 )
 
 var (
-	phpNamespacePattern      = regexp.MustCompile(`^\s*namespace\s+([^;]+);`)
-	phpUsePattern            = regexp.MustCompile(`^\s*use\s+([^;]+);`)
-	phpTypePattern           = regexp.MustCompile(`^\s*(?:abstract\s+|final\s+)?(class|interface|trait)\s+([A-Za-z_]\w*)(.*)$`)
-	phpFunctionPattern       = regexp.MustCompile(`^\s*(?:public\s+|protected\s+|private\s+|static\s+|abstract\s+|final\s+|readonly\s+)*function\s+([A-Za-z_]\w*)\s*\(`)
-	phpFunctionReturnPattern = regexp.MustCompile(`\)\s*:\s*([^{;]+)`)
-	phpVariablePattern       = regexp.MustCompile(`\$[A-Za-z_]\w*`)
-	phpTypedVariablePattern  = regexp.MustCompile(`(?:(?:public|protected|private|readonly|static)\s+)*([?A-Za-z_\\][\w\\|?]*)\s+\$[A-Za-z_]\w*`)
-	phpMethodCallPattern     = regexp.MustCompile(`((?:\((?:\$[A-Za-z_]\w*(?:->\w+(?:\([^()]*\))?)*|(?:[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::[A-Za-z_]\w*\(\)|new\s+[A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*\(\))\)|\$[A-Za-z_]\w*(?:->\w+(?:\([^()]*\))?)*|(?:[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::[A-Za-z_]\w*\(\)|new\s+[A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*\(\))(?:->\w+(?:\([^()]*\))?)*->\w+)\s*\(`)
-	phpFunctionChainPattern  = regexp.MustCompile(`((?:\((?:[A-Za-z_]\w*\(\))\)|[A-Za-z_]\w*\(\))(?:->\w+(?:\([^()]*\))?)*->\w+)\s*\(`)
-	phpStaticCallPattern     = regexp.MustCompile(`\b([A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::([A-Za-z_]\w*)\s*\(`)
-	phpNewCallPattern        = regexp.MustCompile(`\bnew\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
-	phpFunctionCallPattern   = regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
-	phpVariableTypePattern   = regexp.MustCompile(`\$\w+\s*=\s*new\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
+	phpNamespacePattern          = regexp.MustCompile(`^\s*namespace\s+([^;]+);`)
+	phpUsePattern                = regexp.MustCompile(`^\s*use\s+([^;]+);`)
+	phpTypePattern               = regexp.MustCompile(`^\s*(?:abstract\s+|final\s+)?(class|interface|trait)\s+([A-Za-z_]\w*)(.*)$`)
+	phpFunctionPattern           = regexp.MustCompile(`^\s*(?:public\s+|protected\s+|private\s+|static\s+|abstract\s+|final\s+|readonly\s+)*function\s+([A-Za-z_]\w*)\s*\(`)
+	phpFunctionReturnPattern     = regexp.MustCompile(`\)\s*:\s*([^{;]+)`)
+	phpVariablePattern           = regexp.MustCompile(`\$[A-Za-z_]\w*`)
+	phpTypedVariablePattern      = regexp.MustCompile(`(?:(?:public|protected|private|readonly|static)\s+)*([?A-Za-z_\\][\w\\|?]*)\s+\$[A-Za-z_]\w*`)
+	phpStaticPropertyCallPattern = regexp.MustCompile(`((?:[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::\$[A-Za-z_]\w*(?:->\w+(?:\([^()]*\))?)*->\w+)\s*\(`)
+	phpMethodCallPattern         = regexp.MustCompile(`((?:\((?:\$[A-Za-z_]\w*(?:->\w+(?:\([^()]*\))?)*|(?:[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::[A-Za-z_]\w*\(\)|new\s+[A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*\(\))\)|\$[A-Za-z_]\w*(?:->\w+(?:\([^()]*\))?)*|(?:[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::[A-Za-z_]\w*\(\)|new\s+[A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*\(\))(?:->\w+(?:\([^()]*\))?)*->\w+)\s*\(`)
+	phpFunctionChainPattern      = regexp.MustCompile(`((?:\((?:[A-Za-z_]\w*\(\))\)|[A-Za-z_]\w*\(\))(?:->\w+(?:\([^()]*\))?)*->\w+)\s*\(`)
+	phpStaticCallPattern         = regexp.MustCompile(`\b([A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::([A-Za-z_]\w*)\s*\(`)
+	phpNewCallPattern            = regexp.MustCompile(`\bnew\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
+	phpFunctionCallPattern       = regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
+	phpVariableTypePattern       = regexp.MustCompile(`\$\w+\s*=\s*new\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
 )
 
 type phpScopedContext struct {
@@ -286,6 +287,24 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 
 		normalizedTrimmed := strings.ReplaceAll(trimmed, "?->", "->")
 		normalizedRawLine := strings.ReplaceAll(rawLine, "?->", "->")
+		for _, match := range phpStaticPropertyCallPattern.FindAllStringSubmatch(normalizedTrimmed, -1) {
+			if len(match) != 2 {
+				continue
+			}
+			callName := lastPathSegment(match[1], "->")
+			fullName := normalizePHPMethodCall(match[1])
+			inferredObjType := inferPHPMethodReceiverType(
+				match[1],
+				currentClassContext,
+				classParentTypes,
+				classPropertyTypes,
+				localVariableTypes[functionScopeKey],
+				methodReturnTypes,
+				functionReturnTypes,
+				importAliases,
+			)
+			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, normalizedRawLine, match[0]), contextName, contextKind, contextLine, inferredObjType)
+		}
 		for _, match := range phpMethodCallPattern.FindAllStringSubmatch(normalizedTrimmed, -1) {
 			if len(match) != 2 {
 				continue
