@@ -127,7 +127,7 @@ func githubActionsWorkflowInputRepositoryRefs(document map[string]any) []string 
 		if withMap == nil {
 			continue
 		}
-		for _, key := range []string{"automation-repo", "automation_repo"} {
+		for _, key := range []string{"workflow_input_repository", "automation-repo", "automation_repo"} {
 			if repoRef := strings.TrimSpace(stringValue(withMap[key])); repoRef != "" {
 				refs = append(refs, repoRef)
 			}

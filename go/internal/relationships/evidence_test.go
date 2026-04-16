@@ -461,6 +461,44 @@ jobs:
 	}
 }
 
+func TestDiscoverGitHubActionsWorkflowInputRepositoryEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-service",
+			Payload: map[string]any{
+				"artifact_type": "github_actions_workflow",
+				"relative_path": ".github/workflows/pr-command-dispatch.yml",
+				"content": `name: 'Pull Request: Command Dispatch'
+jobs:
+  dispatch-command:
+    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    with:
+      workflow_input_repository: 'boatsgroup/core-engineering-automation'
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-automation", Aliases: []string{"core-engineering-automation", "boatsgroup/core-engineering-automation"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 2 {
+		t.Fatalf("len = %d, want 2", len(evidence))
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindGitHubActionsReusableWorkflow) {
+		t.Fatal("missing reusable workflow evidence")
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindGitHubActionsWorkflowInputRepository) {
+		t.Fatal("missing workflow input repository evidence")
+	}
+	if !hasRelationshipType(evidence, RelDiscoversConfigIn) {
+		t.Fatalf("missing %q evidence", RelDiscoversConfigIn)
+	}
+}
+
 func TestDiscoverDockerComposeEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -533,6 +571,37 @@ func TestDiscoverJenkinsSharedLibraryEvidence(t *testing.T) {
 	}
 	if evidence[0].TargetRepoID != "repo-pipelines" {
 		t.Fatalf("target = %q, want %q", evidence[0].TargetRepoID, "repo-pipelines")
+	}
+}
+
+func TestDiscoverJenkinsSharedLibraryEvidenceTrimsVersionSuffix(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-service",
+			Payload: map[string]any{
+				"relative_path": "Jenkinsfile",
+				"content":       "@Library('pipelines@v2') _\n",
+				"parsed_file_data": map[string]any{
+					"shared_libraries": []any{"pipelines@v2", "pipelines"},
+				},
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-pipelines", Aliases: []string{"pipelines"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+	if evidence[0].EvidenceKind != EvidenceKindJenkinsSharedLibrary {
+		t.Fatalf("kind = %q, want %q", evidence[0].EvidenceKind, EvidenceKindJenkinsSharedLibrary)
+	}
+	if got, want := evidence[0].Details["shared_library"], "pipelines"; got != want {
+		t.Fatalf("shared_library = %#v, want %#v", got, want)
 	}
 }
 

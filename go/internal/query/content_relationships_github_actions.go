@@ -85,7 +85,7 @@ func githubActionsSourceRelationships(entity EntityContent) []githubActionsRelat
 			if leadingWhitespaceWidth(lines[j]) < leadingWhitespaceWidth(lines[i]) {
 				break
 			}
-			for _, key := range []string{"automation-repo", "automation_repo"} {
+			for _, key := range []string{"workflow_input_repository", "automation-repo", "automation_repo"} {
 				repoValue, ok := yamlScalarValue(lines[j], key)
 				if !ok {
 					continue

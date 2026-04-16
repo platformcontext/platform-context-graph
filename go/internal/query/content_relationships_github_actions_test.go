@@ -144,3 +144,40 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesAutomationRepos
 		t.Fatalf("relationships.outgoing[1][reason] = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRepository(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:     "gha-workflow-4",
+		RepoID:       "repo-1",
+		RelativePath: ".github/workflows/pr-command-dispatch.yml",
+		EntityType:   "File",
+		EntityName:   "pr-command-dispatch",
+		Language:     "yaml",
+		SourceCache: `jobs:
+  dispatch-command:
+    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    with:
+      workflow_input_repository: 'boatsgroup/core-engineering-automation'
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+
+	if len(relationships.outgoing) != 2 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 2", len(relationships.outgoing))
+	}
+
+	second := relationships.outgoing[1]
+	if got, want := second["type"], "DISCOVERS_CONFIG_IN"; got != want {
+		t.Fatalf("relationships.outgoing[1][type] = %#v, want %#v", got, want)
+	}
+	if got, want := second["target_name"], "boatsgroup/core-engineering-automation"; got != want {
+		t.Fatalf("relationships.outgoing[1][target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := second["reason"], "github_actions_workflow_input_repository"; got != want {
+		t.Fatalf("relationships.outgoing[1][reason] = %#v, want %#v", got, want)
+	}
+}
