@@ -63,6 +63,6 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 
 ## Known Limitations
-- Computed property names in classes are not resolved to static names
+- Static computed property names in classes are normalized to names; dynamic computed expressions remain unresolved
 - Dynamic `require()` calls with non-literal paths are not tracked
 - Generator functions are captured as regular functions without generator flag

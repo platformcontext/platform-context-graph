@@ -222,7 +222,7 @@ func appendFunctionDeclaration(
 	lang string,
 	options Options,
 ) {
-	name := nodeText(nameNode, source)
+	name := javaScriptFunctionName(nameNode, source)
 	if strings.TrimSpace(name) == "" {
 		return
 	}
