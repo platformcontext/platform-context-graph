@@ -180,6 +180,36 @@ func kotlinInferAssignedVariableType(
 	return ""
 }
 
+func kotlinInferAssignedVariableCallKind(trimmed string, name string) string {
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" || name == "" {
+		return ""
+	}
+
+	assignMatches := kotlinLazyDelegatedAssignPattern.FindStringSubmatch(trimmed)
+	if len(assignMatches) == 3 && assignMatches[1] == name {
+		return "kotlin_lazy_delegated_property_receiver"
+	}
+
+	return ""
+}
+
+func kotlinInferReceiverCallKind(receiver string, variableCallKinds map[string]string) string {
+	receiver = strings.TrimSpace(receiver)
+	if receiver == "" || len(variableCallKinds) == 0 {
+		return ""
+	}
+
+	receiver = kotlinNormalizeParenthesizedReceivers(receiver)
+	receiver = strings.TrimPrefix(receiver, "this.")
+	segments := strings.Split(receiver, ".")
+	if len(segments) == 0 {
+		return ""
+	}
+
+	return strings.TrimSpace(variableCallKinds[strings.TrimSpace(segments[0])])
+}
+
 func kotlinMatchingParenIndex(value string, openIndex int) int {
 	if openIndex < 0 || openIndex >= len(value) {
 		return -1

@@ -49,6 +49,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	classTypeParameters := make(map[string][]string)
 	seenVariables := make(map[string]struct{})
 	localVariableTypes := make(map[string]map[string]string)
+	localVariableCallKinds := make(map[string]map[string]string)
 	classPropertyTypes := make(map[string]map[string]string)
 	functionReturnTypes := make(map[string]string, len(siblingFunctionReturnTypes))
 	for key, returnType := range siblingFunctionReturnTypes {
@@ -276,6 +277,14 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					functionReturnTypes,
 				); inferredType != "" {
 					localVariableTypes[functionContext][name] = inferredType
+					if inferredKind := kotlinInferAssignedVariableCallKind(trimmed, name); inferredKind != "" {
+						if _, ok := localVariableCallKinds[functionContext]; !ok {
+							localVariableCallKinds[functionContext] = make(map[string]string)
+						}
+						localVariableCallKinds[functionContext][name] = inferredKind
+					} else {
+						delete(localVariableCallKinds[functionContext], name)
+					}
 				}
 			}
 			if _, ok := seenVariables[name]; !ok {
@@ -425,6 +434,9 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 							classTypeParameters,
 						); inferredType != "" {
 							item["inferred_obj_type"] = kotlinBaseTypeName(inferredType)
+						}
+						if callKind := kotlinInferReceiverCallKind(receiver, localVariableCallKinds[functionContext]); callKind != "" {
+							item["call_kind"] = callKind
 						}
 					}
 				}

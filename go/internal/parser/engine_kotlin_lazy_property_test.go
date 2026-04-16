@@ -48,6 +48,7 @@ fun usage(): String {
 			continue
 		}
 		assertStringFieldValue(t, item, "inferred_obj_type", "Service")
+		assertStringFieldValue(t, item, "call_kind", "kotlin_lazy_delegated_property_receiver")
 		return
 	}
 	t.Fatalf("function_calls missing full_name=%q in %#v", "service.info", items)

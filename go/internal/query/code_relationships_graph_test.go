@@ -401,6 +401,8 @@ func TestHandleRelationshipsReturnsGraphBackedKotlinLazyDelegatedPropertyReceive
 						map[string]any{
 							"direction":   "outgoing",
 							"type":        "CALLS",
+							"call_kind":   "kotlin_lazy_delegated_property_receiver",
+							"reason":      "kotlin_lazy_delegated_property_receiver",
 							"target_name": "info",
 							"target_id":   "function-kotlin-lazy-2",
 						},
@@ -442,6 +444,12 @@ func TestHandleRelationshipsReturnsGraphBackedKotlinLazyDelegatedPropertyReceive
 	}
 	if got, want := relationship["type"], "CALLS"; got != want {
 		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["call_kind"], "kotlin_lazy_delegated_property_receiver"; got != want {
+		t.Fatalf("relationship[call_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["reason"], "kotlin_lazy_delegated_property_receiver"; got != want {
+		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
 	}
 	if got, want := relationship["target_name"], "info"; got != want {
 		t.Fatalf("relationship[target_name] = %#v, want %#v", got, want)

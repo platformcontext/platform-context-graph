@@ -90,6 +90,9 @@ fun usage(): String {
 			if gotName, wantName := row["full_name"], "service.info"; gotName != wantName {
 				t.Fatalf("full_name = %#v, want %#v", gotName, wantName)
 			}
+			if gotKind, wantKind := row["call_kind"], "kotlin_lazy_delegated_property_receiver"; gotKind != wantKind {
+				t.Fatalf("call_kind = %#v, want %#v", gotKind, wantKind)
+			}
 			return
 		}
 	}
