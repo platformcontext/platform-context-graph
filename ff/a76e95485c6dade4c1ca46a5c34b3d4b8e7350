@@ -1,0 +1,42 @@
+go/internal/storage/neo4j/canonical_node_writer.go
+  26d0a7775258d320 400,404
+go/cmd/ingester/wiring.go
+  26d0a7775258d320 281-311
+go/internal/storage/neo4j/retryable_error_test.go
+  26d0a7775258d320 8,14-16,37,44,51,57,64-66,72-74,104-106,114
+go/internal/storage/neo4j/retryable_error.go
+  26d0a7775258d320 3-4,6-7,32-35,40-41,44-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "ffa76e95485c6dade4c1ca46a5c34b3d4b8e7350",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 67,
+      "total_deletions": 3397,
+      "accepted_lines": 63,
+      "overriden_lines": 0
+    }
+  }
+}
