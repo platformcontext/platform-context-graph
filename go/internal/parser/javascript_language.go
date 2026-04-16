@@ -149,6 +149,12 @@ func (e *Engine) parseJavaScriptLike(
 			if outputLanguage == "tsx" {
 				if assertion := javaScriptComponentTypeAssertion(valueNode, source, reactAliases); assertion != "" {
 					item["component_type_assertion"] = assertion
+				} else if typeNode := node.ChildByFieldName("type"); typeNode != nil {
+					if assertion := javaScriptComponentTypeAssertion(typeNode, source, reactAliases); assertion != "" {
+						item["component_type_assertion"] = assertion
+					}
+				} else if assertion := javaScriptComponentTypeAssertion(node, source, reactAliases); assertion != "" {
+					item["component_type_assertion"] = assertion
 				}
 			}
 			appendBucket(payload, "variables", item)
@@ -450,6 +456,15 @@ func javaScriptCallName(node *tree_sitter.Node, source []byte) string {
 		return ""
 	}
 	switch node.Kind() {
+	case "parenthesized_expression":
+		cursor := node.Walk()
+		children := node.NamedChildren(cursor)
+		cursor.Close()
+		for i := range children {
+			if name := javaScriptCallName(&children[i], source); name != "" {
+				return name
+			}
+		}
 	case "identifier":
 		return nodeText(node, source)
 	case "member_expression":
@@ -458,6 +473,7 @@ func javaScriptCallName(node *tree_sitter.Node, source []byte) string {
 	default:
 		return ""
 	}
+	return ""
 }
 
 func javaScriptCallFullName(node *tree_sitter.Node, source []byte) string {

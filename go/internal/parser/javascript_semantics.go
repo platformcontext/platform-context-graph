@@ -84,6 +84,21 @@ func javaScriptComponentTypeAssertion(node *tree_sitter.Node, source []byte, rea
 		return ""
 	}
 	switch node.Kind() {
+	case "type_annotation":
+		if typeNode := node.ChildByFieldName("type"); typeNode != nil {
+			if typeName := javaScriptAssertionTypeName(typeNode, source); typeName != "" {
+				return typeName
+			}
+		}
+		cursor := node.Walk()
+		children := node.NamedChildren(cursor)
+		cursor.Close()
+		for i := range children {
+			child := children[i]
+			if typeName := javaScriptAssertionTypeName(&child, source); typeName != "" {
+				return javaScriptNormalizeReactAlias(typeName, reactAliases)
+			}
+		}
 	case "as_expression", "type_assertion":
 		if typeName := javaScriptAssertionTypeName(node.ChildByFieldName("type"), source); typeName != "" {
 			return javaScriptNormalizeReactAlias(typeName, reactAliases)

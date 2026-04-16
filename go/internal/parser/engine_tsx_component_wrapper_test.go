@@ -118,6 +118,42 @@ const WrappedButton = wrap(() => <button type="button" />);
 		t.Fatalf("ParsePath() error = %v, want nil", err)
 	}
 
+	t.Logf("variables: %#v", got["variables"])
+
 	wrappedButton := findNamedBucketItem(t, got, "components", "WrappedButton")
 	assertStringFieldValue(t, wrappedButton, "component_wrapper_kind", "memo")
+}
+
+func TestDefaultEngineParsePathTSXResolvesParenthesizedWrapperAndComponentTypeAnnotation(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "src", "Screen.tsx")
+	writeTestFile(
+		t,
+		filePath,
+		`import { memo as wrap } from "react";
+import type { ComponentType as CT } from "react";
+
+const WrappedButton: CT<{ title: string }> = (wrap)(() => <button type="button" />);
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	t.Logf("variables: %#v", got["variables"])
+
+	wrappedButton := findNamedBucketItem(t, got, "components", "WrappedButton")
+	assertStringFieldValue(t, wrappedButton, "component_wrapper_kind", "memo")
+
+	wrappedVar := findNamedBucketItem(t, got, "variables", "WrappedButton")
+	assertStringFieldValue(t, wrappedVar, "component_type_assertion", "ComponentType")
 }
