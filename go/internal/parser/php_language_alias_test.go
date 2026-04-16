@@ -25,6 +25,7 @@ class Config {
         $service = new Service();
         $logger = $service;
         $logger->info($message);
+        new Service()->info($message);
     }
 }
 `,
@@ -45,6 +46,9 @@ class Config {
 
 	infoCall := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "$logger.info")
 	phpAssertStringFieldValue(t, infoCall, "inferred_obj_type", "Service")
+
+	newServiceCall := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "new Service().info")
+	phpAssertStringFieldValue(t, newServiceCall, "inferred_obj_type", "Service")
 }
 
 func TestDefaultEngineParsePathPHPInfersAliasedThisPropertyReceiverCalls(t *testing.T) {
