@@ -141,6 +141,51 @@ class Child {
 	phpAssertStringFieldValue(t, streamImport, "alias", "StreamLogger")
 }
 
+func TestDefaultEngineParsePathPHPEmitsGroupedUseFunctionAndConstImportKinds(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "grouped_use_kinds.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+namespace Demo;
+
+use function Demo\Library\{helper, format as format_value};
+use const Demo\Library\{DEFAULT_LIMIT, MAX_VALUE as MAX_LIMIT};
+use Demo\Library\Service;
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	helperImport := assertBucketItemByName(t, got, "imports", "Demo\\Library\\helper")
+	phpAssertStringFieldValue(t, helperImport, "import_type", "function")
+
+	formatImport := assertBucketItemByName(t, got, "imports", "Demo\\Library\\format")
+	phpAssertStringFieldValue(t, formatImport, "import_type", "function")
+	phpAssertStringFieldValue(t, formatImport, "alias", "format_value")
+
+	limitImport := assertBucketItemByName(t, got, "imports", "Demo\\Library\\DEFAULT_LIMIT")
+	phpAssertStringFieldValue(t, limitImport, "import_type", "const")
+
+	maxLimitImport := assertBucketItemByName(t, got, "imports", "Demo\\Library\\MAX_VALUE")
+	phpAssertStringFieldValue(t, maxLimitImport, "import_type", "const")
+	phpAssertStringFieldValue(t, maxLimitImport, "alias", "MAX_LIMIT")
+
+	serviceImport := assertBucketItemByName(t, got, "imports", "Demo\\Library\\Service")
+	phpAssertStringFieldValue(t, serviceImport, "import_type", "use")
+}
+
 func TestDefaultEngineParsePathPHPEmitsVariableAndCallMetadata(t *testing.T) {
 	t.Parallel()
 

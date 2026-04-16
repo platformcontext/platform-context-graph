@@ -6,8 +6,9 @@ import (
 )
 
 type phpImportSpec struct {
-	name  string
-	alias string
+	name       string
+	alias      string
+	importType string
 }
 
 func parsePHPImports(raw string) []phpImportSpec {
@@ -24,6 +25,10 @@ func parsePHPImports(raw string) []phpImportSpec {
 			break
 		}
 	}
+	importType := "use"
+	if prefixKeyword != "" {
+		importType = prefixKeyword
+	}
 
 	openBrace := strings.Index(trimmed, "{")
 	closeBrace := strings.LastIndex(trimmed, "}")
@@ -32,7 +37,7 @@ func parsePHPImports(raw string) []phpImportSpec {
 		if name == "" {
 			return nil
 		}
-		return []phpImportSpec{{name: name, alias: alias}}
+		return []phpImportSpec{{name: name, alias: alias, importType: importType}}
 	}
 
 	prefix := strings.TrimSpace(trimmed[:openBrace])
@@ -49,7 +54,7 @@ func parsePHPImports(raw string) []phpImportSpec {
 		if name == "" {
 			continue
 		}
-		imports = append(imports, phpImportSpec{name: name, alias: alias})
+		imports = append(imports, phpImportSpec{name: name, alias: alias, importType: importType})
 	}
 	return imports
 }

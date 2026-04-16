@@ -98,6 +98,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 					"full_import_name": trimmed,
 					"line_number":      lineNumber,
 					"alias":            spec.alias,
+					"import_type":      spec.importType,
 					"context":          []any{nil, nil},
 					"lang":             "php",
 					"is_dependency":    false,
