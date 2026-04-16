@@ -71,7 +71,7 @@ func javaScriptComponentWrapperKind(node *tree_sitter.Node, source []byte) strin
 		functionNode := node.ChildByFieldName("function")
 		name := strings.TrimSpace(javaScriptCallName(functionNode, source))
 		switch name {
-		case "memo", "forwardRef":
+		case "memo", "forwardRef", "lazy":
 			return name
 		}
 	}

@@ -65,3 +65,31 @@ const ForwardedButton = forwardRef(function ForwardedButton(_props, ref) {
 	forwardedButton := findNamedBucketItem(t, got, "components", "ForwardedButton")
 	assertStringFieldValue(t, forwardedButton, "component_wrapper_kind", "forwardRef")
 }
+
+func TestDefaultEngineParsePathTSXCapturesLazyWrapper(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "src", "Screen.tsx")
+	writeTestFile(
+		t,
+		filePath,
+		`import { lazy } from "react";
+
+const LazyButton = lazy(() => import("./Button"));
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	lazyButton := findNamedBucketItem(t, got, "components", "LazyButton")
+	assertStringFieldValue(t, lazyButton, "component_wrapper_kind", "lazy")
+}
