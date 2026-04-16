@@ -62,6 +62,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 	braceDepth := 0
 	stack := make([]phpScopedContext, 0)
 	var pendingFunction *phpScopedContext
+	var pendingAnonymousClass *phpScopedContext
 	seenVariables := make(map[string]struct{})
 	seenCalls := make(map[string]struct{})
 	classPropertyTypes := make(map[string]map[string]string)
@@ -107,6 +108,27 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 		} else if contextName, contextKind, _ := currentPHPContext(stack); contextKind == "class_declaration" {
 			if bases := parsePHPClassTraitUses(trimmed); len(bases) > 0 {
 				appendPHPClassBases(payload, contextName, bases)
+			}
+		}
+
+		if anonymousTail, ok := parsePHPAnonymousClass(trimmed); ok {
+			name := phpAnonymousClassName(lineNumber)
+			bases := parsePHPBases("class", anonymousTail)
+			item := map[string]any{
+				"name":        name,
+				"line_number": lineNumber,
+				"end_line":    lineNumber,
+				"lang":        "php",
+			}
+			if len(bases) > 0 {
+				item["bases"] = bases
+			}
+			appendBucket(payload, "classes", item)
+			pendingAnonymousClass = &phpScopedContext{
+				kind:       "class_declaration",
+				name:       name,
+				braceDepth: braceDepth + max(1, strings.Count(rawLine, "{")),
+				lineNumber: lineNumber,
 			}
 		}
 
@@ -194,6 +216,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			variableType := inferPHPVariableType(
 				rawLine,
 				variable,
+				lineNumber,
 				currentClassContext,
 				classPropertyTypes,
 				localVariableTypes[functionScopeKey],
@@ -303,6 +326,11 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				}
 				appendUniquePHPCall(payload, seenCalls, name, name, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, "")
 			}
+		}
+
+		if pendingAnonymousClass != nil {
+			stack = append(stack, *pendingAnonymousClass)
+			pendingAnonymousClass = nil
 		}
 
 		braceDepth += braceDelta(rawLine)

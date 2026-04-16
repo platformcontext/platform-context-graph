@@ -25,6 +25,7 @@ func currentPHPFunctionScopeKey(stack []phpScopedContext) string {
 func inferPHPVariableType(
 	rawLine string,
 	variable string,
+	lineNumber int,
 	classContext string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
@@ -38,6 +39,9 @@ func inferPHPVariableType(
 		return normalizePHPTypeName(matches[1])
 	}
 	if matches := phpAssignmentPattern.FindStringSubmatch(rawLine); len(matches) == 3 && matches[1] == variable {
+		if strings.Contains(matches[2], "new class") {
+			return phpAnonymousClassName(lineNumber)
+		}
 		if inferred := inferPHPReferenceType(matches[2], classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes); inferred != "" {
 			return inferred
 		}
