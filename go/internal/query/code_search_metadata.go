@@ -78,6 +78,11 @@ func (h *CodeHandler) enrichGraphResultsWithContentMetadataByEntityID(
 	results []map[string]any,
 ) ([]map[string]any, error) {
 	if h == nil || h.Content == nil || len(results) == 0 {
+		for i := range results {
+			if metadata, ok := results[i]["metadata"].(map[string]any); ok && len(metadata) > 0 {
+				attachSemanticSummary(results[i])
+			}
+		}
 		return results, nil
 	}
 
@@ -85,6 +90,9 @@ func (h *CodeHandler) enrichGraphResultsWithContentMetadataByEntityID(
 		entityID := StringVal(results[i], "entity_id")
 		if entityID == "" {
 			continue
+		}
+		if metadata, ok := results[i]["metadata"].(map[string]any); ok && len(metadata) > 0 {
+			attachSemanticSummary(results[i])
 		}
 		entity, err := h.Content.GetEntityContent(ctx, entityID)
 		if err != nil {

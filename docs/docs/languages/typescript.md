@@ -54,8 +54,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   `typescript_semantics` bundle when class-family or TSX rows already carry
   decorators, type parameters, declaration-merge metadata, fragment shorthand,
   or `ComponentType` assertions. That bundle now shows up on the shared
-  `code/search`, `entities/resolve`, `code/relationships`, `code/complexity`,
-  `code/language-query`, and entity-context/story paths.
+  `code/search`, `code/dead-code`, `entities/resolve`, `code/relationships`,
+  `code/complexity`, `code/language-query`, and entity-context/story paths.
 - Canonical TypeScript `Class`, `Interface`, and `Enum` rows now preserve
   `decorators`, `type_parameters`, and `declaration_merge_*` metadata through
   the Go projector and Neo4j writer when those values are present in the
