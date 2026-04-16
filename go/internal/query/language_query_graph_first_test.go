@@ -404,6 +404,68 @@ func TestHandleLanguageQuery_PythonLambdaFunctionUsesGraphMetadataWithoutContent
 	}
 }
 
+func TestHandleLanguageQuery_PythonDocumentedClassUsesGraphMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":  "graph-py-class-1",
+				"name":       "Logged",
+				"labels":     []string{"Class"},
+				"file_path":  "src/models.py",
+				"repo_id":    "repo-1",
+				"repo_name":  "repo-1",
+				"language":   "python",
+				"start_line": int64(4),
+				"end_line":   int64(8),
+				"docstring":  "Represents a configured logger.",
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"python","entity_type":"class","query":"Logged","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed Python class", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["semantic_summary"], "Class Logged is documented as \"Represents a configured logger.\"."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "documented_class"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["docstring"], "Represents a configured logger."; got != want {
+		t.Fatalf("semantic_profile[docstring] = %#v, want %#v", got, want)
+	}
+}
+
 func TestHandleLanguageQuery_ElixirGuardUsesGraphMetadataWithoutContent(t *testing.T) {
 	t.Parallel()
 

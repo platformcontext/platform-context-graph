@@ -194,7 +194,7 @@ func semanticSurfaceKind(
 			return "javascript_method"
 		}
 	}
-	if language == "python" && pythonProfile.HasSignals() {
+	if language == "python" && (pythonProfile.HasSignals() || pythonProfile.Docstring != "") {
 		return pythonProfile.SurfaceKind()
 	}
 	if _, decorated := profile["decorators"].([]string); decorated {

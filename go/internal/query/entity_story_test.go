@@ -87,6 +87,19 @@ func TestAttachSemanticSummaryAddsStoryForSemanticEntities(t *testing.T) {
 			want: "Class Logged uses metaclass MetaLogger. Defined in src/models.py (python).",
 		},
 		{
+			name: "python class docstring",
+			entity: map[string]any{
+				"labels":    []string{"Class"},
+				"name":      "Logged",
+				"language":  "python",
+				"file_path": "src/models.py",
+				"metadata": map[string]any{
+					"docstring": "Represents a configured logger.",
+				},
+			},
+			want: "Class Logged is documented as \"Represents a configured logger.\". Defined in src/models.py (python).",
+		},
+		{
 			name: "python type annotation",
 			entity: map[string]any{
 				"labels":    []string{"TypeAnnotation"},
@@ -409,6 +422,70 @@ func TestGetEntityContextUsesGraphPythonTypeAnnotationWithoutContent(t *testing.
 	}
 	if got, want := profile["annotation_kind"], "parameter"; got != want {
 		t.Fatalf("semantic_profile[annotation_kind] = %#v, want %#v", got, want)
+	}
+}
+
+func TestGetEntityContextUsesGraphPythonClassDocstringWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if got, want := params["entity_id"], "class-docstring-1"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				if want := "e.docstring as docstring"; !strings.Contains(cypher, want) {
+					t.Fatalf("cypher = %q, want %q", cypher, want)
+				}
+				return map[string]any{
+					"id":            "class-docstring-1",
+					"labels":        []any{"Class"},
+					"name":          "Logged",
+					"file_path":     "src/models.py",
+					"language":      "python",
+					"start_line":    int64(4),
+					"end_line":      int64(8),
+					"repo_id":       "repo-1",
+					"repo_name":     "repo-1",
+					"docstring":     "Represents a configured logger.",
+					"relationships": []any{},
+				}, nil
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/class-docstring-1/context", nil)
+	req.SetPathValue("entity_id", "class-docstring-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	if got, want := resp["semantic_summary"], "Class Logged is documented as \"Represents a configured logger.\"."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["story"], "Class Logged is documented as \"Represents a configured logger.\". Defined in src/models.py (python)."; got != want {
+		t.Fatalf("resp[story] = %#v, want %#v", got, want)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "documented_class"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["docstring"], "Represents a configured logger."; got != want {
+		t.Fatalf("semantic_profile[docstring] = %#v, want %#v", got, want)
 	}
 }
 

@@ -27,6 +27,7 @@ type PythonSemanticProfile struct {
 	Async               bool
 	Lambda              bool
 	Metaclass           string
+	Docstring           string
 	TypeAnnotation      bool
 	TypeAnnotationCount int
 	TypeAnnotationKinds []string
@@ -46,6 +47,7 @@ func PythonSemanticProfileFromMetadata(entityType string, metadata map[string]an
 	profile.Async = boolValue(metadata["async"])
 	profile.Lambda = metadataString(metadata, "semantic_kind") == "lambda"
 	profile.Metaclass = metadataString(metadata, "metaclass")
+	profile.Docstring = metadataString(metadata, "docstring")
 	profile.TypeAnnotationCount = IntVal(metadata, "type_annotation_count")
 	profile.TypeAnnotationKinds = stringSliceFromAny(metadata["type_annotation_kinds"])
 	profile.AnnotationKind = metadataString(metadata, "annotation_kind")
@@ -117,6 +119,12 @@ func (p PythonSemanticProfile) SurfaceKind() string {
 		return "return_type_annotation"
 	case p.TypeAnnotation:
 		return "type_annotation"
+	case p.EntityType == "Class" && p.Docstring != "":
+		return "documented_class"
+	case p.EntityType == "Function" && p.Docstring != "":
+		return "documented_function"
+	case p.Docstring != "":
+		return "documented_entity"
 	default:
 		return "plain"
 	}

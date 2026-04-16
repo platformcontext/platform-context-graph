@@ -65,6 +65,11 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     enrichment path used by `code/dead-code` and `code/complexity`, so those
     responses keep graph-owned decorators, async flags, and annotation signals
     when content fallback is available for the same entity.
+  - Graph-backed Python docstrings now keep a Python-specific documented
+    surface kind in `semantic_profile` and related story/context responses:
+    classes surface as `documented_class`, functions as
+    `documented_function`, and the generic `documented_entity` fallback is
+    reserved for non-Python or unlabeled content.
   - Identifier-assigned lambdas now materialize as Python function entities
     with `semantic_kind=lambda`, and the normal semantic/profile/story
     surfaces promote them as `lambda_function`.

@@ -91,6 +91,22 @@ func TestPythonSemanticProfileFromMetadata(t *testing.T) {
 			wantKind: "metaclass_class",
 		},
 		{
+			name:       "class with docstring only",
+			entityType: "Class",
+			metadata: map[string]any{
+				"docstring": "Represents a configured logger.",
+			},
+			wantKind: "documented_class",
+		},
+		{
+			name:       "function with docstring only",
+			entityType: "Function",
+			metadata: map[string]any{
+				"docstring": "Handles incoming requests.",
+			},
+			wantKind: "documented_function",
+		},
+		{
 			name:        "plain python function",
 			entityType:  "Function",
 			metadata:    map[string]any{},
