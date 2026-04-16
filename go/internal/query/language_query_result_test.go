@@ -134,3 +134,49 @@ func TestBuildLanguageResult_AttachesPythonGraphMetadataAndSemanticSummary(t *te
 		t.Fatalf("semantic_profile[metaclass] = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildLanguageResult_AttachesPythonTypeAnnotationGraphMetadata(t *testing.T) {
+	row := map[string]any{
+		"entity_id":       "type-ann:py:name",
+		"name":            "name",
+		"labels":          []any{"TypeAnnotation"},
+		"file_path":       "src/app.py",
+		"repo_id":         "repo:py",
+		"repo_name":       "service",
+		"language":        "python",
+		"start_line":      int64(10),
+		"end_line":        int64(10),
+		"annotation_kind": "parameter",
+		"context":         "greet",
+		"type":            "str",
+	}
+
+	result := buildLanguageResult(row, "TypeAnnotation")
+
+	metadata, ok := result["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata type = %T, want map[string]any", result["metadata"])
+	}
+	if got, want := metadata["annotation_kind"], "parameter"; got != want {
+		t.Fatalf("metadata[annotation_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := metadata["context"], "greet"; got != want {
+		t.Fatalf("metadata[context] = %#v, want %#v", got, want)
+	}
+	if got, want := metadata["type"], "str"; got != want {
+		t.Fatalf("metadata[type] = %#v, want %#v", got, want)
+	}
+	if got, want := result["semantic_summary"], "TypeAnnotation name is a parameter annotation for greet with type str."; got != want {
+		t.Fatalf("semantic_summary = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("semantic_profile type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "parameter_type_annotation"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["annotation_kind"], "parameter"; got != want {
+		t.Fatalf("semantic_profile[annotation_kind] = %#v, want %#v", got, want)
+	}
+}

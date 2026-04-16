@@ -3,17 +3,18 @@ package query
 // graphBackedEntityTypes maps the user-facing entity type name to the Neo4j
 // node label used in Cypher queries.
 var graphBackedEntityTypes = map[string]string{
-	"repository": "Repository",
-	"directory":  "Directory",
-	"file":       "File",
-	"module":     "Module",
-	"function":   "Function",
-	"class":      "Class",
-	"struct":     "Struct",
-	"enum":       "Enum",
-	"union":      "Union",
-	"macro":      "Macro",
-	"variable":   "Variable",
+	"repository":      "Repository",
+	"directory":       "Directory",
+	"file":            "File",
+	"module":          "Module",
+	"function":        "Function",
+	"class":           "Class",
+	"struct":          "Struct",
+	"enum":            "Enum",
+	"union":           "Union",
+	"macro":           "Macro",
+	"variable":        "Variable",
+	"type_annotation": "TypeAnnotation",
 }
 
 // contentBackedEntityTypes maps user-facing entity types to content-entity
@@ -101,6 +102,12 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	if v := StringVal(row, "method_kind"); v != "" {
 		metadata["method_kind"] = v
 	}
+	if v := StringVal(row, "annotation_kind"); v != "" {
+		metadata["annotation_kind"] = v
+	}
+	if v := StringVal(row, "context"); v != "" {
+		metadata["context"] = v
+	}
 	if values := StringSliceVal(row, "type_parameters"); len(values) > 0 {
 		typeParameters := make([]any, 0, len(values))
 		for _, value := range values {
@@ -183,7 +190,7 @@ func graphLabelToContentEntityType(label string) string {
 	switch label {
 	case "Annotation":
 		return "Annotation"
-	case "Function", "Class", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock", "Typedef", "TypeAlias", "Component":
+	case "Function", "Class", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock", "Typedef", "TypeAlias", "TypeAnnotation", "Component":
 		return label
 	default:
 		return ""

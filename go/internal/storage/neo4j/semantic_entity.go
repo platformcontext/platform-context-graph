@@ -67,6 +67,26 @@ SET n.id = row.entity_id,
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
+	semanticTypeAnnotationUpsertCypher = `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
+MERGE (n:TypeAnnotation {uid: row.entity_id})
+SET n.id = row.entity_id,
+    n.name = row.entity_name,
+    n.path = row.file_path,
+    n.relative_path = row.relative_path,
+    n.line_number = row.start_line,
+    n.start_line = row.start_line,
+    n.end_line = row.end_line,
+    n.repo_id = row.repo_id,
+    n.language = row.language,
+    n.lang = row.language,
+    n.annotation_kind = row.annotation_kind,
+    n.context = row.context,
+    n.type = row.type,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
+    n.evidence_source = row.evidence_source
+MERGE (f)-[:CONTAINS]->(n)`
+
 	semanticComponentUpsertCypher = `UNWIND $rows AS row
 MATCH (f:File {path: row.file_path})
 MERGE (n:Component {uid: row.entity_id})
@@ -201,6 +221,8 @@ SET n.id = row.entity_id,
     n.impl_context = row.impl_context,
     n.docstring = row.docstring,
     n.method_kind = row.method_kind,
+    n.annotation_kind = row.annotation_kind,
+    n.context = row.context,
     n.jsx_fragment_shorthand = row.jsx_fragment_shorthand,
     n.decorators = row.decorators,
     n.async = row.async,
@@ -212,15 +234,15 @@ MATCH (impl:ImplBlock {uid: row.impl_block_id})
 MATCH (fn:Function {uid: row.function_id})
 MERGE (impl)-[:CONTAINS]->(fn)`
 
-	semanticEntityRetractCypher = `MATCH (n:Annotation|Typedef|TypeAlias|Component|Module|ImplBlock|Protocol|ProtocolImplementation|Variable|Function)
+	semanticEntityRetractCypher = `MATCH (n:Annotation|Typedef|TypeAlias|TypeAnnotation|Component|Module|ImplBlock|Protocol|ProtocolImplementation|Variable|Function)
 WHERE n.repo_id IN $repo_ids
   AND n.evidence_source = $evidence_source
 DETACH DELETE n`
 )
 
-// SemanticEntityWriter writes Annotation, Typedef, TypeAlias, Component,
-// ImplBlock, Protocol, ProtocolImplementation, Variable, and JavaScript
-// callable Function semantic nodes into Neo4j.
+// SemanticEntityWriter writes Annotation, Typedef, TypeAlias, TypeAnnotation,
+// Component, Module, ImplBlock, Protocol, ProtocolImplementation, Variable,
+// and JavaScript callable Function semantic nodes into Neo4j.
 type SemanticEntityWriter struct {
 	executor  Executor
 	BatchSize int
@@ -265,6 +287,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		"Annotation":             nil,
 		"Typedef":                nil,
 		"TypeAlias":              nil,
+		"TypeAnnotation":         nil,
 		"Component":              nil,
 		"Module":                 nil,
 		"ImplBlock":              nil,
@@ -289,6 +312,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		{label: "Annotation", cypher: semanticAnnotationUpsertCypher},
 		{label: "Typedef", cypher: semanticTypedefUpsertCypher},
 		{label: "TypeAlias", cypher: semanticTypeAliasUpsertCypher},
+		{label: "TypeAnnotation", cypher: semanticTypeAnnotationUpsertCypher},
 		{label: "Component", cypher: semanticComponentUpsertCypher},
 		{label: "Module", cypher: semanticModuleUpsertCypher},
 		{label: "ImplBlock", cypher: semanticImplBlockUpsertCypher},
@@ -339,7 +363,7 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		return nil, false
 	}
 	if row.EntityType != "Annotation" && row.EntityType != "Typedef" && row.EntityType != "TypeAlias" &&
-		row.EntityType != "Component" && row.EntityType != "Module" && row.EntityType != "ImplBlock" &&
+		row.EntityType != "TypeAnnotation" && row.EntityType != "Component" && row.EntityType != "Module" && row.EntityType != "ImplBlock" &&
 		row.EntityType != "Protocol" && row.EntityType != "ProtocolImplementation" &&
 		row.EntityType != "Variable" && row.EntityType != "Function" {
 		return nil, false
@@ -423,6 +447,12 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 		if methodKind := semanticMetadataString(row.Metadata, "method_kind"); methodKind != "" {
 			rowMap["method_kind"] = methodKind
+		}
+		if annotationKind := semanticMetadataString(row.Metadata, "annotation_kind"); annotationKind != "" {
+			rowMap["annotation_kind"] = annotationKind
+		}
+		if context := semanticMetadataString(row.Metadata, "context"); context != "" {
+			rowMap["context"] = context
 		}
 		if jsxFragment := semanticMetadataBool(row.Metadata, "jsx_fragment_shorthand"); jsxFragment {
 			rowMap["jsx_fragment_shorthand"] = true

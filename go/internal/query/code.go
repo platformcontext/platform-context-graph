@@ -95,6 +95,10 @@ func (h *CodeHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 // searchGraphEntities finds entities by name pattern in the Neo4j graph.
 func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, language string, limit int) ([]map[string]any, error) {
+	if h == nil || h.Neo4j == nil {
+		return h.searchEntityContent(ctx, repoID, query, language, limit)
+	}
+
 	cypher := `
 		MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
 		WHERE r.id = $repo_id AND e.name CONTAINS $query
@@ -118,7 +122,9 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 		       e.start_line as start_line,
 		       e.end_line as end_line,
 		       e.docstring as docstring,
-		       e.method_kind as method_kind
+		       e.method_kind as method_kind,
+		       e.annotation_kind as annotation_kind,
+		       e.context as context
 		ORDER BY e.name
 		LIMIT $limit
 	`

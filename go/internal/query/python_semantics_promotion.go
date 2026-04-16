@@ -28,6 +28,8 @@ type PythonSemanticProfile struct {
 	Lambda         bool
 	Metaclass      string
 	TypeAnnotation bool
+	AnnotationKind string
+	Context        string
 }
 
 // PythonSemanticProfileFromMetadata builds a promotion profile from a content
@@ -42,6 +44,8 @@ func PythonSemanticProfileFromMetadata(entityType string, metadata map[string]an
 	profile.Async = boolValue(metadata["async"])
 	profile.Lambda = metadataString(metadata, "semantic_kind") == "lambda"
 	profile.Metaclass = metadataString(metadata, "metaclass")
+	profile.AnnotationKind = metadataString(metadata, "annotation_kind")
+	profile.Context = metadataString(metadata, "context")
 	profile.TypeAnnotation = entityType == "TypeAnnotation" || hasValues(metadata["type_annotations"])
 	return profile
 }
@@ -100,6 +104,10 @@ func (p PythonSemanticProfile) SurfaceKind() string {
 		return "lambda_function"
 	case p.EntityType == "Class" && p.Metaclass != "":
 		return "metaclass_class"
+	case p.TypeAnnotation && p.AnnotationKind == "parameter":
+		return "parameter_type_annotation"
+	case p.TypeAnnotation && p.AnnotationKind == "return":
+		return "return_type_annotation"
 	case p.TypeAnnotation:
 		return "type_annotation"
 	default:

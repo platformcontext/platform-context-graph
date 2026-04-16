@@ -34,9 +34,10 @@ type SemanticEntityWriteResult struct {
 	CanonicalWrites int
 }
 
-// SemanticEntityWriter persists Annotation, Typedef, TypeAlias, Component,
-// Module, ImplBlock, Protocol, ProtocolImplementation, Variable, and callable
-// Function semantic nodes into Neo4j.
+// SemanticEntityWriter persists Annotation, Typedef, TypeAlias,
+// TypeAnnotation, Component, Module, ImplBlock, Protocol,
+// ProtocolImplementation, Variable, and callable Function semantic nodes into
+// Neo4j.
 type SemanticEntityWriter interface {
 	WriteSemanticEntities(context.Context, SemanticEntityWrite) (SemanticEntityWriteResult, error)
 }
@@ -196,7 +197,7 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 			metadata[key] = value
 		}
 	}
-	for _, key := range []string{"docstring", "method_kind", "semantic_kind", "module_kind", "declaration_merge_group"} {
+	for _, key := range []string{"docstring", "method_kind", "semantic_kind", "module_kind", "declaration_merge_group", "annotation_kind", "context"} {
 		if value := semanticPayloadMetadataString(payload, key); value != "" {
 			metadata[key] = value
 		}
@@ -366,7 +367,7 @@ func semanticPayloadStringSlice(payload map[string]any, key string) []string {
 
 func isSemanticEntityType(payload map[string]any, entityType string) bool {
 	switch entityType {
-	case "Annotation", "Typedef", "TypeAlias", "Component", "Module", "ImplBlock", "Protocol", "ProtocolImplementation":
+	case "Annotation", "Typedef", "TypeAlias", "TypeAnnotation", "Component", "Module", "ImplBlock", "Protocol", "ProtocolImplementation":
 		return true
 	case "Variable":
 		return isElixirModuleAttributeSemanticEntity(payload)

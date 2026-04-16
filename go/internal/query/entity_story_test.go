@@ -87,6 +87,21 @@ func TestAttachSemanticSummaryAddsStoryForSemanticEntities(t *testing.T) {
 			want: "Class Logged uses metaclass MetaLogger. Defined in src/models.py (python).",
 		},
 		{
+			name: "python type annotation",
+			entity: map[string]any{
+				"labels":    []string{"TypeAnnotation"},
+				"name":      "name",
+				"language":  "python",
+				"file_path": "src/app.py",
+				"metadata": map[string]any{
+					"type":            "str",
+					"annotation_kind": "parameter",
+					"context":         "greet",
+				},
+			},
+			want: "TypeAnnotation name is a parameter annotation for greet with type str. Defined in src/app.py (python).",
+		},
+		{
 			name: "java applied annotation",
 			entity: map[string]any{
 				"labels":    []string{"Annotation"},
@@ -318,5 +333,71 @@ func TestGetEntityContextUsesGraphPythonMetadataWithoutContent(t *testing.T) {
 	}
 	if len(decorators) != 1 || decorators[0] != "@route" {
 		t.Fatalf("semantic_profile[decorators] = %#v, want [@route]", decorators)
+	}
+}
+
+func TestGetEntityContextUsesGraphPythonTypeAnnotationWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if got, want := params["entity_id"], "type-ann-1"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				if want := "e.annotation_kind as annotation_kind"; !strings.Contains(cypher, want) {
+					t.Fatalf("cypher = %q, want %q", cypher, want)
+				}
+				return map[string]any{
+					"id":              "type-ann-1",
+					"labels":          []any{"TypeAnnotation"},
+					"name":            "name",
+					"file_path":       "src/app.py",
+					"language":        "python",
+					"start_line":      int64(10),
+					"end_line":        int64(10),
+					"repo_id":         "repo-1",
+					"repo_name":       "repo-1",
+					"annotation_kind": "parameter",
+					"context":         "greet",
+					"type":            "str",
+					"relationships":   []any{},
+				}, nil
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/type-ann-1/context", nil)
+	req.SetPathValue("entity_id", "type-ann-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	if got, want := resp["semantic_summary"], "TypeAnnotation name is a parameter annotation for greet with type str."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["story"], "TypeAnnotation name is a parameter annotation for greet with type str. Defined in src/app.py (python)."; got != want {
+		t.Fatalf("resp[story] = %#v, want %#v", got, want)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "parameter_type_annotation"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["annotation_kind"], "parameter"; got != want {
+		t.Fatalf("semantic_profile[annotation_kind] = %#v, want %#v", got, want)
 	}
 }

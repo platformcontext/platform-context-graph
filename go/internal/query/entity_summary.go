@@ -63,6 +63,18 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		if typeName == "" {
 			return ""
 		}
+		annotationKind, _ := metadata["annotation_kind"].(string)
+		context, _ := metadata["context"].(string)
+		switch annotationKind {
+		case "parameter":
+			if context != "" {
+				return fmt.Sprintf("%s %s is a parameter annotation for %s with type %s.", label, name, context, typeName)
+			}
+		case "return":
+			if context != "" {
+				return fmt.Sprintf("%s %s is a return annotation for %s with type %s.", label, name, context, typeName)
+			}
+		}
 		return fmt.Sprintf("%s %s is annotated as %s.", label, name, typeName)
 	case "TerraformBlock":
 		requiredProviders, _ := metadata["required_providers"].(string)
@@ -211,6 +223,18 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 	}
 	if pythonProfile.Metaclass != "" {
 		fragments = append(fragments, "uses metaclass "+pythonProfile.Metaclass)
+	}
+	if pythonProfile.TypeAnnotation && label == "TypeAnnotation" {
+		switch pythonProfile.AnnotationKind {
+		case "parameter":
+			if pythonProfile.Context != "" {
+				fragments = append(fragments, fmt.Sprintf("is a parameter annotation for %s", pythonProfile.Context))
+			}
+		case "return":
+			if pythonProfile.Context != "" {
+				fragments = append(fragments, fmt.Sprintf("is a return annotation for %s", pythonProfile.Context))
+			}
+		}
 	}
 	if params := metadataStringSlice(metadata, "type_parameters"); len(params) > 0 {
 		fragments = append(fragments, "declares type parameters "+strings.Join(params, ", "))

@@ -36,11 +36,25 @@ func TestPythonSemanticProfileFromMetadata(t *testing.T) {
 			metadata: map[string]any{
 				"type":            "str",
 				"annotation_kind": "parameter",
+				"context":         "greet",
 			},
 			wantSignals: []PythonSemanticSignal{
 				PythonSemanticSignalTypeAnnotation,
 			},
-			wantKind: "type_annotation",
+			wantKind: "parameter_type_annotation",
+		},
+		{
+			name:       "return type annotation entity",
+			entityType: "TypeAnnotation",
+			metadata: map[string]any{
+				"type":            "str",
+				"annotation_kind": "return",
+				"context":         "greet",
+			},
+			wantSignals: []PythonSemanticSignal{
+				PythonSemanticSignalTypeAnnotation,
+			},
+			wantKind: "return_type_annotation",
 		},
 		{
 			name:       "lambda function",

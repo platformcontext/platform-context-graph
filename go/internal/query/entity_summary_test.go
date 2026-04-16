@@ -82,14 +82,36 @@ func TestBuildEntitySemanticSummaryTypeAnnotation(t *testing.T) {
 
 	entity := map[string]any{
 		"labels": []string{"TypeAnnotation"},
-		"name":   "user_id",
+		"name":   "name",
 		"metadata": map[string]any{
-			"type": "UUID",
+			"type":            "str",
+			"annotation_kind": "parameter",
+			"context":         "greet",
 		},
 	}
 
 	got := buildEntitySemanticSummary(entity)
-	want := "TypeAnnotation user_id is annotated as UUID."
+	want := "TypeAnnotation name is a parameter annotation for greet with type str."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildEntitySemanticSummaryTypeAnnotationReturn(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"TypeAnnotation"},
+		"name":   "greet",
+		"metadata": map[string]any{
+			"type":            "str",
+			"annotation_kind": "return",
+			"context":         "greet",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "TypeAnnotation greet is a return annotation for greet with type str."
 	if got != want {
 		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
 	}

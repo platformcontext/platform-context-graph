@@ -74,7 +74,9 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 		       r.id as repo_id, r.name as repo_name,
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
-		       e.end_line as end_line
+		       e.end_line as end_line,
+		       e.annotation_kind as annotation_kind,
+		       e.context as context
 		ORDER BY e.name
 		LIMIT 20
 	`
@@ -146,6 +148,8 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line,
+		       e.annotation_kind as annotation_kind,
+		       e.context as context,
 		       e.docstring as docstring,
 		       e.method_kind as method_kind,
 		       r.id as repo_id, r.name as repo_name,

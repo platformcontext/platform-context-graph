@@ -208,6 +208,14 @@ func (h *LanguageQueryHandler) queryByLanguageWithSemanticFilter(
 	semanticFilterKey string,
 	semanticFilterValue string,
 ) ([]map[string]any, error) {
+	if h == nil || h.Neo4j == nil {
+		contentLabel := graphLabelToContentEntityType(label)
+		if h == nil || contentLabel == "" {
+			return nil, fmt.Errorf("neo4j reader is required for %s queries", label)
+		}
+		return h.queryContentByLanguage(ctx, language, contentLabel, query, repoID, limit)
+	}
+
 	cypher, params := buildLanguageCypherWithSemanticFilter(
 		language,
 		label,
@@ -452,6 +460,8 @@ func buildEntityCypherWithSemanticFilter(
 		       e.start_line as start_line, e.end_line as end_line,
 		       e.docstring as docstring,
 		       e.method_kind as method_kind,
+		       e.annotation_kind as annotation_kind,
+		       e.context as context,
 		       e.kind as kind,
 		       e.target_kind as target_kind,
 		       e.type as type,

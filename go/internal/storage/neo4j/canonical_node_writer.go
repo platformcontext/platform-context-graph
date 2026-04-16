@@ -13,8 +13,6 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
-const canonicalEvidenceSource = "projector/canonical"
-
 // CanonicalNodeWriter writes canonical graph nodes from a CanonicalMaterialization
 // in strict phase order. Each phase creates nodes that subsequent phases MATCH.
 type CanonicalNodeWriter struct {
