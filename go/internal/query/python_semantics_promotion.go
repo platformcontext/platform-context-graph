@@ -14,6 +14,8 @@ const (
 	PythonSemanticSignalDecorator PythonSemanticSignal = "decorator"
 	// PythonSemanticSignalAsync marks async function behavior.
 	PythonSemanticSignalAsync PythonSemanticSignal = "async"
+	// PythonSemanticSignalGenerator marks generator function behavior.
+	PythonSemanticSignalGenerator PythonSemanticSignal = "generator"
 	// PythonSemanticSignalLambda marks lambda-assignment behavior.
 	PythonSemanticSignalLambda PythonSemanticSignal = "lambda"
 	// PythonSemanticSignalMetaclass marks class metaclass ownership.
@@ -28,6 +30,7 @@ type PythonSemanticProfile struct {
 	EntityType          string
 	Decorators          []string
 	Async               bool
+	Generator           bool
 	Lambda              bool
 	Metaclass           string
 	Docstring           string
@@ -48,6 +51,7 @@ func PythonSemanticProfileFromMetadata(entityType string, metadata map[string]an
 
 	profile.Decorators = stringSliceFromAny(metadata["decorators"])
 	profile.Async = boolValue(metadata["async"])
+	profile.Generator = metadataString(metadata, "semantic_kind") == "generator"
 	profile.Lambda = metadataString(metadata, "semantic_kind") == "lambda"
 	profile.Metaclass = metadataString(metadata, "metaclass")
 	profile.Docstring = metadataString(metadata, "docstring")
@@ -80,6 +84,9 @@ func (p PythonSemanticProfile) Fields() map[string]any {
 	}
 	if p.Async {
 		fields["async"] = true
+	}
+	if p.Generator {
+		fields["generator"] = true
 	}
 	if p.Lambda {
 		fields["lambda"] = true
@@ -142,12 +149,15 @@ func (p PythonSemanticProfile) PrimarySignal() PythonSemanticSignal {
 
 // Signals returns the profile signals in promotion priority order.
 func (p PythonSemanticProfile) Signals() []PythonSemanticSignal {
-	signals := make([]PythonSemanticSignal, 0, 5)
+	signals := make([]PythonSemanticSignal, 0, 6)
 	if len(p.Decorators) > 0 {
 		signals = append(signals, PythonSemanticSignalDecorator)
 	}
 	if p.Async {
 		signals = append(signals, PythonSemanticSignalAsync)
+	}
+	if p.Generator {
+		signals = append(signals, PythonSemanticSignalGenerator)
 	}
 	if p.Lambda {
 		signals = append(signals, PythonSemanticSignalLambda)
@@ -174,6 +184,10 @@ func (p PythonSemanticProfile) SurfaceKind() string {
 		return "decorated_async_function"
 	case len(p.Decorators) > 0:
 		return "decorated_function"
+	case p.Async && p.Generator:
+		return "async_generator_function"
+	case p.Generator:
+		return "generator_function"
 	case p.Async:
 		return "async_function"
 	case p.Lambda:

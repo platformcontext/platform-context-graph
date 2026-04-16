@@ -24,7 +24,6 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 		profile["async"] = true
 		signals = append(signals, "async")
 	}
-
 	typeParameters := metadataStringSlice(metadata, "type_parameters")
 	if len(typeParameters) > 0 {
 		profile["type_parameters"] = typeParameters
@@ -108,6 +107,10 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 	if pythonProfile.Lambda {
 		profile["lambda"] = true
 		signals = append(signals, "lambda")
+	}
+	if pythonProfile.Generator {
+		profile["generator"] = true
+		signals = append(signals, "generator")
 	}
 	if pythonProfile.Metaclass != "" {
 		profile["metaclass"] = pythonProfile.Metaclass

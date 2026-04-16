@@ -270,6 +270,9 @@ func isPythonSemanticFunction(payload map[string]any) bool {
 	if semanticPayloadMetadataString(payload, "semantic_kind") == "lambda" {
 		return true
 	}
+	if semanticPayloadMetadataString(payload, "semantic_kind") == "generator" {
+		return true
+	}
 	if semanticPayloadMetadataBool(payload, "async") {
 		return true
 	}

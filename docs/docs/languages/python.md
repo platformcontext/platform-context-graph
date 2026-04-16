@@ -39,7 +39,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Notes:
   - Framework evidence for FastAPI and Flask is carried by the Go parser and
     indexing path.
-  - Python function semantics for decorators, async, and `semantic_kind=lambda`
+  - Python function semantics for decorators, async, generator, and `semantic_kind=lambda`
     are persisted on the graph-backed semantic entity row and projected
     directly by `code/language-query`; graph-backed entity-context/story and
     `code/search` now preserve the graph row when that metadata is already
@@ -56,7 +56,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     normal entity resolve/context surfaces now fall back to content-backed
     entities, and the normal `code/search` fallback now searches
     content-backed entity names as well as source text. `code/language-query`
-    now projects Python decorator, async, lambda, and metaclass metadata
+    now projects Python decorator, async, generator, lambda, and metaclass metadata
     directly from graph rows, while `code/search` and repository stories still
     rely on the shared enrichment path to surface those semantics as
     summaries, `semantic_profile`, and first-class `story` output when graph
@@ -66,7 +66,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     metaclass metadata is already present.
   - Graph-backed Python metadata is now also preserved on the entity-ID
     enrichment path used by `code/dead-code` and `code/complexity`, so those
-    responses keep graph-owned decorators, async flags, and annotation signals
+    responses keep graph-owned decorators, async flags, generator markers, and annotation signals
     when content fallback is available for the same entity.
   - Graph-backed Python docstrings now keep a Python-specific documented
     surface kind in `semantic_profile` and related story/context responses:
@@ -77,13 +77,16 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     dedicated `python_semantics` bundle for structured consumers alongside
     `semantic_profile`; that bundle now carries the promoted `surface_kind`
     and ordered `signals` for graph-backed Python rows as well as the raw
-    decorator, async, lambda, metaclass, and type-annotation fields. Python
+    decorator, async, generator, lambda, metaclass, and type-annotation fields. Python
     module docstrings now surface as `documented_module` when the graph row
     already carries the docstring.
-  - Identifier- and attribute-assigned lambdas now materialize as Python
+  - Identifier-, attribute-, and anonymous inline lambdas now materialize as Python
     function entities with `semantic_kind=lambda`, and the normal
     semantic/profile/story surfaces promote them as `lambda_function` and
     describe them as lambda functions.
+  - Python generator functions now materialize with `semantic_kind=generator`,
+    and the normal semantic/profile/story surfaces promote them as
+    `generator_function` and describe them as generator functions.
   - Graph-backed Python decorator rows are also preserved by the normal
     `entities/resolve` surface, which now returns the same structured
     `python_semantics` bundle and `decorated_class` surface kind when the

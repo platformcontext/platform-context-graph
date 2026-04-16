@@ -149,6 +149,48 @@ func TestBuildLanguageResult_AttachesPythonGraphMetadataAndSemanticSummary(t *te
 	}
 }
 
+func TestBuildLanguageResult_AttachesPythonGeneratorGraphMetadataAndSemanticSummary(t *testing.T) {
+	row := map[string]any{
+		"entity_id":     "func:py:create_ids",
+		"name":          "create_ids",
+		"labels":        []any{"Function"},
+		"file_path":     "src/generators.py",
+		"repo_id":       "repo:py",
+		"repo_name":     "service",
+		"language":      "python",
+		"start_line":    int64(1),
+		"end_line":      int64(3),
+		"semantic_kind": "generator",
+	}
+
+	result := buildLanguageResult(row, "Function")
+
+	metadata, ok := result["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata type = %T, want map[string]any", result["metadata"])
+	}
+	if got, want := metadata["semantic_kind"], "generator"; got != want {
+		t.Fatalf("metadata[semantic_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := result["semantic_summary"], "Function create_ids is a generator."; got != want {
+		t.Fatalf("semantic_summary = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("semantic_profile type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "generator_function"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	pythonSemantics, ok := result["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("python_semantics type = %T, want map[string]any", result["python_semantics"])
+	}
+	if got, want := pythonSemantics["generator"], true; got != want {
+		t.Fatalf("python_semantics[generator] = %#v, want %#v", got, want)
+	}
+}
+
 func TestBuildLanguageResult_AttachesPythonTypeAnnotationGraphMetadata(t *testing.T) {
 	row := map[string]any{
 		"entity_id":       "type-ann:py:name",

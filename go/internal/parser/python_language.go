@@ -106,6 +106,9 @@ func (e *Engine) parsePython(
 				"async":                 pythonFunctionIsAsync(functionSource),
 				"cyclomatic_complexity": cyclomaticComplexity(node),
 			}
+			if pythonFunctionIsGenerator(node) {
+				item["semantic_kind"] = "generator"
+			}
 			if docstring := pythonDocstring(node, source); docstring != "" {
 				item["docstring"] = docstring
 			}
