@@ -132,6 +132,16 @@ func TestEnrichGraphSearchResultsWithContentMetadataPrefersExistingJavaScriptMet
 	if gotValue, want := semanticProfile["surface_kind"], "javascript_method"; gotValue != want {
 		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
 	}
+	jsSemantics, ok := got[0]["javascript_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][javascript_semantics] type = %T, want map[string]any", got[0]["javascript_semantics"])
+	}
+	if gotValue, want := jsSemantics["method_kind"], "getter"; gotValue != want {
+		t.Fatalf("javascript_semantics[method_kind] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := jsSemantics["docstring"], "Returns the active tab."; gotValue != want {
+		t.Fatalf("javascript_semantics[docstring] = %#v, want %#v", gotValue, want)
+	}
 }
 
 func TestEnrichGraphResultsWithContentMetadataByEntityIDPreservesPythonGraphMetadata(t *testing.T) {

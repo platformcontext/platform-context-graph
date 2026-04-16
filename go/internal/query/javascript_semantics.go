@@ -4,7 +4,7 @@ import "maps"
 
 // JavaScriptSemantics captures the JavaScript-specific metadata that the query
 // layer promotes into first-class shared result surfaces such as
-// semantic_profile.
+// semantic_profile and javascript_semantics.
 type JavaScriptSemantics struct {
 	Docstring  string
 	MethodKind string

@@ -246,6 +246,16 @@ func TestGetEntityContextUsesGraphJavaScriptMetadataWithoutContent(t *testing.T)
 	if got, want := profile["method_kind"], "getter"; got != want {
 		t.Fatalf("semantic_profile[method_kind] = %#v, want %#v", got, want)
 	}
+	jsSemantics, ok := resp["javascript_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[javascript_semantics] type = %T, want map[string]any", resp["javascript_semantics"])
+	}
+	if got, want := jsSemantics["method_kind"], "getter"; got != want {
+		t.Fatalf("javascript_semantics[method_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := jsSemantics["docstring"], "Returns the active tab."; got != want {
+		t.Fatalf("javascript_semantics[docstring] = %#v, want %#v", got, want)
+	}
 }
 
 func TestGetEntityContextUsesGraphPythonMetadataWithoutContent(t *testing.T) {

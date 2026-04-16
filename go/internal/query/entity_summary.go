@@ -331,6 +331,9 @@ func attachSemanticSummary(result map[string]any) {
 	if profile := buildEntitySemanticProfile(entity); len(profile) > 0 {
 		result["semantic_profile"] = profile
 	}
+	if jsSemantics := ExtractJavaScriptSemantics(metadata); jsSemantics.Present() {
+		result["javascript_semantics"] = jsSemantics.Fields()
+	}
 	if story := buildEntityStory(result); story != "" {
 		result["story"] = story
 	}

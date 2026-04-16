@@ -273,6 +273,16 @@ func TestHandleLanguageQuery_JavaScriptMethodPrefersGraphPathAndUsesGraphMetadat
 	if got, want := profile["docstring"], "Returns the active tab."; got != want {
 		t.Fatalf("semantic_profile[docstring] = %#v, want %#v", got, want)
 	}
+	jsSemantics, ok := result["javascript_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[javascript_semantics] type = %T, want map[string]any", result["javascript_semantics"])
+	}
+	if got, want := jsSemantics["method_kind"], "getter"; got != want {
+		t.Fatalf("javascript_semantics[method_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := jsSemantics["docstring"], "Returns the active tab."; got != want {
+		t.Fatalf("javascript_semantics[docstring] = %#v, want %#v", got, want)
+	}
 }
 
 func TestHandleLanguageQuery_PythonDecoratedAsyncFunctionUsesGraphMetadataWithoutContent(t *testing.T) {
