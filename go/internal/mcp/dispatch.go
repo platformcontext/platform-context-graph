@@ -199,6 +199,19 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 			"start": str(args, "start"), "end": str(args, "end"),
 			"max_depth": intOr(args, "max_depth", 5),
 		}}, nil
+	case "execute_cypher_query":
+		return &route{method: "POST", path: "/api/v0/code/cypher", body: map[string]any{
+			"cypher_query": str(args, "cypher_query"),
+		}}, nil
+	case "visualize_graph_query":
+		return &route{method: "POST", path: "/api/v0/code/visualize", body: map[string]any{
+			"cypher_query": str(args, "cypher_query"),
+		}}, nil
+	case "search_registry_bundles":
+		return &route{method: "POST", path: "/api/v0/code/bundles", body: map[string]any{
+			"query":       str(args, "query"),
+			"unique_only": boolOr(args, "unique_only", false),
+		}}, nil
 
 	// ── Repositories ──
 	case "list_indexed_repositories":

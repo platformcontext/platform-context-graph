@@ -28,6 +28,11 @@ func (h *CodeHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v0/code/complexity", h.handleComplexity)
 	mux.HandleFunc("POST /api/v0/code/call-chain", h.handleCallChain)
 
+	// Read-only Cypher, visualization, and bundle search.
+	mux.HandleFunc("POST /api/v0/code/cypher", h.handleCypherQuery)
+	mux.HandleFunc("POST /api/v0/code/visualize", h.handleVisualizeQuery)
+	mux.HandleFunc("POST /api/v0/code/bundles", h.handleSearchBundles)
+
 	// Language-specific queries.
 	lq := &LanguageQueryHandler{Neo4j: h.Neo4j, Content: h.Content}
 	lq.Mount(mux)
