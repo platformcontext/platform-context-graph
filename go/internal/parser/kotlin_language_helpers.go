@@ -15,7 +15,7 @@ var (
 		`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\([^)]*\)\s*:\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)`,
 	)
 	kotlinFunctionCallAssignPattern = regexp.MustCompile(
-		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\([^)]*\)\s*$`,
+		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\([^()]*\)\s*$`,
 	)
 	kotlinConstructorCallPattern = regexp.MustCompile(`\b([A-Z][A-Za-z_]\w*)\s*\(`)
 )
