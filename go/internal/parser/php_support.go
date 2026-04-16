@@ -176,14 +176,22 @@ func appendPHPBaseList(raw string) []string {
 
 func parsePHPClassTraitUses(raw string) []string {
 	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" || !strings.HasPrefix(trimmed, "use ") || !strings.HasSuffix(trimmed, ";") {
+	if trimmed == "" || !strings.HasPrefix(trimmed, "use ") {
 		return nil
 	}
-	lower := strings.ToLower(trimmed)
-	if strings.Contains(trimmed, "{") || strings.Contains(lower, " insteadof ") || strings.Contains(lower, " as ") {
+	body := strings.TrimSpace(trimmed[len("use "):])
+	if body == "" {
 		return nil
 	}
-	body := strings.TrimSpace(strings.TrimSuffix(trimmed[len("use "):], ";"))
+	if braceIndex := strings.Index(body, "{"); braceIndex >= 0 {
+		body = strings.TrimSpace(body[:braceIndex])
+	}
+	if semicolonIndex := strings.Index(body, ";"); semicolonIndex >= 0 {
+		body = strings.TrimSpace(body[:semicolonIndex])
+	}
+	if body == "" {
+		return nil
+	}
 	if body == "" {
 		return nil
 	}
