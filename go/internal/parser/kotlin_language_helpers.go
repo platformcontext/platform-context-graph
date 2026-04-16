@@ -18,6 +18,9 @@ var (
 	kotlinFunctionCallAssignPattern = regexp.MustCompile(
 		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\([^()]*\)\s*$`,
 	)
+	kotlinCastAssignPattern = regexp.MustCompile(
+		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*.+?\s+as\??\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\??)\s*$`,
+	)
 	kotlinLazyDelegatedAssignPattern = regexp.MustCompile(
 		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s+by\s+lazy(?:\s*\([^)]*\))?\s*\{\s*(.+?)\s*\}\s*$`,
 	)
@@ -133,6 +136,11 @@ func kotlinInferAssignedVariableType(
 				packageName,
 				functionReturnTypes,
 			)
+		}
+	case kotlinCastAssignPattern.MatchString(trimmed):
+		assignMatches := kotlinCastAssignPattern.FindStringSubmatch(trimmed)
+		if len(assignMatches) == 3 && assignMatches[1] == name {
+			return strings.TrimSuffix(strings.TrimSpace(assignMatches[2]), "?")
 		}
 	case kotlinStringAssignPattern.MatchString(trimmed):
 		assignMatches := kotlinStringAssignPattern.FindStringSubmatch(trimmed)
