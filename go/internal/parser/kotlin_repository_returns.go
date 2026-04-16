@@ -42,7 +42,7 @@ func kotlinCollectSiblingFunctionReturnTypes(currentPath string, packageName str
 	}
 
 	roots := []string{root}
-	for ancestor := filepath.Dir(root); ancestor != root && len(roots) < 3; ancestor = filepath.Dir(ancestor) {
+	for ancestor := filepath.Dir(root); ancestor != root && len(roots) < 4; ancestor = filepath.Dir(ancestor) {
 		base := filepath.Base(ancestor)
 		if base == "T" || strings.HasPrefix(base, "TemporaryItems") {
 			break
