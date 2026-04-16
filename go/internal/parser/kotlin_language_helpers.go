@@ -72,6 +72,10 @@ func kotlinFunctionIsSuspend(line string) bool {
 	return kotlinSuspendFunctionPattern.MatchString(strings.TrimSpace(line))
 }
 
+func kotlinCurrentTypeScopeName(stack []scopedContext) string {
+	return currentScopedName(stack, "class", "interface")
+}
+
 func kotlinInferAssignedVariableType(
 	trimmed string,
 	name string,

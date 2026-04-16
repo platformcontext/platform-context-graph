@@ -117,7 +117,7 @@ func kotlinCollectFunctionReturnTypesFromFile(path string) (map[string]string, e
 				key := functionName
 				if receiverType != "" {
 					key = receiverType + "." + functionName
-				} else if classContext := currentScopedName(stack, "class"); classContext != "" {
+				} else if classContext := kotlinCurrentTypeScopeName(stack); classContext != "" {
 					key = classContext + "." + functionName
 				}
 				results[key] = returnType

@@ -174,8 +174,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				if kotlinFunctionIsSuspend(trimmed) {
 					item["suspend"] = true
 				}
-				if classContext := currentScopedName(stack, "class"); classContext != "" {
-					item["class_context"] = classContext
+				if typeContext := kotlinCurrentTypeScopeName(stack); typeContext != "" {
+					item["class_context"] = typeContext
 				}
 				if receiverType := strings.TrimSpace(matches[1]); receiverType != "" {
 					item["extension_receiver"] = receiverType
@@ -191,8 +191,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					key := functionName
 					if receiverType != "" {
 						key = receiverType + "." + functionName
-					} else if classContext := currentScopedName(stack, "class"); classContext != "" {
-						key = classContext + "." + functionName
+					} else if typeContext := kotlinCurrentTypeScopeName(stack); typeContext != "" {
+						key = typeContext + "." + functionName
 					}
 					functionReturnTypes[key] = returnType
 				}
@@ -214,8 +214,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				"lang":             "kotlin",
 				"decorators":       []string{},
 			}
-			if classContext := currentScopedName(stack, "class"); classContext != "" {
-				item["class_context"] = classContext
+			if typeContext := kotlinCurrentTypeScopeName(stack); typeContext != "" {
+				item["class_context"] = typeContext
 			}
 			if options.IndexSource {
 				item["source"] = rawLine
@@ -226,7 +226,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		if matches := kotlinVariablePattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
 			functionContext := currentScopedName(stack, "function")
-			classContext := currentScopedName(stack, "class")
+			typeContext := kotlinCurrentTypeScopeName(stack)
 			if typedType := kotlinTypedDeclarationType(trimmed); typedType != "" {
 				switch {
 				case functionContext != "":
@@ -234,11 +234,11 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 						localVariableTypes[functionContext] = make(map[string]string)
 					}
 					localVariableTypes[functionContext][name] = typedType
-				case classContext != "":
-					if _, ok := classPropertyTypes[classContext]; !ok {
-						classPropertyTypes[classContext] = make(map[string]string)
+				case typeContext != "":
+					if _, ok := classPropertyTypes[typeContext]; !ok {
+						classPropertyTypes[typeContext] = make(map[string]string)
 					}
-					classPropertyTypes[classContext][name] = typedType
+					classPropertyTypes[typeContext][name] = typedType
 				}
 			} else if functionContext != "" {
 				if _, ok := localVariableTypes[functionContext]; !ok {
@@ -248,7 +248,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					trimmed,
 					name,
 					functionContext,
-					classContext,
+					typeContext,
 					localVariableTypes,
 					classPropertyTypes,
 					functionReturnTypes,
@@ -288,16 +288,16 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 						classContext string
 					)
 					if receiver == "this" {
-						if currentClass := currentScopedName(stack, "class"); currentClass != "" {
-							classContext = currentClass
-							inferredType = currentClass
+						if currentType := kotlinCurrentTypeScopeName(stack); currentType != "" {
+							classContext = currentType
+							inferredType = currentType
 						}
 					} else {
 						inferredType = kotlinInferReceiverType(
 							receiver,
 							localVariableTypes[functionContext],
 							classPropertyTypes,
-							currentScopedName(stack, "class"),
+							kotlinCurrentTypeScopeName(stack),
 							functionReturnTypes,
 						)
 					}
@@ -322,7 +322,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				}
 			}
 		}
-		kotlinAppendThisCalls(payload, trimmed, lineNumber, seenLineCalls, currentScopedName(stack, "class"))
+		kotlinAppendThisCalls(payload, trimmed, lineNumber, seenLineCalls, kotlinCurrentTypeScopeName(stack))
 
 		kotlinAppendConstructorCalls(
 			payload,
@@ -369,8 +369,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				"lang":        "kotlin",
 			}
 			if receiver == "this" {
-				if classContext := currentScopedName(stack, "class"); classContext != "" {
-					item["class_context"] = classContext
+				if typeContext := kotlinCurrentTypeScopeName(stack); typeContext != "" {
+					item["class_context"] = typeContext
 				}
 			} else if receiver != "" {
 				if functionContext := currentScopedName(stack, "function"); functionContext != "" {
@@ -378,7 +378,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 						receiver,
 						localVariableTypes[functionContext],
 						classPropertyTypes,
-						currentScopedName(stack, "class"),
+						kotlinCurrentTypeScopeName(stack),
 						functionReturnTypes,
 					); inferredType != "" {
 						item["inferred_obj_type"] = inferredType
