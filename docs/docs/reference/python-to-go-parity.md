@@ -27,13 +27,18 @@ The runtime migration is complete:
 
 Feature parity is not yet complete.
 
-The current repo still documents multiple parser or graph-surface capabilities
-as `partial` or `unsupported`, plus a handful of non-parser operator-surface
-gaps where the Go implementation is present but still narrower than the Python
-platform contract.
+The remaining parity debt is concentrated in Kotlin and PHP long-tail
+receiver/call proof breadth. The API/MCP query surfacing infrastructure is now
+parity-complete: every `pass` parser/graph family has checked-in query-level
+proof across entity resolve/context, graph-backed language-query, code search,
+relationships, dead-code, complexity, call-chain, content fallback, semantic
+enrichment, and repository story surfaces, with the MCP dispatch mapping all
+registered tools to HTTP API routes.
 
-That means the branch is structurally migrated off Python, but it is not yet
-honest to call the rewrite feature-for-feature parity complete.
+That means the branch is structurally migrated off Python and the query
+infrastructure is complete, but Kotlin and PHP long-tail call families still
+need their remaining receiver/type-inference proof closed before the rewrite
+can be called feature-for-feature parity complete.
 
 ## Verification Evidence
 
@@ -109,12 +114,15 @@ capabilities in the checked-in language pages:
 - JSON: generic JSON intentionally remains partial
 - SQL/dbt: Python-era feature parity is met, but validation maturity is still narrower than the final desired bar because broader real-repo and compose-backed proof remains to be expanded
 
-The parser-family audit currently groups the remaining work into these high
-leverage buckets:
+The IaC validation sweep is now backed by current evidence: Terraform,
+Terragrunt, Kubernetes, ArgoCD, CloudFormation, Kustomize, and SQL/dbt rows
+all pass their focused parser, relationship, content, and query tests. The
+API/MCP query surfacing infrastructure is also now parity-complete with
+checked-in proof across all `pass` parser/graph families.
 
-- shared YAML/IaC validation sweep for Kubernetes, ArgoCD, CloudFormation, and Kustomize
-- shared HCL closure for Terraform and Terragrunt
-- single-family graph promotions for Kotlin and PHP
+The remaining parity work is concentrated in:
+
+- single-family graph promotions for Kotlin and PHP long-tail receiver/call proof
 
 ## What Counts As Parity Complete
 

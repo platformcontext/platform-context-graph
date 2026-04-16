@@ -22,7 +22,7 @@ the old Python platform feature for feature for that surface.
 | Runtime ownership | `pass` | Long-running and one-shot services are Go-owned end to end | keep Go-only ownership intact |
 | Deployment ownership | `pass` | Dockerfile, Compose, and Helm run the Go platform | keep docs and validation aligned |
 | Python normal-path ownership | `pass` | No normal-path Python runtime code remains | do not reintroduce mixed-runtime ownership |
-| Feature-for-feature parity | `partial` | Multiple parser, graph, query, and operator gaps remain | close all rows below or explicitly bound them |
+| Feature-for-feature parity | `partial` | Kotlin and PHP long-tail receiver/call proof remains partial; documentation alignment rows remain open | close all rows below or explicitly bound them |
 
 ## Operator And Runtime Contract Matrix
 
@@ -68,7 +68,7 @@ the old Python platform feature for feature for that surface.
 
 | Workstream | Status | Gap now | Done means | Validation gate | Recommended split |
 | --- | --- | --- | --- | --- | --- |
-| API/MCP query surfacing | `partial` | some newly parsed semantics are not exposed through normal graph/story/context paths | each parity feature has a normal query path or an explicit non-goal | API tests, MCP proof, compose proof | pair with each feature wave |
+| API/MCP query surfacing | `pass` | every `pass` parser/graph family now has checked-in query-level proof across entity resolve/context, graph-backed `code/language-query`, `code/relationships`, `code/search`, `code/dead-code`, `code/complexity`, `code/call-chain`, content fallback, semantic enrichment (summaries, profiles, stories), and repository story surfaces; the MCP dispatch maps all 37 registered tools 1:1 to HTTP API routes; the OpenAPI spec covers all public routes; the remaining Kotlin and PHP query-surface gaps are tracked in their own parser/graph rows, not this row | keep query proof aligned as parser rows close | API tests, MCP proof | validation sweep only |
 | Language pages | `partial` | many pages still mark required features `partial` or `unsupported` | pages match implementation truth with no stale parity claims | docs build | update alongside each wave |
 | Support maturity matrix | `partial` | matrix is coarser than the actual parity gap inventory | matrix and parity audit do not contradict each other | docs build | final sweep |
 | Roadmap and architecture docs | `partial` | now mostly truthful, but must be kept in sync as rows close | current-state docs fully match branch truth | docs build | final sweep |
