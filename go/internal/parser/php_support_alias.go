@@ -86,8 +86,16 @@ func inferPHPReferenceType(
 		return ""
 	}
 
-	if matches := phpNewCallPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
-		return normalizePHPImportedTypeName(matches[1], importAliases)
+	if matches := phpNewCallPattern.FindStringSubmatch(trimmed); len(matches) == 2 && !strings.Contains(trimmed, "->") && !strings.Contains(trimmed, "::") {
+		normalized := normalizePHPImportedTypeName(matches[1], importAliases)
+		switch normalized {
+		case "self", "static":
+			return classContext
+		case "parent":
+			return ""
+		default:
+			return normalized
+		}
 	}
 
 	if inferred := inferPHPFunctionCallType(trimmed, functionReturnTypes, importAliases); inferred != "" {
