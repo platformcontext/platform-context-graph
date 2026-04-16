@@ -58,5 +58,10 @@ The current accepted ADR set establishes the rewrite baseline:
   user management or OAuth design is intentionally deferred until hosted or
   multi-tenant requirements are real.
 
+- [Cross-Phase EntityNotFound Race](2026-04-16-cross-phase-entity-not-found-race.md)
+  documents the within-generation race between projector canonical writes and
+  reducer materialization, analyzes root causes (non-atomic phases, missing
+  generation filters), and evaluates seven fix options.
+
 Read these records together. They are meant to remove ambiguity before new
 collector or runtime work begins.
