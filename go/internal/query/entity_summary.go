@@ -77,6 +77,11 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 			}
 		}
 		return fmt.Sprintf("%s %s is annotated as %s.", label, name, typeName)
+	case "Module":
+		docstring, _ := metadata["docstring"].(string)
+		if docstring != "" {
+			return fmt.Sprintf("%s %s is documented as %q.", label, name, docstring)
+		}
 	case "TerraformBlock":
 		requiredProviders, _ := metadata["required_providers"].(string)
 		if requiredProviders == "" {

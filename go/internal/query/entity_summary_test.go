@@ -60,6 +60,24 @@ func TestBuildEntitySemanticSummaryPythonDecoratedClass(t *testing.T) {
 	}
 }
 
+func TestBuildEntitySemanticSummaryPythonModuleDocstring(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Module"},
+		"name":   "module_docstring",
+		"metadata": map[string]any{
+			"docstring": "Utilities for payments.",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Module module_docstring is documented as \"Utilities for payments.\"."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildEntitySemanticSummaryPythonFunctionTypeAnnotations(t *testing.T) {
 	t.Parallel()
 

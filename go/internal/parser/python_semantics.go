@@ -221,6 +221,13 @@ func pythonDocstring(node *tree_sitter.Node, source []byte) string {
 
 	body := node.ChildByFieldName("body")
 	if body == nil {
+		if node.Kind() == "module" {
+			body = node
+		} else {
+			return ""
+		}
+	}
+	if body == nil {
 		return ""
 	}
 

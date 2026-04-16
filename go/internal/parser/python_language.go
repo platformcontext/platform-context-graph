@@ -50,9 +50,23 @@ func (e *Engine) parsePython(
 	defer tree.Close()
 
 	payload := basePayload(path, "python", isDependency)
+	payload["modules"] = []map[string]any{}
 	payload["type_annotations"] = []map[string]any{}
 	root := tree.RootNode()
 	scope := options.normalizedVariableScope()
+	if docstring := pythonDocstring(root, source); docstring != "" {
+		moduleName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		if moduleName == "" {
+			moduleName = filepath.Base(path)
+		}
+		appendBucket(payload, "modules", map[string]any{
+			"name":        moduleName,
+			"line_number": 1,
+			"end_line":    1,
+			"lang":        "python",
+			"docstring":   docstring,
+		})
+	}
 
 	walkNamed(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
@@ -162,6 +176,7 @@ func (e *Engine) parsePython(
 
 	sortNamedBucket(payload, "functions")
 	sortNamedBucket(payload, "classes")
+	sortNamedBucket(payload, "modules")
 	sortNamedBucket(payload, "variables")
 	sortNamedBucket(payload, "imports")
 	sortNamedBucket(payload, "function_calls")
@@ -177,7 +192,7 @@ func (e *Engine) preScanPython(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	names := collectBucketNames(payload, "functions", "classes")
+	names := collectBucketNames(payload, "functions", "classes", "modules")
 	slices.Sort(names)
 	return names, nil
 }

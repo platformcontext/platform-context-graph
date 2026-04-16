@@ -110,6 +110,21 @@ func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasComponentAndF
 				"method_kind":   "getter",
 			},
 		},
+		{
+			FactKind: "content_entity",
+			SourceRef: facts.Ref{
+				SourceURI: "/repo/src/module_docstring.py",
+			},
+			Payload: map[string]any{
+				"repo_id":       "repo-1",
+				"entity_id":     "module-1",
+				"relative_path": "src/module_docstring.py",
+				"entity_type":   "Module",
+				"entity_name":   "module_docstring",
+				"language":      "python",
+				"docstring":     "Utilities for payments.",
+			},
+		},
 	}
 
 	repoIDs, rows := ExtractSemanticEntityRows(envelopes)
@@ -117,7 +132,7 @@ func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasComponentAndF
 	if got, want := repoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("ExtractSemanticEntityRows() repoIDs = %v, want %v", got, want)
 	}
-	if got, want := len(rows), 5; got != want {
+	if got, want := len(rows), 6; got != want {
 		t.Fatalf("ExtractSemanticEntityRows() rows = %d, want %d", got, want)
 	}
 
@@ -189,6 +204,14 @@ func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasComponentAndF
 	}
 	if got, want := jsFunction.Metadata["method_kind"], "getter"; got != want {
 		t.Fatalf("Function.Metadata[method_kind] = %v, want %v", got, want)
+	}
+
+	moduleRow := rowsByType["Module"]
+	if moduleRow.EntityType != "Module" {
+		t.Fatalf("Module row missing")
+	}
+	if got, want := moduleRow.Metadata["docstring"], "Utilities for payments."; got != want {
+		t.Fatalf("Module.Metadata[docstring] = %v, want %v", got, want)
 	}
 }
 

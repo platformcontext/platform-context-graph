@@ -17,6 +17,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
 | Functions | `functions` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
 | Classes | `classes` | supported | `classes` | `name, line_number` | `node:Class` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
+| Module docstrings | `module-docstrings` | supported | `modules` | `name, line_number, docstring` | `node:Module` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonModuleDocstringEmitsModuleMetadata`, `go/internal/reducer/semantic_entity_materialization_test.go::TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasComponentAndFunctionFacts`, `go/internal/query/entity_summary_test.go::TestBuildEntitySemanticSummaryPythonModuleDocstring`, `go/internal/query/entity_story_test.go::TestGetEntityContextUsesGraphPythonModuleDocstringWithoutContent` | Compose-backed fixture verification | Python module docstrings now materialize as first-class `Module` entities on the Go parser/reducer/query path, and graph-backed query/context/story surfaces promote them as `documented_module` when the graph row already carries the docstring. |
 | Imports | `imports` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
 | Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
@@ -76,7 +77,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     dedicated `python_semantics` bundle for structured consumers alongside
     `semantic_profile`; that bundle now carries the promoted `surface_kind`
     and ordered `signals` for graph-backed Python rows as well as the raw
-    decorator, async, lambda, metaclass, and type-annotation fields.
+    decorator, async, lambda, metaclass, and type-annotation fields. Python
+    module docstrings now surface as `documented_module` when the graph row
+    already carries the docstring.
   - Identifier- and attribute-assigned lambdas now materialize as Python
     function entities with `semantic_kind=lambda`, and the normal
     semantic/profile/story surfaces promote them as `lambda_function` and
@@ -92,6 +95,6 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 
 ## Known Limitations
-- Broader graph-first modeling beyond the current function, class, and
-  type-annotation surfaces remains partial and is tracked in the branch-level
-  parity matrix.
+- Broader graph-first modeling beyond the current function, class, module,
+  and type-annotation surfaces remains partial and is tracked in the
+  branch-level parity matrix.

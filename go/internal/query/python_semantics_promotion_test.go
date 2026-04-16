@@ -99,6 +99,14 @@ func TestPythonSemanticProfileFromMetadata(t *testing.T) {
 			wantKind: "documented_class",
 		},
 		{
+			name:       "module with docstring only",
+			entityType: "Module",
+			metadata: map[string]any{
+				"docstring": "Utilities for payments.",
+			},
+			wantKind: "documented_module",
+		},
+		{
 			name:       "function with docstring only",
 			entityType: "Function",
 			metadata: map[string]any{

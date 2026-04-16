@@ -186,6 +186,8 @@ func (p PythonSemanticProfile) SurfaceKind() string {
 		return "return_type_annotation"
 	case p.TypeAnnotation:
 		return "type_annotation"
+	case p.EntityType == "Module" && p.Docstring != "":
+		return "documented_module"
 	case p.EntityType == "Class" && p.Docstring != "":
 		return "documented_class"
 	case p.EntityType == "Function" && p.Docstring != "":
