@@ -18,6 +18,9 @@ var (
 	kotlinFunctionCallAssignPattern = regexp.MustCompile(
 		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\([^()]*\)\s*$`,
 	)
+	kotlinLazyDelegatedAssignPattern = regexp.MustCompile(
+		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s+by\s+lazy(?:\s*\([^)]*\))?\s*\{\s*(.+?)\s*\}\s*$`,
+	)
 	kotlinConstructorCallPattern = regexp.MustCompile(`\b([A-Z][A-Za-z_]\w*)\s*\(`)
 )
 
@@ -135,6 +138,18 @@ func kotlinInferAssignedVariableType(
 		}
 	case kotlinAliasAssignPattern.MatchString(trimmed):
 		assignMatches := kotlinAliasAssignPattern.FindStringSubmatch(trimmed)
+		if len(assignMatches) == 3 && assignMatches[1] == name {
+			return kotlinInferReceiverType(
+				assignMatches[2],
+				localVariableTypes[functionContext],
+				classPropertyTypes,
+				classContext,
+				packageName,
+				functionReturnTypes,
+			)
+		}
+	case kotlinLazyDelegatedAssignPattern.MatchString(trimmed):
+		assignMatches := kotlinLazyDelegatedAssignPattern.FindStringSubmatch(trimmed)
 		if len(assignMatches) == 3 && assignMatches[1] == name {
 			return kotlinInferReceiverType(
 				assignMatches[2],
