@@ -140,9 +140,13 @@ func streamFacts(
 	}
 	snapshot.ContentEntities = nil
 
-	// Workload identity fact
+	// Reducer follow-up facts — trigger downstream materialization domains.
 	ch <- workloadIdentityFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
+	ch <- workloadMaterializationFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
 	ch <- codeCallMaterializationFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
+	ch <- deploymentMappingFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
+	ch <- sqlRelationshipMaterializationFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
+	ch <- inheritanceMaterializationFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
 }
 
 // snapshotFreshnessHint computes a deterministic hash from file digests and
@@ -398,6 +402,106 @@ func codeCallMaterializationFactEnvelope(
 		generationID,
 		observedAt,
 		"shared_followup:"+repoID+":code_call_materialization",
+		payload,
+		repoPath,
+	)
+}
+
+func workloadMaterializationFactEnvelope(
+	repoPath string,
+	repoID string,
+	scopeID string,
+	generationID string,
+	observedAt time.Time,
+) facts.Envelope {
+	payload := map[string]any{
+		"reducer_domain": "workload_materialization",
+		"entity_key":     "workload:" + filepath.Base(repoPath),
+		"reason":         "repository snapshot emitted workload materialization follow-up",
+		"repo_id":        repoID,
+	}
+
+	return factEnvelope(
+		"shared_followup",
+		scopeID,
+		generationID,
+		observedAt,
+		"shared_followup:"+repoID+":workload_materialization",
+		payload,
+		repoPath,
+	)
+}
+
+func deploymentMappingFactEnvelope(
+	repoPath string,
+	repoID string,
+	scopeID string,
+	generationID string,
+	observedAt time.Time,
+) facts.Envelope {
+	payload := map[string]any{
+		"reducer_domain": "deployment_mapping",
+		"entity_key":     "deployment:" + filepath.Base(repoPath),
+		"reason":         "repository snapshot emitted deployment mapping follow-up",
+		"repo_id":        repoID,
+	}
+
+	return factEnvelope(
+		"shared_followup",
+		scopeID,
+		generationID,
+		observedAt,
+		"shared_followup:"+repoID+":deployment_mapping",
+		payload,
+		repoPath,
+	)
+}
+
+func sqlRelationshipMaterializationFactEnvelope(
+	repoPath string,
+	repoID string,
+	scopeID string,
+	generationID string,
+	observedAt time.Time,
+) facts.Envelope {
+	payload := map[string]any{
+		"reducer_domain": "sql_relationship_materialization",
+		"entity_key":     "sql:" + filepath.Base(repoPath),
+		"reason":         "repository snapshot emitted SQL relationship materialization follow-up",
+		"repo_id":        repoID,
+	}
+
+	return factEnvelope(
+		"shared_followup",
+		scopeID,
+		generationID,
+		observedAt,
+		"shared_followup:"+repoID+":sql_relationship_materialization",
+		payload,
+		repoPath,
+	)
+}
+
+func inheritanceMaterializationFactEnvelope(
+	repoPath string,
+	repoID string,
+	scopeID string,
+	generationID string,
+	observedAt time.Time,
+) facts.Envelope {
+	payload := map[string]any{
+		"reducer_domain": "inheritance_materialization",
+		"entity_key":     "inheritance:" + filepath.Base(repoPath),
+		"reason":         "repository snapshot emitted inheritance materialization follow-up",
+		"repo_id":        repoID,
+	}
+
+	return factEnvelope(
+		"shared_followup",
+		scopeID,
+		generationID,
+		observedAt,
+		"shared_followup:"+repoID+":inheritance_materialization",
 		payload,
 		repoPath,
 	)

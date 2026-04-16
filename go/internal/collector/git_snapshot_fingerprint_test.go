@@ -182,8 +182,8 @@ func TestStreamFactsReReadsBodyFromDisk(t *testing.T) {
 	collected := buildStreamingGeneration(repoPath, repo, "run-1", observedAt, snapshot, false)
 	allFacts := drainFactChannel(collected.Facts)
 
-	// Facts: 1 repo + 1 file + 1 content + 1 entity + 2 followups = 6
-	if got, want := len(allFacts), 6; got != want {
+	// Facts: 1 repo + 1 file + 1 content + 1 entity + 6 followups = 10
+	if got, want := len(allFacts), 10; got != want {
 		t.Fatalf("fact count = %d, want %d", got, want)
 	}
 
@@ -228,8 +228,8 @@ func TestStreamFactsSkipsMissingFile(t *testing.T) {
 	collected := buildStreamingGeneration(repoPath, repo, "run-1", observedAt, snapshot, false)
 	allFacts := drainFactChannel(collected.Facts)
 
-	// With missing file: 1 repo + 1 file + 0 content (skipped) + 0 entities + 2 followups = 4
-	if got, want := len(allFacts), 4; got != want {
+	// With missing file: 1 repo + 1 file + 0 content (skipped) + 0 entities + 6 followups = 8
+	if got, want := len(allFacts), 8; got != want {
 		t.Fatalf("fact count = %d, want %d (missing file should be skipped)", got, want)
 	}
 

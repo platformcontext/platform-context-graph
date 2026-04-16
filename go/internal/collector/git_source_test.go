@@ -116,16 +116,16 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 	var fullFacts []facts.Envelope
 	var emptyFacts []facts.Envelope
 	switch {
-	case len(facts1) == 6 && len(facts2) == 3:
+	case len(facts1) == 10 && len(facts2) == 7:
 		fullCollected = collected1
 		fullFacts = facts1
 		emptyFacts = facts2
-	case len(facts1) == 3 && len(facts2) == 6:
+	case len(facts1) == 7 && len(facts2) == 10:
 		fullCollected = collected2
 		fullFacts = facts2
 		emptyFacts = facts1
 	default:
-		t.Fatalf("unexpected fact counts: %d and %d, want 6 and 3", len(facts1), len(facts2))
+		t.Fatalf("unexpected fact counts: %d and %d, want 10 and 7", len(facts1), len(facts2))
 	}
 
 	// Validate common scope/generation fields on the full repo.
@@ -144,6 +144,10 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		"file",
 		"content",
 		"content_entity",
+		"shared_followup",
+		"shared_followup",
+		"shared_followup",
+		"shared_followup",
 		"shared_followup",
 		"shared_followup",
 	}
@@ -191,26 +195,33 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		t.Fatalf("entity fact entity_metadata[docstring] = %#v, want %#v", got, want)
 	}
 
-	sharedFollowupKinds := []string{emptyFacts[1].FactKind, emptyFacts[2].FactKind}
-	if sharedFollowupKinds[0] != "shared_followup" || sharedFollowupKinds[1] != "shared_followup" {
-		t.Fatalf("empty repo followup kinds = %v, want both shared_followup", sharedFollowupKinds)
+	for _, fact := range emptyFacts[1:] {
+		if fact.FactKind != "shared_followup" {
+			t.Fatalf("empty repo followup kind = %q, want shared_followup", fact.FactKind)
+		}
 	}
-	followupDomains := make(map[string]struct{}, 2)
+	followupDomains := make(map[string]struct{}, len(emptyFacts)-1)
 	for _, fact := range emptyFacts[1:] {
 		domain, _ := fact.Payload["reducer_domain"].(string)
 		if domain != "" {
 			followupDomains[domain] = struct{}{}
 		}
 	}
-	if _, ok := followupDomains["workload_identity"]; !ok {
-		t.Fatalf("empty repo followups missing workload_identity domain: %#v", emptyFacts[1:])
-	}
-	if _, ok := followupDomains["code_call_materialization"]; !ok {
-		t.Fatalf("empty repo followups missing code_call_materialization domain: %#v", emptyFacts[1:])
+	for _, wantDomain := range []string{
+		"workload_identity",
+		"workload_materialization",
+		"code_call_materialization",
+		"deployment_mapping",
+		"sql_relationship_materialization",
+		"inheritance_materialization",
+	} {
+		if _, ok := followupDomains[wantDomain]; !ok {
+			t.Fatalf("empty repo followups missing %s domain: %#v", wantDomain, emptyFacts[1:])
+		}
 	}
 
-	// Validate empty repo has repo + workload/code-call followups.
-	if got, want := len(emptyFacts), 3; got != want {
+	// Validate empty repo has repo + 6 followups.
+	if got, want := len(emptyFacts), 7; got != want {
 		t.Fatalf("len(empty facts) = %d, want %d", got, want)
 	}
 
