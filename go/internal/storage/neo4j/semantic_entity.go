@@ -223,6 +223,7 @@ SET n.id = row.entity_id,
     n.impl_context = row.impl_context,
     n.docstring = row.docstring,
     n.method_kind = row.method_kind,
+    n.constructor_kind = row.constructor_kind,
     n.annotation_kind = row.annotation_kind,
     n.context = row.context,
     n.type_annotation_count = row.type_annotation_count,
@@ -455,6 +456,9 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 		if methodKind := semanticMetadataString(row.Metadata, "method_kind"); methodKind != "" {
 			rowMap["method_kind"] = methodKind
+		}
+		if constructorKind := semanticMetadataString(row.Metadata, "constructor_kind"); constructorKind != "" {
+			rowMap["constructor_kind"] = constructorKind
 		}
 		if annotationKind := semanticMetadataString(row.Metadata, "annotation_kind"); annotationKind != "" {
 			rowMap["annotation_kind"] = annotationKind
