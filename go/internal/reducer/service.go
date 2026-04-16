@@ -61,9 +61,9 @@ type Service struct {
 	SharedProjectionRunner *SharedProjectionRunner
 
 	// Telemetry fields (optional)
-	Tracer      trace.Tracer
-	Instruments *telemetry.Instruments
-	Logger      *slog.Logger
+	Tracer         trace.Tracer
+	Instruments    *telemetry.Instruments
+	Logger         *slog.Logger
 	Workers        int // concurrent worker count; 0 or 1 means sequential
 	BatchClaimSize int // items per ClaimBatch call; 0 uses default (Workers * 4, max 64)
 }
@@ -295,6 +295,7 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 	}
 
 	if err := s.WorkSink.Ack(ctx, intent, result); err != nil {
+		s.recordReducerResult(ctx, intent, duration, "ack_failed", workerID, err)
 		return fmt.Errorf("ack reducer work: %w", err)
 	}
 
@@ -306,6 +307,7 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 	if s.Instruments != nil {
 		attrs := metric.WithAttributes(
 			telemetry.AttrDomain(string(intent.Domain)),
+			attribute.String("queue", "reducer"),
 			attribute.String("status", status),
 		)
 		s.Instruments.ReducerRunDuration.Record(ctx, duration, metric.WithAttributes(
@@ -324,17 +326,24 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 		for _, a := range domainAttrs {
 			logAttrs = append(logAttrs, a)
 		}
+		logAttrs = append(logAttrs, slog.String("queue", "reducer"))
 		logAttrs = append(logAttrs, slog.String("intent_id", intent.IntentID))
 		logAttrs = append(logAttrs, slog.String("status", status))
 		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
 		logAttrs = append(logAttrs, slog.Int("worker_id", workerID))
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseReduction))
-		if status == "failed" {
-			logAttrs = append(logAttrs, telemetry.FailureClassAttr("reducer_failure"))
+		if status == "failed" || status == "ack_failed" {
+			failureClass := "reducer_failure"
+			message := "reducer execution failed"
+			if status == "ack_failed" {
+				failureClass = "ack_failure"
+				message = "reducer ack failed"
+			}
+			logAttrs = append(logAttrs, telemetry.FailureClassAttr(failureClass))
 			if execErr != nil {
 				logAttrs = append(logAttrs, slog.String("error", execErr.Error()))
 			}
-			s.Logger.ErrorContext(ctx, "reducer execution failed", logAttrs...)
+			s.Logger.ErrorContext(ctx, message, logAttrs...)
 		} else {
 			s.Logger.InfoContext(ctx, "reducer execution succeeded", logAttrs...)
 		}

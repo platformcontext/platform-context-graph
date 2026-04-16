@@ -223,6 +223,7 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 	}
 
 	if err := s.WorkSink.Ack(ctx, work, result); err != nil {
+		s.recordProjectionResult(ctx, work, start, "ack_failed", len(factsForGeneration), err, workerID)
 		return fmt.Errorf("ack projector work: %w", err)
 	}
 
@@ -239,6 +240,7 @@ func (s Service) recordProjectionResult(ctx context.Context, work ScopeGeneratio
 		))
 		s.Instruments.ProjectionsCompleted.Add(ctx, 1, metric.WithAttributes(
 			telemetry.AttrScopeID(work.Scope.ScopeID),
+			attribute.String("queue", "projector"),
 			attribute.String("status", status),
 		))
 	}
@@ -249,6 +251,7 @@ func (s Service) recordProjectionResult(ctx context.Context, work ScopeGeneratio
 		for _, a := range scopeAttrs {
 			logAttrs = append(logAttrs, a)
 		}
+		logAttrs = append(logAttrs, slog.String("queue", "projector"))
 		logAttrs = append(logAttrs, slog.String("status", status))
 		logAttrs = append(logAttrs, slog.Int("fact_count", factCount))
 		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
@@ -256,8 +259,14 @@ func (s Service) recordProjectionResult(ctx context.Context, work ScopeGeneratio
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseProjection))
 		if err != nil {
 			logAttrs = append(logAttrs, slog.String("error", err.Error()))
-			logAttrs = append(logAttrs, telemetry.FailureClassAttr("projection_failure"))
-			s.Logger.ErrorContext(ctx, "projection failed", logAttrs...)
+			failureClass := "projection_failure"
+			message := "projection failed"
+			if status == "ack_failed" {
+				failureClass = "ack_failure"
+				message = "projection ack failed"
+			}
+			logAttrs = append(logAttrs, telemetry.FailureClassAttr(failureClass))
+			s.Logger.ErrorContext(ctx, message, logAttrs...)
 		} else {
 			s.Logger.InfoContext(ctx, "projection succeeded", logAttrs...)
 		}

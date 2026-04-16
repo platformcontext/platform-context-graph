@@ -205,13 +205,14 @@ type stubReducerWorkSink struct {
 	ackCalls   int
 	failCalls  int
 	failedWith error
+	ackErr     error
 }
 
 func (s *stubReducerWorkSink) Ack(context.Context, Intent, Result) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ackCalls++
-	return nil
+	return s.ackErr
 }
 
 func (s *stubReducerWorkSink) Fail(_ context.Context, _ Intent, err error) error {
