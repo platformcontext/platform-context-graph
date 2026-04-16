@@ -131,7 +131,20 @@ inputs = yamldecode(file("${get_repo_root()}/config/runtime.yaml"))
 locals {
   rendered = templatefile("${path.module}/templates/runtime.json", {})
 }
+
+module "service" {
+  source = "./modules/service"
+}
 `,
+		},
+		{
+			RelativePath: "env/prod/terraform.tfvars",
+			Content: `app_repo = "payments-service"
+`,
+		},
+		{
+			RelativePath: "env/prod/terraform.tfvars.json",
+			Content:      `{"app_repo":"payments-service"}`,
 		},
 	})
 	if got == nil {
@@ -143,6 +156,9 @@ locals {
 		"buildspec.yaml",
 		"config/runtime.yaml",
 		"env.hcl",
+		"env/prod/terraform.tfvars",
+		"env/prod/terraform.tfvars.json",
+		"modules/service",
 		"root.hcl",
 		"templates/runtime.json",
 	}

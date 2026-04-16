@@ -511,9 +511,13 @@ Go-backed sources are:
   config references
 - local Terraform and Terragrunt `file(...)` / `templatefile(...)` config
   assets when the path is repo-local and not a remote module source
+- Terraform `*.tfvars` and `*.tfvars.json` files on the normal HCL path
+- local Terraform `module.source = "./..."` style module-asset paths when the
+  source is repo-local and not a registry or remote module ref
 
 Broader Terraform and Terragrunt local asset/config-file surfacing remains a
-separate parity lane.
+separate parity lane for unresolved helper forms and any path that cannot be
+proven exactly from the checked-in source.
 
 ### Story Ordering
 

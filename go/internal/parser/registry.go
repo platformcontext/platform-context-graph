@@ -114,6 +114,11 @@ func (r Registry) LookupByExtension(extension string) (Definition, bool) {
 // LookupByPath returns the definition registered for one file path.
 func (r Registry) LookupByPath(path string) (Definition, bool) {
 	base := strings.ToLower(filepath.Base(path))
+	if strings.HasSuffix(base, ".tfvars.json") {
+		if definition, ok := r.byKey["hcl"]; ok {
+			return cloneDefinition(definition), true
+		}
+	}
 	if definition, ok := r.byExactName[base]; ok {
 		return cloneDefinition(definition), true
 	}

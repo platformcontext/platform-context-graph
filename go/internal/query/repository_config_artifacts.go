@@ -16,6 +16,7 @@ var (
 	terragruntReadConfigPattern           = regexp.MustCompile(`(?i)read_terragrunt_config\((?:find_in_parent_folders\()?"([^"]+)"`)
 	terragruntIncludePathPattern          = regexp.MustCompile(`(?i)\bpath\s*=\s*find_in_parent_folders\("([^"]+)"\)`)
 	localFileFunctionPattern              = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(\s*"([^"]+)"`)
+	localTerraformModuleSourcePattern     = regexp.MustCompile(`(?is)module\s+"[^"]+"\s*\{[^}]*?\bsource\b\s*=\s*"((?:\./|\.\./)[^"]+)"`)
 	ssmConfigPathPattern                  = regexp.MustCompile(`(?i)((?:/(?:configd|api)/[A-Za-z0-9._*/-]+))`)
 	ssmParameterARNPattern                = regexp.MustCompile(`(?i):parameter((?:/(?:configd|api)/[A-Za-z0-9._*/-]+))`)
 )
@@ -207,6 +208,8 @@ func isConfigArtifactCandidate(file FileContent) bool {
 		return true
 	case lowerBase == "terragrunt.hcl":
 		return true
+	case strings.HasSuffix(lowerBase, ".tfvars"), strings.HasSuffix(lowerBase, ".tfvars.json"):
+		return true
 	case strings.HasSuffix(lowerBase, ".tf"), strings.HasSuffix(lowerBase, ".hcl"):
 		return true
 	case strings.HasPrefix(lowerBase, "docker-compose"):
@@ -222,6 +225,15 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 	rows := make([]map[string]any, 0)
 	for _, file := range files {
 		lowerBase := strings.ToLower(path.Base(file.RelativePath))
+		if strings.HasSuffix(lowerBase, ".tfvars") || strings.HasSuffix(lowerBase, ".tfvars.json") {
+			rows = append(rows, map[string]any{
+				"path":          cleanRepositoryRelativePath(file.RelativePath),
+				"source_repo":   repoName,
+				"relative_path": file.RelativePath,
+				"evidence_kind": "terraform_var_file",
+			})
+			continue
+		}
 		if lowerBase != "terragrunt.hcl" && !strings.HasSuffix(lowerBase, ".tf") && !strings.HasSuffix(lowerBase, ".hcl") {
 			continue
 		}
@@ -274,6 +286,18 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 				"source_repo":   repoName,
 				"relative_path": file.RelativePath,
 				"evidence_kind": "local_config_asset",
+			})
+		}
+		for _, match := range localTerraformModuleSourcePattern.FindAllStringSubmatch(file.Content, -1) {
+			configPath := normalizeLocalConfigAssetPath(match)
+			if configPath == "" {
+				continue
+			}
+			rows = append(rows, map[string]any{
+				"path":          configPath,
+				"source_repo":   repoName,
+				"relative_path": file.RelativePath,
+				"evidence_kind": "terraform_module_source_path",
 			})
 		}
 	}
