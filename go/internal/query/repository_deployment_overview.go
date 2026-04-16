@@ -59,11 +59,18 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		if path == "" || controllerKind == "" {
 			continue
 		}
-		paths = append(paths, map[string]any{
+		entry := map[string]any{
 			"path":            path,
 			"kind":            "controller_artifact",
 			"controller_kind": controllerKind,
-		})
+		}
+		copyStringSliceField(entry, row, "shared_libraries")
+		copyStringSliceField(entry, row, "pipeline_calls")
+		copyStringSliceField(entry, row, "entry_points")
+		if hints := mapSliceValue(row, "ansible_playbook_hints"); len(hints) > 0 {
+			entry["ansible_playbook_hints"] = hints
+		}
+		paths = append(paths, entry)
 	}
 
 	for _, row := range mapSliceValue(deploymentArtifacts, "deployment_artifacts") {
@@ -232,7 +239,32 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			if path == "" || controllerKind == "" {
 				continue
 			}
-			story = append(story, fmt.Sprintf("Controller delivery paths include %s via %s.", path, controllerKind))
+			details := make([]string, 0, 3)
+			if entryPoints := stringSliceValue(row, "entry_points"); len(entryPoints) > 0 {
+				details = append(details, "entry points "+strings.Join(entryPoints, ", "))
+			}
+			if sharedLibraries := stringSliceValue(row, "shared_libraries"); len(sharedLibraries) > 0 {
+				details = append(details, "shared libraries "+strings.Join(sharedLibraries, ", "))
+			}
+			if pipelineCalls := stringSliceValue(row, "pipeline_calls"); len(pipelineCalls) > 0 {
+				details = append(details, "pipeline calls "+strings.Join(pipelineCalls, ", "))
+			}
+			if hints := mapSliceValue(row, "ansible_playbook_hints"); len(hints) > 0 {
+				playbooks := make([]string, 0, len(hints))
+				for _, hint := range hints {
+					if playbook := strings.TrimSpace(StringVal(hint, "playbook")); playbook != "" {
+						playbooks = append(playbooks, playbook)
+					}
+				}
+				if len(playbooks) > 0 {
+					details = append(details, "ansible playbooks "+strings.Join(playbooks, ", "))
+				}
+			}
+			line := fmt.Sprintf("Controller delivery paths include %s via %s", path, controllerKind)
+			if len(details) > 0 {
+				line += " (" + strings.Join(details, "; ") + ")"
+			}
+			story = append(story, line+".")
 		case "runtime_artifact":
 			path := strings.TrimSpace(StringVal(row, "path"))
 			artifactType := strings.TrimSpace(StringVal(row, "artifact_type"))

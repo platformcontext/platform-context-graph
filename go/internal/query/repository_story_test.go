@@ -180,9 +180,13 @@ func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *test
 			"deployment_artifacts": map[string]any{
 				"controller_artifacts": []map[string]any{
 					{
-						"path":            "Jenkinsfile",
-						"controller_kind": "jenkins_pipeline",
-						"entry_points":    []string{"dist/api.js"},
+						"path":             "Jenkinsfile",
+						"controller_kind":  "jenkins_pipeline",
+						"shared_libraries": []string{"pipelines"},
+						"entry_points":     []string{"dist/api.js"},
+						"ansible_playbook_hints": []map[string]any{
+							{"playbook": "deploy.yml"},
+						},
 					},
 				},
 				"deployment_artifacts": []map[string]any{
@@ -219,7 +223,7 @@ func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *test
 	if len(directStory) != 3 {
 		t.Fatalf("len(direct_story) = %d, want 3", len(directStory))
 	}
-	if got, want := directStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline."; got != want {
+	if got, want := directStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; ansible playbooks deploy.yml)."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
 	if got, want := directStory[1], "Runtime artifacts include docker_compose service api in docker-compose.yaml (build, ports)."; got != want {

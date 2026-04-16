@@ -119,6 +119,9 @@ func TestBuildRepositoryDeploymentOverviewIncludesDeliveryPathsAndWorkflows(t *t
 						"controller_kind":  "jenkins_pipeline",
 						"shared_libraries": []string{"pipelines"},
 						"entry_points":     []string{"dist/api.js"},
+						"ansible_playbook_hints": []map[string]any{
+							{"playbook": "deploy.yml"},
+						},
 					},
 				},
 				"deployment_artifacts": []map[string]any{
@@ -165,6 +168,12 @@ func TestBuildRepositoryDeploymentOverviewIncludesDeliveryPathsAndWorkflows(t *t
 	}
 	if len(topologyStory) != 2 {
 		t.Fatalf("len(topology_story) = %d, want 2", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; ansible playbooks deploy.yml)."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+	if got, want := topologyStory[1], "Runtime artifacts include docker_compose service api in docker-compose.yaml (build, ports)."; got != want {
+		t.Fatalf("topology_story[1] = %q, want %q", got, want)
 	}
 }
 
