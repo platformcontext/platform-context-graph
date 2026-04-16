@@ -49,7 +49,7 @@ class Person(val name: String, val age: Int) {
 			name, _ := function["name"].(string)
 			classContext, _ := function["class_context"].(string)
 			switch {
-			case name == "create" && classContext == "Companion":
+			case name == "create" && classContext == "Person":
 				function["uid"] = "content-entity:kotlin-person-create"
 			case name == "greet" && classContext == "Person":
 				function["uid"] = "content-entity:kotlin-person-greet"

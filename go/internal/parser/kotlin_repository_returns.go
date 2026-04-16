@@ -149,7 +149,7 @@ func kotlinCollectFunctionReturnTypesFromFile(path string, packageName string) (
 			if len(matches) == 2 && strings.TrimSpace(matches[1]) != "" {
 				name = matches[1]
 			}
-			stack = append(stack, scopedContext{kind: "class", name: name, braceDepth: braceDepth + max(1, strings.Count(rawLine, "{"))})
+			stack = append(stack, scopedContext{kind: "companion", name: name, braceDepth: braceDepth + max(1, strings.Count(rawLine, "{"))})
 		}
 		if matches := kotlinInterfacePattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			stack = append(stack, scopedContext{kind: "class", name: matches[1], braceDepth: braceDepth + max(1, strings.Count(rawLine, "{"))})

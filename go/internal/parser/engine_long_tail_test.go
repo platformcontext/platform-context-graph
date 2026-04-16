@@ -148,7 +148,7 @@ func TestDefaultEngineParsePathKotlinFixtures(t *testing.T) {
 	}
 	assertNamedBucketContains(t, classesPayload, "classes", "Point")
 	assertNamedBucketContains(t, classesPayload, "classes", "Companion")
-	assertFunctionWithClassContext(t, classesPayload, "create", "Companion")
+	assertFunctionWithClassContext(t, classesPayload, "create", "Person")
 }
 
 func TestDefaultEngineParsePathSwiftFixtures(t *testing.T) {

@@ -369,7 +369,12 @@ func kotlinInferReceiverSegmentType(
 		return inferredType
 	}
 	if currentClass != "" {
-		return strings.TrimSpace(classPropertyTypes[currentClass][segment])
+		if inferredType := strings.TrimSpace(classPropertyTypes[currentClass][segment]); inferredType != "" {
+			return inferredType
+		}
+	}
+	if kotlinLooksLikeTypeName(segment) {
+		return segment
 	}
 	return ""
 }

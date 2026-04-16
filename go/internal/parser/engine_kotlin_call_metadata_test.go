@@ -310,6 +310,105 @@ class Worker {
 	t.Fatalf("function_calls missing full_name=%q in %#v", "active.info", items)
 }
 
+func TestDefaultEngineParsePathKotlinInfersObjectReceiverTypesForDotCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Usage.kt")
+	writeTestFile(
+		t,
+		filePath,
+		`package comprehensive
+
+object AppConfig {
+    fun isProduction(): Boolean = true
+}
+
+fun usage(): Boolean {
+    return AppConfig.isProduction()
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if fullName != "AppConfig.isProduction" {
+			continue
+		}
+		assertStringFieldValue(t, item, "inferred_obj_type", "AppConfig")
+		return
+	}
+	t.Fatalf("function_calls missing full_name=%q in %#v", "AppConfig.isProduction", items)
+}
+
+func TestDefaultEngineParsePathKotlinInfersCompanionObjectReceiverTypesForDotCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Usage.kt")
+	writeTestFile(
+		t,
+		filePath,
+		`package comprehensive
+
+data class Person(val name: String) {
+    companion object {
+        fun create(name: String): Person = Person(name)
+    }
+}
+
+fun usage(): String {
+    val person = Person.create("Ada")
+    return person.name
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+
+	want := map[string]string{
+		"Person.create": "Person",
+	}
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if wantType, ok := want[fullName]; ok {
+			assertStringFieldValue(t, item, "inferred_obj_type", wantType)
+			delete(want, fullName)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing inferred receiver calls: %#v in %#v", want, items)
+	}
+}
+
 func TestDefaultEngineParsePathKotlinInfersTypedPropertyChainCallsForDotCalls(t *testing.T) {
 	t.Parallel()
 

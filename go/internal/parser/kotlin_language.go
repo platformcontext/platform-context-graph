@@ -135,7 +135,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				"end_line":    lineNumber,
 				"lang":        "kotlin",
 			})
-			stack = append(stack, scopedContext{kind: "class", name: name, braceDepth: braceDepth + max(1, strings.Count(rawLine, "{"))})
+			stack = append(stack, scopedContext{kind: "companion", name: name, braceDepth: braceDepth + max(1, strings.Count(rawLine, "{"))})
 		}
 		if matches := kotlinInterfacePattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
