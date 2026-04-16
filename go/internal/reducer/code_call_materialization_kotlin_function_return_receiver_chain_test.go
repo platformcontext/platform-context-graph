@@ -1074,3 +1074,179 @@ fun usage(): String {
 		t.Fatalf("missing expected callee rows: %#v; rows=%#v", want, rows)
 	}
 }
+
+func TestExtractCodeCallRowsResolvesKotlinParenthesizedCrossFilePackageAwareFunctionReturnReceiverChainsUsingInferredObjectType(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	servicePath := filepath.Join(repoRoot, "src", "main", "kotlin", "com", "example", "api", "Service.kt")
+	factoryPath := filepath.Join(repoRoot, "src", "main", "kotlin", "com", "example", "api", "Factory.kt")
+	factoryHelpersPath := filepath.Join(repoRoot, "src", "main", "kotlin", "com", "example", "factory", "Factories.kt")
+	conflictPath := filepath.Join(repoRoot, "src", "main", "kotlin", "com", "other", "Other.kt")
+	usagePath := filepath.Join(repoRoot, "src", "main", "kotlin", "com", "example", "feature", "module", "Usage.kt")
+	writeFile := func(path string, contents string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q) error = %v, want nil", path, err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v, want nil", path, err)
+		}
+	}
+
+	writeFile(servicePath, `package com.example
+
+class Service {
+    fun info(): String = "ok"
+}
+`)
+	writeFile(factoryPath, `package com.example
+
+class Factory {
+    fun createService(): Service = Service()
+}
+`)
+	writeFile(factoryHelpersPath, `package com.example
+
+fun createFactory(): Factory = Factory()
+`)
+	writeFile(conflictPath, `package com.other
+
+class OtherService {
+    fun info(): String = "wrong"
+}
+
+class OtherFactory {
+    fun createService(): OtherService = OtherService()
+}
+
+fun createFactory(): OtherFactory = OtherFactory()
+`)
+	writeFile(usagePath, `package com.example
+
+fun usage(): String {
+    return (createFactory().createService()).info()
+}
+`)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	servicePayload, err := engine.ParsePath(repoRoot, servicePath, false, parser.Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", servicePath, err)
+	}
+	factoryPayload, err := engine.ParsePath(repoRoot, factoryPath, false, parser.Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", factoryPath, err)
+	}
+	factoryHelpersPayload, err := engine.ParsePath(repoRoot, factoryHelpersPath, false, parser.Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", factoryHelpersPath, err)
+	}
+	usagePayload, err := engine.ParsePath(repoRoot, usagePath, false, parser.Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", usagePath, err)
+	}
+
+	if functions, ok := servicePayload["functions"].([]map[string]any); ok {
+		for _, function := range functions {
+			name, _ := function["name"].(string)
+			classContext, _ := function["class_context"].(string)
+			if name == "info" && classContext == "Service" {
+				function["uid"] = "content-entity:kotlin-service-info"
+			}
+		}
+	}
+	if functions, ok := factoryPayload["functions"].([]map[string]any); ok {
+		for _, function := range functions {
+			name, _ := function["name"].(string)
+			classContext, _ := function["class_context"].(string)
+			if name == "createService" && classContext == "Factory" {
+				function["uid"] = "content-entity:kotlin-factory-create-service"
+			}
+		}
+	}
+	if functions, ok := factoryHelpersPayload["functions"].([]map[string]any); ok {
+		for _, function := range functions {
+			name, _ := function["name"].(string)
+			if name == "createFactory" {
+				function["uid"] = "content-entity:kotlin-create-factory"
+			}
+		}
+	}
+	if functions, ok := usagePayload["functions"].([]map[string]any); ok {
+		for _, function := range functions {
+			name, _ := function["name"].(string)
+			if name == "usage" {
+				function["end_line"] = 6
+				function["uid"] = "content-entity:kotlin-usage"
+			}
+		}
+	}
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-kotlin",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repo-kotlin",
+				"relative_path":    "src/main/kotlin/com/example/feature/module/Usage.kt",
+				"parsed_file_data": usagePayload,
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repo-kotlin",
+				"relative_path":    "src/main/kotlin/com/example/api/Factory.kt",
+				"parsed_file_data": factoryPayload,
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repo-kotlin",
+				"relative_path":    "src/main/kotlin/com/example/api/Service.kt",
+				"parsed_file_data": servicePayload,
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repo-kotlin",
+				"relative_path":    "src/main/kotlin/com/example/factory/Factories.kt",
+				"parsed_file_data": factoryHelpersPayload,
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2; rows=%#v", len(rows), rows)
+	}
+
+	want := map[string]string{
+		"content-entity:kotlin-factory-create-service": "createFactory().createService",
+		"content-entity:kotlin-service-info":           "createFactory().createService().info",
+	}
+	for _, row := range rows {
+		calleeID, _ := row["callee_entity_id"].(string)
+		if expectedFullName, ok := want[calleeID]; ok {
+			if got := row["full_name"]; got != expectedFullName {
+				t.Fatalf("full_name = %#v, want %#v for callee %#v", got, expectedFullName, calleeID)
+			}
+			delete(want, calleeID)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing expected callee rows: %#v; rows=%#v", want, rows)
+	}
+}
