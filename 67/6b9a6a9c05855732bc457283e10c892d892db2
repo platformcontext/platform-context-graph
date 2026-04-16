@@ -1,0 +1,71 @@
+src/platform_context_graph/parsers/capabilities/specs/typescript.yaml
+  f69ed2d84efff435 30,132,137,139-144
+tests/integration/test_language_graph.py
+  f69ed2d84efff435 386,395-405
+tests/unit/parsers/test_typescript_parser.py
+  f69ed2d84efff435 370,372-375,382-385
+docs/docs/languages/typescript.md
+  f69ed2d84efff435 26,43
+src/platform_context_graph/parsers/languages/typescript.py
+  ac011ac8e86374f0 63-71
+  2980d28d5cf34cee 48-62,72-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "676b9a6a9c05855732bc457283e10c892d892db2",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 105,
+      "total_deletions": 105,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "2980d28d5cf34cee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9453-f918-75b3-a2c5-f0bb8376143a",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 26,
+      "total_deletions": 2,
+      "accepted_lines": 34,
+      "overriden_lines": 0
+    },
+    "ac011ac8e86374f0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9453-fe2b-7cb2-aa20-07dc01a474b8",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 2,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    },
+    "f69ed2d84efff435": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9453-f46f-7742-9a7e-970360b4fe67",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 32,
+      "total_deletions": 15,
+      "accepted_lines": 32,
+      "overriden_lines": 0
+    }
+  }
+}
