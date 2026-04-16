@@ -107,6 +107,9 @@ func TestPythonSemanticProfileFromMetadata(t *testing.T) {
 			metadata: map[string]any{
 				"docstring": "Represents a configured logger.",
 			},
+			wantSignals: []PythonSemanticSignal{
+				PythonSemanticSignalDocstring,
+			},
 			wantKind: "documented_class",
 		},
 		{
@@ -115,6 +118,9 @@ func TestPythonSemanticProfileFromMetadata(t *testing.T) {
 			metadata: map[string]any{
 				"docstring": "Utilities for payments.",
 			},
+			wantSignals: []PythonSemanticSignal{
+				PythonSemanticSignalDocstring,
+			},
 			wantKind: "documented_module",
 		},
 		{
@@ -122,6 +128,9 @@ func TestPythonSemanticProfileFromMetadata(t *testing.T) {
 			entityType: "Function",
 			metadata: map[string]any{
 				"docstring": "Handles incoming requests.",
+			},
+			wantSignals: []PythonSemanticSignal{
+				PythonSemanticSignalDocstring,
 			},
 			wantKind: "documented_function",
 		},
@@ -205,8 +214,26 @@ func TestAttachPythonSemanticsClonesResult(t *testing.T) {
 	if !ok {
 		t.Fatalf("python_semantics[signals] type = %T, want []string", semantics["signals"])
 	}
-	if !reflect.DeepEqual(signals, []string{"decorator", "async"}) {
-		t.Fatalf("python_semantics[signals] = %#v, want [decorator async]", signals)
+	if !reflect.DeepEqual(signals, []string{"decorator", "async", "docstring"}) {
+		t.Fatalf("python_semantics[signals] = %#v, want [decorator async docstring]", signals)
+	}
+}
+
+func TestPythonSemanticProfileFromMetadataDocstringSignal(t *testing.T) {
+	t.Parallel()
+
+	profile := PythonSemanticProfileFromMetadata("Module", map[string]any{
+		"docstring": "Utilities for payments.",
+	})
+
+	if !profile.HasSignals() {
+		t.Fatal("HasSignals() = false, want true")
+	}
+	if got, want := profile.PrimarySignal(), PythonSemanticSignalDocstring; got != want {
+		t.Fatalf("PrimarySignal() = %q, want %q", got, want)
+	}
+	if got, want := profile.Signals(), []PythonSemanticSignal{PythonSemanticSignalDocstring}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Signals() = %#v, want %#v", got, want)
 	}
 }
 

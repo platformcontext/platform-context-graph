@@ -565,6 +565,20 @@ func TestGetEntityContextUsesGraphPythonModuleDocstringWithoutContent(t *testing
 	if got, want := profile["docstring"], "Utilities for payments."; got != want {
 		t.Fatalf("semantic_profile[docstring] = %#v, want %#v", got, want)
 	}
+	pythonSemantics, ok := resp["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[python_semantics] type = %T, want map[string]any", resp["python_semantics"])
+	}
+	if got, want := pythonSemantics["surface_kind"], "documented_module"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
+	}
+	signals, ok := pythonSemantics["signals"].([]any)
+	if !ok {
+		t.Fatalf("python_semantics[signals] type = %T, want []any", pythonSemantics["signals"])
+	}
+	if len(signals) != 1 || signals[0] != "docstring" {
+		t.Fatalf("python_semantics[signals] = %#v, want [docstring]", signals)
+	}
 }
 
 func TestGetEntityContextUsesGraphPythonDecoratedClassWithoutContent(t *testing.T) {

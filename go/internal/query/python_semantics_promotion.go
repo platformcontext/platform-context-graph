@@ -20,6 +20,8 @@ const (
 	PythonSemanticSignalLambda PythonSemanticSignal = "lambda"
 	// PythonSemanticSignalMetaclass marks class metaclass ownership.
 	PythonSemanticSignalMetaclass PythonSemanticSignal = "metaclass"
+	// PythonSemanticSignalDocstring marks docstring-only behavior.
+	PythonSemanticSignalDocstring PythonSemanticSignal = "docstring"
 	// PythonSemanticSignalTypeAnnotation marks type annotation behavior.
 	PythonSemanticSignalTypeAnnotation PythonSemanticSignal = "type_annotation"
 )
@@ -164,6 +166,9 @@ func (p PythonSemanticProfile) Signals() []PythonSemanticSignal {
 	}
 	if p.Metaclass != "" {
 		signals = append(signals, PythonSemanticSignalMetaclass)
+	}
+	if p.Docstring != "" {
+		signals = append(signals, PythonSemanticSignalDocstring)
 	}
 	if p.TypeAnnotation {
 		signals = append(signals, PythonSemanticSignalTypeAnnotation)
