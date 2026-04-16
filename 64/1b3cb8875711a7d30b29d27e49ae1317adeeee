@@ -1,0 +1,144 @@
+go/internal/reducer/intent.go
+  1ca5ee6ce936a402 36-41
+go/internal/reducer/sql_relationship_materialization_test.go
+  1ca5ee6ce936a402 1-430
+go/internal/storage/postgres/relationship_schema.go
+  1ca5ee6ce936a402 180-191
+go/cmd/bootstrap-index/main.go
+  1ca5ee6ce936a402 35,55,689
+go/internal/projector/stage_files.go
+  1ca5ee6ce936a402 14-15
+go/cmd/projector/main_test.go
+  1ca5ee6ce936a402 15,17-18,30,56,133-134,136-138
+go/internal/reducer/platform_materialization.go
+  1ca5ee6ce936a402 39-41,46,93-102
+go/internal/storage/neo4j/canonical_node_writer_test.go
+  1ca5ee6ce936a402 1-518
+go/internal/reducer/workload_materializer.go
+  1ca5ee6ce936a402 41-49
+go/internal/storage/neo4j/canonical.go
+  1ca5ee6ce936a402 180-214,217-226,527-551
+go/internal/storage/postgres/proof_domain_harness_test.go
+  1ca5ee6ce936a402 14,18-19,22-24
+go/internal/projector/stage_relationships_test.go
+  1ca5ee6ce936a402 35,39-54,58-59
+go/internal/telemetry/contract_test.go
+  1ca5ee6ce936a402 21-23,50-54
+go/internal/storage/postgres/proof_domain_test.go
+  1ca5ee6ce936a402 145,154-156
+go/cmd/projector/runtime_wiring.go
+  1ca5ee6ce936a402 27,47,54,59-62,66,71,88
+go/internal/storage/postgres/proof_domain_retry_test.go
+  1ca5ee6ce936a402 50,61,92,106
+go/internal/storage/postgres/relationship_store.go
+  1ca5ee6ce936a402 173-213
+go/internal/storage/neo4j/canonical_node_writer.go
+  1ca5ee6ce936a402 1-426
+go/internal/reducer/cross_repo_resolution_test.go
+  1ca5ee6ce936a402 1-410
+go/internal/projector/canonical_builder_test.go
+  1ca5ee6ce936a402 1-915
+go/internal/projector/canonical_builder.go
+  1ca5ee6ce936a402 1-366
+go/cmd/bootstrap-index/wiring.go
+  1ca5ee6ce936a402 72,87-91,116,121,132-136,138-142
+go/cmd/bootstrap-index/main_test.go
+  1ca5ee6ce936a402 42,57,104,133,138,683-688
+go/internal/reducer/workload_identity_test.go
+  1ca5ee6ce936a402 204
+go/internal/reducer/defaults.go
+  1ca5ee6ce936a402 3-8,29-37,41-54,93-103,108,126-135
+go/internal/projector/runtime_retry_test.go
+  1ca5ee6ce936a402 21,25-27,49,52-54,63-64,70-71
+go/internal/projector/canonical.go
+  1ca5ee6ce936a402 1-203
+go/internal/reducer/shared_projection_runner.go
+  1ca5ee6ce936a402 36-37
+go/internal/storage/neo4j/edge_writer.go
+  1ca5ee6ce936a402 100-103,190-215,259-262
+go/internal/reducer/shared_projection_runner_test.go
+  1ca5ee6ce936a402 375-472
+go/internal/projector/stage_relationships.go
+  1ca5ee6ce936a402 10,13-15
+go/internal/reducer/inheritance_materialization_test.go
+  1ca5ee6ce936a402 1-470
+go/internal/reducer/cross_repo_resolution.go
+  1ca5ee6ce936a402 1-256
+go/internal/reducer/platform_materialization_test.go
+  1ca5ee6ce936a402 8-9,203-293
+go/internal/reducer/registry.go
+  1ca5ee6ce936a402 231-260
+go/internal/reducer/defaults_test.go
+  1ca5ee6ce936a402 8,122-123,165-229
+go/internal/projector/runtime_test.go
+  1ca5ee6ce936a402 21,26-28,48-59,107-108,544-545,548-550,585,590-594,614-625,670-671
+go/cmd/ingester/wiring.go
+  1ca5ee6ce936a402 58,71,121,144,194,201-206,210,215,226-230,232-236
+go/internal/projector/runtime.go
+  1ca5ee6ce936a402 22-26,28-33,109-112,115,117-119,122-123,127-128,134,136,196,242-244,246
+go/internal/reducer/inheritance_materialization.go
+  1ca5ee6ce936a402 1-272
+go/internal/reducer/sql_relationship_materialization.go
+  1ca5ee6ce936a402 1-334
+go/internal/reducer/domain.go
+  1ca5ee6ce936a402 17-19
+go/internal/reducer/shared_projection.go
+  1ca5ee6ce936a402 16-17
+go/internal/storage/neo4j/edge_writer_test.go
+  1ca5ee6ce936a402 663-892
+go/internal/telemetry/contract.go
+  1ca5ee6ce936a402 38-40,54-59,93-95,108-112
+go/internal/storage/postgres/proof_domain_support_test.go
+  1ca5ee6ce936a402 405
+go/cmd/reducer/main.go
+  1ca5ee6ce936a402 132-134,142,144-149
+go/internal/projector/canonical_integration_test.go
+  1ca5ee6ce936a402 1-447
+go/cmd/ingester/wiring_test.go
+  1ca5ee6ce936a402 26
+go/cmd/ingester/main_test.go
+  1ca5ee6ce936a402 4,7,16,31-37
+go/cmd/ingester/main.go
+  1ca5ee6ce936a402 69,74,86
+go/internal/telemetry/instruments.go
+  1ca5ee6ce936a402 82-94,410-497,652-666
+go/internal/storage/neo4j/canonical_node_cypher.go
+  1ca5ee6ce936a402 1-134
+go/cmd/projector/main.go
+  1ca5ee6ce936a402 55,60,63
+go/internal/storage/postgres/proof_domain_cloud_asset_test.go
+  1ca5ee6ce936a402 112,121-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "641b3cb8875711a7d30b29d27e49ae1317adeeee",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 9,
+      "total_deletions": 0,
+      "accepted_lines": 6314,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 82,
+      "overriden_lines": 0
+    }
+  }
+}
