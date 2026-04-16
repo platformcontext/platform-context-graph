@@ -173,9 +173,6 @@ func focusedDeploymentStory(lines []string) []string {
 		if trimmed == "" {
 			continue
 		}
-		if strings.HasPrefix(strings.ToLower(trimmed), "shared config") {
-			continue
-		}
 		focused = append(focused, trimmed)
 	}
 	return focused

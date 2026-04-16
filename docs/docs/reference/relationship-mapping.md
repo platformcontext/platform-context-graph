@@ -546,6 +546,15 @@ That order matters. For example, shared config hints should not appear before th
 
 `deployment_story` itself has an internal preference order:
 
+- direct controller and runtime delivery paths first
+- repo-local config provenance next
+- shared config family lines after the direct provenance they summarize
+
+The Go repository `direct_story` no longer strips shared-config family lines
+out of the first-glance narrative. If a repository has both direct delivery
+evidence and shared config families, the direct story now keeps both in order
+instead of hiding the shared-config portion behind a secondary field.
+
 1. workflow- and delivery-path-derived deployment lines
 2. reusable-workflow handoff plus canonical deploy/provision/runtime context when explicit command rows are missing
 3. controller-driven automation lines built from Jenkins or other controllers plus Ansible-style automation evidence

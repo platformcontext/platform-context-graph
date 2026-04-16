@@ -110,7 +110,7 @@ func TestBuildRepositoryStoryResponseIncludesStructuredOverviews(t *testing.T) {
 	}
 }
 
-func TestBuildRepositoryStoryResponseOmitsSharedConfigFromDirectStory(t *testing.T) {
+func TestBuildRepositoryStoryResponseIncludesSharedConfigInDirectStory(t *testing.T) {
 	t.Parallel()
 
 	repo := RepoRef{ID: "repository:payments", Name: "payments"}
@@ -148,19 +148,14 @@ func TestBuildRepositoryStoryResponseOmitsSharedConfigFromDirectStory(t *testing
 	if !ok {
 		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
 	}
-	if len(directStory) != 0 {
-		t.Fatalf("direct_story = %#v, want shared-config line omitted", directStory)
+	if len(directStory) != 1 {
+		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
 	}
-	traceLimitations, ok := deploymentOverview["trace_limitations"].(map[string]any)
-	if !ok {
-		t.Fatalf("trace_limitations type = %T, want map[string]any", deploymentOverview["trace_limitations"])
+	if got, want := directStory[0], "Shared config families span /configd/payments/* across helm-charts, terraform-stack-payments."; got != want {
+		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
-	omittedSections, ok := traceLimitations["omitted_sections"].([]string)
-	if !ok {
-		t.Fatalf("omitted_sections type = %T, want []string", traceLimitations["omitted_sections"])
-	}
-	if len(omittedSections) != 1 || omittedSections[0] != "shared_config_paths" {
-		t.Fatalf("omitted_sections = %#v, want [shared_config_paths]", omittedSections)
+	if _, ok := deploymentOverview["trace_limitations"]; ok {
+		t.Fatalf("trace_limitations = %#v, want omitted", deploymentOverview["trace_limitations"])
 	}
 }
 
@@ -195,6 +190,7 @@ func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *test
 						"artifact_type": "docker_compose",
 						"service_name":  "api",
 						"signals":       []string{"build", "ports"},
+						"build_context": "./",
 					},
 				},
 				"config_paths": []map[string]any{
@@ -220,16 +216,19 @@ func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *test
 	if !ok {
 		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
 	}
-	if len(directStory) != 3 {
-		t.Fatalf("len(direct_story) = %d, want 3", len(directStory))
+	if len(directStory) != 4 {
+		t.Fatalf("len(direct_story) = %d, want 4", len(directStory))
 	}
 	if got, want := directStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; ansible playbooks deploy.yml)."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
-	if got, want := directStory[1], "Runtime artifacts include docker_compose service api in docker-compose.yaml (build, ports)."; got != want {
+	if got, want := directStory[1], "Runtime artifacts include docker_compose service api in docker-compose.yaml built from ./ (build, ports)."; got != want {
 		t.Fatalf("direct_story[1] = %q, want %q", got, want)
 	}
 	if got, want := directStory[2], "Config provenance includes root.hcl from terraform-stack-payments via terragrunt_include_path in env/prod/terragrunt.hcl."; got != want {
 		t.Fatalf("direct_story[2] = %q, want %q", got, want)
+	}
+	if got, want := directStory[3], "Shared config families span /configd/payments/* across helm-charts, terraform-stack-payments."; got != want {
+		t.Fatalf("direct_story[3] = %q, want %q", got, want)
 	}
 }

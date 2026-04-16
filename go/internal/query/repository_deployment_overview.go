@@ -84,6 +84,9 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 			"kind":          "runtime_artifact",
 			"artifact_type": artifactType,
 		}
+		if buildContext := strings.TrimSpace(StringVal(row, "build_context")); buildContext != "" {
+			entry["build_context"] = buildContext
+		}
 		if serviceName := strings.TrimSpace(StringVal(row, "service_name")); serviceName != "" {
 			entry["service_name"] = serviceName
 		}
@@ -269,11 +272,15 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			path := strings.TrimSpace(StringVal(row, "path"))
 			artifactType := strings.TrimSpace(StringVal(row, "artifact_type"))
 			serviceName := strings.TrimSpace(StringVal(row, "service_name"))
+			buildContext := strings.TrimSpace(StringVal(row, "build_context"))
 			signals := stringSliceValue(row, "signals")
 			if path == "" || artifactType == "" || serviceName == "" {
 				continue
 			}
 			line := fmt.Sprintf("Runtime artifacts include %s service %s in %s", artifactType, serviceName, path)
+			if buildContext != "" {
+				line += fmt.Sprintf(" built from %s", buildContext)
+			}
 			if len(signals) > 0 {
 				line += fmt.Sprintf(" (%s)", strings.Join(signals, ", "))
 			}
