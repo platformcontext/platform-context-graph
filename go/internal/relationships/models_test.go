@@ -48,16 +48,17 @@ func TestEvidenceKindConstants(t *testing.T) {
 
 	// Verify key constants have expected string values.
 	checks := map[EvidenceKind]string{
-		EvidenceKindTerraformAppRepo:               "TERRAFORM_APP_REPO",
-		EvidenceKindTerraformModuleSource:          "TERRAFORM_MODULE_SOURCE",
-		EvidenceKindTerragruntDependencyConfigPath: "TERRAGRUNT_DEPENDENCY_CONFIG_PATH",
-		EvidenceKindHelmChart:                      "HELM_CHART_REFERENCE",
-		EvidenceKindArgoCDAppSource:                "ARGOCD_APPLICATION_SOURCE",
-		EvidenceKindJenkinsSharedLibrary:           "JENKINS_SHARED_LIBRARY",
-		EvidenceKindJenkinsGitHubRepository:        "JENKINS_GITHUB_REPOSITORY",
-		EvidenceKindKustomizeResource:              "KUSTOMIZE_RESOURCE_REFERENCE",
-		EvidenceKindKustomizeHelmChart:             "KUSTOMIZE_HELM_CHART_REFERENCE",
-		EvidenceKindKustomizeImage:                 "KUSTOMIZE_IMAGE_REFERENCE",
+		EvidenceKindTerraformAppRepo:                     "TERRAFORM_APP_REPO",
+		EvidenceKindTerraformModuleSource:                "TERRAFORM_MODULE_SOURCE",
+		EvidenceKindTerragruntDependencyConfigPath:       "TERRAGRUNT_DEPENDENCY_CONFIG_PATH",
+		EvidenceKindHelmChart:                            "HELM_CHART_REFERENCE",
+		EvidenceKindArgoCDAppSource:                      "ARGOCD_APPLICATION_SOURCE",
+		EvidenceKindJenkinsSharedLibrary:                 "JENKINS_SHARED_LIBRARY",
+		EvidenceKindJenkinsGitHubRepository:              "JENKINS_GITHUB_REPOSITORY",
+		EvidenceKindGitHubActionsWorkflowInputRepository: "GITHUB_ACTIONS_WORKFLOW_INPUT_REPOSITORY",
+		EvidenceKindKustomizeResource:                    "KUSTOMIZE_RESOURCE_REFERENCE",
+		EvidenceKindKustomizeHelmChart:                   "KUSTOMIZE_HELM_CHART_REFERENCE",
+		EvidenceKindKustomizeImage:                       "KUSTOMIZE_IMAGE_REFERENCE",
 	}
 	for kind, want := range checks {
 		if string(kind) != want {

@@ -36,6 +36,8 @@ const (
 	EvidenceKindGitHubActionsReusableWorkflow EvidenceKind = "GITHUB_ACTIONS_REUSABLE_WORKFLOW"
 	// EvidenceKindGitHubActionsCheckoutRepository is an explicit checkout repo reference.
 	EvidenceKindGitHubActionsCheckoutRepository EvidenceKind = "GITHUB_ACTIONS_CHECKOUT_REPOSITORY"
+	// EvidenceKindGitHubActionsWorkflowInputRepository is an explicit repo-bearing workflow input reference.
+	EvidenceKindGitHubActionsWorkflowInputRepository EvidenceKind = "GITHUB_ACTIONS_WORKFLOW_INPUT_REPOSITORY"
 	// EvidenceKindJenkinsSharedLibrary is a Jenkins shared library reference.
 	EvidenceKindJenkinsSharedLibrary EvidenceKind = "JENKINS_SHARED_LIBRARY"
 	// EvidenceKindJenkinsGitHubRepository is an explicit GitHub repo URL inside Jenkins automation.

@@ -278,7 +278,7 @@ The current mapping and enrichment flow understands these families:
 | :--- | :--- | :--- |
 | Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR` and platform/runtime context |
 | Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config | Same semantic family as Terraform, with the same emphasis on truthful direction; `terraform.source` now also materializes through the normal `TerraformModule` surface, while `read_terragrunt_config()` remains intentionally opaque |
-| GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Reusable workflow refs and explicit cross-repo checkout now emit canonical repo evidence on both the relationship and query paths; broader workflow relationship promotion is still active parity work on this branch |
+| GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Reusable workflow refs, explicit cross-repo checkout, and explicit repo-bearing workflow inputs such as `automation-repo` now emit canonical repo evidence on both the relationship and query paths; broader workflow relationship promotion is still active parity work on this branch |
 | Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Explicit shared-library refs and explicit GitHub repository URLs now emit canonical repo evidence; broader controller-driven promotion is still active parity work on this branch |
 | Ansible | playbooks, inventories, `group_vars`, `host_vars`, targeted roles, task entrypoints | Controller-driven deployment context today; first-class relationship promotion is still active parity work on this branch |
 | Docker / Compose | Dockerfile build/runtime hints, Compose services, image wiring, env/config links, dependency hints | Docker Compose build contexts and image refs now emit canonical deploy-source evidence with reducer and query proof; broader Docker and controller/runtime promotion is still active parity work on this branch |
@@ -466,8 +466,8 @@ The minimum proof shape is:
 
 The remaining open corpus families on this branch are:
 
-- Terraform variable files and shared-infra runtime chains
-- broader GitHub Actions delivery-path evidence beyond reusable workflows and explicit checkout
+- Terraform and Terragrunt shared-config read-model surfacing plus shared-infra runtime-chain proof
+- broader GitHub Actions delivery-path evidence beyond reusable workflows, explicit checkout, and explicit repo-bearing workflow inputs
 - broader Jenkins / Groovy controller evidence beyond explicit shared-library and GitHub repository refs
 - Ansible automation evidence
 - broader Docker / Docker Compose deployment/runtime evidence beyond Compose build-context and image-ref promotion

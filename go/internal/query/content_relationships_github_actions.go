@@ -46,6 +46,15 @@ func githubActionsMetadataRelationships(metadata map[string]any) []githubActions
 			})
 		}
 	}
+	for _, repoRef := range githubActionsWorkflowInputRepositoryMetadata(metadata) {
+		if targetName := githubActionsRepositoryRef(repoRef); targetName != "" {
+			relationships = append(relationships, githubActionsRelationship{
+				relationshipType: "DISCOVERS_CONFIG_IN",
+				targetName:       targetName,
+				reason:           "github_actions_workflow_input_repository",
+			})
+		}
+	}
 	return relationships
 }
 
@@ -67,6 +76,30 @@ func githubActionsSourceRelationships(entity EntityContent) []githubActionsRelat
 				targetName:       targetName,
 				reason:           "github_actions_reusable_workflow_ref",
 			})
+		}
+		for j := i + 1; j < len(lines); j++ {
+			nextTrimmed := strings.TrimSpace(lines[j])
+			if nextTrimmed == "" || strings.HasPrefix(nextTrimmed, "#") {
+				continue
+			}
+			if leadingWhitespaceWidth(lines[j]) < leadingWhitespaceWidth(lines[i]) {
+				break
+			}
+			for _, key := range []string{"automation-repo", "automation_repo"} {
+				repoValue, ok := yamlScalarValue(lines[j], key)
+				if !ok {
+					continue
+				}
+				if targetName := githubActionsRepositoryRef(repoValue); targetName != "" {
+					relationships = append(relationships, githubActionsRelationship{
+						relationshipType: "DISCOVERS_CONFIG_IN",
+						targetName:       targetName,
+						reason:           "github_actions_workflow_input_repository",
+					})
+				}
+			}
+		}
+		if targetName := githubActionsReusableWorkflowRepoRef(usesValue); targetName != "" {
 			continue
 		}
 		if !strings.HasPrefix(strings.TrimSpace(usesValue), "actions/checkout@") {
@@ -111,7 +144,16 @@ func entityLooksLikeGitHubActionsWorkflow(entity EntityContent) bool {
 	return len(metadataStringSlice(entity.Metadata, "workflow_refs")) > 0 ||
 		len(metadataStringSlice(entity.Metadata, "workflow_ref")) > 0 ||
 		len(metadataStringSlice(entity.Metadata, "checkout_repositories")) > 0 ||
-		len(metadataStringSlice(entity.Metadata, "checkout_repository")) > 0
+		len(metadataStringSlice(entity.Metadata, "checkout_repository")) > 0 ||
+		len(githubActionsWorkflowInputRepositoryMetadata(entity.Metadata)) > 0
+}
+
+func githubActionsWorkflowInputRepositoryMetadata(metadata map[string]any) []string {
+	refs := make([]string, 0, 2)
+	for _, key := range []string{"workflow_input_repository", "automation-repo", "automation_repo"} {
+		refs = append(refs, metadataStringSlice(metadata, key)...)
+	}
+	return refs
 }
 
 func githubActionsReusableWorkflowRepoRef(value string) string {

@@ -29,6 +29,16 @@ func discoverGitHubActionsEvidence(
 				},
 			)...)
 		}
+		for _, candidate := range githubActionsWorkflowInputRepositoryRefs(document) {
+			evidence = append(evidence, matchCatalog(
+				sourceRepoID, candidate, filePath,
+				EvidenceKindGitHubActionsWorkflowInputRepository, RelDiscoversConfigIn, 0.90,
+				"GitHub Actions passes an explicit automation or config repository through workflow inputs",
+				"github_actions", catalog, seen, map[string]any{
+					"workflow_input_repository": candidate,
+				},
+			)...)
+		}
 	}
 	return evidence
 }
@@ -88,6 +98,37 @@ func githubActionsCheckoutRepositoryRefs(document map[string]any) []string {
 				continue
 			}
 			if repoRef := strings.TrimSpace(stringValue(withMap["repository"])); repoRef != "" {
+				refs = append(refs, repoRef)
+			}
+		}
+	}
+
+	return uniqueStrings(refs)
+}
+
+func githubActionsWorkflowInputRepositoryRefs(document map[string]any) []string {
+	jobsValue, ok := document["jobs"]
+	if !ok {
+		return nil
+	}
+
+	jobs, ok := jobsValue.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	refs := make([]string, 0, len(jobs))
+	for _, rawJob := range jobs {
+		job, ok := rawJob.(map[string]any)
+		if !ok {
+			continue
+		}
+		withMap, _ := nestedMap(job, "with")
+		if withMap == nil {
+			continue
+		}
+		for _, key := range []string{"automation-repo", "automation_repo"} {
+			if repoRef := strings.TrimSpace(stringValue(withMap[key])); repoRef != "" {
 				refs = append(refs, repoRef)
 			}
 		}

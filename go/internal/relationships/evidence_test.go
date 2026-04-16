@@ -422,6 +422,45 @@ jobs:
 	}
 }
 
+func TestDiscoverGitHubActionsAutomationRepositoryEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-service",
+			Payload: map[string]any{
+				"artifact_type": "github_actions_workflow",
+				"relative_path": ".github/workflows/pr-command-dispatch.yml",
+				"content": `name: 'Pull Request: Command Dispatch'
+jobs:
+  dispatch-command:
+    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    with:
+      automation-repo: 'boatsgroup/core-engineering-automation'
+      automation-repo-ref: 'refs/tags/v2'
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-automation", Aliases: []string{"core-engineering-automation", "boatsgroup/core-engineering-automation"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 2 {
+		t.Fatalf("len = %d, want 2", len(evidence))
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindGitHubActionsReusableWorkflow) {
+		t.Fatal("missing reusable workflow evidence")
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindGitHubActionsWorkflowInputRepository) {
+		t.Fatal("missing automation repository evidence")
+	}
+	if !hasRelationshipType(evidence, RelDiscoversConfigIn) {
+		t.Fatalf("missing %q evidence", RelDiscoversConfigIn)
+	}
+}
+
 func TestDiscoverDockerComposeEvidence(t *testing.T) {
 	t.Parallel()
 
