@@ -157,6 +157,107 @@ func TestResolveEntityReturnsGraphBackedTypeScriptClassWithTypeScriptSemantics(t
 	}
 }
 
+func TestResolveEntityReturnsGraphBackedJavaScriptFunctionWithJavaScriptSemantics(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if got, want := params["name"], "getTab"; got != want {
+					t.Fatalf("params[name] = %#v, want %#v", got, want)
+				}
+				if got, want := params["type"], "Function"; got != want {
+					t.Fatalf("params[type] = %#v, want %#v", got, want)
+				}
+				if got, want := params["repo_id"], "repo-1"; got != want {
+					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+				}
+				for _, fragment := range []string{
+					"e.docstring as docstring",
+					"e.method_kind as method_kind",
+				} {
+					if !strings.Contains(cypher, fragment) {
+						t.Fatalf("cypher = %q, want %q", cypher, fragment)
+					}
+				}
+				return []map[string]any{
+					{
+						"id":          "function-js-1",
+						"labels":      []any{"Function"},
+						"name":        "getTab",
+						"file_path":   "src/app.js",
+						"repo_id":     "repo-1",
+						"repo_name":   "repo-1",
+						"language":    "javascript",
+						"start_line":  int64(10),
+						"end_line":    int64(24),
+						"docstring":   "Returns the active tab.",
+						"method_kind": "getter",
+					},
+				}, nil
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/entities/resolve",
+		bytes.NewBufferString(`{"name":"getTab","type":"function","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	entities, ok := resp["entities"].([]any)
+	if !ok || len(entities) != 1 {
+		t.Fatalf("entities = %#v, want one graph-backed entity", resp["entities"])
+	}
+	entity, ok := entities[0].(map[string]any)
+	if !ok {
+		t.Fatalf("entity type = %T, want map[string]any", entities[0])
+	}
+	if got, want := entity["semantic_summary"], "Function getTab has JavaScript method kind getter and is documented as \"Returns the active tab.\"."; got != want {
+		t.Fatalf("entity[semantic_summary] = %#v, want %#v", got, want)
+	}
+	metadata, ok := entity["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity[metadata] type = %T, want map[string]any", entity["metadata"])
+	}
+	if got, want := metadata["docstring"], "Returns the active tab."; got != want {
+		t.Fatalf("entity[metadata][docstring] = %#v, want %#v", got, want)
+	}
+	if got, want := metadata["method_kind"], "getter"; got != want {
+		t.Fatalf("entity[metadata][method_kind] = %#v, want %#v", got, want)
+	}
+	semantics, ok := entity["javascript_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity[javascript_semantics] type = %T, want map[string]any", entity["javascript_semantics"])
+	}
+	if got, want := semantics["docstring"], "Returns the active tab."; got != want {
+		t.Fatalf("javascript_semantics[docstring] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["method_kind"], "getter"; got != want {
+		t.Fatalf("javascript_semantics[method_kind] = %#v, want %#v", got, want)
+	}
+	profile, ok := entity["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity[semantic_profile] type = %T, want map[string]any", entity["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "javascript_method"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
 func TestResolveEntityFallsBackToContentEntitiesWithSemanticSummary(t *testing.T) {
 	t.Parallel()
 
