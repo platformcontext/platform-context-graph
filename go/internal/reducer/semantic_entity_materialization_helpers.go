@@ -28,6 +28,9 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 	if componentAssertion := semanticPayloadMetadataString(payload, "component_type_assertion"); componentAssertion != "" {
 		metadata["component_type_assertion"] = componentAssertion
 	}
+	if componentWrapper := semanticPayloadMetadataString(payload, "component_wrapper_kind"); componentWrapper != "" {
+		metadata["component_wrapper_kind"] = componentWrapper
+	}
 	for _, key := range []string{"attribute_kind", "value"} {
 		if value := semanticPayloadMetadataString(payload, key); value != "" {
 			metadata[key] = value

@@ -23,6 +23,7 @@ func TestAttachTypeScriptSemanticsClonesResult(t *testing.T) {
 		"declaration_merge_count":  2,
 		"declaration_merge_kinds":  []any{"class", "namespace"},
 		"component_type_assertion": "ComponentType",
+		"component_wrapper_kind":    "memo",
 		"jsx_fragment_shorthand":   true,
 	})
 
@@ -54,6 +55,9 @@ func TestAttachTypeScriptSemanticsClonesResult(t *testing.T) {
 	}
 	if got, want := semantics["component_type_assertion"], "ComponentType"; got != want {
 		t.Fatalf("typescript_semantics[component_type_assertion] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["component_wrapper_kind"], "memo"; got != want {
+		t.Fatalf("typescript_semantics[component_wrapper_kind] = %#v, want %#v", got, want)
 	}
 	if got, want := semantics["jsx_fragment_shorthand"], true; got != want {
 		t.Fatalf("typescript_semantics[jsx_fragment_shorthand] = %#v, want %#v", got, want)

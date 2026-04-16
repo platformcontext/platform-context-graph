@@ -45,7 +45,37 @@ func maybeAppendJavaScriptComponent(
 	if outputLanguage == "tsx" && javaScriptContainsJSXFragmentShorthand(node) {
 		item["jsx_fragment_shorthand"] = true
 	}
+	if outputLanguage == "tsx" {
+		if wrapperKind := javaScriptComponentWrapperKind(node, source); wrapperKind != "" {
+			item["component_wrapper_kind"] = wrapperKind
+		}
+	}
 	appendBucket(payload, "components", item)
+}
+
+func javaScriptComponentWrapperKind(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	switch node.Kind() {
+	case "parenthesized_expression":
+		cursor := node.Walk()
+		children := node.NamedChildren(cursor)
+		cursor.Close()
+		for i := range children {
+			if wrapper := javaScriptComponentWrapperKind(&children[i], source); wrapper != "" {
+				return wrapper
+			}
+		}
+	case "call_expression":
+		functionNode := node.ChildByFieldName("function")
+		name := strings.TrimSpace(javaScriptCallName(functionNode, source))
+		switch name {
+		case "memo", "forwardRef":
+			return name
+		}
+	}
+	return ""
 }
 
 func javaScriptLooksLikeComponent(node *tree_sitter.Node, source []byte, outputLanguage string) bool {

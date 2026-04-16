@@ -42,6 +42,10 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 		profile["component_type_assertion"] = componentAssertion
 		signals = append(signals, "component_type_assertion")
 	}
+	if componentWrapper, _ := metadata["component_wrapper_kind"].(string); componentWrapper != "" {
+		profile["component_wrapper_kind"] = componentWrapper
+		signals = append(signals, "component_wrapper_kind")
+	}
 	if mergeGroup, _ := metadata["declaration_merge_group"].(string); mergeGroup != "" {
 		if mergeCount := IntVal(metadata, "declaration_merge_count"); mergeCount > 1 {
 			profile["declaration_merge"] = true
@@ -142,11 +146,14 @@ func semanticSurfaceKind(
 	profile map[string]any,
 	pythonProfile PythonSemanticProfile,
 ) string {
-	if framework, ok := profile["framework"].(string); ok && framework != "" && label == "Component" {
-		return "framework_component"
+	if _, ok := profile["component_wrapper_kind"].(string); ok {
+		return "component_wrapper"
 	}
 	if _, ok := profile["component_type_assertion"].(string); ok {
 		return "component_type_assertion"
+	}
+	if framework, ok := profile["framework"].(string); ok && framework != "" && label == "Component" {
+		return "framework_component"
 	}
 	if aliasKind, _ := profile["type_alias_kind"].(string); aliasKind != "" {
 		switch aliasKind {

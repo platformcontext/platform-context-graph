@@ -26,6 +26,7 @@ func TestHandleLanguageQueryProjectsTypeScriptGraphMetadata(t *testing.T) {
 					"e.declaration_merge_kinds as declaration_merge_kinds",
 					"e.decorators as decorators",
 					"e.component_type_assertion as component_type_assertion",
+					"e.component_wrapper_kind as component_wrapper_kind",
 					"e.jsx_fragment_shorthand as jsx_fragment_shorthand",
 				} {
 					if !strings.Contains(cypher, fragment) {
@@ -97,6 +98,7 @@ func TestCodeSearchProjectsTypeScriptGraphMetadata(t *testing.T) {
 					"e.declaration_merge_kinds as declaration_merge_kinds",
 					"e.decorators as decorators",
 					"e.component_type_assertion as component_type_assertion",
+					"e.component_wrapper_kind as component_wrapper_kind",
 					"e.jsx_fragment_shorthand as jsx_fragment_shorthand",
 				} {
 					if !strings.Contains(cypher, fragment) {
@@ -152,6 +154,7 @@ func TestGetEntityContextProjectsTypeScriptGraphMetadata(t *testing.T) {
 					"e.declaration_merge_kinds as declaration_merge_kinds",
 					"e.decorators as decorators",
 					"e.component_type_assertion as component_type_assertion",
+					"e.component_wrapper_kind as component_wrapper_kind",
 					"e.jsx_fragment_shorthand as jsx_fragment_shorthand",
 				} {
 					if !strings.Contains(cypher, fragment) {

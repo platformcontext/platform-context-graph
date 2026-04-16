@@ -98,13 +98,14 @@ SET n.id = row.entity_id,
     n.start_line = row.start_line,
     n.end_line = row.end_line,
     n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.framework = row.framework,
-    n.jsx_fragment_shorthand = row.jsx_fragment_shorthand,
-    n.component_type_assertion = row.component_type_assertion,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
+	n.language = row.language,
+	n.lang = row.language,
+	n.framework = row.framework,
+	n.jsx_fragment_shorthand = row.jsx_fragment_shorthand,
+	n.component_type_assertion = row.component_type_assertion,
+	n.component_wrapper_kind = row.component_wrapper_kind,
+	n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
+	n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
 	semanticImplBlockUpsertCypher = `UNWIND $rows AS row
@@ -424,6 +425,9 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 		if componentAssertion := semanticMetadataString(row.Metadata, "component_type_assertion"); componentAssertion != "" {
 			rowMap["component_type_assertion"] = componentAssertion
+		}
+		if componentWrapper := semanticMetadataString(row.Metadata, "component_wrapper_kind"); componentWrapper != "" {
+			rowMap["component_wrapper_kind"] = componentWrapper
 		}
 		if implContext := semanticMetadataString(row.Metadata, "impl_context"); implContext != "" {
 			rowMap["impl_context"] = implContext

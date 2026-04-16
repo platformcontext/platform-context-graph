@@ -116,13 +116,21 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		}
 	case "Component":
 		framework, _ := metadata["framework"].(string)
-		if framework == "" {
-			return ""
+		wrapperKind, _ := metadata["component_wrapper_kind"].(string)
+		fragments := make([]string, 0, 3)
+		if framework != "" {
+			fragments = append(fragments, "is associated with the "+framework+" framework")
+		}
+		if wrapperKind != "" {
+			fragments = append(fragments, "is wrapped by "+wrapperKind)
 		}
 		if boolValue(metadata["jsx_fragment_shorthand"]) {
-			return fmt.Sprintf("%s %s is associated with the %s framework and uses JSX fragment shorthand.", label, name, framework)
+			fragments = append(fragments, "uses JSX fragment shorthand")
 		}
-		return fmt.Sprintf("%s %s is associated with the %s framework.", label, name, framework)
+		if len(fragments) > 0 {
+			return fmt.Sprintf("%s %s %s.", label, name, joinSentenceFragments(fragments))
+		}
+		return ""
 	case "KustomizeOverlay":
 		bases := metadataStringSlice(metadata, "bases")
 		resourceRefs := metadataStringSlice(metadata, "resource_refs")

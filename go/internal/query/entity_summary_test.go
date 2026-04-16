@@ -342,6 +342,25 @@ func TestBuildEntitySemanticSummaryJavaScriptFunction(t *testing.T) {
 	}
 }
 
+func TestBuildEntitySemanticSummaryJavaScriptGeneratorFunction(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels":   []string{"Function"},
+		"name":     "createIds",
+		"language": "javascript",
+		"metadata": map[string]any{
+			"semantic_kind": "generator",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Function createIds is a generator."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildEntitySemanticSummaryEmptyWhenNoUsefulMetadata(t *testing.T) {
 	t.Parallel()
 

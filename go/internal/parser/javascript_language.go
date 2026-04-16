@@ -47,6 +47,10 @@ func (e *Engine) parseJavaScriptLike(
 			nameNode := node.ChildByFieldName("name")
 			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
 			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage)
+		case "generator_function_declaration":
+			nameNode := node.ChildByFieldName("name")
+			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
+			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage)
 		case "method_definition", "method_signature":
 			nameNode := node.ChildByFieldName("name")
 			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
@@ -119,6 +123,9 @@ func (e *Engine) parseJavaScriptLike(
 				appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
 				maybeAppendJavaScriptComponent(payload, valueNode, nameNode, source, outputLanguage)
 				return
+			}
+			if outputLanguage == "tsx" && javaScriptComponentWrapperKind(valueNode, source) != "" {
+				maybeAppendJavaScriptComponent(payload, valueNode, nameNode, source, outputLanguage)
 			}
 			if scope == "module" && javaScriptInsideFunction(node) {
 				return
@@ -227,25 +234,35 @@ func appendFunctionDeclaration(
 		return
 	}
 
+	declarationNode := node
+	if node != nil && node.Kind() == "variable_declarator" {
+		if valueNode := node.ChildByFieldName("value"); isJavaScriptFunctionValue(valueNode) {
+			declarationNode = valueNode
+		}
+	}
+
 	item := map[string]any{
 		"name":            name,
 		"line_number":     nodeLine(nameNode),
-		"end_line":        nodeEndLine(node),
-		"decorators":      javaScriptDecorators(node, source),
-		"type_parameters": javaScriptTypeParameters(node, source),
+		"end_line":        nodeEndLine(declarationNode),
+		"decorators":      javaScriptDecorators(declarationNode, source),
+		"type_parameters": javaScriptTypeParameters(declarationNode, source),
 		"lang":            lang,
 	}
-	if functionType := javaScriptFunctionKind(node, source); functionType != "" {
+	if functionType := javaScriptFunctionKind(declarationNode, source); functionType != "" {
 		item["type"] = functionType
+		if functionType == "generator" {
+			item["semantic_kind"] = "generator"
+		}
 	}
-	if docstring := javaScriptDocstring(node, source); docstring != "" {
+	if docstring := javaScriptDocstring(declarationNode, source); docstring != "" {
 		item["docstring"] = docstring
 	}
-	for key, value := range javaScriptFunctionSemantics(node, lang) {
+	for key, value := range javaScriptFunctionSemantics(declarationNode, lang) {
 		item[key] = value
 	}
 	if options.IndexSource {
-		item["source"] = nodeText(node, source)
+		item["source"] = nodeText(declarationNode, source)
 	}
 	appendBucket(payload, "functions", item)
 }

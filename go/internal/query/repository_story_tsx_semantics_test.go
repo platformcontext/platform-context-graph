@@ -18,6 +18,17 @@ func TestBuildRepositorySemanticOverviewCountsTSXAdvancedSignals(t *testing.T) {
 			},
 		},
 		{
+			EntityID:   "component-2",
+			RepoID:     "repo-1",
+			EntityType: "Component",
+			EntityName: "MemoButton",
+			Language:   "tsx",
+			Metadata: map[string]any{
+				"framework":              "react",
+				"component_wrapper_kind": "memo",
+			},
+		},
+		{
 			EntityID:   "variable-1",
 			RepoID:     "repo-1",
 			EntityType: "Variable",
@@ -43,6 +54,9 @@ func TestBuildRepositorySemanticOverviewCountsTSXAdvancedSignals(t *testing.T) {
 	if got, want := signalCounts["component_type_assertion"], 1; got != want {
 		t.Fatalf("signal_counts[component_type_assertion] = %d, want %d", got, want)
 	}
+	if got, want := signalCounts["component_wrapper_kind"], 1; got != want {
+		t.Fatalf("signal_counts[component_wrapper_kind] = %d, want %d", got, want)
+	}
 
 	surfaceKinds, ok := overview["surface_kind_counts"].(map[string]int)
 	if !ok {
@@ -50,6 +64,9 @@ func TestBuildRepositorySemanticOverviewCountsTSXAdvancedSignals(t *testing.T) {
 	}
 	if got, want := surfaceKinds["framework_component"], 1; got != want {
 		t.Fatalf("surface_kind_counts[framework_component] = %d, want %d", got, want)
+	}
+	if got, want := surfaceKinds["component_wrapper"], 1; got != want {
+		t.Fatalf("surface_kind_counts[component_wrapper] = %d, want %d", got, want)
 	}
 	if got, want := surfaceKinds["component_type_assertion"], 1; got != want {
 		t.Fatalf("surface_kind_counts[component_type_assertion] = %d, want %d", got, want)

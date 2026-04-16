@@ -109,6 +109,9 @@ func (e *Engine) parsePython(
 			if scope == "module" && !pythonModuleScoped(node) {
 				return
 			}
+			if annotationItem, ok := pythonAnnotatedAssignmentItem(node, source); ok {
+				appendBucket(payload, "type_annotations", annotationItem)
+			}
 			left := node.ChildByFieldName("left")
 			if left == nil || left.Kind() != "identifier" {
 				return

@@ -140,6 +140,9 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	if v := StringVal(row, "component_type_assertion"); v != "" {
 		metadata["component_type_assertion"] = v
 	}
+	if v := StringVal(row, "component_wrapper_kind"); v != "" {
+		metadata["component_wrapper_kind"] = v
+	}
 	if v := StringVal(row, "protocol"); v != "" {
 		metadata["protocol"] = v
 	}
@@ -210,6 +213,7 @@ func graphSemanticMetadataProjection() string {
 		       e.module_kind as module_kind,
 		       e.jsx_fragment_shorthand as jsx_fragment_shorthand,
 		       e.component_type_assertion as component_type_assertion,
+		       e.component_wrapper_kind as component_wrapper_kind,
 		       e.protocol as protocol,
 		       e.implemented_for as implemented_for,
 		       e.attribute_kind as attribute_kind,

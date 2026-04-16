@@ -107,3 +107,57 @@ func TestEnrichEntityResultsWithContentMetadataTSXComponentTypeAssertion(t *test
 		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
 	}
 }
+
+func TestEnrichEntityResultsWithContentMetadataTSXComponentWrapper(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"component-1", "repo-1", "src/Screen.tsx", "Component", "MemoButton",
+					int64(3), int64(3), "tsx", "const MemoButton = memo(() => <button />)",
+					[]byte(`{"framework":"react","component_wrapper_kind":"memo"}`),
+				},
+			},
+		},
+	})
+
+	handler := &EntityHandler{Content: NewContentReader(db)}
+	results := []map[string]any{
+		{
+			"id":         "graph-1",
+			"name":       "MemoButton",
+			"labels":     []string{"Component"},
+			"file_path":  "src/Screen.tsx",
+			"repo_id":    "repo-1",
+			"language":   "tsx",
+			"start_line": 3,
+			"end_line":   3,
+		},
+	}
+
+	got, err := handler.enrichEntityResultsWithContentMetadata(context.Background(), results, "repo-1", "MemoButton", 20)
+	if err != nil {
+		t.Fatalf("enrichEntityResultsWithContentMetadata() error = %v, want nil", err)
+	}
+
+	if gotValue, want := got[0]["semantic_summary"], "Component MemoButton is associated with the react framework and is wrapped by memo."; gotValue != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", gotValue, want)
+	}
+
+	semanticProfile, ok := got[0]["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][semantic_profile] type = %T, want map[string]any", got[0]["semantic_profile"])
+	}
+	if gotValue, want := semanticProfile["surface_kind"], "component_wrapper"; gotValue != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := semanticProfile["component_wrapper_kind"], "memo"; gotValue != want {
+		t.Fatalf("semantic_profile[component_wrapper_kind] = %#v, want %#v", gotValue, want)
+	}
+}

@@ -15,6 +15,7 @@ type TypeScriptSemanticProfile struct {
 	DeclarationMergeCount  int
 	DeclarationMergeKinds  []string
 	ComponentTypeAssertion string
+	ComponentWrapperKind   string
 	JSXFragmentShorthand   bool
 }
 
@@ -33,6 +34,7 @@ func TypeScriptSemanticProfileFromMetadata(metadata map[string]any) TypeScriptSe
 		DeclarationMergeCount:  IntVal(metadata, "declaration_merge_count"),
 		DeclarationMergeKinds:  metadataStringSlice(metadata, "declaration_merge_kinds"),
 		ComponentTypeAssertion: metadataString(metadata, "component_type_assertion"),
+		ComponentWrapperKind:   metadataString(metadata, "component_wrapper_kind"),
 		JSXFragmentShorthand:   boolValue(metadata["jsx_fragment_shorthand"]),
 	}
 }
@@ -46,6 +48,7 @@ func (p TypeScriptSemanticProfile) Present() bool {
 		p.DeclarationMergeCount > 0 ||
 		len(p.DeclarationMergeKinds) > 0 ||
 		p.ComponentTypeAssertion != "" ||
+		p.ComponentWrapperKind != "" ||
 		p.JSXFragmentShorthand
 }
 
@@ -72,6 +75,9 @@ func (p TypeScriptSemanticProfile) Fields() map[string]any {
 	}
 	if p.ComponentTypeAssertion != "" {
 		fields["component_type_assertion"] = p.ComponentTypeAssertion
+	}
+	if p.ComponentWrapperKind != "" {
+		fields["component_wrapper_kind"] = p.ComponentWrapperKind
 	}
 	if p.JSXFragmentShorthand {
 		fields["jsx_fragment_shorthand"] = true

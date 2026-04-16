@@ -221,6 +221,53 @@ class Counter {
 	assertStringFieldValue(t, load, "type", "async")
 }
 
+func TestDefaultEngineParsePathJavaScriptGeneratorFunctions(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "generator.js")
+	writeTestFile(
+		t,
+		filePath,
+		`function* createIds() {
+  yield 1;
+}
+
+const buildIds = function* buildIds() {
+  yield 2;
+};
+
+class Registry {
+  *iterate() {
+    yield 3;
+  }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	createIDs := findNamedBucketItem(t, got, "functions", "createIds")
+	assertStringFieldValue(t, createIDs, "type", "generator")
+	assertStringFieldValue(t, createIDs, "semantic_kind", "generator")
+
+	buildIDs := findNamedBucketItem(t, got, "functions", "buildIds")
+	assertStringFieldValue(t, buildIDs, "type", "generator")
+	assertStringFieldValue(t, buildIDs, "semantic_kind", "generator")
+
+	iterate := findNamedBucketItem(t, got, "functions", "iterate")
+	assertStringFieldValue(t, iterate, "type", "generator")
+	assertStringFieldValue(t, iterate, "semantic_kind", "generator")
+}
+
 func TestDefaultEngineParsePathJSXStatelessComponentSemantics(t *testing.T) {
 	t.Parallel()
 
