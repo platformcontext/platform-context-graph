@@ -76,9 +76,19 @@ func extractRepository(envelopes []facts.Envelope) *RepositoryRow {
 	remoteURL, _ := payloadString(p, "remote_url")
 	repoSlug, _ := payloadString(p, "repo_slug")
 
+	// The collector does not emit "path" — fall back to local_path which is
+	// unique per repository and satisfies the Repository.path constraint.
+	if repoPath == "" {
+		repoPath = localPath
+	}
+
+	// The collector does not emit "has_remote" — derive from remote_url
+	// presence which the collector sets when the repository has an origin.
 	hasRemote := false
 	if ptr := payloadBoolPtr(p, "has_remote"); ptr != nil {
 		hasRemote = *ptr
+	} else {
+		hasRemote = remoteURL != ""
 	}
 
 	return &RepositoryRow{

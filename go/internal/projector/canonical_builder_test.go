@@ -877,6 +877,78 @@ func TestEntityTypeLabelMapCoversAllSchemaLabels(t *testing.T) {
 	}
 }
 
+func TestExtractRepositoryFallsBackToLocalPath(t *testing.T) {
+	t.Parallel()
+
+	// The collector does not emit "path" or "has_remote". extractRepository
+	// must fall back to local_path for Path and derive HasRemote from remote_url.
+	sc := testScope()
+	gen := testGeneration()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "r-1",
+			ScopeID:  "scope-1",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id":    "repo-abc",
+				"name":       "my-project",
+				"local_path": "/home/user/repos/my-project",
+				"remote_url": "https://github.com/org/my-project.git",
+				"repo_slug":  "org/my-project",
+				// NOTE: no "path" key and no "has_remote" key — matches real collector output
+			},
+		},
+	}
+
+	result := buildCanonicalMaterialization(sc, gen, envelopes)
+
+	if result.Repository == nil {
+		t.Fatal("Repository is nil")
+	}
+	repo := result.Repository
+	// Path should fall back to local_path when path is absent.
+	if repo.Path != "/home/user/repos/my-project" {
+		t.Errorf("Path = %q, want %q (fallback to local_path)", repo.Path, "/home/user/repos/my-project")
+	}
+	// HasRemote should be derived from non-empty remote_url.
+	if !repo.HasRemote {
+		t.Error("HasRemote = false, want true (derived from remote_url)")
+	}
+	// RepoPath on the materialization should be set from Repository.Path.
+	if result.RepoPath != "/home/user/repos/my-project" {
+		t.Errorf("RepoPath = %q, want %q", result.RepoPath, "/home/user/repos/my-project")
+	}
+}
+
+func TestExtractRepositoryNoRemoteURL(t *testing.T) {
+	t.Parallel()
+
+	// Local-only repo: no remote_url, no has_remote → HasRemote should be false.
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "r-1",
+			ScopeID:  "scope-1",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id":    "repo-local",
+				"name":       "local-project",
+				"local_path": "/tmp/repos/local-project",
+			},
+		},
+	}
+
+	repo := extractRepository(envelopes)
+	if repo == nil {
+		t.Fatal("Repository is nil")
+	}
+	if repo.HasRemote {
+		t.Error("HasRemote = true, want false (no remote_url)")
+	}
+	if repo.Path != "/tmp/repos/local-project" {
+		t.Errorf("Path = %q, want %q (fallback to local_path)", repo.Path, "/tmp/repos/local-project")
+	}
+}
+
 func TestBuildCanonicalMaterializationFallsBackToScopeMetadata(t *testing.T) {
 	t.Parallel()
 
