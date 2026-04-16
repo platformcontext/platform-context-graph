@@ -1,6 +1,9 @@
 package query
 
-import "strings"
+import (
+	"maps"
+	"strings"
+)
 
 // PythonSemanticSignal identifies a Python-specific semantic that should be
 // promoted in query surfaces.
@@ -62,6 +65,64 @@ func PythonSemanticProfileFromMetadata(entityType string, metadata map[string]an
 // HasSignals reports whether the profile contains any Python-specific signals.
 func (p PythonSemanticProfile) HasSignals() bool {
 	return len(p.Signals()) > 0
+}
+
+// Present reports whether the profile carries any Python-specific semantics.
+func (p PythonSemanticProfile) Present() bool {
+	return p.Docstring != "" || p.HasSignals()
+}
+
+// Fields returns the semantic fields as a promotion-ready map.
+func (p PythonSemanticProfile) Fields() map[string]any {
+	fields := make(map[string]any, 8)
+	if len(p.Decorators) > 0 {
+		fields["decorators"] = cloneStrings(p.Decorators)
+	}
+	if p.Async {
+		fields["async"] = true
+	}
+	if p.Lambda {
+		fields["lambda"] = true
+	}
+	if p.Metaclass != "" {
+		fields["metaclass"] = p.Metaclass
+	}
+	if p.Docstring != "" {
+		fields["docstring"] = p.Docstring
+	}
+	if p.TypeAnnotationCount > 0 {
+		fields["type_annotation_count"] = p.TypeAnnotationCount
+	}
+	if len(p.TypeAnnotationKinds) > 0 {
+		fields["type_annotation_kinds"] = cloneStrings(p.TypeAnnotationKinds)
+	}
+	if p.AnnotationKind != "" {
+		fields["annotation_kind"] = p.AnnotationKind
+	}
+	if p.Context != "" {
+		fields["context"] = p.Context
+	}
+	if p.TypeAnnotation {
+		fields["type_annotation"] = true
+	}
+	return fields
+}
+
+// AttachPythonSemantics returns a shallow copy of result with a dedicated
+// python_semantics bundle when metadata contains promotable values.
+func AttachPythonSemantics(result map[string]any, metadata map[string]any) map[string]any {
+	if result == nil {
+		result = map[string]any{}
+	}
+
+	semantics := PythonSemanticProfileFromMetadata("", metadata)
+	if !semantics.Present() {
+		return result
+	}
+
+	cloned := maps.Clone(result)
+	cloned["python_semantics"] = semantics.Fields()
+	return cloned
 }
 
 // PrimarySignal returns the highest-priority semantic signal present.
@@ -179,4 +240,13 @@ func hasValues(value any) bool {
 	default:
 		return false
 	}
+}
+
+func cloneStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make([]string, len(values))
+	copy(cloned, values)
+	return cloned
 }

@@ -277,6 +277,17 @@ func TestHandleSearchReturnsGraphBackedPythonDecoratedClassWithoutContent(t *tes
 	if got, want := result["semantic_summary"], "Class Logged is decorated with @tracked."; got != want {
 		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
 	}
+	pythonSemantics, ok := result["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[python_semantics] type = %T, want map[string]any", result["python_semantics"])
+	}
+	decorators, ok := pythonSemantics["decorators"].([]any)
+	if !ok {
+		t.Fatalf("python_semantics[decorators] type = %T, want []any", pythonSemantics["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@tracked" {
+		t.Fatalf("python_semantics[decorators] = %#v, want [@tracked]", decorators)
+	}
 	profile, ok := result["semantic_profile"].(map[string]any)
 	if !ok {
 		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])

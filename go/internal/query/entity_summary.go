@@ -337,6 +337,11 @@ func attachSemanticSummary(result map[string]any) {
 	if profile := buildEntitySemanticProfile(entity); len(profile) > 0 {
 		result["semantic_profile"] = profile
 	}
+	if StringVal(entity, "language") == "python" {
+		if pythonSemantics := PythonSemanticProfileFromMetadata("python", metadata); pythonSemantics.Present() {
+			result["python_semantics"] = pythonSemantics.Fields()
+		}
+	}
 	if jsSemantics := ExtractJavaScriptSemantics(metadata); jsSemantics.Present() {
 		result["javascript_semantics"] = jsSemantics.Fields()
 	}

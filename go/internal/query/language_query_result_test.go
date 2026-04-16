@@ -123,6 +123,20 @@ func TestBuildLanguageResult_AttachesPythonGraphMetadataAndSemanticSummary(t *te
 	if got, want := result["semantic_summary"], "Class Logged uses decorators @tracked and uses metaclass MetaLogger."; got != want {
 		t.Fatalf("semantic_summary = %#v, want %#v", got, want)
 	}
+	pythonSemantics, ok := result["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("python_semantics type = %T, want map[string]any", result["python_semantics"])
+	}
+	pythonDecorators, ok := pythonSemantics["decorators"].([]string)
+	if !ok {
+		t.Fatalf("python_semantics[decorators] type = %T, want []string", pythonSemantics["decorators"])
+	}
+	if len(pythonDecorators) != 1 || pythonDecorators[0] != "@tracked" {
+		t.Fatalf("python_semantics[decorators] = %#v, want [@tracked]", pythonDecorators)
+	}
+	if got, want := pythonSemantics["metaclass"], "MetaLogger"; got != want {
+		t.Fatalf("python_semantics[metaclass] = %#v, want %#v", got, want)
+	}
 	profile, ok := result["semantic_profile"].(map[string]any)
 	if !ok {
 		t.Fatalf("semantic_profile type = %T, want map[string]any", result["semantic_profile"])

@@ -340,6 +340,20 @@ func TestGetEntityContextUsesGraphPythonMetadataWithoutContent(t *testing.T) {
 	if got, want := resp["story"], "Function handler is async and uses decorators @route. Defined in src/app.py (python)."; got != want {
 		t.Fatalf("resp[story] = %#v, want %#v", got, want)
 	}
+	pythonSemantics, ok := resp["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[python_semantics] type = %T, want map[string]any", resp["python_semantics"])
+	}
+	decorators, ok := pythonSemantics["decorators"].([]any)
+	if !ok {
+		t.Fatalf("python_semantics[decorators] type = %T, want []any", pythonSemantics["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@route" {
+		t.Fatalf("python_semantics[decorators] = %#v, want [@route]", decorators)
+	}
+	if got, want := pythonSemantics["async"], true; got != want {
+		t.Fatalf("python_semantics[async] = %#v, want %#v", got, want)
+	}
 	profile, ok := resp["semantic_profile"].(map[string]any)
 	if !ok {
 		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
@@ -350,12 +364,12 @@ func TestGetEntityContextUsesGraphPythonMetadataWithoutContent(t *testing.T) {
 	if got, want := profile["async"], true; got != want {
 		t.Fatalf("semantic_profile[async] = %#v, want %#v", got, want)
 	}
-	decorators, ok := profile["decorators"].([]any)
+	profileDecorators, ok := profile["decorators"].([]any)
 	if !ok {
 		t.Fatalf("semantic_profile[decorators] type = %T, want []any", profile["decorators"])
 	}
-	if len(decorators) != 1 || decorators[0] != "@route" {
-		t.Fatalf("semantic_profile[decorators] = %#v, want [@route]", decorators)
+	if len(profileDecorators) != 1 || profileDecorators[0] != "@route" {
+		t.Fatalf("semantic_profile[decorators] = %#v, want [@route]", profileDecorators)
 	}
 }
 
@@ -541,6 +555,17 @@ func TestGetEntityContextUsesGraphPythonDecoratedClassWithoutContent(t *testing.
 	if got, want := resp["story"], "Class Logged is decorated with @tracked. Defined in src/models.py (python)."; got != want {
 		t.Fatalf("resp[story] = %#v, want %#v", got, want)
 	}
+	pythonSemantics, ok := resp["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[python_semantics] type = %T, want map[string]any", resp["python_semantics"])
+	}
+	decorators, ok := pythonSemantics["decorators"].([]any)
+	if !ok {
+		t.Fatalf("python_semantics[decorators] type = %T, want []any", pythonSemantics["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@tracked" {
+		t.Fatalf("python_semantics[decorators] = %#v, want [@tracked]", decorators)
+	}
 	profile, ok := resp["semantic_profile"].(map[string]any)
 	if !ok {
 		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
@@ -548,12 +573,12 @@ func TestGetEntityContextUsesGraphPythonDecoratedClassWithoutContent(t *testing.
 	if got, want := profile["surface_kind"], "decorated_class"; got != want {
 		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
 	}
-	decorators, ok := profile["decorators"].([]any)
+	profileDecorators, ok := profile["decorators"].([]any)
 	if !ok {
 		t.Fatalf("semantic_profile[decorators] type = %T, want []any", profile["decorators"])
 	}
-	if len(decorators) != 1 || decorators[0] != "@tracked" {
-		t.Fatalf("semantic_profile[decorators] = %#v, want [@tracked]", decorators)
+	if len(profileDecorators) != 1 || profileDecorators[0] != "@tracked" {
+		t.Fatalf("semantic_profile[decorators] = %#v, want [@tracked]", profileDecorators)
 	}
 }
 

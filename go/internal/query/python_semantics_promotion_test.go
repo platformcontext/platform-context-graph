@@ -147,3 +147,53 @@ func TestPythonSemanticProfilePriority(t *testing.T) {
 		t.Fatalf("PrimarySignal() = %q, want %q", got, want)
 	}
 }
+
+func TestAttachPythonSemanticsClonesResult(t *testing.T) {
+	t.Parallel()
+
+	result := map[string]any{
+		"entity_id": "graph-1",
+		"name":      "handler",
+	}
+
+	got := AttachPythonSemantics(result, map[string]any{
+		"decorators": []any{"@route"},
+		"async":      true,
+		"docstring":  "Handles incoming requests.",
+	})
+
+	if _, ok := result["python_semantics"]; ok {
+		t.Fatal("result was mutated, want original map unchanged")
+	}
+
+	semantics, ok := got["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("python_semantics type = %T, want map[string]any", got["python_semantics"])
+	}
+	if got, want := semantics["decorators"], []string{"@route"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("python_semantics[decorators] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["async"], true; got != want {
+		t.Fatalf("python_semantics[async] = %#v, want %#v", got, want)
+	}
+	if got, want := semantics["docstring"], "Handles incoming requests."; got != want {
+		t.Fatalf("python_semantics[docstring] = %#v, want %#v", got, want)
+	}
+}
+
+func TestAttachPythonSemanticsReturnsOriginalWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	result := map[string]any{
+		"entity_id": "graph-1",
+	}
+
+	got := AttachPythonSemantics(result, map[string]any{})
+
+	if _, ok := got["python_semantics"]; ok {
+		t.Fatal("python_semantics present, want absent")
+	}
+	if got["entity_id"] != "graph-1" {
+		t.Fatalf("entity_id = %#v, want graph-1", got["entity_id"])
+	}
+}
