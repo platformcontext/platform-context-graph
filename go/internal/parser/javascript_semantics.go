@@ -294,12 +294,33 @@ func javaScriptAssertionTypeName(node *tree_sitter.Node, source []byte) string {
 	}
 	switch node.Kind() {
 	case "generic_type":
-		return strings.TrimSpace(nodeText(node.ChildByFieldName("name"), source))
-	case "type_identifier", "identifier", "nested_type_identifier":
+		if typeName := javaScriptAssertionTypeName(node.ChildByFieldName("name"), source); typeName != "" {
+			return typeName
+		}
+	case "parenthesized_type", "union_type", "intersection_type":
+		cursor := node.Walk()
+		children := node.NamedChildren(cursor)
+		cursor.Close()
+		for i := range children {
+			child := children[i]
+			if typeName := javaScriptAssertionTypeName(&child, source); typeName != "" {
+				return typeName
+			}
+		}
+	case "type_identifier", "identifier", "nested_type_identifier", "scoped_type_identifier", "member_expression":
 		return strings.TrimSpace(nodeText(node, source))
 	default:
-		return ""
+		cursor := node.Walk()
+		children := node.NamedChildren(cursor)
+		cursor.Close()
+		for i := range children {
+			child := children[i]
+			if typeName := javaScriptAssertionTypeName(&child, source); typeName != "" {
+				return typeName
+			}
+		}
 	}
+	return ""
 }
 
 func componentNames(payload map[string]any) []string {

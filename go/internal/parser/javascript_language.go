@@ -2,14 +2,11 @@ package parser
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
-
-var javaScriptTypeParametersRe = regexp.MustCompile(`<([^<>]+)>`)
 
 func (e *Engine) parseJavaScriptLike(
 	path string,
@@ -302,25 +299,7 @@ func javaScriptDecorators(node *tree_sitter.Node, source []byte) []string {
 }
 
 func javaScriptTypeParameters(node *tree_sitter.Node, source []byte) []string {
-	declaration := nodeText(node, source)
-	matches := javaScriptTypeParametersRe.FindStringSubmatch(declaration)
-	if len(matches) != 2 {
-		return []string{}
-	}
-	parts := strings.Split(matches[1], ",")
-	typeParameters := make([]string, 0, len(parts))
-	for _, part := range parts {
-		normalized := strings.TrimSpace(part)
-		if normalized == "" {
-			continue
-		}
-		fields := strings.Fields(normalized)
-		if len(fields) == 0 {
-			continue
-		}
-		typeParameters = append(typeParameters, fields[0])
-	}
-	return typeParameters
+	return javaScriptTypeParameterNames(nodeText(node, source))
 }
 
 func javaScriptImportEntries(node *tree_sitter.Node, source []byte, lang string) []map[string]any {
