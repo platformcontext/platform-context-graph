@@ -1,0 +1,42 @@
+docs/docs/languages/php.md
+  1ca5ee6ce936a402 23
+go/internal/parser/php_language.go
+  1ca5ee6ce936a402 101
+go/internal/parser/php_language_test.go
+  1ca5ee6ce936a402 144-188
+go/internal/parser/php_support.go
+  1ca5ee6ce936a402 9-11,28-31,40,57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "708f894fcd62543be7438bd4773eea67d0bd64b4",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 56,
+      "total_deletions": 6,
+      "accepted_lines": 56,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 82,
+      "overriden_lines": 0
+    }
+  }
+}
