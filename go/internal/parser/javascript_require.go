@@ -68,6 +68,9 @@ func javaScriptRequireModuleSource(node *tree_sitter.Node, source []byte) (strin
 	if argument == "" || strings.Contains(argument, ",") {
 		return "", false
 	}
+	if strings.Contains(argument, "${") {
+		return "", false
+	}
 
 	if unquoted, ok := trimJavaScriptQuotes(argument); ok {
 		return unquoted, true

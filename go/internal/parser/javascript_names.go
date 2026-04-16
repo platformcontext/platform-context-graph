@@ -57,7 +57,7 @@ func javaScriptComputedPropertyName(node *tree_sitter.Node, source []byte) strin
 	if javaScriptStaticComputedMemberNameRe.MatchString(inner) {
 		return inner
 	}
-	return text
+	return ""
 }
 
 func javaScriptStaticComputedPropertyName(node *tree_sitter.Node, source []byte) (string, bool) {
