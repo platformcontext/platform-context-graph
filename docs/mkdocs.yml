@@ -70,6 +70,7 @@ nav:
     - Architecture: architecture.md
     - Python-To-Go Parity Audit: reference/python-to-go-parity.md
     - Parity Closure Matrix: reference/parity-closure-matrix.md
+    - Merge Readiness Signoff: reference/merge-readiness-signoff.md
     - Relationship Mapping: reference/relationship-mapping.md
     - Relationship Mapping Observability: reference/relationship-mapping-observability.md
     - ".pcgignore": reference/pcgignore.md

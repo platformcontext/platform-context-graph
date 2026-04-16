@@ -92,3 +92,6 @@ Use this matrix to answer three questions before execution starts:
 Do not treat a row as complete because the parser extracts it. A row is only
 complete when persistence, query surfacing, tests, end-to-end proof, and docs
 all agree.
+
+For the final branch closeout record, use
+[merge-readiness-signoff.md](merge-readiness-signoff.md).

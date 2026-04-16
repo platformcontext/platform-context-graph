@@ -147,3 +147,6 @@ If any of those are missing, the feature is not parity complete.
 
 Use [parity-closure-matrix.md](parity-closure-matrix.md) as the execution
 checklist for the remaining validation and documentation lock work.
+
+Use [merge-readiness-signoff.md](merge-readiness-signoff.md) for the final
+closed-versus-deferred branch signoff record.
