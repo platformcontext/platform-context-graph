@@ -97,3 +97,67 @@ class ChildRegistry extends BaseRegistry {
 		t.Fatalf("missing inferred receiver calls: %#v in %#v", want, items)
 	}
 }
+
+func TestDefaultEngineParsePathPHPInfersDeepStaticPropertyReceiverChains(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "deep_static_property_receiver.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+class Service {
+    public function info(string $message): void {}
+}
+
+class Factory {
+    public function createService(): Service {
+        return new Service();
+    }
+}
+
+class BaseRegistry {
+    protected static Factory $factory;
+}
+
+class ChildRegistry extends BaseRegistry {
+    public static function boot(string $message): void {
+        self::$factory->createService()->info($message);
+        parent::$factory->createService()->info($message);
+        static::$factory->createService()->info($message);
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	want := map[string]string{
+		"self::$factory->createService().info":   "Service",
+		"parent::$factory->createService().info": "Service",
+		"static::$factory->createService().info": "Service",
+	}
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if wantType, ok := want[fullName]; ok {
+			phpAssertStringFieldValue(t, item, "inferred_obj_type", wantType)
+			delete(want, fullName)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing inferred deep receiver calls: %#v in %#v", want, items)
+	}
+}
