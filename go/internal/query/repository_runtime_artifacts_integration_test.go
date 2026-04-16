@@ -223,4 +223,30 @@ func TestGetRepositoryStoryIncludesDeploymentArtifactsFromDockerCompose(t *testi
 	if !ok || len(artifacts) != 1 {
 		t.Fatalf("deployment_artifacts.deployment_artifacts = %#v, want one row", deploymentArtifacts["deployment_artifacts"])
 	}
+
+	deliveryPaths, ok := deploymentOverview["delivery_paths"].([]any)
+	if !ok || len(deliveryPaths) != 1 {
+		t.Fatalf("delivery_paths = %#v, want one runtime row", deploymentOverview["delivery_paths"])
+	}
+	deliveryRow, ok := deliveryPaths[0].(map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths[0] type = %T, want map[string]any", deliveryPaths[0])
+	}
+	if got, want := deliveryRow["path"], "docker-compose.yaml"; got != want {
+		t.Fatalf("delivery_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := deliveryRow["artifact_type"], "docker_compose"; got != want {
+		t.Fatalf("delivery_paths[0].artifact_type = %#v, want %#v", got, want)
+	}
+	if got, want := deliveryRow["service_name"], "api"; got != want {
+		t.Fatalf("delivery_paths[0].service_name = %#v, want %#v", got, want)
+	}
+
+	directStory, ok := deploymentOverview["direct_story"].([]any)
+	if !ok || len(directStory) != 1 {
+		t.Fatalf("direct_story = %#v, want one runtime line", deploymentOverview["direct_story"])
+	}
+	if got, want := directStory[0], "Runtime artifacts include docker_compose service api in docker-compose.yaml (ports, volumes)."; got != want {
+		t.Fatalf("direct_story[0] = %#v, want %#v", got, want)
+	}
 }

@@ -63,6 +63,21 @@ func buildRepositoryControllerArtifacts(repoName string, files []FileContent) ma
 	return map[string]any{"controller_artifacts": artifacts}
 }
 
+func isPotentialControllerArtifact(file FileContent) bool {
+	base := strings.TrimSpace(file.RelativePath)
+	if base == "" {
+		return false
+	}
+	name := strings.ToLower(filepath.Base(base))
+	if name == "jenkinsfile" {
+		return true
+	}
+	if strings.HasPrefix(name, "jenkinsfile.") {
+		return true
+	}
+	return strings.HasSuffix(name, ".groovy")
+}
+
 func isJenkinsGroovyArtifact(file FileContent, metadata map[string]any) bool {
 	base := strings.TrimSpace(file.RelativePath)
 	if base == "" {

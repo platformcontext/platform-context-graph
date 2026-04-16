@@ -163,3 +163,60 @@ func TestBuildRepositoryStoryResponseOmitsSharedConfigFromDirectStory(t *testing
 		t.Fatalf("omitted_sections = %#v, want [shared_config_paths]", omittedSections)
 	}
 }
+
+func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *testing.T) {
+	t.Parallel()
+
+	repo := RepoRef{ID: "repository:payments", Name: "payments"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		42,
+		[]string{"go"},
+		[]string{"payments-api"},
+		[]string{"argocd_application"},
+		2,
+		map[string]any{
+			"families": []string{"terraform"},
+			"deployment_artifacts": map[string]any{
+				"controller_artifacts": []map[string]any{
+					{
+						"path":            "Jenkinsfile",
+						"controller_kind": "jenkins_pipeline",
+						"entry_points":    []string{"dist/api.js"},
+					},
+				},
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "docker-compose.yaml",
+						"artifact_type": "docker_compose",
+						"service_name":  "api",
+						"signals":       []string{"build", "ports"},
+					},
+				},
+				"config_paths": []map[string]any{
+					{"path": "/configd/payments/*", "source_repo": "helm-charts"},
+					{"path": "/configd/payments/*", "source_repo": "terraform-stack-payments"},
+				},
+			},
+		},
+		nil,
+	)
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	if len(directStory) != 2 {
+		t.Fatalf("len(direct_story) = %d, want 2", len(directStory))
+	}
+	if got, want := directStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline."; got != want {
+		t.Fatalf("direct_story[0] = %q, want %q", got, want)
+	}
+	if got, want := directStory[1], "Runtime artifacts include docker_compose service api in docker-compose.yaml (build, ports)."; got != want {
+		t.Fatalf("direct_story[1] = %q, want %q", got, want)
+	}
+}

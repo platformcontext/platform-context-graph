@@ -33,6 +33,20 @@ pipelineDeploy(entry_point: 'dist/api.js')
 				},
 			},
 		},
+		{
+			columns: []string{
+				"repo_id", "relative_path", "commit_sha", "content",
+				"content_hash", "line_count", "language", "artifact_type",
+			},
+			rows: [][]driver.Value{
+				{
+					"repo-1", "Jenkinsfile", "abc123", `@Library('pipelines@v2') _
+pipelineDeploy(entry_point: 'dist/api.js')
+`,
+					"hash-jenkins", int64(12), "groovy", "groovy",
+				},
+			},
+		},
 	})
 
 	handler := &RepositoryHandler{
