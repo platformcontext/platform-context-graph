@@ -553,6 +553,63 @@ fun usage(): String {
 	}
 }
 
+func TestDefaultEngineParsePathKotlinInfersSiblingFileFunctionReturnAliasChainCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	apiPath := filepath.Join(repoRoot, "Api.kt")
+	usagePath := filepath.Join(repoRoot, "Usage.kt")
+	writeTestFile(
+		t,
+		apiPath,
+		`package comprehensive
+
+class Service {
+    fun info(): String = "ok"
+}
+
+fun createService(): Service = Service()
+`,
+	)
+	writeTestFile(
+		t,
+		usagePath,
+		`package comprehensive
+
+fun usage(): String {
+    val provider = createService()
+    val active = provider
+    return active.info()
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, usagePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", usagePath, err)
+	}
+
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if fullName != "active.info" {
+			continue
+		}
+		assertStringFieldValue(t, item, "inferred_obj_type", "Service")
+		return
+	}
+	t.Fatalf("function_calls missing full_name=%q in %#v", "active.info", items)
+}
+
 func TestDefaultEngineParsePathKotlinPrefersPackageAwareSiblingFunctionReturnTypesForDotCalls(t *testing.T) {
 	t.Parallel()
 
