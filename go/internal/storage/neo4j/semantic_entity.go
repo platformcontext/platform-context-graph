@@ -175,14 +175,15 @@ SET n.id = row.entity_id,
     n.line_number = row.start_line,
     n.start_line = row.start_line,
     n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.attribute_kind = row.attribute_kind,
-    n.value = row.value,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
+	    n.repo_id = row.repo_id,
+	    n.language = row.language,
+	    n.lang = row.language,
+	    n.attribute_kind = row.attribute_kind,
+	    n.value = row.value,
+	    n.component_type_assertion = row.component_type_assertion,
+	    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
+	    n.evidence_source = row.evidence_source
+	MERGE (f)-[:CONTAINS]->(n)`
 
 	semanticModuleUpsertCypher = `UNWIND $rows AS row
 MATCH (f:File {path: row.file_path})

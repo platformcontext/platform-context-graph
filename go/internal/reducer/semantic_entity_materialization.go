@@ -205,6 +205,9 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 	if jsxFragment := semanticPayloadMetadataBool(payload, "jsx_fragment_shorthand"); jsxFragment {
 		metadata["jsx_fragment_shorthand"] = true
 	}
+	if componentAssertion := semanticPayloadMetadataString(payload, "component_type_assertion"); componentAssertion != "" {
+		metadata["component_type_assertion"] = componentAssertion
+	}
 	for _, key := range []string{"attribute_kind", "value"} {
 		if value := semanticPayloadMetadataString(payload, key); value != "" {
 			metadata[key] = value
@@ -413,7 +416,8 @@ func isSemanticEntityType(payload map[string]any, entityType string) bool {
 	case "Annotation", "Typedef", "TypeAlias", "TypeAnnotation", "Component", "Module", "ImplBlock", "Protocol", "ProtocolImplementation":
 		return true
 	case "Variable":
-		return isElixirModuleAttributeSemanticEntity(payload)
+		return isElixirModuleAttributeSemanticEntity(payload) ||
+			isTypeScriptJSXComponentTypeAssertionSemanticEntity(payload)
 	case "Function":
 		return isJavaScriptCallableSemanticEntity(payload) ||
 			isPythonSemanticFunction(payload) ||
@@ -468,6 +472,13 @@ func isTypeScriptJSXFragmentSemanticEntity(payload map[string]any) bool {
 		return false
 	}
 	return semanticPayloadMetadataBool(payload, "jsx_fragment_shorthand")
+}
+
+func isTypeScriptJSXComponentTypeAssertionSemanticEntity(payload map[string]any) bool {
+	if semanticPayloadString(payload, "language") != "tsx" {
+		return false
+	}
+	return semanticPayloadMetadataString(payload, "component_type_assertion") != ""
 }
 
 func isRustSemanticFunction(payload map[string]any) bool {

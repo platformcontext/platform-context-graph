@@ -33,6 +33,7 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 		if !isJavaScriptCallableSemanticEntity(fact.Payload, entityType) &&
 			!isPythonCallableSemanticEntity(fact.Payload, entityType) &&
 			!isElixirCallableSemanticEntity(fact.Payload, entityType) &&
+			!isTypeScriptJSXComponentTypeAssertionSemanticEntity(fact.Payload, entityType) &&
 			!isTypeScriptJSXFragmentSemanticEntity(fact.Payload, entityType) &&
 			!isTypeScriptModuleSemanticEntity(fact.Payload, entityType) &&
 			!isElixirModuleAttributeSemanticEntity(fact.Payload, entityType) {
@@ -137,6 +138,16 @@ func isTypeScriptJSXFragmentSemanticEntity(payload map[string]any, entityType st
 		return false
 	}
 	return payloadMetadataBool(payload, "jsx_fragment_shorthand")
+}
+
+func isTypeScriptJSXComponentTypeAssertionSemanticEntity(payload map[string]any, entityType string) bool {
+	if entityType != "Variable" {
+		return false
+	}
+	if payloadMetadataString(payload, "language") != "tsx" {
+		return false
+	}
+	return payloadMetadataString(payload, "component_type_assertion") != ""
 }
 
 func payloadMetadataString(payload map[string]any, key string) string {
