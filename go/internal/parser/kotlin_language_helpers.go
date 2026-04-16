@@ -94,6 +94,7 @@ func kotlinInferAssignedVariableType(
 	classPropertyTypes map[string]map[string]string,
 	functionReturnTypes map[string]string,
 ) string {
+	trimmed = strings.ReplaceAll(trimmed, "?.", ".")
 	switch {
 	case kotlinCtorAssignPattern.MatchString(trimmed):
 		assignMatches := kotlinCtorAssignPattern.FindStringSubmatch(trimmed)
