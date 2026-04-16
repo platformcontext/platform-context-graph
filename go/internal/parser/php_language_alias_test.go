@@ -369,6 +369,55 @@ class ConfigRunner {
 	phpAssertStringFieldValue(t, infoCall, "inferred_obj_type", "Config")
 }
 
+func TestDefaultEngineParsePathPHPInfersImportedStaticTypeAliasReceiverChains(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "imported_static_alias.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+namespace Demo;
+
+use Demo\Library\Factory as AppFactory;
+
+class Service {
+    public function info(string $message): void {}
+}
+
+class Factory {
+    public static function instance(): Factory {
+        return new Factory();
+    }
+
+    public function createService(): Service {
+        return new Service();
+    }
+}
+
+class ConfigRunner {
+    public function run(string $message): void {
+        AppFactory::instance()->createService()->info($message);
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	infoCall := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "AppFactory::instance()->createService().info")
+	phpAssertStringFieldValue(t, infoCall, "inferred_obj_type", "Service")
+}
+
 func phpAssertStringFieldValue(t *testing.T, item map[string]any, field string, want string) {
 	t.Helper()
 

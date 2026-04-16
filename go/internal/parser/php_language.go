@@ -321,7 +321,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			if len(match) != 3 {
 				continue
 			}
-			receiver := normalizePHPStaticReceiver(match[1], currentClassContext)
+			receiver := normalizePHPStaticReceiver(match[1], currentClassContext, importAliases)
 			if receiver == "" {
 				continue
 			}
@@ -436,7 +436,7 @@ func normalizePHPMethodCall(raw string) string {
 	return strings.Join(parts[:len(parts)-1], "->") + "." + parts[len(parts)-1]
 }
 
-func normalizePHPStaticReceiver(raw string, classContext string) string {
+func normalizePHPStaticReceiver(raw string, classContext string, importAliases map[string]string) string {
 	receiver := strings.TrimSpace(raw)
 	if receiver == "" {
 		return ""
@@ -451,7 +451,14 @@ func normalizePHPStaticReceiver(raw string, classContext string) string {
 		return receiver
 	}
 
-	return strings.TrimPrefix(receiver, `\`)
+	trimmed := strings.TrimPrefix(receiver, `\`)
+	if importAliases != nil {
+		if resolved := strings.TrimSpace(importAliases[trimmed]); resolved != "" {
+			return normalizePHPImportedTypeName(resolved, importAliases)
+		}
+	}
+
+	return trimmed
 }
 
 func hasPHPReceiverChainPrefix(raw string, start int) bool {

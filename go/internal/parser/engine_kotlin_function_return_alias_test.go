@@ -54,6 +54,104 @@ fun usage(): String {
 	t.Fatalf("function_calls missing full_name=%q in %#v", "provider.info", items)
 }
 
+func TestDefaultEngineParsePathKotlinInfersNullableFunctionReturnTypeAliasCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Usage.kt")
+	writeTestFile(
+		t,
+		filePath,
+		`package comprehensive
+
+class Service {
+    fun info(): String = "ok"
+}
+
+fun createService(): Service? = Service()
+
+fun usage(): String {
+    val service = createService()
+    return service?.info() ?: "missing"
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if fullName != "service.info" {
+			continue
+		}
+		assertStringFieldValue(t, item, "inferred_obj_type", "Service")
+		return
+	}
+	t.Fatalf("function_calls missing full_name=%q in %#v", "service.info", items)
+}
+
+func TestDefaultEngineParsePathKotlinInfersGenericFunctionReturnTypeAliasCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Usage.kt")
+	writeTestFile(
+		t,
+		filePath,
+		`package comprehensive
+
+class ServiceBox<T> {
+    fun info(): String = "ok"
+}
+
+fun createBox(): ServiceBox<String> = ServiceBox()
+
+fun usage(): String {
+    val box = createBox()
+    return box.info()
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if fullName != "box.info" {
+			continue
+		}
+		assertStringFieldValue(t, item, "inferred_obj_type", "ServiceBox")
+		return
+	}
+	t.Fatalf("function_calls missing full_name=%q in %#v", "box.info", items)
+}
+
 func TestDefaultEngineParsePathKotlinInfersFunctionReturnReceiverChainsForDotCalls(t *testing.T) {
 	t.Parallel()
 
