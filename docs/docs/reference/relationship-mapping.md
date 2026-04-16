@@ -179,7 +179,9 @@ This is the main rule that keeps the graph from becoming a pile of vague `DEPEND
 
 ### 5. Derived summaries
 
-After resolution, repository context enrichment builds derived summaries from the resolved relationships and related config repositories. These summaries are for answering questions, not for redefining canonical truth.
+After resolution, repository context enrichment builds derived summaries from
+the resolved relationships plus normal read-path artifact extraction. These
+summaries are for answering questions, not for redefining canonical truth.
 
 The current derived summaries include:
 
@@ -193,7 +195,11 @@ The current derived summaries include:
 
 ### 6. Repo context enrichment
 
-The query layer uses the resolved relationships to look up related repositories and collect supporting context. This is where deployment artifacts are assembled from related repos and values-style files.
+The query layer uses the resolved relationships to look up related repositories
+and collect supporting context. This is where deployment artifacts are
+assembled from related repos and read-side artifact extraction such as
+Kustomize policy-document config paths, Terragrunt dependency `config_path`
+values, and Compose runtime hints.
 
 Repository-level platform counts and stories should follow the canonical
 runtime shape:
@@ -281,7 +287,7 @@ The current mapping and enrichment flow understands these families:
 | GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Reusable workflow refs, explicit cross-repo checkout, and explicit repo-bearing workflow inputs such as `automation-repo` now emit canonical repo evidence on both the relationship and query paths; broader workflow relationship promotion is still active parity work on this branch |
 | Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Explicit shared-library refs and explicit GitHub repository URLs now emit canonical repo evidence; broader controller-driven promotion is still active parity work on this branch |
 | Ansible | playbooks, inventories, `group_vars`, `host_vars`, targeted roles, task entrypoints | Controller-driven deployment context today; first-class relationship promotion is still active parity work on this branch |
-| Docker / Compose | Dockerfile build/runtime hints, Compose services, image wiring, env/config links, dependency hints | Docker Compose build contexts and image refs now emit canonical deploy-source evidence, and explicit `depends_on` service names now emit canonical dependency evidence when they resolve truthfully through the repo catalog; broader Docker and controller/runtime promotion is still active parity work on this branch |
+| Docker / Compose | Dockerfile build/runtime hints, Compose services, image wiring, env/config links, dependency hints | Docker Compose build contexts and image refs now emit canonical deploy-source evidence, explicit `depends_on` service names now emit canonical dependency evidence when they resolve truthfully through the repo catalog, and the Go read side now surfaces runtime artifact summaries for Compose `healthcheck`, `ports`, `environment`, and `volumes`; broader Docker and controller/runtime promotion is still active parity work on this branch |
 | ArgoCD | ApplicationSet discovery targets, deploy-source repo URLs, destination clusters | `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, and `RUNS_ON` |
 | Helm | chart metadata, values files, chart dependency references | `DEPLOYS_FROM` |
 | Kustomize | `resources`, base references, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
@@ -435,7 +441,8 @@ If the feature skips straight to answer shaping, it will drift.
 
 Deployment artifacts are the derived pieces of repository context that help answer "what deploys from here?" after the canonical mapping has been resolved.
 
-They are assembled from related repositories and values-style config, not invented from a single repo in isolation.
+They are assembled from related repositories and normal read-path artifact
+extraction, not invented from a single repo in isolation.
 
 Examples include:
 
@@ -466,11 +473,13 @@ The minimum proof shape is:
 
 The remaining open corpus families on this branch are:
 
-- Terraform and Terragrunt shared-config read-model surfacing plus shared-infra runtime-chain proof
+- broader Terraform and Terragrunt config-asset extraction beyond the current
+  Kustomize policy-document and Terragrunt `dependency.config_path` read path,
+  plus shared-infra runtime-chain proof
 - broader GitHub Actions delivery-path evidence beyond reusable workflows, explicit checkout, and explicit repo-bearing workflow inputs
 - broader Jenkins / Groovy controller evidence beyond explicit shared-library and GitHub repository refs
 - Ansible automation evidence
-- broader Docker / Docker Compose deployment/runtime evidence beyond Compose build-context, image-ref, and explicit `depends_on` promotion
+- broader Docker / Docker Compose deployment/runtime evidence beyond Compose build-context, image-ref, explicit `depends_on` promotion, and read-side runtime artifact surfacing
 
 For each family, ask the same questions:
 
@@ -491,6 +500,16 @@ They should help answer:
 - which repos reference or call this service without deploying it
 
 They should not be used to invent deployment or provisioning relationships by themselves.
+
+On this branch, `shared_config_paths` is now fed by the Go normal read path
+from related repositories rather than a deleted Python bridge. The current
+Go-backed sources are:
+
+- Kustomize-reachable policy documents that reference SSM parameter families
+- Terragrunt `dependency.config_path` values
+
+Broader Terraform and Terragrunt local asset/config-file surfacing remains a
+separate parity lane.
 
 ### Story Ordering
 

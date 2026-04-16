@@ -109,3 +109,57 @@ func TestBuildRepositoryStoryResponseIncludesStructuredOverviews(t *testing.T) {
 		t.Fatalf("drilldowns.context_path = %#v", drilldowns["context_path"])
 	}
 }
+
+func TestBuildRepositoryStoryResponseOmitsSharedConfigFromDirectStory(t *testing.T) {
+	t.Parallel()
+
+	repo := RepoRef{ID: "repository:payments", Name: "payments"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		42,
+		[]string{"go"},
+		[]string{"payments-api"},
+		[]string{"argocd_application"},
+		2,
+		map[string]any{
+			"families": []string{"terraform"},
+			"deployment_artifacts": map[string]any{
+				"config_paths": []map[string]any{
+					{"path": "/configd/payments/*", "source_repo": "helm-charts"},
+					{"path": "/configd/payments/*", "source_repo": "terraform-stack-payments"},
+				},
+			},
+		},
+		nil,
+	)
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	topologyStory, ok := deploymentOverview["topology_story"].([]string)
+	if !ok || len(topologyStory) != 1 {
+		t.Fatalf("topology_story = %#v, want one shared-config line", deploymentOverview["topology_story"])
+	}
+	if got, want := topologyStory[0], "Shared config families span /configd/payments/* across helm-charts, terraform-stack-payments."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	if len(directStory) != 0 {
+		t.Fatalf("direct_story = %#v, want shared-config line omitted", directStory)
+	}
+	traceLimitations, ok := deploymentOverview["trace_limitations"].(map[string]any)
+	if !ok {
+		t.Fatalf("trace_limitations type = %T, want map[string]any", deploymentOverview["trace_limitations"])
+	}
+	omittedSections, ok := traceLimitations["omitted_sections"].([]string)
+	if !ok {
+		t.Fatalf("omitted_sections type = %T, want []string", traceLimitations["omitted_sections"])
+	}
+	if len(omittedSections) != 1 || omittedSections[0] != "shared_config_paths" {
+		t.Fatalf("omitted_sections = %#v, want [shared_config_paths]", omittedSections)
+	}
+}

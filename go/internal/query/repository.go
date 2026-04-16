@@ -105,17 +105,49 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	// queries are non-fatal — the base response is still returned.
 	result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, params)
 	result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, params)
+	result["relationships"] = queryRepoDependencies(ctx, h.Neo4j, params)
+	result["consumers"] = queryRepoConsumers(ctx, h.Neo4j, params)
 	if h.Content != nil {
 		files, err := h.Content.ListRepoFiles(ctx, repoID, repositorySemanticEntityLimit)
 		if err == nil {
-			if overview := buildRepositoryInfrastructureOverview(result["infrastructure"].([]map[string]any), files); overview != nil {
+			if files == nil {
+				files = []FileContent{}
+			}
+			overview := buildRepositoryInfrastructureOverview(result["infrastructure"].([]map[string]any), files)
+			configArtifacts, configErr := loadSharedRepositoryConfigArtifacts(
+				ctx,
+				h.Neo4j,
+				h.Content,
+				repoID,
+				StringVal(baseRow, "name"),
+				files,
+			)
+			if configErr == nil && len(configArtifacts) > 0 {
+				if overview == nil {
+					overview = map[string]any{}
+				}
+				overview["deployment_artifacts"] = mergeDeploymentArtifactMaps(
+					mapValue(overview, "deployment_artifacts"),
+					configArtifacts,
+				)
+				result["deployment_artifacts"] = overview["deployment_artifacts"]
+			}
+			if runtimeArtifacts, runtimeErr := loadRepositoryRuntimeArtifacts(ctx, h.Content, repoID, files); runtimeErr == nil && len(runtimeArtifacts) > 0 {
+				if overview == nil {
+					overview = map[string]any{}
+				}
+				overview["deployment_artifacts"] = mergeDeploymentArtifactMaps(
+					mapValue(overview, "deployment_artifacts"),
+					runtimeArtifacts,
+				)
+				result["deployment_artifacts"] = overview["deployment_artifacts"]
+			}
+			if overview != nil {
 				result["infrastructure_overview"] = overview
 			}
 		}
 	}
 	result["languages"] = queryRepoLanguageDistribution(ctx, h.Neo4j, params)
-	result["relationships"] = queryRepoDependencies(ctx, h.Neo4j, params)
-	result["consumers"] = queryRepoConsumers(ctx, h.Neo4j, params)
 
 	WriteJSON(w, http.StatusOK, result)
 }
@@ -269,6 +301,54 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("semantic overview failed: %v", err))
 		return
 	}
+	var infrastructureOverview map[string]any
+	if h.Content != nil {
+		files, err := h.Content.ListRepoFiles(r.Context(), repoID, repositorySemanticEntityLimit)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("list repository files failed: %v", err))
+			return
+		}
+		if files == nil {
+			files = []FileContent{}
+		}
+		infrastructure := queryRepoInfrastructure(r.Context(), h.Neo4j, h.Content, map[string]any{"repo_id": repoID})
+		infrastructureOverview = buildRepositoryInfrastructureOverview(infrastructure, files)
+		configArtifacts, err := loadSharedRepositoryConfigArtifacts(
+			r.Context(),
+			h.Neo4j,
+			h.Content,
+			repoID,
+			repo.Name,
+			files,
+		)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("config artifact overview failed: %v", err))
+			return
+		}
+		if len(configArtifacts) > 0 {
+			if infrastructureOverview == nil {
+				infrastructureOverview = map[string]any{}
+			}
+			infrastructureOverview["deployment_artifacts"] = mergeDeploymentArtifactMaps(
+				mapValue(infrastructureOverview, "deployment_artifacts"),
+				configArtifacts,
+			)
+		}
+		runtimeArtifacts, err := loadRepositoryRuntimeArtifacts(r.Context(), h.Content, repoID, files)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("runtime artifact overview failed: %v", err))
+			return
+		}
+		if len(runtimeArtifacts) > 0 {
+			if infrastructureOverview == nil {
+				infrastructureOverview = map[string]any{}
+			}
+			infrastructureOverview["deployment_artifacts"] = mergeDeploymentArtifactMaps(
+				mapValue(infrastructureOverview, "deployment_artifacts"),
+				runtimeArtifacts,
+			)
+		}
+	}
 
 	WriteJSON(w, http.StatusOK, buildRepositoryStoryResponse(
 		repo,
@@ -277,7 +357,7 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		workloadNames,
 		platformTypes,
 		dependencyCount,
-		nil,
+		infrastructureOverview,
 		semanticOverview,
 	))
 }

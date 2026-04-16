@@ -57,13 +57,12 @@ func buildRepositoryStoryResponse(
 				"summary": fmt.Sprintf("%d workload(s) and %d platform signal(s)", len(filteredWorkloads), len(filteredPlatforms)),
 			},
 		},
-		"deployment_overview": map[string]any{
-			"workload_count":          len(filteredWorkloads),
-			"platform_count":          len(filteredPlatforms),
-			"workloads":               filteredWorkloads,
-			"platforms":               filteredPlatforms,
-			"infrastructure_families": infraFamilies,
-		},
+		"deployment_overview": BuildRepositoryDeploymentOverview(
+			filteredWorkloads,
+			filteredPlatforms,
+			infraFamilies,
+			infrastructureOverview,
+		),
 		"gitops_overview": map[string]any{
 			"enabled":          containsGitOpsSignals(filteredPlatforms, infraFamilies),
 			"tool_families":    mergeStringSets(filteredPlatforms, infraFamilies),
@@ -103,6 +102,17 @@ func buildRepositoryStoryResponse(
 	}
 	if len(infrastructureOverview) > 0 {
 		response["infrastructure_overview"] = infrastructureOverview
+	}
+	if deploymentOverview, ok := response["deployment_overview"].(map[string]any); ok {
+		topologyStory := stringSliceMapValue(deploymentOverview, "topology_story")
+		directStory := focusedDeploymentStory(topologyStory)
+		deploymentOverview["direct_story"] = directStory
+		if len(topologyStory) > 0 && len(directStory) != len(topologyStory) {
+			deploymentOverview["trace_limitations"] = map[string]any{
+				"omitted_sections": []string{"shared_config_paths"},
+				"reason":           "Keep the repository story focused on direct deployment evidence.",
+			}
+		}
 	}
 	storySections = append(storySections, map[string]any{
 		"title":   "support",
@@ -145,6 +155,21 @@ func buildRepositoryStory(
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func focusedDeploymentStory(lines []string) []string {
+	focused := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(trimmed), "shared config") {
+			continue
+		}
+		focused = append(focused, trimmed)
+	}
+	return focused
 }
 
 func nonEmptyStrings(values []string) []string {
