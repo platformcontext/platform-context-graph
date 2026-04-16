@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/queue"
 )
 
@@ -49,11 +50,6 @@ type FailureClassification struct {
 const neo4jTransientCodePrefix = "Neo.TransientError."
 const neo4jTransientRetrySeconds = 15
 
-// Neo4jCodeError is implemented by Neo4j driver errors that carry a server
-// error code.
-type Neo4jCodeError interface {
-	Neo4jCode() string
-}
 
 // StageError wraps one error with the projection stage that raised it.
 type StageError struct {
@@ -200,13 +196,13 @@ func unwrapStageError(err error, fallbackStage string) (string, error) {
 }
 
 // neo4jErrorCode returns the Neo4j server error code if the error (or any
-// wrapped error) implements the Neo4jCodeError interface.
+// wrapped error) is a *neo4j.Neo4jError from the driver.
 func neo4jErrorCode(err error) string {
-	var neo4jErr Neo4jCodeError
+	var neo4jErr *neo4jdriver.Neo4jError
 	if errors.As(err, &neo4jErr) {
-		code := neo4jErr.Neo4jCode()
-		if strings.TrimSpace(code) != "" {
-			return strings.TrimSpace(code)
+		code := strings.TrimSpace(neo4jErr.Code)
+		if code != "" {
+			return code
 		}
 	}
 	return ""

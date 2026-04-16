@@ -139,7 +139,8 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 			Operation: OperationCanonicalRetract,
 			Cypher:    canonicalNodeRetractParametersCypher,
 			Parameters: map[string]any{
-				"file_paths": filePaths,
+				"file_paths":    filePaths,
+				"generation_id": mat.GenerationID,
 			},
 		})
 	}
@@ -333,10 +334,11 @@ func (w *CanonicalNodeWriter) buildStructuralEdgeStatements(mat projector.Canoni
 		rows := make([]map[string]any, len(mat.Parameters))
 		for i, p := range mat.Parameters {
 			rows[i] = map[string]any{
-				"func_name":  p.FunctionName,
-				"file_path":  p.FilePath,
-				"func_line":  p.FunctionLine,
-				"param_name": p.ParamName,
+				"func_name":      p.FunctionName,
+				"file_path":      p.FilePath,
+				"func_line":      p.FunctionLine,
+				"param_name":     p.ParamName,
+				"generation_id":  mat.GenerationID,
 			}
 		}
 		stmts = append(stmts, buildBatchedStatements(canonicalNodeHasParameterEdgeCypher, rows, w.batchSize)...)

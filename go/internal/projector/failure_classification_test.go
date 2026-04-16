@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net"
 	"testing"
+
+	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
 func TestClassifyNeo4jTransientError(t *testing.T) {
 	t.Parallel()
 
-	exc := neo4jLikeError{code: "Neo.TransientError.Transaction.DeadlockDetected"}
+	exc := &neo4jdriver.Neo4jError{Code: "Neo.TransientError.Transaction.DeadlockDetected", Msg: "deadlock"}
 	result := ClassifyFailure(exc, "project_facts")
 
 	if result.FailureStage != "project_facts" {
@@ -26,8 +28,8 @@ func TestClassifyNeo4jTransientError(t *testing.T) {
 	if result.RetryAfterSeconds == 0 {
 		t.Error("retry_after_seconds should be non-zero for Neo4j transient errors")
 	}
-	if result.ErrorClass != "neo4jLikeError" {
-		t.Errorf("error_class = %q, want neo4jLikeError", result.ErrorClass)
+	if result.ErrorClass != "Neo4jError" {
+		t.Errorf("error_class = %q, want Neo4jError", result.ErrorClass)
 	}
 	want := "neo__transient_error__transaction__deadlock_detected"
 	if result.FailureCode != want {
@@ -137,7 +139,7 @@ func TestClassifyUnwrapsStageError(t *testing.T) {
 func TestClassifyWrappedNeo4jTransient(t *testing.T) {
 	t.Parallel()
 
-	inner := neo4jLikeError{code: "Neo.TransientError.General.DatabaseUnavailable"}
+	inner := &neo4jdriver.Neo4jError{Code: "Neo.TransientError.General.DatabaseUnavailable", Msg: "db unavailable"}
 	wrapped := fmt.Errorf("projector stage failed: %w", inner)
 	result := ClassifyFailure(wrapped, "project_facts")
 
@@ -166,20 +168,4 @@ func TestFailureCodeForPlainError(t *testing.T) {
 	if code != "errors_error_string" {
 		t.Errorf("code = %q, want errors_error_string", code)
 	}
-}
-
-// -- test helpers --
-
-// neo4jLikeError simulates a Neo4j driver error with a server error code.
-type neo4jLikeError struct {
-	code string
-}
-
-func (e neo4jLikeError) Error() string {
-	return fmt.Sprintf("neo4j error: %s", e.code)
-}
-
-// Neo4jCode implements the Neo4jCodeError interface.
-func (e neo4jLikeError) Neo4jCode() string {
-	return e.code
 }

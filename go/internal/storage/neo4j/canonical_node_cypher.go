@@ -45,6 +45,7 @@ DETACH DELETE d`
 
 const canonicalNodeRetractParametersCypher = `MATCH (p:Parameter)
 WHERE p.path IN $file_paths AND p.evidence_source = 'projector/canonical'
+  AND p.generation_id <> $generation_id
 DETACH DELETE p`
 
 // --- Phase B: Repository Cypher ---
@@ -128,7 +129,8 @@ const canonicalNodeHasParameterEdgeCypher = `UNWIND $rows AS row
 MATCH (fn:Function {name: row.func_name, path: row.file_path, line_number: row.func_line})
 MERGE (p:Parameter {name: row.param_name, path: row.file_path, function_line_number: row.func_line})
 MERGE (fn)-[:HAS_PARAMETER]->(p)
-SET p.evidence_source = 'projector/canonical'`
+SET p.evidence_source = 'projector/canonical',
+    p.generation_id = row.generation_id`
 
 const canonicalNodeClassContainsFuncEdgeCypher = `UNWIND $rows AS row
 MATCH (c:Class {name: row.class_name, path: row.file_path})
