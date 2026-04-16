@@ -474,6 +474,8 @@ func TestDiscoverDockerComposeEvidence(t *testing.T) {
   payments:
     build:
       context: ../payments-service
+    depends_on:
+      - checkout-service
   checkout:
     image: ghcr.io/myorg/checkout-service:latest
 `,
@@ -486,14 +488,17 @@ func TestDiscoverDockerComposeEvidence(t *testing.T) {
 	}
 
 	evidence := DiscoverEvidence(envelopes, catalog)
-	if len(evidence) != 2 {
-		t.Fatalf("len = %d, want 2", len(evidence))
+	if len(evidence) != 3 {
+		t.Fatalf("len = %d, want 3", len(evidence))
 	}
 	if !hasEvidenceKind(evidence, EvidenceKindDockerComposeBuildContext) {
 		t.Fatal("missing Docker Compose build-context evidence")
 	}
 	if !hasEvidenceKind(evidence, EvidenceKindDockerComposeImage) {
 		t.Fatal("missing Docker Compose image evidence")
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindDockerComposeDependsOn) {
+		t.Fatal("missing Docker Compose depends_on evidence")
 	}
 }
 

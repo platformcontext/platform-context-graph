@@ -46,6 +46,8 @@ const (
 	EvidenceKindDockerComposeBuildContext EvidenceKind = "DOCKER_COMPOSE_BUILD_CONTEXT"
 	// EvidenceKindDockerComposeImage is a Compose image repo reference.
 	EvidenceKindDockerComposeImage EvidenceKind = "DOCKER_COMPOSE_IMAGE"
+	// EvidenceKindDockerComposeDependsOn is a Compose service dependency reference.
+	EvidenceKindDockerComposeDependsOn EvidenceKind = "DOCKER_COMPOSE_DEPENDS_ON"
 	// EvidenceKindKustomizeResource is a Kustomize resource reference.
 	EvidenceKindKustomizeResource EvidenceKind = "KUSTOMIZE_RESOURCE_REFERENCE"
 	// EvidenceKindKustomizeHelmChart is a Kustomize Helm chart reference.

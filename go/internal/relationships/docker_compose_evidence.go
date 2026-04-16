@@ -27,6 +27,16 @@ func discoverDockerComposeEvidence(
 				},
 			)...)
 		}
+		for _, candidate := range dockerComposeDependsOnRefs(document) {
+			evidence = append(evidence, matchCatalog(
+				sourceRepoID, candidate, filePath,
+				EvidenceKindDockerComposeDependsOn, RelDependsOn, 0.84,
+				"Docker Compose service dependency refers to the target repository",
+				"docker_compose", catalog, seen, map[string]any{
+					"depends_on_service": candidate,
+				},
+			)...)
+		}
 	}
 	return evidence
 }
@@ -73,4 +83,49 @@ func dockerComposeImageRefs(document map[string]any) []string {
 	}
 
 	return uniqueStrings(images)
+}
+
+func dockerComposeDependsOnRefs(document map[string]any) []string {
+	services, ok := nestedMap(document, "services")
+	if !ok {
+		return nil
+	}
+
+	dependencies := make([]string, 0, len(services))
+	for _, rawService := range services {
+		service, ok := rawService.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, dependency := range dockerComposeDependsOnValues(service["depends_on"]) {
+			if dependency != "" {
+				dependencies = append(dependencies, dependency)
+			}
+		}
+	}
+
+	return uniqueStrings(dependencies)
+}
+
+func dockerComposeDependsOnValues(value any) []string {
+	switch typed := value.(type) {
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if dependency := stringValue(item); dependency != "" {
+				values = append(values, dependency)
+			}
+		}
+		return values
+	case map[string]any:
+		values := make([]string, 0, len(typed))
+		for key := range typed {
+			if key != "" {
+				values = append(values, key)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
 }

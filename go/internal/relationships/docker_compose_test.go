@@ -19,6 +19,8 @@ func TestDiscoverDockerComposeEvidencePromotesBuildContextAndImageReferences(t *
   payments:
     build:
       context: ../payments-service
+    depends_on:
+      - checkout-service
   checkout:
     image: ghcr.io/myorg/checkout-service:latest
 `,
@@ -31,15 +33,12 @@ func TestDiscoverDockerComposeEvidencePromotesBuildContextAndImageReferences(t *
 	}
 
 	evidence := DiscoverEvidence(envelopes, catalog)
-	if len(evidence) != 2 {
-		t.Fatalf("len = %d, want 2", len(evidence))
+	if len(evidence) != 3 {
+		t.Fatalf("len = %d, want 3", len(evidence))
 	}
 
 	got := make(map[EvidenceKind]EvidenceFact, len(evidence))
 	for _, fact := range evidence {
-		if fact.RelationshipType != RelDeploysFrom {
-			t.Fatalf("relationship_type = %q, want %q", fact.RelationshipType, RelDeploysFrom)
-		}
 		got[fact.EvidenceKind] = fact
 	}
 
@@ -53,6 +52,9 @@ func TestDiscoverDockerComposeEvidencePromotesBuildContextAndImageReferences(t *
 	if got, want := buildContext.Details["build_context"], "../payments-service"; got != want {
 		t.Fatalf("build context details = %#v, want %#v", got, want)
 	}
+	if got, want := buildContext.RelationshipType, RelDeploysFrom; got != want {
+		t.Fatalf("build context relationship = %q, want %q", got, want)
+	}
 
 	imageRef, ok := got[EvidenceKindDockerComposeImage]
 	if !ok {
@@ -63,5 +65,22 @@ func TestDiscoverDockerComposeEvidencePromotesBuildContextAndImageReferences(t *
 	}
 	if got, want := imageRef.Details["image_ref"], "ghcr.io/myorg/checkout-service:latest"; got != want {
 		t.Fatalf("image ref details = %#v, want %#v", got, want)
+	}
+	if got, want := imageRef.RelationshipType, RelDeploysFrom; got != want {
+		t.Fatalf("image ref relationship = %q, want %q", got, want)
+	}
+
+	dependsOn, ok := got[EvidenceKindDockerComposeDependsOn]
+	if !ok {
+		t.Fatal("missing docker compose depends_on evidence")
+	}
+	if got, want := dependsOn.TargetRepoID, "repo-checkout"; got != want {
+		t.Fatalf("depends_on target = %q, want %q", got, want)
+	}
+	if got, want := dependsOn.RelationshipType, RelDependsOn; got != want {
+		t.Fatalf("depends_on relationship = %q, want %q", got, want)
+	}
+	if got, want := dependsOn.Details["depends_on_service"], "checkout-service"; got != want {
+		t.Fatalf("depends_on details = %#v, want %#v", got, want)
 	}
 }

@@ -56,6 +56,7 @@ func TestEvidenceKindConstants(t *testing.T) {
 		EvidenceKindJenkinsSharedLibrary:                 "JENKINS_SHARED_LIBRARY",
 		EvidenceKindJenkinsGitHubRepository:              "JENKINS_GITHUB_REPOSITORY",
 		EvidenceKindGitHubActionsWorkflowInputRepository: "GITHUB_ACTIONS_WORKFLOW_INPUT_REPOSITORY",
+		EvidenceKindDockerComposeDependsOn:               "DOCKER_COMPOSE_DEPENDS_ON",
 		EvidenceKindKustomizeResource:                    "KUSTOMIZE_RESOURCE_REFERENCE",
 		EvidenceKindKustomizeHelmChart:                   "KUSTOMIZE_HELM_CHART_REFERENCE",
 		EvidenceKindKustomizeImage:                       "KUSTOMIZE_IMAGE_REFERENCE",
