@@ -1,0 +1,60 @@
+go/internal/query/repository_story_test.go
+  26d0a7775258d320 235-278
+go/internal/query/repository_deployment_overview.go
+  26d0a7775258d320 87-92,280,282,285-289,292,335-347
+docs/docs/reference/relationship-mapping.md
+  26d0a7775258d320 291-292
+go/internal/relationships/evidence_test.go
+  26d0a7775258d320 554-565,587-608,654-655,659,681-705
+go/internal/parser/dockerfile_language.go
+  26d0a7775258d320 21-46,48,93
+go/internal/query/repository_runtime_artifacts_dockerfile.go
+  26d0a7775258d320 1-127
+go/internal/relationships/jenkins_evidence.go
+  26d0a7775258d320 17,20-21,26,31-32,37,44-84,143-153
+go/internal/query/repository_runtime_artifacts.go
+  26d0a7775258d320 10-11,15-19,21-41,43-44,78
+docs/docs/reference/parity-closure-matrix.md
+  26d0a7775258d320 68,72,88-89
+go/internal/relationships/ansible_evidence.go
+  26d0a7775258d320 16-18,147-165
+go/internal/relationships/ansible_evidence_test.go
+  26d0a7775258d320 44-106
+go/internal/query/repository_deployment_overview_test.go
+  26d0a7775258d320 180-224
+go/internal/query/repository_runtime_artifacts_test.go
+  26d0a7775258d320 90,109-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "823d810937bec1457857ab550d7f3bba51995403",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 283,
+      "total_deletions": 18,
+      "accepted_lines": 675,
+      "overriden_lines": 0
+    }
+  }
+}
