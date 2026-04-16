@@ -41,6 +41,25 @@ func TestBuildEntitySemanticSummaryPythonFunction(t *testing.T) {
 	}
 }
 
+func TestBuildEntitySemanticSummaryPythonDecoratedClass(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels":   []string{"Class"},
+		"name":     "Logged",
+		"language": "python",
+		"metadata": map[string]any{
+			"decorators": []any{"@tracked"},
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Class Logged is decorated with @tracked."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildEntitySemanticSummaryPythonFunctionTypeAnnotations(t *testing.T) {
 	t.Parallel()
 

@@ -13,6 +13,7 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 
 	label := primaryEntityLabel(entity)
 	name := StringVal(entity, "name")
+	language := StringVal(entity, "language")
 	if label == "" || name == "" {
 		return ""
 	}
@@ -219,7 +220,12 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		fragments = append(fragments, "is async")
 	}
 	if len(pythonProfile.Decorators) > 0 {
-		fragments = append(fragments, "uses decorators "+strings.Join(pythonProfile.Decorators, ", "))
+		switch {
+		case language == "python" && label == "Class" && pythonProfile.Metaclass == "":
+			fragments = append(fragments, "is decorated with "+strings.Join(pythonProfile.Decorators, ", "))
+		default:
+			fragments = append(fragments, "uses decorators "+strings.Join(pythonProfile.Decorators, ", "))
+		}
 	}
 	if pythonProfile.Metaclass != "" {
 		fragments = append(fragments, "uses metaclass "+pythonProfile.Metaclass)

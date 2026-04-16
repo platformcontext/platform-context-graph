@@ -489,6 +489,74 @@ func TestGetEntityContextUsesGraphPythonClassDocstringWithoutContent(t *testing.
 	}
 }
 
+func TestGetEntityContextUsesGraphPythonDecoratedClassWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if got, want := params["entity_id"], "class-decorators-1"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				if want := "e.decorators as decorators"; !strings.Contains(cypher, want) {
+					t.Fatalf("cypher = %q, want %q", cypher, want)
+				}
+				return map[string]any{
+					"id":            "class-decorators-1",
+					"labels":        []any{"Class"},
+					"name":          "Logged",
+					"file_path":     "src/models.py",
+					"language":      "python",
+					"start_line":    int64(4),
+					"end_line":      int64(8),
+					"repo_id":       "repo-1",
+					"repo_name":     "repo-1",
+					"decorators":    []any{"@tracked"},
+					"relationships": []any{},
+				}, nil
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/class-decorators-1/context", nil)
+	req.SetPathValue("entity_id", "class-decorators-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	if got, want := resp["semantic_summary"], "Class Logged is decorated with @tracked."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["story"], "Class Logged is decorated with @tracked. Defined in src/models.py (python)."; got != want {
+		t.Fatalf("resp[story] = %#v, want %#v", got, want)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "decorated_class"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	decorators, ok := profile["decorators"].([]any)
+	if !ok {
+		t.Fatalf("semantic_profile[decorators] type = %T, want []any", profile["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@tracked" {
+		t.Fatalf("semantic_profile[decorators] = %#v, want [@tracked]", decorators)
+	}
+}
+
 func TestGetEntityContextUsesGraphPythonTypeAnnotationsWithoutContent(t *testing.T) {
 	t.Parallel()
 
