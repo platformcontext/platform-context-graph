@@ -87,24 +87,25 @@ $ pcg watch .
 
 This is the CLI-friendly local equivalent of the long-running sync and re-index loop used in the deployable-service runtime.
 
-The same Go-owned bootstrap runtime also backs `pcg ecosystem index` and
-`pcg ecosystem update`, so local multi-repository indexing follows the same
-parser/write ownership boundary as the deployed Git write plane.
+For multi-repository local indexing, use `pcg workspace index`. The historical
+`pcg ecosystem index` and `pcg ecosystem update` commands are not part of the
+supported Go CLI contract.
 
 ---
 
-## `pcg delete`
+## Removed commands
 
-Removes a repository from the database. This does *not* delete your actual files, only the graph index.
+The old Python-era CLI exposed several management commands that the Go CLI does
+not support as public contracts today:
 
-**Usage:**
-```bash
-pcg delete [path] [options]
-```
+- `pcg delete`
+- `pcg clean`
+- `pcg add-package`
+- `pcg ecosystem index`
+- `pcg ecosystem status`
 
-**Common Options:**
-
-*   `--all`: Dangerous. Wipes the entire database.
+Deletion, cleanup, and recovery now belong to the Go admin/runtime surfaces
+rather than ad hoc local CLI mutations.
 
 ---
 

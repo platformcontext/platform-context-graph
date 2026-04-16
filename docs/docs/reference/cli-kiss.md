@@ -102,6 +102,21 @@ These are still local-only:
 - `pcg serve start`
 - `pcg neo4j setup`
 
+## Commands that are intentionally removed
+
+These names still appear in older docs, scripts, or muscle memory, but they are
+not part of the supported Go CLI contract anymore:
+
+- `pcg clean`
+- `pcg delete`
+- `pcg add-package`
+- `pcg unwatch`
+- `pcg watching`
+- `pcg ecosystem index`
+- `pcg ecosystem status`
+
+Use the Go admin/status flows or the supported indexing commands instead.
+
 ## Use this when you are unsure
 
 - Start with [CLI Reference](cli-reference.md) if you need the full command map.

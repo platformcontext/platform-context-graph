@@ -67,7 +67,7 @@ These are the currently known branch-level gaps outside parser family work.
 | API admin route mounting | pass | the shipped Go API now exposes the public `/api/v0/admin/*` control surface while the same process also mounts the shared service-local runtime admin probes and status routes | keep OpenAPI, docs, and query wiring aligned with the mounted admin contract |
 | Status endpoint breadth | pass | the API runtime now mounts the shared `/healthz`, `/readyz`, `/admin/status`, and `/metrics` surface, while the public query API exposes canonical `/api/v0/status/*` routes plus legacy `GET /api/v0/ingesters*` aliases for ingester status | keep docs, OpenAPI, and tests aligned with the shipped surface |
 | Run-scoped index coverage endpoints | bounded | the shipped completeness contract is `GET /api/v0/status/index`, legacy `GET /api/v0/index-status`, and repository-scoped `GET /api/v0/repositories/{repo_id}/coverage`; run-scoped coverage endpoints are intentionally not part of the public OpenAPI contract on this branch | keep that bounded contract explicit instead of reintroducing stale run-scoped claims |
-| CLI parity breadth | partial | core CLI ownership is Go, but a few flows are still thinner than the old Python behavior | decide which historical commands are required parity and close them intentionally |
+| CLI parity breadth | pass | the supported Go CLI contract is now explicit in both code and docs: historical commands are either supported, deprecated with guidance, or intentionally removed with compatibility errors instead of silently drifting from the Python-era UX | keep command metadata, docs, and focused CLI tests aligned |
 
 ## Feature Parity Status
 

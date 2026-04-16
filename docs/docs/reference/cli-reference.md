@@ -56,17 +56,17 @@ These options apply at the root command level.
 | `pcg index [path]` | Index a local path by launching the Go `bootstrap-index` runtime. | No |
 | `pcg index-status` | Show the latest checkpointed index status. This is the completeness signal, not process health. | Yes |
 | `pcg finalize` | **Removed.** Use the Go ingester admin recovery endpoints `/admin/refinalize` and `/admin/replay`. | No |
-| `pcg clean` | Remove orphaned nodes and relationships. | No |
+| `pcg clean` | **Removed.** Use the Go admin cleanup flows directly until a dedicated public cleanup command exists. | No |
 | `pcg stats [path]` | Show indexing statistics. | No |
-| `pcg delete <path>` | Delete one indexed repository. | No |
-| `pcg delete --all` | Delete every indexed repository. | No |
+| `pcg delete <path>` | **Removed.** Use the admin deletion flows directly until a dedicated public Go delete command exists. | No |
+| `pcg delete --all` | **Removed.** Use the admin deletion flows directly until a dedicated public Go delete command exists. | No |
 | `pcg visualize` | Launch the interactive Playground UI. | No |
 | `pcg list` | List indexed repositories. | No |
-| `pcg add-package` | Add a package dependency node via the Go `bootstrap-index` runtime. | No |
+| `pcg add-package` | **Removed.** Package indexing now belongs to the Go `bootstrap-index` runtime, not a standalone public CLI command. | No |
 | `pcg watch [path]` | Watch a local path and keep the graph updated. | No |
-| `pcg unwatch <path>` | Stop watching a path. | No |
-| `pcg watching` | List active watchers. | No |
-| `pcg query "<cypher>"` | Run a read-only Cypher query. | No |
+| `pcg unwatch <path>` | **Removed.** Watcher lifecycle belongs to the Go ingester runtime, not a public CLI contract. | No |
+| `pcg watching` | **Removed.** Watcher lifecycle belongs to the Go ingester runtime, not a public CLI contract. | No |
+| `pcg query "<query>"` | Run a language-query search against indexed code. | No |
 | `pcg start` | Deprecated root alias for `pcg mcp start`. | No |
 
 ### Workspace commands
@@ -152,18 +152,9 @@ These options apply at the root command level.
 
 | Command | Purpose |
 | :--- | :--- |
-| `pcg ecosystem generation` | Show the active relationship-resolution generation. |
-| `pcg ecosystem relationships` | List resolved repository relationships. |
-| `pcg ecosystem candidates` | List relationship candidates waiting for review. |
-| `pcg ecosystem assert-relationship` | Persist an explicit dependency assertion. |
-| `pcg ecosystem reject-relationship` | Persist an explicit dependency rejection. |
-| `pcg ecosystem index` | Index all repositories in a manifest through the Go `bootstrap-index` runtime. |
-| `pcg ecosystem status` | Show per-repository index status. |
-| `pcg ecosystem update` | Re-index only stale repositories through the Go `bootstrap-index` runtime. |
-| `pcg ecosystem link` | Build cross-repository relationships. |
-| `pcg ecosystem resolve` | Resolve evidence-backed repository dependencies. |
+| `pcg ecosystem index` | **Removed.** Use `pcg index`, `pcg workspace index`, or the Go admin reindex flows instead. |
+| `pcg ecosystem status` | **Removed.** Use `pcg index-status`, `pcg workspace status`, or the Go admin/status APIs instead. |
 | `pcg ecosystem overview` | Show ecosystem summary statistics. |
-| `pcg ecosystem query` | Run ecosystem-level queries. |
 
 ### Shortcuts
 
@@ -175,7 +166,7 @@ These are public aliases:
 | `pcg n` | `pcg neo4j setup` |
 | `pcg i` | `pcg index` |
 | `pcg ls` | `pcg list` |
-| `pcg rm` | `pcg delete` |
+| `pcg rm` | `pcg delete` (removed command; kept only as a compatibility alias) |
 | `pcg v` | `pcg visualize` |
 | `pcg w` | `pcg watch` |
 | `pcg export` | `pcg bundle export` |

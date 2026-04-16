@@ -1,10 +1,6 @@
 package main
 
-import (
-	"fmt"
-
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 var ecosystemCmd = &cobra.Command{
 	Use:   "ecosystem",
@@ -16,39 +12,43 @@ func init() {
 
 	ecosystemCmd.AddCommand(&cobra.Command{
 		Use:   "index",
-		Short: "Ecosystem indexing is now handled by the Go ingester",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Ecosystem indexing has been migrated to the Go ingester service.")
-			fmt.Println("Use: pcg index <path> or run the ingester directly.")
-			return nil
-		},
+		Short: "Removed: use the supported local or admin indexing flows instead",
+		RunE:  runEcosystemIndex,
 	})
 
 	ecosystemCmd.AddCommand(&cobra.Command{
 		Use:   "status",
-		Short: "Show ecosystem indexing status",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client := NewAPIClient("", "", "")
-			var result any
-			if err := client.Get("/api/v0/status/pipeline", &result); err != nil {
-				return err
-			}
-			printJSON(result)
-			return nil
-		},
+		Short: "Removed: no dedicated ecosystem status command is supported",
+		RunE:  runEcosystemStatus,
 	})
 
 	ecosystemCmd.AddCommand(&cobra.Command{
 		Use:   "overview",
 		Short: "Show ecosystem overview",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client := NewAPIClient("", "", "")
-			var result any
-			if err := client.Get("/api/v0/repositories", &result); err != nil {
-				return err
-			}
-			printJSON(result)
-			return nil
-		},
+		RunE:  runEcosystemOverview,
 	})
+}
+
+func runEcosystemIndex(cmd *cobra.Command, args []string) error {
+	return removedCommandError(
+		"pcg ecosystem index",
+		"Use `pcg index <path>` or the Go admin indexing flows until a dedicated ecosystem index contract exists.",
+	)
+}
+
+func runEcosystemStatus(cmd *cobra.Command, args []string) error {
+	return removedCommandError(
+		"pcg ecosystem status",
+		"Use `pcg index-status` or the Go admin/status APIs until a dedicated ecosystem status contract exists.",
+	)
+}
+
+func runEcosystemOverview(cmd *cobra.Command, args []string) error {
+	client := apiClientFromCmd(cmd)
+	var result any
+	if err := client.Get("/api/v0/ecosystem/overview", &result); err != nil {
+		return err
+	}
+	printJSON(result)
+	return nil
 }

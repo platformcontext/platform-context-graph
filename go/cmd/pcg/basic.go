@@ -51,7 +51,7 @@ func init() {
 	// delete
 	deleteCmd := &cobra.Command{
 		Use:   "delete [path]",
-		Short: "Delete one or all indexed repositories",
+		Short: "Removed: use admin deletion flows instead",
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runDelete,
 	}
@@ -61,15 +61,15 @@ func init() {
 	// clean
 	cleanCmd := &cobra.Command{
 		Use:   "clean",
-		Short: "Remove orphaned nodes and relationships",
+		Short: "Removed: use admin cleanup flows instead",
 		RunE:  runClean,
 	}
 	rootCmd.AddCommand(cleanCmd)
 
 	// query
 	queryCmd := &cobra.Command{
-		Use:   "query <cypher>",
-		Short: "Execute a read-only Cypher query",
+		Use:   "query <query>",
+		Short: "Execute a language query against indexed code",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runQuery,
 	}
@@ -88,7 +88,7 @@ func init() {
 	// unwatch
 	unwatchCmd := &cobra.Command{
 		Use:   "unwatch <path>",
-		Short: "Stop watching a directory",
+		Short: "Removed: watcher lifecycle is owned by the Go ingester runtime",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runUnwatch,
 	}
@@ -97,7 +97,7 @@ func init() {
 	// watching
 	watchingCmd := &cobra.Command{
 		Use:   "watching",
-		Short: "List all directories being watched",
+		Short: "Removed: watcher lifecycle is owned by the Go ingester runtime",
 		RunE:  runWatching,
 	}
 	rootCmd.AddCommand(watchingCmd)
@@ -105,7 +105,7 @@ func init() {
 	// add-package
 	addPkgCmd := &cobra.Command{
 		Use:   "add-package <name> <language>",
-		Short: "Add a package dependency to the code graph",
+		Short: "Removed: package indexing is owned by the Go bootstrap runtime",
 		Args:  cobra.ExactArgs(2),
 		RunE:  runAddPackage,
 	}
@@ -237,37 +237,28 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		printError("Please provide a path or use --all to delete all repositories")
 		return fmt.Errorf("missing path")
 	}
-	// For now, delete uses the admin API
-	client := NewAPIClient("", "", "")
 	if allRepos {
-		fmt.Println("Deleting all repositories...")
-		// This would need a specific endpoint; for now print guidance
-		fmt.Println("Use the admin API or Cypher: MATCH (r:Repository) DETACH DELETE r")
-	} else {
-		absPath, _ := filepath.Abs(args[0])
-		fmt.Printf("Deleting repository: %s\n", absPath)
-		var result any
-		_ = client.Post("/api/v0/admin/reindex", map[string]any{
-			"path":   absPath,
-			"action": "delete",
-		}, &result)
+		return removedCommandError(
+			"pcg delete --all",
+			"Use the admin API or an explicit graph mutation workflow until a dedicated Go delete command ships.",
+		)
 	}
-	return nil
+
+	return removedCommandError(
+		"pcg delete",
+		"Use the admin API or an explicit graph mutation workflow until a dedicated Go delete command ships.",
+	)
 }
 
 func runClean(cmd *cobra.Command, args []string) error {
-	fmt.Println("Cleaning orphaned nodes and relationships...")
-	client := NewAPIClient("", "", "")
-	var result any
-	if err := client.Post("/api/v0/admin/reindex", map[string]any{"action": "clean"}, &result); err != nil {
-		return err
-	}
-	printJSON(result)
-	return nil
+	return removedCommandError(
+		"pcg clean",
+		"Use the Go admin APIs directly until a dedicated cleanup command exists.",
+	)
 }
 
 func runQuery(cmd *cobra.Command, args []string) error {
-	client := NewAPIClient("", "", "")
+	client := apiClientFromCmd(cmd)
 	var result any
 	if err := client.Post("/api/v0/code/language-query", map[string]any{
 		"query": args[0],
@@ -299,21 +290,24 @@ func runWatch(cmd *cobra.Command, args []string) error {
 }
 
 func runUnwatch(cmd *cobra.Command, args []string) error {
-	fmt.Printf("Stopped watching: %s\n", args[0])
-	return nil
+	return removedCommandError(
+		"pcg unwatch",
+		"Watcher lifecycle is currently owned by the Go ingester runtime rather than the public CLI.",
+	)
 }
 
 func runWatching(cmd *cobra.Command, args []string) error {
-	fmt.Println("Active watchers are managed by the Go ingester service.")
-	fmt.Println("Check ingester status: curl http://localhost:8080/api/v0/status/ingesters")
-	return nil
+	return removedCommandError(
+		"pcg watching",
+		"Watcher lifecycle is currently owned by the Go ingester runtime rather than the public CLI.",
+	)
 }
 
 func runAddPackage(cmd *cobra.Command, args []string) error {
-	fmt.Printf("Adding package %s (%s) to the code graph...\n", args[0], args[1])
-	// Package addition would be handled via the ingester
-	fmt.Println("Package indexing is handled by the Go bootstrap-index binary.")
-	return nil
+	return removedCommandError(
+		"pcg add-package",
+		"Package indexing is currently owned by the Go bootstrap-index runtime, not a standalone public CLI command.",
+	)
 }
 
 // addRemoteFlags adds --service-url, --api-key, and --profile flags to a command.
