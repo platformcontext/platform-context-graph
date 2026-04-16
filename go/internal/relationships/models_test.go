@@ -53,6 +53,8 @@ func TestEvidenceKindConstants(t *testing.T) {
 		EvidenceKindTerragruntDependencyConfigPath: "TERRAGRUNT_DEPENDENCY_CONFIG_PATH",
 		EvidenceKindHelmChart:                      "HELM_CHART_REFERENCE",
 		EvidenceKindArgoCDAppSource:                "ARGOCD_APPLICATION_SOURCE",
+		EvidenceKindJenkinsSharedLibrary:           "JENKINS_SHARED_LIBRARY",
+		EvidenceKindJenkinsGitHubRepository:        "JENKINS_GITHUB_REPOSITORY",
 		EvidenceKindKustomizeResource:              "KUSTOMIZE_RESOURCE_REFERENCE",
 		EvidenceKindKustomizeHelmChart:             "KUSTOMIZE_HELM_CHART_REFERENCE",
 		EvidenceKindKustomizeImage:                 "KUSTOMIZE_IMAGE_REFERENCE",

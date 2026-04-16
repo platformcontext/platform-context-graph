@@ -1,0 +1,108 @@
+package query
+
+import (
+	"context"
+	"testing"
+)
+
+func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesExplicitRefsFromSource(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:     "gha-workflow-1",
+		RepoID:       "repo-1",
+		RelativePath: ".github/workflows/deploy.yaml",
+		EntityType:   "File",
+		EntityName:   "deploy",
+		Language:     "yaml",
+		SourceCache: `name: Deploy
+jobs:
+  deploy:
+    uses: myorg/deployment-helm/.github/workflows/deploy.yaml@main
+  local:
+    uses: ./.github/workflows/local.yaml
+  checkout:
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: myorg/deployment-kustomize
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+
+	if len(relationships.outgoing) != 2 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 2", len(relationships.outgoing))
+	}
+
+	first := relationships.outgoing[0]
+	if got, want := first["type"], "DEPLOYS_FROM"; got != want {
+		t.Fatalf("relationships.outgoing[0][type] = %#v, want %#v", got, want)
+	}
+	if got, want := first["target_name"], "myorg/deployment-helm"; got != want {
+		t.Fatalf("relationships.outgoing[0][target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := first["reason"], "github_actions_reusable_workflow_ref"; got != want {
+		t.Fatalf("relationships.outgoing[0][reason] = %#v, want %#v", got, want)
+	}
+
+	second := relationships.outgoing[1]
+	if got, want := second["type"], "DISCOVERS_CONFIG_IN"; got != want {
+		t.Fatalf("relationships.outgoing[1][type] = %#v, want %#v", got, want)
+	}
+	if got, want := second["target_name"], "myorg/deployment-kustomize"; got != want {
+		t.Fatalf("relationships.outgoing[1][target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := second["reason"], "github_actions_checkout_repository"; got != want {
+		t.Fatalf("relationships.outgoing[1][reason] = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesExplicitRefsFromMetadata(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:     "gha-workflow-2",
+		RepoID:       "repo-1",
+		RelativePath: ".github/workflows/release.yaml",
+		EntityType:   "File",
+		EntityName:   "release",
+		Metadata: map[string]any{
+			"workflow_refs": []any{
+				"myorg/deployment-helm/.github/workflows/release.yaml@main",
+				"./.github/workflows/internal.yaml@main",
+			},
+			"checkout_repository": "myorg/deployment-kustomize",
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+
+	if len(relationships.outgoing) != 2 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 2", len(relationships.outgoing))
+	}
+
+	first := relationships.outgoing[0]
+	if got, want := first["type"], "DEPLOYS_FROM"; got != want {
+		t.Fatalf("relationships.outgoing[0][type] = %#v, want %#v", got, want)
+	}
+	if got, want := first["target_name"], "myorg/deployment-helm"; got != want {
+		t.Fatalf("relationships.outgoing[0][target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := first["reason"], "github_actions_reusable_workflow_ref"; got != want {
+		t.Fatalf("relationships.outgoing[0][reason] = %#v, want %#v", got, want)
+	}
+
+	second := relationships.outgoing[1]
+	if got, want := second["type"], "DISCOVERS_CONFIG_IN"; got != want {
+		t.Fatalf("relationships.outgoing[1][type] = %#v, want %#v", got, want)
+	}
+	if got, want := second["target_name"], "myorg/deployment-kustomize"; got != want {
+		t.Fatalf("relationships.outgoing[1][target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := second["reason"], "github_actions_checkout_repository"; got != want {
+		t.Fatalf("relationships.outgoing[1][reason] = %#v, want %#v", got, want)
+	}
+}

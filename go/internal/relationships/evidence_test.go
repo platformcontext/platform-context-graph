@@ -458,6 +458,78 @@ func TestDiscoverDockerComposeEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverJenkinsSharedLibraryEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-service",
+			Payload: map[string]any{
+				"relative_path": "Jenkinsfile",
+				"content":       "@Library('pipelines') _\n",
+				"parsed_file_data": map[string]any{
+					"shared_libraries": []any{"pipelines"},
+				},
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-pipelines", Aliases: []string{"pipelines"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+	if evidence[0].EvidenceKind != EvidenceKindJenkinsSharedLibrary {
+		t.Fatalf("kind = %q, want %q", evidence[0].EvidenceKind, EvidenceKindJenkinsSharedLibrary)
+	}
+	if evidence[0].RelationshipType != RelDiscoversConfigIn {
+		t.Fatalf("type = %q, want %q", evidence[0].RelationshipType, RelDiscoversConfigIn)
+	}
+	if evidence[0].TargetRepoID != "repo-pipelines" {
+		t.Fatalf("target = %q, want %q", evidence[0].TargetRepoID, "repo-pipelines")
+	}
+}
+
+func TestDiscoverJenkinsGitHubRepositoryEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-service",
+			Payload: map[string]any{
+				"relative_path": "Jenkinsfile",
+				"content": `node {
+  git url: "https://github.com/boatsgroup/terraform-modules-aws.git"
+}`,
+				"parsed_file_data": map[string]any{
+					"shell_commands": []any{
+						`git clone https://github.com/boatsgroup/terraform-modules-aws.git`,
+					},
+				},
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-modules", Aliases: []string{"terraform-modules-aws"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+	if evidence[0].EvidenceKind != EvidenceKindJenkinsGitHubRepository {
+		t.Fatalf("kind = %q, want %q", evidence[0].EvidenceKind, EvidenceKindJenkinsGitHubRepository)
+	}
+	if evidence[0].RelationshipType != RelDiscoversConfigIn {
+		t.Fatalf("type = %q, want %q", evidence[0].RelationshipType, RelDiscoversConfigIn)
+	}
+	if evidence[0].TargetRepoID != "repo-modules" {
+		t.Fatalf("target = %q, want %q", evidence[0].TargetRepoID, "repo-modules")
+	}
+}
+
 func TestIsTerraformArtifactIncludesVariableFiles(t *testing.T) {
 	t.Parallel()
 

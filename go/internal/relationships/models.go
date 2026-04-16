@@ -36,6 +36,10 @@ const (
 	EvidenceKindGitHubActionsReusableWorkflow EvidenceKind = "GITHUB_ACTIONS_REUSABLE_WORKFLOW"
 	// EvidenceKindGitHubActionsCheckoutRepository is an explicit checkout repo reference.
 	EvidenceKindGitHubActionsCheckoutRepository EvidenceKind = "GITHUB_ACTIONS_CHECKOUT_REPOSITORY"
+	// EvidenceKindJenkinsSharedLibrary is a Jenkins shared library reference.
+	EvidenceKindJenkinsSharedLibrary EvidenceKind = "JENKINS_SHARED_LIBRARY"
+	// EvidenceKindJenkinsGitHubRepository is an explicit GitHub repo URL inside Jenkins automation.
+	EvidenceKindJenkinsGitHubRepository EvidenceKind = "JENKINS_GITHUB_REPOSITORY"
 	// EvidenceKindDockerComposeBuildContext is a Compose build context repo reference.
 	EvidenceKindDockerComposeBuildContext EvidenceKind = "DOCKER_COMPOSE_BUILD_CONTEXT"
 	// EvidenceKindDockerComposeImage is a Compose image repo reference.

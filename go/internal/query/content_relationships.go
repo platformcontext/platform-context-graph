@@ -42,6 +42,9 @@ func buildOutgoingContentRelationships(
 	if relationships, ok, err := buildOutgoingTerraformRelationships(entity); ok || err != nil {
 		return relationships, err
 	}
+	if relationships, ok, err := buildOutgoingGitHubActionsRelationships(entity); ok || err != nil {
+		return relationships, err
+	}
 	if reader == nil {
 		return nil, nil
 	}
@@ -146,6 +149,38 @@ func buildOutgoingArgoCDRelationships(entity EntityContent) ([]map[string]any, b
 	default:
 		return nil, false, nil
 	}
+}
+
+func buildOutgoingGitHubActionsRelationships(entity EntityContent) ([]map[string]any, bool, error) {
+	metadataRelationships := githubActionsMetadataRelationships(entity.Metadata)
+	sourceRelationships := githubActionsSourceRelationships(entity)
+	if len(metadataRelationships)+len(sourceRelationships) == 0 {
+		return nil, false, nil
+	}
+
+	relationships := make([]map[string]any, 0, len(metadataRelationships)+len(sourceRelationships))
+	seen := make(map[string]struct{}, len(metadataRelationships)+len(sourceRelationships))
+	add := func(relationship githubActionsRelationship) {
+		key := relationship.relationshipType + "|" + relationship.targetName + "|" + relationship.reason
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		relationships = append(relationships, map[string]any{
+			"type":        relationship.relationshipType,
+			"target_name": relationship.targetName,
+			"reason":      relationship.reason,
+		})
+	}
+
+	for _, relationship := range metadataRelationships {
+		add(relationship)
+	}
+	for _, relationship := range sourceRelationships {
+		add(relationship)
+	}
+
+	return relationships, true, nil
 }
 
 func buildOutgoingArgoCDApplicationRelationships(entity EntityContent) []map[string]any {

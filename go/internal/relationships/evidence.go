@@ -89,12 +89,10 @@ var terraformPatterns = []terraformPattern{
 }
 
 var (
-	terraformModuleBlockPattern      = regexp.MustCompile(`(?is)module\s+"([^"]+)"\s*\{(.*?)\}`)
-	terragruntTerraformBlockPattern  = regexp.MustCompile(`(?is)terraform\s*\{(.*?)\}`)
-	terragruntDependencyBlockPattern = regexp.MustCompile(`(?is)\bdependency\s+"([^"]+)"\s*\{(.*?)\}`)
-	terragruntConfigPathPattern      = regexp.MustCompile(`(?i)\bconfig_path\s*=\s*"([^"]+)"`)
-	terraformSourcePattern           = regexp.MustCompile(`(?i)\bsource\b\s*=\s*"([^"]+)"`)
-	terraformRegistrySourcePattern   = regexp.MustCompile(`^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+(?://.*)?$`)
+	terraformModuleBlockPattern    = regexp.MustCompile(`(?is)module\s+"([^"]+)"\s*\{(.*?)\}`)
+	terragruntConfigPathPattern    = regexp.MustCompile(`(?i)\bconfig_path\s*=\s*"([^"]+)"`)
+	terraformSourcePattern         = regexp.MustCompile(`(?i)\bsource\b\s*=\s*"([^"]+)"`)
+	terraformRegistrySourcePattern = regexp.MustCompile(`^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+(?://.*)?$`)
 )
 
 // helmChartFilenames are the recognized Helm chart metadata files.
@@ -164,6 +162,10 @@ func discoverFromEnvelope(
 	case isArgoCDArtifact(artifactType, content):
 		evidence = append(evidence, discoverArgoCDEvidence(
 			sourceRepoID, filePath, content, catalog, seen,
+		)...)
+	case isJenkinsArtifact(filePath):
+		evidence = append(evidence, discoverJenkinsEvidence(
+			sourceRepoID, filePath, content, parsedFileData, catalog, seen,
 		)...)
 	case artifactType == "docker_compose":
 		evidence = append(evidence, discoverDockerComposeEvidence(
@@ -631,6 +633,11 @@ func isArgoCDArtifact(artifactType, content string) bool {
 	}
 	return strings.Contains(content, "kind: Application") ||
 		strings.Contains(content, "kind: ApplicationSet")
+}
+
+func isJenkinsArtifact(filePath string) bool {
+	base := strings.ToLower(fileBaseName(filePath))
+	return base == "jenkinsfile" || strings.HasPrefix(base, "jenkinsfile.")
 }
 
 // fileBaseName returns the last path component of a file path.
