@@ -2,6 +2,12 @@ package reducer
 
 import "strings"
 
+type inheritanceTraitAlias struct {
+	TraitName        string
+	SourceMethodName string
+	AliasMethodName  string
+}
+
 func inheritancePayloadTraitAdaptations(payload map[string]any) []string {
 	return semanticPayloadMetadataStringSlice(payload, "trait_adaptations")
 }
@@ -35,34 +41,62 @@ func inheritanceTraitOverrideTargets(adaptation string) []string {
 }
 
 func inheritanceTraitAliasTargets(adaptation string) []string {
+	alias, ok := inheritanceTraitAliasMapping(adaptation)
+	if !ok {
+		return nil
+	}
+
+	return []string{alias.TraitName}
+}
+
+func inheritanceTraitAliasMapping(adaptation string) (inheritanceTraitAlias, bool) {
 	trimmed := strings.TrimSpace(adaptation)
 	if trimmed == "" {
-		return nil
+		return inheritanceTraitAlias{}, false
 	}
 
 	lower := strings.ToLower(trimmed)
 	key := " as "
 	index := strings.Index(lower, key)
 	if index < 0 {
-		return nil
+		return inheritanceTraitAlias{}, false
 	}
 
 	head := strings.TrimSpace(trimmed[:index])
 	if head == "" {
-		return nil
+		return inheritanceTraitAlias{}, false
 	}
 
 	parts := strings.Split(head, "::")
-	if len(parts) == 0 {
-		return nil
+	if len(parts) != 2 {
+		return inheritanceTraitAlias{}, false
 	}
 
 	traitName := inheritanceTraitName(parts[0])
-	if traitName == "" {
-		return nil
+	sourceMethodName := strings.TrimSpace(parts[1])
+	if traitName == "" || sourceMethodName == "" {
+		return inheritanceTraitAlias{}, false
 	}
 
-	return []string{traitName}
+	tail := strings.TrimSpace(trimmed[index+len(key):])
+	if tail == "" {
+		return inheritanceTraitAlias{}, false
+	}
+
+	tailFields := strings.Fields(tail)
+	if len(tailFields) == 0 {
+		return inheritanceTraitAlias{}, false
+	}
+	aliasMethodName := strings.TrimSpace(tailFields[len(tailFields)-1])
+	if aliasMethodName == "" {
+		return inheritanceTraitAlias{}, false
+	}
+
+	return inheritanceTraitAlias{
+		TraitName:        traitName,
+		SourceMethodName: sourceMethodName,
+		AliasMethodName:  aliasMethodName,
+	}, true
 }
 
 func inheritanceTraitName(raw string) string {

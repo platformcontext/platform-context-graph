@@ -126,6 +126,7 @@ func ExtractInheritanceRows(envelopes []facts.Envelope) ([]string, []map[string]
 
 	// Build entity index: entity_name -> entity_id for intra-repo matching.
 	entityIndex := buildInheritanceEntityIndex(envelopes)
+	methodIndex := buildInheritanceMethodIndex(envelopes)
 
 	seenEdges := make(map[string]struct{})
 	rows := make([]map[string]any, 0)
@@ -216,6 +217,38 @@ func ExtractInheritanceRows(envelopes []facts.Envelope) ([]string, []map[string]
 					"relationship_type": "ALIASES",
 				})
 			}
+
+			aliasMapping, ok := inheritanceTraitAliasMapping(adaptation)
+			if !ok {
+				continue
+			}
+
+			childMethodID, childOK := methodIndex[inheritanceMethodIndexKey{
+				repoID:       repoID,
+				classContext: semanticPayloadString(env.Payload, "entity_name"),
+				name:         aliasMapping.AliasMethodName,
+			}]
+			parentMethodID, parentOK := methodIndex[inheritanceMethodIndexKey{
+				repoID:       repoID,
+				classContext: aliasMapping.TraitName,
+				name:         aliasMapping.SourceMethodName,
+			}]
+			if !childOK || !parentOK {
+				continue
+			}
+
+			edgeKey := childMethodID + "->" + parentMethodID + ":ALIASES"
+			if _, dup := seenEdges[edgeKey]; dup {
+				continue
+			}
+			seenEdges[edgeKey] = struct{}{}
+
+			rows = append(rows, map[string]any{
+				"child_entity_id":   childMethodID,
+				"parent_entity_id":  parentMethodID,
+				"repo_id":           repoID,
+				"relationship_type": "ALIASES",
+			})
 		}
 	}
 
@@ -235,6 +268,12 @@ func ExtractInheritanceRows(envelopes []facts.Envelope) ([]string, []map[string]
 type inheritanceIndexKey struct {
 	repoID string
 	name   string
+}
+
+type inheritanceMethodIndexKey struct {
+	repoID       string
+	classContext string
+	name         string
 }
 
 // buildInheritanceEntityIndex builds a map from (repo_id, entity_name) to
@@ -257,6 +296,34 @@ func buildInheritanceEntityIndex(envelopes []facts.Envelope) map[inheritanceInde
 		}
 		key := inheritanceIndexKey{repoID: repoID, name: entityName}
 		// First-seen wins; duplicates are ignored for matching purposes.
+		if _, exists := index[key]; !exists {
+			index[key] = entityID
+		}
+	}
+	return index
+}
+
+func buildInheritanceMethodIndex(envelopes []facts.Envelope) map[inheritanceMethodIndexKey]string {
+	index := make(map[inheritanceMethodIndexKey]string)
+	for _, env := range envelopes {
+		if env.FactKind != "content_entity" {
+			continue
+		}
+		if semanticPayloadString(env.Payload, "entity_type") != "Function" {
+			continue
+		}
+		repoID := semanticPayloadString(env.Payload, "repo_id")
+		classContext := semanticPayloadMetadataString(env.Payload, "class_context")
+		entityName := semanticPayloadString(env.Payload, "entity_name")
+		entityID := semanticPayloadString(env.Payload, "entity_id")
+		if repoID == "" || classContext == "" || entityName == "" || entityID == "" {
+			continue
+		}
+		key := inheritanceMethodIndexKey{
+			repoID:       repoID,
+			classContext: classContext,
+			name:         entityName,
+		}
 		if _, exists := index[key]; !exists {
 			index[key] = entityID
 		}
