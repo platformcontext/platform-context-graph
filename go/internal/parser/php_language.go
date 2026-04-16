@@ -67,6 +67,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 	seenVariables := make(map[string]struct{})
 	seenCalls := make(map[string]struct{})
 	classPropertyTypes := make(map[string]map[string]string)
+	classParentTypes := make(map[string]string)
 	localVariableTypes := make(map[string]map[string]string)
 	methodReturnTypes := make(map[string]map[string]string)
 	functionReturnTypes := make(map[string]string)
@@ -136,6 +137,9 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			if len(bases) > 0 {
 				item["bases"] = bases
 			}
+			if strings.Contains(anonymousTail, "extends") && len(bases) > 0 {
+				classParentTypes[name] = normalizePHPImportedTypeName(bases[0], importAliases)
+			}
 			appendBucket(payload, "classes", item)
 			pendingAnonymousClass = &phpScopedContext{
 				kind:       "class_declaration",
@@ -159,6 +163,9 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			}
 			switch matches[1] {
 			case "class":
+				if strings.Contains(matches[3], "extends") && len(bases) > 0 {
+					classParentTypes[name] = normalizePHPImportedTypeName(bases[0], importAliases)
+				}
 				appendBucket(payload, "classes", item)
 				stack = append(stack, phpScopedContext{kind: "class_declaration", name: name, braceDepth: braceDepth + max(1, strings.Count(rawLine, "{")), lineNumber: lineNumber})
 			case "interface":
@@ -237,6 +244,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				variable,
 				lineNumber,
 				currentClassContext,
+				classParentTypes,
 				classPropertyTypes,
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
@@ -286,6 +294,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			inferredObjType := inferPHPMethodReceiverType(
 				match[1],
 				currentClassContext,
+				classParentTypes,
 				classPropertyTypes,
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
@@ -309,6 +318,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			inferredObjType := inferPHPMethodReceiverType(
 				match,
 				currentClassContext,
+				classParentTypes,
 				classPropertyTypes,
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
@@ -321,7 +331,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			if len(match) != 3 {
 				continue
 			}
-			receiver := normalizePHPStaticReceiver(match[1], currentClassContext, importAliases)
+			receiver := normalizePHPStaticReceiver(match[1], currentClassContext, classParentTypes, importAliases)
 			if receiver == "" {
 				continue
 			}
@@ -436,7 +446,7 @@ func normalizePHPMethodCall(raw string) string {
 	return strings.Join(parts[:len(parts)-1], "->") + "." + parts[len(parts)-1]
 }
 
-func normalizePHPStaticReceiver(raw string, classContext string, importAliases map[string]string) string {
+func normalizePHPStaticReceiver(raw string, classContext string, classParentTypes map[string]string, importAliases map[string]string) string {
 	receiver := strings.TrimSpace(raw)
 	if receiver == "" {
 		return ""
@@ -448,7 +458,10 @@ func normalizePHPStaticReceiver(raw string, classContext string, importAliases m
 			return classContext
 		}
 	case "parent":
-		return receiver
+		if parentType := strings.TrimSpace(classParentTypes[classContext]); parentType != "" {
+			return parentType
+		}
+		return ""
 	}
 
 	trimmed := strings.TrimPrefix(receiver, `\`)

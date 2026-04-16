@@ -27,6 +27,7 @@ func inferPHPVariableType(
 	variable string,
 	lineNumber int,
 	classContext string,
+	classParentTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
@@ -43,7 +44,7 @@ func inferPHPVariableType(
 		if strings.Contains(matches[2], "new class") {
 			return phpAnonymousClassName(lineNumber)
 		}
-		if inferred := inferPHPReferenceType(matches[2], classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
+		if inferred := inferPHPReferenceType(matches[2], classContext, classParentTypes, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
 			return inferred
 		}
 		if inferred := inferPHPFunctionCallType(matches[2], functionReturnTypes, importAliases); inferred != "" {
@@ -56,6 +57,7 @@ func inferPHPVariableType(
 func inferPHPMethodReceiverType(
 	raw string,
 	classContext string,
+	classParentTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
@@ -69,12 +71,13 @@ func inferPHPMethodReceiverType(
 	if index := strings.LastIndex(trimmed, "->"); index >= 0 {
 		trimmed = trimmed[:index]
 	}
-	return inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases)
+	return inferPHPReferenceType(trimmed, classContext, classParentTypes, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases)
 }
 
 func inferPHPReferenceType(
 	raw string,
 	classContext string,
+	classParentTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
@@ -92,7 +95,7 @@ func inferPHPReferenceType(
 		case "self", "static":
 			return classContext
 		case "parent":
-			return ""
+			return resolvePHPParentClassType(classContext, classParentTypes)
 		default:
 			return normalized
 		}
@@ -102,11 +105,11 @@ func inferPHPReferenceType(
 		return inferred
 	}
 
-	if inferred := inferPHPMethodCallType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
+	if inferred := inferPHPMethodCallType(trimmed, classContext, classParentTypes, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
 		return inferred
 	}
 
-	if inferred := inferPHPCallChainType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
+	if inferred := inferPHPCallChainType(trimmed, classContext, classParentTypes, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
 		return inferred
 	}
 
@@ -141,6 +144,7 @@ func inferPHPReferenceType(
 func inferPHPCallChainType(
 	raw string,
 	classContext string,
+	classParentTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
@@ -166,7 +170,7 @@ func inferPHPCallChainType(
 	if inferred := inferPHPFunctionCallType(root, functionReturnTypes, importAliases); inferred != "" {
 		return resolvePHPReferenceChainType(inferred, remainder, classPropertyTypes, methodReturnTypes, functionReturnTypes, importAliases)
 	}
-	if inferred := inferPHPMethodCallType(root, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
+	if inferred := inferPHPMethodCallType(root, classContext, classParentTypes, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
 		return resolvePHPReferenceChainType(inferred, remainder, classPropertyTypes, methodReturnTypes, functionReturnTypes, importAliases)
 	}
 
@@ -176,6 +180,7 @@ func inferPHPCallChainType(
 func inferPHPMethodCallType(
 	raw string,
 	classContext string,
+	classParentTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
@@ -216,7 +221,7 @@ func inferPHPMethodCallType(
 		return ""
 	}
 
-	receiverType := resolvePHPReferenceRootType(receiverExpr, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases)
+	receiverType := resolvePHPReferenceRootType(receiverExpr, classContext, classParentTypes, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases)
 	if receiverType == "" {
 		return ""
 	}
@@ -227,6 +232,7 @@ func inferPHPMethodCallType(
 func resolvePHPReferenceRootType(
 	raw string,
 	classContext string,
+	classParentTypes map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	localVariableTypes map[string]string,
 	methodReturnTypes map[string]map[string]string,
@@ -241,8 +247,11 @@ func resolvePHPReferenceRootType(
 	if trimmed == "self" || trimmed == "static" {
 		return classContext
 	}
+	if trimmed == "parent" {
+		return resolvePHPParentClassType(classContext, classParentTypes)
+	}
 
-	if inferred := inferPHPReferenceType(trimmed, classContext, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
+	if inferred := inferPHPReferenceType(trimmed, classContext, classParentTypes, classPropertyTypes, localVariableTypes, methodReturnTypes, functionReturnTypes, importAliases); inferred != "" {
 		return inferred
 	}
 
@@ -251,6 +260,13 @@ func resolvePHPReferenceRootType(
 	}
 
 	return normalizePHPImportedTypeName(trimmed, importAliases)
+}
+
+func resolvePHPParentClassType(classContext string, classParentTypes map[string]string) string {
+	if classContext == "" || len(classParentTypes) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(classParentTypes[classContext])
 }
 
 func inferPHPFunctionCallType(

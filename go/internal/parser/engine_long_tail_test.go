@@ -76,9 +76,12 @@ func TestDefaultEngineParsePathPHPFixtures(t *testing.T) {
 		t.Fatalf("ParsePath(%q) error = %v, want nil", staticCallsPath, err)
 	}
 	assertNamedBucketContains(t, staticCallsPayload, "classes", "Logger")
+	assertNamedBucketContains(t, staticCallsPayload, "classes", "Child")
 	assertNamedBucketContains(t, staticCallsPayload, "functions", "warn")
 	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "full_name", "Logger.warn")
 	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "inferred_obj_type", "Logger")
+	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "full_name", "parent::instance()->createService().info")
+	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "inferred_obj_type", "Service")
 
 	staticAliasCallsPath := filepath.Join(repoRoot, "static_alias_calls.php")
 	staticAliasCallsPayload, err := engine.ParsePath(repoRoot, staticAliasCallsPath, false, Options{})
