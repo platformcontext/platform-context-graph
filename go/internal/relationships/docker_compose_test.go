@@ -84,3 +84,40 @@ func TestDiscoverDockerComposeEvidencePromotesBuildContextAndImageReferences(t *
 		t.Fatalf("depends_on details = %#v, want %#v", got, want)
 	}
 }
+
+func TestDiscoverDockerComposeEvidenceSupportsBuildShorthandContext(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-deploy",
+			Payload: map[string]any{
+				"artifact_type": "docker_compose",
+				"relative_path": "docker-compose.yaml",
+				"content": `services:
+  api:
+    build: ../payments-service
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+
+	buildContext := evidence[0]
+	if got, want := buildContext.EvidenceKind, EvidenceKindDockerComposeBuildContext; got != want {
+		t.Fatalf("kind = %q, want %q", got, want)
+	}
+	if got, want := buildContext.TargetRepoID, "repo-payments"; got != want {
+		t.Fatalf("target = %q, want %q", got, want)
+	}
+	if got, want := buildContext.Details["build_context"], "../payments-service"; got != want {
+		t.Fatalf("details = %#v, want %#v", got, want)
+	}
+}

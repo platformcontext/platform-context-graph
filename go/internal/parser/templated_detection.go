@@ -26,7 +26,7 @@ var (
 
 func inferContentMetadata(path string, content string) contentMetadata {
 	rootFamily := inferRootFamily(path, content)
-	artifactType := inferArtifactType(rootFamily, path)
+	artifactType := inferArtifactType(rootFamily, path, content)
 	loweredContent := strings.ToLower(content)
 	if artifactType == "generic_config" || artifactType == "generic_config_template" {
 		switch {
@@ -95,6 +95,11 @@ func inferContentMetadata(path string, content string) contentMetadata {
 		if tfMarkerCount > 0 {
 			bucket = "terraform_hcl_templated"
 			templateDialect = "terraform_template"
+		}
+	case strings.HasPrefix(artifactType, "ansible_"):
+		bucket = artifactType
+		if explicitJinja || jinjaStatementRE.MatchString(content) || hasCurlyExpressions {
+			templateDialect = "jinja"
 		}
 	case !isYAMLSuffix(lastSuffix) && lastSuffix != ".kcl":
 		if templateDialect == "" && (explicitJinja || hasCurlyExpressions || hasGitHubActions || tfMarkerCount > 0) {
@@ -193,7 +198,7 @@ func inferRootFamily(path string, content string) string {
 	}
 }
 
-func inferArtifactType(rootFamily string, path string) string {
+func inferArtifactType(rootFamily string, path string, content string) string {
 	name := strings.ToLower(filepath.Base(path))
 	parts := pathParts(path)
 	suffixes := splitSuffixes(path)
@@ -202,8 +207,11 @@ func inferArtifactType(rootFamily string, path string) string {
 		lastSuffix = suffixes[len(suffixes)-1]
 	}
 	isTemplateSuffix := isJinjaSuffix(lastSuffix) || isTerraformTemplateSuffix(lastSuffix)
+	ansibleType := ansibleArtifactType(parts, name, content)
 
 	switch {
+	case ansibleType != "":
+		return ansibleType
 	case hasPart(parts, ".github") && hasPart(parts, "workflows"):
 		return "github_actions_workflow"
 	case name == "dockerfile" || strings.HasPrefix(name, "dockerfile."):
@@ -247,6 +255,37 @@ func inferArtifactType(rootFamily string, path string) string {
 	default:
 		return "plain_text"
 	}
+}
+
+func ansibleArtifactType(parts map[string]struct{}, name string, content string) string {
+	switch {
+	case hasPart(parts, "inventories", "inventory"):
+		return "ansible_inventory"
+	case hasPart(parts, "group_vars", "host_vars"):
+		return "ansible_vars"
+	case hasPart(parts, "playbooks"):
+		return "ansible_playbook"
+	case hasPart(parts, "roles"):
+		if hasPart(parts, "tasks") && (name == "main.yml" || name == "main.yaml") {
+			return "ansible_task_entrypoint"
+		}
+		if hasPart(parts, "vars", "defaults") {
+			return "ansible_vars"
+		}
+		return "ansible_role"
+	case isAnsiblePlaybookContent(content):
+		return "ansible_playbook"
+	default:
+		return ""
+	}
+}
+
+func isAnsiblePlaybookContent(content string) bool {
+	lowered := strings.ToLower(content)
+	return strings.Contains(lowered, "\nhosts:") ||
+		strings.Contains(lowered, "\nroles:") ||
+		strings.Contains(lowered, "\nvars_files:") ||
+		strings.Contains(lowered, "\nimport_playbook:")
 }
 
 func persistedArtifactType(bucket string, artifactType string) string {

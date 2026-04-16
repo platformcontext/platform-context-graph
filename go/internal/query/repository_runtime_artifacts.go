@@ -28,6 +28,9 @@ func buildRepositoryRuntimeArtifacts(files []FileContent) map[string]any {
 				"service_name":  service.ServiceName,
 				"signals":       service.signals(),
 			}
+			if service.BuildContext != "" {
+				row["build_context"] = service.BuildContext
+			}
 			if ports := composeRuntimeValues(service.Ports); len(ports) > 0 {
 				row["ports"] = ports
 			}
@@ -113,15 +116,19 @@ func mergeDeploymentArtifactMaps(left map[string]any, right map[string]any) map[
 }
 
 type composeRuntimeArtifact struct {
-	ServiceName string
-	Healthcheck bool
-	Ports       []string
-	Environment []string
-	Volumes     []string
+	ServiceName  string
+	BuildContext string
+	Healthcheck  bool
+	Ports        []string
+	Environment  []string
+	Volumes      []string
 }
 
 func (a composeRuntimeArtifact) signals() []string {
 	signals := make([]string, 0, 4)
+	if a.BuildContext != "" {
+		signals = append(signals, "build")
+	}
 	if a.Healthcheck {
 		signals = append(signals, "healthcheck")
 	}
@@ -156,7 +163,7 @@ func parseDockerComposeRuntimeArtifacts(content string) []composeRuntimeArtifact
 		current.Ports = composeRuntimeValues(current.Ports)
 		current.Environment = composeRuntimeValues(current.Environment)
 		current.Volumes = composeRuntimeValues(current.Volumes)
-		if current.Healthcheck || len(current.Ports) > 0 || len(current.Environment) > 0 || len(current.Volumes) > 0 {
+		if current.BuildContext != "" || current.Healthcheck || len(current.Ports) > 0 || len(current.Environment) > 0 || len(current.Volumes) > 0 {
 			artifacts = append(artifacts, *current)
 		}
 		current = nil
@@ -217,7 +224,7 @@ func parseDockerComposeRuntimeArtifacts(content string) []composeRuntimeArtifact
 			switch key {
 			case "healthcheck":
 				current.Healthcheck = true
-			case "ports", "environment", "volumes":
+			case "build", "ports", "environment", "volumes":
 				currentSection = key
 				currentSectionIndent = indent
 				composeCaptureRuntimeSectionInlineValue(current, key, value)
@@ -285,6 +292,14 @@ func composeCaptureRuntimeSectionValue(current *composeRuntimeArtifact, section,
 	}
 
 	switch section {
+	case "build":
+		if key, value, ok := yamlKeyValue(normalized); ok && key == "context" {
+			current.BuildContext = composeNormalizeScalar(value)
+			return
+		}
+		if current.BuildContext == "" {
+			current.BuildContext = composeNormalizeScalar(normalized)
+		}
 	case "ports":
 		current.Ports = append(current.Ports, composeNormalizeScalar(normalized))
 	case "environment":

@@ -147,6 +147,10 @@ func discoverFromEnvelope(
 	}
 
 	switch {
+	case isAnsibleArtifact(artifactType, filePath):
+		evidence = append(evidence, discoverAnsibleEvidence(
+			sourceRepoID, filePath, content, catalog, seen,
+		)...)
 	case isTerraformArtifact(artifactType, filePath):
 		evidence = append(evidence, discoverTerraformEvidence(
 			sourceRepoID, filePath, content, catalog, seen,

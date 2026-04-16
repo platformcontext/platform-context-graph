@@ -97,6 +97,41 @@ sh 'ansible-playbook deploy.yml -i inventory/dynamic_hosts.py --limit prod'
 	assertBucketContainsFieldValue(t, got, "ansible_playbook_hints", "playbook", "deploy.yml")
 }
 
+func TestDefaultEngineParsePathGroovyJenkinsfileLibraryStep(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Jenkinsfile")
+	writeTestFile(
+		t,
+		filePath,
+		`def libs = []
+library identifier: 'pipelines@v2'
+library('shared-controllers@main')
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertStringSliceContains(t, got["shared_libraries"], "pipelines")
+	assertStringSliceContains(t, got["shared_libraries"], "shared-controllers")
+
+	prescanned, err := engine.PreScanPaths([]string{filePath})
+	if err != nil {
+		t.Fatalf("PreScanPaths() error = %v, want nil", err)
+	}
+	assertPrescanContains(t, prescanned, "pipelines", filePath)
+	assertPrescanContains(t, prescanned, "shared-controllers", filePath)
+}
+
 func TestDefaultEnginePreScanPathsGroovyJenkinsfile(t *testing.T) {
 	t.Parallel()
 

@@ -8,6 +8,7 @@ import (
 
 var (
 	groovyLibraryPattern      = regexp.MustCompile(`@Library\(['"]([^'"]+)['"]\)`)
+	groovyLibraryStepPattern  = regexp.MustCompile(`(?is)\blibrary\s*(?:\(\s*)?(?:identifier\s*:\s*)?['"]([^'"]+)['"]`)
 	groovyPipelineCallPattern = regexp.MustCompile(`\b(pipeline[A-Za-z0-9_]*)\s*\(`)
 	groovyShellCommandPattern = regexp.MustCompile(`\bsh\s+['"]([^'"]+)['"]`)
 	groovyAnsiblePattern      = regexp.MustCompile(`ansible-playbook\s+([^\s]+)(?:.*?-i\s+([^\s]+))?`)
@@ -65,8 +66,18 @@ func (e *Engine) preScanGroovy(path string) ([]string, error) {
 	return names, nil
 }
 
+// ExtractGroovyPipelineMetadata returns the explicit Jenkins/Groovy signals
+// that the parser can safely prove from source text.
+func ExtractGroovyPipelineMetadata(sourceText string) map[string]any {
+	return extractGroovyPipelineMetadata(sourceText)
+}
+
 func extractGroovyPipelineMetadata(sourceText string) map[string]any {
-	sharedLibraries := orderedUniqueStrings(groovyLibraryPattern.FindAllStringSubmatch(sourceText, -1), 1)
+	sharedLibraryMatches := append(
+		groovyLibraryPattern.FindAllStringSubmatch(sourceText, -1),
+		groovyLibraryStepPattern.FindAllStringSubmatch(sourceText, -1)...,
+	)
+	sharedLibraries := normalizeGroovyLibraryReferences(orderedUniqueStrings(sharedLibraryMatches, 1))
 	pipelineCalls := orderedUniqueStrings(groovyPipelineCallPattern.FindAllStringSubmatch(sourceText, -1), 1)
 	shellCommands := orderedUniqueStrings(groovyShellCommandPattern.FindAllStringSubmatch(sourceText, -1), 1)
 
@@ -104,6 +115,25 @@ func extractGroovyPipelineMetadata(sourceText string) map[string]any {
 		"use_configd":            useConfigd,
 		"has_pre_deploy":         groovyPreDeployPattern.MatchString(sourceText),
 	}
+}
+
+func normalizeGroovyLibraryReferences(libraries []string) []string {
+	normalized := make([]string, 0, len(libraries))
+	for _, library := range libraries {
+		library = strings.TrimSpace(library)
+		if library == "" {
+			continue
+		}
+		if at := strings.Index(library, "@"); at >= 0 {
+			library = library[:at]
+		}
+		library = strings.TrimSpace(library)
+		if library == "" {
+			continue
+		}
+		normalized = append(normalized, library)
+	}
+	return normalized
 }
 
 func orderedUniqueStrings(matches [][]string, group int) []string {

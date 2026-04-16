@@ -67,6 +67,8 @@ func infraFamilyForEntityType(entityType string) string {
 
 func infraFamilyForArtifactType(artifactType string) string {
 	switch artifactType {
+	case "ansible_playbook", "ansible_inventory", "ansible_role", "ansible_vars", "ansible_task_entrypoint":
+		return "ansible"
 	case "github_actions_workflow":
 		return "github_actions"
 	case "dockerfile", "docker_compose":

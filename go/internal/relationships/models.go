@@ -54,6 +54,8 @@ const (
 	EvidenceKindKustomizeHelmChart EvidenceKind = "KUSTOMIZE_HELM_CHART_REFERENCE"
 	// EvidenceKindKustomizeImage is a Kustomize image reference.
 	EvidenceKindKustomizeImage EvidenceKind = "KUSTOMIZE_IMAGE_REFERENCE"
+	// EvidenceKindAnsibleRoleReference is an Ansible playbook role reference.
+	EvidenceKindAnsibleRoleReference EvidenceKind = "ANSIBLE_ROLE_REFERENCE"
 )
 
 // RelationshipType classifies the kind of link between two entities.

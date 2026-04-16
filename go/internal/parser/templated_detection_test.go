@@ -50,6 +50,46 @@ value = ${var.name}
 			wantIACRelated: false,
 		},
 		{
+			name:         "ansible playbook is classified",
+			relativePath: filepath.Join("playbooks", "site.yml"),
+			content: `- hosts: all
+  roles:
+    - common
+`,
+			wantArtifact:   "ansible_playbook",
+			wantDialect:    "",
+			wantIACRelated: true,
+		},
+		{
+			name:         "ansible inventory is classified",
+			relativePath: filepath.Join("inventories", "prod", "hosts.yml"),
+			content: `all:
+  children:
+    web:
+      hosts:
+        web-1.example.com:
+`,
+			wantArtifact:   "ansible_inventory",
+			wantDialect:    "",
+			wantIACRelated: true,
+		},
+		{
+			name:           "ansible role task entrypoint is classified",
+			relativePath:   filepath.Join("roles", "web", "tasks", "main.yml"),
+			content:        "- debug:\n    msg: hello\n",
+			wantArtifact:   "ansible_task_entrypoint",
+			wantDialect:    "",
+			wantIACRelated: true,
+		},
+		{
+			name:           "ansible vars file is classified",
+			relativePath:   filepath.Join("group_vars", "all.yml"),
+			content:        "app_name: demo\n",
+			wantArtifact:   "ansible_vars",
+			wantDialect:    "",
+			wantIACRelated: true,
+		},
+		{
 			name:         "terraform tfvars json stays on terraform artifact path",
 			relativePath: filepath.Join("infra", "terraform.tfvars.json"),
 			content: `{

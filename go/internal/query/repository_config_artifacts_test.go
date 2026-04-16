@@ -171,3 +171,62 @@ module "service" {
 		}
 	}
 }
+
+func TestBuildRepositoryConfigArtifactsExtractsAnsibleConfigAssets(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("ansible-ops", []FileContent{
+		{
+			RelativePath: "playbooks/site.yml",
+			Content: `- hosts: all
+  roles:
+    - web
+`,
+		},
+		{
+			RelativePath: "inventories/prod/hosts.yml",
+			Content: `all:
+  children:
+    web:
+      hosts:
+        web-1.example.com:
+`,
+		},
+		{
+			RelativePath: "group_vars/all.yml",
+			Content:      "app_name: demo\n",
+		},
+		{
+			RelativePath: "roles/web/tasks/main.yml",
+			Content:      "- debug:\n    msg: hello\n",
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want ansible config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 5 {
+		t.Fatalf("len(config_paths) = %d, want 5", len(configPaths))
+	}
+
+	want := map[string]string{
+		"playbooks/site.yml":         "ansible_playbook",
+		"inventories/prod/hosts.yml": "ansible_inventory",
+		"group_vars/all.yml":         "ansible_vars",
+		"roles/web":                  "ansible_role",
+		"roles/web/tasks/main.yml":   "ansible_task_entrypoint",
+	}
+	for _, row := range configPaths {
+		path, _ := row["path"].(string)
+		if path == "" {
+			t.Fatalf("config_paths row missing path: %#v", row)
+		}
+		if gotKind, ok := row["evidence_kind"].(string); !ok || gotKind != want[path] {
+			t.Fatalf("config_paths[%q].evidence_kind = %#v, want %#v", path, row["evidence_kind"], want[path])
+		}
+		if gotRepo, ok := row["source_repo"].(string); !ok || gotRepo != "ansible-ops" {
+			t.Fatalf("config_paths[%q].source_repo = %#v, want %q", path, row["source_repo"], "ansible-ops")
+		}
+	}
+}

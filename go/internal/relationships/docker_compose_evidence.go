@@ -53,12 +53,21 @@ func dockerComposeBuildContexts(document map[string]any) []string {
 		if !ok {
 			continue
 		}
-		buildMap, _ := nestedMap(service, "build")
-		if buildMap == nil {
+		buildValue, ok := service["build"]
+		if !ok {
 			continue
 		}
-		if context := stringValue(buildMap["context"]); context != "" {
-			contexts = append(contexts, context)
+		switch typed := buildValue.(type) {
+		case string:
+			if context := stringValue(typed); context != "" {
+				contexts = append(contexts, context)
+			}
+		case map[string]any:
+			if context := stringValue(typed["context"]); context != "" {
+				contexts = append(contexts, context)
+			}
+		default:
+			continue
 		}
 	}
 
