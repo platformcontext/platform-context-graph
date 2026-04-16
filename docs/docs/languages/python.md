@@ -73,7 +73,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     reserved for non-Python or unlabeled content.
   - Graph-backed Python query/search/context/story responses also expose a
     dedicated `python_semantics` bundle for structured consumers alongside
-    `semantic_profile`.
+    `semantic_profile`; that bundle now carries the promoted `surface_kind`
+    and ordered `signals` for graph-backed Python rows as well as the raw
+    decorator, async, lambda, metaclass, and type-annotation fields.
   - Identifier-assigned lambdas now materialize as Python function entities
     with `semantic_kind=lambda`, and the normal semantic/profile/story
     surfaces promote them as `lambda_function`.

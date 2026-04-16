@@ -105,6 +105,12 @@ func (p PythonSemanticProfile) Fields() map[string]any {
 	if p.TypeAnnotation {
 		fields["type_annotation"] = true
 	}
+	if surfaceKind := p.SurfaceKind(); surfaceKind != "" {
+		fields["surface_kind"] = surfaceKind
+	}
+	if signals := p.Signals(); len(signals) > 0 {
+		fields["signals"] = pythonSemanticSignalsToStrings(signals)
+	}
 	return fields
 }
 
@@ -189,6 +195,18 @@ func (p PythonSemanticProfile) SurfaceKind() string {
 	default:
 		return "plain"
 	}
+}
+
+func pythonSemanticSignalsToStrings(signals []PythonSemanticSignal) []string {
+	if len(signals) == 0 {
+		return nil
+	}
+
+	values := make([]string, 0, len(signals))
+	for _, signal := range signals {
+		values = append(values, string(signal))
+	}
+	return values
 }
 
 func stringSliceFromAny(value any) []string {

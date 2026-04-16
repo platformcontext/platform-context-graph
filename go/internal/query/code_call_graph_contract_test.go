@@ -110,6 +110,85 @@ func TestHandleDeadCodeExcludesDecoratedEntities(t *testing.T) {
 	}
 }
 
+func TestHandleComplexityPreservesPythonGraphMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if got, want := params["entity_id"], "function-1"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				if want := "e.decorators as decorators"; !strings.Contains(cypher, want) {
+					t.Fatalf("cypher = %q, want %q", cypher, want)
+				}
+				if !strings.Contains(cypher, "e.docstring as docstring") {
+					t.Fatalf("cypher = %q, want graph semantic projection", cypher)
+				}
+				return map[string]any{
+					"id":                  "function-1",
+					"name":                "handler",
+					"labels":              []any{"Function"},
+					"file_path":           "src/routes.py",
+					"repo_id":             "repo-1",
+					"repo_name":           "payments",
+					"language":            "python",
+					"start_line":          int64(10),
+					"end_line":            int64(14),
+					"outgoing_count":      int64(3),
+					"incoming_count":      int64(1),
+					"total_relationships": int64(4),
+					"decorators":          []any{"@route"},
+					"async":               true,
+				}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/complexity",
+		bytes.NewBufferString(`{"entity_id":"function-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := resp["semantic_summary"], "Function handler is async and uses decorators @route."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	pythonSemantics, ok := resp["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[python_semantics] type = %T, want map[string]any", resp["python_semantics"])
+	}
+	decorators, ok := pythonSemantics["decorators"].([]any)
+	if !ok {
+		t.Fatalf("python_semantics[decorators] type = %T, want []any", pythonSemantics["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@route" {
+		t.Fatalf("python_semantics[decorators] = %#v, want [@route]", decorators)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "decorated_async_function"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["async"], true; got != want {
+		t.Fatalf("semantic_profile[async] = %#v, want %#v", got, want)
+	}
+}
+
 func TestHandleCallChainReturnsShortestPath(t *testing.T) {
 	t.Parallel()
 

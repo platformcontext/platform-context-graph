@@ -179,6 +179,16 @@ func TestAttachPythonSemanticsClonesResult(t *testing.T) {
 	if got, want := semantics["docstring"], "Handles incoming requests."; got != want {
 		t.Fatalf("python_semantics[docstring] = %#v, want %#v", got, want)
 	}
+	if got, want := semantics["surface_kind"], "decorated_async_function"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
+	}
+	signals, ok := semantics["signals"].([]string)
+	if !ok {
+		t.Fatalf("python_semantics[signals] type = %T, want []string", semantics["signals"])
+	}
+	if !reflect.DeepEqual(signals, []string{"decorator", "async"}) {
+		t.Fatalf("python_semantics[signals] = %#v, want [decorator async]", signals)
+	}
 }
 
 func TestAttachPythonSemanticsReturnsOriginalWhenEmpty(t *testing.T) {
