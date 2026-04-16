@@ -35,13 +35,21 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	payload := basePayload(path, "kotlin", isDependency)
 	payload["interfaces"] = []map[string]any{}
 
+	siblingFunctionReturnTypes, err := kotlinCollectSiblingFunctionReturnTypes(path)
+	if err != nil {
+		return nil, err
+	}
+
 	lines := strings.Split(string(source), "\n")
 	braceDepth := 0
 	stack := make([]scopedContext, 0)
 	seenVariables := make(map[string]struct{})
 	localVariableTypes := make(map[string]map[string]string)
 	classPropertyTypes := make(map[string]map[string]string)
-	functionReturnTypes := make(map[string]string)
+	functionReturnTypes := make(map[string]string, len(siblingFunctionReturnTypes))
+	for key, returnType := range siblingFunctionReturnTypes {
+		functionReturnTypes[key] = returnType
+	}
 	knownTypeNames := make(map[string]struct{})
 
 	for index, rawLine := range lines {
