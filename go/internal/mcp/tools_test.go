@@ -7,7 +7,7 @@ import (
 func TestReadOnlyTools(t *testing.T) {
 	tools := ReadOnlyTools()
 
-	expectedCount := 39
+	expectedCount := 36
 	if len(tools) != expectedCount {
 		t.Errorf("Expected %d tools, got %d", expectedCount, len(tools))
 	}
@@ -49,8 +49,8 @@ func TestReadOnlyTools(t *testing.T) {
 
 func TestCodebaseTools(t *testing.T) {
 	tools := codebaseTools()
-	if len(tools) != 12 {
-		t.Errorf("Expected 12 codebase tools, got %d", len(tools))
+	if len(tools) != 9 {
+		t.Errorf("Expected 9 codebase tools, got %d", len(tools))
 	}
 }
 
@@ -79,6 +79,18 @@ func TestRuntimeTools(t *testing.T) {
 	tools := runtimeTools()
 	if len(tools) != 3 {
 		t.Errorf("Expected 3 runtime tools, got %d", len(tools))
+	}
+}
+
+func TestEveryRegisteredToolHasDispatchRoute(t *testing.T) {
+	tools := ReadOnlyTools()
+	for _, tool := range tools {
+		// Provide minimal args so resolveRoute can build a route.
+		args := map[string]any{}
+		_, err := resolveRoute(tool.Name, args)
+		if err != nil {
+			t.Errorf("tool %q is registered but has no dispatch route: %v", tool.Name, err)
+		}
 	}
 }
 

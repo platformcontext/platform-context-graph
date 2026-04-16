@@ -174,53 +174,6 @@ func codebaseTools() []ToolDefinition {
 			},
 		},
 		{
-			Name:        "execute_cypher_query",
-			Description: "Fallback tool to run a direct, read-only Cypher query against the code graph.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"cypher_query": map[string]any{
-						"type":        "string",
-						"description": "Read-only Cypher query to execute",
-					},
-				},
-				"required": []string{"cypher_query"},
-			},
-		},
-		{
-			Name:        "visualize_graph_query",
-			Description: "Generates a URL to visualize the results of a Cypher query in the Neo4j Browser.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"cypher_query": map[string]any{
-						"type":        "string",
-						"description": "Cypher query to visualize",
-					},
-				},
-				"required": []string{"cypher_query"},
-			},
-		},
-		{
-			Name:        "search_registry_bundles",
-			Description: "Search for available pre-indexed bundles in the registry.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"query": map[string]any{
-						"type":        "string",
-						"description": "Search query for bundles",
-					},
-					"unique_only": map[string]any{
-						"type":        "boolean",
-						"description": "Return only unique bundles",
-						"default":     false,
-					},
-				},
-				"required": []string{},
-			},
-		},
-		{
 			Name:        "get_repository_stats",
 			Description: "Get graph-derived statistics about indexed repositories.",
 			InputSchema: map[string]any{
