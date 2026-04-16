@@ -1,0 +1,54 @@
+docs/docs/adrs/2026-04-16-cross-phase-entity-not-found-race-evidence.md
+  34f71964cf7839c6 1-159
+docs/docs/adrs/2026-04-16-cross-phase-entity-not-found-race.md
+  72c82225e70ef41d 12-16,126,150,186,188-192,194,207-217,219-223,225-226,239-242,244-246,276-277,295-297,353-358,370-372,377-379,381,383-384,391,399,405-406,411-415,450,485,488-489,493-494
+  34f71964cf7839c6 1-11,17-125,127-149,151-185,187,193,195-206,218,224,227-238,243,247-275,278-294,298-352,359-369,373-376,380,382,385-390,392-398,400-404,407-410,416-449,451-484,486-487,490-492,495-702
+docs/docs/adrs/index.md
+  34f71964cf7839c6 61-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "d655671fdc6837273e9103f1f637045275232b17",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "34f71964cf7839c6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2bcf8e2-53d2-4c3f-88a5-2dbbf5aa1a4b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 792,
+      "overriden_lines": 0
+    },
+    "72c82225e70ef41d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9836-7763-76c0-a116-358a6223b5f9",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 76,
+      "overriden_lines": 0
+    }
+  }
+}
