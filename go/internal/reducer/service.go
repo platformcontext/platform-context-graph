@@ -287,7 +287,7 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 
 	if err != nil {
 		status = "failed"
-		s.recordReducerResult(ctx, intent, duration, status, workerID)
+		s.recordReducerResult(ctx, intent, duration, status, workerID, err)
 		if failErr := s.WorkSink.Fail(ctx, intent, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail reducer work: %w", failErr))
 		}
@@ -298,11 +298,11 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 		return fmt.Errorf("ack reducer work: %w", err)
 	}
 
-	s.recordReducerResult(ctx, intent, duration, status, workerID)
+	s.recordReducerResult(ctx, intent, duration, status, workerID, nil)
 	return nil
 }
 
-func (s Service) recordReducerResult(ctx context.Context, intent Intent, duration float64, status string, workerID int) {
+func (s Service) recordReducerResult(ctx context.Context, intent Intent, duration float64, status string, workerID int, execErr error) {
 	if s.Instruments != nil {
 		attrs := metric.WithAttributes(
 			telemetry.AttrDomain(string(intent.Domain)),
@@ -331,6 +331,9 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseReduction))
 		if status == "failed" {
 			logAttrs = append(logAttrs, telemetry.FailureClassAttr("reducer_failure"))
+			if execErr != nil {
+				logAttrs = append(logAttrs, slog.String("error", execErr.Error()))
+			}
 			s.Logger.ErrorContext(ctx, "reducer execution failed", logAttrs...)
 		} else {
 			s.Logger.InfoContext(ctx, "reducer execution succeeded", logAttrs...)

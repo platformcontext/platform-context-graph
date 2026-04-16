@@ -216,13 +216,13 @@ func (s Service) executeAndReport(ctx context.Context, intent Intent, workerID i
 
 	if err != nil {
 		status = "failed"
-		s.recordReducerResult(ctx, intent, duration, status, workerID)
+		s.recordReducerResult(ctx, intent, duration, status, workerID, err)
 		if failErr := s.WorkSink.Fail(ctx, intent, err); failErr != nil {
 			return Result{}, errors.Join(err, fmt.Errorf("fail reducer work: %w", failErr))
 		}
 		return Result{Status: ResultStatusFailed}, nil
 	}
 
-	s.recordReducerResult(ctx, intent, duration, status, workerID)
+	s.recordReducerResult(ctx, intent, duration, status, workerID, nil)
 	return result, nil
 }
