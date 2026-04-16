@@ -107,6 +107,198 @@ func TestHandleRelationshipsReturnsGraphBackedKotlinTypedInfixCalls(t *testing.T
 	assertGraphBackedSingleCallResponse(t, handler, "function-kotlin-infix-1", "kotlin", "add")
 }
 
+func TestHandleRelationshipsReturnsGraphBackedKotlinLocalTypedReceiverCalls(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, _ string, _ map[string]any) (map[string]any, error) {
+				return map[string]any{
+					"id":         "function-kotlin-local-typed-1",
+					"name":       "run",
+					"labels":     []any{"Function"},
+					"file_path":  "src/Worker.kt",
+					"repo_id":    "repo-1",
+					"repo_name":  "comprehensive",
+					"language":   "kotlin",
+					"start_line": int64(10),
+					"end_line":   int64(14),
+					"outgoing": []any{
+						map[string]any{
+							"direction":   "outgoing",
+							"type":        "CALLS",
+							"target_name": "info",
+							"target_id":   "function-kotlin-local-typed-2",
+						},
+					},
+					"incoming": []any{},
+				}, nil
+			},
+		},
+	}
+	assertGraphBackedSingleCallResponse(
+		t,
+		handler,
+		"function-kotlin-local-typed-1",
+		"kotlin",
+		"info",
+	)
+}
+
+func TestHandleRelationshipsReturnsGraphBackedKotlinCastReceiverCalls(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, _ string, _ map[string]any) (map[string]any, error) {
+				return map[string]any{
+					"id":         "function-kotlin-cast-receiver-1",
+					"name":       "run",
+					"labels":     []any{"Function"},
+					"file_path":  "src/Worker.kt",
+					"repo_id":    "repo-1",
+					"repo_name":  "comprehensive",
+					"language":   "kotlin",
+					"start_line": int64(11),
+					"end_line":   int64(15),
+					"outgoing": []any{
+						map[string]any{
+							"direction":   "outgoing",
+							"type":        "CALLS",
+							"target_name": "info",
+							"target_id":   "function-kotlin-cast-receiver-2",
+						},
+					},
+					"incoming": []any{},
+				}, nil
+			},
+		},
+	}
+	assertGraphBackedSingleCallResponse(
+		t,
+		handler,
+		"function-kotlin-cast-receiver-1",
+		"kotlin",
+		"info",
+	)
+}
+
+func TestHandleRelationshipsReturnsGraphBackedKotlinDirectCastReceiverCalls(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, _ string, _ map[string]any) (map[string]any, error) {
+				return map[string]any{
+					"id":         "function-kotlin-direct-cast-1",
+					"name":       "run",
+					"labels":     []any{"Function"},
+					"file_path":  "src/Worker.kt",
+					"repo_id":    "repo-1",
+					"repo_name":  "comprehensive",
+					"language":   "kotlin",
+					"start_line": int64(12),
+					"end_line":   int64(16),
+					"outgoing": []any{
+						map[string]any{
+							"direction":   "outgoing",
+							"type":        "CALLS",
+							"target_name": "info",
+							"target_id":   "function-kotlin-direct-cast-2",
+						},
+					},
+					"incoming": []any{},
+				}, nil
+			},
+		},
+	}
+	assertGraphBackedSingleCallResponse(
+		t,
+		handler,
+		"function-kotlin-direct-cast-1",
+		"kotlin",
+		"info",
+	)
+}
+
+func TestHandleRelationshipsReturnsGraphBackedKotlinPrimaryConstructorPropertyReceiverCalls(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, _ string, _ map[string]any) (map[string]any, error) {
+				return map[string]any{
+					"id":         "function-kotlin-constructor-property-1",
+					"name":       "run",
+					"labels":     []any{"Function"},
+					"file_path":  "src/Worker.kt",
+					"repo_id":    "repo-1",
+					"repo_name":  "comprehensive",
+					"language":   "kotlin",
+					"start_line": int64(13),
+					"end_line":   int64(17),
+					"outgoing": []any{
+						map[string]any{
+							"direction":   "outgoing",
+							"type":        "CALLS",
+							"target_name": "info",
+							"target_id":   "function-kotlin-constructor-property-2",
+						},
+					},
+					"incoming": []any{},
+				}, nil
+			},
+		},
+	}
+	assertGraphBackedSingleCallResponse(
+		t,
+		handler,
+		"function-kotlin-constructor-property-1",
+		"kotlin",
+		"info",
+	)
+}
+
+func TestHandleRelationshipsReturnsGraphBackedKotlinAlsoScopeFunctionPreservedAssignmentReceiverCalls(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, _ string, _ map[string]any) (map[string]any, error) {
+				return map[string]any{
+					"id":         "function-kotlin-also-scope-1",
+					"name":       "run",
+					"labels":     []any{"Function"},
+					"file_path":  "src/Worker.kt",
+					"repo_id":    "repo-1",
+					"repo_name":  "comprehensive",
+					"language":   "kotlin",
+					"start_line": int64(14),
+					"end_line":   int64(19),
+					"outgoing": []any{
+						map[string]any{
+							"direction":   "outgoing",
+							"type":        "CALLS",
+							"target_name": "info",
+							"target_id":   "function-kotlin-also-scope-2",
+						},
+					},
+					"incoming": []any{},
+				}, nil
+			},
+		},
+	}
+	assertGraphBackedSingleCallResponse(
+		t,
+		handler,
+		"function-kotlin-also-scope-1",
+		"kotlin",
+		"info",
+	)
+}
+
 func TestHandleRelationshipsReturnsGraphBackedPHPTypedThisPropertyCalls(t *testing.T) {
 	t.Parallel()
 

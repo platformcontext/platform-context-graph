@@ -214,3 +214,97 @@ func TestHandleRelationshipsReturnsGraphBackedPHPTypedParameterReceiverCalls(t *
 		"info",
 	)
 }
+
+func TestHandleRelationshipsReturnsGraphBackedPHPNewExpressionReceiverCalls(t *testing.T) {
+	t.Parallel()
+
+	assertGraphBackedSingleCallResponse(t, newPHPGraphBackedSingleCallHandler("function-php-new-expression-1"), "function-php-new-expression-1", "php", "info")
+}
+
+func TestHandleRelationshipsReturnsGraphBackedPHPSameFileFreeFunctionReturnAliasReceiverCalls(t *testing.T) {
+	t.Parallel()
+
+	assertGraphBackedSingleCallResponse(t, newPHPGraphBackedSingleCallHandler("function-php-free-function-alias-1"), "function-php-free-function-alias-1", "php", "info")
+}
+
+func TestHandleRelationshipsReturnsGraphBackedPHPSameFileFreeFunctionReturnPropertyChainAliasCalls(t *testing.T) {
+	t.Parallel()
+
+	assertGraphBackedSingleCallResponse(t, newPHPGraphBackedSingleCallHandler("function-php-free-function-property-chain-1"), "function-php-free-function-property-chain-1", "php", "info")
+}
+
+func TestHandleRelationshipsReturnsGraphBackedPHPSameFileMethodReturnPropertyChainAliasCalls(t *testing.T) {
+	t.Parallel()
+
+	assertGraphBackedSingleCallResponse(t, newPHPGraphBackedSingleCallHandler("function-php-method-property-chain-1"), "function-php-method-property-chain-1", "php", "info")
+}
+
+func TestHandleRelationshipsReturnsGraphBackedPHPStaticPropertyReceiverChains(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		entityID string
+	}{
+		{name: "self", entityID: "function-php-self-static-property-1"},
+		{name: "parent", entityID: "function-php-parent-static-property-1"},
+		{name: "static", entityID: "function-php-static-property-1"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assertGraphBackedSingleCallResponse(t, newPHPGraphBackedSingleCallHandler(tc.entityID), tc.entityID, "php", "info")
+		})
+	}
+}
+
+func TestHandleRelationshipsReturnsGraphBackedPHPParentAndStaticPropertyReceiverAccessChains(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		entityID string
+	}{
+		{name: "parent", entityID: "function-php-parent-property-access-1"},
+		{name: "static", entityID: "function-php-static-property-access-1"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assertGraphBackedSingleCallResponse(t, newPHPGraphBackedSingleCallHandler(tc.entityID), tc.entityID, "php", "info")
+		})
+	}
+}
+
+func newPHPGraphBackedSingleCallHandler(entityID string) *CodeHandler {
+	return &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, _ string, _ map[string]any) (map[string]any, error) {
+				return map[string]any{
+					"id":         entityID,
+					"name":       "run",
+					"labels":     []any{"Function"},
+					"file_path":  "src/Config.php",
+					"repo_id":    "repo-1",
+					"repo_name":  "payments",
+					"language":   "php",
+					"start_line": int64(1),
+					"end_line":   int64(2),
+					"outgoing": []any{
+						map[string]any{
+							"direction":   "outgoing",
+							"type":        "CALLS",
+							"target_name": "info",
+							"target_id":   entityID + "-callee",
+						},
+					},
+					"incoming": []any{},
+				}, nil
+			},
+		},
+	}
+}
