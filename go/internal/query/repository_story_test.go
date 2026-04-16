@@ -196,6 +196,12 @@ func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *test
 				"config_paths": []map[string]any{
 					{"path": "/configd/payments/*", "source_repo": "helm-charts"},
 					{"path": "/configd/payments/*", "source_repo": "terraform-stack-payments"},
+					{
+						"path":          "root.hcl",
+						"source_repo":   "terraform-stack-payments",
+						"relative_path": "env/prod/terragrunt.hcl",
+						"evidence_kind": "terragrunt_include_path",
+					},
 				},
 			},
 		},
@@ -210,13 +216,16 @@ func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *test
 	if !ok {
 		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
 	}
-	if len(directStory) != 2 {
-		t.Fatalf("len(direct_story) = %d, want 2", len(directStory))
+	if len(directStory) != 3 {
+		t.Fatalf("len(direct_story) = %d, want 3", len(directStory))
 	}
 	if got, want := directStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
 	if got, want := directStory[1], "Runtime artifacts include docker_compose service api in docker-compose.yaml (build, ports)."; got != want {
 		t.Fatalf("direct_story[1] = %q, want %q", got, want)
+	}
+	if got, want := directStory[2], "Config provenance includes root.hcl from terraform-stack-payments via terragrunt_include_path in env/prod/terragrunt.hcl."; got != want {
+		t.Fatalf("direct_story[2] = %q, want %q", got, want)
 	}
 }

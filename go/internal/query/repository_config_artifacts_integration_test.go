@@ -165,7 +165,7 @@ spec:
 				},
 			},
 			runByMatch: map[string][]map[string]any{
-				"RETURN related.id AS repo_id, related.name AS repo_name": {
+				"MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(related:Repository)": {
 					{"repo_id": "repo-helm", "repo_name": "helm-charts"},
 					{"repo_id": "repo-terraform", "repo_name": "terraform-stack-payments"},
 				},
@@ -213,10 +213,16 @@ spec:
 	}
 
 	topologyStory, ok := deploymentOverview["topology_story"].([]any)
-	if !ok || len(topologyStory) != 1 {
-		t.Fatalf("topology_story = %#v, want one story line", deploymentOverview["topology_story"])
+	if !ok || len(topologyStory) != 3 {
+		t.Fatalf("topology_story = %#v, want config provenance plus shared-config summary", deploymentOverview["topology_story"])
 	}
-	if got, want := topologyStory[0], "Shared config families span /configd/payments/* across helm-charts, terraform-stack-payments."; got != want {
+	if got, want := topologyStory[0], "Config provenance includes /configd/payments/* from helm-charts via kustomize_policy_document_resource in deploy/policy.yaml."; got != want {
+		t.Fatalf("topology_story[0] = %#v, want %#v", got, want)
+	}
+	if got, want := topologyStory[1], "Config provenance includes /configd/payments/* from terraform-stack-payments via kustomize_policy_document_resource in deploy/policy.yaml."; got != want {
+		t.Fatalf("topology_story[1] = %#v, want %#v", got, want)
+	}
+	if got, want := topologyStory[2], "Shared config families span /configd/payments/* across helm-charts, terraform-stack-payments."; got != want {
 		t.Fatalf("topology_story[0] = %#v, want %#v", got, want)
 	}
 }

@@ -7,9 +7,24 @@ func TestBuildSharedConfigPathsGroupsDuplicatePathsAcrossRepos(t *testing.T) {
 
 	got := buildSharedConfigPaths(map[string]any{
 		"config_paths": []map[string]any{
-			{"path": "/configd/payments/*", "source_repo": "helm-charts"},
-			{"path": "/configd/payments/*", "source_repo": "terraform-stack-payments"},
-			{"path": "/configd/payments/*", "source_repo": "helm-charts"},
+			{
+				"path":          "/configd/payments/*",
+				"source_repo":   "helm-charts",
+				"relative_path": "deploy/policy.yaml",
+				"evidence_kind": "kustomize_policy_document_resource",
+			},
+			{
+				"path":          "/configd/payments/*",
+				"source_repo":   "terraform-stack-payments",
+				"relative_path": "env/prod/terragrunt.hcl",
+				"evidence_kind": "terragrunt_dependency_config_path",
+			},
+			{
+				"path":          "/configd/payments/*",
+				"source_repo":   "helm-charts",
+				"relative_path": "deploy/policy.yaml",
+				"evidence_kind": "kustomize_policy_document_resource",
+			},
 			{"path": "/api/payments/*", "source_repo": "helm-charts"},
 		},
 	})
@@ -29,6 +44,28 @@ func TestBuildSharedConfigPathsGroupsDuplicatePathsAcrossRepos(t *testing.T) {
 	}
 	if sourceRepos[0] != "helm-charts" || sourceRepos[1] != "terraform-stack-payments" {
 		t.Fatalf("source_repositories = %#v, want sorted unique repos", sourceRepos)
+	}
+
+	evidenceKinds, ok := got[0]["evidence_kinds"].([]string)
+	if !ok {
+		t.Fatalf("evidence_kinds type = %T, want []string", got[0]["evidence_kinds"])
+	}
+	if len(evidenceKinds) != 2 {
+		t.Fatalf("len(evidence_kinds) = %d, want 2", len(evidenceKinds))
+	}
+	if evidenceKinds[0] != "kustomize_policy_document_resource" || evidenceKinds[1] != "terragrunt_dependency_config_path" {
+		t.Fatalf("evidence_kinds = %#v, want sorted unique evidence kinds", evidenceKinds)
+	}
+
+	relativePaths, ok := got[0]["relative_paths"].([]string)
+	if !ok {
+		t.Fatalf("relative_paths type = %T, want []string", got[0]["relative_paths"])
+	}
+	if len(relativePaths) != 2 {
+		t.Fatalf("len(relative_paths) = %d, want 2", len(relativePaths))
+	}
+	if relativePaths[0] != "deploy/policy.yaml" || relativePaths[1] != "env/prod/terragrunt.hcl" {
+		t.Fatalf("relative_paths = %#v, want sorted unique relative paths", relativePaths)
 	}
 }
 
@@ -128,5 +165,61 @@ func TestBuildRepositoryDeploymentOverviewIncludesDeliveryPathsAndWorkflows(t *t
 	}
 	if len(topologyStory) != 2 {
 		t.Fatalf("len(topology_story) = %d, want 2", len(topologyStory))
+	}
+}
+
+func TestBuildRepositoryDeploymentOverviewIncludesSingleSourceConfigPathsInDeliveryPaths(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		[]string{"argocd_application"},
+		[]string{"terraform", "terragrunt"},
+		map[string]any{
+			"deployment_artifacts": map[string]any{
+				"config_paths": []map[string]any{
+					{
+						"path":          "root.hcl",
+						"source_repo":   "terraform-stack-payments",
+						"relative_path": "env/prod/terragrunt.hcl",
+						"evidence_kind": "terragrunt_include_path",
+					},
+				},
+			},
+		},
+	)
+
+	deliveryPaths, ok := got["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
+	}
+	if len(deliveryPaths) != 1 {
+		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
+	}
+	if got, want := deliveryPaths[0]["kind"], "config_artifact"; got != want {
+		t.Fatalf("delivery_paths[0].kind = %#v, want %#v", got, want)
+	}
+	if got, want := deliveryPaths[0]["path"], "root.hcl"; got != want {
+		t.Fatalf("delivery_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := deliveryPaths[0]["source_repo"], "terraform-stack-payments"; got != want {
+		t.Fatalf("delivery_paths[0].source_repo = %#v, want %#v", got, want)
+	}
+	if got, want := deliveryPaths[0]["relative_path"], "env/prod/terragrunt.hcl"; got != want {
+		t.Fatalf("delivery_paths[0].relative_path = %#v, want %#v", got, want)
+	}
+	if got, want := deliveryPaths[0]["evidence_kind"], "terragrunt_include_path"; got != want {
+		t.Fatalf("delivery_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+
+	topologyStory, ok := got["topology_story"].([]string)
+	if !ok {
+		t.Fatalf("topology_story type = %T, want []string", got["topology_story"])
+	}
+	if len(topologyStory) != 1 {
+		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Config provenance includes root.hcl from terraform-stack-payments via terragrunt_include_path in env/prod/terragrunt.hcl."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 }

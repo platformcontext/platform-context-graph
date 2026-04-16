@@ -66,7 +66,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 					"file_count":       int64(120),
 					"workload_count":   int64(2),
 					"platform_count":   int64(1),
-					"dependency_count": int64(4),
+					"dependency_count": int64(5),
 				},
 			},
 			runByMatch: map[string][]map[string]any{
@@ -108,7 +108,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 					},
 				},
 				// Cross-repo relationships (outgoing)
-				"RETURN type(rel) AS type": {
+				"MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(target:Repository)": {
 					{
 						"type":          "DEPENDS_ON",
 						"target_name":   "auth-service",
@@ -133,9 +133,15 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 						"target_id":     "repo-5",
 						"evidence_type": "terraform_source",
 					},
+					{
+						"type":          "RUNS_ON",
+						"target_name":   "eks-platform",
+						"target_id":     "repo-7",
+						"evidence_type": "terraform_runtime_family",
+					},
 				},
 				// Consumer repositories (incoming)
-				"RETURN consumer.name AS consumer_name": {
+				"MATCH (consumer:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(r:Repository {id: $repo_id})": {
 					{
 						"consumer_name": "checkout-service",
 						"consumer_id":   "repo-4",
@@ -178,7 +184,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 	if got, want := resp["workload_count"], float64(2); got != want {
 		t.Fatalf("workload_count = %v, want %v", got, want)
 	}
-	if got, want := resp["dependency_count"], float64(4); got != want {
+	if got, want := resp["dependency_count"], float64(5); got != want {
 		t.Fatalf("dependency_count = %v, want %v", got, want)
 	}
 
@@ -228,8 +234,8 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 	if !ok {
 		t.Fatalf("relationships type = %T, want []any", resp["relationships"])
 	}
-	if len(relationships) != 4 {
-		t.Fatalf("len(relationships) = %d, want 4", len(relationships))
+	if len(relationships) != 5 {
+		t.Fatalf("len(relationships) = %d, want 5", len(relationships))
 	}
 	rel0, ok := relationships[0].(map[string]any)
 	if !ok {
@@ -250,7 +256,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 		}
 		relTypes[row["type"].(string)] = struct{}{}
 	}
-	for _, want := range []string{"DEPENDS_ON", "USES_MODULE", "DEPLOYS_FROM", "PROVISIONS_DEPENDENCY_FOR"} {
+	for _, want := range []string{"DEPENDS_ON", "USES_MODULE", "DEPLOYS_FROM", "PROVISIONS_DEPENDENCY_FOR", "RUNS_ON"} {
 		if _, ok := relTypes[want]; !ok {
 			t.Fatalf("missing relationship type %q", want)
 		}

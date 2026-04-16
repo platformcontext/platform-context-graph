@@ -520,6 +520,13 @@ Go-backed sources are:
 - local Terraform `module.source = "./..."` style module-asset paths when the
   source is repo-local and not a registry or remote module ref
 
+The same Go read path now also preserves per-repo config provenance in
+`deployment_overview.delivery_paths` and `deployment_overview.topology_story`
+even when a path appears in only one repository. That means Terragrunt
+includes, dependency config paths, local `file()` / `templatefile()` assets,
+and other repo-local config rows no longer disappear unless another repo
+shares the same path.
+
 Broader Terraform and Terragrunt helper forms remain a separate parity lane
 for any path that cannot be proven exactly from the checked-in source.
 

@@ -86,6 +86,23 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		paths = append(paths, entry)
 	}
 
+	for _, row := range mapSliceValue(deploymentArtifacts, "config_paths") {
+		path := strings.TrimSpace(StringVal(row, "path"))
+		sourceRepo := strings.TrimSpace(StringVal(row, "source_repo"))
+		relativePath := strings.TrimSpace(StringVal(row, "relative_path"))
+		evidenceKind := strings.TrimSpace(StringVal(row, "evidence_kind"))
+		if path == "" || sourceRepo == "" || relativePath == "" || evidenceKind == "" {
+			continue
+		}
+		paths = append(paths, map[string]any{
+			"path":          path,
+			"kind":          "config_artifact",
+			"source_repo":   sourceRepo,
+			"relative_path": relativePath,
+			"evidence_kind": evidenceKind,
+		})
+	}
+
 	sort.Slice(paths, func(i, j int) bool {
 		leftPath := StringVal(paths[i], "path")
 		rightPath := StringVal(paths[j], "path")
@@ -144,22 +161,40 @@ func buildSharedConfigPaths(deploymentArtifacts map[string]any) []map[string]any
 		return nil
 	}
 
-	grouped := map[string]map[string]struct{}{}
+	type sharedConfigAggregate struct {
+		sourceRepos   map[string]struct{}
+		evidenceKinds map[string]struct{}
+		relativePaths map[string]struct{}
+	}
+
+	grouped := map[string]*sharedConfigAggregate{}
 	for _, row := range rows {
 		path := strings.TrimSpace(StringVal(row, "path"))
 		sourceRepo := strings.TrimSpace(StringVal(row, "source_repo"))
 		if path == "" || sourceRepo == "" {
 			continue
 		}
-		if _, ok := grouped[path]; !ok {
-			grouped[path] = map[string]struct{}{}
+		aggregate, ok := grouped[path]
+		if !ok {
+			aggregate = &sharedConfigAggregate{
+				sourceRepos:   map[string]struct{}{},
+				evidenceKinds: map[string]struct{}{},
+				relativePaths: map[string]struct{}{},
+			}
+			grouped[path] = aggregate
 		}
-		grouped[path][sourceRepo] = struct{}{}
+		aggregate.sourceRepos[sourceRepo] = struct{}{}
+		if evidenceKind := strings.TrimSpace(StringVal(row, "evidence_kind")); evidenceKind != "" {
+			aggregate.evidenceKinds[evidenceKind] = struct{}{}
+		}
+		if relativePath := strings.TrimSpace(StringVal(row, "relative_path")); relativePath != "" {
+			aggregate.relativePaths[relativePath] = struct{}{}
+		}
 	}
 
 	paths := make([]string, 0, len(grouped))
-	for path, repos := range grouped {
-		if len(repos) > 1 {
+	for path, aggregate := range grouped {
+		if len(aggregate.sourceRepos) > 1 {
 			paths = append(paths, path)
 		}
 	}
@@ -167,14 +202,22 @@ func buildSharedConfigPaths(deploymentArtifacts map[string]any) []map[string]any
 
 	result := make([]map[string]any, 0, len(paths))
 	for _, path := range paths {
-		sourceRepos := sortedSetKeys(grouped[path])
+		aggregate := grouped[path]
+		sourceRepos := sortedSetKeys(aggregate.sourceRepos)
 		if len(sourceRepos) <= 1 {
 			continue
 		}
-		result = append(result, map[string]any{
+		entry := map[string]any{
 			"path":                path,
 			"source_repositories": sourceRepos,
-		})
+		}
+		if evidenceKinds := sortedSetKeys(aggregate.evidenceKinds); len(evidenceKinds) > 0 {
+			entry["evidence_kinds"] = evidenceKinds
+		}
+		if relativePaths := sortedSetKeys(aggregate.relativePaths); len(relativePaths) > 0 {
+			entry["relative_paths"] = relativePaths
+		}
+		result = append(result, entry)
 	}
 	return result
 }
@@ -203,6 +246,21 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 				line += fmt.Sprintf(" (%s)", strings.Join(signals, ", "))
 			}
 			story = append(story, line+".")
+		case "config_artifact":
+			path := strings.TrimSpace(StringVal(row, "path"))
+			sourceRepo := strings.TrimSpace(StringVal(row, "source_repo"))
+			relativePath := strings.TrimSpace(StringVal(row, "relative_path"))
+			evidenceKind := strings.TrimSpace(StringVal(row, "evidence_kind"))
+			if path == "" || sourceRepo == "" || relativePath == "" || evidenceKind == "" {
+				continue
+			}
+			story = append(story, fmt.Sprintf(
+				"Config provenance includes %s from %s via %s in %s.",
+				path,
+				sourceRepo,
+				evidenceKind,
+				relativePath,
+			))
 		}
 	}
 
