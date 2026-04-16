@@ -60,7 +60,7 @@ func inferPHPMethodReceiverType(
 	methodReturnTypes map[string]map[string]string,
 	functionReturnTypes map[string]string,
 ) string {
-	trimmed := strings.TrimSpace(raw)
+	trimmed := normalizePHPParenthesizedReceiverExpression(raw)
 	if trimmed == "" {
 		return ""
 	}
@@ -78,7 +78,7 @@ func inferPHPReferenceType(
 	methodReturnTypes map[string]map[string]string,
 	functionReturnTypes map[string]string,
 ) string {
-	trimmed := strings.TrimSpace(raw)
+	trimmed := normalizePHPParenthesizedReceiverExpression(raw)
 	if trimmed == "" {
 		return ""
 	}
@@ -135,7 +135,7 @@ func inferPHPCallChainType(
 	methodReturnTypes map[string]map[string]string,
 	functionReturnTypes map[string]string,
 ) string {
-	trimmed := strings.TrimSpace(raw)
+	trimmed := normalizePHPParenthesizedReceiverExpression(raw)
 	if trimmed == "" {
 		return ""
 	}
@@ -394,4 +394,39 @@ func resolvePHPReferenceChainType(
 		currentType = nextType
 	}
 	return currentType
+}
+
+func normalizePHPParenthesizedReceiverExpression(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	for trimmed != "" && strings.HasPrefix(trimmed, "(") {
+		closeIndex := findPHPMatchingParen(trimmed)
+		if closeIndex < 0 {
+			return trimmed
+		}
+		remainder := strings.TrimSpace(trimmed[closeIndex+1:])
+		if remainder != "" && !strings.HasPrefix(remainder, "->") && !strings.HasPrefix(remainder, "::") {
+			return trimmed
+		}
+		trimmed = strings.TrimSpace(trimmed[1:closeIndex]) + remainder
+	}
+	return trimmed
+}
+
+func findPHPMatchingParen(raw string) int {
+	depth := 0
+	for index, r := range raw {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return index
+			}
+			if depth < 0 {
+				return -1
+			}
+		}
+	}
+	return -1
 }

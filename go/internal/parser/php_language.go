@@ -14,8 +14,8 @@ var (
 	phpFunctionReturnPattern = regexp.MustCompile(`\)\s*:\s*([^{;]+)`)
 	phpVariablePattern       = regexp.MustCompile(`\$[A-Za-z_]\w*`)
 	phpTypedVariablePattern  = regexp.MustCompile(`(?:(?:public|protected|private|readonly|static)\s+)*([?A-Za-z_\\][\w\\|?]*)\s+\$[A-Za-z_]\w*`)
-	phpMethodCallPattern     = regexp.MustCompile(`((?:\$[A-Za-z_]\w*(?:->\w+)*|(?:[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::[A-Za-z_]\w*\(\)|new\s+[A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*\(\))(?:->\w+(?:\([^()]*\))?)*->\w+)\s*\(`)
-	phpFunctionChainPattern  = regexp.MustCompile(`((?:[A-Za-z_]\w*\(\))(?:->\w+(?:\([^()]*\))?)*->\w+)\s*\(`)
+	phpMethodCallPattern     = regexp.MustCompile(`((?:\((?:\$[A-Za-z_]\w*(?:->\w+(?:\([^()]*\))?)*|(?:[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::[A-Za-z_]\w*\(\)|new\s+[A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*\(\))\)|\$[A-Za-z_]\w*(?:->\w+(?:\([^()]*\))?)*|(?:[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::[A-Za-z_]\w*\(\)|new\s+[A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*\(\))(?:->\w+(?:\([^()]*\))?)*->\w+)\s*\(`)
+	phpFunctionChainPattern  = regexp.MustCompile(`((?:\((?:[A-Za-z_]\w*\(\))\)|[A-Za-z_]\w*\(\))(?:->\w+(?:\([^()]*\))?)*->\w+)\s*\(`)
 	phpStaticCallPattern     = regexp.MustCompile(`\b([A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)::([A-Za-z_]\w*)\s*\(`)
 	phpNewCallPattern        = regexp.MustCompile(`\bnew\s+([A-Za-z_\\]\w*(?:\\[A-Za-z_]\w*)*)\s*\(`)
 	phpFunctionCallPattern   = regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
@@ -422,7 +422,7 @@ func appendUniquePHPCall(
 }
 
 func normalizePHPMethodCall(raw string) string {
-	parts := strings.Split(raw, "->")
+	parts := strings.Split(normalizePHPParenthesizedReceiverExpression(raw), "->")
 	if len(parts) <= 1 {
 		return raw
 	}
