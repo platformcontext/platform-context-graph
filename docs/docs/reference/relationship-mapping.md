@@ -93,23 +93,24 @@ These verbs define the relationship-parity bar on this branch:
 - `DEPLOYS_FROM`
 - `DISCOVERS_CONFIG_IN`
 - `DEPENDS_ON`
-- `DEPLOYMENT_SOURCE`
 - `DEFINES`
 - `INSTANCE_OF`
-- `WORKLOAD_DEPENDS_ON`
+- `USES_MODULE`
 
 Not every verb lives at the same layer:
 
 - repository-scoped canonical relationships include `DEPLOYS_FROM`,
   `DISCOVERS_CONFIG_IN`, `PROVISIONS_DEPENDENCY_FOR`,
-  `PROVISIONS_PLATFORM`, `RUNS_ON`, and compatibility `DEPENDS_ON`
+  `PROVISIONS_PLATFORM`, `RUNS_ON`, `USES_MODULE`, and compatibility
+  `DEPENDS_ON`
 - runtime topology also depends on graph structure such as
   `Repository -[:DEFINES]-> Workload`,
   `Workload <-[:INSTANCE_OF]- WorkloadInstance`, and
   `WorkloadInstance -[:RUNS_ON]-> Platform`
 - deployment-path answers may additionally expose derived
-  `DEPLOYMENT_SOURCE` semantics when they are backed by lower-layer canonical
-  evidence
+  `DEPLOYMENT_SOURCE` context when they are backed by lower-layer canonical
+  evidence, but that remains read-side detail rather than a current canonical
+  relationship type
 
 A family is not done because a parser emitted metadata. It is done only when
 the right verb survives persistence, projection, and query-visible proof.
@@ -159,7 +160,7 @@ Canonical relationship types today are:
 - `DISCOVERS_CONFIG_IN`
 - `DEPLOYS_FROM`
 - `PROVISIONS_DEPENDENCY_FOR`
-
+- `USES_MODULE`
 - `PROVISIONS_PLATFORM`
 - `RUNS_ON`
 
@@ -253,7 +254,9 @@ The Go graph needs to keep these distinctions visible:
 - repos that provision platforms versus repos that provision application
   dependencies
 - dual runtime paths for the same logical service during migration
-- workload-level dependencies such as `WORKLOAD_DEPENDS_ON`
+- workload-level dependencies expressed through canonical `DEPENDS_ON` and
+  the workload-instance runtime chain, not a separate `WORKLOAD_DEPENDS_ON`
+  relationship type
 - controller-driven delivery context that explains how a workload reaches a
   runtime without inventing stronger canonical edges than the evidence
   supports

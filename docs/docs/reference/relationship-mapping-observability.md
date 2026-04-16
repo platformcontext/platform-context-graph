@@ -3,82 +3,117 @@
 Use this page as the operational companion to
 [Relationship Mapping](relationship-mapping.md).
 
-The main relationship mapping reference explains stage ownership, typed
-precedence, and extension rules. This companion focuses on the signals and
-examples operators use when they need to prove that mapping behaved correctly.
+This branch no longer uses the older synthetic `relationships.*` log families
+or `pcg.relationships.*` trace families as its primary contract. Relationship
+mapping now rides on the Go reducer/materialization path plus the shared
+storage traces and structured JSON logs.
 
-## Logging
+## Where Relationship Work Happens Now
 
-Relationship mapping uses the shared JSON logging contract.
+The important relationship stages on the Go path are:
 
-Rules:
+- `reducer.cross_repo_resolution`
+- `reducer.sql_relationship_materialization`
+- `reducer.inheritance_materialization`
+- `canonical.write`
+- nested `postgres.exec`, `postgres.query`, and `neo4j.execute`
 
-- keep stable machine-readable `event_name` values
-- keep custom dimensions under `extra_keys`
-- keep trace and correlation fields intact
-- do not add ad hoc top-level log keys
+Those spans, together with reducer/projector metrics and structured logs, are
+the current observability contract for relationship mapping.
 
-Current relationship log families include:
+## What To Watch First
 
-- `relationships.discover_file_evidence.completed`
-- `relationships.discover_gitops_evidence.completed`
-- `relationships.discover_evidence.completed`
-- `relationships.persist_generation.completed`
-- `relationships.project.completed`
-- `relationships.resolve.completed`
-- `relationships.resolve.failed`
+Start with metrics:
 
-## OTEL Traces
+- reducer queue depth and age from `pcg_dp_queue_depth` and
+  `pcg_dp_queue_oldest_age_seconds`
+- reducer execution latency from `pcg_dp_reducer_run_duration_seconds`
+- canonical graph write latency from `pcg_dp_canonical_write_duration_seconds`
 
-Use OTEL spans around both the extractor family and the overall resolve/project
-phases.
+Then use traces:
 
-Current span families include:
+- `reducer.cross_repo_resolution` when the problem looks like missing or slow
+  cross-repo linkage
+- `reducer.sql_relationship_materialization` when SQL-side relationship writes
+  are slow or incomplete
+- `reducer.inheritance_materialization` when inheritance-derived relationships
+  lag
+- `canonical.write` when the bottleneck is in graph persistence
 
-- `pcg.relationships.discover_evidence`
-- `pcg.relationships.discover_evidence.file`
-- `pcg.relationships.discover_evidence.terraform`
-- `pcg.relationships.discover_evidence.helm`
-- `pcg.relationships.discover_evidence.kustomize`
-- `pcg.relationships.discover_evidence.gitops`
-- `pcg.relationships.discover_evidence.argocd`
-- `pcg.relationships.resolve_repository_dependencies`
-- `pcg.relationships.project`
+Finally use logs:
 
-## Required Tests
+- reducer logs with `domain`, `pipeline_phase`, `failure_class`, `scope_id`,
+  and `generation_id`
+- storage retry logs such as Neo4j transient retry warnings
+- canonical write completion logs for batch-level confirmation
 
-Every new mapping family should come with:
+## Current Log Reality
 
-- unit tests for the extractor
-- unit tests for resolver precedence or coexistence
-- a negative test that proves unrelated repos stay unrelated
-- a mixed-corpus validation run when the family changes answer shape
+Relationship debugging uses the shared Go JSON logger. The most useful fields
+are:
 
-For this slice, the important relationship tests are in:
+- `message`
+- `pipeline_phase`
+- `domain`
+- `scope_id`
+- `generation_id`
+- `failure_class`
+- `trace_id`
+- `span_id`
 
-- `go/internal/relationships/evidence_test.go`
-- `go/internal/relationships/resolver_test.go`
-- `go/internal/storage/postgres/relationship_store_test.go`
+`event_name` is optional. Do not assume every relationship log line has one.
 
-## Example Multi-Chain
+The useful current messages are the reducer/materialization messages emitted by
+the Go code, for example:
 
-One useful pattern from the local corpus is:
+- `cross-repo relationship resolution started`
+- `cross-repo relationship resolution completed`
+- `cross-repo relationship routing completed`
+- `sql relationship materialization started`
+- `sql relationship materialization completed`
+- `inheritance materialization started`
+- `inheritance materialization completed`
+- `canonical atomic write completed`
+- `canonical sequential write completed`
+- `neo4j transient error, retrying`
 
-```text
-gitops-control-plane
-  DISCOVERS_CONFIG_IN -> platform-observability
-  DISCOVERS_CONFIG_IN -> helm-charts
+## Required Proof For Relationship Changes
 
-home-service
-  DEPLOYS_FROM -> helm-charts
+When relationship behavior changes, keep proof at three layers:
 
-search-api
-  DEPLOYS_FROM -> helm-charts
+1. extractor or evidence tests
+2. reducer/materialization tests
+3. query/story/context proof
 
-payments-api
-  DEPLOYS_FROM -> helm-charts
-```
+The important packages are typically:
 
-That is more truthful than flattening everything into a generic dependency
-chain. It preserves the control-plane meaning of the ArgoCD repository while
-keeping downstream deployment answers queryable.
+- `go/internal/relationships`
+- `go/internal/reducer`
+- `go/internal/storage/postgres`
+- `go/internal/storage/neo4j`
+- `go/internal/query`
+
+## Investigation Recipes
+
+### Missing cross-repo edge
+
+1. Confirm the evidence family exists in tests or fixtures.
+2. Check reducer queue depth and reducer latency metrics.
+3. Open `reducer.cross_repo_resolution`.
+4. Follow child `postgres.*` and `neo4j.execute` spans.
+5. Use logs to extract the exact `scope_id`, `generation_id`, and
+   `failure_class`.
+
+### Relationship write is slow
+
+1. Start with `pcg_dp_canonical_write_duration_seconds`.
+2. Open the matching `canonical.write` span.
+3. Check nested `neo4j.execute` spans for the slow statement.
+4. Correlate with reducer logs for the owning domain and phase.
+
+### Query answer disagrees with reducer truth
+
+1. Confirm the canonical relationship exists in reducer/storage proof.
+2. Check repository context/story or entity fallback tests in `go/internal/query`.
+3. Treat it as a read-model/query-shaping gap, not as proof that reducer
+   materialization failed.

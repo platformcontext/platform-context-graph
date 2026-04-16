@@ -6,7 +6,7 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 		if source, ok := metadataNonEmptyString(entity.Metadata, "source"); ok {
 			return []map[string]any{
 				{
-					"type":        "DEPLOYS_FROM",
+					"type":        "USES_MODULE",
 					"target_name": source,
 					"reason":      "terraform_module_source",
 				},
@@ -17,7 +17,7 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 		if source, ok := metadataNonEmptyString(entity.Metadata, "terraform_source"); ok {
 			return []map[string]any{
 				{
-					"type":        "DEPLOYS_FROM",
+					"type":        "USES_MODULE",
 					"target_name": source,
 					"reason":      "terragrunt_terraform_source",
 				},

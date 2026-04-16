@@ -23,7 +23,7 @@ the reported state is live or inferred.
 | one repository is slow | ingester metrics | ingester traces and resolution-engine stage timings |
 | graph writes are slow | resolution metrics | Neo4j traces and graph persistence logs |
 | content reads are missing or slow | API metrics and content metrics | content traces and logs |
-| replay or dead-letter behavior looks wrong | recovery metrics | recovery traces and admin/replay logs |
+| replay or dead-letter behavior looks wrong | recovery metrics | recovery traces and admin recovery logs |
 
 ## Health Versus Completeness
 
@@ -85,7 +85,7 @@ For shared-write debugging specifically:
 - Start with `pcg_shared_projection_pending_intents` and
   `pcg_shared_projection_oldest_pending_age_seconds` to see whether
   authoritative platform or dependency follow-up is actually building up.
-- Use `pcg_fact_queue_depth` and `pcg_fact_queue_oldest_age_seconds` alongside
+- Use `pcg_dp_queue_depth` and `pcg_dp_queue_oldest_age_seconds` alongside
   the shared-projection gauges rather than instead of them. Fact queue growth
   and shared follow-up growth answer different questions.
 - Pivot to traces when backlog exists but is not draining. Pivot to logs when
@@ -117,8 +117,10 @@ For shared-write debugging specifically:
 - Metrics answer fact-store latency, queue backlog depth, queue age, retry
   churn, dead-letter pressure, and connection-pool saturation.
 - Traces show individual fact-store and fact-queue operations.
-- Logs capture snapshot emission, inline lease behavior, replay, and work-item
-  lifecycle breadcrumbs.
+- Logs capture snapshot emission, queue/retry behavior, recovery actions, and
+  work-item lifecycle breadcrumbs as structured JSON. On the Go path,
+  `event_name` is optional; phase-scoped `slog` fields such as
+  `pipeline_phase`, `scope_id`, and `failure_class` are the stable filters.
 
 ### Resolution Engine
 
@@ -157,7 +159,7 @@ identity. Use traces and logs when you need repository-level detail.
 
 When validating shared-write runtime changes in staging or production:
 
-1. Start with `pcg_fact_queue_depth`, `pcg_fact_queue_oldest_age_seconds`,
+1. Start with `pcg_dp_queue_depth`, `pcg_dp_queue_oldest_age_seconds`,
    `pcg_shared_projection_pending_intents`, and
    `pcg_shared_projection_oldest_pending_age_seconds`.
 2. Confirm backlog trends are flat-to-down, not simply that pods are up.
@@ -193,7 +195,7 @@ Recommended staging order:
    `pcg_shared_projection_pending_intents` plus
    `pcg_shared_projection_oldest_pending_age_seconds`.
 2. Confirm fact queue metrics stay flat-to-down at the same time:
-   `pcg_fact_queue_depth` and `pcg_fact_queue_oldest_age_seconds`.
+   `pcg_dp_queue_depth` and `pcg_dp_queue_oldest_age_seconds`.
 3. Only then try a modest batch-limit increase if backlog still drains in too
    many rounds after partitioning is healthy.
 

@@ -36,6 +36,11 @@ same thing a `ServiceMonitor` would scrape:
 - a Prometheus-format `/metrics` endpoint on `ingester`
 - a Prometheus-format `/metrics` endpoint on `resolution-engine`
 
+Those endpoints carry the current Go metric split:
+
+- `pcg_dp_*` for data-plane counters, histograms, and gauges
+- `pcg_runtime_*` for runtime health and queue state
+
 For the admin re-finalize flow specifically, use the compose-backed verification
 wrapper:
 
@@ -107,30 +112,49 @@ curl http://localhost:19466/metrics | head
 To watch one runtime live:
 
 ```bash
-watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^pcg_" | head -40'
+watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^(pcg_dp_|pcg_runtime_)" | head -40'
 ```
 
 To see live counters change while you exercise the stack, open two terminals:
 
 ```bash
-watch -n 2 'curl -fsS http://localhost:19464/metrics | rg "^(pcg_http|pcg_mcp)" | head -40'
+watch -n 2 'curl -fsS http://localhost:19464/metrics | rg "^(pcg_dp_|pcg_runtime_)" | head -40'
 ```
 
 ```bash
-watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^(pcg_fact|pcg_resolution)" | head -60'
+watch -n 2 'curl -fsS http://localhost:19465/metrics | rg "^(pcg_dp_|pcg_runtime_)" | head -40'
 ```
 
-The indexing services also honor worker-tuning controls from the environment:
+```bash
+watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^(pcg_dp_|pcg_runtime_)" | head -60'
+```
+
+The Go runtimes honor the current worker-tuning controls from the environment.
+Use these instead of the older Python multiprocess parser knobs:
+
+- `PCG_PROJECTION_WORKERS`
+- `PCG_SNAPSHOT_WORKERS`
+- `PCG_PARSE_WORKERS`
+- `PCG_PROJECTOR_WORKERS`
+- `PCG_REDUCER_WORKERS`
+- `PCG_SHARED_PROJECTION_WORKERS`
+- `PCG_SHARED_PROJECTION_PARTITION_COUNT`
+- `PCG_SHARED_PROJECTION_BATCH_LIMIT`
+- `PCG_SHARED_PROJECTION_POLL_INTERVAL`
+- `PCG_SHARED_PROJECTION_LEASE_TTL`
+- `PCG_LARGE_REPO_FILE_THRESHOLD`
+- `PCG_LARGE_REPO_MAX_CONCURRENT`
+
+The removed Python-era parser flags were:
 
 - `PCG_REPO_FILE_PARSE_MULTIPROCESS`
 - `PCG_MULTIPROCESS_START_METHOD`
-- `PCG_PARSE_WORKERS`
 - `PCG_WORKER_MAX_TASKS`
 - `PCG_INDEX_QUEUE_DEPTH`
 
-Compose passes those values through to `bootstrap-index`, `ingester`,
+Compose passes the Go controls through to `bootstrap-index`, `ingester`,
 `resolution-engine`, and `platform-context-graph`, so local and containerized
-runs stay aligned.
+runs stay aligned with the Go runtime/data-plane stack.
 
 Health and completeness are separate checks in Compose, too:
 

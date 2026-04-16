@@ -131,7 +131,7 @@ func TestBuildContentRelationshipSetTerraformModulePromotesSource(t *testing.T) 
 		t.Fatalf("len(relationships.outgoing) = %d, want 1", len(relationships.outgoing))
 	}
 	relationship := relationships.outgoing[0]
-	if got, want := relationship["type"], "DEPLOYS_FROM"; got != want {
+	if got, want := relationship["type"], "USES_MODULE"; got != want {
 		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
 	}
 	if got, want := relationship["target_name"], "tfr:///terraform-aws-modules/eks/aws?version=19.0.0"; got != want {
@@ -161,7 +161,7 @@ func TestBuildContentRelationshipSetTerragruntConfigPromotesTerraformSource(t *t
 		t.Fatalf("len(relationships.outgoing) = %d, want 1", len(relationships.outgoing))
 	}
 	relationship := relationships.outgoing[0]
-	if got, want := relationship["type"], "DEPLOYS_FROM"; got != want {
+	if got, want := relationship["type"], "USES_MODULE"; got != want {
 		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
 	}
 	if got, want := relationship["target_name"], "../modules/app"; got != want {

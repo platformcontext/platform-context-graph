@@ -156,7 +156,8 @@ and fast I/O to Postgres and Neo4j.
 
 ### Telemetry signals for tuning
 
-All signals use the `pcg_dp_` prefix and are exported via OTLP and Prometheus.
+Go data-plane signals use the `pcg_dp_` prefix, and service-health/runtime
+gauges use the `pcg_runtime_` prefix on the same `/metrics` surface.
 
 | Signal | Type | What it tells you |
 | --- | --- | --- |
