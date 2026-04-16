@@ -60,6 +60,9 @@ func codeCallExactCandidateNames(call map[string]any, language string) []string 
 	inferredType := strings.TrimSpace(anyToString(call["inferred_obj_type"]))
 	if inferredType != "" && strings.TrimSpace(name) != "" {
 		appendName(inferredType + "." + name)
+		if language == "php" && strings.Contains(inferredType, "\\") {
+			appendName(codeCallTrailingName(inferredType) + "." + name)
+		}
 	}
 	contextName := codeCallContextName(call["context"])
 	contextType := codeCallContextType(call)

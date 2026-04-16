@@ -341,7 +341,9 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				kotlinEnumPattern.MatchString(trimmed),
 		)
 
-		normalizedTrimmed := kotlinNormalizeParenthesizedReceivers(strings.ReplaceAll(trimmed, "?.", "."))
+		callTrimmed := strings.ReplaceAll(trimmed, "?.", ".")
+		kotlinAppendCastReceiverCalls(payload, callTrimmed, lineNumber, functionDeclCutoff, seenLineCalls)
+		normalizedTrimmed := kotlinNormalizeParenthesizedReceivers(callTrimmed)
 		for _, match := range kotlinCallPattern.FindAllStringSubmatchIndex(normalizedTrimmed, -1) {
 			if len(match) != 6 {
 				continue
