@@ -245,14 +245,25 @@ fun usage(): String {
 	}
 
 	_, rows := ExtractCodeCallRows(envelopes)
-	if len(rows) != 1 {
-		t.Fatalf("len(rows) = %d, want 1; rows=%#v; function_calls=%#v", len(rows), rows, callerPayload["function_calls"])
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2; rows=%#v; function_calls=%#v", len(rows), rows, callerPayload["function_calls"])
 	}
 
-	if got, want := rows[0]["callee_entity_id"], "content-entity:kotlin-service-info"; got != want {
-		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
+	want := map[string]string{
+		"content-entity:kotlin-factory-create-service": "Factory().createService",
+		"content-entity:kotlin-service-info":           "Factory().createService().info",
 	}
-	if got, want := rows[0]["full_name"], "Factory().createService().info"; got != want {
-		t.Fatalf("full_name = %#v, want %#v", got, want)
+	for _, row := range rows {
+		calleeID, _ := row["callee_entity_id"].(string)
+		fullName, _ := row["full_name"].(string)
+		if expectedFullName, ok := want[calleeID]; ok {
+			if fullName != expectedFullName {
+				t.Fatalf("full_name = %#v, want %#v for callee %#v", fullName, expectedFullName, calleeID)
+			}
+			delete(want, calleeID)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing expected callee rows: %#v; rows=%#v", want, rows)
 	}
 }
