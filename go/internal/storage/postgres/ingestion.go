@@ -208,6 +208,14 @@ func (s IngestionStore) CommitScopeGeneration(
 			if len(evidence) == 0 {
 				return nil
 			}
+			log.Printf(
+				"%s=%q %s=%q evidence_facts_discovered=%d",
+				telemetry.LogKeyScopeID,
+				scopeValue.ScopeID,
+				telemetry.LogKeyGenerationID,
+				generation.GenerationID,
+				len(evidence),
+			)
 			if err := relationshipStore.UpsertEvidenceFacts(ctx, generation.GenerationID, evidence); err != nil {
 				return fmt.Errorf("persist relationship evidence: %w", err)
 			}

@@ -49,6 +49,7 @@ func TestSpanNames(t *testing.T) {
 		"canonical.write",
 		"canonical.projection",
 		"canonical.retract",
+		"ingestion.evidence_discovery",
 		"reducer.sql_relationship_materialization",
 		"reducer.inheritance_materialization",
 		"reducer.cross_repo_resolution",

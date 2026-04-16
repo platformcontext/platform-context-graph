@@ -421,7 +421,9 @@ func (h *EntityHandler) getServiceStory(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// fetchWorkloadContext queries Neo4j for workload context with a custom WHERE clause.
+// fetchWorkloadContext queries Neo4j for workload context with a custom WHERE
+// clause. When the workload is linked to a repository, the response is enriched
+// with repository-level context: dependencies, infrastructure, and entry points.
 func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause string, params map[string]any) (map[string]any, error) {
 	cypher := fmt.Sprintf(`
 		MATCH (w:Workload) WHERE %s
@@ -441,14 +443,25 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 		return nil, nil
 	}
 
-	return map[string]any{
+	result := map[string]any{
 		"id":        StringVal(row, "id"),
 		"name":      StringVal(row, "name"),
 		"kind":      StringVal(row, "kind"),
 		"repo_id":   StringVal(row, "repo_id"),
 		"repo_name": StringVal(row, "repo_name"),
 		"instances": extractInstances(row),
-	}, nil
+	}
+
+	// Enrich with repository-level context when the workload has a linked repo.
+	repoID := StringVal(row, "repo_id")
+	if repoID != "" {
+		repoParams := map[string]any{"repo_id": repoID}
+		result["dependencies"] = queryRepoDependencies(ctx, h.Neo4j, repoParams)
+		result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, repoParams)
+		result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, repoParams)
+	}
+
+	return result, nil
 }
 
 // extractRelationships converts the Neo4j relationships collection to typed structs.

@@ -112,6 +112,17 @@ func discoverFromEnvelope(
 	content, _ := envelope.Payload["content"].(string)
 	sourceRepoID := envelope.ScopeID
 
+	// Fall back to Go collector content fact payload keys. The collector
+	// emits content_path and content_body instead of relative_path and
+	// content. Both formats are supported so evidence discovery works
+	// regardless of how facts were produced.
+	if filePath == "" {
+		filePath, _ = envelope.Payload["content_path"].(string)
+	}
+	if content == "" {
+		content, _ = envelope.Payload["content_body"].(string)
+	}
+
 	if content == "" || filePath == "" {
 		return nil
 	}

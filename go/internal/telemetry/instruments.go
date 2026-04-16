@@ -90,6 +90,9 @@ type Instruments struct {
 	// Neo4j transient error retry metrics
 	Neo4jDeadlockRetries metric.Int64Counter
 
+	// Evidence discovery metrics (during ingestion)
+	EvidenceFactsDiscovered metric.Int64Counter
+
 	// Cross-repo resolution metrics
 	CrossRepoResolutionDuration metric.Float64Histogram
 	CrossRepoEvidenceLoaded     metric.Int64Counter
@@ -476,6 +479,15 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register CanonicalPhaseDuration histogram: %w", err)
+	}
+
+	// Evidence discovery instruments (during ingestion)
+	inst.EvidenceFactsDiscovered, err = meter.Int64Counter(
+		"pcg_dp_evidence_facts_discovered_total",
+		metric.WithDescription("Total evidence facts discovered from IaC content during ingestion"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register EvidenceFactsDiscovered counter: %w", err)
 	}
 
 	// Cross-repo resolution instruments

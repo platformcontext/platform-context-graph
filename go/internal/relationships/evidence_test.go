@@ -427,6 +427,108 @@ func TestIsArgoCDArtifact(t *testing.T) {
 	}
 }
 
+// TestDiscoverEvidenceFromGoCollectorContentFacts verifies that evidence
+// discovery works with the Go collector's content fact payload format, which
+// uses content_path/content_body instead of relative_path/content.
+func TestDiscoverEvidenceFromGoCollectorContentFacts(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-infra",
+			Payload: map[string]any{
+				"artifact_type": "terraform",
+				"content_path":  "modules/iam.tf",
+				"content_body":  `app_repo = "payments-service"`,
+				"content_digest": "sha256:abc123",
+				"repo_id":        "repo-infra",
+				"language":        "terraform_hcl",
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1 (Go collector content fact format)", len(evidence))
+	}
+	if evidence[0].EvidenceKind != EvidenceKindTerraformAppRepo {
+		t.Errorf("kind = %q, want %q", evidence[0].EvidenceKind, EvidenceKindTerraformAppRepo)
+	}
+	if evidence[0].SourceRepoID != "repo-infra" {
+		t.Errorf("source = %q, want repo-infra", evidence[0].SourceRepoID)
+	}
+	if evidence[0].TargetRepoID != "repo-payments" {
+		t.Errorf("target = %q, want repo-payments", evidence[0].TargetRepoID)
+	}
+}
+
+// TestDiscoverEvidenceFromGoCollectorHelmFacts verifies Helm evidence
+// extraction using Go collector content fact format (content_path/content_body).
+func TestDiscoverEvidenceFromGoCollectorHelmFacts(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-deploy",
+			Payload: map[string]any{
+				"content_path": "charts/app/values.yaml",
+				"content_body": "image:\n  repository: payments-service\n",
+				"repo_id":      "repo-deploy",
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1 (Helm values via content_path/content_body)", len(evidence))
+	}
+	if evidence[0].EvidenceKind != EvidenceKindHelmValues {
+		t.Errorf("kind = %q, want %q", evidence[0].EvidenceKind, EvidenceKindHelmValues)
+	}
+}
+
+// TestDiscoverEvidenceFromGoCollectorArgoCDFacts verifies ArgoCD evidence
+// extraction using Go collector content fact format.
+func TestDiscoverEvidenceFromGoCollectorArgoCDFacts(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"content_path": "apps/payments.yaml",
+				"content_body": `apiVersion: argoproj.io/v1alpha1
+kind: Application
+spec:
+  source:
+    repoURL: 'https://github.com/myorg/payments-service.git'
+`,
+				"repo_id": "repo-gitops",
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1 (ArgoCD via content_path/content_body)", len(evidence))
+	}
+	if evidence[0].EvidenceKind != EvidenceKindArgoCDAppSource {
+		t.Errorf("kind = %q, want %q", evidence[0].EvidenceKind, EvidenceKindArgoCDAppSource)
+	}
+}
+
 func TestFileBaseName(t *testing.T) {
 	t.Parallel()
 

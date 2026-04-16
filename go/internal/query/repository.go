@@ -8,7 +8,7 @@ import (
 
 // RepositoryHandler exposes HTTP routes for repository queries.
 type RepositoryHandler struct {
-	Neo4j   *Neo4jReader
+	Neo4j   GraphReader
 	Content *ContentReader
 }
 
@@ -56,15 +56,20 @@ func (h *RepositoryHandler) listRepositories(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// getRepositoryContext returns repository metadata with graph statistics.
+// getRepositoryContext returns repository metadata with graph statistics and
+// enriched context including entry points, infrastructure entities, language
+// distribution, cross-repo relationships, and consumer repositories.
 func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.Request) {
 	repoID := PathParam(r, "repo_id")
 	if repoID == "" {
 		WriteError(w, http.StatusBadRequest, "repo_id is required")
 		return
 	}
+	ctx := r.Context()
+	params := map[string]any{"repo_id": repoID}
 
-	cypher := fmt.Sprintf(`
+	// Base query: repo metadata + aggregate counts.
+	baseCypher := fmt.Sprintf(`
 		MATCH (r:Repository) WHERE r.id = $repo_id
 		OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
 		OPTIONAL MATCH (r)-[:DEFINES]->(w:Workload)
@@ -77,25 +82,161 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		       count(DISTINCT dep) as dependency_count
 	`, RepoProjection("r"))
 
-	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_id": repoID})
+	baseRow, err := h.Neo4j.RunSingle(ctx, baseCypher, params)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
 	}
-	if row == nil {
+	if baseRow == nil {
 		WriteError(w, http.StatusNotFound, "repository not found")
 		return
 	}
 
-	context := map[string]any{
-		"repository":       RepoRefFromRow(row),
-		"file_count":       IntVal(row, "file_count"),
-		"workload_count":   IntVal(row, "workload_count"),
-		"platform_count":   IntVal(row, "platform_count"),
-		"dependency_count": IntVal(row, "dependency_count"),
+	result := map[string]any{
+		"repository":       RepoRefFromRow(baseRow),
+		"file_count":       IntVal(baseRow, "file_count"),
+		"workload_count":   IntVal(baseRow, "workload_count"),
+		"platform_count":   IntVal(baseRow, "platform_count"),
+		"dependency_count": IntVal(baseRow, "dependency_count"),
 	}
 
-	WriteJSON(w, http.StatusOK, context)
+	// Enrichment queries run after the base query succeeds. Each is a focused
+	// query that populates one section of the response. Errors in enrichment
+	// queries are non-fatal — the base response is still returned.
+	result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, params)
+	result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, params)
+	result["languages"] = queryRepoLanguageDistribution(ctx, h.Neo4j, params)
+	result["relationships"] = queryRepoDependencies(ctx, h.Neo4j, params)
+	result["consumers"] = queryRepoConsumers(ctx, h.Neo4j, params)
+
+	WriteJSON(w, http.StatusOK, result)
+}
+
+// queryRepoEntryPoints returns main functions, handlers, and app factories for
+// a repository. Shared by RepositoryHandler and EntityHandler workload enrichment.
+func queryRepoEntryPoints(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+	rows, err := reader.Run(ctx, `
+		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(fn:Function)
+		WHERE fn.name IN ['main', 'handler', 'app', 'create_app', 'lambda_handler',
+		                   'Main', 'Handler', 'App', 'CreateApp', 'LambdaHandler']
+		RETURN fn.name AS name, f.relative_path AS relative_path, fn.language AS language
+		ORDER BY fn.name
+	`, params)
+	if err != nil || len(rows) == 0 {
+		return make([]map[string]any, 0)
+	}
+
+	result := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, map[string]any{
+			"name":          StringVal(row, "name"),
+			"relative_path": StringVal(row, "relative_path"),
+			"language":      StringVal(row, "language"),
+		})
+	}
+	return result
+}
+
+// queryRepoInfrastructure returns K8s, Terraform, and ArgoCD entities for a
+// repository. Shared by RepositoryHandler and EntityHandler workload enrichment.
+func queryRepoInfrastructure(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+	rows, err := reader.Run(ctx, `
+		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(infra)
+		WHERE infra:K8sResource OR infra:TerraformResource OR infra:ArgoCDApplication
+		      OR infra:HelmChart OR infra:CrossplaneXRD
+		RETURN labels(infra)[0] AS type, infra.name AS name,
+		       infra.kind AS kind, f.relative_path AS file_path
+		ORDER BY type, name
+	`, params)
+	if err != nil || len(rows) == 0 {
+		return make([]map[string]any, 0)
+	}
+
+	result := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		entry := map[string]any{
+			"type":      StringVal(row, "type"),
+			"name":      StringVal(row, "name"),
+			"file_path": StringVal(row, "file_path"),
+		}
+		if kind := StringVal(row, "kind"); kind != "" {
+			entry["kind"] = kind
+		}
+		result = append(result, entry)
+	}
+	return result
+}
+
+// queryRepoLanguageDistribution returns file counts grouped by language for a
+// repository.
+func queryRepoLanguageDistribution(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+	rows, err := reader.Run(ctx, `
+		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
+		WHERE f.language IS NOT NULL
+		RETURN f.language AS language, count(f) AS file_count
+		ORDER BY file_count DESC
+	`, params)
+	if err != nil || len(rows) == 0 {
+		return make([]map[string]any, 0)
+	}
+
+	result := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, map[string]any{
+			"language":   StringVal(row, "language"),
+			"file_count": IntVal(row, "file_count"),
+		})
+	}
+	return result
+}
+
+// queryRepoDependencies returns outgoing cross-repo dependency edges for a
+// repository. Shared by RepositoryHandler and EntityHandler workload enrichment.
+func queryRepoDependencies(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+	rows, err := reader.Run(ctx, `
+		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|DEPLOYS_FROM|DISCOVERS_CONFIG_IN]->(target:Repository)
+		RETURN type(rel) AS type, target.name AS target_name,
+		       target.id AS target_id, rel.evidence_type AS evidence_type
+		ORDER BY type, target_name
+	`, params)
+	if err != nil || len(rows) == 0 {
+		return make([]map[string]any, 0)
+	}
+
+	result := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		entry := map[string]any{
+			"type":        StringVal(row, "type"),
+			"target_name": StringVal(row, "target_name"),
+			"target_id":   StringVal(row, "target_id"),
+		}
+		if evidenceType := StringVal(row, "evidence_type"); evidenceType != "" {
+			entry["evidence_type"] = evidenceType
+		}
+		result = append(result, entry)
+	}
+	return result
+}
+
+// queryRepoConsumers returns repos that depend on a given repository.
+func queryRepoConsumers(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+	rows, err := reader.Run(ctx, `
+		MATCH (consumer:Repository)-[:DEPENDS_ON]->(r:Repository {id: $repo_id})
+		RETURN consumer.name AS consumer_name, consumer.id AS consumer_id
+		ORDER BY consumer_name
+	`, params)
+	if err != nil || len(rows) == 0 {
+		return make([]map[string]any, 0)
+	}
+
+	result := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, map[string]any{
+			"name": StringVal(row, "consumer_name"),
+			"id":   StringVal(row, "consumer_id"),
+		})
+	}
+	return result
 }
 
 // getRepositoryStory returns a narrative summary for the repository.
