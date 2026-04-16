@@ -70,6 +70,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 	localVariableTypes := make(map[string]map[string]string)
 	methodReturnTypes := make(map[string]map[string]string)
 	functionReturnTypes := make(map[string]string)
+	importAliases := make(map[string]string)
 
 	for index, rawLine := range lines {
 		lineNumber := index + 1
@@ -95,6 +96,9 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 
 		if matches := phpUsePattern.FindStringSubmatch(trimmed); len(matches) == 2 && currentPHPScopedName(stack, "class_declaration", "interface_declaration", "trait_declaration") == "" {
 			for _, spec := range parsePHPImports(matches[1]) {
+				if spec.importType == "use" && spec.alias != "" {
+					importAliases[spec.alias] = normalizePHPTypeName(spec.name)
+				}
 				appendBucket(payload, "imports", map[string]any{
 					"name":             spec.name,
 					"full_import_name": trimmed,
@@ -237,6 +241,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
 				functionReturnTypes,
+				importAliases,
 			)
 			if contextKind == "class_declaration" {
 				if _, ok := classPropertyTypes[contextName]; !ok {
@@ -285,6 +290,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
 				functionReturnTypes,
+				importAliases,
 			)
 			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, normalizedRawLine, match[0]), contextName, contextKind, contextLine, inferredObjType)
 		}
@@ -307,6 +313,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				localVariableTypes[functionScopeKey],
 				methodReturnTypes,
 				functionReturnTypes,
+				importAliases,
 			)
 			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, normalizedRawLine, match), contextName, contextKind, contextLine, inferredObjType)
 		}
@@ -327,7 +334,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				continue
 			}
 			className := lastPathSegment(match[1], `\`)
-			appendUniquePHPCall(payload, seenCalls, className, className, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, "")
+			appendUniquePHPCall(payload, seenCalls, className, className, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, normalizePHPImportedTypeName(className, importAliases))
 		}
 		if !strings.Contains(trimmed, "->") && !strings.Contains(trimmed, "::") && !strings.Contains(trimmed, "new ") && !phpFunctionPattern.MatchString(trimmed) {
 			for _, match := range phpFunctionCallPattern.FindAllStringSubmatch(trimmed, -1) {
