@@ -374,6 +374,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		)
 
 		callTrimmed := strings.ReplaceAll(trimmed, "?.", ".")
+		callTrimmed = kotlinStripReceiverPreservingScopeFunctions(callTrimmed)
 		kotlinAppendCastReceiverCalls(payload, callTrimmed, lineNumber, functionDeclCutoff, seenLineCalls)
 		normalizedTrimmed := kotlinNormalizeParenthesizedReceivers(callTrimmed)
 		for _, match := range kotlinCallPattern.FindAllStringSubmatchIndex(normalizedTrimmed, -1) {

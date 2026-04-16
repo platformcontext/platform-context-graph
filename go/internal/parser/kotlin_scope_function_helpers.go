@@ -6,16 +6,16 @@ import (
 )
 
 var kotlinReceiverPreservingScopeFunctionPattern = regexp.MustCompile(
-	`(?s)^(.*)\.(?:also|apply)\s*\{.*\}\s*$`,
+	`(?s)\.(?:also|apply)\s*\{.*?\}`,
 )
 
 func kotlinStripReceiverPreservingScopeFunctions(expression string) string {
 	expression = strings.TrimSpace(expression)
 	for {
-		matches := kotlinReceiverPreservingScopeFunctionPattern.FindStringSubmatch(expression)
-		if len(matches) != 2 {
+		next := kotlinReceiverPreservingScopeFunctionPattern.ReplaceAllString(expression, "")
+		if next == expression {
 			return expression
 		}
-		expression = strings.TrimSpace(matches[1])
+		expression = strings.TrimSpace(next)
 	}
 }
