@@ -79,6 +79,41 @@ Repository -[:CONTAINS*]-> File
 
 Keep `CONTAINS*` when the query is actually about the tree, not just about locating files inside a repo.
 
+## Contract-First Relationship Verbs
+
+The historical Python relationship pipeline and fixture corpus were organized
+around verb coverage, not parser checklists. The Go branch needs to keep that
+same contract explicit.
+
+These verbs define the relationship-parity bar on this branch:
+
+- `PROVISIONS_DEPENDENCY_FOR`
+- `PROVISIONS_PLATFORM`
+- `RUNS_ON`
+- `DEPLOYS_FROM`
+- `DISCOVERS_CONFIG_IN`
+- `DEPENDS_ON`
+- `DEPLOYMENT_SOURCE`
+- `DEFINES`
+- `INSTANCE_OF`
+- `WORKLOAD_DEPENDS_ON`
+
+Not every verb lives at the same layer:
+
+- repository-scoped canonical relationships include `DEPLOYS_FROM`,
+  `DISCOVERS_CONFIG_IN`, `PROVISIONS_DEPENDENCY_FOR`,
+  `PROVISIONS_PLATFORM`, `RUNS_ON`, and compatibility `DEPENDS_ON`
+- runtime topology also depends on graph structure such as
+  `Repository -[:DEFINES]-> Workload`,
+  `Workload <-[:INSTANCE_OF]- WorkloadInstance`, and
+  `WorkloadInstance -[:RUNS_ON]-> Platform`
+- deployment-path answers may additionally expose derived
+  `DEPLOYMENT_SOURCE` semantics when they are backed by lower-layer canonical
+  evidence
+
+A family is not done because a parser emitted metadata. It is done only when
+the right verb survives persistence, projection, and query-visible proof.
+
 ## Story-First Answer Contract
 
 MCP and HTTP responses now intentionally expose a top-level `story` field on `get_repo_summary` and `trace_deployment_chain`.
@@ -200,6 +235,23 @@ Write the edge in the direction of the behavior being explained.
 
 If the source is the control plane, keep the control-plane source on the left. If the source is the deployed workload or service, keep that workload on the left.
 
+### Shared Infrastructure Must Stay First-Class
+
+The old relationship guides were explicit that shared infrastructure is core
+PCG behavior, not optional enrichment. Do not flatten shared runtime and
+network repositories into a generic dependency bucket just because the story
+gets shorter.
+
+The Go graph needs to keep these distinctions visible:
+
+- repos that provision platforms versus repos that provision application
+  dependencies
+- dual runtime paths for the same logical service during migration
+- workload-level dependencies such as `WORKLOAD_DEPENDS_ON`
+- controller-driven delivery context that explains how a workload reaches a
+  runtime without inventing stronger canonical edges than the evidence
+  supports
+
 ### Typed Precedence
 
 When the same pair can be described by both a typed relationship and a generic `DEPENDS_ON`, the typed edge wins. The resolver suppresses the generic candidate for the same implied pair, then may derive a compatibility `DEPENDS_ON` edge from the typed result unless that generic edge was explicitly rejected.
@@ -226,8 +278,10 @@ The current mapping and enrichment flow understands these families:
 | :--- | :--- | :--- |
 | Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR` and platform/runtime context |
 | Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config | Same semantic family as Terraform, with the same emphasis on truthful direction; `terraform.source` now also materializes through the normal `TerraformModule` surface, while `read_terragrunt_config()` remains intentionally opaque |
-| GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Delivery-path summaries today; canonical relationship promotion is still active parity work on this branch |
+| GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Reusable workflow refs and explicit cross-repo checkout now emit canonical repo evidence; broader workflow relationship promotion is still active parity work on this branch |
 | Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Delivery-path summaries today; canonical relationship promotion is still active parity work on this branch |
+| Ansible | playbooks, inventories, `group_vars`, `host_vars`, targeted roles, task entrypoints | Controller-driven deployment context today; first-class relationship promotion is still active parity work on this branch |
+| Docker / Compose | Dockerfile build/runtime hints, Compose services, image wiring, env/config links, dependency hints | Docker Compose build contexts and image refs now emit canonical deploy-source evidence; broader Docker and controller/runtime promotion is still active parity work on this branch |
 | ArgoCD | ApplicationSet discovery targets, deploy-source repo URLs, destination clusters | `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, and `RUNS_ON` |
 | Helm | chart metadata, values files, chart dependency references | `DEPLOYS_FROM` |
 | Kustomize | `resources`, base references, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
@@ -365,6 +419,35 @@ Examples include:
 - workflow refs that help explain the delivery path
 
 Use deployment artifacts to enrich answers and summaries. Do not treat them as a replacement for the underlying relationship edge.
+
+## Fixture-Corpus Proof Shape
+
+The historical fixture corpus is still the best truth test for this branch. It
+proves the relationship workflow across service repos, Helm/Kustomize deploy
+repos, ArgoCD delivery repos, controller-driven automation repos, and shared
+infrastructure/runtime Terraform repos.
+
+The minimum proof shape is:
+
+1. extract evidence from the right family
+2. resolve the correct verb
+3. persist it through the relationship store
+4. project the active generation into Neo4j
+5. surface the same meaning through query, story, and trace outputs
+
+The remaining open corpus families on this branch are:
+
+- Terraform variable files and shared-infra runtime chains
+- broader GitHub Actions delivery-path evidence beyond reusable workflows and explicit checkout
+- Jenkins / Groovy controller evidence
+- Ansible automation evidence
+- broader Docker / Docker Compose deployment/runtime evidence
+
+For each family, ask the same questions:
+
+- which verb should this family prove
+- which stage owns that decision
+- what query, story, or trace proves it after projection
 
 ### Shared Config And Consumer Summaries
 

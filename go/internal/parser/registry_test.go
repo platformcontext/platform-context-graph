@@ -94,6 +94,21 @@ func TestDefaultRegistryLookupByExtensionAndPath(t *testing.T) {
 			t.Fatalf("ParserKey = %q, want %q", definition.ParserKey, "__jenkinsfile__")
 		}
 	})
+
+	t.Run("terraform tfvars extension", func(t *testing.T) {
+		t.Parallel()
+
+		definition, ok := registry.LookupByPath(filepath.Join("infra", "terraform.tfvars"))
+		if !ok {
+			t.Fatalf("expected terraform.tfvars to resolve")
+		}
+		if definition.ParserKey != "hcl" {
+			t.Fatalf("ParserKey = %q, want %q", definition.ParserKey, "hcl")
+		}
+		if definition.Language != "hcl" {
+			t.Fatalf("Language = %q, want %q", definition.Language, "hcl")
+		}
+	})
 }
 
 func TestRegistryOrderingAndImmutability(t *testing.T) {

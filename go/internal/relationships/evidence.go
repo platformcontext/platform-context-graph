@@ -146,6 +146,14 @@ func discoverFromEnvelope(
 		evidence = append(evidence, discoverArgoCDEvidence(
 			sourceRepoID, filePath, content, catalog, seen,
 		)...)
+	case artifactType == "docker_compose":
+		evidence = append(evidence, discoverDockerComposeEvidence(
+			sourceRepoID, filePath, content, catalog, seen,
+		)...)
+	case artifactType == "github_actions_workflow":
+		evidence = append(evidence, discoverGitHubActionsEvidence(
+			sourceRepoID, filePath, content, catalog, seen,
+		)...)
 	}
 
 	return evidence
@@ -350,12 +358,14 @@ func extractYAMLStringValues(content string) []string {
 
 // isTerraformArtifact checks if a file is a Terraform/Terragrunt file.
 func isTerraformArtifact(artifactType, filePath string) bool {
-	if artifactType == "terraform" || artifactType == "terragrunt" {
+	if artifactType == "terraform" || artifactType == "terraform_hcl" || artifactType == "terragrunt" {
 		return true
 	}
 	lower := strings.ToLower(filePath)
 	return strings.HasSuffix(lower, ".tf") ||
 		strings.HasSuffix(lower, ".tf.json") ||
+		strings.HasSuffix(lower, ".tfvars") ||
+		strings.HasSuffix(lower, ".tfvars.json") ||
 		strings.HasSuffix(lower, ".hcl")
 }
 

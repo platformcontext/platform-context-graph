@@ -30,6 +30,21 @@ older parity docs:
    - Docker and Docker Compose relationship semantics
    - GitHub Actions relationship semantics
 
+The historical Python relationship README and fixture-corpus design add one
+more constraint: this branch closes as verb coverage, not just parser
+coverage. The open contract that still needs proof is:
+
+- `PROVISIONS_DEPENDENCY_FOR`
+- `PROVISIONS_PLATFORM`
+- `RUNS_ON`
+- `DEPLOYS_FROM`
+- `DISCOVERS_CONFIG_IN`
+- `DEPENDS_ON`
+- `DEPLOYMENT_SOURCE`
+- `DEFINES`
+- `INSTANCE_OF`
+- `WORKLOAD_DEPENDS_ON`
+
 This plan fixes those gaps in-place on the current branch. It does not reopen
 the Python migration itself. It hardens and completes the Go-owned path.
 
@@ -147,6 +162,11 @@ checked-in execution record for the newly discovered gaps.
 
 Modify the docs listed above so they stop claiming full parity on the affected
 surfaces.
+
+- [ ] **Step 1a: Add the relationship verb contract to the active docs**
+
+Update the parity matrix and relationship mapping docs so they explicitly track
+the fixture-corpus verbs and the remaining family-to-verb gaps.
 
 - [ ] **Step 2: Add this plan to the active execution record**
 
@@ -393,6 +413,8 @@ canonical relationship materialization, and query-visible graph truth.
   semantics
 - replace hidden `.tfvars` exclusion with normal-path collector support
 - add GitHub Actions as a first-class relationship-mapping family
+- prove the open verbs from the historical corpus instead of stopping at
+  parser metadata or summary-only surfacing
 
 ### Ownership impact
 
@@ -419,6 +441,18 @@ Cover:
 - Ansible path families become durable entities or evidence-bearing content
 - Docker and Docker Compose emit relationship-bearing metadata
 - GitHub Actions workflow files become relationship-bearing content
+
+For fixture-corpus parity, this chunk must also prove the right verb family per
+source:
+
+- Terraform / Terragrunt: `PROVISIONS_PLATFORM`,
+  `PROVISIONS_DEPENDENCY_FOR`, and related runtime `RUNS_ON` evidence
+- GitHub Actions: deployment-source and repo handoff proof without inventing
+  stronger canonical edges than the evidence supports
+- Jenkins / Groovy and Ansible: controller-driven delivery-path proof backed by
+  truthful lower-layer deploy/config/runtime evidence
+- Docker / Compose: deployment/runtime hints that survive into relationship or
+  story proof instead of staying parser-only
 
 - [ ] **Step 2: Write failing relationship and query tests**
 

@@ -225,7 +225,7 @@ func defaultDefinitions() []Definition {
 		{
 			ParserKey:  "hcl",
 			Language:   "hcl",
-			Extensions: []string{".hcl", ".tf"},
+			Extensions: []string{".hcl", ".tf", ".tfvars"},
 		},
 		{
 			ParserKey:  "java",

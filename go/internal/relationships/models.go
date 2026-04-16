@@ -28,6 +28,14 @@ const (
 	EvidenceKindArgoCDApplicationSetDeploySource EvidenceKind = "ARGOCD_APPLICATIONSET_DEPLOY_SOURCE"
 	// EvidenceKindArgoCDDestinationPlatform is an ApplicationSet destination-platform reference.
 	EvidenceKindArgoCDDestinationPlatform EvidenceKind = "ARGOCD_DESTINATION_PLATFORM"
+	// EvidenceKindGitHubActionsReusableWorkflow is a reusable workflow repo reference.
+	EvidenceKindGitHubActionsReusableWorkflow EvidenceKind = "GITHUB_ACTIONS_REUSABLE_WORKFLOW"
+	// EvidenceKindGitHubActionsCheckoutRepository is an explicit checkout repo reference.
+	EvidenceKindGitHubActionsCheckoutRepository EvidenceKind = "GITHUB_ACTIONS_CHECKOUT_REPOSITORY"
+	// EvidenceKindDockerComposeBuildContext is a Compose build context repo reference.
+	EvidenceKindDockerComposeBuildContext EvidenceKind = "DOCKER_COMPOSE_BUILD_CONTEXT"
+	// EvidenceKindDockerComposeImage is a Compose image repo reference.
+	EvidenceKindDockerComposeImage EvidenceKind = "DOCKER_COMPOSE_IMAGE"
 	// EvidenceKindKustomizeResource is a Kustomize resource reference.
 	EvidenceKindKustomizeResource EvidenceKind = "KUSTOMIZE_RESOURCE_REFERENCE"
 	// EvidenceKindKustomizeHelmChart is a Kustomize Helm chart reference.

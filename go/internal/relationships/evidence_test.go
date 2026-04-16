@@ -53,6 +53,31 @@ func TestDiscoverTerraformEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverTerraformEvidenceFromTfvarsPath(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-infra",
+			Payload: map[string]any{
+				"relative_path": "env/prod/terraform.tfvars",
+				"content":       `app_repo = "payments-service"`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service", "payments"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+	if evidence[0].RelationshipType != RelProvisionsDependencyFor {
+		t.Fatalf("type = %q, want %q", evidence[0].RelationshipType, RelProvisionsDependencyFor)
+	}
+}
+
 func TestDiscoverTerraformGitHubEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -238,6 +263,156 @@ spec:
 	}
 	if evidence[0].Confidence != 0.95 {
 		t.Errorf("confidence = %f", evidence[0].Confidence)
+	}
+}
+
+func TestDiscoverGitHubActionsReusableWorkflowEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-service",
+			Payload: map[string]any{
+				"artifact_type": "github_actions_workflow",
+				"relative_path": ".github/workflows/deploy.yaml",
+				"content": `name: Deploy
+jobs:
+  deploy:
+    uses: myorg/deployment-helm/.github/workflows/deploy.yaml@main
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-deploy", Aliases: []string{"deployment-helm"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+	if evidence[0].EvidenceKind != EvidenceKindGitHubActionsReusableWorkflow {
+		t.Fatalf("kind = %q, want %q", evidence[0].EvidenceKind, EvidenceKindGitHubActionsReusableWorkflow)
+	}
+	if evidence[0].RelationshipType != RelDeploysFrom {
+		t.Fatalf("type = %q, want %q", evidence[0].RelationshipType, RelDeploysFrom)
+	}
+	if evidence[0].TargetRepoID != "repo-deploy" {
+		t.Fatalf("target = %q, want %q", evidence[0].TargetRepoID, "repo-deploy")
+	}
+}
+
+func TestDiscoverGitHubActionsCheckoutRepositoryEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-service",
+			Payload: map[string]any{
+				"artifact_type": "github_actions_workflow",
+				"relative_path": ".github/workflows/deploy.yaml",
+				"content": `name: Deploy
+jobs:
+  deploy:
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: myorg/deployment-kustomize
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-kustomize", Aliases: []string{"deployment-kustomize"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+	if evidence[0].EvidenceKind != EvidenceKindGitHubActionsCheckoutRepository {
+		t.Fatalf("kind = %q, want %q", evidence[0].EvidenceKind, EvidenceKindGitHubActionsCheckoutRepository)
+	}
+	if evidence[0].RelationshipType != RelDiscoversConfigIn {
+		t.Fatalf("type = %q, want %q", evidence[0].RelationshipType, RelDiscoversConfigIn)
+	}
+	if evidence[0].TargetRepoID != "repo-kustomize" {
+		t.Fatalf("target = %q, want %q", evidence[0].TargetRepoID, "repo-kustomize")
+	}
+}
+
+func TestDiscoverDockerComposeEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-deploy",
+			Payload: map[string]any{
+				"artifact_type": "docker_compose",
+				"relative_path": "docker-compose.yaml",
+				"content": `services:
+  payments:
+    build:
+      context: ../payments-service
+  checkout:
+    image: ghcr.io/myorg/checkout-service:latest
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+		{RepoID: "repo-checkout", Aliases: []string{"checkout-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 2 {
+		t.Fatalf("len = %d, want 2", len(evidence))
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindDockerComposeBuildContext) {
+		t.Fatal("missing Docker Compose build-context evidence")
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindDockerComposeImage) {
+		t.Fatal("missing Docker Compose image evidence")
+	}
+}
+
+func TestIsTerraformArtifactIncludesVariableFiles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		artifactType string
+		filePath     string
+		want         bool
+	}{
+		{
+			name:     "tfvars suffix",
+			filePath: "env/prod/terraform.tfvars",
+			want:     true,
+		},
+		{
+			name:     "tfvars json suffix",
+			filePath: "env/prod/terraform.tfvars.json",
+			want:     true,
+		},
+		{
+			name:         "terraform hcl artifact type",
+			artifactType: "terraform_hcl",
+			filePath:     "env/prod/terraform.tfvars.json",
+			want:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := isTerraformArtifact(tt.artifactType, tt.filePath); got != tt.want {
+				t.Fatalf("isTerraformArtifact(%q, %q) = %t, want %t", tt.artifactType, tt.filePath, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -437,12 +612,12 @@ func TestDiscoverEvidenceFromGoCollectorContentFacts(t *testing.T) {
 		{
 			ScopeID: "repo-infra",
 			Payload: map[string]any{
-				"artifact_type": "terraform",
-				"content_path":  "modules/iam.tf",
-				"content_body":  `app_repo = "payments-service"`,
+				"artifact_type":  "terraform",
+				"content_path":   "modules/iam.tf",
+				"content_body":   `app_repo = "payments-service"`,
 				"content_digest": "sha256:abc123",
 				"repo_id":        "repo-infra",
-				"language":        "terraform_hcl",
+				"language":       "terraform_hcl",
 			},
 		},
 	}

@@ -49,6 +49,16 @@ value = ${var.name}
 			wantDialect:    "",
 			wantIACRelated: false,
 		},
+		{
+			name:         "terraform tfvars json stays on terraform artifact path",
+			relativePath: filepath.Join("infra", "terraform.tfvars.json"),
+			content: `{
+  "app_repo": "payments-service"
+}`,
+			wantArtifact:   "terraform_hcl",
+			wantDialect:    "",
+			wantIACRelated: true,
+		},
 	}
 
 	for _, tt := range tests {
