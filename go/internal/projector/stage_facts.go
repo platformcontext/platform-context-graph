@@ -6,11 +6,13 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 )
 
-// Fact kind constants after normalization (trailing "Fact" suffix stripped).
+// Fact kind constants matching the Go git collector output. The collector emits
+// lowercase fact kinds ("repository", "file", "content_entity"). NormalizeFactKind
+// strips the legacy "Fact" suffix (e.g. "repositoryFact" → "repository").
 const (
-	FactKindFileObserved         = "FileObserved"
-	FactKindParsedEntityObserved = "ParsedEntityObserved"
-	FactKindRepositoryObserved   = "RepositoryObserved"
+	FactKindFileObserved         = "file"
+	FactKindParsedEntityObserved = "content_entity"
+	FactKindRepositoryObserved   = "repository"
 )
 
 // NormalizeFactKind returns a stable fact kind by stripping the legacy "Fact"

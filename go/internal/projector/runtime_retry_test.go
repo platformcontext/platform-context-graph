@@ -46,7 +46,7 @@ func TestRuntimeProjectFailsRetryablyOnceBeforeMaterializing(t *testing.T) {
 		FactID:       "fact-1",
 		ScopeID:      "scope-123",
 		GenerationID: "generation-456",
-		FactKind:     "RepositoryObserved",
+		FactKind:     "repository",
 		ObservedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
 		Payload: map[string]any{
 			"repo_id": "repo-123",

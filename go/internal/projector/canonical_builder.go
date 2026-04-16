@@ -92,8 +92,9 @@ func extractRepository(envelopes []facts.Envelope) *RepositoryRow {
 	}
 }
 
-// extractFiles builds FileRow entries from FileObserved fact envelopes,
-// skipping tombstones.
+// extractFiles builds FileRow entries from file fact envelopes, skipping
+// tombstones. The canonical path (used as the Neo4j MERGE key) is the
+// relative_path so it matches entity file_path references in the graph.
 func extractFiles(envelopes []facts.Envelope, repoID string) []FileRow {
 	fileFacts := FilterFileFacts(envelopes)
 	var rows []FileRow
@@ -104,15 +105,17 @@ func extractFiles(envelopes []facts.Envelope, repoID string) []FileRow {
 		}
 
 		p := fileFacts[i].Payload
-		filePath, _ := payloadString(p, "path")
 		relativePath, _ := payloadString(p, "relative_path")
-		name, _ := payloadString(p, "name")
-		language, _ := payloadString(p, "language")
+		if relativePath == "" {
+			continue
+		}
 
-		dirPath := path.Dir(filePath)
+		name := path.Base(relativePath)
+		language, _ := payloadString(p, "language")
+		dirPath := path.Dir(relativePath)
 
 		rows = append(rows, FileRow{
-			Path:         filePath,
+			Path:         relativePath,
 			RelativePath: relativePath,
 			Name:         name,
 			Language:     language,
@@ -128,7 +131,7 @@ func extractFiles(envelopes []facts.Envelope, repoID string) []FileRow {
 // list of DirectoryRow entries. Directories are computed relative to the
 // repository root path.
 func buildDirectoryChain(files []FileRow, repoPath string, repoID string) []DirectoryRow {
-	if len(files) == 0 || repoPath == "" {
+	if len(files) == 0 {
 		return nil
 	}
 
@@ -220,6 +223,7 @@ func extractEntities(envelopes []facts.Envelope, repoID string) []EntityRow {
 			EntityID:     entityID,
 			Label:        label,
 			EntityName:   entityName,
+			FilePath:     relativePath,
 			RelativePath: relativePath,
 			StartLine:    startLine,
 			EndLine:      endLine,

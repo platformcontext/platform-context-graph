@@ -12,7 +12,7 @@ func TestWorkloadStageExtractsRepositoryIDs(t *testing.T) {
 	envelopes := []facts.Envelope{
 		{
 			FactID:   "repo-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id":       "repository:r_payments",
 				"source_run_id": "run-42",
@@ -36,8 +36,8 @@ func TestWorkloadStageDeduplicatesRepos(t *testing.T) {
 	t.Parallel()
 
 	envelopes := []facts.Envelope{
-		{FactID: "r-1", FactKind: "RepositoryObserved", Payload: map[string]any{"repo_id": "repo:r1"}},
-		{FactID: "r-2", FactKind: "RepositoryObserved", Payload: map[string]any{"repo_id": "repo:r1"}},
+		{FactID: "r-1", FactKind: "repository", Payload: map[string]any{"repo_id": "repo:r1"}},
+		{FactID: "r-2", FactKind: "repository", Payload: map[string]any{"repo_id": "repo:r1"}},
 	}
 
 	result := ProjectWorkloadStage(envelopes)
@@ -52,7 +52,7 @@ func TestWorkloadStageCollectsReducerIntents(t *testing.T) {
 	envelopes := []facts.Envelope{
 		{
 			FactID:       "w-1",
-			FactKind:     "FileObserved",
+			FactKind:     "file",
 			ScopeID:      "scope-1",
 			GenerationID: "gen-1",
 			Payload: map[string]any{
@@ -72,8 +72,8 @@ func TestWorkloadStageSkipsEmptyRepoID(t *testing.T) {
 	t.Parallel()
 
 	envelopes := []facts.Envelope{
-		{FactID: "r-1", FactKind: "RepositoryObserved", Payload: map[string]any{"repo_id": ""}},
-		{FactID: "r-2", FactKind: "RepositoryObserved", Payload: map[string]any{}},
+		{FactID: "r-1", FactKind: "repository", Payload: map[string]any{"repo_id": ""}},
+		{FactID: "r-2", FactKind: "repository", Payload: map[string]any{}},
 	}
 
 	result := ProjectWorkloadStage(envelopes)

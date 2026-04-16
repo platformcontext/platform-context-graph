@@ -44,7 +44,7 @@ func TestBuildCanonicalMaterializationExtractsRepository(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id":    "repo-abc",
 				"name":       "my-project",
@@ -107,7 +107,7 @@ func TestBuildCanonicalMaterializationExtractsFiles(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"name":    "my-project",
@@ -117,7 +117,7 @@ func TestBuildCanonicalMaterializationExtractsFiles(t *testing.T) {
 		{
 			FactID:   "f-1",
 			ScopeID:  "scope-1",
-			FactKind: "FileObserved",
+			FactKind: "file",
 			Payload: map[string]any{
 				"path":          "/repos/my-project/src/main.py",
 				"relative_path": "src/main.py",
@@ -128,7 +128,7 @@ func TestBuildCanonicalMaterializationExtractsFiles(t *testing.T) {
 		{
 			FactID:   "f-2",
 			ScopeID:  "scope-1",
-			FactKind: "FileObserved",
+			FactKind: "file",
 			Payload: map[string]any{
 				"path":          "/repos/my-project/src/api/handler.go",
 				"relative_path": "src/api/handler.go",
@@ -145,8 +145,8 @@ func TestBuildCanonicalMaterializationExtractsFiles(t *testing.T) {
 	}
 
 	f0 := result.Files[0]
-	if f0.Path != "/repos/my-project/src/main.py" {
-		t.Errorf("[0].Path = %q", f0.Path)
+	if f0.Path != "src/main.py" {
+		t.Errorf("[0].Path = %q, want %q", f0.Path, "src/main.py")
 	}
 	if f0.RelativePath != "src/main.py" {
 		t.Errorf("[0].RelativePath = %q", f0.RelativePath)
@@ -157,19 +157,19 @@ func TestBuildCanonicalMaterializationExtractsFiles(t *testing.T) {
 	if f0.Language != "python" {
 		t.Errorf("[0].Language = %q", f0.Language)
 	}
-	if f0.DirPath != "/repos/my-project/src" {
-		t.Errorf("[0].DirPath = %q, want %q", f0.DirPath, "/repos/my-project/src")
+	if f0.DirPath != "src" {
+		t.Errorf("[0].DirPath = %q, want %q", f0.DirPath, "src")
 	}
 	if f0.RepoID != "repo-abc" {
 		t.Errorf("[0].RepoID = %q", f0.RepoID)
 	}
 
 	f1 := result.Files[1]
-	if f1.Path != "/repos/my-project/src/api/handler.go" {
-		t.Errorf("[1].Path = %q", f1.Path)
+	if f1.Path != "src/api/handler.go" {
+		t.Errorf("[1].Path = %q, want %q", f1.Path, "src/api/handler.go")
 	}
-	if f1.DirPath != "/repos/my-project/src/api" {
-		t.Errorf("[1].DirPath = %q, want %q", f1.DirPath, "/repos/my-project/src/api")
+	if f1.DirPath != "src/api" {
+		t.Errorf("[1].DirPath = %q, want %q", f1.DirPath, "src/api")
 	}
 }
 
@@ -182,7 +182,7 @@ func TestBuildCanonicalMaterializationBuildsDirectoryChain(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"name":    "my-project",
@@ -192,7 +192,7 @@ func TestBuildCanonicalMaterializationBuildsDirectoryChain(t *testing.T) {
 		{
 			FactID:   "f-1",
 			ScopeID:  "scope-1",
-			FactKind: "FileObserved",
+			FactKind: "file",
 			Payload: map[string]any{
 				"path":          "/repos/my-project/src/api/handlers/auth.go",
 				"relative_path": "src/api/handlers/auth.go",
@@ -218,11 +218,11 @@ func TestBuildCanonicalMaterializationBuildsDirectoryChain(t *testing.T) {
 	}
 
 	d0 := result.Directories[0]
-	if d0.Path != "/repos/my-project/src" {
-		t.Errorf("[0].Path = %q, want %q", d0.Path, "/repos/my-project/src")
+	if d0.Path != "src" {
+		t.Errorf("[0].Path = %q, want %q", d0.Path, "src")
 	}
-	if d0.ParentPath != "/repos/my-project" {
-		t.Errorf("[0].ParentPath = %q, want %q", d0.ParentPath, "/repos/my-project")
+	if d0.ParentPath != "." {
+		t.Errorf("[0].ParentPath = %q, want %q", d0.ParentPath, ".")
 	}
 	if d0.Name != "src" {
 		t.Errorf("[0].Name = %q, want %q", d0.Name, "src")
@@ -235,22 +235,22 @@ func TestBuildCanonicalMaterializationBuildsDirectoryChain(t *testing.T) {
 	}
 
 	d1 := result.Directories[1]
-	if d1.Path != "/repos/my-project/src/api" {
-		t.Errorf("[1].Path = %q, want %q", d1.Path, "/repos/my-project/src/api")
+	if d1.Path != "src/api" {
+		t.Errorf("[1].Path = %q, want %q", d1.Path, "src/api")
 	}
-	if d1.ParentPath != "/repos/my-project/src" {
-		t.Errorf("[1].ParentPath = %q, want %q", d1.ParentPath, "/repos/my-project/src")
+	if d1.ParentPath != "src" {
+		t.Errorf("[1].ParentPath = %q, want %q", d1.ParentPath, "src")
 	}
 	if d1.Depth != 1 {
 		t.Errorf("[1].Depth = %d, want 1", d1.Depth)
 	}
 
 	d2 := result.Directories[2]
-	if d2.Path != "/repos/my-project/src/api/handlers" {
-		t.Errorf("[2].Path = %q, want %q", d2.Path, "/repos/my-project/src/api/handlers")
+	if d2.Path != "src/api/handlers" {
+		t.Errorf("[2].Path = %q, want %q", d2.Path, "src/api/handlers")
 	}
-	if d2.ParentPath != "/repos/my-project/src/api" {
-		t.Errorf("[2].ParentPath = %q, want %q", d2.ParentPath, "/repos/my-project/src/api")
+	if d2.ParentPath != "src/api" {
+		t.Errorf("[2].ParentPath = %q, want %q", d2.ParentPath, "src/api")
 	}
 	if d2.Depth != 2 {
 		t.Errorf("[2].Depth = %d, want 2", d2.Depth)
@@ -266,7 +266,7 @@ func TestBuildCanonicalMaterializationExtractsEntities(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"name":    "my-project",
@@ -276,7 +276,7 @@ func TestBuildCanonicalMaterializationExtractsEntities(t *testing.T) {
 		{
 			FactID:   "e-1",
 			ScopeID:  "scope-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"entity_id":     "eid-1",
 				"entity_type":   "function",
@@ -295,7 +295,7 @@ func TestBuildCanonicalMaterializationExtractsEntities(t *testing.T) {
 		{
 			FactID:   "e-2",
 			ScopeID:  "scope-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"entity_type":   "class",
 				"entity_name":   "UserService",
@@ -365,7 +365,7 @@ func TestBuildCanonicalMaterializationExtractsModules(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"path":    "/repos/my-project",
@@ -374,7 +374,7 @@ func TestBuildCanonicalMaterializationExtractsModules(t *testing.T) {
 		{
 			FactID:   "i-1",
 			ScopeID:  "scope-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"module_name":     "requests",
 				"imported_module": "requests",
@@ -403,7 +403,7 @@ func TestBuildCanonicalMaterializationExtractsImports(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"path":    "/repos/my-project",
@@ -412,7 +412,7 @@ func TestBuildCanonicalMaterializationExtractsImports(t *testing.T) {
 		{
 			FactID:   "i-1",
 			ScopeID:  "scope-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"imported_module": "requests",
 				"module_name":    "requests",
@@ -456,7 +456,7 @@ func TestBuildCanonicalMaterializationExtractsParameters(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"path":    "/repos/my-project",
@@ -465,7 +465,7 @@ func TestBuildCanonicalMaterializationExtractsParameters(t *testing.T) {
 		{
 			FactID:   "p-1",
 			ScopeID:  "scope-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"param_name":    "ctx",
 				"function_name": "handleRequest",
@@ -504,7 +504,7 @@ func TestBuildCanonicalMaterializationExtractsClassMembers(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"path":    "/repos/my-project",
@@ -513,7 +513,7 @@ func TestBuildCanonicalMaterializationExtractsClassMembers(t *testing.T) {
 		{
 			FactID:   "cm-1",
 			ScopeID:  "scope-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"class_name":    "UserService",
 				"function_name": "get_user",
@@ -552,7 +552,7 @@ func TestBuildCanonicalMaterializationExtractsNestedFunctions(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"path":    "/repos/my-project",
@@ -561,7 +561,7 @@ func TestBuildCanonicalMaterializationExtractsNestedFunctions(t *testing.T) {
 		{
 			FactID:   "nf-1",
 			ScopeID:  "scope-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"outer_name":    "handleRequest",
 				"inner_name":    "validateInput",
@@ -619,7 +619,7 @@ func TestBuildCanonicalMaterializationDeduplicatesDirectories(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"path":    "/repos/my-project",
@@ -628,7 +628,7 @@ func TestBuildCanonicalMaterializationDeduplicatesDirectories(t *testing.T) {
 		{
 			FactID:   "f-1",
 			ScopeID:  "scope-1",
-			FactKind: "FileObserved",
+			FactKind: "file",
 			Payload: map[string]any{
 				"path":          "/repos/my-project/src/main.py",
 				"relative_path": "src/main.py",
@@ -639,7 +639,7 @@ func TestBuildCanonicalMaterializationDeduplicatesDirectories(t *testing.T) {
 		{
 			FactID:   "f-2",
 			ScopeID:  "scope-1",
-			FactKind: "FileObserved",
+			FactKind: "file",
 			Payload: map[string]any{
 				"path":          "/repos/my-project/src/util.py",
 				"relative_path": "src/util.py",
@@ -650,7 +650,7 @@ func TestBuildCanonicalMaterializationDeduplicatesDirectories(t *testing.T) {
 		{
 			FactID:   "f-3",
 			ScopeID:  "scope-1",
-			FactKind: "FileObserved",
+			FactKind: "file",
 			Payload: map[string]any{
 				"path":          "/repos/my-project/src/api/router.py",
 				"relative_path": "src/api/router.py",
@@ -691,7 +691,7 @@ func TestBuildCanonicalMaterializationSkipsTombstones(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"path":    "/repos/my-project",
@@ -700,7 +700,7 @@ func TestBuildCanonicalMaterializationSkipsTombstones(t *testing.T) {
 		{
 			FactID:      "f-1",
 			ScopeID:     "scope-1",
-			FactKind:    "FileObserved",
+			FactKind:    "file",
 			IsTombstone: true,
 			Payload: map[string]any{
 				"path":          "/repos/my-project/src/deleted.py",
@@ -712,7 +712,7 @@ func TestBuildCanonicalMaterializationSkipsTombstones(t *testing.T) {
 		{
 			FactID:      "e-1",
 			ScopeID:     "scope-1",
-			FactKind:    "ParsedEntityObserved",
+			FactKind:    "content_entity",
 			IsTombstone: true,
 			Payload: map[string]any{
 				"entity_type":   "function",
@@ -743,7 +743,7 @@ func TestBuildCanonicalMaterializationSkipsUnmappedEntityTypes(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObserved",
+			FactKind: "repository",
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"path":    "/repos/my-project",
@@ -752,7 +752,7 @@ func TestBuildCanonicalMaterializationSkipsUnmappedEntityTypes(t *testing.T) {
 		{
 			FactID:   "e-1",
 			ScopeID:  "scope-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"entity_type":   "unknown_type_xyz",
 				"entity_name":   "SomeEntity",
@@ -779,7 +779,7 @@ func TestBuildCanonicalMaterializationUsesLegacyFactSuffix(t *testing.T) {
 		{
 			FactID:   "r-1",
 			ScopeID:  "scope-1",
-			FactKind: "RepositoryObservedFact",
+			FactKind: "repositoryFact", // NormalizeFactKind strips "Fact" → "repository"
 			Payload: map[string]any{
 				"repo_id": "repo-abc",
 				"path":    "/repos/my-project",
@@ -789,7 +789,7 @@ func TestBuildCanonicalMaterializationUsesLegacyFactSuffix(t *testing.T) {
 		{
 			FactID:   "f-1",
 			ScopeID:  "scope-1",
-			FactKind: "FileObservedFact",
+			FactKind: "fileFact", // NormalizeFactKind strips "Fact" → "file"
 			Payload: map[string]any{
 				"path":          "/repos/my-project/main.go",
 				"relative_path": "main.go",
@@ -888,7 +888,7 @@ func TestBuildCanonicalMaterializationFallsBackToScopeMetadata(t *testing.T) {
 		{
 			FactID:   "f-1",
 			ScopeID:  "scope-1",
-			FactKind: "FileObserved",
+			FactKind: "file",
 			Payload: map[string]any{
 				"path":          "/repos/my-project/src/main.py",
 				"relative_path": "src/main.py",

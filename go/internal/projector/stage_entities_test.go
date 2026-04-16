@@ -12,7 +12,7 @@ func TestEntityStageProjectsFromPayload(t *testing.T) {
 	envelopes := []facts.Envelope{
 		{
 			FactID:   "e-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"entity_name": "UserService",
 				"entity_kind": "Class",
@@ -47,7 +47,7 @@ func TestEntityStageSkipsNonEntityFacts(t *testing.T) {
 	t.Parallel()
 
 	envelopes := []facts.Envelope{
-		{FactID: "f-1", FactKind: "FileObserved", Payload: map[string]any{"content_path": "/src/main.py"}},
+		{FactID: "f-1", FactKind: "file", Payload: map[string]any{"content_path": "/src/main.py"}},
 	}
 
 	result := ProjectEntityStage("repo:r1", envelopes)
@@ -62,7 +62,7 @@ func TestEntityStageDeduplicates(t *testing.T) {
 	envelopes := []facts.Envelope{
 		{
 			FactID:   "e-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"entity_name": "Foo",
 				"entity_kind": "Function",
@@ -72,7 +72,7 @@ func TestEntityStageDeduplicates(t *testing.T) {
 		},
 		{
 			FactID:   "e-1",
-			FactKind: "ParsedEntityObserved",
+			FactKind: "content_entity",
 			Payload: map[string]any{
 				"entity_name": "Foo",
 				"entity_kind": "Function",

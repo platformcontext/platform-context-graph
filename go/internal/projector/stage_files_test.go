@@ -10,9 +10,9 @@ func TestFilterFileFactsSelectsFileObserved(t *testing.T) {
 	t.Parallel()
 
 	envelopes := []facts.Envelope{
-		{FactID: "f-1", FactKind: "FileObserved", Payload: map[string]any{"content_path": "/src/main.py"}},
-		{FactID: "f-2", FactKind: "RepositoryObserved", Payload: map[string]any{"repo_id": "r1"}},
-		{FactID: "f-3", FactKind: "FileObservedFact", Payload: map[string]any{"content_path": "/src/util.py"}},
+		{FactID: "f-1", FactKind: "file", Payload: map[string]any{"content_path": "/src/main.py"}},
+		{FactID: "f-2", FactKind: "repository", Payload: map[string]any{"repo_id": "r1"}},
+		{FactID: "f-3", FactKind: "fileFact", Payload: map[string]any{"content_path": "/src/util.py"}},
 	}
 
 	filtered := FilterFileFacts(envelopes)
@@ -31,8 +31,8 @@ func TestFilterFileFactsDeduplicates(t *testing.T) {
 	t.Parallel()
 
 	envelopes := []facts.Envelope{
-		{FactID: "f-1", FactKind: "FileObserved", Payload: map[string]any{"content_path": "/src/main.py"}},
-		{FactID: "f-1", FactKind: "FileObserved", Payload: map[string]any{"content_path": "/src/main.py"}},
+		{FactID: "f-1", FactKind: "file", Payload: map[string]any{"content_path": "/src/main.py"}},
+		{FactID: "f-1", FactKind: "file", Payload: map[string]any{"content_path": "/src/main.py"}},
 	}
 
 	filtered := FilterFileFacts(envelopes)
@@ -45,9 +45,9 @@ func TestFilterEntityFactsSelectsParsedEntityObserved(t *testing.T) {
 	t.Parallel()
 
 	envelopes := []facts.Envelope{
-		{FactID: "e-1", FactKind: "ParsedEntityObserved", Payload: map[string]any{"entity_name": "Foo"}},
-		{FactID: "e-2", FactKind: "FileObserved", Payload: map[string]any{"content_path": "/src/main.py"}},
-		{FactID: "e-3", FactKind: "ParsedEntityObservedFact", Payload: map[string]any{"entity_name": "Bar"}},
+		{FactID: "e-1", FactKind: "content_entity", Payload: map[string]any{"entity_name": "Foo"}},
+		{FactID: "e-2", FactKind: "file", Payload: map[string]any{"content_path": "/src/main.py"}},
+		{FactID: "e-3", FactKind: "content_entityFact", Payload: map[string]any{"entity_name": "Bar"}},
 	}
 
 	filtered := FilterEntityFacts(envelopes)
@@ -60,9 +60,9 @@ func TestFilterRepositoryFactsSelectsRepositoryObserved(t *testing.T) {
 	t.Parallel()
 
 	envelopes := []facts.Envelope{
-		{FactID: "r-1", FactKind: "RepositoryObserved", Payload: map[string]any{"repo_id": "r1"}},
-		{FactID: "r-2", FactKind: "FileObserved", Payload: map[string]any{"content_path": "/src/main.py"}},
-		{FactID: "r-3", FactKind: "RepositoryObservedFact", Payload: map[string]any{"repo_id": "r2"}},
+		{FactID: "r-1", FactKind: "repository", Payload: map[string]any{"repo_id": "r1"}},
+		{FactID: "r-2", FactKind: "file", Payload: map[string]any{"content_path": "/src/main.py"}},
+		{FactID: "r-3", FactKind: "repositoryFact", Payload: map[string]any{"repo_id": "r2"}},
 	}
 
 	filtered := FilterRepositoryFacts(envelopes)
@@ -78,10 +78,10 @@ func TestNormalizeFactKindStripsSuffix(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"FileObserved", "FileObserved"},
-		{"FileObservedFact", "FileObserved"},
-		{"ParsedEntityObservedFact", "ParsedEntityObserved"},
-		{"RepositoryObserved", "RepositoryObserved"},
+		{"file", "file"},
+		{"fileFact", "file"},
+		{"content_entityFact", "content_entity"},
+		{"repository", "repository"},
 		{"Fact", ""},
 	}
 

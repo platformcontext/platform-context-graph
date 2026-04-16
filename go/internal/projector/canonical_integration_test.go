@@ -54,7 +54,7 @@ func TestCanonicalProjectionEndToEndWritesAllStages(t *testing.T) {
 			FactID:       "fact-repo",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "RepositoryObserved",
+			FactKind:     "repository",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id":    repoID,
@@ -70,7 +70,7 @@ func TestCanonicalProjectionEndToEndWritesAllStages(t *testing.T) {
 			FactID:       "fact-file-1",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "FileObserved",
+			FactKind:     "file",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id":       repoID,
@@ -84,7 +84,7 @@ func TestCanonicalProjectionEndToEndWritesAllStages(t *testing.T) {
 			FactID:       "fact-file-2",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "FileObserved",
+			FactKind:     "file",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id":       repoID,
@@ -98,7 +98,7 @@ func TestCanonicalProjectionEndToEndWritesAllStages(t *testing.T) {
 			FactID:       "fact-entity-1",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "ParsedEntityObserved",
+			FactKind:     "content_entity",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id":       repoID,
@@ -115,7 +115,7 @@ func TestCanonicalProjectionEndToEndWritesAllStages(t *testing.T) {
 			FactID:       "fact-entity-2",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "ParsedEntityObserved",
+			FactKind:     "content_entity",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id":       repoID,
@@ -270,7 +270,7 @@ func TestCanonicalProjectionDirectoryChainOrdering(t *testing.T) {
 			FactID:       "fact-repo",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "RepositoryObserved",
+			FactKind:     "repository",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id": repoID,
@@ -282,7 +282,7 @@ func TestCanonicalProjectionDirectoryChainOrdering(t *testing.T) {
 			FactID:       "fact-file-1",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "FileObserved",
+			FactKind:     "file",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id":       repoID,
@@ -296,7 +296,7 @@ func TestCanonicalProjectionDirectoryChainOrdering(t *testing.T) {
 			FactID:       "fact-file-2",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "FileObserved",
+			FactKind:     "file",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id":       repoID,
@@ -310,7 +310,7 @@ func TestCanonicalProjectionDirectoryChainOrdering(t *testing.T) {
 			FactID:       "fact-file-3",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "FileObserved",
+			FactKind:     "file",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id":       repoID,
@@ -347,7 +347,7 @@ func TestCanonicalProjectionDirectoryChainOrdering(t *testing.T) {
 		t.Errorf("mat.Directories[2].Depth = %d, want %d", got, want)
 	}
 
-	if got, want := mat.Directories[0].ParentPath, repoPath; got != want {
+	if got, want := mat.Directories[0].ParentPath, "."; got != want {
 		t.Errorf("mat.Directories[0].ParentPath = %q, want %q", got, want)
 	}
 	if got, want := mat.Directories[1].ParentPath, mat.Directories[0].Path; got != want {
@@ -389,7 +389,7 @@ func TestCanonicalProjectionEntityLabelMapping(t *testing.T) {
 			FactID:       "fact-repo",
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "RepositoryObserved",
+			FactKind:     "repository",
 			ObservedAt:   now,
 			Payload:      map[string]any{"repo_id": repoID, "name": "test-repo", "path": repoPath},
 		},
@@ -400,7 +400,7 @@ func TestCanonicalProjectionEntityLabelMapping(t *testing.T) {
 			FactID:       "fact-" + e.id,
 			ScopeID:      scopeValue.ScopeID,
 			GenerationID: generationValue.GenerationID,
-			FactKind:     "ParsedEntityObserved",
+			FactKind:     "content_entity",
 			ObservedAt:   now,
 			Payload: map[string]any{
 				"repo_id": repoID, "entity_id": e.id, "entity_type": e.typ,

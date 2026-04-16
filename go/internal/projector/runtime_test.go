@@ -49,7 +49,7 @@ func TestRuntimeProjectMaterializesSourceLocalTruthAndReducerIntents(t *testing.
 			FactID:       "fact-0",
 			ScopeID:      "scope-123",
 			GenerationID: "generation-456",
-			FactKind:     "RepositoryObserved",
+			FactKind:     "repository",
 			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
 			Payload: map[string]any{
 				"repo_id": "repo-123",
@@ -615,7 +615,7 @@ func TestRuntimeProjectWithTelemetry(t *testing.T) {
 			FactID:       "fact-0",
 			ScopeID:      "scope-123",
 			GenerationID: "generation-456",
-			FactKind:     "RepositoryObserved",
+			FactKind:     "repository",
 			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
 			Payload: map[string]any{
 				"repo_id": "repo-123",

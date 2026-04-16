@@ -12,7 +12,7 @@ func TestRelationshipStageBuildsReducerIntents(t *testing.T) {
 	envelopes := []facts.Envelope{
 		{
 			FactID:       "i-1",
-			FactKind:     "FileObserved",
+			FactKind:     "file",
 			ScopeID:      "scope-1",
 			GenerationID: "gen-1",
 			Payload: map[string]any{
@@ -38,7 +38,7 @@ func TestRelationshipStageDeduplicatesIntents(t *testing.T) {
 	envelopes := []facts.Envelope{
 		{
 			FactID:   "r-1",
-			FactKind: "FileObserved",
+			FactKind: "file",
 			Payload: map[string]any{
 				"reducer_domain": "data_lineage",
 				"entity_key":     "repo:r1",
@@ -46,7 +46,7 @@ func TestRelationshipStageDeduplicatesIntents(t *testing.T) {
 		},
 		{
 			FactID:   "r-1",
-			FactKind: "FileObserved",
+			FactKind: "file",
 			Payload: map[string]any{
 				"reducer_domain": "data_lineage",
 				"entity_key":     "repo:r1",
