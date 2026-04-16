@@ -40,7 +40,7 @@ func buildRepositoryRelationshipOverview(relationships []map[string]any) map[str
 		return strings.Compare(StringVal(left, "evidence_type"), StringVal(right, "evidence_type"))
 	})
 
-	controllerDriven := filterRepositoryRelationshipsByEvidence(rows, "argocd_")
+	controllerDriven := filterRepositoryRelationshipsByEvidencePrefix(rows, controllerEvidenceTypePrefixes...)
 	workflowDriven := filterRepositoryRelationshipsByEvidence(rows, "github_actions_")
 	iacDriven := filterRepositoryRelationshipsByEvidencePrefix(rows, iacEvidenceTypePrefixes...)
 	otherTyped := excludeRepositoryRelationships(rows, controllerDriven, workflowDriven, iacDriven)
@@ -180,11 +180,15 @@ func uniqueRelationshipStrings(rows []map[string]any, key string) []string {
 }
 
 var iacEvidenceTypePrefixes = []string{
-	"ansible_",
 	"docker_compose_",
 	"helm_",
-	"jenkins_",
 	"kustomize_",
 	"terraform_",
 	"terragrunt_",
+}
+
+var controllerEvidenceTypePrefixes = []string{
+	"argocd_",
+	"ansible_",
+	"jenkins_",
 }

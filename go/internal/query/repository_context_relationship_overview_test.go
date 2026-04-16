@@ -25,7 +25,7 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 					"file_count":       int64(12),
 					"workload_count":   int64(1),
 					"platform_count":   int64(1),
-					"dependency_count": int64(3),
+					"dependency_count": int64(5),
 				},
 			},
 			runByMatch: map[string][]map[string]any{
@@ -47,6 +47,18 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 						"target_name":   "terraform-modules",
 						"target_id":     "repo-4",
 						"evidence_type": "terraform_module_source",
+					},
+					{
+						"type":          "DISCOVERS_CONFIG_IN",
+						"target_name":   "shared-pipelines",
+						"target_id":     "repo-5",
+						"evidence_type": "jenkins_shared_library",
+					},
+					{
+						"type":          "DEPENDS_ON",
+						"target_name":   "ansible-ops",
+						"target_id":     "repo-6",
+						"evidence_type": "ansible_role_reference",
 					},
 				},
 			},
@@ -75,7 +87,7 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 		t.Fatalf("relationship_overview type = %T, want map[string]any", resp["relationship_overview"])
 	}
 
-	if got, want := overview["relationship_count"], float64(3); got != want {
+	if got, want := overview["relationship_count"], float64(5); got != want {
 		t.Fatalf("relationship_overview.relationship_count = %#v, want %#v", got, want)
 	}
 
@@ -83,15 +95,21 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 	if !ok {
 		t.Fatalf("controller_driven type = %T, want []any", overview["controller_driven"])
 	}
-	if len(controllerDriven) != 1 {
-		t.Fatalf("len(controller_driven) = %d, want 1", len(controllerDriven))
+	if len(controllerDriven) != 3 {
+		t.Fatalf("len(controller_driven) = %d, want 3", len(controllerDriven))
 	}
-	controllerRow, ok := controllerDriven[0].(map[string]any)
-	if !ok {
-		t.Fatalf("controller_driven[0] type = %T, want map[string]any", controllerDriven[0])
+	controllerEvidence := map[string]struct{}{}
+	for index, item := range controllerDriven {
+		row, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("controller_driven[%d] type = %T, want map[string]any", index, item)
+		}
+		controllerEvidence[StringVal(row, "evidence_type")] = struct{}{}
 	}
-	if got, want := controllerRow["evidence_type"], "argocd_application_source"; got != want {
-		t.Fatalf("controller_driven[0].evidence_type = %#v, want %#v", got, want)
+	for _, want := range []string{"argocd_application_source", "ansible_role_reference", "jenkins_shared_library"} {
+		if _, ok := controllerEvidence[want]; !ok {
+			t.Fatalf("controller_driven missing evidence_type %q", want)
+		}
 	}
 
 	workflowDriven, ok := overview["workflow_driven"].([]any)
