@@ -120,13 +120,8 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 		       r.id as repo_id, r.name as repo_name,
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
-		       e.end_line as end_line,
-		       e.docstring as docstring,
-		       e.method_kind as method_kind,
-		       e.annotation_kind as annotation_kind,
-		       e.context as context,
-		       e.type_annotation_count as type_annotation_count,
-		       e.type_annotation_kinds as type_annotation_kinds
+		       e.end_line as end_line
+` + graphSemanticMetadataProjection() + `
 		ORDER BY e.name
 		LIMIT $limit
 	`

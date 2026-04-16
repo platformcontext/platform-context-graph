@@ -56,7 +56,10 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     and normal `code/relationships` can still synthesize JSX component-
     reference edges for content-backed entities when direct graph edges are
     absent. TSX `as ComponentType<...>` narrowing now also persists as
-    first-class graph metadata on `Variable` rows.
+    first-class graph metadata on `Variable` rows, and the graph-backed
+    `language-query`, `code/search`, and entity-context surfaces now project
+    `jsx_fragment_shorthand` and `component_type_assertion` directly from
+    Neo4j rows when present.
 
 
 ## Known Limitations

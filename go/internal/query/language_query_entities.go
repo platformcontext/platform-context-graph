@@ -196,6 +196,36 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	return metadata
 }
 
+func graphSemanticMetadataProjection() string {
+	return `,
+		       e.docstring as docstring,
+		       e.method_kind as method_kind,
+		       e.annotation_kind as annotation_kind,
+		       e.context as context,
+		       e.type_annotation_count as type_annotation_count,
+		       e.type_annotation_kinds as type_annotation_kinds,
+		       e.type_parameters as type_parameters,
+		       e.type_alias_kind as type_alias_kind,
+		       e.framework as framework,
+		       e.module_kind as module_kind,
+		       e.jsx_fragment_shorthand as jsx_fragment_shorthand,
+		       e.component_type_assertion as component_type_assertion,
+		       e.protocol as protocol,
+		       e.implemented_for as implemented_for,
+		       e.attribute_kind as attribute_kind,
+		       e.value as value,
+		       e.declaration_merge_group as declaration_merge_group,
+		       e.declaration_merge_count as declaration_merge_count,
+		       e.declaration_merge_kinds as declaration_merge_kinds,
+		       e.kind as kind,
+		       e.target_kind as target_kind,
+		       e.type as type,
+		       e.decorators as decorators,
+		       e.async as async,
+		       e.semantic_kind as semantic_kind,
+		       e.metaclass as metaclass`
+}
+
 func graphLabelToContentEntityType(label string) string {
 	switch label {
 	case "Annotation":
