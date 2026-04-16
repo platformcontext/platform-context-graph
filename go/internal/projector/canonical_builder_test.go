@@ -968,6 +968,81 @@ func TestBuildCanonicalMaterializationExcludesModuleAndParameterFromEntities(t *
 	if result.Entities[0].Label != "Function" {
 		t.Errorf("Entities[0].Label = %q, want Function", result.Entities[0].Label)
 	}
+
+	// Module entities should be extracted into Modules instead.
+	// Both lowercase "module" and PascalCase "Module" should be captured.
+	if len(result.Modules) != 2 {
+		t.Fatalf("len(Modules) = %d, want 2", len(result.Modules))
+	}
+	moduleNames := map[string]bool{}
+	for _, m := range result.Modules {
+		moduleNames[m.Name] = true
+	}
+	if !moduleNames["requests"] {
+		t.Error("expected Module 'requests' to be extracted")
+	}
+	if !moduleNames["utils"] {
+		t.Error("expected Module 'utils' to be extracted")
+	}
+}
+
+func TestExtractModulesFromEntitiesDeduplicatesByName(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "e-1",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_type":   "Module",
+				"entity_name":   "Cypress",
+				"relative_path": "cypress/support/commands.ts",
+				"start_line":    1,
+				"language":      "typescript",
+			},
+		},
+		{
+			FactID:   "e-2",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_type":   "Module",
+				"entity_name":   "Cypress",
+				"relative_path": "cypress/support/e2e.ts",
+				"start_line":    1,
+				"language":      "typescript",
+			},
+		},
+		{
+			FactID:   "e-3",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_type":   "Module",
+				"entity_name":   "Fastlane",
+				"relative_path": "fastlane/actions/export_certs.rb",
+				"start_line":    2,
+				"language":      "ruby",
+			},
+		},
+	}
+
+	modules := extractModulesFromEntities(envelopes)
+
+	if len(modules) != 2 {
+		t.Fatalf("len(modules) = %d, want 2 (Cypress deduped)", len(modules))
+	}
+	names := map[string]string{}
+	for _, m := range modules {
+		names[m.Name] = m.Language
+	}
+	if names["Cypress"] != "typescript" {
+		t.Errorf("Cypress language = %q, want typescript", names["Cypress"])
+	}
+	if names["Fastlane"] != "ruby" {
+		t.Errorf("Fastlane language = %q, want ruby", names["Fastlane"])
+	}
 }
 
 func TestBuildCanonicalMaterializationUsesLegacyFactSuffix(t *testing.T) {

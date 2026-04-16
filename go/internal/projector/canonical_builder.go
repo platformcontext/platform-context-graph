@@ -53,8 +53,15 @@ func buildCanonicalMaterialization(
 	// Extract entities.
 	mat.Entities = extractEntities(inputFacts, repoID, repoPath)
 
+	// Extract modules from Module-type entity facts. The Go parser emits
+	// Module entities as content_entity facts (entity_type=Module) rather
+	// than separate import/module facts with module_name payload keys.
+	mat.Modules = extractModulesFromEntities(inputFacts)
+
 	// Extract modules, imports, parameters, class members, nested functions
-	// from all non-tombstoned facts.
+	// from all non-tombstoned facts. This handles Python-era payload keys
+	// (module_name, imported_module, param_name, etc.) and merges any
+	// additionally discovered modules into the set above.
 	extractRelationships(inputFacts, &mat)
 
 	return mat
@@ -275,11 +282,56 @@ func extractEntityMetadata(payload map[string]any) map[string]any {
 	return cloneAnyMap(typed)
 }
 
+// extractModulesFromEntities extracts ModuleRow entries from entity facts
+// whose entity_type maps to the "Module" Neo4j label. The Go parser emits
+// Module entities as content_entity facts rather than separate import/module
+// facts, so this function bridges the gap.
+func extractModulesFromEntities(envelopes []facts.Envelope) []ModuleRow {
+	entityFacts := FilterEntityFacts(envelopes)
+	seen := make(map[string]struct{})
+	var rows []ModuleRow
+
+	for i := range entityFacts {
+		if entityFacts[i].IsTombstone {
+			continue
+		}
+
+		p := entityFacts[i].Payload
+		entityType, _ := payloadString(p, "entity_type")
+		label, ok := EntityTypeLabel(entityType)
+		if !ok || label != "Module" {
+			continue
+		}
+
+		entityName, _ := payloadString(p, "entity_name")
+		if entityName == "" {
+			continue
+		}
+
+		if _, ok := seen[entityName]; ok {
+			continue // dedupe by name — Module MERGE key is name
+		}
+		seen[entityName] = struct{}{}
+
+		language, _ := payloadString(p, "language")
+		rows = append(rows, ModuleRow{
+			Name:     entityName,
+			Language: language,
+		})
+	}
+
+	return rows
+}
+
 // extractRelationships scans all non-tombstoned facts for module, import,
 // parameter, class member, and nested function payload patterns. All file
 // paths are repo-qualified via mat.RepoPath to match canonical File/Entity paths.
 func extractRelationships(envelopes []facts.Envelope, mat *CanonicalMaterialization) {
-	moduleSeen := make(map[string]struct{})
+	// Seed the seen set with modules already extracted from entity facts.
+	moduleSeen := make(map[string]struct{}, len(mat.Modules))
+	for _, m := range mat.Modules {
+		moduleSeen[m.Name] = struct{}{}
+	}
 	repoPath := mat.RepoPath
 
 	for i := range envelopes {
