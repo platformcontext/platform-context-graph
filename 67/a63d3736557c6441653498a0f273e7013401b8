@@ -1,0 +1,39 @@
+go/internal/storage/neo4j/semantic_entity.go
+  1ca5ee6ce936a402 229
+docs/docs/languages/typescript.md
+  1ca5ee6ce936a402 56-65,67-68,71-72,79-81
+go/internal/query/language_query_tsx_wrapper_graph_first_test.go
+  1ca5ee6ce936a402 1-76
+go/internal/parser/engine_tsx_component_wrapper_test.go
+  1ca5ee6ce936a402 1-32
+go/internal/query/typescript_function_graph_first_test.go
+  1ca5ee6ce936a402 1-111
+go/internal/storage/neo4j/semantic_entity_typescript_test.go
+  1ca5ee6ce936a402 1-82
+go/internal/reducer/semantic_entity_materialization_typescript_test.go
+  1ca5ee6ce936a402 1-59
+docs/docs/languages/typescriptjsx.md
+  1ca5ee6ce936a402 27,50,59-60,72-73
+go/internal/reducer/semantic_entity_materialization_helpers.go
+  1ca5ee6ce936a402 377-385
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "67a63d3736557c6441653498a0f273e7013401b8",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 185,
+      "total_deletions": 14,
+      "accepted_lines": 536,
+      "overriden_lines": 0
+    }
+  }
+}
