@@ -20,8 +20,12 @@ class Factory {
 }
 
 class Config {
+    public static function emit(string $message): void {}
+
     public function run(): void {
         Logger::warn('warn');
+        self::emit('self');
+        static::emit('static');
     }
 }
 

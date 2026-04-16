@@ -78,10 +78,23 @@ func TestDefaultEngineParsePathPHPFixtures(t *testing.T) {
 	assertNamedBucketContains(t, staticCallsPayload, "classes", "Logger")
 	assertNamedBucketContains(t, staticCallsPayload, "classes", "Child")
 	assertNamedBucketContains(t, staticCallsPayload, "functions", "warn")
+	assertNamedBucketContains(t, staticCallsPayload, "functions", "emit")
 	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "full_name", "Logger.warn")
 	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "inferred_obj_type", "Logger")
 	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "full_name", "parent::instance()->createService().info")
 	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "inferred_obj_type", "Service")
+	staticEmitCalls := 0
+	for _, item := range staticCallsPayload["function_calls"].([]map[string]any) {
+		fullName, _ := item["full_name"].(string)
+		if fullName != "Config.emit" {
+			continue
+		}
+		assertStringFieldValue(t, item, "inferred_obj_type", "Config")
+		staticEmitCalls++
+	}
+	if staticEmitCalls != 2 {
+		t.Fatalf("Config.emit calls = %d, want 2 in %#v", staticEmitCalls, staticCallsPayload["function_calls"])
+	}
 
 	staticAliasCallsPath := filepath.Join(repoRoot, "static_alias_calls.php")
 	staticAliasCallsPayload, err := engine.ParsePath(repoRoot, staticAliasCallsPath, false, Options{})
