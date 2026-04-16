@@ -251,11 +251,11 @@ func pythonLambdaAssignmentItem(
 ) (map[string]any, bool) {
 	left := node.ChildByFieldName("left")
 	right := node.ChildByFieldName("right")
-	if left == nil || right == nil || left.Kind() != "identifier" || right.Kind() != "lambda" {
+	if left == nil || right == nil || right.Kind() != "lambda" {
 		return nil, false
 	}
 
-	name := nodeText(left, source)
+	name := pythonLambdaAssignmentTargetName(left, source)
 	if strings.TrimSpace(name) == "" {
 		return nil, false
 	}
@@ -275,6 +275,19 @@ func pythonLambdaAssignmentItem(
 		item["source"] = nodeText(node, source)
 	}
 	return item, true
+}
+
+func pythonLambdaAssignmentTargetName(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+
+	switch node.Kind() {
+	case "identifier", "attribute":
+		return nodeText(node, source)
+	default:
+		return ""
+	}
 }
 
 func pythonClassMetaclass(node *tree_sitter.Node, source []byte) string {
