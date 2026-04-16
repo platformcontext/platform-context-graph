@@ -294,6 +294,10 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 		return nil
 	}
 
+	if result.Status == ResultStatusSuperseded {
+		status = "superseded"
+	}
+
 	if err := s.WorkSink.Ack(ctx, intent, result); err != nil {
 		s.recordReducerResult(ctx, intent, duration, "ack_failed", workerID, err)
 		return fmt.Errorf("ack reducer work: %w", err)
@@ -332,7 +336,8 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
 		logAttrs = append(logAttrs, slog.Int("worker_id", workerID))
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseReduction))
-		if status == "failed" || status == "ack_failed" {
+		switch status {
+		case "failed", "ack_failed":
 			failureClass := "reducer_failure"
 			message := "reducer execution failed"
 			if status == "ack_failed" {
@@ -344,7 +349,10 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 				logAttrs = append(logAttrs, slog.String("error", execErr.Error()))
 			}
 			s.Logger.ErrorContext(ctx, message, logAttrs...)
-		} else {
+		case "superseded":
+			logAttrs = append(logAttrs, telemetry.FailureClassAttr("generation_superseded"))
+			s.Logger.InfoContext(ctx, "reducer intent superseded", logAttrs...)
+		default:
 			s.Logger.InfoContext(ctx, "reducer execution succeeded", logAttrs...)
 		}
 	}

@@ -66,6 +66,9 @@ const (
 	ResultStatusSucceeded ResultStatus = "succeeded"
 	// ResultStatusFailed means the execution failed.
 	ResultStatusFailed ResultStatus = "failed"
+	// ResultStatusSuperseded means the intent was skipped because a newer
+	// generation is already active for the scope.
+	ResultStatusSuperseded ResultStatus = "superseded"
 )
 
 // FailureRecord captures the durable reducer failure classification.

@@ -178,9 +178,50 @@ func (f *fakeReducerDB) ExecContext(
 	return fakeReducerResult{}, nil
 }
 
-func (f *fakeReducerDB) QueryContext(_ context.Context, query string, _ ...any) (postgres.Rows, error) {
+func (f *fakeReducerDB) QueryContext(_ context.Context, query string, args ...any) (postgres.Rows, error) {
+	// Generation freshness check: return a row matching the intent's generation
+	// so the guard treats the intent as current.
+	if strings.Contains(query, "active_generation_id") && strings.Contains(query, "ingestion_scopes") {
+		scopeGenID := ""
+		if len(args) > 0 {
+			// Look up what generation the intent carries — fake DB always reports
+			// the intent's generation as active so execution proceeds.
+			scopeGenID = "generation-456"
+		}
+		return &fakeGenerationRows{value: &scopeGenID, read: false}, nil
+	}
 	return nil, fmt.Errorf("unexpected query: %s", query)
 }
+
+// fakeGenerationRows returns a single active_generation_id row.
+type fakeGenerationRows struct {
+	value *string
+	read  bool
+}
+
+func (r *fakeGenerationRows) Next() bool {
+	if r.read {
+		return false
+	}
+	r.read = true
+	return true
+}
+
+func (r *fakeGenerationRows) Scan(dest ...any) error {
+	if len(dest) != 1 {
+		return fmt.Errorf("scan: got %d dest, want 1", len(dest))
+	}
+	switch d := dest[0].(type) {
+	case *sql.NullString:
+		*d = sql.NullString{String: *r.value, Valid: true}
+	default:
+		return fmt.Errorf("unsupported scan dest type %T", dest[0])
+	}
+	return nil
+}
+
+func (r *fakeGenerationRows) Err() error  { return nil }
+func (r *fakeGenerationRows) Close() error { return nil }
 
 type fakeReducerResult struct{}
 

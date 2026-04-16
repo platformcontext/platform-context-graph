@@ -50,6 +50,10 @@ type DefaultHandlers struct {
 	// from evidence facts. Optional; nil disables cross-repo edge writes.
 	RepoDependencyEdgeWriter SharedProjectionEdgeWriter
 
+	// GenerationCheck reports whether an intent's generation is still current.
+	// Nil disables the guard and lets all intents execute unconditionally.
+	GenerationCheck GenerationFreshnessCheck
+
 	// Tracer and Instruments for cross-repo resolution telemetry.
 	Tracer      trace.Tracer
 	Instruments *telemetry.Instruments
@@ -79,7 +83,12 @@ func NewDefaultRuntime(handlers DefaultHandlers) (*Runtime, error) {
 		return nil, err
 	}
 
-	return NewRuntime(registry)
+	rt, err := NewRuntime(registry)
+	if err != nil {
+		return nil, err
+	}
+	rt.GenerationCheck = handlers.GenerationCheck
+	return rt, nil
 }
 
 func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefinition {

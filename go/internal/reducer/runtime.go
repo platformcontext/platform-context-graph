@@ -53,9 +53,10 @@ type Stats struct {
 
 // Runtime owns the bounded reducer execution surface.
 type Runtime struct {
-	mu       sync.Mutex
-	registry Registry
-	intents  []Intent
+	mu              sync.Mutex
+	registry        Registry
+	intents         []Intent
+	GenerationCheck GenerationFreshnessCheck // nil disables the guard
 }
 
 // NewRuntime constructs a reducer runtime over the supplied registry.
@@ -331,6 +332,24 @@ func (r *Runtime) markFailed(position int, completedAt time.Time, failureClass, 
 }
 
 func (r *Runtime) execute(ctx context.Context, intent Intent) (Result, error) {
+	// Generation guard: skip stale intents before touching Neo4j.
+	if r.GenerationCheck != nil {
+		current, err := r.GenerationCheck(ctx, intent.ScopeID, intent.GenerationID)
+		if err != nil {
+			return Result{}, fmt.Errorf("generation freshness check: %w", err)
+		}
+		if !current {
+			return Result{
+				IntentID:        intent.IntentID,
+				Domain:          intent.Domain,
+				Status:          ResultStatusSuperseded,
+				EvidenceSummary: fmt.Sprintf("generation %s superseded for scope %s", intent.GenerationID, intent.ScopeID),
+				CanonicalWrites: 0,
+				CompletedAt:     time.Now(),
+			}, nil
+		}
+	}
+
 	def, ok := r.registry.Definition(intent.Domain)
 	if !ok {
 		return Result{}, fmt.Errorf("domain %q is not registered", intent.Domain)
