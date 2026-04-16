@@ -728,6 +728,221 @@ func TestGetEntityContextUsesGraphPythonLambdaWithoutContent(t *testing.T) {
 	}
 }
 
+func TestGetEntityContextFallsBackToContentBackedPythonDecoratedAsyncFunction(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"function-1", "repo-1", "src/handler.py", "Function", "handler",
+					int64(12), int64(20), "python", "async def handler(): ...", []byte(`{"decorators":["@route"],"async":true}`),
+				},
+			},
+		},
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{},
+		},
+	})
+
+	handler := &EntityHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/function-1/context", nil)
+	req.SetPathValue("entity_id", "function-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	if got, want := resp["semantic_summary"], "Function handler is async and uses decorators @route."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["story"], "Function handler is async and uses decorators @route. Defined in src/handler.py (python)."; got != want {
+		t.Fatalf("resp[story] = %#v, want %#v", got, want)
+	}
+	pythonSemantics, ok := resp["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[python_semantics] type = %T, want map[string]any", resp["python_semantics"])
+	}
+	if got, want := pythonSemantics["surface_kind"], "decorated_async_function"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := pythonSemantics["async"], true; got != want {
+		t.Fatalf("python_semantics[async] = %#v, want %#v", got, want)
+	}
+	decorators, ok := pythonSemantics["decorators"].([]any)
+	if !ok {
+		t.Fatalf("python_semantics[decorators] type = %T, want []any", pythonSemantics["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@route" {
+		t.Fatalf("python_semantics[decorators] = %#v, want [@route]", decorators)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "decorated_async_function"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
+func TestGetEntityContextFallsBackToContentBackedPythonAsyncFunction(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"function-1", "repo-1", "src/worker.py", "Function", "run",
+					int64(7), int64(15), "python", "async def run(): ...", []byte(`{"async":true}`),
+				},
+			},
+		},
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{},
+		},
+	})
+
+	handler := &EntityHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/function-1/context", nil)
+	req.SetPathValue("entity_id", "function-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	if got, want := resp["semantic_summary"], "Function run is async."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["story"], "Function run is async. Defined in src/worker.py (python)."; got != want {
+		t.Fatalf("resp[story] = %#v, want %#v", got, want)
+	}
+	pythonSemantics, ok := resp["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[python_semantics] type = %T, want map[string]any", resp["python_semantics"])
+	}
+	if got, want := pythonSemantics["surface_kind"], "async_function"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := pythonSemantics["async"], true; got != want {
+		t.Fatalf("python_semantics[async] = %#v, want %#v", got, want)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "async_function"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
+func TestGetEntityContextFallsBackToContentBackedPythonDecoratedFunction(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"function-1", "repo-1", "src/handler.py", "Function", "handler",
+					int64(12), int64(20), "python", "def handler(): ...", []byte(`{"decorators":["@route"]}`),
+				},
+			},
+		},
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{},
+		},
+	})
+
+	handler := &EntityHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/function-1/context", nil)
+	req.SetPathValue("entity_id", "function-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	if got, want := resp["semantic_summary"], "Function handler uses decorators @route."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["story"], "Function handler uses decorators @route. Defined in src/handler.py (python)."; got != want {
+		t.Fatalf("resp[story] = %#v, want %#v", got, want)
+	}
+	pythonSemantics, ok := resp["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[python_semantics] type = %T, want map[string]any", resp["python_semantics"])
+	}
+	if got, want := pythonSemantics["surface_kind"], "decorated_function"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
+	}
+	decorators, ok := pythonSemantics["decorators"].([]any)
+	if !ok {
+		t.Fatalf("python_semantics[decorators] type = %T, want []any", pythonSemantics["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@route" {
+		t.Fatalf("python_semantics[decorators] = %#v, want [@route]", decorators)
+	}
+	profile, ok := resp["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[semantic_profile] type = %T, want map[string]any", resp["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "decorated_function"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
 func TestGetEntityContextUsesGraphPythonTypeAnnotationsWithoutContent(t *testing.T) {
 	t.Parallel()
 

@@ -60,6 +60,24 @@ func TestBuildEntitySemanticSummaryPythonDecoratedClass(t *testing.T) {
 	}
 }
 
+func TestBuildEntitySemanticSummaryPythonAsyncFunction(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Function"},
+		"name":   "run",
+		"metadata": map[string]any{
+			"async": true,
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Function run is async."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildEntitySemanticSummaryPythonModuleDocstring(t *testing.T) {
 	t.Parallel()
 
