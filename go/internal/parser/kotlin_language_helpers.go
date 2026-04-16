@@ -260,6 +260,9 @@ func kotlinInferMethodCallReturnType(
 	}
 
 	if receiver == "" {
+		if kotlinLooksLikeTypeName(name) {
+			return name
+		}
 		return kotlinLookupFunctionReturnType(functionReturnTypes, packageName, currentClass, name)
 	}
 

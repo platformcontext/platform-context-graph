@@ -163,6 +163,60 @@ fun usage(): String {
 	}
 }
 
+func TestDefaultEngineParsePathKotlinInfersConstructorRootReceiverChainsForDotCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Usage.kt")
+	writeTestFile(
+		t,
+		filePath,
+		`package comprehensive
+
+class Service {
+    fun info(): String = "ok"
+}
+
+class Factory {
+    fun createService(): Service = Service()
+}
+
+fun usage(): String {
+    return Factory().createService().info()
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+
+	want := map[string]string{
+		"Factory().createService().info": "Service",
+	}
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if wantType, ok := want[fullName]; ok {
+			assertStringFieldValue(t, item, "inferred_obj_type", wantType)
+			delete(want, fullName)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing inferred receiver calls: %#v in %#v", want, items)
+	}
+}
+
 func TestDefaultEngineParsePathKotlinInfersSiblingFileFunctionReturnTypeAliasCalls(t *testing.T) {
 	t.Parallel()
 
