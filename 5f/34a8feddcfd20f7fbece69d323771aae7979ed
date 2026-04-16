@@ -1,0 +1,98 @@
+docs/docs/deployment/docker-compose.md
+  34f71964cf7839c6 56-63,75-84
+go/cmd/collector-git/service.go
+  34f71964cf7839c6 4,9-10,18-20,34-36,42-44,48-50
+go/cmd/projector/main.go
+  34f71964cf7839c6 6,21-28,30-31,95
+go/cmd/api/wiring_test.go
+  34f71964cf7839c6 4,10-21
+go/cmd/collector-git/main.go
+  34f71964cf7839c6 5-6,16,20-27,29-30,35-54,63-69,77
+go/cmd/mcp-server/wiring.go
+  34f71964cf7839c6 15,20-24
+go/internal/runtime/api_key_test.go
+  34f71964cf7839c6 1-106
+scripts/verify_reducer_runtime_compose.sh
+  34f71964cf7839c6 10-11,15,18-20,23-54,59-63,67-76,80-95,99-119,123-127,131-143,147-160,163-173,177,179-181,184-185,187-188,190-191,197-198,200-202,206,211
+go/cmd/pcg/config_test.go
+  34f71964cf7839c6 1-30
+go/internal/storage/postgres/projector_queue_lifecycle_test.go
+  34f71964cf7839c6 48-81,235-236,255-275
+go/internal/parser/engine.go
+  34f71964cf7839c6 54,74-83,85-92,123,164,192
+docs/docs/adrs/index.md
+  34f71964cf7839c6 56-59
+go/internal/parser/kotlin_repository_returns.go
+  34f71964cf7839c6 12,18-23,52-57
+docs/docs/adrs/2026-04-16-auth-boundary-and-deferred-user-management.md
+  34f71964cf7839c6 1-93
+docker-compose.template.yml
+  34f71964cf7839c6 134
+go/internal/runtime/api_key.go
+  34f71964cf7839c6 1-188
+scripts/verify_projector_runtime_compose.sh
+  34f71964cf7839c6 10-11,41-48,73-81,93-139,149,165,177,187-234,241-246,253-294,296-337,362-375,380,385-388,394,396-397,431,434-435,441-442
+go/internal/storage/postgres/proof_domain_harness_test.go
+  34f71964cf7839c6 307-350
+go/cmd/collector-git/service_test.go
+  34f71964cf7839c6 4,10-12,21-23,68-70,99-101,116-158
+scripts/local-integration-test.sh
+  34f71964cf7839c6 217-229,235,237-238
+go/internal/storage/postgres/projector_queue.go
+  34f71964cf7839c6 87-100
+go/cmd/api/wiring.go
+  34f71964cf7839c6 32-36
+go/internal/parser/kotlin_language.go
+  34f71964cf7839c6 29,39,478-479
+docker-compose.yaml
+  34f71964cf7839c6 171,222-223
+docs/docs/reference/configuration.md
+  34f71964cf7839c6 32-36,198-200
+scripts/verify_incremental_refresh_compose.sh
+  34f71964cf7839c6 10-11,43-50,75-83,95-141,151,167,179,189-219,226-231,236-337,361-371,373-382,387,392-395,401,403-404,438-439,443,447-448
+scripts/verify_collector_git_runtime_compose.sh
+  34f71964cf7839c6 13-14,41-43,64-72,80,96,106-141,144-145,152-153,160,162,176,178-179,186,190,192-193,198-206,210-211,229,234
+go/internal/collector/git_snapshot_native.go
+  34f71964cf7839c6 142
+go/internal/parser/engine_kotlin_repo_boundary_test.go
+  34f71964cf7839c6 1-83
+docs/docs/reference/local-testing.md
+  34f71964cf7839c6 43-56,248-254
+go/cmd/mcp-server/wiring_test.go
+  34f71964cf7839c6 1-19
+scripts/verify_relationship_platform_compose.sh
+  34f71964cf7839c6 13-16,18,31-34,59,81-85,88-92,108-116,121-129,149-201,204-210,212,214-246,248-251,289,296-301,304-306
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "5f34a8feddcfd20f7fbece69d323771aae7979ed",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "34f71964cf7839c6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2bcf8e2-53d2-4c3f-88a5-2dbbf5aa1a4b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 679,
+      "total_deletions": 41,
+      "accepted_lines": 2050,
+      "overriden_lines": 6
+    }
+  }
+}
