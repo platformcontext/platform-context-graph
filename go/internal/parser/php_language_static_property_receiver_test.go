@@ -41,3 +41,59 @@ class Registry {
 	call := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "self::$service.info")
 	phpAssertStringFieldValue(t, call, "inferred_obj_type", "Service")
 }
+
+func TestDefaultEngineParsePathPHPInfersParentAndStaticPropertyReceiverChains(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "parent_static_property_receiver.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+class Service {
+    public function info(string $message): void {}
+}
+
+class BaseRegistry {
+    protected static Service $service;
+}
+
+class ChildRegistry extends BaseRegistry {
+    public static function boot(string $message): void {
+        parent::$service->info($message);
+        static::$service->info($message);
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	want := map[string]string{
+		"parent::$service.info": "Service",
+		"static::$service.info": "Service",
+	}
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if wantType, ok := want[fullName]; ok {
+			phpAssertStringFieldValue(t, item, "inferred_obj_type", wantType)
+			delete(want, fullName)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing inferred receiver calls: %#v in %#v", want, items)
+	}
+}

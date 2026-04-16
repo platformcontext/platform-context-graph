@@ -293,11 +293,41 @@ func resolvePHPStaticPropertyRootType(
 		return ""
 	}
 
-	propertyType := strings.TrimSpace(classPropertyTypes[ownerType][matches[2]])
+	propertyType := lookupPHPClassPropertyType(ownerType, matches[2], classParentTypes, classPropertyTypes)
 	if propertyType == "" {
 		return ""
 	}
 	return normalizePHPImportedTypeName(propertyType, importAliases)
+}
+
+func lookupPHPClassPropertyType(
+	className string,
+	propertyName string,
+	classParentTypes map[string]string,
+	classPropertyTypes map[string]map[string]string,
+) string {
+	trimmedClassName := strings.TrimSpace(className)
+	trimmedPropertyName := strings.TrimSpace(propertyName)
+	if trimmedClassName == "" || trimmedPropertyName == "" {
+		return ""
+	}
+
+	seen := make(map[string]struct{})
+	current := trimmedClassName
+	for current != "" {
+		if _, ok := seen[current]; ok {
+			return ""
+		}
+		seen[current] = struct{}{}
+
+		if propertyType := strings.TrimSpace(classPropertyTypes[current][trimmedPropertyName]); propertyType != "" {
+			return propertyType
+		}
+
+		current = strings.TrimSpace(classParentTypes[current])
+	}
+
+	return ""
 }
 
 func inferPHPFunctionCallType(
