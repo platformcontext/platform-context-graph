@@ -215,6 +215,14 @@ func extractEntities(envelopes []facts.Envelope, repoID, repoPath string) []Enti
 			continue
 		}
 
+		// Module and Parameter have dedicated write phases (F and G) that use
+		// different MERGE keys (name for Module, composite key for Parameter).
+		// Writing them through the generic entity phase (E) which MERGEs by
+		// uid would violate their uniqueness constraints.
+		if label == "Module" || label == "Parameter" {
+			continue
+		}
+
 		entityName, _ := payloadString(p, "entity_name")
 		relativePath, _ := payloadString(p, "relative_path")
 		startLine, _ := payloadInt(p, "start_line")

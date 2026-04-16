@@ -9,7 +9,7 @@ import (
 
 var kotlinPackagePattern = regexp.MustCompile(`^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*$`)
 
-func kotlinCollectSiblingFunctionReturnTypes(currentPath string, packageName string) (map[string]string, error) {
+func kotlinCollectSiblingFunctionReturnTypes(currentPath string) (map[string]string, error) {
 	root := filepath.Dir(currentPath)
 	currentAbs, err := filepath.Abs(currentPath)
 	if err != nil {
@@ -46,7 +46,7 @@ func kotlinCollectSiblingFunctionReturnTypes(currentPath string, packageName str
 		roots = append(roots, parent)
 	}
 	for _, directory := range roots {
-		functionReturnTypes, err := kotlinCollectFunctionReturnTypesFromDirectory(directory, currentAbs, packageName)
+		functionReturnTypes, err := kotlinCollectFunctionReturnTypesFromDirectory(directory, currentAbs)
 		if err != nil {
 			return nil, err
 		}
@@ -65,7 +65,7 @@ func kotlinCollectSiblingFunctionReturnTypes(currentPath string, packageName str
 	return results, nil
 }
 
-func kotlinCollectFunctionReturnTypesFromDirectory(directory string, currentAbs string, packageName string) (map[string]string, error) {
+func kotlinCollectFunctionReturnTypesFromDirectory(directory string, currentAbs string) (map[string]string, error) {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return nil, err
@@ -73,28 +73,15 @@ func kotlinCollectFunctionReturnTypesFromDirectory(directory string, currentAbs 
 
 	results := make(map[string]string)
 	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".kt" {
+			continue
+		}
 		path := filepath.Join(directory, entry.Name())
-		if entry.IsDir() {
-			functionReturnTypes, err := kotlinCollectFunctionReturnTypesFromDirectory(path, currentAbs, packageName)
-			if err != nil {
-				return nil, err
-			}
-			for key, returnType := range functionReturnTypes {
-				if _, ok := results[key]; ok {
-					continue
-				}
-				results[key] = returnType
-			}
-			continue
-		}
-		if filepath.Ext(entry.Name()) != ".kt" {
-			continue
-		}
 		if absPath, err := filepath.Abs(path); err == nil && absPath == currentAbs {
 			continue
 		}
 
-		functionReturnTypes, err := kotlinCollectFunctionReturnTypesFromFile(path, packageName)
+		functionReturnTypes, err := kotlinCollectFunctionReturnTypesFromFile(path)
 		if err != nil {
 			return nil, err
 		}
@@ -108,15 +95,12 @@ func kotlinCollectFunctionReturnTypesFromDirectory(directory string, currentAbs 
 	return results, nil
 }
 
-func kotlinCollectFunctionReturnTypesFromFile(path string, packageName string) (map[string]string, error) {
+func kotlinCollectFunctionReturnTypesFromFile(path string) (map[string]string, error) {
 	source, err := readSource(path)
 	if err != nil {
 		return nil, err
 	}
-	filePackageName := kotlinFilePackage(string(source))
-	if packageName != "" && filePackageName != packageName {
-		return nil, nil
-	}
+	packageName := kotlinFilePackage(string(source))
 
 	lines := strings.Split(string(source), "\n")
 	braceDepth := 0
@@ -160,7 +144,7 @@ func kotlinCollectFunctionReturnTypesFromFile(path string, packageName string) (
 				} else if classContext := kotlinCurrentTypeScopeName(stack); classContext != "" {
 					key = classContext + "." + functionName
 				}
-				kotlinStoreFunctionReturnType(results, filePackageName, key, returnType)
+				kotlinStoreFunctionReturnType(results, packageName, key, returnType)
 			}
 			if strings.Contains(rawLine, "{") {
 				stack = append(stack, scopedContext{

@@ -887,6 +887,89 @@ func TestBuildCanonicalMaterializationSkipsUnmappedEntityTypes(t *testing.T) {
 	}
 }
 
+func TestBuildCanonicalMaterializationExcludesModuleAndParameterFromEntities(t *testing.T) {
+	t.Parallel()
+
+	sc := testScope()
+	gen := testGeneration()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "r-1",
+			ScopeID:  "scope-1",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-abc",
+				"path":    "/repos/my-project",
+			},
+		},
+		{
+			FactID:   "e-mod",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_type":   "module",
+				"entity_name":   "requests",
+				"relative_path": "src/lib.py",
+				"start_line":    1,
+				"repo_id":       "repo-abc",
+			},
+		},
+		{
+			FactID:   "e-mod-pascal",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_type":   "Module",
+				"entity_name":   "utils",
+				"relative_path": "src/lib.py",
+				"start_line":    2,
+				"repo_id":       "repo-abc",
+			},
+		},
+		{
+			FactID:   "e-param",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_type":   "parameter",
+				"entity_name":   "ctx",
+				"relative_path": "src/handler.go",
+				"start_line":    10,
+				"repo_id":       "repo-abc",
+			},
+		},
+		{
+			FactID:   "e-func",
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_type":   "function",
+				"entity_name":   "handleRequest",
+				"relative_path": "src/handler.go",
+				"start_line":    10,
+				"repo_id":       "repo-abc",
+			},
+		},
+	}
+
+	result := buildCanonicalMaterialization(sc, gen, envelopes)
+
+	// Module and Parameter entities are excluded from the entity phase
+	// because they have dedicated write phases with different MERGE keys.
+	// Only the Function entity should appear.
+	if len(result.Entities) != 1 {
+		var labels []string
+		for _, e := range result.Entities {
+			labels = append(labels, e.Label)
+		}
+		t.Fatalf("len(Entities) = %d, want 1 (Module/Parameter excluded); labels=%v",
+			len(result.Entities), labels)
+	}
+	if result.Entities[0].Label != "Function" {
+		t.Errorf("Entities[0].Label = %q, want Function", result.Entities[0].Label)
+	}
+}
+
 func TestBuildCanonicalMaterializationUsesLegacyFactSuffix(t *testing.T) {
 	t.Parallel()
 
