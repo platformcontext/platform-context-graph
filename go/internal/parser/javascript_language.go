@@ -130,6 +130,11 @@ func (e *Engine) parseJavaScriptLike(
 			if scope == "module" && javaScriptInsideFunction(node) {
 				return
 			}
+			if requireItems := javaScriptRequireImportEntries(node, source, outputLanguage); len(requireItems) > 0 {
+				for _, item := range requireItems {
+					appendBucket(payload, "imports", item)
+				}
+			}
 			item := map[string]any{
 				"name":        name,
 				"line_number": nodeLine(nameNode),
