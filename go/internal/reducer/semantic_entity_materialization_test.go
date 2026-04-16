@@ -158,9 +158,9 @@ func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasComponentAndF
 	if got, want := typeAlias.Metadata["type_alias_kind"], "mapped_type"; got != want {
 		t.Fatalf("TypeAlias.Metadata[type_alias_kind] = %v, want %v", got, want)
 	}
-	typeParameters, ok := typeAlias.Metadata["type_parameters"].([]any)
+	typeParameters, ok := typeAlias.Metadata["type_parameters"].([]string)
 	if !ok {
-		t.Fatalf("TypeAlias.Metadata[type_parameters] type = %T, want []any", typeAlias.Metadata["type_parameters"])
+		t.Fatalf("TypeAlias.Metadata[type_parameters] type = %T, want []string", typeAlias.Metadata["type_parameters"])
 	}
 	if got, want := len(typeParameters), 1; got != want || typeParameters[0] != "T" {
 		t.Fatalf("TypeAlias.Metadata[type_parameters] = %#v, want [T]", typeParameters)
