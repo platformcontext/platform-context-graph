@@ -23,6 +23,10 @@ func (h *LanguageQueryHandler) enrichLanguageResultsWithContentMetadata(
 		return results, nil
 	}
 
+	for i := range results {
+		attachSemanticSummary(results[i])
+	}
+
 	rows, err := h.Content.SearchEntitiesByLanguageAndType(
 		ctx,
 		repoID,

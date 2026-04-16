@@ -1,6 +1,9 @@
 package query
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestBuildLanguageResult_Entity(t *testing.T) {
 	row := map[string]any{
@@ -287,5 +290,64 @@ func TestBuildLanguageResult_AttachesPythonTypeAnnotationProjection(t *testing.T
 	}
 	if len(typeAnnotationKinds) != 2 || typeAnnotationKinds[0] != "parameter" || typeAnnotationKinds[1] != "return" {
 		t.Fatalf("semantic_profile[type_annotation_kinds] = %#v, want [parameter return]", typeAnnotationKinds)
+	}
+}
+
+func TestBuildLanguageResult_AttachesCombinedPythonDecoratorAsyncAndTypeAnnotationMetadata(t *testing.T) {
+	row := map[string]any{
+		"entity_id":             "func:py:handler",
+		"name":                  "handler",
+		"labels":                []any{"Function"},
+		"file_path":             "src/app.py",
+		"repo_id":               "repo:py",
+		"repo_name":             "service",
+		"language":              "python",
+		"start_line":            int64(10),
+		"end_line":              int64(24),
+		"decorators":            []any{"@route"},
+		"async":                 true,
+		"type_annotation_count": int64(2),
+		"type_annotation_kinds": []any{"parameter", "return"},
+	}
+
+	result := buildLanguageResult(row, "Function")
+
+	metadata, ok := result["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata type = %T, want map[string]any", result["metadata"])
+	}
+	if got, want := metadata["decorators"], []any{"@route"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("metadata[decorators] = %#v, want %#v", got, want)
+	}
+	if got, want := metadata["async"], true; got != want {
+		t.Fatalf("metadata[async] = %#v, want %#v", got, want)
+	}
+	if got, want := metadata["type_annotation_count"], 2; got != want {
+		t.Fatalf("metadata[type_annotation_count] = %#v, want %#v", got, want)
+	}
+	if got, want := metadata["type_annotation_kinds"], []any{"parameter", "return"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("metadata[type_annotation_kinds] = %#v, want %#v", got, want)
+	}
+	if got, want := result["semantic_summary"], "Function handler is async, uses decorators @route, and has parameter and return type annotations."; got != want {
+		t.Fatalf("semantic_summary = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("semantic_profile type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "type_annotation"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["async"], true; got != want {
+		t.Fatalf("semantic_profile[async] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["decorators"], []string{"@route"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("semantic_profile[decorators] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["type_annotation_count"], 2; got != want {
+		t.Fatalf("semantic_profile[type_annotation_count] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["type_annotation_kinds"], []string{"parameter", "return"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("semantic_profile[type_annotation_kinds] = %#v, want %#v", got, want)
 	}
 }

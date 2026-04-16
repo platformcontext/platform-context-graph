@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -103,6 +104,76 @@ func TestEnrichLanguageResultsWithContentMetadata(t *testing.T) {
 	}
 	if len(decoratorValues) != 1 || decoratorValues[0] != "@route" {
 		t.Fatalf("semantic_profile[decorators] = %#v, want [@route]", decoratorValues)
+	}
+}
+
+func TestEnrichLanguageResultsWithContentMetadataPromotesExistingPythonSemanticsWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: nil,
+		},
+	})
+	handler := &LanguageQueryHandler{Content: NewContentReader(db)}
+	graphResults := []map[string]any{
+		{
+			"entity_id":  "graph-1",
+			"name":       "handler",
+			"labels":     []string{"Function"},
+			"file_path":  "src/handler.py",
+			"repo_id":    "repo-1",
+			"language":   "python",
+			"start_line": 12,
+			"end_line":   24,
+			"metadata": map[string]any{
+				"decorators":            []any{"@route"},
+				"async":                 true,
+				"type_annotation_count": 2,
+				"type_annotation_kinds": []any{"parameter", "return"},
+			},
+			"semantic_summary": "Function handler is async, uses decorators @route, and has parameter and return type annotations.",
+		},
+	}
+
+	got, err := handler.enrichLanguageResultsWithContentMetadata(
+		context.Background(),
+		graphResults,
+		"python",
+		"Function",
+		"handler",
+		"repo-1",
+		10,
+	)
+	if err != nil {
+		t.Fatalf("enrichLanguageResultsWithContentMetadata() error = %v, want nil", err)
+	}
+
+	pythonSemantics, ok := got[0]["python_semantics"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][python_semantics] type = %T, want map[string]any", got[0]["python_semantics"])
+	}
+	if got, want := pythonSemantics["surface_kind"], "decorated_async_function"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := pythonSemantics["decorators"], []string{"@route"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("python_semantics[decorators] = %#v, want %#v", got, want)
+	}
+	if got, want := pythonSemantics["async"], true; got != want {
+		t.Fatalf("python_semantics[async] = %#v, want %#v", got, want)
+	}
+	if got, want := pythonSemantics["type_annotation_count"], 2; got != want {
+		t.Fatalf("python_semantics[type_annotation_count] = %#v, want %#v", got, want)
+	}
+	if got, want := pythonSemantics["type_annotation_kinds"], []string{"parameter", "return"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("python_semantics[type_annotation_kinds] = %#v, want %#v", got, want)
+	}
+	if got, want := got[0]["semantic_summary"], "Function handler is async, uses decorators @route, and has parameter and return type annotations."; got != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", got, want)
 	}
 }
 
