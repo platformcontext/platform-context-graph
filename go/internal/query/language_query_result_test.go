@@ -137,6 +137,9 @@ func TestBuildLanguageResult_AttachesPythonGraphMetadataAndSemanticSummary(t *te
 	if got, want := pythonSemantics["metaclass"], "MetaLogger"; got != want {
 		t.Fatalf("python_semantics[metaclass] = %#v, want %#v", got, want)
 	}
+	if got, want := pythonSemantics["surface_kind"], "decorated_class"; got != want {
+		t.Fatalf("python_semantics[surface_kind] = %#v, want %#v", got, want)
+	}
 	profile, ok := result["semantic_profile"].(map[string]any)
 	if !ok {
 		t.Fatalf("semantic_profile type = %T, want map[string]any", result["semantic_profile"])
