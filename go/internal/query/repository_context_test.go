@@ -20,21 +20,31 @@ type fakeRepoGraphReader struct {
 }
 
 func (f fakeRepoGraphReader) Run(ctx context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+	var (
+		bestRows []map[string]any
+		bestLen  int
+	)
 	for fragment, rows := range f.runByMatch {
-		if strings.Contains(cypher, fragment) {
-			return rows, nil
+		if strings.Contains(cypher, fragment) && len(fragment) > bestLen {
+			bestRows = rows
+			bestLen = len(fragment)
 		}
 	}
-	return nil, nil
+	return bestRows, nil
 }
 
 func (f fakeRepoGraphReader) RunSingle(ctx context.Context, cypher string, params map[string]any) (map[string]any, error) {
+	var (
+		bestRow map[string]any
+		bestLen int
+	)
 	for fragment, row := range f.runSingleByMatch {
-		if strings.Contains(cypher, fragment) {
-			return row, nil
+		if strings.Contains(cypher, fragment) && len(fragment) > bestLen {
+			bestRow = row
+			bestLen = len(fragment)
 		}
 	}
-	return nil, nil
+	return bestRow, nil
 }
 
 func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
@@ -44,7 +54,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 		Neo4j: fakeRepoGraphReader{
 			runSingleByMatch: map[string]map[string]any{
 				// Base repo query — must return repo + counts
-				"count(DISTINCT f) as file_count": {
+				"INSTANCE_OF": {
 					"id":               "repo-1",
 					"name":             "order-service",
 					"path":             "/repos/order-service",
@@ -55,7 +65,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 					"file_count":       int64(120),
 					"workload_count":   int64(2),
 					"platform_count":   int64(1),
-					"dependency_count": int64(3),
+					"dependency_count": int64(4),
 				},
 			},
 			runByMatch: map[string][]map[string]any{
@@ -97,7 +107,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 					},
 				},
 				// Cross-repo relationships (outgoing)
-				"DEPENDS_ON|DEPLOYS_FROM": {
+				"RETURN type(rel) AS type": {
 					{
 						"type":          "DEPENDS_ON",
 						"target_name":   "auth-service",
@@ -110,9 +120,15 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 						"target_id":     "repo-3",
 						"evidence_type": "argocd_source",
 					},
+					{
+						"type":          "PROVISIONS_DEPENDENCY_FOR",
+						"target_name":   "platform-infra",
+						"target_id":     "repo-5",
+						"evidence_type": "terraform_source",
+					},
 				},
 				// Consumer repositories (incoming)
-				"consumer:Repository": {
+				"RETURN consumer.name AS consumer_name": {
 					{
 						"consumer_name": "checkout-service",
 						"consumer_id":   "repo-4",
@@ -155,7 +171,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 	if got, want := resp["workload_count"], float64(2); got != want {
 		t.Fatalf("workload_count = %v, want %v", got, want)
 	}
-	if got, want := resp["dependency_count"], float64(3); got != want {
+	if got, want := resp["dependency_count"], float64(4); got != want {
 		t.Fatalf("dependency_count = %v, want %v", got, want)
 	}
 
@@ -205,8 +221,8 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 	if !ok {
 		t.Fatalf("relationships type = %T, want []any", resp["relationships"])
 	}
-	if len(relationships) != 2 {
-		t.Fatalf("len(relationships) = %d, want 2", len(relationships))
+	if len(relationships) != 3 {
+		t.Fatalf("len(relationships) = %d, want 3", len(relationships))
 	}
 	rel0, ok := relationships[0].(map[string]any)
 	if !ok {
@@ -217,6 +233,20 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 	}
 	if got, want := rel0["target_name"], "auth-service"; got != want {
 		t.Fatalf("relationships[0].target_name = %v, want %v", got, want)
+	}
+
+	relTypes := make(map[string]struct{}, len(relationships))
+	for _, rel := range relationships {
+		row, ok := rel.(map[string]any)
+		if !ok {
+			t.Fatalf("relationship type = %T, want map[string]any", rel)
+		}
+		relTypes[row["type"].(string)] = struct{}{}
+	}
+	for _, want := range []string{"DEPENDS_ON", "DEPLOYS_FROM", "PROVISIONS_DEPENDENCY_FOR"} {
+		if _, ok := relTypes[want]; !ok {
+			t.Fatalf("missing relationship type %q", want)
+		}
 	}
 
 	// Verify consumer repositories

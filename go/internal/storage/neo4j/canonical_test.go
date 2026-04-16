@@ -92,6 +92,48 @@ func TestBuildCanonicalRuntimePlatformUpsertStatement(t *testing.T) {
 	}
 }
 
+func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalRepoRelationshipUpsert(CanonicalRepoRelationshipParams{
+		RepoID:           "repo-a",
+		TargetRepoID:     "repo-b",
+		RelationshipType: "DEPLOYS_FROM",
+	}, "resolver/cross-repo")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)") {
+		t.Fatalf("Cypher missing DEPLOYS_FROM edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["relationship_type"] != "DEPLOYS_FROM" {
+		t.Fatalf("relationship_type = %v", stmt.Parameters["relationship_type"])
+	}
+}
+
+func TestBuildCanonicalRunsOnUpsertStatementUsesWorkloadInstanceShape(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalRunsOnUpsert(CanonicalRunsOnParams{
+		RepoID:     "repo-a",
+		PlatformID: "platform:eks:aws:cluster-1:prod:us-east-1",
+	}, "resolver/cross-repo")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "WorkloadInstance") {
+		t.Fatalf("Cypher missing WorkloadInstance match: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (i)-[rel:RUNS_ON]->(p)") {
+		t.Fatalf("Cypher missing RUNS_ON edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["platform_id"] != "platform:eks:aws:cluster-1:prod:us-east-1" {
+		t.Fatalf("platform_id = %v", stmt.Parameters["platform_id"])
+	}
+}
+
 func TestBuildCanonicalInfrastructurePlatformUpsertStatement(t *testing.T) {
 	t.Parallel()
 
@@ -233,8 +275,8 @@ func TestBuildCanonicalCodeCallUpsertStatementUsesMetaclassEdges(t *testing.T) {
 	t.Parallel()
 
 	stmt := BuildCanonicalCodeCallUpsert(CanonicalCodeCallParams{
-		CallerEntityID:  "entity:class:logged",
-		CalleeEntityID:  "entity:class:meta",
+		CallerEntityID:   "entity:class:logged",
+		CalleeEntityID:   "entity:class:meta",
 		RelationshipType: "USES_METACLASS",
 	}, "parser/python-metaclass")
 

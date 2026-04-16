@@ -43,26 +43,34 @@ func (w *EdgeWriter) WriteEdges(
 	if w.executor == nil {
 		return fmt.Errorf("edge writer executor is required")
 	}
-
-	cypher, err := batchCypherForDomain(domain)
-	if err != nil {
+	if _, err := batchCypherForDomain(domain); err != nil {
 		return err
 	}
 
-	var validRows []map[string]any
+	routedRows := make(map[string][]map[string]any)
+	routeOrder := make([]string, 0, 2)
 	for _, row := range rows {
-		rowMap, ok := buildRowMap(domain, row, evidenceSource)
+		cypher, rowMap, ok := buildRowMap(domain, row, evidenceSource)
 		if !ok {
 			continue
 		}
-		validRows = append(validRows, rowMap)
+		if _, seen := routedRows[cypher]; !seen {
+			routeOrder = append(routeOrder, cypher)
+		}
+		routedRows[cypher] = append(routedRows[cypher], rowMap)
 	}
 
-	if len(validRows) == 0 {
+	if len(routedRows) == 0 {
 		return nil
 	}
 
-	return w.executeBatched(ctx, cypher, validRows)
+	for _, cypher := range routeOrder {
+		if err := w.executeBatched(ctx, cypher, routedRows[cypher]); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // executeBatched executes batched UNWIND operations, mirroring
@@ -113,15 +121,15 @@ func buildRowMap(
 	domain string,
 	row reducer.SharedProjectionIntentRow,
 	evidenceSource string,
-) (map[string]any, bool) {
+) (string, map[string]any, bool) {
 	switch domain {
 	case reducer.DomainPlatformInfra:
 		repoID := payloadString(row.Payload, "repo_id")
 		platformID := payloadString(row.Payload, "platform_id")
 		if repoID == "" || platformID == "" {
-			return nil, false
+			return "", nil, false
 		}
-		return map[string]any{
+		return batchCanonicalInfrastructurePlatformUpsertCypher, map[string]any{
 			"repo_id":              repoID,
 			"platform_id":          platformID,
 			"platform_name":        payloadString(row.Payload, "platform_name"),
@@ -136,22 +144,53 @@ func buildRowMap(
 	case reducer.DomainRepoDependency:
 		repoID := payloadString(row.Payload, "repo_id")
 		targetRepoID := payloadString(row.Payload, "target_repo_id")
-		if repoID == "" || targetRepoID == "" {
-			return nil, false
+		relationshipType := payloadString(row.Payload, "relationship_type")
+		if repoID == "" {
+			return "", nil, false
 		}
-		return map[string]any{
-			"repo_id":         repoID,
-			"target_repo_id":  targetRepoID,
-			"evidence_source": evidenceSource,
+		if relationshipType == "RUNS_ON" {
+			platformID := payloadString(row.Payload, "platform_id")
+			if platformID == "" {
+				return "", nil, false
+			}
+			return batchCanonicalRunsOnUpsertCypher, map[string]any{
+				"repo_id":         repoID,
+				"platform_id":     platformID,
+				"evidence_source": evidenceSource,
+			}, true
+		}
+		if targetRepoID == "" {
+			return "", nil, false
+		}
+		if relationshipType == "" || relationshipType == "DEPENDS_ON" {
+			return batchCanonicalRepoDependencyUpsertCypher, map[string]any{
+				"repo_id":         repoID,
+				"target_repo_id":  targetRepoID,
+				"evidence_source": evidenceSource,
+			}, true
+		}
+		if relationshipType == "DEPLOYS_FROM" || relationshipType == "DISCOVERS_CONFIG_IN" || relationshipType == "PROVISIONS_DEPENDENCY_FOR" {
+			return batchCanonicalTypedRepoRelationshipUpsertCypher, map[string]any{
+				"repo_id":           repoID,
+				"target_repo_id":    targetRepoID,
+				"relationship_type": relationshipType,
+				"evidence_source":   evidenceSource,
+			}, true
+		}
+		return batchCanonicalTypedRepoRelationshipUpsertCypher, map[string]any{
+			"repo_id":           repoID,
+			"target_repo_id":    targetRepoID,
+			"relationship_type": relationshipType,
+			"evidence_source":   evidenceSource,
 		}, true
 
 	case reducer.DomainWorkloadDependency:
 		workloadID := payloadString(row.Payload, "workload_id")
 		targetWorkloadID := payloadString(row.Payload, "target_workload_id")
 		if workloadID == "" || targetWorkloadID == "" {
-			return nil, false
+			return "", nil, false
 		}
-		return map[string]any{
+		return batchCanonicalWorkloadDependencyUpsertCypher, map[string]any{
 			"workload_id":        workloadID,
 			"target_workload_id": targetWorkloadID,
 			"evidence_source":    evidenceSource,
@@ -162,9 +201,9 @@ func buildRowMap(
 			sourceEntityID := payloadString(row.Payload, "source_entity_id")
 			targetEntityID := payloadString(row.Payload, "target_entity_id")
 			if sourceEntityID == "" || targetEntityID == "" {
-				return nil, false
+				return "", nil, false
 			}
-			return map[string]any{
+			return batchCanonicalCodeCallUpsertCypher, map[string]any{
 				"source_entity_id":  sourceEntityID,
 				"target_entity_id":  targetEntityID,
 				"relationship_type": relationshipType,
@@ -175,7 +214,7 @@ func buildRowMap(
 		callerEntityID := payloadString(row.Payload, "caller_entity_id")
 		calleeEntityID := payloadString(row.Payload, "callee_entity_id")
 		if callerEntityID == "" || calleeEntityID == "" {
-			return nil, false
+			return "", nil, false
 		}
 		rowMap := map[string]any{
 			"caller_entity_id": callerEntityID,
@@ -185,15 +224,15 @@ func buildRowMap(
 		if callKind := payloadString(row.Payload, "call_kind"); callKind != "" {
 			rowMap["call_kind"] = callKind
 		}
-		return rowMap, true
+		return batchCanonicalCodeCallUpsertCypher, rowMap, true
 
 	case reducer.DomainInheritanceEdges:
 		childEntityID := payloadString(row.Payload, "child_entity_id")
 		parentEntityID := payloadString(row.Payload, "parent_entity_id")
 		if childEntityID == "" || parentEntityID == "" {
-			return nil, false
+			return "", nil, false
 		}
-		return map[string]any{
+		return batchCanonicalInheritanceEdgeUpsertCypher, map[string]any{
 			"child_entity_id":   childEntityID,
 			"parent_entity_id":  parentEntityID,
 			"relationship_type": payloadString(row.Payload, "relationship_type"),
@@ -204,9 +243,9 @@ func buildRowMap(
 		sourceEntityID := payloadString(row.Payload, "source_entity_id")
 		targetEntityID := payloadString(row.Payload, "target_entity_id")
 		if sourceEntityID == "" || targetEntityID == "" {
-			return nil, false
+			return "", nil, false
 		}
-		return map[string]any{
+		return batchCanonicalSQLRelationshipUpsertCypher, map[string]any{
 			"source_entity_id":  sourceEntityID,
 			"target_entity_id":  targetEntityID,
 			"relationship_type": payloadString(row.Payload, "relationship_type"),
@@ -214,7 +253,7 @@ func buildRowMap(
 		}, true
 
 	default:
-		return nil, false
+		return "", nil, false
 	}
 }
 
@@ -251,7 +290,14 @@ func buildRetractStatement(
 	case reducer.DomainPlatformInfra:
 		return BuildRetractInfrastructurePlatformEdges(repoIDs, evidenceSource), nil
 	case reducer.DomainRepoDependency:
-		return BuildRetractRepoDependencyEdges(repoIDs, evidenceSource), nil
+		return Statement{
+			Operation: OperationCanonicalRetract,
+			Cypher:    retractRepoRelationshipAndRunsOnEdgesCypher,
+			Parameters: map[string]any{
+				"repo_ids":        repoIDs,
+				"evidence_source": evidenceSource,
+			},
+		}, nil
 	case reducer.DomainWorkloadDependency:
 		return BuildRetractWorkloadDependencyEdges(repoIDs, evidenceSource), nil
 	case reducer.DomainCodeCalls:

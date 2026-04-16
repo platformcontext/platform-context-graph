@@ -155,7 +155,7 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 		return 0, fmt.Errorf("retract cross-repo dependency edges: %w", err)
 	}
 
-	writeRows := buildResolvedEdgeIntentRows(resolved, generationID)
+	writeRows, routeCounts := buildResolvedEdgeIntentRows(resolved, generationID)
 	if len(writeRows) > 0 {
 		if err := h.EdgeWriter.WriteEdges(
 			ctx,
@@ -170,10 +170,21 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 	edgeCount := len(writeRows)
 
 	if h.Instruments != nil {
-		h.Instruments.CrossRepoEdgesResolved.Add(ctx, int64(edgeCount),
-			metric.WithAttributes(telemetry.AttrScopeID(scopeID)),
-		)
+		for relationshipType, count := range routeCounts {
+			h.Instruments.CrossRepoEdgesResolved.Add(ctx, int64(count),
+				metric.WithAttributes(
+					telemetry.AttrScopeID(scopeID),
+					attribute.String("relationship_type", relationshipType),
+				),
+			)
+		}
 	}
+
+	slog.InfoContext(ctx, "cross-repo relationship routing completed",
+		slog.String(telemetry.LogKeyScopeID, scopeID),
+		slog.String(telemetry.LogKeyGenerationID, generationID),
+		slog.Any("relationship_route_counts", routeCounts),
+	)
 
 	h.recordDuration(ctx, start, scopeID)
 
@@ -218,39 +229,78 @@ func buildRetractRowsFromRepoIDs(repoIDs []string) []SharedProjectionIntentRow {
 }
 
 // buildResolvedEdgeIntentRows converts resolved relationships to shared
-// projection intent rows for the repo dependency domain.
+// projection intent rows while preserving typed relationship families.
 func buildResolvedEdgeIntentRows(
 	resolved []relationships.ResolvedRelationship,
 	generationID string,
-) []SharedProjectionIntentRow {
+) ([]SharedProjectionIntentRow, map[string]int) {
 	now := time.Now().UTC()
 	rows := make([]SharedProjectionIntentRow, 0, len(resolved))
+	routeCounts := make(map[string]int)
 
 	for _, r := range resolved {
-		if r.SourceRepoID == "" || r.TargetRepoID == "" {
+		row, routeType, ok := buildResolvedEdgeIntentRow(r, generationID, now)
+		if !ok {
 			continue
 		}
-
-		partitionKey := fmt.Sprintf("repo:%s->%s", r.SourceRepoID, r.TargetRepoID)
-
-		rows = append(rows, BuildSharedProjectionIntent(SharedProjectionIntentInput{
-			ProjectionDomain: DomainRepoDependency,
-			PartitionKey:     partitionKey,
-			RepositoryID:     r.SourceRepoID,
-			SourceRunID:      generationID,
-			GenerationID:     generationID,
-			Payload: map[string]any{
-				"repo_id":           r.SourceRepoID,
-				"target_repo_id":    r.TargetRepoID,
-				"evidence_source":   crossRepoEvidenceSource,
-				"relationship_type": string(r.RelationshipType),
-				"confidence":        r.Confidence,
-				"evidence_count":    r.EvidenceCount,
-				"resolution_source": string(r.ResolutionSource),
-			},
-			CreatedAt: now,
-		}))
+		rows = append(rows, row)
+		routeCounts[routeType]++
 	}
 
-	return rows
+	return rows, routeCounts
+}
+
+func buildResolvedEdgeIntentRow(
+	r relationships.ResolvedRelationship,
+	generationID string,
+	createdAt time.Time,
+) (SharedProjectionIntentRow, string, bool) {
+	if r.SourceRepoID == "" {
+		return SharedProjectionIntentRow{}, "", false
+	}
+
+	payload := map[string]any{
+		"repo_id":           r.SourceRepoID,
+		"evidence_source":   crossRepoEvidenceSource,
+		"confidence":        r.Confidence,
+		"evidence_count":    r.EvidenceCount,
+		"resolution_source": string(r.ResolutionSource),
+	}
+
+	partitionKey := ""
+	routeType := string(r.RelationshipType)
+
+	switch r.RelationshipType {
+	case relationships.RelRunsOn:
+		if r.TargetEntityID == "" {
+			return SharedProjectionIntentRow{}, "", false
+		}
+		payload["platform_id"] = r.TargetEntityID
+		payload["relationship_type"] = string(r.RelationshipType)
+		partitionKey = fmt.Sprintf("runs_on:%s->%s", r.SourceRepoID, r.TargetEntityID)
+	case relationships.RelDeploysFrom, relationships.RelDiscoversConfigIn, relationships.RelProvisionsDependencyFor:
+		if r.TargetRepoID == "" {
+			return SharedProjectionIntentRow{}, "", false
+		}
+		payload["target_repo_id"] = r.TargetRepoID
+		payload["relationship_type"] = string(r.RelationshipType)
+		partitionKey = fmt.Sprintf("repo:%s->%s|%s", r.SourceRepoID, r.TargetRepoID, r.RelationshipType)
+	default:
+		if r.TargetRepoID == "" {
+			return SharedProjectionIntentRow{}, "", false
+		}
+		payload["target_repo_id"] = r.TargetRepoID
+		payload["relationship_type"] = string(r.RelationshipType)
+		partitionKey = fmt.Sprintf("repo:%s->%s|%s", r.SourceRepoID, r.TargetRepoID, r.RelationshipType)
+	}
+
+	return BuildSharedProjectionIntent(SharedProjectionIntentInput{
+		ProjectionDomain: DomainRepoDependency,
+		PartitionKey:     partitionKey,
+		RepositoryID:     r.SourceRepoID,
+		SourceRunID:      generationID,
+		GenerationID:     generationID,
+		Payload:          payload,
+		CreatedAt:        createdAt,
+	}), routeType, true
 }

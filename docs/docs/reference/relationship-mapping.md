@@ -160,6 +160,17 @@ The current derived summaries include:
 
 The query layer uses the resolved relationships to look up related repositories and collect supporting context. This is where deployment artifacts are assembled from related repos and values-style files.
 
+Repository-level platform counts and stories should follow the canonical
+runtime shape:
+
+- `Repository -[:DEFINES]-> Workload`
+- `Workload <-[:INSTANCE_OF]- WorkloadInstance`
+- `WorkloadInstance -[:RUNS_ON]-> Platform`
+
+Do not count platforms from a direct `Repository -[:RUNS_ON]-> Platform` hop in
+new query work. That shortcut undercounts once canonical runtime ownership
+stays on workload instances.
+
 ### 7. MCP / API answer shaping
 
 The query surfaces do not invent new canonical relationships. They choose how to present the already-resolved evidence, derived summaries, and limitations.
@@ -192,6 +203,14 @@ If the source is the control plane, keep the control-plane source on the left. I
 ### Typed Precedence
 
 When the same pair can be described by both a typed relationship and a generic `DEPENDS_ON`, the typed edge wins. The resolver suppresses the generic candidate for the same implied pair, then may derive a compatibility `DEPENDS_ON` edge from the typed result unless that generic edge was explicitly rejected.
+
+The Go reducer and canonical Neo4j writer now preserve that typed meaning end
+to end for repository-scoped relationship families such as:
+
+- `DEPLOYS_FROM`
+- `DISCOVERS_CONFIG_IN`
+- `PROVISIONS_DEPENDENCY_FOR`
+- `RUNS_ON`
 
 That keeps the graph:
 

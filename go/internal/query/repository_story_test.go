@@ -20,7 +20,7 @@ func TestBuildRepositoryStoryResponseIncludesStructuredOverviews(t *testing.T) {
 		[]string{"go", "yaml"},
 		[]string{"payments-api"},
 		[]string{"argocd_application"},
-		3,
+		4,
 		nil,
 	)
 
@@ -75,8 +75,8 @@ func TestBuildRepositoryStoryResponseIncludesStructuredOverviews(t *testing.T) {
 	if !ok {
 		t.Fatalf("support_overview type = %T, want map[string]any", got["support_overview"])
 	}
-	if supportOverview["dependency_count"] != 3 {
-		t.Fatalf("support_overview.dependency_count = %#v, want 3", supportOverview["dependency_count"])
+	if supportOverview["dependency_count"] != 4 {
+		t.Fatalf("support_overview.dependency_count = %#v, want 4", supportOverview["dependency_count"])
 	}
 
 	coverageSummary, ok := got["coverage_summary"].(map[string]any)
