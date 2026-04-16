@@ -63,6 +63,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 	stack := make([]phpScopedContext, 0)
 	var pendingFunction *phpScopedContext
 	var pendingAnonymousClass *phpScopedContext
+	var pendingTraitAdaptation *phpScopedContext
 	seenVariables := make(map[string]struct{})
 	seenCalls := make(map[string]struct{})
 	classPropertyTypes := make(map[string]map[string]string)
@@ -109,6 +110,14 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			if bases := parsePHPClassTraitUses(trimmed); len(bases) > 0 {
 				appendPHPClassBases(payload, contextName, bases)
 			}
+			if strings.Contains(trimmed, "{") && strings.Contains(trimmed, "use ") {
+				pendingTraitAdaptation = &phpScopedContext{
+					kind:       "trait_adaptation",
+					name:       contextName,
+					braceDepth: braceDepth + max(1, strings.Count(rawLine, "{")),
+					lineNumber: lineNumber,
+				}
+			}
 		}
 
 		if anonymousTail, ok := parsePHPAnonymousClass(trimmed); ok {
@@ -154,6 +163,12 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 			case "trait":
 				appendBucket(payload, "traits", item)
 				stack = append(stack, phpScopedContext{kind: "trait_declaration", name: name, braceDepth: braceDepth + max(1, strings.Count(rawLine, "{")), lineNumber: lineNumber})
+			}
+		}
+
+		if pendingTraitAdaptation != nil && braceDepth >= pendingTraitAdaptation.braceDepth {
+			if adaptations := parsePHPClassTraitAdaptations(trimmed); len(adaptations) > 0 {
+				appendPHPClassTraitAdaptations(payload, pendingTraitAdaptation.name, adaptations)
 			}
 		}
 
@@ -335,6 +350,9 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 
 		braceDepth += braceDelta(rawLine)
 		stack = popPHPCompletedScopes(stack, braceDepth)
+		if pendingTraitAdaptation != nil && braceDepth < pendingTraitAdaptation.braceDepth {
+			pendingTraitAdaptation = nil
+		}
 	}
 
 	sortNamedBucket(payload, "functions")
