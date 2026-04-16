@@ -225,7 +225,11 @@ func openIngesterCanonicalWriter(
 
 	writer := sourceneo4j.NewCanonicalNodeWriter(
 		&sourceneo4j.InstrumentedExecutor{
-			Inner:       rawExecutor,
+			Inner: &sourceneo4j.RetryingExecutor{
+				Inner:       rawExecutor,
+				MaxRetries:  3,
+				Instruments: instruments,
+			},
 			Tracer:      tracer,
 			Instruments: instruments,
 		},

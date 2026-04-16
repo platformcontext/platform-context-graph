@@ -87,6 +87,9 @@ type Instruments struct {
 	CanonicalBatchSize         metric.Float64Histogram
 	CanonicalPhaseDuration     metric.Float64Histogram
 
+	// Neo4j transient error retry metrics
+	Neo4jDeadlockRetries metric.Int64Counter
+
 	// Cross-repo resolution metrics
 	CrossRepoResolutionDuration metric.Float64Histogram
 	CrossRepoEvidenceLoaded     metric.Int64Counter
@@ -405,6 +408,14 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register Neo4jBatchesExecuted counter: %w", err)
+	}
+
+	inst.Neo4jDeadlockRetries, err = meter.Int64Counter(
+		"pcg_dp_neo4j_deadlock_retries_total",
+		metric.WithDescription("Total Neo4j transient error retries (deadlocks, lock timeouts)"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register Neo4jDeadlockRetries counter: %w", err)
 	}
 
 	// Canonical projection instruments
