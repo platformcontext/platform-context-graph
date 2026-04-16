@@ -132,6 +132,37 @@ func TestContentReaderListRepoEntitiesIncludesMetadata(t *testing.T) {
 	}
 }
 
+func TestContentReaderListRepoFilesIncludesArtifactType(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"repo_id", "relative_path", "commit_sha", "content",
+				"content_hash", "line_count", "language", "artifact_type",
+			},
+			rows: [][]driver.Value{
+				{
+					"repo-1", ".github/workflows/deploy.yaml", "abc123", "",
+					"hash-1", int64(20), "yaml", "github_actions_workflow",
+				},
+			},
+		},
+	})
+
+	reader := NewContentReader(db)
+	results, err := reader.ListRepoFiles(context.Background(), "repo-1", 10)
+	if err != nil {
+		t.Fatalf("ListRepoFiles() error = %v, want nil", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	if got, want := results[0].ArtifactType, "github_actions_workflow"; got != want {
+		t.Fatalf("ArtifactType = %q, want %q", got, want)
+	}
+}
+
 func TestContentReaderGetEntityContentRejectsInvalidMetadata(t *testing.T) {
 	t.Parallel()
 

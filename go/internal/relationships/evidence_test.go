@@ -105,6 +105,87 @@ func TestDiscoverTerraformGitHubEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverTerraformModuleSourceEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-stack",
+			Payload: map[string]any{
+				"artifact_type": "terraform_hcl",
+				"relative_path": "main.tf",
+				"content": `module "service" {
+  source = "git::https://github.com/example/terraform-modules-shared.git//modules/edge-service?ref=v1.2.3"
+}`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-shared-modules", Aliases: []string{"terraform-modules-shared"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if !hasEvidenceKind(evidence, EvidenceKindTerraformModuleSource) {
+		t.Fatal("missing TERRAFORM_MODULE_SOURCE evidence")
+	}
+	if !hasRelationshipType(evidence, RelUsesModule) {
+		t.Fatalf("missing %q relationship evidence", RelUsesModule)
+	}
+}
+
+func TestDiscoverTerragruntModuleSourceEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-live",
+			Payload: map[string]any{
+				"artifact_type": "terragrunt",
+				"relative_path": "env/dev/terragrunt.hcl",
+				"content": `terraform {
+  source = "git::git@github.com:boatsgroup/terraform-module-eks.git//wrapper?ref=${feature.version.value}"
+}`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-terraform-module-eks", Aliases: []string{"terraform-module-eks"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if !hasEvidenceKind(evidence, EvidenceKindTerraformModuleSource) {
+		t.Fatal("missing TERRAFORM_MODULE_SOURCE evidence")
+	}
+	if !hasRelationshipType(evidence, RelUsesModule) {
+		t.Fatalf("missing %q relationship evidence", RelUsesModule)
+	}
+}
+
+func TestDiscoverTerraformRegistryModuleSourceDoesNotCreateRepoEdge(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-live",
+			Payload: map[string]any{
+				"artifact_type": "terragrunt",
+				"relative_path": "env/dev/terragrunt.hcl",
+				"content": `terraform {
+  source = "tfr:///terraform-aws-modules/eks/aws?version=19.0.0"
+}`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-local-eks", Aliases: []string{"eks"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if hasRelationshipType(evidence, RelUsesModule) {
+		t.Fatalf("unexpected %q relationship evidence for registry module source", RelUsesModule)
+	}
+}
+
 func TestDiscoverHelmChartEvidence(t *testing.T) {
 	t.Parallel()
 

@@ -232,6 +232,96 @@ func TestBuildRepositorySemanticOverviewCountsElixirSemanticSignals(t *testing.T
 	}
 }
 
+func TestBuildRepositorySemanticOverviewCountsTerraformAndTerragruntSignals(t *testing.T) {
+	t.Parallel()
+
+	overview := buildRepositorySemanticOverview([]EntityContent{
+		{
+			EntityID:   "tf-module-1",
+			RepoID:     "repo-1",
+			EntityType: "TerraformModule",
+			EntityName: "eks",
+			Language:   "hcl",
+			Metadata: map[string]any{
+				"source": "tfr:///terraform-aws-modules/eks/aws?version=19.0.0",
+			},
+		},
+		{
+			EntityID:   "tg-config-1",
+			RepoID:     "repo-1",
+			EntityType: "TerragruntConfig",
+			EntityName: "terragrunt",
+			Language:   "hcl",
+			Metadata: map[string]any{
+				"terraform_source": "../modules/app",
+				"includes":         "root",
+				"inputs":           "image_tag",
+			},
+		},
+		{
+			EntityID:   "tg-dep-1",
+			RepoID:     "repo-1",
+			EntityType: "TerragruntDependency",
+			EntityName: "vpc",
+			Language:   "hcl",
+			Metadata: map[string]any{
+				"config_path": "../vpc",
+			},
+		},
+	})
+
+	if overview == nil {
+		t.Fatal("buildRepositorySemanticOverview() = nil, want non-nil")
+	}
+
+	signalCounts, ok := overview["signal_counts"].(map[string]int)
+	if !ok {
+		t.Fatalf("signal_counts type = %T, want map[string]int", overview["signal_counts"])
+	}
+	if got, want := signalCounts["source"], 1; got != want {
+		t.Fatalf("signal_counts[source] = %d, want %d", got, want)
+	}
+	if got, want := signalCounts["terraform_source"], 1; got != want {
+		t.Fatalf("signal_counts[terraform_source] = %d, want %d", got, want)
+	}
+	if got, want := signalCounts["config_path"], 1; got != want {
+		t.Fatalf("signal_counts[config_path] = %d, want %d", got, want)
+	}
+
+	surfaceKinds, ok := overview["surface_kind_counts"].(map[string]int)
+	if !ok {
+		t.Fatalf("surface_kind_counts type = %T, want map[string]int", overview["surface_kind_counts"])
+	}
+	if got, want := surfaceKinds["terraform_module_source"], 1; got != want {
+		t.Fatalf("surface_kind_counts[terraform_module_source] = %d, want %d", got, want)
+	}
+	if got, want := surfaceKinds["terragrunt_config"], 1; got != want {
+		t.Fatalf("surface_kind_counts[terragrunt_config] = %d, want %d", got, want)
+	}
+	if got, want := surfaceKinds["terragrunt_dependency"], 1; got != want {
+		t.Fatalf("surface_kind_counts[terragrunt_dependency] = %d, want %d", got, want)
+	}
+
+	entityTypeCounts, ok := overview["entity_type_counts"].(map[string]int)
+	if !ok {
+		t.Fatalf("entity_type_counts type = %T, want map[string]int", overview["entity_type_counts"])
+	}
+	if got, want := entityTypeCounts["TerraformModule"], 1; got != want {
+		t.Fatalf("entity_type_counts[TerraformModule] = %d, want %d", got, want)
+	}
+
+	infraFamilyCounts, ok := overview["infra_family_counts"].(map[string]int)
+	if !ok {
+		t.Fatalf("infra_family_counts type = %T, want map[string]int", overview["infra_family_counts"])
+	}
+	if got, want := infraFamilyCounts["terraform"], 1; got != want {
+		t.Fatalf("infra_family_counts[terraform] = %d, want %d", got, want)
+	}
+	if got, want := infraFamilyCounts["terragrunt"], 2; got != want {
+		t.Fatalf("infra_family_counts[terragrunt] = %d, want %d", got, want)
+	}
+}
+
 func TestBuildRepositoryStoryResponseIncludesSemanticOverview(t *testing.T) {
 	t.Parallel()
 
@@ -262,6 +352,9 @@ func TestBuildRepositoryStoryResponseIncludesSemanticOverview(t *testing.T) {
 		[]string{"payments-api"},
 		[]string{"argocd_application"},
 		3,
+		map[string]any{
+			"families": []string{"argocd", "docker", "github_actions", "terraform"},
+		},
 		semanticOverview,
 	)
 
@@ -284,7 +377,7 @@ func TestBuildRepositoryStoryResponseIncludesSemanticOverview(t *testing.T) {
 		t.Fatalf("story_sections[2][title] = %#v, want %#v", gotValue, want)
 	}
 
-	if gotValue, want := got["story"], "Repository payments contains 42 indexed files. Languages: python, typescript. Defines 1 workload(s): payments-api. Runs on platform signal(s): argocd_application. Semantic signals cover 3 entity(ies) across 3 language(s): annotation=1, async=1, decorators=1, applied_annotation=1, decorated_async_function=1, and generic_declaration=1."; gotValue != want {
+	if gotValue, want := got["story"], "Repository payments contains 42 indexed files. Languages: python, typescript. Defines 1 workload(s): payments-api. Runs on platform signal(s): argocd_application. Infrastructure families present: argocd, docker, github_actions, terraform. Semantic signals cover 3 entity(ies) across 3 language(s): annotation=1, async=1, decorators=1, applied_annotation=1, decorated_async_function=1, and generic_declaration=1."; gotValue != want {
 		t.Fatalf("story = %#v, want %#v", gotValue, want)
 	}
 }
@@ -300,6 +393,7 @@ func TestBuildRepositoryStoryResponseOmitsSemanticOverviewWhenEmpty(t *testing.T
 		nil,
 		nil,
 		0,
+		nil,
 		nil,
 	)
 

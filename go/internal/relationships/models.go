@@ -16,6 +16,10 @@ const (
 	EvidenceKindTerraformGitHubActions EvidenceKind = "TERRAFORM_GITHUB_ACTIONS_REPOSITORY"
 	// EvidenceKindTerraformConfigPath is a Terraform config path reference.
 	EvidenceKindTerraformConfigPath EvidenceKind = "TERRAFORM_CONFIG_PATH"
+	// EvidenceKindTerraformModuleSource is a Terraform or Terragrunt module source reference.
+	EvidenceKindTerraformModuleSource EvidenceKind = "TERRAFORM_MODULE_SOURCE"
+	// EvidenceKindTerragruntDependencyConfigPath is a Terragrunt dependency config_path reference.
+	EvidenceKindTerragruntDependencyConfigPath EvidenceKind = "TERRAGRUNT_DEPENDENCY_CONFIG_PATH"
 	// EvidenceKindHelmChart is a Helm Chart.yaml reference.
 	EvidenceKindHelmChart EvidenceKind = "HELM_CHART_REFERENCE"
 	// EvidenceKindHelmValues is a Helm values reference.
@@ -58,6 +62,8 @@ const (
 	RelProvisionsDependencyFor RelationshipType = "PROVISIONS_DEPENDENCY_FOR"
 	// RelDependsOn is a generic dependency relationship.
 	RelDependsOn RelationshipType = "DEPENDS_ON"
+	// RelUsesModule indicates the source consumes a target module repository.
+	RelUsesModule RelationshipType = "USES_MODULE"
 )
 
 // ResolutionSource classifies how a resolved relationship was determined.

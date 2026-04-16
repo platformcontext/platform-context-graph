@@ -54,6 +54,54 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 			signals = append(signals, "declaration_merge")
 		}
 	}
+	if source, _ := metadata["source"].(string); source != "" {
+		profile["source"] = source
+		signals = append(signals, "source")
+	}
+	if terraformSource, _ := metadata["terraform_source"].(string); terraformSource != "" {
+		profile["terraform_source"] = terraformSource
+		signals = append(signals, "terraform_source")
+	}
+	if configPath, _ := metadata["config_path"].(string); configPath != "" {
+		profile["config_path"] = configPath
+		signals = append(signals, "config_path")
+	}
+	if includes := metadataStringSlice(metadata, "includes"); len(includes) > 0 {
+		profile["includes"] = includes
+		signals = append(signals, "includes")
+	}
+	if inputs := metadataStringSlice(metadata, "inputs"); len(inputs) > 0 {
+		profile["inputs"] = inputs
+		signals = append(signals, "inputs")
+	}
+	if locals := metadataStringSlice(metadata, "locals"); len(locals) > 0 {
+		profile["locals"] = locals
+		signals = append(signals, "locals")
+	}
+	if deploymentName, _ := metadata["deployment_name"].(string); deploymentName != "" {
+		profile["deployment_name"] = deploymentName
+		signals = append(signals, "deployment_name")
+	}
+	if repoName, _ := metadata["repo_name"].(string); repoName != "" {
+		profile["repo_name"] = repoName
+		signals = append(signals, "repo_name")
+	}
+	if createDeploy, _ := metadata["create_deploy"].(string); createDeploy != "" {
+		profile["create_deploy"] = createDeploy
+		signals = append(signals, "create_deploy")
+	}
+	if clusterName, _ := metadata["cluster_name"].(string); clusterName != "" {
+		profile["cluster_name"] = clusterName
+		signals = append(signals, "cluster_name")
+	}
+	if zoneID, _ := metadata["zone_id"].(string); zoneID != "" {
+		profile["zone_id"] = zoneID
+		signals = append(signals, "zone_id")
+	}
+	if deployEntryPoint, _ := metadata["deploy_entry_point"].(string); deployEntryPoint != "" {
+		profile["deploy_entry_point"] = deployEntryPoint
+		signals = append(signals, "deploy_entry_point")
+	}
 
 	jsSemantics := ExtractJavaScriptSemantics(metadata)
 	if jsSemantics.MethodKind != "" {
@@ -171,6 +219,15 @@ func semanticSurfaceKind(
 	}
 	if _, ok := profile["declaration_merge"].(bool); ok {
 		return "declaration_merge"
+	}
+	if _, ok := profile["source"].(string); ok && label == "TerraformModule" {
+		return "terraform_module_source"
+	}
+	if _, ok := profile["terraform_source"].(string); ok && label == "TerragruntConfig" {
+		return "terragrunt_config"
+	}
+	if _, ok := profile["config_path"].(string); ok && label == "TerragruntDependency" {
+		return "terragrunt_dependency"
 	}
 	if _, ok := profile["protocol"].(bool); ok {
 		return "protocol"

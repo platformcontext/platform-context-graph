@@ -343,6 +343,32 @@ func TestHandleLanguageQuery_ContentBackedEntityTypes(t *testing.T) {
 			wantValue: "../vpc",
 		},
 		{
+			name:       "terraform module from content store",
+			language:   "hcl",
+			entityType: "terraform_module",
+			query:      "eks",
+			row: []driver.Value{
+				"tf-module-1", "repo-1", "infra/main.tf", "TerraformModule", "eks",
+				int64(1), int64(8), "hcl", "module \"eks\" { source = \"tfr:///terraform-aws-modules/eks/aws?version=19.0.0\" }\n", []byte(`{"source":"tfr:///terraform-aws-modules/eks/aws?version=19.0.0","deployment_name":"comprehensive-cluster"}`),
+			},
+			wantName:  "eks",
+			wantKey:   "source",
+			wantValue: "tfr:///terraform-aws-modules/eks/aws?version=19.0.0",
+		},
+		{
+			name:       "terragrunt config from content store",
+			language:   "hcl",
+			entityType: "terragrunt_config",
+			query:      "terragrunt",
+			row: []driver.Value{
+				"tg-config-1", "repo-1", "infra/terragrunt.hcl", "TerragruntConfig", "terragrunt",
+				int64(1), int64(12), "hcl", "terraform { source = \"../modules/app\" }\n", []byte(`{"terraform_source":"../modules/app","includes":"root","inputs":"image_tag"}`),
+			},
+			wantName:  "terragrunt",
+			wantKey:   "terraform_source",
+			wantValue: "../modules/app",
+		},
+		{
 			name:       "terragrunt local from content store",
 			language:   "hcl",
 			entityType: "terragrunt_local",

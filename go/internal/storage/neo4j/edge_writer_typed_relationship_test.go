@@ -42,6 +42,15 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 				"relationship_type": "PROVISIONS_DEPENDENCY_FOR",
 			},
 		},
+		{
+			IntentID:     "i4",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"repo_id":           "repo-a",
+				"target_repo_id":    "repo-e",
+				"relationship_type": "USES_MODULE",
+			},
+		},
 	}
 
 	err := writer.WriteEdges(context.Background(), reducer.DomainRepoDependency, rows, "resolver/cross-repo")
@@ -52,7 +61,7 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
 	cypher := executor.calls[0].Cypher
-	for _, want := range []string{"DEPLOYS_FROM", "DISCOVERS_CONFIG_IN", "PROVISIONS_DEPENDENCY_FOR"} {
+	for _, want := range []string{"DEPLOYS_FROM", "DISCOVERS_CONFIG_IN", "PROVISIONS_DEPENDENCY_FOR", "USES_MODULE"} {
 		if !strings.Contains(cypher, want) {
 			t.Fatalf("cypher missing %s branch: %s", want, cypher)
 		}

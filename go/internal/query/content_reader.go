@@ -35,6 +35,7 @@ type FileContent struct {
 	ContentHash  string `json:"content_hash"`
 	LineCount    int    `json:"line_count"`
 	Language     string `json:"language,omitempty"`
+	ArtifactType string `json:"artifact_type,omitempty"`
 }
 
 // EntityContent is one parsed entity from the content store.
@@ -64,14 +65,15 @@ func (cr *ContentReader) GetFileContent(ctx context.Context, repoID, relativePat
 
 	row := cr.db.QueryRowContext(ctx, `
 		SELECT repo_id, relative_path, coalesce(commit_sha, ''),
-		       content, content_hash, line_count, coalesce(language, '')
+		       content, content_hash, line_count, coalesce(language, ''),
+		       coalesce(artifact_type, '')
 		FROM content_files
 		WHERE repo_id = $1 AND relative_path = $2
 	`, repoID, relativePath)
 
 	var f FileContent
 	err := row.Scan(&f.RepoID, &f.RelativePath, &f.CommitSHA,
-		&f.Content, &f.ContentHash, &f.LineCount, &f.Language)
+		&f.Content, &f.ContentHash, &f.LineCount, &f.Language, &f.ArtifactType)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -175,7 +177,8 @@ func (cr *ContentReader) SearchFileContent(ctx context.Context, repoID, pattern 
 
 	query := `
 		SELECT repo_id, relative_path, coalesce(commit_sha, ''),
-		       '', content_hash, line_count, coalesce(language, '')
+		       '', content_hash, line_count, coalesce(language, ''),
+		       coalesce(artifact_type, '')
 		FROM content_files
 		WHERE repo_id = $1 AND content ILIKE '%' || $2 || '%'
 		ORDER BY relative_path
@@ -192,7 +195,7 @@ func (cr *ContentReader) SearchFileContent(ctx context.Context, repoID, pattern 
 	for rows.Next() {
 		var f FileContent
 		if err := rows.Scan(&f.RepoID, &f.RelativePath, &f.CommitSHA,
-			&f.Content, &f.ContentHash, &f.LineCount, &f.Language); err != nil {
+			&f.Content, &f.ContentHash, &f.LineCount, &f.Language, &f.ArtifactType); err != nil {
 			span.RecordError(err)
 			return nil, fmt.Errorf("scan file search result: %w", err)
 		}
@@ -419,7 +422,8 @@ func (cr *ContentReader) ListRepoFiles(ctx context.Context, repoID string, limit
 
 	rows, err := cr.db.QueryContext(ctx, `
 		SELECT repo_id, relative_path, coalesce(commit_sha, ''),
-		       '', content_hash, line_count, coalesce(language, '')
+		       '', content_hash, line_count, coalesce(language, ''),
+		       coalesce(artifact_type, '')
 		FROM content_files
 		WHERE repo_id = $1
 		ORDER BY relative_path
@@ -435,7 +439,7 @@ func (cr *ContentReader) ListRepoFiles(ctx context.Context, repoID string, limit
 	for rows.Next() {
 		var f FileContent
 		if err := rows.Scan(&f.RepoID, &f.RelativePath, &f.CommitSHA,
-			&f.Content, &f.ContentHash, &f.LineCount, &f.Language); err != nil {
+			&f.Content, &f.ContentHash, &f.LineCount, &f.Language, &f.ArtifactType); err != nil {
 			span.RecordError(err)
 			return nil, fmt.Errorf("scan repo file: %w", err)
 		}

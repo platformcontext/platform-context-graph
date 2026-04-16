@@ -457,7 +457,7 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 	if repoID != "" {
 		repoParams := map[string]any{"repo_id": repoID}
 		result["dependencies"] = queryRepoDependencies(ctx, h.Neo4j, repoParams)
-		result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, repoParams)
+		result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, repoParams)
 		result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, repoParams)
 	}
 

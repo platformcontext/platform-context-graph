@@ -112,6 +112,96 @@ func TestBuildContentRelationshipSetArgoCDApplicationSetPromotesDiscoveryDeployA
 	}
 }
 
+func TestBuildContentRelationshipSetTerraformModulePromotesSource(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:   "tf-module-1",
+		RepoID:     "repo-1",
+		EntityType: "TerraformModule",
+		EntityName: "eks",
+		Metadata: map[string]any{
+			"source": "tfr:///terraform-aws-modules/eks/aws?version=19.0.0",
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+	if len(relationships.outgoing) != 1 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 1", len(relationships.outgoing))
+	}
+	relationship := relationships.outgoing[0]
+	if got, want := relationship["type"], "DEPLOYS_FROM"; got != want {
+		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["target_name"], "tfr:///terraform-aws-modules/eks/aws?version=19.0.0"; got != want {
+		t.Fatalf("relationship[target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["reason"], "terraform_module_source"; got != want {
+		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildContentRelationshipSetTerragruntConfigPromotesTerraformSource(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:   "tg-config-1",
+		RepoID:     "repo-1",
+		EntityType: "TerragruntConfig",
+		EntityName: "terragrunt",
+		Metadata: map[string]any{
+			"terraform_source": "../modules/app",
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+	if len(relationships.outgoing) != 1 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 1", len(relationships.outgoing))
+	}
+	relationship := relationships.outgoing[0]
+	if got, want := relationship["type"], "DEPLOYS_FROM"; got != want {
+		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["target_name"], "../modules/app"; got != want {
+		t.Fatalf("relationship[target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["reason"], "terragrunt_terraform_source"; got != want {
+		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildContentRelationshipSetTerragruntDependencyPromotesConfigPath(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:   "tg-dep-1",
+		RepoID:     "repo-1",
+		EntityType: "TerragruntDependency",
+		EntityName: "vpc",
+		Metadata: map[string]any{
+			"config_path": "../vpc",
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+	if len(relationships.outgoing) != 1 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 1", len(relationships.outgoing))
+	}
+	relationship := relationships.outgoing[0]
+	if got, want := relationship["type"], "DEPENDS_ON"; got != want {
+		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["target_name"], "../vpc"; got != want {
+		t.Fatalf("relationship[target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["reason"], "terragrunt_dependency_config_path"; got != want {
+		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
+	}
+}
+
 func TestMetadataStringSliceSupportsCommaSeparatedStrings(t *testing.T) {
 	t.Parallel()
 

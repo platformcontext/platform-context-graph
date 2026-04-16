@@ -58,7 +58,7 @@ func TestGetWorkloadContextReturnsEnrichedResponse(t *testing.T) {
 			},
 			runByMatch: map[string][]map[string]any{
 				// Dependencies query
-				"DEPENDS_ON|DEPLOYS_FROM": {
+				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {
 					{
 						"type":          "DEPENDS_ON",
 						"target_name":   "auth-service",

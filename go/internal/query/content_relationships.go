@@ -18,10 +18,6 @@ func buildContentRelationshipSet(
 	reader *ContentReader,
 	entity EntityContent,
 ) (contentRelationshipSet, error) {
-	if reader == nil {
-		return contentRelationshipSet{}, nil
-	}
-
 	outgoing, err := buildOutgoingContentRelationships(ctx, reader, entity)
 	if err != nil {
 		return contentRelationshipSet{}, err
@@ -40,6 +36,15 @@ func buildOutgoingContentRelationships(
 	reader *ContentReader,
 	entity EntityContent,
 ) ([]map[string]any, error) {
+	if relationships, ok, err := buildOutgoingArgoCDRelationships(entity); ok || err != nil {
+		return relationships, err
+	}
+	if relationships, ok, err := buildOutgoingTerraformRelationships(entity); ok || err != nil {
+		return relationships, err
+	}
+	if reader == nil {
+		return nil, nil
+	}
 	if relationships, ok, err := buildOutgoingK8sSelectRelationships(ctx, reader, entity); ok || err != nil {
 		return relationships, err
 	}
@@ -47,9 +52,6 @@ func buildOutgoingContentRelationships(
 		return relationships, err
 	}
 	if relationships, ok, err := buildOutgoingKustomizeRelationships(ctx, reader, entity); ok || err != nil {
-		return relationships, err
-	}
-	if relationships, ok, err := buildOutgoingArgoCDRelationships(entity); ok || err != nil {
 		return relationships, err
 	}
 	if relationships, ok, err := buildOutgoingRustImplBlockRelationships(ctx, reader, entity); ok || err != nil {

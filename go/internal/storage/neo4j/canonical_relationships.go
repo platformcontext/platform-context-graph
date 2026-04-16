@@ -39,6 +39,13 @@ FOREACH (_ IN CASE WHEN row.relationship_type = 'PROVISIONS_DEPENDENCY_FOR' THEN
         rel.evidence_source = row.evidence_source,
         rel.relationship_type = row.relationship_type
 )
+FOREACH (_ IN CASE WHEN row.relationship_type = 'USES_MODULE' THEN [1] ELSE [] END |
+    MERGE (source_repo)-[rel:USES_MODULE]->(target_repo)
+    SET rel.confidence = 0.9,
+        rel.reason = 'Runtime services list declares repository dependency',
+        rel.evidence_source = row.evidence_source,
+        rel.relationship_type = row.relationship_type
+)
 FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type = '' OR row.relationship_type = 'DEPENDS_ON' THEN [1] ELSE [] END |
     MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)
     SET rel.confidence = 0.9,
@@ -60,7 +67,7 @@ SET rel.confidence = 0.97,
 
 const batchCanonicalRunsOnUpsertCypher = canonicalRunsOnUpsertCypher
 
-const retractRepoRelationshipAndRunsOnEdgesCypher = `MATCH (source_repo:Repository)-[rel:DEPENDS_ON|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR]->(:Repository)
+const retractRepoRelationshipAndRunsOnEdgesCypher = `MATCH (source_repo:Repository)-[rel:DEPENDS_ON|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|USES_MODULE]->(:Repository)
 WHERE source_repo.id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel

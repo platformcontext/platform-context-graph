@@ -12,11 +12,16 @@ func buildRepositoryStoryResponse(
 	workloads []string,
 	platforms []string,
 	dependencyCount int,
+	infrastructureOverview map[string]any,
 	semanticOverview map[string]any,
 ) map[string]any {
 	filteredLanguages := nonEmptyStrings(languages)
 	filteredPlatforms := nonEmptyStrings(platforms)
 	filteredWorkloads := nonEmptyStrings(workloads)
+	infraFamilies := stringSliceMapValue(infrastructureOverview, "families")
+	if len(infraFamilies) == 0 {
+		infraFamilies = stringSliceMapValue(semanticOverview, "infrastructure_families")
+	}
 	semanticStory := buildRepositorySemanticStory(semanticOverview)
 	limitations := []string{"coverage_not_computed"}
 	if len(filteredPlatforms) == 0 {
@@ -39,6 +44,7 @@ func buildRepositoryStoryResponse(
 			filteredLanguages,
 			filteredWorkloads,
 			filteredPlatforms,
+			infraFamilies,
 			semanticStory,
 		),
 		"story_sections": []map[string]any{
@@ -52,14 +58,15 @@ func buildRepositoryStoryResponse(
 			},
 		},
 		"deployment_overview": map[string]any{
-			"workload_count": len(filteredWorkloads),
-			"platform_count": len(filteredPlatforms),
-			"workloads":      filteredWorkloads,
-			"platforms":      filteredPlatforms,
+			"workload_count":          len(filteredWorkloads),
+			"platform_count":          len(filteredPlatforms),
+			"workloads":               filteredWorkloads,
+			"platforms":               filteredPlatforms,
+			"infrastructure_families": infraFamilies,
 		},
 		"gitops_overview": map[string]any{
-			"enabled":          containsGitOpsPlatform(filteredPlatforms),
-			"tool_families":    filteredPlatforms,
+			"enabled":          containsGitOpsSignals(filteredPlatforms, infraFamilies),
+			"tool_families":    mergeStringSets(filteredPlatforms, infraFamilies),
 			"observed_targets": filteredWorkloads,
 		},
 		"documentation_overview": map[string]any{
@@ -94,6 +101,9 @@ func buildRepositoryStoryResponse(
 		})
 		response["semantic_overview"] = semanticOverview
 	}
+	if len(infrastructureOverview) > 0 {
+		response["infrastructure_overview"] = infrastructureOverview
+	}
 	storySections = append(storySections, map[string]any{
 		"title":   "support",
 		"summary": fmt.Sprintf("%d dependency link(s) and remote=%t", dependencyCount, repo.HasRemote),
@@ -108,6 +118,7 @@ func buildRepositoryStory(
 	languages []string,
 	workloads []string,
 	platforms []string,
+	infraFamilies []string,
 	semanticStory string,
 ) string {
 	parts := []string{
@@ -122,6 +133,9 @@ func buildRepositoryStory(
 	}
 	if len(platforms) > 0 {
 		parts = append(parts, fmt.Sprintf("Runs on platform signal(s): %s.", strings.Join(platforms, ", ")))
+	}
+	if len(infraFamilies) > 0 {
+		parts = append(parts, fmt.Sprintf("Infrastructure families present: %s.", strings.Join(infraFamilies, ", ")))
 	}
 	if semanticStory != "" {
 		parts = append(parts, semanticStory)
@@ -144,12 +158,54 @@ func nonEmptyStrings(values []string) []string {
 	return filtered
 }
 
-func containsGitOpsPlatform(platforms []string) bool {
-	for _, platform := range platforms {
+func containsGitOpsSignals(platforms []string, infraFamilies []string) bool {
+	for _, platform := range mergeStringSets(platforms, infraFamilies) {
 		switch platform {
-		case "argocd_application", "argocd_applicationset", "flux_kustomization", "flux_helmrelease":
+		case "argocd_application", "argocd_applicationset", "flux_kustomization", "flux_helmrelease",
+			"argocd", "helm", "kustomize":
 			return true
 		}
 	}
 	return false
+}
+
+func mergeStringSets(left []string, right []string) []string {
+	seen := map[string]struct{}{}
+	merged := make([]string, 0, len(left)+len(right))
+	for _, item := range append(append([]string{}, left...), right...) {
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		merged = append(merged, item)
+	}
+	return merged
+}
+
+func stringSliceMapValue(value map[string]any, key string) []string {
+	if len(value) == 0 {
+		return nil
+	}
+	raw, ok := value[key]
+	if !ok {
+		return nil
+	}
+	switch typed := raw.(type) {
+	case []string:
+		return nonEmptyStrings(typed)
+	case []any:
+		items := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if ok && text != "" {
+				items = append(items, text)
+			}
+		}
+		return items
+	default:
+		return nil
+	}
 }

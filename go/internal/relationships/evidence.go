@@ -88,6 +88,15 @@ var terraformPatterns = []terraformPattern{
 	},
 }
 
+var (
+	terraformModuleBlockPattern      = regexp.MustCompile(`(?is)module\s+"([^"]+)"\s*\{(.*?)\}`)
+	terragruntTerraformBlockPattern  = regexp.MustCompile(`(?is)terraform\s*\{(.*?)\}`)
+	terragruntDependencyBlockPattern = regexp.MustCompile(`(?is)\bdependency\s+"([^"]+)"\s*\{(.*?)\}`)
+	terragruntConfigPathPattern      = regexp.MustCompile(`(?i)\bconfig_path\s*=\s*"([^"]+)"`)
+	terraformSourcePattern           = regexp.MustCompile(`(?i)\bsource\b\s*=\s*"([^"]+)"`)
+	terraformRegistrySourcePattern   = regexp.MustCompile(`^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+(?://.*)?$`)
+)
+
 // helmChartFilenames are the recognized Helm chart metadata files.
 var helmChartFilenames = map[string]struct{}{
 	"chart.yaml": {},
@@ -110,6 +119,7 @@ func discoverFromEnvelope(
 	artifactType, _ := envelope.Payload["artifact_type"].(string)
 	filePath, _ := envelope.Payload["relative_path"].(string)
 	content, _ := envelope.Payload["content"].(string)
+	parsedFileData, _ := envelope.Payload["parsed_file_data"].(map[string]any)
 	sourceRepoID := envelope.ScopeID
 
 	// Fall back to Go collector content fact payload keys. The collector
@@ -123,11 +133,20 @@ func discoverFromEnvelope(
 		content, _ = envelope.Payload["content_body"].(string)
 	}
 
-	if content == "" || filePath == "" {
+	if filePath == "" {
+		return nil
+	}
+	if content == "" && len(parsedFileData) == 0 {
 		return nil
 	}
 
 	var evidence []EvidenceFact
+
+	if len(parsedFileData) > 0 {
+		evidence = append(evidence, discoverStructuredTerraformEvidence(
+			sourceRepoID, filePath, parsedFileData, catalog, seen,
+		)...)
+	}
 
 	switch {
 	case isTerraformArtifact(artifactType, filePath):
@@ -167,6 +186,13 @@ func discoverTerraformEvidence(
 ) []EvidenceFact {
 	var evidence []EvidenceFact
 
+	evidence = append(evidence, discoverTerraformModuleSourceEvidence(
+		sourceRepoID, filePath, content, catalog, seen,
+	)...)
+	evidence = append(evidence, discoverTerragruntDependencyConfigPathEvidence(
+		sourceRepoID, filePath, content, catalog, seen,
+	)...)
+
 	for _, tp := range terraformPatterns {
 		matches := tp.Pattern.FindAllStringSubmatch(content, -1)
 		for _, match := range matches {
@@ -185,6 +211,69 @@ func discoverTerraformEvidence(
 	evidence = append(evidence, discoverTerraformSchemaEvidence(
 		sourceRepoID, filePath, content, catalog, seen,
 	)...)
+
+	return evidence
+}
+
+func discoverStructuredTerraformEvidence(
+	sourceRepoID, filePath string,
+	parsedFileData map[string]any,
+	catalog []CatalogEntry,
+	seen map[evidenceKey]struct{},
+) []EvidenceFact {
+	var evidence []EvidenceFact
+
+	if modules, ok := parsedFileData["terraform_modules"].([]any); ok {
+		for _, item := range modules {
+			module, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			source := strings.TrimSpace(payloadString(module, "source"))
+			if source == "" || !looksLikeRemoteModuleSource(source) {
+				continue
+			}
+			evidence = append(evidence, matchCatalog(
+				sourceRepoID,
+				source,
+				filePath,
+				EvidenceKindTerraformModuleSource,
+				RelUsesModule,
+				0.98,
+				"Terraform or Terragrunt module source points at the target module repository",
+				"terraform-module-source",
+				catalog,
+				seen,
+				map[string]any{"source_ref": source},
+			)...)
+		}
+	}
+
+	if dependencies, ok := parsedFileData["terragrunt_dependencies"].([]any); ok {
+		for _, item := range dependencies {
+			dependency, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			configPath := strings.TrimSpace(payloadString(dependency, "config_path"))
+			if configPath == "" || !looksLikeRemoteModuleSource(configPath) {
+				continue
+			}
+			evidence = append(evidence, matchCatalog(
+				sourceRepoID,
+				configPath,
+				filePath,
+				EvidenceKindTerragruntDependencyConfigPath,
+				RelDependsOn,
+				0.90,
+				"Terragrunt dependency config_path points at the target repository",
+				"terragrunt-dependency-config-path",
+				catalog,
+				seen,
+				map[string]any{"config_path": configPath},
+			)...)
+		}
+	}
 
 	return evidence
 }
@@ -367,6 +456,152 @@ func isTerraformArtifact(artifactType, filePath string) bool {
 		strings.HasSuffix(lower, ".tfvars") ||
 		strings.HasSuffix(lower, ".tfvars.json") ||
 		strings.HasSuffix(lower, ".hcl")
+}
+
+func discoverTerraformModuleSourceEvidence(
+	sourceRepoID, filePath, content string,
+	catalog []CatalogEntry,
+	seen map[evidenceKey]struct{},
+) []EvidenceFact {
+	var evidence []EvidenceFact
+
+	for _, candidate := range extractRemoteTerraformModuleSources(filePath, content) {
+		evidence = append(evidence, matchCatalog(
+			sourceRepoID,
+			candidate,
+			filePath,
+			EvidenceKindTerraformModuleSource,
+			RelUsesModule,
+			0.98,
+			"Terraform or Terragrunt module source points at the target module repository",
+			"terraform-module-source",
+			catalog,
+			seen,
+			map[string]any{"source_ref": candidate},
+		)...)
+	}
+
+	return evidence
+}
+
+func discoverTerragruntDependencyConfigPathEvidence(
+	sourceRepoID, filePath, content string,
+	catalog []CatalogEntry,
+	seen map[evidenceKey]struct{},
+) []EvidenceFact {
+	if !strings.EqualFold(fileBaseName(filePath), "terragrunt.hcl") {
+		return nil
+	}
+
+	var evidence []EvidenceFact
+	for _, configPath := range extractTerragruntConfigPaths(content) {
+		if !looksLikeRemoteModuleSource(configPath) {
+			continue
+		}
+		evidence = append(evidence, matchCatalog(
+			sourceRepoID,
+			configPath,
+			filePath,
+			EvidenceKindTerragruntDependencyConfigPath,
+			RelDependsOn,
+			0.90,
+			"Terragrunt dependency config_path points at the target repository",
+			"terragrunt-dependency-config-path",
+			catalog,
+			seen,
+			map[string]any{"config_path": configPath},
+		)...)
+	}
+
+	return evidence
+}
+
+func extractRemoteTerraformModuleSources(filePath, content string) []string {
+	var matches []string
+	seen := make(map[string]struct{})
+	add := func(source string) {
+		source = strings.TrimSpace(source)
+		if source == "" || !looksLikeRemoteModuleSource(source) {
+			return
+		}
+		if _, ok := seen[source]; ok {
+			return
+		}
+		seen[source] = struct{}{}
+		matches = append(matches, source)
+	}
+
+	if strings.EqualFold(fileBaseName(filePath), "terragrunt.hcl") {
+		for _, source := range extractSourceAssignments(content) {
+			add(source)
+		}
+		return matches
+	}
+
+	for _, block := range terraformModuleBlockPattern.FindAllStringSubmatch(content, -1) {
+		if len(block) < 3 {
+			continue
+		}
+		for _, source := range extractSourceAssignments(block[2]) {
+			add(source)
+		}
+	}
+
+	return matches
+}
+
+func extractSourceAssignments(body string) []string {
+	raw := terraformSourcePattern.FindAllStringSubmatch(body, -1)
+	values := make([]string, 0, len(raw))
+	for _, match := range raw {
+		if len(match) < 2 {
+			continue
+		}
+		value := strings.TrimSpace(match[1])
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+func extractTerragruntConfigPaths(body string) []string {
+	raw := terragruntConfigPathPattern.FindAllStringSubmatch(body, -1)
+	values := make([]string, 0, len(raw))
+	for _, match := range raw {
+		if len(match) < 2 {
+			continue
+		}
+		value := strings.TrimSpace(match[1])
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+func looksLikeRemoteModuleSource(source string) bool {
+	lower := strings.ToLower(strings.TrimSpace(source))
+	if lower == "" {
+		return false
+	}
+	if strings.HasPrefix(lower, "tfr:///") || terraformRegistrySourcePattern.MatchString(lower) {
+		return false
+	}
+	if strings.HasPrefix(lower, "./") || strings.HasPrefix(lower, "../") || strings.HasPrefix(lower, "/") {
+		return true
+	}
+	return strings.Contains(lower, "github.com") ||
+		strings.Contains(lower, "git::") ||
+		strings.HasPrefix(lower, "git@") ||
+		strings.HasPrefix(lower, "ssh://") ||
+		strings.HasPrefix(lower, "https://") ||
+		strings.HasPrefix(lower, "http://")
+}
+
+func payloadString(payload map[string]any, key string) string {
+	value, _ := payload[key].(string)
+	return value
 }
 
 // isHelmArtifact checks if a file is a Helm chart file.

@@ -289,6 +289,35 @@ The current mapping and enrichment flow understands these families:
 
 The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repository or platform meaning.
 
+### Mixed-Source Repositories
+
+The Go read path now treats mixed-source repositories as first-class, not as a
+single inferred repo type.
+
+That matters for repositories like `iac-eks-argocd` or self-service repos that
+legitimately contain several families at once:
+
+- Argo CD Applications and ApplicationSets
+- Kustomize overlays
+- Helm values or chart references
+- Terraform or Terragrunt modules
+- Dockerfiles or Docker Compose manifests
+- GitHub Actions workflows
+
+Current truth on this branch:
+
+- content-backed infrastructure summaries surface multiple infrastructure
+  families at once when the repo contains them
+- Docker and GitHub Actions are also surfaced as artifact families from the
+  content store, even when they are still evidence-driven rather than
+  first-class config entities in the repository context list
+- repository context, repository story, and semantic overview now report mixed
+  infrastructure/artifact families instead of flattening the repo to one
+  deployment surface
+
+Do not downcast a mixed repo to “Terraform repo”, “Argo CD repo”, or “service
+repo” if the indexed content proves more than one family is present.
+
 Terraform provider-schema support is now Go-owned on this branch:
 
 The normal Postgres ingestion boundary now proves that runtime ownership in

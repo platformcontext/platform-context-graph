@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -115,6 +116,12 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 						"evidence_type": "terraform_module_source",
 					},
 					{
+						"type":          "USES_MODULE",
+						"target_name":   "terraform-modules-shared",
+						"target_id":     "repo-6",
+						"evidence_type": "terraform_module_source",
+					},
+					{
 						"type":          "DEPLOYS_FROM",
 						"target_name":   "infra-configs",
 						"target_id":     "repo-3",
@@ -221,8 +228,8 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 	if !ok {
 		t.Fatalf("relationships type = %T, want []any", resp["relationships"])
 	}
-	if len(relationships) != 3 {
-		t.Fatalf("len(relationships) = %d, want 3", len(relationships))
+	if len(relationships) != 4 {
+		t.Fatalf("len(relationships) = %d, want 4", len(relationships))
 	}
 	rel0, ok := relationships[0].(map[string]any)
 	if !ok {
@@ -243,7 +250,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 		}
 		relTypes[row["type"].(string)] = struct{}{}
 	}
-	for _, want := range []string{"DEPENDS_ON", "DEPLOYS_FROM", "PROVISIONS_DEPENDENCY_FOR"} {
+	for _, want := range []string{"DEPENDS_ON", "USES_MODULE", "DEPLOYS_FROM", "PROVISIONS_DEPENDENCY_FOR"} {
 		if _, ok := relTypes[want]; !ok {
 			t.Fatalf("missing relationship type %q", want)
 		}
@@ -263,6 +270,144 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 	}
 	if got, want := con0["name"], "checkout-service"; got != want {
 		t.Fatalf("consumers[0].name = %v, want %v", got, want)
+	}
+}
+
+func TestGetRepositoryContextIncludesTerraformAndTerragruntInfrastructureFromContent(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"tf-module-1", "repo-1", "infra/main.tf", "TerraformModule", "eks",
+					int64(1), int64(8), "hcl", "module \"eks\" {}", []byte(`{"source":"tfr:///terraform-aws-modules/eks/aws?version=19.0.0","deployment_name":"comprehensive-cluster"}`),
+				},
+				{
+					"tg-config-1", "repo-1", "infra/terragrunt.hcl", "TerragruntConfig", "terragrunt",
+					int64(1), int64(12), "hcl", "terraform { source = \"../modules/app\" }", []byte(`{"terraform_source":"../modules/app","includes":"root","inputs":"image_tag"}`),
+				},
+				{
+					"tg-dep-1", "repo-1", "infra/terragrunt.hcl", "TerragruntDependency", "vpc",
+					int64(5), int64(8), "hcl", "dependency \"vpc\" {}", []byte(`{"config_path":"../vpc"}`),
+				},
+			},
+		},
+		{
+			columns: []string{
+				"repo_id", "relative_path", "commit_sha", "content",
+				"content_hash", "line_count", "language", "artifact_type",
+			},
+			rows: [][]driver.Value{
+				{
+					"repo-1", "Dockerfile", "abc123", "",
+					"hash-docker", int64(30), "dockerfile", "dockerfile",
+				},
+				{
+					"repo-1", ".github/workflows/deploy.yaml", "abc123", "",
+					"hash-gha", int64(40), "yaml", "github_actions_workflow",
+				},
+			},
+		},
+	})
+
+	handler := &RepositoryHandler{
+		Neo4j: fakeRepoGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"INSTANCE_OF": {
+					"id":               "repo-1",
+					"name":             "infra-runtime",
+					"path":             "/repos/infra-runtime",
+					"local_path":       "/repos/infra-runtime",
+					"remote_url":       "https://github.com/acme/infra-runtime.git",
+					"repo_slug":        "acme/infra-runtime",
+					"has_remote":       true,
+					"file_count":       int64(12),
+					"workload_count":   int64(0),
+					"platform_count":   int64(0),
+					"dependency_count": int64(0),
+				},
+			},
+			runByMatch: map[string][]map[string]any{},
+		},
+		Content: NewContentReader(db),
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-1/context", nil)
+	req.SetPathValue("repo_id", "repo-1")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	infraEntities, ok := resp["infrastructure"].([]any)
+	if !ok {
+		t.Fatalf("infrastructure type = %T, want []any", resp["infrastructure"])
+	}
+	if len(infraEntities) != 3 {
+		t.Fatalf("len(infrastructure) = %d, want 3", len(infraEntities))
+	}
+
+	types := make(map[string]map[string]any, len(infraEntities))
+	for _, item := range infraEntities {
+		infra, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("infrastructure item type = %T, want map[string]any", item)
+		}
+		types[infra["type"].(string)] = infra
+	}
+
+	tfModule, ok := types["TerraformModule"]
+	if !ok {
+		t.Fatal("missing TerraformModule infrastructure entry")
+	}
+	if got, want := tfModule["source"], "tfr:///terraform-aws-modules/eks/aws?version=19.0.0"; got != want {
+		t.Fatalf("TerraformModule.source = %#v, want %#v", got, want)
+	}
+
+	tgConfig, ok := types["TerragruntConfig"]
+	if !ok {
+		t.Fatal("missing TerragruntConfig infrastructure entry")
+	}
+	if got, want := tgConfig["terraform_source"], "../modules/app"; got != want {
+		t.Fatalf("TerragruntConfig.terraform_source = %#v, want %#v", got, want)
+	}
+
+	tgDep, ok := types["TerragruntDependency"]
+	if !ok {
+		t.Fatal("missing TerragruntDependency infrastructure entry")
+	}
+	if got, want := tgDep["config_path"], "../vpc"; got != want {
+		t.Fatalf("TerragruntDependency.config_path = %#v, want %#v", got, want)
+	}
+
+	overview, ok := resp["infrastructure_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("infrastructure_overview type = %T, want map[string]any", resp["infrastructure_overview"])
+	}
+	artifactCounts, ok := overview["artifact_family_counts"].(map[string]any)
+	if !ok {
+		t.Fatalf("artifact_family_counts type = %T, want map[string]any", overview["artifact_family_counts"])
+	}
+	if got, want := artifactCounts["docker"], float64(1); got != want {
+		t.Fatalf("artifact_family_counts[docker] = %#v, want %#v", got, want)
+	}
+	if got, want := artifactCounts["github_actions"], float64(1); got != want {
+		t.Fatalf("artifact_family_counts[github_actions] = %#v, want %#v", got, want)
 	}
 }
 

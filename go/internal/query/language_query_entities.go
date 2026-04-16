@@ -42,6 +42,9 @@ var graphFirstContentBackedEntityTypes = map[string]string{
 	"protocol":                "Protocol",
 	"protocol_implementation": "ProtocolImplementation",
 	"module_attribute":        "Variable",
+	"terraform_module":        "TerraformModule",
+	"terragrunt_config":       "TerragruntConfig",
+	"terragrunt_dependency":   "TerragruntDependency",
 	"type_alias":              "TypeAlias",
 	"typedef":                 "Typedef",
 }
@@ -196,6 +199,54 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	if v := StringVal(row, "metaclass"); v != "" {
 		metadata["metaclass"] = v
 	}
+	if v := StringVal(row, "source"); v != "" {
+		metadata["source"] = v
+	}
+	if v := StringVal(row, "terraform_source"); v != "" {
+		metadata["terraform_source"] = v
+	}
+	if v := StringVal(row, "config_path"); v != "" {
+		metadata["config_path"] = v
+	}
+	if values := StringSliceVal(row, "includes"); len(values) > 0 {
+		includes := make([]any, 0, len(values))
+		for _, value := range values {
+			includes = append(includes, value)
+		}
+		metadata["includes"] = includes
+	}
+	if values := StringSliceVal(row, "inputs"); len(values) > 0 {
+		inputs := make([]any, 0, len(values))
+		for _, value := range values {
+			inputs = append(inputs, value)
+		}
+		metadata["inputs"] = inputs
+	}
+	if values := StringSliceVal(row, "locals"); len(values) > 0 {
+		locals := make([]any, 0, len(values))
+		for _, value := range values {
+			locals = append(locals, value)
+		}
+		metadata["locals"] = locals
+	}
+	if v := StringVal(row, "deployment_name"); v != "" {
+		metadata["deployment_name"] = v
+	}
+	if v := StringVal(row, "repo_name"); v != "" {
+		metadata["repo_name"] = v
+	}
+	if v := StringVal(row, "create_deploy"); v != "" {
+		metadata["create_deploy"] = v
+	}
+	if v := StringVal(row, "cluster_name"); v != "" {
+		metadata["cluster_name"] = v
+	}
+	if v := StringVal(row, "zone_id"); v != "" {
+		metadata["zone_id"] = v
+	}
+	if v := StringVal(row, "deploy_entry_point"); v != "" {
+		metadata["deploy_entry_point"] = v
+	}
 	if len(metadata) == 0 {
 		return nil
 	}
@@ -231,7 +282,19 @@ func graphSemanticMetadataProjection() string {
 		       e.decorators as decorators,
 		       e.async as async,
 		       e.semantic_kind as semantic_kind,
-		       e.metaclass as metaclass`
+		       e.metaclass as metaclass,
+		       e.source as source,
+		       e.terraform_source as terraform_source,
+		       e.config_path as config_path,
+		       e.includes as includes,
+		       e.inputs as inputs,
+		       e.locals as locals,
+		       e.deployment_name as deployment_name,
+		       e.repo_name as repo_name,
+		       e.create_deploy as create_deploy,
+		       e.cluster_name as cluster_name,
+		       e.zone_id as zone_id,
+		       e.deploy_entry_point as deploy_entry_point`
 }
 
 func graphLabelToContentEntityType(label string) string {
@@ -239,6 +302,8 @@ func graphLabelToContentEntityType(label string) string {
 	case "Annotation":
 		return "Annotation"
 	case "Function", "Class", "Interface", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock", "Typedef", "TypeAlias", "TypeAnnotation", "Component":
+		return label
+	case "TerraformModule", "TerragruntConfig", "TerragruntDependency":
 		return label
 	default:
 		return ""

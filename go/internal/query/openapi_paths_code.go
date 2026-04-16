@@ -75,6 +75,8 @@ const openAPIPathsCode = `
                       "type_annotation",
                       "typedef",
                       "component",
+                      "terraform_module",
+                      "terragrunt_config",
                       "terragrunt_dependency",
                       "terragrunt_local",
                       "terragrunt_input"

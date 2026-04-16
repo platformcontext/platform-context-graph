@@ -26,7 +26,7 @@ func TestGetEntityContextFallsBackToCloudFormationNestedStackResource(t *testing
 		},
 		{
 			columns: []string{
-				"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language",
+				"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type",
 			},
 			rows: [][]driver.Value{},
 		},
@@ -92,14 +92,14 @@ func TestGetEntityContextLinksNestedStackTemplateURLToRepoLocalTemplate(t *testi
 		},
 		{
 			columns: []string{
-				"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language",
+				"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type",
 			},
 			rows: [][]driver.Value{
 				{
-					"repo-1", "infra/templates/nested/network.yaml", "", "", "hash-1", int64(25), "yaml",
+					"repo-1", "infra/templates/nested/network.yaml", "", "", "hash-1", int64(25), "yaml", "cloudformation_template",
 				},
 				{
-					"repo-1", "infra/root/stack.yaml", "", "", "hash-2", int64(40), "yaml",
+					"repo-1", "infra/root/stack.yaml", "", "", "hash-2", int64(40), "yaml", "cloudformation_template",
 				},
 			},
 		},
@@ -156,11 +156,11 @@ func TestGetEntityContextLeavesRemoteNestedStackTemplateURLUnlinked(t *testing.T
 		},
 		{
 			columns: []string{
-				"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language",
+				"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type",
 			},
 			rows: [][]driver.Value{
 				{
-					"repo-1", "infra/templates/other.yaml", "", "", "hash-1", int64(25), "yaml",
+					"repo-1", "infra/templates/other.yaml", "", "", "hash-1", int64(25), "yaml", "cloudformation_template",
 				},
 			},
 		},

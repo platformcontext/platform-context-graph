@@ -10,16 +10,29 @@ import (
 const repositorySemanticEntityLimit = 5000
 
 func buildRepositorySemanticOverview(entities []EntityContent) map[string]any {
+	return buildRepositorySemanticOverviewWithFiles(entities, nil)
+}
+
+func buildRepositorySemanticOverviewWithFiles(
+	entities []EntityContent,
+	files []FileContent,
+) map[string]any {
 	if len(entities) == 0 {
-		return nil
+		return buildRepositoryInfrastructureOverview(nil, files)
 	}
 
 	languageCounts := map[string]int{}
 	signalCounts := map[string]int{}
 	surfaceKindCounts := map[string]int{}
+	entityTypeCounts := map[string]int{}
+	infraFamilyCounts := map[string]int{}
 	entityCount := 0
 
 	for _, entity := range entities {
+		entityTypeCounts[entity.EntityType]++
+		if family := infraFamilyForEntityType(entity.EntityType); family != "" {
+			infraFamilyCounts[family]++
+		}
 		result := map[string]any{
 			"labels":   []string{entity.EntityType},
 			"language": entity.Language,
@@ -48,15 +61,22 @@ func buildRepositorySemanticOverview(entities []EntityContent) map[string]any {
 	}
 
 	if entityCount == 0 {
-		return nil
+		return buildRepositoryInfrastructureOverview(nil, files)
 	}
 
-	return map[string]any{
+	overview := map[string]any{
 		"entity_count":        entityCount,
 		"language_counts":     languageCounts,
 		"signal_counts":       signalCounts,
 		"surface_kind_counts": surfaceKindCounts,
+		"entity_type_counts":  entityTypeCounts,
+		"infra_family_counts": infraFamilyCounts,
 	}
+	if infraOverview := buildRepositoryInfrastructureOverview(nil, files); infraOverview != nil {
+		overview["artifact_family_counts"] = infraOverview["artifact_family_counts"]
+		overview["infrastructure_families"] = infraOverview["families"]
+	}
+	return overview
 }
 
 func loadRepositorySemanticOverview(
@@ -72,7 +92,11 @@ func loadRepositorySemanticOverview(
 	if err != nil {
 		return nil, fmt.Errorf("list repository semantic entities: %w", err)
 	}
-	return buildRepositorySemanticOverview(entities), nil
+	files, err := reader.ListRepoFiles(ctx, repoID, repositorySemanticEntityLimit)
+	if err != nil {
+		return nil, fmt.Errorf("list repository semantic files: %w", err)
+	}
+	return buildRepositorySemanticOverviewWithFiles(entities, files), nil
 }
 
 func buildRepositorySemanticStory(overview map[string]any) string {
@@ -84,8 +108,23 @@ func buildRepositorySemanticStory(overview map[string]any) string {
 	languageCounts, _ := overview["language_counts"].(map[string]int)
 	signalCounts, _ := overview["signal_counts"].(map[string]int)
 	surfaceKindCounts, _ := overview["surface_kind_counts"].(map[string]int)
-	if entityCount == 0 || (len(signalCounts) == 0 && len(surfaceKindCounts) == 0) {
+	infraFamilyCounts, _ := overview["infra_family_counts"].(map[string]int)
+	artifactFamilyCounts, _ := overview["artifact_family_counts"].(map[string]int)
+	if entityCount == 0 && len(infraFamilyCounts) == 0 && len(artifactFamilyCounts) == 0 {
 		return ""
+	}
+	if entityCount == 0 {
+		fragments := make([]string, 0, len(infraFamilyCounts)+len(artifactFamilyCounts))
+		if infraValues := renderCountFragments(infraFamilyCounts); len(infraValues) > 0 {
+			fragments = append(fragments, "infrastructure="+joinSentenceFragments(infraValues))
+		}
+		if artifactValues := renderCountFragments(artifactFamilyCounts); len(artifactValues) > 0 {
+			fragments = append(fragments, "artifacts="+joinSentenceFragments(artifactValues))
+		}
+		if len(fragments) == 0 {
+			return ""
+		}
+		return "Infrastructure coverage: " + joinSentenceFragments(fragments) + "."
 	}
 
 	fragments := make([]string, 0, len(signalCounts)+len(surfaceKindCounts))
@@ -96,12 +135,19 @@ func buildRepositorySemanticStory(overview map[string]any) string {
 		fragments = append(fragments, fmt.Sprintf("%s=%d", key, surfaceKindCounts[key]))
 	}
 
-	return fmt.Sprintf(
+	story := fmt.Sprintf(
 		"Semantic signals cover %d entity(ies) across %d language(s): %s.",
 		entityCount,
 		len(languageCounts),
 		joinSentenceFragments(fragments),
 	)
+	if infraFragments := renderCountFragments(infraFamilyCounts); len(infraFragments) > 0 {
+		story += " Infrastructure families: " + joinSentenceFragments(infraFragments) + "."
+	}
+	if artifactFragments := renderCountFragments(artifactFamilyCounts); len(artifactFragments) > 0 {
+		story += " Artifact families: " + joinSentenceFragments(artifactFragments) + "."
+	}
+	return story
 }
 
 func sortedIntMapKeys(values map[string]int) []string {
@@ -117,4 +163,16 @@ func sortedIntMapKeys(values map[string]int) []string {
 		return cmp.Compare(left, right)
 	})
 	return keys
+}
+
+func renderCountFragments(values map[string]int) []string {
+	keys := sortedIntMapKeys(values)
+	if len(keys) == 0 {
+		return nil
+	}
+	fragments := make([]string, 0, len(keys))
+	for _, key := range keys {
+		fragments = append(fragments, fmt.Sprintf("%s=%d", key, values[key]))
+	}
+	return fragments
 }

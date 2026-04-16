@@ -30,8 +30,8 @@ func TestSupportedLanguages(t *testing.T) {
 
 func TestSupportedEntityTypes(t *testing.T) {
 	types := SupportedEntityTypes()
-	if len(types) != 24 {
-		t.Errorf("expected 24 supported entity types, got %d: %v", len(types), types)
+	if len(types) != 26 {
+		t.Errorf("expected 26 supported entity types, got %d: %v", len(types), types)
 	}
 	expected := map[string]bool{
 		"repository": true, "directory": true, "file": true,
@@ -39,6 +39,7 @@ func TestSupportedEntityTypes(t *testing.T) {
 		"type_alias": true, "type_annotation": true, "typedef": true, "component": true,
 		"annotation": true, "protocol": true, "impl_block": true,
 		"guard": true, "protocol_implementation": true, "module_attribute": true,
+		"terraform_module": true, "terragrunt_config": true,
 		"terragrunt_dependency": true, "terragrunt_local": true, "terragrunt_input": true,
 	}
 	typeSet := make(map[string]bool, len(types))

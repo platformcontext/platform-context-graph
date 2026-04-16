@@ -100,6 +100,48 @@ func TestAttachSemanticSummaryAddsStoryForSemanticEntities(t *testing.T) {
 			want: "Class Logged is documented as \"Represents a configured logger.\". Defined in src/models.py (python).",
 		},
 		{
+			name: "terraform module source",
+			entity: map[string]any{
+				"labels":    []string{"TerraformModule"},
+				"name":      "eks",
+				"language":  "hcl",
+				"file_path": "infra/main.tf",
+				"metadata": map[string]any{
+					"source":          "tfr:///terraform-aws-modules/eks/aws?version=19.0.0",
+					"deployment_name": "comprehensive-cluster",
+				},
+			},
+			want: "TerraformModule eks uses module source tfr:///terraform-aws-modules/eks/aws?version=19.0.0. Defined in infra/main.tf (hcl).",
+		},
+		{
+			name: "terragrunt config source",
+			entity: map[string]any{
+				"labels":    []string{"TerragruntConfig"},
+				"name":      "terragrunt",
+				"language":  "hcl",
+				"file_path": "infra/terragrunt.hcl",
+				"metadata": map[string]any{
+					"terraform_source": "../modules/app",
+					"includes":         "root",
+					"inputs":           "image_tag",
+				},
+			},
+			want: "TerragruntConfig terragrunt uses terraform source ../modules/app, includes root, and declares inputs image_tag. Defined in infra/terragrunt.hcl (hcl).",
+		},
+		{
+			name: "terragrunt dependency path",
+			entity: map[string]any{
+				"labels":    []string{"TerragruntDependency"},
+				"name":      "vpc",
+				"language":  "hcl",
+				"file_path": "infra/terragrunt.hcl",
+				"metadata": map[string]any{
+					"config_path": "../vpc",
+				},
+			},
+			want: "TerragruntDependency vpc depends on ../vpc. Defined in infra/terragrunt.hcl (hcl).",
+		},
+		{
 			name: "python type annotation",
 			entity: map[string]any{
 				"labels":    []string{"TypeAnnotation"},

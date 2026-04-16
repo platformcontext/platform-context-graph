@@ -88,6 +88,40 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 			return ""
 		}
 		return fmt.Sprintf("%s %s requires providers %s.", label, name, requiredProviders)
+	case "TerraformModule":
+		source, _ := metadata["source"].(string)
+		if source == "" {
+			return ""
+		}
+		return fmt.Sprintf("%s %s uses module source %s.", label, name, source)
+	case "TerragruntConfig":
+		terraformSource, _ := metadata["terraform_source"].(string)
+		includes := metadataStringSlice(metadata, "includes")
+		inputs := metadataStringSlice(metadata, "inputs")
+		locals := metadataStringSlice(metadata, "locals")
+		fragments := make([]string, 0, 4)
+		if terraformSource != "" {
+			fragments = append(fragments, "uses terraform source "+terraformSource)
+		}
+		if len(includes) > 0 {
+			fragments = append(fragments, "includes "+strings.Join(includes, ", "))
+		}
+		if len(inputs) > 0 {
+			fragments = append(fragments, "declares inputs "+strings.Join(inputs, ", "))
+		}
+		if len(locals) > 0 {
+			fragments = append(fragments, "declares locals "+strings.Join(locals, ", "))
+		}
+		if len(fragments) == 0 {
+			return ""
+		}
+		return fmt.Sprintf("%s %s %s.", label, name, joinSentenceFragments(fragments))
+	case "TerragruntDependency":
+		configPath, _ := metadata["config_path"].(string)
+		if configPath == "" {
+			return ""
+		}
+		return fmt.Sprintf("%s %s depends on %s.", label, name, configPath)
 	case "Typedef":
 		typeName, _ := metadata["type"].(string)
 		if typeName == "" {

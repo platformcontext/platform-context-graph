@@ -21,6 +21,9 @@ func TestBuildRepositoryStoryResponseIncludesStructuredOverviews(t *testing.T) {
 		[]string{"payments-api"},
 		[]string{"argocd_application"},
 		4,
+		map[string]any{
+			"families": []string{"argocd", "helm", "terraform"},
+		},
 		nil,
 	)
 
@@ -53,6 +56,9 @@ func TestBuildRepositoryStoryResponseIncludesStructuredOverviews(t *testing.T) {
 	}
 	if deploymentOverview["platform_count"] != 1 {
 		t.Fatalf("deployment_overview.platform_count = %#v, want 1", deploymentOverview["platform_count"])
+	}
+	if got, ok := deploymentOverview["infrastructure_families"].([]string); !ok || len(got) != 3 {
+		t.Fatalf("deployment_overview.infrastructure_families = %#v, want 3 families", deploymentOverview["infrastructure_families"])
 	}
 
 	gitopsOverview, ok := got["gitops_overview"].(map[string]any)
