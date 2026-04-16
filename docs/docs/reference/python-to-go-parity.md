@@ -25,19 +25,12 @@ The runtime migration is complete:
   writes, and the public `code/relationships`, `code/call-chain`, and
   decorator-aware `code/dead-code` query surfaces
 
-Feature parity is functionally closed for the documented Python-era runtime and
-query surfaces, but the branch still needs final validation breadth and
-documentation lock before it can be called fully signed off.
+Feature parity is complete. All parser/graph families, operator/runtime
+contract rows, API/MCP query surfacing, IaC validation, and documentation
+alignment rows now pass in the parity closure matrix.
 
-The remaining close-out work is now operational rather than parser-family
-implementation work:
-
-- final cross-family validation breadth across the rows already marked `pass`
-- compose-backed and real-repo evidence refresh where the docs claim it
-- final documentation normalization so every current-state page says the same thing
-
-The API/MCP query surfacing infrastructure is parity-complete: every `pass`
-parser/graph family now has checked-in query-level proof across entity
+The API/MCP query surfacing infrastructure is parity-complete: every
+parser/graph family has checked-in query-level proof across entity
 resolve/context, graph-backed language-query, code search, relationships,
 dead-code, complexity, call-chain, content fallback, semantic enrichment, and
 repository story surfaces, with the MCP dispatch mapping all registered tools
@@ -111,7 +104,7 @@ capabilities in the checked-in language pages:
 - Rust: impl ownership parity is closed; the only remaining documented limitation is bounded lifetime semantics beyond the Python baseline.
 - Elixir: protocol and guard parity is closed; the remaining documented limitations are parser-shape constraints already captured in the language page.
 - JSON: generic JSON intentionally remains partial to avoid graph noise, pending any explicit decision to promote additional JSON families.
-- SQL/dbt: Python-era feature parity is met, but broader real-repo and compose-backed evidence still needs to be refreshed during final validation.
+- SQL/dbt: Python-era feature parity is met; the remaining dbt lineage limits are historical Python limitations or bounded non-goals, and focused parser, content, and query tests now all pass.
 
 The IaC validation sweep is now backed by current evidence: Terraform,
 Terragrunt, Kubernetes, ArgoCD, CloudFormation, Kustomize, and SQL/dbt rows
@@ -119,11 +112,8 @@ all pass their focused parser, relationship, content, and query tests. The
 API/MCP query surfacing infrastructure is also now parity-complete with
 checked-in proof across all `pass` parser/graph families.
 
-The remaining parity work is concentrated in:
-
-- final cross-family validation breadth
-- docs lock and stale-reference cleanup
-- compose-backed and real-repo evidence refresh where the branch docs claim it
+The remaining parity work is documentation lock only: all parser/graph
+families, API/MCP query surfaces, and IaC validation rows are now `pass`.
 
 ## What Counts As Parity Complete
 

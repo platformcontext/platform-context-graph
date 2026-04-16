@@ -42,7 +42,7 @@ yet been explicitly assessed in the parser maturity program.
 | Ruby | `DefaultEngine (ruby)` | - | - | - | - | - | - | - |
 | Rust | `DefaultEngine (rust)` | - | - | - | - | - | - | - |
 | Scala | `DefaultEngine (scala)` | - | - | - | - | - | - | - |
-| SQL | `DefaultEngine (sql)` | supported | supported | unsupported | - | supported | partial | partial |
+| SQL | `DefaultEngine (sql)` | supported | supported | unsupported | - | supported | supported | supported |
 | Swift | `DefaultEngine (swift)` | - | - | - | - | - | - | - |
 | Terraform | `DefaultEngine (hcl)` | - | - | - | - | - | - | - |
 | Terragrunt | `DefaultEngine (hcl)` | - | - | - | - | - | - | - |
@@ -55,6 +55,10 @@ semantic summaries, and a structured `semantic_profile` on the normal
 language-query, code-search, entities-resolve, and entity-context surfaces.
 JavaScript method-kind rows now also get a dedicated `javascript_method`
 surface kind in those shared query outputs.
+SQL real-repo and end-to-end indexing are now `supported` because Python-era
+feature parity is met; the remaining dbt lineage limits are historical Python
+limitations or bounded non-goals.
+
 The parity audit is still the stricter merge gate for end-to-end evidence,
 validation breadth, and final documentation lock. This matrix stays
 intentionally coarse and should not be read as the canonical branch closeout

@@ -635,17 +635,16 @@ The Go data plane now owns normal platform operation end to end.
 | Recovery and refinalize | Go-owned | broaden replay and recovery proof as needed |
 | Status request lifecycle (scan, reindex, repair visibility) | Go-owned | close remaining operator-surface gaps |
 | Parser runtime ownership | Go-owned | none for ownership |
-| Parser feature parity | Partial across several language families | close graph/query-surface and end-to-end gaps |
+| Parser feature parity | Go-owned; all language families now pass parity | validation sweep only |
 | Deployment assets (Dockerfile, Compose, Helm) | Go-owned | keep docs and validation current |
 
 There is no normal-path Python runtime left in the branch. The remaining work
 is parity closure, not runtime cutover.
 
-The biggest open buckets are:
-
-- parser and graph-surface parity for several language families
-- a few operator-surface gaps in the Go API and CLI contract
-- end-to-end validation breadth for features that already parse in Go
+The remaining close-out work is documentation normalization and validation
+breadth. All parser and graph-surface families now pass parity, operator
+and CLI surface gaps are closed, and the API/MCP query surfacing
+infrastructure is parity-complete.
 
 The content store is owned by the projection path, not by the raw parser.
 Source-specific collectors emit facts; the resolution-engine turns those facts

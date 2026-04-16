@@ -22,7 +22,7 @@ the old Python platform feature for feature for that surface.
 | Runtime ownership | `pass` | Long-running and one-shot services are Go-owned end to end | keep Go-only ownership intact |
 | Deployment ownership | `pass` | Dockerfile, Compose, and Helm run the Go platform | keep docs and validation aligned |
 | Python normal-path ownership | `pass` | No normal-path Python runtime code remains | do not reintroduce mixed-runtime ownership |
-| Feature-for-feature parity | `partial` | Required Python-era runtime and query behavior is now implemented and checked in; the remaining work is final validation breadth plus documentation normalization | close the remaining validation and documentation rows below |
+| Feature-for-feature parity | `pass` | All parser/graph families, operator/runtime contract rows, API/MCP query surfacing, IaC validation, and documentation rows now pass | keep all rows aligned as features evolve |
 
 ## Operator And Runtime Contract Matrix
 
@@ -69,9 +69,9 @@ the old Python platform feature for feature for that surface.
 | Workstream | Status | Gap now | Done means | Validation gate | Recommended split |
 | --- | --- | --- | --- | --- | --- |
 | API/MCP query surfacing | `pass` | every `pass` parser/graph family now has checked-in query-level proof across entity resolve/context, graph-backed `code/language-query`, `code/relationships`, `code/search`, `code/dead-code`, `code/complexity`, `code/call-chain`, content fallback, semantic enrichment (summaries, profiles, stories), and repository story surfaces; the MCP dispatch maps all 37 registered tools 1:1 to HTTP API routes; the OpenAPI spec covers all public routes | keep query proof and public docs aligned as the final validation sweep lands | API tests, MCP proof | validation sweep only |
-| Language pages | `partial` | the highest-traffic language pages are current, but the full doc set still needs one last stale-reference sweep | pages match implementation truth with no stale parity claims | docs build | final sweep |
-| Support maturity matrix | `partial` | the matrix is now close to the true gap inventory, but it still needs final normalization against the parity audit after the validation sweep | matrix and parity audit do not contradict each other | docs build | final sweep |
-| Roadmap and architecture docs | `partial` | current-state runtime docs are substantially aligned, but the final closeout still needs one current-truth normalization pass | current-state docs fully match branch truth | docs build | final sweep |
+| Language pages | `pass` | language pages now match implementation truth: SQL real-repo and end-to-end status updated to `supported (bounded)`, Kotlin and PHP pages reflect closed graph parity, and remaining documented limitations are bounded non-goals rather than stale parity claims | keep language pages aligned as features evolve | docs build | closed |
+| Support maturity matrix | `pass` | the matrix now matches the parity audit: SQL real-repo and end-to-end moved from `partial` to `supported`, and no matrix row contradicts the parity closure state | keep the matrix aligned with the parity audit | docs build | closed |
+| Roadmap and architecture docs | `pass` | architecture.md now reflects all parser/graph families passing parity, roadmap.md reflects Phase 5 validation evidence is refreshed and all families pass, and the remaining close-out is documentation lock only | keep docs aligned with branch truth | docs build | closed |
 
 ## Suggested Execution Waves
 

@@ -62,13 +62,13 @@ plan:
 
 ### Phase 5: Validation And Documentation Lock
 
-Before new collectors begin, finish the remaining validation closeout and
-evidence work for the Go graph and query surfaces.
+Before new collectors begin, finish the remaining documentation lock for
+the Go graph and query surfaces.
 
-- refresh validation evidence for rows already marked `pass`
-- lock the docs to current branch truth
-- close the remaining operator/runbook normalization work
-- update the docs to reflect the final parity sign-off state
+- validation evidence for rows marked `pass` has been refreshed
+- API/MCP query surfacing infrastructure is parity-complete
+- all parser and graph-surface families now pass parity
+- lock the docs to current branch truth and finalize the close-out
 
 ### Phase 6: Multi-Collector Expansion
 

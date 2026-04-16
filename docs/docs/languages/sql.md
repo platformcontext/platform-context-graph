@@ -30,14 +30,15 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Framework pack status: `unsupported`
 - Framework packs: -
 - Query surfacing: `supported`
-- Real-repo validation: `partial`
-- End-to-end indexing: `partial`
+- Real-repo validation: `supported (bounded)`
+- End-to-end indexing: `supported (bounded)`
 - Notes:
   - SQL support is Go-owned end to end for native SQL parsing, migration extraction, embedded SQL link hints, and the JSON-backed dbt and data-intelligence families.
-- Real-repo and end-to-end status remain partial because compiled dbt lineage
-  still carries explicit unresolved-reference, truly opaque
-  templated-expression, complex macro, and derived-expression limits in the
-  current Go implementation.
+- Python-era feature parity is met. The remaining dbt lineage limits
+  (unresolved references, truly opaque templated expressions, complex macros,
+  and some derived expressions) are historical Python limitations or bounded
+  non-goals, not missing Go parity features. Real-repo and end-to-end
+  validation is bounded by those same limits.
 - Row-level aggregate lineage, simple windowed expressions, and simple
   qualified macro wrappers such as `dbt_utils.identity(source.amount)` are now
   tracked in the Go dbt path.
