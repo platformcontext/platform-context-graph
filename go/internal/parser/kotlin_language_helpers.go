@@ -14,6 +14,7 @@ var (
 	kotlinFunctionReturnPattern = regexp.MustCompile(
 		`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\([^)]*\)\s*:\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)`,
 	)
+	kotlinSuspendFunctionPattern    = regexp.MustCompile(`\bsuspend\s+fun\b`)
 	kotlinFunctionCallAssignPattern = regexp.MustCompile(
 		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\([^()]*\)\s*$`,
 	)
@@ -65,6 +66,10 @@ func kotlinFunctionDeclarationReturnType(line string) (string, string, string) {
 		return "", "", ""
 	}
 	return strings.TrimSpace(matches[1]), strings.TrimSpace(matches[2]), strings.TrimSpace(matches[3])
+}
+
+func kotlinFunctionIsSuspend(line string) bool {
+	return kotlinSuspendFunctionPattern.MatchString(strings.TrimSpace(line))
 }
 
 func kotlinInferAssignedVariableType(

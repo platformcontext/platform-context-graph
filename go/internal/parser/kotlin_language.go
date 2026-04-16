@@ -171,6 +171,9 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					"lang":        "kotlin",
 					"decorators":  []string{},
 				}
+				if kotlinFunctionIsSuspend(trimmed) {
+					item["suspend"] = true
+				}
 				if classContext := currentScopedName(stack, "class"); classContext != "" {
 					item["class_context"] = classContext
 				}
