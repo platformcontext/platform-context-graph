@@ -9,8 +9,9 @@ import (
 
 // ExistingRepoDependencyEdge represents one existing DEPENDS_ON edge between repositories.
 type ExistingRepoDependencyEdge struct {
-	RepoID       string
-	TargetRepoID string
+	RepoID           string
+	TargetRepoID     string
+	RelationshipType string
 }
 
 // ExistingWorkloadDependencyEdge represents one existing DEPENDS_ON edge between workloads.
@@ -34,9 +35,14 @@ func BuildRepoDependencyIntentRows(
 	for _, row := range repoDependencyRows {
 		repoID := anyToString(row["repo_id"])
 		targetRepoID := anyToString(row["target_repo_id"])
+		relationshipType := anyToString(row["relationship_type"])
 		partitionKey := ""
 		if repoID != "" && targetRepoID != "" {
-			partitionKey = fmt.Sprintf("repo:%s->%s", repoID, targetRepoID)
+			if relationshipType != "" && relationshipType != "DEPENDS_ON" {
+				partitionKey = fmt.Sprintf("repo:%s->%s|%s", repoID, targetRepoID, relationshipType)
+			} else {
+				partitionKey = fmt.Sprintf("repo:%s->%s", repoID, targetRepoID)
+			}
 		}
 		normalizedRow := make(map[string]any)
 		for k, v := range row {
@@ -51,9 +57,13 @@ func BuildRepoDependencyIntentRows(
 	for _, edge := range existingRows {
 		partitionKey := ""
 		if edge.RepoID != "" && edge.TargetRepoID != "" {
-			partitionKey = fmt.Sprintf("repo:%s->%s", edge.RepoID, edge.TargetRepoID)
+			if edge.RelationshipType != "" && edge.RelationshipType != "DEPENDS_ON" {
+				partitionKey = fmt.Sprintf("repo:%s->%s|%s", edge.RepoID, edge.TargetRepoID, edge.RelationshipType)
+			} else {
+				partitionKey = fmt.Sprintf("repo:%s->%s", edge.RepoID, edge.TargetRepoID)
+			}
 		}
-		key := fmt.Sprintf("%s|%s|%s", edge.RepoID, edge.TargetRepoID, partitionKey)
+		key := fmt.Sprintf("%s|%s|%s|%s", edge.RepoID, edge.TargetRepoID, edge.RelationshipType, partitionKey)
 		existingPairs[key] = struct{}{}
 	}
 
@@ -62,7 +72,7 @@ func BuildRepoDependencyIntentRows(
 		normalizedRows,
 		existingPairs,
 		contextByRepoID,
-		[]string{"repo_id", "target_repo_id", "partition_key"},
+		[]string{"repo_id", "target_repo_id", "relationship_type", "partition_key"},
 		createdAt,
 	)
 }

@@ -83,6 +83,42 @@ func TestStatusMetricsHandlerServesRuntimeMetrics(t *testing.T) {
 	}
 }
 
+func TestStatusMetricsHandlerReportsQueueFailureAndOverdueClaims(t *testing.T) {
+	handler, err := NewStatusMetricsHandler("reducer", &fakeStatusReader{
+		snapshot: statuspkg.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			Queue: statuspkg.QueueSnapshot{
+				Outstanding:          3,
+				InFlight:             0,
+				Failed:               2,
+				OverdueClaims:        1,
+				OldestOutstandingAge: 45 * time.Second,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewStatusMetricsHandler() error = %v, want nil", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	handler.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("GET /metrics status = %d, want %d", got, want)
+	}
+	body := recorder.Body.String()
+	for _, want := range []string{
+		`pcg_runtime_queue_failed{service_name="reducer"} 2`,
+		`pcg_runtime_queue_overdue_claims{service_name="reducer"} 1`,
+		`pcg_runtime_health_state{service_name="reducer",state="stalled"} 1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("GET /metrics body missing %q\nbody:\n%s", want, body)
+		}
+	}
+}
+
 func TestStatusMetricsHandlerReportsSkippedRefreshes(t *testing.T) {
 	telemetry.ResetSkippedRefreshCountForTesting()
 	t.Cleanup(telemetry.ResetSkippedRefreshCountForTesting)

@@ -1,6 +1,9 @@
 package query
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	t.Parallel()
@@ -238,5 +241,63 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	}
 	if drilldowns["service_context_path"] == "" {
 		t.Fatal("drilldowns.service_context_path is empty, want service context route")
+	}
+}
+
+func TestBuildDeploymentTraceResponseNarratesTypedControllerProvenance(t *testing.T) {
+	t.Parallel()
+
+	ctx := map[string]any{
+		"id":        "workload-1",
+		"name":      "payments-api",
+		"kind":      "service",
+		"repo_id":   "repo-1",
+		"repo_name": "payments",
+		"instances": []map[string]any{
+			{
+				"instance_id":   "inst-1",
+				"platform_name": "payments-argocd",
+				"platform_kind": "argocd_application",
+				"environment":   "prod",
+			},
+		},
+		"deployment_sources": []map[string]any{
+			{
+				"repo_id":   "repo-deploy",
+				"repo_name": "payments-deploy",
+			},
+		},
+		"controller_entities": []map[string]any{
+			{
+				"entity_id":       "argocd-app-1",
+				"entity_type":     "ArgoCDApplication",
+				"entity_name":     "payments-app",
+				"controller_kind": "argocd_application",
+				"repo_id":         "repo-deploy",
+				"relative_path":   "argocd/payments.yaml",
+				"source_repo":     "https://github.com/myorg/payments-deploy.git",
+				"source_path":     "deploy/overlays/prod",
+				"dest_server":     "https://kubernetes.default.svc",
+				"dest_namespace":  "payments",
+			},
+		},
+	}
+
+	got := buildDeploymentTraceResponse("payments-api", ctx)
+	story, ok := got["story"].(string)
+	if !ok {
+		t.Fatalf("story type = %T, want string", got["story"])
+	}
+	if story == "" {
+		t.Fatal("story is empty, want typed provenance narrative")
+	}
+	if !strings.Contains(story, "payments-app") {
+		t.Fatalf("story = %q, want controller entity name", story)
+	}
+	if !strings.Contains(story, "argocd_application") {
+		t.Fatalf("story = %q, want controller kind", story)
+	}
+	if !strings.Contains(story, "payments-deploy") {
+		t.Fatalf("story = %q, want deployment source repo", story)
 	}
 }

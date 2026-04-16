@@ -154,6 +154,48 @@ func TestBuildRepoDependencyIntentRows_MissingContext(t *testing.T) {
 	assert.Equal(t, "repo1", intents[0].RepositoryID)
 }
 
+func TestBuildRepoDependencyIntentRows_PreservesTypedRelationshipsForSamePair(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
+	contextByRepoID := map[string]ProjectionContext{
+		"repo1": {SourceRunID: "run1", GenerationID: "gen1"},
+	}
+
+	desiredRows := []map[string]any{
+		{
+			"repo_id":           "repo1",
+			"target_repo_id":    "repo2",
+			"relationship_type": "DEPLOYS_FROM",
+		},
+		{
+			"repo_id":           "repo1",
+			"target_repo_id":    "repo2",
+			"relationship_type": "DISCOVERS_CONFIG_IN",
+		},
+	}
+
+	intents := BuildRepoDependencyIntentRows(
+		desiredRows,
+		nil,
+		contextByRepoID,
+		createdAt,
+	)
+
+	require.Len(t, intents, 2)
+
+	gotTypes := map[string]bool{}
+	for _, intent := range intents {
+		assert.Equal(t, "repo1", intent.RepositoryID)
+		assert.NotEmpty(t, intent.PartitionKey)
+		gotTypes[anyToString(intent.Payload["relationship_type"])] = true
+	}
+
+	assert.True(t, gotTypes["DEPLOYS_FROM"])
+	assert.True(t, gotTypes["DISCOVERS_CONFIG_IN"])
+	assert.NotEqual(t, intents[0].PartitionKey, intents[1].PartitionKey)
+}
+
 func TestBuildWorkloadDependencyIntentRows_Empty(t *testing.T) {
 	createdAt := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
 	contextByRepoID := map[string]ProjectionContext{
@@ -178,14 +220,14 @@ func TestBuildWorkloadDependencyIntentRows_AllUpserts(t *testing.T) {
 
 	desiredRows := []map[string]any{
 		{
-			"repo_id":             "repo1",
-			"workload_id":         "wl1",
-			"target_workload_id":  "wl2",
+			"repo_id":            "repo1",
+			"workload_id":        "wl1",
+			"target_workload_id": "wl2",
 		},
 		{
-			"repo_id":             "repo1",
-			"workload_id":         "wl1",
-			"target_workload_id":  "wl3",
+			"repo_id":            "repo1",
+			"workload_id":        "wl1",
+			"target_workload_id": "wl3",
 		},
 	}
 
@@ -219,9 +261,9 @@ func TestBuildWorkloadDependencyIntentRows_MixedUpsertAndRetract(t *testing.T) {
 
 	desiredRows := []map[string]any{
 		{
-			"repo_id":             "repo1",
-			"workload_id":         "wl1",
-			"target_workload_id":  "wl2",
+			"repo_id":            "repo1",
+			"workload_id":        "wl1",
+			"target_workload_id": "wl2",
 		},
 	}
 

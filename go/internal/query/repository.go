@@ -68,7 +68,6 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	ctx := r.Context()
 	params := map[string]any{"repo_id": repoID}
 
-	// Base query: repo metadata + aggregate counts.
 	baseCypher := fmt.Sprintf(`
 		MATCH (r:Repository) WHERE r.id = $repo_id
 		OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
@@ -100,12 +99,12 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		"dependency_count": IntVal(baseRow, "dependency_count"),
 	}
 
-	// Enrichment queries run after the base query succeeds. Each is a focused
-	// query that populates one section of the response. Errors in enrichment
-	// queries are non-fatal — the base response is still returned.
 	result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, params)
 	result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, params)
 	result["relationships"] = queryRepoDependencies(ctx, h.Neo4j, params)
+	if relationshipOverview := buildRepositoryRelationshipOverview(result["relationships"].([]map[string]any)); relationshipOverview != nil {
+		result["relationship_overview"] = relationshipOverview
+	}
 	result["consumers"] = queryRepoConsumers(ctx, h.Neo4j, params)
 	if h.Content != nil {
 		files, err := h.Content.ListRepoFiles(ctx, repoID, repositorySemanticEntityLimit)
@@ -152,8 +151,6 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	WriteJSON(w, http.StatusOK, result)
 }
 
-// queryRepoEntryPoints returns main functions, handlers, and app factories for
-// a repository. Shared by RepositoryHandler and EntityHandler workload enrichment.
 func queryRepoEntryPoints(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(fn:Function)
@@ -177,14 +174,10 @@ func queryRepoEntryPoints(ctx context.Context, reader GraphReader, params map[st
 	return result
 }
 
-// queryRepoInfrastructure returns K8s, Terraform, and ArgoCD entities for a
-// repository. Shared by RepositoryHandler and EntityHandler workload enrichment.
 func queryRepoInfrastructure(ctx context.Context, reader GraphReader, content *ContentReader, params map[string]any) []map[string]any {
 	return queryRepoInfrastructureRows(ctx, reader, content, params)
 }
 
-// queryRepoLanguageDistribution returns file counts grouped by language for a
-// repository.
 func queryRepoLanguageDistribution(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
@@ -206,8 +199,6 @@ func queryRepoLanguageDistribution(ctx context.Context, reader GraphReader, para
 	return result
 }
 
-// queryRepoDependencies returns outgoing cross-repo dependency edges for a
-// repository. Shared by RepositoryHandler and EntityHandler workload enrichment.
 func queryRepoDependencies(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR]->(target:Repository)
@@ -234,7 +225,6 @@ func queryRepoDependencies(ctx context.Context, reader GraphReader, params map[s
 	return result
 }
 
-// queryRepoConsumers returns repos that depend on a given repository.
 func queryRepoConsumers(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (consumer:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR]->(r:Repository {id: $repo_id})
@@ -255,7 +245,6 @@ func queryRepoConsumers(ctx context.Context, reader GraphReader, params map[stri
 	return result
 }
 
-// getRepositoryStory returns a narrative summary for the repository.
 func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Request) {
 	repoID := PathParam(r, "repo_id")
 	if repoID == "" {
@@ -347,6 +336,13 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 				mapValue(infrastructureOverview, "deployment_artifacts"),
 				runtimeArtifacts,
 			)
+		}
+		relationships := queryRepoDependencies(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID})
+		if relationshipOverview := buildRepositoryRelationshipOverview(relationships); relationshipOverview != nil {
+			if infrastructureOverview == nil {
+				infrastructureOverview = map[string]any{}
+			}
+			infrastructureOverview["relationship_overview"] = relationshipOverview
 		}
 	}
 

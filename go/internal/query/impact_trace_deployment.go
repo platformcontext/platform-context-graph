@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 )
 
 type traceDeploymentChainRequest struct {
@@ -81,6 +82,10 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	environments := distinctSortedInstanceField(instances, "environment")
 	mappingMode := deploymentMappingMode(platformKinds)
 	deploymentFacts := buildDeploymentFacts(platforms, platformKinds, environments, deploymentSources)
+	story := buildWorkloadStory(workloadContext)
+	if provenanceStory := buildDeploymentProvenanceStory(controllerEntities, deploymentSources); provenanceStory != "" {
+		story = story + " " + provenanceStory
+	}
 
 	response := map[string]any{
 		"service_name": serviceName,
@@ -103,7 +108,7 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		"deployment_facts":        deploymentFacts,
 		"controller_driven_paths": buildControllerDrivenPaths(platforms, platformKinds),
 		"delivery_paths":          buildDeliveryPaths(deploymentSources, cloudResources, k8sResources, imageRefs, k8sRelationships),
-		"story":                   buildWorkloadStory(workloadContext),
+		"story":                   story,
 		"story_sections":          buildStorySections(platforms, platformKinds, environments),
 		"deployment_overview": map[string]any{
 			"instance_count":          len(instances),
@@ -285,6 +290,42 @@ func buildDeploymentDrilldowns(serviceName, workloadID string) map[string]any {
 		"service_story_path":    "/api/v0/services/" + serviceName + "/story",
 		"workload_context_path": "/api/v0/workloads/" + workloadID + "/context",
 	}
+}
+
+func buildDeploymentProvenanceStory(controllerEntities, deploymentSources []map[string]any) string {
+	parts := make([]string, 0, 2)
+	if len(controllerEntities) > 0 {
+		summaries := make([]string, 0, len(controllerEntities))
+		for _, controller := range controllerEntities {
+			summary := StringVal(controller, "entity_name")
+			if summary == "" {
+				summary = StringVal(controller, "entity_id")
+			}
+			if controllerKind := StringVal(controller, "controller_kind"); controllerKind != "" {
+				summary += " (" + controllerKind + ")"
+			}
+			if sourceRepo := StringVal(controller, "source_repo"); sourceRepo != "" {
+				summary += " from " + sourceRepo
+			}
+			summaries = append(summaries, summary)
+		}
+		parts = append(parts, "Controller provenance: "+joinSentenceFragments(summaries)+".")
+	}
+	if len(deploymentSources) > 0 {
+		summaries := make([]string, 0, len(deploymentSources))
+		for _, source := range deploymentSources {
+			summary := StringVal(source, "repo_name")
+			if summary == "" {
+				summary = StringVal(source, "repo_id")
+			}
+			if reason := StringVal(source, "reason"); reason != "" {
+				summary += " via " + reason
+			}
+			summaries = append(summaries, summary)
+		}
+		parts = append(parts, "Deployment sources: "+joinSentenceFragments(summaries)+".")
+	}
+	return strings.Join(parts, " ")
 }
 
 func deploymentMappingMode(platformKinds []string) string {

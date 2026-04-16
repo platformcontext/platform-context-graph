@@ -22,6 +22,7 @@ func buildRepositoryStoryResponse(
 	if len(infraFamilies) == 0 {
 		infraFamilies = stringSliceMapValue(semanticOverview, "infrastructure_families")
 	}
+	relationshipOverview := mapValue(infrastructureOverview, "relationship_overview")
 	semanticStory := buildRepositorySemanticStory(semanticOverview)
 	limitations := []string{"coverage_not_computed"}
 	if len(filteredPlatforms) == 0 {
@@ -93,6 +94,14 @@ func buildRepositoryStoryResponse(
 	}
 
 	storySections := response["story_sections"].([]map[string]any)
+	if relationshipStory := StringVal(relationshipOverview, "story"); relationshipStory != "" {
+		storySections = append(storySections, map[string]any{
+			"title":   "relationships",
+			"summary": relationshipStory,
+		})
+		response["story"] = response["story"].(string) + " " + relationshipStory
+		response["relationship_overview"] = relationshipOverview
+	}
 	if len(semanticOverview) > 0 {
 		storySections = append(storySections, map[string]any{
 			"title":   "semantics",
