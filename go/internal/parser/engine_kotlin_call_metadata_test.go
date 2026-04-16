@@ -409,6 +409,67 @@ fun usage(): String {
 	}
 }
 
+func TestDefaultEngineParsePathKotlinInfersGenericNullableReceiverTypesForDotCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Usage.kt")
+	writeTestFile(
+		t,
+		filePath,
+		`package comprehensive
+
+class Box<T>(private val value: T) {
+    fun unwrap(): T = value
+}
+
+class Service {
+    fun info(): String = "ok"
+}
+
+fun createBox(): Box<Service>? = Box(Service())
+
+fun usage(): String {
+    val typedBox: Box<Service>? = Box(Service())
+    val returnedBox = createBox()
+    return typedBox.unwrap().info() + returnedBox.unwrap().info()
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	items, ok := got["function_calls"].([]map[string]any)
+	if !ok {
+		t.Fatalf("function_calls = %T, want []map[string]any", got["function_calls"])
+	}
+
+	want := map[string]string{
+		"typedBox.unwrap":           "Box",
+		"typedBox.unwrap().info":    "Service",
+		"returnedBox.unwrap":        "Box",
+		"returnedBox.unwrap().info": "Service",
+	}
+	for _, item := range items {
+		fullName, _ := item["full_name"].(string)
+		if wantType, ok := want[fullName]; ok {
+			assertStringFieldValue(t, item, "inferred_obj_type", wantType)
+			delete(want, fullName)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing inferred receiver calls: %#v in %#v", want, items)
+	}
+}
+
 func TestDefaultEngineParsePathKotlinInfersTypedPropertyChainCallsForDotCalls(t *testing.T) {
 	t.Parallel()
 

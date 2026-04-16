@@ -17,8 +17,8 @@ var (
 	kotlinFunctionPattern      = regexp.MustCompile(`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\(`)
 	kotlinConstructorPattern   = regexp.MustCompile(`^\s*(?:(?:public|private|protected|internal)\s+)?constructor\s*\(`)
 	kotlinVariablePattern      = regexp.MustCompile(`^\s*(?:private|public|protected|internal)?\s*(?:const\s+)?(?:val|var)\s+([A-Za-z_]\w*)`)
-	kotlinTypedVariablePattern = regexp.MustCompile(`^\s*(?:private|public|protected|internal)?\s*(?:const\s+)?(?:val|var)\s+([A-Za-z_]\w*)\s*:\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)`)
-	kotlinCtorAssignPattern    = regexp.MustCompile(`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*\([^()]*\)\s*$`)
+	kotlinTypedVariablePattern = regexp.MustCompile(`^\s*(?:private|public|protected|internal)?\s*(?:const\s+)?(?:val|var)\s+([A-Za-z_]\w*)\s*:\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>]+>)?\??)`)
+	kotlinCtorAssignPattern    = regexp.MustCompile(`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>]+>)?\??)\s*\([^()]*\)\s*$`)
 	kotlinStringAssignPattern  = regexp.MustCompile(`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*"([^"]*)"`)
 	kotlinAliasAssignPattern   = regexp.MustCompile(`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*((?:this\.)?(?:[A-Za-z_]\w*(?:\([^)]*\))?)(?:\.(?:[A-Za-z_]\w*(?:\([^)]*\))?))*)\s*$`)
 	kotlinThisCallPattern      = regexp.MustCompile(`this\.([A-Za-z_]\w*)\s*\(`)
@@ -44,6 +44,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	lines := strings.Split(string(source), "\n")
 	braceDepth := 0
 	stack := make([]scopedContext, 0)
+	classTypeParameters := make(map[string][]string)
 	seenVariables := make(map[string]struct{})
 	localVariableTypes := make(map[string]map[string]string)
 	classPropertyTypes := make(map[string]map[string]string)
@@ -94,6 +95,9 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			name := matches[1]
 			knownTypeNames[name] = struct{}{}
 			declaredTypeNames[name] = struct{}{}
+			if typeParameters := kotlinDeclaredTypeParameters(trimmed); len(typeParameters) > 0 {
+				classTypeParameters[name] = typeParameters
+			}
 			appendBucket(payload, "classes", map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
@@ -141,6 +145,9 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			name := matches[1]
 			knownTypeNames[name] = struct{}{}
 			declaredTypeNames[name] = struct{}{}
+			if typeParameters := kotlinDeclaredTypeParameters(trimmed); len(typeParameters) > 0 {
+				classTypeParameters[name] = typeParameters
+			}
 			appendBucket(payload, "interfaces", map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
@@ -251,6 +258,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 					functionContext,
 					typeContext,
 					packageName,
+					classTypeParameters,
 					localVariableTypes,
 					classPropertyTypes,
 					functionReturnTypes,
@@ -302,6 +310,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 							kotlinCurrentTypeScopeName(stack),
 							packageName,
 							functionReturnTypes,
+							classTypeParameters,
 						)
 					}
 					if inferredType != "" {
@@ -314,7 +323,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 								"full_name":         fullName,
 								"line_number":       lineNumber,
 								"lang":              "kotlin",
-								"inferred_obj_type": inferredType,
+								"inferred_obj_type": kotlinBaseTypeName(inferredType),
 							}
 							if classContext != "" {
 								item["class_context"] = classContext
@@ -389,8 +398,9 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 							kotlinCurrentTypeScopeName(stack),
 							packageName,
 							functionReturnTypes,
+							classTypeParameters,
 						); inferredType != "" {
-							item["inferred_obj_type"] = inferredType
+							item["inferred_obj_type"] = kotlinBaseTypeName(inferredType)
 						}
 					}
 				}
@@ -429,6 +439,7 @@ func kotlinInferReceiverType(
 	currentClass string,
 	packageName string,
 	functionReturnTypes map[string]string,
+	classTypeParameters map[string][]string,
 ) string {
 	receiver = strings.TrimSpace(receiver)
 	if receiver == "" {
@@ -450,6 +461,7 @@ func kotlinInferReceiverType(
 		currentClass,
 		packageName,
 		functionReturnTypes,
+		classTypeParameters,
 	)
 	if currentType == "" {
 		return ""
@@ -464,20 +476,20 @@ func kotlinInferReceiverType(
 			return ""
 		}
 		if strings.Contains(name, "(") && strings.HasSuffix(name, ")") {
-			currentType = kotlinInferReceiverSegmentType(
-				name,
-				variableTypes,
-				classPropertyTypes,
+			currentType = kotlinInferReceiverMethodReturnType(
 				currentType,
+				strings.TrimSuffix(name, "()"),
+				kotlinBaseTypeName(currentType),
 				packageName,
 				functionReturnTypes,
+				classTypeParameters,
 			)
 			if currentType == "" {
 				return ""
 			}
 			continue
 		}
-		properties := classPropertyTypes[currentType]
+		properties := classPropertyTypes[kotlinBaseTypeName(currentType)]
 		if len(properties) == 0 {
 			return ""
 		}
@@ -485,7 +497,7 @@ func kotlinInferReceiverType(
 		if nextType == "" {
 			return ""
 		}
-		currentType = nextType
+		currentType = kotlinResolveTypeReference(nextType, currentType, classTypeParameters)
 	}
 	return currentType
 }

@@ -80,6 +80,15 @@ func TestDefaultEngineParsePathPHPFixtures(t *testing.T) {
 	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "full_name", "Logger.warn")
 	assertBucketContainsFieldValue(t, staticCallsPayload, "function_calls", "inferred_obj_type", "Logger")
 
+	staticAliasCallsPath := filepath.Join(repoRoot, "static_alias_calls.php")
+	staticAliasCallsPayload, err := engine.ParsePath(repoRoot, staticAliasCallsPath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", staticAliasCallsPath, err)
+	}
+	assertNamedBucketContains(t, staticAliasCallsPayload, "classes", "Factory")
+	assertBucketContainsFieldValue(t, staticAliasCallsPayload, "function_calls", "full_name", "AppFactory::instance()->createService().info")
+	assertBucketContainsFieldValue(t, staticAliasCallsPayload, "function_calls", "inferred_obj_type", "Service")
+
 	traitsPath := filepath.Join(repoRoot, "traits.php")
 	traitsPayload, err := engine.ParsePath(repoRoot, traitsPath, false, Options{})
 	if err != nil {
@@ -149,6 +158,15 @@ func TestDefaultEngineParsePathKotlinFixtures(t *testing.T) {
 	assertNamedBucketContains(t, classesPayload, "classes", "Point")
 	assertNamedBucketContains(t, classesPayload, "classes", "Companion")
 	assertFunctionWithClassContext(t, classesPayload, "create", "Person")
+
+	genericsPath := filepath.Join(repoRoot, "Generics.kt")
+	genericsPayload, err := engine.ParsePath(repoRoot, genericsPath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", genericsPath, err)
+	}
+	assertNamedBucketContains(t, genericsPayload, "classes", "Box")
+	assertBucketContainsFieldValue(t, genericsPayload, "function_calls", "full_name", "typedBox.unwrap().info")
+	assertBucketContainsFieldValue(t, genericsPayload, "function_calls", "full_name", "returnedBox.unwrap().info")
 }
 
 func TestDefaultEngineParsePathSwiftFixtures(t *testing.T) {

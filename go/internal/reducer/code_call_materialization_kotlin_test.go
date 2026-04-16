@@ -438,6 +438,104 @@ fun usage(): String {
 	}
 }
 
+func TestExtractCodeCallRowsResolvesKotlinGenericNullableReceiverCallsUsingInferredObjectType(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	callerPath := filepath.Join(repoRoot, "Usage.kt")
+
+	writeFile := func(path string, contents string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v, want nil", path, err)
+		}
+	}
+
+	writeFile(callerPath, `package comprehensive
+
+class Box<T>(private val value: T) {
+    fun unwrap(): T = value
+}
+
+class Service {
+    fun info(): String = "ok"
+}
+
+fun createBox(): Box<Service>? = Box(Service())
+
+fun usage(): String {
+    val typedBox: Box<Service>? = Box(Service())
+    val returnedBox = createBox()
+    return typedBox.unwrap().info() + returnedBox.unwrap().info()
+}
+`)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	callerPayload, err := engine.ParsePath(repoRoot, callerPath, false, parser.Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", callerPath, err)
+	}
+	if functions, ok := callerPayload["functions"].([]map[string]any); ok {
+		for _, function := range functions {
+			name, _ := function["name"].(string)
+			classContext, _ := function["class_context"].(string)
+			switch {
+			case name == "usage":
+				function["end_line"] = 17
+				function["uid"] = "content-entity:kotlin-usage"
+			case name == "unwrap" && classContext == "Box":
+				function["uid"] = "content-entity:kotlin-box-unwrap"
+			case name == "info" && classContext == "Service":
+				function["uid"] = "content-entity:kotlin-service-info"
+			}
+		}
+	}
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-kotlin",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repo-kotlin",
+				"relative_path":    "Usage.kt",
+				"parsed_file_data": callerPayload,
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2; rows=%#v; function_calls=%#v", len(rows), rows, callerPayload["function_calls"])
+	}
+
+	want := map[string]string{
+		"typedBox.unwrap":        "content-entity:kotlin-box-unwrap",
+		"typedBox.unwrap().info": "content-entity:kotlin-service-info",
+	}
+	for _, row := range rows {
+		calleeID, _ := row["callee_entity_id"].(string)
+		fullName, _ := row["full_name"].(string)
+		if expectedCalleeID, ok := want[fullName]; ok {
+			if calleeID != expectedCalleeID {
+				t.Fatalf("callee_entity_id = %#v, want %#v for full_name %#v", calleeID, expectedCalleeID, fullName)
+			}
+			delete(want, fullName)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing expected callee rows: %#v; rows=%#v", want, rows)
+	}
+}
+
 func TestExtractCodeCallRowsResolvesKotlinDirectCastReceiverCallsUsingInferredObjectType(t *testing.T) {
 	t.Parallel()
 

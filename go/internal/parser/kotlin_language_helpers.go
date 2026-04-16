@@ -7,19 +7,19 @@ import (
 )
 
 var kotlinPrimaryConstructorPropertyPattern = regexp.MustCompile(
-	`(?m)(?:^|,)\s*(?:(?:@[A-Za-z_]\w*(?:\([^)]*\))?\s+)*)*(?:(?:private|public|protected|internal|override|open|final|const|lateinit)\s+)*(?:val|var)\s+([A-Za-z_]\w*)\s*:\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)`,
+	`(?m)(?:^|,)\s*(?:(?:@[A-Za-z_]\w*(?:\([^)]*\))?\s+)*)*(?:(?:private|public|protected|internal|override|open|final|const|lateinit)\s+)*(?:val|var)\s+([A-Za-z_]\w*)\s*:\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>]+>)?\??)`,
 )
 
 var (
 	kotlinFunctionReturnPattern = regexp.MustCompile(
-		`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\([^)]*\)\s*:\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)`,
+		`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\([^)]*\)\s*:\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>]+>)?\??)`,
 	)
 	kotlinSuspendFunctionPattern    = regexp.MustCompile(`\bsuspend\s+fun\b`)
 	kotlinFunctionCallAssignPattern = regexp.MustCompile(
 		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\([^()]*\)\s*$`,
 	)
 	kotlinCastAssignPattern = regexp.MustCompile(
-		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*.+?\s+as\??\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\??)\s*$`,
+		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*.+?\s+as\??\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>]+>)?\??)\s*$`,
 	)
 	kotlinLazyDelegatedAssignPattern = regexp.MustCompile(
 		`^\s*(?:val|var)\s+([A-Za-z_]\w*)\s+by\s+lazy(?:\s*\([^)]*\))?\s*\{\s*(.+?)\s*\}\s*$`,
@@ -57,7 +57,7 @@ func kotlinPrimaryConstructorPropertyTypes(line string) map[string]string {
 			continue
 		}
 		name := strings.TrimSpace(match[1])
-		typ := strings.TrimSpace(match[2])
+		typ := kotlinCanonicalTypeReference(match[2])
 		if name == "" || typ == "" {
 			continue
 		}
@@ -74,7 +74,7 @@ func kotlinFunctionDeclarationReturnType(line string) (string, string, string) {
 	if len(matches) != 4 {
 		return "", "", ""
 	}
-	return strings.TrimSpace(matches[1]), strings.TrimSpace(matches[2]), strings.TrimSpace(matches[3])
+	return strings.TrimSpace(matches[1]), strings.TrimSpace(matches[2]), kotlinCanonicalTypeReference(matches[3])
 }
 
 func kotlinFunctionIsSuspend(line string) bool {
@@ -90,7 +90,7 @@ func kotlinTypedDeclarationType(line string) string {
 	if len(matches) != 3 {
 		return ""
 	}
-	return strings.TrimSpace(matches[2])
+	return kotlinCanonicalTypeReference(matches[2])
 }
 
 func kotlinInferAssignedVariableType(
@@ -99,6 +99,7 @@ func kotlinInferAssignedVariableType(
 	functionContext string,
 	classContext string,
 	packageName string,
+	classTypeParameters map[string][]string,
 	localVariableTypes map[string]map[string]string,
 	classPropertyTypes map[string]map[string]string,
 	functionReturnTypes map[string]string,
@@ -114,7 +115,7 @@ func kotlinInferAssignedVariableType(
 				return ""
 			}
 			if kotlinLooksLikeTypeName(assignedType) {
-				return assignedType
+				return kotlinCanonicalTypeReference(assignedType)
 			}
 			return kotlinInferFunctionCallReturnType(
 				assignedType,
@@ -123,6 +124,7 @@ func kotlinInferAssignedVariableType(
 				classContext,
 				packageName,
 				functionReturnTypes,
+				classTypeParameters,
 			)
 		}
 	case kotlinFunctionCallAssignPattern.MatchString(trimmed):
@@ -135,12 +137,13 @@ func kotlinInferAssignedVariableType(
 				classContext,
 				packageName,
 				functionReturnTypes,
+				classTypeParameters,
 			)
 		}
 	case kotlinCastAssignPattern.MatchString(trimmed):
 		assignMatches := kotlinCastAssignPattern.FindStringSubmatch(trimmed)
 		if len(assignMatches) == 3 && assignMatches[1] == name {
-			return strings.TrimSuffix(strings.TrimSpace(assignMatches[2]), "?")
+			return kotlinCanonicalTypeReference(assignMatches[2])
 		}
 	case kotlinStringAssignPattern.MatchString(trimmed):
 		assignMatches := kotlinStringAssignPattern.FindStringSubmatch(trimmed)
@@ -157,6 +160,7 @@ func kotlinInferAssignedVariableType(
 				classContext,
 				packageName,
 				functionReturnTypes,
+				classTypeParameters,
 			)
 		}
 	case kotlinLazyDelegatedAssignPattern.MatchString(trimmed):
@@ -169,6 +173,7 @@ func kotlinInferAssignedVariableType(
 				classContext,
 				packageName,
 				functionReturnTypes,
+				classTypeParameters,
 			)
 		}
 	}
@@ -252,6 +257,7 @@ func kotlinInferFunctionCallReturnType(
 	currentClass string,
 	packageName string,
 	functionReturnTypes map[string]string,
+	classTypeParameters map[string][]string,
 ) string {
 	callExpression = strings.TrimSpace(callExpression)
 	if callExpression == "" {
@@ -266,6 +272,7 @@ func kotlinInferFunctionCallReturnType(
 			currentClass,
 			packageName,
 			functionReturnTypes,
+			classTypeParameters,
 		)
 	}
 
@@ -276,6 +283,7 @@ func kotlinInferFunctionCallReturnType(
 		currentClass,
 		packageName,
 		functionReturnTypes,
+		classTypeParameters,
 	)
 }
 
@@ -286,6 +294,7 @@ func kotlinInferMethodCallReturnType(
 	currentClass string,
 	packageName string,
 	functionReturnTypes map[string]string,
+	classTypeParameters map[string][]string,
 ) string {
 	callExpression = strings.TrimSpace(callExpression)
 	if callExpression == "" {
@@ -320,7 +329,7 @@ func kotlinInferMethodCallReturnType(
 
 	if receiver == "" {
 		if kotlinLooksLikeTypeName(name) {
-			return name
+			return kotlinCanonicalTypeReference(name)
 		}
 		return kotlinLookupFunctionReturnType(functionReturnTypes, packageName, currentClass, name)
 	}
@@ -332,11 +341,16 @@ func kotlinInferMethodCallReturnType(
 		currentClass,
 		packageName,
 		functionReturnTypes,
+		classTypeParameters,
 	)
 	if inferredReceiverType == "" {
 		return ""
 	}
-	return kotlinLookupFunctionReturnType(functionReturnTypes, packageName, inferredReceiverType, name)
+	return kotlinResolveTypeReference(
+		kotlinLookupFunctionReturnType(functionReturnTypes, packageName, kotlinBaseTypeName(inferredReceiverType), name),
+		inferredReceiverType,
+		classTypeParameters,
+	)
 }
 
 func kotlinInferReceiverSegmentType(
@@ -346,6 +360,7 @@ func kotlinInferReceiverSegmentType(
 	currentClass string,
 	packageName string,
 	functionReturnTypes map[string]string,
+	classTypeParameters map[string][]string,
 ) string {
 	segment = strings.TrimSpace(segment)
 	if segment == "" {
@@ -362,21 +377,44 @@ func kotlinInferReceiverSegmentType(
 			currentClass,
 			packageName,
 			functionReturnTypes,
+			classTypeParameters,
 		)
 	}
 
 	if inferredType := strings.TrimSpace(variableTypes[segment]); inferredType != "" {
-		return inferredType
+		return kotlinCanonicalTypeReference(inferredType)
 	}
 	if currentClass != "" {
 		if inferredType := strings.TrimSpace(classPropertyTypes[currentClass][segment]); inferredType != "" {
-			return inferredType
+			return kotlinCanonicalTypeReference(inferredType)
 		}
 	}
 	if kotlinLooksLikeTypeName(segment) {
-		return segment
+		return kotlinCanonicalTypeReference(segment)
 	}
 	return ""
+}
+
+func kotlinInferReceiverMethodReturnType(
+	receiverType string,
+	methodName string,
+	currentClass string,
+	packageName string,
+	functionReturnTypes map[string]string,
+	classTypeParameters map[string][]string,
+) string {
+	receiverType = kotlinCanonicalTypeReference(receiverType)
+	currentClass = strings.TrimSpace(currentClass)
+	methodName = strings.TrimSpace(methodName)
+	if receiverType == "" || methodName == "" {
+		return ""
+	}
+
+	returnType := kotlinLookupFunctionReturnType(functionReturnTypes, packageName, currentClass, methodName)
+	if returnType == "" {
+		return ""
+	}
+	return kotlinResolveTypeReference(returnType, receiverType, classTypeParameters)
 }
 
 func kotlinImportAlias(name string) string {
