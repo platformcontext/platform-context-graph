@@ -145,8 +145,8 @@ func TestBuildCanonicalMaterializationExtractsFiles(t *testing.T) {
 	}
 
 	f0 := result.Files[0]
-	if f0.Path != "src/main.py" {
-		t.Errorf("[0].Path = %q, want %q", f0.Path, "src/main.py")
+	if f0.Path != "/repos/my-project/src/main.py" {
+		t.Errorf("[0].Path = %q, want %q", f0.Path, "/repos/my-project/src/main.py")
 	}
 	if f0.RelativePath != "src/main.py" {
 		t.Errorf("[0].RelativePath = %q", f0.RelativePath)
@@ -157,19 +157,19 @@ func TestBuildCanonicalMaterializationExtractsFiles(t *testing.T) {
 	if f0.Language != "python" {
 		t.Errorf("[0].Language = %q", f0.Language)
 	}
-	if f0.DirPath != "src" {
-		t.Errorf("[0].DirPath = %q, want %q", f0.DirPath, "src")
+	if f0.DirPath != "/repos/my-project/src" {
+		t.Errorf("[0].DirPath = %q, want %q", f0.DirPath, "/repos/my-project/src")
 	}
 	if f0.RepoID != "repo-abc" {
 		t.Errorf("[0].RepoID = %q", f0.RepoID)
 	}
 
 	f1 := result.Files[1]
-	if f1.Path != "src/api/handler.go" {
-		t.Errorf("[1].Path = %q, want %q", f1.Path, "src/api/handler.go")
+	if f1.Path != "/repos/my-project/src/api/handler.go" {
+		t.Errorf("[1].Path = %q, want %q", f1.Path, "/repos/my-project/src/api/handler.go")
 	}
-	if f1.DirPath != "src/api" {
-		t.Errorf("[1].DirPath = %q, want %q", f1.DirPath, "src/api")
+	if f1.DirPath != "/repos/my-project/src/api" {
+		t.Errorf("[1].DirPath = %q, want %q", f1.DirPath, "/repos/my-project/src/api")
 	}
 }
 
@@ -218,11 +218,11 @@ func TestBuildCanonicalMaterializationBuildsDirectoryChain(t *testing.T) {
 	}
 
 	d0 := result.Directories[0]
-	if d0.Path != "src" {
-		t.Errorf("[0].Path = %q, want %q", d0.Path, "src")
+	if d0.Path != "/repos/my-project/src" {
+		t.Errorf("[0].Path = %q, want %q", d0.Path, "/repos/my-project/src")
 	}
-	if d0.ParentPath != "." {
-		t.Errorf("[0].ParentPath = %q, want %q", d0.ParentPath, ".")
+	if d0.ParentPath != "/repos/my-project" {
+		t.Errorf("[0].ParentPath = %q, want %q", d0.ParentPath, "/repos/my-project")
 	}
 	if d0.Name != "src" {
 		t.Errorf("[0].Name = %q, want %q", d0.Name, "src")
@@ -235,22 +235,22 @@ func TestBuildCanonicalMaterializationBuildsDirectoryChain(t *testing.T) {
 	}
 
 	d1 := result.Directories[1]
-	if d1.Path != "src/api" {
-		t.Errorf("[1].Path = %q, want %q", d1.Path, "src/api")
+	if d1.Path != "/repos/my-project/src/api" {
+		t.Errorf("[1].Path = %q, want %q", d1.Path, "/repos/my-project/src/api")
 	}
-	if d1.ParentPath != "src" {
-		t.Errorf("[1].ParentPath = %q, want %q", d1.ParentPath, "src")
+	if d1.ParentPath != "/repos/my-project/src" {
+		t.Errorf("[1].ParentPath = %q, want %q", d1.ParentPath, "/repos/my-project/src")
 	}
 	if d1.Depth != 1 {
 		t.Errorf("[1].Depth = %d, want 1", d1.Depth)
 	}
 
 	d2 := result.Directories[2]
-	if d2.Path != "src/api/handlers" {
-		t.Errorf("[2].Path = %q, want %q", d2.Path, "src/api/handlers")
+	if d2.Path != "/repos/my-project/src/api/handlers" {
+		t.Errorf("[2].Path = %q, want %q", d2.Path, "/repos/my-project/src/api/handlers")
 	}
-	if d2.ParentPath != "src/api" {
-		t.Errorf("[2].ParentPath = %q, want %q", d2.ParentPath, "src/api")
+	if d2.ParentPath != "/repos/my-project/src/api" {
+		t.Errorf("[2].ParentPath = %q, want %q", d2.ParentPath, "/repos/my-project/src/api")
 	}
 	if d2.Depth != 2 {
 		t.Errorf("[2].Depth = %d, want 2", d2.Depth)
@@ -547,8 +547,8 @@ func TestBuildCanonicalMaterializationExtractsImports(t *testing.T) {
 		t.Fatalf("len(Imports) = %d, want 1", len(result.Imports))
 	}
 	imp := result.Imports[0]
-	if imp.FilePath != "src/client.py" {
-		t.Errorf("FilePath = %q", imp.FilePath)
+	if imp.FilePath != "/repos/my-project/src/client.py" {
+		t.Errorf("FilePath = %q, want %q", imp.FilePath, "/repos/my-project/src/client.py")
 	}
 	if imp.ModuleName != "requests" {
 		t.Errorf("ModuleName = %q", imp.ModuleName)
@@ -604,8 +604,8 @@ func TestBuildCanonicalMaterializationExtractsParameters(t *testing.T) {
 	if p.FunctionName != "handleRequest" {
 		t.Errorf("FunctionName = %q", p.FunctionName)
 	}
-	if p.FilePath != "src/handler.go" {
-		t.Errorf("FilePath = %q", p.FilePath)
+	if p.FilePath != "/repos/my-project/src/handler.go" {
+		t.Errorf("FilePath = %q, want %q", p.FilePath, "/repos/my-project/src/handler.go")
 	}
 	if p.FunctionLine != 10 {
 		t.Errorf("FunctionLine = %d", p.FunctionLine)
@@ -652,8 +652,8 @@ func TestBuildCanonicalMaterializationExtractsClassMembers(t *testing.T) {
 	if cm.FunctionName != "get_user" {
 		t.Errorf("FunctionName = %q", cm.FunctionName)
 	}
-	if cm.FilePath != "src/service.py" {
-		t.Errorf("FilePath = %q", cm.FilePath)
+	if cm.FilePath != "/repos/my-project/src/service.py" {
+		t.Errorf("FilePath = %q, want %q", cm.FilePath, "/repos/my-project/src/service.py")
 	}
 	if cm.FunctionLine != 25 {
 		t.Errorf("FunctionLine = %d", cm.FunctionLine)
@@ -700,8 +700,8 @@ func TestBuildCanonicalMaterializationExtractsNestedFunctions(t *testing.T) {
 	if nf.InnerName != "validateInput" {
 		t.Errorf("InnerName = %q", nf.InnerName)
 	}
-	if nf.FilePath != "src/handler.go" {
-		t.Errorf("FilePath = %q", nf.FilePath)
+	if nf.FilePath != "/repos/my-project/src/handler.go" {
+		t.Errorf("FilePath = %q, want %q", nf.FilePath, "/repos/my-project/src/handler.go")
 	}
 	if nf.InnerLine != 15 {
 		t.Errorf("InnerLine = %d", nf.InnerLine)

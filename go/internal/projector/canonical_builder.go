@@ -45,13 +45,13 @@ func buildCanonicalMaterialization(
 	repoPath := mat.RepoPath
 
 	// Extract files.
-	mat.Files = extractFiles(inputFacts, repoID)
+	mat.Files = extractFiles(inputFacts, repoID, repoPath)
 
 	// Build directory chain from file paths.
 	mat.Directories = buildDirectoryChain(mat.Files, repoPath, repoID)
 
 	// Extract entities.
-	mat.Entities = extractEntities(inputFacts, repoID)
+	mat.Entities = extractEntities(inputFacts, repoID, repoPath)
 
 	// Extract modules, imports, parameters, class members, nested functions
 	// from all non-tombstoned facts.
@@ -103,9 +103,10 @@ func extractRepository(envelopes []facts.Envelope) *RepositoryRow {
 }
 
 // extractFiles builds FileRow entries from file fact envelopes, skipping
-// tombstones. The canonical path (used as the Neo4j MERGE key) is the
-// relative_path so it matches entity file_path references in the graph.
-func extractFiles(envelopes []facts.Envelope, repoID string) []FileRow {
+// tombstones. The canonical path (used as the Neo4j MERGE key) is
+// repoPath/relative_path — a globally unique path that prevents cross-repo
+// constraint collisions. The relative_path is preserved separately for display.
+func extractFiles(envelopes []facts.Envelope, repoID, repoPath string) []FileRow {
 	fileFacts := FilterFileFacts(envelopes)
 	var rows []FileRow
 
@@ -120,12 +121,13 @@ func extractFiles(envelopes []facts.Envelope, repoID string) []FileRow {
 			continue
 		}
 
+		fullPath := qualifyPath(repoPath, relativePath)
 		name := path.Base(relativePath)
 		language, _ := payloadString(p, "language")
-		dirPath := path.Dir(relativePath)
+		dirPath := path.Dir(fullPath)
 
 		rows = append(rows, FileRow{
-			Path:         relativePath,
+			Path:         fullPath,
 			RelativePath: relativePath,
 			Name:         name,
 			Language:     language,
@@ -190,7 +192,9 @@ func buildDirectoryChain(files []FileRow, repoPath string, repoID string) []Dire
 
 // extractEntities builds EntityRow entries from ParsedEntityObserved fact
 // envelopes. Entities with unmapped types or tombstoned facts are skipped.
-func extractEntities(envelopes []facts.Envelope, repoID string) []EntityRow {
+// FilePath is set to the repo-qualified full path (repoPath/relative_path) so
+// it matches File.path and avoids cross-repo constraint collisions.
+func extractEntities(envelopes []facts.Envelope, repoID, repoPath string) []EntityRow {
 	entityFacts := FilterEntityFacts(envelopes)
 	var rows []EntityRow
 
@@ -227,13 +231,14 @@ func extractEntities(envelopes []facts.Envelope, repoID string) []EntityRow {
 			entityID = content.CanonicalEntityID(entityRepoID, relativePath, entityType, entityName, startLine)
 		}
 
+		fullPath := qualifyPath(repoPath, relativePath)
 		metadata := extractEntityMetadata(p)
 
 		rows = append(rows, EntityRow{
 			EntityID:     entityID,
 			Label:        label,
 			EntityName:   entityName,
-			FilePath:     relativePath,
+			FilePath:     fullPath,
 			RelativePath: relativePath,
 			StartLine:    startLine,
 			EndLine:      endLine,
@@ -263,9 +268,11 @@ func extractEntityMetadata(payload map[string]any) map[string]any {
 }
 
 // extractRelationships scans all non-tombstoned facts for module, import,
-// parameter, class member, and nested function payload patterns.
+// parameter, class member, and nested function payload patterns. All file
+// paths are repo-qualified via mat.RepoPath to match canonical File/Entity paths.
 func extractRelationships(envelopes []facts.Envelope, mat *CanonicalMaterialization) {
 	moduleSeen := make(map[string]struct{})
+	repoPath := mat.RepoPath
 
 	for i := range envelopes {
 		if envelopes[i].IsTombstone {
@@ -296,9 +303,10 @@ func extractRelationships(envelopes []facts.Envelope, mat *CanonicalMaterializat
 				}
 			}
 
-			// Import row.
-			filePath, _ := payloadString(p, "relative_path")
-			if filePath == "" {
+			// Import row — qualify relative_path with repoPath.
+			relPath, _ := payloadString(p, "relative_path")
+			filePath := qualifyPath(repoPath, relPath)
+			if relPath == "" {
 				filePath = envelopes[i].SourceRef.SourceURI
 			}
 			importedName, _ := payloadString(p, "imported_name")
@@ -323,12 +331,12 @@ func extractRelationships(envelopes []facts.Envelope, mat *CanonicalMaterializat
 		paramName, hasParam := payloadString(p, "param_name")
 		if hasParam {
 			funcName, _ := payloadString(p, "function_name")
-			filePath, _ := payloadString(p, "relative_path")
+			relPath, _ := payloadString(p, "relative_path")
 			funcLine, _ := payloadInt(p, "function_line")
 
 			mat.Parameters = append(mat.Parameters, ParameterRow{
 				ParamName:    paramName,
-				FilePath:     filePath,
+				FilePath:     qualifyPath(repoPath, relPath),
 				FunctionName: funcName,
 				FunctionLine: funcLine,
 			})
@@ -338,13 +346,13 @@ func extractRelationships(envelopes []facts.Envelope, mat *CanonicalMaterializat
 		className, hasClass := payloadString(p, "class_name")
 		funcName, hasFunc := payloadString(p, "function_name")
 		if hasClass && hasFunc && !hasParam {
-			filePath, _ := payloadString(p, "relative_path")
+			relPath, _ := payloadString(p, "relative_path")
 			funcLine, _ := payloadInt(p, "function_line")
 
 			mat.ClassMembers = append(mat.ClassMembers, ClassMemberRow{
 				ClassName:    className,
 				FunctionName: funcName,
-				FilePath:     filePath,
+				FilePath:     qualifyPath(repoPath, relPath),
 				FunctionLine: funcLine,
 			})
 		}
@@ -353,15 +361,27 @@ func extractRelationships(envelopes []facts.Envelope, mat *CanonicalMaterializat
 		outerName, hasOuter := payloadString(p, "outer_name")
 		innerName, hasInner := payloadString(p, "inner_name")
 		if hasOuter && hasInner {
-			filePath, _ := payloadString(p, "relative_path")
+			relPath, _ := payloadString(p, "relative_path")
 			innerLine, _ := payloadInt(p, "inner_line")
 
 			mat.NestedFuncs = append(mat.NestedFuncs, NestedFunctionRow{
 				OuterName: outerName,
 				InnerName: innerName,
-				FilePath:  filePath,
+				FilePath:  qualifyPath(repoPath, relPath),
 				InnerLine: innerLine,
 			})
 		}
 	}
+}
+
+// qualifyPath builds a globally unique canonical path by joining repoPath and
+// relativePath. If either component is empty the other is returned as-is.
+func qualifyPath(repoPath, relativePath string) string {
+	if repoPath == "" {
+		return relativePath
+	}
+	if relativePath == "" {
+		return repoPath
+	}
+	return repoPath + "/" + relativePath
 }

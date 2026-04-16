@@ -36,7 +36,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	payload := basePayload(path, "kotlin", isDependency)
 	payload["interfaces"] = []map[string]any{}
 
-	siblingFunctionReturnTypes, err := kotlinCollectSiblingFunctionReturnTypes(path, packageName)
+	siblingFunctionReturnTypes, err := kotlinCollectSiblingFunctionReturnTypes(path)
 	if err != nil {
 		return nil, err
 	}

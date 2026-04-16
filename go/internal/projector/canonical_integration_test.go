@@ -347,7 +347,7 @@ func TestCanonicalProjectionDirectoryChainOrdering(t *testing.T) {
 		t.Errorf("mat.Directories[2].Depth = %d, want %d", got, want)
 	}
 
-	if got, want := mat.Directories[0].ParentPath, "."; got != want {
+	if got, want := mat.Directories[0].ParentPath, "org/test-repo"; got != want {
 		t.Errorf("mat.Directories[0].ParentPath = %q, want %q", got, want)
 	}
 	if got, want := mat.Directories[1].ParentPath, mat.Directories[0].Path; got != want {
