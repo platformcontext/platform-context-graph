@@ -1,0 +1,33 @@
+go/internal/projector/canonical_builder.go
+  1ca5ee6ce936a402 48,54,106-109,124,127,130,195-197,234,241,271-272,275,306-309,334,339,349,355,364,370,376-386
+go/internal/projector/canonical_builder_test.go
+  1ca5ee6ce936a402 148-149,160-161,168-169,171-172,221-222,224-225,238-239,241-242,249-250,252-253,550-551,607-608,655-656,703-704
+go/internal/projector/canonical_integration_test.go
+  1ca5ee6ce936a402 350
+go/internal/parser/kotlin_language.go
+  1ca5ee6ce936a402 39
+go/internal/parser/kotlin_repository_returns.go
+  1ca5ee6ce936a402 12,49,68,76,79,84,98,103,147
+docs/docs/languages/kotlin.md
+  1ca5ee6ce936a402 28,37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "8bfc81c5ffacd23091633b78fad48ea552766ebe",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 80,
+      "total_deletions": 300,
+      "accepted_lines": 80,
+      "overriden_lines": 0
+    }
+  }
+}
