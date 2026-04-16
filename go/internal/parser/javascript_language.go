@@ -40,17 +40,18 @@ func (e *Engine) parseJavaScriptLike(
 	}
 	scope := options.normalizedVariableScope()
 	root := tree.RootNode()
+	reactAliases := javaScriptReactAliases(root, source, outputLanguage)
 
 	walkNamed(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
 		case "function_declaration":
 			nameNode := node.ChildByFieldName("name")
 			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
-			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage)
+			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage, reactAliases)
 		case "generator_function_declaration":
 			nameNode := node.ChildByFieldName("name")
 			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
-			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage)
+			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage, reactAliases)
 		case "method_definition", "method_signature":
 			nameNode := node.ChildByFieldName("name")
 			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
@@ -71,7 +72,7 @@ func (e *Engine) parseJavaScriptLike(
 				classItem["type_parameters"] = javaScriptTypeParameters(node, source)
 			}
 			appendBucket(payload, "classes", classItem)
-			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage)
+			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage, reactAliases)
 		case "interface_declaration":
 			if outputLanguage == "javascript" {
 				return
@@ -125,11 +126,11 @@ func (e *Engine) parseJavaScriptLike(
 			valueNode := node.ChildByFieldName("value")
 			if isJavaScriptFunctionValue(valueNode) {
 				appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
-				maybeAppendJavaScriptComponent(payload, valueNode, nameNode, source, outputLanguage)
+				maybeAppendJavaScriptComponent(payload, valueNode, nameNode, source, outputLanguage, reactAliases)
 				return
 			}
-			if outputLanguage == "tsx" && javaScriptComponentWrapperKind(valueNode, source) != "" {
-				maybeAppendJavaScriptComponent(payload, valueNode, nameNode, source, outputLanguage)
+			if outputLanguage == "tsx" && javaScriptComponentWrapperKind(valueNode, source, reactAliases) != "" {
+				maybeAppendJavaScriptComponent(payload, valueNode, nameNode, source, outputLanguage, reactAliases)
 			}
 			if scope == "module" && javaScriptInsideFunction(node) {
 				return
@@ -146,7 +147,7 @@ func (e *Engine) parseJavaScriptLike(
 				"lang":        outputLanguage,
 			}
 			if outputLanguage == "tsx" {
-				if assertion := javaScriptComponentTypeAssertion(valueNode, source); assertion != "" {
+				if assertion := javaScriptComponentTypeAssertion(valueNode, source, reactAliases); assertion != "" {
 					item["component_type_assertion"] = assertion
 				}
 			}

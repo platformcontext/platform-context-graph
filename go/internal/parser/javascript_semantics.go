@@ -28,6 +28,7 @@ func maybeAppendJavaScriptComponent(
 	nameNode *tree_sitter.Node,
 	source []byte,
 	outputLanguage string,
+	reactAliases map[string]string,
 ) {
 	name := strings.TrimSpace(nodeText(nameNode, source))
 	if !isPascalIdentifier(name) {
@@ -46,14 +47,14 @@ func maybeAppendJavaScriptComponent(
 		item["jsx_fragment_shorthand"] = true
 	}
 	if outputLanguage == "tsx" {
-		if wrapperKind := javaScriptComponentWrapperKind(node, source); wrapperKind != "" {
+		if wrapperKind := javaScriptComponentWrapperKind(node, source, reactAliases); wrapperKind != "" {
 			item["component_wrapper_kind"] = wrapperKind
 		}
 	}
 	appendBucket(payload, "components", item)
 }
 
-func javaScriptComponentWrapperKind(node *tree_sitter.Node, source []byte) string {
+func javaScriptComponentWrapperKind(node *tree_sitter.Node, source []byte, reactAliases map[string]string) string {
 	if node == nil {
 		return ""
 	}
@@ -63,19 +64,94 @@ func javaScriptComponentWrapperKind(node *tree_sitter.Node, source []byte) strin
 		children := node.NamedChildren(cursor)
 		cursor.Close()
 		for i := range children {
-			if wrapper := javaScriptComponentWrapperKind(&children[i], source); wrapper != "" {
+			if wrapper := javaScriptComponentWrapperKind(&children[i], source, reactAliases); wrapper != "" {
 				return wrapper
 			}
 		}
 	case "call_expression":
 		functionNode := node.ChildByFieldName("function")
-		name := strings.TrimSpace(javaScriptCallName(functionNode, source))
+		name := javaScriptNormalizeReactAlias(strings.TrimSpace(javaScriptCallName(functionNode, source)), reactAliases)
 		switch name {
 		case "memo", "forwardRef", "lazy":
 			return name
 		}
 	}
 	return ""
+}
+
+func javaScriptComponentTypeAssertion(node *tree_sitter.Node, source []byte, reactAliases map[string]string) string {
+	if node == nil {
+		return ""
+	}
+	switch node.Kind() {
+	case "as_expression", "type_assertion":
+		if typeName := javaScriptAssertionTypeName(node.ChildByFieldName("type"), source); typeName != "" {
+			return javaScriptNormalizeReactAlias(typeName, reactAliases)
+		}
+		cursor := node.Walk()
+		children := node.NamedChildren(cursor)
+		cursor.Close()
+		if len(children) >= 2 {
+			return javaScriptNormalizeReactAlias(javaScriptAssertionTypeName(&children[1], source), reactAliases)
+		}
+	case "parenthesized_expression":
+		cursor := node.Walk()
+		children := node.NamedChildren(cursor)
+		cursor.Close()
+		for i := range children {
+			child := children[i]
+			if typeName := javaScriptComponentTypeAssertion(&child, source, reactAliases); typeName != "" {
+				return typeName
+			}
+		}
+	}
+	return ""
+}
+
+func javaScriptNormalizeReactAlias(name string, reactAliases map[string]string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || len(reactAliases) == 0 {
+		return name
+	}
+	if normalized, ok := reactAliases[name]; ok && normalized != "" {
+		return normalized
+	}
+	return name
+}
+
+func javaScriptReactAliases(root *tree_sitter.Node, source []byte, outputLanguage string) map[string]string {
+	if root == nil || outputLanguage != "tsx" {
+		return nil
+	}
+
+	reactAliases := map[string]string{}
+	walkNamed(root, func(node *tree_sitter.Node) {
+		if node.Kind() != "import_statement" {
+			return
+		}
+		for _, item := range javaScriptImportEntries(node, source, outputLanguage) {
+			sourceName, _ := item["source"].(string)
+			if sourceName != "react" {
+				continue
+			}
+			alias, _ := item["alias"].(string)
+			if alias == "" {
+				continue
+			}
+			name, _ := item["name"].(string)
+			if name == "" || name == "*" || name == "default" {
+				continue
+			}
+			switch name {
+			case "ComponentType", "FC", "FunctionComponent", "memo", "forwardRef", "lazy":
+				reactAliases[alias] = name
+			}
+		}
+	})
+	if len(reactAliases) == 0 {
+		return nil
+	}
+	return reactAliases
 }
 
 func javaScriptLooksLikeComponent(node *tree_sitter.Node, source []byte, outputLanguage string) bool {
@@ -287,35 +363,6 @@ func javaScriptContainsJSXFragmentShorthand(node *tree_sitter.Node) bool {
 		}
 	}
 	return false
-}
-
-func javaScriptComponentTypeAssertion(node *tree_sitter.Node, source []byte) string {
-	if node == nil {
-		return ""
-	}
-	switch node.Kind() {
-	case "as_expression", "type_assertion":
-		if typeName := javaScriptAssertionTypeName(node.ChildByFieldName("type"), source); typeName != "" {
-			return typeName
-		}
-		cursor := node.Walk()
-		children := node.NamedChildren(cursor)
-		cursor.Close()
-		if len(children) >= 2 {
-			return javaScriptAssertionTypeName(&children[1], source)
-		}
-	case "parenthesized_expression":
-		cursor := node.Walk()
-		children := node.NamedChildren(cursor)
-		cursor.Close()
-		for i := range children {
-			child := children[i]
-			if typeName := javaScriptComponentTypeAssertion(&child, source); typeName != "" {
-				return typeName
-			}
-		}
-	}
-	return ""
 }
 
 func javaScriptAssertionTypeName(node *tree_sitter.Node, source []byte) string {

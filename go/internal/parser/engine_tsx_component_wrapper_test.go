@@ -93,3 +93,31 @@ const LazyButton = lazy(() => import("./Button"));
 	lazyButton := findNamedBucketItem(t, got, "components", "LazyButton")
 	assertStringFieldValue(t, lazyButton, "component_wrapper_kind", "lazy")
 }
+
+func TestDefaultEngineParsePathTSXResolvesAliasedMemoWrapper(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "src", "Screen.tsx")
+	writeTestFile(
+		t,
+		filePath,
+		`import { memo as wrap } from "react";
+
+const WrappedButton = wrap(() => <button type="button" />);
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	wrappedButton := findNamedBucketItem(t, got, "components", "WrappedButton")
+	assertStringFieldValue(t, wrappedButton, "component_wrapper_kind", "memo")
+}
