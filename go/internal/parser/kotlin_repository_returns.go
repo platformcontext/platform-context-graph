@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -41,28 +41,18 @@ func kotlinCollectSiblingFunctionReturnTypes(currentPath string) (map[string]str
 		candidates[key] = candidate
 	}
 
-	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || filepath.Ext(path) != ".kt" {
-			return nil
-		}
-		if absPath, err := filepath.Abs(path); err == nil && absPath == currentAbs {
-			return nil
-		}
-
-		functionReturnTypes, err := kotlinCollectFunctionReturnTypesFromFile(path)
+	roots := []string{root}
+	if parent := filepath.Dir(root); parent != root {
+		roots = append(roots, parent)
+	}
+	for _, directory := range roots {
+		functionReturnTypes, err := kotlinCollectFunctionReturnTypesFromDirectory(directory, currentAbs)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for key, returnType := range functionReturnTypes {
 			record(key, returnType)
 		}
-		return nil
-	})
-	if walkErr != nil {
-		return nil, walkErr
 	}
 
 	results := make(map[string]string, len(candidates))
@@ -71,6 +61,36 @@ func kotlinCollectSiblingFunctionReturnTypes(currentPath string) (map[string]str
 			continue
 		}
 		results[key] = candidate.value
+	}
+	return results, nil
+}
+
+func kotlinCollectFunctionReturnTypesFromDirectory(directory string, currentAbs string) (map[string]string, error) {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make(map[string]string)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".kt" {
+			continue
+		}
+		path := filepath.Join(directory, entry.Name())
+		if absPath, err := filepath.Abs(path); err == nil && absPath == currentAbs {
+			continue
+		}
+
+		functionReturnTypes, err := kotlinCollectFunctionReturnTypesFromFile(path)
+		if err != nil {
+			return nil, err
+		}
+		for key, returnType := range functionReturnTypes {
+			if _, ok := results[key]; ok {
+				continue
+			}
+			results[key] = returnType
+		}
 	}
 	return results, nil
 }
