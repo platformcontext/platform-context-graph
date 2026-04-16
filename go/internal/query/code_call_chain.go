@@ -46,8 +46,12 @@ func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
 
 	chains := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
+		chain := row["chain"]
+		if nodes, ok := chain.([]any); ok {
+			chain = attachCallChainNodeSemantics(nodes)
+		}
 		chains = append(chains, map[string]any{
-			"chain": row["chain"],
+			"chain": chain,
 			"depth": IntVal(row, "depth"),
 		})
 	}
@@ -94,9 +98,33 @@ func buildCallChainCypher(req callChainRequest) (string, map[string]any) {
 		MATCH path = shortestPath(
 			(start)-[:CALLS*1..` + fmt.Sprintf("%d", req.MaxDepth) + `]->(end)
 		)
-		RETURN [node IN nodes(path) | {id: node.id, name: node.name, labels: labels(node)}] as chain,
+		RETURN [node IN nodes(path) | {id: node.id, name: node.name, labels: labels(node), language: node.language, docstring: node.docstring, method_kind: node.method_kind}] as chain,
 		       length(path) as depth
 		LIMIT 5
 	`
 	return cypher, params
+}
+
+func attachCallChainNodeSemantics(nodes []any) []any {
+	if len(nodes) == 0 {
+		return nodes
+	}
+
+	attached := make([]any, 0, len(nodes))
+	for _, node := range nodes {
+		nodeMap, ok := node.(map[string]any)
+		if !ok {
+			attached = append(attached, node)
+			continue
+		}
+
+		normalized := cloneQueryAnyMap(nodeMap)
+		if metadata := graphResultMetadata(normalized); len(metadata) > 0 {
+			normalized["metadata"] = metadata
+			attachSemanticSummary(normalized)
+		}
+		attached = append(attached, normalized)
+	}
+
+	return attached
 }
