@@ -122,6 +122,34 @@ interface Response {
 	}
 }
 
+func TestDefaultEngineParsePathTypeScriptCapturesGenericInterfaceTypeParameters(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "src", "interfaces.ts")
+	writeTestFile(
+		t,
+		filePath,
+		`interface Box<T> {
+  value: T;
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	boxInterface := findNamedBucketItem(t, got, "interfaces", "Box")
+	assertStringSliceFieldValue(t, boxInterface, "type_parameters", []string{"T"})
+}
+
 func TestDefaultEngineParsePathTypeScriptCapturesWrappedConditionalTypeSemantics(t *testing.T) {
 	t.Parallel()
 

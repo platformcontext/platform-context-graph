@@ -81,12 +81,16 @@ func (e *Engine) parseJavaScriptLike(
 			if strings.TrimSpace(name) == "" {
 				return
 			}
-			appendBucket(payload, "interfaces", map[string]any{
+			item := map[string]any{
 				"name":        name,
 				"line_number": nodeLine(nameNode),
 				"end_line":    nodeEndLine(node),
 				"lang":        outputLanguage,
-			})
+			}
+			if outputLanguage != "javascript" {
+				item["type_parameters"] = javaScriptTypeParameters(node, source)
+			}
+			appendBucket(payload, "interfaces", item)
 		case "type_alias_declaration":
 			if outputLanguage == "javascript" {
 				return

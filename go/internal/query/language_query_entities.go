@@ -102,6 +102,9 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	if v := StringVal(row, "method_kind"); v != "" {
 		metadata["method_kind"] = v
 	}
+	if v := StringVal(row, "constructor_kind"); v != "" {
+		metadata["constructor_kind"] = v
+	}
 	if v := StringVal(row, "annotation_kind"); v != "" {
 		metadata["annotation_kind"] = v
 	}
@@ -203,6 +206,7 @@ func graphSemanticMetadataProjection() string {
 	return `,
 		       e.docstring as docstring,
 		       e.method_kind as method_kind,
+		       e.constructor_kind as constructor_kind,
 		       e.annotation_kind as annotation_kind,
 		       e.context as context,
 		       e.type_annotation_count as type_annotation_count,
@@ -234,7 +238,7 @@ func graphLabelToContentEntityType(label string) string {
 	switch label {
 	case "Annotation":
 		return "Annotation"
-	case "Function", "Class", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock", "Typedef", "TypeAlias", "TypeAnnotation", "Component":
+	case "Function", "Class", "Interface", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock", "Typedef", "TypeAlias", "TypeAnnotation", "Component":
 		return label
 	default:
 		return ""

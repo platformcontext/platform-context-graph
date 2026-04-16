@@ -23,7 +23,7 @@ func TestAttachTypeScriptSemanticsClonesResult(t *testing.T) {
 		"declaration_merge_count":  2,
 		"declaration_merge_kinds":  []any{"class", "namespace"},
 		"component_type_assertion": "ComponentType",
-		"component_wrapper_kind":    "memo",
+		"component_wrapper_kind":   "memo",
 		"jsx_fragment_shorthand":   true,
 	})
 
@@ -133,6 +133,60 @@ func TestEnrichEntityResultsWithContentMetadataTypeScriptMappedTypeAlias(t *test
 	}
 	if gotValue, want := semanticProfile["type_alias_kind"], "mapped_type"; gotValue != want {
 		t.Fatalf("semantic_profile[type_alias_kind] = %#v, want %#v", gotValue, want)
+	}
+}
+
+func TestEnrichEntityResultsWithContentMetadataTypeScriptGenericInterface(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"content-1", "repo-1", "src/interfaces.ts", "Interface", "Box",
+					int64(2), int64(4), "typescript", "interface Box<T> { value: T }",
+					[]byte(`{"type_parameters":["T"]}`),
+				},
+			},
+		},
+	})
+
+	handler := &EntityHandler{Content: NewContentReader(db)}
+	results := []map[string]any{
+		{
+			"id":         "graph-1",
+			"name":       "Box",
+			"labels":     []string{"Interface"},
+			"file_path":  "src/interfaces.ts",
+			"repo_id":    "repo-1",
+			"language":   "typescript",
+			"start_line": 2,
+			"end_line":   4,
+		},
+	}
+
+	got, err := handler.enrichEntityResultsWithContentMetadata(context.Background(), results, "repo-1", "Box", 20)
+	if err != nil {
+		t.Fatalf("enrichEntityResultsWithContentMetadata() error = %v, want nil", err)
+	}
+
+	if gotValue, want := got[0]["semantic_summary"], "Interface Box declares type parameters T."; gotValue != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", gotValue, want)
+	}
+
+	semanticProfile, ok := got[0]["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][semantic_profile] type = %T, want map[string]any", got[0]["semantic_profile"])
+	}
+	if gotValue, want := semanticProfile["surface_kind"], "generic_declaration"; gotValue != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := semanticProfile["type_parameters"], []string{"T"}; !reflect.DeepEqual(gotValue, want) {
+		t.Fatalf("semantic_profile[type_parameters] = %#v, want %#v", gotValue, want)
 	}
 }
 
