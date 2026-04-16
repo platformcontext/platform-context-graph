@@ -15,7 +15,7 @@ The immediate options are:
 2. keep authentication inside the API boundary for the current platform shape
 3. design user management, sessions, or OAuth flows as part of the migration
 
-The current branch goal is still parity-preserving Python-to-Go runtime
+The branch goal during this migration phase was parity-preserving Python-to-Go runtime
 conversion, not full identity-platform design. We do not yet have a
 multi-tenant control plane, customer-facing login surface, or external product
 requirement that justifies a dedicated auth service during this cutover.

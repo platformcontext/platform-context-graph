@@ -129,87 +129,97 @@ start_stack() {
 
     # Show finalization timing
     log "=== Finalization Timing ==="
-    docker-compose logs bootstrap-index 2>&1 | rg "Finalization timings" | tail -1 | python3 -c "
-import sys, json
-for line in sys.stdin:
-    try:
-        j = json.loads(line.strip().split('| ', 1)[-1])
-        ek = j.get('extra_keys', {})
-        for k, v in sorted(ek.items()):
-            if k.endswith('_seconds'):
-                print(f'  {k}: {v}s')
-    except:
-        print(f'  {line.strip()[:200]}')
-" 2>/dev/null || true
+    docker-compose logs bootstrap-index 2>&1 \
+        | rg "Finalization timings" \
+        | tail -1 \
+        | sed 's/^.*| //' \
+        | jq -r '(.extra_keys // {} | to_entries[]? | select(.key | endswith("_seconds")) | "  \(.key): \(.value)s")' \
+        2>/dev/null || true
 
     # Show memory
     log "=== Peak Memory ==="
-    docker-compose logs bootstrap-index 2>&1 | rg "After finalization" | tail -1 | python3 -c "
-import sys, json
-for line in sys.stdin:
-    try:
-        j = json.loads(line.strip().split('| ', 1)[-1])
-        print(f'  {j.get(\"message\", \"?\")}')
-    except:
-        pass
-" 2>/dev/null || true
+    docker-compose logs bootstrap-index 2>&1 \
+        | rg "After finalization" \
+        | tail -1 \
+        | sed 's/^.*| //' \
+        | jq -r '"  \(.message // "?")"' \
+        2>/dev/null || true
 }
 
 validate() {
     log "=== Validation ==="
     cd "$REPO_ROOT"
 
-    PYTHONPATH=src uv run python -c "
-import os
-os.environ.setdefault('DATABASE_TYPE', 'neo4j')
-os.environ.setdefault('NEO4J_URI', 'bolt://localhost:7687')
-os.environ.setdefault('NEO4J_USERNAME', 'neo4j')
-os.environ.setdefault('NEO4J_PASSWORD', 'change-me')
+    local neo4j_password="${PCG_NEO4J_PASSWORD:-change-me}"
+    local repo_count variable_count function_count relationship_count argocd_count xrd_count terraform_count
 
-from platform_context_graph.core import get_database_manager
-db = get_database_manager()
-driver = db.get_driver()
+    repo_count=$(
+        docker-compose exec -T neo4j cypher-shell \
+            -u neo4j \
+            -p "$neo4j_password" \
+            --format plain \
+            "MATCH (r:Repository) RETURN count(r) AS count" 2>/dev/null \
+            | tail -n 1
+    )
+    variable_count=$(
+        docker-compose exec -T neo4j cypher-shell \
+            -u neo4j \
+            -p "$neo4j_password" \
+            --format plain \
+            "MATCH (v:Variable) RETURN count(v) AS count" 2>/dev/null \
+            | tail -n 1
+    )
+    function_count=$(
+        docker-compose exec -T neo4j cypher-shell \
+            -u neo4j \
+            -p "$neo4j_password" \
+            --format plain \
+            "MATCH (f:Function) RETURN count(f) AS count" 2>/dev/null \
+            | tail -n 1
+    )
+    relationship_count=$(
+        docker-compose exec -T neo4j cypher-shell \
+            -u neo4j \
+            -p "$neo4j_password" \
+            --format plain \
+            "MATCH (:Repository)-[r]->(:Repository) RETURN count(r) AS count" 2>/dev/null \
+            | tail -n 1
+    )
+    argocd_count=$(
+        docker-compose exec -T neo4j cypher-shell \
+            -u neo4j \
+            -p "$neo4j_password" \
+            --format plain \
+            "MATCH (a:ArgoCDApplicationSet) RETURN count(a) AS count" 2>/dev/null \
+            | tail -n 1
+    )
+    xrd_count=$(
+        docker-compose exec -T neo4j cypher-shell \
+            -u neo4j \
+            -p "$neo4j_password" \
+            --format plain \
+            "MATCH (x:CrossplaneXRD) RETURN count(x) AS count" 2>/dev/null \
+            | tail -n 1
+    )
+    terraform_count=$(
+        docker-compose exec -T neo4j cypher-shell \
+            -u neo4j \
+            -p "$neo4j_password" \
+            --format plain \
+            "MATCH (t:TerraformResource) RETURN count(t) AS count" 2>/dev/null \
+            | tail -n 1
+    )
 
-with driver.session() as s:
-    # Repos
-    repos = s.run('MATCH (r:Repository) RETURN r.name as name ORDER BY r.name').data()
-    print(f'Repos: {len(repos)}')
-    for r in repos:
-        print(f'  {r[\"name\"]}')
-
-    # Variables (should be 0)
-    cnt = s.run('MATCH (v:Variable) RETURN count(v) as cnt').single()
-    var_count = cnt['cnt']
-    print(f'Variable nodes: {var_count}')
-    if var_count > 0:
-        print('  FAIL: INDEX_VARIABLES=false but Variable nodes exist!')
-
-    # Functions
-    fn = s.run('MATCH (f:Function) RETURN count(f) as cnt').single()
-    print(f'Function nodes: {fn[\"cnt\"]}')
-
-    # Cross-repo relationships
-    rels = s.run('''
-        MATCH (a:Repository)-[r]->(b:Repository)
-        RETURN a.name as source, type(r) as rel, b.name as target
-        ORDER BY source, rel, target
-    ''').data()
-    print(f'Cross-repo relationships: {len(rels)}')
-    for r in rels:
-        print(f'  {r[\"source\"]} --[{r[\"rel\"]}]--> {r[\"target\"]}')
-
-    # ArgoCD ApplicationSets
-    argo = s.run('MATCH (a:ArgoCDApplicationSet) RETURN count(a) as cnt').single()
-    print(f'ArgoCD ApplicationSets: {argo[\"cnt\"]}')
-
-    # Crossplane
-    xrd = s.run('MATCH (x:CrossplaneXRD) RETURN count(x) as cnt').single()
-    print(f'Crossplane XRDs: {xrd[\"cnt\"]}')
-
-    # Terraform
-    tf = s.run('MATCH (t:TerraformResource) RETURN count(t) as cnt').single()
-    print(f'Terraform resources: {tf[\"cnt\"]}')
-"
+    log "  Repositories: ${repo_count:-0}"
+    log "  Variable nodes: ${variable_count:-0}"
+    if [[ "${variable_count:-0}" != "0" ]]; then
+        log "  FAIL: INDEX_VARIABLES=false but Variable nodes exist"
+    fi
+    log "  Function nodes: ${function_count:-0}"
+    log "  Cross-repo relationships: ${relationship_count:-0}"
+    log "  ArgoCD ApplicationSets: ${argocd_count:-0}"
+    log "  Crossplane XRDs: ${xrd_count:-0}"
+    log "  Terraform resources: ${terraform_count:-0}"
 
     # API health
     log "=== API Check ==="

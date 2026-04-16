@@ -3,10 +3,12 @@
 Sanitized from local real-world source files under `~/repos`.
 These fixtures preserve templating structure while removing company domains, org names, registries, and secrets.
 
-Regenerate with:
+Regeneration note:
 
 ```bash
-python3 scripts/generate_templated_iac_fixtures.py
+# The old local-only generator is no longer shipped in this repository.
+# Update these fixtures manually from sanitized source examples and keep this
+# README in sync with the corpus layout.
 ```
 
 ## ansible_jinja

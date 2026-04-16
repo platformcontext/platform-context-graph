@@ -44,7 +44,7 @@ The current accepted ADR set establishes the rewrite baseline:
   keep durable queue boundaries, and how resiliency and backpressure are
   treated as first-class platform rules.
 - [Cutover And Legacy Bridge](2026-04-12-cutover-and-legacy-bridge.md) defines
-  the transition model away from the current Python-heavy procedural write path
+  the transition model away from the historical Python-heavy procedural write path
   without keeping two long-lived architectures alive.
 - [Go Data Plane Ownership Completion](2026-04-13-go-data-plane-ownership-completion.md)
   extends the write-plane conversion beyond deployment surfaces to cover full Go
