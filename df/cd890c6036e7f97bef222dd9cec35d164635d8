@@ -1,0 +1,96 @@
+go/internal/query/language_registry_test.go
+  34f71964cf7839c6 33-34,42
+go/internal/query/content_relationships_argocd_test.go
+  34f71964cf7839c6 115-204
+go/internal/query/semantic_profile.go
+  34f71964cf7839c6 57-104,223-231
+go/internal/query/entity_summary.go
+  34f71964cf7839c6 91-124
+go/internal/query/repository_semantics.go
+  34f71964cf7839c6 13-19,21,27-28,32-35,64,67,72-73,75-79,95-99,111-113,116-128,138,144-150,167-177
+go/internal/query/repository_story_test.go
+  34f71964cf7839c6 24-26,60-61
+go/internal/query/repository_infrastructure.go
+  34f71964cf7839c6 1-164
+go/internal/query/content_relationships.go
+  34f71964cf7839c6 39-47
+go/internal/relationships/evidence.go
+  34f71964cf7839c6 91-99,122,136-139,145-150,189-195,218-280,461-606
+go/internal/relationships/evidence_test.go
+  34f71964cf7839c6 108-188
+go/internal/storage/neo4j/edge_writer_typed_relationship_test.go
+  34f71964cf7839c6 45-53,64
+go/internal/query/language_query_entities.go
+  34f71964cf7839c6 45-47,202-249,285-297,306-307
+go/internal/relationships/evidence_structured_hcl_test.go
+  34f71964cf7839c6 1-140
+go/internal/query/language_queries_test.go
+  34f71964cf7839c6 346-370
+go/internal/query/workload_context_test.go
+  34f71964cf7839c6 61
+go/internal/relationships/models_test.go
+  34f71964cf7839c6 51-58
+go/internal/query/openapi_test.go
+  34f71964cf7839c6 341-342
+docs/docs/reference/relationship-mapping.md
+  34f71964cf7839c6 292-320
+go/internal/query/content_relationships_terraform.go
+  34f71964cf7839c6 1-41
+go/internal/query/repository_story.go
+  34f71964cf7839c6 15,21-24,47,61-65,68-69,104-106,121,137-139,161-162,164-165,171-210
+go/internal/query/repository_story_semantics_test.go
+  34f71964cf7839c6 235-324,355-357,380,397
+go/internal/query/content_reader.go
+  34f71964cf7839c6 38,68-69,76,180-181,198,425-426,442
+go/internal/storage/neo4j/canonical_relationships.go
+  34f71964cf7839c6 42-48,70
+go/internal/relationships/models.go
+  34f71964cf7839c6 19-22,65-66
+go/internal/query/repository_families.go
+  34f71964cf7839c6 1-96
+go/internal/query/content_reader_test.go
+  34f71964cf7839c6 135-165
+go/internal/query/repository_context_test.go
+  34f71964cf7839c6 5,118-123,231-232,253,276-413
+go/internal/query/entity_story_test.go
+  34f71964cf7839c6 103-143
+go/internal/query/openapi_paths_code.go
+  34f71964cf7839c6 78-79
+go/internal/query/repository.go
+  34f71964cf7839c6 77,107-115,150-151,181,208,242,280
+go/internal/query/entity.go
+  34f71964cf7839c6 460
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "dfcd890c6036e7f97bef222dd9cec35d164635d8",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "34f71964cf7839c6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2bcf8e2-53d2-4c3f-88a5-2dbbf5aa1a4b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 379,
+      "total_deletions": 23,
+      "accepted_lines": 2219,
+      "overriden_lines": 0
+    }
+  }
+}
