@@ -1,0 +1,25 @@
+docs/docs/languages/python.md
+  1ca5ee6ce936a402 23,83-86
+go/internal/query/entity_content_python_resolve_test.go
+  1ca5ee6ce936a402 1-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "d0daf2de0a2d3ad1a94fffcbaa57911eee6049de",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 11,
+      "total_deletions": 7,
+      "accepted_lines": 341,
+      "overriden_lines": 0
+    }
+  }
+}
