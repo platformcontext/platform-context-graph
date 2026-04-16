@@ -1,0 +1,29 @@
+go/internal/parser/engine_kotlin_function_return_alias_test.go
+  1ca5ee6ce936a402 374-438
+docs/docs/languages/kotlin.md
+  1ca5ee6ce936a402 28,37
+go/internal/parser/kotlin_repository_returns.go
+  1ca5ee6ce936a402 12,45-50,53,72,80-97,104,118,123-126,170
+go/internal/reducer/code_call_materialization_kotlin_function_return_receiver_chain_test.go
+  1ca5ee6ce936a402 541-661
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "ff71794fead3d2c9aa902077fb51076bb7d25f51",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 219,
+      "overriden_lines": 0
+    }
+  }
+}
