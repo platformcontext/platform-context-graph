@@ -129,11 +129,12 @@ Do not reintroduce a Python wrapper.
 The runtime-ownership bar is now structural rather than pytest-based.
 
 ```bash
-rg --files . -g '*.py' | rg -v '^tests/fixtures/'
+rg --files . -g '*.py' | rg -v '^(\\./)?tests/fixtures/'
 ```
 
 That command should return no runtime Python files. Only fixture data under
-`tests/fixtures/` is allowed to remain in Python.
+`tests/fixtures/` and clearly offline-only docs/CI toolchains are allowed to
+remain in Python.
 
 ## Bootstrap Projection Concurrency
 

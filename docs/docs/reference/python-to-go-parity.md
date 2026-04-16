@@ -24,6 +24,9 @@ The runtime migration is complete:
   collector follow-up emission, reducer materialization, canonical Neo4j edge
   writes, and the public `code/relationships`, `code/call-chain`, and
   decorator-aware `code/dead-code` query surfaces
+- the remaining Python usage is limited to fixture source files plus
+  explicitly offline-only docs/CI toolchains, not normal runtime or developer
+  verification flow
 
 Feature parity is complete. All parser/graph families, operator/runtime
 contract rows, API/MCP query surfacing, IaC validation, and documentation
@@ -41,6 +44,8 @@ to HTTP API routes.
 The current branch truth is backed by these checks:
 
 - `rg --files . -g '*.py' | rg -v '^tests/fixtures/'` returns no runtime Python files
+- `rg --files . -g '*.py' | rg -v '^(\\./)?tests/fixtures/'` returns no
+  non-fixture Python files in the checked-in repo
 - `rg --files . | rg '^src/'` returns no Python service tree
 - strict docs build passes
 - targeted Go parser, relationship, and Terraform schema tests pass
