@@ -9,11 +9,17 @@ import (
 
 var kotlinPackagePattern = regexp.MustCompile(`^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*$`)
 
-func kotlinCollectSiblingFunctionReturnTypes(currentPath string, packageName string) (map[string]string, error) {
+func kotlinCollectSiblingFunctionReturnTypes(repoRoot string, currentPath string, packageName string) (map[string]string, error) {
 	root := filepath.Dir(currentPath)
 	currentAbs, err := filepath.Abs(currentPath)
 	if err != nil {
 		return nil, err
+	}
+	boundedRepoRoot := strings.TrimSpace(repoRoot)
+	if boundedRepoRoot != "" {
+		if boundedRepoRoot, err = filepath.Abs(boundedRepoRoot); err != nil {
+			return nil, err
+		}
 	}
 
 	candidates := make(map[string]struct {
@@ -43,6 +49,12 @@ func kotlinCollectSiblingFunctionReturnTypes(currentPath string, packageName str
 
 	roots := []string{root}
 	for ancestor := filepath.Dir(root); ancestor != root && len(roots) < 4; ancestor = filepath.Dir(ancestor) {
+		if boundedRepoRoot != "" {
+			rel, relErr := filepath.Rel(boundedRepoRoot, ancestor)
+			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				break
+			}
+		}
 		base := filepath.Base(ancestor)
 		if base == "T" || strings.HasPrefix(base, "TemporaryItems") {
 			break

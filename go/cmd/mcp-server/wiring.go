@@ -12,10 +12,16 @@ import (
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
+	internalruntime "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	pgstatus "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
 func wireAPI(ctx context.Context, getenv func(string) string) (http.Handler, func(), error) {
+	apiKey, err := internalruntime.ResolveAPIKey(getenv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve api key: %w", err)
+	}
+
 	// Open Neo4j
 	neo4jURI := envOrDefault(getenv, "NEO4J_URI", "bolt://localhost:7687")
 	neo4jUser := envOrDefault(getenv, "NEO4J_USERNAME", "neo4j")
@@ -96,7 +102,6 @@ func wireAPI(ctx context.Context, getenv func(string) string) (http.Handler, fun
 	router.Mount(mux)
 
 	// Wrap with auth middleware (protects all /api/v0/* routes when mounted by MCP server)
-	apiKey := strings.TrimSpace(getenv("PCG_API_KEY"))
 	authedHandler := query.AuthMiddleware(apiKey, mux)
 
 	cleanup := func() {

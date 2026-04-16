@@ -168,6 +168,7 @@ services:
       PCG_GIT_AUTH_METHOD: none
       PCG_REPOSITORY_RULES_JSON: "[]"
       PCG_RUNTIME_ROLE: api
+      PCG_API_KEY: ${PCG_API_KEY:-}
       PCG_AUTO_GENERATE_API_KEY: "true"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
@@ -218,6 +219,8 @@ services:
       PCG_REPOSITORY_RULES_JSON: "[]"
       PCG_MCP_TRANSPORT: http
       PCG_MCP_ADDR: ":8080"
+      PCG_API_KEY: ${PCG_API_KEY:-}
+      PCG_AUTO_GENERATE_API_KEY: "true"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc

@@ -1,11 +1,15 @@
 package main
 
 import (
+	"log/slog"
 	"reflect"
 	"testing"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestBuildCollectorServiceUsesIngestionStoreBoundary(t *testing.T) {
@@ -14,8 +18,9 @@ func TestBuildCollectorServiceUsesIngestionStoreBoundary(t *testing.T) {
 	service, err := buildCollectorService(
 		postgres.SQLDB{},
 		func(string) string { return "" },
-		func() (string, error) { return t.TempDir(), nil },
-		func() []string { return []string{"PATH=/usr/bin"} },
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("buildCollectorService() error = %v, want nil", err)
@@ -60,8 +65,9 @@ func TestBuildCollectorServiceDoesNotRequireBridgeRepoRoot(t *testing.T) {
 	service, err := buildCollectorService(
 		postgres.SQLDB{},
 		func(string) string { return "" },
-		func() (string, error) { return "/tmp/does-not-exist", nil },
-		func() []string { return nil },
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("buildCollectorService() error = %v, want nil", err)
@@ -90,8 +96,9 @@ func TestBuildCollectorServiceWiresSCIPEnvironment(t *testing.T) {
 				return ""
 			}
 		},
-		func() (string, error) { return t.TempDir(), nil },
-		func() []string { return nil },
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("buildCollectorService() error = %v, want nil", err)
@@ -105,4 +112,47 @@ func TestBuildCollectorServiceWiresSCIPEnvironment(t *testing.T) {
 	if got, want := snapshotter.SCIP.Languages, []string{"python", "go"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("SCIP languages = %#v, want %#v", got, want)
 	}
+}
+
+func TestBuildCollectorServiceWiresTelemetryIntoSourceAndService(t *testing.T) {
+	t.Parallel()
+
+	meter := noopmetric.NewMeterProvider().Meter("test")
+	instruments, err := telemetry.NewInstruments(meter)
+	if err != nil {
+		t.Fatalf("NewInstruments() error = %v, want nil", err)
+	}
+	tracer := nooptrace.NewTracerProvider().Tracer("test")
+	logger := slog.New(slog.NewJSONHandler(&discardWriter{}, nil))
+
+	service, err := buildCollectorService(
+		postgres.SQLDB{},
+		func(string) string { return "" },
+		tracer,
+		instruments,
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("buildCollectorService() error = %v, want nil", err)
+	}
+
+	source, ok := service.Source.(*collector.GitSource)
+	if !ok {
+		t.Fatalf("buildCollectorService() source type = %T, want *collector.GitSource", service.Source)
+	}
+	if source.Tracer == nil || service.Tracer == nil {
+		t.Fatal("collector tracer wiring = nil, want non-nil")
+	}
+	if source.Instruments == nil || service.Instruments == nil {
+		t.Fatal("collector instruments wiring = nil, want non-nil")
+	}
+	if source.Logger == nil || service.Logger == nil {
+		t.Fatal("collector logger wiring = nil, want non-nil")
+	}
+}
+
+type discardWriter struct{}
+
+func (*discardWriter) Write(p []byte) (int, error) {
+	return len(p), nil
 }

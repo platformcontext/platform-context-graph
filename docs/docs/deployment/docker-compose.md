@@ -53,6 +53,14 @@ That script:
 - prints the Jaeger URL, selected `scope_id`, and useful logs for debugging
 - auto-selects free host ports when the usual local defaults are already occupied
 
+The runtime proof wrappers under `scripts/verify_*_compose.sh` are shell-native
+Go-runtime checks. They no longer delegate to deleted Python
+`tests/e2e/*compose.py` harnesses.
+
+Run one wrapper at a time. They share the same Compose project name, so
+parallel wrapper runs can collide even when each script chooses different host
+ports.
+
 Set `PCG_KEEP_COMPOSE_STACK=true` if you want the stack left running after the verification completes.
 
 By default, the bootstrap, ingester, and resolution-engine services mount the fixture ecosystems tree from
@@ -63,6 +71,16 @@ collector forwards traces into Jaeger. Open `http://localhost:16686` after the s
 inspect spans. The collector also exposes Prometheus-format metrics on
 `http://localhost:9464/metrics` by default, so local OTLP metric export has a real sink instead of
 failing with `UNIMPLEMENTED`.
+
+Local auth stays at the Go API boundary too:
+
+- `PCG_API_KEY` is the bearer token contract when local auth is enabled.
+- If `PCG_API_KEY` is not passed into Compose, the Go runtime can reuse a persisted token from
+  `PCG_HOME/.env` or generate and persist one when `PCG_AUTO_GENERATE_API_KEY=true`.
+- The compose verification scripts check both the running container environment and the persisted
+  `PCG_HOME/.env` contract before issuing authenticated requests.
+- If neither source contains a token, the local stack runs without bearer auth.
+- There is no separate auth service, login flow, or OAuth dependency in this stack.
 
 For direct runtime scraping, Compose also enables per-runtime Prometheus endpoints:
 

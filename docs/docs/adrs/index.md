@@ -53,6 +53,10 @@ The current accepted ADR set establishes the rewrite baseline:
 - [Unified JSON Logging Standard](2026-04-13-unified-logging-standard.md)
   defines the canonical JSON log schema that every Go-owned runtime emits,
   enabling consistent cross-service log correlation in Grafana/Loki.
+- [Auth Boundary And Deferred User Management](2026-04-16-auth-boundary-and-deferred-user-management.md)
+  records that the API remains the current authentication boundary and that
+  user management or OAuth design is intentionally deferred until hosted or
+  multi-tenant requirements are real.
 
 Read these records together. They are meant to remove ambiguity before new
 collector or runtime work begins.

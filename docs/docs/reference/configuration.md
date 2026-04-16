@@ -29,6 +29,11 @@ pcg config set MAX_FILE_SIZE_MB 20
 pcg config set ENABLE_AUTO_WATCH true
 ```
 
+The user-level `~/.platform-context-graph/.env` file is for CLI settings, not
+the local API bearer-token contract. When local compose auth is enabled, the
+Go API and MCP runtimes use `PCG_API_KEY` from the running container
+environment.
+
 ### 3. Quick Switch Database
 A shortcut to toggle between `falkordb` and `neo4j`.
 
@@ -189,6 +194,10 @@ PlatformContextGraph uses the following hierarchy:
 1.  **Project Level:** `.pcgignore` in your project root (files to exclude).
 2.  **User Level:** `~/.platform-context-graph/.env` (global settings).
 3.  **Defaults:** Built-in application defaults.
+
+That user-level `.env` file is for CLI configuration. It is not the local API
+bearer-token store; the Go API and MCP runtimes read `PCG_API_KEY` from their
+own process environment when bearer auth is enabled.
 
 Use `.pcgignore` for project-specific exclusions. Use
 `PCG_IGNORE_DEPENDENCY_DIRS` to control the built-in dependency-root policy, and

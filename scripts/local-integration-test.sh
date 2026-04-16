@@ -214,13 +214,28 @@ with driver.session() as s:
     # API health
     log "=== API Check ==="
     local api_key
-    api_key=$(docker exec platform-context-graph-platform-context-graph-1 cat /data/.platform-context-graph/.env 2>/dev/null | rg "PCG_API_KEY=" | cut -d= -f2)
+    api_key=$(
+        docker-compose exec -T platform-context-graph sh -lc '
+            token="${PCG_API_KEY:-}";
+            if [ -n "$token" ]; then
+                printf %s "$token";
+                exit 0;
+            fi
+            home="${PCG_HOME:-/data/.platform-context-graph}";
+            if [ -f "$home/.env" ]; then
+                sed -n "s/^PCG_API_KEY=//p" "$home/.env" | tail -n 1 | tr -d "\n";
+            fi
+        ' 2>/dev/null || true
+    )
     if [ -n "$api_key" ]; then
         local repo_count
-        repo_count=$(curl -s -H "Authorization: Bearer $api_key" http://localhost:8080/api/v0/repositories 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else len(d.get('repositories',[])))" 2>/dev/null || echo "?")
+        repo_count=$(curl -s -H "Authorization: Bearer $api_key" http://localhost:8080/api/v0/repositories 2>/dev/null | jq -r 'if type == "array" then length elif ((.repositories? // []) | length > 0) then (.repositories | length) elif ((.items? // []) | length > 0) then (.items | length) else "?" end' 2>/dev/null || echo "?")
         log "  API repos: $repo_count"
     else
-        log "  WARNING: Could not read API key"
+        local repo_count
+        repo_count=$(curl -s http://localhost:8080/api/v0/repositories 2>/dev/null | jq -r 'if type == "array" then length elif ((.repositories? // []) | length > 0) then (.repositories | length) elif ((.items? // []) | length > 0) then (.items | length) else "?" end' 2>/dev/null || echo "?")
+        log "  API repos: $repo_count"
+        log "  INFO: no explicit PCG_API_KEY found; local auth may be disabled or the token may be persisted under PCG_HOME/.env"
     fi
 
     log "=== Validation complete ==="

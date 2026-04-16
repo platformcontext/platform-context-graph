@@ -82,33 +82,33 @@ JOIN scope_generations AS generation
   ON generation.generation_id = claimed.generation_id
 `
 
-const ackProjectorWorkQuery = `
-WITH lifecycle_update AS (
-    UPDATE scope_generations
-    SET status = CASE
-            WHEN generation_id = $3 THEN 'active'
-            WHEN status = 'active' THEN 'superseded'
-            ELSE status
-        END,
-        activated_at = CASE
-            WHEN generation_id = $3 THEN COALESCE(activated_at, $1)
-            ELSE activated_at
-        END,
-        superseded_at = CASE
-            WHEN generation_id = $3 THEN NULL
-            WHEN status = 'active' THEN $1
-            ELSE superseded_at
-        END
-    WHERE scope_id = $2
-      AND (generation_id = $3 OR status = 'active')
-),
-scope_update AS (
-    UPDATE ingestion_scopes
-    SET status = 'active',
-        active_generation_id = $3,
-        ingested_at = $1
-    WHERE scope_id = $2
-)
+const supersedeProjectorActiveGenerationQuery = `
+UPDATE scope_generations
+SET status = 'superseded',
+    superseded_at = $1
+WHERE scope_id = $2
+  AND generation_id <> $3
+  AND status = 'active'
+`
+
+const activateProjectorGenerationQuery = `
+UPDATE scope_generations
+SET status = 'active',
+    activated_at = COALESCE(activated_at, $1),
+    superseded_at = NULL
+WHERE scope_id = $2
+  AND generation_id = $3
+`
+
+const updateProjectorScopeGenerationQuery = `
+UPDATE ingestion_scopes
+SET status = 'active',
+    active_generation_id = $3,
+    ingested_at = $1
+WHERE scope_id = $2
+`
+
+const ackProjectorWorkItemQuery = `
 UPDATE fact_work_items
 SET status = 'succeeded',
     lease_owner = NULL,
@@ -279,17 +279,58 @@ func (q ProjectorQueue) Ack(
 		return err
 	}
 
-	_, err := q.db.ExecContext(
-		ctx,
-		ackProjectorWorkQuery,
-		q.now(),
-		work.Scope.ScopeID,
-		work.Generation.GenerationID,
-		q.LeaseOwner,
-	)
-	if err != nil {
-		return fmt.Errorf("ack projector work: %w", err)
+	beginner, ok := q.db.(Beginner)
+	if !ok {
+		return errors.New("projector queue database must support Begin for ack")
 	}
+
+	tx, err := beginner.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("ack projector work: begin: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	now := q.now()
+	steps := []struct {
+		query string
+		op    string
+		args  []any
+	}{
+		{
+			query: supersedeProjectorActiveGenerationQuery,
+			op:    "supersede active generation",
+			args:  []any{now, work.Scope.ScopeID, work.Generation.GenerationID},
+		},
+		{
+			query: activateProjectorGenerationQuery,
+			op:    "activate target generation",
+			args:  []any{now, work.Scope.ScopeID, work.Generation.GenerationID},
+		},
+		{
+			query: updateProjectorScopeGenerationQuery,
+			op:    "update scope active generation",
+			args:  []any{now, work.Scope.ScopeID, work.Generation.GenerationID},
+		},
+		{
+			query: ackProjectorWorkItemQuery,
+			op:    "mark projector work succeeded",
+			args:  []any{now, work.Scope.ScopeID, work.Generation.GenerationID, q.LeaseOwner},
+		},
+	}
+	for _, step := range steps {
+		if _, err := tx.ExecContext(ctx, step.query, step.args...); err != nil {
+			return fmt.Errorf("ack projector work: %s: %w", step.op, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("ack projector work: commit: %w", err)
+	}
+	committed = true
 
 	return nil
 }

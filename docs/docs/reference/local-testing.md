@@ -40,6 +40,20 @@ export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform
 export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
 ```
 
+## Local API Auth
+
+Local compose keeps auth at the Go API boundary.
+
+- If `PCG_API_KEY` is explicitly set for the running `platform-context-graph`
+  container, the compose proof scripts use it as the bearer token.
+- If no explicit env token is present, the Go runtime can reuse a persisted
+  token from `PCG_HOME/.env` or generate one when
+  `PCG_AUTO_GENERATE_API_KEY=true`, and the proof scripts check that same file.
+- If neither source contains a token, the local stack runs without bearer auth
+  and the proof scripts omit the header.
+- There is no separate auth service, login flow, or OAuth dependency in this
+  local contract.
+
 ## Compose Host-Path Rules
 
 When you run the stack against host repositories, the bind root must be an
@@ -230,6 +244,13 @@ reducer service
 These scripts allocate their own local ports, start only the required
 compose-backed infrastructure, and tear the stack down automatically unless
 `PCG_KEEP_COMPOSE_STACK=true` is set.
+
+They are shell-native Go-runtime proofs now. They do not call deleted Python
+`tests/e2e/*compose.py` harnesses.
+
+Run them one at a time. They all reuse the same local Compose project name, so
+parallel runs will fight over container and network ownership even if the host
+ports differ.
 
 ```bash
 ./scripts/verify_collector_git_runtime_compose.sh

@@ -139,7 +139,7 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		return snapshot, nil
 	}
 
-	importsMap, err := engine.PreScanPaths(fileSet.Files)
+	importsMap, err := engine.PreScanRepositoryPaths(repoPath, fileSet.Files)
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("pre-scan repository imports for %q: %w", repoPath, err)
 	}

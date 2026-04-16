@@ -29,6 +29,11 @@ func wireAPI(
 	logger *slog.Logger,
 	prometheusHandler http.Handler,
 ) (http.Handler, func(), error) {
+	apiKey, err := internalruntime.ResolveAPIKey(getenv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve api key: %w", err)
+	}
+
 	// Open Neo4j
 	neo4jURI := envOrDefault(getenv, "NEO4J_URI", "bolt://localhost:7687")
 	neo4jUser := envOrDefault(getenv, "NEO4J_USERNAME", "neo4j")
@@ -95,7 +100,6 @@ func wireAPI(
 	}
 
 	// Wrap with auth middleware
-	apiKey := strings.TrimSpace(getenv("PCG_API_KEY"))
 	authedMux := query.AuthMiddleware(apiKey, mux)
 
 	cleanup := func() {

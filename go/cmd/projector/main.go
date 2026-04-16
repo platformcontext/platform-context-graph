@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,8 +18,17 @@ import (
 )
 
 func main() {
+	bootstrap, err := telemetry.NewBootstrap("projector")
+	if err != nil {
+		fallback := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+		fallback.Error("projector bootstrap failed", "event_name", "runtime.startup.failed", "error", err)
+		os.Exit(1)
+	}
+	logger := telemetry.NewLogger(bootstrap, "projector", "projector")
+
 	if err := run(context.Background()); err != nil {
-		log.Fatal(err)
+		logger.Error("projector failed", telemetry.EventAttr("runtime.startup.failed"), "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -83,6 +92,7 @@ func run(parent context.Context) error {
 		"projector",
 		runner,
 		statusReader,
+		runtimecfg.WithPrometheusHandler(providers.PrometheusHandler),
 	)
 	if err != nil {
 		return err

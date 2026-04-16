@@ -51,7 +51,7 @@ func (e *Engine) ParsePath(
 		return nil, fmt.Errorf("no parser registered for %q", resolvedPath)
 	}
 
-	payload, err := e.parseDefinition(definition, resolvedPath, isDependency, options)
+	payload, err := e.parseDefinition(resolvedRepoRoot, definition, resolvedPath, isDependency, options)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,25 @@ func (e *Engine) ParsePath(
 
 // PreScanPaths returns the import-map contract used by the collector prescan path.
 func (e *Engine) PreScanPaths(paths []string) (map[string][]string, error) {
+	return e.preScanPathsWithRoot("", paths)
+}
+
+// PreScanRepositoryPaths returns the import-map contract used by collectors
+// that already know the repository root and want prescan logic bounded to it.
+func (e *Engine) PreScanRepositoryPaths(repoRoot string, paths []string) (map[string][]string, error) {
+	return e.preScanPathsWithRoot(repoRoot, paths)
+}
+
+func (e *Engine) preScanPathsWithRoot(repoRoot string, paths []string) (map[string][]string, error) {
 	results := make(map[string][]string)
+	resolvedRepoRoot := strings.TrimSpace(repoRoot)
+	if resolvedRepoRoot != "" {
+		absRepoRoot, err := filepath.Abs(resolvedRepoRoot)
+		if err != nil {
+			return nil, fmt.Errorf("resolve prescan repo root %q: %w", repoRoot, err)
+		}
+		resolvedRepoRoot = absRepoRoot
+	}
 	for _, rawPath := range paths {
 		resolvedPath, err := filepath.Abs(rawPath)
 		if err != nil {
@@ -102,7 +120,7 @@ func (e *Engine) PreScanPaths(paths []string) (map[string][]string, error) {
 		case "java":
 			names, err = e.preScanJava(resolvedPath)
 		case "kotlin":
-			names, err = e.preScanKotlin(resolvedPath)
+			names, err = e.preScanKotlin(resolvedRepoRoot, resolvedPath)
 		case "perl":
 			names, err = e.preScanPerl(resolvedPath)
 		case "php":
@@ -143,6 +161,7 @@ func (e *Engine) PreScanPaths(paths []string) (map[string][]string, error) {
 }
 
 func (e *Engine) parseDefinition(
+	repoRoot string,
 	definition Definition,
 	resolvedPath string,
 	isDependency bool,
@@ -170,7 +189,7 @@ func (e *Engine) parseDefinition(
 	case "java":
 		return e.parseJava(resolvedPath, isDependency, options)
 	case "kotlin":
-		return e.parseKotlin(resolvedPath, isDependency, options)
+		return e.parseKotlin(repoRoot, resolvedPath, isDependency, options)
 	case "perl":
 		return e.parsePerl(resolvedPath, isDependency, options)
 	case "php":

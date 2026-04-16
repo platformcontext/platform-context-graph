@@ -26,7 +26,7 @@ var (
 	kotlinInfixCallPattern     = regexp.MustCompile(`^(?:return\s+)?([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s+(.+)$`)
 )
 
-func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (map[string]any, error) {
+func (e *Engine) parseKotlin(repoRoot string, path string, isDependency bool, options Options) (map[string]any, error) {
 	source, err := readSource(path)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	payload := basePayload(path, "kotlin", isDependency)
 	payload["interfaces"] = []map[string]any{}
 
-	siblingFunctionReturnTypes, err := kotlinCollectSiblingFunctionReturnTypes(path, packageName)
+	siblingFunctionReturnTypes, err := kotlinCollectSiblingFunctionReturnTypes(repoRoot, path, packageName)
 	if err != nil {
 		return nil, err
 	}
@@ -475,8 +475,8 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	return payload, nil
 }
 
-func (e *Engine) preScanKotlin(path string) ([]string, error) {
-	payload, err := e.parseKotlin(path, false, Options{})
+func (e *Engine) preScanKotlin(repoRoot string, path string) ([]string, error) {
+	payload, err := e.parseKotlin(repoRoot, path, false, Options{})
 	if err != nil {
 		return nil, err
 	}

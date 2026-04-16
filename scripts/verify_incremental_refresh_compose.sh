@@ -4,17 +4,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TIMEOUT_SECONDS="${PCG_E2E_TIMEOUT_SECONDS:-180}"
 KEEP_STACK="${PCG_KEEP_COMPOSE_STACK:-false}"
 TMP_DIR="$(mktemp -d)"
 PROOF_LOG="$TMP_DIR/incremental-refresh.log"
+STATUS_FILE="$TMP_DIR/incremental-refresh-status.json"
+METRICS_FILE="$TMP_DIR/incremental-refresh-metrics.txt"
 COMPOSE_CMD=()
 COMPOSE_DISPLAY=""
 POSTGRES_DSN=""
 PROJECTOR_PID=""
 
 PROJECTOR_HTTP_PORT_BASE="${PCG_PROJECTOR_HTTP_PORT:-28081}"
-PROJECTOR_METRICS_PORT_BASE="${PCG_PROJECTOR_METRICS_PORT:-29468}"
 POSTGRES_PORT_BASE="${PCG_POSTGRES_PORT:-25432}"
 NEO4J_HTTP_PORT_BASE="${NEO4J_HTTP_PORT:-27474}"
 NEO4J_BOLT_PORT_BASE="${NEO4J_BOLT_PORT:-27687}"
@@ -40,6 +40,14 @@ cleanup() {
             echo "  proof log tail:"
             tail -n 200 "$PROOF_LOG" || true
         fi
+        if [[ -s "$STATUS_FILE" ]]; then
+            echo "  projector status:"
+            cat "$STATUS_FILE"
+        fi
+        if [[ -s "$METRICS_FILE" ]]; then
+            echo "  projector metrics tail:"
+            tail -n 40 "$METRICS_FILE" || true
+        fi
         echo "  $COMPOSE_DISPLAY logs --tail=200 postgres"
         echo "  $COMPOSE_DISPLAY logs --tail=200 neo4j"
         echo "  $COMPOSE_DISPLAY logs --tail=200 otel-collector"
@@ -64,24 +72,15 @@ require_tool() {
 
 pick_port() {
     local start_port="$1"
-    python3 - "$start_port" <<'PY'
-import socket
-import sys
-
-start = int(sys.argv[1])
-for port in range(start, start + 200):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        sock.bind(("127.0.0.1", port))
-    except OSError:
-        sock.close()
-        continue
-    sock.close()
-    print(port)
-    break
-else:
-    raise SystemExit(f"no free port found near {start}")
-PY
+    local port
+    for ((port = start_port; port < start_port + 200; port++)); do
+        if ! nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+            echo "$port"
+            return 0
+        fi
+    done
+    echo "no free port found near $start_port" >&2
+    return 1
 }
 
 configure_ports() {
@@ -93,7 +92,53 @@ configure_ports() {
     export OTEL_COLLECTOR_OTLP_HTTP_PORT="$(pick_port "$OTEL_COLLECTOR_OTLP_HTTP_PORT_BASE")"
     export OTEL_COLLECTOR_PROMETHEUS_PORT="$(pick_port "$OTEL_COLLECTOR_PROMETHEUS_PORT_BASE")"
     export PCG_PROJECTOR_HTTP_PORT="$(pick_port "$PROJECTOR_HTTP_PORT_BASE")"
-    export PCG_PROJECTOR_METRICS_PORT="$(pick_port "$PROJECTOR_METRICS_PORT_BASE")"
+    POSTGRES_DSN="postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@localhost:${PCG_POSTGRES_PORT}/platform_context_graph"
+}
+
+refresh_compose_ports() {
+    local mapped
+
+    mapped="$("${COMPOSE_CMD[@]}" port postgres 5432 | tail -n 1)"
+    if [[ -z "$mapped" ]]; then
+        echo "Could not determine the published Postgres port from compose." >&2
+        return 1
+    fi
+    export PCG_POSTGRES_PORT="${mapped##*:}"
+
+    mapped="$("${COMPOSE_CMD[@]}" port neo4j 7474 | tail -n 1)"
+    if [[ -z "$mapped" ]]; then
+        echo "Could not determine the published Neo4j HTTP port from compose." >&2
+        return 1
+    fi
+    export NEO4J_HTTP_PORT="${mapped##*:}"
+
+    mapped="$("${COMPOSE_CMD[@]}" port neo4j 7687 | tail -n 1)"
+    if [[ -z "$mapped" ]]; then
+        echo "Could not determine the published Neo4j Bolt port from compose." >&2
+        return 1
+    fi
+    export NEO4J_BOLT_PORT="${mapped##*:}"
+
+    mapped="$("${COMPOSE_CMD[@]}" port otel-collector 4317 | tail -n 1)"
+    if [[ -z "$mapped" ]]; then
+        echo "Could not determine the published OTEL collector gRPC port from compose." >&2
+        return 1
+    fi
+    export OTEL_COLLECTOR_OTLP_GRPC_PORT="${mapped##*:}"
+
+    mapped="$("${COMPOSE_CMD[@]}" port otel-collector 4318 | tail -n 1)"
+    if [[ -z "$mapped" ]]; then
+        echo "Could not determine the published OTEL collector HTTP port from compose." >&2
+        return 1
+    fi
+    export OTEL_COLLECTOR_OTLP_HTTP_PORT="${mapped##*:}"
+
+    mapped="$("${COMPOSE_CMD[@]}" port otel-collector 9464 | tail -n 1)"
+    if [[ -z "$mapped" ]]; then
+        echo "Could not determine the published OTEL collector metrics port from compose." >&2
+        return 1
+    fi
+    export OTEL_COLLECTOR_PROMETHEUS_PORT="${mapped##*:}"
 
     POSTGRES_DSN="postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@localhost:${PCG_POSTGRES_PORT}/platform_context_graph"
 }
@@ -103,7 +148,7 @@ wait_for_http() {
     local attempts="$2"
     local sleep_seconds="$3"
 
-    for ((attempt=1; attempt<=attempts; attempt++)); do
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
         if curl -fsS "$url" >/dev/null 2>&1; then
             return 0
         fi
@@ -119,7 +164,7 @@ wait_for_http() {
 
 wait_for_postgres() {
     local attempts="$1"
-    for ((attempt=1; attempt<=attempts; attempt++)); do
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
         if "${COMPOSE_CMD[@]}" exec -T postgres pg_isready -U pcg -d platform_context_graph >/dev/null 2>&1; then
             return 0
         fi
@@ -131,7 +176,7 @@ wait_for_postgres() {
 
 wait_for_neo4j() {
     local attempts="$1"
-    for ((attempt=1; attempt<=attempts; attempt++)); do
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
         if "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell -u neo4j -p "${PCG_NEO4J_PASSWORD:-change-me}" "RETURN 1" >/dev/null 2>&1; then
             return 0
         fi
@@ -141,14 +186,153 @@ wait_for_neo4j() {
     return 1
 }
 
+psql_exec() {
+    "${COMPOSE_CMD[@]}" exec -T postgres sh -lc \
+        "psql -U pcg -d platform_context_graph -v ON_ERROR_STOP=1"
+}
+
+psql_query() {
+    local query="$1"
+    "${COMPOSE_CMD[@]}" exec -T postgres sh -lc \
+        "psql -U pcg -d platform_context_graph -Atc \"$query\""
+}
+
+wait_for_sql_value() {
+    local query="$1"
+    local expected="$2"
+    local attempts="$3"
+    local sleep_seconds="$4"
+    local result=""
+
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
+        result="$(psql_query "$query" | tr -d '[:space:]')"
+        if [[ "$result" == "$expected" ]]; then
+            return 0
+        fi
+        sleep "$sleep_seconds"
+    done
+
+    echo "Timed out waiting for SQL query to return $expected: $query" >&2
+    echo "Last result: ${result:-<empty>}" >&2
+    return 1
+}
+
 bootstrap_data_plane_schema() {
     echo "Applying Go data-plane Postgres schema bootstrap..."
     (
         cd "$REPO_ROOT/go"
         PCG_POSTGRES_DSN="$POSTGRES_DSN" \
         PCG_CONTENT_STORE_DSN="$POSTGRES_DSN" \
+        PCG_NEO4J_URI="bolt://localhost:${NEO4J_BOLT_PORT}" \
+        PCG_NEO4J_USERNAME="neo4j" \
+        PCG_NEO4J_PASSWORD="${PCG_NEO4J_PASSWORD:-change-me}" \
+        NEO4J_URI="bolt://localhost:${NEO4J_BOLT_PORT}" \
+        NEO4J_USERNAME="neo4j" \
+        NEO4J_PASSWORD="${PCG_NEO4J_PASSWORD:-change-me}" \
         go run ./cmd/bootstrap-data-plane
     )
+}
+
+seed_incremental_refresh_state() {
+    echo "Seeding incremental refresh proof state..."
+    cat <<'SQL' | psql_exec >/dev/null
+INSERT INTO ingestion_scopes (
+    scope_id, scope_kind, source_system, source_key, parent_scope_id,
+    collector_kind, partition_key, observed_at, ingested_at, status,
+    active_generation_id, payload
+) VALUES (
+    'scope-incremental-refresh', 'repository', 'git', 'repo-incremental-refresh',
+    NULL, 'git', 'repo-incremental-refresh', TIMESTAMPTZ '2026-04-16T00:00:00Z',
+    TIMESTAMPTZ '2026-04-16T00:05:00Z', 'pending', NULL,
+    $json${"repo_id":"repo-123"}$json$::jsonb
+)
+ON CONFLICT (scope_id) DO UPDATE SET
+    scope_kind = EXCLUDED.scope_kind,
+    source_system = EXCLUDED.source_system,
+    source_key = EXCLUDED.source_key,
+    parent_scope_id = EXCLUDED.parent_scope_id,
+    collector_kind = EXCLUDED.collector_kind,
+    partition_key = EXCLUDED.partition_key,
+    observed_at = EXCLUDED.observed_at,
+    ingested_at = EXCLUDED.ingested_at,
+    status = EXCLUDED.status,
+    active_generation_id = EXCLUDED.active_generation_id,
+    payload = EXCLUDED.payload;
+
+INSERT INTO scope_generations (
+    generation_id, scope_id, trigger_kind, freshness_hint,
+    observed_at, ingested_at, status, activated_at, superseded_at, payload
+) VALUES
+(
+    'generation-incremental-refresh-a', 'scope-incremental-refresh', 'snapshot',
+    'fingerprint-a', TIMESTAMPTZ '2026-04-16T00:00:00Z', TIMESTAMPTZ '2026-04-16T00:05:00Z',
+    'pending', NULL, NULL, '{}'::jsonb
+),
+(
+    'generation-incremental-refresh-b', 'scope-incremental-refresh', 'snapshot',
+    'fingerprint-b', TIMESTAMPTZ '2026-04-16T00:01:00Z', TIMESTAMPTZ '2026-04-16T00:06:00Z',
+    'pending', NULL, NULL, '{}'::jsonb
+)
+ON CONFLICT (generation_id) DO UPDATE SET
+    scope_id = EXCLUDED.scope_id,
+    trigger_kind = EXCLUDED.trigger_kind,
+    freshness_hint = EXCLUDED.freshness_hint,
+    observed_at = EXCLUDED.observed_at,
+    ingested_at = EXCLUDED.ingested_at,
+    status = EXCLUDED.status,
+    activated_at = EXCLUDED.activated_at,
+    superseded_at = EXCLUDED.superseded_at,
+    payload = EXCLUDED.payload;
+
+INSERT INTO fact_records (
+    fact_id, scope_id, generation_id, fact_kind, stable_fact_key,
+    source_system, source_fact_key, source_uri, source_record_id,
+    observed_at, ingested_at, is_tombstone, payload
+) VALUES
+(
+    'fact-incremental-refresh-a', 'scope-incremental-refresh', 'generation-incremental-refresh-a',
+    'repository', 'repository:fact-incremental-refresh-a', 'git', 'fact-incremental-refresh-a',
+    NULL, NULL, TIMESTAMPTZ '2026-04-16T00:00:00Z', TIMESTAMPTZ '2026-04-16T00:05:00Z',
+    FALSE, $json${"graph_id":"incremental-refresh-proof-repo","graph_kind":"repository","name":"platform-context-graph","content_path":"README.md","content_body":"initial body","content_digest":"initial body"}$json$::jsonb
+),
+(
+    'fact-incremental-refresh-b', 'scope-incremental-refresh', 'generation-incremental-refresh-b',
+    'repository', 'repository:fact-incremental-refresh-b', 'git', 'fact-incremental-refresh-b',
+    NULL, NULL, TIMESTAMPTZ '2026-04-16T00:01:00Z', TIMESTAMPTZ '2026-04-16T00:06:00Z',
+    FALSE, $json${"graph_id":"incremental-refresh-proof-repo","graph_kind":"repository","name":"platform-context-graph","content_path":"README.md","content_body":"changed body","content_digest":"changed body"}$json$::jsonb
+)
+ON CONFLICT (fact_id) DO UPDATE SET
+    fact_kind = EXCLUDED.fact_kind,
+    stable_fact_key = EXCLUDED.stable_fact_key,
+    source_system = EXCLUDED.source_system,
+    source_fact_key = EXCLUDED.source_fact_key,
+    source_uri = EXCLUDED.source_uri,
+    source_record_id = EXCLUDED.source_record_id,
+    observed_at = EXCLUDED.observed_at,
+    ingested_at = EXCLUDED.ingested_at,
+    is_tombstone = EXCLUDED.is_tombstone,
+    payload = EXCLUDED.payload;
+
+INSERT INTO fact_work_items (
+    work_item_id, scope_id, generation_id, stage, domain, status,
+    attempt_count, lease_owner, claim_until, visible_at,
+    last_attempt_at, next_attempt_at, failure_class, failure_message,
+    failure_details, payload, created_at, updated_at
+) VALUES
+(
+    'projector_scope-incremental-refresh_generation-incremental-refresh-a',
+    'scope-incremental-refresh', 'generation-incremental-refresh-a', 'projector',
+    'source_local', 'pending', 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, '{}'::jsonb, TIMESTAMPTZ '2026-04-16T00:05:00Z', TIMESTAMPTZ '2026-04-16T00:05:00Z'
+),
+(
+    'projector_scope-incremental-refresh_generation-incremental-refresh-b',
+    'scope-incremental-refresh', 'generation-incremental-refresh-b', 'projector',
+    'source_local', 'pending', 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, '{}'::jsonb, TIMESTAMPTZ '2026-04-16T00:06:00Z', TIMESTAMPTZ '2026-04-16T00:06:00Z'
+)
+ON CONFLICT (work_item_id) DO NOTHING;
+SQL
 }
 
 start_projector() {
@@ -156,7 +340,6 @@ start_projector() {
     (
         cd "$REPO_ROOT/go"
         PCG_LISTEN_ADDR="127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}" \
-        PCG_METRICS_ADDR="127.0.0.1:${PCG_PROJECTOR_METRICS_PORT}" \
         PCG_POSTGRES_DSN="$POSTGRES_DSN" \
         PCG_CONTENT_STORE_DSN="$POSTGRES_DSN" \
         PCG_PROJECTOR_RETRY_ONCE_SCOPE_GENERATION="$PROJECTOR_RETRY_ONCE_SCOPE_GENERATION" \
@@ -175,41 +358,50 @@ start_projector() {
     PROJECTOR_PID="$!"
 }
 
-run_pytest() {
-    echo "Running incremental refresh compose pytest (unchanged + live retry-once changed-generation proof)..."
-    local pythonpath="src:."
-    if [[ -n "${PYTHONPATH:-}" ]]; then
-        pythonpath="$pythonpath:$PYTHONPATH"
+verify_incremental_refresh_outputs() {
+    wait_for_sql_value "SELECT active_generation_id FROM ingestion_scopes WHERE scope_id = 'scope-incremental-refresh'" "generation-incremental-refresh-b" 180 1
+    wait_for_sql_value "SELECT status FROM scope_generations WHERE generation_id = 'generation-incremental-refresh-a'" "superseded" 180 1
+    wait_for_sql_value "SELECT status FROM scope_generations WHERE generation_id = 'generation-incremental-refresh-b'" "active" 180 1
+    wait_for_sql_value "SELECT status FROM fact_work_items WHERE generation_id = 'generation-incremental-refresh-b' AND stage = 'projector'" "succeeded" 180 1
+
+    local attempt_count
+    attempt_count="$(psql_query "SELECT attempt_count FROM fact_work_items WHERE generation_id = 'generation-incremental-refresh-b' AND stage = 'projector'" | tr -d '[:space:]')"
+    if [[ ! "$attempt_count" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Expected retry-once proof to increment attempt_count for generation B, got: ${attempt_count:-<empty>}" >&2
+        return 1
     fi
-    PCG_E2E_INCREMENTAL_REFRESH_BASE_URL="http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}" \
-    PCG_E2E_POSTGRES_DSN="$POSTGRES_DSN" \
-    PCG_E2E_TIMEOUT_SECONDS="$TIMEOUT_SECONDS" \
-    PYTHONPATH="$pythonpath" \
-    uv run \
-        --with httpx \
-        --with 'psycopg[binary]' \
-        pytest tests/e2e/test_incremental_refresh_compose.py -q
+
+    curl -fsS "http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}/admin/status?format=json" >"$STATUS_FILE"
+    curl -fsS "http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}/metrics" >"$METRICS_FILE"
+
+    jq -e '
+        (.health.state | type) == "string" and
+        ((.flow // []) | map(select(.lane == "projector")) | length) == 1 and
+        ((.stages // []) | map(select(.stage == "projector")) | length) == 1
+    ' "$STATUS_FILE" >/dev/null
+    rg -q 'pcg_runtime_info\{service_name="projector"' "$METRICS_FILE"
 }
 
 verify_neo4j_projection() {
-    echo "Verifying Neo4j projection state..."
     local result
+    local count
     result="$("${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
         -u neo4j \
         -p "${PCG_NEO4J_PASSWORD:-change-me}" \
         --format plain \
-        "MATCH (n:SourceLocalRecord {record_id: 'incremental-refresh-proof-repo'}) RETURN count(n) AS count")"
-    if ! printf '%s\n' "$result" | rg -q '^[1-9][0-9]*$'; then
-        echo "Expected at least one SourceLocalRecord in Neo4j, got: $result" >&2
+        "MATCH (n:Repository {scope_id: 'scope-incremental-refresh', generation_id: 'generation-incremental-refresh-b'}) RETURN count(n) AS count")"
+    count="$(printf '%s\n' "$result" | tail -n 1 | tr -d '[:space:]')"
+    if [[ ! "$count" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Expected at least one canonical Repository node in Neo4j, got: $result" >&2
         return 1
     fi
 }
 
-require_tool docker
 require_tool curl
-require_tool python3
+require_tool docker
 require_tool go
-require_tool uv
+require_tool jq
+require_tool nc
 require_tool rg
 
 if docker compose version >/dev/null 2>&1; then
@@ -243,13 +435,17 @@ for attempt in 1 2; do
     sleep 2
 done
 
+refresh_compose_ports
+
 wait_for_postgres 60
 wait_for_neo4j 60
 bootstrap_data_plane_schema
+seed_incremental_refresh_state
 start_projector
 wait_for_http "http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}/healthz" 60 1
 wait_for_http "http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}/readyz" 60 1
-run_pytest
+wait_for_http "http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}/metrics" 60 1
+verify_incremental_refresh_outputs
 verify_neo4j_projection
 
 echo

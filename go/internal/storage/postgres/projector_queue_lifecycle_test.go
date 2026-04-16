@@ -31,22 +31,54 @@ func TestProjectorQueueAckPromotesGenerationAndSupersedesPriorActive(t *testing.
 		t.Fatalf("Ack() error = %v, want nil", err)
 	}
 
-	if got, want := len(db.execs), 1; got != want {
+	if got, want := db.beginCalls, 1; got != want {
+		t.Fatalf("begin count = %d, want %d", got, want)
+	}
+	if got, want := len(db.execs), 4; got != want {
 		t.Fatalf("exec count = %d, want %d", got, want)
 	}
 
-	query := db.execs[0].query
-	for _, want := range []string{
-		"UPDATE scope_generations",
-		"WHEN status = 'active' THEN 'superseded'",
-		"WHEN generation_id = $3 THEN 'active'",
-		"UPDATE ingestion_scopes",
-		"active_generation_id = $3",
-		"UPDATE fact_work_items",
-		"status = 'succeeded'",
-	} {
-		if !strings.Contains(query, want) {
-			t.Fatalf("Ack() query missing %q:\n%s", want, query)
+	checks := []struct {
+		query string
+		want  []string
+	}{
+		{
+			query: db.execs[0].query,
+			want: []string{
+				"UPDATE scope_generations",
+				"status = 'superseded'",
+				"generation_id <> $3",
+				"status = 'active'",
+			},
+		},
+		{
+			query: db.execs[1].query,
+			want: []string{
+				"UPDATE scope_generations",
+				"status = 'active'",
+				"activated_at = COALESCE(activated_at, $1)",
+			},
+		},
+		{
+			query: db.execs[2].query,
+			want: []string{
+				"UPDATE ingestion_scopes",
+				"active_generation_id = $3",
+			},
+		},
+		{
+			query: db.execs[3].query,
+			want: []string{
+				"UPDATE fact_work_items",
+				"status = 'succeeded'",
+			},
+		},
+	}
+	for _, check := range checks {
+		for _, want := range check.want {
+			if !strings.Contains(check.query, want) {
+				t.Fatalf("Ack() query missing %q:\n%s", want, check.query)
+			}
 		}
 	}
 }
@@ -200,7 +232,8 @@ func (e *retryableTestError) Retryable() bool {
 }
 
 type recordingExecQueryer struct {
-	execs []recordedExecCall
+	beginCalls int
+	execs      []recordedExecCall
 }
 
 type recordedExecCall struct {
@@ -219,3 +252,24 @@ func (r *recordingExecQueryer) ExecContext(_ context.Context, query string, args
 func (r *recordingExecQueryer) QueryContext(context.Context, string, ...any) (Rows, error) {
 	return nil, nil
 }
+
+func (r *recordingExecQueryer) Begin(context.Context) (Transaction, error) {
+	r.beginCalls++
+	return recordingTransaction{parent: r}, nil
+}
+
+type recordingTransaction struct {
+	parent *recordingExecQueryer
+}
+
+func (tx recordingTransaction) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return tx.parent.ExecContext(ctx, query, args...)
+}
+
+func (recordingTransaction) QueryContext(context.Context, string, ...any) (Rows, error) {
+	return nil, nil
+}
+
+func (recordingTransaction) Commit() error { return nil }
+
+func (recordingTransaction) Rollback() error { return nil }

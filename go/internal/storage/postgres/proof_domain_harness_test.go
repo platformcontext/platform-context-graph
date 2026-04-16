@@ -304,6 +304,50 @@ func (db *proofDomainDB) claimReducerWork(now time.Time, leaseOwner string, clai
 func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	_ = ctx
 	switch {
+	case strings.Contains(query, "UPDATE scope_generations") && strings.Contains(query, "status = 'superseded'"):
+		scopeID := args[1].(string)
+		generationID := args[2].(string)
+		for key, generation := range tx.state.generations {
+			if generation.ScopeID != scopeID || generation.GenerationID == generationID {
+				continue
+			}
+			if generation.Status != scope.GenerationStatusActive {
+				continue
+			}
+			generation.Status = scope.GenerationStatusSuperseded
+			tx.state.generations[key] = generation
+		}
+		return proofResult{}, nil
+	case strings.Contains(query, "UPDATE scope_generations") && strings.Contains(query, "activated_at = COALESCE"):
+		scopeID := args[1].(string)
+		generationID := args[2].(string)
+		for key, generation := range tx.state.generations {
+			if generation.ScopeID != scopeID || generation.GenerationID != generationID {
+				continue
+			}
+			generation.Status = scope.GenerationStatusActive
+			tx.state.generations[key] = generation
+		}
+		return proofResult{}, nil
+	case strings.Contains(query, "UPDATE ingestion_scopes") && strings.Contains(query, "active_generation_id = $3"):
+		scopeID := args[1].(string)
+		generationID := args[2].(string)
+		tx.state.activeGenerations[scopeID] = generationID
+		tx.state.scopeStatuses[scopeID] = string(scope.GenerationStatusActive)
+		return proofResult{}, nil
+	case strings.Contains(query, "WHERE stage = 'projector'") && strings.Contains(query, "status = 'succeeded'"):
+		for key, item := range tx.state.workItems {
+			if item.stage != "projector" || item.scopeID != args[1].(string) || item.generationID != args[2].(string) || item.leaseOwner != args[3].(string) {
+				continue
+			}
+			item.status = "succeeded"
+			item.updatedAt = tx.db.now
+			item.leaseOwner = ""
+			item.claimUntil = time.Time{}
+			tx.state.workItems[key] = item
+			return proofResult{}, nil
+		}
+		return nil, fmt.Errorf("projector work item not found for scope=%s generation=%s", args[1].(string), args[2].(string))
 	case strings.Contains(query, "INSERT INTO ingestion_scopes"):
 		metadata := map[string]string{}
 		if payload, err := unmarshalPayload(args[11].([]byte)); err == nil {
