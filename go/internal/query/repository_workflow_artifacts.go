@@ -88,12 +88,16 @@ func workflowArtifactName(relativePath string) string {
 }
 
 func enrichWorkflowArtifactRow(row map[string]any, content string) {
-	reusableWorkflowRepositories, runCommands, gatingConditions, needsDependencies := workflowArtifactDetails(content)
+	reusableWorkflowRepositories, workflowInputRepositories, runCommands, gatingConditions, needsDependencies := workflowArtifactDetails(content)
 	signals := stringSliceValue(row, "signals")
 
 	if len(reusableWorkflowRepositories) > 0 {
 		row["reusable_workflow_repositories"] = reusableWorkflowRepositories
 		signals = append(signals, "reusable_workflow_refs")
+	}
+	if len(workflowInputRepositories) > 0 {
+		row["workflow_input_repositories"] = workflowInputRepositories
+		signals = append(signals, "workflow_input_repositories")
 	}
 	if len(runCommands) > 0 {
 		row["run_commands"] = runCommands
@@ -113,13 +117,14 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	}
 }
 
-func workflowArtifactDetails(content string) ([]string, []string, []string, []string) {
+func workflowArtifactDetails(content string) ([]string, []string, []string, []string, []string) {
 	documents, err := decodeYAMLMaps(content)
 	if err != nil {
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	}
 
 	reusableWorkflowRepositories := make([]string, 0)
+	workflowInputRepositories := make([]string, 0)
 	runCommands := make([]string, 0)
 	gatingConditions := make([]string, 0)
 	needsDependencies := make([]string, 0)
@@ -135,6 +140,16 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 			}
 			if workflowRef := githubActionsReusableWorkflowRepoRef(StringVal(job, "uses")); workflowRef != "" {
 				reusableWorkflowRepositories = append(reusableWorkflowRepositories, workflowRef)
+			}
+			workflowInputRepositories = append(
+				workflowInputRepositories,
+				githubActionsWorkflowInputRepositoryMetadata(job)...,
+			)
+			if with, ok := job["with"].(map[string]any); ok {
+				workflowInputRepositories = append(
+					workflowInputRepositories,
+					githubActionsWorkflowInputRepositoryMetadata(with)...,
+				)
 			}
 			if condition := strings.TrimSpace(StringVal(job, "if")); condition != "" {
 				gatingConditions = append(gatingConditions, "job "+jobName+" if "+condition)
@@ -168,6 +183,7 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 	}
 
 	return sortedUniqueWorkflowStrings(reusableWorkflowRepositories),
+		sortedUniqueWorkflowStrings(workflowInputRepositories),
 		sortedUniqueWorkflowStrings(runCommands),
 		sortedUniqueWorkflowStrings(gatingConditions),
 		sortedUniqueWorkflowStrings(needsDependencies)

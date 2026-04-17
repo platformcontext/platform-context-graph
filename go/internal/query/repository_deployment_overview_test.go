@@ -338,3 +338,49 @@ func TestBuildRepositoryDeploymentOverviewIncludesSingleSourceConfigPathsInDeliv
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 }
+
+func TestBuildRepositoryDeploymentOverviewIncludesWorkflowInputRepositoriesInDeliveryPaths(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		[]string{"github_actions"},
+		[]string{"github_actions"},
+		map[string]any{
+			"deployment_artifacts": map[string]any{
+				"workflow_artifacts": []map[string]any{
+					{
+						"relative_path":                  ".github/workflows/dispatch.yaml",
+						"artifact_type":                  "github_actions_workflow",
+						"workflow_name":                  "dispatch",
+						"reusable_workflow_repositories": []string{"boatsgroup/core-engineering-automation"},
+						"workflow_input_repositories":    []string{"boatsgroup/automation-fallback", "boatsgroup/core-engineering-automation"},
+						"signals":                        []string{"workflow_file", "reusable_workflow_refs", "workflow_input_repositories"},
+					},
+				},
+			},
+		},
+	)
+
+	deliveryPaths, ok := got["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
+	}
+	if len(deliveryPaths) != 1 {
+		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "workflow_input_repositories"), []string{"boatsgroup/automation-fallback", "boatsgroup/core-engineering-automation"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("delivery_paths[0].workflow_input_repositories = %#v, want %#v", got, want)
+	}
+
+	topologyStory, ok := got["topology_story"].([]string)
+	if !ok {
+		t.Fatalf("topology_story type = %T, want []string", got["topology_story"])
+	}
+	if len(topologyStory) != 1 {
+		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/dispatch.yaml as github_actions_workflow dispatch via reusable workflow repos boatsgroup/core-engineering-automation and workflow input repos boatsgroup/automation-fallback, boatsgroup/core-engineering-automation (workflow_file, reusable_workflow_refs, workflow_input_repositories)."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+}
