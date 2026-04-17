@@ -92,6 +92,39 @@ func TestRelationshipPlatformFixtureComposeEmitsCrossRepoEvidence(t *testing.T) 
 	}
 }
 
+func TestRelationshipPlatformFixtureLocalWorkflowDoesNotEmitCanonicalRepoEvidence(t *testing.T) {
+	t.Parallel()
+
+	content := readRelationshipPlatformFixture(
+		t,
+		"service-worker-jobs",
+		".github",
+		"workflows",
+		"deploy-modern.yml",
+	)
+
+	evidence := DiscoverEvidence(
+		[]facts.Envelope{
+			{
+				ScopeID: "service-worker-jobs",
+				Payload: map[string]any{
+					"artifact_type": "github_actions_workflow",
+					"relative_path": ".github/workflows/deploy-modern.yml",
+					"content":       content,
+				},
+			},
+		},
+		[]CatalogEntry{
+			{RepoID: "delivery-legacy-automation", Aliases: []string{"delivery-legacy-automation"}},
+			{RepoID: "service-worker-jobs", Aliases: []string{"service-worker-jobs"}},
+		},
+	)
+
+	if len(evidence) != 0 {
+		t.Fatalf("local workflow evidence = %#v, want none", evidence)
+	}
+}
+
 func readRelationshipPlatformFixture(t *testing.T, pathParts ...string) string {
 	t.Helper()
 
