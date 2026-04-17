@@ -80,6 +80,17 @@ func TestRelationshipPlatformFixtureComposeEmitsCrossRepoEvidence(t *testing.T) 
 		t.Fatalf("build-context relationship type = %q, want %q", got, want)
 	}
 
+	imageEvidence, ok := findEvidenceByKind(evidence, EvidenceKindDockerComposeImage)
+	if !ok {
+		t.Fatal("missing docker compose image evidence for relationship-platform fixture")
+	}
+	if got, want := imageEvidence.TargetRepoID, "service-worker-jobs"; got != want {
+		t.Fatalf("image target repo = %q, want %q", got, want)
+	}
+	if got, want := imageEvidence.RelationshipType, RelDeploysFrom; got != want {
+		t.Fatalf("image relationship type = %q, want %q", got, want)
+	}
+
 	dependsOnEvidence, ok := findEvidenceByKind(evidence, EvidenceKindDockerComposeDependsOn)
 	if !ok {
 		t.Fatal("missing docker compose depends_on evidence for relationship-platform fixture")

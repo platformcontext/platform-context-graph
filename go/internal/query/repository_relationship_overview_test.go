@@ -122,6 +122,12 @@ func TestBuildRepositoryRelationshipOverviewTreatsDockerComposeAsIACDriven(t *te
 			"evidence_type": "docker_compose_build_context",
 		},
 		{
+			"type":          "DEPLOYS_FROM",
+			"target_name":   "service-worker-jobs",
+			"target_id":     "repo-worker",
+			"evidence_type": "docker_compose_image",
+		},
+		{
 			"type":          "DEPENDS_ON",
 			"target_name":   "service-worker-jobs",
 			"target_id":     "repo-worker",
@@ -137,15 +143,15 @@ func TestBuildRepositoryRelationshipOverviewTreatsDockerComposeAsIACDriven(t *te
 	if !ok {
 		t.Fatalf("iac_driven type = %T, want []map[string]any", overview["iac_driven"])
 	}
-	if len(iacDriven) != 2 {
-		t.Fatalf("len(iac_driven) = %d, want 2", len(iacDriven))
+	if len(iacDriven) != 3 {
+		t.Fatalf("len(iac_driven) = %d, want 3", len(iacDriven))
 	}
 
 	evidenceTypes := map[string]struct{}{}
 	for _, row := range iacDriven {
 		evidenceTypes[StringVal(row, "evidence_type")] = struct{}{}
 	}
-	for _, want := range []string{"docker_compose_build_context", "docker_compose_depends_on"} {
+	for _, want := range []string{"docker_compose_build_context", "docker_compose_image", "docker_compose_depends_on"} {
 		if _, ok := evidenceTypes[want]; !ok {
 			t.Fatalf("iac_driven missing evidence_type %q", want)
 		}

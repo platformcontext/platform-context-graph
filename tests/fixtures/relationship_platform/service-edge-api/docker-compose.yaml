@@ -2,6 +2,7 @@ services:
   edge-api:
     build:
       context: .
+    image: ghcr.io/platformcontext/service-worker-jobs:latest
     depends_on:
       service-worker-jobs:
         condition: service_started
