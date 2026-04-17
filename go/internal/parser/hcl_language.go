@@ -280,6 +280,19 @@ func parseTerragruntConfig(body *hclsyntax.Body, source []byte, path string) map
 	row["includes"] = strings.Join(includeNames, ",")
 	row["locals"] = strings.Join(localNames, ",")
 	row["inputs"] = strings.Join(objectAttributeKeys(body.Attributes["inputs"], source), ",")
+	helperPaths := parseTerragruntHelperPaths(source)
+	if len(helperPaths.includePaths) > 0 {
+		row["include_paths"] = strings.Join(helperPaths.includePaths, ",")
+	}
+	if len(helperPaths.readConfigPaths) > 0 {
+		row["read_config_paths"] = strings.Join(helperPaths.readConfigPaths, ",")
+	}
+	if len(helperPaths.findInParentFoldersPaths) > 0 {
+		row["find_in_parent_folders_paths"] = strings.Join(helperPaths.findInParentFoldersPaths, ",")
+	}
+	if len(helperPaths.localConfigAssetPaths) > 0 {
+		row["local_config_asset_paths"] = strings.Join(helperPaths.localConfigAssetPaths, ",")
+	}
 	return row
 }
 

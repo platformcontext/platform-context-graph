@@ -47,3 +47,48 @@ include "root" {
 		t.Fatalf("source = %#v, want %#v", rows[0]["source"], "../modules/app")
 	}
 }
+
+func TestParseTerragruntConfigExtractsHelperPaths(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "terragrunt.hcl")
+	source := []byte(`terraform {
+  source = "../modules/app"
+}
+
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+locals {
+  env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+  runtime = yamldecode(file("${get_repo_root()}/config/runtime.yaml"))
+  rendered = templatefile("${path.module}/templates/runtime.json", {})
+}
+`)
+
+	file, diags := hclparse.NewParser().ParseHCL(source, filePath)
+	if diags.HasErrors() {
+		t.Fatalf("ParseHCL() diagnostics = %s", diags.Error())
+	}
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		t.Fatalf("file.Body = %T, want *hclsyntax.Body", file.Body)
+	}
+
+	config := parseTerragruntConfig(body, source, filePath)
+
+	if got, want := config["include_paths"], "root.hcl"; got != want {
+		t.Fatalf("include_paths = %#v, want %#v", got, want)
+	}
+	if got, want := config["read_config_paths"], "env.hcl"; got != want {
+		t.Fatalf("read_config_paths = %#v, want %#v", got, want)
+	}
+	if got, want := config["find_in_parent_folders_paths"], "env.hcl,root.hcl"; got != want {
+		t.Fatalf("find_in_parent_folders_paths = %#v, want %#v", got, want)
+	}
+	if got, want := config["local_config_asset_paths"], "config/runtime.yaml,templates/runtime.json"; got != want {
+		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
+	}
+}

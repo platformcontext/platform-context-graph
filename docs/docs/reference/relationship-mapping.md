@@ -62,6 +62,7 @@ The repo-to-file traversal rule is now explicit:
 That distinction matters because a lot of dynamic mapping work starts from repo-local files:
 
 - Terraform and Terragrunt evidence often starts as `Repository -> File -> TerraformModule`
+- Terragrunt helper-path provenance can also stay attached to `TerragruntConfig` metadata first, then surface on the query path as truthful config-discovery relationships such as `include`, `read_terragrunt_config`, `find_in_parent_folders`, and repo-local config assets
 - GitOps and workflow evidence often starts as `Repository -> File -> K8sResource` or `Repository -> File -> workflow/config entity`
 - MCP and query hot paths often need file counts, entrypoint scans, or content discovery without walking the directory tree
 
