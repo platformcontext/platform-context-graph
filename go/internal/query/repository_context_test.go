@@ -314,7 +314,7 @@ func TestGetRepositoryContextIncludesTerraformAndTerragruntInfrastructureFromCon
 					"hash-docker", int64(30), "dockerfile", "dockerfile",
 				},
 				{
-					"repo-1", ".github/workflows/deploy.yaml", "abc123", "",
+					"repo-1", ".github/workflows/deploy.yaml", "abc123", "name: deploy\non:\n  push:\n",
 					"hash-gha", int64(40), "yaml", "github_actions_workflow",
 				},
 			},
@@ -414,6 +414,28 @@ func TestGetRepositoryContextIncludesTerraformAndTerragruntInfrastructureFromCon
 	}
 	if got, want := artifactCounts["github_actions"], float64(1); got != want {
 		t.Fatalf("artifact_family_counts[github_actions] = %#v, want %#v", got, want)
+	}
+
+	deploymentArtifacts, ok := overview["deployment_artifacts"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_artifacts type = %T, want map[string]any", overview["deployment_artifacts"])
+	}
+	workflowArtifacts, ok := deploymentArtifacts["workflow_artifacts"].([]any)
+	if !ok {
+		t.Fatalf("workflow_artifacts type = %T, want []any", deploymentArtifacts["workflow_artifacts"])
+	}
+	if len(workflowArtifacts) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(workflowArtifacts))
+	}
+	workflowArtifact, ok := workflowArtifacts[0].(map[string]any)
+	if !ok {
+		t.Fatalf("workflow_artifacts[0] type = %T, want map[string]any", workflowArtifacts[0])
+	}
+	if got, want := workflowArtifact["relative_path"], ".github/workflows/deploy.yaml"; got != want {
+		t.Fatalf("workflow_artifacts[0].relative_path = %#v, want %#v", got, want)
+	}
+	if got, want := workflowArtifact["workflow_name"], "deploy"; got != want {
+		t.Fatalf("workflow_artifacts[0].workflow_name = %#v, want %#v", got, want)
 	}
 }
 

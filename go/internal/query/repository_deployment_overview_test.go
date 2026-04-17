@@ -222,6 +222,53 @@ func TestBuildRepositoryDeploymentOverviewIncludesDockerfileRuntimeStory(t *test
 	}
 }
 
+func TestBuildRepositoryDeploymentOverviewIncludesWorkflowArtifactsInDeliveryPaths(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		[]string{"argocd_application"},
+		[]string{"github_actions"},
+		map[string]any{
+			"deployment_artifacts": map[string]any{
+				"workflow_artifacts": []map[string]any{
+					{
+						"relative_path": ".github/workflows/deploy.yaml",
+						"artifact_type": "github_actions_workflow",
+						"workflow_name": "deploy",
+						"signals":       []string{"workflow_file"},
+					},
+				},
+			},
+		},
+	)
+
+	deliveryPaths, ok := got["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
+	}
+	if len(deliveryPaths) != 1 {
+		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
+	}
+	if got, want := deliveryPaths[0]["kind"], "workflow_artifact"; got != want {
+		t.Fatalf("delivery_paths[0].kind = %#v, want %#v", got, want)
+	}
+	if got, want := deliveryPaths[0]["workflow_name"], "deploy"; got != want {
+		t.Fatalf("delivery_paths[0].workflow_name = %#v, want %#v", got, want)
+	}
+
+	topologyStory, ok := got["topology_story"].([]string)
+	if !ok {
+		t.Fatalf("topology_story type = %T, want []string", got["topology_story"])
+	}
+	if len(topologyStory) != 1 {
+		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy.yaml as github_actions_workflow deploy (workflow_file)."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+}
+
 func TestBuildRepositoryDeploymentOverviewIncludesSingleSourceConfigPathsInDeliveryPaths(t *testing.T) {
 	t.Parallel()
 

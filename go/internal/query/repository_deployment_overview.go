@@ -102,6 +102,26 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		paths = append(paths, entry)
 	}
 
+	for _, row := range mapSliceValue(deploymentArtifacts, "workflow_artifacts") {
+		path := strings.TrimSpace(StringVal(row, "relative_path"))
+		artifactType := strings.TrimSpace(StringVal(row, "artifact_type"))
+		if path == "" || artifactType == "" {
+			continue
+		}
+		entry := map[string]any{
+			"path":          path,
+			"kind":          "workflow_artifact",
+			"artifact_type": artifactType,
+		}
+		if workflowName := strings.TrimSpace(StringVal(row, "workflow_name")); workflowName != "" {
+			entry["workflow_name"] = workflowName
+		}
+		if signals := stringSliceValue(row, "signals"); len(signals) > 0 {
+			entry["signals"] = signals
+		}
+		paths = append(paths, entry)
+	}
+
 	for _, row := range mapSliceValue(deploymentArtifacts, "config_paths") {
 		path := strings.TrimSpace(StringVal(row, "path"))
 		sourceRepo := strings.TrimSpace(StringVal(row, "source_repo"))
@@ -311,6 +331,21 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 				evidenceKind,
 				relativePath,
 			))
+		case "workflow_artifact":
+			path := strings.TrimSpace(StringVal(row, "path"))
+			artifactType := strings.TrimSpace(StringVal(row, "artifact_type"))
+			workflowName := strings.TrimSpace(StringVal(row, "workflow_name"))
+			if path == "" || artifactType == "" {
+				continue
+			}
+			line := fmt.Sprintf("Workflow delivery paths include %s", path)
+			if workflowName != "" {
+				line += fmt.Sprintf(" as %s %s", artifactType, workflowName)
+			}
+			if signals := stringSliceValue(row, "signals"); len(signals) > 0 {
+				line += fmt.Sprintf(" (%s)", strings.Join(signals, ", "))
+			}
+			story = append(story, line+".")
 		}
 	}
 

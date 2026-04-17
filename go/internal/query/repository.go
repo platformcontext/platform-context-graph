@@ -113,35 +113,22 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 				files = []FileContent{}
 			}
 			overview := buildRepositoryInfrastructureOverview(result["infrastructure"].([]map[string]any), files)
-			configArtifacts, configErr := loadSharedRepositoryConfigArtifacts(
+			deploymentOverview, _ := loadDeploymentArtifactOverview(
 				ctx,
 				h.Neo4j,
 				h.Content,
 				repoID,
 				StringVal(baseRow, "name"),
 				files,
+				overview,
 			)
-			if configErr == nil && len(configArtifacts) > 0 {
-				if overview == nil {
-					overview = map[string]any{}
-				}
-				overview["deployment_artifacts"] = mergeDeploymentArtifactMaps(
-					mapValue(overview, "deployment_artifacts"),
-					configArtifacts,
-				)
-				result["deployment_artifacts"] = overview["deployment_artifacts"]
-			}
-			if runtimeArtifacts, runtimeErr := loadRepositoryRuntimeArtifacts(ctx, h.Content, repoID, files); runtimeErr == nil && len(runtimeArtifacts) > 0 {
-				if overview == nil {
-					overview = map[string]any{}
-				}
-				overview["deployment_artifacts"] = mergeDeploymentArtifactMaps(
-					mapValue(overview, "deployment_artifacts"),
-					runtimeArtifacts,
-				)
-				result["deployment_artifacts"] = overview["deployment_artifacts"]
+			if deploymentOverview != nil {
+				overview = deploymentOverview
 			}
 			if overview != nil {
+				if deploymentArtifacts := mapValue(overview, "deployment_artifacts"); len(deploymentArtifacts) > 0 {
+					result["deployment_artifacts"] = deploymentArtifacts
+				}
 				result["infrastructure_overview"] = overview
 			}
 		}
@@ -302,40 +289,17 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		}
 		infrastructure := queryRepoInfrastructure(r.Context(), h.Neo4j, h.Content, map[string]any{"repo_id": repoID})
 		infrastructureOverview = buildRepositoryInfrastructureOverview(infrastructure, files)
-		configArtifacts, err := loadSharedRepositoryConfigArtifacts(
+		deploymentOverview, _ := loadDeploymentArtifactOverview(
 			r.Context(),
 			h.Neo4j,
 			h.Content,
 			repoID,
 			repo.Name,
 			files,
+			infrastructureOverview,
 		)
-		if err != nil {
-			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("config artifact overview failed: %v", err))
-			return
-		}
-		if len(configArtifacts) > 0 {
-			if infrastructureOverview == nil {
-				infrastructureOverview = map[string]any{}
-			}
-			infrastructureOverview["deployment_artifacts"] = mergeDeploymentArtifactMaps(
-				mapValue(infrastructureOverview, "deployment_artifacts"),
-				configArtifacts,
-			)
-		}
-		runtimeArtifacts, err := loadRepositoryRuntimeArtifacts(r.Context(), h.Content, repoID, files)
-		if err != nil {
-			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("runtime artifact overview failed: %v", err))
-			return
-		}
-		if len(runtimeArtifacts) > 0 {
-			if infrastructureOverview == nil {
-				infrastructureOverview = map[string]any{}
-			}
-			infrastructureOverview["deployment_artifacts"] = mergeDeploymentArtifactMaps(
-				mapValue(infrastructureOverview, "deployment_artifacts"),
-				runtimeArtifacts,
-			)
+		if deploymentOverview != nil {
+			infrastructureOverview = deploymentOverview
 		}
 		relationships := queryRepoDependencies(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID})
 		if relationshipOverview := buildRepositoryRelationshipOverview(relationships); relationshipOverview != nil {
