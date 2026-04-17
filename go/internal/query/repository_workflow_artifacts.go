@@ -48,7 +48,25 @@ func loadRepositoryWorkflowArtifacts(
 			return nil, fmt.Errorf("list workflow artifact files: %w", err)
 		}
 	}
-	return buildRepositoryWorkflowArtifacts(candidates), nil
+
+	contentFiles := make([]FileContent, 0, len(candidates))
+	for _, file := range candidates {
+		if !isGitHubActionsWorkflowFile(file) {
+			continue
+		}
+		if strings.TrimSpace(file.Content) == "" {
+			fileContent, err := reader.GetFileContent(ctx, repoID, file.RelativePath)
+			if err != nil {
+				return nil, fmt.Errorf("get workflow artifact file %q: %w", file.RelativePath, err)
+			}
+			if fileContent == nil {
+				continue
+			}
+			file = *fileContent
+		}
+		contentFiles = append(contentFiles, file)
+	}
+	return buildRepositoryWorkflowArtifacts(contentFiles), nil
 }
 
 func isGitHubActionsWorkflowFile(file FileContent) bool {
@@ -70,7 +88,7 @@ func workflowArtifactName(relativePath string) string {
 }
 
 func enrichWorkflowArtifactRow(row map[string]any, content string) {
-	reusableWorkflowRepositories, runCommands := workflowArtifactDetails(content)
+	reusableWorkflowRepositories, runCommands, gatingConditions, needsDependencies := workflowArtifactDetails(content)
 	signals := stringSliceValue(row, "signals")
 
 	if len(reusableWorkflowRepositories) > 0 {
@@ -82,25 +100,35 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 		row["command_count"] = len(runCommands)
 		signals = append(signals, "run_commands")
 	}
+	if len(gatingConditions) > 0 {
+		row["gating_conditions"] = gatingConditions
+		signals = append(signals, "gating_conditions")
+	}
+	if len(needsDependencies) > 0 {
+		row["needs_dependencies"] = needsDependencies
+		signals = append(signals, "job_dependencies")
+	}
 	if len(signals) > 0 {
 		row["signals"] = uniqueWorkflowStringsPreserveOrder(signals)
 	}
 }
 
-func workflowArtifactDetails(content string) ([]string, []string) {
+func workflowArtifactDetails(content string) ([]string, []string, []string, []string) {
 	documents, err := decodeYAMLMaps(content)
 	if err != nil {
-		return nil, nil
+		return nil, nil, nil, nil
 	}
 
 	reusableWorkflowRepositories := make([]string, 0)
 	runCommands := make([]string, 0)
+	gatingConditions := make([]string, 0)
+	needsDependencies := make([]string, 0)
 	for _, document := range documents {
 		jobs, ok := document["jobs"].(map[string]any)
 		if !ok {
 			continue
 		}
-		for _, rawJob := range jobs {
+		for jobName, rawJob := range jobs {
 			job, ok := rawJob.(map[string]any)
 			if !ok {
 				continue
@@ -108,6 +136,10 @@ func workflowArtifactDetails(content string) ([]string, []string) {
 			if workflowRef := githubActionsReusableWorkflowRepoRef(StringVal(job, "uses")); workflowRef != "" {
 				reusableWorkflowRepositories = append(reusableWorkflowRepositories, workflowRef)
 			}
+			if condition := strings.TrimSpace(StringVal(job, "if")); condition != "" {
+				gatingConditions = append(gatingConditions, "job "+jobName+" if "+condition)
+			}
+			needsDependencies = append(needsDependencies, githubActionsNeedsDependencies(jobName, job["needs"])...)
 			steps, ok := job["steps"].([]any)
 			if !ok {
 				continue
@@ -119,6 +151,15 @@ func workflowArtifactDetails(content string) ([]string, []string) {
 				}
 				runCommand := strings.TrimSpace(StringVal(step, "run"))
 				if runCommand == "" {
+					runCommand = ""
+				}
+				if condition := strings.TrimSpace(StringVal(step, "if")); condition != "" {
+					gatingConditions = append(
+						gatingConditions,
+						"step "+jobName+"/"+workflowStepName(step)+" if "+condition,
+					)
+				}
+				if runCommand == "" {
 					continue
 				}
 				runCommands = append(runCommands, runCommand)
@@ -126,7 +167,42 @@ func workflowArtifactDetails(content string) ([]string, []string) {
 		}
 	}
 
-	return sortedUniqueWorkflowStrings(reusableWorkflowRepositories), sortedUniqueWorkflowStrings(runCommands)
+	return sortedUniqueWorkflowStrings(reusableWorkflowRepositories),
+		sortedUniqueWorkflowStrings(runCommands),
+		sortedUniqueWorkflowStrings(gatingConditions),
+		sortedUniqueWorkflowStrings(needsDependencies)
+}
+
+func githubActionsNeedsDependencies(jobName string, rawNeeds any) []string {
+	needs := make([]string, 0, 2)
+	switch value := rawNeeds.(type) {
+	case string:
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			needs = append(needs, jobName+"<-"+trimmed)
+		}
+	case []any:
+		for _, item := range value {
+			trimmed := strings.TrimSpace(StringVal(map[string]any{"needs": item}, "needs"))
+			if trimmed == "" {
+				continue
+			}
+			needs = append(needs, jobName+"<-"+trimmed)
+		}
+	}
+	return needs
+}
+
+func workflowStepName(step map[string]any) string {
+	if name := strings.TrimSpace(StringVal(step, "name")); name != "" {
+		return name
+	}
+	if uses := strings.TrimSpace(StringVal(step, "uses")); uses != "" {
+		return uses
+	}
+	if run := strings.TrimSpace(StringVal(step, "run")); run != "" {
+		return run
+	}
+	return "step"
 }
 
 func sortedUniqueWorkflowStrings(values []string) []string {

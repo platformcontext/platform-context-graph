@@ -275,7 +275,10 @@ verify_service_edge_api_context() {
         ((.relationship_overview.iac_driven // []) | any(
             (.type // "") == "DEPLOYS_FROM" and
             (.target_name // "") == "service-worker-jobs" and
-            (.evidence_type // "") == "docker_compose_build_context"
+            (
+                (.evidence_type // "") == "docker_compose_image" or
+                (.evidence_type // "") == "docker_compose_build_context"
+            )
         )) and
         ((.relationship_overview.iac_driven // []) | any(
             (.type // "") == "DEPENDS_ON" and
@@ -293,6 +296,27 @@ verify_service_edge_api_context() {
             (.artifact_type // "") == "docker_compose" and
             (.relative_path // "") == "docker-compose.yaml" and
             (.service_name // "") == "service-worker-jobs"
+        ))
+    ' "$CONTEXT_FILE" >/dev/null
+}
+
+verify_service_worker_jobs_context() {
+    local repo_id
+    repo_id="$(repository_id_by_name "service-worker-jobs")"
+    if [[ -z "$repo_id" || "$repo_id" == "null" ]]; then
+        echo "Could not resolve service-worker-jobs repository id from /repositories payload." >&2
+        return 1
+    fi
+
+    api_get "/repositories/${repo_id}/context" "$CONTEXT_FILE"
+    jq -e '
+        (.repository.name // "") == "service-worker-jobs" and
+        ((.deployment_artifacts.workflow_artifacts // []) | any(
+            (.relative_path // "") == ".github/workflows/deploy-gated.yml" and
+            (.workflow_name // "") == "deploy-gated" and
+            (.command_count // 0) == 2 and
+            ((.gating_conditions // []) | length) == 2 and
+            ((.needs_dependencies // []) | length) == 1
         ))
     ' "$CONTEXT_FILE" >/dev/null
 }
@@ -385,6 +409,7 @@ verify_api_surface() {
     ' "$CONTEXT_FILE" >/dev/null
 
     verify_service_edge_api_context
+    verify_service_worker_jobs_context
 }
 
 verify_graph_state() {

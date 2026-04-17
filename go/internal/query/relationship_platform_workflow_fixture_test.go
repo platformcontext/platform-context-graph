@@ -141,6 +141,120 @@ func TestRelationshipPlatformLegacyWorkflowSurfacesReusableWorkflowAndRunCommand
 	}
 }
 
+func TestRelationshipPlatformWorkerWorkflowSurfacesGatingAndNeeds(t *testing.T) {
+	t.Parallel()
+
+	artifacts := buildRepositoryWorkflowArtifacts([]FileContent{
+		{
+			RelativePath: ".github/workflows/deploy-gated.yml",
+			ArtifactType: "github_actions_workflow",
+			Content: readRelationshipPlatformFixture(
+				t,
+				"service-worker-jobs",
+				".github",
+				"workflows",
+				"deploy-gated.yml",
+			),
+		},
+	})
+	if artifacts == nil {
+		t.Fatal("buildRepositoryWorkflowArtifacts() = nil, want workflow_artifacts")
+	}
+
+	rows, ok := artifacts["workflow_artifacts"].([]map[string]any)
+	if !ok {
+		t.Fatalf("workflow_artifacts type = %T, want []map[string]any", artifacts["workflow_artifacts"])
+	}
+	if len(rows) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0]["command_count"], 2; got != want {
+		t.Fatalf("workflow_artifacts[0].command_count = %#v, want %#v", got, want)
+	}
+
+	gatingConditions, ok := rows[0]["gating_conditions"].([]string)
+	if !ok {
+		t.Fatalf("workflow_artifacts[0].gating_conditions type = %T, want []string", rows[0]["gating_conditions"])
+	}
+	wantGatingConditions := []string{
+		"job deploy if ${{ github.ref == 'refs/heads/main' }}",
+		"step deploy/Deploy gated worker if ${{ inputs.deploy_enabled == 'true' }}",
+	}
+	if len(gatingConditions) != len(wantGatingConditions) {
+		t.Fatalf("len(workflow_artifacts[0].gating_conditions) = %d, want %d", len(gatingConditions), len(wantGatingConditions))
+	}
+	for i, want := range wantGatingConditions {
+		if got := gatingConditions[i]; got != want {
+			t.Fatalf("workflow_artifacts[0].gating_conditions[%d] = %q, want %q", i, got, want)
+		}
+	}
+
+	needsDependencies, ok := rows[0]["needs_dependencies"].([]string)
+	if !ok {
+		t.Fatalf("workflow_artifacts[0].needs_dependencies type = %T, want []string", rows[0]["needs_dependencies"])
+	}
+	if len(needsDependencies) != 1 || needsDependencies[0] != "deploy<-verify" {
+		t.Fatalf("workflow_artifacts[0].needs_dependencies = %#v, want deploy<-verify", needsDependencies)
+	}
+
+	overview := BuildRepositoryDeploymentOverview(
+		[]string{"service-worker-jobs"},
+		nil,
+		[]string{"github_actions"},
+		map[string]any{"deployment_artifacts": artifacts},
+	)
+
+	deliveryPaths, ok := overview["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", overview["delivery_paths"])
+	}
+	if len(deliveryPaths) != 1 {
+		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
+	}
+	if got, want := deliveryPaths[0]["command_count"], 2; got != want {
+		t.Fatalf("delivery_paths[0].command_count = %#v, want %#v", got, want)
+	}
+
+	topologyStory, ok := overview["topology_story"].([]string)
+	if !ok {
+		t.Fatalf("topology_story type = %T, want []string", overview["topology_story"])
+	}
+	if len(topologyStory) != 1 {
+		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy-gated.yml as github_actions_workflow deploy-gated with 2 run command(s), 2 gating condition(s), and 1 needs edge(s) (workflow_file, run_commands, gating_conditions, job_dependencies)."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+
+	story := buildRepositoryStoryResponse(
+		RepoRef{ID: "repository:service-worker-jobs", Name: "service-worker-jobs"},
+		6,
+		[]string{"yaml"},
+		nil,
+		nil,
+		0,
+		map[string]any{
+			"families":             []string{"github_actions"},
+			"deployment_artifacts": artifacts,
+		},
+		nil,
+	)
+	deploymentOverview, ok := story["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", story["deployment_overview"])
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	if len(directStory) != 1 {
+		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
+	}
+	if got, want := directStory[0], "Workflow delivery paths include .github/workflows/deploy-gated.yml as github_actions_workflow deploy-gated with 2 run command(s), 2 gating condition(s), and 1 needs edge(s) (workflow_file, run_commands, gating_conditions, job_dependencies)."; got != want {
+		t.Fatalf("direct_story[0] = %q, want %q", got, want)
+	}
+}
+
 func TestRelationshipPlatformWorkerDockerfileSurfacesRuntimeStory(t *testing.T) {
 	t.Parallel()
 

@@ -127,6 +127,8 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 			entry["command_count"] = commandCount
 		}
 		copyStringSliceField(entry, row, "run_commands")
+		copyStringSliceField(entry, row, "gating_conditions")
+		copyStringSliceField(entry, row, "needs_dependencies")
 		copyStringSliceField(entry, row, "reusable_workflow_repositories")
 		if signals := stringSliceValue(row, "signals"); len(signals) > 0 {
 			entry["signals"] = signals
@@ -370,6 +372,12 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			}
 			if commandCount := intValue(row, "command_count"); commandCount > 0 {
 				line += fmt.Sprintf(" with %d run command(s)", commandCount)
+			}
+			if gatingConditions := stringSliceValue(row, "gating_conditions"); len(gatingConditions) > 0 {
+				line += fmt.Sprintf(", %d gating condition(s)", len(gatingConditions))
+			}
+			if needsDependencies := stringSliceValue(row, "needs_dependencies"); len(needsDependencies) > 0 {
+				line += fmt.Sprintf(", and %d needs edge(s)", len(needsDependencies))
 			}
 			if reusableWorkflows := stringSliceValue(row, "reusable_workflow_repositories"); len(reusableWorkflows) > 0 {
 				line += fmt.Sprintf(" via reusable workflow repos %s", strings.Join(reusableWorkflows, ", "))
