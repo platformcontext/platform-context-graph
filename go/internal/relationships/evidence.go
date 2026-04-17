@@ -444,9 +444,14 @@ func matchCatalog(
 // matchesEntry checks if a candidate string matches any alias of a catalog entry.
 // Returns the matched alias or empty string.
 func matchesEntry(candidate string, entry CatalogEntry) string {
-	lowerCandidate := strings.ToLower(candidate)
+	lowerCandidate := strings.ToLower(strings.TrimSpace(candidate))
 	for _, alias := range entry.Aliases {
-		if strings.Contains(lowerCandidate, strings.ToLower(alias)) {
+		lowerAlias := strings.ToLower(strings.TrimSpace(alias))
+		if lowerAlias == "" {
+			continue
+		}
+		if strings.Contains(lowerCandidate, lowerAlias) ||
+			matchesPrivateTerraformRegistryAlias(lowerCandidate, lowerAlias) {
 			return alias
 		}
 	}
@@ -614,11 +619,17 @@ func extractTerragruntConfigPaths(body string) []string {
 }
 
 func looksLikeRemoteModuleSource(source string) bool {
-	lower := strings.ToLower(strings.TrimSpace(source))
+	lower := normalizeTerraformModuleSource(source)
 	if lower == "" {
 		return false
 	}
-	if strings.HasPrefix(lower, "tfr:///") || terraformRegistrySourcePattern.MatchString(lower) {
+	if strings.HasPrefix(lower, "tfr:///") {
+		return false
+	}
+	if isPrivateTerraformRegistryModuleSource(lower) {
+		return true
+	}
+	if terraformRegistrySourcePattern.MatchString(lower) {
 		return false
 	}
 	if strings.HasPrefix(lower, "./") || strings.HasPrefix(lower, "../") || strings.HasPrefix(lower, "/") {

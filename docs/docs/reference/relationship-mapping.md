@@ -529,6 +529,15 @@ Go-backed sources are:
 - local Terraform `module.source = "./..."` style module-asset paths when the
   source is repo-local and not a registry or remote module ref
 
+For canonical `USES_MODULE` edges, the Go evidence path now distinguishes
+between generic public registry refs and repo-owned private registry refs.
+Generic public registry references such as `terraform-aws-modules/eks/aws` or
+`tfr:///terraform-aws-modules/eks/aws` stay non-repo-bearing and do not create
+cross-repo edges. Private host-backed refs such as
+`boatsgroup.pe.jfrog.io/TF__BG/lambda-function/aws` are treated as repo-bearing
+module sources when they resolve to a known local module monorepo alias such as
+`terraform-modules-aws`.
+
 The same Go read path now also preserves per-repo config provenance in
 `deployment_overview.delivery_paths` and `deployment_overview.topology_story`
 even when a path appears in only one repository. That means Terragrunt
