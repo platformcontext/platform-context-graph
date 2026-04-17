@@ -2,13 +2,17 @@ package reducer
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
-// ProjectionContext holds the source_run_id and generation_id for one repository.
+// ProjectionContext holds the bounded-unit freshness context for one shared
+// projection repository slice.
 type ProjectionContext struct {
-	SourceRunID  string
-	GenerationID string
+	ScopeID          string
+	AcceptanceUnitID string
+	SourceRunID      string
+	GenerationID     string
 }
 
 // EmitPlatformInfraIntents builds platform_infra intent rows from descriptor rows.
@@ -70,6 +74,8 @@ func EmitDependencyIntents(
 		intent := BuildSharedProjectionIntent(SharedProjectionIntentInput{
 			ProjectionDomain: "shadow_repo_dependency",
 			PartitionKey:     partitionKey,
+			ScopeID:          context.ScopeID,
+			AcceptanceUnitID: context.acceptanceUnitID(repositoryID),
 			RepositoryID:     repositoryID,
 			SourceRunID:      context.SourceRunID,
 			GenerationID:     context.GenerationID,
@@ -98,6 +104,8 @@ func EmitDependencyIntents(
 		intent := BuildSharedProjectionIntent(SharedProjectionIntentInput{
 			ProjectionDomain: "shadow_workload_dependency",
 			PartitionKey:     partitionKey,
+			ScopeID:          context.ScopeID,
+			AcceptanceUnitID: context.acceptanceUnitID(repositoryID),
 			RepositoryID:     repositoryID,
 			SourceRunID:      context.SourceRunID,
 			GenerationID:     context.GenerationID,
@@ -137,6 +145,8 @@ func intentRowsForPlatformDomain(
 		intent := BuildSharedProjectionIntent(SharedProjectionIntentInput{
 			ProjectionDomain: projectionDomain,
 			PartitionKey:     platformID,
+			ScopeID:          context.ScopeID,
+			AcceptanceUnitID: context.acceptanceUnitID(repositoryID),
 			RepositoryID:     repositoryID,
 			SourceRunID:      context.SourceRunID,
 			GenerationID:     context.GenerationID,
@@ -176,4 +186,11 @@ func copyPayload(m map[string]any) map[string]any {
 		result[k] = v
 	}
 	return result
+}
+
+func (c ProjectionContext) acceptanceUnitID(repositoryID string) string {
+	if unitID := strings.TrimSpace(c.AcceptanceUnitID); unitID != "" {
+		return unitID
+	}
+	return strings.TrimSpace(repositoryID)
 }

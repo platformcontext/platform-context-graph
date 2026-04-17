@@ -150,6 +150,16 @@ func DomainAttrs(domain, partitionKey string) []slog.Attr {
 	}
 }
 
+// AcceptanceAttrs returns acceptance-specific structured logging attributes.
+func AcceptanceAttrs(scopeID, unitID, sourceRunID, generationID string) []slog.Attr {
+	return []slog.Attr{
+		slog.String(LogKeyAcceptanceScopeID, scopeID),
+		slog.String(LogKeyAcceptanceUnitID, unitID),
+		slog.String(LogKeyAcceptanceSourceRunID, sourceRunID),
+		slog.String(LogKeyAcceptanceGenerationID, generationID),
+	}
+}
+
 // Pipeline phase constants for structured log correlation across the full
 // ingestion pipeline. Every log line should carry one of these so operators
 // can filter by phase when tracing end-to-end.
@@ -172,4 +182,9 @@ func PhaseAttr(phase string) slog.Attr {
 // FailureClassAttr returns a failure_class attribute for structured logging.
 func FailureClassAttr(class string) slog.Attr {
 	return slog.String(LogKeyFailureClass, class)
+}
+
+// AcceptanceStaleCountAttr returns the stale-intent count for acceptance logs.
+func AcceptanceStaleCountAttr(count int) slog.Attr {
+	return slog.Int(LogKeyAcceptanceStaleCount, count)
 }

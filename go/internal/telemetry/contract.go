@@ -33,6 +33,9 @@ const (
 	MetricDimensionCollectorKind = "collector_kind"
 	MetricDimensionDomain        = "domain"
 	MetricDimensionPartitionKey  = "partition_key"
+	MetricDimensionRunner        = "runner"
+	MetricDimensionLookupResult  = "lookup_result"
+	MetricDimensionErrorType     = "error_type"
 	MetricDimensionRepoSizeTier  = "repo_size_tier"
 	MetricDimensionSkipReason    = "skip_reason"
 	MetricDimensionNodeType      = "node_type"
@@ -58,6 +61,8 @@ const (
 	SpanSQLRelationshipMaterialization = "reducer.sql_relationship_materialization"
 	SpanInheritanceMaterialization     = "reducer.inheritance_materialization"
 	SpanCrossRepoResolution            = "reducer.cross_repo_resolution"
+	SpanSharedAcceptanceLookup         = "shared_acceptance.lookup"
+	SpanSharedAcceptanceUpsert         = "shared_acceptance.upsert"
 
 	// Dependency service spans — track external call performance.
 	SpanPostgresExec  = "postgres.exec"
@@ -68,17 +73,22 @@ const (
 // Log keys define the structured logging contract for terminal failures and
 // retryable failure classification.
 const (
-	LogKeyScopeID        = "scope_id"
-	LogKeyScopeKind      = "scope_kind"
-	LogKeySourceSystem   = "source_system"
-	LogKeyGenerationID   = "generation_id"
-	LogKeyCollectorKind  = "collector_kind"
-	LogKeyDomain         = "domain"
-	LogKeyPartitionKey   = "partition_key"
-	LogKeyRequestID      = "request_id"
-	LogKeyFailureClass   = "failure_class"
-	LogKeyRefreshSkipped = "refresh_skipped"
-	LogKeyPipelinePhase  = "pipeline_phase"
+	LogKeyScopeID                = "scope_id"
+	LogKeyScopeKind              = "scope_kind"
+	LogKeySourceSystem           = "source_system"
+	LogKeyGenerationID           = "generation_id"
+	LogKeyCollectorKind          = "collector_kind"
+	LogKeyDomain                 = "domain"
+	LogKeyPartitionKey           = "partition_key"
+	LogKeyRequestID              = "request_id"
+	LogKeyFailureClass           = "failure_class"
+	LogKeyRefreshSkipped         = "refresh_skipped"
+	LogKeyPipelinePhase          = "pipeline_phase"
+	LogKeyAcceptanceScopeID      = "acceptance.scope_id"
+	LogKeyAcceptanceUnitID       = "acceptance.unit_id"
+	LogKeyAcceptanceSourceRunID  = "acceptance.source_run_id"
+	LogKeyAcceptanceGenerationID = "acceptance.generation_id"
+	LogKeyAcceptanceStaleCount   = "acceptance.stale_count"
 )
 
 var metricDimensionKeys = []string{
@@ -89,6 +99,9 @@ var metricDimensionKeys = []string{
 	MetricDimensionCollectorKind,
 	MetricDimensionDomain,
 	MetricDimensionPartitionKey,
+	MetricDimensionRunner,
+	MetricDimensionLookupResult,
+	MetricDimensionErrorType,
 	MetricDimensionRepoSizeTier,
 	MetricDimensionSkipReason,
 	MetricDimensionNodeType,
@@ -112,6 +125,8 @@ var spanNames = []string{
 	SpanSQLRelationshipMaterialization,
 	SpanInheritanceMaterialization,
 	SpanCrossRepoResolution,
+	SpanSharedAcceptanceLookup,
+	SpanSharedAcceptanceUpsert,
 	SpanPostgresExec,
 	SpanPostgresQuery,
 	SpanNeo4jExecute,
@@ -129,6 +144,11 @@ var logKeys = []string{
 	LogKeyFailureClass,
 	LogKeyRefreshSkipped,
 	LogKeyPipelinePhase,
+	LogKeyAcceptanceScopeID,
+	LogKeyAcceptanceUnitID,
+	LogKeyAcceptanceSourceRunID,
+	LogKeyAcceptanceGenerationID,
+	LogKeyAcceptanceStaleCount,
 }
 
 // MetricDimensionKeys returns the frozen ordered metric dimensions.

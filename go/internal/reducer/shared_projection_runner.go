@@ -94,12 +94,13 @@ func (c SharedProjectionRunnerConfig) leaseOwner() string {
 // domains and partitions. It runs as a long-lived goroutine alongside the
 // main reducer claim/execute/ack loop.
 type SharedProjectionRunner struct {
-	IntentReader SharedIntentReader
-	LeaseManager PartitionLeaseManager
-	EdgeWriter   SharedProjectionEdgeWriter
-	AcceptedGen  AcceptedGenerationLookup
-	Config       SharedProjectionRunnerConfig
-	Wait         func(context.Context, time.Duration) error
+	IntentReader        SharedIntentReader
+	LeaseManager        PartitionLeaseManager
+	EdgeWriter          SharedProjectionEdgeWriter
+	AcceptedGen         AcceptedGenerationLookup
+	AcceptedGenPrefetch AcceptedGenerationPrefetch
+	Config              SharedProjectionRunnerConfig
+	Wait                func(context.Context, time.Duration) error
 
 	// Telemetry fields (optional)
 	Tracer      trace.Tracer
@@ -283,9 +284,15 @@ func (r *SharedProjectionRunner) processPartitionWithTelemetry(
 		r.IntentReader,
 		r.EdgeWriter,
 		r.AcceptedGen,
+		r.AcceptedGenPrefetch,
 	)
 
 	duration := time.Since(start).Seconds()
+	acceptanceTelemetry := sharedAcceptanceTelemetry{
+		Instruments: r.Instruments,
+		Logger:      r.Logger,
+	}
+	acceptanceTelemetry.RecordStaleIntents(ctx, "shared_projection", domain, result.StaleIntents)
 
 	if err == nil && result.ProcessedIntents > 0 {
 		r.recordSharedProjectionCycle(ctx, domain, duration)

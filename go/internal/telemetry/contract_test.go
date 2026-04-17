@@ -16,6 +16,9 @@ func TestMetricDimensionKeys(t *testing.T) {
 		"collector_kind",
 		"domain",
 		"partition_key",
+		"runner",
+		"lookup_result",
+		"error_type",
 		"repo_size_tier",
 		"skip_reason",
 		"node_type",
@@ -53,6 +56,8 @@ func TestSpanNames(t *testing.T) {
 		"reducer.sql_relationship_materialization",
 		"reducer.inheritance_materialization",
 		"reducer.cross_repo_resolution",
+		"shared_acceptance.lookup",
+		"shared_acceptance.upsert",
 		"postgres.exec",
 		"postgres.query",
 		"neo4j.execute",
@@ -79,6 +84,11 @@ func TestLogKeys(t *testing.T) {
 		"failure_class",
 		"refresh_skipped",
 		"pipeline_phase",
+		"acceptance.scope_id",
+		"acceptance.unit_id",
+		"acceptance.source_run_id",
+		"acceptance.generation_id",
+		"acceptance.stale_count",
 	}
 
 	got := LogKeys()

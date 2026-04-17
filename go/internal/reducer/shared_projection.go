@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -22,6 +23,8 @@ type SharedProjectionIntentRow struct {
 	IntentID         string
 	ProjectionDomain string
 	PartitionKey     string
+	ScopeID          string
+	AcceptanceUnitID string
 	RepositoryID     string
 	SourceRunID      string
 	GenerationID     string
@@ -35,6 +38,8 @@ type SharedProjectionIntentRow struct {
 type SharedProjectionIntentInput struct {
 	ProjectionDomain string
 	PartitionKey     string
+	ScopeID          string
+	AcceptanceUnitID string
 	RepositoryID     string
 	SourceRunID      string
 	GenerationID     string
@@ -46,18 +51,27 @@ type SharedProjectionIntentInput struct {
 // row. The intent ID is a SHA256 of the identity fields, matching the Python
 // implementation exactly.
 func BuildSharedProjectionIntent(input SharedProjectionIntentInput) SharedProjectionIntentRow {
+	acceptanceUnitID := strings.TrimSpace(input.AcceptanceUnitID)
+	if acceptanceUnitID == "" {
+		acceptanceUnitID = strings.TrimSpace(input.RepositoryID)
+	}
+
 	intentID := stableIntentID(map[string]string{
-		"generation_id":     input.GenerationID,
-		"partition_key":     input.PartitionKey,
-		"projection_domain": input.ProjectionDomain,
-		"repository_id":     input.RepositoryID,
-		"source_run_id":     input.SourceRunID,
+		"acceptance_unit_id": acceptanceUnitID,
+		"generation_id":      input.GenerationID,
+		"partition_key":      input.PartitionKey,
+		"projection_domain":  input.ProjectionDomain,
+		"repository_id":      input.RepositoryID,
+		"scope_id":           strings.TrimSpace(input.ScopeID),
+		"source_run_id":      input.SourceRunID,
 	})
 
 	return SharedProjectionIntentRow{
 		IntentID:         intentID,
 		ProjectionDomain: input.ProjectionDomain,
 		PartitionKey:     input.PartitionKey,
+		ScopeID:          strings.TrimSpace(input.ScopeID),
+		AcceptanceUnitID: acceptanceUnitID,
 		RepositoryID:     input.RepositoryID,
 		SourceRunID:      input.SourceRunID,
 		GenerationID:     input.GenerationID,
@@ -65,6 +79,40 @@ func BuildSharedProjectionIntent(input SharedProjectionIntentInput) SharedProjec
 		CreatedAt:        input.CreatedAt,
 		CompletedAt:      nil,
 	}
+}
+
+// SharedProjectionAcceptanceKey identifies one authoritative freshness slice.
+type SharedProjectionAcceptanceKey struct {
+	ScopeID          string
+	AcceptanceUnitID string
+	SourceRunID      string
+}
+
+// AcceptanceKey returns the bounded-unit freshness key for the row.
+func (row SharedProjectionIntentRow) AcceptanceKey() (SharedProjectionAcceptanceKey, bool) {
+	scopeID := strings.TrimSpace(row.ScopeID)
+	if scopeID == "" && row.Payload != nil {
+		scopeID = strings.TrimSpace(anyToString(row.Payload["scope_id"]))
+	}
+
+	acceptanceUnitID := strings.TrimSpace(row.AcceptanceUnitID)
+	if acceptanceUnitID == "" && row.Payload != nil {
+		acceptanceUnitID = strings.TrimSpace(anyToString(row.Payload["acceptance_unit_id"]))
+	}
+	if acceptanceUnitID == "" {
+		acceptanceUnitID = strings.TrimSpace(row.RepositoryID)
+	}
+
+	sourceRunID := strings.TrimSpace(row.SourceRunID)
+	if scopeID == "" || acceptanceUnitID == "" || sourceRunID == "" {
+		return SharedProjectionAcceptanceKey{}, false
+	}
+
+	return SharedProjectionAcceptanceKey{
+		ScopeID:          scopeID,
+		AcceptanceUnitID: acceptanceUnitID,
+		SourceRunID:      sourceRunID,
+	}, true
 }
 
 // RowsForPartition returns intent rows whose partition key belongs to one

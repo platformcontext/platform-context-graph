@@ -124,7 +124,7 @@ func TestServiceRunStartsSharedProjectionRunner(t *testing.T) {
 			IntentReader: &fakeSharedIntentReader{},
 			LeaseManager: leaseManager,
 			EdgeWriter:   &fakeEdgeWriter{},
-			AcceptedGen:  func(_, _ string) (string, bool) { return "", false },
+			AcceptedGen:  acceptedGenerationFixed("", false),
 			Config: SharedProjectionRunnerConfig{
 				PartitionCount: 1,
 				PollInterval:   10 * time.Millisecond,
@@ -164,7 +164,7 @@ func TestServiceRunStartsCodeCallProjectionRunner(t *testing.T) {
 			IntentReader: store,
 			LeaseManager: store,
 			EdgeWriter:   &recordingCodeCallProjectionEdgeWriter{},
-			AcceptedGen:  func(_, _ string) (string, bool) { return "", false },
+			AcceptedGen:  acceptedGenerationFixed("", false),
 			Config: CodeCallProjectionRunnerConfig{
 				PollInterval: 10 * time.Millisecond,
 			},

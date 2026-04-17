@@ -132,6 +132,8 @@ func buildReducerService(
 
 	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	relationshipStore := postgres.NewRelationshipStore(database)
+	codeCallIntentWriter := postgres.NewCodeCallIntentWriter(database)
+	acceptedGenerationPrefetch := postgres.NewAcceptedGenerationPrefetch(database)
 
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
 		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
@@ -140,7 +142,7 @@ func buildReducerService(
 		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
 		FactLoader:                         postgres.NewFactStore(database),
-		CodeCallIntentWriter:               intentStore,
+		CodeCallIntentWriter:               codeCallIntentWriter,
 		SemanticEntityWriter:               sourceneo4j.NewSemanticEntityWriter(neo4jExec, neo4jBatchSize(getenv)),
 		SQLRelationshipEdgeWriter:          edgeWriterForHandlers,
 		InheritanceEdgeWriter:              edgeWriterForHandlers,
@@ -175,24 +177,26 @@ func buildReducerService(
 		WorkSink:                   workQueue,
 		SharedProjectionEdgeWriter: edgeWriter,
 		SharedProjectionRunner: &reducer.SharedProjectionRunner{
-			IntentReader: intentStore,
-			LeaseManager: intentStore,
-			EdgeWriter:   edgeWriter,
-			AcceptedGen:  postgres.NewAcceptedGenerationLookup(database),
-			Config:       sharedCfg,
-			Tracer:       tracer,
-			Instruments:  instruments,
-			Logger:       logger,
+			IntentReader:        intentStore,
+			LeaseManager:        intentStore,
+			EdgeWriter:          edgeWriter,
+			AcceptedGen:         postgres.NewAcceptedGenerationLookup(database),
+			AcceptedGenPrefetch: acceptedGenerationPrefetch,
+			Config:              sharedCfg,
+			Tracer:              tracer,
+			Instruments:         instruments,
+			Logger:              logger,
 		},
 		CodeCallProjectionRunner: &reducer.CodeCallProjectionRunner{
-			IntentReader: intentStore,
-			LeaseManager: intentStore,
-			EdgeWriter:   edgeWriter,
-			AcceptedGen:  postgres.NewAcceptedGenerationLookup(database),
-			Config:       codeCallCfg,
-			Tracer:       tracer,
-			Instruments:  instruments,
-			Logger:       logger,
+			IntentReader:        intentStore,
+			LeaseManager:        intentStore,
+			EdgeWriter:          edgeWriter,
+			AcceptedGen:         postgres.NewAcceptedGenerationLookup(database),
+			AcceptedGenPrefetch: acceptedGenerationPrefetch,
+			Config:              codeCallCfg,
+			Tracer:              tracer,
+			Instruments:         instruments,
+			Logger:              logger,
 		},
 		Workers:        workers,
 		BatchClaimSize: loadReducerBatchClaimSize(getenv, workers),

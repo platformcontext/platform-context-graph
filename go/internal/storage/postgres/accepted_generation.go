@@ -2,47 +2,64 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
+	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 )
 
-const acceptedGenerationLookupSQL = `
-SELECT accepted_generation_id
-FROM fact_work_items
-WHERE repository_id = $1
-  AND source_run_id = $2
-  AND shared_projection_pending = TRUE
-  AND accepted_generation_id IS NOT NULL
-ORDER BY updated_at DESC, work_item_id DESC
-LIMIT 1
-`
-
-// NewAcceptedGenerationLookup creates an AcceptedGenerationLookup backed by
-// PostgreSQL fact_work_items queries. Returns the accepted_generation_id for a
-// given (repository_id, source_run_id) pair when shared projection is pending.
-// Returns empty string and false when no matching row exists.
+// NewAcceptedGenerationLookup creates an exact bounded-unit acceptance lookup
+// backed by shared_projection_acceptance.
 func NewAcceptedGenerationLookup(db ExecQueryer) reducer.AcceptedGenerationLookup {
-	return func(repositoryID, sourceRunID string) (string, bool) {
-		ctx := context.Background()
-		rows, err := db.QueryContext(ctx, acceptedGenerationLookupSQL, repositoryID, sourceRunID)
+	store := NewSharedProjectionAcceptanceStore(db)
+	return func(key reducer.SharedProjectionAcceptanceKey) (string, bool) {
+		generationID, found, err := store.Lookup(
+			context.Background(),
+			key.ScopeID,
+			key.AcceptanceUnitID,
+			key.SourceRunID,
+		)
 		if err != nil {
 			return "", false
 		}
-		defer func() { _ = rows.Close() }()
+		return generationID, found
+	}
+}
 
-		if !rows.Next() {
-			return "", false
-		}
+// NewAcceptedGenerationPrefetch batches acceptance lookups for a current
+// partition slice and returns an in-memory lookup closure for the reducer hot
+// path. This keeps the shared runner collector-agnostic while avoiding repeated
+// store calls for duplicate bounded-unit keys.
+func NewAcceptedGenerationPrefetch(db ExecQueryer) reducer.AcceptedGenerationPrefetch {
+	store := NewSharedProjectionAcceptanceStore(db)
 
-		var acceptedGenerationID string
-		if err := rows.Scan(&acceptedGenerationID); err != nil {
-			if err == sql.ErrNoRows {
-				return "", false
+	return func(ctx context.Context, intents []reducer.SharedProjectionIntentRow) (reducer.AcceptedGenerationLookup, error) {
+		acceptedByKey := make(map[reducer.SharedProjectionAcceptanceKey]string, len(intents))
+
+		for _, intent := range intents {
+			key, ok := intent.AcceptanceKey()
+			if !ok {
+				continue
 			}
-			return "", false
+			if _, seen := acceptedByKey[key]; seen {
+				continue
+			}
+
+			generationID, found, err := store.Lookup(ctx, key.ScopeID, key.AcceptanceUnitID, key.SourceRunID)
+			if err != nil {
+				return nil, err
+			}
+			if !found {
+				continue
+			}
+			acceptedByKey[key] = generationID
 		}
 
-		return acceptedGenerationID, true
+		return func(key reducer.SharedProjectionAcceptanceKey) (string, bool) {
+			key.ScopeID = strings.TrimSpace(key.ScopeID)
+			key.AcceptanceUnitID = strings.TrimSpace(key.AcceptanceUnitID)
+			key.SourceRunID = strings.TrimSpace(key.SourceRunID)
+			generationID, ok := acceptedByKey[key]
+			return generationID, ok
+		}, nil
 	}
 }

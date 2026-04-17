@@ -24,8 +24,10 @@ func buildCodeCallProjectionContexts(envelopes []facts.Envelope, generationID st
 		}
 
 		contextByRepoID[repositoryID] = ProjectionContext{
-			SourceRunID:  sourceRunID,
-			GenerationID: generationID,
+			ScopeID:          env.ScopeID,
+			AcceptanceUnitID: repositoryID,
+			SourceRunID:      sourceRunID,
+			GenerationID:     generationID,
 		}
 	}
 	return contextByRepoID
@@ -67,6 +69,8 @@ func buildCodeCallSharedIntentRows(
 		intents = append(intents, BuildSharedProjectionIntent(SharedProjectionIntentInput{
 			ProjectionDomain: DomainCodeCalls,
 			PartitionKey:     partitionKey,
+			ScopeID:          context.ScopeID,
+			AcceptanceUnitID: context.acceptanceUnitID(repositoryID),
 			RepositoryID:     repositoryID,
 			SourceRunID:      context.SourceRunID,
 			GenerationID:     context.GenerationID,
@@ -112,6 +116,8 @@ func buildCodeCallRefreshIntents(
 		intents = append(intents, BuildSharedProjectionIntent(SharedProjectionIntentInput{
 			ProjectionDomain: DomainCodeCalls,
 			PartitionKey:     codeCallRefreshPartitionKey(repositoryID),
+			ScopeID:          context.ScopeID,
+			AcceptanceUnitID: context.acceptanceUnitID(repositoryID),
 			RepositoryID:     repositoryID,
 			SourceRunID:      context.SourceRunID,
 			GenerationID:     context.GenerationID,

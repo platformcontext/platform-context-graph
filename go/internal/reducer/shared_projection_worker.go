@@ -26,15 +26,20 @@ type SharedIntentReader interface {
 	MarkIntentsCompleted(ctx context.Context, intentIDs []string, completedAt time.Time) error
 }
 
-// AcceptedGenerationLookup returns the accepted generation for a
-// (repositoryID, sourceRunID) pair. Returns empty string and false when no
-// accepted generation is known.
-type AcceptedGenerationLookup func(repositoryID, sourceRunID string) (string, bool)
+// AcceptedGenerationLookup returns the accepted generation for one bounded
+// acceptance key. Returns empty string and false when no accepted generation is
+// known.
+type AcceptedGenerationLookup func(key SharedProjectionAcceptanceKey) (string, bool)
+
+// AcceptedGenerationPrefetch batches acceptance resolution for a set of
+// intents and returns an in-memory lookup closure for the current cycle.
+type AcceptedGenerationPrefetch func(ctx context.Context, intents []SharedProjectionIntentRow) (AcceptedGenerationLookup, error)
 
 // PartitionBatchResult holds the result of selecting one partition batch.
 type PartitionBatchResult struct {
 	LatestRows    []SharedProjectionIntentRow
 	StaleIDs      []string
+	StaleCount    int
 	SupersededIDs []string
 }
 
@@ -57,10 +62,11 @@ type PartitionProcessResult struct {
 	ProcessedIntents int
 	UpsertedRows     int
 	RetractedRows    int
+	StaleIntents     int
 }
 
 // LatestIntentsByRepoAndPartition deduplicates intents to the most recent per
-// (repository_id, partition_key) pair, matching the Python
+// bounded acceptance key and partition, matching the Python
 // _latest_intents_by_repo_and_partition function.
 func LatestIntentsByRepoAndPartition(intents []SharedProjectionIntentRow) ([]SharedProjectionIntentRow, []string) {
 	if len(intents) == 0 {
@@ -77,8 +83,11 @@ func LatestIntentsByRepoAndPartition(intents []SharedProjectionIntentRow) ([]Sha
 	})
 
 	type repoPartitionKey struct {
-		repositoryID string
-		partitionKey string
+		scopeID          string
+		acceptanceUnitID string
+		sourceRunID      string
+		repositoryID     string
+		partitionKey     string
 	}
 
 	latestByKey := make(map[repoPartitionKey]SharedProjectionIntentRow)
@@ -87,8 +96,15 @@ func LatestIntentsByRepoAndPartition(intents []SharedProjectionIntentRow) ([]Sha
 
 	for _, intent := range sorted {
 		k := repoPartitionKey{
+			scopeID:      intent.ScopeID,
+			sourceRunID:  intent.SourceRunID,
 			repositoryID: intent.RepositoryID,
 			partitionKey: intent.PartitionKey,
+		}
+		if acceptanceKey, ok := intent.AcceptanceKey(); ok {
+			k.scopeID = acceptanceKey.ScopeID
+			k.acceptanceUnitID = acceptanceKey.AcceptanceUnitID
+			k.sourceRunID = acceptanceKey.SourceRunID
 		}
 		if prev, ok := latestByKey[k]; ok {
 			supersededIDs = append(supersededIDs, prev.IntentID)
@@ -114,7 +130,12 @@ func FilterAuthoritativeIntents(
 	acceptedGen AcceptedGenerationLookup,
 ) (active []SharedProjectionIntentRow, staleIDs []string) {
 	for _, intent := range intents {
-		accepted, ok := acceptedGen(intent.RepositoryID, intent.SourceRunID)
+		key, ok := intent.AcceptanceKey()
+		if !ok {
+			continue
+		}
+
+		accepted, ok := acceptedGen(key)
 		if !ok {
 			continue
 		}
@@ -138,6 +159,7 @@ func SelectPartitionBatch(
 	partitionID, partitionCount int,
 	batchLimit int,
 	acceptedGen AcceptedGenerationLookup,
+	prefetch AcceptedGenerationPrefetch,
 ) (PartitionBatchResult, error) {
 	if batchLimit < 1 {
 		batchLimit = 1
@@ -160,7 +182,16 @@ func SelectPartitionBatch(
 			return PartitionBatchResult{}, nil
 		}
 
-		active, staleIDs := FilterAuthoritativeIntents(partitionRows, acceptedGen)
+		lookup := acceptedGen
+		if prefetch != nil {
+			resolvedLookup, err := prefetch(ctx, partitionRows)
+			if err != nil {
+				return PartitionBatchResult{}, fmt.Errorf("prefetch accepted generations: %w", err)
+			}
+			lookup = resolvedLookup
+		}
+
+		active, staleIDs := FilterAuthoritativeIntents(partitionRows, lookup)
 		latest, supersededIDs := LatestIntentsByRepoAndPartition(active)
 
 		if len(latest) >= batchLimit || len(pending) < scanLimit {
@@ -170,6 +201,7 @@ func SelectPartitionBatch(
 			return PartitionBatchResult{
 				LatestRows:    latest,
 				StaleIDs:      staleIDs,
+				StaleCount:    len(staleIDs),
 				SupersededIDs: supersededIDs,
 			}, nil
 		}
@@ -190,6 +222,7 @@ func ProcessPartitionOnce(
 	reader SharedIntentReader,
 	edgeWriter SharedProjectionEdgeWriter,
 	acceptedGen AcceptedGenerationLookup,
+	prefetch AcceptedGenerationPrefetch,
 ) (PartitionProcessResult, error) {
 	claimed, err := leaseManager.ClaimPartitionLease(
 		ctx, cfg.Domain, cfg.PartitionID, cfg.PartitionCount,
@@ -216,7 +249,7 @@ func ProcessPartitionOnce(
 	batch, err := SelectPartitionBatch(
 		ctx, reader, cfg.Domain,
 		cfg.PartitionID, cfg.PartitionCount,
-		batchLimit, acceptedGen,
+		batchLimit, acceptedGen, prefetch,
 	)
 	if err != nil {
 		return PartitionProcessResult{LeaseAcquired: true}, fmt.Errorf("select batch: %w", err)
@@ -258,6 +291,7 @@ func ProcessPartitionOnce(
 		ProcessedIntents: len(processedIDs),
 		UpsertedRows:     len(upsertRows),
 		RetractedRows:    len(batch.LatestRows),
+		StaleIntents:     len(batch.StaleIDs),
 	}, nil
 }
 

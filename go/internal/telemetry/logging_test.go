@@ -207,6 +207,28 @@ func TestDomainAttrs(t *testing.T) {
 	assert.Equal(t, "org/repo", attrMap[LogKeyPartitionKey])
 }
 
+func TestAcceptanceAttrs(t *testing.T) {
+	attrs := AcceptanceAttrs("scope-1", "unit-2", "run-3", "gen-4")
+
+	require.Len(t, attrs, 4)
+
+	attrMap := make(map[string]string)
+	for _, attr := range attrs {
+		attrMap[attr.Key] = attr.Value.String()
+	}
+
+	assert.Equal(t, "scope-1", attrMap[LogKeyAcceptanceScopeID])
+	assert.Equal(t, "unit-2", attrMap[LogKeyAcceptanceUnitID])
+	assert.Equal(t, "run-3", attrMap[LogKeyAcceptanceSourceRunID])
+	assert.Equal(t, "gen-4", attrMap[LogKeyAcceptanceGenerationID])
+}
+
+func TestAcceptanceStaleCountAttr(t *testing.T) {
+	attr := AcceptanceStaleCountAttr(7)
+	assert.Equal(t, LogKeyAcceptanceStaleCount, attr.Key)
+	assert.Equal(t, int64(7), attr.Value.Int64())
+}
+
 func TestTraceHandlerWithAttrs(t *testing.T) {
 	var buf bytes.Buffer
 

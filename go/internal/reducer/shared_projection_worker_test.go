@@ -66,22 +66,19 @@ func TestFilterAuthoritativeIntentsMatchesGeneration(t *testing.T) {
 	t.Parallel()
 
 	intents := []SharedProjectionIntentRow{
-		{IntentID: "active-1", RepositoryID: "repo-a", SourceRunID: "run-1", GenerationID: "gen-1"},
-		{IntentID: "stale-1", RepositoryID: "repo-a", SourceRunID: "run-2", GenerationID: "gen-old"},
-		{IntentID: "active-2", RepositoryID: "repo-b", SourceRunID: "run-1", GenerationID: "gen-2"},
+		{IntentID: "active-1", ScopeID: "scope-a", AcceptanceUnitID: "unit-a", RepositoryID: "repo-a", SourceRunID: "run-1", GenerationID: "gen-1"},
+		{IntentID: "stale-1", ScopeID: "scope-a", AcceptanceUnitID: "unit-a", RepositoryID: "repo-a", SourceRunID: "run-2", GenerationID: "gen-old"},
+		{IntentID: "active-2", ScopeID: "scope-b", AcceptanceUnitID: "unit-b", RepositoryID: "repo-b", SourceRunID: "run-1", GenerationID: "gen-2"},
 	}
 
-	lookup := func(repoID, sourceRunID string) (string, bool) {
-		accepted := map[string]map[string]string{
-			"repo-a": {"run-1": "gen-1", "run-2": "gen-current"},
-			"repo-b": {"run-1": "gen-2"},
+	lookup := func(key SharedProjectionAcceptanceKey) (string, bool) {
+		accepted := map[SharedProjectionAcceptanceKey]string{
+			{ScopeID: "scope-a", AcceptanceUnitID: "unit-a", SourceRunID: "run-1"}: "gen-1",
+			{ScopeID: "scope-a", AcceptanceUnitID: "unit-a", SourceRunID: "run-2"}: "gen-current",
+			{ScopeID: "scope-b", AcceptanceUnitID: "unit-b", SourceRunID: "run-1"}: "gen-2",
 		}
-		if runs, ok := accepted[repoID]; ok {
-			if gen, ok := runs[sourceRunID]; ok {
-				return gen, true
-			}
-		}
-		return "", false
+		gen, ok := accepted[key]
+		return gen, ok
 	}
 
 	active, staleIDs := FilterAuthoritativeIntents(intents, lookup)
@@ -103,10 +100,10 @@ func TestFilterAuthoritativeIntentsSkipsUnknownRepos(t *testing.T) {
 	t.Parallel()
 
 	intents := []SharedProjectionIntentRow{
-		{IntentID: "unknown-1", RepositoryID: "repo-x", SourceRunID: "run-1", GenerationID: "gen-1"},
+		{IntentID: "unknown-1", ScopeID: "scope-x", AcceptanceUnitID: "unit-x", RepositoryID: "repo-x", SourceRunID: "run-1", GenerationID: "gen-1"},
 	}
 
-	lookup := func(_, _ string) (string, bool) {
+	lookup := func(SharedProjectionAcceptanceKey) (string, bool) {
 		return "", false
 	}
 
@@ -116,6 +113,47 @@ func TestFilterAuthoritativeIntentsSkipsUnknownRepos(t *testing.T) {
 	}
 	if len(staleIDs) != 0 {
 		t.Errorf("staleIDs = %v, want empty", staleIDs)
+	}
+}
+
+func TestFilterAuthoritativeIntentsUsesScopeAndAcceptanceUnit(t *testing.T) {
+	t.Parallel()
+
+	intents := []SharedProjectionIntentRow{
+		{
+			IntentID:         "active",
+			ScopeID:          "scope-a",
+			AcceptanceUnitID: "unit-a",
+			RepositoryID:     "repo-shared",
+			SourceRunID:      "run-1",
+			GenerationID:     "gen-a",
+		},
+		{
+			IntentID:         "stale",
+			ScopeID:          "scope-b",
+			AcceptanceUnitID: "unit-b",
+			RepositoryID:     "repo-shared",
+			SourceRunID:      "run-1",
+			GenerationID:     "gen-a",
+		},
+	}
+
+	lookup := func(key SharedProjectionAcceptanceKey) (string, bool) {
+		if key.ScopeID == "scope-a" && key.AcceptanceUnitID == "unit-a" && key.SourceRunID == "run-1" {
+			return "gen-a", true
+		}
+		if key.ScopeID == "scope-b" && key.AcceptanceUnitID == "unit-b" && key.SourceRunID == "run-1" {
+			return "gen-b", true
+		}
+		return "", false
+	}
+
+	active, staleIDs := FilterAuthoritativeIntents(intents, lookup)
+	if len(active) != 1 || active[0].IntentID != "active" {
+		t.Fatalf("active = %v, want only active", active)
+	}
+	if len(staleIDs) != 1 || staleIDs[0] != "stale" {
+		t.Fatalf("staleIDs = %v, want [stale]", staleIDs)
 	}
 }
 
@@ -150,19 +188,17 @@ func TestSelectPartitionBatchReturnsAcceptedBatch(t *testing.T) {
 	t0 := time.Date(2026, time.April, 13, 12, 0, 0, 0, time.UTC)
 	reader := &stubSharedIntentReader{
 		pending: []SharedProjectionIntentRow{
-			{IntentID: "i1", ProjectionDomain: "platform_infra", PartitionKey: "pk-a", RepositoryID: "repo-a", SourceRunID: "run-1", GenerationID: "gen-1", CreatedAt: t0},
-			{IntentID: "i2", ProjectionDomain: "platform_infra", PartitionKey: "pk-b", RepositoryID: "repo-b", SourceRunID: "run-1", GenerationID: "gen-1", CreatedAt: t0},
+			{IntentID: "i1", ProjectionDomain: "platform_infra", PartitionKey: "pk-a", ScopeID: "scope-a", AcceptanceUnitID: "repo-a", RepositoryID: "repo-a", SourceRunID: "run-1", GenerationID: "gen-1", CreatedAt: t0},
+			{IntentID: "i2", ProjectionDomain: "platform_infra", PartitionKey: "pk-b", ScopeID: "scope-b", AcceptanceUnitID: "repo-b", RepositoryID: "repo-b", SourceRunID: "run-1", GenerationID: "gen-1", CreatedAt: t0},
 		},
 	}
 
-	lookup := func(_, _ string) (string, bool) {
-		return "gen-1", true
-	}
+	lookup := acceptedGenerationFixed("gen-1", true)
 
 	batch, err := SelectPartitionBatch(
 		context.Background(), reader, "platform_infra",
 		0, 1, // partition 0 of 1 → all rows match
-		10, lookup,
+		10, lookup, nil,
 	)
 	if err != nil {
 		t.Fatalf("SelectPartitionBatch error = %v", err)
@@ -178,18 +214,16 @@ func TestSelectPartitionBatchFiltersStale(t *testing.T) {
 	t0 := time.Date(2026, time.April, 13, 12, 0, 0, 0, time.UTC)
 	reader := &stubSharedIntentReader{
 		pending: []SharedProjectionIntentRow{
-			{IntentID: "active-1", ProjectionDomain: "platform_infra", PartitionKey: "pk-a", RepositoryID: "repo-a", SourceRunID: "run-1", GenerationID: "gen-current", CreatedAt: t0},
-			{IntentID: "stale-1", ProjectionDomain: "platform_infra", PartitionKey: "pk-b", RepositoryID: "repo-a", SourceRunID: "run-1", GenerationID: "gen-old", CreatedAt: t0},
+			{IntentID: "active-1", ProjectionDomain: "platform_infra", PartitionKey: "pk-a", ScopeID: "scope-a", AcceptanceUnitID: "repo-a", RepositoryID: "repo-a", SourceRunID: "run-1", GenerationID: "gen-current", CreatedAt: t0},
+			{IntentID: "stale-1", ProjectionDomain: "platform_infra", PartitionKey: "pk-b", ScopeID: "scope-a", AcceptanceUnitID: "repo-a", RepositoryID: "repo-a", SourceRunID: "run-1", GenerationID: "gen-old", CreatedAt: t0},
 		},
 	}
 
-	lookup := func(_, _ string) (string, bool) {
-		return "gen-current", true
-	}
+	lookup := acceptedGenerationFixed("gen-current", true)
 
 	batch, err := SelectPartitionBatch(
 		context.Background(), reader, "platform_infra",
-		0, 1, 10, lookup,
+		0, 1, 10, lookup, nil,
 	)
 	if err != nil {
 		t.Fatalf("SelectPartitionBatch error = %v", err)
@@ -217,6 +251,8 @@ func TestProcessPartitionOnceFullCycle(t *testing.T) {
 				IntentID:         "intent-1",
 				ProjectionDomain: "platform_infra",
 				PartitionKey:     "pk-a",
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-a",
 				RepositoryID:     "repo-a",
 				SourceRunID:      "run-1",
 				GenerationID:     "gen-1",
@@ -229,9 +265,7 @@ func TestProcessPartitionOnceFullCycle(t *testing.T) {
 	lease := &stubLeaseManager{claimResult: true}
 	edges := &stubEdgeWriter{}
 
-	lookup := func(_, _ string) (string, bool) {
-		return "gen-1", true
-	}
+	lookup := acceptedGenerationFixed("gen-1", true)
 
 	cfg := PartitionProcessorConfig{
 		Domain:         "platform_infra",
@@ -243,7 +277,7 @@ func TestProcessPartitionOnceFullCycle(t *testing.T) {
 		EvidenceSource: "finalization/workloads",
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
 	if err != nil {
 		t.Fatalf("ProcessPartitionOnce error = %v", err)
 	}
@@ -280,7 +314,7 @@ func TestProcessPartitionOnceLeaseNotAcquired(t *testing.T) {
 	lease := &stubLeaseManager{claimResult: false}
 	reader := &stubSharedIntentReader{}
 	edges := &stubEdgeWriter{}
-	lookup := func(_, _ string) (string, bool) { return "", false }
+	lookup := acceptedGenerationFixed("", false)
 
 	cfg := PartitionProcessorConfig{
 		Domain:         "platform_infra",
@@ -290,7 +324,7 @@ func TestProcessPartitionOnceLeaseNotAcquired(t *testing.T) {
 		LeaseTTL:       30 * time.Second,
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
 	if err != nil {
 		t.Fatalf("ProcessPartitionOnce error = %v", err)
 	}
@@ -309,7 +343,7 @@ func TestProcessPartitionOnceEmptyBatch(t *testing.T) {
 	lease := &stubLeaseManager{claimResult: true}
 	reader := &stubSharedIntentReader{pending: nil}
 	edges := &stubEdgeWriter{}
-	lookup := func(_, _ string) (string, bool) { return "gen-1", true }
+	lookup := acceptedGenerationFixed("gen-1", true)
 
 	cfg := PartitionProcessorConfig{
 		Domain:         "platform_infra",
@@ -319,7 +353,7 @@ func TestProcessPartitionOnceEmptyBatch(t *testing.T) {
 		LeaseTTL:       30 * time.Second,
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -346,6 +380,8 @@ func TestProcessPartitionOnceFiltersDeleteAction(t *testing.T) {
 				IntentID:         "upsert-1",
 				ProjectionDomain: "platform_infra",
 				PartitionKey:     "pk-a",
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-a",
 				RepositoryID:     "repo-a",
 				SourceRunID:      "run-1",
 				GenerationID:     "gen-1",
@@ -356,6 +392,8 @@ func TestProcessPartitionOnceFiltersDeleteAction(t *testing.T) {
 				IntentID:         "delete-1",
 				ProjectionDomain: "platform_infra",
 				PartitionKey:     "pk-b",
+				ScopeID:          "scope-b",
+				AcceptanceUnitID: "repo-b",
 				RepositoryID:     "repo-b",
 				SourceRunID:      "run-1",
 				GenerationID:     "gen-1",
@@ -367,7 +405,7 @@ func TestProcessPartitionOnceFiltersDeleteAction(t *testing.T) {
 
 	lease := &stubLeaseManager{claimResult: true}
 	edges := &stubEdgeWriter{}
-	lookup := func(_, _ string) (string, bool) { return "gen-1", true }
+	lookup := acceptedGenerationFixed("gen-1", true)
 
 	cfg := PartitionProcessorConfig{
 		Domain:         "platform_infra",
@@ -379,7 +417,7 @@ func TestProcessPartitionOnceFiltersDeleteAction(t *testing.T) {
 		EvidenceSource: "finalization/workloads",
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -403,6 +441,8 @@ func TestProcessPartitionOnceCodeCallsDomain(t *testing.T) {
 				IntentID:         "intent-1",
 				ProjectionDomain: DomainCodeCalls,
 				PartitionKey:     "entity:function:caller",
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-a",
 				RepositoryID:     "repo-a",
 				SourceRunID:      "run-1",
 				GenerationID:     "gen-1",
@@ -419,7 +459,7 @@ func TestProcessPartitionOnceCodeCallsDomain(t *testing.T) {
 
 	lease := &stubLeaseManager{claimResult: true}
 	edges := &stubEdgeWriter{}
-	lookup := func(_, _ string) (string, bool) { return "gen-1", true }
+	lookup := acceptedGenerationFixed("gen-1", true)
 
 	cfg := PartitionProcessorConfig{
 		Domain:         DomainCodeCalls,
@@ -431,7 +471,7 @@ func TestProcessPartitionOnceCodeCallsDomain(t *testing.T) {
 		EvidenceSource: "parser/code-calls",
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
 	if err != nil {
 		t.Fatalf("ProcessPartitionOnce() error = %v", err)
 	}

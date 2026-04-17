@@ -22,7 +22,9 @@ type PendingGenerationCounter interface {
 // InlineFollowupConfig holds parameters for running inline shared projection
 // draining after a reducer execution completes.
 type InlineFollowupConfig struct {
+	ScopeID              string
 	RepositoryID         string
+	AcceptanceUnitID     string
 	SourceRunID          string
 	AcceptedGenerationID string
 	AuthoritativeDomains []string
@@ -89,8 +91,9 @@ func RunInlineSharedFollowup(
 		return nil
 	}
 
-	acceptedGen := func(repositoryID, sourceRunID string) (string, bool) {
-		if repositoryID == cfg.RepositoryID && sourceRunID == cfg.SourceRunID {
+	acceptedGen := func(key SharedProjectionAcceptanceKey) (string, bool) {
+		scopeMatches := strings.TrimSpace(cfg.ScopeID) == "" || key.ScopeID == cfg.ScopeID
+		if scopeMatches && key.AcceptanceUnitID == cfg.acceptanceUnitID() && key.SourceRunID == cfg.SourceRunID {
 			return cfg.AcceptedGenerationID, true
 		}
 		return "", false
@@ -163,6 +166,7 @@ func drainDomain(
 				reader,
 				edgeWriter,
 				acceptedGen,
+				nil,
 			); err != nil {
 				return false
 			}
@@ -231,4 +235,11 @@ func deduplicateDomains(domains []string) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+func (c InlineFollowupConfig) acceptanceUnitID() string {
+	if unitID := strings.TrimSpace(c.AcceptanceUnitID); unitID != "" {
+		return unitID
+	}
+	return strings.TrimSpace(c.RepositoryID)
 }

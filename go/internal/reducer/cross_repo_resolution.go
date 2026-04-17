@@ -158,7 +158,7 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 		return 0, fmt.Errorf("retract cross-repo dependency edges: %w", err)
 	}
 
-	writeRows, routeCounts := buildResolvedEdgeIntentRows(resolved, generationID)
+	writeRows, routeCounts := buildResolvedEdgeIntentRows(resolved, scopeID, generationID)
 	if len(writeRows) > 0 {
 		if err := h.EdgeWriter.WriteEdges(
 			ctx,
@@ -276,6 +276,7 @@ func buildRetractRowsFromRepoIDs(repoIDs []string) []SharedProjectionIntentRow {
 // projection intent rows while preserving typed relationship families.
 func buildResolvedEdgeIntentRows(
 	resolved []relationships.ResolvedRelationship,
+	scopeID string,
 	generationID string,
 ) ([]SharedProjectionIntentRow, map[string]int) {
 	now := time.Now().UTC()
@@ -283,7 +284,7 @@ func buildResolvedEdgeIntentRows(
 	routeCounts := make(map[string]int)
 
 	for _, r := range resolved {
-		row, routeType, ok := buildResolvedEdgeIntentRow(r, generationID, now)
+		row, routeType, ok := buildResolvedEdgeIntentRow(r, scopeID, generationID, now)
 		if !ok {
 			continue
 		}
@@ -296,6 +297,7 @@ func buildResolvedEdgeIntentRows(
 
 func buildResolvedEdgeIntentRow(
 	r relationships.ResolvedRelationship,
+	scopeID string,
 	generationID string,
 	createdAt time.Time,
 ) (SharedProjectionIntentRow, string, bool) {
@@ -344,6 +346,8 @@ func buildResolvedEdgeIntentRow(
 	return BuildSharedProjectionIntent(SharedProjectionIntentInput{
 		ProjectionDomain: DomainRepoDependency,
 		PartitionKey:     partitionKey,
+		ScopeID:          scopeID,
+		AcceptanceUnitID: r.SourceRepoID,
 		RepositoryID:     r.SourceRepoID,
 		SourceRunID:      generationID,
 		GenerationID:     generationID,

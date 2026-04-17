@@ -59,6 +59,8 @@ func TestBuildSharedProjectionIntentSetsAllFields(t *testing.T) {
 	input := SharedProjectionIntentInput{
 		ProjectionDomain: DomainRepoDependency,
 		PartitionKey:     "pk-test",
+		ScopeID:          "scope-test",
+		AcceptanceUnitID: "unit-test",
 		RepositoryID:     "repo-test",
 		SourceRunID:      "run-test",
 		GenerationID:     "gen-test",
@@ -76,6 +78,12 @@ func TestBuildSharedProjectionIntentSetsAllFields(t *testing.T) {
 	}
 	if row.PartitionKey != "pk-test" {
 		t.Errorf("PartitionKey = %q", row.PartitionKey)
+	}
+	if row.ScopeID != "scope-test" {
+		t.Errorf("ScopeID = %q", row.ScopeID)
+	}
+	if row.AcceptanceUnitID != "unit-test" {
+		t.Errorf("AcceptanceUnitID = %q", row.AcceptanceUnitID)
 	}
 	if row.RepositoryID != "repo-test" {
 		t.Errorf("RepositoryID = %q", row.RepositoryID)
@@ -97,6 +105,67 @@ func TestBuildSharedProjectionIntentSetsAllFields(t *testing.T) {
 	}
 }
 
+func TestBuildSharedProjectionIntentDifferentAcceptanceIdentityDifferentIDs(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	base := SharedProjectionIntentInput{
+		ProjectionDomain: DomainCodeCalls,
+		PartitionKey:     "caller->callee",
+		ScopeID:          "scope-a",
+		AcceptanceUnitID: "repo-a",
+		RepositoryID:     "repo-a",
+		SourceRunID:      "run-1",
+		GenerationID:     "gen-1",
+		CreatedAt:        now,
+	}
+
+	modifiedScope := base
+	modifiedScope.ScopeID = "scope-b"
+	modifiedUnit := base
+	modifiedUnit.AcceptanceUnitID = "repo-b"
+
+	baseRow := BuildSharedProjectionIntent(base)
+	scopeRow := BuildSharedProjectionIntent(modifiedScope)
+	unitRow := BuildSharedProjectionIntent(modifiedUnit)
+
+	if baseRow.IntentID == scopeRow.IntentID {
+		t.Fatal("different scope_id produced same intent ID")
+	}
+	if baseRow.IntentID == unitRow.IntentID {
+		t.Fatal("different acceptance_unit_id produced same intent ID")
+	}
+}
+
+func TestSharedProjectionIntentRowAcceptanceKeyPrefersExplicitFields(t *testing.T) {
+	t.Parallel()
+
+	row := SharedProjectionIntentRow{
+		ScopeID:          "scope-explicit",
+		AcceptanceUnitID: "unit-explicit",
+		RepositoryID:     "repo-fallback",
+		SourceRunID:      "run-1",
+		Payload: map[string]any{
+			"scope_id":           "scope-payload",
+			"acceptance_unit_id": "unit-payload",
+		},
+	}
+
+	key, ok := row.AcceptanceKey()
+	if !ok {
+		t.Fatal("AcceptanceKey() ok = false, want true")
+	}
+	if got, want := key.ScopeID, "scope-explicit"; got != want {
+		t.Fatalf("key.ScopeID = %q, want %q", got, want)
+	}
+	if got, want := key.AcceptanceUnitID, "unit-explicit"; got != want {
+		t.Fatalf("key.AcceptanceUnitID = %q, want %q", got, want)
+	}
+	if got, want := key.SourceRunID, "run-1"; got != want {
+		t.Fatalf("key.SourceRunID = %q, want %q", got, want)
+	}
+}
+
 func TestBuildSharedProjectionIntentCrossLanguageParity(t *testing.T) {
 	t.Parallel()
 
@@ -104,8 +173,9 @@ func TestBuildSharedProjectionIntentCrossLanguageParity(t *testing.T) {
 	// build_shared_projection_intent(
 	//   projection_domain="platform_infra", partition_key="pk-1",
 	//   repository_id="repo-1", source_run_id="run-1",
-	//   generation_id="gen-1", payload={}, created_at=...)
-	// produces intent_id = "e8fde8ab174b7b78932579b3588281a96504f36882fe174d0242594b4ca0d9e5"
+	//   generation_id="gen-1", scope_id="", acceptance_unit_id="repo-1",
+	//   payload={}, created_at=...)
+	// produces intent_id = "0200325eedd43adccebc04f7f0711824935c1cf9f1f09dee568e9b80ea194cbe"
 	now := time.Now().UTC()
 	input := SharedProjectionIntentInput{
 		ProjectionDomain: DomainPlatformInfra,
@@ -119,7 +189,7 @@ func TestBuildSharedProjectionIntentCrossLanguageParity(t *testing.T) {
 
 	row := BuildSharedProjectionIntent(input)
 
-	want := "e8fde8ab174b7b78932579b3588281a96504f36882fe174d0242594b4ca0d9e5"
+	want := "0200325eedd43adccebc04f7f0711824935c1cf9f1f09dee568e9b80ea194cbe"
 	if row.IntentID != want {
 		t.Errorf("IntentID = %q, want %q (Python parity)", row.IntentID, want)
 	}

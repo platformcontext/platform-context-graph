@@ -27,30 +27,43 @@ type WorkerObserver interface {
 	ActiveWorkers(ctx context.Context) (map[string]int64, error)
 }
 
+// AcceptanceObserver provides shared acceptance row counts for observable
+// gauges.
+type AcceptanceObserver interface {
+	// AcceptanceRowCount returns the number of durable shared acceptance rows.
+	AcceptanceRowCount(ctx context.Context) (int64, error)
+}
+
 // Instruments holds all pre-registered OTEL metric instruments for the Go
 // data plane. All instruments use the pcg_dp_ prefix to differentiate from
 // Python pcg_ metrics.
 type Instruments struct {
 	// Counters track cumulative totals
-	FactsEmitted           metric.Int64Counter
-	FactsCommitted         metric.Int64Counter
-	ProjectionsCompleted   metric.Int64Counter
-	ReducerIntentsEnqueued metric.Int64Counter
-	ReducerExecutions      metric.Int64Counter
-	CanonicalWrites        metric.Int64Counter
-	SharedProjectionCycles metric.Int64Counter
+	FactsEmitted                 metric.Int64Counter
+	FactsCommitted               metric.Int64Counter
+	ProjectionsCompleted         metric.Int64Counter
+	ReducerIntentsEnqueued       metric.Int64Counter
+	ReducerExecutions            metric.Int64Counter
+	CanonicalWrites              metric.Int64Counter
+	SharedProjectionCycles       metric.Int64Counter
+	SharedAcceptanceUpserts      metric.Int64Counter
+	SharedAcceptanceLookupErrors metric.Int64Counter
+	SharedProjectionStaleIntents metric.Int64Counter
 
 	// Histograms track distributions
-	CollectorObserveDuration metric.Float64Histogram
-	ScopeAssignDuration      metric.Float64Histogram
-	FactEmitDuration         metric.Float64Histogram
-	ProjectorRunDuration     metric.Float64Histogram
-	ProjectorStageDuration   metric.Float64Histogram
-	ReducerRunDuration       metric.Float64Histogram
-	CanonicalWriteDuration   metric.Float64Histogram
-	QueueClaimDuration       metric.Float64Histogram
-	PostgresQueryDuration    metric.Float64Histogram
-	Neo4jQueryDuration       metric.Float64Histogram
+	CollectorObserveDuration       metric.Float64Histogram
+	ScopeAssignDuration            metric.Float64Histogram
+	FactEmitDuration               metric.Float64Histogram
+	ProjectorRunDuration           metric.Float64Histogram
+	ProjectorStageDuration         metric.Float64Histogram
+	ReducerRunDuration             metric.Float64Histogram
+	CanonicalWriteDuration         metric.Float64Histogram
+	QueueClaimDuration             metric.Float64Histogram
+	PostgresQueryDuration          metric.Float64Histogram
+	Neo4jQueryDuration             metric.Float64Histogram
+	SharedAcceptanceUpsertDuration metric.Float64Histogram
+	SharedAcceptanceLookupDuration metric.Float64Histogram
+	SharedAcceptancePrefetchSize   metric.Int64Histogram
 
 	// Collector concurrency histograms and counters
 	RepoSnapshotDuration metric.Float64Histogram
@@ -106,9 +119,10 @@ type Instruments struct {
 	PipelineOverlapDuration metric.Float64Histogram
 
 	// Observable gauges for autoscaling signals
-	QueueDepth       metric.Int64ObservableGauge
-	QueueOldestAge   metric.Float64ObservableGauge
-	WorkerPoolActive metric.Int64ObservableGauge
+	QueueDepth           metric.Int64ObservableGauge
+	QueueOldestAge       metric.Float64ObservableGauge
+	WorkerPoolActive     metric.Int64ObservableGauge
+	SharedAcceptanceRows metric.Int64ObservableGauge
 }
 
 // NewInstruments creates and registers all OTEL metric instruments using the
@@ -177,6 +191,30 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register SharedProjectionCycles counter: %w", err)
+	}
+
+	inst.SharedAcceptanceUpserts, err = meter.Int64Counter(
+		"pcg_dp_shared_acceptance_upserts_total",
+		metric.WithDescription("Total shared acceptance upserts"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedAcceptanceUpserts counter: %w", err)
+	}
+
+	inst.SharedAcceptanceLookupErrors, err = meter.Int64Counter(
+		"pcg_dp_shared_acceptance_lookup_errors_total",
+		metric.WithDescription("Total shared acceptance lookup errors"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedAcceptanceLookupErrors counter: %w", err)
+	}
+
+	inst.SharedProjectionStaleIntents, err = meter.Int64Counter(
+		"pcg_dp_shared_projection_stale_intents_total",
+		metric.WithDescription("Total stale shared projection intents filtered"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedProjectionStaleIntents counter: %w", err)
 	}
 
 	// Register histograms with explicit bucket boundaries where specified
@@ -278,6 +316,34 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register Neo4jQueryDuration histogram: %w", err)
+	}
+
+	inst.SharedAcceptanceUpsertDuration, err = meter.Float64Histogram(
+		"pcg_dp_shared_acceptance_upsert_duration_seconds",
+		metric.WithDescription("Shared acceptance upsert duration"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedAcceptanceUpsertDuration histogram: %w", err)
+	}
+
+	inst.SharedAcceptanceLookupDuration, err = meter.Float64Histogram(
+		"pcg_dp_shared_acceptance_lookup_duration_seconds",
+		metric.WithDescription("Shared acceptance lookup duration"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedAcceptanceLookupDuration histogram: %w", err)
+	}
+
+	acceptancePrefetchBuckets := []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512}
+	inst.SharedAcceptancePrefetchSize, err = meter.Int64Histogram(
+		"pcg_dp_shared_acceptance_prefetch_size",
+		metric.WithDescription("Shared acceptance bounded-unit prefetch size"),
+		metric.WithExplicitBucketBoundaries(acceptancePrefetchBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedAcceptancePrefetchSize histogram: %w", err)
 	}
 
 	// Collector concurrency instruments
@@ -647,6 +713,39 @@ func RegisterObservableGauges(
 	return nil
 }
 
+// RegisterAcceptanceObservableGauges registers acceptance-specific observable
+// gauges backed by the supplied observer.
+func RegisterAcceptanceObservableGauges(inst *Instruments, meter metric.Meter, acceptanceObs AcceptanceObserver) error {
+	if inst == nil {
+		return errors.New("instruments are required")
+	}
+	if meter == nil {
+		return errors.New("meter is required")
+	}
+	if acceptanceObs == nil {
+		return nil
+	}
+
+	var err error
+	inst.SharedAcceptanceRows, err = meter.Int64ObservableGauge(
+		"pcg_dp_shared_acceptance_rows",
+		metric.WithDescription("Current durable shared acceptance row count"),
+		metric.WithInt64Callback(func(ctx context.Context, o metric.Int64Observer) error {
+			rows, err := acceptanceObs.AcceptanceRowCount(ctx)
+			if err != nil {
+				return err
+			}
+			o.Observe(rows)
+			return nil
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("register SharedAcceptanceRows gauge: %w", err)
+	}
+
+	return nil
+}
+
 // AttrScopeID returns a scope_id attribute for metric recording.
 func AttrScopeID(v string) attribute.KeyValue {
 	return attribute.String(MetricDimensionScopeID, v)
@@ -680,6 +779,21 @@ func AttrDomain(v string) attribute.KeyValue {
 // AttrPartitionKey returns a partition_key attribute for metric recording.
 func AttrPartitionKey(v string) attribute.KeyValue {
 	return attribute.String(MetricDimensionPartitionKey, v)
+}
+
+// AttrRunner returns a runner attribute for metric recording.
+func AttrRunner(v string) attribute.KeyValue {
+	return attribute.String(MetricDimensionRunner, v)
+}
+
+// AttrLookupResult returns a lookup_result attribute for metric recording.
+func AttrLookupResult(v string) attribute.KeyValue {
+	return attribute.String(MetricDimensionLookupResult, v)
+}
+
+// AttrErrorType returns an error_type attribute for metric recording.
+func AttrErrorType(v string) attribute.KeyValue {
+	return attribute.String(MetricDimensionErrorType, v)
 }
 
 // AttrRepoSizeTier returns a repo_size_tier attribute for metric recording.

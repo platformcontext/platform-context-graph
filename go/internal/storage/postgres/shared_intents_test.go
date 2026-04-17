@@ -28,8 +28,12 @@ func TestSharedIntentStoreUpsertAndList(t *testing.T) {
 			RepositoryID:     "repository:r_payments",
 			SourceRunID:      "run-001",
 			GenerationID:     "gen-001",
-			Payload:          map[string]any{"fact_count": 3},
-			CreatedAt:        now,
+			Payload: map[string]any{
+				"fact_count":         3,
+				"scope_id":           "scope:git:payments",
+				"acceptance_unit_id": "repository:r_payments",
+			},
+			CreatedAt: now,
 		},
 	}
 
@@ -271,11 +275,12 @@ func TestSharedIntentStoreUpsertIntentsBatch(t *testing.T) {
 	// Spot-check a few intents
 	for _, idx := range []int{0, 500, 999, 1199} {
 		intentID := fmt.Sprintf("si-batch-%d", idx)
-		intent, ok := db.intents[intentID]
+		stored, ok := db.intents[intentID]
 		if !ok {
 			t.Errorf("intent %q not found", intentID)
 			continue
 		}
+		intent := stored.row
 		if intent.RepositoryID != "repository:r_batch_test" {
 			t.Errorf("intent %q: RepositoryID = %q", intentID, intent.RepositoryID)
 		}
@@ -295,11 +300,60 @@ func TestSharedIntentSchemaSQL(t *testing.T) {
 	if !strings.Contains(sqlStr, "CREATE TABLE IF NOT EXISTS shared_projection_partition_leases") {
 		t.Error("missing shared_projection_partition_leases table")
 	}
+	if !strings.Contains(sqlStr, "ADD COLUMN IF NOT EXISTS scope_id") {
+		t.Error("missing scope_id migration clause")
+	}
+	if !strings.Contains(sqlStr, "ADD COLUMN IF NOT EXISTS acceptance_unit_id") {
+		t.Error("missing acceptance_unit_id migration clause")
+	}
 	if !strings.Contains(sqlStr, "shared_projection_intents_repo_run_idx") {
 		t.Error("missing repo_run index")
 	}
+	if !strings.Contains(sqlStr, "shared_projection_intents_acceptance_lookup_idx") {
+		t.Error("missing acceptance lookup index")
+	}
 	if !strings.Contains(sqlStr, "shared_projection_intents_pending_idx") {
 		t.Error("missing pending index")
+	}
+}
+
+func TestSharedIntentStorePersistsAcceptanceIdentity(t *testing.T) {
+	t.Parallel()
+
+	db := newSharedIntentTestDB()
+	store := NewSharedIntentStore(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:         "si-identity",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-identity",
+			RepositoryID:     "repository:r_identity",
+			SourceRunID:      "run-identity",
+			GenerationID:     "gen-identity",
+			Payload: map[string]any{
+				"scope_id":           "scope:git:identity",
+				"acceptance_unit_id": "unit:identity",
+			},
+			CreatedAt: now,
+		},
+	}
+
+	if err := store.UpsertIntents(ctx, rows); err != nil {
+		t.Fatalf("UpsertIntents: %v", err)
+	}
+
+	stored, ok := db.intents["si-identity"]
+	if !ok {
+		t.Fatal("expected stored intent")
+	}
+	if stored.scopeID != "scope:git:identity" {
+		t.Fatalf("scopeID = %q, want %q", stored.scopeID, "scope:git:identity")
+	}
+	if stored.acceptanceUnitID != "unit:identity" {
+		t.Fatalf("acceptanceUnitID = %q, want %q", stored.acceptanceUnitID, "unit:identity")
 	}
 }
 
@@ -517,13 +571,13 @@ func TestSharedIntentStoreCountPendingGenerationIntents(t *testing.T) {
 // sharedIntentTestDB is an in-memory mock of ExecQueryer that stores shared
 // projection intents for unit testing. Follows the decisionTestDB pattern.
 type sharedIntentTestDB struct {
-	intents   map[string]reducer.SharedProjectionIntentRow
+	intents   map[string]storedSharedIntent
 	execCalls int
 }
 
 func newSharedIntentTestDB() *sharedIntentTestDB {
 	return &sharedIntentTestDB{
-		intents: make(map[string]reducer.SharedProjectionIntentRow),
+		intents: make(map[string]storedSharedIntent),
 	}
 }
 
@@ -533,31 +587,34 @@ func (db *sharedIntentTestDB) ExecContext(_ context.Context, query string, args 
 	switch {
 	case strings.Contains(query, "INSERT INTO shared_projection_intents"):
 		// Handle batched multi-row INSERT
-		// Each row has 9 columns: intent_id, projection_domain, partition_key,
-		// repository_id, source_run_id, generation_id, payload, created_at, completed_at
-		numRows := len(args) / 9
+		// Each row has 11 columns, including the bounded-unit acceptance identity.
+		numRows := len(args) / 11
 		for i := 0; i < numRows; i++ {
-			offset := i * 9
+			offset := i * 11
 			row := reducer.SharedProjectionIntentRow{
 				IntentID:         args[offset+0].(string),
 				ProjectionDomain: args[offset+1].(string),
 				PartitionKey:     args[offset+2].(string),
-				RepositoryID:     args[offset+3].(string),
-				SourceRunID:      args[offset+4].(string),
-				GenerationID:     args[offset+5].(string),
-				CreatedAt:        args[offset+7].(time.Time),
+				RepositoryID:     args[offset+5].(string),
+				SourceRunID:      args[offset+6].(string),
+				GenerationID:     args[offset+7].(string),
+				CreatedAt:        args[offset+9].(time.Time),
 			}
-			if b, ok := args[offset+6].([]byte); ok {
+			if b, ok := args[offset+8].([]byte); ok {
 				var m map[string]any
 				if err := json.Unmarshal(b, &m); err == nil {
 					row.Payload = m
 				}
 			}
-			if args[offset+8] != nil {
-				ca := args[offset+8].(time.Time)
+			if args[offset+10] != nil {
+				ca := args[offset+10].(time.Time)
 				row.CompletedAt = &ca
 			}
-			db.intents[row.IntentID] = row
+			db.intents[row.IntentID] = storedSharedIntent{
+				row:              row,
+				scopeID:          args[offset+3].(string),
+				acceptanceUnitID: args[offset+4].(string),
+			}
 		}
 		return sharedIntentResult{}, nil
 
@@ -565,9 +622,9 @@ func (db *sharedIntentTestDB) ExecContext(_ context.Context, query string, args 
 		completedAt := args[0].(time.Time)
 		intentIDs := args[1].([]string)
 		for _, id := range intentIDs {
-			if row, ok := db.intents[id]; ok {
-				row.CompletedAt = &completedAt
-				db.intents[id] = row
+			if stored, ok := db.intents[id]; ok {
+				stored.row.CompletedAt = &completedAt
+				db.intents[id] = stored
 			}
 		}
 		return sharedIntentResult{}, nil
@@ -590,7 +647,8 @@ func (db *sharedIntentTestDB) QueryContext(_ context.Context, query string, args
 		domain := args[3].(string)
 
 		count := 0
-		for _, intent := range db.intents {
+		for _, stored := range db.intents {
+			intent := stored.row
 			if intent.RepositoryID == repoID &&
 				intent.SourceRunID == runID &&
 				intent.GenerationID == genID &&
@@ -612,7 +670,8 @@ func (db *sharedIntentTestDB) QueryContext(_ context.Context, query string, args
 		}
 
 		var rows [][]any
-		for _, intent := range db.intents {
+		for _, stored := range db.intents {
+			intent := stored.row
 			if intent.RepositoryID != repoID {
 				continue
 			}
@@ -625,11 +684,54 @@ func (db *sharedIntentTestDB) QueryContext(_ context.Context, query string, args
 			if intent.CompletedAt != nil {
 				continue
 			}
+				payloadBytes, _ := json.Marshal(intent.Payload)
+				rows = append(rows, []any{
+					intent.IntentID,
+					intent.ProjectionDomain,
+					intent.PartitionKey,
+					stored.scopeID,
+					stored.acceptanceUnitID,
+					intent.RepositoryID,
+					intent.SourceRunID,
+					intent.GenerationID,
+					payloadBytes,
+					intent.CreatedAt,
+				nil,
+			})
+			if len(rows) >= limit {
+				break
+			}
+		}
+			return newSharedIntentRows(rows), nil
+
+	case strings.Contains(query, "WHERE scope_id = $1") &&
+		strings.Contains(query, "acceptance_unit_id = $2") &&
+		strings.Contains(query, "projection_domain = $4"):
+		scopeID := args[0].(string)
+		acceptanceUnitID := args[1].(string)
+		runID := args[2].(string)
+		domain := args[3].(string)
+		limit := args[4].(int)
+		if limit < 1 {
+			limit = 1
+		}
+
+		var rows [][]any
+		for _, stored := range db.intents {
+			intent := stored.row
+			if stored.scopeID != scopeID || stored.acceptanceUnitID != acceptanceUnitID {
+				continue
+			}
+			if intent.SourceRunID != runID || intent.ProjectionDomain != domain || intent.CompletedAt != nil {
+				continue
+			}
 			payloadBytes, _ := json.Marshal(intent.Payload)
 			rows = append(rows, []any{
 				intent.IntentID,
 				intent.ProjectionDomain,
 				intent.PartitionKey,
+				stored.scopeID,
+				stored.acceptanceUnitID,
 				intent.RepositoryID,
 				intent.SourceRunID,
 				intent.GenerationID,
@@ -652,23 +754,26 @@ func (db *sharedIntentTestDB) QueryContext(_ context.Context, query string, args
 		}
 
 		var rows [][]any
-		for _, intent := range db.intents {
+		for _, stored := range db.intents {
+			intent := stored.row
 			if intent.ProjectionDomain != domain {
 				continue
 			}
 			if intent.CompletedAt != nil {
 				continue
 			}
-			payloadBytes, _ := json.Marshal(intent.Payload)
-			rows = append(rows, []any{
-				intent.IntentID,
-				intent.ProjectionDomain,
-				intent.PartitionKey,
-				intent.RepositoryID,
-				intent.SourceRunID,
-				intent.GenerationID,
-				payloadBytes,
-				intent.CreatedAt,
+				payloadBytes, _ := json.Marshal(intent.Payload)
+				rows = append(rows, []any{
+					intent.IntentID,
+					intent.ProjectionDomain,
+					intent.PartitionKey,
+					stored.scopeID,
+					stored.acceptanceUnitID,
+					intent.RepositoryID,
+					intent.SourceRunID,
+					intent.GenerationID,
+					payloadBytes,
+					intent.CreatedAt,
 				nil,
 			})
 			if len(rows) >= limit {
@@ -691,7 +796,8 @@ func (db *sharedIntentTestDB) QueryContext(_ context.Context, query string, args
 		}
 
 		var rows [][]any
-		for _, intent := range db.intents {
+		for _, stored := range db.intents {
+			intent := stored.row
 			if intent.RepositoryID != repoID || intent.SourceRunID != runID {
 				continue
 			}
@@ -703,14 +809,16 @@ func (db *sharedIntentTestDB) QueryContext(_ context.Context, query string, args
 			if intent.CompletedAt != nil {
 				completedAt = *intent.CompletedAt
 			}
-			rows = append(rows, []any{
-				intent.IntentID,
-				intent.ProjectionDomain,
-				intent.PartitionKey,
-				intent.RepositoryID,
-				intent.SourceRunID,
-				intent.GenerationID,
-				payloadBytes,
+				rows = append(rows, []any{
+					intent.IntentID,
+					intent.ProjectionDomain,
+					intent.PartitionKey,
+					stored.scopeID,
+					stored.acceptanceUnitID,
+					intent.RepositoryID,
+					intent.SourceRunID,
+					intent.GenerationID,
+					payloadBytes,
 				intent.CreatedAt,
 				completedAt,
 			})
@@ -729,6 +837,12 @@ type sharedIntentResult struct{}
 
 func (sharedIntentResult) LastInsertId() (int64, error) { return 0, nil }
 func (sharedIntentResult) RowsAffected() (int64, error) { return 1, nil }
+
+type storedSharedIntent struct {
+	row              reducer.SharedProjectionIntentRow
+	scopeID          string
+	acceptanceUnitID string
+}
 
 // sharedIntentRows implements the Rows interface for shared intent test queries.
 type sharedIntentRows struct {

@@ -6,279 +6,159 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 )
 
-func TestAcceptedGenerationLookup(t *testing.T) {
+func TestNewAcceptedGenerationLookupUsesAcceptanceTable(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name           string
-		repositoryID   string
-		sourceRunID    string
-		setupRows      []acceptedGenRow
-		wantGeneration string
-		wantFound      bool
-	}{
-		{
-			name:         "returns generation when row exists",
-			repositoryID: "repository:r_api",
-			sourceRunID:  "run-001",
-			setupRows: []acceptedGenRow{
-				{
-					repositoryID:          "repository:r_api",
-					sourceRunID:           "run-001",
-					acceptedGenerationID:  "gen-abc-123",
-					sharedProjectionPending: true,
-				},
-			},
-			wantGeneration: "gen-abc-123",
-			wantFound:      true,
-		},
-		{
-			name:         "returns not found when no matching row exists",
-			repositoryID: "repository:r_payments",
-			sourceRunID:  "run-002",
-			setupRows: []acceptedGenRow{
-				{
-					repositoryID:          "repository:r_api",
-					sourceRunID:           "run-001",
-					acceptedGenerationID:  "gen-abc-123",
-					sharedProjectionPending: true,
-				},
-			},
-			wantGeneration: "",
-			wantFound:      false,
-		},
-		{
-			name:         "returns not found when no rows at all",
-			repositoryID: "repository:r_empty",
-			sourceRunID:  "run-empty",
-			setupRows:    nil,
-			wantGeneration: "",
-			wantFound:      false,
-		},
-		{
-			name:         "returns most recent when multiple rows match",
-			repositoryID: "repository:r_multi",
-			sourceRunID:  "run-multi",
-			setupRows: []acceptedGenRow{
-				{
-					repositoryID:          "repository:r_multi",
-					sourceRunID:           "run-multi",
-					acceptedGenerationID:  "gen-old",
-					sharedProjectionPending: true,
-				},
-				{
-					repositoryID:          "repository:r_multi",
-					sourceRunID:           "run-multi",
-					acceptedGenerationID:  "gen-new",
-					sharedProjectionPending: true,
-				},
-			},
-			wantGeneration: "gen-new",
-			wantFound:      true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			db := newAcceptedGenerationTestDB(tt.setupRows)
-			lookup := NewAcceptedGenerationLookup(db)
-
-			gotGeneration, gotFound := lookup(tt.repositoryID, tt.sourceRunID)
-
-			if gotGeneration != tt.wantGeneration {
-				t.Errorf("generation = %q, want %q", gotGeneration, tt.wantGeneration)
-			}
-			if gotFound != tt.wantFound {
-				t.Errorf("found = %v, want %v", gotFound, tt.wantFound)
-			}
-		})
-	}
-}
-
-func TestAcceptedGenerationLookupQueryVerification(t *testing.T) {
-	t.Parallel()
-
-	db := &queryCapturingDB{
-		rows: []acceptedGenRow{
+	db := &acceptanceQueryCapturingDB{
+		rows: []sharedProjectionAcceptanceRow{
 			{
-				repositoryID:          "repository:r_test",
-				sourceRunID:           "run-test",
-				acceptedGenerationID:  "gen-test",
-				sharedProjectionPending: true,
+				scopeID:          "scope:git:repo-1",
+				acceptanceUnitID: "repository:r_test",
+				sourceRunID:      "run-test",
+				generationID:     "gen-test",
+				updatedAt:        time.Now().UTC(),
 			},
 		},
 	}
 
 	lookup := NewAcceptedGenerationLookup(db)
-	_, _ = lookup("repository:r_test", "run-test")
+	gotGeneration, gotFound := lookup(reducer.SharedProjectionAcceptanceKey{
+		ScopeID:          "scope:git:repo-1",
+		AcceptanceUnitID: "repository:r_test",
+		SourceRunID:      "run-test",
+	})
+
+	if !gotFound {
+		t.Fatal("lookup should find the acceptance row")
+	}
+	if gotGeneration != "gen-test" {
+		t.Fatalf("generation = %q, want %q", gotGeneration, "gen-test")
+	}
 
 	if db.lastQuery == "" {
 		t.Fatal("no query was executed")
 	}
-
-	// Verify the query structure
-	if !strings.Contains(db.lastQuery, "SELECT accepted_generation_id") {
-		t.Error("query should SELECT accepted_generation_id")
+	if strings.Contains(db.lastQuery, "FROM fact_work_items") {
+		t.Fatal("compatibility lookup must not query fact_work_items")
 	}
-	if !strings.Contains(db.lastQuery, "FROM fact_work_items") {
-		t.Error("query should be FROM fact_work_items")
+	if !strings.Contains(db.lastQuery, "FROM shared_projection_acceptance") {
+		t.Fatal("compatibility lookup should query shared_projection_acceptance")
 	}
-	if !strings.Contains(db.lastQuery, "WHERE repository_id = $1") {
-		t.Error("query should filter by repository_id = $1")
+	if !strings.Contains(db.lastQuery, "WHERE scope_id = $1") {
+		t.Fatal("lookup should filter by scope_id")
 	}
-	if !strings.Contains(db.lastQuery, "AND source_run_id = $2") {
-		t.Error("query should filter by source_run_id = $2")
+	if !strings.Contains(db.lastQuery, "AND acceptance_unit_id = $2") {
+		t.Fatal("lookup should filter by acceptance_unit_id")
 	}
-	if !strings.Contains(db.lastQuery, "AND shared_projection_pending = TRUE") {
-		t.Error("query should filter by shared_projection_pending = TRUE")
+	if !strings.Contains(db.lastQuery, "AND source_run_id = $3") {
+		t.Fatal("lookup should filter by source_run_id")
 	}
-	if !strings.Contains(db.lastQuery, "AND accepted_generation_id IS NOT NULL") {
-		t.Error("query should filter by accepted_generation_id IS NOT NULL")
+	if len(db.lastArgs) != 3 {
+		t.Fatalf("len(args) = %d, want 3", len(db.lastArgs))
 	}
-	if !strings.Contains(db.lastQuery, "ORDER BY updated_at DESC") {
-		t.Error("query should ORDER BY updated_at DESC")
+	if db.lastArgs[0] != "scope:git:repo-1" {
+		t.Fatalf("arg[0] = %v, want scope:git:repo-1", db.lastArgs[0])
 	}
-	if !strings.Contains(db.lastQuery, "LIMIT 1") {
-		t.Error("query should LIMIT 1")
+	if db.lastArgs[1] != "repository:r_test" {
+		t.Fatalf("arg[1] = %v, want repository:r_test", db.lastArgs[1])
 	}
-
-	// Verify the parameters
-	if len(db.lastArgs) != 2 {
-		t.Fatalf("expected 2 query args, got %d", len(db.lastArgs))
-	}
-	if db.lastArgs[0] != "repository:r_test" {
-		t.Errorf("arg[0] = %v, want repository:r_test", db.lastArgs[0])
-	}
-	if db.lastArgs[1] != "run-test" {
-		t.Errorf("arg[1] = %v, want run-test", db.lastArgs[1])
+	if db.lastArgs[2] != "run-test" {
+		t.Fatalf("arg[2] = %v, want run-test", db.lastArgs[2])
 	}
 }
 
-// -- test helpers --
+func TestNewAcceptedGenerationLookupReturnsFalseOnStoreError(t *testing.T) {
+	t.Parallel()
 
-type acceptedGenRow struct {
-	repositoryID          string
-	sourceRunID           string
-	acceptedGenerationID  string
-	sharedProjectionPending bool
+	lookup := NewAcceptedGenerationLookup(&acceptanceStoreErrorDB{})
+	gotGeneration, gotFound := lookup(reducer.SharedProjectionAcceptanceKey{
+		ScopeID:          "scope:git:repo-1",
+		AcceptanceUnitID: "repository:r_test",
+		SourceRunID:      "run-test",
+	})
+
+	if gotGeneration != "" {
+		t.Fatalf("generation = %q, want empty string", gotGeneration)
+	}
+	if gotFound {
+		t.Fatal("found = true, want false when the store query fails")
+	}
 }
 
-// acceptedGenerationTestDB is an in-memory mock of ExecQueryer for testing
-// accepted generation lookups.
-type acceptedGenerationTestDB struct {
-	rows []acceptedGenRow
-}
+func TestNewAcceptedGenerationPrefetchCachesByAcceptanceKey(t *testing.T) {
+	t.Parallel()
 
-func newAcceptedGenerationTestDB(rows []acceptedGenRow) *acceptedGenerationTestDB {
-	return &acceptedGenerationTestDB{rows: rows}
-}
-
-func (db *acceptedGenerationTestDB) ExecContext(_ context.Context, _ string, _ ...any) (sql.Result, error) {
-	return nil, fmt.Errorf("ExecContext not implemented in test stub")
-}
-
-func (db *acceptedGenerationTestDB) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
-	if !strings.Contains(query, "SELECT accepted_generation_id") {
-		return nil, fmt.Errorf("unexpected query: %s", query)
+	db := &acceptanceQueryCapturingDB{
+		rows: []sharedProjectionAcceptanceRow{
+			{
+				scopeID:          "scope:git:repo-1",
+				acceptanceUnitID: "repository:r_test",
+				sourceRunID:      "run-test",
+				generationID:     "gen-test",
+				updatedAt:        time.Now().UTC(),
+			},
+		},
 	}
 
-	if len(args) != 2 {
-		return nil, fmt.Errorf("expected 2 args, got %d", len(args))
+	prefetch := NewAcceptedGenerationPrefetch(db)
+	lookup, err := prefetch(context.Background(), []reducer.SharedProjectionIntentRow{
+		{
+			ScopeID:          "scope:git:repo-1",
+			AcceptanceUnitID: "repository:r_test",
+			RepositoryID:     "repository:r_test",
+			SourceRunID:      "run-test",
+		},
+		{
+			ScopeID:          "scope:git:repo-1",
+			AcceptanceUnitID: "repository:r_test",
+			RepositoryID:     "repository:r_test",
+			SourceRunID:      "run-test",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prefetch() error = %v", err)
 	}
 
-	repositoryID := args[0].(string)
-	sourceRunID := args[1].(string)
-
-	var matchingRows [][]any
-	for _, row := range db.rows {
-		if row.repositoryID == repositoryID && row.sourceRunID == sourceRunID && row.sharedProjectionPending {
-			matchingRows = append(matchingRows, []any{row.acceptedGenerationID})
-		}
+	gotGeneration, gotFound := lookup(reducer.SharedProjectionAcceptanceKey{
+		ScopeID:          "scope:git:repo-1",
+		AcceptanceUnitID: "repository:r_test",
+		SourceRunID:      "run-test",
+	})
+	if !gotFound {
+		t.Fatal("lookup should find prefetched row")
 	}
-
-	// Return the most recent (last in slice simulates ORDER BY updated_at DESC)
-	if len(matchingRows) > 0 {
-		return &acceptedGenTestRows{
-			data: [][]any{matchingRows[len(matchingRows)-1]},
-			idx:  -1,
-		}, nil
+	if gotGeneration != "gen-test" {
+		t.Fatalf("generation = %q, want gen-test", gotGeneration)
 	}
-
-	return &acceptedGenTestRows{data: nil, idx: -1}, nil
 }
 
-// queryCapturingDB captures the last query and args for verification.
-type queryCapturingDB struct {
-	rows      []acceptedGenRow
+type acceptanceQueryCapturingDB struct {
+	rows      []sharedProjectionAcceptanceRow
 	lastQuery string
 	lastArgs  []any
 }
 
-func (db *queryCapturingDB) ExecContext(_ context.Context, _ string, _ ...any) (sql.Result, error) {
+func (db *acceptanceQueryCapturingDB) ExecContext(_ context.Context, _ string, _ ...any) (sql.Result, error) {
 	return nil, fmt.Errorf("ExecContext not implemented in test stub")
 }
 
-func (db *queryCapturingDB) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
+func (db *acceptanceQueryCapturingDB) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
 	db.lastQuery = query
 	db.lastArgs = args
-
-	if len(args) != 2 {
-		return nil, fmt.Errorf("expected 2 args, got %d", len(args))
-	}
-
-	repositoryID := args[0].(string)
-	sourceRunID := args[1].(string)
-
-	var matchingRows [][]any
-	for _, row := range db.rows {
-		if row.repositoryID == repositoryID && row.sourceRunID == sourceRunID && row.sharedProjectionPending {
-			matchingRows = append(matchingRows, []any{row.acceptedGenerationID})
-		}
-	}
-
-	if len(matchingRows) > 0 {
-		return &acceptedGenTestRows{
-			data: [][]any{matchingRows[len(matchingRows)-1]},
-			idx:  -1,
-		}, nil
-	}
-
-	return &acceptedGenTestRows{data: nil, idx: -1}, nil
+	return queryAcceptanceRows(db.rows, query, args...)
 }
 
-// acceptedGenTestRows implements the Rows interface for testing.
-type acceptedGenTestRows struct {
-	data [][]any
-	idx  int
+type acceptanceStoreErrorDB struct{}
+
+func (db *acceptanceStoreErrorDB) ExecContext(_ context.Context, _ string, _ ...any) (sql.Result, error) {
+	return nil, fmt.Errorf("ExecContext not implemented in test stub")
 }
 
-func (r *acceptedGenTestRows) Next() bool {
-	r.idx++
-	return r.idx < len(r.data)
+func (db *acceptanceStoreErrorDB) QueryContext(_ context.Context, _ string, _ ...any) (Rows, error) {
+	return nil, fmt.Errorf("boom")
 }
-
-func (r *acceptedGenTestRows) Scan(dest ...any) error {
-	if r.idx < 0 || r.idx >= len(r.data) {
-		return sql.ErrNoRows
-	}
-	row := r.data[r.idx]
-	if len(dest) != len(row) {
-		return fmt.Errorf("scan: got %d dest, have %d cols", len(dest), len(row))
-	}
-	for i, val := range row {
-		switch d := dest[i].(type) {
-		case *string:
-			*d = val.(string)
-		default:
-			return fmt.Errorf("unsupported scan dest type %T", dest[i])
-		}
-	}
-	return nil
-}
-
-func (r *acceptedGenTestRows) Err() error  { return nil }
-func (r *acceptedGenTestRows) Close() error { return nil }

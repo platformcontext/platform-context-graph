@@ -25,6 +25,9 @@ func TestNewInstrumentsNoError(t *testing.T) {
 	assert.NotNil(t, inst.ReducerExecutions, "ReducerExecutions counter should be registered")
 	assert.NotNil(t, inst.CanonicalWrites, "CanonicalWrites counter should be registered")
 	assert.NotNil(t, inst.SharedProjectionCycles, "SharedProjectionCycles counter should be registered")
+	assert.NotNil(t, inst.SharedAcceptanceUpserts, "SharedAcceptanceUpserts counter should be registered")
+	assert.NotNil(t, inst.SharedAcceptanceLookupErrors, "SharedAcceptanceLookupErrors counter should be registered")
+	assert.NotNil(t, inst.SharedProjectionStaleIntents, "SharedProjectionStaleIntents counter should be registered")
 
 	// Verify all histogram fields are non-nil
 	assert.NotNil(t, inst.CollectorObserveDuration, "CollectorObserveDuration histogram should be registered")
@@ -38,6 +41,9 @@ func TestNewInstrumentsNoError(t *testing.T) {
 	assert.NotNil(t, inst.BatchClaimSize, "BatchClaimSize histogram should be registered")
 	assert.NotNil(t, inst.PostgresQueryDuration, "PostgresQueryDuration histogram should be registered")
 	assert.NotNil(t, inst.Neo4jQueryDuration, "Neo4jQueryDuration histogram should be registered")
+	assert.NotNil(t, inst.SharedAcceptanceUpsertDuration, "SharedAcceptanceUpsertDuration histogram should be registered")
+	assert.NotNil(t, inst.SharedAcceptanceLookupDuration, "SharedAcceptanceLookupDuration histogram should be registered")
+	assert.NotNil(t, inst.SharedAcceptancePrefetchSize, "SharedAcceptancePrefetchSize histogram should be registered")
 }
 
 func TestNewInstrumentsNilMeterError(t *testing.T) {
@@ -88,6 +94,21 @@ func TestAttrHelpers(t *testing.T) {
 			name:     "AttrPartitionKey",
 			attrFunc: func(v string) string { return string(AttrPartitionKey(v).Key) },
 			wantKey:  MetricDimensionPartitionKey,
+		},
+		{
+			name:     "AttrRunner",
+			attrFunc: func(v string) string { return string(AttrRunner(v).Key) },
+			wantKey:  MetricDimensionRunner,
+		},
+		{
+			name:     "AttrLookupResult",
+			attrFunc: func(v string) string { return string(AttrLookupResult(v).Key) },
+			wantKey:  MetricDimensionLookupResult,
+		},
+		{
+			name:     "AttrErrorType",
+			attrFunc: func(v string) string { return string(AttrErrorType(v).Key) },
+			wantKey:  MetricDimensionErrorType,
 		},
 	}
 
@@ -159,6 +180,31 @@ func TestRegisterObservableGauges_WithObservers(t *testing.T) {
 	}
 }
 
+func TestRegisterAcceptanceObservableGauges_NilInputs(t *testing.T) {
+	meter := sdkmetric.NewMeterProvider().Meter("test")
+	inst := &Instruments{}
+
+	if err := RegisterAcceptanceObservableGauges(nil, meter, nil); err == nil {
+		t.Fatal("expected error for nil instruments")
+	}
+	if err := RegisterAcceptanceObservableGauges(inst, nil, nil); err == nil {
+		t.Fatal("expected error for nil meter")
+	}
+}
+
+func TestRegisterAcceptanceObservableGauges_WithObserver(t *testing.T) {
+	meter := sdkmetric.NewMeterProvider().Meter("test")
+	inst := &Instruments{}
+	observer := &fakeAcceptanceObserver{rows: 42}
+
+	if err := RegisterAcceptanceObservableGauges(inst, meter, observer); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inst.SharedAcceptanceRows == nil {
+		t.Fatal("expected SharedAcceptanceRows gauge to be set")
+	}
+}
+
 type fakeQueueObserver struct {
 	depths map[string]map[string]int64
 	ages   map[string]float64
@@ -178,4 +224,12 @@ type fakeWorkerObserver struct {
 
 func (f *fakeWorkerObserver) ActiveWorkers(_ context.Context) (map[string]int64, error) {
 	return f.counts, nil
+}
+
+type fakeAcceptanceObserver struct {
+	rows int64
+}
+
+func (f *fakeAcceptanceObserver) AcceptanceRowCount(_ context.Context) (int64, error) {
+	return f.rows, nil
 }

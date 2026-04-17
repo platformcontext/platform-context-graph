@@ -13,12 +13,13 @@ import (
 
 const (
 	// sharedIntentBatchSize is the number of rows per multi-row INSERT batch.
-	// 500 rows * 9 columns = 4500 parameters per query, well under the
+	// 500 rows * 11 columns = 5500 parameters per query, well under the
 	// Postgres limit of 65535.
 	sharedIntentBatchSize = 500
 
-	// columnsPerSharedIntent is the number of columns in the shared_projection_intents INSERT.
-	columnsPerSharedIntent = 9
+	// columnsPerSharedIntent is the number of columns in the
+	// shared_projection_intents INSERT.
+	columnsPerSharedIntent = 11
 )
 
 // preparedRow holds marshaled data for one shared intent row before batching.
@@ -26,6 +27,8 @@ type preparedRow struct {
 	intentID         string
 	projectionDomain string
 	partitionKey     string
+	scopeID          string
+	acceptanceUnitID string
 	repositoryID     string
 	sourceRunID      string
 	generationID     string
@@ -39,6 +42,8 @@ CREATE TABLE IF NOT EXISTS shared_projection_intents (
     intent_id TEXT PRIMARY KEY,
     projection_domain TEXT NOT NULL,
     partition_key TEXT NOT NULL,
+    scope_id TEXT NOT NULL DEFAULT '',
+    acceptance_unit_id TEXT NOT NULL DEFAULT '',
     repository_id TEXT NOT NULL,
     source_run_id TEXT NOT NULL,
     generation_id TEXT NOT NULL,
@@ -46,8 +51,14 @@ CREATE TABLE IF NOT EXISTS shared_projection_intents (
     created_at TIMESTAMPTZ NOT NULL,
     completed_at TIMESTAMPTZ NULL
 );
+ALTER TABLE shared_projection_intents
+    ADD COLUMN IF NOT EXISTS scope_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE shared_projection_intents
+    ADD COLUMN IF NOT EXISTS acceptance_unit_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS shared_projection_intents_repo_run_idx
     ON shared_projection_intents (repository_id, source_run_id, projection_domain, created_at);
+CREATE INDEX IF NOT EXISTS shared_projection_intents_acceptance_lookup_idx
+    ON shared_projection_intents (scope_id, acceptance_unit_id, source_run_id, projection_domain, created_at);
 CREATE INDEX IF NOT EXISTS shared_projection_intents_pending_idx
     ON shared_projection_intents (projection_domain, completed_at, created_at);
 
@@ -69,14 +80,16 @@ func SharedIntentSchemaSQL() string {
 
 const upsertSharedIntentBatchPrefix = `
 INSERT INTO shared_projection_intents (
-    intent_id, projection_domain, partition_key, repository_id,
-    source_run_id, generation_id, payload, created_at, completed_at
+    intent_id, projection_domain, partition_key, scope_id, acceptance_unit_id,
+    repository_id, source_run_id, generation_id, payload, created_at, completed_at
 ) VALUES `
 
 const upsertSharedIntentBatchSuffix = `
 ON CONFLICT (intent_id) DO UPDATE
 SET projection_domain = EXCLUDED.projection_domain,
     partition_key = EXCLUDED.partition_key,
+    scope_id = EXCLUDED.scope_id,
+    acceptance_unit_id = EXCLUDED.acceptance_unit_id,
     repository_id = EXCLUDED.repository_id,
     source_run_id = EXCLUDED.source_run_id,
     generation_id = EXCLUDED.generation_id,
@@ -89,7 +102,8 @@ SET projection_domain = EXCLUDED.projection_domain,
 `
 
 const listSharedIntentsSQL = `
-SELECT intent_id, projection_domain, partition_key, repository_id,
+SELECT intent_id, projection_domain, partition_key, scope_id,
+       acceptance_unit_id, repository_id,
        source_run_id, generation_id, payload, created_at, completed_at
 FROM shared_projection_intents
 WHERE repository_id = $1
@@ -100,7 +114,8 @@ LIMIT $4
 `
 
 const listPendingDomainIntentsSQL = `
-SELECT intent_id, projection_domain, partition_key, repository_id,
+SELECT intent_id, projection_domain, partition_key, scope_id,
+       acceptance_unit_id, repository_id,
        source_run_id, generation_id, payload, created_at, completed_at
 FROM shared_projection_intents
 WHERE projection_domain = $1
@@ -116,7 +131,8 @@ WHERE intent_id = ANY($2)
 `
 
 const listPendingRepoRunIntentsSQL = `
-SELECT intent_id, projection_domain, partition_key, repository_id,
+SELECT intent_id, projection_domain, partition_key, scope_id,
+       acceptance_unit_id, repository_id,
        source_run_id, generation_id, payload, created_at, completed_at
 FROM shared_projection_intents
 WHERE repository_id = $1
@@ -125,6 +141,20 @@ WHERE repository_id = $1
   AND completed_at IS NULL
 ORDER BY created_at ASC, intent_id ASC
 LIMIT $4
+`
+
+const listPendingAcceptanceUnitIntentsSQL = `
+SELECT intent_id, projection_domain, partition_key, scope_id,
+       acceptance_unit_id, repository_id,
+       source_run_id, generation_id, payload, created_at, completed_at
+FROM shared_projection_intents
+WHERE scope_id = $1
+  AND acceptance_unit_id = $2
+  AND source_run_id = $3
+  AND projection_domain = $4
+  AND completed_at IS NULL
+ORDER BY created_at ASC, intent_id ASC
+LIMIT $5
 `
 
 const countPendingGenerationIntentsSQL = `
@@ -213,6 +243,8 @@ func (s *SharedIntentStore) UpsertIntents(ctx context.Context, rows []reducer.Sh
 			intentID:         r.IntentID,
 			projectionDomain: r.ProjectionDomain,
 			partitionKey:     r.PartitionKey,
+			scopeID:          sharedIntentScopeID(r),
+			acceptanceUnitID: sharedIntentAcceptanceUnitID(r),
 			repositoryID:     r.RepositoryID,
 			sourceRunID:      r.SourceRunID,
 			generationID:     r.GenerationID,
@@ -251,15 +283,17 @@ func upsertSharedIntentBatch(ctx context.Context, db ExecQueryer, batch []prepar
 		}
 		offset := i * columnsPerSharedIntent
 		fmt.Fprintf(&values,
-			"($%d, $%d, $%d, $%d, $%d, $%d, $%d::jsonb, $%d, $%d)",
+			"($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d::jsonb, $%d, $%d)",
 			offset+1, offset+2, offset+3, offset+4, offset+5,
-			offset+6, offset+7, offset+8, offset+9,
+			offset+6, offset+7, offset+8, offset+9, offset+10, offset+11,
 		)
 
 		args = append(args,
 			row.intentID,
 			row.projectionDomain,
 			row.partitionKey,
+			row.scopeID,
+			row.acceptanceUnitID,
 			row.repositoryID,
 			row.sourceRunID,
 			row.generationID,
@@ -397,6 +431,33 @@ func (s *SharedIntentStore) ListPendingRepoRunIntents(ctx context.Context, repos
 	return scanSharedIntentRows(sqlRows)
 }
 
+// ListPendingAcceptanceUnitIntents lists uncompleted intents for one bounded
+// freshness key and projection domain.
+func (s *SharedIntentStore) ListPendingAcceptanceUnitIntents(
+	ctx context.Context,
+	key reducer.SharedProjectionAcceptanceKey,
+	domain string,
+	limit int,
+) ([]reducer.SharedProjectionIntentRow, error) {
+	l := max(limit, 1)
+
+	sqlRows, err := s.db.QueryContext(
+		ctx,
+		listPendingAcceptanceUnitIntentsSQL,
+		key.ScopeID,
+		key.AcceptanceUnitID,
+		key.SourceRunID,
+		domain,
+		l,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sqlRows.Close() }()
+
+	return scanSharedIntentRows(sqlRows)
+}
+
 // CountPendingGenerationIntents counts uncompleted intents for a specific
 // repository, source run, generation, and projection domain.
 func (s *SharedIntentStore) CountPendingGenerationIntents(ctx context.Context, repositoryID, sourceRunID, generationID, domain string) (int, error) {
@@ -431,6 +492,8 @@ func scanSharedIntentRows(rows Rows) ([]reducer.SharedProjectionIntentRow, error
 			&r.IntentID,
 			&r.ProjectionDomain,
 			&r.PartitionKey,
+			&r.ScopeID,
+			&r.AcceptanceUnitID,
 			&r.RepositoryID,
 			&r.SourceRunID,
 			&r.GenerationID,
@@ -452,6 +515,44 @@ func scanSharedIntentRows(rows Rows) ([]reducer.SharedProjectionIntentRow, error
 	}
 
 	return result, rows.Err()
+}
+
+// sharedIntentScopeID keeps the storage layer compatible while reducer callers
+// migrate to explicit Option B identity fields.
+func sharedIntentScopeID(row reducer.SharedProjectionIntentRow) string {
+	if value := strings.TrimSpace(row.ScopeID); value != "" {
+		return value
+	}
+	return sharedIntentPayloadString(row.Payload, "scope_id")
+}
+
+// sharedIntentAcceptanceUnitID falls back to repository identity so the current
+// Git collector path remains stable while the broader bounded-unit contract
+// lands across the reducer.
+func sharedIntentAcceptanceUnitID(row reducer.SharedProjectionIntentRow) string {
+	if value := strings.TrimSpace(row.AcceptanceUnitID); value != "" {
+		return value
+	}
+	if value := sharedIntentPayloadString(row.Payload, "acceptance_unit_id"); value != "" {
+		return value
+	}
+	return row.RepositoryID
+}
+
+func sharedIntentPayloadString(payload map[string]any, key string) string {
+	if payload == nil {
+		return ""
+	}
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return typed
+	default:
+		return fmt.Sprint(typed)
+	}
 }
 
 // sharedIntentBootstrapDefinition returns the schema definition for the

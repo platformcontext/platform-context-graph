@@ -228,6 +228,8 @@ func buildDependencyIntents(
 		intent := BuildSharedProjectionIntent(SharedProjectionIntentInput{
 			ProjectionDomain: projectionDomain,
 			PartitionKey:     partitionKey,
+			ScopeID:          context.ScopeID,
+			AcceptanceUnitID: context.acceptanceUnitID(repositoryID),
 			RepositoryID:     repositoryID,
 			SourceRunID:      context.SourceRunID,
 			GenerationID:     context.GenerationID,
@@ -269,6 +271,8 @@ func buildDependencyIntents(
 		intent := BuildSharedProjectionIntent(SharedProjectionIntentInput{
 			ProjectionDomain: projectionDomain,
 			PartitionKey:     partitionKey,
+			ScopeID:          context.ScopeID,
+			AcceptanceUnitID: context.acceptanceUnitID(repositoryID),
 			RepositoryID:     repositoryID,
 			SourceRunID:      context.SourceRunID,
 			GenerationID:     context.GenerationID,
