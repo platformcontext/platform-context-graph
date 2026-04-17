@@ -1,91 +1,10 @@
 package query
 
 import (
-	"context"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 )
-
-func buildRepositoryWorkflowArtifacts(files []FileContent) map[string]any {
-	artifacts := make([]map[string]any, 0)
-	for _, file := range files {
-		if !isGitHubActionsWorkflowFile(file) {
-			continue
-		}
-
-		row := map[string]any{
-			"relative_path": file.RelativePath,
-			"artifact_type": "github_actions_workflow",
-			"workflow_name": workflowArtifactName(file.RelativePath),
-			"signals":       []string{"workflow_file"},
-		}
-		enrichWorkflowArtifactRow(row, file.Content)
-		artifacts = append(artifacts, row)
-	}
-	if len(artifacts) == 0 {
-		return nil
-	}
-	return map[string]any{"workflow_artifacts": artifacts}
-}
-
-func loadRepositoryWorkflowArtifacts(
-	ctx context.Context,
-	reader *ContentReader,
-	repoID string,
-	files []FileContent,
-) (map[string]any, error) {
-	if reader == nil || repoID == "" {
-		return nil, nil
-	}
-
-	candidates := files
-	if candidates == nil {
-		var err error
-		candidates, err = reader.ListRepoFiles(ctx, repoID, repositorySemanticEntityLimit)
-		if err != nil {
-			return nil, fmt.Errorf("list workflow artifact files: %w", err)
-		}
-	}
-
-	contentFiles := make([]FileContent, 0, len(candidates))
-	for _, file := range candidates {
-		if !isGitHubActionsWorkflowFile(file) {
-			continue
-		}
-		if strings.TrimSpace(file.Content) == "" {
-			fileContent, err := reader.GetFileContent(ctx, repoID, file.RelativePath)
-			if err != nil {
-				return nil, fmt.Errorf("get workflow artifact file %q: %w", file.RelativePath, err)
-			}
-			if fileContent == nil {
-				continue
-			}
-			file = *fileContent
-		}
-		contentFiles = append(contentFiles, file)
-	}
-	return buildRepositoryWorkflowArtifacts(contentFiles), nil
-}
-
-func isGitHubActionsWorkflowFile(file FileContent) bool {
-	if strings.EqualFold(file.ArtifactType, "github_actions_workflow") {
-		return true
-	}
-	lower := strings.ToLower(filepath.ToSlash(strings.TrimSpace(file.RelativePath)))
-	return strings.Contains(lower, ".github/workflows/") &&
-		(strings.HasSuffix(lower, ".yml") || strings.HasSuffix(lower, ".yaml"))
-}
-
-func workflowArtifactName(relativePath string) string {
-	base := filepath.Base(strings.TrimSpace(relativePath))
-	if base == "" {
-		return ""
-	}
-	ext := filepath.Ext(base)
-	return strings.TrimSuffix(base, ext)
-}
 
 func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	reusableWorkflowRepositories,
@@ -142,6 +61,10 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	if len(triggerEvents) > 0 {
 		row["trigger_events"] = triggerEvents
 		signals = append(signals, "workflow_triggers")
+	}
+	if deliveryCommandFamilies := workflowDeliveryCommandFamilies(runCommands); len(deliveryCommandFamilies) > 0 {
+		row["delivery_command_families"] = deliveryCommandFamilies
+		signals = append(signals, "delivery_command_families")
 	}
 	if len(workflowInputs) > 0 {
 		row["workflow_inputs"] = workflowInputs
@@ -253,9 +176,6 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 					actionRepositories = append(actionRepositories, actionRepository)
 				}
 				runCommand := strings.TrimSpace(StringVal(step, "run"))
-				if runCommand == "" {
-					runCommand = ""
-				}
 				if condition := strings.TrimSpace(StringVal(step, "if")); condition != "" {
 					gatingConditions = append(
 						gatingConditions,
