@@ -280,7 +280,7 @@ func parseTerragruntConfig(body *hclsyntax.Body, source []byte, path string) map
 	row["includes"] = strings.Join(includeNames, ",")
 	row["locals"] = strings.Join(localNames, ",")
 	row["inputs"] = strings.Join(objectAttributeKeys(body.Attributes["inputs"], source), ",")
-	helperPaths := parseTerragruntHelperPaths(source)
+	helperPaths := parseTerragruntHelperPaths(source, path)
 	if len(helperPaths.includePaths) > 0 {
 		row["include_paths"] = strings.Join(helperPaths.includePaths, ",")
 	}

@@ -60,3 +60,33 @@ func TestBuildRepositoryConfigArtifactsExtractsSlashJoinedRepoRootAssets(t *test
 		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildRepositoryConfigArtifactsExtractsNestedHelperBackedLocalJoinedAssets(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-stack-aws-client-vpn", []FileContent{
+		{
+			RelativePath: "modules/2024.02/custom/ecs-application/pipeline_node/main.tf",
+			Content: `locals {
+  templates_dir = "${path.module}/templates"
+  template_name  = "runtime.json"
+  rendered      = templatefile(join("/", [local.templates_dir, local.template_name]), {})
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 1 {
+		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
+	}
+	if got, want := configPaths[0]["path"], "templates/runtime.json"; got != want {
+		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[0]["evidence_kind"], "local_config_asset"; got != want {
+		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+}
