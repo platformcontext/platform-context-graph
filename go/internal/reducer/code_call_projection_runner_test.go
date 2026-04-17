@@ -2,6 +2,7 @@ package reducer
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 	"testing"
@@ -214,13 +215,138 @@ func TestCodeCallProjectionRunnerProcessesRepoAtomically(t *testing.T) {
 	}
 }
 
+func TestCodeCallProjectionRunnerRunContinuesAfterCycleError(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 17, 9, 0, 0, 0, time.UTC)
+	reader := &fakeCodeCallIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			{
+				IntentID:         "edge-1",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "caller->callee",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				Payload: map[string]any{
+					"repo_id":          "repo-a",
+					"caller_entity_id": "caller",
+					"callee_entity_id": "callee",
+					"evidence_source":  codeCallEvidenceSource,
+				},
+				CreatedAt: now,
+			},
+		},
+		pendingByRepoRun: map[string][]SharedProjectionIntentRow{
+			"repo-a|run-1": {
+				{
+					IntentID:         "edge-1",
+					ProjectionDomain: DomainCodeCalls,
+					PartitionKey:     "caller->callee",
+					RepositoryID:     "repo-a",
+					SourceRunID:      "run-1",
+					GenerationID:     "gen-1",
+					Payload: map[string]any{
+						"repo_id":          "repo-a",
+						"caller_entity_id": "caller",
+						"callee_entity_id": "callee",
+						"evidence_source":  codeCallEvidenceSource,
+					},
+					CreatedAt: now,
+				},
+			},
+		},
+		leaseGranted: true,
+	}
+	writer := &flakyCodeCallProjectionEdgeWriter{
+		err:             errors.New("neo4j transient write conflict"),
+		retractFailures: 1,
+	}
+
+	waits := make([]time.Duration, 0, 2)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runner := CodeCallProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: reader,
+		EdgeWriter:   writer,
+		AcceptedGen:  func(_, _ string) (string, bool) { return "gen-1", true },
+		Config:       CodeCallProjectionRunnerConfig{PollInterval: 10 * time.Millisecond},
+		Wait: func(_ context.Context, interval time.Duration) error {
+			waits = append(waits, interval)
+			if len(waits) == 1 {
+				return nil
+			}
+			cancel()
+			return context.Canceled
+		},
+	}
+
+	if err := runner.Run(ctx); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got := len(reader.marked); got != 1 {
+		t.Fatalf("len(marked) = %d, want 1 completed intent after retry", got)
+	}
+	if got := len(writer.writeCalls); got != 1 {
+		t.Fatalf("len(writeCalls) = %d, want 1 successful write call", got)
+	}
+	if got := len(waits); got != 2 {
+		t.Fatalf("len(waits) = %d, want 2 waits (post-error backoff, then idle poll)", got)
+	}
+	if got, want := waits[0], 10*time.Millisecond; got != want {
+		t.Fatalf("waits[0] = %v, want %v", got, want)
+	}
+	if got, want := waits[1], 10*time.Millisecond; got != want {
+		t.Fatalf("waits[1] = %v, want %v", got, want)
+	}
+}
+
+func TestCodeCallProjectionRunnerLoadAllRepoRunIntentsRejectsOversizedRepoRun(t *testing.T) {
+	t.Parallel()
+
+	reader := &fakeCodeCallIntentStore{
+		repoRunResponder: func(_ string, _ string, limit int) ([]SharedProjectionIntentRow, error) {
+			rows := make([]SharedProjectionIntentRow, limit)
+			for i := range rows {
+				rows[i] = SharedProjectionIntentRow{
+					IntentID:         "intent",
+					ProjectionDomain: DomainCodeCalls,
+					RepositoryID:     "repo-a",
+					SourceRunID:      "run-1",
+					GenerationID:     "gen-1",
+				}
+			}
+			return rows, nil
+		},
+	}
+	runner := CodeCallProjectionRunner{
+		IntentReader: reader,
+		Config:       CodeCallProjectionRunnerConfig{BatchLimit: 100},
+	}
+
+	_, err := runner.loadAllRepoRunIntents(context.Background(), "repo-a", "run-1")
+	if err == nil {
+		t.Fatal("loadAllRepoRunIntents() error = nil, want non-nil")
+	}
+	if got, want := reader.repoRunLimitRequests[len(reader.repoRunLimitRequests)-1], maxCodeCallRepoRunScanLimit; got != want {
+		t.Fatalf("final repo/run scan limit = %d, want cap %d", got, want)
+	}
+	if len(reader.repoRunLimitRequests) < 2 {
+		t.Fatalf("repoRunLimitRequests = %v, want growth up to cap", reader.repoRunLimitRequests)
+	}
+}
+
 type fakeCodeCallIntentStore struct {
-	mu               sync.Mutex
-	pendingByDomain  []SharedProjectionIntentRow
-	pendingByRepoRun map[string][]SharedProjectionIntentRow
-	marked           []string
-	leaseGranted     bool
-	claims           int
+	mu                   sync.Mutex
+	pendingByDomain      []SharedProjectionIntentRow
+	pendingByRepoRun     map[string][]SharedProjectionIntentRow
+	marked               []string
+	leaseGranted         bool
+	claims               int
+	repoRunLimitRequests []int
+	repoRunResponder     func(repositoryID, sourceRunID string, limit int) ([]SharedProjectionIntentRow, error)
 }
 
 func (f *fakeCodeCallIntentStore) ListPendingDomainIntents(_ context.Context, _ string, limit int) ([]SharedProjectionIntentRow, error) {
@@ -250,6 +376,11 @@ func (f *fakeCodeCallIntentStore) ListPendingRepoRunIntents(_ context.Context, r
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	f.repoRunLimitRequests = append(f.repoRunLimitRequests, limit)
+	if f.repoRunResponder != nil {
+		return f.repoRunResponder(repositoryID, sourceRunID, limit)
+	}
+
 	rows := make([]SharedProjectionIntentRow, 0, len(f.pendingByRepoRun[repositoryID+"|"+sourceRunID]))
 	for _, row := range f.pendingByRepoRun[repositoryID+"|"+sourceRunID] {
 		if row.CompletedAt != nil {
@@ -274,6 +405,23 @@ func (f *fakeCodeCallIntentStore) MarkIntentsCompleted(_ context.Context, intent
 	defer f.mu.Unlock()
 
 	f.marked = append(f.marked, intentIDs...)
+	completedAt := time.Now().UTC()
+	markSet := make(map[string]struct{}, len(intentIDs))
+	for _, intentID := range intentIDs {
+		markSet[intentID] = struct{}{}
+	}
+	for i := range f.pendingByDomain {
+		if _, ok := markSet[f.pendingByDomain[i].IntentID]; ok {
+			f.pendingByDomain[i].CompletedAt = &completedAt
+		}
+	}
+	for key := range f.pendingByRepoRun {
+		for i := range f.pendingByRepoRun[key] {
+			if _, ok := markSet[f.pendingByRepoRun[key][i].IntentID]; ok {
+				f.pendingByRepoRun[key][i].CompletedAt = &completedAt
+			}
+		}
+	}
 	return nil
 }
 
@@ -313,4 +461,27 @@ func (r *recordingCodeCallProjectionEdgeWriter) WriteEdges(_ context.Context, _ 
 		evidenceSource: evidenceSource,
 	})
 	return nil
+}
+
+type flakyCodeCallProjectionEdgeWriter struct {
+	recordingCodeCallProjectionEdgeWriter
+	err             error
+	retractFailures int
+	writeFailures   int
+}
+
+func (r *flakyCodeCallProjectionEdgeWriter) RetractEdges(ctx context.Context, domain string, rows []SharedProjectionIntentRow, evidenceSource string) error {
+	if r.retractFailures > 0 {
+		r.retractFailures--
+		return r.err
+	}
+	return r.recordingCodeCallProjectionEdgeWriter.RetractEdges(ctx, domain, rows, evidenceSource)
+}
+
+func (r *flakyCodeCallProjectionEdgeWriter) WriteEdges(ctx context.Context, domain string, rows []SharedProjectionIntentRow, evidenceSource string) error {
+	if r.writeFailures > 0 {
+		r.writeFailures--
+		return r.err
+	}
+	return r.recordingCodeCallProjectionEdgeWriter.WriteEdges(ctx, domain, rows, evidenceSource)
 }

@@ -19,6 +19,9 @@ import (
 const (
 	defaultCodeCallLeaseOwner = "code-call-projection-runner"
 	maxCodeCallPollInterval   = 5 * time.Second
+	// Repo-atomic processing must either see the full repo/run slice or fail
+	// safely instead of silently truncating the snapshot.
+	maxCodeCallRepoRunScanLimit = 10_000
 )
 
 // CodeCallProjectionIntentReader reads code-call intents by domain and repo/run.
@@ -90,9 +93,18 @@ func (r *CodeCallProjectionRunner) Run(ctx context.Context) error {
 			return nil
 		}
 
+		cycleStart := time.Now()
 		didWork, err := r.runOneCycle(ctx)
 		if err != nil {
-			return err
+			consecutiveEmpty++
+			r.recordCodeCallCycleFailure(ctx, err, time.Since(cycleStart).Seconds())
+			if err := r.wait(ctx, codeCallPollBackoff(r.Config.pollInterval(), consecutiveEmpty)); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+					return nil
+				}
+				return fmt.Errorf("wait for code call work: %w", err)
+			}
+			continue
 		}
 		if didWork {
 			consecutiveEmpty = 0
@@ -100,15 +112,7 @@ func (r *CodeCallProjectionRunner) Run(ctx context.Context) error {
 		}
 
 		consecutiveEmpty++
-		backoff := r.Config.pollInterval()
-		for i := 1; i < consecutiveEmpty && i < 4; i++ {
-			backoff *= 2
-		}
-		if backoff > maxCodeCallPollInterval {
-			backoff = maxCodeCallPollInterval
-		}
-
-		if err := r.wait(ctx, backoff); err != nil {
+		if err := r.wait(ctx, codeCallPollBackoff(r.Config.pollInterval(), consecutiveEmpty)); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
 				return nil
 			}
@@ -237,6 +241,9 @@ func (r *CodeCallProjectionRunner) selectRepoRunWork(ctx context.Context) (strin
 
 func (r *CodeCallProjectionRunner) loadAllRepoRunIntents(ctx context.Context, repositoryID, sourceRunID string) ([]SharedProjectionIntentRow, error) {
 	limit := r.Config.batchLimit()
+	if limit > maxCodeCallRepoRunScanLimit {
+		limit = maxCodeCallRepoRunScanLimit
+	}
 	for {
 		rows, err := r.IntentReader.ListPendingRepoRunIntents(ctx, repositoryID, sourceRunID, DomainCodeCalls, limit)
 		if err != nil {
@@ -245,7 +252,19 @@ func (r *CodeCallProjectionRunner) loadAllRepoRunIntents(ctx context.Context, re
 		if len(rows) < limit {
 			return rows, nil
 		}
-		limit *= 2
+		if limit >= maxCodeCallRepoRunScanLimit {
+			return nil, fmt.Errorf(
+				"code call repo/run intent scan reached cap (%d) for repository %q run %q",
+				maxCodeCallRepoRunScanLimit,
+				repositoryID,
+				sourceRunID,
+			)
+		}
+		nextLimit := limit * 2
+		if nextLimit > maxCodeCallRepoRunScanLimit {
+			nextLimit = maxCodeCallRepoRunScanLimit
+		}
+		limit = nextLimit
 	}
 }
 
@@ -308,6 +327,30 @@ func (r *CodeCallProjectionRunner) recordCodeCallCycle(ctx context.Context, repo
 	return nil
 }
 
+func (r *CodeCallProjectionRunner) recordCodeCallCycleFailure(ctx context.Context, err error, duration float64) {
+	if r.Logger == nil {
+		return
+	}
+
+	failureClass := "code_call_projection_cycle_error"
+	if IsRetryable(err) {
+		failureClass = "code_call_projection_retryable"
+	}
+
+	logAttrs := make([]any, 0, 6)
+	for _, attr := range telemetry.DomainAttrs(string(DomainCodeCalls), "") {
+		logAttrs = append(logAttrs, attr)
+	}
+	logAttrs = append(logAttrs,
+		slog.Float64("duration_seconds", duration),
+		slog.Bool("retryable", IsRetryable(err)),
+		slog.String("error", err.Error()),
+		telemetry.FailureClassAttr(failureClass),
+		telemetry.PhaseAttr(telemetry.PhaseReduction),
+	)
+	r.Logger.ErrorContext(ctx, "code call projection cycle failed", logAttrs...)
+}
+
 func (r *CodeCallProjectionRunner) validate() error {
 	if r.IntentReader == nil {
 		return errors.New("code call projection runner: intent reader is required")
@@ -338,6 +381,17 @@ func (r *CodeCallProjectionRunner) wait(ctx context.Context, interval time.Durat
 	case <-timer.C:
 		return nil
 	}
+}
+
+func codeCallPollBackoff(base time.Duration, consecutiveEmpty int) time.Duration {
+	backoff := base
+	for i := 1; i < consecutiveEmpty && i < 4; i++ {
+		backoff *= 2
+	}
+	if backoff > maxCodeCallPollInterval {
+		backoff = maxCodeCallPollInterval
+	}
+	return backoff
 }
 
 func codeCallEvidenceSources() []string {
