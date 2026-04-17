@@ -46,8 +46,10 @@ Go-owned parity work in the normal runtime path:
   broader controller-driven promotion and end-to-end proof still need
   current-truth evidence; Terraform variable-file promotion is already proven
   on the normal Go path, and Compose runtime summaries now retain
-  `env_file`, `configs`, and `secrets` linkage metadata on the normal Go read
-  path
+  `env_file`, `configs`, and `secrets` linkage metadata while the same
+  repo-local Compose file references now also feed `config_paths`,
+  `shared_config_paths`, `delivery_paths`, and topology-story config
+  provenance on the normal Go read path
 - end-to-end validation and instrumentation proof for those flows
 
 The API/MCP query surfacing infrastructure is parity-complete: every

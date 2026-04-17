@@ -30,6 +30,7 @@ var (
 func buildRepositoryConfigArtifacts(repoName string, files []FileContent) map[string]any {
 	configPaths := make([]map[string]any, 0)
 	configPaths = append(configPaths, extractKustomizeConfigPathRows(repoName, files)...)
+	configPaths = append(configPaths, extractDockerComposeConfigPathRows(repoName, files)...)
 	configPaths = append(configPaths, extractHCLConfigAssetRows(repoName, files)...)
 	configPaths = append(configPaths, extractAnsibleConfigPathRows(repoName, files)...)
 	if len(configPaths) == 0 {
@@ -61,14 +62,14 @@ func isConfigArtifactCandidate(file FileContent) bool {
 	switch {
 	case lowerBase == "kustomization.yaml", lowerBase == "kustomization.yml", lowerBase == "kustomization":
 		return true
+	case strings.HasPrefix(lowerBase, "docker-compose"):
+		return true
 	case lowerBase == "terragrunt.hcl":
 		return true
 	case strings.HasSuffix(lowerBase, ".tfvars"), strings.HasSuffix(lowerBase, ".tfvars.json"):
 		return true
 	case strings.HasSuffix(lowerBase, ".tf"), strings.HasSuffix(lowerBase, ".hcl"):
 		return true
-	case strings.HasPrefix(lowerBase, "docker-compose"):
-		return false
 	case strings.HasSuffix(lowerBase, ".yaml"), strings.HasSuffix(lowerBase, ".yml"), strings.HasSuffix(lowerBase, ".json"):
 		return true
 	default:

@@ -94,6 +94,10 @@ func loadRepositoryRuntimeArtifacts(
 		if !isDockerComposeArtifact(file) && !isDockerfileArtifact(file) {
 			continue
 		}
+		if strings.TrimSpace(file.Content) != "" {
+			contentFiles = append(contentFiles, file)
+			continue
+		}
 		fileContent, err := reader.GetFileContent(ctx, repoID, file.RelativePath)
 		if err != nil {
 			return nil, fmt.Errorf("get runtime artifact file %q: %w", file.RelativePath, err)

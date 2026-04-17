@@ -117,6 +117,72 @@ dependency "network" {
 	}
 }
 
+func TestBuildRepositoryConfigArtifactsExtractsDockerComposeConfigLinks(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("payments-service", []FileContent{
+		{
+			RelativePath: "docker-compose.yaml",
+			ArtifactType: "docker_compose",
+			Content: `services:
+  api:
+    env_file:
+      - .env
+      - deploy/api.env
+    configs:
+      - source: app-config
+        target: /etc/api/config.yaml
+    secrets:
+      - source: db-password
+        target: db-password
+
+configs:
+  app-config:
+    file: ./config/app.yaml
+
+secrets:
+  db-password:
+    file: ./secrets/db-password.txt
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 4 {
+		t.Fatalf("len(config_paths) = %d, want 4", len(configPaths))
+	}
+
+	wantKinds := map[string]string{
+		".env":                    "docker_compose_env_file",
+		"config/app.yaml":         "docker_compose_config_file",
+		"deploy/api.env":          "docker_compose_env_file",
+		"secrets/db-password.txt": "docker_compose_secret_file",
+	}
+	for _, row := range configPaths {
+		path, _ := row["path"].(string)
+		wantKind, ok := wantKinds[path]
+		if !ok {
+			t.Fatalf("unexpected config_paths row = %#v", row)
+		}
+		if got, want := row["source_repo"], "payments-service"; got != want {
+			t.Fatalf("config_paths[%q].source_repo = %#v, want %#v", path, got, want)
+		}
+		if got, want := row["relative_path"], "docker-compose.yaml"; got != want {
+			t.Fatalf("config_paths[%q].relative_path = %#v, want %#v", path, got, want)
+		}
+		if got := row["evidence_kind"]; got != wantKind {
+			t.Fatalf("config_paths[%q].evidence_kind = %#v, want %#v", path, got, wantKind)
+		}
+		delete(wantKinds, path)
+	}
+	if len(wantKinds) != 0 {
+		t.Fatalf("missing config_paths rows for %#v", wantKinds)
+	}
+}
+
 func TestBuildRepositoryConfigArtifactsExtractsTerragruntAndTerraformConfigAssets(t *testing.T) {
 	t.Parallel()
 
