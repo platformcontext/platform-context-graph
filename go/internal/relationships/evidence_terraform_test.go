@@ -109,3 +109,81 @@ func TestDiscoverTerraformRegistryMonorepoModuleSourceEvidence(t *testing.T) {
 		})
 	}
 }
+
+func TestDiscoverTerraformAndTerragruntHelperBuiltPathEvidence(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		artifactType string
+		relativePath string
+		parsedData   map[string]any
+		catalog      []CatalogEntry
+		wantKind     EvidenceKind
+		wantTarget   string
+	}{
+		{
+			name:         "helper-built terraform source maps to module repository",
+			artifactType: "terraform_hcl",
+			relativePath: "shared/pending-provisioning.tf",
+			parsedData: map[string]any{
+				"terraform_modules": []any{
+					map[string]any{
+						"name":   "queue",
+						"source": `join("/", [get_repo_root(), "local-modules/braintree-api"])`,
+					},
+				},
+			},
+			catalog: []CatalogEntry{
+				{RepoID: "repo-braintree-api", Aliases: []string{"braintree-api"}},
+			},
+			wantKind:   EvidenceKindTerraformModuleSource,
+			wantTarget: "repo-braintree-api",
+		},
+		{
+			name:         "helper-built terragrunt dependency config path maps to target repository",
+			artifactType: "terragrunt",
+			relativePath: "env/dev/terragrunt.hcl",
+			parsedData: map[string]any{
+				"terragrunt_dependencies": []any{
+					map[string]any{
+						"name":        "payments",
+						"config_path": `join("/", [get_repo_root(), "payments-service"])`,
+					},
+				},
+			},
+			catalog: []CatalogEntry{
+				{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+			},
+			wantKind:   EvidenceKindTerragruntDependencyConfigPath,
+			wantTarget: "repo-payments",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			evidence := DiscoverEvidence([]facts.Envelope{
+				{
+					ScopeID: "repo-stack",
+					Payload: map[string]any{
+						"artifact_type":    tt.artifactType,
+						"relative_path":    tt.relativePath,
+						"parsed_file_data": tt.parsedData,
+					},
+				},
+			}, tt.catalog)
+			if len(evidence) != 1 {
+				t.Fatalf("len(evidence) = %d, want 1", len(evidence))
+			}
+			if got, want := evidence[0].EvidenceKind, tt.wantKind; got != want {
+				t.Fatalf("EvidenceKind = %q, want %q", got, want)
+			}
+			if got, want := evidence[0].TargetRepoID, tt.wantTarget; got != want {
+				t.Fatalf("TargetRepoID = %q, want %q", got, want)
+			}
+		})
+	}
+}

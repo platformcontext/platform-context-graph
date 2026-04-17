@@ -8,12 +8,12 @@ import (
 )
 
 var (
-	terragruntDependencyConfigPathPattern = regexp.MustCompile(`(?i)\bconfig_path\s*=\s*"([^"]+)"`)
+	terragruntDependencyConfigPathPattern = regexp.MustCompile(`(?im)(?:^|[\r\n])\s*config_path\s*=\s*(.+?)\s*(?:$|[\r\n])`)
 	terragruntReadConfigPattern           = regexp.MustCompile(`(?i)read_terragrunt_config\(\s*(?:find_in_parent_folders\(\s*(?:"([^"]+)")?\s*\)|"([^"]+)")`)
 	terragruntFindInParentFoldersPattern  = regexp.MustCompile(`(?i)find_in_parent_folders\(\s*(?:"([^"]+)")?\s*\)`)
 	terragruntIncludePathPattern          = regexp.MustCompile(`(?i)\bpath\s*=\s*find_in_parent_folders\(\s*(?:"([^"]+)")?\s*\)`)
 	localConfigFunctionStartPattern       = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(`)
-	localTerraformModuleSourcePattern     = regexp.MustCompile(`(?is)(?:module\s+"[^"]+"\s*\{[^}]*?|\bterraform\s*\{[^}]*?)\bsource\b\s*=\s*"((?:\./|\.\./|\$\{get_repo_root\(\)\}/)[^"]+)"`)
+	localTerraformModuleSourcePattern     = regexp.MustCompile(`(?im)(?:module\s+"[^"]+"\s*\{[^}]*?|\bterraform\s*\{[^}]*?)\bsource\b\s*=\s*(.+?)\s*(?:$|[\r\n])`)
 	localStringAssignmentPattern          = regexp.MustCompile(`(?m)^\s*([A-Za-z0-9_]+)\s*=\s*"([^"]+)"\s*$`)
 	localAssignmentStartPattern           = regexp.MustCompile(`^\s*([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$`)
 	pathRelativeToIncludeSplitPattern     = regexp.MustCompile(`(?is)^split\(\s*"/"\s*,\s*path_relative_to_include\(\s*(?:"[^"]+")?\s*\)\s*\)$`)
@@ -39,7 +39,7 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 			if len(match) < 2 {
 				continue
 			}
-			configPath := strings.TrimSpace(match[1])
+			configPath := normalizeConfigArtifactExpression(match[1], localConfigAssignments)
 			if configPath == "" {
 				continue
 			}
@@ -73,7 +73,10 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "local_config_asset")
 		}
 		for _, match := range localTerraformModuleSourcePattern.FindAllStringSubmatch(file.Content, -1) {
-			configPath := normalizeLocalConfigAssetPath(match)
+			if len(match) < 2 {
+				continue
+			}
+			configPath := normalizeConfigArtifactExpression(match[1], localConfigAssignments)
 			if configPath == "" {
 				continue
 			}
@@ -81,6 +84,67 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 		}
 	}
 	return rows
+}
+
+func normalizeConfigArtifactExpression(expression string, localAssignments map[string]string) string {
+	trimmed := strings.TrimSpace(stripHCLInlineComments(expression))
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = strings.TrimSuffix(trimmed, ",")
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" {
+		return ""
+	}
+
+	if value := extractConfigAssetPathFromExpression(trimmed, localAssignments); value != "" {
+		if isHelperBuiltConfigExpression(trimmed) || isLocalishConfigArtifactPath(value) {
+			return value
+		}
+	}
+	if value := normalizeLocalConfigAssetPathValue(trimmed, localAssignments); value != "" {
+		if isHelperBuiltConfigExpression(trimmed) || isLocalishConfigArtifactPath(value) {
+			return value
+		}
+	}
+	return ""
+}
+
+func isHelperBuiltConfigExpression(expression string) bool {
+	lower := strings.ToLower(expression)
+	return strings.Contains(lower, "get_repo_root(") ||
+		strings.Contains(lower, "path.module") ||
+		strings.Contains(lower, "get_parent_terragrunt_dir(") ||
+		strings.Contains(lower, "get_terragrunt_dir(") ||
+		strings.Contains(lower, "path_relative_to_include(") ||
+		strings.Contains(lower, "local.") ||
+		strings.Contains(lower, "join(") ||
+		strings.Contains(lower, "lookup(") ||
+		strings.Contains(lower, "file(") ||
+		strings.Contains(lower, "templatefile(")
+}
+
+func isLocalishConfigArtifactPath(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false
+	}
+	if strings.HasPrefix(trimmed, "./") || strings.HasPrefix(trimmed, "../") || strings.HasPrefix(trimmed, "/") {
+		return true
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.HasSuffix(lower, ".hcl") ||
+		strings.HasSuffix(lower, ".tf") ||
+		strings.HasSuffix(lower, ".yaml") ||
+		strings.HasSuffix(lower, ".yml") ||
+		strings.HasSuffix(lower, ".json") ||
+		strings.HasSuffix(lower, ".tpl") ||
+		strings.HasSuffix(lower, ".tmpl") {
+		return true
+	}
+	return strings.Contains(trimmed, "/") &&
+		!strings.Contains(trimmed, "://") &&
+		!strings.Contains(trimmed, "?")
 }
 
 func extractLocalConfigAssignments(relativePath, content string) map[string]string {

@@ -90,3 +90,54 @@ func TestBuildRepositoryConfigArtifactsExtractsNestedHelperBackedLocalJoinedAsse
 		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildRepositoryConfigArtifactsNormalizesHelperBuiltTerraformSourceAndDependencyConfigPath(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-stack-payments", []FileContent{
+		{
+			RelativePath: "env/prod/terragrunt.hcl",
+			Content: `terraform {
+  source = join("/", [get_repo_root(), "modules/service"])
+}
+
+dependency "network" {
+  config_path = join("/", [get_repo_root(), "network/root.hcl"])
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 2 {
+		t.Fatalf("len(config_paths) = %d, want 2", len(configPaths))
+	}
+
+	wantKinds := map[string]string{
+		"modules/service":  "terraform_module_source_path",
+		"network/root.hcl": "terragrunt_dependency_config_path",
+	}
+	for _, row := range configPaths {
+		path, _ := row["path"].(string)
+		wantKind, ok := wantKinds[path]
+		if !ok {
+			t.Fatalf("unexpected config_paths row = %#v", row)
+		}
+		if got, want := row["source_repo"], "terraform-stack-payments"; got != want {
+			t.Fatalf("config_paths[%q].source_repo = %#v, want %#v", path, got, want)
+		}
+		if got, want := row["relative_path"], "env/prod/terragrunt.hcl"; got != want {
+			t.Fatalf("config_paths[%q].relative_path = %#v, want %#v", path, got, want)
+		}
+		if got := row["evidence_kind"]; got != wantKind {
+			t.Fatalf("config_paths[%q].evidence_kind = %#v, want %#v", path, got, wantKind)
+		}
+		delete(wantKinds, path)
+	}
+	if len(wantKinds) != 0 {
+		t.Fatalf("missing config_paths rows for %#v", wantKinds)
+	}
+}

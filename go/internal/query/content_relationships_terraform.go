@@ -10,6 +10,9 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 	switch entity.EntityType {
 	case "TerraformModule":
 		if source, ok := metadataNonEmptyString(entity.Metadata, "source"); ok {
+			if normalized := normalizeConfigArtifactExpression(source, nil); normalized != "" {
+				source = normalized
+			}
 			return []map[string]any{
 				{
 					"type":        "USES_MODULE",
@@ -38,6 +41,9 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 			})
 		}
 		if source, ok := metadataNonEmptyString(entity.Metadata, "terraform_source"); ok {
+			if normalized := normalizeConfigArtifactExpression(source, nil); normalized != "" {
+				source = normalized
+			}
 			add(contentRelationshipSpec{
 				relationshipType: "USES_MODULE",
 				targetName:       source,
@@ -45,6 +51,10 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 			})
 		}
 		for _, includePath := range metadataStringSlice(entity.Metadata, "include_paths") {
+			includePath = normalizeConfigArtifactExpression(includePath, nil)
+			if includePath == "" {
+				continue
+			}
 			add(contentRelationshipSpec{
 				relationshipType: "DISCOVERS_CONFIG_IN",
 				targetName:       includePath,
@@ -52,6 +62,10 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 			})
 		}
 		for _, configPath := range metadataStringSlice(entity.Metadata, "read_config_paths") {
+			configPath = normalizeConfigArtifactExpression(configPath, nil)
+			if configPath == "" {
+				continue
+			}
 			add(contentRelationshipSpec{
 				relationshipType: "DISCOVERS_CONFIG_IN",
 				targetName:       configPath,
@@ -59,6 +73,10 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 			})
 		}
 		for _, configPath := range metadataStringSlice(entity.Metadata, "find_in_parent_folders_paths") {
+			configPath = normalizeConfigArtifactExpression(configPath, nil)
+			if configPath == "" {
+				continue
+			}
 			add(contentRelationshipSpec{
 				relationshipType: "DISCOVERS_CONFIG_IN",
 				targetName:       configPath,
@@ -66,6 +84,10 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 			})
 		}
 		for _, configPath := range metadataStringSlice(entity.Metadata, "local_config_asset_paths") {
+			configPath = normalizeConfigArtifactExpression(configPath, nil)
+			if configPath == "" {
+				continue
+			}
 			add(contentRelationshipSpec{
 				relationshipType: "DISCOVERS_CONFIG_IN",
 				targetName:       configPath,
@@ -75,6 +97,10 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 		return relationships, true, nil
 	case "TerragruntDependency":
 		if configPath, ok := metadataNonEmptyString(entity.Metadata, "config_path"); ok {
+			configPath = normalizeConfigArtifactExpression(configPath, nil)
+			if configPath == "" {
+				return nil, true, nil
+			}
 			return []map[string]any{
 				{
 					"type":        "DISCOVERS_CONFIG_IN",

@@ -106,3 +106,67 @@ func TestBuildContentRelationshipSetTerragruntDependencyPromotesConfigDiscovery(
 		t.Fatalf("reason = %v, want terragrunt_dependency_config_path", got["reason"])
 	}
 }
+
+func TestBuildContentRelationshipSetNormalizesHelperBuiltTerraformSource(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:   "tg-config-helpers-2",
+		RepoID:     "repo-1",
+		EntityType: "TerragruntConfig",
+		EntityName: "terragrunt",
+		Metadata: map[string]any{
+			"terraform_source": `join("/", [get_repo_root(), "modules/app"])`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+
+	if len(relationships.outgoing) != 1 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 1", len(relationships.outgoing))
+	}
+
+	got := relationships.outgoing[0]
+	if got["type"] != "USES_MODULE" {
+		t.Fatalf("relationship type = %v, want USES_MODULE", got["type"])
+	}
+	if got["target_name"] != "modules/app" {
+		t.Fatalf("target_name = %v, want modules/app", got["target_name"])
+	}
+	if got["reason"] != "terragrunt_terraform_source" {
+		t.Fatalf("reason = %v, want terragrunt_terraform_source", got["reason"])
+	}
+}
+
+func TestBuildContentRelationshipSetNormalizesHelperBuiltDependencyConfigPath(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:   "tg-dependency-2",
+		RepoID:     "repo-1",
+		EntityType: "TerragruntDependency",
+		EntityName: "network",
+		Metadata: map[string]any{
+			"config_path": `join("/", [get_repo_root(), "network/root.hcl"])`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+
+	if len(relationships.outgoing) != 1 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 1", len(relationships.outgoing))
+	}
+
+	got := relationships.outgoing[0]
+	if got["type"] != "DISCOVERS_CONFIG_IN" {
+		t.Fatalf("relationship type = %v, want DISCOVERS_CONFIG_IN", got["type"])
+	}
+	if got["target_name"] != "network/root.hcl" {
+		t.Fatalf("target_name = %v, want network/root.hcl", got["target_name"])
+	}
+	if got["reason"] != "terragrunt_dependency_config_path" {
+		t.Fatalf("reason = %v, want terragrunt_dependency_config_path", got["reason"])
+	}
+}

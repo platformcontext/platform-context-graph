@@ -45,6 +45,12 @@ func buildOutgoingContentRelationships(
 	if relationships, ok, err := buildOutgoingGitHubActionsRelationships(entity); ok || err != nil {
 		return relationships, err
 	}
+	if relationships, ok, err := buildOutgoingDockerfileRelationships(entity); ok || err != nil {
+		return relationships, err
+	}
+	if relationships, ok, err := buildOutgoingDockerComposeRelationships(entity); ok || err != nil {
+		return relationships, err
+	}
 	if reader == nil {
 		return nil, nil
 	}

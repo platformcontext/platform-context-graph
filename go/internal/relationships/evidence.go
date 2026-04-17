@@ -94,6 +94,7 @@ var (
 	terragruntConfigPathPattern    = regexp.MustCompile(`(?i)\bconfig_path\s*=\s*"([^"]+)"`)
 	terraformSourcePattern         = regexp.MustCompile(`(?i)\bsource\b\s*=\s*"([^"]+)"`)
 	terraformRegistrySourcePattern = regexp.MustCompile(`^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+(?://.*)?$`)
+	evidenceQuotedStringPattern    = regexp.MustCompile(`"([^"]+)"`)
 )
 
 // helmChartFilenames are the recognized Helm chart metadata files.
@@ -210,6 +211,80 @@ func normalizeRepositoryIdentifier(value string) string {
 	return value
 }
 
+func normalizeTerraformEvidencePathExpression(expression string) string {
+	trimmed := strings.TrimSpace(expression)
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = strings.TrimSuffix(trimmed, ",")
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" {
+		return ""
+	}
+	if !strings.ContainsAny(trimmed, "()[]{}\"") {
+		if value := normalizeTerraformEvidencePathLiteral(trimmed, trimmed); value != "" {
+			return value
+		}
+	}
+	matches := evidenceQuotedStringPattern.FindAllStringSubmatch(trimmed, -1)
+	for index := len(matches) - 1; index >= 0; index-- {
+		match := matches[index]
+		if len(match) < 2 {
+			continue
+		}
+		if value := normalizeTerraformEvidencePathLiteral(match[1], trimmed); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func normalizeTerraformEvidencePathLiteral(value, expression string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.Contains(trimmed, "://") ||
+		strings.HasPrefix(lower, "git::") ||
+		strings.HasPrefix(lower, "tfr:///") {
+		return ""
+	}
+
+	replacer := strings.NewReplacer(
+		"${get_repo_root()}/", "",
+		"${path.module}/", "",
+		"${path_relative_to_include()}/", "",
+		"${path_relative_to_include()}", "",
+		"${get_parent_terragrunt_dir()}/", "",
+		"${get_terragrunt_dir()}/", "",
+	)
+	trimmed = replacer.Replace(trimmed)
+	trimmed = strings.TrimPrefix(trimmed, "./")
+	trimmed = strings.TrimPrefix(trimmed, "/")
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" || trimmed == "." {
+		return ""
+	}
+
+	if strings.HasPrefix(trimmed, "../") || strings.HasPrefix(trimmed, "./") || strings.HasPrefix(trimmed, "/") {
+		return trimmed
+	}
+	if strings.Contains(expression, "get_repo_root(") ||
+		strings.Contains(expression, "path.module") ||
+		strings.Contains(expression, "get_parent_terragrunt_dir(") ||
+		strings.Contains(expression, "get_terragrunt_dir(") ||
+		strings.Contains(expression, "path_relative_to_include(") ||
+		strings.Contains(expression, "local.") ||
+		strings.Contains(expression, "join(") ||
+		strings.Contains(expression, "lookup(") ||
+		strings.Contains(expression, "file(") ||
+		strings.Contains(expression, "templatefile(") {
+		return trimmed
+	}
+	return ""
+}
+
 // discoverTerraformEvidence applies Terraform regex patterns against file content.
 func discoverTerraformEvidence(
 	sourceRepoID, filePath, content string,
@@ -262,7 +337,15 @@ func discoverStructuredTerraformEvidence(
 				continue
 			}
 			source := strings.TrimSpace(payloadString(module, "source"))
-			if source == "" || !looksLikeRemoteModuleSource(source) {
+			helperDerived := false
+			if normalized := normalizeTerraformEvidencePathExpression(source); normalized != "" {
+				source = normalized
+				helperDerived = normalized != strings.TrimSpace(payloadString(module, "source"))
+			}
+			if source == "" {
+				continue
+			}
+			if !helperDerived && !looksLikeRemoteModuleSource(source) {
 				continue
 			}
 			evidence = append(evidence, matchCatalog(
@@ -288,7 +371,15 @@ func discoverStructuredTerraformEvidence(
 				continue
 			}
 			configPath := strings.TrimSpace(payloadString(dependency, "config_path"))
-			if configPath == "" || !looksLikeRemoteModuleSource(configPath) {
+			helperDerived := false
+			if normalized := normalizeTerraformEvidencePathExpression(configPath); normalized != "" {
+				configPath = normalized
+				helperDerived = normalized != strings.TrimSpace(payloadString(dependency, "config_path"))
+			}
+			if configPath == "" {
+				continue
+			}
+			if !helperDerived && !looksLikeRemoteModuleSource(configPath) {
 				continue
 			}
 			evidence = append(evidence, matchCatalog(
