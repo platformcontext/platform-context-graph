@@ -157,6 +157,16 @@ func TestBuildRepositoryStoryResponseIncludesSharedConfigInDirectStory(t *testin
 	if got, want := directStory[0], "Shared config families span /configd/payments/* across helm-charts, terraform-stack-payments."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
+	sharedConfigPaths, ok := deploymentOverview["shared_config_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("shared_config_paths type = %T, want []map[string]any", deploymentOverview["shared_config_paths"])
+	}
+	if len(sharedConfigPaths) != 1 {
+		t.Fatalf("len(shared_config_paths) = %d, want 1", len(sharedConfigPaths))
+	}
+	if got, want := sharedConfigPaths[0]["path"], "/configd/payments/*"; got != want {
+		t.Fatalf("shared_config_paths[0].path = %#v, want %#v", got, want)
+	}
 	if _, ok := deploymentOverview["trace_limitations"]; ok {
 		t.Fatalf("trace_limitations = %#v, want omitted", deploymentOverview["trace_limitations"])
 	}
@@ -362,7 +372,7 @@ func TestBuildRepositoryStoryResponseIncludesControllerAndWorkflowProofTogether(
 			"families": []string{"argocd", "ansible", "github_actions", "terraform"},
 			"relationship_overview": map[string]any{
 				"relationship_count": 5,
-				"story":              "Controller-driven relationships: DEPLOYS_FROM infra-configs via argocd_application_source. Workflow-driven relationships: DEPLOYS_FROM ci-workflows via github_actions_reusable_workflow_ref. IaC-driven relationships: DEPENDS_ON terraform-modules via terraform_module_source.",
+				"story":              "Controller-driven relationships: DEPLOYS_FROM infra-configs via argocd_application_source. Workflow-driven relationships: DEPLOYS_FROM ci-workflows via github_actions_reusable_workflow_ref. Controller-driven relationships: DISCOVERS_CONFIG_IN controller-pipelines via jenkins_shared_library. Controller-driven relationships: DEPENDS_ON ansible-ops via ansible_role_reference. IaC-driven relationships: DEPENDS_ON terraform-modules via terraform_module_source.",
 				"controller_driven": []map[string]any{
 					{
 						"type":          "DEPLOYS_FROM",
@@ -461,6 +471,24 @@ func TestBuildRepositoryStoryResponseIncludesControllerAndWorkflowProofTogether(
 	for _, want := range []string{"Controller-driven relationships:", "Workflow-driven relationships:"} {
 		if !strings.Contains(relationshipsSummary, want) {
 			t.Fatalf("relationships summary = %q, want %q", relationshipsSummary, want)
+		}
+	}
+
+	relationshipOverview, ok := got["relationship_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("relationship_overview type = %T, want map[string]any", got["relationship_overview"])
+	}
+	controllerDriven, ok := relationshipOverview["controller_driven"].([]map[string]any)
+	if !ok {
+		t.Fatalf("relationship_overview.controller_driven type = %T, want []map[string]any", relationshipOverview["controller_driven"])
+	}
+	controllerEvidence := map[string]struct{}{}
+	for _, row := range controllerDriven {
+		controllerEvidence[row["evidence_type"].(string)] = struct{}{}
+	}
+	for _, want := range []string{"argocd_application_source", "jenkins_shared_library", "ansible_role_reference"} {
+		if _, ok := controllerEvidence[want]; !ok {
+			t.Fatalf("relationship_overview.controller_driven missing evidence_type %q", want)
 		}
 	}
 

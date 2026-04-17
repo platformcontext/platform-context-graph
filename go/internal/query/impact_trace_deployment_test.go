@@ -143,7 +143,6 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	if controllerOverview["controller_count"] != 1 {
 		t.Fatalf("controller_overview.controller_count = %#v, want 1", controllerOverview["controller_count"])
 	}
-
 	gitopsOverview, ok := got["gitops_overview"].(map[string]any)
 	if !ok {
 		t.Fatalf("gitops_overview type = %T, want map[string]any", got["gitops_overview"])

@@ -62,6 +62,9 @@ func TestBuildDeploymentTraceResponseIncludesControllerEntities(t *testing.T) {
 	if gotValue, want := entities[0]["source_repo"], "https://github.com/myorg/payments-deploy.git"; gotValue != want {
 		t.Fatalf("controller_overview.entities[0][source_repo] = %#v, want %#v", gotValue, want)
 	}
+	if gotValue, want := entities[0]["source_path"], "deploy/overlays/prod"; gotValue != want {
+		t.Fatalf("controller_overview.entities[0][source_path] = %#v, want %#v", gotValue, want)
+	}
 }
 
 func TestFetchControllerEntitiesReturnsArgoCDControllersFromDeploymentSources(t *testing.T) {
