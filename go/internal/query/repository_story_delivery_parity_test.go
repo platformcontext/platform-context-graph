@@ -106,3 +106,79 @@ func TestBuildRepositoryStoryResponsePreservesCombinedDeliverySurfaces(t *testin
 		}
 	}
 }
+
+func TestBuildRepositoryStoryResponsePreservesDockerfileRelationshipAndRuntimeStory(t *testing.T) {
+	t.Parallel()
+
+	repo := RepoRef{ID: "repository:payments", Name: "payments"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		42,
+		[]string{"go"},
+		[]string{"payments-api"},
+		[]string{"ecs_service"},
+		1,
+		map[string]any{
+			"families": []string{"docker"},
+			"relationship_overview": map[string]any{
+				"relationship_count": 1,
+				"story":              "IaC-driven relationships: DEPLOYS_FROM payments-service via dockerfile_source_label.",
+				"iac_driven": []map[string]any{
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "payments-service",
+						"target_id":     "repo-7",
+						"evidence_type": "dockerfile_source_label",
+					},
+				},
+			},
+			"deployment_artifacts": map[string]any{
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "Dockerfile",
+						"artifact_type": "dockerfile",
+						"artifact_name": "runtime",
+						"base_image":    "alpine",
+						"cmd":           `["/app", "--serve"]`,
+						"signals":       []string{"base_image", "copy_from", "cmd", "ports"},
+					},
+				},
+			},
+		},
+		nil,
+	)
+
+	story, ok := got["story"].(string)
+	if !ok {
+		t.Fatalf("story type = %T, want string", got["story"])
+	}
+	if story == "" {
+		t.Fatal("story is empty, want combined narrative")
+	}
+	if want := "dockerfile_source_label"; !containsSubstring(story, want) {
+		t.Fatalf("story = %q, want %q", story, want)
+	}
+
+	relationshipOverview, ok := got["relationship_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("relationship_overview type = %T, want map[string]any", got["relationship_overview"])
+	}
+	if got, want := relationshipOverview["relationship_count"], 1; got != want {
+		t.Fatalf("relationship_overview.relationship_count = %#v, want %#v", got, want)
+	}
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	if len(directStory) != 1 {
+		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
+	}
+	if got, want := directStory[0], "Runtime artifacts include dockerfile stage runtime in Dockerfile based on alpine with cmd [\"/app\", \"--serve\"] (base_image, copy_from, cmd, ports)."; got != want {
+		t.Fatalf("direct_story[0] = %q, want %q", got, want)
+	}
+}
