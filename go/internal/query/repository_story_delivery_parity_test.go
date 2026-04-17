@@ -335,6 +335,156 @@ func TestBuildRepositoryStoryResponsePreservesSharedConfigAlongsideDeliverySurfa
 	}
 }
 
+func TestBuildRepositoryStoryResponsePreservesDockerAndComposeRelationshipEvidenceWithDeliveryStory(t *testing.T) {
+	t.Parallel()
+
+	repo := RepoRef{ID: "repository:platform-runtime", Name: "platform-runtime"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		64,
+		[]string{"go", "yaml", "dockerfile"},
+		[]string{"platform-runtime"},
+		[]string{"argocd_application", "github_actions", "docker_compose"},
+		6,
+		map[string]any{
+			"families": []string{"argocd", "github_actions", "docker", "docker_compose", "terraform"},
+			"relationship_overview": map[string]any{
+				"relationship_count": 6,
+				"story": "Controller-driven relationships: DEPLOYS_FROM infra-configs via argocd_application_source. Workflow-driven relationships: DEPLOYS_FROM ci-workflows via github_actions_reusable_workflow_ref. IaC-driven relationships: DEPLOYS_FROM runtime-image via dockerfile_source_label. IaC-driven relationships: DEPLOYS_FROM ../api via docker_compose_build_context. IaC-driven relationships: DEPLOYS_FROM ghcr.io/acme/api:1.2.3 via docker_compose_image. IaC-driven relationships: DEPENDS_ON database via docker_compose_depends_on.",
+				"controller_driven": []map[string]any{
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "infra-configs",
+						"target_id":     "repo-ctrl",
+						"evidence_type": "argocd_application_source",
+					},
+				},
+				"workflow_driven": []map[string]any{
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "ci-workflows",
+						"target_id":     "repo-wf",
+						"evidence_type": "github_actions_reusable_workflow_ref",
+					},
+				},
+				"iac_driven": []map[string]any{
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "runtime-image",
+						"target_id":     "repo-dockerfile",
+						"evidence_type": "dockerfile_source_label",
+					},
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "../api",
+						"target_id":     "repo-compose-build",
+						"evidence_type": "docker_compose_build_context",
+					},
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "ghcr.io/acme/api:1.2.3",
+						"target_id":     "repo-compose-image",
+						"evidence_type": "docker_compose_image",
+					},
+					{
+						"type":          "DEPENDS_ON",
+						"target_name":   "database",
+						"target_id":     "repo-compose-db",
+						"evidence_type": "docker_compose_depends_on",
+					},
+				},
+			},
+			"deployment_artifacts": map[string]any{
+				"controller_artifacts": []map[string]any{
+					{
+						"path":            "Jenkinsfile",
+						"controller_kind": "jenkins_pipeline",
+						"entry_points":    []string{"dist/api.js"},
+					},
+				},
+				"workflow_artifacts": []map[string]any{
+					{
+						"relative_path": ".github/workflows/deploy.yaml",
+						"artifact_type": "github_actions_workflow",
+						"workflow_name": "deploy",
+						"signals":       []string{"workflow_file"},
+					},
+				},
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "docker-compose.yaml",
+						"artifact_type": "docker_compose",
+						"service_name":  "api",
+						"signals":       []string{"build", "ports"},
+						"build_context": "./",
+					},
+				},
+			},
+		},
+		nil,
+	)
+
+	story, ok := got["story"].(string)
+	if !ok {
+		t.Fatalf("story type = %T, want string", got["story"])
+	}
+	for _, want := range []string{
+		"argocd_application_source",
+		"github_actions_reusable_workflow_ref",
+		"dockerfile_source_label",
+		"docker_compose_build_context",
+		"docker_compose_image",
+		"docker_compose_depends_on",
+	} {
+		if !containsSubstring(story, want) {
+			t.Fatalf("story = %q, want %q", story, want)
+		}
+	}
+
+	relationshipOverview, ok := got["relationship_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("relationship_overview type = %T, want map[string]any", got["relationship_overview"])
+	}
+	if got, want := relationshipOverview["relationship_count"], 6; got != want {
+		t.Fatalf("relationship_overview.relationship_count = %#v, want %#v", got, want)
+	}
+
+	iacDriven, ok := relationshipOverview["iac_driven"].([]map[string]any)
+	if !ok {
+		t.Fatalf("relationship_overview.iac_driven type = %T, want []map[string]any", relationshipOverview["iac_driven"])
+	}
+	wantEvidence := map[string]struct{}{
+		"dockerfile_source_label":      {},
+		"docker_compose_build_context": {},
+		"docker_compose_image":         {},
+		"docker_compose_depends_on":    {},
+	}
+	for _, row := range iacDriven {
+		delete(wantEvidence, StringVal(row, "evidence_type"))
+	}
+	if len(wantEvidence) != 0 {
+		t.Fatalf("relationship_overview.iac_driven missing evidence types: %#v", wantEvidence)
+	}
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	for _, want := range []string{
+		"Workflow delivery paths include .github/workflows/deploy.yaml as github_actions_workflow deploy (workflow_file).",
+		"Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js).",
+		"Runtime artifacts include docker_compose service api in docker-compose.yaml built from ./ (build, ports).",
+	} {
+		if !containsExactLine(directStory, want) {
+			t.Fatalf("direct_story = %#v, want line %q", directStory, want)
+		}
+	}
+}
+
 func containsExactLine(lines []string, want string) bool {
 	for _, line := range lines {
 		if line == want {
