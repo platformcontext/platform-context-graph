@@ -1,6 +1,9 @@
 package query
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildRepositoryConfigArtifactsExtractsKustomizePolicyConfigPaths(t *testing.T) {
 	t.Parallel()
@@ -547,5 +550,92 @@ func TestBuildRepositoryConfigArtifactsExtractsNestedLocalInterpolationConfigAss
 	}
 	if got, want := configPaths[0]["evidence_kind"], "local_config_asset"; got != want {
 		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildRepositoryConfigArtifactsExtractsTerragruntServiceLevelFileAssetsFromNamedPathRelativeToInclude(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terragrunt-deployment", []FileContent{
+		{
+			RelativePath: "accounts/bg-dev/us-east-1/dev.network-us-east-1/services/terragrunt.hcl",
+			Content: `include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+locals {
+  path_parts   = split("/", path_relative_to_include("root"))
+  account_name = local.path_parts[1]  # bg-dev
+  region_name  = local.path_parts[2]  # us-east-1
+  vpc_name     = local.path_parts[3]  # dev.network-us-east-1
+
+  account_vars = yamldecode(file("${get_repo_root()}/tf-modules/terragrunt-deployment/accounts/${local.account_name}/account.yaml"))
+  region_vars  = yamldecode(file("${get_repo_root()}/tf-modules/terragrunt-deployment/accounts/${local.account_name}/${local.region_name}/region.yaml"))
+  vpc_vars     = yamldecode(file("${get_repo_root()}/tf-modules/terragrunt-deployment/accounts/${local.account_name}/${local.region_name}/${local.vpc_name}/vpc.yaml"))
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 5 {
+		t.Fatalf("len(config_paths) = %d, want 5", len(configPaths))
+	}
+
+	pathCounts := map[string]int{}
+	for _, row := range configPaths {
+		pathCounts[StringVal(row, "path")]++
+	}
+
+	wantCounts := map[string]int{
+		"accounts/bg-dev/account.yaml":                             1,
+		"accounts/bg-dev/us-east-1/region.yaml":                    1,
+		"accounts/bg-dev/us-east-1/dev.network-us-east-1/vpc.yaml": 1,
+		"root.hcl": 2,
+	}
+	for wantPath, wantCount := range wantCounts {
+		if gotCount := pathCounts[wantPath]; gotCount != wantCount {
+			t.Fatalf("pathCounts[%q] = %d, want %d", wantPath, gotCount, wantCount)
+		}
+	}
+}
+
+func TestBuildRepositoryConfigArtifactsDoesNotPromoteTerragruntRemoteStateKeyAsConfigAsset(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terragrunt-deployment", []FileContent{
+		{
+			RelativePath: "accounts/bg-dev/us-east-1/dev.network-us-east-1/services/terragrunt.hcl",
+			Content: `include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+locals {
+  path_parts   = split("/", path_relative_to_include("root"))
+  account_name = local.path_parts[1]
+  region_name  = local.path_parts[2]
+  vpc_name     = local.path_parts[3]
+}
+
+remote_state {
+  backend = "s3"
+  config = {
+    key = "${local.vpc_name}/services/${path_relative_to_include("root")}/terraform.tfstate"
+  }
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	for _, row := range mapSliceValue(got, "config_paths") {
+		if strings.Contains(StringVal(row, "path"), "terraform.tfstate") {
+			t.Fatalf("config_paths contains remote state key row = %#v, want omitted", row)
+		}
 	}
 }

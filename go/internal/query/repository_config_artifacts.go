@@ -19,6 +19,7 @@ var (
 	localTerraformModuleSourcePattern     = regexp.MustCompile(`(?is)(?:module\s+"[^"]+"\s*\{[^}]*?|\bterraform\s*\{[^}]*?)\bsource\b\s*=\s*"((?:\./|\.\./|\$\{get_repo_root\(\)\}/)[^"]+)"`)
 	localStringAssignmentPattern          = regexp.MustCompile(`(?m)^\s*([A-Za-z0-9_]+)\s*=\s*"([^"]+)"\s*$`)
 	localAssignmentStartPattern           = regexp.MustCompile(`^\s*([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$`)
+	pathRelativeToIncludeSplitPattern     = regexp.MustCompile(`(?is)^split\(\s*"/"\s*,\s*path_relative_to_include\(\s*"[^"]+"\s*\)\s*\)$`)
 	quotedStringPattern                   = regexp.MustCompile(`"([^"]+)"`)
 	localInterpolationPattern             = regexp.MustCompile(`\$\{local\.([A-Za-z0-9_]+)\}`)
 	joinPathModulePattern                 = regexp.MustCompile(`(?is)^join\(\s*""\s*,\s*\[\s*path\.module\s*,\s*"([^"]+)"\s*\]\s*\)$`)
@@ -87,7 +88,7 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 		if lowerBase != "terragrunt.hcl" && !strings.HasSuffix(lowerBase, ".tf") && !strings.HasSuffix(lowerBase, ".hcl") {
 			continue
 		}
-		localConfigAssignments := extractLocalConfigAssignments(file.Content)
+		localConfigAssignments := extractLocalConfigAssignments(file.RelativePath, file.Content)
 		for _, match := range terragruntDependencyConfigPathPattern.FindAllStringSubmatch(file.Content, -1) {
 			if len(match) < 2 {
 				continue
@@ -136,7 +137,7 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 	return rows
 }
 
-func extractLocalConfigAssignments(content string) map[string]string {
+func extractLocalConfigAssignments(relativePath, content string) map[string]string {
 	assignments := make(map[string]string)
 	lines := strings.Split(content, "\n")
 	inLocals := false
@@ -171,7 +172,7 @@ func extractLocalConfigAssignments(content string) map[string]string {
 				currentExpression.WriteString(strings.TrimSpace(assignment[2]))
 				currentParenDepth = countParensOutsideStrings(assignment[2])
 				if currentParenDepth <= 0 {
-					storeLocalConfigAssignment(assignments, currentName, currentExpression.String())
+					storeLocalConfigAssignment(assignments, currentName, currentExpression.String(), relativePath)
 					currentName = ""
 				}
 			}
@@ -182,14 +183,14 @@ func extractLocalConfigAssignments(content string) map[string]string {
 			}
 			currentParenDepth += countParensOutsideStrings(line)
 			if currentParenDepth <= 0 {
-				storeLocalConfigAssignment(assignments, currentName, currentExpression.String())
+				storeLocalConfigAssignment(assignments, currentName, currentExpression.String(), relativePath)
 				currentName = ""
 			}
 		}
 		depth += countBracesOutsideStrings(line)
 		if depth <= 0 {
 			if currentName != "" {
-				storeLocalConfigAssignment(assignments, currentName, currentExpression.String())
+				storeLocalConfigAssignment(assignments, currentName, currentExpression.String(), relativePath)
 				currentName = ""
 			}
 			inLocals = false
@@ -199,13 +200,42 @@ func extractLocalConfigAssignments(content string) map[string]string {
 	return assignments
 }
 
-func storeLocalConfigAssignment(assignments map[string]string, name, expression string) {
+func storeLocalConfigAssignment(assignments map[string]string, name, expression, relativePath string) {
 	if name == "" {
+		return
+	}
+	if indexedAssignments := extractPathRelativeToIncludeIndexedAssignments(name, expression, relativePath); len(indexedAssignments) > 0 {
+		for key, value := range indexedAssignments {
+			assignments[key] = value
+		}
 		return
 	}
 	if value := extractConfigAssetPathFromExpression(expression, assignments); value != "" {
 		assignments[name] = value
 	}
+}
+
+func extractPathRelativeToIncludeIndexedAssignments(name, expression, relativePath string) map[string]string {
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" || !pathRelativeToIncludeSplitPattern.MatchString(stripHCLInlineComments(expression)) {
+		return nil
+	}
+
+	directory := cleanRepositoryRelativePath(path.Dir(strings.TrimSpace(relativePath)))
+	if directory == "" || directory == "." {
+		return nil
+	}
+
+	parts := strings.Split(directory, "/")
+	assignments := make(map[string]string, len(parts))
+	for index, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		assignments[fmt.Sprintf("%s[%d]", trimmedName, index)] = part
+	}
+	return assignments
 }
 
 func countBracesOutsideStrings(line string) int {
@@ -346,7 +376,7 @@ func firstTopLevelArgument(arguments string) string {
 }
 
 func extractConfigAssetPathFromExpression(expression string, localAssignments map[string]string) string {
-	trimmed := strings.TrimSpace(expression)
+	trimmed := strings.TrimSpace(stripHCLInlineComments(expression))
 	if trimmed == "" {
 		return ""
 	}
@@ -358,7 +388,7 @@ func extractConfigAssetPathFromExpression(expression string, localAssignments ma
 		if localName == "" {
 			return ""
 		}
-		return normalizeConfigAssetLiteral(localAssignments[localName], localAssignments)
+		return strings.TrimSpace(localAssignments[localName])
 	}
 	if match := joinPathModulePattern.FindStringSubmatch(trimmed); len(match) >= 2 {
 		return normalizeConfigAssetLiteral(match[1], localAssignments)
@@ -393,7 +423,7 @@ func normalizeConfigAssetLiteral(value string, localAssignments map[string]strin
 }
 
 func appendConfigArtifactRow(rows []map[string]any, seen map[string]struct{}, pathValue, repoName, relativePath, evidenceKind string) []map[string]any {
-	pathValue = strings.TrimSpace(pathValue)
+	pathValue = normalizeRepoScopedPath(pathValue, repoName)
 	if pathValue == "" {
 		return rows
 	}
@@ -757,6 +787,55 @@ func resolveLocalInterpolations(value string, localAssignments map[string]string
 		}
 	}
 	return resolved
+}
+
+func stripHCLInlineComments(expression string) string {
+	lines := strings.Split(expression, "\n")
+	for index, line := range lines {
+		lines[index] = stripHCLLineComment(line)
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func stripHCLLineComment(line string) string {
+	inString := false
+	escaped := false
+	for index := 0; index < len(line); index++ {
+		switch {
+		case escaped:
+			escaped = false
+		case line[index] == '\\' && inString:
+			escaped = true
+		case line[index] == '"':
+			inString = !inString
+		case !inString && line[index] == '#':
+			return strings.TrimSpace(line[:index])
+		case !inString && line[index] == '/' && index+1 < len(line) && line[index+1] == '/':
+			return strings.TrimSpace(line[:index])
+		}
+	}
+	return strings.TrimSpace(line)
+}
+
+func normalizeRepoScopedPath(pathValue, repoName string) string {
+	cleanedPath := cleanRepositoryRelativePath(pathValue)
+	trimmedRepoName := strings.TrimSpace(repoName)
+	if cleanedPath == "" || trimmedRepoName == "" {
+		return cleanedPath
+	}
+
+	parts := strings.Split(cleanedPath, "/")
+	for index := range parts {
+		prefix := path.Join(parts[:index+1]...)
+		if path.Base(prefix) != trimmedRepoName {
+			continue
+		}
+		suffix := path.Join(parts[index+1:]...)
+		if suffix != "" && suffix != "." {
+			return suffix
+		}
+	}
+	return cleanedPath
 }
 
 func cleanRepositoryRelativePath(relativePath string) string {

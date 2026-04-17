@@ -142,8 +142,11 @@ honest signoff:
   lookup-backed local config assets, helper-composed `join("", [path.module,
   "/..."])` template assets, nested `${local.foo}` interpolation inside
   helper-built defaults, helper-built Terragrunt `${get_repo_root()}`
-  module sources, and the shared-infra compose-backed deployment-trace proof
-  are already proven on the normal Go path
+  module sources, the named `split("/", path_relative_to_include("root"))`
+  service-level Terragrunt pattern that now recovers repo-local `account.yaml`,
+  `region.yaml`, and `vpc.yaml` assets without leaking remote-state keys, and
+  the shared-infra compose-backed deployment-trace proof are already proven on
+  the normal Go path
 - JSON remains intentionally partial to avoid graph noise unless a specific
   JSON family is promoted on purpose
 
