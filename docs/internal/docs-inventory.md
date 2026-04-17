@@ -1,115 +1,48 @@
 # Docs Inventory
 
-This inventory is the current-state map for PlatformContextGraph documentation.
+This inventory describes the documentation surfaces that are tracked in the
+current repository state. It is intentionally current-state only.
 
-## Public docs pages
+## Public docs
 
-| Path | Topic | Status |
+The public site is built from:
+
+- `docs/mkdocs.yml`
+- `docs/docs/`
+
+The public docs are grouped into these active families:
+
+| Area | Paths | Purpose |
 | --- | --- | --- |
-| `docs/docs/index.md` | Product landing page | active |
-| `docs/docs/architecture.md` | System architecture | active |
-| `docs/docs/concepts/graph-model.md` | Graph model | active |
-| `docs/docs/concepts/how-it-works.md` | Processing model | active |
-| `docs/docs/concepts/modes.md` | CLI, MCP, and HTTP API roles | active |
-| `docs/docs/contributing-language-support.md` | Adding language support | active |
-| `docs/docs/contributing.md` | Public contribution guide | active |
-| `docs/docs/deployment/argocd.md` | Argo CD deployment | active |
-| `docs/docs/deployment/docker-compose.md` | Local deployment with Docker Compose | active |
-| `docs/docs/deployment/helm.md` | Helm deployment | active |
-| `docs/docs/deployment/manifests.md` | Minimal Kubernetes manifests | active |
-| `docs/docs/deployment/overview.md` | Deployment overview | active |
-| `docs/docs/deployment/service-runtimes.md` | Operator guide for runtime ownership, entrypoints, and scaling boundaries | active |
-| `docs/docs/getting-started/installation.md` | Installation guide | active |
-| `docs/docs/getting-started/prerequisites.md` | Prerequisites | active |
-| `docs/docs/getting-started/quickstart.md` | Quickstart | active |
-| `docs/docs/getting-started/windows-setup.md` | Windows setup | active |
-| `docs/docs/guides/bundles.md` | Bundle workflows | active |
-| `docs/docs/guides/ci-cd.md` | CI/CD guide | active |
-| `docs/docs/guides/fixture-ecosystems.md` | Fixture ecosystems | active |
-| `docs/docs/guides/mcp-guide.md` | MCP usage guide | active |
-| `docs/docs/guides/neo4j-setup.md` | Neo4j setup | active |
-| `docs/docs/guides/relationship-graphs.md` | Public relationship graph examples and capability showcase | active |
-| `docs/docs/guides/shared-infra-trace.md` | Shared infra tracing walkthrough | active |
-| `docs/docs/guides/starter-prompts.md` | Role-based prompt cookbook for engineers using MCP, API, and graph-aware assistants | active |
-| `docs/docs/guides/terraform-providers/index.md` | Terraform provider guide index | active |
-| `docs/docs/guides/terraform-providers/adding-providers.md` | Adding Terraform providers guide | active |
-| `docs/docs/guides/terraform-providers/service-categories.md` | Terraform provider service categories reference | active |
-| `docs/docs/guides/terraform-providers/updating-providers.md` | Updating Terraform providers guide | active |
-| `docs/docs/guides/visualization.md` | Visualization guide | active |
-| `docs/docs/license.md` | License page | active |
-| `docs/docs/reference/cli-analysis.md` | CLI analysis reference | active |
-| `docs/docs/reference/cli-indexing.md` | CLI indexing reference | active |
-| `docs/docs/reference/cli-kiss.md` | Short CLI quickstart and remote/local usage guide | active |
-| `docs/docs/reference/cli-reference.md` | CLI command reference | active |
-| `docs/docs/reference/cli-system.md` | CLI system reference | active |
-| `docs/docs/reference/configuration.md` | Configuration reference | active |
-| `docs/docs/reference/http-api.md` | HTTP API reference | active |
-| `docs/docs/reference/ingestion-observability.md` | Ingestion observability reference | active |
-| `docs/docs/reference/logging.md` | Logging and telemetry reference | active |
-| `docs/docs/reference/service-workflows.md` | Inter-service workflow and operator flow reference | active |
-| `docs/docs/reference/telemetry/index.md` | Telemetry overview and operator starting points | active |
-| `docs/docs/reference/telemetry/metrics.md` | Metric catalog and tuning recipes | active |
-| `docs/docs/reference/telemetry/traces.md` | Trace catalog and latency-debug recipes | active |
-| `docs/docs/reference/telemetry/logs.md` | Structured log catalog and forensic guidance | active |
-| `docs/docs/reference/mcp-cookbook.md` | MCP examples | active |
-| `docs/docs/reference/mcp-reference.md` | MCP reference | active |
-| `docs/docs/reference/pcgignore.md` | `.pcgignore` reference | active |
-| `docs/docs/reference/relationship-mapping.md` | Relationship mapping and typed edge semantics | active |
-| `docs/docs/reference/source-layout.md` | Source layout map | active |
-| `docs/docs/reference/local-testing.md` | Default local verification and testing runbook | active |
-| `docs/docs/reference/troubleshooting.md` | Troubleshooting guide | active |
-| `docs/docs/use-cases.md` | Use cases | active |
-| `docs/docs/why-pcg.md` | Why PlatformContextGraph exists | active |
-| `docs/docs/languages/feature-matrix.md` | Parser feature matrix | active |
-| `docs/docs/languages/support-maturity.md` | Parser support maturity matrix | active |
-| `docs/docs/languages/python.md` | Python parser spec | active |
-| `docs/docs/languages/go.md` | Go parser spec | active |
-| `docs/docs/languages/typescript.md` | TypeScript parser spec | active |
-| `docs/docs/languages/rust.md` | Rust parser spec | active |
-| `docs/docs/languages/java.md` | Java parser spec | active |
-| `docs/docs/languages/cpp.md` | C++ parser spec | active |
-| `docs/docs/languages/csharp.md` | C# parser spec | active |
-| `docs/docs/languages/c.md` | C parser spec | active |
-| `docs/docs/languages/scala.md` | Scala parser spec | active |
-| `docs/docs/languages/sql.md` | SQL parser spec | active |
-| `docs/docs/languages/javascript.md` | JavaScript parser spec | active |
-| `docs/docs/languages/ruby.md` | Ruby parser spec | active |
-| `docs/docs/languages/kotlin.md` | Kotlin parser spec | active |
-| `docs/docs/languages/swift.md` | Swift parser spec | active |
-| `docs/docs/languages/php.md` | PHP parser spec | active |
-| `docs/docs/languages/perl.md` | Perl parser spec | active |
-| `docs/docs/languages/elixir.md` | Elixir parser spec | active |
-| `docs/docs/languages/haskell.md` | Haskell parser spec | active |
-| `docs/docs/languages/dart.md` | Dart parser spec | active |
-| `docs/docs/languages/typescriptjsx.md` | TypeScript JSX parser spec | active |
-| `docs/docs/languages/terraform.md` | Terraform parser spec | active |
-| `docs/docs/languages/terragrunt.md` | Terragrunt parser spec | active |
-| `docs/docs/languages/helm.md` | Helm parser spec | active |
-| `docs/docs/languages/kustomize.md` | Kustomize parser spec | active |
-| `docs/docs/languages/argocd.md` | ArgoCD parser spec | active |
-| `docs/docs/languages/crossplane.md` | Crossplane parser spec | active |
-| `docs/docs/languages/kubernetes.md` | Kubernetes parser spec | active |
-| `docs/docs/languages/cloudformation.md` | CloudFormation parser spec | active |
-| `docs/docs/languages/json.md` | JSON config parser spec | active |
-| `docs/docs/languages/groovy.md` | Groovy parser spec | active |
+| Landing and product narrative | `docs/docs/index.md`, `architecture.md`, `why-pcg.md`, `use-cases.md` | Explain what PCG is, why it exists, and how the platform fits together. |
+| Concepts | `docs/docs/concepts/*.md` | Core mental models such as graph semantics, processing flow, and runtime modes. |
+| Getting started | `docs/docs/getting-started/*.md` | Installation, prerequisites, quickstart, and workstation setup. |
+| Deployment | `docs/docs/deployment/*.md` | Docker Compose, Helm, Argo CD, manifests, service runtimes, and deployment boundaries. |
+| Guides | `docs/docs/guides/*.md` | Workflow guides, visualization, relationship examples, fixture ecosystems, CI/CD, and Terraform provider operations. |
+| Services | `docs/docs/services/*.md` | Service-level operational pages for `bootstrap-index`, `ingester`, and `resolution-engine`. |
+| Reference | `docs/docs/reference/*.md` and `docs/docs/reference/telemetry/*.md` | CLI, HTTP API, runtime admin API, local testing, logging, telemetry, workflows, parity, relationship mapping, and troubleshooting. |
+| Language support | `docs/docs/languages/*.md` | Parser behavior pages plus feature and support matrices for supported languages and IaC families. |
+| Supporting assets | `docs/docs/images/*`, `docs/openapi/runtime-admin-v1.yaml`, `docs/diagrams/*.mmd`, `docs/dashboards/*.json` | Images, diagrams, OpenAPI, and dashboard assets used by the public docs and operator workflows. |
 
 ## Internal docs
 
-| Path | Purpose | Status |
-| --- | --- | --- |
-| `docs/internal/README.md` | Boundary rules for internal docs | active |
-| `docs/internal/docs-inventory.md` | Current docs inventory | active |
-| `docs/internal/updating-docs.md` | Maintainer workflow for docs changes | active |
-
-## Active specs and plans
+Maintainer-only docs live under `docs/internal/`.
 
 | Path | Purpose | Status |
 | --- | --- | --- |
-| `docs/superpowers/specs/2026-03-19-query-model-api-design.md` | Query model and API design reference | active |
-| `docs/superpowers/specs/2026-04-05-gitops-support-story-design.md` | Design for GitOps, documentation, and support story orchestration | active |
-| `docs/superpowers/plans/2026-04-05-gitops-support-story-implementation.md` | Implementation plan for additive story orchestration and docs generation | active |
+| `docs/internal/README.md` | Boundary rules for internal versus public docs | active |
+| `docs/internal/docs-inventory.md` | This inventory | active |
+| `docs/internal/updating-docs.md` | Maintainer workflow for updating docs | active |
 
-## Archive boundary
+Untracked investigation notes may exist in `docs/internal/` during active work,
+but they are not part of the stable docs set until they are intentionally
+committed.
 
-- `docs/archive/` is reserved for retired internal material when needed.
-- The archive is intentionally empty in the current repo.
+## Retired historical material
+
+- There is no tracked `docs/superpowers/` documentation tree in the current
+  worktree.
+- There is no tracked `docs/archive/` tree in the current worktree.
+- Historical plans and migration records should stay out of the public docs
+  unless they are rewritten into current architecture, workflow, or operator
+  guidance.
