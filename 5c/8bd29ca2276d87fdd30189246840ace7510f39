@@ -1,0 +1,110 @@
+go/internal/reducer/code_call_materialization.go
+  de63bbdd05c53445 36-39
+  99840ae60320a7bd 7,13-15,19-20,25-30,32,34-35,56-57,65-66,71,75-78,81-97,99-101,109-111,113
+go/internal/reducer/defaults_test.go
+  99840ae60320a7bd 8,16-71,88-89,155-178
+go/internal/reducer/code_call_materialization_test.go
+  de63bbdd05c53445 11,14-15,18-28,32,35-36,39-49,53,56-61,69-77,79-91,93-101,106-117,122-131,134-138,147,149-150,154,157,159,162,170-171,173-174,177-182,185-186,188-189,192-209,211-218,221-223,228-232,235-248,250-261,266-267,269-270,272-273,278-286
+  99840ae60320a7bd 62-66,132-133
+  72c82225e70ef41d 224-226,262-263,274-276
+go/internal/reducer/code_call_materialization_intents.go
+  72c82225e70ef41d 1-128
+go/internal/reducer/code_call_projection_runner.go
+  72c82225e70ef41d 1-428
+go/internal/reducer/defaults.go
+  99840ae60320a7bd 25-28,129-130
+  de63bbdd05c53445 29-30
+go/internal/reducer/semantic_entity_materialization_test.go
+  72c82225e70ef41d 603
+go/internal/reducer/python_metaclass_materialization_test.go
+  de63bbdd05c53445 147-151,179,181-182,204-205,207-208,210,213,216,219-221,225
+go/internal/reducer/service.go
+  72c82225e70ef41d 63-66,89-104,111-121,127-129,134-136
+go/internal/reducer/service_test.go
+  72c82225e70ef41d 153-190
+go/cmd/reducer/main.go
+  72c82225e70ef41d 131,143,187-192
+docs/docs/adrs/2026-04-17-neo4j-concurrent-write-deadlock-root-cause.md
+  26d0a7775258d320 25-26,447-448
+  72c82225e70ef41d 27-31,50,57-61,179,205,207-211,214,219,242-244,246,248-256,260-267,269-272,274-278,280-284,288,292-295,303,305-324,328,331-332,336-343,346-356,358,360-364,366-372,375-376,379-382,385,387,398-400,402-404,408-438,449-451,454,465-467,473-474
+go/cmd/reducer/config.go
+  72c82225e70ef41d 7,9,16-25,67-110
+go/internal/reducer/code_call_projection_runner_test.go
+  99840ae60320a7bd 5-6,11-65,183-184,218,221,226-246,249-269,273-275,281-284
+  72c82225e70ef41d 66,70-80,82-95,97-111,113-121,124-176,179-181,186-187,190-192,194-195,197-198,200-201,203-204,206-207,209-210,212-213,217,272,276,280,285,288,292-294,297,299,302-306,310-314
+  de63bbdd05c53445 1-4,7-10,67-69,81,96,112,122-123,177-178,182,185,188-189,193,196,199,202,205,208,211,214-216,219-220,222-225,247-248,270-271,277-279,286-287,289-291,295-296,298,300-301,307-309,315-316
+go/cmd/reducer/main_test.go
+  de63bbdd05c53445 55-72,241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "5c8bd29ca2276d87fdd30189246840ace7510f39",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    },
+    "72c82225e70ef41d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9836-7763-76c0-a116-358a6223b5f9",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 988,
+      "total_deletions": 376,
+      "accepted_lines": 979,
+      "overriden_lines": 0
+    },
+    "99840ae60320a7bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9989-b55b-73a3-977d-ca5f75ce6919",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 267,
+      "total_deletions": 241,
+      "accepted_lines": 259,
+      "overriden_lines": 0
+    },
+    "de63bbdd05c53445": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9989-dfc4-7e83-bcad-3317afd11ae0",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 737,
+      "total_deletions": 575,
+      "accepted_lines": 344,
+      "overriden_lines": 0
+    }
+  }
+}
