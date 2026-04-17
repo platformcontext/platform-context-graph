@@ -139,6 +139,7 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		copyStringSliceField(entry, row, "environments")
 		copyStringSliceField(entry, row, "job_timeout_minutes")
 		copyStringSliceField(entry, row, "matrix_keys")
+		copyStringSliceField(entry, row, "local_reusable_workflow_paths")
 		copyStringSliceField(entry, row, "reusable_workflow_repositories")
 		copyStringSliceField(entry, row, "checkout_repositories")
 		copyStringSliceField(entry, row, "workflow_input_repositories")
@@ -432,8 +433,15 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			if needsDependencies := stringSliceValue(row, "needs_dependencies"); len(needsDependencies) > 0 {
 				line += fmt.Sprintf(", and %d needs edge(s)", len(needsDependencies))
 			}
+			if localWorkflowPaths := stringSliceValue(row, "local_reusable_workflow_paths"); len(localWorkflowPaths) > 0 {
+				line += fmt.Sprintf(" via local reusable workflow paths %s", strings.Join(localWorkflowPaths, ", "))
+			}
 			if reusableWorkflows := stringSliceValue(row, "reusable_workflow_repositories"); len(reusableWorkflows) > 0 {
-				line += fmt.Sprintf(" via reusable workflow repos %s", strings.Join(reusableWorkflows, ", "))
+				if strings.Contains(line, " via local reusable workflow paths ") {
+					line += fmt.Sprintf(" and reusable workflow repos %s", strings.Join(reusableWorkflows, ", "))
+				} else {
+					line += fmt.Sprintf(" via reusable workflow repos %s", strings.Join(reusableWorkflows, ", "))
+				}
 			}
 			if checkoutRepos := stringSliceValue(row, "checkout_repositories"); len(checkoutRepos) > 0 {
 				if strings.Contains(line, " via reusable workflow repos ") {

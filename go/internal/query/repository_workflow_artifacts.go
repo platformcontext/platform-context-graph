@@ -89,6 +89,7 @@ func workflowArtifactName(relativePath string) string {
 
 func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	reusableWorkflowRepositories,
+		localReusableWorkflowPaths,
 		checkoutRepositories,
 		workflowInputRepositories,
 		runCommands,
@@ -107,6 +108,10 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	if len(reusableWorkflowRepositories) > 0 {
 		row["reusable_workflow_repositories"] = reusableWorkflowRepositories
 		signals = append(signals, "reusable_workflow_refs")
+	}
+	if len(localReusableWorkflowPaths) > 0 {
+		row["local_reusable_workflow_paths"] = localReusableWorkflowPaths
+		signals = append(signals, "local_reusable_workflow_refs")
 	}
 	if len(checkoutRepositories) > 0 {
 		row["checkout_repositories"] = checkoutRepositories
@@ -164,13 +169,14 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	}
 }
 
-func workflowArtifactDetails(content string) ([]string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, int) {
+func workflowArtifactDetails(content string) ([]string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, int) {
 	documents, err := decodeYAMLMaps(content)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
 	}
 
 	reusableWorkflowRepositories := make([]string, 0)
+	localReusableWorkflowPaths := make([]string, 0)
 	checkoutRepositories := make([]string, 0)
 	workflowInputRepositories := make([]string, 0)
 	runCommands := make([]string, 0)
@@ -200,6 +206,9 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 			}
 			if workflowRef := githubActionsReusableWorkflowRepoRef(StringVal(job, "uses")); workflowRef != "" {
 				reusableWorkflowRepositories = append(reusableWorkflowRepositories, workflowRef)
+			}
+			if localWorkflowPath := githubActionsLocalReusableWorkflowPath(StringVal(job, "uses")); localWorkflowPath != "" {
+				localReusableWorkflowPaths = append(localReusableWorkflowPaths, localWorkflowPath)
 			}
 			permissionScopes = append(permissionScopes, githubActionsPermissionScopes(job["permissions"])...)
 			concurrencyGroups = append(concurrencyGroups, githubActionsConcurrencyGroups(job["concurrency"])...)
@@ -253,6 +262,7 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 	}
 
 	return sortedUniqueWorkflowStrings(reusableWorkflowRepositories),
+		sortedUniqueWorkflowStrings(localReusableWorkflowPaths),
 		sortedUniqueWorkflowStrings(checkoutRepositories),
 		sortedUniqueWorkflowStrings(workflowInputRepositories),
 		sortedUniqueWorkflowStrings(runCommands),
@@ -383,6 +393,22 @@ func githubActionsPermissionScopes(rawPermissions any) []string {
 		return scopes
 	}
 	return nil
+}
+
+func githubActionsLocalReusableWorkflowPath(value string) string {
+	trimmed := strings.TrimSpace(trimGitHubActionsScalar(value))
+	if trimmed == "" {
+		return ""
+	}
+	if at := strings.Index(trimmed, "@"); at >= 0 {
+		trimmed = trimmed[:at]
+	}
+	trimmed = strings.TrimPrefix(trimmed, "./")
+	trimmed = strings.TrimPrefix(trimmed, "/")
+	if !strings.HasPrefix(trimmed, ".github/workflows/") {
+		return ""
+	}
+	return trimmed
 }
 
 func githubActionsConcurrencyGroups(rawConcurrency any) []string {

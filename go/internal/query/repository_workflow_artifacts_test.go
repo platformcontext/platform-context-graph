@@ -289,3 +289,37 @@ jobs:
 		t.Fatalf("workflow_artifacts[0].signals = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildRepositoryWorkflowArtifactsIncludesLocalReusableWorkflowPaths(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryWorkflowArtifacts([]FileContent{
+		{
+			RelativePath: ".github/workflows/deploy-local.yaml",
+			ArtifactType: "github_actions_workflow",
+			Content: `name: Deploy Local
+jobs:
+  local-release:
+    uses: ./.github/workflows/release.yaml
+  local-verify:
+    uses: ./.github/workflows/verify.yaml@main
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryWorkflowArtifacts() = nil, want workflow_artifacts")
+	}
+
+	rows := mapSliceValue(got, "workflow_artifacts")
+	if len(rows) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(rows))
+	}
+
+	row := rows[0]
+	if got, want := StringSliceVal(row, "local_reusable_workflow_paths"), []string{".github/workflows/release.yaml", ".github/workflows/verify.yaml"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("workflow_artifacts[0].local_reusable_workflow_paths = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(row, "signals"), []string{"workflow_file", "local_reusable_workflow_refs"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("workflow_artifacts[0].signals = %#v, want %#v", got, want)
+	}
+}
