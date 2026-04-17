@@ -1,7 +1,7 @@
 # Python-To-Go Parity Audit
 
-This page is the source of truth for parity closure on the
-`codex/go-data-plane-architecture` branch.
+This page is the source of truth for Python-to-Go parity closure in the current
+repository state.
 
 Use it to answer two different questions clearly:
 
@@ -29,7 +29,7 @@ The runtime migration is complete:
   verification flow
 
 Feature-for-feature parity is closed for the supported Go-owned runtime and
-relationship surfaces on this branch.
+relationship surfaces documented here.
 
 The remaining notes in this document are bounded follow-on enhancement lanes,
 not known Python-era parity blockers. The largest bounded areas are:
@@ -50,7 +50,7 @@ to HTTP API routes.
 
 ## Verification Evidence
 
-The current branch truth is backed by these checks:
+The current parity statement is backed by these checks:
 
 - `rg --files . -g '*.py' | rg -v '^tests/fixtures/'` returns no runtime Python files
 - `rg --files . -g '*.py' | rg -v '^(\\./)?tests/fixtures/'` returns no
@@ -74,7 +74,7 @@ The current branch truth is backed by these checks:
 
 ## Non-Parser Platform Parity Status
 
-These are the current branch-level parity surfaces outside parser families.
+These are the current parity surfaces outside parser families.
 
 | Area | Status | Current truth | Remaining work |
 | --- | --- | --- | --- |
@@ -86,13 +86,13 @@ These are the current branch-level parity surfaces outside parser families.
 | Projector/reducer queue safety | Go-owned | compose-backed proof now covers incremental-refresh retry/supersession, projector ack visibility, reducer dead-letter handling, lease cleanup, and queue-state telemetry/logging on the Go runtime path | keep the existing proof scripts and queue-focused Go tests green |
 | Relationship fidelity | pass | typed relationship evidence now survives reducer normalization, Neo4j write dispatch, repository context/story read models, and the compose-backed relationship-platform proof, including controller-driven, workflow-driven, and IaC-driven family classification from persisted `evidence_type` metadata | keep typed edges and evidence-family shaping aligned as validation work continues |
 
-There are no currently-known branch-level parity blockers outside validation and
+There are no currently-known parity blockers outside validation and
 documentation alignment. Remaining notes in this document that mention bounded
 future enhancement space are intentionally outside Python-era parity scope.
 
 ## Feature Parity Status
 
-The table below is the branch-level parity inventory. It separates extraction
+The table below is the current parity inventory. It separates extraction
 parity from persisted graph and query-surface parity.
 
 | Area | Ownership | Parity status | Current truth | Remaining work |
@@ -119,7 +119,7 @@ parity from persisted graph and query-surface parity.
 
 ## Documented Gap Inventory
 
-These are the currently documented branch-level gaps that still matter for
+These are the currently documented gaps that still matter for
 honest signoff:
 
 - explicit repo-bearing GitHub Actions, Jenkins/Groovy, Ansible, Docker, and
@@ -204,9 +204,9 @@ If any of those are missing, the feature is not parity complete.
 
 ## Companion Checklist
 
-Use [parity-closure-matrix.md](parity-closure-matrix.md) as the current branch
-truth for which surfaces are `pass`, `bounded`, or still need validation
+Use [parity-closure-matrix.md](parity-closure-matrix.md) as the current
+reference for which surfaces are `pass`, `bounded`, or still need validation
 refresh.
 
-Use [merge-readiness-signoff.md](merge-readiness-signoff.md) for the final
-closed-versus-deferred branch signoff record.
+Use [merge-readiness-signoff.md](merge-readiness-signoff.md) for the current
+closed-versus-deferred signoff record.

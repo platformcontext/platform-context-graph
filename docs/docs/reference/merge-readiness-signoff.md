@@ -1,7 +1,6 @@
 # Merge Readiness Signoff
 
-This page is the final signoff record for the
-`codex/go-data-plane-architecture` branch.
+This page is the current signoff record for the Go-owned platform state.
 
 Use it to answer one practical question:
 
@@ -72,32 +71,24 @@ These are not migration blockers:
 
 ## Final Branch Truth
 
-The honest branch-level statement is:
+The honest current statement is:
 
 - runtime and service migration is complete
 - active developer-path migration is complete
 - remaining Python is fixture-only or offline-only
-- feature-for-feature parity is not yet fully signed off because queue
-  broader workflow/controller relationship coverage, broader helper-built IaC
-  path reduction, and compose/real-repo proof still need final closure, even
-  though queue safety, typed relationship fidelity, and the explicit
-  repo-bearing GitHub Actions, Jenkins, Ansible, Docker, and IaC subfamilies
-  are already Go-owned at the parser/query layer
+- feature-for-feature parity is signed off for the supported runtime,
+  relationship, and query surfaces documented in the parity audit and closure
+  matrix
+- broader enhancement space remains documented as bounded follow-on work, not
+  as unfinished migration scope
 
 ## Verification Snapshot
 
-Use this record only when the open parity rows are actually closed. The current
-readiness gate still depends on:
+Use this record as a maintenance gate: if a parity-critical surface changes,
+refresh the evidence below and keep the parity audit, closure matrix, and live
+operator docs aligned with the code.
 
-- broader workflow/controller relationship proof for GitHub Actions,
-  Jenkins/Groovy, Ansible, Docker, and Docker Compose beyond the already
-  implemented explicit repo-bearing subfamilies and same-repo local reusable
-  workflow provenance; Terraform variable-file promotion is already proven
-- broader IaC helper-built path-expression proof beyond the currently
-  implemented exact helper reductions
-- docs, telemetry, and compose-backed evidence refresh
-
-At final signoff time, the branch truth should be supported by:
+The current signoff should be supported by:
 
 ```bash
 rg --files . -g '*.py' | rg -v '^(\\./)?tests/fixtures/'

@@ -15,14 +15,14 @@ the old Python platform feature for feature for that surface.
 | `fail` | required parity behavior is still missing |
 | `bounded` | intentionally narrower than Python and must stay documented as a non-goal |
 
-## Branch Baseline
+## Current Baseline
 
 | Workstream | Status | Current truth | Approval bar |
 | --- | --- | --- | --- |
 | Runtime ownership | `pass` | Long-running and one-shot services are Go-owned end to end | keep Go-only ownership intact |
 | Deployment ownership | `pass` | Dockerfile, Compose, and Helm run the Go platform | keep docs and validation aligned |
 | Python normal-path ownership | `pass` | No normal-path Python runtime code remains | do not reintroduce mixed-runtime ownership |
-| Feature-for-feature parity | `pass` | The branch is Go-owned, typed relationship fidelity is proven end to end, repo-local GitHub Actions workflow artifacts now surface reusable workflow repositories, explicit checkout repositories, explicit workflow-input repositories, run-command counts, derived delivery-command families, and repo-local delivery paths for Terraform `-chdir`, Terragrunt working directories, Helm chart paths, kubectl manifests, Ansible playbooks/inventories/vars, and Compose file references on the Go read path, repo-local reusable workflow calls now also emit canonical same-repo `DEPLOYS_FROM` evidence, shared-infra deployment tracing now has live compose-backed HTTP proof, and the projector/reducer runtime now uses explicit dead-letter queue semantics with replay support for both new `dead_letter` rows and legacy `failed` rows. The still-bounded Docker base-image or stage-alias lane plus broader helper-built Terraform/Terragrunt wrapper semantics are future enhancement space rather than missing Python-era parity behavior | keep this row at `pass` unless a concrete Python-era feature is still missing on the Go path |
+| Feature-for-feature parity | `pass` | The platform is Go-owned, typed relationship fidelity is proven end to end, repo-local GitHub Actions workflow artifacts now surface reusable workflow repositories, explicit checkout repositories, explicit workflow-input repositories, run-command counts, derived delivery-command families, and repo-local delivery paths for Terraform `-chdir`, Terragrunt working directories, Helm chart paths, kubectl manifests, Ansible playbooks/inventories/vars, and Compose file references on the Go read path, repo-local reusable workflow calls now also emit canonical same-repo `DEPLOYS_FROM` evidence, shared-infra deployment tracing now has live compose-backed HTTP proof, and the projector/reducer runtime now uses explicit dead-letter queue semantics with replay support for both new `dead_letter` rows and legacy `failed` rows. The still-bounded Docker base-image or stage-alias lane plus broader helper-built Terraform/Terragrunt wrapper semantics are future enhancement space rather than missing Python-era parity behavior | keep this row at `pass` unless a concrete Python-era feature is still missing on the Go path |
 
 ## Operator And Runtime Contract Matrix
 
@@ -73,7 +73,7 @@ the old Python platform feature for feature for that surface.
 
 ## Relationship Verb Coverage Matrix
 
-This is the branch-close bar for relationship parity. It is keyed to the
+This is the close bar for relationship parity. It is keyed to the
 historical relationship README, relationship-graph guides, and fixture-corpus
 design rather than to parser output alone.
 
@@ -94,19 +94,9 @@ design rather than to parser output alone.
 | Workstream | Status | Gap now | Done means | Validation gate | Recommended split |
 | --- | --- | --- | --- | --- | --- |
 | API/MCP query surfacing | `pass` | the broad query contract is Go-owned and proven, and repository context/story outputs now have direct proof for typed relationship overviews plus controller-driven, workflow-driven, and IaC-driven relationship narratives. The remaining Docker and helper-expression notes are bounded future enhancement lanes rather than missing API or MCP surface behavior from the Python platform | keep this row aligned with the relationship-family proof inventory and OpenAPI/MCP validation | API tests, MCP proof, relationship query proof | validation sweep only |
-| Language pages | `pass` | the branch-truth language and relationship references now live in the current parity, relationship-mapping, local-testing, runtime, and telemetry docs; any supplemental language pages that remain are no longer treated as branch-level parity blockers | keep supplemental language pages aligned when they change, but do not let them drift ahead of the branch-truth reference set | docs build | docs truth check |
+| Language pages | `pass` | the current language and relationship references now live in the parity, relationship-mapping, local-testing, runtime, and telemetry docs; any supplemental language pages that remain are no longer treated as parity blockers on their own | keep supplemental language pages aligned when they change, but do not let them drift ahead of the current reference set | docs build | docs truth check |
 | Support maturity matrix | `pass` | the matrix now matches the parity audit: SQL real-repo and end-to-end moved from `partial` to `supported`, and no matrix row contradicts the parity closure state | keep the matrix aligned with the parity audit | docs build | closed |
-| Roadmap and architecture docs | `pass` | the branch-truth architecture and parity references now reflect that runtime ownership is complete and Python-era parity is met on the supported surfaces; historical plans remain records, not the active source of truth | keep historical plans clearly subordinate to the current reference set | docs build | docs truth check |
-
-## Historical Execution Waves
-
-| Wave | Includes | Why this grouping works |
-| --- | --- | --- |
-| Wave 0 | docs truth reset | completed |
-| Wave 1 | queue lease recovery and ack observability | completed |
-| Wave 2 | ArgoCD `RUNS_ON` and shared-infra trace proof | completed |
-| Wave 3 | workflow and IaC parser-family promotion | completed |
-| Wave 4 | docs lock, validation, and evidence refresh | remaining validation follow-through, not a known parity blocker |
+| Roadmap and architecture docs | `pass` | the current architecture and parity references reflect that runtime ownership is complete and Python-era parity is met on the supported surfaces; historical plans remain subordinate to the live reference set | keep historical material clearly subordinate to the current reference set | docs build | docs truth check |
 
 ## Approval Gate
 
@@ -120,5 +110,5 @@ Do not treat a row as complete because the parser extracts it. A row is only
 complete when persistence, query surfacing, tests, end-to-end proof, and docs
 all agree.
 
-For the final branch closeout record, use
+For the signoff record, use
 [merge-readiness-signoff.md](merge-readiness-signoff.md).
