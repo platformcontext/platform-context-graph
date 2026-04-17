@@ -180,6 +180,14 @@ bootstrap_data_plane_schema() {
     )
 }
 
+prepare_workspace_volume() {
+    echo "Preparing shared workspace volume..."
+    (
+        cd "$REPO_ROOT"
+        "${COMPOSE_CMD[@]}" run --rm --no-deps workspace-setup
+    )
+}
+
 prepare_fixture_root() {
     mkdir -p "$PROOF_REPO_ROOT"
     cp "$REPO_ROOT/tests/fixtures/ecosystems/code_only_python/app.py" "$PROOF_REPO_ROOT/app.py"
@@ -227,6 +235,7 @@ prepare_fixture_root
 start_compose_infra
 wait_for_postgres 60
 wait_for_neo4j 60
+prepare_workspace_volume
 bootstrap_data_plane_schema
 start_collector
 wait_for_http "http://127.0.0.1:${PCG_COLLECTOR_GIT_HTTP_PORT}/healthz" 60 1
