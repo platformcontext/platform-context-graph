@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -258,14 +259,19 @@ CREATE INDEX IF NOT EXISTS fact_backfill_requests_scope_idx
 
 // BootstrapDefinitions returns a copy of the ordered Wave 2 bootstrap layout.
 func BootstrapDefinitions() []Definition {
-	return append([]Definition(nil), bootstrapDefinitions...)
+	defs := append([]Definition(nil), bootstrapDefinitions...)
+	sort.SliceStable(defs, func(i, j int) bool {
+		return defs[i].Path < defs[j].Path
+	})
+	return defs
 }
 
 // BootstrapStatements returns the ordered SQL payloads that make up the
 // bootstrap layout.
 func BootstrapStatements() []string {
-	statements := make([]string, 0, len(bootstrapDefinitions))
-	for _, def := range bootstrapDefinitions {
+	defs := BootstrapDefinitions()
+	statements := make([]string, 0, len(defs))
+	for _, def := range defs {
 		statements = append(statements, def.SQL)
 	}
 
@@ -314,5 +320,5 @@ func ApplyDefinitions(ctx context.Context, exec Executor, defs []Definition) err
 
 // ApplyBootstrap applies the Wave 2 schema bootstrap layout.
 func ApplyBootstrap(ctx context.Context, exec Executor) error {
-	return ApplyDefinitions(ctx, exec, bootstrapDefinitions)
+	return ApplyDefinitions(ctx, exec, BootstrapDefinitions())
 }

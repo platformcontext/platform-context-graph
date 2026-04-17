@@ -28,6 +28,7 @@ type Runtime struct {
 	CanonicalWriter CanonicalWriter        // replaces GraphWriter — canonical graph projection
 	ContentWriter   content.Writer
 	IntentWriter    ReducerIntentWriter
+	PhasePublisher  reducer.GraphProjectionPhasePublisher
 	RetryInjector   RetryInjector
 	Tracer          trace.Tracer           // optional
 	Instruments     *telemetry.Instruments // optional
@@ -122,6 +123,9 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 		if err := r.CanonicalWriter.Write(ctx, projection.canonical); err != nil {
 			return Result{}, fmt.Errorf("write canonical projection: %w", err)
 		}
+		if err := r.publishCanonicalGraphPhases(ctx, generation.GenerationID, inputFacts); err != nil {
+			return Result{}, fmt.Errorf("publish canonical graph phases: %w", err)
+		}
 
 		if r.Instruments != nil {
 			canonicalDur := time.Since(canonicalStart).Seconds()
@@ -190,6 +194,58 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 	}
 
 	return result, nil
+}
+
+func (r Runtime) publishCanonicalGraphPhases(ctx context.Context, generationID string, inputFacts []facts.Envelope) error {
+	if r.PhasePublisher == nil {
+		return nil
+	}
+
+	rows := canonicalGraphPhaseStates(generationID, inputFacts)
+	if len(rows) == 0 {
+		return nil
+	}
+	return r.PhasePublisher.PublishGraphProjectionPhases(ctx, rows)
+}
+
+func canonicalGraphPhaseStates(generationID string, inputFacts []facts.Envelope) []reducer.GraphProjectionPhaseState {
+	seen := make(map[string]struct{})
+	rows := make([]reducer.GraphProjectionPhaseState, 0)
+
+	for _, fact := range inputFacts {
+		if fact.FactKind != "repository" {
+			continue
+		}
+
+		repoID, _ := payloadString(fact.Payload, "repo_id")
+		if repoID == "" {
+			repoID, _ = payloadString(fact.Payload, "graph_id")
+		}
+		sourceRunID, _ := payloadString(fact.Payload, "source_run_id")
+		if strings.TrimSpace(fact.ScopeID) == "" || repoID == "" || sourceRunID == "" || strings.TrimSpace(generationID) == "" {
+			continue
+		}
+
+		composite := strings.Join([]string{fact.ScopeID, repoID, sourceRunID, generationID}, "|")
+		if _, ok := seen[composite]; ok {
+			continue
+		}
+		seen[composite] = struct{}{}
+		rows = append(rows, reducer.GraphProjectionPhaseState{
+			Key: reducer.GraphProjectionPhaseKey{
+				ScopeID:          fact.ScopeID,
+				AcceptanceUnitID: repoID,
+				SourceRunID:      sourceRunID,
+				GenerationID:     generationID,
+				Keyspace:         reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+			},
+			Phase:       reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+			CommittedAt: fact.ObservedAt,
+			UpdatedAt:   fact.ObservedAt,
+		})
+	}
+
+	return rows
 }
 
 type projection struct {

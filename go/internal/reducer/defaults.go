@@ -26,6 +26,10 @@ type DefaultHandlers struct {
 	// and Python metaclass materialization.
 	CodeCallIntentWriter CodeCallIntentWriter
 
+	// GraphProjectionPhasePublisher persists durable graph-readiness publications
+	// for canonical and semantic node writers.
+	GraphProjectionPhasePublisher GraphProjectionPhasePublisher
+
 	// CodeCallEdgeWriter is retained for compatibility with older reducer tests
 	// and wiring. Code-call materialization no longer uses it directly.
 	CodeCallEdgeWriter SharedProjectionEdgeWriter
@@ -131,8 +135,9 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			}
 		case DomainSemanticEntityMaterialization:
 			def.Handler = SemanticEntityMaterializationHandler{
-				FactLoader: handlers.FactLoader,
-				Writer:     handlers.SemanticEntityWriter,
+				FactLoader:     handlers.FactLoader,
+				Writer:         handlers.SemanticEntityWriter,
+				PhasePublisher: handlers.GraphProjectionPhasePublisher,
 			}
 		case DomainSQLRelationshipMaterialization:
 			def.Handler = SQLRelationshipMaterializationHandler{

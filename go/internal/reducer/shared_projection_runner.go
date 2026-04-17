@@ -99,6 +99,8 @@ type SharedProjectionRunner struct {
 	EdgeWriter          SharedProjectionEdgeWriter
 	AcceptedGen         AcceptedGenerationLookup
 	AcceptedGenPrefetch AcceptedGenerationPrefetch
+	ReadinessLookup     GraphProjectionReadinessLookup
+	ReadinessPrefetch   GraphProjectionReadinessPrefetch
 	Config              SharedProjectionRunnerConfig
 	Wait                func(context.Context, time.Duration) error
 
@@ -285,6 +287,8 @@ func (r *SharedProjectionRunner) processPartitionWithTelemetry(
 		r.EdgeWriter,
 		r.AcceptedGen,
 		r.AcceptedGenPrefetch,
+		r.ReadinessLookup,
+		r.ReadinessPrefetch,
 	)
 
 	duration := time.Since(start).Seconds()
@@ -293,6 +297,17 @@ func (r *SharedProjectionRunner) processPartitionWithTelemetry(
 		Logger:      r.Logger,
 	}
 	acceptanceTelemetry.RecordStaleIntents(ctx, "shared_projection", domain, result.StaleIntents)
+	if result.BlockedReadiness > 0 && r.Logger != nil {
+		r.Logger.InfoContext(
+			ctx,
+			"shared projection skipped intents until semantic readiness is committed",
+			slog.String("domain", domain),
+			slog.Int("partition_id", partitionID),
+			slog.Int("partition_count", partitionCount),
+			slog.Int("blocked_count", result.BlockedReadiness),
+			telemetry.PhaseAttr(telemetry.PhaseShared),
+		)
+	}
 
 	if err == nil && result.ProcessedIntents > 0 {
 		r.recordSharedProjectionCycle(ctx, domain, duration)

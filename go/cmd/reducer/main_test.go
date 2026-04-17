@@ -55,8 +55,20 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	if service.SharedProjectionRunner == nil {
 		t.Fatal("buildReducerService() shared projection runner = nil, want non-nil")
 	}
+	if service.SharedProjectionRunner.ReadinessLookup == nil {
+		t.Fatal("buildReducerService() shared projection readiness lookup = nil, want non-nil")
+	}
+	if service.SharedProjectionRunner.ReadinessPrefetch == nil {
+		t.Fatal("buildReducerService() shared projection readiness prefetch = nil, want non-nil")
+	}
 	if service.CodeCallProjectionRunner == nil {
 		t.Fatal("buildReducerService() code call projection runner = nil, want non-nil")
+	}
+	if service.CodeCallProjectionRunner.ReadinessLookup == nil {
+		t.Fatal("buildReducerService() code call readiness lookup = nil, want non-nil")
+	}
+	if service.CodeCallProjectionRunner.ReadinessPrefetch == nil {
+		t.Fatal("buildReducerService() code call readiness prefetch = nil, want non-nil")
 	}
 	if got := service.CodeCallProjectionRunner.Config.PollInterval; got <= 0 {
 		t.Fatalf("buildReducerService() code call poll interval = %v, want positive", got)

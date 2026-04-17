@@ -88,6 +88,52 @@ type SharedProjectionAcceptanceKey struct {
 	SourceRunID      string
 }
 
+func domainRequiresSemanticNodeReadiness(domain string) bool {
+	switch domain {
+	case DomainCodeCalls, DomainSQLRelationships, DomainInheritanceEdges:
+		return true
+	default:
+		return false
+	}
+}
+
+func semanticNodeReadinessPhase(domain string) (GraphProjectionPhase, bool) {
+	if !domainRequiresSemanticNodeReadiness(domain) {
+		return "", false
+	}
+	return GraphProjectionPhaseSemanticNodesCommitted, true
+}
+
+func graphProjectionPhaseKeyForAcceptance(
+	key SharedProjectionAcceptanceKey,
+	generationID string,
+	keyspace GraphProjectionKeyspace,
+) (GraphProjectionPhaseKey, bool) {
+	phaseKey := GraphProjectionPhaseKey{
+		ScopeID:          strings.TrimSpace(key.ScopeID),
+		AcceptanceUnitID: strings.TrimSpace(key.AcceptanceUnitID),
+		SourceRunID:      strings.TrimSpace(key.SourceRunID),
+		GenerationID:     strings.TrimSpace(generationID),
+		Keyspace:         keyspace,
+	}
+	if err := phaseKey.Validate(); err != nil {
+		return GraphProjectionPhaseKey{}, false
+	}
+	return phaseKey, true
+}
+
+func graphProjectionPhaseKeyForIntent(
+	row SharedProjectionIntentRow,
+	generationID string,
+	keyspace GraphProjectionKeyspace,
+) (GraphProjectionPhaseKey, bool) {
+	acceptanceKey, ok := row.AcceptanceKey()
+	if !ok {
+		return GraphProjectionPhaseKey{}, false
+	}
+	return graphProjectionPhaseKeyForAcceptance(acceptanceKey, generationID, keyspace)
+}
+
 // AcceptanceKey returns the bounded-unit freshness key for the row.
 func (row SharedProjectionIntentRow) AcceptanceKey() (SharedProjectionAcceptanceKey, bool) {
 	scopeID := strings.TrimSpace(row.ScopeID)

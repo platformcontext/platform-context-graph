@@ -321,6 +321,81 @@ func TestRuntimeProjectMaterializesExplicitEntityRecords(t *testing.T) {
 	}
 }
 
+func TestRuntimeProjectPublishesCanonicalNodesCommittedAfterCanonicalWrite(t *testing.T) {
+	t.Parallel()
+
+	canonicalWriter := &recordingCanonicalWriter{}
+	publisher := &recordingGraphProjectionPhasePublisher{}
+	runtime := Runtime{
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   &recordingContentWriter{},
+		PhasePublisher:  publisher,
+		IntentWriter:    &recordingIntentWriter{result: IntentResult{Count: 1}},
+	}
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+	}
+	generationValue := scope.ScopeGeneration{
+		GenerationID: "generation-456",
+		ScopeID:      "scope-123",
+		ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+		IngestedAt:   time.Date(2026, time.April, 12, 11, 35, 0, 0, time.UTC),
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+
+	_, err := runtime.Project(context.Background(), scopeValue, generationValue, []facts.Envelope{
+		{
+			FactID:       "fact-0",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "repository",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"repo_id":       "repo-123",
+				"name":          "platform-context-graph",
+				"path":          "org/platform-context-graph",
+				"source_run_id": "run-123",
+			},
+		},
+		{
+			FactID:       "fact-1",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_node",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"graph_id":   "repo-123",
+				"graph_kind": "repository",
+				"name":       "platform-context-graph",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Project() error = %v, want nil", err)
+	}
+	if got, want := len(canonicalWriter.calls), 1; got != want {
+		t.Fatalf("canonical writer calls = %d, want %d", got, want)
+	}
+	if got, want := len(publisher.calls), 1; got != want {
+		t.Fatalf("publisher calls = %d, want %d", got, want)
+	}
+	if got, want := len(publisher.calls[0]), 1; got != want {
+		t.Fatalf("published rows = %d, want %d", got, want)
+	}
+	if got, want := publisher.calls[0][0].Phase, reducer.GraphProjectionPhaseCanonicalNodesCommitted; got != want {
+		t.Fatalf("published phase = %q, want %q", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.SourceRunID, "run-123"; got != want {
+		t.Fatalf("published source run = %q, want %q", got, want)
+	}
+}
+
 func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedefTypeAliasComponentAndFunction(t *testing.T) {
 	t.Parallel()
 
@@ -574,6 +649,17 @@ func (w *recordingIntentWriter) Enqueue(_ context.Context, intents []ReducerInte
 	copy(cloned, intents)
 	w.calls = append(w.calls, cloned)
 	return w.result, nil
+}
+
+type recordingGraphProjectionPhasePublisher struct {
+	calls [][]reducer.GraphProjectionPhaseState
+}
+
+func (p *recordingGraphProjectionPhasePublisher) PublishGraphProjectionPhases(_ context.Context, rows []reducer.GraphProjectionPhaseState) error {
+	cloned := make([]reducer.GraphProjectionPhaseState, len(rows))
+	copy(cloned, rows)
+	p.calls = append(p.calls, cloned)
+	return nil
 }
 
 func TestRuntimeProjectWithTelemetry(t *testing.T) {

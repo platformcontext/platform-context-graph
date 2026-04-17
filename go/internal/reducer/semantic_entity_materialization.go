@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 )
@@ -46,8 +47,9 @@ type SemanticEntityWriter interface {
 // into canonical graph writes. It loads parser facts, extracts canonical
 // semantic rows, and writes them through the Neo4j adapter.
 type SemanticEntityMaterializationHandler struct {
-	FactLoader FactLoader
-	Writer     SemanticEntityWriter
+	FactLoader     FactLoader
+	Writer         SemanticEntityWriter
+	PhasePublisher GraphProjectionPhasePublisher
 }
 
 // Handle executes the semantic-entity materialization path.
@@ -90,6 +92,9 @@ func (h SemanticEntityMaterializationHandler) Handle(
 	if err != nil {
 		return Result{}, fmt.Errorf("write semantic entities: %w", err)
 	}
+	if err := h.publishSemanticGraphPhases(ctx, intent.GenerationID, envelopes, repoIDs, len(rows)); err != nil {
+		return Result{}, fmt.Errorf("publish semantic graph phases: %w", err)
+	}
 
 	summary := fmt.Sprintf("materialized %d semantic entities across %d repositories", len(rows), len(repoIDs))
 	if len(rows) == 0 {
@@ -103,6 +108,73 @@ func (h SemanticEntityMaterializationHandler) Handle(
 		EvidenceSummary: summary,
 		CanonicalWrites: writeResult.CanonicalWrites,
 	}, nil
+}
+
+func (h SemanticEntityMaterializationHandler) publishSemanticGraphPhases(
+	ctx context.Context,
+	generationID string,
+	envelopes []facts.Envelope,
+	repoIDs []string,
+	rowCount int,
+) error {
+	if h.PhasePublisher == nil || rowCount == 0 || len(repoIDs) == 0 {
+		return nil
+	}
+
+	states := semanticGraphPhaseStates(generationID, envelopes, repoIDs)
+	if len(states) == 0 {
+		return nil
+	}
+	return h.PhasePublisher.PublishGraphProjectionPhases(ctx, states)
+}
+
+func semanticGraphPhaseStates(
+	generationID string,
+	envelopes []facts.Envelope,
+	repoIDs []string,
+) []GraphProjectionPhaseState {
+	repoSet := make(map[string]struct{}, len(repoIDs))
+	for _, repoID := range repoIDs {
+		if trimmed := strings.TrimSpace(repoID); trimmed != "" {
+			repoSet[trimmed] = struct{}{}
+		}
+	}
+
+	seen := make(map[string]struct{}, len(repoSet))
+	states := make([]GraphProjectionPhaseState, 0, len(repoSet))
+	for _, env := range envelopes {
+		if env.FactKind != "repository" {
+			continue
+		}
+		repoID := semanticPayloadString(env.Payload, "repo_id")
+		if _, ok := repoSet[repoID]; !ok {
+			continue
+		}
+		sourceRunID := semanticPayloadString(env.Payload, "source_run_id")
+		if strings.TrimSpace(env.ScopeID) == "" || sourceRunID == "" || strings.TrimSpace(generationID) == "" {
+			continue
+		}
+		composite := strings.Join([]string{env.ScopeID, repoID, sourceRunID, generationID}, "|")
+		if _, ok := seen[composite]; ok {
+			continue
+		}
+		seen[composite] = struct{}{}
+		publishedAt := time.Now().UTC()
+		states = append(states, GraphProjectionPhaseState{
+			Key: GraphProjectionPhaseKey{
+				ScopeID:          env.ScopeID,
+				AcceptanceUnitID: repoID,
+				SourceRunID:      sourceRunID,
+				GenerationID:     generationID,
+				Keyspace:         GraphProjectionKeyspaceCodeEntitiesUID,
+			},
+			Phase:       GraphProjectionPhaseSemanticNodesCommitted,
+			CommittedAt: publishedAt,
+			UpdatedAt:   publishedAt,
+		})
+	}
+
+	return states
 }
 
 // ExtractSemanticEntityRows returns the touched repository IDs and canonical

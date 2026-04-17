@@ -134,6 +134,8 @@ func buildReducerService(
 	relationshipStore := postgres.NewRelationshipStore(database)
 	codeCallIntentWriter := postgres.NewCodeCallIntentWriterWithInstruments(database, instruments)
 	acceptedGenerationPrefetch := postgres.NewAcceptedGenerationPrefetch(database)
+	graphProjectionReadinessLookup := postgres.NewGraphProjectionReadinessLookup(database)
+	graphProjectionReadinessPrefetch := postgres.NewGraphProjectionReadinessPrefetch(database)
 
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
 		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
@@ -143,6 +145,7 @@ func buildReducerService(
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
 		FactLoader:                         postgres.NewFactStore(database),
 		CodeCallIntentWriter:               codeCallIntentWriter,
+		GraphProjectionPhasePublisher:      postgres.NewGraphProjectionPhaseStateStore(database),
 		SemanticEntityWriter:               sourceneo4j.NewSemanticEntityWriter(neo4jExec, neo4jBatchSize(getenv)),
 		SQLRelationshipEdgeWriter:          edgeWriterForHandlers,
 		InheritanceEdgeWriter:              edgeWriterForHandlers,
@@ -182,6 +185,8 @@ func buildReducerService(
 			EdgeWriter:          edgeWriter,
 			AcceptedGen:         postgres.NewAcceptedGenerationLookup(database),
 			AcceptedGenPrefetch: acceptedGenerationPrefetch,
+			ReadinessLookup:     graphProjectionReadinessLookup,
+			ReadinessPrefetch:   graphProjectionReadinessPrefetch,
 			Config:              sharedCfg,
 			Tracer:              tracer,
 			Instruments:         instruments,
@@ -193,6 +198,8 @@ func buildReducerService(
 			EdgeWriter:          edgeWriter,
 			AcceptedGen:         postgres.NewAcceptedGenerationLookup(database),
 			AcceptedGenPrefetch: acceptedGenerationPrefetch,
+			ReadinessLookup:     graphProjectionReadinessLookup,
+			ReadinessPrefetch:   graphProjectionReadinessPrefetch,
 			Config:              codeCallCfg,
 			Tracer:              tracer,
 			Instruments:         instruments,

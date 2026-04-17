@@ -43,6 +43,7 @@ type PartitionBatchResult struct {
 	StaleIDs      []string
 	StaleCount    int
 	SupersededIDs []string
+	BlockedCount  int
 }
 
 // PartitionProcessorConfig holds configuration for one partition processor
@@ -65,6 +66,7 @@ type PartitionProcessResult struct {
 	UpsertedRows     int
 	RetractedRows    int
 	StaleIntents     int
+	BlockedReadiness int
 }
 
 // LatestIntentsByRepoAndPartition deduplicates intents to the most recent per
@@ -162,6 +164,8 @@ func SelectPartitionBatch(
 	batchLimit int,
 	acceptedGen AcceptedGenerationLookup,
 	prefetch AcceptedGenerationPrefetch,
+	readinessLookup GraphProjectionReadinessLookup,
+	readinessPrefetch GraphProjectionReadinessPrefetch,
 ) (PartitionBatchResult, error) {
 	if batchLimit < 1 {
 		batchLimit = 1
@@ -215,16 +219,27 @@ func SelectPartitionBatch(
 
 		active, staleIDs := FilterAuthoritativeIntents(partitionRows, lookup)
 		latest, supersededIDs := LatestIntentsByRepoAndPartition(active)
+		readyRows, blockedCount, err := filterRowsByReadiness(
+			ctx,
+			domain,
+			latest,
+			readinessLookup,
+			readinessPrefetch,
+		)
+		if err != nil {
+			return PartitionBatchResult{}, err
+		}
 
-		if len(latest) >= batchLimit || len(pending) < scanLimit {
-			if len(latest) > batchLimit {
-				latest = latest[:batchLimit]
+		if len(readyRows) >= batchLimit || len(pending) < scanLimit {
+			if len(readyRows) > batchLimit {
+				readyRows = readyRows[:batchLimit]
 			}
 			return PartitionBatchResult{
-				LatestRows:    latest,
+				LatestRows:    readyRows,
 				StaleIDs:      staleIDs,
 				StaleCount:    len(staleIDs),
 				SupersededIDs: supersededIDs,
+				BlockedCount:  blockedCount,
 			}, nil
 		}
 
@@ -258,6 +273,8 @@ func ProcessPartitionOnce(
 	edgeWriter SharedProjectionEdgeWriter,
 	acceptedGen AcceptedGenerationLookup,
 	prefetch AcceptedGenerationPrefetch,
+	readinessLookup GraphProjectionReadinessLookup,
+	readinessPrefetch GraphProjectionReadinessPrefetch,
 ) (PartitionProcessResult, error) {
 	claimed, err := leaseManager.ClaimPartitionLease(
 		ctx, cfg.Domain, cfg.PartitionID, cfg.PartitionCount,
@@ -285,13 +302,17 @@ func ProcessPartitionOnce(
 		ctx, reader, cfg.Domain,
 		cfg.PartitionID, cfg.PartitionCount,
 		batchLimit, acceptedGen, prefetch,
+		readinessLookup, readinessPrefetch,
 	)
 	if err != nil {
 		return PartitionProcessResult{LeaseAcquired: true}, fmt.Errorf("select batch: %w", err)
 	}
 
 	if len(batch.LatestRows) == 0 && len(batch.StaleIDs) == 0 && len(batch.SupersededIDs) == 0 {
-		return PartitionProcessResult{LeaseAcquired: true}, nil
+		return PartitionProcessResult{
+			LeaseAcquired:    true,
+			BlockedReadiness: batch.BlockedCount,
+		}, nil
 	}
 
 	evidenceSource := cfg.EvidenceSource
@@ -327,7 +348,63 @@ func ProcessPartitionOnce(
 		UpsertedRows:     len(upsertRows),
 		RetractedRows:    len(batch.LatestRows),
 		StaleIntents:     len(batch.StaleIDs),
+		BlockedReadiness: batch.BlockedCount,
 	}, nil
+}
+
+func filterRowsByReadiness(
+	ctx context.Context,
+	domain string,
+	rows []SharedProjectionIntentRow,
+	readinessLookup GraphProjectionReadinessLookup,
+	readinessPrefetch GraphProjectionReadinessPrefetch,
+) ([]SharedProjectionIntentRow, int, error) {
+	phase, gated := semanticNodeReadinessPhase(domain)
+	if !gated || len(rows) == 0 {
+		return rows, 0, nil
+	}
+
+	lookup := readinessLookup
+	if readinessPrefetch != nil {
+		seen := make(map[GraphProjectionPhaseKey]struct{}, len(rows))
+		keys := make([]GraphProjectionPhaseKey, 0, len(rows))
+		for _, row := range rows {
+			key, ok := graphProjectionPhaseKeyForIntent(row, row.GenerationID, GraphProjectionKeyspaceCodeEntitiesUID)
+			if !ok {
+				continue
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			keys = append(keys, key)
+		}
+		resolvedLookup, err := readinessPrefetch(ctx, keys, phase)
+		if err != nil {
+			return nil, 0, fmt.Errorf("prefetch graph projection readiness: %w", err)
+		}
+		lookup = resolvedLookup
+	}
+
+	if lookup == nil {
+		return rows, 0, nil
+	}
+
+	readyRows := make([]SharedProjectionIntentRow, 0, len(rows))
+	blockedCount := 0
+	for _, row := range rows {
+		key, ok := graphProjectionPhaseKeyForIntent(row, row.GenerationID, GraphProjectionKeyspaceCodeEntitiesUID)
+		if !ok {
+			continue
+		}
+		ready, found := lookup(key, phase)
+		if !found || !ready {
+			blockedCount++
+			continue
+		}
+		readyRows = append(readyRows, row)
+	}
+	return readyRows, blockedCount, nil
 }
 
 // filterUpsertRows returns rows whose payload action is "upsert" or absent.

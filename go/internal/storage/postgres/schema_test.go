@@ -13,8 +13,8 @@ func TestBootstrapDefinitionsAreOrderedAndComplete(t *testing.T) {
 	t.Parallel()
 
 	defs := BootstrapDefinitions()
-	if len(defs) != 11 {
-		t.Fatalf("BootstrapDefinitions() len = %d, want 11", len(defs))
+	if len(defs) != 12 {
+		t.Fatalf("BootstrapDefinitions() len = %d, want 12", len(defs))
 	}
 
 	wantNames := []string{
@@ -25,10 +25,11 @@ func TestBootstrapDefinitionsAreOrderedAndComplete(t *testing.T) {
 		"fact_work_items",
 		"fact_work_item_audit",
 		"projection_decisions",
-		"relationship_tables",
 		"shared_projection_intents",
-		"shared_projection_acceptance",
 		"runtime_ingester_control",
+		"relationship_tables",
+		"shared_projection_acceptance",
+		"graph_projection_phase_state",
 	}
 	for i, want := range wantNames {
 		if defs[i].Name != want {
@@ -79,8 +80,9 @@ func TestApplyBootstrapExecutesDefinitionsInOrder(t *testing.T) {
 	}
 
 	got := exec.statements
-	want := make([]string, 0, len(bootstrapDefinitions))
-	for _, def := range bootstrapDefinitions {
+	defs := BootstrapDefinitions()
+	want := make([]string, 0, len(defs))
+	for _, def := range defs {
 		want = append(want, def.SQL)
 	}
 	if len(got) != len(want) {

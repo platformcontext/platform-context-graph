@@ -75,6 +75,8 @@ type CodeCallProjectionRunner struct {
 	EdgeWriter          SharedProjectionEdgeWriter
 	AcceptedGen         AcceptedGenerationLookup
 	AcceptedGenPrefetch AcceptedGenerationPrefetch
+	ReadinessLookup     GraphProjectionReadinessLookup
+	ReadinessPrefetch   GraphProjectionReadinessPrefetch
 	Config              CodeCallProjectionRunnerConfig
 	Wait                func(context.Context, time.Duration) error
 
@@ -268,6 +270,8 @@ func (r *CodeCallProjectionRunner) selectAcceptanceUnitWork(ctx context.Context)
 			lookup = resolvedLookup
 		}
 
+		phase, gated := semanticNodeReadinessPhase(DomainCodeCalls)
+		acceptedByKey := make(map[SharedProjectionAcceptanceKey]string, len(pending))
 		seen := make(map[SharedProjectionAcceptanceKey]struct{}, len(pending))
 		for _, row := range pending {
 			key, ok := row.AcceptanceKey()
@@ -281,14 +285,89 @@ func (r *CodeCallProjectionRunner) selectAcceptanceUnitWork(ctx context.Context)
 				continue
 			}
 			seen[key] = struct{}{}
-			if _, ok := lookup(key); ok {
+			if acceptedGeneration, ok := lookup(key); ok {
+				acceptedByKey[key] = acceptedGeneration
+			}
+		}
+
+		readinessLookup := r.ReadinessLookup
+		if gated && r.ReadinessPrefetch != nil {
+			readinessKeys := make([]GraphProjectionPhaseKey, 0, len(acceptedByKey))
+			for key, acceptedGeneration := range acceptedByKey {
+				readinessKey, ok := graphProjectionPhaseKeyForAcceptance(
+					key,
+					acceptedGeneration,
+					GraphProjectionKeyspaceCodeEntitiesUID,
+				)
+				if !ok {
+					continue
+				}
+				readinessKeys = append(readinessKeys, readinessKey)
+			}
+			resolvedLookup, err := r.ReadinessPrefetch(ctx, readinessKeys, phase)
+			if err != nil {
 				acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
 					Runner:   "code_call_projection",
-					Result:   "hit",
+					Result:   "error",
 					Duration: time.Since(start).Seconds(),
+					Err:      err,
 				})
-				return key, nil
+				return SharedProjectionAcceptanceKey{}, fmt.Errorf("prefetch graph projection readiness: %w", err)
 			}
+			readinessLookup = resolvedLookup
+		}
+
+		blockedCount := 0
+		seen = make(map[SharedProjectionAcceptanceKey]struct{}, len(pending))
+		for _, row := range pending {
+			key, ok := row.AcceptanceKey()
+			if !ok {
+				return SharedProjectionAcceptanceKey{}, fmt.Errorf(
+					"pending code call intent %q is missing scope, acceptance unit, or source run",
+					row.IntentID,
+				)
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+
+			acceptedGeneration, ok := acceptedByKey[key]
+			if !ok {
+				continue
+			}
+			if gated && readinessLookup != nil {
+				readinessKey, ok := graphProjectionPhaseKeyForAcceptance(
+					key,
+					acceptedGeneration,
+					GraphProjectionKeyspaceCodeEntitiesUID,
+				)
+				if !ok {
+					continue
+				}
+				ready, found := readinessLookup(readinessKey, phase)
+				if !found || !ready {
+					blockedCount++
+					continue
+				}
+			}
+
+			acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
+				Runner:   "code_call_projection",
+				Result:   "hit",
+				Duration: time.Since(start).Seconds(),
+			})
+			return key, nil
+		}
+
+		if blockedCount > 0 && r.Logger != nil {
+			r.Logger.InfoContext(
+				ctx,
+				"code call projection skipped acceptance units until semantic readiness is committed",
+				slog.Int("blocked_count", blockedCount),
+				slog.String("domain", DomainCodeCalls),
+				telemetry.PhaseAttr(telemetry.PhaseShared),
+			)
 		}
 
 		if len(pending) < scanLimit {

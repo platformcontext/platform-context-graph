@@ -500,6 +500,110 @@ func TestCodeCallProjectionRunnerSelectsAcceptanceUnitBeyondInitialBatchWindow(t
 	}
 }
 
+func TestCodeCallProjectionRunnerSkipsAcceptanceUnitUntilSemanticNodesCommitted(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 17, 12, 0, 0, 0, time.UTC)
+	reader := &fakeCodeCallIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			{
+				IntentID:         "accepted-1",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "caller->callee",
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-a",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				CreatedAt:        now,
+			},
+		},
+	}
+	runner := CodeCallProjectionRunner{
+		IntentReader:    reader,
+		AcceptedGen:     acceptedGenerationFixed("gen-1", true),
+		ReadinessLookup: readinessLookupFixed(false, false),
+		Config:          CodeCallProjectionRunnerConfig{BatchLimit: 10},
+	}
+
+	key, err := runner.selectAcceptanceUnitWork(context.Background())
+	if err != nil {
+		t.Fatalf("selectAcceptanceUnitWork() error = %v", err)
+	}
+	if key != (SharedProjectionAcceptanceKey{}) {
+		t.Fatalf("key = %#v, want zero value while semantic readiness is missing", key)
+	}
+}
+
+func TestCodeCallProjectionRunnerSelectsReadyAcceptanceUnitWhenEarlierUnitIsBlockedByReadiness(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 17, 12, 30, 0, 0, time.UTC)
+	reader := &fakeCodeCallIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			{
+				IntentID:         "blocked-1",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "caller->blocked",
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-blocked",
+				RepositoryID:     "repo-blocked",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				CreatedAt:        now,
+			},
+			{
+				IntentID:         "ready-1",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "caller->ready",
+				ScopeID:          "scope-b",
+				AcceptanceUnitID: "repo-ready",
+				RepositoryID:     "repo-ready",
+				SourceRunID:      "run-2",
+				GenerationID:     "gen-2",
+				CreatedAt:        now.Add(time.Second),
+			},
+		},
+	}
+	runner := CodeCallProjectionRunner{
+		IntentReader: reader,
+		AcceptedGen: func(key SharedProjectionAcceptanceKey) (string, bool) {
+			switch key.AcceptanceUnitID {
+			case "repo-blocked":
+				return "gen-1", true
+			case "repo-ready":
+				return "gen-2", true
+			default:
+				return "", false
+			}
+		},
+		ReadinessLookup: func(key GraphProjectionPhaseKey, phase GraphProjectionPhase) (bool, bool) {
+			if phase != GraphProjectionPhaseSemanticNodesCommitted {
+				t.Fatalf("phase = %q, want %q", phase, GraphProjectionPhaseSemanticNodesCommitted)
+			}
+			if key.AcceptanceUnitID == "repo-ready" {
+				return true, true
+			}
+			return false, false
+		},
+		Config: CodeCallProjectionRunnerConfig{BatchLimit: 10},
+	}
+
+	key, err := runner.selectAcceptanceUnitWork(context.Background())
+	if err != nil {
+		t.Fatalf("selectAcceptanceUnitWork() error = %v", err)
+	}
+	if got, want := key.AcceptanceUnitID, "repo-ready"; got != want {
+		t.Fatalf("key.AcceptanceUnitID = %q, want %q", got, want)
+	}
+	if got, want := key.ScopeID, "scope-b"; got != want {
+		t.Fatalf("key.ScopeID = %q, want %q", got, want)
+	}
+	if got, want := key.SourceRunID, "run-2"; got != want {
+		t.Fatalf("key.SourceRunID = %q, want %q", got, want)
+	}
+}
+
 func TestCodeCallProjectionRunnerRecordCycleUsesAcceptanceLogKeys(t *testing.T) {
 	t.Parallel()
 

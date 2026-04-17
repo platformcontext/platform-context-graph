@@ -198,7 +198,7 @@ func TestSelectPartitionBatchReturnsAcceptedBatch(t *testing.T) {
 	batch, err := SelectPartitionBatch(
 		context.Background(), reader, "platform_infra",
 		0, 1, // partition 0 of 1 → all rows match
-		10, lookup, nil,
+		10, lookup, nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("SelectPartitionBatch error = %v", err)
@@ -223,7 +223,7 @@ func TestSelectPartitionBatchFiltersStale(t *testing.T) {
 
 	batch, err := SelectPartitionBatch(
 		context.Background(), reader, "platform_infra",
-		0, 1, 10, lookup, nil,
+		0, 1, 10, lookup, nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("SelectPartitionBatch error = %v", err)
@@ -314,6 +314,8 @@ func TestSelectPartitionBatchExpandsWindowWhenPartitionWorkIsBeyondHeadSlice(t *
 		1,
 		acceptedGenerationFixed("gen-target", true),
 		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SelectPartitionBatch() error = %v", err)
@@ -357,12 +359,140 @@ func TestSelectPartitionBatchErrorsWhenScanCapIsReached(t *testing.T) {
 		1,
 		acceptedGenerationFixed("gen-1", true),
 		nil,
+		nil,
+		nil,
 	)
 	if err == nil {
 		t.Fatal("SelectPartitionBatch() error = nil, want non-nil")
 	}
 	if got, want := reader.limitRequests[len(reader.limitRequests)-1], maxSharedSelectionScanLimit; got != want {
 		t.Fatalf("final scan limit = %d, want cap %d", got, want)
+	}
+}
+
+func TestSelectPartitionBatchSkipsSQLAndInheritanceRowsUntilSemanticNodesCommitted(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 17, 13, 0, 0, 0, time.UTC)
+	domains := []string{DomainSQLRelationships, DomainInheritanceEdges}
+
+	for _, domain := range domains {
+		domain := domain
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+
+			reader := &stubSharedIntentReader{
+				pending: []SharedProjectionIntentRow{
+					{
+						IntentID:         "blocked-1",
+						ProjectionDomain: domain,
+						PartitionKey:     "pk-a",
+						ScopeID:          "scope-a",
+						AcceptanceUnitID: "repo-a",
+						RepositoryID:     "repo-a",
+						SourceRunID:      "run-1",
+						GenerationID:     "gen-1",
+						CreatedAt:        now,
+					},
+				},
+			}
+
+			result, err := SelectPartitionBatch(
+				context.Background(),
+				reader,
+				domain,
+				0,
+				1,
+				100,
+				acceptedGenerationFixed("gen-1", true),
+				nil,
+				readinessLookupFixed(false, false),
+				nil,
+			)
+			if err != nil {
+				t.Fatalf("SelectPartitionBatch() error = %v", err)
+			}
+			if len(result.LatestRows) != 0 {
+				t.Fatalf("len(LatestRows) = %d, want 0 until semantic readiness exists", len(result.LatestRows))
+			}
+			if len(result.StaleIDs) != 0 {
+				t.Fatalf("StaleIDs = %v, want empty", result.StaleIDs)
+			}
+			if len(result.SupersededIDs) != 0 {
+				t.Fatalf("SupersededIDs = %v, want empty", result.SupersededIDs)
+			}
+		})
+	}
+}
+
+func TestSelectPartitionBatchKeepsScanningForReadyRowsWhenEarlierUnitsAreReadinessBlocked(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 17, 13, 30, 0, 0, time.UTC)
+	reader := &stubSharedIntentReader{
+		pending: []SharedProjectionIntentRow{
+			{
+				IntentID:         "blocked-1",
+				ProjectionDomain: DomainSQLRelationships,
+				PartitionKey:     "pk-a",
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-blocked",
+				RepositoryID:     "repo-blocked",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				CreatedAt:        now,
+			},
+			{
+				IntentID:         "ready-1",
+				ProjectionDomain: DomainSQLRelationships,
+				PartitionKey:     "pk-b",
+				ScopeID:          "scope-b",
+				AcceptanceUnitID: "repo-ready",
+				RepositoryID:     "repo-ready",
+				SourceRunID:      "run-2",
+				GenerationID:     "gen-2",
+				CreatedAt:        now.Add(time.Second),
+			},
+		},
+	}
+
+	result, err := SelectPartitionBatch(
+		context.Background(),
+		reader,
+		DomainSQLRelationships,
+		0,
+		1,
+		10,
+		func(key SharedProjectionAcceptanceKey) (string, bool) {
+			switch key.AcceptanceUnitID {
+			case "repo-blocked":
+				return "gen-1", true
+			case "repo-ready":
+				return "gen-2", true
+			default:
+				return "", false
+			}
+		},
+		nil,
+		func(key GraphProjectionPhaseKey, phase GraphProjectionPhase) (bool, bool) {
+			if phase != GraphProjectionPhaseSemanticNodesCommitted {
+				t.Fatalf("phase = %q, want %q", phase, GraphProjectionPhaseSemanticNodesCommitted)
+			}
+			if key.AcceptanceUnitID == "repo-ready" {
+				return true, true
+			}
+			return false, false
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SelectPartitionBatch() error = %v", err)
+	}
+	if len(result.LatestRows) != 1 {
+		t.Fatalf("len(LatestRows) = %d, want 1 ready row", len(result.LatestRows))
+	}
+	if got, want := result.LatestRows[0].IntentID, "ready-1"; got != want {
+		t.Fatalf("LatestRows[0].IntentID = %q, want %q", got, want)
 	}
 }
 
@@ -404,7 +534,7 @@ func TestProcessPartitionOnceFullCycle(t *testing.T) {
 		EvidenceSource: "finalization/workloads",
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProcessPartitionOnce error = %v", err)
 	}
@@ -451,7 +581,7 @@ func TestProcessPartitionOnceLeaseNotAcquired(t *testing.T) {
 		LeaseTTL:       30 * time.Second,
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProcessPartitionOnce error = %v", err)
 	}
@@ -480,7 +610,7 @@ func TestProcessPartitionOnceEmptyBatch(t *testing.T) {
 		LeaseTTL:       30 * time.Second,
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -544,7 +674,7 @@ func TestProcessPartitionOnceFiltersDeleteAction(t *testing.T) {
 		EvidenceSource: "finalization/workloads",
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -598,7 +728,7 @@ func TestProcessPartitionOnceCodeCallsDomain(t *testing.T) {
 		EvidenceSource: "parser/code-calls",
 	}
 
-	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil)
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProcessPartitionOnce() error = %v", err)
 	}
