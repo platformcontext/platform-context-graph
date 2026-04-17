@@ -20,11 +20,12 @@ func TestWrapRetryableNeo4jError(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		err           error
-		wantRetryable bool
-		wantWrapped   bool // true when WrapRetryableNeo4jError should return a different error
-		wantMessage   string
+		name           string
+		err            error
+		wantRetryable  bool
+		wantWrapped    bool // true when WrapRetryableNeo4jError should return a different error
+		wantMessage    string
+		skipNeo4jCheck bool // TransactionExecutionLimit doesn't implement Unwrap
 	}{
 		{
 			name:          "nil error returns nil",
@@ -76,6 +77,32 @@ func TestWrapRetryableNeo4jError(t *testing.T) {
 			wantWrapped:   true,
 			wantMessage:   "deadlock",
 		},
+		{
+			name: "TransactionExecutionLimit is retryable",
+			err: &neo4jdriver.TransactionExecutionLimit{
+				Cause: "timeout (exceeded max retry time: 30s)",
+				Errors: []error{
+					newNeo4jError("Neo.TransientError.Transaction.DeadlockDetected", "deadlock"),
+				},
+			},
+			wantRetryable:  true,
+			wantWrapped:    true,
+			wantMessage:    "TransactionExecutionLimit",
+			skipNeo4jCheck: true,
+		},
+		{
+			name: "wrapped TransactionExecutionLimit is retryable",
+			err: fmt.Errorf("write canonical code calls: %w", &neo4jdriver.TransactionExecutionLimit{
+				Cause: "timeout (exceeded max retry time: 30s)",
+				Errors: []error{
+					newNeo4jError("Neo.TransientError.Transaction.DeadlockDetected", "deadlock"),
+				},
+			}),
+			wantRetryable:  true,
+			wantWrapped:    true,
+			wantMessage:    "TransactionExecutionLimit",
+			skipNeo4jCheck: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -102,8 +129,11 @@ func TestWrapRetryableNeo4jError(t *testing.T) {
 			assert.Contains(t, result.Error(), tt.wantMessage, "error message should be preserved")
 
 			// Original Neo4j error should be accessible via Unwrap
-			var neo4jErr *neo4jdriver.Neo4jError
-			assert.True(t, errors.As(result, &neo4jErr), "original Neo4j error should be reachable via errors.As")
+			// (TransactionExecutionLimit doesn't implement Unwrap, so the inner Neo4jError is unreachable)
+			if !tt.skipNeo4jCheck {
+				var neo4jErr *neo4jdriver.Neo4jError
+				assert.True(t, errors.As(result, &neo4jErr), "original Neo4j error should be reachable via errors.As")
+			}
 		})
 	}
 }
