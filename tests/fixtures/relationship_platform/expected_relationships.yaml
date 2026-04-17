@@ -137,7 +137,7 @@ api_expectations:
         - deploy-legacy
       workflow_paths:
         - .github/workflows/deploy-legacy.yml
-      command_count: 0
+      command_count: 1
       reusable_workflow_repositories:
         - delivery-legacy-automation
     jenkins:
@@ -154,4 +154,4 @@ worker_api_expectations:
         - deploy-modern
       workflow_paths:
         - .github/workflows/deploy-modern.yml
-      command_count: 0
+      command_count: 1

@@ -128,12 +128,14 @@ honest signoff:
 - queue-hardening work in projector/reducer is still active
 - explicit repo-bearing GitHub Actions, Jenkins/Groovy, Ansible, Docker, and
   Docker Compose subfamilies already have Go-owned parser/query proof; the
+  GitHub Actions read path now also preserves reusable-workflow repositories
+  plus run-command counts on repo-local workflow artifacts, and the
   Jenkins-plus-Ansible controller path now also carries inventories,
   `group_vars` / `host_vars`, and task entrypoint context through repository
   controller artifacts and deployment/story shaping. Broader controller-driven
-  relationship promotion and compose-backed evidence still need current-truth
-  validation; Terraform variable-file promotion is already proven on the
-  normal Go path
+  relationship promotion, richer workflow gating semantics, and compose-backed
+  evidence still need current-truth validation; Terraform variable-file
+  promotion is already proven on the normal Go path
 - JSON remains intentionally partial to avoid graph noise unless a specific
   JSON family is promoted on purpose
 

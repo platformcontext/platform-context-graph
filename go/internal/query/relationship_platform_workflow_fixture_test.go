@@ -47,6 +47,16 @@ func TestRelationshipPlatformWorkerWorkflowSurfacesReadSideDeliveryPath(t *testi
 	if got, want := deliveryPaths[0]["kind"], "workflow_artifact"; got != want {
 		t.Fatalf("delivery_paths[0].kind = %#v, want %#v", got, want)
 	}
+	if got, want := deliveryPaths[0]["command_count"], 1; got != want {
+		t.Fatalf("delivery_paths[0].command_count = %#v, want %#v", got, want)
+	}
+	runCommands, ok := deliveryPaths[0]["run_commands"].([]string)
+	if !ok {
+		t.Fatalf("delivery_paths[0].run_commands type = %T, want []string", deliveryPaths[0]["run_commands"])
+	}
+	if len(runCommands) != 1 || runCommands[0] != `echo "deploying service-worker-jobs to modern kubernetes"` {
+		t.Fatalf("delivery_paths[0].run_commands = %#v, want deploy command", runCommands)
+	}
 
 	topologyStory, ok := overview["topology_story"].([]string)
 	if !ok {
@@ -55,7 +65,7 @@ func TestRelationshipPlatformWorkerWorkflowSurfacesReadSideDeliveryPath(t *testi
 	if len(topologyStory) != 1 {
 		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
 	}
-	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy-modern.yml as github_actions_workflow deploy-modern (workflow_file)."; got != want {
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy-modern.yml as github_actions_workflow deploy-modern with 1 run command(s) (workflow_file, run_commands)."; got != want {
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 
@@ -83,8 +93,51 @@ func TestRelationshipPlatformWorkerWorkflowSurfacesReadSideDeliveryPath(t *testi
 	if len(directStory) != 1 {
 		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
 	}
-	if got, want := directStory[0], "Workflow delivery paths include .github/workflows/deploy-modern.yml as github_actions_workflow deploy-modern (workflow_file)."; got != want {
+	if got, want := directStory[0], "Workflow delivery paths include .github/workflows/deploy-modern.yml as github_actions_workflow deploy-modern with 1 run command(s) (workflow_file, run_commands)."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
+	}
+}
+
+func TestRelationshipPlatformLegacyWorkflowSurfacesReusableWorkflowAndRunCommands(t *testing.T) {
+	t.Parallel()
+
+	artifacts := buildRepositoryWorkflowArtifacts([]FileContent{
+		{
+			RelativePath: ".github/workflows/deploy-legacy.yml",
+			ArtifactType: "github_actions_workflow",
+			Content: readRelationshipPlatformFixture(
+				t,
+				"service-edge-api",
+				".github",
+				"workflows",
+				"deploy-legacy.yml",
+			),
+		},
+	})
+	if artifacts == nil {
+		t.Fatal("buildRepositoryWorkflowArtifacts() = nil, want workflow_artifacts")
+	}
+
+	rows, ok := artifacts["workflow_artifacts"].([]map[string]any)
+	if !ok {
+		t.Fatalf("workflow_artifacts type = %T, want []map[string]any", artifacts["workflow_artifacts"])
+	}
+	if len(rows) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(rows))
+	}
+
+	if got, want := rows[0]["command_count"], 1; got != want {
+		t.Fatalf("workflow_artifacts[0].command_count = %#v, want %#v", got, want)
+	}
+	reusableRepos, ok := rows[0]["reusable_workflow_repositories"].([]string)
+	if !ok {
+		t.Fatalf(
+			"workflow_artifacts[0].reusable_workflow_repositories type = %T, want []string",
+			rows[0]["reusable_workflow_repositories"],
+		)
+	}
+	if len(reusableRepos) != 1 || reusableRepos[0] != "platformcontext/delivery-legacy-automation" {
+		t.Fatalf("workflow_artifacts[0].reusable_workflow_repositories = %#v, want delivery repo", reusableRepos)
 	}
 }
 

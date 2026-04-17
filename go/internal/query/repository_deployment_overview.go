@@ -123,6 +123,11 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		if workflowName := strings.TrimSpace(StringVal(row, "workflow_name")); workflowName != "" {
 			entry["workflow_name"] = workflowName
 		}
+		if commandCount := intValue(row, "command_count"); commandCount > 0 {
+			entry["command_count"] = commandCount
+		}
+		copyStringSliceField(entry, row, "run_commands")
+		copyStringSliceField(entry, row, "reusable_workflow_repositories")
 		if signals := stringSliceValue(row, "signals"); len(signals) > 0 {
 			entry["signals"] = signals
 		}
@@ -363,6 +368,12 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			if workflowName != "" {
 				line += fmt.Sprintf(" as %s %s", artifactType, workflowName)
 			}
+			if commandCount := intValue(row, "command_count"); commandCount > 0 {
+				line += fmt.Sprintf(" with %d run command(s)", commandCount)
+			}
+			if reusableWorkflows := stringSliceValue(row, "reusable_workflow_repositories"); len(reusableWorkflows) > 0 {
+				line += fmt.Sprintf(" via reusable workflow repos %s", strings.Join(reusableWorkflows, ", "))
+			}
 			if signals := stringSliceValue(row, "signals"); len(signals) > 0 {
 				line += fmt.Sprintf(" (%s)", strings.Join(signals, ", "))
 			}
@@ -473,6 +484,26 @@ func stringSliceValue(value map[string]any, key string) []string {
 		return result
 	default:
 		return nil
+	}
+}
+
+func intValue(value map[string]any, key string) int {
+	if len(value) == 0 {
+		return 0
+	}
+	raw, ok := value[key]
+	if !ok {
+		return 0
+	}
+	switch typed := raw.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
 	}
 }
 
