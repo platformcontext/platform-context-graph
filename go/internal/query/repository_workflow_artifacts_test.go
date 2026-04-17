@@ -128,3 +128,39 @@ jobs:
 		t.Fatalf("workflow_artifacts[0].workflow_input_repositories = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildRepositoryWorkflowArtifactsIncludesCheckoutRepositories(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryWorkflowArtifacts([]FileContent{
+		{
+			RelativePath: ".github/workflows/deploy.yaml",
+			ArtifactType: "github_actions_workflow",
+			Content: `name: Deploy
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: boatsgroup/deployment-kustomize
+      - uses: actions/checkout@v4
+        with:
+          repository: boatsgroup/deployment-helm
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryWorkflowArtifacts() = nil, want workflow_artifacts")
+	}
+
+	rows := mapSliceValue(got, "workflow_artifacts")
+	if len(rows) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(rows))
+	}
+
+	row := rows[0]
+	if got, want := StringSliceVal(row, "checkout_repositories"), []string{"boatsgroup/deployment-helm", "boatsgroup/deployment-kustomize"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("workflow_artifacts[0].checkout_repositories = %#v, want %#v", got, want)
+	}
+}

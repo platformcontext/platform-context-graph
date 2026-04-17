@@ -129,8 +129,8 @@ honest signoff:
 - explicit repo-bearing GitHub Actions, Jenkins/Groovy, Ansible, Docker, and
   Docker Compose subfamilies already have Go-owned parser/query proof; the
   GitHub Actions read path now also preserves reusable-workflow repositories,
-  explicit workflow-input repositories, and run-command counts on repo-local
-  workflow artifacts, and the
+  explicit checkout repositories, explicit workflow-input repositories, and
+  run-command counts on repo-local workflow artifacts, and the
   Jenkins-plus-Ansible controller path now also carries inventories,
   `group_vars` / `host_vars`, and task entrypoint context through repository
   controller artifacts and deployment/story shaping. Broader controller-driven
