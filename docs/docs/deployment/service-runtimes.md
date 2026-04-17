@@ -18,8 +18,8 @@ Every long-running runtime should also follow one operator principle:
 - the exact counters may differ by runtime, but the operator experience should
   not
 
-For the Go rewrite, that shared admin contract is used by the core data-plane
-services, including MCP, that mount `go/internal/runtime`:
+That shared admin contract is used by the core data-plane services, including
+MCP, that mount `go/internal/runtime`:
 
 - `/healthz` and `/readyz` describe process health and readiness
 - `/metrics` exposes runtime and backlog signals
@@ -74,10 +74,10 @@ Current branch reality:
 - `bootstrap-index` remains a one-shot helper for empty or recovered
   environments, not a steady-state health target.
 
-## Git Cutover Runtime Status
+## Local Proof Runtimes
 
-The rewrite branch also has three local proof runtimes that exercise the Go
-data plane directly.
+The repo also has three local proof runtimes that exercise the Go data plane
+directly.
 
 They are not yet separate deployed Kubernetes workloads in the public chart,
 but they do follow the same shared admin contract:
@@ -96,8 +96,8 @@ normal-path Python delegation.
 
 ## Admin Contract
 
-For the Go rewrite path, the platform rule is a consistent operator/admin
-contract across long-running services:
+The platform rule is a consistent operator/admin contract across long-running
+services:
 
 - one shared status/report seam
 - one CLI surface for local and on-host inspection
@@ -111,7 +111,7 @@ This is intentionally a platform rule, not a one-off `admin-status` feature.
 Operators should not need a different mental model for collector, projector,
 reducer, or future background services.
 
-Current rewrite status:
+Current runtime status:
 
 - `go/internal/status/` owns the shared reader/report seam
 - `go/cmd/admin-status/` renders that report through the local CLI

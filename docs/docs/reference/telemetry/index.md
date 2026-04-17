@@ -67,8 +67,8 @@ flowchart LR
 
 ## Incremental Refresh And Reconciliation Signals
 
-The rewrite is moving toward incremental refresh and reconciliation, not full
-re-indexing as the normal freshness model.
+The current Go-owned runtime uses incremental refresh and reconciliation, not
+full re-indexing, as the normal freshness model.
 
 Watch these signals together:
 
