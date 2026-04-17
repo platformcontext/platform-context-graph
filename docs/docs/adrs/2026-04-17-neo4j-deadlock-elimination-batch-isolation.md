@@ -400,6 +400,9 @@ writer:
 - `DomainCodeCalls` also splits grouped Neo4j writes into smaller
   `ExecuteGroup(...)` chunks
 - grouped managed transactions are preserved, so we keep retry semantics
+- the reducer emits `pcg_dp_code_call_edge_batches_total` and
+  `pcg_dp_code_call_edge_batch_duration_seconds` so operators can observe the
+  isolated batch path directly
 
 It reduces lock footprint and tail latency, but it is still not the elimination
 strategy. Readiness gating remains the correctness contract.
@@ -451,6 +454,17 @@ The Postgres store now provides:
 - cycle-local batching through `NewGraphProjectionReadinessPrefetch`
 - direct runner lookup through `NewGraphProjectionReadinessLookup`
 - exact repair queue persistence through `GraphProjectionPhaseRepairQueueStore`
+
+### Runtime telemetry
+
+The reducer now emits dedicated `code_call` batch-isolation telemetry:
+
+- `pcg_dp_code_call_edge_batches_total`
+- `pcg_dp_code_call_edge_batch_duration_seconds`
+
+These signals are emitted from the Neo4j edge writer when isolated `code_call`
+batches execute, so staging and production can validate that the deadlock fix
+is active and measure its latency envelope directly.
 
 ### Runtime publications
 

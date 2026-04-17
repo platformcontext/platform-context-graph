@@ -136,6 +136,11 @@ For shared-write debugging specifically:
 - Metrics answer claim latency, worker activity, stage duration, stage output
   volume, stage failures, dead-letter pressure, and shared authoritative
   follow-up backlog.
+- The `code_call` deadlock-elimination path also exposes
+  `pcg_dp_code_call_edge_batches_total` and
+  `pcg_dp_code_call_edge_batch_duration_seconds` so operators can measure the
+  isolated Neo4j batch transactions directly instead of inferring their
+  behavior from generic Neo4j timings.
 - Traces show one projection attempt from claim to graph write.
 - Logs capture work-item completion, retry, dead-letter, and per-stage failure
   context.
@@ -169,12 +174,16 @@ identity. Use traces and logs when you need repository-level detail.
 When validating shared-write runtime changes in staging or production:
 
 1. Start with `pcg_dp_queue_depth`, `pcg_dp_queue_oldest_age_seconds`,
-   `pcg_shared_projection_pending_intents`, and
-   `pcg_shared_projection_oldest_pending_age_seconds`.
+   `pcg_shared_projection_pending_intents`,
+   `pcg_shared_projection_oldest_pending_age_seconds`,
+   `pcg_dp_code_call_edge_batches_total`, and
+   `pcg_dp_code_call_edge_batch_duration_seconds`.
 2. Confirm backlog trends are flat-to-down, not simply that pods are up.
-3. If shared backlog remains non-zero, inspect traces for the affected
+3. Confirm isolated `code_call` batches are still flowing and that duration
+   stays within the expected staging envelope after tuning changes.
+4. If shared backlog remains non-zero, inspect traces for the affected
    projection domain before assuming the fact queue is the bottleneck.
-4. Use logs last to extract exact repository, source run, generation, or lease
+5. Use logs last to extract exact repository, source run, generation, or lease
    owner context for the stuck or slow path.
 
 ## Tuning Guidance For Shared-Write Backlog

@@ -91,6 +91,8 @@ type Instruments struct {
 	// Neo4j batch write metrics
 	Neo4jBatchSize       metric.Float64Histogram
 	Neo4jBatchesExecuted metric.Int64Counter
+	CodeCallEdgeBatches  metric.Int64Counter
+	CodeCallEdgeDuration metric.Float64Histogram
 
 	// Canonical projection metrics
 	CanonicalNodesWritten       metric.Int64Counter
@@ -481,6 +483,25 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register Neo4jBatchesExecuted counter: %w", err)
+	}
+
+	inst.CodeCallEdgeBatches, err = meter.Int64Counter(
+		"pcg_dp_code_call_edge_batches_total",
+		metric.WithDescription("Total isolated code-call edge batch executions"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CodeCallEdgeBatches counter: %w", err)
+	}
+
+	codeCallBatchBuckets := []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
+	inst.CodeCallEdgeDuration, err = meter.Float64Histogram(
+		"pcg_dp_code_call_edge_batch_duration_seconds",
+		metric.WithDescription("Duration of each isolated code-call edge batch transaction"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(codeCallBatchBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register CodeCallEdgeDuration histogram: %w", err)
 	}
 
 	inst.CanonicalAtomicWrites, err = meter.Int64Counter(

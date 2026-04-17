@@ -41,6 +41,8 @@ func TestNewInstrumentsNoError(t *testing.T) {
 	assert.NotNil(t, inst.BatchClaimSize, "BatchClaimSize histogram should be registered")
 	assert.NotNil(t, inst.PostgresQueryDuration, "PostgresQueryDuration histogram should be registered")
 	assert.NotNil(t, inst.Neo4jQueryDuration, "Neo4jQueryDuration histogram should be registered")
+	assert.NotNil(t, inst.CodeCallEdgeBatches, "CodeCallEdgeBatches counter should be registered")
+	assert.NotNil(t, inst.CodeCallEdgeDuration, "CodeCallEdgeDuration histogram should be registered")
 	assert.NotNil(t, inst.SharedAcceptanceUpsertDuration, "SharedAcceptanceUpsertDuration histogram should be registered")
 	assert.NotNil(t, inst.SharedAcceptanceLookupDuration, "SharedAcceptanceLookupDuration histogram should be registered")
 	assert.NotNil(t, inst.SharedAcceptancePrefetchSize, "SharedAcceptancePrefetchSize histogram should be registered")

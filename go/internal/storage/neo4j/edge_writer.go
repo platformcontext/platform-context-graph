@@ -3,8 +3,12 @@ package neo4j
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 // EdgeWriter implements reducer.SharedProjectionEdgeWriter by dispatching
@@ -15,6 +19,7 @@ type EdgeWriter struct {
 	BatchSize              int
 	CodeCallBatchSize      int
 	CodeCallGroupBatchSize int
+	Instruments            *telemetry.Instruments
 }
 
 // NewEdgeWriter returns an EdgeWriter backed by the given Executor.
@@ -99,9 +104,11 @@ func (w *EdgeWriter) WriteEdges(
 				if end > len(stmts) {
 					end = len(stmts)
 				}
+				start := time.Now()
 				if err := ge.ExecuteGroup(ctx, stmts[i:end]); err != nil {
 					return WrapRetryableNeo4jError(err)
 				}
+				w.recordCodeCallBatch(ctx, time.Since(start).Seconds(), stmts[i:end])
 			}
 			return nil
 		}
@@ -112,11 +119,27 @@ func (w *EdgeWriter) WriteEdges(
 	}
 
 	for _, stmt := range stmts {
+		start := time.Now()
 		if err := w.executor.Execute(ctx, stmt); err != nil {
 			return WrapRetryableNeo4jError(err)
 		}
+		if domain == reducer.DomainCodeCalls {
+			w.recordCodeCallBatch(ctx, time.Since(start).Seconds(), []Statement{stmt})
+		}
 	}
 	return nil
+}
+
+func (w *EdgeWriter) recordCodeCallBatch(ctx context.Context, duration float64, stmts []Statement) {
+	if w.Instruments == nil || len(stmts) == 0 {
+		return
+	}
+
+	attrs := metric.WithAttributes(
+		telemetry.AttrDomain(reducer.DomainCodeCalls),
+	)
+	w.Instruments.CodeCallEdgeBatches.Add(ctx, 1, attrs)
+	w.Instruments.CodeCallEdgeDuration.Record(ctx, duration, attrs)
 }
 
 // batchCypherForDomain returns the batched UNWIND Cypher template for the

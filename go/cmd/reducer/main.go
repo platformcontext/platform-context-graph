@@ -133,6 +133,7 @@ func buildReducerService(
 	codeCallEdgeBatchSize, codeCallEdgeGroupBatchSize := loadCodeCallEdgeWriterTuning(getenv)
 
 	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
+	edgeWriterForHandlers.Instruments = instruments
 	relationshipStore := postgres.NewRelationshipStore(database)
 	codeCallIntentWriter := postgres.NewCodeCallIntentWriterWithInstruments(database, instruments)
 	acceptedGenerationPrefetch := postgres.NewAcceptedGenerationPrefetch(database)
@@ -168,6 +169,7 @@ func buildReducerService(
 	}
 
 	edgeWriter := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
+	edgeWriter.Instruments = instruments
 	edgeWriter.CodeCallBatchSize = codeCallEdgeBatchSize
 	edgeWriter.CodeCallGroupBatchSize = codeCallEdgeGroupBatchSize
 
