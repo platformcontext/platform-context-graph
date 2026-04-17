@@ -181,6 +181,7 @@ func uniqueRelationshipStrings(rows []map[string]any, key string) []string {
 
 var iacEvidenceTypePrefixes = []string{
 	"docker_compose_",
+	"dockerfile_",
 	"helm_",
 	"kustomize_",
 	"terraform_",

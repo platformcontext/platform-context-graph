@@ -171,6 +171,10 @@ func discoverFromEnvelope(
 		evidence = append(evidence, discoverJenkinsEvidence(
 			sourceRepoID, filePath, content, parsedFileData, catalog, seen,
 		)...)
+	case isDockerfileArtifact(artifactType, filePath):
+		evidence = append(evidence, discoverDockerfileEvidence(
+			sourceRepoID, filePath, parsedFileData, catalog, seen,
+		)...)
 	case artifactType == "docker_compose":
 		evidence = append(evidence, discoverDockerComposeEvidence(
 			sourceRepoID, filePath, content, catalog, seen,
@@ -637,6 +641,14 @@ func isArgoCDArtifact(artifactType, content string) bool {
 	}
 	return strings.Contains(content, "kind: Application") ||
 		strings.Contains(content, "kind: ApplicationSet")
+}
+
+func isDockerfileArtifact(artifactType, filePath string) bool {
+	if strings.EqualFold(artifactType, "dockerfile") {
+		return true
+	}
+	lowerName := strings.ToLower(fileBaseName(filePath))
+	return lowerName == "dockerfile" || strings.HasPrefix(lowerName, "dockerfile.")
 }
 
 func isJenkinsArtifact(filePath string) bool {

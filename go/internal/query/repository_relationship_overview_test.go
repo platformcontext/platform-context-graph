@@ -1,6 +1,9 @@
 package query
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildRepositoryRelationshipOverviewSeparatesControllerAndWorkflowEvidence(t *testing.T) {
 	t.Parallel()
@@ -25,6 +28,12 @@ func TestBuildRepositoryRelationshipOverviewSeparatesControllerAndWorkflowEviden
 			"evidence_type": "terraform_module_source",
 		},
 		{
+			"type":          "DEPLOYS_FROM",
+			"target_name":   "payments-service",
+			"target_id":     "repo-7",
+			"evidence_type": "dockerfile_source_label",
+		},
+		{
 			"type":          "DISCOVERS_CONFIG_IN",
 			"target_name":   "shared-pipelines",
 			"target_id":     "repo-5",
@@ -42,7 +51,7 @@ func TestBuildRepositoryRelationshipOverviewSeparatesControllerAndWorkflowEviden
 		t.Fatal("buildRepositoryRelationshipOverview() = nil, want typed relationship overview")
 	}
 
-	if got, want := overview["relationship_count"], 5; got != want {
+	if got, want := overview["relationship_count"], 6; got != want {
 		t.Fatalf("relationship_count = %#v, want %#v", got, want)
 	}
 
@@ -50,8 +59,8 @@ func TestBuildRepositoryRelationshipOverviewSeparatesControllerAndWorkflowEviden
 	if !ok {
 		t.Fatalf("evidence_types type = %T, want []string", overview["evidence_types"])
 	}
-	if len(evidenceTypes) != 5 {
-		t.Fatalf("len(evidence_types) = %d, want 5", len(evidenceTypes))
+	if len(evidenceTypes) != 6 {
+		t.Fatalf("len(evidence_types) = %d, want 6", len(evidenceTypes))
 	}
 
 	controllerDriven, ok := overview["controller_driven"].([]map[string]any)
@@ -82,6 +91,14 @@ func TestBuildRepositoryRelationshipOverviewSeparatesControllerAndWorkflowEviden
 		t.Fatalf("workflow_driven[0].evidence_type = %#v, want %#v", got, want)
 	}
 
+	iacDriven, ok := overview["iac_driven"].([]map[string]any)
+	if !ok {
+		t.Fatalf("iac_driven type = %T, want []map[string]any", overview["iac_driven"])
+	}
+	if len(iacDriven) != 2 {
+		t.Fatalf("len(iac_driven) = %d, want 2", len(iacDriven))
+	}
+
 	story, ok := overview["story"].(string)
 	if !ok {
 		t.Fatalf("story type = %T, want string", overview["story"])
@@ -89,4 +106,11 @@ func TestBuildRepositoryRelationshipOverviewSeparatesControllerAndWorkflowEviden
 	if story == "" {
 		t.Fatal("story is empty, want typed relationship narrative")
 	}
+	if !containsSubstring(story, "dockerfile_source_label") {
+		t.Fatalf("story = %q, want dockerfile_source_label evidence summary", story)
+	}
+}
+
+func containsSubstring(value string, needle string) bool {
+	return strings.Contains(value, needle)
 }

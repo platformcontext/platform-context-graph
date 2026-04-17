@@ -689,6 +689,73 @@ func TestDiscoverJenkinsGitHubRepositoryEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverDockerfileSourceLabelEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-runtime",
+			Payload: map[string]any{
+				"artifact_type": "dockerfile",
+				"relative_path": "Dockerfile",
+				"content":       `FROM alpine:3.20`,
+				"parsed_file_data": map[string]any{
+					"dockerfile_labels": []any{
+						map[string]any{
+							"name":  "org.opencontainers.image.source",
+							"value": "https://github.com/acme/payments-service.git",
+						},
+					},
+				},
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+	if got, want := evidence[0].EvidenceKind, EvidenceKindDockerfileSourceLabel; got != want {
+		t.Fatalf("kind = %q, want %q", got, want)
+	}
+	if got, want := evidence[0].RelationshipType, RelDeploysFrom; got != want {
+		t.Fatalf("type = %q, want %q", got, want)
+	}
+	if got, want := evidence[0].TargetRepoID, "repo-payments"; got != want {
+		t.Fatalf("target = %q, want %q", got, want)
+	}
+	if got, want := evidence[0].Details["source_label"], "org.opencontainers.image.source"; got != want {
+		t.Fatalf("source_label = %#v, want %#v", got, want)
+	}
+}
+
+func TestDiscoverDockerfileBaseImageDoesNotEmitRepoEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-runtime",
+			Payload: map[string]any{
+				"artifact_type":    "dockerfile",
+				"relative_path":    "Dockerfile",
+				"content":          `FROM ghcr.io/acme/payments-service:latest`,
+				"parsed_file_data": map[string]any{},
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 0 {
+		t.Fatalf("len = %d, want 0", len(evidence))
+	}
+}
+
 func stringSlicesEqual(got any, want []string) bool {
 	values, ok := got.([]string)
 	if !ok {

@@ -48,6 +48,8 @@ const (
 	EvidenceKindDockerComposeImage EvidenceKind = "DOCKER_COMPOSE_IMAGE"
 	// EvidenceKindDockerComposeDependsOn is a Compose service dependency reference.
 	EvidenceKindDockerComposeDependsOn EvidenceKind = "DOCKER_COMPOSE_DEPENDS_ON"
+	// EvidenceKindDockerfileSourceLabel is an explicit repo-bearing Dockerfile source label reference.
+	EvidenceKindDockerfileSourceLabel EvidenceKind = "DOCKERFILE_SOURCE_LABEL"
 	// EvidenceKindKustomizeResource is a Kustomize resource reference.
 	EvidenceKindKustomizeResource EvidenceKind = "KUSTOMIZE_RESOURCE_REFERENCE"
 	// EvidenceKindKustomizeHelmChart is a Kustomize Helm chart reference.
