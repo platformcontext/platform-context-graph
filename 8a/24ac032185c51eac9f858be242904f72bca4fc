@@ -1,0 +1,38 @@
+go/internal/relationships/evidence_test.go
+  72c82225e70ef41d 502-545
+go/internal/relationships/github_actions_evidence.go
+  72c82225e70ef41d 193-212,217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "8a24ac032185c51eac9f858be242904f72bca4fc",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    },
+    "72c82225e70ef41d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9836-7763-76c0-a116-358a6223b5f9",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 65,
+      "total_deletions": 4,
+      "accepted_lines": 65,
+      "overriden_lines": 0
+    }
+  }
+}
