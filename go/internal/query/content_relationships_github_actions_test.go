@@ -182,6 +182,64 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 	}
 }
 
+func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRepositoriesListFromSource(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:     "gha-workflow-4c",
+		RepoID:       "repo-1",
+		RelativePath: ".github/workflows/pr-command-dispatch.yml",
+		EntityType:   "File",
+		EntityName:   "pr-command-dispatch",
+		Language:     "yaml",
+		SourceCache: `jobs:
+  dispatch-command:
+    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    with:
+      workflow_input_repositories:
+        - boatsgroup/core-engineering-automation
+        - boatsgroup/automation-fallback
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+
+	if len(relationships.outgoing) != 3 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 3", len(relationships.outgoing))
+	}
+
+	first := relationships.outgoing[0]
+	if got, want := first["type"], "DEPLOYS_FROM"; got != want {
+		t.Fatalf("relationships.outgoing[0][type] = %#v, want %#v", got, want)
+	}
+	if got, want := first["target_name"], "boatsgroup/core-engineering-automation"; got != want {
+		t.Fatalf("relationships.outgoing[0][target_name] = %#v, want %#v", got, want)
+	}
+
+	second := relationships.outgoing[1]
+	if got, want := second["type"], "DISCOVERS_CONFIG_IN"; got != want {
+		t.Fatalf("relationships.outgoing[1][type] = %#v, want %#v", got, want)
+	}
+	if got, want := second["target_name"], "boatsgroup/core-engineering-automation"; got != want {
+		t.Fatalf("relationships.outgoing[1][target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := second["reason"], "github_actions_workflow_input_repository"; got != want {
+		t.Fatalf("relationships.outgoing[1][reason] = %#v, want %#v", got, want)
+	}
+
+	third := relationships.outgoing[2]
+	if got, want := third["type"], "DISCOVERS_CONFIG_IN"; got != want {
+		t.Fatalf("relationships.outgoing[2][type] = %#v, want %#v", got, want)
+	}
+	if got, want := third["target_name"], "boatsgroup/automation-fallback"; got != want {
+		t.Fatalf("relationships.outgoing[2][target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := third["reason"], "github_actions_workflow_input_repository"; got != want {
+		t.Fatalf("relationships.outgoing[2][reason] = %#v, want %#v", got, want)
+	}
+}
+
 func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRepositoriesListMetadata(t *testing.T) {
 	t.Parallel()
 

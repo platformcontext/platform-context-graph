@@ -95,11 +95,11 @@ func githubActionsSourceRelationships(entity EntityContent) []githubActionsRelat
 				break
 			}
 			for _, key := range []string{"workflow_input_repository", "workflow_input_repositories", "automation-repo", "automation_repo"} {
-				repoValue, ok := yamlScalarValue(lines[j], key)
-				if !ok {
-					continue
-				}
-				if targetName := githubActionsRepositoryRef(repoValue); targetName != "" {
+				for _, repoValue := range yamlRepositoryValues(lines, j, key) {
+					targetName := githubActionsRepositoryRef(repoValue)
+					if targetName == "" {
+						continue
+					}
 					relationships = append(relationships, githubActionsRelationship{
 						relationshipType: "DISCOVERS_CONFIG_IN",
 						targetName:       targetName,
@@ -259,6 +259,46 @@ func yamlScalarValue(line string, key string) (string, bool) {
 		return "", false
 	}
 	return trimGitHubActionsScalar(value), true
+}
+
+func yamlRepositoryValues(lines []string, index int, key string) []string {
+	if index < 0 || index >= len(lines) {
+		return nil
+	}
+	if value, ok := yamlScalarValue(lines[index], key); ok {
+		return []string{value}
+	}
+
+	trimmed := strings.TrimSpace(lines[index])
+	prefix := key + ":"
+	if !strings.HasPrefix(trimmed, prefix) {
+		return nil
+	}
+	if strings.TrimSpace(strings.TrimPrefix(trimmed, prefix)) != "" {
+		return nil
+	}
+
+	parentIndent := leadingWhitespaceWidth(lines[index])
+	values := make([]string, 0, 2)
+	for i := index + 1; i < len(lines); i++ {
+		nextTrimmed := strings.TrimSpace(lines[i])
+		if nextTrimmed == "" || strings.HasPrefix(nextTrimmed, "#") {
+			continue
+		}
+		nextIndent := leadingWhitespaceWidth(lines[i])
+		if nextIndent <= parentIndent {
+			break
+		}
+		if !strings.HasPrefix(nextTrimmed, "- ") {
+			break
+		}
+		value := trimGitHubActionsScalar(strings.TrimSpace(strings.TrimPrefix(nextTrimmed, "- ")))
+		if value == "" {
+			continue
+		}
+		values = append(values, value)
+	}
+	return values
 }
 
 func trimGitHubActionsScalar(value string) string {
