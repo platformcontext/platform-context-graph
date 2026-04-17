@@ -16,7 +16,9 @@ var (
 	terragruntFindInParentFoldersPattern  = regexp.MustCompile(`(?i)find_in_parent_folders\(\s*(?:"([^"]+)")?\s*\)`)
 	terragruntIncludePathPattern          = regexp.MustCompile(`(?i)\bpath\s*=\s*find_in_parent_folders\(\s*(?:"([^"]+)")?\s*\)`)
 	localFileFunctionPattern              = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(\s*"([^"]+)"`)
+	localVariableFileFunctionPattern      = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(\s*local\.([A-Za-z0-9_]+)`)
 	localTerraformModuleSourcePattern     = regexp.MustCompile(`(?is)module\s+"[^"]+"\s*\{[^}]*?\bsource\b\s*=\s*"((?:\./|\.\./)[^"]+)"`)
+	localStringAssignmentPattern          = regexp.MustCompile(`(?m)^\s*([A-Za-z0-9_]+)\s*=\s*"([^"]+)"\s*$`)
 	ssmConfigPathPattern                  = regexp.MustCompile(`(?i)((?:/(?:configd|api)/[A-Za-z0-9._*/-]+))`)
 	ssmParameterARNPattern                = regexp.MustCompile(`(?i):parameter((?:/(?:configd|api)/[A-Za-z0-9._*/-]+))`)
 )
@@ -82,6 +84,7 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 		if lowerBase != "terragrunt.hcl" && !strings.HasSuffix(lowerBase, ".tf") && !strings.HasSuffix(lowerBase, ".hcl") {
 			continue
 		}
+		localConfigAssignments := extractLocalConfigAssignments(file.Content)
 		for _, match := range terragruntDependencyConfigPathPattern.FindAllStringSubmatch(file.Content, -1) {
 			if len(match) < 2 {
 				continue
@@ -120,6 +123,16 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 			}
 			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "local_config_asset")
 		}
+		for _, match := range localVariableFileFunctionPattern.FindAllStringSubmatch(file.Content, -1) {
+			if len(match) < 2 {
+				continue
+			}
+			configPath := normalizeLocalConfigAssetPath([]string{"", localConfigAssignments[match[1]]})
+			if configPath == "" {
+				continue
+			}
+			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "local_config_asset")
+		}
 		for _, match := range localTerraformModuleSourcePattern.FindAllStringSubmatch(file.Content, -1) {
 			configPath := normalizeLocalConfigAssetPath(match)
 			if configPath == "" {
@@ -129,6 +142,63 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 		}
 	}
 	return rows
+}
+
+func extractLocalConfigAssignments(content string) map[string]string {
+	assignments := make(map[string]string)
+	lines := strings.Split(content, "\n")
+	inLocals := false
+	depth := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !inLocals {
+			if !strings.HasPrefix(trimmed, "locals") || !strings.Contains(trimmed, "{") {
+				continue
+			}
+			inLocals = true
+			depth = countBracesOutsideStrings(line)
+			if depth <= 0 {
+				inLocals = false
+				depth = 0
+			}
+			continue
+		}
+		if assignment := localStringAssignmentPattern.FindStringSubmatch(line); len(assignment) >= 3 {
+			name := strings.TrimSpace(assignment[1])
+			value := strings.TrimSpace(assignment[2])
+			if name != "" && value != "" {
+				assignments[name] = value
+			}
+		}
+		depth += countBracesOutsideStrings(line)
+		if depth <= 0 {
+			inLocals = false
+			depth = 0
+		}
+	}
+	return assignments
+}
+
+func countBracesOutsideStrings(line string) int {
+	depth := 0
+	inString := false
+	escaped := false
+	for _, r := range line {
+		switch {
+		case escaped:
+			escaped = false
+			continue
+		case r == '\\' && inString:
+			escaped = true
+		case r == '"':
+			inString = !inString
+		case !inString && r == '{':
+			depth++
+		case !inString && r == '}':
+			depth--
+		}
+	}
+	return depth
 }
 
 func appendConfigArtifactRow(rows []map[string]any, seen map[string]struct{}, pathValue, repoName, relativePath, evidenceKind string) []map[string]any {

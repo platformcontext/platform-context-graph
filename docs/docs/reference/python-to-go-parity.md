@@ -135,7 +135,8 @@ honest signoff:
   `group_vars` / `host_vars`, and task entrypoint context through repository
   controller artifacts and deployment/story shaping. Broader controller-driven
   relationship promotion and richer workflow gating semantics still need
-  current-truth validation; Terraform variable-file promotion and the
+  current-truth validation; Terraform variable-file promotion, local-variable-
+  backed `file(local.foo)` / `templatefile(local.bar, ...)` config assets, and the
   shared-infra compose-backed deployment-trace proof are already proven on the
   normal Go path
 - JSON remains intentionally partial to avoid graph noise unless a specific

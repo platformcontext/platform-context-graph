@@ -515,7 +515,10 @@ Go-backed sources are:
   config references, including the default no-argument
   `find_in_parent_folders()` form that resolves the parent `terragrunt.hcl`
 - local Terraform and Terragrunt `file(...)` / `templatefile(...)` config
-  assets when the path is repo-local and not a remote module source
+  assets when the path is repo-local and not a remote module source, including
+  simple local-variable-backed forms such as `file(local.config_file_path)` and
+  `templatefile(local.lifecycle_template, ...)` when the local resolves to a
+  checked-in repo-relative path
 - Terraform `*.tfvars` and `*.tfvars.json` files on the normal HCL path
 - local Terraform `module.source = "./..."` style module-asset paths when the
   source is repo-local and not a registry or remote module ref

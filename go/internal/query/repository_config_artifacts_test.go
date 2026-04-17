@@ -368,3 +368,47 @@ func TestBuildRepositoryConfigArtifactsExtractsAnsibleConfigAssets(t *testing.T)
 		}
 	}
 }
+
+func TestBuildRepositoryConfigArtifactsExtractsLocalVariableConfigAssets(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-modules-aws", []FileContent{
+		{
+			RelativePath: "modules/service/main.tf",
+			Content: `locals {
+  config_file_path  = "${path.module}/config/runtime.yaml"
+  lifecycle_template = "${path.module}/templates/lifecycle.tpl"
+}
+
+resource "example" "service" {
+  rendered_config = file(local.config_file_path)
+  lifecycle       = templatefile(local.lifecycle_template, {})
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 2 {
+		t.Fatalf("len(config_paths) = %d, want 2", len(configPaths))
+	}
+
+	wantPaths := []string{"config/runtime.yaml", "templates/lifecycle.tpl"}
+	for index, want := range wantPaths {
+		if got, ok := configPaths[index]["path"].(string); !ok || got != want {
+			t.Fatalf("config_paths[%d].path = %#v, want %#v", index, configPaths[index]["path"], want)
+		}
+		if got, wantRepo := configPaths[index]["source_repo"], "terraform-modules-aws"; got != wantRepo {
+			t.Fatalf("config_paths[%d].source_repo = %#v, want %#v", index, got, wantRepo)
+		}
+		if got, wantRelative := configPaths[index]["relative_path"], "modules/service/main.tf"; got != wantRelative {
+			t.Fatalf("config_paths[%d].relative_path = %#v, want %#v", index, got, wantRelative)
+		}
+		if got, wantKind := configPaths[index]["evidence_kind"], "local_config_asset"; got != wantKind {
+			t.Fatalf("config_paths[%d].evidence_kind = %#v, want %#v", index, got, wantKind)
+		}
+	}
+}
