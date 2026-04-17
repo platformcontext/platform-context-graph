@@ -1,0 +1,46 @@
+docs/docs/deployment/service-runtimes.md
+  26d0a7775258d320 42-46,133-135
+docs/docs/reference/parity-closure-matrix.md
+  26d0a7775258d320 1-60
+docs/docs/reference/telemetry/index.md
+  26d0a7775258d320 97-102
+docs/docs/reference/relationship-mapping.md
+  26d0a7775258d320 42-49,53-54,189-213
+docs/mkdocs.yml
+  26d0a7775258d320 72
+docs/docs/reference/service-workflows.md
+  26d0a7775258d320 33-39,47-49,66-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "c78dfd55a42de5ca505f3c52604d9c57410f2294",
+  "prompts": {
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 137,
+      "total_deletions": 12,
+      "accepted_lines": 137,
+      "overriden_lines": 0
+    },
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 633,
+      "total_deletions": 0,
+      "accepted_lines": 633,
+      "overriden_lines": 0
+    }
+  }
+}
