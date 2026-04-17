@@ -55,6 +55,15 @@ func githubActionsMetadataRelationships(metadata map[string]any) []githubActions
 			})
 		}
 	}
+	for _, repoRef := range metadataStringSlice(metadata, "action_repositories") {
+		if targetName := githubActionsActionRepositoryRef(repoRef); targetName != "" {
+			relationships = append(relationships, githubActionsRelationship{
+				relationshipType: "DEPENDS_ON",
+				targetName:       targetName,
+				reason:           "github_actions_action_repository",
+			})
+		}
+	}
 	return relationships
 }
 
@@ -102,6 +111,14 @@ func githubActionsSourceRelationships(entity EntityContent) []githubActionsRelat
 		if targetName := githubActionsReusableWorkflowRepoRef(usesValue); targetName != "" {
 			continue
 		}
+		if targetName := githubActionsActionRepositoryRef(usesValue); targetName != "" {
+			relationships = append(relationships, githubActionsRelationship{
+				relationshipType: "DEPENDS_ON",
+				targetName:       targetName,
+				reason:           "github_actions_action_repository",
+			})
+			continue
+		}
 		if !strings.HasPrefix(strings.TrimSpace(usesValue), "actions/checkout@") {
 			continue
 		}
@@ -145,6 +162,7 @@ func entityLooksLikeGitHubActionsWorkflow(entity EntityContent) bool {
 		len(metadataStringSlice(entity.Metadata, "workflow_ref")) > 0 ||
 		len(metadataStringSlice(entity.Metadata, "checkout_repositories")) > 0 ||
 		len(metadataStringSlice(entity.Metadata, "checkout_repository")) > 0 ||
+		len(metadataStringSlice(entity.Metadata, "action_repositories")) > 0 ||
 		len(githubActionsWorkflowInputRepositoryMetadata(entity.Metadata)) > 0
 }
 
@@ -190,6 +208,30 @@ func githubActionsRepositoryRef(value string) string {
 		return trimmed
 	}
 	return ""
+}
+
+func githubActionsActionRepositoryRef(value string) string {
+	trimmed := strings.TrimSpace(trimGitHubActionsScalar(value))
+	if trimmed == "" || strings.HasPrefix(trimmed, "docker://") {
+		return ""
+	}
+	if strings.HasPrefix(trimmed, "actions/checkout@") {
+		return ""
+	}
+	if repoRef := githubActionsReusableWorkflowRepoRef(trimmed); repoRef != "" {
+		return ""
+	}
+	if at := strings.Index(trimmed, "@"); at >= 0 {
+		trimmed = trimmed[:at]
+	}
+	if strings.HasPrefix(trimmed, "./") || strings.HasPrefix(trimmed, ".github/") {
+		return ""
+	}
+	parts := strings.Split(trimmed, "/")
+	if len(parts) < 2 || parts[0] == "." {
+		return ""
+	}
+	return strings.Join(parts[:2], "/")
 }
 
 func isGitHubRepoSlug(value string) bool {

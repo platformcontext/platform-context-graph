@@ -181,3 +181,76 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 		t.Fatalf("relationships.outgoing[1][reason] = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesActionRepositories(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:     "gha-workflow-5",
+		RepoID:       "repo-1",
+		RelativePath: ".github/workflows/update-providers.yml",
+		EntityType:   "File",
+		EntityName:   "update-providers",
+		Language:     "yaml",
+		SourceCache: `jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: peter-evans/create-pull-request@v5
+      - uses: ./.github/actions/local-helper
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+
+	if len(relationships.outgoing) != 2 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 2", len(relationships.outgoing))
+	}
+
+	first := relationships.outgoing[0]
+	if got, want := first["type"], "DEPENDS_ON"; got != want {
+		t.Fatalf("relationships.outgoing[0][type] = %#v, want %#v", got, want)
+	}
+	if got, want := first["target_name"], "hashicorp/setup-terraform"; got != want {
+		t.Fatalf("relationships.outgoing[0][target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := first["reason"], "github_actions_action_repository"; got != want {
+		t.Fatalf("relationships.outgoing[0][reason] = %#v, want %#v", got, want)
+	}
+
+	second := relationships.outgoing[1]
+	if got, want := second["type"], "DEPENDS_ON"; got != want {
+		t.Fatalf("relationships.outgoing[1][type] = %#v, want %#v", got, want)
+	}
+	if got, want := second["target_name"], "peter-evans/create-pull-request"; got != want {
+		t.Fatalf("relationships.outgoing[1][target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := second["reason"], "github_actions_action_repository"; got != want {
+		t.Fatalf("relationships.outgoing[1][reason] = %#v, want %#v", got, want)
+	}
+}
+
+func TestGitHubActionsActionRepositoryRef(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "step action", in: "hashicorp/setup-terraform@v3", want: "hashicorp/setup-terraform"},
+		{name: "checkout stays explicit", in: "actions/checkout@v4", want: ""},
+		{name: "local action ignored", in: "./.github/actions/local-helper", want: ""},
+		{name: "reusable workflow ignored", in: "myorg/deployment-helm/.github/workflows/deploy.yaml@main", want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := githubActionsActionRepositoryRef(tc.in); got != tc.want {
+				t.Fatalf("githubActionsActionRepositoryRef(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}

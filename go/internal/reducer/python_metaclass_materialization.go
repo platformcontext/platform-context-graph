@@ -110,40 +110,6 @@ func extractPythonMetaclassRowsWithIndex(
 	return repositoryIDs, rows
 }
 
-func mergeCodeRelationshipRepositoryIDs(left []string, right []string) []string {
-	if len(left) == 0 {
-		return append([]string(nil), right...)
-	}
-	if len(right) == 0 {
-		return append([]string(nil), left...)
-	}
-
-	seen := make(map[string]struct{}, len(left)+len(right))
-	merged := make([]string, 0, len(left)+len(right))
-	for _, repositoryID := range left {
-		if repositoryID == "" {
-			continue
-		}
-		if _, ok := seen[repositoryID]; ok {
-			continue
-		}
-		seen[repositoryID] = struct{}{}
-		merged = append(merged, repositoryID)
-	}
-	for _, repositoryID := range right {
-		if repositoryID == "" {
-			continue
-		}
-		if _, ok := seen[repositoryID]; ok {
-			continue
-		}
-		seen[repositoryID] = struct{}{}
-		merged = append(merged, repositoryID)
-	}
-	sort.Strings(merged)
-	return merged
-}
-
 func resolvePythonClassEntityID(
 	index codeEntityIndex,
 	rawPath string,

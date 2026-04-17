@@ -145,6 +145,7 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		copyStringSliceField(entry, row, "local_reusable_workflow_paths")
 		copyStringSliceField(entry, row, "reusable_workflow_repositories")
 		copyStringSliceField(entry, row, "checkout_repositories")
+		copyStringSliceField(entry, row, "action_repositories")
 		copyStringSliceField(entry, row, "workflow_input_repositories")
 		if signals := stringSliceValue(row, "signals"); len(signals) > 0 {
 			entry["signals"] = signals
@@ -469,10 +470,22 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 					line += fmt.Sprintf(" via checkout repos %s", strings.Join(checkoutRepos, ", "))
 				}
 			}
+			if actionRepos := stringSliceValue(row, "action_repositories"); len(actionRepos) > 0 {
+				switch {
+				case strings.Contains(line, " via reusable workflow repos "),
+					strings.Contains(line, " via checkout repos "),
+					strings.Contains(line, " and checkout repos "):
+					line += fmt.Sprintf(" and action repos %s", strings.Join(actionRepos, ", "))
+				default:
+					line += fmt.Sprintf(" via action repos %s", strings.Join(actionRepos, ", "))
+				}
+			}
 			if workflowInputRepos := stringSliceValue(row, "workflow_input_repositories"); len(workflowInputRepos) > 0 {
 				if strings.Contains(line, " via reusable workflow repos ") ||
 					strings.Contains(line, " via checkout repos ") ||
-					strings.Contains(line, " and checkout repos ") {
+					strings.Contains(line, " and checkout repos ") ||
+					strings.Contains(line, " via action repos ") ||
+					strings.Contains(line, " and action repos ") {
 					line += fmt.Sprintf(" and workflow input repos %s", strings.Join(workflowInputRepos, ", "))
 				} else {
 					line += fmt.Sprintf(" via workflow input repos %s", strings.Join(workflowInputRepos, ", "))

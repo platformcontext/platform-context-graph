@@ -165,6 +165,43 @@ jobs:
 	}
 }
 
+func TestBuildRepositoryWorkflowArtifactsIncludesActionRepositories(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryWorkflowArtifacts([]FileContent{
+		{
+			RelativePath: ".github/workflows/update-providers.yml",
+			ArtifactType: "github_actions_workflow",
+			Content: `name: Update providers
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: peter-evans/create-pull-request@v5
+      - uses: ./.github/actions/local-helper
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryWorkflowArtifacts() = nil, want workflow_artifacts")
+	}
+
+	rows := mapSliceValue(got, "workflow_artifacts")
+	if len(rows) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(rows))
+	}
+
+	row := rows[0]
+	if got, want := StringSliceVal(row, "action_repositories"), []string{"hashicorp/setup-terraform", "peter-evans/create-pull-request"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("workflow_artifacts[0].action_repositories = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(row, "signals"), []string{"workflow_file", "action_repositories"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("workflow_artifacts[0].signals = %#v, want %#v", got, want)
+	}
+}
+
 func TestBuildRepositoryWorkflowArtifactsIncludesWorkflowTriggerAndMatrixMetadata(t *testing.T) {
 	t.Parallel()
 

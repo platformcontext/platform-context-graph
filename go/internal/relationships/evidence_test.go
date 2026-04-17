@@ -499,6 +499,45 @@ jobs:
 	}
 }
 
+func TestDiscoverGitHubActionsActionRepositoryEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-service",
+			Payload: map[string]any{
+				"artifact_type": "github_actions_workflow",
+				"relative_path": ".github/workflows/update-providers.yml",
+				"content": `name: Update providers
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: peter-evans/create-pull-request@v5
+      - uses: ./.github/actions/local-helper
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-hashicorp-setup-terraform", Aliases: []string{"hashicorp/setup-terraform", "setup-terraform"}},
+		{RepoID: "repo-peter-evans-create-pr", Aliases: []string{"peter-evans/create-pull-request", "create-pull-request"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 2 {
+		t.Fatalf("len = %d, want 2", len(evidence))
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindGitHubActionsActionRepository) {
+		t.Fatal("missing GitHub Actions action repository evidence")
+	}
+	if !hasRelationshipType(evidence, RelDependsOn) {
+		t.Fatalf("missing %q evidence", RelDependsOn)
+	}
+}
+
 func TestDiscoverDockerComposeEvidence(t *testing.T) {
 	t.Parallel()
 

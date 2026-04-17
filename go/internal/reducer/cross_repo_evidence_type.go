@@ -24,6 +24,7 @@ var evidenceKindToType = map[relationships.EvidenceKind]string{
 	relationships.EvidenceKindGitHubActionsReusableWorkflow:        "github_actions_reusable_workflow_ref",
 	relationships.EvidenceKindGitHubActionsCheckoutRepository:      "github_actions_checkout_repository",
 	relationships.EvidenceKindGitHubActionsWorkflowInputRepository: "github_actions_workflow_input_repository",
+	relationships.EvidenceKindGitHubActionsActionRepository:        "github_actions_action_repository",
 	relationships.EvidenceKindJenkinsSharedLibrary:                 "jenkins_shared_library",
 	relationships.EvidenceKindJenkinsGitHubRepository:              "jenkins_github_repository",
 	relationships.EvidenceKindDockerComposeBuildContext:            "docker_compose_build_context",

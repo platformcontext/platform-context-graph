@@ -39,6 +39,16 @@ func discoverGitHubActionsEvidence(
 				},
 			)...)
 		}
+		for _, candidate := range githubActionsActionRepositoryRefs(document) {
+			evidence = append(evidence, matchCatalog(
+				sourceRepoID, candidate, filePath,
+				EvidenceKindGitHubActionsActionRepository, RelDependsOn, 0.88,
+				"GitHub Actions step uses the target repository as an action dependency",
+				"github_actions", catalog, seen, map[string]any{
+					"action_repository": candidate,
+				},
+			)...)
+		}
 	}
 	return evidence
 }
@@ -137,6 +147,37 @@ func githubActionsWorkflowInputRepositoryRefs(document map[string]any) []string 
 	return uniqueStrings(refs)
 }
 
+func githubActionsActionRepositoryRefs(document map[string]any) []string {
+	jobsValue, ok := document["jobs"]
+	if !ok {
+		return nil
+	}
+
+	jobs, ok := jobsValue.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	refs := make([]string, 0)
+	for _, rawJob := range jobs {
+		job, ok := rawJob.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, rawStep := range sliceValue(job["steps"]) {
+			step, ok := rawStep.(map[string]any)
+			if !ok {
+				continue
+			}
+			if repoRef := githubActionsActionRepoRef(stringValue(step["uses"])); repoRef != "" {
+				refs = append(refs, repoRef)
+			}
+		}
+	}
+
+	return uniqueStrings(refs)
+}
+
 func reusableWorkflowRepoRef(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -154,6 +195,31 @@ func reusableWorkflowRepoRef(value string) string {
 		return ""
 	}
 	if parts[2] != ".github" {
+		return ""
+	}
+	return strings.Join(parts[:2], "/")
+}
+
+func githubActionsActionRepoRef(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || strings.HasPrefix(trimmed, "docker://") {
+		return ""
+	}
+	if strings.HasPrefix(trimmed, "actions/checkout@") {
+		return ""
+	}
+	at := strings.Index(trimmed, "@")
+	if at >= 0 {
+		trimmed = trimmed[:at]
+	}
+	if strings.HasPrefix(trimmed, "./") || strings.HasPrefix(trimmed, ".github/") {
+		return ""
+	}
+	if repoRef := reusableWorkflowRepoRef(trimmed); repoRef != "" {
+		return ""
+	}
+	parts := strings.Split(trimmed, "/")
+	if len(parts) < 2 || parts[0] == "." {
 		return ""
 	}
 	return strings.Join(parts[:2], "/")

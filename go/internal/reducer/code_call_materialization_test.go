@@ -285,36 +285,3 @@ func (r *recordingCodeCallIntentWriter) UpsertIntents(_ context.Context, rows []
 	r.rows = append(r.rows, rows...)
 	return nil
 }
-
-type recordingCodeCallEdgeWriter struct {
-	retractDomain         string
-	retractEvidenceSource string
-	retractRows           []SharedProjectionIntentRow
-	writeDomain           string
-	writeEvidenceSource   string
-	writeRows             []SharedProjectionIntentRow
-}
-
-func (r *recordingCodeCallEdgeWriter) RetractEdges(
-	_ context.Context,
-	domain string,
-	rows []SharedProjectionIntentRow,
-	evidenceSource string,
-) error {
-	r.retractDomain = domain
-	r.retractEvidenceSource = evidenceSource
-	r.retractRows = append(r.retractRows, rows...)
-	return nil
-}
-
-func (r *recordingCodeCallEdgeWriter) WriteEdges(
-	_ context.Context,
-	domain string,
-	rows []SharedProjectionIntentRow,
-	evidenceSource string,
-) error {
-	r.writeDomain = domain
-	r.writeEvidenceSource = evidenceSource
-	r.writeRows = append(r.writeRows, rows...)
-	return nil
-}

@@ -37,6 +37,14 @@ func TestResolvedRelationshipEvidenceTypeFallsBackToEvidenceKinds(t *testing.T) 
 	}
 }
 
+func TestNormalizeEvidenceKindMapsGitHubActionsActionRepository(t *testing.T) {
+	t.Parallel()
+
+	if got, want := normalizeEvidenceKind(string(relationships.EvidenceKindGitHubActionsActionRepository)), "github_actions_action_repository"; got != want {
+		t.Fatalf("normalizeEvidenceKind() = %q, want %q", got, want)
+	}
+}
+
 func TestNormalizeEvidenceKindFallsBackToLowercaseConstant(t *testing.T) {
 	t.Parallel()
 

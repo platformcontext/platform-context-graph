@@ -91,6 +91,7 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	reusableWorkflowRepositories,
 		localReusableWorkflowPaths,
 		checkoutRepositories,
+		actionRepositories,
 		workflowInputRepositories,
 		runCommands,
 		gatingConditions,
@@ -116,6 +117,10 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	if len(checkoutRepositories) > 0 {
 		row["checkout_repositories"] = checkoutRepositories
 		signals = append(signals, "checkout_repositories")
+	}
+	if len(actionRepositories) > 0 {
+		row["action_repositories"] = actionRepositories
+		signals = append(signals, "action_repositories")
 	}
 	if len(workflowInputRepositories) > 0 {
 		row["workflow_input_repositories"] = workflowInputRepositories
@@ -169,15 +174,16 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	}
 }
 
-func workflowArtifactDetails(content string) ([]string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, int) {
+func workflowArtifactDetails(content string) ([]string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, int) {
 	documents, err := decodeYAMLMaps(content)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
 	}
 
 	reusableWorkflowRepositories := make([]string, 0)
 	localReusableWorkflowPaths := make([]string, 0)
 	checkoutRepositories := make([]string, 0)
+	actionRepositories := make([]string, 0)
 	workflowInputRepositories := make([]string, 0)
 	runCommands := make([]string, 0)
 	gatingConditions := make([]string, 0)
@@ -243,6 +249,9 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 				if usesValue := StringVal(step, "uses"); strings.HasPrefix(strings.TrimSpace(usesValue), "actions/checkout@") {
 					checkoutRepositories = append(checkoutRepositories, githubActionsCheckoutRepositories(step)...)
 				}
+				if actionRepository := githubActionsActionRepositoryRef(StringVal(step, "uses")); actionRepository != "" {
+					actionRepositories = append(actionRepositories, actionRepository)
+				}
 				runCommand := strings.TrimSpace(StringVal(step, "run"))
 				if runCommand == "" {
 					runCommand = ""
@@ -264,6 +273,7 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 	return sortedUniqueWorkflowStrings(reusableWorkflowRepositories),
 		sortedUniqueWorkflowStrings(localReusableWorkflowPaths),
 		sortedUniqueWorkflowStrings(checkoutRepositories),
+		sortedUniqueWorkflowStrings(actionRepositories),
 		sortedUniqueWorkflowStrings(workflowInputRepositories),
 		sortedUniqueWorkflowStrings(runCommands),
 		sortedUniqueWorkflowStrings(gatingConditions),
