@@ -70,8 +70,6 @@ spec:
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:
-            - name: PCG_RUNTIME_ROLE
-              value: "ingester"
             - name: PCG_HOME
               value: /data/.platform-context-graph
             - name: HOME
@@ -96,10 +94,6 @@ spec:
               value: {{ .Values.repoSync.source.cloneDepth | quote }}
             - name: PCG_REPO_LIMIT
               value: {{ .Values.repoSync.source.limit | quote }}
-            - name: PCG_REPO_SYNC_INITIAL_DELAY_SECONDS
-              value: {{ .Values.repoSync.initialDelaySeconds | quote }}
-            - name: PCG_REPO_SYNC_INTERVAL_SECONDS
-              value: {{ .Values.repoSync.intervalSeconds | quote }}
             - name: NEO4J_URI
               value: {{ .Values.neo4j.uri | quote }}
             {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}

@@ -47,8 +47,6 @@ spec:
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:
-            - name: PCG_RUNTIME_ROLE
-              value: "resolution-engine"
             - name: PCG_HOME
               value: /tmp/.platform-context-graph
             - name: HOME

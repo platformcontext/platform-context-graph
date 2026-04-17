@@ -43,14 +43,10 @@ helm template platform-context-graph ./deploy/helm/platform-context-graph
 | `repoSync.source.rules` | Structured include rules for Git discovery |
 | `observability.otel.*` | OTLP settings for traces and metrics |
 | `observability.prometheus.*` | Prometheus scrape endpoint and `ServiceMonitor` settings |
-| `env.PCG_LOG_FORMAT` | Shared log format. Keep this at `json` in deployed environments. |
 
 Typical OTEL collector override:
 
 ```yaml
-env:
-  PCG_LOG_FORMAT: json
-
 observability:
   environment: ops-qa
   otel:
@@ -161,10 +157,8 @@ The external PostgreSQL instance must support the `pg_trgm` extension. PCG creat
 
 ## Logging And Tracing Defaults
 
-Production should keep two observability defaults in place:
-
-- `PCG_LOG_FORMAT=json`
-- OTLP trace export enabled through the existing `observability.otel.*` values
+Production should keep OTLP trace export enabled through the existing
+`observability.otel.*` values:
 
 That gives you:
 

@@ -59,7 +59,6 @@ repoSync:
       - regex: myorg/platform-.*
 
 env:
-  PCG_LOG_FORMAT: json
   PCG_ENABLE_PUBLIC_DOCS: "true"
 
 observability:
