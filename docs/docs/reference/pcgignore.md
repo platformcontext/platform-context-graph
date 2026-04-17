@@ -20,8 +20,7 @@ including:
 - `.aws-sam/`
 - `cdk.out/`
 
-PCG also excludes built-in dependency roots before parse when
-`PCG_IGNORE_DEPENDENCY_DIRS=true`:
+PCG also excludes built-in dependency roots before parse by default:
 
 - JavaScript and TypeScript: `node_modules/`, `bower_components/`,
   `jspm_packages/`

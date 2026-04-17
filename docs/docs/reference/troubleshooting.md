@@ -67,7 +67,7 @@ PCG should skip `.git`, `.terraform`, `.terragrunt-cache`, and similar cache tre
 
 If you suspect this is not happening:
 
-1. Check your `.pcgignore` and `IGNORE_DIRS` configuration
+1. Check your `.pcgignore` patterns and repository-source configuration
 2. Re-index with `pcg index <path> --force`
 3. Inspect file paths in the graph for hidden cache segments
 

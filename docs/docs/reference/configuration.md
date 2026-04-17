@@ -22,11 +22,11 @@ Update a setting permanently. This writes to `~/.platform-context-graph/.env`.
 # Switch to Neo4j backend
 pcg config set DEFAULT_DATABASE neo4j
 
-# Increase max file size to index (MB)
-pcg config set MAX_FILE_SIZE_MB 20
+# Select filesystem discovery for a local workspace
+pcg config set PCG_REPO_SOURCE_MODE filesystem
 
-# Enable automatic watching after index
-pcg config set ENABLE_AUTO_WATCH true
+# Persist a local API bearer token for CLI calls
+pcg config set PCG_API_KEY local-compose-token
 ```
 
 The user-level `~/.platform-context-graph/.env` file is for CLI settings, not
@@ -52,8 +52,6 @@ Here are the available settings you can configure.
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | **`DEFAULT_DATABASE`** | `falkordb` | The database engine to use (`neo4j`, `falkordb`, or `kuzudb`). |
-| **`ENABLE_AUTO_WATCH`** | `false` | If `true`, `pcg index` will automatically start watching for changes. |
-| **`CACHE_ENABLED`** | `true` | Caches file hashes to speed up re-indexing. |
 
 ### Logging And Tracing
 
@@ -112,14 +110,13 @@ uses these unsupported controls.
 
 ### Indexing Scope
 
-| Key | Default | Description |
-| :--- | :--- | :--- |
-| **`MAX_FILE_SIZE_MB`** | `5` | Files larger than this (in MB) are skipped. |
-| **`IGNORE_TESTS`** | `false` | If `true`, skips folders named `tests` or `spec`. |
-| **`IGNORE_HIDDEN`** | `true` | Skips hidden files (`.git`, `.vscode`). |
-| **`IGNORE_DIRS`** | built-in list | Comma-separated directory names that PCG always skips before descent. Defaults include `.git`, common virtualenv roots, and generic build caches. |
-| **`PCG_IGNORE_DEPENDENCY_DIRS`** | `true` | Excludes built-in dependency and tool-managed cache roots such as `vendor/`, `node_modules/`, `site-packages/`, `deps/`, `.terraform/`, and `.terragrunt-cache/` before parse and storage. |
-| **`INDEX_VARIABLES`** | `true` | Creates nodes for variables. Set to `false` for a smaller graph. |
+The current Go runtime does not expose public environment variables for file-size
+limits, hidden-directory skipping, or dependency-root pruning. Those defaults
+are built into the discovery and parser pipeline.
+
+Use `.pcgignore` for repo-specific exclusions, and use the repository-source
+settings below when you need to switch between GitHub discovery, explicit repo
+lists, and direct filesystem mode.
 
 ### Database Connection (Neo4j)
 
@@ -152,19 +149,16 @@ resolution-engine workloads should be tuned independently.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| **`PCG_CONTENT_STORE_ENABLED`** | `true` | Enables PostgreSQL-backed content retrieval and search. Set this to `false` to disable Postgres content access entirely. |
 | **`PCG_CONTENT_STORE_DSN`** | unset | Primary DSN for the PostgreSQL content store. |
 | **`PCG_POSTGRES_DSN`** | unset | Backward-compatible alias for the PostgreSQL content store DSN. |
 | **`PCG_FACT_STORE_DSN`** | unset | Primary DSN for the facts-first PostgreSQL fact store. Falls back to `PCG_CONTENT_STORE_DSN` or `PCG_POSTGRES_DSN` when unset. |
-| **`PCG_FACT_STORE_POOL_MAX_SIZE`** | `4` | Maximum psycopg pool size for the fact-store backend. |
-| **`PCG_FACT_QUEUE_POOL_MAX_SIZE`** | `4` | Maximum psycopg pool size for the facts work-queue backend. |
 
 Notes:
 
 - deployed API runtimes use the PostgreSQL content store directly and return `unavailable` when content is not yet indexed
 - facts-first Git ingestion also uses Postgres for fact persistence and queued projection work
 - local helper flows may still fall back to the workspace or graph cache
-- content search routes and MCP search tools require PostgreSQL and return an error when the content store is disabled
+- content search routes and MCP search tools require PostgreSQL-backed content to be available
 - portable source retrieval uses `repo_id + relative_path` for files and `entity_id` for content-bearing entities
 - the Helm chart exposes Go runtime pool tuning per workload under `api.connectionTuning`, `ingester.connectionTuning`, and `resolutionEngine.connectionTuning`
 
@@ -206,9 +200,8 @@ bearer-token store; the Go API and MCP runtimes read `PCG_API_KEY` from their
 own process environment when bearer auth is enabled.
 
 Use `.pcgignore` for project-specific exclusions. Use
-`PCG_IGNORE_DEPENDENCY_DIRS` to control the built-in dependency-root policy, and
-use `IGNORE_DIRS` only if you want to change the generic always-ignore
-directory list globally.
+the built-in dependency-root pruning plus repository-source settings for
+global indexing behavior.
 
 For logging, the rule is simpler: the current Go runtimes always emit JSON to
 stderr, so deployment tuning should focus on OTLP export and log shipping
