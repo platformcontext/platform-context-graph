@@ -41,25 +41,25 @@ WITH latest_generations AS (
     GROUP BY generation.scope_id, scope.active_generation_id
 )
 SELECT
-    fact_id,
-    scope_id,
-    generation_id,
-    fact_kind,
-    stable_fact_key,
-    source_system,
-    source_fact_key,
-    COALESCE(source_uri, ''),
-    COALESCE(source_record_id, ''),
-    observed_at,
-    is_tombstone,
-    payload
+    fact.fact_id,
+    fact.scope_id,
+    fact.generation_id,
+    fact.fact_kind,
+    fact.stable_fact_key,
+    fact.source_system,
+    fact.source_fact_key,
+    COALESCE(fact.source_uri, ''),
+    COALESCE(fact.source_record_id, ''),
+    fact.observed_at,
+    fact.is_tombstone,
+    fact.payload
 FROM fact_records AS fact
 JOIN latest_generations AS latest
   ON latest.scope_id = fact.scope_id
  AND latest.generation_id = fact.generation_id
 WHERE latest.generation_id IS NOT NULL
-  AND fact_kind IN ('content', 'file')
-ORDER BY observed_at ASC, fact_id ASC
+  AND fact.fact_kind IN ('content', 'file')
+ORDER BY fact.observed_at ASC, fact.fact_id ASC
 `
 
 const upsertIngestionScopeQuery = `

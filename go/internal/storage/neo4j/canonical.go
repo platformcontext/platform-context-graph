@@ -80,12 +80,14 @@ SET rel.confidence = 0.98,
     rel.reason = 'Deployment manifests for workload instance live in deployment repository',
     rel.evidence_source = $evidence_source`
 
-const canonicalRepoDependencyUpsertCypher = `MATCH (source_repo:Repository {id: $repo_id})
-MATCH (target_repo:Repository {id: $target_repo_id})
+const canonicalRepoDependencyUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
+MERGE (target_repo:Repository {id: $target_repo_id})
 MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)
 SET rel.confidence = 0.9,
     rel.reason = 'Runtime services list declares repository dependency',
-    rel.evidence_source = $evidence_source`
+    rel.evidence_source = $evidence_source,
+    rel.evidence_type = $evidence_type,
+    rel.relationship_type = 'DEPENDS_ON'`
 
 const canonicalWorkloadDependencyUpsertCypher = `MATCH (source:Workload {id: $workload_id})
 MATCH (target:Workload {id: $target_workload_id})
@@ -137,12 +139,14 @@ SET rel.confidence = 0.98,
     rel.evidence_source = row.evidence_source`
 
 const batchCanonicalRepoDependencyUpsertCypher = `UNWIND $rows AS row
-MATCH (source_repo:Repository {id: row.repo_id})
-MATCH (target_repo:Repository {id: row.target_repo_id})
+MERGE (source_repo:Repository {id: row.repo_id})
+MERGE (target_repo:Repository {id: row.target_repo_id})
 MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)
 SET rel.confidence = 0.9,
     rel.reason = 'Runtime services list declares repository dependency',
-    rel.evidence_source = row.evidence_source`
+    rel.evidence_source = row.evidence_source,
+    rel.evidence_type = row.evidence_type,
+    rel.relationship_type = 'DEPENDS_ON'`
 
 const batchCanonicalWorkloadDependencyUpsertCypher = `UNWIND $rows AS row
 MATCH (source:Workload {id: row.workload_id})
@@ -324,6 +328,7 @@ type CanonicalDeploymentSourceParams struct {
 type CanonicalRepoDependencyParams struct {
 	RepoID       string
 	TargetRepoID string
+	EvidenceType string
 }
 
 // CanonicalWorkloadDependencyParams holds the parameters for a Workload
@@ -440,6 +445,7 @@ func BuildCanonicalRepoDependencyUpsert(p CanonicalRepoDependencyParams, evidenc
 		Parameters: map[string]any{
 			"repo_id":         p.RepoID,
 			"target_repo_id":  p.TargetRepoID,
+			"evidence_type":   p.EvidenceType,
 			"evidence_source": evidenceSource,
 		},
 	}

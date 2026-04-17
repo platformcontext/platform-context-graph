@@ -27,6 +27,14 @@ repository_relationships:
     source: service-edge-api
     target: deployment-kustomize
   - type: DEPLOYS_FROM
+    source: service-edge-api
+    target: delivery-legacy-automation
+    evidence_type: github_actions_reusable_workflow_ref
+  - type: DEPLOYS_FROM
+    source: service-edge-api
+    target: service-worker-jobs
+    evidence_type: docker_compose_build_context
+  - type: DEPLOYS_FROM
     source: service-worker-jobs
     target: deployment-kustomize
   - type: DISCOVERS_CONFIG_IN
@@ -35,6 +43,7 @@ repository_relationships:
   - type: DEPENDS_ON
     source: service-edge-api
     target: service-worker-jobs
+    evidence_type: docker_compose_depends_on
 platform_relationships:
   - type: PROVISIONS_PLATFORM
     source: infra-runtime-legacy
@@ -118,6 +127,8 @@ api_expectations:
       - charts/service-edge-api/Chart.yaml
     cloudformation_resource_paths:
       - infra/api-service.yaml
+    docker_compose_paths:
+      - docker-compose.yaml
     k8s_resource_paths:
       - k8s/deployment.yaml
   expected_delivery_workflows:
@@ -127,6 +138,8 @@ api_expectations:
       workflow_paths:
         - .github/workflows/deploy-legacy.yml
       command_count: 0
+      reusable_workflow_repositories:
+        - delivery-legacy-automation
     jenkins:
       relative_paths:
         - Jenkinsfile

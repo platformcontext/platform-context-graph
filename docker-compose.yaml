@@ -91,6 +91,32 @@ services:
       postgres:
         condition: service_healthy
 
+  workspace-setup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "0:0"
+    healthcheck:
+      disable: true
+    environment:
+      PCG_HOME: /data/.platform-context-graph
+      PCG_REPOS_DIR: /data/repos
+    volumes:
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
+      - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        mkdir -p /data/.platform-context-graph /data/repos
+        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi
+        chown -R 10001:10001 /data
+
   bootstrap-index:
     build:
       context: .
@@ -127,19 +153,19 @@ services:
       PCG_LARGE_REPO_MAX_CONCURRENT: ${PCG_LARGE_REPO_MAX_CONCURRENT:-1}
       GOMEMLIMIT: ${GOMEMLIMIT:-}
     volumes:
-      - pcg_data:/data
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
       - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        mkdir -p /data/repos && \
-        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
-        exec /usr/local/bin/pcg-bootstrap-index
+    command: ["/usr/local/bin/pcg-bootstrap-index"]
     depends_on:
       db-migrate:
+        condition: service_completed_successfully
+      workspace-setup:
         condition: service_completed_successfully
       otel-collector:
         condition: service_started
@@ -180,11 +206,17 @@ services:
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
-      - pcg_data:/data
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
     depends_on:
       db-migrate:
+        condition: service_completed_successfully
+      workspace-setup:
         condition: service_completed_successfully
       otel-collector:
         condition: service_started
@@ -231,11 +263,17 @@ services:
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
-      - pcg_data:/data
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
     depends_on:
       db-migrate:
+        condition: service_completed_successfully
+      workspace-setup:
         condition: service_completed_successfully
       otel-collector:
         condition: service_started
@@ -290,18 +328,19 @@ services:
       PCG_LARGE_REPO_MAX_CONCURRENT: ${PCG_LARGE_REPO_MAX_CONCURRENT:-1}
       GOMEMLIMIT: ${GOMEMLIMIT:-}
     volumes:
-      - pcg_data:/data
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
       - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
-        exec /usr/local/bin/pcg-ingester
+    command: ["/usr/local/bin/pcg-ingester"]
     depends_on:
       bootstrap-index:
+        condition: service_completed_successfully
+      workspace-setup:
         condition: service_completed_successfully
       otel-collector:
         condition: service_started
@@ -354,11 +393,17 @@ services:
       PCG_SHARED_PROJECTION_LEASE_TTL: ${PCG_SHARED_PROJECTION_LEASE_TTL:-}
       PCG_REDUCER_BATCH_CLAIM_SIZE: ${PCG_REDUCER_BATCH_CLAIM_SIZE:-}
     volumes:
-      - pcg_data:/data
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
     depends_on:
       db-migrate:
+        condition: service_completed_successfully
+      workspace-setup:
         condition: service_completed_successfully
       otel-collector:
         condition: service_started

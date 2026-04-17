@@ -111,6 +111,47 @@ func TestBuildRepositoryRelationshipOverviewSeparatesControllerAndWorkflowEviden
 	}
 }
 
+func TestBuildRepositoryRelationshipOverviewTreatsDockerComposeAsIACDriven(t *testing.T) {
+	t.Parallel()
+
+	overview := buildRepositoryRelationshipOverview([]map[string]any{
+		{
+			"type":          "DEPLOYS_FROM",
+			"target_name":   "service-worker-jobs",
+			"target_id":     "repo-worker",
+			"evidence_type": "docker_compose_build_context",
+		},
+		{
+			"type":          "DEPENDS_ON",
+			"target_name":   "service-worker-jobs",
+			"target_id":     "repo-worker",
+			"evidence_type": "docker_compose_depends_on",
+		},
+	})
+
+	if overview == nil {
+		t.Fatal("buildRepositoryRelationshipOverview() = nil, want typed relationship overview")
+	}
+
+	iacDriven, ok := overview["iac_driven"].([]map[string]any)
+	if !ok {
+		t.Fatalf("iac_driven type = %T, want []map[string]any", overview["iac_driven"])
+	}
+	if len(iacDriven) != 2 {
+		t.Fatalf("len(iac_driven) = %d, want 2", len(iacDriven))
+	}
+
+	evidenceTypes := map[string]struct{}{}
+	for _, row := range iacDriven {
+		evidenceTypes[StringVal(row, "evidence_type")] = struct{}{}
+	}
+	for _, want := range []string{"docker_compose_build_context", "docker_compose_depends_on"} {
+		if _, ok := evidenceTypes[want]; !ok {
+			t.Fatalf("iac_driven missing evidence_type %q", want)
+		}
+	}
+}
+
 func containsSubstring(value string, needle string) bool {
 	return strings.Contains(value, needle)
 }

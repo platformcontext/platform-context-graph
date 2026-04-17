@@ -239,6 +239,64 @@ api_get() {
     fi
 }
 
+repository_id_by_name() {
+    local repo_name="$1"
+    jq -r --arg repo_name "$repo_name" '
+        def repo_rows:
+            if type == "array" then
+                .[]
+            elif ((.repositories? // []) | length > 0) then
+                .repositories[]
+            elif ((.items? // []) | length > 0) then
+                .items[]
+            else
+                empty
+            end;
+        first(repo_rows | select((.name // "") == $repo_name) | (.repo_id // .id // .repository_id // empty))
+    ' "$REPOSITORIES_FILE"
+}
+
+verify_service_edge_api_context() {
+    local repo_id
+    repo_id="$(repository_id_by_name "service-edge-api")"
+    if [[ -z "$repo_id" || "$repo_id" == "null" ]]; then
+        echo "Could not resolve service-edge-api repository id from /repositories payload." >&2
+        return 1
+    fi
+
+    api_get "/repositories/${repo_id}/context" "$CONTEXT_FILE"
+    jq -e '
+        (.repository.name // "") == "service-edge-api" and
+        ((.relationship_overview.workflow_driven // []) | any(
+            (.type // "") == "DEPLOYS_FROM" and
+            (.target_name // "") == "delivery-legacy-automation" and
+            (.evidence_type // "") == "github_actions_reusable_workflow_ref"
+        )) and
+        ((.relationship_overview.iac_driven // []) | any(
+            (.type // "") == "DEPLOYS_FROM" and
+            (.target_name // "") == "service-worker-jobs" and
+            (.evidence_type // "") == "docker_compose_build_context"
+        )) and
+        ((.relationship_overview.iac_driven // []) | any(
+            (.type // "") == "DEPENDS_ON" and
+            (.target_name // "") == "service-worker-jobs" and
+            (.evidence_type // "") == "docker_compose_depends_on"
+        )) and
+        ((.infrastructure_overview.artifact_family_counts.github_actions // 0) >= 1) and
+        ((.infrastructure_overview.artifact_family_counts.docker // 0) >= 1) and
+        ((.deployment_artifacts.deployment_artifacts // []) | any(
+            (.artifact_type // "") == "docker_compose" and
+            (.relative_path // "") == "docker-compose.yaml" and
+            (.service_name // "") == "edge-api"
+        )) and
+        ((.deployment_artifacts.deployment_artifacts // []) | any(
+            (.artifact_type // "") == "docker_compose" and
+            (.relative_path // "") == "docker-compose.yaml" and
+            (.service_name // "") == "service-worker-jobs"
+        ))
+    ' "$CONTEXT_FILE" >/dev/null
+}
+
 verify_api_surface() {
     local repo_id
     local relationship_repo_id
@@ -325,6 +383,8 @@ verify_api_surface() {
             ((.relationship_overview.iac_driven // []) | length) > 0
         )
     ' "$CONTEXT_FILE" >/dev/null
+
+    verify_service_edge_api_context
 }
 
 verify_graph_state() {

@@ -281,7 +281,7 @@ func shouldSkipFilesystemEntry(
 	if name == ".DS_Store" {
 		return true
 	}
-	if strings.HasPrefix(name, ".") {
+	if strings.HasPrefix(name, ".") && !preserveFilesystemHiddenPath(rel) {
 		return true
 	}
 	if isCollectorGitignoredInRepo(repoRoot, fullPath, cache) {
@@ -294,6 +294,17 @@ func shouldSkipFilesystemEntry(
 		}
 	}
 	return rel == "."
+}
+
+func preserveFilesystemHiddenPath(rel string) bool {
+	normalized := path.Clean(filepath.ToSlash(rel))
+	if normalized == "." {
+		return false
+	}
+
+	return normalized == ".github" ||
+		normalized == ".github/workflows" ||
+		strings.HasPrefix(normalized, ".github/workflows/")
 }
 
 type collectorGitignoreSpec struct {

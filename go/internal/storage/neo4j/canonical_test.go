@@ -105,6 +105,12 @@ func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
 	if stmt.Operation != OperationCanonicalUpsert {
 		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
 	}
+	if !strings.Contains(stmt.Cypher, "MERGE (source_repo:Repository {id: row.repo_id})") {
+		t.Fatalf("Cypher missing source Repository MERGE: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (target_repo:Repository {id: row.target_repo_id})") {
+		t.Fatalf("Cypher missing target Repository MERGE: %s", stmt.Cypher)
+	}
 	if !strings.Contains(stmt.Cypher, "MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)") {
 		t.Fatalf("Cypher missing DEPLOYS_FROM edge: %s", stmt.Cypher)
 	}
@@ -194,19 +200,35 @@ func TestBuildCanonicalRepoDependencyUpsertStatement(t *testing.T) {
 	stmt := BuildCanonicalRepoDependencyUpsert(CanonicalRepoDependencyParams{
 		RepoID:       "repo-a",
 		TargetRepoID: "repo-b",
+		EvidenceType: "docker_compose_depends_on",
 	}, "finalization/workloads")
 
 	if stmt.Operation != OperationCanonicalUpsert {
 		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
 	}
+	if !strings.Contains(stmt.Cypher, "MERGE (source_repo:Repository {id: $repo_id})") {
+		t.Fatalf("Cypher missing source Repository MERGE: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (target_repo:Repository {id: $target_repo_id})") {
+		t.Fatalf("Cypher missing target Repository MERGE: %s", stmt.Cypher)
+	}
 	if !strings.Contains(stmt.Cypher, "MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)") {
 		t.Fatalf("Cypher missing DEPENDS_ON edge: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "rel.evidence_type = $evidence_type") {
+		t.Fatalf("Cypher missing evidence_type write: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "rel.relationship_type = 'DEPENDS_ON'") {
+		t.Fatalf("Cypher missing relationship_type write: %s", stmt.Cypher)
 	}
 	if stmt.Parameters["repo_id"] != "repo-a" {
 		t.Fatalf("repo_id = %v", stmt.Parameters["repo_id"])
 	}
 	if stmt.Parameters["target_repo_id"] != "repo-b" {
 		t.Fatalf("target_repo_id = %v", stmt.Parameters["target_repo_id"])
+	}
+	if stmt.Parameters["evidence_type"] != "docker_compose_depends_on" {
+		t.Fatalf("evidence_type = %v", stmt.Parameters["evidence_type"])
 	}
 }
 

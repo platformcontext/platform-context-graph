@@ -99,6 +99,45 @@ func TestNativeRepositorySelectorSelectRepositoriesFilesystemSyncsChangedReposit
 	}
 }
 
+func TestNativeRepositorySelectorSelectRepositoriesFilesystemPreservesGitHubWorkflows(t *testing.T) {
+	t.Parallel()
+
+	filesystemRoot := t.TempDir()
+	reposDir := t.TempDir()
+	sourceRepo := filepath.Join(filesystemRoot, "platformcontext", "service-a")
+	writeSelectionTestFile(t, filepath.Join(sourceRepo, "main.go"), "package main\n")
+	writeSelectionTestFile(
+		t,
+		filepath.Join(sourceRepo, ".github", "workflows", "deploy.yml"),
+		"name: deploy\non:\n  push:\n",
+	)
+
+	selector := NativeRepositorySelector{
+		Config: RepoSyncConfig{
+			ReposDir:       reposDir,
+			SourceMode:     "filesystem",
+			FilesystemRoot: filesystemRoot,
+			Component:      "collector-git",
+			CloneDepth:     1,
+			RepoLimit:      4000,
+			GitAuthMethod:  "none",
+		},
+	}
+
+	batch, err := selector.SelectRepositories(context.Background())
+	if err != nil {
+		t.Fatalf("SelectRepositories() error = %v, want nil", err)
+	}
+	if got, want := len(batch.Repositories), 1; got != want {
+		t.Fatalf("len(Repositories) = %d, want %d", got, want)
+	}
+
+	wantWorkflowPath := filepath.Join(reposDir, "platformcontext", "service-a", ".github", "workflows", "deploy.yml")
+	if _, err := os.Stat(wantWorkflowPath); err != nil {
+		t.Fatalf("copied repository missing GitHub workflow %q: %v", wantWorkflowPath, err)
+	}
+}
+
 func TestNativeRepositorySelectorSelectRepositoriesFilesystemReturnsEmptyBatchWhenManifestUnchanged(t *testing.T) {
 	t.Parallel()
 

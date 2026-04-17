@@ -17,8 +17,8 @@ type CanonicalRunsOnParams struct {
 }
 
 const canonicalRepoRelationshipUpsertCypher = `UNWIND $rows AS row
-MATCH (source_repo:Repository {id: row.repo_id})
-MATCH (target_repo:Repository {id: row.target_repo_id})
+MERGE (source_repo:Repository {id: row.repo_id})
+MERGE (target_repo:Repository {id: row.target_repo_id})
 FOREACH (_ IN CASE WHEN row.relationship_type = 'DEPLOYS_FROM' THEN [1] ELSE [] END |
     MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)
     SET rel.confidence = 0.9,

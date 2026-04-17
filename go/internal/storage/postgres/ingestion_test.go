@@ -142,6 +142,17 @@ func TestUpsertIngestionScopeQueryPreservesActiveStatusDuringPendingRefresh(t *t
 	}
 }
 
+func TestListLatestRelationshipFactRecordsQueryQualifiesFactColumns(t *testing.T) {
+	t.Parallel()
+
+	if !strings.Contains(listLatestRelationshipFactRecordsQuery, "\n    fact.scope_id,\n") {
+		t.Fatalf("listLatestRelationshipFactRecordsQuery must qualify fact.scope_id:\n%s", listLatestRelationshipFactRecordsQuery)
+	}
+	if !strings.Contains(listLatestRelationshipFactRecordsQuery, "\n    fact.generation_id,\n") {
+		t.Fatalf("listLatestRelationshipFactRecordsQuery must qualify fact.generation_id:\n%s", listLatestRelationshipFactRecordsQuery)
+	}
+}
+
 func TestIngestionStoreCommitScopeGenerationSkipsUnchangedActiveGeneration(t *testing.T) {
 	telemetry.ResetSkippedRefreshCountForTesting()
 	t.Cleanup(telemetry.ResetSkippedRefreshCountForTesting)

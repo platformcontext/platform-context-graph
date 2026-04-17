@@ -62,6 +62,7 @@ func TestEdgeWriterWriteEdgesRepoDependencyDispatch(t *testing.T) {
 			Payload: map[string]any{
 				"repo_id":        "repo-a",
 				"target_repo_id": "repo-b",
+				"evidence_type":  "docker_compose_depends_on",
 			},
 		},
 	}
@@ -76,8 +77,21 @@ func TestEdgeWriterWriteEdgesRepoDependencyDispatch(t *testing.T) {
 	if !strings.Contains(executor.calls[0].Cypher, "DEPENDS_ON") {
 		t.Fatalf("cypher missing DEPENDS_ON: %s", executor.calls[0].Cypher)
 	}
-	if !strings.Contains(executor.calls[0].Cypher, "source_repo:Repository") {
-		t.Fatalf("cypher missing Repository match: %s", executor.calls[0].Cypher)
+	if !strings.Contains(executor.calls[0].Cypher, "MERGE (source_repo:Repository {id: row.repo_id})") {
+		t.Fatalf("cypher missing source Repository MERGE: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MERGE (target_repo:Repository {id: row.target_repo_id})") {
+		t.Fatalf("cypher missing target Repository MERGE: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "rel.evidence_type = row.evidence_type") {
+		t.Fatalf("cypher missing evidence_type write: %s", executor.calls[0].Cypher)
+	}
+	rowsOut, ok := executor.calls[0].Parameters["rows"].([]map[string]any)
+	if !ok || len(rowsOut) != 1 {
+		t.Fatalf("expected 1 row in batch, got %v", executor.calls[0].Parameters["rows"])
+	}
+	if got, want := rowsOut[0]["evidence_type"], "docker_compose_depends_on"; got != want {
+		t.Fatalf("row evidence_type = %v, want %v", got, want)
 	}
 }
 
