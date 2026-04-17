@@ -119,6 +119,16 @@ func TestBuildRepositoryDeploymentOverviewIncludesDeliveryPathsAndWorkflows(t *t
 						"controller_kind":  "jenkins_pipeline",
 						"shared_libraries": []string{"pipelines"},
 						"entry_points":     []string{"dist/api.js"},
+						"ansible_inventories": []string{
+							"inventory/dynamic_hosts.py",
+						},
+						"ansible_var_files": []string{
+							"group_vars/all.yml",
+							"host_vars/web-prod.yml",
+						},
+						"ansible_task_entrypoints": []string{
+							"roles/website_import/tasks/main.yml",
+						},
 						"ansible_playbook_hints": []map[string]any{
 							{"playbook": "deploy.yml"},
 						},
@@ -169,7 +179,7 @@ func TestBuildRepositoryDeploymentOverviewIncludesDeliveryPathsAndWorkflows(t *t
 	if len(topologyStory) != 2 {
 		t.Fatalf("len(topology_story) = %d, want 2", len(topologyStory))
 	}
-	if got, want := topologyStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; ansible playbooks deploy.yml)."; got != want {
+	if got, want := topologyStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; ansible playbooks deploy.yml; ansible inventories inventory/dynamic_hosts.py; ansible vars group_vars/all.yml, host_vars/web-prod.yml; ansible task entrypoints roles/website_import/tasks/main.yml)."; got != want {
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 	if got, want := topologyStory[1], "Runtime artifacts include docker_compose service api in docker-compose.yaml built from ./ (build, ports)."; got != want {

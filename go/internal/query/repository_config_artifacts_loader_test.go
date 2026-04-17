@@ -34,7 +34,13 @@ func TestLoadRepositoryControllerArtifactsFallsBackToGetFileContentForJenkinsfil
 		reader,
 		"repo-1",
 		"controller-service",
-		[]FileContent{{RelativePath: "Jenkinsfile"}},
+		[]FileContent{
+			{RelativePath: "Jenkinsfile"},
+			{RelativePath: "inventory/dynamic_hosts.py"},
+			{RelativePath: "group_vars/all.yml"},
+			{RelativePath: "host_vars/web-prod.yml"},
+			{RelativePath: "roles/website_import/tasks/main.yml"},
+		},
 	)
 	if err != nil {
 		t.Fatalf("loadRepositoryControllerArtifacts() error = %v, want nil", err)
@@ -63,6 +69,18 @@ func TestLoadRepositoryControllerArtifactsFallsBackToGetFileContentForJenkinsfil
 	shellCommands := StringSliceVal(row, "shell_commands")
 	if len(shellCommands) != 1 || shellCommands[0] != "./scripts/deploy.sh" {
 		t.Fatalf("controller_artifacts[0].shell_commands = %#v, want [./scripts/deploy.sh]", row["shell_commands"])
+	}
+	inventories := StringSliceVal(row, "ansible_inventories")
+	if len(inventories) != 1 || inventories[0] != "inventory/dynamic_hosts.py" {
+		t.Fatalf("controller_artifacts[0].ansible_inventories = %#v, want [inventory/dynamic_hosts.py]", row["ansible_inventories"])
+	}
+	varFiles := StringSliceVal(row, "ansible_var_files")
+	if len(varFiles) != 2 || varFiles[0] != "group_vars/all.yml" || varFiles[1] != "host_vars/web-prod.yml" {
+		t.Fatalf("controller_artifacts[0].ansible_var_files = %#v, want [group_vars/all.yml host_vars/web-prod.yml]", row["ansible_var_files"])
+	}
+	taskEntrypoints := StringSliceVal(row, "ansible_task_entrypoints")
+	if len(taskEntrypoints) != 1 || taskEntrypoints[0] != "roles/website_import/tasks/main.yml" {
+		t.Fatalf("controller_artifacts[0].ansible_task_entrypoints = %#v, want [roles/website_import/tasks/main.yml]", row["ansible_task_entrypoints"])
 	}
 }
 

@@ -192,6 +192,16 @@ func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *test
 						"controller_kind":  "jenkins_pipeline",
 						"shared_libraries": []string{"pipelines"},
 						"entry_points":     []string{"dist/api.js"},
+						"ansible_inventories": []string{
+							"inventory/dynamic_hosts.py",
+						},
+						"ansible_var_files": []string{
+							"group_vars/all.yml",
+							"host_vars/web-prod.yml",
+						},
+						"ansible_task_entrypoints": []string{
+							"roles/website_import/tasks/main.yml",
+						},
 						"ansible_playbook_hints": []map[string]any{
 							{"playbook": "deploy.yml"},
 						},
@@ -232,7 +242,7 @@ func TestBuildRepositoryStoryResponsePreservesDeliveryPathsInDirectStory(t *test
 	if len(directStory) != 4 {
 		t.Fatalf("len(direct_story) = %d, want 4", len(directStory))
 	}
-	if got, want := directStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; ansible playbooks deploy.yml)."; got != want {
+	if got, want := directStory[0], "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; ansible playbooks deploy.yml; ansible inventories inventory/dynamic_hosts.py; ansible vars group_vars/all.yml, host_vars/web-prod.yml; ansible task entrypoints roles/website_import/tasks/main.yml)."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
 	if got, want := directStory[1], "Runtime artifacts include docker_compose service api in docker-compose.yaml built from ./ (build, ports)."; got != want {
@@ -419,6 +429,16 @@ func TestBuildRepositoryStoryResponseIncludesControllerAndWorkflowProofTogether(
 						"pipeline_calls":   []string{"pipelineDeploy"},
 						"entry_points":     []string{"dist/api.js"},
 						"shell_commands":   []string{"./scripts/deploy.sh"},
+						"ansible_inventories": []string{
+							"inventory/dynamic_hosts.py",
+						},
+						"ansible_var_files": []string{
+							"group_vars/all.yml",
+							"host_vars/web-prod.yml",
+						},
+						"ansible_task_entrypoints": []string{
+							"roles/website_import/tasks/main.yml",
+						},
 						"ansible_playbook_hints": []map[string]any{
 							{"playbook": "deploy.yml"},
 						},
@@ -503,7 +523,7 @@ func TestBuildRepositoryStoryResponseIncludesControllerAndWorkflowProofTogether(
 	if len(directStory) != 2 {
 		t.Fatalf("len(direct_story) = %d, want 2", len(directStory))
 	}
-	wantControllerLine := "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; pipeline calls pipelineDeploy; ansible playbooks deploy.yml)."
+	wantControllerLine := "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; pipeline calls pipelineDeploy; ansible playbooks deploy.yml; ansible inventories inventory/dynamic_hosts.py; ansible vars group_vars/all.yml, host_vars/web-prod.yml; ansible task entrypoints roles/website_import/tasks/main.yml)."
 	wantWorkflowLine := "Workflow delivery paths include .github/workflows/deploy.yaml as github_actions_workflow deploy (workflow_file)."
 	foundControllerLine := false
 	foundWorkflowLine := false

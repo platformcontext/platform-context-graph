@@ -9,6 +9,7 @@ import (
 )
 
 func buildRepositoryControllerArtifacts(repoName string, files []FileContent) map[string]any {
+	ansibleMetadata := collectAnsibleControllerMetadata(files)
 	artifacts := make([]map[string]any, 0)
 	for _, file := range files {
 		metadata := parser.ExtractGroovyPipelineMetadata(file.Content)
@@ -37,6 +38,10 @@ func buildRepositoryControllerArtifacts(repoName string, files []FileContent) ma
 		if hints := mapSliceValue(metadata, "ansible_playbook_hints"); len(hints) > 0 {
 			row["ansible_playbook_hints"] = hints
 		}
+		copyStringSliceField(row, ansibleMetadata, "ansible_inventories")
+		copyStringSliceField(row, ansibleMetadata, "ansible_var_files")
+		copyStringSliceField(row, ansibleMetadata, "ansible_task_entrypoints")
+		copyStringSliceField(row, ansibleMetadata, "ansible_role_paths")
 		if useConfigd, ok := metadata["use_configd"].(bool); ok {
 			row["use_configd"] = useConfigd
 		}
@@ -119,4 +124,48 @@ func groovyPipelineMetadataPresent(metadata map[string]any) bool {
 		return true
 	}
 	return false
+}
+
+func collectAnsibleControllerMetadata(files []FileContent) map[string]any {
+	inventories := make(map[string]struct{})
+	varFiles := make(map[string]struct{})
+	taskEntrypoints := make(map[string]struct{})
+	rolePaths := make(map[string]struct{})
+
+	for _, file := range files {
+		relativePath := strings.TrimSpace(file.RelativePath)
+		if relativePath == "" {
+			continue
+		}
+		lowerPath := strings.ToLower(cleanRepositoryRelativePath(relativePath))
+		lowerBase := strings.ToLower(filepath.Base(relativePath))
+
+		if ansibleInventoryEvidencePath(lowerPath, lowerBase) {
+			inventories[cleanRepositoryRelativePath(relativePath)] = struct{}{}
+		}
+		if ansibleVarsEvidencePath(lowerPath, lowerBase) {
+			varFiles[cleanRepositoryRelativePath(relativePath)] = struct{}{}
+		}
+		if ansibleTaskEntrypointEvidencePath(lowerPath, lowerBase) {
+			taskEntrypoints[cleanRepositoryRelativePath(relativePath)] = struct{}{}
+		}
+		if rolePath := ansibleRoleEvidencePath(lowerPath); rolePath != "" {
+			rolePaths[cleanRepositoryRelativePath(rolePath)] = struct{}{}
+		}
+	}
+
+	metadata := map[string]any{}
+	if values := sortedSetKeys(inventories); len(values) > 0 {
+		metadata["ansible_inventories"] = values
+	}
+	if values := sortedSetKeys(varFiles); len(values) > 0 {
+		metadata["ansible_var_files"] = values
+	}
+	if values := sortedSetKeys(taskEntrypoints); len(values) > 0 {
+		metadata["ansible_task_entrypoints"] = values
+	}
+	if values := sortedSetKeys(rolePaths); len(values) > 0 {
+		metadata["ansible_role_paths"] = values
+	}
+	return metadata
 }

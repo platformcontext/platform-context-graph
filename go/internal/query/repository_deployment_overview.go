@@ -67,6 +67,10 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		copyStringSliceField(entry, row, "shared_libraries")
 		copyStringSliceField(entry, row, "pipeline_calls")
 		copyStringSliceField(entry, row, "entry_points")
+		copyStringSliceField(entry, row, "ansible_inventories")
+		copyStringSliceField(entry, row, "ansible_var_files")
+		copyStringSliceField(entry, row, "ansible_task_entrypoints")
+		copyStringSliceField(entry, row, "ansible_role_paths")
 		if hints := mapSliceValue(row, "ansible_playbook_hints"); len(hints) > 0 {
 			entry["ansible_playbook_hints"] = hints
 		}
@@ -175,6 +179,10 @@ func buildOverviewDeliveryWorkflows(deploymentArtifacts map[string]any) []map[st
 		copyStringSliceField(entry, row, "pipeline_calls")
 		copyStringSliceField(entry, row, "entry_points")
 		copyStringSliceField(entry, row, "shell_commands")
+		copyStringSliceField(entry, row, "ansible_inventories")
+		copyStringSliceField(entry, row, "ansible_var_files")
+		copyStringSliceField(entry, row, "ansible_task_entrypoints")
+		copyStringSliceField(entry, row, "ansible_role_paths")
 		if hints := mapSliceValue(row, "ansible_playbook_hints"); len(hints) > 0 {
 			entry["ansible_playbook_hints"] = hints
 		}
@@ -291,6 +299,15 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 				if len(playbooks) > 0 {
 					details = append(details, "ansible playbooks "+strings.Join(playbooks, ", "))
 				}
+			}
+			if inventories := stringSliceValue(row, "ansible_inventories"); len(inventories) > 0 {
+				details = append(details, "ansible inventories "+strings.Join(inventories, ", "))
+			}
+			if varFiles := stringSliceValue(row, "ansible_var_files"); len(varFiles) > 0 {
+				details = append(details, "ansible vars "+strings.Join(varFiles, ", "))
+			}
+			if taskEntrypoints := stringSliceValue(row, "ansible_task_entrypoints"); len(taskEntrypoints) > 0 {
+				details = append(details, "ansible task entrypoints "+strings.Join(taskEntrypoints, ", "))
 			}
 			line := fmt.Sprintf("Controller delivery paths include %s via %s", path, controllerKind)
 			if len(details) > 0 {

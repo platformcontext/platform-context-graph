@@ -40,9 +40,12 @@ Go-owned parity work in the normal runtime path:
 - explicit repo-bearing GitHub Actions inputs, reusable workflow refs, Jenkins
   shared-library refs and repo URLs, Ansible inventories/playbooks/roles/task
   entrypoints, and Docker Compose build/dependency/runtime hints are already
-  Go-owned and query-visible, but broader controller-driven promotion and
-  end-to-end proof still need current-truth evidence; Terraform variable-file
-  promotion is already proven on the normal Go path
+  Go-owned and query-visible. The Go query path now also carries
+  Jenkins-adjacent Ansible inventories, `group_vars` / `host_vars`, and task
+  entrypoints through controller artifacts plus deployment/story shaping, but
+  broader controller-driven promotion and end-to-end proof still need
+  current-truth evidence; Terraform variable-file promotion is already proven
+  on the normal Go path
 - end-to-end validation and instrumentation proof for those flows
 
 The API/MCP query surfacing infrastructure is parity-complete: every
@@ -124,10 +127,13 @@ honest signoff:
 
 - queue-hardening work in projector/reducer is still active
 - explicit repo-bearing GitHub Actions, Jenkins/Groovy, Ansible, Docker, and
-  Docker Compose subfamilies already have Go-owned parser/query proof, while
-  broader controller-driven relationship promotion and compose-backed evidence
-  still need current-truth validation; Terraform variable-file promotion is
-  already proven on the normal Go path
+  Docker Compose subfamilies already have Go-owned parser/query proof; the
+  Jenkins-plus-Ansible controller path now also carries inventories,
+  `group_vars` / `host_vars`, and task entrypoint context through repository
+  controller artifacts and deployment/story shaping. Broader controller-driven
+  relationship promotion and compose-backed evidence still need current-truth
+  validation; Terraform variable-file promotion is already proven on the
+  normal Go path
 - JSON remains intentionally partial to avoid graph noise unless a specific
   JSON family is promoted on purpose
 

@@ -25,6 +25,10 @@ pipelineDeploy(
 pipelineDeploy(entry_point: 'dist/worker.js')
 `,
 		},
+		{RelativePath: "inventory/dynamic_hosts.py"},
+		{RelativePath: "group_vars/all.yml"},
+		{RelativePath: "host_vars/web-prod.yml"},
+		{RelativePath: "roles/website_import/tasks/main.yml"},
 	})
 	if got == nil {
 		t.Fatal("buildRepositoryControllerArtifacts() = nil, want controller_artifacts")
@@ -84,6 +88,22 @@ pipelineDeploy(entry_point: 'dist/worker.js')
 	}
 	if got, want := hints[0]["playbook"], "deploy.yml"; got != want {
 		t.Fatalf("ansible_playbook_hints[0].playbook = %#v, want %#v", got, want)
+	}
+	inventories := StringSliceVal(first, "ansible_inventories")
+	if len(inventories) != 1 || inventories[0] != "inventory/dynamic_hosts.py" {
+		t.Fatalf("controller_artifacts[0].ansible_inventories = %#v, want [inventory/dynamic_hosts.py]", first["ansible_inventories"])
+	}
+	varFiles := StringSliceVal(first, "ansible_var_files")
+	if len(varFiles) != 2 || varFiles[0] != "group_vars/all.yml" || varFiles[1] != "host_vars/web-prod.yml" {
+		t.Fatalf("controller_artifacts[0].ansible_var_files = %#v, want [group_vars/all.yml host_vars/web-prod.yml]", first["ansible_var_files"])
+	}
+	taskEntrypoints := StringSliceVal(first, "ansible_task_entrypoints")
+	if len(taskEntrypoints) != 1 || taskEntrypoints[0] != "roles/website_import/tasks/main.yml" {
+		t.Fatalf("controller_artifacts[0].ansible_task_entrypoints = %#v, want [roles/website_import/tasks/main.yml]", first["ansible_task_entrypoints"])
+	}
+	rolePaths := StringSliceVal(first, "ansible_role_paths")
+	if len(rolePaths) != 1 || rolePaths[0] != "roles/website_import" {
+		t.Fatalf("controller_artifacts[0].ansible_role_paths = %#v, want [roles/website_import]", first["ansible_role_paths"])
 	}
 }
 
