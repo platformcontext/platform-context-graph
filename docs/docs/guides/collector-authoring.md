@@ -2,9 +2,9 @@
 
 Use this guide when adding a new collector family such as AWS, Kubernetes,
 SQL/data systems, or another source that should feed the shared PCG data plane.
-The Git parser/runtime cutover is complete on this branch, so new collector
-work should start from the Go-owned service and parser boundaries documented
-here rather than reopening migration seams.
+The Git parser/runtime is Go-owned on this branch, so new collector work
+should start from the current Go service and parser boundaries documented here
+rather than reopening migration seams.
 
 The goal is not to teach one collector how to fit the current Git path. The
 goal is to make every new ingestor follow the same platform contract so the

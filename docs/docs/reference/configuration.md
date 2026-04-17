@@ -77,29 +77,41 @@ Notes:
 - The request ID becomes the default correlation ID unless an upstream correlation ID is already present.
 - OTEL logs export is not required for this setup. Stdout JSON is the source of truth for logs.
 
-### Concurrency And Watch Controls
+### Concurrency Controls
 
-These settings are the public knobs for the Go-owned `bootstrap-index` local
-indexing runtime and the repo-partitioned watch loop.
+These settings are the public knobs for the Go-owned collector, projector,
+bootstrap, reducer, and watch flows.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| **`PCG_PARSE_WORKERS`** | `4` | Number of concurrent repository parse workers used by checkpointed indexing. |
-| **`PCG_REPO_FILE_PARSE_MULTIPROCESS`** | `false` | When `true`, file parsing inside a repository snapshot uses a process pool instead of the threaded path. |
-| **`PCG_MULTIPROCESS_START_METHOD`** | `spawn` | Process start method for parse workers. `spawn` is the safe default for host and container runtimes; override only after verifying another mode on your exact platform. |
-| **`PCG_WORKER_MAX_TASKS`** | unset | Optional per-worker recycle threshold for the multiprocess parser. Leave unset to keep workers alive for the whole run; set it only if you need explicit worker recycling for a known memory issue. |
-| **`PCG_INDEX_QUEUE_DEPTH`** | `8` | Maximum number of parsed repositories allowed to wait for commit/finalization. |
-| **`PCG_WATCH_DEBOUNCE_SECONDS`** | `2.0` | Debounce interval for batching file-system events before incremental updates run. |
+| **`PCG_SNAPSHOT_WORKERS`** | `min(NumCPU, 8)` | Concurrent repository snapshot workers for collector/bootstrap discovery and collection. |
+| **`PCG_PARSE_WORKERS`** | `min(NumCPU, 8)` | Concurrent file-parse workers inside a repository snapshot. |
+| **`PCG_STREAM_BUFFER`** | `0` | Optional buffer for streaming collected generations. `0` means use the worker-count-derived default. |
+| **`PCG_LARGE_REPO_FILE_THRESHOLD`** | `1000` | File-count threshold above which a repository is treated as “large” for concurrency limiting. |
+| **`PCG_LARGE_REPO_MAX_CONCURRENT`** | `2` | Maximum number of large repositories that may be snapshotted concurrently. |
+| **`PCG_PROJECTOR_WORKERS`** | `min(NumCPU, 8)` | Concurrent source-local projection workers in the ingester runtime. |
+| **`PCG_LARGE_GEN_THRESHOLD`** | `10000` | Fact-count threshold above which a projector generation is treated as “large”. |
+| **`PCG_LARGE_GEN_MAX_CONCURRENT`** | `2` | Maximum number of large projector generations processed concurrently. |
+| **`PCG_PROJECTION_WORKERS`** | `min(NumCPU, 8)` | Concurrent bootstrap-index projection workers. |
+| **`PCG_REDUCER_WORKERS`** | `min(NumCPU, 4)` | Concurrent reducer intent workers in the resolution engine. |
+| **`PCG_REDUCER_BATCH_CLAIM_SIZE`** | `workers * 4` (min 4, max 64) | Number of reducer intents claimed per polling cycle. |
+| **`PCG_SHARED_PROJECTION_WORKERS`** | `1` | Concurrent shared-projection partition workers. |
+| **`PCG_SHARED_PROJECTION_PARTITION_COUNT`** | `8` | Number of shared-projection partitions per domain. |
+| **`PCG_SHARED_PROJECTION_BATCH_LIMIT`** | `100` | Maximum intents processed per shared-projection partition batch. |
+| **`PCG_SHARED_PROJECTION_POLL_INTERVAL`** | `5s` | Idle poll interval for shared projection work. |
+| **`PCG_SHARED_PROJECTION_LEASE_TTL`** | `60s` | Lease duration for shared-projection partition claims. |
 
-Notes:
+Removed Python-era parser controls:
 
-- `PCG_PARSE_WORKERS` is the primary worker control for modern multi-repo indexing.
-- `PCG_REPO_FILE_PARSE_MULTIPROCESS` enables the process-pool parse engine; leave it `false` until you want the heavier worker-process path.
-- `PCG_MULTIPROCESS_START_METHOD` now defaults to `spawn` because it is the most reliable choice for the parser-heavy process-pool path across local macOS and Linux containers.
-- `PCG_WORKER_MAX_TASKS` is now opt-in. The default leaves parse workers alive for the whole run because recycling long-lived parser workers can stall large local and containerized indexing jobs.
-- `pcg index` now launches the Go `bootstrap-index` runtime in direct filesystem
-  mode, while `pcg watch` continues to surface the effective debounce/runtime
-  settings it uses locally.
+- `PCG_REPO_FILE_PARSE_MULTIPROCESS`
+- `PCG_MULTIPROCESS_START_METHOD`
+- `PCG_WORKER_MAX_TASKS`
+- `PCG_INDEX_QUEUE_DEPTH`
+- `PCG_WATCH_DEBOUNCE_SECONDS`
+
+`pcg index` launches the Go `bootstrap-index` runtime in direct filesystem
+mode, and `pcg watch` hands off to the Go ingester runtime. Neither command
+uses the deleted Python multiprocess parser controls anymore.
 
 ### Indexing Scope
 
