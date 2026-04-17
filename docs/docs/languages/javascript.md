@@ -65,4 +65,4 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 
 ## Known Limitations
-- Runtime-dependent computed expressions and dynamic `require()` targets remain bounded parser limitations rather than parity blockers in the current platform state
+- Runtime-dependent computed expressions and dynamic `require()` targets remain bounded parser limitations in the current platform state.
