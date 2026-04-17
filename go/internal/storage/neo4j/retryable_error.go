@@ -2,6 +2,9 @@ package neo4j
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
+	"reflect"
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
@@ -43,7 +46,25 @@ func WrapRetryableNeo4jError(err error) error {
 	// retry later when contention subsides.
 	var txLimit *neo4jdriver.TransactionExecutionLimit
 	if errors.As(err, &txLimit) {
+		slog.Info("WrapRetryableNeo4jError: matched TransactionExecutionLimit",
+			"error_type", fmt.Sprintf("%T", err),
+			"error_msg", err.Error()[:min(100, len(err.Error()))])
 		return &neo4jRetryableError{inner: err, code: "TransactionExecutionLimit"}
+	}
+	// Debug: log when we see TransactionExecutionLimit in the message but errors.As missed
+	if errStr := err.Error(); len(errStr) > 0 {
+		var matched bool
+		for e := err; e != nil; e = errors.Unwrap(e) {
+			if reflect.TypeOf(e) != nil {
+				typeName := fmt.Sprintf("%T", e)
+				if typeName == "*errorutil.TransactionExecutionLimit" || typeName == "*neo4j.TransactionExecutionLimit" {
+					matched = true
+				}
+				slog.Info("WrapRetryableNeo4jError: unwrap chain",
+					"type", typeName,
+					"is_txlimit", matched)
+			}
+		}
 	}
 	var neo4jErr *neo4jdriver.Neo4jError
 	if !errors.As(err, &neo4jErr) {
