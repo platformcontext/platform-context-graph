@@ -41,8 +41,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Notes:
   - Real-repo validation covers pure TypeScript repositories without requiring
     TSX-specific framework evidence.
-  - TypeScript participates in the same declarative Node HTTP and provider-pack
-    program as JavaScript.
+  - TypeScript uses the same declarative Node HTTP and provider-pack framework
+    families as JavaScript.
 - Type aliases now persist as first-class `TypeAlias` graph nodes through
   the Go projector/reducer/Neo4j path, and the graph-backed `code/language-query`,
   `code/search`, `entities/resolve`, and entity-context surfaces now project

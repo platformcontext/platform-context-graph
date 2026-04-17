@@ -58,9 +58,8 @@ That script:
 - prints the Jaeger URL, selected `scope_id`, and useful logs for debugging
 - auto-selects free host ports when the usual local defaults are already occupied
 
-The runtime proof wrappers under `scripts/verify_*_compose.sh` are shell-native
-Go-runtime checks. They no longer delegate to deleted Python
-`tests/e2e/*compose.py` harnesses.
+The runtime verification wrappers under `scripts/verify_*_compose.sh` are
+shell-native Go-runtime checks.
 
 Run one wrapper at a time. They share the same Compose project name, so
 parallel wrapper runs can collide even when each script chooses different host
@@ -129,8 +128,8 @@ watch -n 2 'curl -fsS http://localhost:19465/metrics | rg "^(pcg_dp_|pcg_runtime
 watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^(pcg_dp_|pcg_runtime_)" | head -60'
 ```
 
-The Go runtimes honor the current worker-tuning controls from the environment.
-Use these instead of the older Python multiprocess parser knobs:
+The canonical Compose assets honor the current worker-tuning controls from the
+environment:
 
 - `PCG_PROJECTION_WORKERS`
 - `PCG_SNAPSHOT_WORKERS`
@@ -144,13 +143,6 @@ Use these instead of the older Python multiprocess parser knobs:
 - `PCG_SHARED_PROJECTION_LEASE_TTL`
 - `PCG_LARGE_REPO_FILE_THRESHOLD`
 - `PCG_LARGE_REPO_MAX_CONCURRENT`
-
-The removed Python-era parser flags were:
-
-- `PCG_REPO_FILE_PARSE_MULTIPROCESS`
-- `PCG_MULTIPROCESS_START_METHOD`
-- `PCG_WORKER_MAX_TASKS`
-- `PCG_INDEX_QUEUE_DEPTH`
 
 Compose passes the Go controls through to `bootstrap-index`, `ingester`,
 `resolution-engine`, and `platform-context-graph`, so local and containerized
@@ -216,7 +208,7 @@ It also exercises the content-store contract:
 - host-side e2e runs can reach the bundled Postgres content store through `PCG_POSTGRES_PORT` (default `15432`)
 - file and entity content reads prefer Postgres and fall back to the server workspace
 - `PCG_REPOSITORY_RULES_JSON` can be set to structured exact or regex include rules for Git-backed sync, and Compose passes that override through to every Go runtime in the stack
-- compose-backed relationship proof relies on Go-written repo-edge
+- compose-backed relationship verification relies on Go-written repo-edge
   `evidence_type` metadata so API repository contexts can classify
   controller-, workflow-, and IaC-driven relationships without any Python
   read-path enrichment

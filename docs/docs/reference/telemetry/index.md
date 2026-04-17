@@ -90,10 +90,10 @@ For shared-write debugging specifically:
   and shared follow-up growth answer different questions.
 - Pivot to traces when backlog exists but is not draining. Pivot to logs when
   you need the exact repository, run, generation, or partition owner involved.
-- The runtime status surface now carries `shared_projection_tuning` whenever
-  shared backlog is present, so operators can see the current recommended
-  partition/batch setting from `get_ingester_status` before opening the
-  separate admin tuning report.
+- The runtime status surface carries `shared_projection_tuning` whenever
+  shared backlog is present, so operators can inspect the recommended
+  partition and batch settings from `get_ingester_status` before opening the
+  admin tuning report.
 
 ## By Runtime
 
@@ -140,10 +140,9 @@ For shared-write debugging specifically:
   services.
 - Use the report before restarting a service or forcing a broader re-index.
 - The normal runtime path is Go-owned end to end.
-- The remaining migration work is Go-owned parity hardening rather than Python
-  retirement work: broader workflow/controller relationship proof, the
-  remaining broader IaC helper-built path-expression reduction, and the
-  telemetry proof that makes those flows operable.
+- Current observability expansion lanes are broader workflow/controller
+  verification, broader IaC helper-built path-expression reduction, and the
+  telemetry coverage that keeps those flows operable.
 
 Shared-write-specific gauges:
 

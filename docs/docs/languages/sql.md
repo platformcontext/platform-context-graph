@@ -34,11 +34,11 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - End-to-end indexing: `supported (bounded)`
 - Notes:
   - SQL support is Go-owned end to end for native SQL parsing, migration extraction, embedded SQL link hints, and the JSON-backed dbt and data-intelligence families.
-- Python-era feature parity is met. The remaining dbt lineage limits
+- The remaining dbt lineage limits
   (unresolved references, truly opaque templated expressions, complex macros,
-  and some derived expressions) are historical Python limitations or bounded
-  non-goals, not missing Go parity features. Real-repo and end-to-end
-  validation is bounded by those same limits.
+  and some derived expressions) are bounded non-goals for the documented SQL
+  surface. Real-repo and end-to-end validation is bounded by those same
+  limits.
 - Row-level aggregate lineage, simple windowed expressions, and simple
   qualified macro wrappers such as `dbt_utils.identity(source.amount)` are now
   tracked in the Go dbt path.
@@ -76,13 +76,11 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   and some derived expressions.
 - Templated wrappers around opaque macro bodies stay unresolved on purpose;
   they are reported as `templated_expression_not_resolved` instead of being
-  guessed into lineage. That behavior is historically accurate for the old
-  Python path too.
+  guessed into lineage.
 
-## Go-Owned Data-Intelligence Path
+## Data-Intelligence Path
 
-The SQL and analytics runtime is no longer split with a Python
-service path.
+The SQL and analytics runtime is Go-owned end to end.
 
 - Native SQL parsing and schema-object extraction live in `go/internal/parser/sql_language.go`
 - Migration intelligence lives in `go/internal/parser/sql_migrations.go`
@@ -99,16 +97,13 @@ service path.
 ## Known Limitations
 - Dialect-specific procedural SQL beyond the common Postgres-style
   dollar-quoted function and procedure bodies proven above remains a bounded
-  non-goal. The old Python path did not provide reliable parity for those
-  forms either.
+  non-goal.
 - Broader ALTER/DDL mutation normalization beyond checked-in `ADD COLUMN`
   materialization, bounded multi-clause `ADD COLUMN` normalization, and the
-  core table/index variants proven above remains a bounded non-goal rather
-  than a Python-era parity gap.
+  core table/index variants proven above remains a bounded non-goal.
 - Compiled dbt lineage still records partial coverage for unresolved references,
   templated expressions, complex macro expansion, and some derived
   expressions.
 - Templated wrappers around opaque macro bodies remain an intentional non-goal
   and are surfaced as `templated_expression_not_resolved`. Non-templated
-  opaque wrappers historically behaved inconsistently in Python and should not
-  be described as one clean inherited unresolved category.
+  opaque wrappers are not treated as one clean resolved category.

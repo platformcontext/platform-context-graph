@@ -44,13 +44,12 @@ whether the latest published Go checkpoint is finished.
   Those routes are documented by `docs/openapi/runtime-admin-v1.yaml`, not the
   public `/api/v0` OpenAPI schema.
 - `GET /api/v0/status/index` returns the current Go-owned checkpoint summary.
-- `GET /api/v0/index-status` is the legacy compatibility alias for the same
-  Go-owned checkpoint summary.
+- `GET /api/v0/index-status` returns the same Go-owned checkpoint summary.
 - `GET /api/v0/status/ingesters` is the canonical ingester-status list route.
 - `GET /api/v0/status/ingesters/{ingester}` is the canonical ingester-status
   detail route.
-- `GET /api/v0/ingesters` and `GET /api/v0/ingesters/{ingester}` remain
-  supported legacy `GET` aliases for the same ingester-status payloads.
+- `GET /api/v0/ingesters` and `GET /api/v0/ingesters/{ingester}` return the
+  same ingester-status payloads.
 - `GET /api/v0/repositories/{repo_id}/coverage` returns durable repository
   coverage rows for one repository.
 - Run-scoped completeness routes such as `/api/v0/index-runs/{run_id}` are not
@@ -69,9 +68,10 @@ whether the latest published Go checkpoint is finished.
   and decision controls.
 - The service-local runtime admin surface remains separate from the public
   `/api/v0` contract even when it is mounted on the same listener. Use
-  `/admin/status`, `/admin/replay`, and `/admin/refinalize` when you need the
-  runtime-local probe and recovery surface described by
-  `docs/openapi/runtime-admin-v1.yaml`.
+  `/admin/status` when you need the runtime-local probe/status surface
+  described by `docs/openapi/runtime-admin-v1.yaml`. Use `/admin/replay` and
+  `/admin/refinalize` only on runtimes that mount the recovery handler, such
+  as the ingester.
 
 ## Model Basics
 
@@ -494,4 +494,4 @@ Request contract:
 - optional form field: `clear_existing=true|false`
 
 The route imports the uploaded `.pcg` bundle into the active graph database and
-returns the same success/message shape as the CLI bundle import flow.
+returns a success/message response describing the import result.

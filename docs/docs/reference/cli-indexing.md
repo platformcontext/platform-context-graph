@@ -87,16 +87,16 @@ $ pcg watch .
 
 This is the CLI-friendly local equivalent of the long-running sync and re-index loop used in the deployable-service runtime.
 
-For multi-repository local indexing, use `pcg workspace index`. The historical
-`pcg ecosystem index` and `pcg ecosystem update` commands are not part of the
-supported Go CLI contract.
+For multi-repository local indexing, use `pcg workspace index`. The public Go
+CLI keeps ecosystem-wide indexing on the `workspace` and admin flows rather
+than on separate ecosystem indexing commands.
 
 ---
 
-## Removed commands
+## Compatibility Stubs
 
-The old Python-era CLI exposed several management commands that the Go CLI does
-not support as public contracts today:
+The current Go CLI still carries a few compatibility stubs so older operator
+muscle memory gets a directed error instead of a silent behavior change:
 
 - `pcg delete`
 - `pcg clean`
@@ -104,51 +104,11 @@ not support as public contracts today:
 - `pcg ecosystem index`
 - `pcg ecosystem status`
 
-Deletion, cleanup, and recovery now belong to the Go admin/runtime surfaces
+Deletion, cleanup, and recovery are owned by the Go admin/runtime surfaces
 rather than ad hoc local CLI mutations.
 
 ---
 
-## `pcg bundle` Commands
-
-Tools for managing portable graph snapshots (`.pcg` files).
-
-### `pcg bundle export`
-Save your graph to a file. Useful for sharing context with team members or loading into a production read-only instance.
-```bash
-pcg bundle export my-graph.pcg --repo /path/to/repo
-```
-
-### `pcg bundle load`
-Download and install a popular library bundle from our registry.
-*(Alias: `pcg load`)*
-
-```bash
-pcg load flask
-```
-
-### `pcg bundle upload`
-Upload a local `.pcg` bundle to a running PCG HTTP service. This is the
-supported opt-in path when you want dependency internals on a remote instance
-without indexing vendored source trees by default.
-
-```bash
-pcg bundle upload vendor-lib.pcg --service-url http://localhost:8080 --clear
-```
-
-### `pcg registry`
-Search for available pre-indexed bundles in the cloud registry.
-**Usage:** `pcg registry [query]`
-
-```bash
-# List top bundles
-pcg registry
-
-# Search for a specific package
-pcg registry pandas
-```
-
 ## Related docs
 
-- [Bundles Guide](../guides/bundles.md)
 - [Troubleshooting](troubleshooting.md)

@@ -264,7 +264,7 @@ Use these docs together:
 ## Terraform Provider Schemas
 
 Terraform provider schema assets are a runtime dependency of the Go-owned
-relationship path, not historical baggage.
+relationship path, not optional reference material.
 
 - assets live in `go/internal/terraformschema/schemas/*.json.gz`
 - loaders live in `go/internal/terraformschema/`
@@ -278,8 +278,8 @@ resource classification and relationship evidence work.
 
 This page is intentionally not:
 
-- a migration diary
-- a historical ADR index
+- a change diary
+- a public ADR index
 - a workstream backlog
 - an incident postmortem collection
 

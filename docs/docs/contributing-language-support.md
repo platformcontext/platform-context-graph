@@ -83,7 +83,7 @@ For `supported` capabilities:
 For support-maturity promotions:
 
 - use at least one real repository run or compose-backed indexing proof
-- document the evidence in the relevant language page or migration notes
+- document the evidence in the relevant language page or support notes
   `end_to_end_indexing: supported`
 
 **For `partial` capabilities:**

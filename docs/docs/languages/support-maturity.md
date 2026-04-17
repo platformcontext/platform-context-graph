@@ -1,4 +1,4 @@
-# Parser Support Maturity Matrix
+# Parser Support Matrix
 
 This page tracks the checked-in Go parser support-maturity matrix in the current repository state.
 
@@ -11,8 +11,8 @@ Use:
   unsupported capability details
 
 This matrix tracks the higher-level support bar for each parser beyond
-the raw capability checklist. `-` means that maturity dimension has not
-yet been explicitly assessed in the parser maturity program.
+the raw capability checklist. `-` means the page does not currently make a
+specific support assertion for that dimension.
 
 | Parser | Parser Class | Grammar Routing | Normalization | Framework Packs | Pack Names | Query Surfacing | Real-Repo Validation | End-to-End Indexing |
 |--------|--------------|-----------------|---------------|-----------------|------------|-----------------|----------------------|---------------------|
@@ -24,7 +24,7 @@ yet been explicitly assessed in the parser maturity program.
 | C# | `DefaultEngine (c_sharp)` | - | - | - | - | - | - | - |
 | Dart | `DefaultEngine (dart)` | - | - | - | - | - | - | - |
 | Elixir | `DefaultEngine (elixir)` | - | - | - | - | - | - | - |
-| Go | `DefaultEngine (go)` | - | - | - | - | - | - | - |
+| Go | `DefaultEngine (go)` | supported | supported | - | - | supported | supported | supported |
 | Groovy | `DefaultEngine (groovy)` | - | - | - | - | - | - | - |
 | Haskell | `DefaultEngine (haskell)` | - | - | - | - | - | - | - |
 | Helm | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
@@ -53,9 +53,9 @@ semantic summaries, and a structured `semantic_profile` on the normal
 language-query, code-search, entities-resolve, and entity-context surfaces.
 JavaScript method-kind rows now also get a dedicated `javascript_method`
 surface kind in those shared query outputs.
-SQL real-repo and end-to-end indexing are now `supported` because Python-era
-feature parity is met; the remaining dbt lineage limits are historical Python
-limitations or bounded non-goals.
+SQL real-repo and end-to-end indexing are `supported` on the current Go
+parser/query path. The remaining dbt lineage limits are bounded non-goals for
+the documented SQL surface.
 
 This matrix stays intentionally coarse and should not be read as the
 canonical signoff checklist.

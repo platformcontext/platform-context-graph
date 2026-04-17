@@ -31,18 +31,17 @@ Canonical implementation:
 
 ## Current Truth
 
-- PHP parser parity is complete for the Python-era object-call and aliasing
-  families that the old runtime exposed.
+- The current Go parser covers the documented PHP object-call and aliasing
+  families end to end.
 - The public Go `code/relationships` surface now has checked-in proof for the
-  remaining bounded PHP receiver families that were previously still marked
-  partial.
+  bounded PHP receiver families covered on this page.
 - Remaining PHP work, if any, is net-new future enhancement work around fully
-  dynamic dispatch and reflection-heavy flows beyond the Python baseline.
+  dynamic dispatch and reflection-heavy flows beyond the documented contract.
 
 ## Known Limitations
 
 - Trait adaptation semantics beyond the bounded alias and override paths remain
   intentionally narrow.
 - Fully dynamic PHP dispatch, reflection-heavy call sites, and arbitrary
-  whole-program alias flow remain bounded future work beyond the historical
-  Python baseline.
+  whole-program alias flow remain bounded future work beyond the documented
+  contract.

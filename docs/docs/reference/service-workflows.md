@@ -139,7 +139,7 @@ flowchart TD
 
 - replay targets durable queue rows, not in-memory state
 - dead-letter state is explicit
-- legacy `failed` rows are supported for recovery where documented
+- `failed` rows from older queue states are supported for recovery where documented
 - repair and replay remain reducer/runtime ownership, not API-owned write logic
 
 ### Operational Signals

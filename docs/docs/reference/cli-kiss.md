@@ -68,19 +68,26 @@ These commands support remote mode:
 - `pcg index-status`
 - `pcg workspace status`
 - `pcg admin reindex`
+- `pcg admin tuning-report`
 - `pcg admin facts replay`
 - `pcg admin facts dead-letter`
+- `pcg admin facts skip`
 - `pcg admin facts backfill`
 - `pcg admin facts list`
 - `pcg admin facts decisions`
 - `pcg admin facts replay-events`
-- `pcg bundle upload`
 - `pcg find name`
 - `pcg find pattern`
+- `pcg find type`
+- `pcg find variable`
+- `pcg find content`
+- `pcg find decorator`
+- `pcg find argument`
 - `pcg analyze calls`
 - `pcg analyze callers`
 - `pcg analyze chain`
 - `pcg analyze deps`
+- `pcg analyze tree`
 - `pcg analyze complexity`
 - `pcg analyze dead-code`
 - `pcg analyze overrides`
@@ -92,7 +99,6 @@ These are still local-only:
 
 - `pcg index`
 - `pcg watch`
-- `pcg visualize`
 - `pcg query`
 - `pcg workspace plan`
 - `pcg workspace sync`

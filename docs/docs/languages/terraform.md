@@ -24,12 +24,12 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Provider blocks | `provider-blocks` | supported | `terraform_providers` | `name, line_number` | `node:TerraformProvider` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerraform` | Compose-backed fixture verification | - |
 | Locals blocks | `locals-blocks` | supported | `terraform_locals` | `name, line_number, value` | `node:TerraformLocal` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerraform` | Compose-backed fixture verification | - |
 
-## Parity Notes
-- Python-era Terraform parser parity is already met, and the Go runtime now exceeds that baseline with first-class `terraform {}` block entities plus provider-schema-backed relationship extraction.
-- The first-class `terraform_blocks` surface is a Go-only improvement. The old Python parser used `required_providers` metadata to enrich provider rows, but it did not persist a standalone `terraform {}` entity.
+## Current Truth
+- The current Go runtime ships the documented Terraform parser surface, including first-class `terraform {}` block entities and provider-schema-backed relationship extraction.
+- The first-class `terraform_blocks` surface persists a standalone `terraform {}` entity with provider metadata.
 - The packaged Terraform provider schemas are still intentionally present
   because the Go runtime uses them for schema-driven relationship extraction.
-  They are no longer part of any Python runtime path.
+  They are part of the current relationship path.
 
 ## Known Limitations
 - `count` and `for_each` meta-arguments are captured on resource rows, but are not expanded to model multiple resource instances

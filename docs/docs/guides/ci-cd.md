@@ -58,11 +58,11 @@ For repositories with 100,000+ lines of code:
 1. **Use Neo4j** — FalkorDB Lite may run out of RAM on large graphs
 2. **Increase memory** — `NEO4J_dbms_memory_heap_max_size=4G`
 3. **Exclude test fixtures** — add `tests/` to `.pcgignore` if test code inflates the graph without adding signal
-4. **Cache the index** — export a bundle in CI and reuse it across pipeline stages (see [Bundles](bundles.md))
+4. **Reuse stable artifacts** — cache the built PCG binary and any database or bundle artifacts your pipeline already produces, instead of rebuilding them in every stage
 
 ## See also
 
 - [CLI Analysis Reference](../reference/cli-analysis.md) — all `pcg analyze` subcommands
 - [Configuration](../reference/configuration.md) — environment variables and settings
 - [.pcgignore](../reference/pcgignore.md) — ignore file syntax
-- [Bundles](bundles.md) — cache and share indexed graphs
+- [Bundles](bundles.md) — import and search prebuilt graph bundles

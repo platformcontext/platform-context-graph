@@ -41,9 +41,9 @@ The read/query layer also emits:
 - `neo4j.query`
 - `neo4j.query.single`
 
-The older Python-era families such as `pcg.http.*`, `pcg.mcp.*`, `pcg.query.*`,
+Legacy span families such as `pcg.http.*`, `pcg.mcp.*`, `pcg.query.*`,
 `pcg.index.*`, `pcg.fact_*`, `pcg.resolution.*`, `pcg.graph.*`, and
-`pcg.content.*` are not part of the current Go trace contract.
+`pcg.content.*` are not part of the current trace contract.
 
 ## How To Read The Trace Tree
 
@@ -82,7 +82,7 @@ The older Python-era families such as `pcg.http.*`, `pcg.mcp.*`, `pcg.query.*`,
 - `neo4j.query` and `neo4j.query.single` trace graph-backed reads
 
 The read path is intentionally narrower than the write path. It traces storage
-cost, not a synthetic Python-era HTTP or MCP span family.
+cost, not a synthetic transport-layer span family.
 
 ## Key Attributes
 
@@ -147,5 +147,5 @@ For query traces, also pay attention to:
 - It does not claim a Python-style universal `pcg.query.*` family.
 - It does not claim every log line has a matching explicit `event_name`.
 - It does not claim replay, admin, or recovery flows have their own special
-  legacy trace namespace. They run through the same Go runtime and store spans
+  dedicated trace namespace. They run through the same Go runtime and store spans
   listed above.

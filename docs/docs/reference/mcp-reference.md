@@ -16,7 +16,7 @@ Repository-bearing results may include `repo_access` metadata. If PCG is running
 Canonical-first query behavior now has one explicit rule:
 
 - prefer canonical IDs at the tool boundary whenever the tool supports them
-- treat name-based repository lookup as a transitional compatibility alias, not the long-term contract
+- treat name-based repository lookup as a supported compatibility alias, not the canonical contract
 - use inspection-style tools when the caller wants evidence widening and coverage reporting, not a second truth model
 - inspection results may report `complete`, `partial`, or `unknown` coverage based on indexed evidence; they should not imply certainty the graph does not have
 
@@ -25,7 +25,7 @@ Content-oriented tools use the same rule:
 - file lookup uses `repo_id + relative_path`
 - entity lookup uses `entity_id`
 - deployed MCP/API runtimes prefer the PostgreSQL content store and report `unavailable` when a row is not yet indexed
-- local helper flows may still use workspace or graph-cache fallbacks
+- local helper flows may use workspace or graph-cache fallbacks when the content store is not the answering backend
 - file and entity read responses include `source_backend` so the client can see whether PCG answered from `postgres`, `workspace`, `graph-cache`, or `unavailable`
 - content search tools require the PostgreSQL content store and return an error when it is disabled
 - `repo_access` prompting is only for workflows that truly need the user's local machine
@@ -63,7 +63,8 @@ Use these tools when the user is asking for a narrative answer such as
 | **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, optional `semantic_overview`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
 | **`get_workload_story`** | Return a narrative workload story using canonical workload identity, optionally scoped to one environment. Use `trace_deployment_chain` when you need the richer deployment-mapping fields such as `story_sections`, `deployment_overview`, `controller_overview`, or `deployment_fact_summary`. | "Show me how payments-api is deployed in prod." |
 | **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts; pair it with `trace_deployment_chain` for deployment-mapping detail. | "What can you tell me about payments-api in QA?" |
-| **`investigate_service`** | Orchestrated service investigation that widens across related repos, evidence families, and deployment planes, then reports coverage and recommended next calls. | "Explain the deployment flow for api-node-boats using PCG only." |
+| **`resolve_entity`** | Resolve fuzzy input into canonical entities before story or context calls. | "What canonical entity matches `payments prod rds`?" |
+| **`get_entity_context`** | Fetch full context for one canonical entity id. | "Show me the context for this resolved entity." |
 | **`get_repo_context`** | Durable drill-down for repository details after the story answer. | "Show me the full repo context behind that story." |
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
 | **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
@@ -122,32 +123,6 @@ Current threshold-code examples:
 
 This keeps the contract portable across ArgoCD, Flux, Terraform, CloudFormation, plain Kubernetes manifests, ECS, Lambda, and environments that do not use a controller at all.
 
-`investigate_service` is the new investigation-first companion to the story
-tools.
-
-Use it when:
-
-- the user asks a normal operator question and should not need prompt engineering
-- you want PCG to widen into deployment-adjacent repos automatically
-- you need explicit coverage reporting and recommended next calls
-
-The main output fields are:
-
-- `repositories_considered`
-- `repositories_with_evidence`
-- `evidence_families_found`
-- `coverage_summary`
-- `investigation_findings`
-- `recommended_next_calls`
-
-Treat `investigate_service` as the inspection-mode companion to the canonical
-story and context tools:
-
-- canonical story/context answers are the default truth surface
-- `investigate_service` is evidence-first and coverage-first
-- `repo_access` tells the client when local checkout help may still be needed
-- repository summary and context tools use canonical `repo_id` values at the public boundary
-
 ## Content Retrieval & Search
 
 Tools for portable source retrieval and indexed content search.
@@ -162,43 +137,23 @@ Use these after story or context determines which files, snippets, or docs matte
 | **`search_file_content`** | Search indexed file text through the content store. | "Find every file that mentions `shared-payments-prod`." |
 | **`search_entity_content`** | Search cached entity snippets through the content store. | "Find entities whose source mentions `process_payment`." |
 
-## System & Management
+## Runtime & Repository Status
 
-Tools for managing the graph and background jobs.
-
-| Tool Name | Description | Natural Language Example |
-| :--- | :--- | :--- |
-| **`monitor_directory`** | Start monitoring a folder (Alias: `watch_directory`) with a Go `bootstrap-index` initial scan when needed and debounced repo-level Go reindexing for later changes. | "Watch the `src` folder." |
-| **`list_watched_paths`** | See what is being monitored. | "What directories are being watched?" |
-| **`unwatch_directory`** | Stop monitoring a folder. | "Stop watching `src`." |
-| **`list_indexed_repositories`** | Show what projects are currently indexed. | "What repos are indexed?" |
-| **`get_repository_stats`** | Show counts of files, classes, LOC. | "Show stats for the backend repo." |
-| **`delete_repository`** | Remove a repo from the graph. | "Remove the frontend repo." |
-| **`add_code_to_graph`** | Manually add a specific path by launching the Go `bootstrap-index` runtime in a background job. | "Add the `lib` folder." |
-| **`add_package_to_graph`** | Index an external library/package by launching the Go `bootstrap-index` runtime for package dependency ingestion. | "Add the `requests` library." |
-
-## Ingester Runtime
-
-Tools for inspecting the status of the deployed ingester runtimes.
+Tools for runtime health, completeness, and repository inventory.
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
+| **`get_index_status`** | Show the latest checkpointed completeness state. | "Is indexing complete right now?" |
 | **`list_ingesters`** | Show the latest persisted status for all configured ingesters. | "What ingesters are configured and what state are they in?" |
 | **`get_ingester_status`** | Show detailed status for one ingester runtime, including retry timing and repo progress counts. | "What is the repository ingester doing right now?" |
-
-## Job Control
-
-| Tool Name | Description | Natural Language Example |
-| :--- | :--- | :--- |
-| **`list_jobs`** | View all background tasks. | "Show me active jobs." |
-| **`check_job_status`** | Check if a specific job is done. | "Is job `xyz` finished?" |
+| **`list_indexed_repositories`** | Show what projects are currently indexed. | "What repos are indexed?" |
+| **`get_repository_stats`** | Show counts of files, classes, LOC. | "Show stats for the backend repo." |
 
 ## Bundles & Registry
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
-| **`search_registry_bundles`** | Find shared graphs in the cloud. | "Search for a `flask` bundle." |
-| **`load_bundle`** | Install a graph bundle. | "Load the `flask` bundle." |
+| **`search_registry_bundles`** | Search the bundle catalog view exposed by the query surface. | "Search for a `flask` bundle." |
 
 ## Advanced Querying
 

@@ -43,7 +43,7 @@ That makes logs the best signal for:
 - debugging retries and fallback behavior
 - understanding why work items were dead-lettered
 - understanding why a repository failed
-- explaining queue churn and compatibility behavior
+- explaining queue churn and fallback behavior
 - reconstructing operator actions during incidents
 
 ## Important Event Families

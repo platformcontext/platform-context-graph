@@ -35,12 +35,12 @@ Canonical implementation:
 
 ## Current Truth
 
-- Kotlin parser parity is complete for the Python-era receiver and call families
-  that the old runtime exposed.
-- The public Go `code/relationships` surface now has checked-in proof for the
-  Kotlin long-tail receiver families that were previously still marked partial.
+- The current Go parser covers the documented Kotlin receiver and call families
+  end to end.
+- The public Go `code/relationships` surface has checked-in proof for the
+  Kotlin long-tail receiver families described on this page.
 - Remaining Kotlin work, if any, is net-new future enhancement work around
-  broader whole-program data-flow inference beyond the Python baseline.
+  broader whole-program data-flow inference beyond the documented contract.
 
 ## Known Limitations
 
@@ -48,6 +48,6 @@ Canonical implementation:
   methods now carry `class_context` so interface-typed receiver calls still
   resolve through the normal reducer/query path.
 - Fully general whole-program data-flow inference remains intentionally bounded.
-  The shipped Go path already covers the Python-era parity surface: typed
+  The shipped Go path already covers the documented receiver surface: typed
   locals, casts, smart casts, safe calls, scope-function-preserved assignments,
   lazy delegates, and package-aware function-return chains.

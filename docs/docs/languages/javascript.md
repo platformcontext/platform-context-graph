@@ -55,7 +55,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   `dead-code`, `code/relationships`, and `code/complexity` now emit semantic
   summaries and a structured `semantic_profile` for JavaScript functions when
   docstring or method-kind metadata is present, JavaScript method-kind rows
-  now get a dedicated `javascript_method` surface kind, generator functions
+  get a dedicated `javascript_method` surface kind, generator functions
   now surface `semantic_kind=generator`, entity-context still emits a
   first-class `story`, and repository stories still expose a semantic overview
   derived from those entities. The documented public JavaScript query
