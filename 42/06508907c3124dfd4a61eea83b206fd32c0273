@@ -1,0 +1,128 @@
+docs/docs/languages/python.md
+  26d0a7775258d320 3,103-104
+docs/docs/languages/sql.md
+  26d0a7775258d320 3,84
+docs/docs/reference/relationship-mapping-observability.md
+  26d0a7775258d320 6
+docs/docs/reference/logging.md
+  26d0a7775258d320 12,65
+docs/docs/languages/json.md
+  26d0a7775258d320 3
+docs/docs/languages/kotlin.md
+  26d0a7775258d320 3
+docs/docs/languages/haskell.md
+  26d0a7775258d320 3
+docs/docs/languages/helm.md
+  26d0a7775258d320 3
+docs/docs/languages/support-maturity.md
+  26d0a7775258d320 3,5,11,64
+docs/docs/reference/python-to-go-parity.md
+  26d0a7775258d320 84
+docs/docs/languages/javascript.md
+  26d0a7775258d320 3,68
+docs/docs/languages/swift.md
+  26d0a7775258d320 3
+docs/docs/languages/terragrunt.md
+  26d0a7775258d320 3,26
+docs/docs/languages/typescriptjsx.md
+  26d0a7775258d320 3
+docs/docs/languages/csharp.md
+  26d0a7775258d320 3
+docs/docs/languages/cloudformation.md
+  26d0a7775258d320 3
+docs/docs/reference/telemetry/index.md
+  26d0a7775258d320 142
+docs/docs/languages/typescript.md
+  26d0a7775258d320 3,28-29,51
+docs/docs/reference/merge-readiness-signoff.md
+  26d0a7775258d320 13
+docs/docs/languages/java.md
+  26d0a7775258d320 3
+docs/docs/languages/dart.md
+  26d0a7775258d320 3
+docs/docs/guides/terraform-providers/index.md
+  26d0a7775258d320 7,24,35
+docs/docs/languages/php.md
+  26d0a7775258d320 3
+docs/docs/languages/ruby.md
+  26d0a7775258d320 3
+docs/docs/languages/terraform.md
+  26d0a7775258d320 3,28
+docs/docs/reference/relationship-mapping.md
+  26d0a7775258d320 86-87,89,167,267,317,331,344,465,478,508
+docs/docs/languages/scala.md
+  26d0a7775258d320 3
+docs/docs/guides/collector-authoring.md
+  26d0a7775258d320 5
+docs/docs/languages/crossplane.md
+  26d0a7775258d320 3
+docs/docs/reference/local-testing.md
+  26d0a7775258d320 4
+docs/docs/reference/parity-closure-matrix.md
+  26d0a7775258d320 34,105
+docs/docs/reference/telemetry/traces.md
+  26d0a7775258d320 13,46
+docs/docs/languages/go.md
+  26d0a7775258d320 3
+docs/docs/reference/cloud-validation.md
+  26d0a7775258d320 25
+docs/docs/languages/feature-matrix.md
+  26d0a7775258d320 3
+docs/docs/languages/perl.md
+  26d0a7775258d320 3
+docs/docs/languages/rust.md
+  26d0a7775258d320 3
+docs/docs/reference/runtime-admin-api.md
+  26d0a7775258d320 135
+docs/docs/languages/kustomize.md
+  26d0a7775258d320 3
+docs/docs/deployment/service-runtimes.md
+  26d0a7775258d320 30,42,71,93,134
+docs/docs/languages/c.md
+  26d0a7775258d320 3
+docs/docs/languages/groovy.md
+  26d0a7775258d320 3
+docs/docs/languages/kubernetes.md
+  26d0a7775258d320 3,30
+docs/docs/reference/source-layout.md
+  26d0a7775258d320 4,114
+docs/docs/languages/elixir.md
+  26d0a7775258d320 3
+docs/docs/languages/cpp.md
+  26d0a7775258d320 3
+docs/docs/languages/argocd.md
+  26d0a7775258d320 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "4206508907c3124dfd4a61eea83b206fd32c0273",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 80,
+      "total_deletions": 82,
+      "accepted_lines": 80,
+      "overriden_lines": 0
+    }
+  }
+}
