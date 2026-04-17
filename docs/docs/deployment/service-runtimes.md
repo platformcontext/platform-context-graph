@@ -45,8 +45,7 @@ Current platform reality:
   `semantic_nodes_committed` is published by semantic-entity materialization,
   and reducer-owned edge domains wait for that state before writing
 - the API, MCP, ingester, reducer, local verification runtimes, and bootstrap
-  helpers
-  emit structured JSON logs through the shared Go telemetry logger
+  helpers emit structured JSON logs through the shared Go telemetry logger
 
 ## Runtime Contract
 
@@ -57,11 +56,11 @@ Current platform reality:
 | MCP Server | MCP tool transport plus mounted query passthrough | `pcg mcp start` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Ingester | repo sync, parsing, fact emission, workspace ownership | `/usr/local/bin/pcg-ingester` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `/usr/local/bin/pcg-reducer` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
-| Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
+| Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + Neo4j | OTEL export only; no mounted runtime `/metrics` endpoint | one-shot local helper |
 
 ## Health, Status, And Completeness
 
-- API, MCP, ingester, reducer, and other runtimes that mount
+- API, MCP, ingester, reducer, and other long-running runtimes that mount
   `go/internal/runtime` use `/healthz`, `/readyz`, `/admin/status`, and
   `/metrics`.
 - The MCP server also exposes `GET /health`, `GET /sse`, `POST /mcp/message`,
@@ -76,15 +75,18 @@ Current platform reality:
 - A service can be healthy while indexing is incomplete. Operators should use
   completeness routes before assuming a full run has finished.
 - `bootstrap-index` remains a one-shot helper for empty or recovered
-  environments, not a steady-state health target.
+  environments. It does not mount the shared runtime HTTP admin surface and is
+  not a steady-state health target.
 
 ## Local Verification Runtimes
 
-The repo also has three local verification runtimes that exercise the Go data plane
-directly.
+The repo also has three local verification runtimes that exercise the Go data
+plane directly.
 
-They are not yet separate deployed Kubernetes workloads in the public chart,
-but they do follow the same shared admin contract:
+They are not yet separate deployed Kubernetes workloads in the public chart.
+Only the long-running hosted variants that mount `go/internal/runtime` expose
+the shared `/healthz`, `/readyz`, optional `/metrics`, and optional
+`/admin/status` contract:
 
 - `collector-git`: `go run ./cmd/collector-git`
 - `projector`: `go run ./cmd/projector`

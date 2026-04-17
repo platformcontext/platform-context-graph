@@ -96,7 +96,10 @@ Current ownership:
 - `reducer` owns queued shared projection, platform materialization,
   dependency projection, repair flows, and recovery ownership
 - `status` owns scan/reindex request lifecycle
-- all runtimes expose `/healthz`, `/readyz`, `/metrics`, and `/admin/status`
+- only long-running hosted runtimes that mount `go/internal/runtime` expose
+  `/healthz`, `/readyz`, `/metrics`, and `/admin/status`
+- one-shot helpers such as `bootstrap-index` emit telemetry through OTEL
+  exporters but do not mount the shared HTTP admin surface
 
 Focused Go package gate:
 
