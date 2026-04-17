@@ -5,6 +5,47 @@ import (
 	"testing"
 )
 
+func TestFetchDeploymentSourcesIncludesRepositoryDeployEdges(t *testing.T) {
+	t.Parallel()
+
+	got, err := fetchDeploymentSourcesFromGraph(t.Context(), fakeRepoGraphReader{
+		runByMatch: map[string][]map[string]any{
+			"coalesce(rel.reason, rel.evidence_type, 'repository_deploys_from') as reason": {
+				{
+					"repo_id":    "repo-helm",
+					"repo_name":  "deployment-helm",
+					"confidence": 0.93,
+					"reason":     "helm_values_reference",
+				},
+				{
+					"repo_id":    "repo-kustomize",
+					"repo_name":  "deployment-kustomize",
+					"confidence": 0.91,
+					"reason":     "kustomize_resource_reference",
+				},
+			},
+		},
+	}, "workload:service-edge-api", "repository:r_service_edge_api")
+	if err != nil {
+		t.Fatalf("fetchDeploymentSources() error = %v, want nil", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(fetchDeploymentSources()) = %d, want 2", len(got))
+	}
+	if got[0]["repo_name"] != "deployment-helm" {
+		t.Fatalf("fetchDeploymentSources()[0].repo_name = %#v, want %#v", got[0]["repo_name"], "deployment-helm")
+	}
+	if got[0]["reason"] != "helm_values_reference" {
+		t.Fatalf("fetchDeploymentSources()[0].reason = %#v, want %#v", got[0]["reason"], "helm_values_reference")
+	}
+	if got[1]["repo_name"] != "deployment-kustomize" {
+		t.Fatalf("fetchDeploymentSources()[1].repo_name = %#v, want %#v", got[1]["repo_name"], "deployment-kustomize")
+	}
+	if got[1]["reason"] != "kustomize_resource_reference" {
+		t.Fatalf("fetchDeploymentSources()[1].reason = %#v, want %#v", got[1]["reason"], "kustomize_resource_reference")
+	}
+}
+
 func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	t.Parallel()
 

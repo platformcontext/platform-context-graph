@@ -239,6 +239,28 @@ api_get() {
     fi
 }
 
+api_post_json() {
+    local path="$1"
+    local payload="$2"
+    local output_file="$3"
+    if [[ -n "$API_KEY" ]]; then
+        curl -fsS \
+            -X POST \
+            -H "Authorization: Bearer $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$API_BASE_URL$path" \
+            >"$output_file"
+    else
+        curl -fsS \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$API_BASE_URL$path" \
+            >"$output_file"
+    fi
+}
+
 repository_id_by_name() {
     local repo_name="$1"
     jq -r --arg repo_name "$repo_name" '
@@ -318,6 +340,21 @@ verify_service_worker_jobs_context() {
             ((.gating_conditions // []) | length) == 2 and
             ((.needs_dependencies // []) | length) == 1
         ))
+    ' "$CONTEXT_FILE" >/dev/null
+}
+
+verify_trace_deployment_chain() {
+    api_post_json "/impact/trace-deployment-chain" '{"service_name":"service-edge-api"}' "$CONTEXT_FILE"
+    jq -e '
+        (.service_name // "") == "service-edge-api" and
+        ((.story // "") | length) > 0 and
+        ((.deployment_overview.platform_count // 0) >= 1) and
+        ((.deployment_sources // []) | any((.repo_name // "") == "deployment-kustomize")) and
+        ((.deployment_sources // []) | any((.repo_name // "") == "deployment-helm")) and
+        ((.k8s_resources // []) | any((.relative_path // "") == "k8s/deployment.yaml")) and
+        ((.controller_overview.controller_count // 0) >= 1) and
+        ((.delivery_paths // []) | any((.type // "") == "deployment_source" and (.target // "") == "deployment-kustomize")) and
+        ((.delivery_paths // []) | any((.type // "") == "deployment_source" and (.target // "") == "deployment-helm"))
     ' "$CONTEXT_FILE" >/dev/null
 }
 
@@ -410,6 +447,7 @@ verify_api_surface() {
 
     verify_service_edge_api_context
     verify_service_worker_jobs_context
+    verify_trace_deployment_chain
 }
 
 verify_graph_state() {

@@ -12,9 +12,9 @@ import (
 
 var (
 	terragruntDependencyConfigPathPattern = regexp.MustCompile(`(?i)\bconfig_path\s*=\s*"([^"]+)"`)
-	terragruntReadConfigPattern           = regexp.MustCompile(`(?i)read_terragrunt_config\((?:find_in_parent_folders\()?"([^"]+)"`)
-	terragruntFindInParentFoldersPattern  = regexp.MustCompile(`(?i)find_in_parent_folders\("([^"]+)"\)`)
-	terragruntIncludePathPattern          = regexp.MustCompile(`(?i)\bpath\s*=\s*find_in_parent_folders\("([^"]+)"\)`)
+	terragruntReadConfigPattern           = regexp.MustCompile(`(?i)read_terragrunt_config\(\s*(?:find_in_parent_folders\(\s*(?:"([^"]+)")?\s*\)|"([^"]+)")`)
+	terragruntFindInParentFoldersPattern  = regexp.MustCompile(`(?i)find_in_parent_folders\(\s*(?:"([^"]+)")?\s*\)`)
+	terragruntIncludePathPattern          = regexp.MustCompile(`(?i)\bpath\s*=\s*find_in_parent_folders\(\s*(?:"([^"]+)")?\s*\)`)
 	localFileFunctionPattern              = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(\s*"([^"]+)"`)
 	localTerraformModuleSourcePattern     = regexp.MustCompile(`(?is)module\s+"[^"]+"\s*\{[^}]*?\bsource\b\s*=\s*"((?:\./|\.\./)[^"]+)"`)
 	ssmConfigPathPattern                  = regexp.MustCompile(`(?i)((?:/(?:configd|api)/[A-Za-z0-9._*/-]+))`)
@@ -93,21 +93,21 @@ func extractHCLConfigAssetRows(repoName string, files []FileContent) []map[strin
 			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "terragrunt_dependency_config_path")
 		}
 		for _, match := range terragruntReadConfigPattern.FindAllStringSubmatch(file.Content, -1) {
-			configPath := normalizeLocalConfigAssetPath(match)
+			configPath := normalizeTerragruntParentConfigPath(match)
 			if configPath == "" {
 				continue
 			}
 			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "terragrunt_read_config")
 		}
 		for _, match := range terragruntIncludePathPattern.FindAllStringSubmatch(file.Content, -1) {
-			configPath := normalizeLocalConfigAssetPath(match)
+			configPath := normalizeTerragruntParentConfigPath(match)
 			if configPath == "" {
 				continue
 			}
 			rows = appendConfigArtifactRow(rows, seen, configPath, repoName, file.RelativePath, "terragrunt_include_path")
 		}
 		for _, match := range terragruntFindInParentFoldersPattern.FindAllStringSubmatch(file.Content, -1) {
-			configPath := normalizeLocalConfigAssetPath(match)
+			configPath := normalizeTerragruntParentConfigPath(match)
 			if configPath == "" {
 				continue
 			}
@@ -147,6 +147,16 @@ func appendConfigArtifactRow(rows []map[string]any, seen map[string]struct{}, pa
 		"relative_path": relativePath,
 		"evidence_kind": evidenceKind,
 	})
+}
+
+func normalizeTerragruntParentConfigPath(match []string) string {
+	for _, candidate := range match[1:] {
+		cleaned := strings.TrimSpace(candidate)
+		if cleaned != "" {
+			return normalizeLocalConfigAssetPath([]string{"", cleaned})
+		}
+	}
+	return "terragrunt.hcl"
 }
 
 func extractKustomizeConfigPathRows(repoName string, files []FileContent) []map[string]any {

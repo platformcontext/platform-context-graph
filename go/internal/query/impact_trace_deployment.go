@@ -39,7 +39,7 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if workloadID := safeStr(ctx, "id"); workloadID != "" {
-		deploymentSources, err := h.fetchDeploymentSources(r.Context(), workloadID)
+		deploymentSources, err := h.fetchDeploymentSources(r.Context(), workloadID, safeStr(ctx, "repo_id"))
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query deployment sources: %v", err))
 			return
@@ -347,12 +347,37 @@ func joinOrNone(values []string) string {
 	return fmt.Sprintf("%v", values)
 }
 
-func (h *ImpactHandler) fetchDeploymentSources(ctx context.Context, workloadID string) ([]map[string]any, error) {
-	rows, err := h.Neo4j.Run(ctx, `
-		MATCH (w:Workload {id: $workload_id})<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:DEPLOYMENT_SOURCE]->(repo:Repository)
-		RETURN DISTINCT repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence, rel.reason as reason
-		ORDER BY repo.name
-	`, map[string]any{"workload_id": workloadID})
+func (h *ImpactHandler) fetchDeploymentSources(
+	ctx context.Context,
+	workloadID string,
+	repoID string,
+) ([]map[string]any, error) {
+	if h == nil || h.Neo4j == nil {
+		return nil, nil
+	}
+	return fetchDeploymentSourcesFromGraph(ctx, h.Neo4j, workloadID, repoID)
+}
+
+func fetchDeploymentSourcesFromGraph(
+	ctx context.Context,
+	reader GraphReader,
+	workloadID string,
+	repoID string,
+) ([]map[string]any, error) {
+	rows, err := reader.Run(ctx, `
+		CALL {
+			MATCH (w:Workload {id: $workload_id})<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:DEPLOYMENT_SOURCE]->(repo:Repository)
+			RETURN repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence, rel.reason as reason
+			UNION
+			MATCH (targetRepo:Repository {id: $repo_id})<-[rel:DEPLOYS_FROM]-(repo:Repository)
+			RETURN repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence, coalesce(rel.reason, rel.evidence_type, 'repository_deploys_from') as reason
+		}
+		RETURN DISTINCT repo_id, repo_name, confidence, reason
+		ORDER BY repo_name
+	`, map[string]any{
+		"workload_id": workloadID,
+		"repo_id":     repoID,
+	})
 	if err != nil {
 		return nil, err
 	}

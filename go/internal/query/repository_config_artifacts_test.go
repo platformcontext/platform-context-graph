@@ -259,6 +259,57 @@ func TestBuildRepositoryConfigArtifactsExtractsTerragruntFindInParentFoldersSide
 	}
 }
 
+func TestBuildRepositoryConfigArtifactsExtractsDefaultTerragruntParentConfig(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("iac-terragrunt-core-infra", []FileContent{
+		{
+			RelativePath: "modules/eks/terragrunt.hcl",
+			Content: `include "root" {
+  path = find_in_parent_folders()
+}
+
+locals {
+  inherited = read_terragrunt_config(find_in_parent_folders())
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 3 {
+		t.Fatalf("len(config_paths) = %d, want 3", len(configPaths))
+	}
+
+	pathCounts := map[string]int{}
+	evidenceKinds := map[string]map[string]int{}
+	for _, row := range configPaths {
+		path, _ := row["path"].(string)
+		kind, _ := row["evidence_kind"].(string)
+		pathCounts[path]++
+		if evidenceKinds[path] == nil {
+			evidenceKinds[path] = map[string]int{}
+		}
+		evidenceKinds[path][kind]++
+	}
+
+	if got, want := pathCounts["terragrunt.hcl"], 3; got != want {
+		t.Fatalf("pathCounts[terragrunt.hcl] = %d, want %d", got, want)
+	}
+	if got, want := evidenceKinds["terragrunt.hcl"]["terragrunt_include_path"], 1; got != want {
+		t.Fatalf("terragrunt.hcl terragrunt_include_path count = %d, want %d", got, want)
+	}
+	if got, want := evidenceKinds["terragrunt.hcl"]["terragrunt_read_config"], 1; got != want {
+		t.Fatalf("terragrunt.hcl terragrunt_read_config count = %d, want %d", got, want)
+	}
+	if got, want := evidenceKinds["terragrunt.hcl"]["terragrunt_find_in_parent_folders"], 1; got != want {
+		t.Fatalf("terragrunt.hcl terragrunt_find_in_parent_folders count = %d, want %d", got, want)
+	}
+}
+
 func TestBuildRepositoryConfigArtifactsExtractsAnsibleConfigAssets(t *testing.T) {
 	t.Parallel()
 

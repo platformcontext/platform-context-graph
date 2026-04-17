@@ -512,7 +512,8 @@ Go-backed sources are:
 - Kustomize-reachable policy documents that reference SSM parameter families
 - Terragrunt `dependency.config_path` values
 - Terragrunt `read_terragrunt_config(...)` and `include` / `find_in_parent_folders(...)`
-  config references
+  config references, including the default no-argument
+  `find_in_parent_folders()` form that resolves the parent `terragrunt.hcl`
 - local Terraform and Terragrunt `file(...)` / `templatefile(...)` config
   assets when the path is repo-local and not a remote module source
 - Terraform `*.tfvars` and `*.tfvars.json` files on the normal HCL path
@@ -525,6 +526,11 @@ even when a path appears in only one repository. That means Terragrunt
 includes, dependency config paths, local `file()` / `templatefile()` assets,
 and other repo-local config rows no longer disappear unless another repo
 shares the same path.
+
+The compose-backed relationship verification now also exercises
+`POST /api/v0/impact/trace-deployment-chain` on the live fixture stack so the
+runtime-chain story is proven from the HTTP surface, not only from repository
+context summaries.
 
 Broader Terraform and Terragrunt helper forms remain a separate parity lane
 for any path that cannot be proven exactly from the checked-in source.
