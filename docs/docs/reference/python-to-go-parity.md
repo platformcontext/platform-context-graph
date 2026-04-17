@@ -51,9 +51,8 @@ Go-owned parity work in the normal runtime path:
   manifests, Ansible playbooks/inventories/vars, and Compose file refs on the
   Go read path without inventing canonical repo edges from those hints alone.
   Repo-local reusable GitHub Actions workflow refs now also surface as
-  same-repo workflow provenance on the Go entity/query fallback path. The
-  remaining workflow/controller gap is the broader promotion and validation of
-  repo-local hints that still should not become fake canonical repo edges
+  same-repo workflow provenance on the Go entity/query fallback path and emit
+  canonical same-repo `DEPLOYS_FROM` evidence on the relationship path.
 - end-to-end validation and instrumentation proof for those flows
 
 The API/MCP query surfacing infrastructure is parity-complete: every
@@ -87,9 +86,9 @@ The current branch truth is backed by these checks:
 | Terraform provider schema ownership | complete | `go/internal/terraformschema/*`, `go/internal/relationships/*` | schema refresh cadence |
 | Python runtime ownership | complete | no runtime `.py` files outside fixtures | none |
 
-## Non-Parser Platform Parity Gaps
+## Non-Parser Platform Parity Status
 
-These are the currently known branch-level gaps outside parser-family promotion.
+These are the current branch-level parity surfaces outside parser families.
 
 | Area | Status | Current truth | Remaining work |
 | --- | --- | --- | --- |
@@ -100,6 +99,10 @@ These are the currently known branch-level gaps outside parser-family promotion.
 | CLI parity breadth | pass | the supported Go CLI contract is now explicit in both code and docs: historical commands are either supported, deprecated with guidance, or intentionally removed with compatibility errors instead of silently drifting from the Python-era UX | keep command metadata, docs, and focused CLI tests aligned |
 | Projector/reducer queue safety | Go-owned | compose-backed proof now covers incremental-refresh retry/supersession, projector ack visibility, reducer dead-letter handling, lease cleanup, and queue-state telemetry/logging on the Go runtime path | keep the existing proof scripts and queue-focused Go tests green |
 | Relationship fidelity | pass | typed relationship evidence now survives reducer normalization, Neo4j write dispatch, repository context/story read models, and the compose-backed relationship-platform proof, including controller-driven, workflow-driven, and IaC-driven family classification from persisted `evidence_type` metadata | keep typed edges and evidence-family shaping aligned as validation work continues |
+
+There are no currently-known branch-level parity blockers outside validation and
+documentation alignment. Remaining notes in this document that mention bounded
+future enhancement space are intentionally outside Python-era parity scope.
 
 ## Feature Parity Status
 
@@ -151,13 +154,12 @@ honest signoff:
   scopes, concurrency groups, job environments, and job timeout metadata on
   repo-local workflow artifacts, and the same repo-local reusable workflow
   refs now surface as same-repo content/query provenance on the Go fallback
-  path without pretending they are cross-repo canonical edges. The
+  path and now also emit canonical same-repo `DEPLOYS_FROM` evidence on the
+  relationship path without pretending they are cross-repo edges. The
   Jenkins-plus-Ansible controller path now also carries inventories,
   `group_vars` / `host_vars`, and task entrypoint context through repository
-  controller artifacts and deployment/story shaping. The remaining workflow
-  gap is canonical promotion for repo-local workflow hints when explicit
-  repo-bearing evidence is absent, plus broader controller-driven validation;
-  Terraform variable-file promotion, local-variable-
+  controller artifacts and deployment/story shaping. Terraform variable-file
+  promotion, local-variable-
   backed `file(local.foo)` / `templatefile(local.bar, ...)` config assets,
   lookup-backed local config assets, helper-composed `join("", [path.module,
   "/..."])` and `join("/", [path.module, "..."])` template assets, nested
@@ -171,10 +173,10 @@ honest signoff:
   in both named and unnamed helper forms that now recovers repo-local
   `account.yaml`, `region.yaml`, and `vpc.yaml` assets without leaking
   remote-state keys, and the shared-infra compose-backed deployment-trace
-  proof are already proven on
-  the normal Go path. The remaining IaC helper gap is now limited to broader
-  helper-built path expressions that still cannot be collapsed into exact
-  repo-relative assets from checked-in source alone.
+  proof are already proven on the normal Go path. Broader helper-built path
+  expressions that still cannot be collapsed into exact repo-relative assets
+  from checked-in source alone remain future enhancement space rather than
+  missing Python-era parity behavior.
 - JSON remains intentionally partial to avoid graph noise unless a specific
   JSON family is promoted on purpose
 
@@ -184,9 +186,9 @@ all pass their focused parser, relationship, content, and query tests. The
 API/MCP query surfacing infrastructure is also now parity-complete with
 checked-in proof across all `pass` parser/graph families.
 
-The remaining parity work is implementation plus validation work, not just doc
-lock. Use the parity matrix and the 2026-04-16 hardening plan to track those
-open rows honestly.
+Python-era parity is now met for the currently-supported runtime and
+relationship surfaces. Use the parity matrix to distinguish bounded future
+enhancements from proven parity behavior.
 
 ## What Counts As Parity Complete
 
