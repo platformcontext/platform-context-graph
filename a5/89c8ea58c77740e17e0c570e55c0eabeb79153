@@ -1,0 +1,44 @@
+go/internal/parser/hcl_terragrunt_join_additional_test.go
+  26d0a7775258d320 136-165
+go/internal/query/repository_config_artifacts_hcl.go
+  26d0a7775258d320 226-236,323-328
+docs/docs/reference/relationship-mapping.md
+  26d0a7775258d320 524-527
+go/internal/query/repository_config_artifacts_real_patterns_test.go
+  26d0a7775258d320 58-89
+docs/docs/reference/parity-closure-matrix.md
+  26d0a7775258d320 71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "a589c8ea58c77740e17e0c570e55c0eabeb79153",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 86,
+      "total_deletions": 2,
+      "accepted_lines": 86,
+      "overriden_lines": 0
+    }
+  }
+}
