@@ -14,6 +14,9 @@ This matrix tracks the higher-level support bar for each parser beyond
 the raw capability checklist. `-` means the page does not currently make a
 specific support assertion for that dimension.
 
+For audited family-level closure status and bounded gaps, see
+[`../reference/parity-closure-matrix.md`](../reference/parity-closure-matrix.md).
+
 | Parser | Parser Class | Grammar Routing | Normalization | Framework Packs | Pack Names | Query Surfacing | Real-Repo Validation | End-to-End Indexing |
 |--------|--------------|-----------------|---------------|-----------------|------------|-----------------|----------------------|---------------------|
 | ArgoCD | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |

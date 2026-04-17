@@ -99,6 +99,6 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 
 ## Known Limitations
-- No parser/query gaps are currently tracked on this page for the documented
-  Python surface. Remaining validation and enhancement work sits in other
-  languages or broader validation sweeps.
+- The documented Python surface is supported end to end on the Go path.
+- Remaining validation is broader corpus breadth, not a page-level parser or
+  query capability gap.

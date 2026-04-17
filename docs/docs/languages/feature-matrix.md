@@ -7,6 +7,9 @@ blanket parity claims for every end-to-end graph surface. Use each
 language-specific page as the source of truth for current limitations, partial
 real-repo validation, and end-to-end indexing status.
 
+For audited family-level closure status, see
+[`../reference/parity-closure-matrix.md`](../reference/parity-closure-matrix.md).
+
 ## Language Parsers
 
 | Parser | Parser Class | Functions | Classes | Interfaces | Traits | Imports | Calls | Variables | Structs | Enums | Macros | Unit Coverage | Integration Coverage | Fixture |
