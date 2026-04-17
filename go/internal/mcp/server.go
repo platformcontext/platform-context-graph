@@ -111,27 +111,12 @@ func NewServer(handler http.Handler, logger *slog.Logger) *Server {
 //   - GET  /sse          — SSE transport (sends endpoint event, then keepalives)
 //   - POST /mcp/message  — JSON-RPC endpoint (works standalone or with SSE session)
 //   - GET  /health       — k8s probes
+//   - shared runtime admin routes from the provided base mux
 //   - /api/v0/*          — query API passthrough
 //
 // Blocks until ctx is cancelled.
-func (s *Server) RunHTTP(ctx context.Context, addr string) error {
-	httpMux := http.NewServeMux()
-
-	// Health probe for k8s readiness/liveness.
-	httpMux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	})
-
-	// SSE transport endpoint.
-	httpMux.HandleFunc("GET /sse", s.handleSSE)
-
-	// MCP JSON-RPC endpoint (supports both standalone POST and SSE-linked POST).
-	httpMux.HandleFunc("POST /mcp/message", s.handleHTTPMessage)
-
-	// Mount the query API routes so the MCP service can also serve
-	// direct HTTP queries (single deployment surface in EKS).
-	httpMux.Handle("/api/", s.handler)
+func (s *Server) RunHTTP(ctx context.Context, addr string, base *http.ServeMux) error {
+	httpMux := s.httpMux(base)
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -153,6 +138,31 @@ func (s *Server) RunHTTP(ctx context.Context, addr string) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	return nil
+}
+
+func (s *Server) httpMux(base *http.ServeMux) *http.ServeMux {
+	httpMux := base
+	if httpMux == nil {
+		httpMux = http.NewServeMux()
+	}
+
+	// Health probe for MCP transport liveness.
+	httpMux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	// SSE transport endpoint.
+	httpMux.HandleFunc("GET /sse", s.handleSSE)
+
+	// MCP JSON-RPC endpoint (supports both standalone POST and SSE-linked POST).
+	httpMux.HandleFunc("POST /mcp/message", s.handleHTTPMessage)
+
+	// Mount the query API routes so the MCP service can also serve
+	// direct HTTP queries (single deployment surface in EKS).
+	httpMux.Handle("/api/", s.handler)
+
+	return httpMux
 }
 
 // handleSSE establishes an SSE connection. It sends an `endpoint` event telling

@@ -79,7 +79,7 @@ flowchart LR
 - The MCP server is a separate Go runtime that serves MCP transport and uses
   the same canonical graph and content backends for read operations.
 - Admin and status reads use the same Go-owned runtime/reporting model as the
-  operator surface where that runtime mounts the shared admin mux.
+  operator surface.
 
 ### What To Check When Reads Look Wrong
 
@@ -218,14 +218,13 @@ flowchart LR
 
 ### Required Operator View
 
-- API, ingester, reducer, and bootstrap runtimes emit structured JSON logs
-  through the shared Go telemetry package
+- API, MCP, ingester, reducer, and bootstrap runtimes emit structured JSON
+  logs through the shared Go telemetry package
 - metrics expose queue, runtime, and data-plane health
 - traces connect ingestion, projection, and query timing
-- `/admin/status` gives the fastest service-level state summary for runtimes
-  that mount the shared admin surface
-- the MCP runtime remains Go-owned but still uses a distinct health and
-  transport surface today
+- `/admin/status` gives the fastest service-level state summary
+- MCP keeps its distinct transport routes while also mounting the shared admin
+  surface
 
 ## 8. Local Validation Workflow
 

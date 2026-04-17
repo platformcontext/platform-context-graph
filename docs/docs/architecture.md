@@ -199,16 +199,17 @@ flowchart LR
 
 ## Operator Contract
 
-The shared Go runtime admin contract currently applies to the API, ingester,
-resolution engine, and local proof runtimes that mount `go/internal/runtime`.
+The shared Go runtime admin contract now applies to the API, MCP server,
+ingester, resolution engine, and local proof runtimes that mount
+`go/internal/runtime`.
 
 - `GET /healthz`
 - `GET /readyz`
 - `GET /admin/status`
 - `/metrics`
 
-The MCP server is a separate Go runtime, but it does not yet mount that same
-admin mux. Today it exposes its own:
+The MCP server is a separate Go runtime and now mounts the shared admin mux
+alongside its transport-specific endpoints. It also exposes:
 
 - `GET /health`
 - `GET /sse`
@@ -226,15 +227,15 @@ The point of the shared contract is consistency:
 
 Telemetry is first-class, not an afterthought.
 
-- Core long-running data-plane runtimes use structured JSON logging through the
-  shared Go telemetry package.
+- Core long-running Go runtimes, including MCP, use structured JSON logging
+  through the shared Go telemetry package.
 - Metrics expose runtime, queue, and data-plane behavior.
 - Traces connect request, ingestion, and reduction work across service
   boundaries.
 
-The MCP runtime is Go-owned and starts with a JSON logger, but it still has a
-small amount of plain startup logging in its wiring path. Treat that as
-remaining telemetry hardening, not as evidence of Python ownership.
+MCP keeps its transport-specific `/health`, `/sse`, and `/mcp/message`
+endpoints, but its operator/admin surface now follows the same shared Go
+runtime contract as the API, ingester, and reducer.
 
 The canonical docs are:
 

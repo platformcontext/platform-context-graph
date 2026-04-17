@@ -383,3 +383,42 @@ func TestAPI_Passthrough(t *testing.T) {
 		t.Errorf("expected test/repo in response, got: %s", body.String())
 	}
 }
+
+func TestHTTPMux_ComposesSharedAdminAndMCPRoutes(t *testing.T) {
+	s := testServer()
+
+	adminMux := http.NewServeMux()
+	adminMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("admin-ok"))
+	})
+
+	httpMux := s.httpMux(adminMux)
+
+	healthzReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	healthzRec := httptest.NewRecorder()
+	httpMux.ServeHTTP(healthzRec, healthzReq)
+	if got, want := healthzRec.Code, http.StatusOK; got != want {
+		t.Fatalf("GET /healthz status = %d, want %d", got, want)
+	}
+	if got := strings.TrimSpace(healthzRec.Body.String()); got != "admin-ok" {
+		t.Fatalf("GET /healthz body = %q, want %q", got, "admin-ok")
+	}
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthRec := httptest.NewRecorder()
+	httpMux.ServeHTTP(healthRec, healthReq)
+	if got, want := healthRec.Code, http.StatusOK; got != want {
+		t.Fatalf("GET /health status = %d, want %d", got, want)
+	}
+
+	apiReq := httptest.NewRequest(http.MethodGet, "/api/v0/repositories", nil)
+	apiRec := httptest.NewRecorder()
+	httpMux.ServeHTTP(apiRec, apiReq)
+	if got, want := apiRec.Code, http.StatusOK; got != want {
+		t.Fatalf("GET /api/v0/repositories status = %d, want %d", got, want)
+	}
+	if got := apiRec.Body.String(); !strings.Contains(got, "test/repo") {
+		t.Fatalf("GET /api/v0/repositories body = %q, want test/repo", got)
+	}
+}
