@@ -1,0 +1,33 @@
+docs/docs/reference/telemetry/traces.md
+  4089dfbfbfef7580 33-34,74-75
+docs/docs/deployment/helm.md
+  4089dfbfbfef7580 171,175
+docs/docs/deployment/docker-compose.md
+  4089dfbfbfef7580 10-13,37,94,101,111
+docs/docs/reference/telemetry/cross-service-correlation.md
+  4089dfbfbfef7580 3-6,21,54-56,73-74,79-80,106-107,195-196,204-206,253-256
+docs/docs/reference/telemetry/index.md
+  4089dfbfbfef7580 51,53-58
+docs/docs/deployment/overview.md
+  4089dfbfbfef7580 4-5,7-8,12-15,23-24,38,40-41,50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "d28f9bb74990dbd1937dd3887f4eb38458957c9e",
+  "prompts": {
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 59,
+      "total_deletions": 27,
+      "accepted_lines": 709,
+      "overriden_lines": 0
+    }
+  }
+}
