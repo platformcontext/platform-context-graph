@@ -30,10 +30,13 @@ flowchart TD
   F --> G["Enqueue projector work"]
   G --> H["Resolution Engine claims projector work"]
   H --> I["Write source-local graph state"]
-  I --> J["Write content entities"]
-  J --> K["Enqueue shared projection intents"]
-  K --> L["Resolution Engine drains shared intents"]
-  L --> M["Write canonical shared graph edges"]
+  I --> J["Publish canonical_nodes_committed"]
+  J --> K["Write content entities"]
+  K --> L["Enqueue semantic + shared projection intents"]
+  L --> M["Resolution Engine materializes semantic nodes"]
+  M --> N["Publish semantic_nodes_committed"]
+  N --> O["Resolution Engine drains shared intents"]
+  O --> P["Write canonical shared graph edges"]
 ```
 
 ### Ownership Notes
@@ -41,6 +44,9 @@ flowchart TD
 - The ingester owns discovery, sync, snapshotting, parsing, and fact emission.
 - The resolution engine owns both projector queue draining and reducer-owned
   shared projection.
+- The projector publishes bounded canonical readiness, semantic-entity
+  materialization publishes bounded semantic readiness, and reducer-owned edge
+  domains wait on that readiness before writing shared Neo4j edges.
 - No normal-path Python runtime participates in this workflow.
 
 ### Operator Checkpoints
@@ -56,6 +62,22 @@ Start with:
 - [Runtime status](../reference/runtime-admin-api.md)
 - [Telemetry overview](../reference/telemetry/index.md)
 - [Local testing runbook](../reference/local-testing.md)
+
+### Graph Projection Readiness Workflow
+
+The bounded graph-write phases are now explicit in the Go runtime:
+
+1. projector writes canonical nodes for one bounded acceptance slice
+2. projector publishes `canonical_nodes_committed`
+3. semantic-entity materialization writes semantic nodes for that same slice
+4. reducer publishes `semantic_nodes_committed`
+5. shared edge domains such as `code_calls`, `sql_relationships`, and
+   `inheritance_edges` only proceed when semantic readiness exists
+
+The durable readiness state is stored in Postgres
+`graph_projection_phase_state`. There is currently no dedicated public admin
+endpoint for per-slice phase rows; operators infer readiness behavior from
+queue/backlog state, reducer logs, and the targeted Go tests for this path.
 
 ## 2. Query Workflow
 

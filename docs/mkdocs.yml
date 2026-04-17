@@ -69,6 +69,7 @@ nav:
     - Graph Model: concepts/graph-model.md
     - Modes: concepts/modes.md
     - Architecture: architecture.md
+    - Parity Closure Matrix: reference/parity-closure-matrix.md
     - Service Workflows: reference/service-workflows.md
     - Relationship Mapping: reference/relationship-mapping.md
     - Relationship Mapping Observability: reference/relationship-mapping-observability.md

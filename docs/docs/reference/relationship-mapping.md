@@ -39,17 +39,19 @@ flowchart TD
     B --> C[Evidence extraction]
     C --> D[Typed resolution]
     D --> E[Canonical resolved relationships]
-    E --> F[Neo4j projection]
-    E --> G[Derived summaries]
-    G --> H[Repo context enrichment]
-    F --> H
-    H --> I[MCP / API answer shaping]
-    I --> J[Truthfulness and completeness notes]
+    E --> F[Canonical node projection]
+    F --> G[Durable graph readiness phases]
+    G --> H[Shared edge projection]
+    E --> I[Derived summaries]
+    I --> J[Repo context enrichment]
+    H --> J
+    J --> K[MCP / API answer shaping]
+    K --> L[Truthfulness and completeness notes]
 
     classDef canonical fill:#e8f3ff,stroke:#2563eb,color:#0f172a;
     classDef derived fill:#ecfdf3,stroke:#059669,color:#052e16;
-    class D,E,F canonical;
-    class G,H,I,J derived;
+    class D,E,F,G,H canonical;
+    class I,J,K,L derived;
 ```
 
 ## Traversal Rules
@@ -183,6 +185,32 @@ This is the main rule that keeps the graph from becoming a pile of vague `DEPEND
 After resolution, repository context enrichment builds derived summaries from
 the resolved relationships plus normal read-path artifact extraction. These
 summaries are for answering questions, not for redefining canonical truth.
+
+### Graph Readiness Between Nodes And Shared Edges
+
+The Go write path now makes the graph-projection boundary explicit instead of
+assuming that every downstream edge writer can proceed as soon as canonical
+projection commits.
+
+Current runtime contract:
+
+- the projector publishes `canonical_nodes_committed` for a bounded
+  `(scope_id, acceptance_unit_id, source_run_id, generation_id, keyspace)`
+  slice after canonical node writes succeed
+- semantic-entity materialization publishes `semantic_nodes_committed` for the
+  same bounded slice after semantic node writes succeed
+- reducer-owned shared edge domains that depend on semantic nodes currently
+  wait for that semantic readiness before they write shared Neo4j edges
+
+Today that gating applies to:
+
+- `code_calls`
+- `sql_relationships`
+- `inheritance_edges`
+
+The durable readiness rows live in Postgres
+`graph_projection_phase_state`. This is canonical coordination state, not a
+read-side summary.
 
 The current derived summaries include:
 

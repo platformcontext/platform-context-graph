@@ -39,6 +39,11 @@ Current platform reality:
   supplementation
 - Terraform provider-schema assets are packaged and loaded from
   `go/internal/terraformschema/schemas/*.json.gz`
+- graph-write coordination for shared edge domains now uses durable bounded
+  readiness state in Postgres:
+  `canonical_nodes_committed` is published by the projector,
+  `semantic_nodes_committed` is published by semantic-entity materialization,
+  and reducer-owned edge domains wait for that state before writing
 - the API, MCP, ingester, reducer, local verification runtimes, and bootstrap
   helpers
   emit structured JSON logs through the shared Go telemetry logger
@@ -125,6 +130,9 @@ Current runtime status:
 - the collector now emits Go-owned parser follow-up facts for workload identity
   and canonical code-call materialization, and the reducer owns the resulting
   `CALLS` edge reconciliation path
+- the projector and reducer now coordinate edge-domain writes through the
+  durable `graph_projection_phase_state` table instead of assuming the
+  canonical and semantic node phases finished in lock-step
 - parser, admin, and runtime ownership are Go-owned
 
 ## Incremental Refresh And Reconciliation

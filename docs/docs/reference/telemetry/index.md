@@ -94,6 +94,12 @@ For shared-write debugging specifically:
   shared backlog is present, so operators can inspect the recommended
   partition and batch settings from `get_ingester_status` before opening the
   admin tuning report.
+- The reducer also persists bounded graph-readiness state in Postgres between
+  canonical-node, semantic-node, and shared-edge phases. There is not yet a
+  dedicated public metric family for those per-slice phase rows, so operators
+  should diagnose that path through reducer backlog, structured logs, and the
+  targeted readiness tests rather than expecting a separate phase-state
+  dashboard out of the box.
 
 ## By Runtime
 
