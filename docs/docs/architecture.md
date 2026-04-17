@@ -21,7 +21,9 @@ traces, and logs, use [Telemetry Overview](reference/telemetry/index.md).
 
 PCG is split into a small number of clear service and storage boundaries:
 
-- **API** serves HTTP and MCP read/query traffic.
+- **API** serves HTTP query, admin, and status traffic.
+- **MCP Server** serves MCP tool transport and mounts the read/query surface for
+  MCP clients.
 - **Ingester** discovers repositories, snapshots content, parses source and
   IaC, and writes durable facts.
 - **Resolution Engine** drains queues, materializes canonical graph state, and
@@ -48,8 +50,10 @@ flowchart LR
   E --> F["Resolution Engine"]
   F --> G["Neo4j canonical graph"]
   F --> H["Postgres content store"]
-  I["API / MCP"] --> G
-  I["API / MCP"] --> H
+  I["API"] --> G
+  I["API"] --> H
+  J["MCP Server"] --> G
+  J["MCP Server"] --> H
 ```
 
 ## Service Boundaries
@@ -59,7 +63,6 @@ flowchart LR
 The API owns:
 
 - HTTP query routes
-- MCP-backed query transport
 - OpenAPI surface
 - public admin/query endpoints
 - runtime health and metrics endpoints
@@ -71,6 +74,22 @@ The API does not own:
 - fact emission
 - queue draining
 - canonical write orchestration
+
+### MCP Server
+
+The MCP server owns:
+
+- MCP SSE and JSON-RPC transport
+- tool dispatch over the Go query/read surface
+- MCP-specific health endpoint shape
+
+The MCP server does not own:
+
+- repository sync
+- parsing
+- fact emission
+- queue draining
+- the shared runtime admin/status mux used by API, ingester, and reducer
 
 ### Ingester
 
@@ -169,22 +188,34 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  A["CLI / MCP / HTTP request"] --> B["API / Query layer"]
+  A["CLI / HTTP request"] --> B["API / Query layer"]
+  F["MCP client"] --> G["MCP Server"]
   B --> C["Neo4j canonical graph"]
   B --> D["Postgres content store"]
   B --> E["Status and admin readers"]
+  G --> C
+  G --> D
 ```
 
 ## Operator Contract
 
-Every long-running runtime uses the same operator contract:
+The shared Go runtime admin contract currently applies to the API, ingester,
+resolution engine, and local proof runtimes that mount `go/internal/runtime`.
 
 - `GET /healthz`
 - `GET /readyz`
 - `GET /admin/status`
 - `/metrics`
 
-The point is consistency:
+The MCP server is a separate Go runtime, but it does not yet mount that same
+admin mux. Today it exposes its own:
+
+- `GET /health`
+- `GET /sse`
+- `POST /mcp/message`
+- `/api/*` passthrough routes for query handling
+
+The point of the shared contract is consistency:
 
 - operators should not need a different mental model per service
 - the CLI and HTTP/admin surfaces should describe the same underlying runtime
@@ -195,10 +226,15 @@ The point is consistency:
 
 Telemetry is first-class, not an afterthought.
 
-- Logs are structured JSON.
+- Core long-running data-plane runtimes use structured JSON logging through the
+  shared Go telemetry package.
 - Metrics expose runtime, queue, and data-plane behavior.
 - Traces connect request, ingestion, and reduction work across service
   boundaries.
+
+The MCP runtime is Go-owned and starts with a JSON logger, but it still has a
+small amount of plain startup logging in its wiring path. Treat that as
+remaining telemetry hardening, not as evidence of Python ownership.
 
 The canonical docs are:
 

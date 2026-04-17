@@ -18,7 +18,8 @@ Every long-running runtime should also follow one operator principle:
 - the exact counters may differ by runtime, but the operator experience should
   not
 
-For the Go rewrite, that contract is the same for every long-running service:
+For the Go rewrite, that shared admin contract is used by the core data-plane
+services that mount `go/internal/runtime`:
 
 - `/healthz` and `/readyz` describe process health and readiness
 - `/metrics` exposes runtime and backlog signals
@@ -39,9 +40,11 @@ Current branch reality:
 - Terraform provider-schema assets are packaged and loaded from
   `go/internal/terraformschema/schemas/*.json.gz`
 - Python no longer owns any deployed or long-running runtime on this branch
-- the API runtime and bootstrap-data-plane helper emit structured JSON logs
-  through the shared Go telemetry logger, matching the ingester and reducer
-  logging contract
+- the API, ingester, reducer, collector proof lane, and bootstrap helpers emit
+  structured JSON logs through the shared Go telemetry logger
+- the MCP runtime is Go-owned and starts with a JSON logger, but its wiring
+  path still contains plain startup log lines and does not yet expose the
+  shared admin mux contract
 
 ## Runtime Contract
 
@@ -49,15 +52,20 @@ Current branch reality:
 | --- | --- | --- | --- | --- | --- |
 | DB Migrate | Postgres + Neo4j schema DDL | `/usr/local/bin/pcg-bootstrap-data-plane` | Postgres DDL + Neo4j DDL | none (exits immediately) | `initContainer` |
 | API | HTTP API, query reads, admin endpoints | `pcg api start --host 0.0.0.0 --port 8080` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
-| MCP Server | MCP tool transport | `pcg mcp start` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
+| MCP Server | MCP tool transport plus mounted query passthrough | `pcg mcp start` | graph + content reads only | no shared `/metrics` endpoint today | `Deployment` |
 | Ingester | repo sync, parsing, fact emission, workspace ownership | `/usr/local/bin/pcg-ingester` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `/usr/local/bin/pcg-reducer` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
 
 ## Health, Status, And Completeness
 
-- `/healthz` and `/readyz` answer process health and readiness only.
-- `/admin/status` reports the live runtime stage, backlog, and failure state.
+- API, ingester, reducer, and other runtimes that mount
+  `go/internal/runtime` use `/healthz`, `/readyz`, `/admin/status`, and
+  `/metrics`.
+- The MCP server currently exposes `GET /health`, `GET /sse`, `POST
+  /mcp/message`, and mounted `/api/*` routes instead of the shared admin mux.
+- Shared `/admin/status` reports the live runtime stage, backlog, and failure
+  state where mounted.
 - `GET /api/v0/status/index` is the normalized Go-owned completeness route.
 - `GET /api/v0/index-status` is the legacy compatibility alias for the same
   completeness payload.
@@ -91,8 +99,9 @@ normal-path Python delegation.
 
 ## Admin Contract
 
-For the Go rewrite path, every long-running service should converge on the same
-operator/admin contract:
+For the Go rewrite path, the platform target remains a consistent operator/admin
+contract across long-running services, but the current code is not fully
+uniform yet:
 
 - one shared status/report seam
 - one CLI surface for local and on-host inspection
@@ -116,8 +125,11 @@ Current rewrite status:
   `/admin/status`
 - hosted Go runtimes can now compose that shared admin server into their
   lifecycle without bespoke HTTP bootstrap code
+- the API runtime mounts that shared contract today
 - `collector-git`, `projector`, and `reducer` all mount that shared admin
   surface in their local proof lanes
+- the MCP runtime remains separate and still exposes its own `/health`,
+  `/sse`, and `/mcp/message` surface instead of the shared admin mux
 - the collector proof lane now uses native Go selection, repo sync, snapshot
   collection, content shaping, and optional SCIP execution/parsing
 - the collector now emits Go-owned parser follow-up facts for workload identity
@@ -161,8 +173,10 @@ flowchart LR
   D --> E["Resolution Engine"]
   E --> F["Neo4j"]
   E --> G["Postgres content store"]
-  H["API / MCP"] --> F
+  H["API"] --> F
   H --> G
+  I["MCP Server"] --> F
+  I --> G
 ```
 
 ## Local Full-Stack Flow
@@ -180,7 +194,7 @@ flowchart LR
 
 ### Responsibilities
 
-- serve HTTP and MCP requests
+- serve HTTP query and admin requests
 - read canonical graph state from Neo4j
 - read file and entity content from Postgres
 - serve operator/admin endpoints
@@ -201,11 +215,39 @@ flowchart LR
 ### Signals to watch
 
 - request latency and error rate
-- MCP/tool latency
 - content read latency
 - graph query latency
 
 Scale the API when request traffic rises. Do not scale it to fix queue backlog.
+
+## MCP Server
+
+### Responsibilities
+
+- serve MCP SSE and JSON-RPC transport
+- dispatch MCP tool calls over the mounted Go query surface
+- expose MCP-specific health and session endpoints
+
+### Does not own
+
+- repository sync
+- parsing
+- fact emission
+- queued projection work
+- the shared runtime admin/status mux used by API, ingester, and reducer
+
+### Deployments
+
+- separate Go runtime started with `pcg mcp start`
+
+### Signals to watch
+
+- MCP session establishment and tool latency
+- backend graph and content query latency
+- transport health through `GET /health`
+
+Treat MCP as a separate query transport runtime, not as part of the API
+process.
 
 ## Ingester
 
