@@ -25,10 +25,13 @@ func TestBuildRepositoryStoryResponseIncludesTypedRelationshipNarrative(t *testi
 		[]string{"argocd_application"},
 		4,
 		map[string]any{
-			"families": []string{"argocd", "helm", "terraform"},
+			"families": []string{"argocd", "ansible", "helm", "terraform"},
 			"relationship_overview": map[string]any{
-				"relationship_count": 2,
-				"story":              "Controller-driven relationships: DEPLOYS_FROM infra-configs via argocd_application_source. Workflow-driven relationships: DEPLOYS_FROM ci-workflows via github_actions_reusable_workflow_ref.",
+				"relationship_count": 4,
+				"story": "Controller-driven relationships: DEPLOYS_FROM infra-configs via argocd_application_source. " +
+					"Workflow-driven relationships: DEPLOYS_FROM ci-workflows via github_actions_reusable_workflow_ref. " +
+					"Controller-driven relationships: DISCOVERS_CONFIG_IN controller-pipelines via jenkins_shared_library. " +
+					"Controller-driven relationships: DEPENDS_ON ansible-ops via ansible_role_reference.",
 				"controller_driven": []map[string]any{
 					{
 						"type":          "DEPLOYS_FROM",
@@ -36,12 +39,24 @@ func TestBuildRepositoryStoryResponseIncludesTypedRelationshipNarrative(t *testi
 						"target_id":     "repo-2",
 						"evidence_type": "argocd_application_source",
 					},
+					{
+						"type":          "DISCOVERS_CONFIG_IN",
+						"target_name":   "controller-pipelines",
+						"target_id":     "repo-3",
+						"evidence_type": "jenkins_shared_library",
+					},
+					{
+						"type":          "DEPENDS_ON",
+						"target_name":   "ansible-ops",
+						"target_id":     "repo-4",
+						"evidence_type": "ansible_role_reference",
+					},
 				},
 				"workflow_driven": []map[string]any{
 					{
 						"type":          "DEPLOYS_FROM",
 						"target_name":   "ci-workflows",
-						"target_id":     "repo-3",
+						"target_id":     "repo-5",
 						"evidence_type": "github_actions_reusable_workflow_ref",
 					},
 				},
@@ -55,7 +70,7 @@ func TestBuildRepositoryStoryResponseIncludesTypedRelationshipNarrative(t *testi
 		t.Fatalf("relationship_overview type = %T, want map[string]any", got["relationship_overview"])
 	}
 
-	if got, want := relationshipOverview["relationship_count"], 2; got != want {
+	if got, want := relationshipOverview["relationship_count"], 4; got != want {
 		t.Fatalf("relationship_overview.relationship_count = %#v, want %#v", got, want)
 	}
 
@@ -63,11 +78,17 @@ func TestBuildRepositoryStoryResponseIncludesTypedRelationshipNarrative(t *testi
 	if !ok {
 		t.Fatalf("relationship_overview.controller_driven type = %T, want []map[string]any", relationshipOverview["controller_driven"])
 	}
-	if len(controllerDriven) != 1 {
-		t.Fatalf("len(relationship_overview.controller_driven) = %d, want 1", len(controllerDriven))
+	if len(controllerDriven) != 3 {
+		t.Fatalf("len(relationship_overview.controller_driven) = %d, want 3", len(controllerDriven))
 	}
-	if got, want := controllerDriven[0]["evidence_type"], "argocd_application_source"; got != want {
-		t.Fatalf("relationship_overview.controller_driven[0].evidence_type = %#v, want %#v", got, want)
+	controllerEvidence := map[string]struct{}{}
+	for _, row := range controllerDriven {
+		controllerEvidence[row["evidence_type"].(string)] = struct{}{}
+	}
+	for _, want := range []string{"argocd_application_source", "jenkins_shared_library", "ansible_role_reference"} {
+		if _, ok := controllerEvidence[want]; !ok {
+			t.Fatalf("relationship_overview.controller_driven missing evidence_type %q", want)
+		}
 	}
 
 	workflowDriven, ok := relationshipOverview["workflow_driven"].([]map[string]any)
@@ -89,17 +110,17 @@ func TestBuildRepositoryStoryResponseIncludesTypedRelationshipNarrative(t *testi
 		t.Fatal("relationship_overview.story is empty, want typed relationship narrative")
 	}
 	lowerStory := strings.ToLower(story)
-	if !strings.Contains(lowerStory, "controller-driven") {
-		t.Fatalf("relationship_overview.story = %q, want controller-driven typed relationships", story)
-	}
-	if !strings.Contains(lowerStory, "workflow-driven") {
-		t.Fatalf("relationship_overview.story = %q, want workflow-driven typed relationships", story)
-	}
-	if !strings.Contains(lowerStory, "argocd_application_source") {
-		t.Fatalf("relationship_overview.story = %q, want argocd evidence type", story)
-	}
-	if !strings.Contains(lowerStory, "github_actions_reusable_workflow_ref") {
-		t.Fatalf("relationship_overview.story = %q, want github actions evidence type", story)
+	for _, want := range []string{
+		"controller-driven",
+		"workflow-driven",
+		"argocd_application_source",
+		"jenkins_shared_library",
+		"ansible_role_reference",
+		"github_actions_reusable_workflow_ref",
+	} {
+		if !strings.Contains(lowerStory, strings.ToLower(want)) {
+			t.Fatalf("relationship_overview.story = %q, want %q", story, want)
+		}
 	}
 
 	storySections, ok := got["story_sections"].([]map[string]any)

@@ -689,6 +689,51 @@ func TestDiscoverJenkinsGitHubRepositoryEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverAnsibleRoleReferenceEvidenceIncludesResolvedMetadata(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-ops",
+			Payload: map[string]any{
+				"artifact_type": "ansible_playbook",
+				"relative_path": "playbooks/site.yml",
+				"content": `- hosts: all
+  roles:
+    - role: payments-service
+      src: git+https://github.com/myorg/payments-service.git
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+	if evidence[0].EvidenceKind != EvidenceKindAnsibleRoleReference {
+		t.Fatalf("kind = %q, want %q", evidence[0].EvidenceKind, EvidenceKindAnsibleRoleReference)
+	}
+	if evidence[0].RelationshipType != RelDependsOn {
+		t.Fatalf("type = %q, want %q", evidence[0].RelationshipType, RelDependsOn)
+	}
+	if evidence[0].TargetRepoID != "repo-payments" {
+		t.Fatalf("target = %q, want %q", evidence[0].TargetRepoID, "repo-payments")
+	}
+	if got, want := evidence[0].Details["role_name"], "payments-service"; got != want {
+		t.Fatalf("role_name = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["reference_key"], "roles"; got != want {
+		t.Fatalf("reference_key = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["source_ref"], "git+https://github.com/myorg/payments-service.git"; got != want {
+		t.Fatalf("source_ref = %#v, want %#v", got, want)
+	}
+}
+
 func TestDiscoverDockerfileSourceLabelEvidence(t *testing.T) {
 	t.Parallel()
 
