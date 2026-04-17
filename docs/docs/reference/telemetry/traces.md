@@ -30,6 +30,8 @@ The stable span families are:
 - `reducer.sql_relationship_materialization`
 - `reducer.inheritance_materialization`
 - `reducer.cross_repo_resolution`
+- `shared_acceptance.lookup`
+- `shared_acceptance.upsert`
 - `postgres.exec`
 - `postgres.query`
 - `neo4j.execute`
@@ -69,6 +71,8 @@ Legacy span families such as `pcg.http.*`, `pcg.mcp.*`, `pcg.query.*`,
 - `reducer.run` is one reducer claim-and-execute cycle
 - `reducer.batch_claim` covers batched reducer claim work where used
 - `reducer.cross_repo_resolution` is the cross-repo relationship resolution span
+- `shared_acceptance.lookup` covers shared acceptance reads
+- `shared_acceptance.upsert` covers shared acceptance writes
 - `reducer.sql_relationship_materialization` covers SQL-side relationship
   materialization
 - `reducer.inheritance_materialization` covers inheritance/write follow-up

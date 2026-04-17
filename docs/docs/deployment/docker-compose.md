@@ -7,9 +7,10 @@ The repository includes a Docker Compose stack that mirrors the deployable-servi
 3. start a local OpenTelemetry collector
 4. start Jaeger for trace inspection
 5. bootstrap index fixture repos
-6. start the HTTP API + MCP service
-7. run the ingester service, which keeps the repo-sync loop running in the background
-8. run the standalone resolution-engine loop
+6. start the HTTP API service
+7. start the MCP server service
+8. run the ingester service, which keeps the repo-sync loop running in the background
+9. run the standalone resolution-engine loop
 
 Compose files:
 - `docker-compose.yaml`
@@ -33,6 +34,7 @@ This stack cannot run a real Kubernetes `ServiceMonitor`, but it can run the
 same thing a `ServiceMonitor` would scrape:
 
 - a Prometheus-format `/metrics` endpoint on `platform-context-graph`
+- a Prometheus-format `/metrics` endpoint on `mcp-server`
 - a Prometheus-format `/metrics` endpoint on `ingester`
 - a Prometheus-format `/metrics` endpoint on `resolution-engine`
 
@@ -89,12 +91,14 @@ Local auth stays at the Go API boundary too:
 For direct runtime scraping, Compose also enables per-runtime Prometheus endpoints:
 
 - API: `http://localhost:19464/metrics`
+- MCP Server: `http://localhost:19468/metrics`
 - Ingester: `http://localhost:19465/metrics`
 - Resolution Engine: `http://localhost:19466/metrics`
 
 Those defaults are configurable through:
 
 - `PCG_API_METRICS_PORT`
+- `PCG_MCP_METRICS_PORT`
 - `PCG_INGESTER_METRICS_PORT`
 - `PCG_RESOLUTION_ENGINE_METRICS_PORT`
 
@@ -104,6 +108,7 @@ To verify the endpoints manually:
 
 ```bash
 curl http://localhost:19464/metrics | head
+curl http://localhost:19468/metrics | head
 curl http://localhost:19465/metrics | head
 curl http://localhost:19466/metrics | head
 ```

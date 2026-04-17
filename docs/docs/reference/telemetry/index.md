@@ -48,11 +48,14 @@ flowchart LR
   D --> F["Postgres content store"]
   D --> G["Projection decisions"]
   C --> H["Failure and replay state"]
-  I["API / MCP"] --> E
+  I["API"] --> E
   I --> F
-  J["Admin API / CLI"] --> G
-  J --> H
-  J --> I
+  J["MCP Server"] --> E
+  J --> F
+  K["Admin API / CLI"] --> G
+  K --> H
+  K --> I
+  K --> J
 ```
 
 ## How To Use The Signals

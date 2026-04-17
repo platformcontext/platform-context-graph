@@ -1,6 +1,9 @@
 # Cross-Service Trace Correlation
 
-PlatformContextGraph runs three services that emit OTEL traces to the same Jaeger backend via an OTEL Collector. This guide shows operators how to correlate traces across service boundaries when debugging end-to-end pipeline behavior.
+PlatformContextGraph runs multiple Go runtimes that emit OTEL traces to the
+same Jaeger backend via an OTEL Collector. This guide shows operators how to
+correlate traces across service boundaries when debugging end-to-end pipeline
+behavior.
 
 ## Why Traces Don't Automatically Stitch
 
@@ -15,6 +18,7 @@ Each service emits traces with a distinct `service.name` resource attribute:
 | Service | service.name | Runtime |
 |---|---|---|
 | API | `platform-context-graph-api` | Go |
+| MCP Server | `mcp-server` | Go |
 | Ingester | `ingester` | Go |
 | Reducer | `reducer` | Go |
 
@@ -47,7 +51,9 @@ These keys appear in span attributes, logs, and metrics. Use them to stitch trac
 4. You will find separate trace trees:
    - **Ingester**: `collector.observe` → `fact.emit` → `projector.run` → `canonical.write`
    - **Reducer**: `reducer.run` → `canonical.write` (shared projection)
-   - **API**: `pcg.http.*` → `pcg.query.*` (if the API queried this repo's data)
+   - **API / MCP read path**: request-scoped traces with nested `postgres.query`,
+     `neo4j.query`, or `neo4j.query.single` spans when the read path touched
+     storage
 
 Each trace tree is independent, but the shared `scope_id` lets you correlate them.
 
@@ -64,12 +70,14 @@ Each trace tree is independent, but the shared `scope_id` lets you correlate the
 
 **Goal:** Trace an API request from the HTTP handler through Neo4j query execution.
 
-1. Start from the API trace (`pcg.http.*` span) in Jaeger.
+1. Start from the API request trace in Jaeger or from the request log entry
+   carrying the `trace_id`.
 2. Note the `request_id` span attribute.
 3. If the request triggered a Neo4j query, the same `request_id` appears in query logs and traces.
 4. Search logs for the `request_id` to find the corresponding query execution events.
 5. Use the `trace_id` from the query log to open the query trace in Jaeger.
-6. The query trace will include child `pcg.neo4j.query` spans showing Cypher execution timing.
+6. The query trace will include child `neo4j.query` or
+   `neo4j.query.single` spans showing Cypher execution timing.
 
 ### Recipe 4: Diagnose pipeline phase latency
 
@@ -95,8 +103,8 @@ Each trace tree is independent, but the shared `scope_id` lets you correlate the
 API Request (Go API runtime)
   service.name: platform-context-graph-api
   trace_id: A, request_id: R1
-  └── pcg.http.* (HTTP handler)
-      └── pcg.query.* → Neo4j read
+  └── request-scoped API trace
+      └── neo4j.query / neo4j.query.single / postgres.query
           scope_id: S1 (identifies which repo data)
 
                     ↕ (correlation via scope_id S1)
@@ -184,7 +192,8 @@ Build a dashboard with:
 - **Panel 1**: `pcg_dp_collector_observe_duration_seconds` (p95) — Ingester collection time
 - **Panel 2**: `pcg_dp_projector_run_duration_seconds` (p95) — Ingester projection time
 - **Panel 3**: `pcg_dp_reducer_run_duration_seconds` (p95) by domain — Reducer execution time
-- **Panel 4**: `pcg_http_request_duration_seconds` (p95) — API request time
+- **Panel 4**: deployment-provided API request latency metric (p95) when your
+  ingress or runtime exposes one
 
 This waterfall shows where latency is accumulating across the pipeline.
 
@@ -192,9 +201,9 @@ This waterfall shows where latency is accumulating across the pipeline.
 
 Build a dashboard with:
 
-- **Panel 1**: `pcg_fact_queue_depth` by work type — Ingester backlog
-- **Panel 2**: `pcg_fact_queue_oldest_age_seconds` — How long work is waiting
-- **Panel 3**: `pcg_runtime_queue_depth` by service and stage — Per-service queue depth
+- **Panel 1**: `pcg_dp_queue_depth` by queue and status — data-plane backlog
+- **Panel 2**: `pcg_dp_queue_oldest_age_seconds` — How long queue work is waiting
+- **Panel 3**: `pcg_runtime_queue_outstanding` and `pcg_runtime_queue_oldest_outstanding_age_seconds` by service — per-runtime backlog
 - **Panel 4**: `pcg_shared_projection_pending_intents` by domain — Shared projection backlog
 
 This dashboard shows where work is piling up and which service needs attention.
@@ -241,5 +250,8 @@ If you cannot find a trace or log for an operation:
 1. **Check service health**: Is the service running? Use `/health` or `/admin/status`.
 2. **Check OTEL export**: Is `OTEL_EXPORTER_OTLP_ENDPOINT` configured? Are traces reaching Jaeger?
 3. **Check log filtering**: Are you filtering by the correct `service.name` or `pipeline_phase`?
-4. **Check queue state**: Is work stuck in the queue? Use `pcg_fact_queue_depth` and `pcg_runtime_queue_depth` metrics.
+4. **Check queue state**: Is work stuck in the queue? Use
+   `pcg_dp_queue_depth`, `pcg_dp_queue_oldest_age_seconds`,
+   `pcg_runtime_queue_outstanding`, and
+   `pcg_runtime_queue_oldest_outstanding_age_seconds`.
 5. **Check dead-letter state**: Did the work fail terminally? Search logs for `resolution.work_item.dead_lettered`.
