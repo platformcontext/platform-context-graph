@@ -316,7 +316,7 @@ reduction, including every database call along the way.
 
 All Go data plane services emit JSON logs via `log/slog` with a custom
 `TraceHandler` that injects `trace_id` and `span_id` from the active OTEL span
-context. Base attributes (`service.name`, `service.namespace`) are set at logger
+context. Base attributes (`service_name`, `service_namespace`) are set at logger
 creation. The following keys appear in structured log events:
 
 | Key | Description |

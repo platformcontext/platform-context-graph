@@ -216,11 +216,13 @@ Every Go data plane log line is a single JSON document written to stderr:
 
 ```json
 {
-  "time": "2026-04-13T18:30:00.000Z",
-  "level": "INFO",
-  "msg": "collector snapshot completed",
-  "service.name": "pcg-ingester",
-  "service.namespace": "platform-context-graph",
+  "timestamp": "2026-04-13T18:30:00.000Z",
+  "severity_text": "INFO",
+  "message": "collector snapshot completed",
+  "service_name": "pcg-ingester",
+  "service_namespace": "platform-context-graph",
+  "component": "collector-git",
+  "runtime_role": "ingester",
   "trace_id": "abc123def456...",
   "span_id": "789abc...",
   "scope_id": "git-repository-scope:...",
@@ -232,7 +234,7 @@ Every Go data plane log line is a single JSON document written to stderr:
 }
 ```
 
-Base attributes (`service.name`, `service.namespace`) are set once at logger
+Base attributes (`service_name`, `service_namespace`) are set once at logger
 creation and appear on every line. Trace correlation (`trace_id`, `span_id`)
 is injected automatically by `TraceHandler` from the active OTEL span context.
 
@@ -327,7 +329,7 @@ jq 'select(.scope_id == "git-repository-scope:<repo_id>")' < logs.jsonl
 #### Find all errors in one pipeline phase
 
 ```
-jq 'select(.pipeline_phase == "projection" and .level == "ERROR")' < logs.jsonl
+jq 'select(.pipeline_phase == "projection" and .severity_text == "ERROR")' < logs.jsonl
 ```
 
 #### Jump from a log line to its trace

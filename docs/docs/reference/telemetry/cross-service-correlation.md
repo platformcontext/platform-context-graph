@@ -161,7 +161,7 @@ If you are using Grafana with Loki for log aggregation, you can build panels tha
   | json 
   | pipeline_phase="shared" 
   | domain="workload" 
-  | level="ERROR"
+  | severity_text="ERROR"
 ```
 
 ### Logs-to-Traces data link

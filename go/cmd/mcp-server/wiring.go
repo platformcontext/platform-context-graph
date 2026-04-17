@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"strings"
-	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -19,8 +17,6 @@ import (
 	pgstatus "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
-
-const statusReadinessTimeout = 3 * time.Second
 
 func wireAPI(
 	ctx context.Context,
@@ -148,62 +144,10 @@ func mountRuntimeSurface(
 	reader status.Reader,
 	prometheusHandler http.Handler,
 ) (*http.ServeMux, error) {
-	statusHandler, err := status.NewHTTPHandler(reader, status.HTTPHandlerOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	metricsHandler, err := internalruntime.NewStatusMetricsHandler(serviceName, reader)
-	if err != nil {
-		return nil, err
-	}
-	if prometheusHandler != nil {
-		metricsHandler = compositeMetricsHandler{
-			statusHandler:     metricsHandler,
-			prometheusHandler: prometheusHandler,
-		}
-	}
-
-	return internalruntime.NewAdminMux(internalruntime.AdminMuxConfig{
-		ServiceName:    serviceName,
-		Ready:          statusReadinessCheck(reader),
-		StatusHandler:  statusHandler,
-		MetricsHandler: metricsHandler,
-	})
-}
-
-func statusReadinessCheck(reader status.Reader) internalruntime.AdminCheck {
-	return func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), statusReadinessTimeout)
-		defer cancel()
-
-		_, err := reader.ReadStatusSnapshot(ctx, time.Now().UTC())
-		if err != nil {
-			return fmt.Errorf("read status snapshot: %w", err)
-		}
-		return nil
-	}
-}
-
-type compositeMetricsHandler struct {
-	statusHandler     http.Handler
-	prometheusHandler http.Handler
-}
-
-func (h compositeMetricsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	promRec := httptest.NewRecorder()
-	h.prometheusHandler.ServeHTTP(promRec, r)
-
-	statusRec := httptest.NewRecorder()
-	h.statusHandler.ServeHTTP(statusRec, r)
-
-	for key, values := range promRec.Header() {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(statusRec.Code)
-	_, _ = w.Write(statusRec.Body.Bytes())
-	_, _ = w.Write(promRec.Body.Bytes())
+	return internalruntime.NewStatusAdminMux(
+		serviceName,
+		reader,
+		nil,
+		internalruntime.WithPrometheusHandler(prometheusHandler),
+	)
 }
