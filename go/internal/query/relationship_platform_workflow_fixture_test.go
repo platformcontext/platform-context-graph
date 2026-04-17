@@ -65,7 +65,7 @@ func TestRelationshipPlatformWorkerWorkflowSurfacesReadSideDeliveryPath(t *testi
 	if len(topologyStory) != 1 {
 		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
 	}
-	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy-modern.yml as github_actions_workflow deploy-modern with 1 run command(s) (workflow_file, run_commands)."; got != want {
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy-modern.yml as github_actions_workflow deploy-modern triggered by workflow_dispatch with 1 run command(s) (workflow_file, run_commands, workflow_triggers)."; got != want {
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 
@@ -93,7 +93,7 @@ func TestRelationshipPlatformWorkerWorkflowSurfacesReadSideDeliveryPath(t *testi
 	if len(directStory) != 1 {
 		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
 	}
-	if got, want := directStory[0], "Workflow delivery paths include .github/workflows/deploy-modern.yml as github_actions_workflow deploy-modern with 1 run command(s) (workflow_file, run_commands)."; got != want {
+	if got, want := directStory[0], "Workflow delivery paths include .github/workflows/deploy-modern.yml as github_actions_workflow deploy-modern triggered by workflow_dispatch with 1 run command(s) (workflow_file, run_commands, workflow_triggers)."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
 }
@@ -222,7 +222,7 @@ func TestRelationshipPlatformWorkerWorkflowSurfacesGatingAndNeeds(t *testing.T) 
 	if len(topologyStory) != 1 {
 		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
 	}
-	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy-gated.yml as github_actions_workflow deploy-gated with 2 run command(s), 2 gating condition(s), and 1 needs edge(s) (workflow_file, run_commands, gating_conditions, job_dependencies)."; got != want {
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy-gated.yml as github_actions_workflow deploy-gated triggered by workflow_dispatch with 2 run command(s), 2 gating condition(s), and 1 needs edge(s) (workflow_file, run_commands, gating_conditions, job_dependencies, workflow_triggers)."; got != want {
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 
@@ -250,7 +250,7 @@ func TestRelationshipPlatformWorkerWorkflowSurfacesGatingAndNeeds(t *testing.T) 
 	if len(directStory) != 1 {
 		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
 	}
-	if got, want := directStory[0], "Workflow delivery paths include .github/workflows/deploy-gated.yml as github_actions_workflow deploy-gated with 2 run command(s), 2 gating condition(s), and 1 needs edge(s) (workflow_file, run_commands, gating_conditions, job_dependencies)."; got != want {
+	if got, want := directStory[0], "Workflow delivery paths include .github/workflows/deploy-gated.yml as github_actions_workflow deploy-gated triggered by workflow_dispatch with 2 run command(s), 2 gating condition(s), and 1 needs edge(s) (workflow_file, run_commands, gating_conditions, job_dependencies, workflow_triggers)."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
 }

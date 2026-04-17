@@ -164,3 +164,55 @@ jobs:
 		t.Fatalf("workflow_artifacts[0].checkout_repositories = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildRepositoryWorkflowArtifactsIncludesWorkflowTriggerAndMatrixMetadata(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryWorkflowArtifacts([]FileContent{
+		{
+			RelativePath: ".github/workflows/deploy-matrix.yaml",
+			ArtifactType: "github_actions_workflow",
+			Content: `name: Deploy Matrix
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_enabled:
+        required: true
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    strategy:
+      matrix:
+        runtime: [node18, node20]
+        region: [us-east-1, us-west-2]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "deploy"
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryWorkflowArtifacts() = nil, want workflow_artifacts")
+	}
+
+	rows := mapSliceValue(got, "workflow_artifacts")
+	if len(rows) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(rows))
+	}
+
+	row := rows[0]
+	if got, want := StringSliceVal(row, "trigger_events"), []string{"push", "workflow_dispatch"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("workflow_artifacts[0].trigger_events = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(row, "workflow_inputs"), []string{"deploy_enabled"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("workflow_artifacts[0].workflow_inputs = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(row, "matrix_keys"), []string{"region", "runtime"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("workflow_artifacts[0].matrix_keys = %#v, want %#v", got, want)
+	}
+	if got, want := row["matrix_combination_count"], 4; got != want {
+		t.Fatalf("workflow_artifacts[0].matrix_combination_count = %#v, want %#v", got, want)
+	}
+}

@@ -126,9 +126,15 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		if commandCount := intValue(row, "command_count"); commandCount > 0 {
 			entry["command_count"] = commandCount
 		}
+		if matrixCombinationCount := intValue(row, "matrix_combination_count"); matrixCombinationCount > 0 {
+			entry["matrix_combination_count"] = matrixCombinationCount
+		}
 		copyStringSliceField(entry, row, "run_commands")
 		copyStringSliceField(entry, row, "gating_conditions")
 		copyStringSliceField(entry, row, "needs_dependencies")
+		copyStringSliceField(entry, row, "trigger_events")
+		copyStringSliceField(entry, row, "workflow_inputs")
+		copyStringSliceField(entry, row, "matrix_keys")
 		copyStringSliceField(entry, row, "reusable_workflow_repositories")
 		copyStringSliceField(entry, row, "checkout_repositories")
 		copyStringSliceField(entry, row, "workflow_input_repositories")
@@ -371,6 +377,18 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			line := fmt.Sprintf("Workflow delivery paths include %s", path)
 			if workflowName != "" {
 				line += fmt.Sprintf(" as %s %s", artifactType, workflowName)
+			}
+			if triggerEvents := stringSliceValue(row, "trigger_events"); len(triggerEvents) > 0 {
+				line += fmt.Sprintf(" triggered by %s", strings.Join(triggerEvents, ", "))
+			}
+			if workflowInputs := stringSliceValue(row, "workflow_inputs"); len(workflowInputs) > 0 {
+				line += fmt.Sprintf(" with workflow inputs %s", strings.Join(workflowInputs, ", "))
+			}
+			if matrixKeys := stringSliceValue(row, "matrix_keys"); len(matrixKeys) > 0 {
+				line += fmt.Sprintf(" and matrix %s", strings.Join(matrixKeys, ", "))
+				if matrixCombinationCount := intValue(row, "matrix_combination_count"); matrixCombinationCount > 0 {
+					line += fmt.Sprintf(" (%d combination(s))", matrixCombinationCount)
+				}
 			}
 			if commandCount := intValue(row, "command_count"); commandCount > 0 {
 				line += fmt.Sprintf(" with %d run command(s)", commandCount)

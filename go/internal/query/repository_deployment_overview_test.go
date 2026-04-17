@@ -429,3 +429,60 @@ func TestBuildRepositoryDeploymentOverviewIncludesCheckoutRepositoriesInDelivery
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 }
+
+func TestBuildRepositoryDeploymentOverviewIncludesWorkflowTriggerAndMatrixMetadata(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		[]string{"argocd_application"},
+		[]string{"github_actions"},
+		map[string]any{
+			"deployment_artifacts": map[string]any{
+				"workflow_artifacts": []map[string]any{
+					{
+						"relative_path":            ".github/workflows/deploy-matrix.yaml",
+						"artifact_type":            "github_actions_workflow",
+						"workflow_name":            "deploy-matrix",
+						"trigger_events":           []string{"push", "workflow_dispatch"},
+						"workflow_inputs":          []string{"deploy_enabled"},
+						"matrix_keys":              []string{"region", "runtime"},
+						"matrix_combination_count": 4,
+						"signals":                  []string{"workflow_file", "workflow_triggers", "matrix_strategy"},
+					},
+				},
+			},
+		},
+	)
+
+	deliveryPaths, ok := got["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
+	}
+	if len(deliveryPaths) != 1 {
+		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "trigger_events"), []string{"push", "workflow_dispatch"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("delivery_paths[0].trigger_events = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "workflow_inputs"), []string{"deploy_enabled"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("delivery_paths[0].workflow_inputs = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "matrix_keys"), []string{"region", "runtime"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("delivery_paths[0].matrix_keys = %#v, want %#v", got, want)
+	}
+	if got, want := deliveryPaths[0]["matrix_combination_count"], 4; got != want {
+		t.Fatalf("delivery_paths[0].matrix_combination_count = %#v, want %#v", got, want)
+	}
+
+	topologyStory, ok := got["topology_story"].([]string)
+	if !ok {
+		t.Fatalf("topology_story type = %T, want []string", got["topology_story"])
+	}
+	if len(topologyStory) != 1 {
+		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy-matrix.yaml as github_actions_workflow deploy-matrix triggered by push, workflow_dispatch with workflow inputs deploy_enabled and matrix region, runtime (4 combination(s)) (workflow_file, workflow_triggers, matrix_strategy)."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+}

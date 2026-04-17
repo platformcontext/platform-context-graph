@@ -93,7 +93,11 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 		workflowInputRepositories,
 		runCommands,
 		gatingConditions,
-		needsDependencies := workflowArtifactDetails(content)
+		needsDependencies,
+		triggerEvents,
+		workflowInputs,
+		matrixKeys,
+		matrixCombinationCount := workflowArtifactDetails(content)
 	signals := stringSliceValue(row, "signals")
 
 	if len(reusableWorkflowRepositories) > 0 {
@@ -121,15 +125,29 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 		row["needs_dependencies"] = needsDependencies
 		signals = append(signals, "job_dependencies")
 	}
+	if len(triggerEvents) > 0 {
+		row["trigger_events"] = triggerEvents
+		signals = append(signals, "workflow_triggers")
+	}
+	if len(workflowInputs) > 0 {
+		row["workflow_inputs"] = workflowInputs
+	}
+	if len(matrixKeys) > 0 {
+		row["matrix_keys"] = matrixKeys
+		signals = append(signals, "matrix_strategy")
+	}
+	if matrixCombinationCount > 0 {
+		row["matrix_combination_count"] = matrixCombinationCount
+	}
 	if len(signals) > 0 {
 		row["signals"] = uniqueWorkflowStringsPreserveOrder(signals)
 	}
 }
 
-func workflowArtifactDetails(content string) ([]string, []string, []string, []string, []string, []string) {
+func workflowArtifactDetails(content string) ([]string, []string, []string, []string, []string, []string, []string, []string, []string, int) {
 	documents, err := decodeYAMLMaps(content)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
 	}
 
 	reusableWorkflowRepositories := make([]string, 0)
@@ -138,7 +156,13 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 	runCommands := make([]string, 0)
 	gatingConditions := make([]string, 0)
 	needsDependencies := make([]string, 0)
+	triggerEvents := make([]string, 0)
+	workflowInputs := make([]string, 0)
+	matrixKeys := make([]string, 0)
+	matrixCombinationCount := 0
 	for _, document := range documents {
+		triggerEvents = append(triggerEvents, githubActionsTriggerEvents(document["on"])...)
+		workflowInputs = append(workflowInputs, githubActionsWorkflowInputs(document["on"])...)
 		jobs, ok := document["jobs"].(map[string]any)
 		if !ok {
 			continue
@@ -165,6 +189,9 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 				gatingConditions = append(gatingConditions, "job "+jobName+" if "+condition)
 			}
 			needsDependencies = append(needsDependencies, githubActionsNeedsDependencies(jobName, job["needs"])...)
+			jobMatrixKeys, jobMatrixCombinationCount := githubActionsMatrixMetadata(job["strategy"])
+			matrixKeys = append(matrixKeys, jobMatrixKeys...)
+			matrixCombinationCount += jobMatrixCombinationCount
 			steps, ok := job["steps"].([]any)
 			if !ok {
 				continue
@@ -200,7 +227,107 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 		sortedUniqueWorkflowStrings(workflowInputRepositories),
 		sortedUniqueWorkflowStrings(runCommands),
 		sortedUniqueWorkflowStrings(gatingConditions),
-		sortedUniqueWorkflowStrings(needsDependencies)
+		sortedUniqueWorkflowStrings(needsDependencies),
+		sortedUniqueWorkflowStrings(triggerEvents),
+		sortedUniqueWorkflowStrings(workflowInputs),
+		sortedUniqueWorkflowStrings(matrixKeys),
+		matrixCombinationCount
+}
+
+func githubActionsTriggerEvents(rawOn any) []string {
+	switch value := rawOn.(type) {
+	case string:
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return []string{trimmed}
+		}
+	case []any:
+		events := make([]string, 0, len(value))
+		for _, item := range value {
+			trimmed := strings.TrimSpace(fmt.Sprint(item))
+			if trimmed == "" || trimmed == "<nil>" {
+				continue
+			}
+			events = append(events, trimmed)
+		}
+		return events
+	case map[string]any:
+		events := make([]string, 0, len(value))
+		for key := range value {
+			trimmed := strings.TrimSpace(key)
+			if trimmed == "" {
+				continue
+			}
+			events = append(events, trimmed)
+		}
+		return events
+	}
+	return nil
+}
+
+func githubActionsWorkflowInputs(rawOn any) []string {
+	onMap, ok := rawOn.(map[string]any)
+	if !ok {
+		return nil
+	}
+	inputs := make([]string, 0)
+	for _, eventName := range []string{"workflow_dispatch", "workflow_call"} {
+		event, ok := onMap[eventName].(map[string]any)
+		if !ok {
+			continue
+		}
+		eventInputs, ok := event["inputs"].(map[string]any)
+		if !ok {
+			continue
+		}
+		for key := range eventInputs {
+			trimmed := strings.TrimSpace(key)
+			if trimmed == "" {
+				continue
+			}
+			inputs = append(inputs, trimmed)
+		}
+	}
+	return inputs
+}
+
+func githubActionsMatrixMetadata(rawStrategy any) ([]string, int) {
+	strategy, ok := rawStrategy.(map[string]any)
+	if !ok {
+		return nil, 0
+	}
+	matrix, ok := strategy["matrix"].(map[string]any)
+	if !ok {
+		return nil, 0
+	}
+	keys := make([]string, 0, len(matrix))
+	combinationCount := 1
+	dimensionCount := 0
+	for key, rawValues := range matrix {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" || trimmedKey == "include" || trimmedKey == "exclude" {
+			continue
+		}
+		values, ok := rawValues.([]any)
+		if !ok || len(values) == 0 {
+			continue
+		}
+		keys = append(keys, trimmedKey)
+		dimensionCount++
+		combinationCount *= len(values)
+	}
+	if dimensionCount == 0 {
+		if include, ok := matrix["include"].([]any); ok && len(include) > 0 {
+			return nil, len(include)
+		}
+		return nil, 0
+	}
+	if exclude, ok := matrix["exclude"].([]any); ok && len(exclude) > 0 && combinationCount > len(exclude) {
+		combinationCount -= len(exclude)
+	}
+	if include, ok := matrix["include"].([]any); ok && len(include) > 0 {
+		combinationCount += len(include)
+	}
+	return keys, combinationCount
 }
 
 func githubActionsCheckoutRepositories(step map[string]any) []string {
