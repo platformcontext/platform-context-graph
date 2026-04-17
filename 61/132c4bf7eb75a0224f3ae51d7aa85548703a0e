@@ -1,0 +1,36 @@
+docs/docs/adrs/2026-04-17-neo4j-concurrent-write-deadlock-root-cause.md
+  26d0a7775258d320 1-369
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "61132c4bf7eb75a0224f3ae51d7aa85548703a0e",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 425,
+      "total_deletions": 21,
+      "accepted_lines": 537,
+      "overriden_lines": 1
+    }
+  }
+}
