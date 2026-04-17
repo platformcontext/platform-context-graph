@@ -537,9 +537,10 @@ context summaries.
 
 Broader Terraform and Terragrunt helper forms still remain a separate parity
 lane for any path that cannot be proven exactly from the checked-in source, but
-the named `path_relative_to_include("root")` service-level Terragrunt pattern
-is now covered on the Go read path for real repo-local YAML assets such as
-`account.yaml`, `region.yaml`, and `vpc.yaml`, without promoting remote-state
+the service-level `path_relative_to_include(...)` split Terragrunt pattern is
+now covered on the Go read path in both named and unnamed helper forms for
+real repo-local YAML assets such as `account.yaml`, `region.yaml`, and
+`vpc.yaml`, without promoting remote-state
 keys into fake config provenance.
 
 ### Story Ordering
