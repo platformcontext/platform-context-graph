@@ -31,10 +31,6 @@ The runtime migration is complete:
 Feature-for-feature parity is not fully closed yet. The branch still has active
 Go-owned parity work in the normal runtime path:
 
-- projector and reducer queue-hardening work, especially lease recovery,
-  crash-safety, and ack-failure visibility
-- typed relationship fidelity so strong relationship evidence is not flattened
-  back to generic `DEPENDS_ON`
 - ArgoCD destination-to-platform `RUNS_ON` materialization and the repo
   read-model counts that depend on those canonical edges
 - explicit repo-bearing GitHub Actions inputs, reusable workflow refs, Jenkins
@@ -53,7 +49,11 @@ Go-owned parity work in the normal runtime path:
   artifacts now also surface repo-local delivery paths for Terraform
   `-chdir`, Terragrunt working directories, Helm chart paths, kubectl
   manifests, Ansible playbooks/inventories/vars, and Compose file refs on the
-  Go read path without inventing canonical repo edges from those hints alone
+  Go read path without inventing canonical repo edges from those hints alone.
+  Repo-local reusable GitHub Actions workflow refs now also surface as
+  same-repo workflow provenance on the Go entity/query fallback path. The
+  remaining workflow/controller gap is the broader promotion and validation of
+  repo-local hints that still should not become fake canonical repo edges
 - end-to-end validation and instrumentation proof for those flows
 
 The API/MCP query surfacing infrastructure is parity-complete: every
@@ -133,7 +133,6 @@ parity from persisted graph and query-surface parity.
 These are the currently documented branch-level gaps that still matter for
 honest signoff:
 
-- queue-hardening work in projector/reducer is still active
 - explicit repo-bearing GitHub Actions, Jenkins/Groovy, Ansible, Docker, and
   Docker Compose subfamilies already have Go-owned parser/query proof; the
   GitHub Actions path now also preserves truthful step-level action-repository
@@ -150,11 +149,14 @@ honest signoff:
   Compose file refs, plus trigger events, workflow inputs, actual
   gating-condition text, `needs` details, matrix metadata, permissions
   scopes, concurrency groups, job environments, and job timeout metadata on
-  repo-local workflow artifacts, and the Jenkins-plus-Ansible controller path
-  now also carries inventories, `group_vars` / `host_vars`, and task
-  entrypoint context through repository controller artifacts and
-  deployment/story shaping. The remaining workflow gap is canonical promotion
-  for repo-local workflow hints when explicit repo-bearing evidence is absent;
+  repo-local workflow artifacts, and the same repo-local reusable workflow
+  refs now surface as same-repo content/query provenance on the Go fallback
+  path without pretending they are cross-repo canonical edges. The
+  Jenkins-plus-Ansible controller path now also carries inventories,
+  `group_vars` / `host_vars`, and task entrypoint context through repository
+  controller artifacts and deployment/story shaping. The remaining workflow
+  gap is canonical promotion for repo-local workflow hints when explicit
+  repo-bearing evidence is absent, plus broader controller-driven validation;
   Terraform variable-file promotion, local-variable-
   backed `file(local.foo)` / `templatefile(local.bar, ...)` config assets,
   lookup-backed local config assets, helper-composed `join("", [path.module,
@@ -204,9 +206,10 @@ If any of those are missing, the feature is not parity complete.
 
 ## Recommended Closure Order
 
-1. Close projector/reducer queue-hardening gaps and add missing telemetry proof
-2. Finish broader workflow/controller relationship coverage for GitHub
-   Actions, Jenkins/Groovy, Ansible, Docker, and Docker Compose
+1. Finish broader workflow/controller relationship coverage and proof for
+   GitHub Actions, Jenkins/Groovy, Ansible, Docker, and Docker Compose
+2. Close the remaining broader IaC helper-built path-expression gap where
+   checked-in source still cannot be collapsed into exact repo-relative assets
 3. Refresh compose-backed and real-repo evidence, then lock docs to current truth
 
 ## Companion Checklist

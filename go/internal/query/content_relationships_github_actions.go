@@ -9,13 +9,21 @@ type githubActionsRelationship struct {
 }
 
 func githubActionsMetadataRelationships(metadata map[string]any) []githubActionsRelationship {
-	relationships := make([]githubActionsRelationship, 0, 2)
+	relationships := make([]githubActionsRelationship, 0, 4)
 	for _, workflowRef := range metadataStringSlice(metadata, "workflow_refs") {
 		if targetName := githubActionsRepositoryRef(workflowRef); targetName != "" {
 			relationships = append(relationships, githubActionsRelationship{
 				relationshipType: "DEPLOYS_FROM",
 				targetName:       targetName,
 				reason:           "github_actions_reusable_workflow_ref",
+			})
+			continue
+		}
+		if targetPath := githubActionsLocalReusableWorkflowPath(workflowRef); targetPath != "" {
+			relationships = append(relationships, githubActionsRelationship{
+				relationshipType: "DEPLOYS_FROM",
+				targetName:       targetPath,
+				reason:           "github_actions_local_reusable_workflow_ref",
 			})
 		}
 	}
@@ -25,6 +33,14 @@ func githubActionsMetadataRelationships(metadata map[string]any) []githubActions
 				relationshipType: "DEPLOYS_FROM",
 				targetName:       targetName,
 				reason:           "github_actions_reusable_workflow_ref",
+			})
+			continue
+		}
+		if targetPath := githubActionsLocalReusableWorkflowPath(workflowRef); targetPath != "" {
+			relationships = append(relationships, githubActionsRelationship{
+				relationshipType: "DEPLOYS_FROM",
+				targetName:       targetPath,
+				reason:           "github_actions_local_reusable_workflow_ref",
 			})
 		}
 	}
@@ -84,6 +100,12 @@ func githubActionsSourceRelationships(entity EntityContent) []githubActionsRelat
 				relationshipType: "DEPLOYS_FROM",
 				targetName:       targetName,
 				reason:           "github_actions_reusable_workflow_ref",
+			})
+		} else if targetPath := githubActionsLocalReusableWorkflowPath(usesValue); targetPath != "" {
+			relationships = append(relationships, githubActionsRelationship{
+				relationshipType: "DEPLOYS_FROM",
+				targetName:       targetPath,
+				reason:           "github_actions_local_reusable_workflow_ref",
 			})
 		}
 		for j := i + 1; j < len(lines); j++ {

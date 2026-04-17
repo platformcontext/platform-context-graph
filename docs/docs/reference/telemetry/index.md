@@ -141,9 +141,9 @@ For shared-write debugging specifically:
 - Use the report before restarting a service or forcing a broader re-index.
 - The normal runtime path on this branch is Go-owned end to end.
 - The remaining migration work is Go-owned parity hardening rather than Python
-  retirement work: queue diagnosis, typed relationship fidelity, workflow/IaC
-  relationship promotion, and the telemetry proof that makes those flows
-  operable.
+  retirement work: broader workflow/controller relationship proof, the
+  remaining broader IaC helper-built path-expression reduction, and the
+  telemetry proof that makes those flows operable.
 
 Shared-write-specific gauges:
 
