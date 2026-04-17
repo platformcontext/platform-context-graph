@@ -62,6 +62,14 @@ The current accepted ADR set establishes the rewrite baseline:
   documents the within-generation race between projector canonical writes and
   reducer materialization, analyzes root causes (non-atomic phases, missing
   generation filters), and evaluates seven fix options.
+- [Neo4j Concurrent Write Deadlock Root Cause](2026-04-17-neo4j-concurrent-write-deadlock-root-cause.md)
+  traces the full error chain from production E2E (1,281 terminal failures → 0),
+  documents TransactionExecutionLimit detection, and assesses the concurrent
+  write architecture at scale.
+- [Semantic Entity Queue Throughput](2026-04-17-semantic-entity-queue-throughput.md)
+  analyzes the 58x intent overhead from per-entity granularity in
+  semantic_entity_materialization and recommends per-repo consolidation to
+  reduce queue drain from 4+ hours to ~18 minutes.
 
 Read these records together. They are meant to remove ambiguity before new
 collector or runtime work begins.
