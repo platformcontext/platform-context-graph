@@ -134,6 +134,10 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		copyStringSliceField(entry, row, "needs_dependencies")
 		copyStringSliceField(entry, row, "trigger_events")
 		copyStringSliceField(entry, row, "workflow_inputs")
+		copyStringSliceField(entry, row, "permission_scopes")
+		copyStringSliceField(entry, row, "concurrency_groups")
+		copyStringSliceField(entry, row, "environments")
+		copyStringSliceField(entry, row, "job_timeout_minutes")
 		copyStringSliceField(entry, row, "matrix_keys")
 		copyStringSliceField(entry, row, "reusable_workflow_repositories")
 		copyStringSliceField(entry, row, "checkout_repositories")
@@ -383,6 +387,35 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			}
 			if workflowInputs := stringSliceValue(row, "workflow_inputs"); len(workflowInputs) > 0 {
 				line += fmt.Sprintf(" with workflow inputs %s", strings.Join(workflowInputs, ", "))
+			}
+			hasGovernance := false
+			if permissionScopes := stringSliceValue(row, "permission_scopes"); len(permissionScopes) > 0 {
+				line += fmt.Sprintf(" with permissions %s", strings.Join(permissionScopes, ", "))
+				hasGovernance = true
+			}
+			if concurrencyGroups := stringSliceValue(row, "concurrency_groups"); len(concurrencyGroups) > 0 {
+				if hasGovernance {
+					line += fmt.Sprintf(", concurrency %s", strings.Join(concurrencyGroups, ", "))
+				} else {
+					line += fmt.Sprintf(" with concurrency %s", strings.Join(concurrencyGroups, ", "))
+					hasGovernance = true
+				}
+			}
+			if environments := stringSliceValue(row, "environments"); len(environments) > 0 {
+				if hasGovernance {
+					line += fmt.Sprintf(", environments %s", strings.Join(environments, ", "))
+				} else {
+					line += fmt.Sprintf(" with environments %s", strings.Join(environments, ", "))
+					hasGovernance = true
+				}
+			}
+			if jobTimeouts := stringSliceValue(row, "job_timeout_minutes"); len(jobTimeouts) > 0 {
+				if hasGovernance {
+					line += fmt.Sprintf(", and job timeouts %s", strings.Join(jobTimeouts, ", "))
+				} else {
+					line += fmt.Sprintf(" with job timeouts %s", strings.Join(jobTimeouts, ", "))
+					hasGovernance = true
+				}
 			}
 			if matrixKeys := stringSliceValue(row, "matrix_keys"); len(matrixKeys) > 0 {
 				line += fmt.Sprintf(" and matrix %s", strings.Join(matrixKeys, ", "))

@@ -130,8 +130,9 @@ honest signoff:
   Docker Compose subfamilies already have Go-owned parser/query proof; the
   GitHub Actions read path now also preserves reusable-workflow repositories,
   explicit checkout repositories, explicit workflow-input repositories, and
-  run-command counts, trigger events, workflow inputs, and matrix metadata on
-  repo-local workflow artifacts, and the
+  run-command counts, trigger events, workflow inputs, matrix metadata,
+  permissions scopes, concurrency groups, job environments, and job timeout
+  metadata on repo-local workflow artifacts, and the
   Jenkins-plus-Ansible controller path now also carries inventories,
   `group_vars` / `host_vars`, and task entrypoint context through repository
   controller artifacts and deployment/story shaping. Broader controller-driven

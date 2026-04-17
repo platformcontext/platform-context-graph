@@ -216,3 +216,76 @@ jobs:
 		t.Fatalf("workflow_artifacts[0].matrix_combination_count = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildRepositoryWorkflowArtifactsIncludesWorkflowGovernanceMetadata(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryWorkflowArtifacts([]FileContent{
+		{
+			RelativePath: ".github/workflows/deploy-governed.yaml",
+			ArtifactType: "github_actions_workflow",
+			Content: `name: Deploy Governed
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  deploy:
+    permissions:
+      deployments: write
+    concurrency: deploy-production
+    environment:
+      name: production
+      url: https://deployments.example.com
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "deploy"
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryWorkflowArtifacts() = nil, want workflow_artifacts")
+	}
+
+	rows := mapSliceValue(got, "workflow_artifacts")
+	if len(rows) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(rows))
+	}
+
+	row := rows[0]
+	if got, want := StringSliceVal(row, "permission_scopes"), []string{"contents:read", "deployments:write", "id-token:write"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Fatalf("workflow_artifacts[0].permission_scopes = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(row, "concurrency_groups"), []string{"deploy-${{ github.ref }}", "deploy-production"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("workflow_artifacts[0].concurrency_groups = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(row, "environments"), []string{"production"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("workflow_artifacts[0].environments = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(row, "job_timeout_minutes"), []string{"deploy:30"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("workflow_artifacts[0].job_timeout_minutes = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(row, "signals"), []string{
+		"workflow_file",
+		"run_commands",
+		"workflow_triggers",
+		"workflow_permissions",
+		"workflow_concurrency",
+		"workflow_environments",
+		"workflow_timeouts",
+	}; len(got) != len(want) ||
+		got[0] != want[0] ||
+		got[1] != want[1] ||
+		got[2] != want[2] ||
+		got[3] != want[3] ||
+		got[4] != want[4] ||
+		got[5] != want[5] ||
+		got[6] != want[6] {
+		t.Fatalf("workflow_artifacts[0].signals = %#v, want %#v", got, want)
+	}
+}

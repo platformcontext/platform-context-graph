@@ -486,3 +486,68 @@ func TestBuildRepositoryDeploymentOverviewIncludesWorkflowTriggerAndMatrixMetada
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 }
+
+func TestBuildRepositoryDeploymentOverviewIncludesWorkflowGovernanceMetadataInDeliveryPaths(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		[]string{"github_actions"},
+		[]string{"github_actions"},
+		map[string]any{
+			"deployment_artifacts": map[string]any{
+				"workflow_artifacts": []map[string]any{
+					{
+						"relative_path":      ".github/workflows/deploy-governed.yaml",
+						"artifact_type":      "github_actions_workflow",
+						"workflow_name":      "deploy-governed",
+						"permission_scopes":  []string{"contents:read", "deployments:write", "id-token:write"},
+						"concurrency_groups": []string{"deploy-${{ github.ref }}", "deploy-production"},
+						"environments":       []string{"production"},
+						"job_timeout_minutes": []string{
+							"deploy:30",
+						},
+						"signals": []string{
+							"workflow_file",
+							"workflow_permissions",
+							"workflow_concurrency",
+							"workflow_environments",
+							"workflow_timeouts",
+						},
+					},
+				},
+			},
+		},
+	)
+
+	deliveryPaths, ok := got["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
+	}
+	if len(deliveryPaths) != 1 {
+		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "permission_scopes"), []string{"contents:read", "deployments:write", "id-token:write"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Fatalf("delivery_paths[0].permission_scopes = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "concurrency_groups"), []string{"deploy-${{ github.ref }}", "deploy-production"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("delivery_paths[0].concurrency_groups = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "environments"), []string{"production"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("delivery_paths[0].environments = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "job_timeout_minutes"), []string{"deploy:30"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("delivery_paths[0].job_timeout_minutes = %#v, want %#v", got, want)
+	}
+
+	topologyStory, ok := got["topology_story"].([]string)
+	if !ok {
+		t.Fatalf("topology_story type = %T, want []string", got["topology_story"])
+	}
+	if len(topologyStory) != 1 {
+		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy-governed.yaml as github_actions_workflow deploy-governed with permissions contents:read, deployments:write, id-token:write, concurrency deploy-${{ github.ref }}, deploy-production, environments production, and job timeouts deploy:30 (workflow_file, workflow_permissions, workflow_concurrency, workflow_environments, workflow_timeouts)."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+}

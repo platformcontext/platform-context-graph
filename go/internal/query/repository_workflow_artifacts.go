@@ -96,6 +96,10 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 		needsDependencies,
 		triggerEvents,
 		workflowInputs,
+		permissionScopes,
+		concurrencyGroups,
+		environments,
+		jobTimeoutMinutes,
 		matrixKeys,
 		matrixCombinationCount := workflowArtifactDetails(content)
 	signals := stringSliceValue(row, "signals")
@@ -132,6 +136,22 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	if len(workflowInputs) > 0 {
 		row["workflow_inputs"] = workflowInputs
 	}
+	if len(permissionScopes) > 0 {
+		row["permission_scopes"] = permissionScopes
+		signals = append(signals, "workflow_permissions")
+	}
+	if len(concurrencyGroups) > 0 {
+		row["concurrency_groups"] = concurrencyGroups
+		signals = append(signals, "workflow_concurrency")
+	}
+	if len(environments) > 0 {
+		row["environments"] = environments
+		signals = append(signals, "workflow_environments")
+	}
+	if len(jobTimeoutMinutes) > 0 {
+		row["job_timeout_minutes"] = jobTimeoutMinutes
+		signals = append(signals, "workflow_timeouts")
+	}
 	if len(matrixKeys) > 0 {
 		row["matrix_keys"] = matrixKeys
 		signals = append(signals, "matrix_strategy")
@@ -144,10 +164,10 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 	}
 }
 
-func workflowArtifactDetails(content string) ([]string, []string, []string, []string, []string, []string, []string, []string, []string, int) {
+func workflowArtifactDetails(content string) ([]string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, []string, int) {
 	documents, err := decodeYAMLMaps(content)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
 	}
 
 	reusableWorkflowRepositories := make([]string, 0)
@@ -158,11 +178,17 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 	needsDependencies := make([]string, 0)
 	triggerEvents := make([]string, 0)
 	workflowInputs := make([]string, 0)
+	permissionScopes := make([]string, 0)
+	concurrencyGroups := make([]string, 0)
+	environments := make([]string, 0)
+	jobTimeoutMinutes := make([]string, 0)
 	matrixKeys := make([]string, 0)
 	matrixCombinationCount := 0
 	for _, document := range documents {
 		triggerEvents = append(triggerEvents, githubActionsTriggerEvents(document["on"])...)
 		workflowInputs = append(workflowInputs, githubActionsWorkflowInputs(document["on"])...)
+		permissionScopes = append(permissionScopes, githubActionsPermissionScopes(document["permissions"])...)
+		concurrencyGroups = append(concurrencyGroups, githubActionsConcurrencyGroups(document["concurrency"])...)
 		jobs, ok := document["jobs"].(map[string]any)
 		if !ok {
 			continue
@@ -175,6 +201,10 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 			if workflowRef := githubActionsReusableWorkflowRepoRef(StringVal(job, "uses")); workflowRef != "" {
 				reusableWorkflowRepositories = append(reusableWorkflowRepositories, workflowRef)
 			}
+			permissionScopes = append(permissionScopes, githubActionsPermissionScopes(job["permissions"])...)
+			concurrencyGroups = append(concurrencyGroups, githubActionsConcurrencyGroups(job["concurrency"])...)
+			environments = append(environments, githubActionsEnvironmentNames(job["environment"])...)
+			jobTimeoutMinutes = append(jobTimeoutMinutes, githubActionsJobTimeoutMetadata(jobName, job["timeout-minutes"])...)
 			workflowInputRepositories = append(
 				workflowInputRepositories,
 				githubActionsWorkflowInputRepositoryMetadata(job)...,
@@ -230,6 +260,10 @@ func workflowArtifactDetails(content string) ([]string, []string, []string, []st
 		sortedUniqueWorkflowStrings(needsDependencies),
 		sortedUniqueWorkflowStrings(triggerEvents),
 		sortedUniqueWorkflowStrings(workflowInputs),
+		sortedUniqueWorkflowStrings(permissionScopes),
+		sortedUniqueWorkflowStrings(concurrencyGroups),
+		sortedUniqueWorkflowStrings(environments),
+		sortedUniqueWorkflowStrings(jobTimeoutMinutes),
 		sortedUniqueWorkflowStrings(matrixKeys),
 		matrixCombinationCount
 }
@@ -328,6 +362,80 @@ func githubActionsMatrixMetadata(rawStrategy any) ([]string, int) {
 		combinationCount += len(include)
 	}
 	return keys, combinationCount
+}
+
+func githubActionsPermissionScopes(rawPermissions any) []string {
+	switch typed := rawPermissions.(type) {
+	case string:
+		if trimmed := strings.TrimSpace(typed); trimmed != "" {
+			return []string{trimmed}
+		}
+	case map[string]any:
+		scopes := make([]string, 0, len(typed))
+		for key, rawValue := range typed {
+			scope := strings.TrimSpace(key)
+			value := strings.TrimSpace(fmt.Sprint(rawValue))
+			if scope == "" || value == "" || value == "<nil>" {
+				continue
+			}
+			scopes = append(scopes, scope+":"+value)
+		}
+		return scopes
+	}
+	return nil
+}
+
+func githubActionsConcurrencyGroups(rawConcurrency any) []string {
+	switch typed := rawConcurrency.(type) {
+	case string:
+		if trimmed := strings.TrimSpace(typed); trimmed != "" {
+			return []string{trimmed}
+		}
+	case map[string]any:
+		if group := strings.TrimSpace(StringVal(typed, "group")); group != "" {
+			return []string{group}
+		}
+	}
+	return nil
+}
+
+func githubActionsEnvironmentNames(rawEnvironment any) []string {
+	switch typed := rawEnvironment.(type) {
+	case string:
+		if trimmed := strings.TrimSpace(typed); trimmed != "" {
+			return []string{trimmed}
+		}
+	case map[string]any:
+		if name := strings.TrimSpace(StringVal(typed, "name")); name != "" {
+			return []string{name}
+		}
+	}
+	return nil
+}
+
+func githubActionsJobTimeoutMetadata(jobName string, rawTimeout any) []string {
+	trimmedJobName := strings.TrimSpace(jobName)
+	if trimmedJobName == "" {
+		return nil
+	}
+
+	var timeout string
+	switch typed := rawTimeout.(type) {
+	case int:
+		timeout = fmt.Sprintf("%d", typed)
+	case int64:
+		timeout = fmt.Sprintf("%d", typed)
+	case float64:
+		timeout = fmt.Sprintf("%.0f", typed)
+	case string:
+		timeout = strings.TrimSpace(typed)
+	default:
+		timeout = strings.TrimSpace(fmt.Sprint(rawTimeout))
+	}
+	if timeout == "" || timeout == "<nil>" {
+		return nil
+	}
+	return []string{trimmedJobName + ":" + timeout}
 }
 
 func githubActionsCheckoutRepositories(step map[string]any) []string {
