@@ -518,7 +518,10 @@ Go-backed sources are:
   assets when the path is repo-local and not a remote module source, including
   simple local-variable-backed forms such as `file(local.config_file_path)` and
   `templatefile(local.lifecycle_template, ...)` when the local resolves to a
-  checked-in repo-relative path
+  checked-in repo-relative path, plus lookup-backed template locals such as
+  `templatefile(local.dashboard_template, ...)` and
+  `trimspace(templatefile(local.userdata_template, ...))` when those locals
+  resolve from `lookup(..., "${path.module}/templates/...")`
 - Terraform `*.tfvars` and `*.tfvars.json` files on the normal HCL path
 - local Terraform `module.source = "./..."` style module-asset paths when the
   source is repo-local and not a registry or remote module ref

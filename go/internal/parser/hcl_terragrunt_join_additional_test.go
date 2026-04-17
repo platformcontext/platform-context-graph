@@ -91,3 +91,45 @@ func TestParseTerragruntConfigResolvesNestedLocalBackedHelperPaths(t *testing.T)
 		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
 	}
 }
+
+func TestParseTerragruntConfigResolvesLookupBackedTemplateLocalsWithTrimspaceWrapper(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "terragrunt.hcl")
+	source := []byte(`locals {
+  userdata_template = lookup(
+    var.configuration,
+    "userdata_template",
+    "${path.module}/templates/user_data.tpl",
+  )
+  dashboard_template = lookup(
+    var.configuration,
+    "dashboard_template",
+    "${path.module}/templates/cloudwatch-dashboard.tpl",
+  )
+
+  userdata = trimspace(templatefile(local.userdata_template, {
+    userdata = var.user_data
+  }))
+  cloudwatch_dashboard = templatefile(local.dashboard_template, {
+    name = var.name
+  })
+}
+`)
+
+	file, diags := hclparse.NewParser().ParseHCL(source, filePath)
+	if diags.HasErrors() {
+		t.Fatalf("ParseHCL() diagnostics = %s", diags.Error())
+	}
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		t.Fatalf("file.Body = %T, want *hclsyntax.Body", file.Body)
+	}
+
+	config := parseTerragruntConfig(body, source, filePath)
+
+	if got, want := config["local_config_asset_paths"], "templates/cloudwatch-dashboard.tpl,templates/user_data.tpl"; got != want {
+		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
+	}
+}
