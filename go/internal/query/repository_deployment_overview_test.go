@@ -236,6 +236,59 @@ func TestBuildRepositoryDeploymentOverviewIncludesDockerfileRuntimeStory(t *test
 	}
 }
 
+func TestBuildRepositoryDeploymentOverviewIncludesComposeRuntimeLinkageMetadata(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		[]string{"docker_compose"},
+		[]string{"docker_compose"},
+		map[string]any{
+			"deployment_artifacts": map[string]any{
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "docker-compose.yaml",
+						"artifact_type": "docker_compose",
+						"service_name":  "api",
+						"env_files":     []string{".env", "deploy/api.env"},
+						"configs":       []string{"app-config", "api-runtime"},
+						"secrets":       []string{"db-password", "api-token"},
+						"signals":       []string{"env_files", "configs", "secrets"},
+					},
+				},
+			},
+		},
+	)
+
+	deliveryPaths, ok := got["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
+	}
+	if len(deliveryPaths) != 1 {
+		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "env_files"), []string{".env", "deploy/api.env"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("delivery_paths[0].env_files = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "configs"), []string{"app-config", "api-runtime"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("delivery_paths[0].configs = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(deliveryPaths[0], "secrets"), []string{"db-password", "api-token"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("delivery_paths[0].secrets = %#v, want %#v", got, want)
+	}
+
+	topologyStory, ok := got["topology_story"].([]string)
+	if !ok {
+		t.Fatalf("topology_story type = %T, want []string", got["topology_story"])
+	}
+	if len(topologyStory) != 1 {
+		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Runtime artifacts include docker_compose service api in docker-compose.yaml with env files .env, deploy/api.env, configs app-config, api-runtime, and secrets db-password, api-token (env_files, configs, secrets)."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+}
+
 func TestBuildRepositoryDeploymentOverviewIncludesWorkflowArtifactsInDeliveryPaths(t *testing.T) {
 	t.Parallel()
 

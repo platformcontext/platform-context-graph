@@ -42,6 +42,15 @@ func buildRepositoryRuntimeArtifacts(files []FileContent) map[string]any {
 				if environment := composeRuntimeValues(service.Environment); len(environment) > 0 {
 					row["environment"] = environment
 				}
+				if envFiles := composeRuntimeValues(service.EnvFiles); len(envFiles) > 0 {
+					row["env_files"] = envFiles
+				}
+				if configs := composeRuntimeValues(service.Configs); len(configs) > 0 {
+					row["configs"] = configs
+				}
+				if secrets := composeRuntimeValues(service.Secrets); len(secrets) > 0 {
+					row["secrets"] = secrets
+				}
 				if volumes := composeRuntimeValues(service.Volumes); len(volumes) > 0 {
 					row["volumes"] = volumes
 				}
@@ -131,11 +140,14 @@ type composeRuntimeArtifact struct {
 	Healthcheck  bool
 	Ports        []string
 	Environment  []string
+	EnvFiles     []string
+	Configs      []string
+	Secrets      []string
 	Volumes      []string
 }
 
 func (a composeRuntimeArtifact) signals() []string {
-	signals := make([]string, 0, 4)
+	signals := make([]string, 0, 8)
 	if a.BuildContext != "" {
 		signals = append(signals, "build")
 	}
@@ -147,6 +159,15 @@ func (a composeRuntimeArtifact) signals() []string {
 	}
 	if len(a.Environment) > 0 {
 		signals = append(signals, "environment")
+	}
+	if len(a.EnvFiles) > 0 {
+		signals = append(signals, "env_files")
+	}
+	if len(a.Configs) > 0 {
+		signals = append(signals, "configs")
+	}
+	if len(a.Secrets) > 0 {
+		signals = append(signals, "secrets")
 	}
 	if len(a.Volumes) > 0 {
 		signals = append(signals, "volumes")
@@ -172,10 +193,13 @@ func parseDockerComposeRuntimeArtifacts(content string) []composeRuntimeArtifact
 		}
 		current.Ports = composeRuntimeValues(current.Ports)
 		current.Environment = composeRuntimeValues(current.Environment)
+		current.EnvFiles = composeRuntimeValues(current.EnvFiles)
+		current.Configs = composeRuntimeValues(current.Configs)
+		current.Secrets = composeRuntimeValues(current.Secrets)
 		current.Volumes = composeRuntimeValues(current.Volumes)
 		current.Command = composeRuntimeValues(current.Command)
 		current.Entrypoint = composeRuntimeValues(current.Entrypoint)
-		if current.BuildContext != "" || len(current.Command) > 0 || len(current.Entrypoint) > 0 || current.Healthcheck || len(current.Ports) > 0 || len(current.Environment) > 0 || len(current.Volumes) > 0 {
+		if current.BuildContext != "" || len(current.Command) > 0 || len(current.Entrypoint) > 0 || current.Healthcheck || len(current.Ports) > 0 || len(current.Environment) > 0 || len(current.EnvFiles) > 0 || len(current.Configs) > 0 || len(current.Secrets) > 0 || len(current.Volumes) > 0 {
 			artifacts = append(artifacts, *current)
 		}
 		current = nil
@@ -236,7 +260,7 @@ func parseDockerComposeRuntimeArtifacts(content string) []composeRuntimeArtifact
 			switch key {
 			case "healthcheck":
 				current.Healthcheck = true
-			case "build", "ports", "environment", "volumes", "command", "entrypoint":
+			case "build", "ports", "environment", "env_file", "configs", "secrets", "volumes", "command", "entrypoint":
 				currentSection = key
 				currentSectionIndent = indent
 				composeCaptureRuntimeSectionInlineValue(current, key, value)
@@ -275,7 +299,7 @@ func composeServiceName(trimmedLine string, indent, servicesIndent int) (string,
 func composeKnownSectionKey(key string) bool {
 	switch key {
 	case "build", "cap_add", "cap_drop", "command", "container_name", "entrypoint",
-		"depends_on", "environment", "env_file", "expose", "healthcheck",
+		"configs", "depends_on", "environment", "env_file", "expose", "healthcheck",
 		"image", "labels", "networks", "ports", "profiles", "restart",
 		"secrets", "stdin_open", "tty", "user", "volumes", "working_dir":
 		return true
@@ -324,6 +348,30 @@ func composeCaptureRuntimeSectionValue(current *composeRuntimeArtifact, section,
 			return
 		}
 		current.Environment = append(current.Environment, composeEnvironmentName(normalized))
+	case "env_file":
+		if key, value, ok := yamlKeyValue(normalized); ok {
+			if key == "path" || key == "file" {
+				current.EnvFiles = append(current.EnvFiles, composeNormalizeScalar(value))
+			}
+			return
+		}
+		current.EnvFiles = append(current.EnvFiles, composeNormalizeScalar(normalized))
+	case "configs":
+		if key, value, ok := yamlKeyValue(normalized); ok {
+			if key == "source" || key == "file" {
+				current.Configs = append(current.Configs, composeNormalizeScalar(value))
+			}
+			return
+		}
+		current.Configs = append(current.Configs, composeNormalizeScalar(normalized))
+	case "secrets":
+		if key, value, ok := yamlKeyValue(normalized); ok {
+			if key == "source" || key == "file" {
+				current.Secrets = append(current.Secrets, composeNormalizeScalar(value))
+			}
+			return
+		}
+		current.Secrets = append(current.Secrets, composeNormalizeScalar(normalized))
 	case "volumes":
 		current.Volumes = append(current.Volumes, composeNormalizeScalar(normalized))
 	}

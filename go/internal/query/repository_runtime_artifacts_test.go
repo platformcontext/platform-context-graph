@@ -252,6 +252,59 @@ func TestBuildRepositoryRuntimeArtifactsCapturesDockerComposeCommandAndEntrypoin
 	}
 }
 
+func TestBuildRepositoryRuntimeArtifactsCapturesDockerComposeEnvFilesConfigsAndSecrets(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryRuntimeArtifacts([]FileContent{
+		{
+			RelativePath: "docker-compose.yaml",
+			ArtifactType: "docker_compose",
+			Content: `services:
+  api:
+    env_file:
+      - .env
+      - deploy/api.env
+    configs:
+      - app-config
+      - source: api-runtime
+        target: /etc/api/config.yaml
+    secrets:
+      - db-password
+      - source: api-token
+        target: api-token
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryRuntimeArtifacts() = nil, want deployment artifacts")
+	}
+
+	artifacts, ok := got["deployment_artifacts"].([]map[string]any)
+	if !ok {
+		t.Fatalf("deployment_artifacts type = %T, want []map[string]any", got["deployment_artifacts"])
+	}
+	if len(artifacts) != 1 {
+		t.Fatalf("len(deployment_artifacts) = %d, want 1", len(artifacts))
+	}
+
+	api := artifacts[0]
+	if got, want := api["service_name"], "api"; got != want {
+		t.Fatalf("api.service_name = %#v, want %#v", got, want)
+	}
+	if got, want := api["signals"], []string{"env_files", "configs", "secrets"}; !stringSliceEqual(got, want) {
+		t.Fatalf("api.signals = %#v, want %#v", got, want)
+	}
+	if got, want := api["env_files"], []string{".env", "deploy/api.env"}; !stringSliceEqual(got, want) {
+		t.Fatalf("api.env_files = %#v, want %#v", got, want)
+	}
+	if got, want := api["configs"], []string{"app-config", "api-runtime"}; !stringSliceEqual(got, want) {
+		t.Fatalf("api.configs = %#v, want %#v", got, want)
+	}
+	if got, want := api["secrets"], []string{"db-password", "api-token"}; !stringSliceEqual(got, want) {
+		t.Fatalf("api.secrets = %#v, want %#v", got, want)
+	}
+}
+
 func stringSliceEqual(got any, want []string) bool {
 	typed, ok := got.([]string)
 	if !ok {

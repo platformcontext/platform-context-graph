@@ -103,6 +103,9 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		if cmd := strings.TrimSpace(StringVal(row, "cmd")); cmd != "" {
 			entry["cmd"] = cmd
 		}
+		copyStringSliceField(entry, row, "env_files")
+		copyStringSliceField(entry, row, "configs")
+		copyStringSliceField(entry, row, "secrets")
 		if signals := stringSliceValue(row, "signals"); len(signals) > 0 {
 			entry["signals"] = signals
 		}
@@ -342,6 +345,9 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			baseImage := strings.TrimSpace(StringVal(row, "base_image"))
 			cmd := strings.TrimSpace(StringVal(row, "cmd"))
 			buildContext := strings.TrimSpace(StringVal(row, "build_context"))
+			envFiles := stringSliceValue(row, "env_files")
+			configs := stringSliceValue(row, "configs")
+			secrets := stringSliceValue(row, "secrets")
 			signals := stringSliceValue(row, "signals")
 			if path == "" || artifactType == "" {
 				continue
@@ -352,6 +358,19 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			}
 			if buildContext != "" && serviceName != "" {
 				line += fmt.Sprintf(" built from %s", buildContext)
+			}
+			runtimeDetails := make([]string, 0, 3)
+			if len(envFiles) > 0 {
+				runtimeDetails = append(runtimeDetails, "env files "+strings.Join(envFiles, ", "))
+			}
+			if len(configs) > 0 {
+				runtimeDetails = append(runtimeDetails, "configs "+strings.Join(configs, ", "))
+			}
+			if len(secrets) > 0 {
+				runtimeDetails = append(runtimeDetails, "secrets "+strings.Join(secrets, ", "))
+			}
+			if len(runtimeDetails) > 0 {
+				line += " with " + joinSentenceFragments(runtimeDetails)
 			}
 			if len(signals) > 0 {
 				line += fmt.Sprintf(" (%s)", strings.Join(signals, ", "))
