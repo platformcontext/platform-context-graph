@@ -14,7 +14,7 @@ func TestRelationshipPlatformWorkerWorkflowSurfacesReadSideDeliveryPath(t *testi
 		{
 			RelativePath: ".github/workflows/deploy-modern.yml",
 			ArtifactType: "github_actions_workflow",
-			Content: readRelationshipPlatformWorkflowFixture(
+			Content: readRelationshipPlatformFixture(
 				t,
 				"service-worker-jobs",
 				".github",
@@ -88,7 +88,86 @@ func TestRelationshipPlatformWorkerWorkflowSurfacesReadSideDeliveryPath(t *testi
 	}
 }
 
-func readRelationshipPlatformWorkflowFixture(t *testing.T, parts ...string) string {
+func TestRelationshipPlatformWorkerDockerfileSurfacesRuntimeStory(t *testing.T) {
+	t.Parallel()
+
+	artifacts := buildRepositoryRuntimeArtifacts([]FileContent{
+		{
+			RelativePath: "Dockerfile",
+			ArtifactType: "dockerfile",
+			Content: readRelationshipPlatformFixture(
+				t,
+				"service-worker-jobs",
+				"Dockerfile",
+			),
+		},
+	})
+	if artifacts == nil {
+		t.Fatal("buildRepositoryRuntimeArtifacts() = nil, want deployment artifacts")
+	}
+
+	overview := BuildRepositoryDeploymentOverview(
+		[]string{"service-worker-jobs"},
+		nil,
+		[]string{"docker"},
+		map[string]any{"deployment_artifacts": artifacts},
+	)
+
+	deliveryPaths, ok := overview["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", overview["delivery_paths"])
+	}
+	if len(deliveryPaths) != 1 {
+		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
+	}
+	if got, want := deliveryPaths[0]["artifact_name"], "node"; got != want {
+		t.Fatalf("delivery_paths[0].artifact_name = %#v, want %#v", got, want)
+	}
+	if got, want := deliveryPaths[0]["cmd"], `["node", "service-worker-jobs.js"]`; got != want {
+		t.Fatalf("delivery_paths[0].cmd = %#v, want %#v", got, want)
+	}
+
+	topologyStory, ok := overview["topology_story"].([]string)
+	if !ok {
+		t.Fatalf("topology_story type = %T, want []string", overview["topology_story"])
+	}
+	if len(topologyStory) != 1 {
+		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
+	}
+	if got, want := topologyStory[0], "Runtime artifacts include dockerfile stage node in Dockerfile based on node with cmd [\"node\", \"service-worker-jobs.js\"] (base_image, cmd)."; got != want {
+		t.Fatalf("topology_story[0] = %q, want %q", got, want)
+	}
+
+	story := buildRepositoryStoryResponse(
+		RepoRef{ID: "repository:service-worker-jobs", Name: "service-worker-jobs"},
+		4,
+		[]string{"dockerfile"},
+		nil,
+		nil,
+		0,
+		map[string]any{
+			"families":             []string{"docker"},
+			"deployment_artifacts": artifacts,
+		},
+		nil,
+	)
+	deploymentOverview, ok := story["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", story["deployment_overview"])
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	if len(directStory) != 1 {
+		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
+	}
+	if got, want := directStory[0], "Runtime artifacts include dockerfile stage node in Dockerfile based on node with cmd [\"node\", \"service-worker-jobs.js\"] (base_image, cmd)."; got != want {
+		t.Fatalf("direct_story[0] = %q, want %q", got, want)
+	}
+}
+
+func readRelationshipPlatformFixture(t *testing.T, parts ...string) string {
 	t.Helper()
 
 	_, file, _, ok := runtime.Caller(0)
