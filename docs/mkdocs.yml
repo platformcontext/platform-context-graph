@@ -62,6 +62,7 @@ nav:
     - CLI Indexing: reference/cli-indexing.md
     - CLI Analysis: reference/cli-analysis.md
     - CLI System: reference/cli-system.md
+    - CLI K.I.S.S.: reference/cli-kiss.md
     - Configuration: reference/configuration.md
     - Runtime Admin API: reference/runtime-admin-api.md
     - How It Works: concepts/how-it-works.md
@@ -76,17 +77,52 @@ nav:
     - Relationship Mapping Observability: reference/relationship-mapping-observability.md
     - ".pcgignore": reference/pcgignore.md
     - Troubleshooting: reference/troubleshooting.md
+    - Logging Standard: reference/logging.md
     - Telemetry:
       - Overview: reference/telemetry/index.md
       - Metrics: reference/telemetry/metrics.md
       - Traces: reference/telemetry/traces.md
       - Logs: reference/telemetry/logs.md
       - Cross-Service Correlation: reference/telemetry/cross-service-correlation.md
+    - Services:
+      - Bootstrap-Index: services/bootstrap-index.md
+      - Ingester: services/ingester.md
+      - Resolution Engine: services/resolution-engine.md
     - Source Layout: reference/source-layout.md
     - Language Support: contributing-language-support.md
-    - Language Feature Matrix: languages/feature-matrix.md
-    - Language Support Maturity: languages/support-maturity.md
-    - PHP Parser: languages/php.md
+    - Languages:
+      - Feature Matrix: languages/feature-matrix.md
+      - Support Maturity: languages/support-maturity.md
+      - C: languages/c.md
+      - C++: languages/cpp.md
+      - C#: languages/csharp.md
+      - Dart: languages/dart.md
+      - Elixir: languages/elixir.md
+      - Go: languages/go.md
+      - Groovy: languages/groovy.md
+      - Haskell: languages/haskell.md
+      - Java: languages/java.md
+      - JavaScript: languages/javascript.md
+      - JSON: languages/json.md
+      - Kotlin: languages/kotlin.md
+      - Perl: languages/perl.md
+      - PHP: languages/php.md
+      - Python: languages/python.md
+      - Ruby: languages/ruby.md
+      - Rust: languages/rust.md
+      - Scala: languages/scala.md
+      - SQL: languages/sql.md
+      - Swift: languages/swift.md
+      - TypeScript: languages/typescript.md
+      - TypeScript JSX: languages/typescriptjsx.md
+      - ArgoCD: languages/argocd.md
+      - CloudFormation: languages/cloudformation.md
+      - Crossplane: languages/crossplane.md
+      - Helm: languages/helm.md
+      - Kubernetes: languages/kubernetes.md
+      - Kustomize: languages/kustomize.md
+      - Terraform: languages/terraform.md
+      - Terragrunt: languages/terragrunt.md
   - Project:
     - Terraform Providers:
       - Overview: guides/terraform-providers/index.md
