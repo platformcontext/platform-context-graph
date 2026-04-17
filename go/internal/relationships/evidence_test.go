@@ -499,6 +499,50 @@ jobs:
 	}
 }
 
+func TestDiscoverGitHubActionsWorkflowInputRepositoriesEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-app",
+			Payload: map[string]any{
+				"artifact_type": "github_actions_workflow",
+				"relative_path": ".github/workflows/deploy.yaml",
+				"content": `jobs:
+  deploy:
+    uses: boatsgroup/core-engineering-automation/.github/workflows/deploy.yaml@main
+    with:
+      workflow_input_repositories:
+        - boatsgroup/automation-fallback
+        - boatsgroup/core-engineering-automation
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-automation-fallback", Aliases: []string{"boatsgroup/automation-fallback", "automation-fallback"}},
+		{RepoID: "repo-core-automation", Aliases: []string{"boatsgroup/core-engineering-automation", "core-engineering-automation"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 3 {
+		t.Fatalf("len(evidence) = %d, want 3", len(evidence))
+	}
+	if !hasRelationshipType(evidence, RelDiscoversConfigIn) {
+		t.Fatalf("missing %q evidence", RelDiscoversConfigIn)
+	}
+
+	targetRepoIDs := make(map[string]struct{}, len(evidence))
+	for _, item := range evidence {
+		targetRepoIDs[item.TargetRepoID] = struct{}{}
+	}
+	for _, want := range []string{"repo-automation-fallback", "repo-core-automation"} {
+		if _, ok := targetRepoIDs[want]; !ok {
+			t.Fatalf("missing target repo %q in %#v", want, targetRepoIDs)
+		}
+	}
+}
+
 func TestDiscoverGitHubActionsActionRepositoryEvidence(t *testing.T) {
 	t.Parallel()
 

@@ -190,14 +190,31 @@ func githubActionsWorkflowInputRepositoryRefs(document map[string]any) []string 
 		if withMap == nil {
 			continue
 		}
-		for _, key := range []string{"workflow_input_repository", "automation-repo", "automation_repo"} {
-			if repoRef := strings.TrimSpace(stringValue(withMap[key])); repoRef != "" {
+		refs = append(refs, githubActionsWorkflowInputRepositoryValues(withMap)...)
+	}
+
+	return uniqueStrings(refs)
+}
+
+func githubActionsWorkflowInputRepositoryValues(withMap map[string]any) []string {
+	refs := make([]string, 0, 2)
+	for _, key := range []string{
+		"workflow_input_repository",
+		"workflow_input_repositories",
+		"automation-repo",
+		"automation_repo",
+	} {
+		if repoRef := strings.TrimSpace(stringValue(withMap[key])); repoRef != "" {
+			refs = append(refs, repoRef)
+			continue
+		}
+		for _, item := range sliceValue(withMap[key]) {
+			if repoRef := strings.TrimSpace(stringValue(item)); repoRef != "" {
 				refs = append(refs, repoRef)
 			}
 		}
 	}
-
-	return uniqueStrings(refs)
+	return refs
 }
 
 func githubActionsActionRepositoryRefs(document map[string]any) []string {
