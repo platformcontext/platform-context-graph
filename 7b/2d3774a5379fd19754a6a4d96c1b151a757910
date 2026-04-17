@@ -1,0 +1,52 @@
+go/cmd/mcp-server/runtime_surface_test.go
+  72c82225e70ef41d 1-80
+go/internal/mcp/server_test.go
+  72c82225e70ef41d 386-424
+docs/docs/architecture.md
+  72c82225e70ef41d 202-204,211-212,230-231,236-238
+go/cmd/mcp-server/wiring.go
+  72c82225e70ef41d 7,9,11,18,20,23-30,33,47,52-55,63,69,74-77,122-129,135,145-208
+docs/docs/deployment/service-runtimes.md
+  72c82225e70ef41d 22,43-44,52,59,62-63,99-100,124-125,225-226,243-244
+go/cmd/mcp-server/main.go
+  72c82225e70ef41d 5,13,20-36,43,45,65,74-76
+docs/docs/reference/service-workflows.md
+  72c82225e70ef41d 82,221-222,225-227
+go/internal/mcp/server.go
+  72c82225e70ef41d 114,118-119,143-165
+go/cmd/mcp-server/wiring_test.go
+  72c82225e70ef41d 13,15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "7b2d3774a5379fd19754a6a4d96c1b151a757910",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    },
+    "72c82225e70ef41d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9836-7763-76c0-a116-358a6223b5f9",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 440,
+      "total_deletions": 73,
+      "accepted_lines": 440,
+      "overriden_lines": 0
+    }
+  }
+}
