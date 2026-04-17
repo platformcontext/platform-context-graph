@@ -34,7 +34,7 @@ live in the repository today.
 | `go/internal/terraformschema/` | packaged Terraform provider schemas and schema loader |
 | `go/internal/truth/` | canonical truth contracts |
 | `deploy/` | Docker, Helm, compose, and manifest assets |
-| `docs/` | operator docs, architecture, ADRs, plans, and language references |
+| `docs/` | operator docs, architecture, workflows, runtime references, and language references |
 | `tests/fixtures/` | parser and ecosystem fixture corpora only |
 
 ## Runtime Binaries

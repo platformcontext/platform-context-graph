@@ -99,7 +99,8 @@ hard-coded values.
 
 Follow this order so the collector lands on stable boundaries:
 
-1. Add or update ADRs if the source introduces a new architectural rule.
+1. Update the published architecture or workflow docs if the source changes a
+   runtime or ownership rule.
 2. Define scope and generation identity.
 3. Define typed fact payloads and validation rules.
 4. Implement source observation and normalization.
@@ -137,7 +138,8 @@ When a collector lands, update these repo-hosted docs in the same milestone:
 - [Local Testing Runbook](../reference/local-testing.md)
 - [Cloud Validation Runbook](../reference/cloud-validation.md)
 - [Telemetry Overview](../reference/telemetry/index.md)
-- the rewrite SOW and doc-set index under `docs/superpowers/plans/`
+- any current deployment, workflow, or service-level reference docs that
+  explain how operators run or validate the collector today
 
 Future workers should be able to onboard to the collector from docs alone
 without guessing which service owns truth.
