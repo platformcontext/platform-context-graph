@@ -182,3 +182,84 @@ func TestBuildRepositoryStoryResponsePreservesDockerfileRelationshipAndRuntimeSt
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
 }
+
+func TestBuildRepositoryStoryResponsePreservesTerragruntNestedConfigStory(t *testing.T) {
+	t.Parallel()
+
+	configArtifacts := buildRepositoryConfigArtifacts("terragrunt-deployment", []FileContent{
+		{
+			RelativePath: "accounts/bg-dev/us-east-1/dev.network-us-east-1/services/terragrunt.hcl",
+			Content: `include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+locals {
+  path_parts   = split("/", path_relative_to_include("root"))
+  account_name = local.path_parts[1]
+  region_name  = local.path_parts[2]
+  vpc_name     = local.path_parts[3]
+
+  inherited    = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+  account_vars = yamldecode(file("${get_repo_root()}/accounts/${local.account_name}/account.yaml"))
+  region_vars  = yamldecode(file("${get_repo_root()}/accounts/${local.account_name}/${local.region_name}/region.yaml"))
+}
+`,
+		},
+	})
+	if configArtifacts == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths, ok := configArtifacts["config_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("config_paths type = %T, want []map[string]any", configArtifacts["config_paths"])
+	}
+
+	repo := RepoRef{ID: "repository:terragrunt-deployment", Name: "terragrunt-deployment"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		12,
+		[]string{"hcl"},
+		nil,
+		nil,
+		0,
+		map[string]any{
+			"families": []string{"terragrunt", "terraform"},
+			"deployment_artifacts": map[string]any{
+				"config_paths": configPaths,
+			},
+		},
+		nil,
+	)
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+
+	wantLines := []string{
+		"Config provenance includes accounts/bg-dev/account.yaml from terragrunt-deployment via local_config_asset in accounts/bg-dev/us-east-1/dev.network-us-east-1/services/terragrunt.hcl.",
+		"Config provenance includes accounts/bg-dev/us-east-1/region.yaml from terragrunt-deployment via local_config_asset in accounts/bg-dev/us-east-1/dev.network-us-east-1/services/terragrunt.hcl.",
+		"Config provenance includes env.hcl from terragrunt-deployment via terragrunt_find_in_parent_folders in accounts/bg-dev/us-east-1/dev.network-us-east-1/services/terragrunt.hcl.",
+		"Config provenance includes env.hcl from terragrunt-deployment via terragrunt_read_config in accounts/bg-dev/us-east-1/dev.network-us-east-1/services/terragrunt.hcl.",
+		"Config provenance includes root.hcl from terragrunt-deployment via terragrunt_include_path in accounts/bg-dev/us-east-1/dev.network-us-east-1/services/terragrunt.hcl.",
+	}
+	for _, want := range wantLines {
+		if !containsExactLine(directStory, want) {
+			t.Fatalf("direct_story = %#v, want line %q", directStory, want)
+		}
+	}
+}
+
+func containsExactLine(lines []string, want string) bool {
+	for _, line := range lines {
+		if line == want {
+			return true
+		}
+	}
+	return false
+}
