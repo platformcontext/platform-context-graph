@@ -1,6 +1,6 @@
 # Kubernetes Parser
 
-This page tracks the checked-in Go parser contract for this branch.
+This page tracks the checked-in Go parser contract in the current repository state.
 Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
@@ -27,5 +27,5 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 ## Known Limitations
 - Container image references within Pod specs are not extracted as separate nodes
-- Real Kubernetes `selector` / `matchLabels` resolution is still intentionally out of scope for this parity branch; the Go platform preserves the historical Python-era same-name/same-namespace heuristic instead
+- Real Kubernetes `selector` / `matchLabels` resolution is still intentionally out of scope for current parity; the Go platform preserves the historical Python-era same-name/same-namespace heuristic instead
 - Custom Resource Definitions (CRDs) are parsed as generic K8s resources without schema awareness

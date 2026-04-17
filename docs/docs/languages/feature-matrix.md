@@ -1,6 +1,6 @@
 # Parser Feature Matrix
 
-This page tracks the checked-in Go parser contract matrix for this branch.
+This page tracks the checked-in Go parser contract matrix in the current repository state.
 
 Coverage counts on this page describe checked-in fixture contract coverage, not
 blanket parity claims for every end-to-end graph surface. Use each

@@ -1,7 +1,6 @@
 # PHP Parser
 
-This page tracks the checked-in Go PHP parser and query contract for the
-current branch.
+This page tracks the checked-in Go PHP parser and query contract in the current repository state.
 
 Canonical implementation:
 - Parser: `go/internal/parser/php_language.go`

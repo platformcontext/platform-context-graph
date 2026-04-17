@@ -4,7 +4,7 @@ PlatformContextGraph uses a **schema-driven approach** to extract infrastructure
 
 ## Runtime Ownership
 
-Terraform provider-schema support is now Go-owned on this branch.
+Terraform provider-schema support is now Go-owned.
 
 The canonical packaged schema assets live under:
 
@@ -21,7 +21,7 @@ detail. They are live runtime inputs used to register schema-driven extractors,
 load provider metadata, infer identity keys, classify service families, and
 emit infrastructure relationship evidence.
 
-On this branch, that evidence path is proven through the Postgres ingestion
+That evidence path is proven through the Postgres ingestion
 transaction: repository facts are read back into a catalog, Terraform fact
 batches are scanned against that catalog, and matching rows are persisted to
 `relationship_evidence_facts` before the projector queue is enqueued.
@@ -32,7 +32,7 @@ Historically, the old Python platform loaded the output of
 `terraform providers schema -json` so it could reason about provider resource
 shapes instead of hard-coding one extractor per Terraform resource type.
 
-That purpose has not gone away. What changed on this branch is ownership:
+That purpose has not gone away. What changed is ownership:
 
 - the schema assets are still generated from `terraform providers schema -json`
 - the runtime loader and extractor registration are now Go-owned

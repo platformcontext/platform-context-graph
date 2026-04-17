@@ -1,6 +1,6 @@
 # Terraform Parser
 
-This page tracks the checked-in Go parser contract for this branch.
+This page tracks the checked-in Go parser contract in the current repository state.
 Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
@@ -25,7 +25,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Locals blocks | `locals-blocks` | supported | `terraform_locals` | `name, line_number, value` | `node:TerraformLocal` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerraform` | Compose-backed fixture verification | - |
 
 ## Parity Notes
-- Python-era Terraform parser parity is already met on this branch, and the Go runtime now exceeds that baseline with first-class `terraform {}` block entities plus provider-schema-backed relationship extraction.
+- Python-era Terraform parser parity is already met, and the Go runtime now exceeds that baseline with first-class `terraform {}` block entities plus provider-schema-backed relationship extraction.
 - The first-class `terraform_blocks` surface is a Go-only improvement. The old Python parser used `required_providers` metadata to enrich provider rows, but it did not persist a standalone `terraform {}` entity.
 - The packaged Terraform provider schemas are still intentionally present
   because the Go runtime uses them for schema-driven relationship extraction.

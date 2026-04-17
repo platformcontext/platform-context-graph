@@ -54,7 +54,7 @@ whether the latest published Go checkpoint is finished.
 - `GET /api/v0/repositories/{repo_id}/coverage` returns durable repository
   coverage rows for one repository.
 - Run-scoped completeness routes such as `/api/v0/index-runs/{run_id}` are not
-  part of the shipped public contract on this branch. Do not assume the
+  part of the shipped public contract. Do not assume the
   repository coverage route is run-scoped.
 - `POST /api/v0/admin/refinalize` re-enqueues active scope generations for
   re-projection through the durable Go work queue.
@@ -477,7 +477,7 @@ Status responses are designed for remote operation and include:
 - failure counts and last error details
 
 The shipped public API does not include a `POST /api/v0/ingesters/{ingester}/scan`
-route on this branch. Use `POST /api/v0/admin/reindex` or deployment-managed
+route in the shipped platform. Use `POST /api/v0/admin/reindex` or deployment-managed
 ingestion instead of assuming a per-ingester public scan endpoint exists.
 
 ## Bundle Import API

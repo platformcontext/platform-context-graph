@@ -10,7 +10,7 @@ store, or runtime spent the time.
 
 ## Current Go Trace Contract
 
-The current branch is Go-owned. The trace contract is therefore the Go data
+The platform is Go-owned. The trace contract is therefore the Go data
 plane contract from `go/internal/telemetry/contract.go` plus the read-path
 query wrappers.
 
@@ -43,7 +43,7 @@ The read/query layer also emits:
 
 The older Python-era families such as `pcg.http.*`, `pcg.mcp.*`, `pcg.query.*`,
 `pcg.index.*`, `pcg.fact_*`, `pcg.resolution.*`, `pcg.graph.*`, and
-`pcg.content.*` are not the current Go trace contract on this branch.
+`pcg.content.*` are not part of the current Go trace contract.
 
 ## How To Read The Trace Tree
 

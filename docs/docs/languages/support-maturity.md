@@ -1,14 +1,14 @@
 # Parser Support Maturity Matrix
 
-This page tracks the checked-in Go parser support-maturity matrix for this branch.
+This page tracks the checked-in Go parser support-maturity matrix in the current repository state.
 
-This matrix is intentionally coarse. It does not replace the branch-level parity
+This matrix is intentionally coarse. It does not replace the parity
 audit or the per-language capability pages.
 
 Use:
 
 - [Python-To-Go Parity Audit](../reference/python-to-go-parity.md) for the
-  current branch closure bar
+  current parity closure bar
 - the language pages under `docs/docs/languages/` for exact partial or
   unsupported capability details
 
@@ -61,5 +61,5 @@ limitations or bounded non-goals.
 
 The parity audit is still the stricter merge gate for end-to-end evidence,
 validation breadth, and final documentation lock. This matrix stays
-intentionally coarse and should not be read as the canonical branch closeout
+intentionally coarse and should not be read as the canonical signoff
 checklist.

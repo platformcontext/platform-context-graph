@@ -1,6 +1,6 @@
 # Terragrunt Parser
 
-This page tracks the checked-in Go parser contract for this branch.
+This page tracks the checked-in Go parser contract in the current repository state.
 Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
@@ -23,7 +23,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Source attribute in `terraform` block | `source-attribute-in-terraform-block` | supported | `source-attribute-in-terraform-block` | `terraform_source` | `property:TerragruntConfig.source` and `node:TerraformModule.source` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt` | Compose-backed fixture verification | The Terragrunt `terraform.source` value now also materializes through the normal `TerraformModule` surface. |
 
 ## Parity Notes
-- Python-era Terragrunt parser parity is met on this branch.
+- Python-era Terragrunt parser parity is met.
 - Repository-context read surfaces now also include `dependency.config_path`, `read_terragrunt_config`, `include`, `file`, `templatefile`, `*.tfvars`, and local module-source paths, while `terraform.source` also materializes through `TerraformModule`.
 - `read_terragrunt_config()` itself remains opaque in parser output.
 

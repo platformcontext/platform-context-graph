@@ -2,7 +2,7 @@
 
 Use this guide when adding a new collector family such as AWS, Kubernetes,
 SQL/data systems, or another source that should feed the shared PCG data plane.
-The Git parser/runtime is Go-owned on this branch, so new collector work
+The Git parser/runtime is Go-owned, so new collector work
 should start from the current Go service and parser boundaries documented here
 rather than reopening migration seams.
 

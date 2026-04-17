@@ -22,7 +22,7 @@ Do not stop at pod health when the goal is operator confidence in freshness.
    `/api/v0/index-status` route for checkpointed completeness.
 3. If you need repository-scoped completeness detail, inspect
    `/api/v0/repositories/{repo_id}/coverage`.
-4. Run-scoped completeness routes are not ported yet on this branch; do not
+4. Run-scoped completeness routes are not part of the shipped public contract; do not
    treat `/api/v0/index-status` as a per-run view.
 5. If you are debugging a recovery action, inspect the ingester
    `/admin/status` surface before and after the recovery call.

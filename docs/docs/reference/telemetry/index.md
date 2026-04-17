@@ -139,7 +139,7 @@ For shared-write debugging specifically:
   different mental model for collector, projector, reducer, or future Go
   services.
 - Use the report before restarting a service or forcing a broader re-index.
-- The normal runtime path on this branch is Go-owned end to end.
+- The normal runtime path is Go-owned end to end.
 - The remaining migration work is Go-owned parity hardening rather than Python
   retirement work: broader workflow/controller relationship proof, the
   remaining broader IaC helper-built path-expression reduction, and the

@@ -9,7 +9,7 @@ same shape without custom parsing.
 
 ## Current Go Contract
 
-The logger contract on this branch comes from `go/internal/telemetry/logging.go`
+The logger contract comes from `go/internal/telemetry/logging.go`
 and the Go runtime entrypoints.
 
 Guaranteed top-level fields from the Go logger are:
@@ -62,7 +62,7 @@ The explicit `event_name` values in the current Go code include:
 
 Do not treat examples such as `http.request.completed`,
 `mcp.request.received`, or `index.discovery.completed` as current universal Go
-events. Those are not the branch’s canonical live event families.
+events. Those are not the current canonical live event families.
 
 ## Phase-Scoped Runtime Logs
 

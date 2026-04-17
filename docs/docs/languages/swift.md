@@ -1,6 +1,6 @@
 # Swift Parser
 
-This page tracks the checked-in Go parser contract for this branch.
+This page tracks the checked-in Go parser contract in the current repository state.
 Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract

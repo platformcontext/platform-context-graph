@@ -1,7 +1,7 @@
 # Local Testing Runbook
 
 This is the default verification runbook for engineers, Claude, and Codex on
-the current Go-owned platform branch.
+the current Go-owned platform.
 
 Use it to answer:
 

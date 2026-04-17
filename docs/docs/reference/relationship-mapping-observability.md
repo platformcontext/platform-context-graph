@@ -3,7 +3,7 @@
 Use this page as the operational companion to
 [Relationship Mapping](relationship-mapping.md).
 
-This branch no longer uses the older synthetic `relationships.*` log families
+The platform no longer uses the older synthetic `relationships.*` log families
 or `pcg.relationships.*` trace families as its primary contract. Relationship
 mapping now rides on the Go reducer/materialization path plus the shared
 storage traces and structured JSON logs.

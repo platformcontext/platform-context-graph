@@ -83,10 +83,10 @@ Keep `CONTAINS*` when the query is actually about the tree, not just about locat
 ## Contract-First Relationship Verbs
 
 The historical Python relationship pipeline and fixture corpus were organized
-around verb coverage, not parser checklists. The Go branch needs to keep that
-same contract explicit.
+around verb coverage, not parser checklists. The Go platform keeps that same
+contract explicit.
 
-These verbs define the relationship-parity bar on this branch:
+These verbs define the relationship-parity bar:
 
 - `PROVISIONS_DEPENDENCY_FOR`
 - `PROVISIONS_PLATFORM`
@@ -164,7 +164,7 @@ Canonical relationship types today are:
 - `USES_MODULE`
 - `RUNS_ON`
 
-Typed relationships are canonical. Downstream graph materialization and query layers also use related runtime edges such as `PROVISIONS_PLATFORM`, `DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE`, but those are not currently resolver-owned relationship types on this branch.
+Typed relationships are canonical. Downstream graph materialization and query layers also use related runtime edges such as `PROVISIONS_PLATFORM`, `DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE`, but those are not currently resolver-owned relationship types.
 
 ### Resolution Precedence Order
 
@@ -264,7 +264,7 @@ The Go graph needs to keep these distinctions visible:
 
 ### Typed Precedence
 
-When the same pair can be described by both a typed relationship and a generic `DEPENDS_ON`, the typed edge wins. The resolver suppresses the weaker generic candidate for the same implied pair, while any compatibility `DEPENDS_ON` view remains a downstream concern rather than a current resolver guarantee on this branch.
+When the same pair can be described by both a typed relationship and a generic `DEPENDS_ON`, the typed edge wins. The resolver suppresses the weaker generic candidate for the same implied pair, while any compatibility `DEPENDS_ON` view remains a downstream concern rather than a current resolver guarantee.
 
 The Go reducer and canonical Neo4j writer now preserve that typed meaning end
 to end for repository-scoped relationship families such as:
@@ -314,7 +314,7 @@ legitimately contain several families at once:
 - Dockerfiles or Docker Compose manifests
 - GitHub Actions workflows
 
-Current truth on this branch:
+Current truth:
 
 - content-backed infrastructure summaries surface multiple infrastructure
   families at once when the repo contains them
@@ -328,7 +328,7 @@ Current truth on this branch:
 Do not downcast a mixed repo to “Terraform repo”, “Argo CD repo”, or “service
 repo” if the indexed content proves more than one family is present.
 
-Terraform provider-schema support is now Go-owned on this branch:
+Terraform provider-schema support is now Go-owned:
 
 The normal Postgres ingestion boundary now proves that runtime ownership in
 practice: repository facts are loaded back into a catalog, Terraform fact
@@ -341,7 +341,7 @@ batches are matched against that catalog, and evidence rows are persisted to
 - the packaged schema assets live under
   `go/internal/terraformschema/schemas/*.json.gz`
 - Python no longer owns any part of the Terraform relationship runtime
-  boundary on this branch
+  boundary today
 
 ## Terraform-Managed Runtime Variants
 
@@ -462,7 +462,7 @@ Use deployment artifacts to enrich answers and summaries. Do not treat them as a
 
 ## Fixture-Corpus Proof Shape
 
-The historical fixture corpus is still the best truth test for this branch. It
+The historical fixture corpus is still the best truth test for the current platform state. It
 proves the relationship workflow across service repos, Helm/Kustomize deploy
 repos, ArgoCD delivery repos, controller-driven automation repos, and shared
 infrastructure/runtime Terraform repos.
@@ -475,7 +475,7 @@ The minimum proof shape is:
 4. project the active generation into Neo4j
 5. surface the same meaning through query, story, and trace outputs
 
-The remaining open corpus families on this branch are:
+The remaining open corpus families are:
 
 - broader Terraform and Terragrunt config-asset extraction beyond the current
   Kustomize policy-document, Terragrunt `dependency.config_path`, Terragrunt
@@ -505,7 +505,7 @@ They should help answer:
 
 They should not be used to invent deployment or provisioning relationships by themselves.
 
-On this branch, `shared_config_paths` is now fed by the Go normal read path
+`shared_config_paths` is now fed by the Go normal read path
 from related repositories rather than a deleted Python bridge. The current
 Go-backed sources are:
 

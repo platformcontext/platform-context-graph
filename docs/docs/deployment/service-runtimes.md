@@ -27,7 +27,7 @@ MCP, that mount `go/internal/runtime`:
 - the CLI and HTTP/admin views should render the same underlying report
 - live-versus-inferred state must be explicit in both views
 
-Current branch reality:
+Current platform reality:
 
 - the platform runtime is Go-owned end to end
 - `collector-git`, `ingester`, and `bootstrap-index` own repository selection,
@@ -39,7 +39,7 @@ Current branch reality:
   supplementation without Python delegation
 - Terraform provider-schema assets are packaged and loaded from
   `go/internal/terraformschema/schemas/*.json.gz`
-- Python no longer owns any deployed or long-running runtime on this branch
+- Python no longer owns any deployed or long-running runtime
 - the API, MCP, ingester, reducer, collector proof lane, and bootstrap helpers
   emit structured JSON logs through the shared Go telemetry logger
 
@@ -68,7 +68,7 @@ Current branch reality:
   completeness payload.
 - `GET /api/v0/repositories/{repo_id}/coverage` narrows the completeness view
   to the repository rows that still need attention.
-- Run-scoped completeness routes remain an open parity item on this branch.
+- Run-scoped completeness routes remain a bounded parity note in the current contract.
 - A service can be healthy while indexing is incomplete. Operators should use
   completeness routes before assuming a full run has finished.
 - `bootstrap-index` remains a one-shot helper for empty or recovered
@@ -90,7 +90,7 @@ but they do follow the same shared admin contract:
 repo sync, durable fact commit, per-repo snapshot collection, content shaping,
 the optional SCIP collector path, and the shared admin surface in Go.
 
-The remaining hardening work on this branch is parity and validation, not
+The remaining hardening work is validation and evidence refresh, not
 runtime ownership. The merge target remains full Go service ownership with no
 normal-path Python delegation.
 
@@ -131,7 +131,7 @@ Current runtime status:
 - the collector now emits Go-owned parser follow-up facts for workload identity
   and canonical code-call materialization, and the reducer owns the resulting
   `CALLS` edge reconciliation path
-- the deleted Python bridge shims are no longer part of the branch
+- the deleted Python bridge shims are no longer part of the platform
 - parser, admin, and runtime ownership are Go-owned; remaining work is parity
   hardening and validation rather than preserving a dual-runtime architecture
 

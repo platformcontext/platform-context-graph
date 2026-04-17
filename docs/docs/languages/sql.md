@@ -1,6 +1,6 @@
 # SQL Parser
 
-This page tracks the checked-in Go parser contract for this branch.
+This page tracks the checked-in Go parser contract in the current repository state.
 Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
@@ -81,7 +81,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 ## Go-Owned Data-Intelligence Path
 
-The SQL and analytics runtime on this branch is no longer split with a Python
+The SQL and analytics runtime is no longer split with a Python
 service path.
 
 - Native SQL parsing and schema-object extraction live in `go/internal/parser/sql_language.go`

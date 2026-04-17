@@ -10,7 +10,7 @@ Use it to answer one practical question:
 
 ## Closed
 
-These migration goals are complete on this branch:
+These migration goals are complete:
 
 - all deployed and long-running runtime ownership is Go-owned
 - Dockerfile, Compose, and Helm run the Go platform

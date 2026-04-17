@@ -1,6 +1,6 @@
 # JavaScript Parser
 
-This page tracks the checked-in Go parser contract for this branch.
+This page tracks the checked-in Go parser contract in the current repository state.
 Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
@@ -65,4 +65,4 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 
 ## Known Limitations
-- Runtime-dependent computed expressions and dynamic `require()` targets remain bounded parser limitations rather than parity blockers on this branch
+- Runtime-dependent computed expressions and dynamic `require()` targets remain bounded parser limitations rather than parity blockers in the current platform state

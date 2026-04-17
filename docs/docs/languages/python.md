@@ -1,6 +1,6 @@
 # Python Parser
 
-This page tracks the checked-in Go parser contract for this branch.
+This page tracks the checked-in Go parser contract in the current repository state.
 Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
@@ -100,5 +100,5 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 ## Known Limitations
 - No remaining Python-era parser/query parity gap is tracked on this page.
-  Remaining parser-family closure work for the branch now sits in other
-  languages, chiefly Kotlin and PHP, plus final validation sweeps.
+  Remaining parser-family validation and enhancement work sits in other
+  languages or broader validation sweeps, not in Python parser parity itself.

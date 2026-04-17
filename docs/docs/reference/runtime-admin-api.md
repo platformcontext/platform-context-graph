@@ -132,4 +132,4 @@ The shared mounted runtime admin surface is implemented through:
 That means new ingestors should not build bespoke probe or status endpoints.
 They should reuse the shared mounted contract and only provide the service-
 specific backing reader or metrics handler. The Go runtime is the source of
-truth for mounted recovery and status behavior on this branch.
+truth for mounted recovery and status behavior today.

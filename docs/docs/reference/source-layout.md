@@ -1,7 +1,7 @@
 # Source Layout
 
 PlatformContextGraph is now organized around Go-owned runtime and domain
-packages. The historical Python service tree has been deleted from this branch.
+packages. The historical Python service tree has been deleted.
 Only fixture inputs under `tests/fixtures/` still use Python source files, and
 those exist solely to exercise parser behavior.
 
@@ -111,7 +111,7 @@ operator docs so the dependency remains explicit.
 
 ## What Is Gone
 
-The following branch-level ownership has been removed:
+The following ownership has been removed:
 
 - Python runtime entrypoints
 - Python API/MCP/CLI service code
