@@ -7,20 +7,31 @@ import (
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 // CodeCallIntentWriter atomically persists code-call shared intents and their
 // authoritative bounded-unit acceptance rows when the underlying database
 // supports transactions.
 type CodeCallIntentWriter struct {
-	db       ExecQueryer
-	beginner Beginner
+	db          ExecQueryer
+	beginner    Beginner
+	instruments *telemetry.Instruments
 }
 
 // NewCodeCallIntentWriter creates a code-call writer backed by the provided
 // database handle.
 func NewCodeCallIntentWriter(db ExecQueryer) *CodeCallIntentWriter {
-	writer := &CodeCallIntentWriter{db: db}
+	return NewCodeCallIntentWriterWithInstruments(db, nil)
+}
+
+// NewCodeCallIntentWriterWithInstruments creates a code-call writer backed by
+// the provided database handle and optional metrics instruments.
+func NewCodeCallIntentWriterWithInstruments(db ExecQueryer, instruments *telemetry.Instruments) *CodeCallIntentWriter {
+	writer := &CodeCallIntentWriter{
+		db:          db,
+		instruments: instruments,
+	}
 	if beginner, ok := db.(Beginner); ok {
 		writer.beginner = beginner
 	}
@@ -39,7 +50,7 @@ func (w *CodeCallIntentWriter) UpsertIntents(ctx context.Context, rows []reducer
 	}
 
 	if w.beginner == nil {
-		return upsertCodeCallArtifacts(ctx, w.db, rows, acceptanceRows)
+		return upsertCodeCallArtifacts(ctx, w.db, rows, acceptanceRows, w.instruments)
 	}
 
 	tx, err := w.beginner.Begin(ctx)
@@ -48,7 +59,7 @@ func (w *CodeCallIntentWriter) UpsertIntents(ctx context.Context, rows []reducer
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := upsertCodeCallArtifacts(ctx, tx, rows, acceptanceRows); err != nil {
+	if err := upsertCodeCallArtifacts(ctx, tx, rows, acceptanceRows, w.instruments); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -62,13 +73,17 @@ func upsertCodeCallArtifacts(
 	db ExecQueryer,
 	intentRows []reducer.SharedProjectionIntentRow,
 	acceptanceRows []SharedProjectionAcceptance,
+	instruments *telemetry.Instruments,
 ) error {
 	if err := NewSharedIntentStore(db).UpsertIntents(ctx, intentRows); err != nil {
 		return fmt.Errorf("upsert shared intents: %w", err)
 	}
+
+	start := time.Now()
 	if err := NewSharedProjectionAcceptanceStore(db).Upsert(ctx, acceptanceRows); err != nil {
 		return fmt.Errorf("upsert shared projection acceptance: %w", err)
 	}
+	recordSharedAcceptanceUpsertMetrics(ctx, instruments, len(acceptanceRows), time.Since(start))
 	return nil
 }
 
@@ -125,4 +140,18 @@ func buildAcceptanceRows(rows []reducer.SharedProjectionIntentRow) ([]SharedProj
 		acceptanceRows = append(acceptanceRows, row)
 	}
 	return acceptanceRows, nil
+}
+
+func recordSharedAcceptanceUpsertMetrics(
+	ctx context.Context,
+	instruments *telemetry.Instruments,
+	rowCount int,
+	duration time.Duration,
+) {
+	if instruments == nil || rowCount <= 0 {
+		return
+	}
+
+	instruments.SharedAcceptanceUpserts.Add(ctx, int64(rowCount))
+	instruments.SharedAcceptanceUpsertDuration.Record(ctx, duration.Seconds())
 }

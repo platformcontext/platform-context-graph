@@ -86,7 +86,7 @@ func buildCodeCallSharedIntentRows(
 		return intents[i].IntentID < intents[j].IntentID
 	})
 
-	return intents
+	return deduplicateCodeCallIntentRows(intents)
 }
 
 func buildCodeCallRefreshIntents(
@@ -131,4 +131,20 @@ func buildCodeCallRefreshIntents(
 
 func codeCallRefreshPartitionKey(repositoryID string) string {
 	return "repo-refresh:" + repositoryID
+}
+
+func deduplicateCodeCallIntentRows(intents []SharedProjectionIntentRow) []SharedProjectionIntentRow {
+	if len(intents) < 2 {
+		return intents
+	}
+
+	deduplicated := intents[:1]
+	for _, intent := range intents[1:] {
+		if intent.IntentID == deduplicated[len(deduplicated)-1].IntentID {
+			continue
+		}
+		deduplicated = append(deduplicated, intent)
+	}
+
+	return deduplicated
 }

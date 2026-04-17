@@ -132,7 +132,7 @@ func buildReducerService(
 
 	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	relationshipStore := postgres.NewRelationshipStore(database)
-	codeCallIntentWriter := postgres.NewCodeCallIntentWriter(database)
+	codeCallIntentWriter := postgres.NewCodeCallIntentWriterWithInstruments(database, instruments)
 	acceptedGenerationPrefetch := postgres.NewAcceptedGenerationPrefetch(database)
 
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{

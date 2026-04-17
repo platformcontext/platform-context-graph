@@ -277,6 +277,76 @@ func TestCodeCallMaterializationHandlerEmitsSharedIntents(t *testing.T) {
 	}
 }
 
+func TestBuildCodeCallSharedIntentRowsDeduplicatesIntentIdentity(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Date(2026, time.April, 17, 15, 0, 0, 0, time.UTC)
+	contextByRepoID := map[string]ProjectionContext{
+		"repo-a": {
+			ScopeID:          "scope:git:repo-a",
+			AcceptanceUnitID: "repository:repo-a",
+			SourceRunID:      "run-a",
+			GenerationID:     "gen-a",
+		},
+	}
+
+	rows := []map[string]any{
+		{
+			"repo_id":          "repo-a",
+			"caller_entity_id": "entity:caller",
+			"callee_entity_id": "entity:callee",
+			"caller_file":      "caller.py",
+			"callee_file":      "callee.py",
+			"callsite_line":    10,
+			"evidence_source":  codeCallEvidenceSource,
+			"edge_observation": "callsite-a",
+			"source_entity_id": "entity:caller",
+			"target_entity_id": "entity:callee",
+		},
+		{
+			"repo_id":          "repo-a",
+			"caller_entity_id": "entity:caller",
+			"callee_entity_id": "entity:callee",
+			"caller_file":      "caller.py",
+			"callee_file":      "callee.py",
+			"callsite_line":    42,
+			"evidence_source":  codeCallEvidenceSource,
+			"edge_observation": "callsite-b",
+			"source_entity_id": "entity:caller",
+			"target_entity_id": "entity:callee",
+		},
+	}
+
+	intents := buildCodeCallSharedIntentRows(rows, contextByRepoID, createdAt, codeCallEvidenceSource)
+	if got, want := len(intents), 1; got != want {
+		t.Fatalf("len(intents) = %d, want %d", got, want)
+	}
+	if got, want := intents[0].IntentID, BuildSharedProjectionIntent(SharedProjectionIntentInput{
+		ProjectionDomain: DomainCodeCalls,
+		PartitionKey:     "entity:caller->entity:callee",
+		ScopeID:          "scope:git:repo-a",
+		AcceptanceUnitID: "repository:repo-a",
+		RepositoryID:     "repo-a",
+		SourceRunID:      "run-a",
+		GenerationID:     "gen-a",
+		Payload: map[string]any{
+			"repo_id":          "repo-a",
+			"caller_entity_id": "entity:caller",
+			"callee_entity_id": "entity:callee",
+			"caller_file":      "caller.py",
+			"callee_file":      "callee.py",
+			"callsite_line":    10,
+			"evidence_source":  codeCallEvidenceSource,
+			"edge_observation": "callsite-a",
+			"source_entity_id": "entity:caller",
+			"target_entity_id": "entity:callee",
+		},
+		CreatedAt: createdAt,
+	}).IntentID; got != want {
+		t.Fatalf("IntentID = %q, want %q", got, want)
+	}
+}
+
 type recordingCodeCallIntentWriter struct {
 	rows []SharedProjectionIntentRow
 }
