@@ -20,7 +20,7 @@ type terragruntHelperPaths struct {
 
 func parseTerragruntHelperPaths(source []byte, path string) terragruntHelperPaths {
 	content := string(source)
-	localAssignments := collectTerragruntLocalAssignments(content)
+	localAssignments := collectTerragruntLocalAssignments(content, path)
 	return terragruntHelperPaths{
 		includePaths:             collectNormalizedHelperPaths(content, terragruntIncludePathPattern),
 		readConfigPaths:          collectNormalizedHelperPaths(content, terragruntReadConfigPattern),

@@ -4,15 +4,17 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 var (
-	localConfigFunctionStartPattern = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(`)
-	localStringAssignmentPattern    = regexp.MustCompile(`(?m)^\s*([A-Za-z0-9_]+)\s*=\s*"([^"]+)"\s*$`)
-	localAssignmentStartPattern     = regexp.MustCompile(`^\s*([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$`)
-	quotedStringPattern             = regexp.MustCompile(`"([^"]+)"`)
-	localInterpolationPattern       = regexp.MustCompile(`\$\{local\.([A-Za-z0-9_]+)\}`)
+	localConfigFunctionStartPattern   = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(`)
+	localStringAssignmentPattern      = regexp.MustCompile(`(?m)^\s*([A-Za-z0-9_]+)\s*=\s*"([^"]+)"\s*$`)
+	localAssignmentStartPattern       = regexp.MustCompile(`^\s*([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$`)
+	pathRelativeToIncludeSplitPattern = regexp.MustCompile(`(?is)^split\(\s*"/"\s*,\s*path_relative_to_include\(\s*(?:"[^"]+")?\s*\)\s*\)$`)
+	quotedStringPattern               = regexp.MustCompile(`"([^"]+)"`)
+	localInterpolationPattern         = regexp.MustCompile(`\$\{local\.([A-Za-z0-9_]+)\}`)
 )
 
 func extractTerragruntLocalConfigAssetPaths(content string, localAssignments map[string]string) []string {
@@ -47,7 +49,7 @@ func extractTerragruntLocalConfigAssetPaths(content string, localAssignments map
 	return paths
 }
 
-func collectTerragruntLocalAssignments(content string) map[string]string {
+func collectTerragruntLocalAssignments(content string, relativePath string) map[string]string {
 	assignments := make(map[string]string)
 	lines := strings.Split(content, "\n")
 	inLocals := false
@@ -84,7 +86,7 @@ func collectTerragruntLocalAssignments(content string) map[string]string {
 				currentExpression.WriteString(strings.TrimSpace(assignment[2]))
 				currentParenDepth = countParensOutsideStrings(assignment[2])
 				if currentParenDepth <= 0 {
-					storeTerragruntLocalAssignment(assignments, currentName, currentExpression.String())
+					storeTerragruntLocalAssignment(assignments, currentName, currentExpression.String(), relativePath)
 					currentName = ""
 				}
 			}
@@ -95,7 +97,7 @@ func collectTerragruntLocalAssignments(content string) map[string]string {
 			}
 			currentParenDepth += countParensOutsideStrings(line)
 			if currentParenDepth <= 0 {
-				storeTerragruntLocalAssignment(assignments, currentName, currentExpression.String())
+				storeTerragruntLocalAssignment(assignments, currentName, currentExpression.String(), relativePath)
 				currentName = ""
 			}
 		}
@@ -103,7 +105,7 @@ func collectTerragruntLocalAssignments(content string) map[string]string {
 		depth += countBracesOutsideStrings(line)
 		if depth <= 0 {
 			if currentName != "" {
-				storeTerragruntLocalAssignment(assignments, currentName, currentExpression.String())
+				storeTerragruntLocalAssignment(assignments, currentName, currentExpression.String(), relativePath)
 				currentName = ""
 			}
 			inLocals = false
@@ -113,14 +115,43 @@ func collectTerragruntLocalAssignments(content string) map[string]string {
 	return assignments
 }
 
-func storeTerragruntLocalAssignment(assignments map[string]string, name, expression string) {
+func storeTerragruntLocalAssignment(assignments map[string]string, name, expression, relativePath string) {
 	name = strings.TrimSpace(name)
 	if name == "" {
+		return
+	}
+	if indexedAssignments := extractPathRelativeToIncludeIndexedAssignments(name, expression, relativePath); len(indexedAssignments) > 0 {
+		for key, value := range indexedAssignments {
+			assignments[key] = value
+		}
 		return
 	}
 	if value := normalizeTerragruntAssignmentValue(expression, assignments); value != "" {
 		assignments[name] = value
 	}
+}
+
+func extractPathRelativeToIncludeIndexedAssignments(name, expression, relativePath string) map[string]string {
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" || !pathRelativeToIncludeSplitPattern.MatchString(stripHCLInlineComments(expression)) {
+		return nil
+	}
+
+	directory := cleanRepositoryRelativePath(path.Dir(strings.TrimSpace(relativePath)))
+	if directory == "" || directory == "." {
+		return nil
+	}
+
+	parts := strings.Split(directory, "/")
+	assignments := make(map[string]string, len(parts))
+	for index, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		assignments[trimmedName+"["+strconv.Itoa(index)+"]"] = part
+	}
+	return assignments
 }
 
 func normalizeTerragruntAssignmentValue(expression string, localAssignments map[string]string) string {
