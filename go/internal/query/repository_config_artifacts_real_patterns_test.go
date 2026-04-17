@@ -55,3 +55,35 @@ func TestBuildRepositoryConfigArtifactsExtractsLookupBackedTemplateAssetsWithTri
 		}
 	}
 }
+
+func TestBuildRepositoryConfigArtifactsExtractsLegacyInterpolationWrappedLookupAndFile(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-legacy-modules", []FileContent{
+		{
+			RelativePath: "modules/ecs/main.tf",
+			Content: `locals {
+  task_template = "${lookup(var.configuration, "template", "${path.module}/templates/ecs/container.tpl")}"
+}
+
+data "template_file" "task" {
+  template = "${file(local.task_template)}"
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 1 {
+		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
+	}
+	if got, want := configPaths[0]["path"], "templates/ecs/container.tpl"; got != want {
+		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[0]["evidence_kind"], "local_config_asset"; got != want {
+		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+}

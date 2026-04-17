@@ -223,6 +223,17 @@ func extractConfigAssetPathFromExpression(expression string, localAssignments ma
 	if strings.Contains(trimmed, "find_in_parent_folders(") || strings.Contains(trimmed, "read_terragrunt_config(") {
 		return ""
 	}
+	if quoted := exactQuotedString(trimmed); quoted != "" {
+		if strings.HasPrefix(quoted, "${") && strings.HasSuffix(quoted, "}") {
+			inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(quoted, "${"), "}"))
+			if value := extractConfigAssetPathFromExpression(inner, localAssignments); value != "" {
+				return value
+			}
+		}
+		if value := normalizeConfigAssetLiteral(quoted, localAssignments); value != "" {
+			return value
+		}
+	}
 	if value := extractJoinedConfigAssetPath(trimmed, localAssignments); value != "" {
 		return value
 	}
@@ -307,6 +318,14 @@ func normalizeConfigAssetLiteral(value string, localAssignments map[string]strin
 		return ""
 	}
 	return normalizeLocalConfigAssetPathValue(trimmed, localAssignments)
+}
+
+func exactQuotedString(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) < 2 || trimmed[0] != '"' || trimmed[len(trimmed)-1] != '"' {
+		return ""
+	}
+	return trimmed[1 : len(trimmed)-1]
 }
 
 func normalizeLocalConfigAssetPath(match []string) string {

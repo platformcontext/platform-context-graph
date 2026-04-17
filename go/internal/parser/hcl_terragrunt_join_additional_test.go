@@ -133,3 +133,33 @@ func TestParseTerragruntConfigResolvesLookupBackedTemplateLocalsWithTrimspaceWra
 		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
 	}
 }
+
+func TestParseTerragruntConfigResolvesLegacyInterpolationWrappedLookupAndFile(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "terragrunt.hcl")
+	source := []byte(`locals {
+  task_template = "${lookup(var.configuration, "template", "${path.module}/templates/ecs/container.tpl")}"
+}
+
+data "template_file" "task" {
+  template = "${file(local.task_template)}"
+}
+`)
+
+	file, diags := hclparse.NewParser().ParseHCL(source, filePath)
+	if diags.HasErrors() {
+		t.Fatalf("ParseHCL() diagnostics = %s", diags.Error())
+	}
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		t.Fatalf("file.Body = %T, want *hclsyntax.Body", file.Body)
+	}
+
+	config := parseTerragruntConfig(body, source, filePath)
+
+	if got, want := config["local_config_asset_paths"], "templates/ecs/container.tpl"; got != want {
+		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
+	}
+}
