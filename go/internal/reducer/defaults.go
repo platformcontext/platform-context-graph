@@ -42,9 +42,10 @@ type DefaultHandlers struct {
 
 	// Cross-repo relationship resolution adapters. All optional; nil disables
 	// cross-repo resolution during deployment_mapping reduction.
-	EvidenceFactLoader  EvidenceFactLoader
-	AssertionLoader     AssertionLoader
-	ResolutionPersister ResolutionPersister
+	EvidenceFactLoader         EvidenceFactLoader
+	AssertionLoader            AssertionLoader
+	ResolutionPersister        ResolutionPersister
+	ResolvedRelationshipLoader ResolvedRelationshipLoader
 
 	// RepoDependencyEdgeWriter writes cross-repo dependency edges resolved
 	// from evidence facts. Optional; nil disables cross-repo edge writes.
@@ -119,8 +120,9 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			}
 		case DomainWorkloadMaterialization:
 			def.Handler = WorkloadMaterializationHandler{
-				FactLoader:   handlers.FactLoader,
-				Materializer: handlers.WorkloadMaterializer,
+				FactLoader:     handlers.FactLoader,
+				ResolvedLoader: handlers.ResolvedRelationshipLoader,
+				Materializer:   handlers.WorkloadMaterializer,
 			}
 		case DomainCodeCallMaterialization:
 			def.Handler = CodeCallMaterializationHandler{

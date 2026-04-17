@@ -88,7 +88,7 @@ These are the currently known branch-level gaps outside parser-family promotion.
 | Run-scoped index coverage endpoints | bounded | the shipped completeness contract is `GET /api/v0/status/index`, legacy `GET /api/v0/index-status`, and repository-scoped `GET /api/v0/repositories/{repo_id}/coverage`; run-scoped coverage endpoints are intentionally not part of the public OpenAPI contract on this branch | keep that bounded contract explicit instead of reintroducing stale run-scoped claims |
 | CLI parity breadth | pass | the supported Go CLI contract is now explicit in both code and docs: historical commands are either supported, deprecated with guidance, or intentionally removed with compatibility errors instead of silently drifting from the Python-era UX | keep command metadata, docs, and focused CLI tests aligned |
 | Projector/reducer queue safety | partial | the queue is Go-owned, but lease recovery, poison handling, and ack-failure observability still need to be hardened to match the desired operator contract | land queue recovery, crash-safety, and telemetry proof |
-| Relationship fidelity | partial | typed relationship evidence exists, but some flows still collapse strong signals into generic dependencies and some read models still miss canonical edge shapes | preserve typed edges and repair read models end to end |
+| Relationship fidelity | pass | typed relationship evidence now survives reducer normalization, Neo4j write dispatch, repository context/story read models, and the compose-backed relationship-platform proof, including controller-driven, workflow-driven, and IaC-driven family classification from persisted `evidence_type` metadata | keep typed edges and evidence-family shaping aligned as validation work continues |
 
 ## Feature Parity Status
 
@@ -123,8 +123,6 @@ These are the currently documented branch-level gaps that still matter for
 honest signoff:
 
 - queue-hardening work in projector/reducer is still active
-- typed relationship fidelity is not fully closed for all IaC and workflow
-  families
 - explicit repo-bearing GitHub Actions, Jenkins/Groovy, Ansible, Docker, and
   Docker Compose subfamilies already have Go-owned parser/query proof, while
   broader controller-driven relationship promotion and compose-backed evidence
@@ -162,10 +160,9 @@ If any of those are missing, the feature is not parity complete.
 ## Recommended Closure Order
 
 1. Close projector/reducer queue-hardening gaps and add missing telemetry proof
-2. Preserve typed relationship fidelity and land ArgoCD `RUNS_ON` plus read-model fixes
-3. Finish broader workflow/controller relationship coverage for GitHub
+2. Finish broader workflow/controller relationship coverage for GitHub
    Actions, Jenkins/Groovy, Ansible, Docker, and Docker Compose
-4. Refresh compose-backed and real-repo evidence, then lock docs to current truth
+3. Refresh compose-backed and real-repo evidence, then lock docs to current truth
 
 ## Companion Checklist
 

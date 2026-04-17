@@ -3,10 +3,12 @@ package reducer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
+	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
 func TestWorkloadMaterializationHandlerMaterializesFromFacts(t *testing.T) {
@@ -133,6 +135,96 @@ func TestWorkloadMaterializationHandlerNoCandidatesSucceeds(t *testing.T) {
 	}
 }
 
+func TestWorkloadMaterializationHandlerUsesArgoDeploymentSourceRelationships(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	loader := &stubFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactID:   "fact-repo",
+				FactKind: "repository",
+				Payload: map[string]any{
+					"graph_id": "repo-service-edge-api",
+					"name":     "service-edge-api",
+				},
+				ObservedAt: now,
+			},
+			{
+				FactID:   "fact-file",
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id": "repo-service-edge-api",
+					"parsed_file_data": map[string]any{
+						"k8s_resources": []any{
+							map[string]any{
+								"name":      "service-edge-api",
+								"kind":      "Deployment",
+								"namespace": "modern",
+							},
+						},
+					},
+				},
+				ObservedAt: now,
+			},
+		},
+	}
+	relationshipLoader := &stubResolvedRelationshipLoader{
+		resolved: []relationships.ResolvedRelationship{
+			{
+				SourceRepoID:     "repo-service-edge-api",
+				TargetRepoID:     "repo-deployment-kustomize",
+				RelationshipType: relationships.RelDeploysFrom,
+				Details: map[string]any{
+					"evidence_kinds": []any{
+						string(relationships.EvidenceKindArgoCDApplicationSetDeploySource),
+					},
+				},
+			},
+		},
+	}
+
+	executor := &recordingCypherExecutor{}
+	materializer := NewWorkloadMaterializer(executor)
+
+	handler := WorkloadMaterializationHandler{
+		FactLoader:     loader,
+		ResolvedLoader: relationshipLoader,
+		Materializer:   materializer,
+	}
+
+	intent := Intent{
+		IntentID:        "intent-wm-deploy-source",
+		ScopeID:         "scope-service-edge-api",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "facts projected",
+		EntityKeys:      []string{"repo-service-edge-api"},
+		RelatedScopeIDs: []string{"scope-service-edge-api"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	result, err := handler.Handle(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if result.CanonicalWrites == 0 {
+		t.Fatal("CanonicalWrites = 0, want > 0")
+	}
+	if relationshipLoader.calls != 1 {
+		t.Fatalf("ResolvedLoader.GetResolvedRelationships calls = %d, want 1", relationshipLoader.calls)
+	}
+	if !containsRecordedCypher(executor.calls, "MERGE (i)-[rel:DEPLOYMENT_SOURCE]->(deployment_repo)") {
+		t.Fatal("missing DEPLOYMENT_SOURCE MERGE cypher")
+	}
+	if !recordedCallContainsParam(executor.calls, "deployment_repo_id", "repo-deployment-kustomize") {
+		t.Fatal("missing deployment_repo_id row for repo-deployment-kustomize")
+	}
+}
+
 func TestWorkloadMaterializationHandlerRejectsMissingDomain(t *testing.T) {
 	t.Parallel()
 
@@ -200,6 +292,19 @@ func (f *stubFactLoader) ListFacts(_ context.Context, _, _ string) ([]facts.Enve
 	return f.envelopes, nil
 }
 
+type stubResolvedRelationshipLoader struct {
+	resolved []relationships.ResolvedRelationship
+	calls    int
+}
+
+func (f *stubResolvedRelationshipLoader) GetResolvedRelationships(
+	_ context.Context,
+	_ string,
+) ([]relationships.ResolvedRelationship, error) {
+	f.calls++
+	return f.resolved, nil
+}
+
 type recordingCypherExecutor struct {
 	calls []recordedCypherCall
 }
@@ -249,4 +354,28 @@ type errorFactLoader struct {
 
 func (f *errorFactLoader) ListFacts(context.Context, string, string) ([]facts.Envelope, error) {
 	return nil, f.err
+}
+
+func containsRecordedCypher(calls []recordedCypherCall, fragment string) bool {
+	for _, call := range calls {
+		if strings.Contains(call.cypher, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+func recordedCallContainsParam(calls []recordedCypherCall, key, want string) bool {
+	for _, call := range calls {
+		rows, ok := call.params["rows"].([]map[string]any)
+		if !ok {
+			continue
+		}
+		for _, row := range rows {
+			if fmt.Sprint(row[key]) == want {
+				return true
+			}
+		}
+	}
+	return false
 }

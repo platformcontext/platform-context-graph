@@ -303,6 +303,9 @@ func (f *fakeTx) QueryContext(_ context.Context, query string, args ...any) (Row
 		}
 		return &rows, nil
 	}
+	if strings.Contains(query, "WITH latest_generations AS") {
+		return &queueFakeRows{}, nil
+	}
 	if strings.Contains(query, "FROM fact_records") && strings.Contains(query, "fact_kind = 'repository'") {
 		return &queueFakeRows{}, nil
 	}

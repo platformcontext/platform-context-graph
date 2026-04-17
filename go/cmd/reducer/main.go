@@ -147,6 +147,7 @@ func buildReducerService(
 		EvidenceFactLoader:                 relationshipStore,
 		AssertionLoader:                    relationshipStore,
 		ResolutionPersister:                relationshipStore,
+		ResolvedRelationshipLoader:         relationshipStore,
 		RepoDependencyEdgeWriter:           edgeWriterForHandlers,
 		GenerationCheck:                    postgres.NewGenerationFreshnessCheck(database),
 		Tracer:                             tracer,

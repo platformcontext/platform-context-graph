@@ -21,6 +21,47 @@ WHERE fact_kind = 'repository'
 ORDER BY observed_at DESC, fact_id DESC
 `
 
+const listLatestRelationshipFactRecordsQuery = `
+WITH latest_generations AS (
+    SELECT
+        generation.scope_id,
+        COALESCE(
+            scope.active_generation_id,
+            (
+                SELECT generation_id
+                FROM scope_generations AS candidate
+                WHERE candidate.scope_id = generation.scope_id
+                ORDER BY candidate.ingested_at DESC, candidate.generation_id DESC
+                LIMIT 1
+            )
+        ) AS generation_id
+    FROM scope_generations AS generation
+    LEFT JOIN ingestion_scopes AS scope
+      ON scope.scope_id = generation.scope_id
+    GROUP BY generation.scope_id, scope.active_generation_id
+)
+SELECT
+    fact_id,
+    scope_id,
+    generation_id,
+    fact_kind,
+    stable_fact_key,
+    source_system,
+    source_fact_key,
+    COALESCE(source_uri, ''),
+    COALESCE(source_record_id, ''),
+    observed_at,
+    is_tombstone,
+    payload
+FROM fact_records AS fact
+JOIN latest_generations AS latest
+  ON latest.scope_id = fact.scope_id
+ AND latest.generation_id = fact.generation_id
+WHERE latest.generation_id IS NOT NULL
+  AND fact_kind IN ('content', 'file')
+ORDER BY observed_at ASC, fact_id ASC
+`
+
 const upsertIngestionScopeQuery = `
 INSERT INTO ingestion_scopes (
     scope_id,
@@ -193,6 +234,8 @@ func (s IngestionStore) CommitScopeGeneration(
 	if err != nil {
 		return fmt.Errorf("load repository catalog: %w", err)
 	}
+	knownRepoIDs := catalogRepoIDs(catalog)
+	currentGenerationRepoIDs := make(map[string]struct{})
 	relationshipStore := NewRelationshipStore(tx)
 	if err := upsertStreamingFacts(
 		ctx,
@@ -201,6 +244,15 @@ func (s IngestionStore) CommitScopeGeneration(
 		scopeValue.ScopeID,
 		generation.GenerationID,
 		func(batch []facts.Envelope) error {
+			for _, envelope := range batch {
+				if envelope.FactKind != "repository" {
+					continue
+				}
+				repoID := payloadRepoID(envelope.Payload)
+				if repoID != "" {
+					currentGenerationRepoIDs[repoID] = struct{}{}
+				}
+			}
 			if len(catalog) == 0 {
 				return nil
 			}
@@ -221,6 +273,16 @@ func (s IngestionStore) CommitScopeGeneration(
 			}
 			return nil
 		},
+	); err != nil {
+		return err
+	}
+	if err := backfillRelationshipEvidenceForNewRepositories(
+		ctx,
+		tx,
+		relationshipStore,
+		generation.GenerationID,
+		knownRepoIDs,
+		currentGenerationRepoIDs,
 	); err != nil {
 		return err
 	}
@@ -333,6 +395,106 @@ func loadRepositoryCatalog(ctx context.Context, queryer Queryer) ([]relationship
 	}
 
 	return catalog, nil
+}
+
+func backfillRelationshipEvidenceForNewRepositories(
+	ctx context.Context,
+	queryer Queryer,
+	relationshipStore *RelationshipStore,
+	generationID string,
+	knownRepoIDs map[string]struct{},
+	currentGenerationRepoIDs map[string]struct{},
+) error {
+	if relationshipStore == nil || len(currentGenerationRepoIDs) == 0 {
+		return nil
+	}
+
+	newRepoIDs := make(map[string]struct{})
+	for repoID := range currentGenerationRepoIDs {
+		if _, exists := knownRepoIDs[repoID]; exists {
+			continue
+		}
+		newRepoIDs[repoID] = struct{}{}
+	}
+	if len(newRepoIDs) == 0 {
+		return nil
+	}
+
+	refreshedCatalog, err := loadRepositoryCatalog(ctx, queryer)
+	if err != nil {
+		return fmt.Errorf("reload repository catalog for relationship backfill: %w", err)
+	}
+	activeFacts, err := loadLatestRelationshipFacts(ctx, queryer)
+	if err != nil {
+		return fmt.Errorf("load latest facts for relationship backfill: %w", err)
+	}
+	evidence := filterEvidenceByTargetRepo(
+		relationships.DiscoverEvidence(activeFacts, refreshedCatalog),
+		newRepoIDs,
+	)
+	if len(evidence) == 0 {
+		return nil
+	}
+	if err := relationshipStore.UpsertEvidenceFacts(ctx, generationID, evidence); err != nil {
+		return fmt.Errorf("persist backfilled relationship evidence: %w", err)
+	}
+
+	return nil
+}
+
+func loadLatestRelationshipFacts(ctx context.Context, queryer Queryer) ([]facts.Envelope, error) {
+	rows, err := queryer.QueryContext(ctx, listLatestRelationshipFactRecordsQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var loaded []facts.Envelope
+	for rows.Next() {
+		envelope, scanErr := scanFactEnvelope(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		loaded = append(loaded, envelope)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return loaded, nil
+}
+
+func catalogRepoIDs(catalog []relationships.CatalogEntry) map[string]struct{} {
+	repoIDs := make(map[string]struct{}, len(catalog))
+	for _, entry := range catalog {
+		if strings.TrimSpace(entry.RepoID) == "" {
+			continue
+		}
+		repoIDs[entry.RepoID] = struct{}{}
+	}
+	return repoIDs
+}
+
+func payloadRepoID(payload map[string]any) string {
+	return catalogString(payload, "repo_id", "graph_id", "name")
+}
+
+func filterEvidenceByTargetRepo(
+	evidence []relationships.EvidenceFact,
+	targetRepoIDs map[string]struct{},
+) []relationships.EvidenceFact {
+	if len(evidence) == 0 || len(targetRepoIDs) == 0 {
+		return nil
+	}
+
+	filtered := make([]relationships.EvidenceFact, 0, len(evidence))
+	for _, fact := range evidence {
+		if _, ok := targetRepoIDs[fact.TargetRepoID]; !ok {
+			continue
+		}
+		filtered = append(filtered, fact)
+	}
+	return filtered
 }
 
 func repositoryCatalogEntryFromPayload(rawPayload []byte) (relationships.CatalogEntry, bool) {

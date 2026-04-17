@@ -176,6 +176,144 @@ func TestGoCollectorContentFactsProduceEvidenceDuringIngestion(t *testing.T) {
 	}
 }
 
+// TestGoCollectorContentFactsBackfillEvidenceWhenTargetArrivesLater verifies
+// that relationship evidence is discovered even when the source repository is
+// ingested before the target repository exists in the repository catalog.
+func TestGoCollectorContentFactsBackfillEvidenceWhenTargetArrivesLater(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 15, 10, 15, 0, 0, time.UTC)
+	db := newProofDomainDB(t, now)
+
+	sourceScope := scope.IngestionScope{
+		ScopeID:       "scope-infra-go-late-target",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-infra-go-late-target",
+		Metadata:      map[string]string{"repo_id": "repo-infra-go-late-target"},
+	}
+	sourceGeneration := scope.ScopeGeneration{
+		GenerationID: "generation-infra-go-late-target",
+		ScopeID:      sourceScope.ScopeID,
+		ObservedAt:   time.Date(2026, time.April, 15, 9, 15, 0, 0, time.UTC),
+		IngestedAt:   now,
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+	sourceFacts := []facts.Envelope{
+		{
+			FactID:        "infra-repo-go-late-target",
+			ScopeID:       sourceScope.ScopeID,
+			GenerationID:  sourceGeneration.GenerationID,
+			FactKind:      "repository",
+			StableFactKey: "repository:repo-infra-go-late-target",
+			ObservedAt:    sourceGeneration.ObservedAt,
+			Payload: map[string]any{
+				"graph_id":   "repo-infra-go-late-target",
+				"graph_kind": "repository",
+				"name":       "infra-go-repo-late-target",
+				"repo_id":    "repo-infra-go-late-target",
+			},
+			SourceRef: facts.Ref{SourceSystem: "git", FactKey: "repo-infra-go-late-target"},
+		},
+		{
+			FactID:        "infra-tf-go-late-target",
+			ScopeID:       sourceScope.ScopeID,
+			GenerationID:  sourceGeneration.GenerationID,
+			FactKind:      "content",
+			StableFactKey: "content:deploy/main.tf",
+			ObservedAt:    sourceGeneration.ObservedAt,
+			Payload: map[string]any{
+				"content_path":   "deploy/main.tf",
+				"content_body":   `module "order" { source = "git::https://github.com/example/order-service.git?ref=v1.2.0" }`,
+				"content_digest": "sha256:late123",
+				"repo_id":        "repo-infra-go-late-target",
+				"language":       "hcl",
+				"artifact_type":  "terraform_hcl",
+			},
+			SourceRef: facts.Ref{SourceSystem: "git", FactKey: "deploy/main.tf"},
+		},
+	}
+
+	targetScope := scope.IngestionScope{
+		ScopeID:       "scope-target-go-late",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-target-go-late",
+		Metadata:      map[string]string{"repo_id": "repo-target-go-late"},
+	}
+	targetGeneration := scope.ScopeGeneration{
+		GenerationID: "generation-target-go-late",
+		ScopeID:      targetScope.ScopeID,
+		ObservedAt:   time.Date(2026, time.April, 15, 9, 45, 0, 0, time.UTC),
+		IngestedAt:   now,
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+	targetFacts := []facts.Envelope{
+		{
+			FactID:        "target-repo-go-late",
+			ScopeID:       targetScope.ScopeID,
+			GenerationID:  targetGeneration.GenerationID,
+			FactKind:      "repository",
+			StableFactKey: "repository:repo-target-go-late",
+			ObservedAt:    targetGeneration.ObservedAt,
+			Payload: map[string]any{
+				"graph_id":   "repo-target-go-late",
+				"graph_kind": "repository",
+				"name":       "order-service",
+				"repo_id":    "repo-target-go-late",
+				"repo_slug":  "order-service",
+			},
+			SourceRef: facts.Ref{SourceSystem: "git", FactKey: "repo-target-go-late"},
+		},
+	}
+
+	ingestionStore := NewIngestionStore(db)
+	ingestionStore.Now = func() time.Time { return now }
+
+	collectorCtx, cancelCollector := context.WithCancel(context.Background())
+	defer cancelCollector()
+
+	collectorService := collector.Service{
+		Source: &proofCollectorSource{
+			collected: []collector.CollectedGeneration{
+				collector.FactsFromSlice(sourceScope, sourceGeneration, sourceFacts),
+				collector.FactsFromSlice(targetScope, targetGeneration, targetFacts),
+			},
+		},
+		Committer: collectorCommitterFunc(func(
+			ctx context.Context,
+			scopeValue scope.IngestionScope,
+			generationValue scope.ScopeGeneration,
+			factStream <-chan facts.Envelope,
+		) error {
+			defer cancelCollector()
+			return ingestionStore.CommitScopeGeneration(ctx, scopeValue, generationValue, factStream)
+		}),
+		PollInterval: time.Millisecond,
+	}
+	if err := collectorService.Run(collectorCtx); err != nil {
+		t.Fatalf("collector service Run() error = %v, want nil", err)
+	}
+
+	var found bool
+	for _, record := range db.state.evidenceFacts {
+		if record.targetRepoID != "repo-target-go-late" {
+			continue
+		}
+		if path, ok := record.details["path"]; !ok || path != "deploy/main.tf" {
+			t.Errorf("evidence details path = %v, want %q", path, "deploy/main.tf")
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("no evidence fact found for repo-target-go-late when the target repository arrived after the source repository")
+	}
+}
+
 // TestGoCollectorHelmFactsProduceEvidenceDuringIngestion verifies that Helm
 // chart references using Go collector content_path / content_body format
 // are discovered during ingestion.
