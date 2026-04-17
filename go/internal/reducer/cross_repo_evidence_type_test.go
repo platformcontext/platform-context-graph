@@ -45,6 +45,14 @@ func TestNormalizeEvidenceKindMapsGitHubActionsActionRepository(t *testing.T) {
 	}
 }
 
+func TestNormalizeEvidenceKindMapsGitHubActionsLocalReusableWorkflow(t *testing.T) {
+	t.Parallel()
+
+	if got, want := normalizeEvidenceKind(string(relationships.EvidenceKindGitHubActionsLocalReusableWorkflow)), "github_actions_local_reusable_workflow_ref"; got != want {
+		t.Fatalf("normalizeEvidenceKind() = %q, want %q", got, want)
+	}
+}
+
 func TestNormalizeEvidenceKindFallsBackToLowercaseConstant(t *testing.T) {
 	t.Parallel()
 

@@ -538,6 +538,46 @@ jobs:
 	}
 }
 
+func TestDiscoverGitHubActionsLocalReusableWorkflowEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-service",
+			Payload: map[string]any{
+				"artifact_type": "github_actions_workflow",
+				"relative_path": ".github/workflows/deploy-local.yml",
+				"content": `name: Deploy local
+jobs:
+  deploy:
+    uses: ./.github/workflows/release.yaml
+  verify:
+    uses: .github/workflows/verify.yaml@main
+`,
+			},
+		},
+	}
+
+	evidence := DiscoverEvidence(envelopes, nil)
+	if len(evidence) != 2 {
+		t.Fatalf("len = %d, want 2", len(evidence))
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindGitHubActionsLocalReusableWorkflow) {
+		t.Fatal("missing local reusable workflow evidence")
+	}
+	if !hasRelationshipType(evidence, RelDeploysFrom) {
+		t.Fatalf("missing %q evidence", RelDeploysFrom)
+	}
+	for _, item := range evidence {
+		if item.EvidenceKind != EvidenceKindGitHubActionsLocalReusableWorkflow {
+			continue
+		}
+		if item.SourceRepoID != "repo-service" || item.TargetRepoID != "repo-service" {
+			t.Fatalf("same-repo workflow evidence = %#v, want repo-service self edge", item)
+		}
+	}
+}
+
 func TestDiscoverDockerComposeEvidence(t *testing.T) {
 	t.Parallel()
 

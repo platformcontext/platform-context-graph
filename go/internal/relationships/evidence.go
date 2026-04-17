@@ -16,7 +16,7 @@ type CatalogEntry struct {
 // DiscoverEvidence scans fact envelopes for IaC relationship evidence
 // (Terraform, Helm, ArgoCD, Kustomize) and returns discovered evidence facts.
 func DiscoverEvidence(envelopes []facts.Envelope, catalog []CatalogEntry) []EvidenceFact {
-	if len(envelopes) == 0 || len(catalog) == 0 {
+	if len(envelopes) == 0 {
 		return nil
 	}
 

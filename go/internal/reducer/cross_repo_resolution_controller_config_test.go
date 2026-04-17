@@ -103,3 +103,46 @@ func TestCrossRepoResolutionPreservesControllerAndConfigEvidenceFamilies(t *test
 		})
 	}
 }
+
+func TestCrossRepoResolutionPreservesLocalReusableWorkflowAsSameRepoDeploySource(t *testing.T) {
+	t.Parallel()
+
+	edgeWriter := &recordingEdgeWriter{}
+	handler := CrossRepoRelationshipHandler{
+		EvidenceLoader: &fakeEvidenceFactLoader{facts: []relationships.EvidenceFact{
+			{
+				EvidenceKind:     relationships.EvidenceKindGitHubActionsLocalReusableWorkflow,
+				RelationshipType: relationships.RelDeploysFrom,
+				SourceRepoID:     "repo-service",
+				TargetRepoID:     "repo-service",
+				Confidence:       0.86,
+			},
+		}},
+		EdgeWriter: edgeWriter,
+	}
+
+	count, err := handler.Resolve(context.Background(), "scope-workflow", "gen-workflow")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("Resolve() = %d, want 1", count)
+	}
+	if len(edgeWriter.writeCalls) != 1 || len(edgeWriter.writeCalls[0].rows) != 1 {
+		t.Fatalf("writeCalls = %#v, want 1 row", edgeWriter.writeCalls)
+	}
+
+	row := edgeWriter.writeCalls[0].rows[0]
+	if got, want := stringValue(row.Payload["repo_id"]), "repo-service"; got != want {
+		t.Fatalf("row repo_id = %q, want %q", got, want)
+	}
+	if got, want := stringValue(row.Payload["target_repo_id"]), "repo-service"; got != want {
+		t.Fatalf("row target_repo_id = %q, want %q", got, want)
+	}
+	if got, want := stringValue(row.Payload["relationship_type"]), string(relationships.RelDeploysFrom); got != want {
+		t.Fatalf("row relationship_type = %q, want %q", got, want)
+	}
+	if got, want := stringValue(row.Payload["evidence_type"]), "github_actions_local_reusable_workflow_ref"; got != want {
+		t.Fatalf("row evidence_type = %q, want %q", got, want)
+	}
+}

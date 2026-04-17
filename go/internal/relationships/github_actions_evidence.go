@@ -9,6 +9,34 @@ func discoverGitHubActionsEvidence(
 ) []EvidenceFact {
 	var evidence []EvidenceFact
 	for _, document := range parseYAMLDocuments(content) {
+		for _, workflowPath := range githubActionsLocalReusableWorkflowPaths(document) {
+			key := evidenceKey{
+				EvidenceKind: EvidenceKindGitHubActionsLocalReusableWorkflow,
+				SourceRepoID: sourceRepoID,
+				TargetRepoID: sourceRepoID,
+				Path:         filePath,
+				MatchedValue: workflowPath,
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			evidence = append(evidence, EvidenceFact{
+				EvidenceKind:     EvidenceKindGitHubActionsLocalReusableWorkflow,
+				RelationshipType: RelDeploysFrom,
+				SourceRepoID:     sourceRepoID,
+				TargetRepoID:     sourceRepoID,
+				Confidence:       0.86,
+				Rationale:        "GitHub Actions reuses deployment logic from a workflow file in the same repository",
+				Details: map[string]any{
+					"path":                filePath,
+					"matched_alias":       sourceRepoID,
+					"matched_value":       workflowPath,
+					"extractor":           "github_actions",
+					"local_workflow_path": workflowPath,
+				},
+			})
+		}
 		for _, candidate := range githubActionsReusableWorkflowRefs(document) {
 			evidence = append(evidence, matchCatalog(
 				sourceRepoID, candidate, filePath,
@@ -76,6 +104,31 @@ func githubActionsReusableWorkflowRefs(document map[string]any) []string {
 	}
 
 	return uniqueStrings(refs)
+}
+
+func githubActionsLocalReusableWorkflowPaths(document map[string]any) []string {
+	jobsValue, ok := document["jobs"]
+	if !ok {
+		return nil
+	}
+
+	jobs, ok := jobsValue.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	paths := make([]string, 0, len(jobs))
+	for _, rawJob := range jobs {
+		job, ok := rawJob.(map[string]any)
+		if !ok {
+			continue
+		}
+		if workflowPath := githubActionsLocalReusableWorkflowPath(stringValue(job["uses"])); workflowPath != "" {
+			paths = append(paths, workflowPath)
+		}
+	}
+
+	return uniqueStrings(paths)
 }
 
 func githubActionsCheckoutRepositoryRefs(document map[string]any) []string {
@@ -223,4 +276,20 @@ func githubActionsActionRepoRef(value string) string {
 		return ""
 	}
 	return strings.Join(parts[:2], "/")
+}
+
+func githubActionsLocalReusableWorkflowPath(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if at := strings.Index(trimmed, "@"); at >= 0 {
+		trimmed = trimmed[:at]
+	}
+	trimmed = strings.TrimPrefix(trimmed, "./")
+	trimmed = strings.TrimPrefix(trimmed, "/")
+	if !strings.HasPrefix(trimmed, ".github/workflows/") {
+		return ""
+	}
+	return trimmed
 }

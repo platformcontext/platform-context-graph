@@ -22,6 +22,7 @@ var evidenceKindToType = map[relationships.EvidenceKind]string{
 	relationships.EvidenceKindArgoCDApplicationSetDeploySource:     "argocd_applicationset_deploy_source",
 	relationships.EvidenceKindArgoCDDestinationPlatform:            "argocd_destination_platform",
 	relationships.EvidenceKindGitHubActionsReusableWorkflow:        "github_actions_reusable_workflow_ref",
+	relationships.EvidenceKindGitHubActionsLocalReusableWorkflow:   "github_actions_local_reusable_workflow_ref",
 	relationships.EvidenceKindGitHubActionsCheckoutRepository:      "github_actions_checkout_repository",
 	relationships.EvidenceKindGitHubActionsWorkflowInputRepository: "github_actions_workflow_input_repository",
 	relationships.EvidenceKindGitHubActionsActionRepository:        "github_actions_action_repository",
