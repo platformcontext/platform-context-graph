@@ -239,6 +239,133 @@ func TestSelectPartitionBatchFiltersStale(t *testing.T) {
 	}
 }
 
+func TestSelectPartitionBatchExpandsWindowWhenPartitionWorkIsBeyondHeadSlice(t *testing.T) {
+	t.Parallel()
+
+	t0 := time.Date(2026, time.April, 17, 12, 0, 0, 0, time.UTC)
+	partitionCount := 2
+	targetPartition := 1
+	reader := &stubSharedIntentReader{
+		pending: []SharedProjectionIntentRow{
+			{
+				IntentID:         "other-partition-1",
+				ProjectionDomain: DomainPlatformInfra,
+				PartitionKey:     partitionKeyForTestPartition(t, 0, partitionCount, "head-a"),
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-a",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				CreatedAt:        t0,
+			},
+			{
+				IntentID:         "other-partition-2",
+				ProjectionDomain: DomainPlatformInfra,
+				PartitionKey:     partitionKeyForTestPartition(t, 0, partitionCount, "head-b"),
+				ScopeID:          "scope-b",
+				AcceptanceUnitID: "repo-b",
+				RepositoryID:     "repo-b",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				CreatedAt:        t0.Add(time.Second),
+			},
+			{
+				IntentID:         "other-partition-3",
+				ProjectionDomain: DomainPlatformInfra,
+				PartitionKey:     partitionKeyForTestPartition(t, 0, partitionCount, "head-c"),
+				ScopeID:          "scope-c",
+				AcceptanceUnitID: "repo-c",
+				RepositoryID:     "repo-c",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				CreatedAt:        t0.Add(2 * time.Second),
+			},
+			{
+				IntentID:         "other-partition-4",
+				ProjectionDomain: DomainPlatformInfra,
+				PartitionKey:     partitionKeyForTestPartition(t, 0, partitionCount, "head-d"),
+				ScopeID:          "scope-d",
+				AcceptanceUnitID: "repo-d",
+				RepositoryID:     "repo-d",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				CreatedAt:        t0.Add(3 * time.Second),
+			},
+			{
+				IntentID:         "target-partition-1",
+				ProjectionDomain: DomainPlatformInfra,
+				PartitionKey:     partitionKeyForTestPartition(t, targetPartition, partitionCount, "tail"),
+				ScopeID:          "scope-target",
+				AcceptanceUnitID: "repo-target",
+				RepositoryID:     "repo-target",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-target",
+				CreatedAt:        t0.Add(4 * time.Second),
+			},
+		},
+	}
+
+	batch, err := SelectPartitionBatch(
+		context.Background(),
+		reader,
+		DomainPlatformInfra,
+		targetPartition,
+		partitionCount,
+		1,
+		acceptedGenerationFixed("gen-target", true),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SelectPartitionBatch() error = %v", err)
+	}
+	if len(batch.LatestRows) != 1 || batch.LatestRows[0].IntentID != "target-partition-1" {
+		t.Fatalf("LatestRows = %v, want target partition row", batch.LatestRows)
+	}
+	if len(reader.limitRequests) < 2 {
+		t.Fatalf("limitRequests = %v, want widened scan window", reader.limitRequests)
+	}
+}
+
+func TestSelectPartitionBatchErrorsWhenScanCapIsReached(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubSharedIntentReader{
+		limitResponder: func(limit int) []SharedProjectionIntentRow {
+			rows := make([]SharedProjectionIntentRow, limit)
+			for i := range rows {
+				rows[i] = SharedProjectionIntentRow{
+					IntentID:         "head-intent",
+					ProjectionDomain: DomainPlatformInfra,
+					PartitionKey:     partitionKeyForTestPartition(t, 0, 2, "cap"),
+					ScopeID:          "scope-a",
+					AcceptanceUnitID: "repo-a",
+					RepositoryID:     "repo-a",
+					SourceRunID:      "run-1",
+					GenerationID:     "gen-1",
+				}
+			}
+			return rows
+		},
+	}
+
+	_, err := SelectPartitionBatch(
+		context.Background(),
+		reader,
+		DomainPlatformInfra,
+		1,
+		2,
+		1,
+		acceptedGenerationFixed("gen-1", true),
+		nil,
+	)
+	if err == nil {
+		t.Fatal("SelectPartitionBatch() error = nil, want non-nil")
+	}
+	if got, want := reader.limitRequests[len(reader.limitRequests)-1], maxSharedSelectionScanLimit; got != want {
+		t.Fatalf("final scan limit = %d, want cap %d", got, want)
+	}
+}
+
 func TestProcessPartitionOnceFullCycle(t *testing.T) {
 	t.Parallel()
 
@@ -492,12 +619,21 @@ func TestProcessPartitionOnceCodeCallsDomain(t *testing.T) {
 // --- Test stubs ---
 
 type stubSharedIntentReader struct {
-	pending      []SharedProjectionIntentRow
-	completedIDs []string
+	pending        []SharedProjectionIntentRow
+	completedIDs   []string
+	limitRequests  []int
+	limitResponder func(limit int) []SharedProjectionIntentRow
 }
 
-func (s *stubSharedIntentReader) ListPendingDomainIntents(_ context.Context, _ string, _ int) ([]SharedProjectionIntentRow, error) {
-	return s.pending, nil
+func (s *stubSharedIntentReader) ListPendingDomainIntents(_ context.Context, _ string, limit int) ([]SharedProjectionIntentRow, error) {
+	s.limitRequests = append(s.limitRequests, limit)
+	if s.limitResponder != nil {
+		return s.limitResponder(limit), nil
+	}
+	if limit > 0 && len(s.pending) > limit {
+		return append([]SharedProjectionIntentRow(nil), s.pending[:limit]...), nil
+	}
+	return append([]SharedProjectionIntentRow(nil), s.pending...), nil
 }
 
 func (s *stubSharedIntentReader) MarkIntentsCompleted(_ context.Context, intentIDs []string, _ time.Time) error {
@@ -532,4 +668,21 @@ func (s *stubEdgeWriter) RetractEdges(_ context.Context, _ string, rows []Shared
 func (s *stubEdgeWriter) WriteEdges(_ context.Context, _ string, rows []SharedProjectionIntentRow, _ string) error {
 	s.writeCalls = append(s.writeCalls, rows)
 	return nil
+}
+
+func partitionKeyForTestPartition(t *testing.T, wantPartition, partitionCount int, prefix string) string {
+	t.Helper()
+
+	for i := 0; i < 10_000; i++ {
+		key := prefix + "-" + time.Date(2026, time.April, 17, 0, 0, i%60, 0, time.UTC).Format("150405") + "-" + string(rune('a'+(i%26)))
+		got, err := PartitionForKey(key, partitionCount)
+		if err != nil {
+			t.Fatalf("PartitionForKey(%q) error = %v", key, err)
+		}
+		if got == wantPartition {
+			return key
+		}
+	}
+	t.Fatalf("could not find partition key for partition %d of %d", wantPartition, partitionCount)
+	return ""
 }

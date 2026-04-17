@@ -202,7 +202,7 @@ func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Tim
 		}
 		result.RetractedRows = len(active)
 		result.UpsertedRows = writtenRows
-		if err := r.recordCodeCallCycle(ctx, key, writtenRows, writtenGroups, cycleStart); err != nil {
+		if err := r.recordCodeCallCycle(ctx, key, acceptedGenerationID(active), writtenRows, writtenGroups, cycleStart); err != nil {
 			return result, err
 		}
 	}
@@ -228,28 +228,13 @@ func (r *CodeCallProjectionRunner) selectAcceptanceUnitWork(ctx context.Context)
 		Instruments: r.Instruments,
 		Logger:      r.Logger,
 	}
-	pending, err := r.IntentReader.ListPendingDomainIntents(ctx, DomainCodeCalls, r.Config.batchLimit())
-	if err != nil {
-		acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
-			Runner:   "code_call_projection",
-			Result:   "error",
-			Duration: time.Since(start).Seconds(),
-			Err:      err,
-		})
-		return SharedProjectionAcceptanceKey{}, fmt.Errorf("list pending code call intents: %w", err)
-	}
-	if len(pending) == 0 {
-		acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
-			Runner:   "code_call_projection",
-			Result:   "miss",
-			Duration: time.Since(start).Seconds(),
-		})
-		return SharedProjectionAcceptanceKey{}, nil
+	scanLimit := r.Config.batchLimit()
+	if scanLimit > maxCodeCallAcceptanceScanLimit {
+		scanLimit = maxCodeCallAcceptanceScanLimit
 	}
 
-	lookup := r.AcceptedGen
-	if r.AcceptedGenPrefetch != nil {
-		resolvedLookup, err := r.AcceptedGenPrefetch(ctx, pending)
+	for {
+		pending, err := r.IntentReader.ListPendingDomainIntents(ctx, DomainCodeCalls, scanLimit)
 		if err != nil {
 			acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
 				Runner:   "code_call_projection",
@@ -257,39 +242,85 @@ func (r *CodeCallProjectionRunner) selectAcceptanceUnitWork(ctx context.Context)
 				Duration: time.Since(start).Seconds(),
 				Err:      err,
 			})
-			return SharedProjectionAcceptanceKey{}, fmt.Errorf("prefetch accepted generations: %w", err)
+			return SharedProjectionAcceptanceKey{}, fmt.Errorf("list pending code call intents: %w", err)
 		}
-		lookup = resolvedLookup
-	}
-
-	seen := make(map[SharedProjectionAcceptanceKey]struct{}, len(pending))
-	for _, row := range pending {
-		key, ok := row.AcceptanceKey()
-		if !ok {
-			return SharedProjectionAcceptanceKey{}, fmt.Errorf(
-				"pending code call intent %q is missing scope, acceptance unit, or source run",
-				row.IntentID,
-			)
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		if _, ok := lookup(key); ok {
+		if len(pending) == 0 {
 			acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
 				Runner:   "code_call_projection",
-				Result:   "hit",
+				Result:   "miss",
 				Duration: time.Since(start).Seconds(),
 			})
-			return key, nil
+			return SharedProjectionAcceptanceKey{}, nil
 		}
+
+		lookup := r.AcceptedGen
+		if r.AcceptedGenPrefetch != nil {
+			resolvedLookup, err := r.AcceptedGenPrefetch(ctx, pending)
+			if err != nil {
+				acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
+					Runner:   "code_call_projection",
+					Result:   "error",
+					Duration: time.Since(start).Seconds(),
+					Err:      err,
+				})
+				return SharedProjectionAcceptanceKey{}, fmt.Errorf("prefetch accepted generations: %w", err)
+			}
+			lookup = resolvedLookup
+		}
+
+		seen := make(map[SharedProjectionAcceptanceKey]struct{}, len(pending))
+		for _, row := range pending {
+			key, ok := row.AcceptanceKey()
+			if !ok {
+				return SharedProjectionAcceptanceKey{}, fmt.Errorf(
+					"pending code call intent %q is missing scope, acceptance unit, or source run",
+					row.IntentID,
+				)
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			if _, ok := lookup(key); ok {
+				acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
+					Runner:   "code_call_projection",
+					Result:   "hit",
+					Duration: time.Since(start).Seconds(),
+				})
+				return key, nil
+			}
+		}
+
+		if len(pending) < scanLimit {
+			acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
+				Runner:   "code_call_projection",
+				Result:   "miss",
+				Duration: time.Since(start).Seconds(),
+			})
+			return SharedProjectionAcceptanceKey{}, nil
+		}
+		if scanLimit >= maxCodeCallAcceptanceScanLimit {
+			acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
+				Runner:   "code_call_projection",
+				Result:   "error",
+				Duration: time.Since(start).Seconds(),
+				Err: fmt.Errorf(
+					"scan limit cap reached before finding accepted code call work (%d)",
+					maxCodeCallAcceptanceScanLimit,
+				),
+			})
+			return SharedProjectionAcceptanceKey{}, fmt.Errorf(
+				"code call acceptance scan reached cap (%d) before locating accepted work",
+				maxCodeCallAcceptanceScanLimit,
+			)
+		}
+
+		nextLimit := scanLimit * 2
+		if nextLimit > maxCodeCallAcceptanceScanLimit {
+			nextLimit = maxCodeCallAcceptanceScanLimit
+		}
+		scanLimit = nextLimit
 	}
-	acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
-		Runner:   "code_call_projection",
-		Result:   "miss",
-		Duration: time.Since(start).Seconds(),
-	})
-	return SharedProjectionAcceptanceKey{}, nil
 }
 
 func (r *CodeCallProjectionRunner) loadAllAcceptanceUnitIntents(ctx context.Context, key SharedProjectionAcceptanceKey) ([]SharedProjectionIntentRow, error) {
@@ -359,7 +390,7 @@ func (r *CodeCallProjectionRunner) writeActiveRows(ctx context.Context, rows []S
 	return writtenRows, len(sources), nil
 }
 
-func (r *CodeCallProjectionRunner) recordCodeCallCycle(ctx context.Context, key SharedProjectionAcceptanceKey, writtenRows, writtenGroups int, startedAt time.Time) error {
+func (r *CodeCallProjectionRunner) recordCodeCallCycle(ctx context.Context, key SharedProjectionAcceptanceKey, generationID string, writtenRows, writtenGroups int, startedAt time.Time) error {
 	duration := time.Since(startedAt).Seconds()
 	if r.Instruments != nil {
 		attrs := metric.WithAttributes(telemetry.AttrDomain(DomainCodeCalls))
@@ -368,15 +399,17 @@ func (r *CodeCallProjectionRunner) recordCodeCallCycle(ctx context.Context, key 
 	}
 
 	if r.Logger != nil {
-		r.Logger.InfoContext(ctx, "code call projection cycle completed",
-			slog.String("scope_id", key.ScopeID),
-			slog.String("acceptance_unit_id", key.AcceptanceUnitID),
-			slog.String("source_run_id", key.SourceRunID),
+		logAttrs := make([]any, 0, 6+len(telemetry.AcceptanceAttrs(key.ScopeID, key.AcceptanceUnitID, key.SourceRunID, generationID)))
+		for _, attr := range telemetry.AcceptanceAttrs(key.ScopeID, key.AcceptanceUnitID, key.SourceRunID, generationID) {
+			logAttrs = append(logAttrs, attr)
+		}
+		logAttrs = append(logAttrs,
 			slog.Int("written_rows", writtenRows),
 			slog.Int("written_groups", writtenGroups),
 			slog.Float64("duration_seconds", duration),
 			telemetry.PhaseAttr(telemetry.PhaseReduction),
 		)
+		r.Logger.InfoContext(ctx, "code call projection cycle completed", logAttrs...)
 	}
 
 	return nil
@@ -496,6 +529,15 @@ func uniqueRepositoryIDs(rows []SharedProjectionIntentRow) []string {
 	}
 	sort.Strings(repositoryIDs)
 	return repositoryIDs
+}
+
+func acceptedGenerationID(rows []SharedProjectionIntentRow) string {
+	for _, row := range rows {
+		if generationID := strings.TrimSpace(row.GenerationID); generationID != "" {
+			return generationID
+		}
+	}
+	return ""
 }
 
 func isCodeCallEdgeRow(row SharedProjectionIntentRow) bool {

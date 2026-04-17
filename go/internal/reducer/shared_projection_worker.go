@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const maxSharedSelectionScanLimit = 10_000
+
 // SharedProjectionEdgeWriter writes and retracts canonical graph edges for one
 // shared projection domain.
 type SharedProjectionEdgeWriter interface {
@@ -166,6 +168,9 @@ func SelectPartitionBatch(
 	}
 
 	scanLimit := batchLimit * max(partitionCount, 1) * 2
+	if scanLimit > maxSharedSelectionScanLimit {
+		scanLimit = maxSharedSelectionScanLimit
+	}
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -179,7 +184,24 @@ func SelectPartitionBatch(
 
 		partitionRows := RowsForPartition(pending, partitionID, partitionCount)
 		if len(partitionRows) == 0 {
-			return PartitionBatchResult{}, nil
+			if len(pending) < scanLimit {
+				return PartitionBatchResult{}, nil
+			}
+			if scanLimit >= maxSharedSelectionScanLimit {
+				return PartitionBatchResult{}, fmt.Errorf(
+					"shared partition selection reached scan cap (%d) for domain %q partition %d/%d",
+					maxSharedSelectionScanLimit,
+					domain,
+					partitionID,
+					partitionCount,
+				)
+			}
+			nextLimit := scanLimit * 2
+			if nextLimit > maxSharedSelectionScanLimit {
+				nextLimit = maxSharedSelectionScanLimit
+			}
+			scanLimit = nextLimit
+			continue
 		}
 
 		lookup := acceptedGen
@@ -206,7 +228,20 @@ func SelectPartitionBatch(
 			}, nil
 		}
 
-		scanLimit *= 2
+		if scanLimit >= maxSharedSelectionScanLimit {
+			return PartitionBatchResult{}, fmt.Errorf(
+				"shared partition selection reached scan cap (%d) for domain %q partition %d/%d",
+				maxSharedSelectionScanLimit,
+				domain,
+				partitionID,
+				partitionCount,
+			)
+		}
+		nextLimit := scanLimit * 2
+		if nextLimit > maxSharedSelectionScanLimit {
+			nextLimit = maxSharedSelectionScanLimit
+		}
+		scanLimit = nextLimit
 	}
 }
 

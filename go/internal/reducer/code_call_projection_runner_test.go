@@ -1,12 +1,18 @@
 package reducer
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"sync"
 	"testing"
 	"time"
+
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func TestCodeCallProjectionRunnerConfigDefaults(t *testing.T) {
@@ -424,6 +430,131 @@ func TestCodeCallProjectionRunnerSelectsAcceptanceUnitUsingScopeAndUnit(t *testi
 	}
 }
 
+func TestCodeCallProjectionRunnerSelectsAcceptanceUnitBeyondInitialBatchWindow(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 17, 11, 0, 0, 0, time.UTC)
+	reader := &fakeCodeCallIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			{
+				IntentID:         "stale-1",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "caller->callee-1",
+				ScopeID:          "scope-stale-1",
+				AcceptanceUnitID: "repo-stale-1",
+				RepositoryID:     "repo-stale-1",
+				SourceRunID:      "run-stale-1",
+				GenerationID:     "gen-stale-1",
+				CreatedAt:        now,
+			},
+			{
+				IntentID:         "stale-2",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "caller->callee-2",
+				ScopeID:          "scope-stale-2",
+				AcceptanceUnitID: "repo-stale-2",
+				RepositoryID:     "repo-stale-2",
+				SourceRunID:      "run-stale-2",
+				GenerationID:     "gen-stale-2",
+				CreatedAt:        now.Add(time.Second),
+			},
+			{
+				IntentID:         "accepted-1",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "caller->callee-3",
+				ScopeID:          "scope-accepted",
+				AcceptanceUnitID: "repo-accepted",
+				RepositoryID:     "repo-accepted",
+				SourceRunID:      "run-accepted",
+				GenerationID:     "gen-accepted",
+				CreatedAt:        now.Add(2 * time.Second),
+			},
+		},
+	}
+	runner := CodeCallProjectionRunner{
+		IntentReader: reader,
+		AcceptedGen: func(key SharedProjectionAcceptanceKey) (string, bool) {
+			if key.ScopeID == "scope-accepted" && key.AcceptanceUnitID == "repo-accepted" && key.SourceRunID == "run-accepted" {
+				return "gen-accepted", true
+			}
+			return "", false
+		},
+		Config: CodeCallProjectionRunnerConfig{BatchLimit: 2},
+	}
+
+	key, err := runner.selectAcceptanceUnitWork(context.Background())
+	if err != nil {
+		t.Fatalf("selectAcceptanceUnitWork() error = %v", err)
+	}
+	if got, want := key.ScopeID, "scope-accepted"; got != want {
+		t.Fatalf("key.ScopeID = %q, want %q", got, want)
+	}
+	if got, want := key.AcceptanceUnitID, "repo-accepted"; got != want {
+		t.Fatalf("key.AcceptanceUnitID = %q, want %q", got, want)
+	}
+	if got, want := key.SourceRunID, "run-accepted"; got != want {
+		t.Fatalf("key.SourceRunID = %q, want %q", got, want)
+	}
+	if len(reader.domainLimitRequests) < 2 {
+		t.Fatalf("domainLimitRequests = %v, want widened scan window", reader.domainLimitRequests)
+	}
+}
+
+func TestCodeCallProjectionRunnerRecordCycleUsesAcceptanceLogKeys(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	bootstrap, err := telemetry.NewBootstrap("test-reducer")
+	if err != nil {
+		t.Fatalf("NewBootstrap() error = %v", err)
+	}
+	logger := telemetry.NewLoggerWithWriter(bootstrap, "reducer", "reducer", &buf)
+	instruments, err := telemetry.NewInstruments(metricnoop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("NewInstruments() error = %v", err)
+	}
+	runner := CodeCallProjectionRunner{
+		Logger:      logger,
+		Instruments: instruments,
+	}
+
+	err = runner.recordCodeCallCycle(
+		context.Background(),
+		SharedProjectionAcceptanceKey{
+			ScopeID:          "scope-a",
+			AcceptanceUnitID: "repo-a",
+			SourceRunID:      "run-1",
+		},
+		"gen-1",
+		2,
+		1,
+		time.Now().Add(-250*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("recordCodeCallCycle() error = %v", err)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if got, want := entry[telemetry.LogKeyAcceptanceScopeID], "scope-a"; got != want {
+		t.Fatalf("%s = %v, want %v", telemetry.LogKeyAcceptanceScopeID, got, want)
+	}
+	if got, want := entry[telemetry.LogKeyAcceptanceUnitID], "repo-a"; got != want {
+		t.Fatalf("%s = %v, want %v", telemetry.LogKeyAcceptanceUnitID, got, want)
+	}
+	if got, want := entry[telemetry.LogKeyAcceptanceSourceRunID], "run-1"; got != want {
+		t.Fatalf("%s = %v, want %v", telemetry.LogKeyAcceptanceSourceRunID, got, want)
+	}
+	if got, want := entry[telemetry.LogKeyAcceptanceGenerationID], "gen-1"; got != want {
+		t.Fatalf("%s = %v, want %v", telemetry.LogKeyAcceptanceGenerationID, got, want)
+	}
+	if _, ok := entry["acceptance_unit_id"]; ok {
+		t.Fatalf("unexpected legacy acceptance_unit_id key in log entry: %v", entry["acceptance_unit_id"])
+	}
+}
+
 type fakeCodeCallIntentStore struct {
 	mu                      sync.Mutex
 	pendingByDomain         []SharedProjectionIntentRow
@@ -431,6 +562,7 @@ type fakeCodeCallIntentStore struct {
 	marked                  []string
 	leaseGranted            bool
 	claims                  int
+	domainLimitRequests     []int
 	acceptanceLimitRequests []int
 	acceptanceResponder     func(key SharedProjectionAcceptanceKey, limit int) ([]SharedProjectionIntentRow, error)
 }
@@ -439,6 +571,7 @@ func (f *fakeCodeCallIntentStore) ListPendingDomainIntents(_ context.Context, _ 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	f.domainLimitRequests = append(f.domainLimitRequests, limit)
 	rows := make([]SharedProjectionIntentRow, 0, len(f.pendingByDomain))
 	for _, row := range f.pendingByDomain {
 		if row.CompletedAt != nil {
