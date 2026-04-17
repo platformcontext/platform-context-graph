@@ -362,6 +362,7 @@ start_projector() {
 verify_projector_outputs() {
     wait_for_sql_value "SELECT status FROM scope_generations WHERE generation_id = 'generation-projector-proof'" "active" 120 1
     wait_for_sql_value "SELECT status FROM fact_work_items WHERE generation_id = 'generation-projector-proof' AND stage = 'projector'" "succeeded" 120 1
+    wait_for_sql_value "SELECT COUNT(*) FROM fact_work_items WHERE generation_id = 'generation-projector-proof' AND stage = 'projector' AND lease_owner IS NULL AND claim_until IS NULL AND visible_at IS NULL AND failure_class IS NULL AND failure_message IS NULL AND failure_details IS NULL" "1" 120 1
 
     curl -fsS "http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}/admin/status?format=json" >"$STATUS_FILE"
     curl -fsS "http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}/metrics" >"$METRICS_FILE"

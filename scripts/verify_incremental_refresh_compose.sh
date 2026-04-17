@@ -363,6 +363,7 @@ verify_incremental_refresh_outputs() {
     wait_for_sql_value "SELECT status FROM scope_generations WHERE generation_id = 'generation-incremental-refresh-a'" "superseded" 180 1
     wait_for_sql_value "SELECT status FROM scope_generations WHERE generation_id = 'generation-incremental-refresh-b'" "active" 180 1
     wait_for_sql_value "SELECT status FROM fact_work_items WHERE generation_id = 'generation-incremental-refresh-b' AND stage = 'projector'" "succeeded" 180 1
+    wait_for_sql_value "SELECT COUNT(*) FROM fact_work_items WHERE scope_id = 'scope-incremental-refresh' AND stage = 'projector' AND lease_owner IS NULL AND claim_until IS NULL AND visible_at IS NULL AND failure_class IS NULL AND failure_message IS NULL AND failure_details IS NULL" "2" 180 1
 
     local attempt_count
     attempt_count="$(psql_query "SELECT attempt_count FROM fact_work_items WHERE generation_id = 'generation-incremental-refresh-b' AND stage = 'projector'" | tr -d '[:space:]')"
