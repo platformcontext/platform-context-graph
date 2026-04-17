@@ -448,10 +448,10 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 				line += fmt.Sprintf(" with %d run command(s)", commandCount)
 			}
 			if gatingConditions := stringSliceValue(row, "gating_conditions"); len(gatingConditions) > 0 {
-				line += fmt.Sprintf(", %d gating condition(s)", len(gatingConditions))
+				line += fmt.Sprintf(", gating conditions %s", strings.Join(gatingConditions, "; "))
 			}
 			if needsDependencies := stringSliceValue(row, "needs_dependencies"); len(needsDependencies) > 0 {
-				line += fmt.Sprintf(", and %d needs edge(s)", len(needsDependencies))
+				line += fmt.Sprintf(", and needs %s", strings.Join(needsDependencies, ", "))
 			}
 			if localWorkflowPaths := stringSliceValue(row, "local_reusable_workflow_paths"); len(localWorkflowPaths) > 0 {
 				line += fmt.Sprintf(" via local reusable workflow paths %s", strings.Join(localWorkflowPaths, ", "))
