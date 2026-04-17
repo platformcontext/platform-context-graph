@@ -85,18 +85,19 @@ surface and queue/generation metrics before assuming a full rebuild is needed.
 
 For shared-write debugging specifically:
 
-- Start with `pcg_shared_projection_pending_intents` and
-  `pcg_shared_projection_oldest_pending_age_seconds` to see whether
-  authoritative platform or dependency follow-up is actually building up.
+- Start with `pcg_dp_shared_projection_cycles_total` and
+  `pcg_dp_shared_projection_stale_intents_total` to confirm that shared-write
+  partition cycles are still running and to see whether stale follow-up work is
+  accumulating.
 - Use `pcg_dp_queue_depth` and `pcg_dp_queue_oldest_age_seconds` alongside
-  the shared-projection gauges rather than instead of them. Fact queue growth
-  and shared follow-up growth answer different questions.
+  those shared-write counters rather than instead of them. Fact queue growth
+  and shared follow-up behavior answer different questions.
 - Pivot to traces when backlog exists but is not draining. Pivot to logs when
   you need the exact repository, run, generation, or partition owner involved.
-- The runtime status surface carries `shared_projection_tuning` whenever
-  shared backlog is present, so operators can inspect the recommended
-  partition and batch settings from `get_ingester_status` before opening the
-  admin tuning report.
+- The runtime status surface does not currently embed
+  `shared_projection_tuning`. Use
+  `GET /api/v0/admin/shared-projection/tuning-report` when you need the
+  operator guidance for partition and batch settings.
 - The reducer also persists bounded graph-readiness state in Postgres between
   canonical-node, semantic-node, and shared-edge phases. There is not yet a
   dedicated public metric family for those per-slice phase rows, so operators
@@ -159,14 +160,14 @@ For shared-write debugging specifically:
   verification, broader IaC helper-built path-expression reduction, and the
   telemetry coverage that keeps those flows operable.
 
-Shared-write-specific gauges:
+Shared-write-specific counters:
 
-- `pcg_shared_projection_pending_intents` reports how many uncompleted shared
-  projection intents exist per `pcg.projection_domain`.
-- `pcg_shared_projection_oldest_pending_age_seconds` reports the age of the
-  oldest uncompleted shared projection intent per `pcg.projection_domain`.
+- `pcg_dp_shared_projection_cycles_total` reports shared projection partition
+  cycles by domain and partition key.
+- `pcg_dp_shared_projection_stale_intents_total` reports stale shared
+  projection intents filtered during reducer processing.
 
-These gauges are intentionally domain-scoped and do not carry repository
+These counters are intentionally domain-scoped and do not carry repository
 identity. Use traces and logs when you need repository-level detail.
 
 ## Rollout Validation For Shared-Write Changes
@@ -174,8 +175,8 @@ identity. Use traces and logs when you need repository-level detail.
 When validating shared-write runtime changes in staging or production:
 
 1. Start with `pcg_dp_queue_depth`, `pcg_dp_queue_oldest_age_seconds`,
-   `pcg_shared_projection_pending_intents`,
-   `pcg_shared_projection_oldest_pending_age_seconds`,
+   `pcg_dp_shared_projection_cycles_total`,
+   `pcg_dp_shared_projection_stale_intents_total`,
    `pcg_dp_code_call_edge_batches_total`, and
    `pcg_dp_code_call_edge_batch_duration_seconds`.
 2. Confirm backlog trends are flat-to-down, not simply that pods are up.
@@ -210,8 +211,8 @@ Interpretation:
 Recommended staging order:
 
 1. Increase partition count and watch
-   `pcg_shared_projection_pending_intents` plus
-   `pcg_shared_projection_oldest_pending_age_seconds`.
+   `pcg_dp_shared_projection_cycles_total` plus
+   `pcg_dp_shared_projection_stale_intents_total`.
 2. Confirm fact queue metrics stay flat-to-down at the same time:
    `pcg_dp_queue_depth` and `pcg_dp_queue_oldest_age_seconds`.
 3. Only then try a modest batch-limit increase if backlog still drains in too

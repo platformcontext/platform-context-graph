@@ -73,7 +73,7 @@ This is where shared infrastructure becomes valuable: the graph can return every
 
 When you need a justification path:
 
-`POST /api/v0/paths/explain`
+`POST /api/v0/impact/explain-dependency-path`
 
 ```json
 {

@@ -87,24 +87,28 @@ Keep `CONTAINS*` when the query is actually about the tree, not just about locat
 The relationship pipeline is organized around verb coverage, not parser
 checklists. The platform keeps that contract explicit.
 
-These verbs define the relationship contract:
+These resolver-owned verbs define the typed relationship contract:
 
 - `PROVISIONS_DEPENDENCY_FOR`
-- `PROVISIONS_PLATFORM`
 - `RUNS_ON`
 - `DEPLOYS_FROM`
 - `DISCOVERS_CONFIG_IN`
 - `DEPENDS_ON`
+- `USES_MODULE`
+
+Related runtime-topology edges are still important, but they are reducer-owned
+or read-side graph structure rather than resolver-owned typed relationships:
+
+- `PROVISIONS_PLATFORM`
 - `DEFINES`
 - `INSTANCE_OF`
-- `USES_MODULE`
+- `DEPLOYMENT_SOURCE`
 
 Not every verb lives at the same layer:
 
 - repository-scoped canonical relationships include `DEPLOYS_FROM`,
-  `DISCOVERS_CONFIG_IN`, `PROVISIONS_DEPENDENCY_FOR`,
-  `PROVISIONS_PLATFORM`, `RUNS_ON`, `USES_MODULE`, and compatibility
-  `DEPENDS_ON`
+  `DISCOVERS_CONFIG_IN`, `PROVISIONS_DEPENDENCY_FOR`, `RUNS_ON`,
+  `USES_MODULE`, and compatibility `DEPENDS_ON`
 - runtime topology also depends on graph structure such as
   `Repository -[:DEFINES]-> Workload`,
   `Workload <-[:INSTANCE_OF]- WorkloadInstance`, and
@@ -174,9 +178,9 @@ Canonical relationship types today are:
 
 Typed relationships are canonical. Downstream graph materialization and query
 layers also use related runtime edges such as `PROVISIONS_PLATFORM`,
-`DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE`, but those are not resolver-owned
-relationship types and should only surface on the documented read-side topology
-and runtime views.
+`DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE`, but those are not
+resolver-owned relationship types and should only surface on the documented
+read-side topology and runtime views.
 
 ### Resolution Precedence Order
 

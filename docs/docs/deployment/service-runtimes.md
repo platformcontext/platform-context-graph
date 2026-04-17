@@ -70,8 +70,9 @@ Current platform reality:
   state where mounted.
 - `GET /api/v0/status/index` is the normalized completeness route.
 - `GET /api/v0/index-status` serves the same completeness payload.
-- `GET /api/v0/repositories/{repo_id}/coverage` narrows the completeness view
-  to the repository rows that still need attention.
+- `GET /api/v0/repositories/{repo_id}/coverage` returns repository content-store
+  coverage for files, entities, and languages that have been indexed for that
+  repository.
 - A service can be healthy while indexing is incomplete. Operators should use
   completeness routes before assuming a full run has finished.
 - `bootstrap-index` remains a one-shot helper for empty or recovered

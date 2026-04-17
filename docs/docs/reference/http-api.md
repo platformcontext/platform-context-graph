@@ -424,7 +424,7 @@ Example file-content search:
 - `POST /api/v0/infra/relationships`
 - `GET /api/v0/ecosystem/overview`
 - `POST /api/v0/traces/resource-to-code`
-- `POST /api/v0/paths/explain`
+- `POST /api/v0/impact/explain-dependency-path`
 - `POST /api/v0/impact/change-surface`
 - `POST /api/v0/environments/compare`
 

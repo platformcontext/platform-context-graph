@@ -204,7 +204,7 @@ Build a dashboard with:
 - **Panel 1**: `pcg_dp_queue_depth` by queue and status — data-plane backlog
 - **Panel 2**: `pcg_dp_queue_oldest_age_seconds` — How long queue work is waiting
 - **Panel 3**: `pcg_runtime_queue_outstanding` and `pcg_runtime_queue_oldest_outstanding_age_seconds` by service — per-runtime backlog
-- **Panel 4**: `pcg_shared_projection_pending_intents` by domain — Shared projection backlog
+- **Panel 4**: `pcg_dp_shared_projection_cycles_total` and `pcg_dp_shared_projection_stale_intents_total` by domain — Shared projection activity and stale intent filtering
 
 This dashboard shows where work is piling up and which service needs attention.
 
