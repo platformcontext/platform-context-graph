@@ -255,6 +255,86 @@ locals {
 	}
 }
 
+func TestBuildRepositoryStoryResponsePreservesSharedConfigAlongsideDeliverySurfaces(t *testing.T) {
+	t.Parallel()
+
+	repo := RepoRef{ID: "repository:platform-service", Name: "platform-service"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		64,
+		[]string{"go", "yaml"},
+		[]string{"platform-runtime"},
+		[]string{"argocd_application", "github_actions"},
+		5,
+		map[string]any{
+			"families": []string{"argocd", "ansible", "github_actions", "docker_compose", "terraform"},
+			"deployment_artifacts": map[string]any{
+				"controller_artifacts": []map[string]any{
+					{
+						"path":             "Jenkinsfile",
+						"controller_kind":  "jenkins_pipeline",
+						"shared_libraries": []string{"pipelines"},
+						"entry_points":     []string{"dist/api.js"},
+					},
+				},
+				"workflow_artifacts": []map[string]any{
+					{
+						"relative_path": ".github/workflows/deploy.yaml",
+						"artifact_type": "github_actions_workflow",
+						"workflow_name": "deploy",
+						"signals":       []string{"workflow_file"},
+					},
+				},
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "docker-compose.yaml",
+						"artifact_type": "docker_compose",
+						"service_name":  "api",
+						"signals":       []string{"build", "ports"},
+						"build_context": "./",
+					},
+				},
+				"config_paths": []map[string]any{
+					{
+						"path":          "/configd/payments/*",
+						"source_repo":   "helm-charts",
+						"relative_path": "deploy/policy.yaml",
+						"evidence_kind": "kustomize_policy_document_resource",
+					},
+					{
+						"path":          "/configd/payments/*",
+						"source_repo":   "terraform-stack-payments",
+						"relative_path": "env/prod/terragrunt.hcl",
+						"evidence_kind": "terragrunt_dependency_config_path",
+					},
+				},
+			},
+		},
+		nil,
+	)
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+
+	wantLines := []string{
+		"Workflow delivery paths include .github/workflows/deploy.yaml as github_actions_workflow deploy (workflow_file).",
+		"Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines).",
+		"Runtime artifacts include docker_compose service api in docker-compose.yaml built from ./ (build, ports).",
+		"Shared config families span /configd/payments/* across helm-charts, terraform-stack-payments.",
+	}
+	for _, want := range wantLines {
+		if !containsExactLine(directStory, want) {
+			t.Fatalf("direct_story = %#v, want line %q", directStory, want)
+		}
+	}
+}
+
 func containsExactLine(lines []string, want string) bool {
 	for _, line := range lines {
 		if line == want {
