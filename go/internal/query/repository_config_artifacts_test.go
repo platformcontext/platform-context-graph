@@ -91,17 +91,26 @@ dependency "network" {
 	}
 
 	configPaths := mapSliceValue(got, "config_paths")
-	if len(configPaths) != 1 {
-		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
+	if len(configPaths) != 2 {
+		t.Fatalf("len(config_paths) = %d, want 2", len(configPaths))
 	}
-	if got, want := configPaths[0]["path"], "../network"; got != want {
+	if got, want := configPaths[0]["path"], "../modules/service"; got != want {
 		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
 	}
 	if got, want := configPaths[0]["source_repo"], "terraform-stack-payments"; got != want {
 		t.Fatalf("config_paths[0].source_repo = %#v, want %#v", got, want)
 	}
-	if got, want := configPaths[0]["evidence_kind"], "terragrunt_dependency_config_path"; got != want {
+	if got, want := configPaths[0]["evidence_kind"], "terraform_module_source_path"; got != want {
 		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[1]["path"], "../network"; got != want {
+		t.Fatalf("config_paths[1].path = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[1]["source_repo"], "terraform-stack-payments"; got != want {
+		t.Fatalf("config_paths[1].source_repo = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[1]["evidence_kind"], "terragrunt_dependency_config_path"; got != want {
+		t.Fatalf("config_paths[1].evidence_kind = %#v, want %#v", got, want)
 	}
 }
 
@@ -410,5 +419,69 @@ resource "example" "service" {
 		if got, wantKind := configPaths[index]["evidence_kind"], "local_config_asset"; got != wantKind {
 			t.Fatalf("config_paths[%d].evidence_kind = %#v, want %#v", index, got, wantKind)
 		}
+	}
+}
+
+func TestBuildRepositoryConfigArtifactsExtractsLookupBackedLocalVariableConfigAssets(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-credentials", []FileContent{
+		{
+			RelativePath: "modules/2021.01/ec2/instance/main.tf",
+			Content: `locals {
+  template = lookup(
+    var.configuration,
+    "template_file",
+    "${path.module}/templates/user_data.tpl",
+  )
+}
+
+data "template_file" "user_data" {
+  template = file(local.template)
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 1 {
+		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
+	}
+	if got, want := configPaths[0]["path"], "templates/user_data.tpl"; got != want {
+		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[0]["evidence_kind"], "local_config_asset"; got != want {
+		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildRepositoryConfigArtifactsExtractsTerragruntGetRepoRootModuleSource(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terragrunt-deployment", []FileContent{
+		{
+			RelativePath: "accounts/bg-dev/us-east-1/dev.network-us-east-1/services/boattrader/root.hcl",
+			Content: `terraform {
+  source = "${get_repo_root()}/terraform-module-boattrader"
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 1 {
+		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
+	}
+	if got, want := configPaths[0]["path"], "terraform-module-boattrader"; got != want {
+		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[0]["evidence_kind"], "terraform_module_source_path"; got != want {
+		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
 	}
 }
