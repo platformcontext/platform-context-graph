@@ -31,6 +31,9 @@ func (w *EdgeWriter) batchSize() int {
 // WriteEdges writes canonical domain edges for the given rows using batched
 // UNWIND statements. Rows with empty required MATCH fields are skipped to
 // avoid silent failures in the batch.
+//
+// When the executor implements GroupExecutor, all batches are dispatched in a
+// single atomic transaction.
 func (w *EdgeWriter) WriteEdges(
 	ctx context.Context,
 	domain string,
@@ -64,30 +67,24 @@ func (w *EdgeWriter) WriteEdges(
 		return nil
 	}
 
+	// Collect all batches as statements.
+	var stmts []Statement
+	bs := w.batchSize()
 	for _, cypher := range routeOrder {
-		if err := w.executeBatched(ctx, cypher, routedRows[cypher]); err != nil {
-			return WrapRetryableNeo4jError(err)
-		}
+		stmts = append(stmts, buildBatchedStatements(cypher, routedRows[cypher], bs)...)
 	}
 
-	return nil
-}
-
-// executeBatched executes batched UNWIND operations, mirroring
-// Adapter.executeBatched in writer.go.
-func (w *EdgeWriter) executeBatched(ctx context.Context, cypher string, rows []map[string]any) error {
-	bs := w.batchSize()
-	for start := 0; start < len(rows); start += bs {
-		end := start + bs
-		if end > len(rows) {
-			end = len(rows)
+	// Prefer atomic grouped execution; fall back to sequential.
+	if ge, ok := w.executor.(GroupExecutor); ok {
+		if err := ge.ExecuteGroup(ctx, stmts); err != nil {
+			return WrapRetryableNeo4jError(err)
 		}
-		if err := w.executor.Execute(ctx, Statement{
-			Operation:  OperationCanonicalUpsert,
-			Cypher:     cypher,
-			Parameters: map[string]any{"rows": rows[start:end]},
-		}); err != nil {
-			return err
+		return nil
+	}
+
+	for _, stmt := range stmts {
+		if err := w.executor.Execute(ctx, stmt); err != nil {
+			return WrapRetryableNeo4jError(err)
 		}
 	}
 	return nil
