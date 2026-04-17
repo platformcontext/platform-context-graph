@@ -12,7 +12,7 @@ elimination mechanism, and harden it so the system is both safe and operable.
 
 This next pass adds four things:
 
-1. A repair path for missed readiness publications
+1. An exact durable repair path for missed readiness publications
 2. A contention-proof test that demonstrates edge work does not start early
 3. Operator-visible telemetry for blocked and repaired readiness state
 4. Smaller managed Neo4j transaction groups for `DomainCodeCalls` writes
@@ -96,23 +96,21 @@ domains while preventing unsafe overlap on the `code_entities_uid` keyspace.
 
 ### 2. Add durable readiness repair
 
-Introduce a repair path that repopulates missing readiness rows when the graph
-write succeeded but the readiness publish did not.
+Introduce an exact repair path that repopulates missing readiness rows when the
+graph write succeeded but the readiness publish did not.
 
 Recommended shape:
 
-1. Add a Postgres-backed repair scanner over authoritative generations.
-2. For each bounded unit, detect cases where:
-   - accepted generation exists
-   - downstream work is blocked on readiness
-   - the required readiness phase row is missing
-3. Recompute whether the missing phase should exist using durable source-of-truth
-   inputs:
-   - canonical readiness can be repaired from the projector/fact-side bounded
-     unit context
-   - semantic readiness can be repaired from durable semantic write inputs and
-     the semantic completion boundary
-4. Upsert the missing readiness phase row idempotently.
+1. Add a Postgres-backed `graph_projection_phase_repair_queue`.
+2. When canonical or semantic readiness publication fails **after** a
+   successful graph write, enqueue the exact bounded-unit readiness slice that
+   failed to publish.
+3. Run a reducer-side repair loop that:
+   - lists due repair rows
+   - skips stale generations
+   - skips rows whose readiness already exists
+   - republishes only the exact missing readiness row
+   - backs off failed republishes without dropping the repair row
 
 Important constraints:
 
@@ -122,6 +120,8 @@ Important constraints:
 3. Repair must not mark edge work complete directly. It only restores readiness.
 4. Repair must be bounded and incremental so it can run continuously without
    becoming a second ingestion pipeline.
+5. Repair must not become a generic scanner over accepted generations when the
+   exact failed readiness slice is already known at publish-failure time.
 
 ### 3. Add readiness-block and repair telemetry
 
@@ -177,13 +177,13 @@ Likely additions:
 
 1. `go/internal/reducer/graph_projection_phase_repair.go`
 2. `go/internal/reducer/graph_projection_phase_repair_test.go`
-3. Postgres lookup helpers in `go/internal/storage/postgres/graph_projection_phase_state.go`
+3. `go/internal/storage/postgres/graph_projection_phase_repair_queue.go`
 4. Reducer service wiring in `go/cmd/reducer/main.go`
 
 Responsibilities:
 
-1. Discover bounded units missing readiness
-2. Decide whether repair is valid
+1. Enqueue exact readiness repair rows when primary publication fails
+2. Decide whether queued repair is still valid
 3. Publish the missing row
 4. Emit repair telemetry
 
@@ -233,9 +233,9 @@ Responsibilities:
 
 1. Graph write succeeds.
 2. Readiness publication fails.
-3. Downstream work is blocked.
-4. Repair loop discovers missing readiness.
-5. Repair publishes the missing row.
+3. Exact repair row is enqueued durably.
+4. Downstream work is blocked.
+5. Repair loop republishes the missing row.
 6. Downstream work resumes on the next selection cycle.
 
 ### Invalid behavior we explicitly forbid

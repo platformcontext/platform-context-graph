@@ -624,6 +624,67 @@ func TestBatchedWriteEdgesParameterFidelity(t *testing.T) {
 	}
 }
 
+func TestEdgeWriterWriteEdgesCodeCallsChunkManagedGroups(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingGroupExecutor{}
+	writer := NewEdgeWriter(executor, 500)
+	writer.CodeCallBatchSize = 2
+	writer.CodeCallGroupBatchSize = 1
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{IntentID: "i1", RepositoryID: "repo-a", Payload: map[string]any{"caller_entity_id": "caller-1", "callee_entity_id": "callee-1"}},
+		{IntentID: "i2", RepositoryID: "repo-a", Payload: map[string]any{"caller_entity_id": "caller-2", "callee_entity_id": "callee-2"}},
+		{IntentID: "i3", RepositoryID: "repo-a", Payload: map[string]any{"caller_entity_id": "caller-3", "callee_entity_id": "callee-3"}},
+	}
+
+	if err := writer.WriteEdges(context.Background(), reducer.DomainCodeCalls, rows, "parser/code-calls"); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.groupCalls), 2; got != want {
+		t.Fatalf("ExecuteGroup calls = %d, want %d", got, want)
+	}
+	if got, want := len(executor.groupCalls[0]), 1; got != want {
+		t.Fatalf("len(groupCalls[0]) = %d, want %d", got, want)
+	}
+	if got, want := len(executor.groupCalls[1]), 1; got != want {
+		t.Fatalf("len(groupCalls[1]) = %d, want %d", got, want)
+	}
+	firstBatchRows := executor.groupCalls[0][0].Parameters["rows"].([]map[string]any)
+	if got, want := len(firstBatchRows), 2; got != want {
+		t.Fatalf("len(first batch rows) = %d, want %d", got, want)
+	}
+	secondBatchRows := executor.groupCalls[1][0].Parameters["rows"].([]map[string]any)
+	if got, want := len(secondBatchRows), 1; got != want {
+		t.Fatalf("len(second batch rows) = %d, want %d", got, want)
+	}
+}
+
+func TestEdgeWriterWriteEdgesNonCodeCallsKeepSingleManagedGroup(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingGroupExecutor{}
+	writer := NewEdgeWriter(executor, 2)
+	writer.CodeCallBatchSize = 1
+	writer.CodeCallGroupBatchSize = 1
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{IntentID: "i1", RepositoryID: "r1", Payload: map[string]any{"repo_id": "r1", "target_repo_id": "r2"}},
+		{IntentID: "i2", RepositoryID: "r1", Payload: map[string]any{"repo_id": "r1", "target_repo_id": "r3"}},
+		{IntentID: "i3", RepositoryID: "r1", Payload: map[string]any{"repo_id": "r1", "target_repo_id": "r4"}},
+	}
+
+	if err := writer.WriteEdges(context.Background(), reducer.DomainRepoDependency, rows, "finalization/workloads"); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.groupCalls), 1; got != want {
+		t.Fatalf("ExecuteGroup calls = %d, want %d", got, want)
+	}
+	if got, want := len(executor.groupCalls[0]), 2; got != want {
+		t.Fatalf("len(groupCalls[0]) = %d, want %d statements", got, want)
+	}
+}
+
 func TestBatchedWriteEdgesUsesUNWINDCypher(t *testing.T) {
 	t.Parallel()
 
@@ -902,6 +963,21 @@ func TestBatchedWriteEdgesUsesUNWINDCypherIncludesNewDomains(t *testing.T) {
 			}
 		})
 	}
+}
+
+type recordingGroupExecutor struct {
+	groupCalls [][]Statement
+}
+
+func (r *recordingGroupExecutor) Execute(context.Context, Statement) error {
+	return nil
+}
+
+func (r *recordingGroupExecutor) ExecuteGroup(_ context.Context, stmts []Statement) error {
+	cloned := make([]Statement, len(stmts))
+	copy(cloned, stmts)
+	r.groupCalls = append(r.groupCalls, cloned)
+	return nil
 }
 
 // Suppress unused import for time package used only by SharedProjectionIntentRow.

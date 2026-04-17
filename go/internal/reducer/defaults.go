@@ -29,6 +29,7 @@ type DefaultHandlers struct {
 	// GraphProjectionPhasePublisher persists durable graph-readiness publications
 	// for canonical and semantic node writers.
 	GraphProjectionPhasePublisher GraphProjectionPhasePublisher
+	GraphProjectionRepairQueue    GraphProjectionPhaseRepairQueue
 
 	// CodeCallEdgeWriter is retained for compatibility with older reducer tests
 	// and wiring. Code-call materialization no longer uses it directly.
@@ -138,6 +139,7 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 				FactLoader:     handlers.FactLoader,
 				Writer:         handlers.SemanticEntityWriter,
 				PhasePublisher: handlers.GraphProjectionPhasePublisher,
+				RepairQueue:    handlers.GraphProjectionRepairQueue,
 			}
 		case DomainSQLRelationshipMaterialization:
 			def.Handler = SQLRelationshipMaterializationHandler{

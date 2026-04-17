@@ -11,8 +11,10 @@ import (
 // domain-specific canonical Cypher statements through a Neo4j Executor.
 // Writes are batched using UNWIND for efficiency.
 type EdgeWriter struct {
-	executor  Executor
-	BatchSize int
+	executor               Executor
+	BatchSize              int
+	CodeCallBatchSize      int
+	CodeCallGroupBatchSize int
 }
 
 // NewEdgeWriter returns an EdgeWriter backed by the given Executor.
@@ -26,6 +28,20 @@ func (w *EdgeWriter) batchSize() int {
 		return DefaultBatchSize
 	}
 	return w.BatchSize
+}
+
+func (w *EdgeWriter) batchSizeForDomain(domain string) int {
+	if domain == reducer.DomainCodeCalls && w.CodeCallBatchSize > 0 {
+		return w.CodeCallBatchSize
+	}
+	return w.batchSize()
+}
+
+func (w *EdgeWriter) codeCallGroupBatchSize() int {
+	if w.CodeCallGroupBatchSize <= 0 {
+		return 0
+	}
+	return w.CodeCallGroupBatchSize
 }
 
 // WriteEdges writes canonical domain edges for the given rows using batched
@@ -69,13 +85,26 @@ func (w *EdgeWriter) WriteEdges(
 
 	// Collect all batches as statements.
 	var stmts []Statement
-	bs := w.batchSize()
+	bs := w.batchSizeForDomain(domain)
 	for _, cypher := range routeOrder {
 		stmts = append(stmts, buildBatchedStatements(cypher, routedRows[cypher], bs)...)
 	}
 
 	// Prefer atomic grouped execution; fall back to sequential.
 	if ge, ok := w.executor.(GroupExecutor); ok {
+		if domain == reducer.DomainCodeCalls && w.codeCallGroupBatchSize() > 0 {
+			groupSize := w.codeCallGroupBatchSize()
+			for i := 0; i < len(stmts); i += groupSize {
+				end := i + groupSize
+				if end > len(stmts) {
+					end = len(stmts)
+				}
+				if err := ge.ExecuteGroup(ctx, stmts[i:end]); err != nil {
+					return WrapRetryableNeo4jError(err)
+				}
+			}
+			return nil
+		}
 		if err := ge.ExecuteGroup(ctx, stmts); err != nil {
 			return WrapRetryableNeo4jError(err)
 		}

@@ -129,11 +129,15 @@ func buildReducerService(
 ) (reducer.Service, error) {
 	sharedCfg := reducer.LoadSharedProjectionConfig(getenv)
 	codeCallCfg := loadCodeCallProjectionConfig(getenv)
+	repairCfg := loadGraphProjectionPhaseRepairConfig(getenv)
+	codeCallEdgeBatchSize, codeCallEdgeGroupBatchSize := loadCodeCallEdgeWriterTuning(getenv)
 
 	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	relationshipStore := postgres.NewRelationshipStore(database)
 	codeCallIntentWriter := postgres.NewCodeCallIntentWriterWithInstruments(database, instruments)
 	acceptedGenerationPrefetch := postgres.NewAcceptedGenerationPrefetch(database)
+	graphProjectionStateStore := postgres.NewGraphProjectionPhaseStateStore(database)
+	graphProjectionRepairQueue := postgres.NewGraphProjectionPhaseRepairQueueStore(database)
 	graphProjectionReadinessLookup := postgres.NewGraphProjectionReadinessLookup(database)
 	graphProjectionReadinessPrefetch := postgres.NewGraphProjectionReadinessPrefetch(database)
 
@@ -145,7 +149,8 @@ func buildReducerService(
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
 		FactLoader:                         postgres.NewFactStore(database),
 		CodeCallIntentWriter:               codeCallIntentWriter,
-		GraphProjectionPhasePublisher:      postgres.NewGraphProjectionPhaseStateStore(database),
+		GraphProjectionPhasePublisher:      graphProjectionStateStore,
+		GraphProjectionRepairQueue:         graphProjectionRepairQueue,
 		SemanticEntityWriter:               sourceneo4j.NewSemanticEntityWriter(neo4jExec, neo4jBatchSize(getenv)),
 		SQLRelationshipEdgeWriter:          edgeWriterForHandlers,
 		InheritanceEdgeWriter:              edgeWriterForHandlers,
@@ -163,6 +168,8 @@ func buildReducerService(
 	}
 
 	edgeWriter := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
+	edgeWriter.CodeCallBatchSize = codeCallEdgeBatchSize
+	edgeWriter.CodeCallGroupBatchSize = codeCallEdgeGroupBatchSize
 
 	retryCfg, err := loadReducerQueueConfig(getenv)
 	if err != nil {
@@ -204,6 +211,15 @@ func buildReducerService(
 			Tracer:              tracer,
 			Instruments:         instruments,
 			Logger:              logger,
+		},
+		GraphProjectionPhaseRepairer: &reducer.GraphProjectionPhaseRepairer{
+			Queue:       graphProjectionRepairQueue,
+			AcceptedGen: postgres.NewAcceptedGenerationLookup(database),
+			StateLookup: graphProjectionStateStore,
+			Publisher:   graphProjectionStateStore,
+			Config:      repairCfg,
+			Instruments: instruments,
+			Logger:      logger,
 		},
 		Workers:        workers,
 		BatchClaimSize: loadReducerBatchClaimSize(getenv, workers),

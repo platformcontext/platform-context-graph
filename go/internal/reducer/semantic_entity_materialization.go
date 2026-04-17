@@ -50,6 +50,7 @@ type SemanticEntityMaterializationHandler struct {
 	FactLoader     FactLoader
 	Writer         SemanticEntityWriter
 	PhasePublisher GraphProjectionPhasePublisher
+	RepairQueue    GraphProjectionPhaseRepairQueue
 }
 
 // Handle executes the semantic-entity materialization path.
@@ -125,7 +126,16 @@ func (h SemanticEntityMaterializationHandler) publishSemanticGraphPhases(
 	if len(states) == 0 {
 		return nil
 	}
-	return h.PhasePublisher.PublishGraphProjectionPhases(ctx, states)
+	if err := h.PhasePublisher.PublishGraphProjectionPhases(ctx, states); err != nil {
+		if h.RepairQueue != nil {
+			repairs := GraphProjectionPhaseRepairsFromStates(states, err.Error(), time.Now().UTC())
+			if enqueueErr := h.RepairQueue.Enqueue(ctx, repairs); enqueueErr != nil {
+				return fmt.Errorf("publish semantic graph phases: %w (enqueue repairs: %v)", err, enqueueErr)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func semanticGraphPhaseStates(

@@ -82,6 +82,37 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	if got := service.CodeCallProjectionRunner.Config.BatchLimit; got <= 0 {
 		t.Fatalf("buildReducerService() code call batch limit = %d, want positive", got)
 	}
+	codeCallEdgeWriter, ok := service.CodeCallProjectionRunner.EdgeWriter.(*sourceneo4j.EdgeWriter)
+	if !ok {
+		t.Fatalf("code call edge writer type = %T, want *neo4j.EdgeWriter", service.CodeCallProjectionRunner.EdgeWriter)
+	}
+	if got, want := codeCallEdgeWriter.CodeCallBatchSize, defaultCodeCallEdgeBatchSize; got != want {
+		t.Fatalf("code call edge batch size = %d, want %d", got, want)
+	}
+	if got, want := codeCallEdgeWriter.CodeCallGroupBatchSize, defaultCodeCallEdgeGroupBatchSize; got != want {
+		t.Fatalf("code call edge group batch size = %d, want %d", got, want)
+	}
+	if service.GraphProjectionPhaseRepairer == nil {
+		t.Fatal("buildReducerService() graph projection repairer = nil, want non-nil")
+	}
+	if service.GraphProjectionPhaseRepairer.Queue == nil {
+		t.Fatal("buildReducerService() graph projection repair queue = nil, want non-nil")
+	}
+	if service.GraphProjectionPhaseRepairer.StateLookup == nil {
+		t.Fatal("buildReducerService() graph projection repair state lookup = nil, want non-nil")
+	}
+	if service.GraphProjectionPhaseRepairer.Publisher == nil {
+		t.Fatal("buildReducerService() graph projection repair publisher = nil, want non-nil")
+	}
+	if got := service.GraphProjectionPhaseRepairer.Config.BatchLimit; got <= 0 {
+		t.Fatalf("buildReducerService() graph projection repair batch limit = %d, want positive", got)
+	}
+	if got := service.GraphProjectionPhaseRepairer.Config.PollInterval; got <= 0 {
+		t.Fatalf("buildReducerService() graph projection repair poll interval = %v, want positive", got)
+	}
+	if got := service.GraphProjectionPhaseRepairer.Config.RetryDelay; got <= 0 {
+		t.Fatalf("buildReducerService() graph projection repair retry delay = %v, want positive", got)
+	}
 }
 
 func TestBuildReducerServiceWiresPostgresWorkloadIdentityWriter(t *testing.T) {

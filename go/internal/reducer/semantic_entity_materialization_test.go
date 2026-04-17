@@ -2,6 +2,7 @@ package reducer
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -561,7 +562,7 @@ func TestSemanticEntityMaterializationPublishesSemanticNodesCommitted(t *testing
 			{
 				ScopeID:      "scope-1",
 				GenerationID: "generation-1",
-				FactKind: "repository",
+				FactKind:     "repository",
 				Payload: map[string]any{
 					"repo_id":       "repo-1",
 					"source_run_id": "run-1",
@@ -570,7 +571,7 @@ func TestSemanticEntityMaterializationPublishesSemanticNodesCommitted(t *testing
 			{
 				ScopeID:      "scope-1",
 				GenerationID: "generation-1",
-				FactKind: "content_entity",
+				FactKind:     "content_entity",
 				SourceRef: facts.Ref{
 					SourceURI: "/repo/src/Logged.java",
 				},
@@ -623,6 +624,80 @@ func TestSemanticEntityMaterializationPublishesSemanticNodesCommitted(t *testing
 	}
 	if got, want := publisher.calls[0][0].Key.SourceRunID, "run-1"; got != want {
 		t.Fatalf("published source run = %q, want %q", got, want)
+	}
+}
+
+func TestSemanticEntityMaterializationEnqueuesRepairWhenPublishFails(t *testing.T) {
+	t.Parallel()
+
+	loader := &fakeSemanticEntityFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "repository",
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"source_run_id": "run-1",
+				},
+			},
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "content_entity",
+				SourceRef: facts.Ref{
+					SourceURI: "/repo/src/Logged.java",
+				},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "annotation-1",
+					"relative_path": "src/Logged.java",
+					"entity_type":   "Annotation",
+					"entity_name":   "Logged",
+					"language":      "java",
+					"start_line":    12,
+					"end_line":      12,
+				},
+			},
+		},
+	}
+	writer := &recordingSemanticEntityWriter{
+		result: SemanticEntityWriteResult{CanonicalWrites: 1},
+	}
+	publisher := &recordingSemanticEntityPhasePublisher{
+		err: errors.New("publish failed"),
+	}
+	repairQueue := &recordingSemanticEntityRepairQueue{}
+
+	handler := SemanticEntityMaterializationHandler{
+		FactLoader:     loader,
+		Writer:         writer,
+		PhasePublisher: publisher,
+		RepairQueue:    repairQueue,
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-3",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		SourceSystem: "git",
+		Domain:       DomainSemanticEntityMaterialization,
+		Cause:        "semantic entity follow-up",
+		Status:       IntentStatusClaimed,
+		EnqueuedAt:   time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+	})
+	if err == nil {
+		t.Fatal("Handle() error = nil, want non-nil")
+	}
+	if got, want := len(repairQueue.calls), 1; got != want {
+		t.Fatalf("repair queue calls = %d, want %d", got, want)
+	}
+	if got, want := len(repairQueue.calls[0]), 1; got != want {
+		t.Fatalf("repair rows = %d, want %d", got, want)
+	}
+	if got, want := repairQueue.calls[0][0].Phase, GraphProjectionPhaseSemanticNodesCommitted; got != want {
+		t.Fatalf("repair phase = %q, want %q", got, want)
 	}
 }
 
@@ -718,11 +793,35 @@ func (w *recordingSemanticEntityWriter) WriteSemanticEntities(
 
 type recordingSemanticEntityPhasePublisher struct {
 	calls [][]GraphProjectionPhaseState
+	err   error
 }
 
 func (p *recordingSemanticEntityPhasePublisher) PublishGraphProjectionPhases(_ context.Context, rows []GraphProjectionPhaseState) error {
 	cloned := make([]GraphProjectionPhaseState, len(rows))
 	copy(cloned, rows)
 	p.calls = append(p.calls, cloned)
+	return p.err
+}
+
+type recordingSemanticEntityRepairQueue struct {
+	calls [][]GraphProjectionPhaseRepair
+}
+
+func (q *recordingSemanticEntityRepairQueue) Enqueue(_ context.Context, repairs []GraphProjectionPhaseRepair) error {
+	cloned := make([]GraphProjectionPhaseRepair, len(repairs))
+	copy(cloned, repairs)
+	q.calls = append(q.calls, cloned)
+	return nil
+}
+
+func (q *recordingSemanticEntityRepairQueue) ListDue(context.Context, time.Time, int) ([]GraphProjectionPhaseRepair, error) {
+	return nil, nil
+}
+
+func (q *recordingSemanticEntityRepairQueue) Delete(context.Context, []GraphProjectionPhaseRepair) error {
+	return nil
+}
+
+func (q *recordingSemanticEntityRepairQueue) MarkFailed(context.Context, GraphProjectionPhaseRepair, time.Time, string) error {
 	return nil
 }

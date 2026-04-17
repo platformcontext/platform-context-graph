@@ -60,6 +60,7 @@ func buildProjectorRuntime(
 		ContentWriter:   postgres.NewContentWriter(database),
 		IntentWriter:    intentWriter,
 		PhasePublisher:  postgres.NewGraphProjectionPhaseStateStore(database),
+		RepairQueue:     postgres.NewGraphProjectionPhaseRepairQueueStore(database),
 		RetryInjector:   retryInjector,
 	}
 }

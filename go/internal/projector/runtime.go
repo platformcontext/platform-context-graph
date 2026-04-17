@@ -25,10 +25,11 @@ type CanonicalWriter interface {
 }
 
 type Runtime struct {
-	CanonicalWriter CanonicalWriter        // replaces GraphWriter — canonical graph projection
+	CanonicalWriter CanonicalWriter // replaces GraphWriter — canonical graph projection
 	ContentWriter   content.Writer
 	IntentWriter    ReducerIntentWriter
 	PhasePublisher  reducer.GraphProjectionPhasePublisher
+	RepairQueue     reducer.GraphProjectionPhaseRepairQueue
 	RetryInjector   RetryInjector
 	Tracer          trace.Tracer           // optional
 	Instruments     *telemetry.Instruments // optional
@@ -205,7 +206,16 @@ func (r Runtime) publishCanonicalGraphPhases(ctx context.Context, generationID s
 	if len(rows) == 0 {
 		return nil
 	}
-	return r.PhasePublisher.PublishGraphProjectionPhases(ctx, rows)
+	if err := r.PhasePublisher.PublishGraphProjectionPhases(ctx, rows); err != nil {
+		if r.RepairQueue != nil {
+			repairs := reducer.GraphProjectionPhaseRepairsFromStates(rows, err.Error(), time.Now().UTC())
+			if enqueueErr := r.RepairQueue.Enqueue(ctx, repairs); enqueueErr != nil {
+				return fmt.Errorf("publish canonical graph phases: %w (enqueue repairs: %v)", err, enqueueErr)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func canonicalGraphPhaseStates(generationID string, inputFacts []facts.Envelope) []reducer.GraphProjectionPhaseState {

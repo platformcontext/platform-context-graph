@@ -8,7 +8,8 @@ batch-isolation draft that treated this as a code-call batching problem
 ## Decision
 
 Adopt a **durable graph-readiness contract** for the `uid`-keyed code-entity
-keyspace and gate edge projection on that readiness.
+keyspace, gate edge projection on that readiness, and harden the contract with
+an **exact repair queue** plus **smaller managed code-call transaction groups**.
 
 For a given bounded unit:
 
@@ -291,7 +292,33 @@ entity writes in:
 
 This is the concrete readiness signal that code-entity edge consumers now use.
 
-### 4. Code-entity edge consumers are gated on semantic readiness
+### 4. Publish failures enqueue exact readiness repairs
+
+The hardening pass adds a second durability layer for the case where the graph
+write succeeded but the readiness publication failed afterward:
+
+- `schema/data-plane/postgres/013_graph_projection_phase_repair_queue.sql`
+- `go/internal/storage/postgres/graph_projection_phase_repair_queue.go`
+- `go/internal/reducer/graph_projection_phase_repair_runner.go`
+
+Concrete behavior:
+
+- projector canonical publish failure enqueues the exact
+  `canonical_nodes_committed` repair row
+- semantic publish failure enqueues the exact
+  `semantic_nodes_committed` repair row
+- the reducer runs a bounded repair loop that:
+  - lists due repair rows
+  - skips stale generations
+  - skips rows whose readiness already exists
+  - republishes only the exact missing readiness row
+  - backs off failed republishes without dropping the row
+
+This keeps readiness recovery precise. The repairer does not scan the world or
+speculate. It only retries a publication that was already proven true by a
+successful upstream graph write.
+
+### 5. Code-entity edge consumers are gated on semantic readiness
 
 The gating now happens at work-selection time, before Neo4j retract/upsert
 work starts:
@@ -313,7 +340,7 @@ Concrete behavior:
 - the selectors keep scanning for other ready work deeper in the slice, so the
   fix does not collapse concurrency to one unit at a time
 
-### 5. Preserve concurrency by scoping the gate to bounded units
+### 6. Preserve concurrency by scoping the gate to bounded units
 
 This is not a global serializer.
 
@@ -354,7 +381,8 @@ That is elimination by construction for this deadlock class.
 
 ### A. Smaller code-call batches in separate transactions
 
-Rejected as the primary design.
+Rejected as the primary design, adopted only as a scoped secondary
+optimization after readiness gating.
 
 Why:
 
@@ -365,8 +393,16 @@ Why:
 - the repo's own Neo4j research notes there is no authoritative batch-size
   guidance that proves deadlock elimination
 
-This remains a possible optimization after the architectural fix, but it is not
-the elimination strategy.
+This is now implemented as a **secondary** safeguard in the reducer edge
+writer:
+
+- `DomainCodeCalls` uses a smaller row batch size than other domains
+- `DomainCodeCalls` also splits grouped Neo4j writes into smaller
+  `ExecuteGroup(...)` chunks
+- grouped managed transactions are preserved, so we keep retry semantics
+
+It reduces lock footprint and tail latency, but it is still not the elimination
+strategy. Readiness gating remains the correctness contract.
 
 ### B. Global Neo4j write serializer
 
@@ -403,7 +439,9 @@ Why:
 The readiness contract is implemented by:
 
 - `schema/data-plane/postgres/012_graph_projection_phase_state.sql`
+- `schema/data-plane/postgres/013_graph_projection_phase_repair_queue.sql`
 - `go/internal/storage/postgres/graph_projection_phase_state.go`
+- `go/internal/storage/postgres/graph_projection_phase_repair_queue.go`
 - `go/internal/storage/postgres/schema.go`
 
 The Postgres store now provides:
@@ -412,6 +450,7 @@ The Postgres store now provides:
 - exact lookup through `Lookup`
 - cycle-local batching through `NewGraphProjectionReadinessPrefetch`
 - direct runner lookup through `NewGraphProjectionReadinessLookup`
+- exact repair queue persistence through `GraphProjectionPhaseRepairQueueStore`
 
 ### Runtime publications
 
@@ -427,6 +466,21 @@ the semantic materialization path:
 - `go/internal/reducer/defaults.go`
 - `go/cmd/reducer/main.go`
 
+When either publication fails after a successful graph write, the same runtime
+path now enqueues an exact repair row instead of leaving the bounded unit
+blocked forever.
+
+### Reducer-side repair
+
+The reducer now owns a dedicated repair loop:
+
+- `go/internal/reducer/graph_projection_phase_repair_runner.go`
+- `go/cmd/reducer/main.go`
+- `go/internal/reducer/service.go`
+
+This loop is intentionally bounded. It consumes queued repair rows rather than
+scanning accepted generations or rebuilding readiness from inference.
+
 ### Runner gating
 
 Readiness-aware selection is implemented in:
@@ -437,10 +491,34 @@ Readiness-aware selection is implemented in:
 
 ### Telemetry
 
-The first implementation adds structured logs when bounded units are skipped
-because semantic readiness is not yet committed. That gives operators a
-concrete "waiting on readiness" signal without inventing a second telemetry
-subsystem inside the refactor.
+The hardened implementation adds structured logs for:
+
+- bounded units skipped because semantic readiness is still missing
+- exact readiness publication failures that were queued for repair
+- exact readiness rows successfully repaired
+- repair cycles with non-zero repaired row counts
+
+This keeps observability tied to the same bounded-unit contract instead of
+inventing a generic second workflow layer.
+
+### Code-call write-path optimization
+
+The reducer Neo4j edge writer now applies smaller managed transaction groups to
+`DomainCodeCalls` only:
+
+- `go/internal/storage/neo4j/edge_writer.go`
+- `go/internal/storage/neo4j/edge_writer_test.go`
+- `go/cmd/reducer/config.go`
+- `go/cmd/reducer/main.go`
+
+Concrete runtime defaults:
+
+- `CodeCallBatchSize = 50`
+- `CodeCallGroupBatchSize = 1`
+
+That means a large code-call slice is still executed through managed
+`ExecuteGroup(...)` retries, but each grouped transaction holds a much smaller
+lock footprint than the old "all statements in one grouped transaction" shape.
 
 ## Verification and Exit Criteria
 
@@ -450,7 +528,7 @@ The elimination bar is not "seems better." It is all of the following.
 
 At minimum, for the code paths touched:
 
-- `cd go && go test ./internal/reducer ./internal/storage/postgres ./internal/storage/neo4j ./internal/projector -count=1`
+- `cd go && go test ./cmd/projector ./cmd/reducer ./internal/projector ./internal/reducer ./internal/storage/postgres ./internal/storage/neo4j -count=1`
 - `cd go && go vet ./internal/reducer ./internal/storage/postgres ./internal/projector`
 - docs gate from the local testing runbook:
   - `uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml`
@@ -466,6 +544,12 @@ Add tests that prove:
 - semantic completion for generation `G` does not unlock edge work for a
   different generation
 - readiness is scoped by `scope_id + acceptance_unit_id + source_run_id`
+- failed canonical readiness publication enqueues an exact repair row
+- failed semantic readiness publication enqueues an exact repair row
+- reducer repair republishes missing readiness and deletes stale queued rows
+- reducer repair backs off failed republishes without dropping the repair row
+- code-call edge writes use smaller managed grouped transactions than other
+  domains
 
 ### Contention proof
 
@@ -497,6 +581,10 @@ The ADR is considered validated only when we have:
 - preserves concurrency across repositories
 - gives the platform an explicit ownership model for the `uid` keyspace
 - creates a reusable contract for future graph consumers
+- closes the liveness hole where a publish failure could otherwise block work
+  indefinitely
+- narrows post-readiness code-call lock footprint without giving up grouped
+  retry semantics
 
 ### Costs
 

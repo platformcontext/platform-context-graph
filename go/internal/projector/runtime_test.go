@@ -2,6 +2,7 @@ package projector
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -396,6 +397,77 @@ func TestRuntimeProjectPublishesCanonicalNodesCommittedAfterCanonicalWrite(t *te
 	}
 }
 
+func TestRuntimeProjectEnqueuesCanonicalRepairWhenPublishFails(t *testing.T) {
+	t.Parallel()
+
+	canonicalWriter := &recordingCanonicalWriter{}
+	publisher := &failingGraphProjectionPhasePublisher{err: errors.New("publish failed")}
+	repairQueue := &recordingGraphProjectionRepairQueue{}
+	runtime := Runtime{
+		CanonicalWriter: canonicalWriter,
+		ContentWriter:   &recordingContentWriter{},
+		PhasePublisher:  publisher,
+		RepairQueue:     repairQueue,
+		IntentWriter:    &recordingIntentWriter{result: IntentResult{Count: 1}},
+	}
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+	}
+	generationValue := scope.ScopeGeneration{
+		GenerationID: "generation-456",
+		ScopeID:      "scope-123",
+		ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+		IngestedAt:   time.Date(2026, time.April, 12, 11, 35, 0, 0, time.UTC),
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+
+	_, err := runtime.Project(context.Background(), scopeValue, generationValue, []facts.Envelope{
+		{
+			FactID:       "fact-0",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "repository",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"repo_id":       "repo-123",
+				"name":          "platform-context-graph",
+				"path":          "org/platform-context-graph",
+				"source_run_id": "run-123",
+			},
+		},
+		{
+			FactID:       "fact-1",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_node",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"graph_id":   "repo-123",
+				"graph_kind": "repository",
+				"name":       "platform-context-graph",
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("Project() error = nil, want non-nil")
+	}
+	if len(repairQueue.calls) != 1 {
+		t.Fatalf("repair queue calls = %d, want 1", len(repairQueue.calls))
+	}
+	if len(repairQueue.calls[0]) != 1 {
+		t.Fatalf("repair rows = %d, want 1", len(repairQueue.calls[0]))
+	}
+	if got, want := repairQueue.calls[0][0].Phase, reducer.GraphProjectionPhaseCanonicalNodesCommitted; got != want {
+		t.Fatalf("repair phase = %q, want %q", got, want)
+	}
+}
+
 func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedefTypeAliasComponentAndFunction(t *testing.T) {
 	t.Parallel()
 
@@ -659,6 +731,37 @@ func (p *recordingGraphProjectionPhasePublisher) PublishGraphProjectionPhases(_ 
 	cloned := make([]reducer.GraphProjectionPhaseState, len(rows))
 	copy(cloned, rows)
 	p.calls = append(p.calls, cloned)
+	return nil
+}
+
+type failingGraphProjectionPhasePublisher struct {
+	err error
+}
+
+func (p *failingGraphProjectionPhasePublisher) PublishGraphProjectionPhases(_ context.Context, _ []reducer.GraphProjectionPhaseState) error {
+	return p.err
+}
+
+type recordingGraphProjectionRepairQueue struct {
+	calls [][]reducer.GraphProjectionPhaseRepair
+}
+
+func (q *recordingGraphProjectionRepairQueue) Enqueue(_ context.Context, repairs []reducer.GraphProjectionPhaseRepair) error {
+	cloned := make([]reducer.GraphProjectionPhaseRepair, len(repairs))
+	copy(cloned, repairs)
+	q.calls = append(q.calls, cloned)
+	return nil
+}
+
+func (q *recordingGraphProjectionRepairQueue) ListDue(context.Context, time.Time, int) ([]reducer.GraphProjectionPhaseRepair, error) {
+	return nil, nil
+}
+
+func (q *recordingGraphProjectionRepairQueue) Delete(context.Context, []reducer.GraphProjectionPhaseRepair) error {
+	return nil
+}
+
+func (q *recordingGraphProjectionRepairQueue) MarkFailed(context.Context, reducer.GraphProjectionPhaseRepair, time.Time, string) error {
 	return nil
 }
 

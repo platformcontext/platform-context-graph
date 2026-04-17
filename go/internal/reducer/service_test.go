@@ -188,6 +188,39 @@ func TestServiceRunStartsCodeCallProjectionRunner(t *testing.T) {
 	}
 }
 
+func TestServiceRunStartsGraphProjectionPhaseRepairer(t *testing.T) {
+	t.Parallel()
+
+	queue := &serviceRepairQueue{}
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource:   &stubReducerWorkSource{},
+		Executor:     &stubReducerExecutor{},
+		WorkSink:     &stubReducerWorkSink{},
+		GraphProjectionPhaseRepairer: &GraphProjectionPhaseRepairer{
+			Queue:       queue,
+			AcceptedGen: acceptedGenerationFixed("", false),
+			StateLookup: graphProjectionPhaseLookupFixed(false, false, nil),
+			Publisher:   &recordingGraphProjectionPhasePublisher{},
+			Config: GraphProjectionPhaseRepairerConfig{
+				PollInterval: 10 * time.Millisecond,
+				BatchLimit:   10,
+				RetryDelay:   time.Minute,
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	if err := service.Run(ctx); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if queue.listCalls == 0 {
+		t.Fatal("expected graph projection repairer to poll the repair queue")
+	}
+}
+
 func TestServiceRunWorksWithoutSharedProjectionRunner(t *testing.T) {
 	t.Parallel()
 
@@ -236,6 +269,27 @@ func (s *stubReducerExecutor) Execute(context.Context, Intent) (Result, error) {
 	defer s.mu.Unlock()
 	s.executeCalls++
 	return s.result, s.executeErr
+}
+
+type serviceRepairQueue struct {
+	listCalls int
+}
+
+func (s *serviceRepairQueue) Enqueue(context.Context, []GraphProjectionPhaseRepair) error {
+	return nil
+}
+
+func (s *serviceRepairQueue) ListDue(context.Context, time.Time, int) ([]GraphProjectionPhaseRepair, error) {
+	s.listCalls++
+	return nil, nil
+}
+
+func (s *serviceRepairQueue) Delete(context.Context, []GraphProjectionPhaseRepair) error {
+	return nil
+}
+
+func (s *serviceRepairQueue) MarkFailed(context.Context, GraphProjectionPhaseRepair, time.Time, string) error {
+	return nil
 }
 
 type stubReducerWorkSink struct {

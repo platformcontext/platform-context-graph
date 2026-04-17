@@ -64,6 +64,10 @@ type Service struct {
 	// concurrently with the main claim/execute/ack loop. Nil disables the lane.
 	CodeCallProjectionRunner *CodeCallProjectionRunner
 
+	// GraphProjectionPhaseRepairer retries exact readiness publications that
+	// failed after the underlying graph write already committed.
+	GraphProjectionPhaseRepairer *GraphProjectionPhaseRepairer
+
 	// Telemetry fields (optional)
 	Tracer         trace.Tracer
 	Instruments    *telemetry.Instruments
@@ -118,6 +122,16 @@ func (s Service) Run(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			if err := s.CodeCallProjectionRunner.Run(ctx); err != nil {
+				recordErr(err)
+			}
+		}()
+	}
+
+	if s.GraphProjectionPhaseRepairer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.GraphProjectionPhaseRepairer.Run(ctx); err != nil {
 				recordErr(err)
 			}
 		}()
