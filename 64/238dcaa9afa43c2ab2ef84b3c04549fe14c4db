@@ -1,0 +1,58 @@
+go/internal/reducer/workload_materialization_handler.go
+  72c82225e70ef41d 8,16-23,29-31,58-64
+docs/docs/reference/parity-closure-matrix.md
+  72c82225e70ef41d 25,67,107
+go/internal/reducer/defaults.go
+  72c82225e70ef41d 45-48,123-125
+go/internal/storage/postgres/ingestion_test.go
+  72c82225e70ef41d 306-308
+go/internal/storage/postgres/proof_domain_go_collector_evidence_test.go
+  72c82225e70ef41d 179-316
+go/internal/reducer/workload_materialization_handler_test.go
+  72c82225e70ef41d 6,11,138-227,295-307,358-380
+docs/docs/reference/python-to-go-parity.md
+  72c82225e70ef41d 91,163,165
+go/internal/storage/postgres/proof_domain_terraform_support_test.go
+  72c82225e70ef41d 5,8,71-138
+go/internal/storage/postgres/proof_domain_harness_test.go
+  72c82225e70ef41d 472-473
+go/cmd/reducer/main.go
+  72c82225e70ef41d 150
+go/internal/storage/postgres/ingestion.go
+  72c82225e70ef41d 24-64,237-238,247-255,279-288,400-497
+go/internal/reducer/workload_deployment_sources.go
+  72c82225e70ef41d 1-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "64238dcaa9afa43c2ab2ef84b3c04549fe14c4db",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "72c82225e70ef41d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9836-7763-76c0-a116-358a6223b5f9",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 625,
+      "total_deletions": 16,
+      "accepted_lines": 625,
+      "overriden_lines": 0
+    }
+  }
+}
