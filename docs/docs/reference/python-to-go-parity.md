@@ -133,9 +133,10 @@ honest signoff:
   Jenkins-plus-Ansible controller path now also carries inventories,
   `group_vars` / `host_vars`, and task entrypoint context through repository
   controller artifacts and deployment/story shaping. Broader controller-driven
-  relationship promotion, richer workflow gating semantics, and compose-backed
-  evidence still need current-truth validation; Terraform variable-file
-  promotion is already proven on the normal Go path
+  relationship promotion and richer workflow gating semantics still need
+  current-truth validation; Terraform variable-file promotion and the
+  shared-infra compose-backed deployment-trace proof are already proven on the
+  normal Go path
 - JSON remains intentionally partial to avoid graph noise unless a specific
   JSON family is promoted on purpose
 
