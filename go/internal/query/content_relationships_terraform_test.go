@@ -74,3 +74,35 @@ func TestBuildContentRelationshipSetTerragruntConfigPromotesHelperPaths(t *testi
 		}
 	}
 }
+
+func TestBuildContentRelationshipSetTerragruntDependencyPromotesConfigDiscovery(t *testing.T) {
+	t.Parallel()
+
+	relationships, err := buildContentRelationshipSet(context.Background(), nil, EntityContent{
+		EntityID:   "tg-dependency-1",
+		RepoID:     "repo-1",
+		EntityType: "TerragruntDependency",
+		EntityName: "payments",
+		Metadata: map[string]any{
+			"config_path": "../payments-service",
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildContentRelationshipSet() error = %v, want nil", err)
+	}
+
+	if len(relationships.outgoing) != 1 {
+		t.Fatalf("len(relationships.outgoing) = %d, want 1", len(relationships.outgoing))
+	}
+
+	got := relationships.outgoing[0]
+	if got["type"] != "DISCOVERS_CONFIG_IN" {
+		t.Fatalf("relationship type = %v, want DISCOVERS_CONFIG_IN", got["type"])
+	}
+	if got["target_name"] != "../payments-service" {
+		t.Fatalf("target_name = %v, want ../payments-service", got["target_name"])
+	}
+	if got["reason"] != "terragrunt_dependency_config_path" {
+		t.Fatalf("reason = %v, want terragrunt_dependency_config_path", got["reason"])
+	}
+}

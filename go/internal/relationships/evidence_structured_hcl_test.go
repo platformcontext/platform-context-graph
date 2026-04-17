@@ -126,8 +126,8 @@ func TestDiscoverStructuredTerraformAndTerragruntEvidence(t *testing.T) {
 				t.Fatalf("EvidenceKind = %q, want %q", evidence[0].EvidenceKind, tt.wantKind)
 			}
 			if tt.wantKind == EvidenceKindTerragruntDependencyConfigPath {
-				if evidence[0].RelationshipType != RelDependsOn {
-					t.Fatalf("RelationshipType = %q, want %q", evidence[0].RelationshipType, RelDependsOn)
+				if evidence[0].RelationshipType != RelDiscoversConfigIn {
+					t.Fatalf("RelationshipType = %q, want %q", evidence[0].RelationshipType, RelDiscoversConfigIn)
 				}
 			} else if evidence[0].RelationshipType != RelUsesModule {
 				t.Fatalf("RelationshipType = %q, want %q", evidence[0].RelationshipType, RelUsesModule)

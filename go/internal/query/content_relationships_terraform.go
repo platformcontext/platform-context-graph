@@ -77,7 +77,7 @@ func buildOutgoingTerraformRelationships(entity EntityContent) ([]map[string]any
 		if configPath, ok := metadataNonEmptyString(entity.Metadata, "config_path"); ok {
 			return []map[string]any{
 				{
-					"type":        "DEPENDS_ON",
+					"type":        "DISCOVERS_CONFIG_IN",
 					"target_name": configPath,
 					"reason":      "terragrunt_dependency_config_path",
 				},

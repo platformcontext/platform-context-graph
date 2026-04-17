@@ -191,7 +191,7 @@ func TestBuildContentRelationshipSetTerragruntDependencyPromotesConfigPath(t *te
 		t.Fatalf("len(relationships.outgoing) = %d, want 1", len(relationships.outgoing))
 	}
 	relationship := relationships.outgoing[0]
-	if got, want := relationship["type"], "DEPENDS_ON"; got != want {
+	if got, want := relationship["type"], "DISCOVERS_CONFIG_IN"; got != want {
 		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
 	}
 	if got, want := relationship["target_name"], "../vpc"; got != want {
