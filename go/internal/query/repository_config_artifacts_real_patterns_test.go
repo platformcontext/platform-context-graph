@@ -87,3 +87,65 @@ data "template_file" "task" {
 		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildRepositoryConfigArtifactsExtractsLegacyInterpolationWrappedLookupAndTemplatefile(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-legacy-modules", []FileContent{
+		{
+			RelativePath: "modules/ec2/main.tf",
+			Content: `locals {
+  template = "${lookup(var.configuration, "template_file", "${path.module}/templates/user_data.tpl")}"
+}
+
+resource "example_instance" "this" {
+  user_data = templatefile(local.template, {
+    userdata = var.user_data
+  })
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 1 {
+		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
+	}
+	if got, want := configPaths[0]["path"], "templates/user_data.tpl"; got != want {
+		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[0]["evidence_kind"], "local_config_asset"; got != want {
+		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildRepositoryConfigArtifactsExtractsDirectLookupWrappedByFile(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-legacy-modules", []FileContent{
+		{
+			RelativePath: "modules/batch/main.tf",
+			Content: `data "template_file" "job" {
+  template = "${file(lookup(var.configuration, "template", "${path.module}/batch/container.tpl"))}"
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 1 {
+		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
+	}
+	if got, want := configPaths[0]["path"], "batch/container.tpl"; got != want {
+		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[0]["evidence_kind"], "local_config_asset"; got != want {
+		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+}

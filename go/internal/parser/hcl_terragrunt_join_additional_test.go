@@ -163,3 +163,61 @@ data "template_file" "task" {
 		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
 	}
 }
+
+func TestParseTerragruntConfigResolvesLegacyInterpolationWrappedLookupAndTemplatefile(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "terragrunt.hcl")
+	source := []byte(`locals {
+  template = "${lookup(var.configuration, "template_file", "${path.module}/templates/user_data.tpl")}"
+}
+
+resource "example_instance" "this" {
+  user_data = templatefile(local.template, {
+    userdata = var.user_data
+  })
+}
+`)
+
+	file, diags := hclparse.NewParser().ParseHCL(source, filePath)
+	if diags.HasErrors() {
+		t.Fatalf("ParseHCL() diagnostics = %s", diags.Error())
+	}
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		t.Fatalf("file.Body = %T, want *hclsyntax.Body", file.Body)
+	}
+
+	config := parseTerragruntConfig(body, source, filePath)
+
+	if got, want := config["local_config_asset_paths"], "templates/user_data.tpl"; got != want {
+		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseTerragruntConfigResolvesDirectLookupWrappedByFile(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "terragrunt.hcl")
+	source := []byte(`data "template_file" "job" {
+  template = "${file(lookup(var.configuration, "template", "${path.module}/batch/container.tpl"))}"
+}
+`)
+
+	file, diags := hclparse.NewParser().ParseHCL(source, filePath)
+	if diags.HasErrors() {
+		t.Fatalf("ParseHCL() diagnostics = %s", diags.Error())
+	}
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		t.Fatalf("file.Body = %T, want *hclsyntax.Body", file.Body)
+	}
+
+	config := parseTerragruntConfig(body, source, filePath)
+
+	if got, want := config["local_config_asset_paths"], "batch/container.tpl"; got != want {
+		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
+	}
+}
