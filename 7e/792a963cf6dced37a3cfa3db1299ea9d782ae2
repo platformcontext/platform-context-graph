@@ -1,0 +1,46 @@
+go/internal/query/repository_story_test.go
+  26d0a7775258d320 3-6,349-494
+go/internal/query/repository_context_test.go
+  26d0a7775258d320 508-652
+go/internal/storage/neo4j/retryable_error_test.go
+  26d0a7775258d320 141-175
+go/internal/storage/neo4j/edge_writer_cross_repo_resolution_integration_test.go
+  26d0a7775258d320 1-144
+docs/docs/reference/parity-closure-matrix.md
+  26d0a7775258d320 96
+go/internal/query/repository_relationship_story_test.go
+  26d0a7775258d320 62-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "7e792a963cf6dced37a3cfa3db1299ea9d782ae2",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1702,
+      "total_deletions": 2851,
+      "accepted_lines": 499,
+      "overriden_lines": 0
+    }
+  }
+}
