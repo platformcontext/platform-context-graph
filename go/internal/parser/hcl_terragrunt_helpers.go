@@ -12,7 +12,7 @@ var (
 	terragruntFindInParentFoldersPattern = regexp.MustCompile(`(?i)find_in_parent_folders\("([^"]+)"\)`)
 	terragruntIncludePathPattern         = regexp.MustCompile(`(?i)\bpath\s*=\s*find_in_parent_folders\("([^"]+)"\)`)
 	localFileFunctionPattern             = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(\s*"([^"]+)"`)
-	localFileJoinedHelperPattern         = regexp.MustCompile(`(?is)\b(?:file|templatefile)\(\s*join\(\s*"/"\s*,\s*\[\s*(?:path_relative_to_include\(\s*(?:"[^"]+")?\s*\)|get_parent_terragrunt_dir\(\s*\)|get_terragrunt_dir\(\s*\))\s*,\s*"([^"]+)"\s*\]\s*\)`)
+	localFileJoinedHelperPattern         = regexp.MustCompile(`(?is)\b(?:file|templatefile)\(\s*join\(\s*"/"\s*,\s*\[\s*(?:path\.module|get_repo_root\(\s*\)|path_relative_to_include\(\s*(?:"[^"]+")?\s*\)|get_parent_terragrunt_dir\(\s*\)|get_terragrunt_dir\(\s*\))\s*,\s*"([^"]+)"\s*\]\s*\)`)
 )
 
 type terragruntHelperPaths struct {

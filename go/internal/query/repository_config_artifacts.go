@@ -163,7 +163,7 @@ func extractLocalConfigAssignments(relativePath, content string) map[string]stri
 		if currentName == "" {
 			if assignment := localStringAssignmentPattern.FindStringSubmatch(line); len(assignment) >= 3 {
 				name := strings.TrimSpace(assignment[1])
-				value := normalizeConfigAssetLiteral(strings.TrimSpace(assignment[2]), assignments)
+				value := strings.TrimSpace(assignment[2])
 				if name != "" && value != "" {
 					assignments[name] = value
 				}
@@ -389,7 +389,7 @@ func extractConfigAssetPathFromExpression(expression string, localAssignments ma
 		if localName == "" {
 			return ""
 		}
-		return strings.TrimSpace(localAssignments[localName])
+		return normalizeLocalConfigAssetPathValue(localAssignments[localName], localAssignments)
 	}
 	if match := joinPathModulePattern.FindStringSubmatch(trimmed); len(match) >= 2 {
 		return normalizeConfigAssetLiteral(match[1], localAssignments)
