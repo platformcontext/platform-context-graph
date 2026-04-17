@@ -52,6 +52,24 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	if service.WorkSink == nil {
 		t.Fatal("buildReducerService() work sink = nil, want non-nil")
 	}
+	if service.SharedProjectionRunner == nil {
+		t.Fatal("buildReducerService() shared projection runner = nil, want non-nil")
+	}
+	if service.CodeCallProjectionRunner == nil {
+		t.Fatal("buildReducerService() code call projection runner = nil, want non-nil")
+	}
+	if got := service.CodeCallProjectionRunner.Config.PollInterval; got <= 0 {
+		t.Fatalf("buildReducerService() code call poll interval = %v, want positive", got)
+	}
+	if got := service.CodeCallProjectionRunner.Config.LeaseOwner; got != defaultCodeCallProjectionLeaseOwner {
+		t.Fatalf("buildReducerService() code call lease owner = %q, want %q", got, defaultCodeCallProjectionLeaseOwner)
+	}
+	if got := service.CodeCallProjectionRunner.Config.LeaseTTL; got <= 0 {
+		t.Fatalf("buildReducerService() code call lease TTL = %v, want positive", got)
+	}
+	if got := service.CodeCallProjectionRunner.Config.BatchLimit; got <= 0 {
+		t.Fatalf("buildReducerService() code call batch limit = %d, want positive", got)
+	}
 }
 
 func TestBuildReducerServiceWiresPostgresWorkloadIdentityWriter(t *testing.T) {
@@ -220,7 +238,7 @@ func (r *fakeGenerationRows) Scan(dest ...any) error {
 	return nil
 }
 
-func (r *fakeGenerationRows) Err() error  { return nil }
+func (r *fakeGenerationRows) Err() error   { return nil }
 func (r *fakeGenerationRows) Close() error { return nil }
 
 type fakeReducerResult struct{}

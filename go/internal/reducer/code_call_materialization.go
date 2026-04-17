@@ -4,28 +4,39 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 )
 
 const (
-	codeCallEvidenceSource         = "parser/code-calls"
-	pythonMetaclassEvidenceSource = "parser/python-metaclass"
+	codeCallEvidenceSource            = "parser/code-calls"
+	pythonMetaclassEvidenceSource     = "parser/python-metaclass"
+	codeCallRepoRefreshEvidenceSource = "reducer/code-call-refresh"
 )
 
 // CanonicalNodeChecker checks whether canonical code entity nodes (Function,
-// Class, File) exist in the graph. When no targets exist, code-call
-// materialization can short-circuit to avoid expensive label-free MATCH scans.
+// Class, File) exist in the graph. The code-call handler no longer uses this
+// preflight check, but the type remains for compatibility with older wiring.
 type CanonicalNodeChecker interface {
 	HasCanonicalCodeTargets(ctx context.Context) (bool, error)
 }
 
+// CodeCallIntentWriter persists durable shared-intent rows for code-call
+// materialization.
+type CodeCallIntentWriter interface {
+	UpsertIntents(ctx context.Context, rows []SharedProjectionIntentRow) error
+}
+
 // CodeCallMaterializationHandler reduces one parser relationship follow-up into
-// canonical code-edge writes.
+// durable shared-intent emission for code-call and Python metaclass rows.
 type CodeCallMaterializationHandler struct {
-	FactLoader           FactLoader
-	EdgeWriter           SharedProjectionEdgeWriter
-	CanonicalNodeChecker CanonicalNodeChecker // optional; nil skips the pre-flight check
+	FactLoader   FactLoader
+	IntentWriter CodeCallIntentWriter
+
+	// EdgeWriter is retained for compatibility with older wiring and tests.
+	// The handler no longer writes canonical edges directly.
+	EdgeWriter SharedProjectionEdgeWriter
 }
 
 // Handle executes the code-call materialization path.
@@ -42,24 +53,8 @@ func (h CodeCallMaterializationHandler) Handle(
 	if h.FactLoader == nil {
 		return Result{}, fmt.Errorf("code call materialization fact loader is required")
 	}
-	if h.EdgeWriter == nil {
-		return Result{}, fmt.Errorf("code call materialization edge writer is required")
-	}
-
-	// Pre-flight: skip expensive fact loading and UNWIND writes when no
-	// canonical code entity nodes (Function, Class, File) exist in the graph.
-	// Without targets the label-free MATCH scans every node for zero results.
-	if h.CanonicalNodeChecker != nil {
-		hasTargets, checkErr := h.CanonicalNodeChecker.HasCanonicalCodeTargets(ctx)
-		if checkErr == nil && !hasTargets {
-			return Result{
-				IntentID:        intent.IntentID,
-				Domain:          DomainCodeCallMaterialization,
-				Status:          ResultStatusSucceeded,
-				EvidenceSummary: "skipped: no canonical code entity nodes exist yet",
-			}, nil
-		}
-		// On error, fall through conservatively to the normal path.
+	if h.IntentWriter == nil {
+		return Result{}, fmt.Errorf("code call materialization intent writer is required")
 	}
 
 	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
@@ -67,47 +62,43 @@ func (h CodeCallMaterializationHandler) Handle(
 		return Result{}, fmt.Errorf("load facts for code call materialization: %w", err)
 	}
 
-	codeCallRepoIDs, codeCallRows, metaclassRepoIDs, metaclassRows := ExtractAllCodeRelationshipRows(envelopes)
-	repositoryIDs := mergeCodeRelationshipRepositoryIDs(codeCallRepoIDs, metaclassRepoIDs)
-	if len(repositoryIDs) == 0 {
+	contextByRepoID := buildCodeCallProjectionContexts(envelopes, intent.GenerationID)
+	if len(contextByRepoID) == 0 {
 		return Result{
 			IntentID:        intent.IntentID,
 			Domain:          DomainCodeCallMaterialization,
 			Status:          ResultStatusSucceeded,
-			EvidenceSummary: "no repositories available for code relationship materialization",
+			EvidenceSummary: "no repositories available for code call materialization",
 		}, nil
 	}
 
-	if err := h.EdgeWriter.RetractEdges(
-		ctx,
-		DomainCodeCalls,
-		buildCodeCallRetractRows(repositoryIDs),
-		codeCallEvidenceSource,
-	); err != nil {
-		return Result{}, fmt.Errorf("retract canonical code calls: %w", err)
+	_, codeCallRows, _, metaclassRows := ExtractAllCodeRelationshipRows(envelopes)
+	createdAt := intent.EnqueuedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
 	}
 
-	writeRows := buildCodeRelationshipIntentRows(codeCallRows)
-	if len(writeRows) > 0 {
-		if err := h.EdgeWriter.WriteEdges(
-			ctx,
-			DomainCodeCalls,
-			writeRows,
-			codeCallEvidenceSource,
-		); err != nil {
-			return Result{}, fmt.Errorf("write canonical code calls: %w", err)
-		}
+	intentRows := buildCodeCallRefreshIntents(contextByRepoID, createdAt)
+	intentRows = append(
+		intentRows,
+		buildCodeCallSharedIntentRows(codeCallRows, contextByRepoID, createdAt, codeCallEvidenceSource)...,
+	)
+	intentRows = append(
+		intentRows,
+		buildCodeCallSharedIntentRows(metaclassRows, contextByRepoID, createdAt, pythonMetaclassEvidenceSource)...,
+	)
+
+	if len(intentRows) == 0 {
+		return Result{
+			IntentID:        intent.IntentID,
+			Domain:          DomainCodeCallMaterialization,
+			Status:          ResultStatusSucceeded,
+			EvidenceSummary: "no code-call or metaclass intents available for materialization",
+		}, nil
 	}
-	metaclassWriteRows := buildCodeRelationshipIntentRows(metaclassRows)
-	if len(metaclassWriteRows) > 0 {
-		if err := h.EdgeWriter.WriteEdges(
-			ctx,
-			DomainCodeCalls,
-			metaclassWriteRows,
-			pythonMetaclassEvidenceSource,
-		); err != nil {
-			return Result{}, fmt.Errorf("write canonical python metaclass edges: %w", err)
-		}
+
+	if err := h.IntentWriter.UpsertIntents(ctx, intentRows); err != nil {
+		return Result{}, fmt.Errorf("write code call intents: %w", err)
 	}
 
 	return Result{
@@ -115,11 +106,11 @@ func (h CodeCallMaterializationHandler) Handle(
 		Domain:   DomainCodeCallMaterialization,
 		Status:   ResultStatusSucceeded,
 		EvidenceSummary: fmt.Sprintf(
-			"materialized %d canonical code relationship edges across %d repositories",
-			len(writeRows)+len(metaclassWriteRows),
-			len(repositoryIDs),
+			"emitted %d durable code call intents across %d repositories",
+			len(intentRows),
+			len(contextByRepoID),
 		),
-		CanonicalWrites: len(writeRows) + len(metaclassWriteRows),
+		CanonicalWrites: len(intentRows),
 	}, nil
 }
 

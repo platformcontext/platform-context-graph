@@ -150,6 +150,44 @@ func TestServiceRunStartsSharedProjectionRunner(t *testing.T) {
 	}
 }
 
+func TestServiceRunStartsCodeCallProjectionRunner(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeCodeCallIntentStore{leaseGranted: false}
+
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource:   &stubReducerWorkSource{},
+		Executor:     &stubReducerExecutor{},
+		WorkSink:     &stubReducerWorkSink{},
+		CodeCallProjectionRunner: &CodeCallProjectionRunner{
+			IntentReader: store,
+			LeaseManager: store,
+			EdgeWriter:   &recordingCodeCallProjectionEdgeWriter{},
+			AcceptedGen:  func(_, _ string) (string, bool) { return "", false },
+			Config: CodeCallProjectionRunnerConfig{
+				PollInterval: 10 * time.Millisecond,
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := service.Run(ctx)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	store.mu.Lock()
+	claims := store.claims
+	store.mu.Unlock()
+
+	if claims == 0 {
+		t.Fatal("expected code call projection runner to attempt at least one lease claim")
+	}
+}
+
 func TestServiceRunWorksWithoutSharedProjectionRunner(t *testing.T) {
 	t.Parallel()
 

@@ -1,6 +1,6 @@
-# ADR: Neo4j Concurrent Write Deadlock — Root Cause and Architecture Assessment
+# ADR: Neo4j Concurrent Write Deadlock — Accuracy and Performance Assessment
 
-**Status:** Accepted
+**Status:** Proposed
 **Date:** 2026-04-17
 
 ## Context
@@ -9,10 +9,26 @@ After implementing the cross-phase EntityNotFound fixes (Options C + F + G
 from the [previous ADR](2026-04-16-cross-phase-entity-not-found-race.md)),
 a 6-hour E2E validation on the remote instance (ubuntu@10.208.198.57, 896
 repos) revealed residual failures that exposed gaps in both the
-implementation and the error-handling architecture. This ADR traces the
-complete execution path, documents every root cause discovered, and
-assesses whether the current write architecture is fundamentally sound or
-needs redesign.
+implementation and the error-handling architecture.
+
+This ADR is intentionally framed around two system goals:
+
+1. **Accuracy:** the graph should converge to the correct state without
+   exposing inconsistent intermediate states or dropping intents.
+2. **Performance:** the system should sustain concurrent indexing without
+   pathological retry churn or long tail latency in hot write paths.
+
+The goal is not to prove every detail of Neo4j's internal lock manager. The
+goal is to make a decision that is accurate enough to guide the next
+performance-safe architecture step.
+
+**Related:** The [Semantic Entity Queue Throughput](2026-04-17-semantic-entity-queue-throughput.md)
+ADR addresses per-entity intent granularity that inflates the reducer queue
+from ~889 per-repo intents to 51K+ per-entity intents. That queue pressure is
+an important adjacent performance problem: it increases overall reducer load,
+prolongs backlog drain, and can worsen retry recovery. It should be treated as
+related supporting context, not as proof of the specific deadlock mechanism
+analyzed here.
 
 ## E2E Results: Before and After
 
@@ -31,12 +47,17 @@ needs redesign.
 | Metric | Value |
 |--------|-------|
 | Total reducer executions | ~35,678 |
-| Succeeded | 3,600+ (running) |
+| Succeeded | 3,600+ (snapshot taken while run was still active) |
 | Terminal failures | **0** |
 | EntityNotFound | **0** (eliminated) |
 | DeadlockDetected (terminal) | **0** (converted to retryable) |
 | TransactionExecutionLimit | 2 (correctly retrying) |
 | Retrying intents | 2 (0.006%) |
+
+**Interpretation:** This snapshot is strong evidence that the correctness fix
+for cross-phase visibility worked. It is not, by itself, enough evidence to
+claim the remaining concurrent-write behavior is fully understood or fully
+optimized.
 
 ## Root Cause Trace (with code paths)
 
@@ -155,7 +176,7 @@ for retry status is the `fact_work_items` table, not the log.
 Either log after `Fail()` returns, or emit a separate log line from the
 queue when it decides to retry. Low priority — does not affect correctness.
 
-## The Remaining Deadlocks: Architectural Analysis
+## The Remaining Deadlocks: Accuracy and Performance Analysis
 
 ### What Produces Them
 
@@ -181,18 +202,21 @@ SET rel.confidence = 0.95, ...
 - Two workers can process `code_call_materialization` for different repos
   simultaneously
 
-**The deadlock mechanism:**
+**Leading mechanism hypothesis:**
 
-Neo4j's Forseti lock manager uses pessimistic locking. The `uid` property
-index on `Function|Class|File` is a global B-tree shared across all repos.
+Neo4j's error output shows the lock cycle occurs on shared `INDEX_ENTRY`
+resources during concurrent `MATCH` + `MERGE` work. The `uid` property index
+on `Function|Class|File` is global, so different reducer workers can contend
+through the same index and relationship write path even when they are not
+processing the exact same node payload.
 
 ```
-Worker 1 (repo: bw-mobile-app):
+Worker 1:
   MATCH (source {uid: "e_abc"})  → SHARED lock on INDEX_ENTRY(X)
   MATCH (target {uid: "e_def"})  → needs SHARED lock on INDEX_ENTRY(Y)
   MERGE CALLS edge               → needs EXCLUSIVE on relationship group
 
-Worker 2 (repo: bg-data-pipeline):
+Worker 2:
   MATCH (source {uid: "e_ghi"})  → EXCLUSIVE lock on INDEX_ENTRY(Y) [from MERGE]
   MATCH (target {uid: "e_jkl"})  → needs SHARED lock on INDEX_ENTRY(X)
   → DEADLOCK CYCLE
@@ -215,42 +239,60 @@ INDEX_ENTRY(-5908163244833332056)-[EXCLUSIVE_OWNER]->(tx:3615)
 ```
 
 This is two transactions contending on two different B-tree index entries.
-Not the same node. Not the same repo. Pure index-level lock contention
-from concurrent writes through a shared global index.
+That strongly suggests concurrent edge materialization is the hot path, but
+it does **not** prove every detail of the lock graph, nor does it prove repo
+identity is irrelevant in all cases.
 
-### Is the Architecture Fundamentally Broken?
+Two points remain important:
 
-**No.** Here's why:
+1. Shared global indexes make cross-worker contention plausible.
+2. Our own transaction shape may be amplifying lock hold time. In particular,
+   `EdgeWriter.WriteEdges()` now groups batches into a single transaction,
+   which improves atomicity but can also widen the contention window for
+   large `code_call_materialization` writes.
+
+### How To Think About This For Accuracy and Performance
+
+**Accuracy:** The system is in much better shape than before.
 
 1. **The projector race is eliminated.** Atomic writes (Option C) ensure
    the graph transitions atomically. No more intermediate state visible
-   to readers. This was the structural flaw, and it's fixed.
+   to readers. This was the correctness bug, and the E2E evidence supports
+   that it is fixed.
 
-2. **The remaining deadlocks are an inherent property of concurrent writes
-   to any database with pessimistic locking.** Postgres has the same issue
-   (`deadlock_timeout`). The standard solution is retry, which we now have.
+2. **Retry classification is now correct.** The queue can distinguish
+   retryable Neo4j failures from terminal ones, which protects eventual
+   convergence instead of dropping intents on transient database contention.
 
-3. **The failure rate is 0.006% (2/35,678).** With queue retry, these
-   resolve on the next attempt when contention has subsided.
+**Performance:** The system is not yet where we should declare victory.
 
-4. **The complexity is bounded.** We added:
-   - `WrapRetryableNeo4jError()` — 56 lines, one function, well-tested
-   - `GroupExecutor` support in projector — mirrors existing reducer pattern
-   - Generation-scoped directory retracts — one predicate change
-   
-   These are not patches on patches. They're completing a design that was
-   originally underspecified about Neo4j concurrency semantics.
+3. **The remaining deadlocks are small in count but concentrated in one hot
+   path.** Both observed cases occurred in `code_call_materialization`. That
+   is a better signal for targeted contention reduction than for broad
+   acceptance of the current concurrency model.
+
+4. **Retry is a safety net, not a performance strategy.** A retry rate of
+   0.006% is operationally small in this snapshot, but `TransactionExecutionLimit`
+   means the driver spent up to its full retry budget under contention. That
+   is exactly the kind of long-tail behavior we should treat as a throughput
+   and latency smell.
+
+5. **The right question is not "is the architecture broken?"** The right
+   question is whether the current concurrency shape is the best trade-off
+   for accurate indexing and predictable throughput. Today the answer is:
+   the correctness direction looks good, but the `code_call_materialization`
+   write path still deserves targeted contention reduction.
 
 ### When Would This Architecture Need Redesign?
 
-The concurrent-writers model breaks down when:
+The current approach should be reconsidered when:
 
 | Scaling scenario | Expected impact |
 |------------------|-----------------|
-| 896 repos, 4 workers | 2 deadlocks (0.006%) — current |
-| 5,000 repos, 4 workers | ~10 deadlocks — still acceptable with retry |
-| 10,000+ repos, 8+ workers | Deadlock rate grows quadratically with concurrent writers; retry delay accumulates |
-| Multiple reducer replicas | Each replica adds independent concurrent writers; deadlocks multiply |
+| 896 repos, 4 workers | Two observed deadlocks in `code_call_materialization`; acceptable for correctness, worth improving for tail latency |
+| Higher repo counts with same hot path | Expect more retry pressure unless contention in edge writes is reduced |
+| More reducer workers or multiple replicas | Increases overlapping edge writes and raises the odds of lock contention |
+| Sustained retrying intents | Indicates retries are no longer just smoothing bursts and are starting to shape throughput |
 
 **Threshold for redesign:** When deadlocked intents take more than one
 retry to resolve (persistent contention), or when queue retry delay
@@ -258,56 +300,91 @@ materially impacts end-to-end indexing latency.
 
 ## Options for Further Reduction (If Needed)
 
-### Option H: Neo4j Write Serializer
+### Option H: Move `code_call_materialization` Onto A Controlled Shared-Intent Lane
 
-Route all Neo4j edge writes through a single goroutine channel. Eliminates
-deadlocks by construction — only one transaction at a time.
+Treat `code_call_materialization` as a staged shared-write producer instead of
+letting each reducer worker write CALLS edges directly to Neo4j.
+
+Today the handler builds `SharedProjectionIntentRow`-shaped rows with
+`ProjectionDomain=code_calls`, but it still calls `EdgeWriter.WriteEdges()`
+directly from the reducer worker. A better shape is:
+
+1. `code_call_materialization` extracts canonical CALLS rows.
+2. Those rows are persisted as durable shared intents for `code_calls`.
+3. A dedicated `code_calls` lane owns the actual Neo4j writes for that domain.
+4. That lane processes one repo/run atomically and starts with deliberately
+   conservative concurrency and batch size until telemetry shows higher
+   parallelism is safe.
+
+The extra constraint is important: the generic shared projection runner is not
+safe for `code_calls` as-is. Its retract path is repo-wide, but its work
+selection is partitioned by per-edge partition keys. That means separate
+partitions for the same repo can retract each other's writes before all edges
+are restored. `code_calls` therefore needs dedicated repo-atomic ownership, not
+just generic shared-runner reuse.
 
 ```
 Reducer Worker 1 ─┐
-Reducer Worker 2 ─┤→ write channel → single writer goroutine → Neo4j
+Reducer Worker 2 ─┤→ persist `code_calls` shared intents → dedicated repo-atomic `code_calls` lane → Neo4j
 Reducer Worker 3 ─┤
 Reducer Worker 4 ─┘
+
+Other domains continue executing in parallel.
 ```
 
 **Pros:**
-- Zero deadlocks by construction
-- Workers still claim and resolve intents concurrently (Postgres work is
-  parallel); only the Neo4j write is serialized
-- Clean separation: reducer logic is concurrent, Neo4j I/O is serial
+- Uses the repo's existing shared-intent and partition-lease architecture
+  instead of inventing a one-off execution path
+- Targets the hot path we actually observed without penalizing unrelated domains
+- Moves CALLS writes behind durable, observable work ownership
+- Creates a natural place to add `code_calls`-specific tuning instead of
+  relying on generic reducer worker concurrency
+- Improves accuracy and recoverability because CALLS writes become explicit
+  queued work instead of in-flight reducer side effects
 
 **Cons:**
-- Neo4j write becomes a throughput bottleneck
-- Requires careful channel design (buffered, back-pressure, shutdown)
-- Changes the error ownership model (who retries? the writer or the
-  worker?)
+- Requires changing `code_call_materialization` from direct-write to
+  emit-intent behavior
+- The current shared projection runner uses global worker / partition / batch
+  settings, so true `code_calls` isolation requires adding per-domain controls
+  or a dedicated `code_calls` lane
+- Needs an explicit initial policy for `code_calls` concurrency
+- Adds one more durable stage before CALLS edges appear in Neo4j
 
-**Assessment:** Right approach when scaling past 8+ concurrent workers or
-multiple reducer replicas. Overkill for current 4-worker single-instance
-deployment.
+**Assessment:** Best next step if the goal is accuracy plus predictable
+throughput. It is more aligned with the architecture the repo already has than
+asking reducer workers to keep doing direct hot-path Neo4j writes.
 
-### Option I: Postgres-Staged Edge Writes
+**Recommended starting policy for `code_calls`:**
 
-Instead of writing directly to Neo4j, reducer handlers write "edge
-intents" to a Postgres staging table. A separate batch writer process
-reads from staging and writes to Neo4j in ordered, non-overlapping batches.
+- add one effective writer lane for `code_calls` specifically, either through
+  per-domain shared-runner overrides or dedicated `code_calls` runner ownership
+- keep other shared domains and reducer work parallel
+- increase `code_calls` parallelism only after telemetry shows low retry churn
+  and acceptable tail latency
+
+The key idea is not "serialize everything forever." The key idea is "put the
+hot path behind a domain-owned execution lane so concurrency is deliberate
+instead of accidental."
+
+### Option I: Global Neo4j Write Serializer
+
+Route all Neo4j edge writes through a single serializer regardless of domain.
 
 **Pros:**
-- Fully decouples reducer concurrency from Neo4j write concurrency
-- Batch writer can optimize write order to minimize lock contention
-- Postgres handles the concurrent-write coordination (it's designed for it)
-- Natural backpressure: staging table depth is observable
+- Strongest deadlock prevention story
+- Simplest mental model for lock contention
 
 **Cons:**
-- Adds write-amplification (Postgres staging → Neo4j)
-- Eventual consistency between Postgres fact state and Neo4j graph state
-- New component to operate and monitor
-- Most complex option
+- Penalizes unrelated domains that may not be contention-prone
+- Creates a larger throughput bottleneck than necessary
+- Throws away the domain-aware partitioning direction already present in the
+  shared projection design
 
 **Assessment:** Appropriate for a multi-replica, high-throughput deployment.
-Not justified at current scale.
+Too broad as the first response.
 
-### Option J: Reduce Concurrent Edge Writers (Simplest)
+### Option J: Reduce Global Reducer Concurrency (Blunt Instrument)
 
 Set `PCG_REDUCER_WORKERS=2` or add domain-level parallelism control so
 only one worker processes `code_call_materialization` at a time while other
@@ -318,28 +395,47 @@ domains remain parallel.
 - Immediately reduces deadlock probability
 
 **Cons:**
-- Reduces throughput for all domains, not just code_call
-- Doesn't eliminate deadlocks — just reduces probability
+- If applied globally, reduces throughput for all domains, not just code_call
+- Does not tell us whether the hot path is domain-specific or truly global
+- Easy to keep forever for the wrong reason
 
-**Assessment:** Quick mitigation if deadlock rate increases. Not needed at
-current 0.006%.
+**Assessment:** Reasonable as an emergency mitigation. Inferior to
+domain-specific serialization if the goal is better accuracy/performance
+trade-offs.
 
 ## Decision
 
-**The current architecture is sound.** The fixes implemented (Options C +
-F + G + TransactionExecutionLimit detection) address all structural issues.
-The remaining deadlocks are an expected property of concurrent writes to a
-pessimistic-locking database, handled correctly by bounded retry.
+**Accepted as a correctness improvement, not yet accepted as a final
+performance shape.** The fixes implemented (Options C + F + G +
+TransactionExecutionLimit detection) address the known correctness issues and
+ensure retryable Neo4j failures are no longer dropped as terminal failures.
+The `code_calls` lane refactor described here has now been implemented in its
+first conservative form: reducer workers emit durable `code_calls` intents, the
+generic shared runner no longer owns `code_calls`, and a dedicated repo-atomic
+runner performs the actual Neo4j writes.
 
-**No redesign is needed at current scale (896 repos, 4 workers).**
+**The preferred next step is to move `code_call_materialization` onto a
+controlled shared-intent lane for `code_calls`, then run that lane with
+conservative concurrency until telemetry proves a higher-performance setting is
+safe.**
 
-**Scaling triggers for future work:**
-- If deadlock rate exceeds 1% per E2E run → implement Option J (reduce
-  workers) as immediate mitigation
-- If scaling past 8 concurrent workers or multiple reducer replicas →
-  implement Option H (write serializer)
-- If latency SLA requires sub-second edge materialization → evaluate
-  Option I (Postgres-staged writes)
+Specifically:
+
+1. Keep the atomic projector write change.
+2. Keep retryable Neo4j error classification.
+3. Stop treating direct CALLS edge writes from arbitrary reducer workers as the
+   desired steady-state architecture.
+4. Reframe `code_call_materialization` as a producer of durable `code_calls`
+   intents, with explicit repo-atomic `code_calls` execution control owning the
+   actual Neo4j write.
+5. Prefer Option H over global worker reduction if further E2E evidence shows
+   recurring contention.
+
+**What we are not claiming:**
+
+- We are not claiming the exact Neo4j lock graph is fully proven.
+- We are not claiming shared global index contention is the only mechanism.
+- We are not claiming current retry behavior alone is the desired end-state.
 
 ## Action Items
 
@@ -348,8 +444,14 @@ pessimistic-locking database, handled correctly by bounded retry.
 | Remove debug logging from `retryable_error.go` | Done | P0 |
 | Fix misleading `failure_class: "reducer_failure"` log (Root Cause 4) | TODO | P2 |
 | Monitor retrying intents to confirm they succeed on next attempt | TODO | P0 |
+| Implement per-repo semantic entity intent consolidation ([throughput ADR](2026-04-17-semantic-entity-queue-throughput.md)) | TODO | P0 |
+| Measure latency and retry behavior specifically for `code_call_materialization` / `code_calls` | TODO | P1 |
+| Prototype `code_call_materialization` as a durable `code_calls` shared-intent producer | Done | P1 |
+| Add per-domain execution control for `code_calls` instead of relying only on global shared-runner settings | Done | P1 |
+| Add a conservative concurrency policy for the `code_calls` shared lane before increasing throughput | Done | P1 |
 | Add `pcg_dp_neo4j_deadlock_retries_total` counter for dashboards | TODO | P1 |
 | Document `TransactionExecutionLimit` behavior in operator runbook | TODO | P1 |
+| Reconcile reducer/shared-projection default-concurrency docs with current code and compose defaults | TODO | P1 |
 
 ## Key Source Files
 
@@ -360,10 +462,14 @@ pessimistic-locking database, handled correctly by bounded retry.
 | `go/internal/storage/neo4j/edge_writer.go` | EdgeWriter applies WrapRetryableNeo4jError at error returns |
 | `go/internal/storage/neo4j/canonical_node_writer.go` | Atomic Phase A-G via GroupExecutor |
 | `go/internal/storage/neo4j/canonical.go:155-178` | Code call upsert Cypher (deadlock-prone MATCH+MERGE) |
+| `go/internal/reducer/code_call_materialization.go` | Reducer handler now emits durable `code_calls` intents instead of direct Neo4j writes |
+| `go/internal/reducer/code_call_projection_runner.go` | Dedicated repo-atomic `code_calls` execution lane |
+| `go/internal/reducer/shared_projection_runner.go` | Generic shared-intent runner; `code_calls` removed from this path because repo-wide retract + per-edge partitioning is unsafe |
 | `go/internal/reducer/service.go:284-294` | Worker loop: execute → log → fail (log before retry decision) |
 | `go/internal/reducer/service.go:339-341` | Hardcoded `failure_class: "reducer_failure"` in logger |
 | `go/internal/storage/postgres/reducer_queue.go:413-454` | Queue retry decision (`retryable()` → `failIntent()`) |
 | `go/internal/reducer/intent.go:81-97` | `RetryableError` interface and `IsRetryable()` |
 | `go/cmd/reducer/config.go:40-52` | Worker count: `PCG_REDUCER_WORKERS`, default min(NumCPU, 4) |
-| `docker-compose.yaml:349` | Production default: `PCG_REDUCER_WORKERS=4` |
+| `go/internal/reducer/shared_projection_runner.go:348-360` | Shared projection defaults differ from docs and should be reconciled |
+| `docker-compose.yaml:349-352` | Compose defaults: reducer/shared projection concurrency and batch settings |
 | `neo4j-go-driver/.../errorutil/retry.go` | `TransactionExecutionLimit` — no `Unwrap()` method |

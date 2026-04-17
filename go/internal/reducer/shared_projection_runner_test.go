@@ -379,7 +379,6 @@ func TestSharedProjectionDomainsIncludesAllExpected(t *testing.T) {
 		DomainPlatformInfra:      false,
 		DomainRepoDependency:     false,
 		DomainWorkloadDependency: false,
-		DomainCodeCalls:          false,
 		DomainInheritanceEdges:   false,
 		DomainSQLRelationships:   false,
 	}

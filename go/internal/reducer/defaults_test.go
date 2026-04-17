@@ -5,12 +5,69 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 	"github.com/platformcontext/platform-context-graph/go/internal/truth"
 )
 
 func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
 	t.Parallel()
+
+	now := time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC)
+	codeCallLoader := &stubFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactKind: "repository",
+				Payload: map[string]any{
+					"repo_id":       "repo-code",
+					"source_run_id": "run-code",
+				},
+			},
+			{
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-code",
+					"relative_path": "caller.py",
+					"parsed_file_data": map[string]any{
+						"path": "caller.py",
+						"functions": []any{
+							map[string]any{
+								"name":        "handle",
+								"line_number": 3,
+								"uid":         "entity:handle",
+							},
+						},
+						"function_calls_scip": []any{
+							map[string]any{
+								"caller_file": "caller.py",
+								"caller_line": 3,
+								"callee_file": "callee.py",
+								"callee_line": 1,
+							},
+						},
+					},
+				},
+			},
+			{
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-code",
+					"relative_path": "callee.py",
+					"parsed_file_data": map[string]any{
+						"path": "callee.py",
+						"functions": []any{
+							map[string]any{
+								"name":        "callee",
+								"line_number": 1,
+								"uid":         "entity:callee",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	codeCallWriter := &recordingCodeCallIntentWriter{}
 
 	runtime, err := NewDefaultRuntime(DefaultHandlers{
 		WorkloadIdentityWriter: &recordingWorkloadIdentityWriter{
@@ -28,7 +85,8 @@ func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
 				CanonicalWrites: 1,
 			},
 		},
-		CodeCallEdgeWriter: &recordingCodeCallEdgeWriter{},
+		FactLoader:           codeCallLoader,
+		CodeCallIntentWriter: codeCallWriter,
 	})
 	if err != nil {
 		t.Fatalf("NewDefaultRuntime() error = %v, want nil", err)
@@ -92,6 +150,32 @@ func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
 	}
 	if got, want := deploymentResult.Status, ResultStatusSucceeded; got != want {
 		t.Fatalf("runtime.Execute(deployment_mapping).Status = %q, want %q", got, want)
+	}
+
+	codeCallResult, err := runtime.Execute(context.Background(), Intent{
+		IntentID:        "intent-code-call-1",
+		ScopeID:         "scope-123",
+		GenerationID:    "generation-456",
+		SourceSystem:    "git",
+		Domain:          DomainCodeCallMaterialization,
+		Cause:           "parser follow-up required",
+		EntityKeys:      []string{"repo-code"},
+		RelatedScopeIDs: []string{"scope-123"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusClaimed,
+	})
+	if err != nil {
+		t.Fatalf("runtime.Execute(code_call) error = %v, want nil", err)
+	}
+	if got, want := codeCallResult.Status, ResultStatusSucceeded; got != want {
+		t.Fatalf("runtime.Execute(code_call).Status = %q, want %q", got, want)
+	}
+	if got, want := codeCallResult.CanonicalWrites, 2; got != want {
+		t.Fatalf("runtime.Execute(code_call).CanonicalWrites = %d, want %d", got, want)
+	}
+	if len(codeCallWriter.rows) != 2 {
+		t.Fatalf("code call writer rows = %d, want 2", len(codeCallWriter.rows))
 	}
 
 	_, err = runtime.Execute(context.Background(), Intent{
@@ -190,7 +274,6 @@ func TestDefaultHandlersWiresCrossRepoResolver(t *testing.T) {
 		PlatformMaterializationWriter: &recordingPlatformMaterializationWriter{
 			result: PlatformMaterializationWriteResult{CanonicalWrites: 1},
 		},
-		CodeCallEdgeWriter:       edgeWriter,
 		EvidenceFactLoader:       evidenceLoader,
 		RepoDependencyEdgeWriter: edgeWriter,
 	})

@@ -128,6 +128,7 @@ func buildReducerService(
 	logger *slog.Logger,
 ) (reducer.Service, error) {
 	sharedCfg := reducer.LoadSharedProjectionConfig(getenv)
+	codeCallCfg := loadCodeCallProjectionConfig(getenv)
 
 	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	relationshipStore := postgres.NewRelationshipStore(database)
@@ -139,8 +140,7 @@ func buildReducerService(
 		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
 		FactLoader:                         postgres.NewFactStore(database),
-		CodeCallEdgeWriter:                 edgeWriterForHandlers,
-		CanonicalNodeChecker:               sourceneo4j.NewCanonicalNodeChecker(neo4jReader),
+		CodeCallIntentWriter:               intentStore,
 		SemanticEntityWriter:               sourceneo4j.NewSemanticEntityWriter(neo4jExec, neo4jBatchSize(getenv)),
 		SQLRelationshipEdgeWriter:          edgeWriterForHandlers,
 		InheritanceEdgeWriter:              edgeWriterForHandlers,
@@ -180,6 +180,16 @@ func buildReducerService(
 			EdgeWriter:   edgeWriter,
 			AcceptedGen:  postgres.NewAcceptedGenerationLookup(database),
 			Config:       sharedCfg,
+			Tracer:       tracer,
+			Instruments:  instruments,
+			Logger:       logger,
+		},
+		CodeCallProjectionRunner: &reducer.CodeCallProjectionRunner{
+			IntentReader: intentStore,
+			LeaseManager: intentStore,
+			EdgeWriter:   edgeWriter,
+			AcceptedGen:  postgres.NewAcceptedGenerationLookup(database),
+			Config:       codeCallCfg,
 			Tracer:       tracer,
 			Instruments:  instruments,
 			Logger:       logger,

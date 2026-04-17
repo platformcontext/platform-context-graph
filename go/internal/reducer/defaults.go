@@ -22,8 +22,12 @@ type DefaultHandlers struct {
 	// platform materialization.
 	FactLoader FactLoader
 
-	// CodeCallEdgeWriter writes canonical CALLS edges from reducer-owned parser
-	// follow-ups.
+	// CodeCallIntentWriter persists durable shared-intent rows for code-call
+	// and Python metaclass materialization.
+	CodeCallIntentWriter CodeCallIntentWriter
+
+	// CodeCallEdgeWriter is retained for compatibility with older reducer tests
+	// and wiring. Code-call materialization no longer uses it directly.
 	CodeCallEdgeWriter SharedProjectionEdgeWriter
 
 	// SQLRelationshipEdgeWriter writes canonical SQL relationship edges
@@ -35,10 +39,6 @@ type DefaultHandlers struct {
 	// edges from reducer-owned parser entity bases and trait adaptation
 	// metadata.
 	InheritanceEdgeWriter SharedProjectionEdgeWriter
-
-	// CanonicalNodeChecker checks whether canonical code entity nodes exist in
-	// the graph. Optional; nil disables the pre-flight check.
-	CanonicalNodeChecker CanonicalNodeChecker
 
 	// Cross-repo relationship resolution adapters. All optional; nil disables
 	// cross-repo resolution during deployment_mapping reduction.
@@ -126,9 +126,8 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			}
 		case DomainCodeCallMaterialization:
 			def.Handler = CodeCallMaterializationHandler{
-				FactLoader:           handlers.FactLoader,
-				EdgeWriter:           handlers.CodeCallEdgeWriter,
-				CanonicalNodeChecker: handlers.CanonicalNodeChecker,
+				FactLoader:   handlers.FactLoader,
+				IntentWriter: handlers.CodeCallIntentWriter,
 			}
 		case DomainSemanticEntityMaterialization:
 			def.Handler = SemanticEntityMaterializationHandler{

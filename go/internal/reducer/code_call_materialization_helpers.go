@@ -384,32 +384,3 @@ func copyOptionalCodeCallField(dst map[string]any, src map[string]any, key strin
 		dst[key] = value
 	}
 }
-
-func buildCodeCallRetractRows(repositoryIDs []string) []SharedProjectionIntentRow {
-	rows := make([]SharedProjectionIntentRow, 0, len(repositoryIDs))
-	for _, repositoryID := range repositoryIDs {
-		rows = append(rows, SharedProjectionIntentRow{RepositoryID: repositoryID})
-	}
-	return rows
-}
-
-func buildCodeRelationshipIntentRows(rows []map[string]any) []SharedProjectionIntentRow {
-	intents := make([]SharedProjectionIntentRow, 0, len(rows))
-	for _, row := range rows {
-		callerID := anyToString(row["caller_entity_id"])
-		if callerID == "" {
-			callerID = anyToString(row["source_entity_id"])
-		}
-		calleeID := anyToString(row["callee_entity_id"])
-		if calleeID == "" {
-			calleeID = anyToString(row["target_entity_id"])
-		}
-		intents = append(intents, SharedProjectionIntentRow{
-			ProjectionDomain: DomainCodeCalls,
-			PartitionKey:     callerID + "->" + calleeID,
-			RepositoryID:     anyToString(row["repo_id"]),
-			Payload:          copyPayload(row),
-		})
-	}
-	return intents
-}

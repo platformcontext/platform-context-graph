@@ -2,427 +2,164 @@ package reducer
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 )
 
-func TestExtractCodeCallRowsBuildsCanonicalEntityPairs(t *testing.T) {
+func TestCodeCallMaterializationHandlerRejectsWrongDomain(t *testing.T) {
 	t.Parallel()
 
-	envelopes := []facts.Envelope{
-		{
-			FactKind: "repository",
-			Payload: map[string]any{
-				"repo_id": "repo-payments",
-			},
-		},
-		{
-			FactKind: "file",
-			Payload: map[string]any{
-				"repo_id":       "repo-payments",
-				"relative_path": "caller.py",
-				"parsed_file_data": map[string]any{
-					"path": "caller.py",
-					"functions": []any{
-						map[string]any{
-							"name":        "handle",
-							"line_number": 3,
-							"uid":         "content-entity:caller",
-						},
-					},
-					"function_calls_scip": []any{
-						map[string]any{
-							"caller_file":   "caller.py",
-							"caller_line":   3,
-							"caller_symbol": "pkg/caller#handle().",
-							"callee_file":   "callee.py",
-							"callee_line":   1,
-							"callee_symbol": "pkg/callee#callee().",
-						},
-					},
-				},
-			},
-		},
-		{
-			FactKind: "file",
-			Payload: map[string]any{
-				"repo_id":       "repo-payments",
-				"relative_path": "callee.py",
-				"parsed_file_data": map[string]any{
-					"path": "callee.py",
-					"functions": []any{
-						map[string]any{
-							"name":        "callee",
-							"line_number": 1,
-							"uid":         "content-entity:callee",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	repoIDs, rows := ExtractCodeCallRows(envelopes)
-	if len(repoIDs) != 1 || repoIDs[0] != "repo-payments" {
-		t.Fatalf("repoIDs = %v, want [repo-payments]", repoIDs)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("len(rows) = %d, want 1", len(rows))
-	}
-	if got, want := rows[0]["caller_entity_id"], "content-entity:caller"; got != want {
-		t.Fatalf("caller_entity_id = %#v, want %#v", got, want)
-	}
-	if got, want := rows[0]["callee_entity_id"], "content-entity:callee"; got != want {
-		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
-	}
-}
-
-func TestExtractCodeCallRowsBuildsCanonicalEntityPairsFromGenericCalls(t *testing.T) {
-	t.Parallel()
-
-	envelopes := []facts.Envelope{
-		{
-			FactKind: "repository",
-			Payload: map[string]any{
-				"repo_id": "repo-payments",
-			},
-		},
-		{
-			FactKind: "file",
-			Payload: map[string]any{
-				"repo_id":       "repo-payments",
-				"relative_path": "service.py",
-				"parsed_file_data": map[string]any{
-					"path": "service.py",
-					"functions": []any{
-						map[string]any{
-							"name":        "handle",
-							"line_number": 3,
-							"end_line":    6,
-							"uid":         "content-entity:handle",
-						},
-						map[string]any{
-							"name":        "helper",
-							"line_number": 8,
-							"end_line":    10,
-							"uid":         "content-entity:helper",
-						},
-					},
-					"function_calls": []any{
-						map[string]any{
-							"name":        "helper",
-							"line_number": 4,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	repoIDs, rows := ExtractCodeCallRows(envelopes)
-	if len(repoIDs) != 1 || repoIDs[0] != "repo-payments" {
-		t.Fatalf("repoIDs = %v, want [repo-payments]", repoIDs)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("len(rows) = %d, want 1", len(rows))
-	}
-	if got, want := rows[0]["caller_entity_id"], "content-entity:handle"; got != want {
-		t.Fatalf("caller_entity_id = %#v, want %#v", got, want)
-	}
-	if got, want := rows[0]["callee_entity_id"], "content-entity:helper"; got != want {
-		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
-	}
-	if got, want := rows[0]["caller_file"], "service.py"; got != want {
-		t.Fatalf("caller_file = %#v, want %#v", got, want)
-	}
-	if got, want := rows[0]["callee_file"], "service.py"; got != want {
-		t.Fatalf("callee_file = %#v, want %#v", got, want)
-	}
-	if got, want := rows[0]["ref_line"], 4; got != want {
-		t.Fatalf("ref_line = %#v, want %#v", got, want)
-	}
-}
-
-func TestExtractCodeCallRowsSkipsAmbiguousGenericCalls(t *testing.T) {
-	t.Parallel()
-
-	envelopes := []facts.Envelope{
-		{
-			FactKind: "repository",
-			Payload: map[string]any{
-				"repo_id": "repo-payments",
-			},
-		},
-		{
-			FactKind: "file",
-			Payload: map[string]any{
-				"repo_id":       "repo-payments",
-				"relative_path": "service.py",
-				"parsed_file_data": map[string]any{
-					"path": "service.py",
-					"functions": []any{
-						map[string]any{
-							"name":        "handle",
-							"line_number": 3,
-							"end_line":    6,
-							"uid":         "content-entity:handle",
-						},
-						map[string]any{
-							"name":        "helper",
-							"line_number": 8,
-							"end_line":    10,
-							"uid":         "content-entity:helper-a",
-						},
-						map[string]any{
-							"name":        "helper",
-							"line_number": 12,
-							"end_line":    14,
-							"uid":         "content-entity:helper-b",
-						},
-					},
-					"function_calls": []any{
-						map[string]any{
-							"name":        "helper",
-							"line_number": 4,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	_, rows := ExtractCodeCallRows(envelopes)
-	if len(rows) != 0 {
-		t.Fatalf("len(rows) = %d, want 0 for ambiguous generic call", len(rows))
-	}
-}
-
-func TestExtractCodeCallRowsDisambiguatesGenericCallsUsingFullName(t *testing.T) {
-	t.Parallel()
-
-	envelopes := []facts.Envelope{
-		{
-			FactKind: "repository",
-			Payload: map[string]any{
-				"repo_id": "repo-payments",
-			},
-		},
-		{
-			FactKind: "file",
-			Payload: map[string]any{
-				"repo_id":       "repo-payments",
-				"relative_path": "service.py",
-				"parsed_file_data": map[string]any{
-					"path": "service.py",
-					"functions": []any{
-						map[string]any{
-							"name":        "handle",
-							"line_number": 3,
-							"end_line":    6,
-							"uid":         "content-entity:handle",
-						},
-						map[string]any{
-							"name":          "request",
-							"class_context": "Service",
-							"line_number":   8,
-							"end_line":      10,
-							"uid":           "content-entity:service-request",
-						},
-						map[string]any{
-							"name":          "request",
-							"class_context": "Queue",
-							"line_number":   12,
-							"end_line":      14,
-							"uid":           "content-entity:queue-request",
-						},
-					},
-					"function_calls": []any{
-						map[string]any{
-							"name":        "request",
-							"full_name":   "Service.request",
-							"call_kind":   "function_call",
-							"line_number": 4,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	_, rows := ExtractCodeCallRows(envelopes)
-	if len(rows) != 1 {
-		t.Fatalf("len(rows) = %d, want 1", len(rows))
-	}
-	if got, want := rows[0]["caller_entity_id"], "content-entity:handle"; got != want {
-		t.Fatalf("caller_entity_id = %#v, want %#v", got, want)
-	}
-	if got, want := rows[0]["callee_entity_id"], "content-entity:service-request"; got != want {
-		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
-	}
-	if got, want := rows[0]["full_name"], "Service.request"; got != want {
-		t.Fatalf("full_name = %#v, want %#v", got, want)
-	}
-	if got, want := rows[0]["call_kind"], "function_call"; got != want {
-		t.Fatalf("call_kind = %#v, want %#v", got, want)
-	}
-}
-
-func TestCodeCallMaterializationHandlerWritesCanonicalCalls(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC)
 	handler := CodeCallMaterializationHandler{
-		FactLoader: &stubFactLoader{
-			envelopes: []facts.Envelope{
-				{
-					FactKind: "repository",
-					Payload: map[string]any{
-						"repo_id": "repo-payments",
-					},
-				},
-				{
-					FactKind: "file",
-					Payload: map[string]any{
-						"repo_id":       "repo-payments",
-						"relative_path": "caller.py",
-						"parsed_file_data": map[string]any{
-							"path": "caller.py",
-							"functions": []any{
-								map[string]any{
-									"name":        "handle",
-									"line_number": 3,
-									"uid":         "content-entity:caller",
-								},
-							},
-							"function_calls_scip": []any{
-								map[string]any{
-									"caller_file":   "caller.py",
-									"caller_line":   3,
-									"caller_symbol": "pkg/caller#handle().",
-									"callee_file":   "callee.py",
-									"callee_line":   1,
-									"callee_symbol": "pkg/callee#callee().",
-								},
-							},
-						},
-					},
-				},
-				{
-					FactKind: "file",
-					Payload: map[string]any{
-						"repo_id":       "repo-payments",
-						"relative_path": "callee.py",
-						"parsed_file_data": map[string]any{
-							"path": "callee.py",
-							"functions": []any{
-								map[string]any{
-									"name":        "callee",
-									"line_number": 1,
-									"uid":         "content-entity:callee",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		EdgeWriter: &recordingCodeCallEdgeWriter{},
+		IntentWriter: &recordingCodeCallIntentWriter{},
 	}
 
-	intent := Intent{
-		IntentID:        "intent-code-calls-1",
-		ScopeID:         "scope-payments",
-		GenerationID:    "gen-1",
-		SourceSystem:    "git",
-		Domain:          DomainCodeCallMaterialization,
-		Cause:           "parser call graph follow-up required",
-		EntityKeys:      []string{"repo-payments"},
-		RelatedScopeIDs: []string{"scope-payments"},
-		EnqueuedAt:      now,
-		AvailableAt:     now,
-		Status:          IntentStatusPending,
-	}
-
-	result, err := handler.Handle(context.Background(), intent)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-	if result.Status != ResultStatusSucceeded {
-		t.Fatalf("result.Status = %q, want %q", result.Status, ResultStatusSucceeded)
-	}
-	if result.CanonicalWrites != 1 {
-		t.Fatalf("result.CanonicalWrites = %d, want 1", result.CanonicalWrites)
-	}
-
-	writer := handler.EdgeWriter.(*recordingCodeCallEdgeWriter)
-	if writer.retractDomain != DomainCodeCalls {
-		t.Fatalf("retractDomain = %q, want %q", writer.retractDomain, DomainCodeCalls)
-	}
-	if writer.retractEvidenceSource != codeCallEvidenceSource {
-		t.Fatalf("retractEvidenceSource = %q, want %q", writer.retractEvidenceSource, codeCallEvidenceSource)
-	}
-	if writer.writeDomain != DomainCodeCalls {
-		t.Fatalf("writeDomain = %q, want %q", writer.writeDomain, DomainCodeCalls)
-	}
-	if writer.writeEvidenceSource != codeCallEvidenceSource {
-		t.Fatalf("writeEvidenceSource = %q, want %q", writer.writeEvidenceSource, codeCallEvidenceSource)
-	}
-	if len(writer.writeRows) != 1 {
-		t.Fatalf("len(writeRows) = %d, want 1", len(writer.writeRows))
-	}
-	if got, want := writer.writeRows[0].Payload["caller_entity_id"], "content-entity:caller"; got != want {
-		t.Fatalf("caller_entity_id = %#v, want %#v", got, want)
-	}
-	if got, want := writer.writeRows[0].Payload["callee_entity_id"], "content-entity:callee"; got != want {
-		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-1",
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		Domain:       DomainWorkloadIdentity,
+		EnqueuedAt:   time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		Status:       IntentStatusPending,
+	})
+	if err == nil {
+		t.Fatal("Handle() error = nil, want non-nil")
 	}
 }
 
-// --- CanonicalNodeChecker pre-flight tests ---
-
-type fakeCanonicalNodeChecker struct {
-	exists bool
-	err    error
-}
-
-func (f *fakeCanonicalNodeChecker) HasCanonicalCodeTargets(_ context.Context) (bool, error) {
-	return f.exists, f.err
-}
-
-func TestCodeCallMaterializationHandlerSkipsWhenNoCanonicalTargets(t *testing.T) {
+func TestCodeCallMaterializationHandlerRequiresIntentWriter(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC)
-	writer := &recordingCodeCallEdgeWriter{}
 	handler := CodeCallMaterializationHandler{
-		FactLoader: &stubFactLoader{
-			envelopes: []facts.Envelope{
-				{FactKind: "repository", Payload: map[string]any{"repo_id": "repo-1"}},
-				{FactKind: "file", Payload: map[string]any{
-					"repo_id": "repo-1", "relative_path": "main.py",
-					"parsed_file_data": map[string]any{
-						"path": "main.py",
-						"functions": []any{
-							map[string]any{"name": "fn", "line_number": 1, "uid": "uid:fn"},
-						},
-					},
-				}},
-			},
-		},
-		EdgeWriter:           writer,
-		CanonicalNodeChecker: &fakeCanonicalNodeChecker{exists: false},
+		FactLoader: &stubFactLoader{},
 	}
 
-	result, err := handler.Handle(context.Background(), Intent{
+	_, err := handler.Handle(context.Background(), Intent{
 		IntentID:     "intent-1",
 		ScopeID:      "scope-1",
 		GenerationID: "gen-1",
 		Domain:       DomainCodeCallMaterialization,
+		EnqueuedAt:   time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		Status:       IntentStatusPending,
+	})
+	if err == nil {
+		t.Fatal("Handle() error = nil, want non-nil")
+	}
+}
+
+func TestCodeCallMaterializationHandlerEmitsSharedIntents(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC)
+	loader := &stubFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactKind: "repository",
+				Payload: map[string]any{
+					"repo_id":       "repo-a",
+					"source_run_id": "run-a",
+					"graph_id":      "repo-a",
+					"graph_kind":    "repository",
+					"name":          "repo-a",
+				},
+			},
+			{
+				FactKind: "repository",
+				Payload: map[string]any{
+					"repo_id":       "repo-b",
+					"source_run_id": "run-b",
+					"graph_id":      "repo-b",
+					"graph_kind":    "repository",
+					"name":          "repo-b",
+				},
+			},
+			{
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-a",
+					"relative_path": "caller.py",
+					"parsed_file_data": map[string]any{
+						"path": "caller.py",
+						"functions": []any{
+							map[string]any{
+								"name":        "handle",
+								"line_number": 3,
+								"uid":         "entity:handle",
+							},
+						},
+						"function_calls_scip": []any{
+							map[string]any{
+								"caller_file":   "caller.py",
+								"caller_line":   3,
+								"caller_symbol": "pkg/caller#handle().",
+								"callee_file":   "callee.py",
+								"callee_line":   1,
+								"callee_symbol": "pkg/callee#callee().",
+							},
+						},
+					},
+				},
+			},
+			{
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-a",
+					"relative_path": "callee.py",
+					"parsed_file_data": map[string]any{
+						"path": "callee.py",
+						"functions": []any{
+							map[string]any{
+								"name":        "callee",
+								"line_number": 1,
+								"uid":         "entity:callee",
+							},
+						},
+					},
+				},
+			},
+			{
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-a",
+					"relative_path": "models.py",
+					"parsed_file_data": map[string]any{
+						"path": "models.py",
+						"classes": []any{
+							map[string]any{
+								"name":      "Widget",
+								"uid":       "entity:widget",
+								"metaclass": "Meta",
+							},
+							map[string]any{
+								"name": "Meta",
+								"uid":  "entity:meta",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	writer := &recordingCodeCallIntentWriter{}
+	handler := CodeCallMaterializationHandler{
+		FactLoader:   loader,
+		IntentWriter: writer,
+	}
+
+	result, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-code-call-1",
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		SourceSystem: "git",
+		Domain:       DomainCodeCallMaterialization,
+		Cause:        "parser follow-up required",
 		EnqueuedAt:   now,
 		AvailableAt:  now,
+		Status:       IntentStatusPending,
 	})
 	if err != nil {
 		t.Fatalf("Handle() error = %v", err)
@@ -430,187 +167,123 @@ func TestCodeCallMaterializationHandlerSkipsWhenNoCanonicalTargets(t *testing.T)
 	if result.Status != ResultStatusSucceeded {
 		t.Fatalf("result.Status = %q, want %q", result.Status, ResultStatusSucceeded)
 	}
-	if result.CanonicalWrites != 0 {
-		t.Fatalf("result.CanonicalWrites = %d, want 0 (should skip)", result.CanonicalWrites)
+	if result.CanonicalWrites != 4 {
+		t.Fatalf("result.CanonicalWrites = %d, want 4", result.CanonicalWrites)
 	}
-	if len(writer.writeRows) != 0 {
-		t.Fatalf("EdgeWriter.WriteEdges called with %d rows, want 0", len(writer.writeRows))
+	if len(writer.rows) != 4 {
+		t.Fatalf("len(writer.rows) = %d, want 4", len(writer.rows))
 	}
-	if len(writer.retractRows) != 0 {
-		t.Fatalf("EdgeWriter.RetractEdges called with %d rows, want 0", len(writer.retractRows))
+
+	rowsByRepo := make(map[string][]SharedProjectionIntentRow)
+	for _, row := range writer.rows {
+		rowsByRepo[row.RepositoryID] = append(rowsByRepo[row.RepositoryID], row)
+		if row.GenerationID != "gen-1" {
+			t.Fatalf("row.GenerationID = %q, want gen-1", row.GenerationID)
+		}
+	}
+
+	if got := len(rowsByRepo["repo-a"]); got != 3 {
+		t.Fatalf("repo-a rows = %d, want 3", got)
+	}
+	if got := len(rowsByRepo["repo-b"]); got != 1 {
+		t.Fatalf("repo-b rows = %d, want 1", got)
+	}
+
+	var (
+		refreshRows   []SharedProjectionIntentRow
+		codeCallRows  []SharedProjectionIntentRow
+		metaclassRows []SharedProjectionIntentRow
+	)
+	for _, row := range writer.rows {
+		switch row.Payload["intent_type"] {
+		case "repo_refresh":
+			refreshRows = append(refreshRows, row)
+		default:
+			switch row.Payload["evidence_source"] {
+			case codeCallEvidenceSource:
+				codeCallRows = append(codeCallRows, row)
+			case pythonMetaclassEvidenceSource:
+				metaclassRows = append(metaclassRows, row)
+			}
+		}
+	}
+
+	if len(refreshRows) != 2 {
+		t.Fatalf("len(refreshRows) = %d, want 2", len(refreshRows))
+	}
+	if len(codeCallRows) != 1 {
+		t.Fatalf("len(codeCallRows) = %d, want 1", len(codeCallRows))
+	}
+	if len(metaclassRows) != 1 {
+		t.Fatalf("len(metaclassRows) = %d, want 1", len(metaclassRows))
+	}
+
+	refreshRuns := make(map[string]string, len(refreshRows))
+	for _, row := range refreshRows {
+		refreshRuns[row.RepositoryID] = row.SourceRunID
+		if got, want := row.PartitionKey, codeCallRefreshPartitionKey(row.RepositoryID); got != want {
+			t.Fatalf("refresh PartitionKey = %q, want %q", got, want)
+		}
+	}
+	if got, want := refreshRuns["repo-a"], "run-a"; got != want {
+		t.Fatalf("refresh SourceRunID for repo-a = %q, want %q", got, want)
+	}
+	if got, want := refreshRuns["repo-b"], "run-b"; got != want {
+		t.Fatalf("refresh SourceRunID for repo-b = %q, want %q", got, want)
+	}
+
+	for _, row := range refreshRows {
+		if row.Payload["action"] != "refresh" {
+			t.Fatalf("refresh action = %#v, want refresh", row.Payload["action"])
+		}
+		if row.Payload["repo_id"] == "" {
+			t.Fatal("refresh row missing repo_id")
+		}
+		if _, ok := row.Payload["caller_entity_id"]; ok {
+			t.Fatal("refresh row unexpectedly contains caller_entity_id")
+		}
+		if _, ok := row.Payload["source_entity_id"]; ok {
+			t.Fatal("refresh row unexpectedly contains source_entity_id")
+		}
+	}
+
+	if got, want := codeCallRows[0].SourceRunID, "run-a"; got != want {
+		t.Fatalf("code-call SourceRunID = %q, want %q", got, want)
+	}
+	if got, want := codeCallRows[0].Payload["evidence_source"], codeCallEvidenceSource; got != want {
+		t.Fatalf("code-call evidence_source = %#v, want %#v", got, want)
+	}
+	if got, want := codeCallRows[0].Payload["caller_entity_id"], "entity:handle"; got != want {
+		t.Fatalf("code-call caller_entity_id = %#v, want %#v", got, want)
+	}
+	if got, want := codeCallRows[0].Payload["callee_entity_id"], "entity:callee"; got != want {
+		t.Fatalf("code-call callee_entity_id = %#v, want %#v", got, want)
+	}
+	if got, want := codeCallRows[0].PartitionKey, "entity:handle->entity:callee"; got != want {
+		t.Fatalf("code-call PartitionKey = %q, want %q", got, want)
+	}
+
+	if got, want := metaclassRows[0].SourceRunID, "run-a"; got != want {
+		t.Fatalf("metaclass SourceRunID = %q, want %q", got, want)
+	}
+	if got, want := metaclassRows[0].Payload["evidence_source"], pythonMetaclassEvidenceSource; got != want {
+		t.Fatalf("metaclass evidence_source = %#v, want %#v", got, want)
+	}
+	if got, want := metaclassRows[0].Payload["relationship_type"], "USES_METACLASS"; got != want {
+		t.Fatalf("metaclass relationship_type = %#v, want %#v", got, want)
+	}
+	if got, want := metaclassRows[0].PartitionKey, "entity:widget->entity:meta"; got != want {
+		t.Fatalf("metaclass PartitionKey = %q, want %q", got, want)
 	}
 }
 
-func TestCodeCallMaterializationHandlerProceedsWhenCanonicalTargetsExist(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC)
-	writer := &recordingCodeCallEdgeWriter{}
-	handler := CodeCallMaterializationHandler{
-		FactLoader: &stubFactLoader{
-			envelopes: []facts.Envelope{
-				{FactKind: "repository", Payload: map[string]any{"repo_id": "repo-1"}},
-				{FactKind: "file", Payload: map[string]any{
-					"repo_id": "repo-1", "relative_path": "caller.py",
-					"parsed_file_data": map[string]any{
-						"path": "caller.py",
-						"functions": []any{
-							map[string]any{"name": "handle", "line_number": 3, "uid": "uid:caller"},
-						},
-						"function_calls_scip": []any{
-							map[string]any{
-								"caller_file": "caller.py", "caller_line": 3,
-								"caller_symbol": "pkg/caller#handle().",
-								"callee_file": "callee.py", "callee_line": 1,
-								"callee_symbol": "pkg/callee#callee().",
-							},
-						},
-					},
-				}},
-				{FactKind: "file", Payload: map[string]any{
-					"repo_id": "repo-1", "relative_path": "callee.py",
-					"parsed_file_data": map[string]any{
-						"path": "callee.py",
-						"functions": []any{
-							map[string]any{"name": "callee", "line_number": 1, "uid": "uid:callee"},
-						},
-					},
-				}},
-			},
-		},
-		EdgeWriter:           writer,
-		CanonicalNodeChecker: &fakeCanonicalNodeChecker{exists: true},
-	}
-
-	result, err := handler.Handle(context.Background(), Intent{
-		IntentID:     "intent-1",
-		ScopeID:      "scope-1",
-		GenerationID: "gen-1",
-		Domain:       DomainCodeCallMaterialization,
-		EnqueuedAt:   now,
-		AvailableAt:  now,
-	})
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-	if result.CanonicalWrites == 0 {
-		t.Fatal("result.CanonicalWrites = 0, want > 0 when canonical targets exist")
-	}
+type recordingCodeCallIntentWriter struct {
+	rows []SharedProjectionIntentRow
 }
 
-func TestCodeCallMaterializationHandlerProceedsWhenCheckerNil(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC)
-	writer := &recordingCodeCallEdgeWriter{}
-	handler := CodeCallMaterializationHandler{
-		FactLoader: &stubFactLoader{
-			envelopes: []facts.Envelope{
-				{FactKind: "repository", Payload: map[string]any{"repo_id": "repo-1"}},
-				{FactKind: "file", Payload: map[string]any{
-					"repo_id": "repo-1", "relative_path": "caller.py",
-					"parsed_file_data": map[string]any{
-						"path": "caller.py",
-						"functions": []any{
-							map[string]any{"name": "handle", "line_number": 3, "uid": "uid:caller"},
-						},
-						"function_calls_scip": []any{
-							map[string]any{
-								"caller_file": "caller.py", "caller_line": 3,
-								"caller_symbol": "pkg/caller#handle().",
-								"callee_file": "callee.py", "callee_line": 1,
-								"callee_symbol": "pkg/callee#callee().",
-							},
-						},
-					},
-				}},
-				{FactKind: "file", Payload: map[string]any{
-					"repo_id": "repo-1", "relative_path": "callee.py",
-					"parsed_file_data": map[string]any{
-						"path": "callee.py",
-						"functions": []any{
-							map[string]any{"name": "callee", "line_number": 1, "uid": "uid:callee"},
-						},
-					},
-				}},
-			},
-		},
-		EdgeWriter:           writer,
-		CanonicalNodeChecker: nil, // backwards-compatible: no checker
-	}
-
-	result, err := handler.Handle(context.Background(), Intent{
-		IntentID:     "intent-1",
-		ScopeID:      "scope-1",
-		GenerationID: "gen-1",
-		Domain:       DomainCodeCallMaterialization,
-		EnqueuedAt:   now,
-		AvailableAt:  now,
-	})
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-	if result.CanonicalWrites == 0 {
-		t.Fatal("result.CanonicalWrites = 0, want > 0 when checker is nil (backwards compat)")
-	}
-}
-
-func TestCodeCallMaterializationHandlerProceedsWhenCheckerErrors(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC)
-	writer := &recordingCodeCallEdgeWriter{}
-	handler := CodeCallMaterializationHandler{
-		FactLoader: &stubFactLoader{
-			envelopes: []facts.Envelope{
-				{FactKind: "repository", Payload: map[string]any{"repo_id": "repo-1"}},
-				{FactKind: "file", Payload: map[string]any{
-					"repo_id": "repo-1", "relative_path": "caller.py",
-					"parsed_file_data": map[string]any{
-						"path": "caller.py",
-						"functions": []any{
-							map[string]any{"name": "handle", "line_number": 3, "uid": "uid:caller"},
-						},
-						"function_calls_scip": []any{
-							map[string]any{
-								"caller_file": "caller.py", "caller_line": 3,
-								"caller_symbol": "pkg/caller#handle().",
-								"callee_file": "callee.py", "callee_line": 1,
-								"callee_symbol": "pkg/callee#callee().",
-							},
-						},
-					},
-				}},
-				{FactKind: "file", Payload: map[string]any{
-					"repo_id": "repo-1", "relative_path": "callee.py",
-					"parsed_file_data": map[string]any{
-						"path": "callee.py",
-						"functions": []any{
-							map[string]any{"name": "callee", "line_number": 1, "uid": "uid:callee"},
-						},
-					},
-				}},
-			},
-		},
-		EdgeWriter:           writer,
-		CanonicalNodeChecker: &fakeCanonicalNodeChecker{exists: false, err: fmt.Errorf("neo4j unavailable")},
-	}
-
-	result, err := handler.Handle(context.Background(), Intent{
-		IntentID:     "intent-1",
-		ScopeID:      "scope-1",
-		GenerationID: "gen-1",
-		Domain:       DomainCodeCallMaterialization,
-		EnqueuedAt:   now,
-		AvailableAt:  now,
-	})
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-	// On checker error, should proceed conservatively (not skip)
-	if result.CanonicalWrites == 0 {
-		t.Fatal("result.CanonicalWrites = 0, want > 0 when checker errors (conservative)")
-	}
+func (r *recordingCodeCallIntentWriter) UpsertIntents(_ context.Context, rows []SharedProjectionIntentRow) error {
+	r.rows = append(r.rows, rows...)
+	return nil
 }
 
 type recordingCodeCallEdgeWriter struct {

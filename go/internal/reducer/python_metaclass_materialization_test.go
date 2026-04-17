@@ -144,7 +144,11 @@ func TestPythonMetaclassMaterializationHandlerWritesCanonicalEdges(t *testing.T)
 			{
 				FactKind: "repository",
 				Payload: map[string]any{
-					"repo_id": "repo-python",
+					"repo_id":       "repo-python",
+					"source_run_id": "run-python",
+					"graph_id":      "repo-python",
+					"graph_kind":    "repository",
+					"name":          "repo-python",
 				},
 			},
 			{
@@ -172,10 +176,10 @@ func TestPythonMetaclassMaterializationHandlerWritesCanonicalEdges(t *testing.T)
 			},
 		},
 	}
-	writer := &stubEdgeWriter{}
+	writer := &recordingCodeCallIntentWriter{}
 	handler := CodeCallMaterializationHandler{
-		FactLoader: loader,
-		EdgeWriter: writer,
+		FactLoader:   loader,
+		IntentWriter: writer,
 	}
 
 	result, err := handler.Handle(context.Background(), Intent{
@@ -197,25 +201,28 @@ func TestPythonMetaclassMaterializationHandlerWritesCanonicalEdges(t *testing.T)
 	if got, want := loader.calls, 1; got != want {
 		t.Fatalf("loader.calls = %d, want %d", got, want)
 	}
-	if got, want := len(writer.retractCalls), 1; got != want {
-		t.Fatalf("len(writer.retractCalls) = %d, want %d", got, want)
+	if got, want := len(writer.rows), 2; got != want {
+		t.Fatalf("len(writer.rows) = %d, want %d", got, want)
 	}
-	if got, want := len(writer.writeCalls), 1; got != want {
-		t.Fatalf("len(writer.writeCalls) = %d, want %d", got, want)
+	if got, want := writer.rows[0].Payload["action"], "refresh"; got != want {
+		t.Fatalf("refresh row action = %#v, want %#v", got, want)
 	}
-	if got, want := writer.writeCalls[0][0].Payload["source_entity_id"], "content-entity:logged"; got != want {
+	if got, want := writer.rows[1].Payload["source_entity_id"], "content-entity:logged"; got != want {
 		t.Fatalf("write row source_entity_id = %#v, want %#v", got, want)
 	}
-	if got, want := writer.writeCalls[0][0].Payload["target_entity_id"], "content-entity:meta"; got != want {
+	if got, want := writer.rows[1].Payload["target_entity_id"], "content-entity:meta"; got != want {
 		t.Fatalf("write row target_entity_id = %#v, want %#v", got, want)
 	}
-	if got, want := writer.writeCalls[0][0].Payload["relationship_type"], "USES_METACLASS"; got != want {
+	if got, want := writer.rows[1].Payload["relationship_type"], "USES_METACLASS"; got != want {
 		t.Fatalf("write row relationship_type = %#v, want %#v", got, want)
+	}
+	if got, want := writer.rows[1].Payload["evidence_source"], pythonMetaclassEvidenceSource; got != want {
+		t.Fatalf("write row evidence_source = %#v, want %#v", got, want)
 	}
 	if got, want := result.Status, ResultStatusSucceeded; got != want {
 		t.Fatalf("result.Status = %q, want %q", got, want)
 	}
-	if got, want := result.CanonicalWrites, 1; got != want {
+	if got, want := result.CanonicalWrites, 2; got != want {
 		t.Fatalf("result.CanonicalWrites = %d, want %d", got, want)
 	}
 }

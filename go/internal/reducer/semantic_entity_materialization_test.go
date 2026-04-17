@@ -600,7 +600,7 @@ func TestNewDefaultRuntimeRegistersSemanticEntityMaterializationWhenWriterPresen
 				},
 			},
 		},
-		CodeCallEdgeWriter: &recordingCodeCallEdgeWriter{},
+		CodeCallIntentWriter: &recordingCodeCallIntentWriter{},
 	})
 	if err != nil {
 		t.Fatalf("NewDefaultRuntime() error = %v, want nil", err)

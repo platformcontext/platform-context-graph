@@ -60,6 +60,10 @@ type Service struct {
 	// concurrently with the main claim/execute/ack loop. Nil disables the runner.
 	SharedProjectionRunner *SharedProjectionRunner
 
+	// CodeCallProjectionRunner runs the controlled code-call projection lane
+	// concurrently with the main claim/execute/ack loop. Nil disables the lane.
+	CodeCallProjectionRunner *CodeCallProjectionRunner
+
 	// Telemetry fields (optional)
 	Tracer         trace.Tracer
 	Instruments    *telemetry.Instruments
@@ -82,29 +86,54 @@ func (s Service) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	var wg sync.WaitGroup
-	var runnerErr error
+	var (
+		wg        sync.WaitGroup
+		errMu     sync.Mutex
+		firstErr  error
+		recordErr = func(err error) {
+			if err == nil {
+				return
+			}
+			errMu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			errMu.Unlock()
+			cancel()
+		}
+	)
 
 	if s.SharedProjectionRunner != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			if err := s.SharedProjectionRunner.Run(ctx); err != nil {
-				runnerErr = err
-				cancel()
+				recordErr(err)
+			}
+		}()
+	}
+
+	if s.CodeCallProjectionRunner != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.CodeCallProjectionRunner.Run(ctx); err != nil {
+				recordErr(err)
 			}
 		}()
 	}
 
 	err := s.runMainLoop(ctx)
+	if err != nil {
+		recordErr(err)
+	}
 
 	cancel()
 	wg.Wait()
 
-	if err != nil {
-		return err
-	}
-	return runnerErr
+	errMu.Lock()
+	defer errMu.Unlock()
+	return firstErr
 }
 
 // runMainLoop is the main claim/execute/ack loop extracted for concurrent use.
