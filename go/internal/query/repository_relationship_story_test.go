@@ -59,6 +59,28 @@ func TestBuildRepositoryStoryResponseIncludesTypedRelationshipNarrative(t *testi
 		t.Fatalf("relationship_overview.relationship_count = %#v, want %#v", got, want)
 	}
 
+	controllerDriven, ok := relationshipOverview["controller_driven"].([]map[string]any)
+	if !ok {
+		t.Fatalf("relationship_overview.controller_driven type = %T, want []map[string]any", relationshipOverview["controller_driven"])
+	}
+	if len(controllerDriven) != 1 {
+		t.Fatalf("len(relationship_overview.controller_driven) = %d, want 1", len(controllerDriven))
+	}
+	if got, want := controllerDriven[0]["evidence_type"], "argocd_application_source"; got != want {
+		t.Fatalf("relationship_overview.controller_driven[0].evidence_type = %#v, want %#v", got, want)
+	}
+
+	workflowDriven, ok := relationshipOverview["workflow_driven"].([]map[string]any)
+	if !ok {
+		t.Fatalf("relationship_overview.workflow_driven type = %T, want []map[string]any", relationshipOverview["workflow_driven"])
+	}
+	if len(workflowDriven) != 1 {
+		t.Fatalf("len(relationship_overview.workflow_driven) = %d, want 1", len(workflowDriven))
+	}
+	if got, want := workflowDriven[0]["evidence_type"], "github_actions_reusable_workflow_ref"; got != want {
+		t.Fatalf("relationship_overview.workflow_driven[0].evidence_type = %#v, want %#v", got, want)
+	}
+
 	story, ok := relationshipOverview["story"].(string)
 	if !ok {
 		t.Fatalf("relationship_overview.story type = %T, want string", relationshipOverview["story"])

@@ -1,6 +1,9 @@
 package query
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildRepositoryStoryResponseIncludesStructuredOverviews(t *testing.T) {
 	t.Parallel()
@@ -341,5 +344,153 @@ func TestBuildRepositoryStoryResponseIncludesWorkflowArtifactsForWorkflowOnlyRep
 	}
 	if got, want := directStory[0], "Workflow delivery paths include .github/workflows/deploy.yaml as github_actions_workflow deploy (workflow_file)."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
+	}
+}
+
+func TestBuildRepositoryStoryResponseIncludesControllerAndWorkflowProofTogether(t *testing.T) {
+	t.Parallel()
+
+	repo := RepoRef{ID: "repository:platform-service", Name: "platform-service"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		64,
+		[]string{"go", "yaml"},
+		[]string{"platform-runtime"},
+		[]string{"argocd_application", "github_actions"},
+		5,
+		map[string]any{
+			"families": []string{"argocd", "ansible", "github_actions", "terraform"},
+			"relationship_overview": map[string]any{
+				"relationship_count": 5,
+				"story":              "Controller-driven relationships: DEPLOYS_FROM infra-configs via argocd_application_source. Workflow-driven relationships: DEPLOYS_FROM ci-workflows via github_actions_reusable_workflow_ref. IaC-driven relationships: DEPENDS_ON terraform-modules via terraform_module_source.",
+				"controller_driven": []map[string]any{
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "infra-configs",
+						"target_id":     "repo-2",
+						"evidence_type": "argocd_application_source",
+					},
+					{
+						"type":          "DISCOVERS_CONFIG_IN",
+						"target_name":   "controller-pipelines",
+						"target_id":     "repo-3",
+						"evidence_type": "jenkins_shared_library",
+					},
+					{
+						"type":          "DEPENDS_ON",
+						"target_name":   "ansible-ops",
+						"target_id":     "repo-4",
+						"evidence_type": "ansible_role_reference",
+					},
+				},
+				"workflow_driven": []map[string]any{
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "ci-workflows",
+						"target_id":     "repo-5",
+						"evidence_type": "github_actions_reusable_workflow_ref",
+					},
+				},
+				"iac_driven": []map[string]any{
+					{
+						"type":          "DEPENDS_ON",
+						"target_name":   "terraform-modules",
+						"target_id":     "repo-6",
+						"evidence_type": "terraform_module_source",
+					},
+				},
+			},
+			"deployment_artifacts": map[string]any{
+				"controller_artifacts": []map[string]any{
+					{
+						"path":             "Jenkinsfile",
+						"controller_kind":  "jenkins_pipeline",
+						"shared_libraries": []string{"pipelines"},
+						"pipeline_calls":   []string{"pipelineDeploy"},
+						"entry_points":     []string{"dist/api.js"},
+						"shell_commands":   []string{"./scripts/deploy.sh"},
+						"ansible_playbook_hints": []map[string]any{
+							{"playbook": "deploy.yml"},
+						},
+					},
+				},
+				"workflow_artifacts": []map[string]any{
+					{
+						"relative_path": ".github/workflows/deploy.yaml",
+						"artifact_type": "github_actions_workflow",
+						"workflow_name": "deploy",
+						"signals":       []string{"workflow_file"},
+					},
+				},
+			},
+		},
+		nil,
+	)
+
+	if gotStory, ok := got["story"].(string); !ok || gotStory == "" {
+		t.Fatalf("story = %#v, want non-empty string", got["story"])
+	} else {
+		for _, want := range []string{
+			"Controller-driven relationships:",
+			"Workflow-driven relationships:",
+			"IaC-driven relationships:",
+			"argocd_application_source",
+			"github_actions_reusable_workflow_ref",
+			"terraform_module_source",
+		} {
+			if !strings.Contains(gotStory, want) {
+				t.Fatalf("story = %q, want %q", gotStory, want)
+			}
+		}
+	}
+
+	storySections, ok := got["story_sections"].([]map[string]any)
+	if !ok {
+		t.Fatalf("story_sections type = %T, want []map[string]any", got["story_sections"])
+	}
+	var relationshipsSummary string
+	for _, section := range storySections {
+		if section["title"] == "relationships" {
+			relationshipsSummary, _ = section["summary"].(string)
+			break
+		}
+	}
+	if relationshipsSummary == "" {
+		t.Fatal("story_sections missing relationships section")
+	}
+	for _, want := range []string{"Controller-driven relationships:", "Workflow-driven relationships:"} {
+		if !strings.Contains(relationshipsSummary, want) {
+			t.Fatalf("relationships summary = %q, want %q", relationshipsSummary, want)
+		}
+	}
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	if len(directStory) != 2 {
+		t.Fatalf("len(direct_story) = %d, want 2", len(directStory))
+	}
+	wantControllerLine := "Controller delivery paths include Jenkinsfile via jenkins_pipeline (entry points dist/api.js; shared libraries pipelines; pipeline calls pipelineDeploy; ansible playbooks deploy.yml)."
+	wantWorkflowLine := "Workflow delivery paths include .github/workflows/deploy.yaml as github_actions_workflow deploy (workflow_file)."
+	foundControllerLine := false
+	foundWorkflowLine := false
+	for _, line := range directStory {
+		if line == wantControllerLine {
+			foundControllerLine = true
+		}
+		if line == wantWorkflowLine {
+			foundWorkflowLine = true
+		}
+	}
+	if !foundControllerLine {
+		t.Fatalf("direct_story = %#v, want controller line %q", directStory, wantControllerLine)
+	}
+	if !foundWorkflowLine {
+		t.Fatalf("direct_story = %#v, want workflow line %q", directStory, wantWorkflowLine)
 	}
 }

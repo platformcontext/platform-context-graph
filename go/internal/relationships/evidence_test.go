@@ -756,6 +756,47 @@ func TestDiscoverDockerfileBaseImageDoesNotEmitRepoEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverDockerfileStageAliasDoesNotEmitRepoEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-runtime",
+			Payload: map[string]any{
+				"artifact_type": "dockerfile",
+				"relative_path": "Dockerfile",
+				"content": `FROM golang:1.24 AS builder
+COPY --from=builder /out/app /app
+FROM alpine:3.20 AS runtime
+COPY --from=builder /out/app /app
+`,
+				"parsed_file_data": map[string]any{
+					"dockerfile_stages": []any{
+						map[string]any{
+							"name":        "builder",
+							"base_image":  "golang",
+							"copies_from": "",
+						},
+						map[string]any{
+							"name":        "runtime",
+							"base_image":  "alpine",
+							"copies_from": "builder",
+						},
+					},
+				},
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 0 {
+		t.Fatalf("len = %d, want 0 for Dockerfile stage aliases", len(evidence))
+	}
+}
+
 func stringSlicesEqual(got any, want []string) bool {
 	values, ok := got.([]string)
 	if !ok {

@@ -138,6 +138,41 @@ func TestWrapRetryableNeo4jError(t *testing.T) {
 	}
 }
 
+// TestProductionErrorChain replicates the exact error path from production:
+// session.ExecuteWrite exhausts retries → *TransactionExecutionLimit
+// → EdgeWriter.WrapRetryableNeo4jError → handler fmt.Errorf wraps
+// → queue checks reducer.IsRetryable
+func TestProductionErrorChain(t *testing.T) {
+	t.Parallel()
+
+	// Step 1: Driver returns *TransactionExecutionLimit after exhausting 30s retry
+	driverErr := &neo4jdriver.TransactionExecutionLimit{
+		Cause: "timeout (exceeded max retry time: 30s)",
+		Errors: []error{
+			newNeo4jError("Neo.TransientError.Transaction.DeadlockDetected", "deadlock cycle"),
+			newNeo4jError("Neo.TransientError.Transaction.DeadlockDetected", "deadlock cycle"),
+			newNeo4jError("Neo.TransientError.Transaction.DeadlockDetected", "deadlock cycle"),
+			newNeo4jError("Neo.TransientError.Transaction.DeadlockDetected", "deadlock cycle"),
+		},
+	}
+
+	// Step 2: EdgeWriter calls WrapRetryableNeo4jError
+	edgeWriterErr := WrapRetryableNeo4jError(driverErr)
+
+	// Step 3: Handler wraps with context
+	handlerErr := fmt.Errorf("write canonical code calls: %w", edgeWriterErr)
+
+	// Step 4: Queue checks IsRetryable — THIS is the critical assertion
+	assert.True(t, reducer.IsRetryable(handlerErr),
+		"queue must see TransactionExecutionLimit as retryable through the full error chain")
+
+	// Verify the intermediate steps
+	assert.True(t, reducer.IsRetryable(edgeWriterErr),
+		"EdgeWriter output must be retryable")
+	assert.NotSame(t, driverErr, edgeWriterErr,
+		"WrapRetryableNeo4jError should have wrapped the error")
+}
+
 func TestNeo4jRetryableErrorImplementsInterface(t *testing.T) {
 	t.Parallel()
 
