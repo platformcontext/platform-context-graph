@@ -13,7 +13,7 @@ func discoverAnsibleEvidence(
 	catalog []CatalogEntry,
 	seen map[evidenceKey]struct{},
 ) []EvidenceFact {
-	if !isAnsibleRelationshipEvidenceSource(filePath) {
+	if !isAnsibleRelationshipEvidenceSource(filePath, content) {
 		return nil
 	}
 	var evidence []EvidenceFact
@@ -144,16 +144,22 @@ func uniqueAnsibleCandidates(candidates []ansibleRoleCandidate) []ansibleRoleCan
 	return result
 }
 
-func isAnsibleRelationshipEvidenceSource(filePath string) bool {
+func isAnsibleRelationshipEvidenceSource(filePath, content string) bool {
 	lower := strings.ToLower(filepath.ToSlash(filePath))
 	if lower == "" {
 		return false
 	}
 
 	switch {
-	case strings.Contains(lower, "/inventories/"), strings.Contains(lower, "/inventory/"):
+	case strings.Contains(lower, "/inventories/"),
+		strings.Contains(lower, "/inventory/"),
+		strings.Contains(lower, "inventories/"),
+		strings.Contains(lower, "inventory/"):
 		return false
-	case strings.Contains(lower, "/group_vars/"), strings.Contains(lower, "/host_vars/"):
+	case strings.Contains(lower, "/group_vars/"),
+		strings.Contains(lower, "/host_vars/"),
+		strings.Contains(lower, "group_vars/"),
+		strings.Contains(lower, "host_vars/"):
 		return false
 	case strings.Contains(lower, "/roles/"), strings.HasPrefix(lower, "roles/"):
 		return false
@@ -162,7 +168,11 @@ func isAnsibleRelationshipEvidenceSource(filePath string) bool {
 	}
 
 	lowerBase := strings.ToLower(filepath.Base(lower))
-	return lowerBase == "site.yml" || lowerBase == "site.yaml"
+	if lowerBase == "site.yml" || lowerBase == "site.yaml" {
+		return true
+	}
+
+	return ansiblePlaybookLikeContent(content)
 }
 
 func isAnsibleArtifact(artifactType, filePath string) bool {
@@ -196,4 +206,12 @@ func parseAnsibleDocuments(content string) []any {
 		}
 		documents = append(documents, document)
 	}
+}
+
+func ansiblePlaybookLikeContent(content string) bool {
+	lowered := strings.ToLower(content)
+	return strings.Contains(lowered, "hosts:") ||
+		strings.Contains(lowered, "roles:") ||
+		strings.Contains(lowered, "tasks:") ||
+		strings.Contains(lowered, "import_playbook:")
 }

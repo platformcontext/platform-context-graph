@@ -66,6 +66,10 @@ func TestLoadRepositoryControllerArtifactsFallsBackToGetFileContentForJenkinsfil
 	if len(pipelineCalls) != 1 || pipelineCalls[0] != "pipelineDeploy" {
 		t.Fatalf("controller_artifacts[0].pipeline_calls = %#v, want [pipelineDeploy]", row["pipeline_calls"])
 	}
+	sharedLibraries := StringSliceVal(row, "shared_libraries")
+	if len(sharedLibraries) != 1 || sharedLibraries[0] != "controller-pipelines" {
+		t.Fatalf("controller_artifacts[0].shared_libraries = %#v, want [controller-pipelines]", row["shared_libraries"])
+	}
 	shellCommands := StringSliceVal(row, "shell_commands")
 	if len(shellCommands) != 1 || shellCommands[0] != "./scripts/deploy.sh" {
 		t.Fatalf("controller_artifacts[0].shell_commands = %#v, want [./scripts/deploy.sh]", row["shell_commands"])
