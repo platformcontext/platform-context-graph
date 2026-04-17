@@ -485,3 +485,67 @@ func TestBuildRepositoryConfigArtifactsExtractsTerragruntGetRepoRootModuleSource
 		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildRepositoryConfigArtifactsExtractsJoinedPathModuleTemplateAssets(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-stack-aws-client-vpn", []FileContent{
+		{
+			RelativePath: "modules/2024.02/custom/ecs-application/pipeline_node/main.tf",
+			Content: `locals {
+  appspec_yaml_file = templatefile(join("", [path.module, "/specs/AppSpec.yaml"]), {
+    app_name = var.app_name
+  })
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 1 {
+		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
+	}
+	if got, want := configPaths[0]["path"], "specs/AppSpec.yaml"; got != want {
+		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[0]["evidence_kind"], "local_config_asset"; got != want {
+		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildRepositoryConfigArtifactsExtractsNestedLocalInterpolationConfigAssets(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("terraform-stack-event-linking", []FileContent{
+		{
+			RelativePath: "modules/2021.01/batch/job-definition/main.tf",
+			Content: `locals {
+  container_template = var.platform_capabilities[0] == "FARGATE" ? "container-fargate.tpl" : "container-ec2.tpl"
+
+  container_properties = templatefile(lookup(var.configuration, "template", "${path.module}/batch/${local.container_template}"),
+    {
+      name = var.name
+    }
+  )
+}
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryConfigArtifacts() = nil, want config_paths")
+	}
+
+	configPaths := mapSliceValue(got, "config_paths")
+	if len(configPaths) != 1 {
+		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
+	}
+	if got, want := configPaths[0]["path"], "batch/container-fargate.tpl"; got != want {
+		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := configPaths[0]["evidence_kind"], "local_config_asset"; got != want {
+		t.Fatalf("config_paths[0].evidence_kind = %#v, want %#v", got, want)
+	}
+}

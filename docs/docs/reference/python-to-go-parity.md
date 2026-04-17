@@ -137,9 +137,11 @@ honest signoff:
   relationship promotion and richer workflow gating semantics still need
   current-truth validation; Terraform variable-file promotion, local-variable-
   backed `file(local.foo)` / `templatefile(local.bar, ...)` config assets,
-  lookup-backed local config assets, helper-built Terragrunt
-  `${get_repo_root()}` module sources, and the shared-infra compose-backed
-  deployment-trace proof are already proven on the normal Go path
+  lookup-backed local config assets, helper-composed `join("", [path.module,
+  "/..."])` template assets, nested `${local.foo}` interpolation inside
+  helper-built defaults, helper-built Terragrunt `${get_repo_root()}`
+  module sources, and the shared-infra compose-backed deployment-trace proof
+  are already proven on the normal Go path
 - JSON remains intentionally partial to avoid graph noise unless a specific
   JSON family is promoted on purpose
 
