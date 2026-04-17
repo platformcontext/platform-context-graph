@@ -16,6 +16,9 @@ one intent per entity instead of one intent per repo. This causes:
 3. **Resource contention:** Postgres at 84% CPU from queue churn, Neo4j at
    361% CPU from concurrent writes, while bootstrap-index is still
    ingesting at 194% CPU and 7.6 GiB RAM
+4. **Deadlock amplification:** Higher concurrent intent volume increases the
+   probability of Neo4j index-entry deadlocks documented in the
+   [deadlock root-cause ADR](2026-04-17-neo4j-concurrent-write-deadlock-root-cause.md)
 
 ### Production Evidence (2026-04-17, 896-repo E2E run)
 
