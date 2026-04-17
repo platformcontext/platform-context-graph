@@ -139,7 +139,7 @@ func TestAttachSemanticSummaryAddsStoryForSemanticEntities(t *testing.T) {
 					"config_path": "../vpc",
 				},
 			},
-			want: "TerragruntDependency vpc depends on ../vpc. Defined in infra/terragrunt.hcl (hcl).",
+			want: "TerragruntDependency vpc discovers config in ../vpc. Defined in infra/terragrunt.hcl (hcl).",
 		},
 		{
 			name: "python type annotation",

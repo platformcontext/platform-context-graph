@@ -121,7 +121,7 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		if configPath == "" {
 			return ""
 		}
-		return fmt.Sprintf("%s %s depends on %s.", label, name, configPath)
+		return fmt.Sprintf("%s %s discovers config in %s.", label, name, configPath)
 	case "Typedef":
 		typeName, _ := metadata["type"].(string)
 		if typeName == "" {
