@@ -12,6 +12,7 @@ var (
 	terragruntFindInParentFoldersPattern = regexp.MustCompile(`(?i)find_in_parent_folders\("([^"]+)"\)`)
 	terragruntIncludePathPattern         = regexp.MustCompile(`(?i)\bpath\s*=\s*find_in_parent_folders\("([^"]+)"\)`)
 	localFileFunctionPattern             = regexp.MustCompile(`(?i)\b(?:file|templatefile)\(\s*"([^"]+)"`)
+	localFileJoinedHelperPattern         = regexp.MustCompile(`(?is)\b(?:file|templatefile)\(\s*join\(\s*"/"\s*,\s*\[\s*(?:path_relative_to_include\(\s*(?:"[^"]+")?\s*\)|get_terragrunt_dir\(\s*\))\s*,\s*"([^"]+)"\s*\]\s*\)`)
 )
 
 type terragruntHelperPaths struct {
@@ -27,8 +28,27 @@ func parseTerragruntHelperPaths(source []byte) terragruntHelperPaths {
 		includePaths:             collectNormalizedHelperPaths(content, terragruntIncludePathPattern),
 		readConfigPaths:          collectNormalizedHelperPaths(content, terragruntReadConfigPattern),
 		findInParentFoldersPaths: collectNormalizedHelperPaths(content, terragruntFindInParentFoldersPattern),
-		localConfigAssetPaths:    collectNormalizedHelperPaths(content, localFileFunctionPattern),
+		localConfigAssetPaths:    mergeNormalizedHelperPaths(content, localFileFunctionPattern, localFileJoinedHelperPattern),
 	}
+}
+
+func mergeNormalizedHelperPaths(content string, patterns ...*regexp.Regexp) []string {
+	seen := map[string]struct{}{}
+	paths := make([]string, 0)
+	for _, pattern := range patterns {
+		for _, normalized := range collectNormalizedHelperPaths(content, pattern) {
+			if _, ok := seen[normalized]; ok {
+				continue
+			}
+			seen[normalized] = struct{}{}
+			paths = append(paths, normalized)
+		}
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 func collectNormalizedHelperPaths(content string, pattern *regexp.Regexp) []string {

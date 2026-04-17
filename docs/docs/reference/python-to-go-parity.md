@@ -119,7 +119,7 @@ parity from persisted graph and query-surface parity.
 | CloudFormation | Go-owned | pass | YAML and JSON detection are native Go; both formats now persist `file_format`, cross-stack import/export buckets, first-class condition definitions, evaluated condition results when expressions are template-local, and nested-stack `template_url` metadata; nested `AWS::CloudFormation::Stack` resources now surface that template URL on the Go entity-context path as a synthesized `DEPLOYS_FROM` relationship and resolve obvious repo-local nested-stack targets without losing the raw URL when no local match exists | broaden compose-backed and real-repo proof in the final validation sweep |
 | Kustomize | Go-owned | pass | overlays, resources, base references, and inline patch targets parse in Go; base references stay first-class as a sorted list; typed Kustomize evidence for resources vs Helm vs images materializes in Go; normalized `resource_refs`, `helm_refs`, and `image_refs` now persist on the parser payload; and both the historical patch-link heuristic plus typed deploy-source relationships now survive on the Go-owned entity-context/query path | keep the current parser/query coverage validated; `components` breakout and inline patch-body traversal remain bounded non-goals rather than parity blockers |
 | Terraform | Go-owned | complete | HCL parser and provider schema support are Go-owned, Go now exceeds the old Python baseline by materializing first-class `terraform {}` block metadata, resource rows now retain raw `count`/`for_each` expressions, and the Postgres ingestion boundary now persists schema-driven Terraform provider evidence into `relationship_evidence_facts` before projector work is enqueued | none for Python-era parity; `count`/`for_each` expansion and `dynamic` traversal remain optional net-new follow-on work |
-| Terragrunt | Go-owned | complete | core Terragrunt parsing is complete, dependency/local/input semantics are queryable through Go content entities, `terraform.source` now also materializes through the normal `TerraformModule` surface, and helper-built module paths such as `terraform.source = "${get_repo_root()}/..."` are restored on the Go read path | none; historical module-source semantics are now restored |
+| Terragrunt | Go-owned | complete | core Terragrunt parsing is complete, dependency/local/input semantics are queryable through Go content entities, `terraform.source` now also materializes through the normal `TerraformModule` surface, helper-built module paths such as `terraform.source = "${get_repo_root()}/..."` are restored on the Go read path, and parser helper metadata now also preserves joined Terragrunt sidecar paths such as `join("/", [path_relative_to_include(), "global.yaml"])` and `join("/", [get_terragrunt_dir(), "templates/runtime.json"])` in `local_config_asset_paths` | none; historical module-source semantics are now restored |
 | Generic JSON | Go-owned | intentionally partial | arbitrary JSON stays quiet to avoid graph noise | confirm whether Python-era behavior needs any targeted JSON families promoted |
 
 ## Documented Gap Inventory
@@ -145,11 +145,14 @@ honest signoff:
   lookup-backed local config assets, helper-composed `join("", [path.module,
   "/..."])` template assets, nested `${local.foo}` interpolation inside
   helper-built defaults, helper-built Terragrunt `${get_repo_root()}`
-  module sources, and the service-level `split("/", path_relative_to_include(...))`
-  Terragrunt pattern in both named and unnamed helper forms that now recovers
-  repo-local `account.yaml`, `region.yaml`, and `vpc.yaml` assets without
-  leaking remote-state keys, and the shared-infra compose-backed
-  deployment-trace proof are already proven on
+  module sources, joined Terragrunt sidecar helper paths such as
+  `join("/", [path_relative_to_include(), "global.yaml"])` and
+  `join("/", [get_terragrunt_dir(), "templates/runtime.json"])`, and the
+  service-level `split("/", path_relative_to_include(...))` Terragrunt pattern
+  in both named and unnamed helper forms that now recovers repo-local
+  `account.yaml`, `region.yaml`, and `vpc.yaml` assets without leaking
+  remote-state keys, and the shared-infra compose-backed deployment-trace
+  proof are already proven on
   the normal Go path
 - JSON remains intentionally partial to avoid graph noise unless a specific
   JSON family is promoted on purpose
