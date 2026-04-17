@@ -99,6 +99,17 @@ value = ${var.name}
 			wantDialect:    "",
 			wantIACRelated: true,
 		},
+		{
+			name:         "docker compose overlay file is classified",
+			relativePath: filepath.Join("deploy", "docker-compose.nornicdb.yml"),
+			content: `services:
+  api:
+    command: ["bundle", "exec", "puma"]
+`,
+			wantArtifact:   "docker_compose",
+			wantDialect:    "",
+			wantIACRelated: true,
+		},
 	}
 
 	for _, tt := range tests {

@@ -162,10 +162,9 @@ Canonical relationship types today are:
 - `DEPLOYS_FROM`
 - `PROVISIONS_DEPENDENCY_FOR`
 - `USES_MODULE`
-- `PROVISIONS_PLATFORM`
 - `RUNS_ON`
 
-Typed relationships are canonical. A compatibility `DEPENDS_ON` edge may be derived later so older query surfaces still work, but the typed edge is the actual statement of meaning.
+Typed relationships are canonical. Downstream graph materialization and query layers also use related runtime edges such as `PROVISIONS_PLATFORM`, `DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE`, but those are not currently resolver-owned relationship types on this branch.
 
 ### Resolution Precedence Order
 
@@ -174,7 +173,7 @@ When multiple signals compete, resolve in this order:
 1. explicit assertions and rejections
 2. typed relationships with direct tool-semantic evidence
 3. typed relationships with weaker heuristic evidence
-4. compatibility `DEPENDS_ON` derived from stronger typed edges
+4. downstream compatibility shaping when a consumer still needs a generic `DEPENDS_ON` view
 5. generic fallback only if no stronger truthful type exists
 
 This is the main rule that keeps the graph from becoming a pile of vague `DEPENDS_ON` edges.
@@ -190,10 +189,11 @@ The current derived summaries include:
 - `deployment_artifacts`
 - `delivery_workflows`
 - `delivery_paths`
-- `consumer_repositories`
+- `consumers`
 - `shared_config_paths`
-- hostnames
-- API surface hints
+- `relationship_overview`
+- `deployment_overview`
+- `story`
 
 ### 6. Repo context enrichment
 
@@ -264,7 +264,7 @@ The Go graph needs to keep these distinctions visible:
 
 ### Typed Precedence
 
-When the same pair can be described by both a typed relationship and a generic `DEPENDS_ON`, the typed edge wins. The resolver suppresses the generic candidate for the same implied pair, then may derive a compatibility `DEPENDS_ON` edge from the typed result unless that generic edge was explicitly rejected.
+When the same pair can be described by both a typed relationship and a generic `DEPENDS_ON`, the typed edge wins. The resolver suppresses the weaker generic candidate for the same implied pair, while any compatibility `DEPENDS_ON` view remains a downstream concern rather than a current resolver guarantee on this branch.
 
 The Go reducer and canonical Neo4j writer now preserve that typed meaning end
 to end for repository-scoped relationship families such as:
@@ -286,7 +286,7 @@ The current mapping and enrichment flow understands these families:
 
 | Family | What it reads | What it is used for |
 | :--- | :--- | :--- |
-| Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR`, `PROVISIONS_PLATFORM`, and platform/runtime context |
+| Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR` on the resolver path plus downstream platform/runtime context such as `PROVISIONS_PLATFORM` where the materialized graph proves it |
 | Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config, local config assets | Same semantic family as Terraform; parser output keeps `read_terragrunt_config()` opaque, while the read path now surfaces `dependency.config_path`, `read_terragrunt_config`, `include`, `file`, `templatefile`, `*.tfvars`, and local module-source assets plus `terraform.source` on the normal `TerraformModule` surface |
 | GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Reusable workflow refs, explicit cross-repo checkout, and explicit repo-bearing workflow inputs such as `automation-repo` and `workflow_input_repository` now emit canonical repo evidence on both the relationship and query paths from source or metadata. Repo-local workflow files under `.github/workflows/*` also surface as read-side `workflow_artifacts` in repository context and story delivery paths, but they do not become canonical repo edges unless the evidence is explicitly repo-bearing. Broader workflow delivery-path promotion beyond those explicit cases remains active parity work on this branch |
 | Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Explicit shared-library refs, including `library(...)` step forms, and explicit GitHub repository URLs now emit canonical repo evidence. Those canonical facts now also preserve the parser-proven controller metadata bundle in evidence details, including entry points, pipeline calls, shell commands, Ansible playbook hints, and config/pre-deploy flags. The Go query path also surfaces those controller-artifact summaries directly; broader controller-driven promotion remains active parity work on this branch |
@@ -295,7 +295,7 @@ The current mapping and enrichment flow understands these families:
 | ArgoCD | ApplicationSet discovery targets, deploy-source repo URLs, destination clusters | `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, and `RUNS_ON` |
 | Helm | chart metadata, values files, chart dependency references | `DEPLOYS_FROM` |
 | Kustomize | `resources`, base references, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
-| Platform / runtime context | workload and platform modeling resolved through mixed entity ids | `PROVISIONS_PLATFORM` and `RUNS_ON`, with repository query surfaces now also partitioning typed relationship summaries into controller-driven, workflow-driven, and IaC-driven buckets when the evidence supports it. The controller-driven bucket now covers ArgoCD, Jenkins, and Ansible evidence families instead of flattening Jenkins and Ansible into generic IaC summaries. |
+| Platform / runtime context | workload and platform modeling resolved through mixed entity ids | downstream graph/materialization edges such as `PROVISIONS_PLATFORM` and `RUNS_ON`, with repository query surfaces now also partitioning typed relationship summaries into controller-driven, workflow-driven, and IaC-driven buckets when the evidence supports it. The controller-driven bucket now covers ArgoCD, Jenkins, and Ansible evidence families instead of flattening Jenkins and Ansible into generic IaC summaries. |
 
 The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repository or platform meaning.
 

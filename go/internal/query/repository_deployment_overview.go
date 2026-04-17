@@ -96,6 +96,9 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		if serviceName := strings.TrimSpace(StringVal(row, "service_name")); serviceName != "" {
 			entry["service_name"] = serviceName
 		}
+		if cmd := strings.TrimSpace(StringVal(row, "cmd")); cmd != "" {
+			entry["cmd"] = cmd
+		}
 		if signals := stringSliceValue(row, "signals"); len(signals) > 0 {
 			entry["signals"] = signals
 		}
@@ -300,12 +303,13 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			artifactName := strings.TrimSpace(StringVal(row, "artifact_name"))
 			serviceName := strings.TrimSpace(StringVal(row, "service_name"))
 			baseImage := strings.TrimSpace(StringVal(row, "base_image"))
+			cmd := strings.TrimSpace(StringVal(row, "cmd"))
 			buildContext := strings.TrimSpace(StringVal(row, "build_context"))
 			signals := stringSliceValue(row, "signals")
 			if path == "" || artifactType == "" {
 				continue
 			}
-			line := buildRuntimeArtifactStoryLine(artifactType, artifactName, serviceName, path, baseImage)
+			line := buildRuntimeArtifactStoryLine(artifactType, artifactName, serviceName, path, baseImage, cmd)
 			if line == "" {
 				continue
 			}
@@ -367,14 +371,21 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 	return story
 }
 
-func buildRuntimeArtifactStoryLine(artifactType, artifactName, serviceName, path, baseImage string) string {
+func buildRuntimeArtifactStoryLine(artifactType, artifactName, serviceName, path, baseImage, cmd string) string {
 	switch {
 	case serviceName != "":
-		return fmt.Sprintf("Runtime artifacts include %s service %s in %s", artifactType, serviceName, path)
+		line := fmt.Sprintf("Runtime artifacts include %s service %s in %s", artifactType, serviceName, path)
+		if cmd != "" {
+			line += fmt.Sprintf(" with cmd %s", cmd)
+		}
+		return line
 	case artifactName != "":
 		line := fmt.Sprintf("Runtime artifacts include %s stage %s in %s", artifactType, artifactName, path)
 		if baseImage != "" {
 			line += fmt.Sprintf(" based on %s", baseImage)
+		}
+		if cmd != "" {
+			line += fmt.Sprintf(" with cmd %s", cmd)
 		}
 		return line
 	default:

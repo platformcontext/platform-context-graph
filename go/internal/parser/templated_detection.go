@@ -216,7 +216,7 @@ func inferArtifactType(rootFamily string, path string, content string) string {
 		return "github_actions_workflow"
 	case name == "dockerfile" || strings.HasPrefix(name, "dockerfile."):
 		return "dockerfile"
-	case name == "compose.yaml" || name == "compose.yml" || name == "docker-compose.yaml" || name == "docker-compose.yml":
+	case isDockerComposeFilename(name):
 		return "docker_compose"
 	case anySuffix(suffixes, isRawConfigSuffix):
 		switch {
@@ -375,4 +375,12 @@ func isTerraformTemplateSuffix(suffix string) bool {
 
 func isRawConfigSuffix(suffix string) bool {
 	return suffix == ".conf" || suffix == ".cfg" || suffix == ".cnf"
+}
+
+func isDockerComposeFilename(name string) bool {
+	return name == "compose.yaml" ||
+		name == "compose.yml" ||
+		name == "docker-compose.yaml" ||
+		name == "docker-compose.yml" ||
+		(strings.HasPrefix(name, "docker-compose.") && (strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")))
 }

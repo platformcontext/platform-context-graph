@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -28,6 +29,12 @@ func buildRepositoryRuntimeArtifacts(files []FileContent) map[string]any {
 				}
 				if service.BuildContext != "" {
 					row["build_context"] = service.BuildContext
+				}
+				if command := composeRuntimeValues(service.Command); len(command) > 0 {
+					row["command"] = command
+				}
+				if entrypoint := composeRuntimeValues(service.Entrypoint); len(entrypoint) > 0 {
+					row["entrypoint"] = entrypoint
 				}
 				if ports := composeRuntimeValues(service.Ports); len(ports) > 0 {
 					row["ports"] = ports
@@ -119,6 +126,8 @@ func mergeDeploymentArtifactMaps(left map[string]any, right map[string]any) map[
 type composeRuntimeArtifact struct {
 	ServiceName  string
 	BuildContext string
+	Command      []string
+	Entrypoint   []string
 	Healthcheck  bool
 	Ports        []string
 	Environment  []string
@@ -164,7 +173,9 @@ func parseDockerComposeRuntimeArtifacts(content string) []composeRuntimeArtifact
 		current.Ports = composeRuntimeValues(current.Ports)
 		current.Environment = composeRuntimeValues(current.Environment)
 		current.Volumes = composeRuntimeValues(current.Volumes)
-		if current.BuildContext != "" || current.Healthcheck || len(current.Ports) > 0 || len(current.Environment) > 0 || len(current.Volumes) > 0 {
+		current.Command = composeRuntimeValues(current.Command)
+		current.Entrypoint = composeRuntimeValues(current.Entrypoint)
+		if current.BuildContext != "" || len(current.Command) > 0 || len(current.Entrypoint) > 0 || current.Healthcheck || len(current.Ports) > 0 || len(current.Environment) > 0 || len(current.Volumes) > 0 {
 			artifacts = append(artifacts, *current)
 		}
 		current = nil
@@ -225,7 +236,7 @@ func parseDockerComposeRuntimeArtifacts(content string) []composeRuntimeArtifact
 			switch key {
 			case "healthcheck":
 				current.Healthcheck = true
-			case "build", "ports", "environment", "volumes":
+			case "build", "ports", "environment", "volumes", "command", "entrypoint":
 				currentSection = key
 				currentSectionIndent = indent
 				composeCaptureRuntimeSectionInlineValue(current, key, value)
@@ -263,7 +274,7 @@ func composeServiceName(trimmedLine string, indent, servicesIndent int) (string,
 
 func composeKnownSectionKey(key string) bool {
 	switch key {
-	case "build", "cap_add", "cap_drop", "command", "container_name",
+	case "build", "cap_add", "cap_drop", "command", "container_name", "entrypoint",
 		"depends_on", "environment", "env_file", "expose", "healthcheck",
 		"image", "labels", "networks", "ports", "profiles", "restart",
 		"secrets", "stdin_open", "tty", "user", "volumes", "working_dir":
@@ -301,6 +312,10 @@ func composeCaptureRuntimeSectionValue(current *composeRuntimeArtifact, section,
 		if current.BuildContext == "" {
 			current.BuildContext = composeNormalizeScalar(normalized)
 		}
+	case "command":
+		current.Command = append(current.Command, composeNormalizeScalar(normalized))
+	case "entrypoint":
+		current.Entrypoint = append(current.Entrypoint, composeNormalizeScalar(normalized))
 	case "ports":
 		current.Ports = append(current.Ports, composeNormalizeScalar(normalized))
 	case "environment":
@@ -386,11 +401,7 @@ func isDockerComposeArtifact(file FileContent) bool {
 		return true
 	}
 
-	relativePath := strings.ToLower(file.RelativePath)
-	return strings.HasSuffix(relativePath, "docker-compose.yaml") ||
-		strings.HasSuffix(relativePath, "docker-compose.yml") ||
-		strings.HasSuffix(relativePath, "compose.yaml") ||
-		strings.HasSuffix(relativePath, "compose.yml")
+	return isDockerComposeFilename(strings.ToLower(filepath.Base(file.RelativePath)))
 }
 
 func composeArtifactType(file FileContent) string {
@@ -416,4 +427,12 @@ func yamlKeyValue(line string) (string, string, bool) {
 		return "", "", false
 	}
 	return key, value, true
+}
+
+func isDockerComposeFilename(name string) bool {
+	return name == "compose.yaml" ||
+		name == "compose.yml" ||
+		name == "docker-compose.yaml" ||
+		name == "docker-compose.yml" ||
+		(strings.HasPrefix(name, "docker-compose.") && (strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")))
 }

@@ -192,7 +192,8 @@ func TestBuildRepositoryDeploymentOverviewIncludesDockerfileRuntimeStory(t *test
 						"artifact_type": "dockerfile",
 						"artifact_name": "runtime",
 						"base_image":    "alpine",
-						"signals":       []string{"base_image", "copy_from", "ports"},
+						"cmd":           `["/app", "--serve"]`,
+						"signals":       []string{"base_image", "copy_from", "cmd", "ports"},
 					},
 				},
 			},
@@ -209,6 +210,9 @@ func TestBuildRepositoryDeploymentOverviewIncludesDockerfileRuntimeStory(t *test
 	if got, want := deliveryPaths[0]["artifact_name"], "runtime"; got != want {
 		t.Fatalf("delivery_paths[0].artifact_name = %#v, want %#v", got, want)
 	}
+	if got, want := deliveryPaths[0]["cmd"], `["/app", "--serve"]`; got != want {
+		t.Fatalf("delivery_paths[0].cmd = %#v, want %#v", got, want)
+	}
 
 	topologyStory, ok := got["topology_story"].([]string)
 	if !ok {
@@ -217,7 +221,7 @@ func TestBuildRepositoryDeploymentOverviewIncludesDockerfileRuntimeStory(t *test
 	if len(topologyStory) != 1 {
 		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
 	}
-	if got, want := topologyStory[0], "Runtime artifacts include dockerfile stage runtime in Dockerfile based on alpine (base_image, copy_from, ports)."; got != want {
+	if got, want := topologyStory[0], "Runtime artifacts include dockerfile stage runtime in Dockerfile based on alpine with cmd [\"/app\", \"--serve\"] (base_image, copy_from, cmd, ports)."; got != want {
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 }

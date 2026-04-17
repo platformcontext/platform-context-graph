@@ -40,6 +40,9 @@ func buildDockerfileRuntimeArtifacts(file FileContent) []map[string]any {
 		if copyFrom := strings.TrimSpace(StringVal(stage, "copies_from")); copyFrom != "" {
 			row["copy_from"] = []string{copyFrom}
 		}
+		if cmd := strings.TrimSpace(StringVal(stage, "cmd")); cmd != "" {
+			row["cmd"] = cmd
+		}
 		if ports := dockerfileStagePorts(metadata, stageName); len(ports) > 0 {
 			row["ports"] = ports
 		}
@@ -66,6 +69,9 @@ func dockerfileRuntimeSignals(stage map[string]any, metadata map[string]any) []s
 	}
 	if strings.TrimSpace(StringVal(stage, "entrypoint")) != "" {
 		signals = append(signals, "entrypoint")
+	}
+	if strings.TrimSpace(StringVal(stage, "cmd")) != "" {
+		signals = append(signals, "cmd")
 	}
 	if strings.TrimSpace(StringVal(stage, "healthcheck")) != "" {
 		signals = append(signals, "healthcheck")

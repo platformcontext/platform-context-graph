@@ -253,7 +253,8 @@ func TestBuildRepositoryStoryResponseIncludesDockerfileRuntimeArtifactsInDirectS
 						"artifact_type": "dockerfile",
 						"artifact_name": "runtime",
 						"base_image":    "alpine",
-						"signals":       []string{"base_image", "copy_from", "ports"},
+						"cmd":           `["/app", "--serve"]`,
+						"signals":       []string{"base_image", "copy_from", "cmd", "ports"},
 					},
 				},
 			},
@@ -272,7 +273,7 @@ func TestBuildRepositoryStoryResponseIncludesDockerfileRuntimeArtifactsInDirectS
 	if len(directStory) != 1 {
 		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
 	}
-	if got, want := directStory[0], "Runtime artifacts include dockerfile stage runtime in Dockerfile based on alpine (base_image, copy_from, ports)."; got != want {
+	if got, want := directStory[0], "Runtime artifacts include dockerfile stage runtime in Dockerfile based on alpine with cmd [\"/app\", \"--serve\"] (base_image, copy_from, cmd, ports)."; got != want {
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
 }

@@ -119,6 +119,7 @@ FROM alpine:3.20 AS runtime
 COPY --from=builder /out/app /app
 EXPOSE 8080
 ENTRYPOINT ["/app"]
+CMD ["/app", "--serve"]
 HEALTHCHECK CMD /app --healthz
 `,
 		},
@@ -162,7 +163,10 @@ HEALTHCHECK CMD /app --healthz
 	if got, want := runtime["ports"], []string{"8080/tcp"}; !stringSliceEqual(got, want) {
 		t.Fatalf("runtime.ports = %#v, want %#v", got, want)
 	}
-	if got, want := runtime["signals"], []string{"base_image", "copy_from", "entrypoint", "healthcheck", "ports"}; !stringSliceEqual(got, want) {
+	if got, want := runtime["cmd"], `["/app", "--serve"]`; got != want {
+		t.Fatalf("runtime.cmd = %#v, want %#v", got, want)
+	}
+	if got, want := runtime["signals"], []string{"base_image", "copy_from", "entrypoint", "cmd", "healthcheck", "ports"}; !stringSliceEqual(got, want) {
 		t.Fatalf("runtime.signals = %#v, want %#v", got, want)
 	}
 }
@@ -201,6 +205,50 @@ func TestBuildRepositoryRuntimeArtifactsSurfacesDockerComposeBuildContext(t *tes
 	}
 	if got, want := api["signals"], []string{"build"}; !stringSliceEqual(got, want) {
 		t.Fatalf("api.signals = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildRepositoryRuntimeArtifactsCapturesDockerComposeCommandAndEntrypoint(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryRuntimeArtifacts([]FileContent{
+		{
+			RelativePath: "docker-compose.nornicdb.yml",
+			ArtifactType: "",
+			Content: `services:
+  api:
+    command: ["bundle", "exec", "puma"]
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryRuntimeArtifacts() = nil, want deployment artifacts")
+	}
+
+	artifacts, ok := got["deployment_artifacts"].([]map[string]any)
+	if !ok {
+		t.Fatalf("deployment_artifacts type = %T, want []map[string]any", got["deployment_artifacts"])
+	}
+	if len(artifacts) != 1 {
+		t.Fatalf("len(deployment_artifacts) = %d, want 1", len(artifacts))
+	}
+
+	api := artifacts[0]
+	if got, want := api["relative_path"], "docker-compose.nornicdb.yml"; got != want {
+		t.Fatalf("api.relative_path = %#v, want %#v", got, want)
+	}
+	if got, want := api["artifact_type"], "docker_compose"; got != want {
+		t.Fatalf("api.artifact_type = %#v, want %#v", got, want)
+	}
+	if got, want := api["service_name"], "api"; got != want {
+		t.Fatalf("api.service_name = %#v, want %#v", got, want)
+	}
+	if got, want := api["command"], []string{"bundle", "exec", "puma"}; !stringSliceEqual(got, want) {
+		t.Fatalf("api.command = %#v, want %#v", got, want)
+	}
+	if got, want := api["entrypoint"], []string{"/usr/local/bin/docker-entrypoint.sh"}; !stringSliceEqual(got, want) {
+		t.Fatalf("api.entrypoint = %#v, want %#v", got, want)
 	}
 }
 
