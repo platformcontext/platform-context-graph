@@ -1,0 +1,36 @@
+scripts/verify_relationship_platform_compose.sh
+  26d0a7775258d320 18,22-40,127-154,244,281-327,342-353,375-382,389-390,423-425
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "f1e1caa92475f770d019e70963d2f42ee25bd8ea",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 202,
+      "overriden_lines": 0
+    }
+  }
+}
