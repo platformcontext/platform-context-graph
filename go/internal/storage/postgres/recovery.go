@@ -22,7 +22,7 @@ WITH replayed AS (
         failure_message = NULL,
         failure_details = NULL,
         updated_at = $1
-    WHERE status = 'failed'
+    WHERE status IN ('dead_letter', 'failed')
       AND stage = $2
     RETURNING work_item_id
 )
@@ -42,7 +42,7 @@ WITH replayed AS (
         failure_message = NULL,
         failure_details = NULL,
         updated_at = $1
-    WHERE status = 'failed'
+    WHERE status IN ('dead_letter', 'failed')
       AND stage = $2
       AND scope_id = ANY($3)
     RETURNING work_item_id
@@ -63,7 +63,7 @@ WITH replayed AS (
         failure_message = NULL,
         failure_details = NULL,
         updated_at = $1
-    WHERE status = 'failed'
+    WHERE status IN ('dead_letter', 'failed')
       AND stage = $2
       AND failure_class = $3
     RETURNING work_item_id
@@ -84,7 +84,7 @@ WITH replayed AS (
         failure_message = NULL,
         failure_details = NULL,
         updated_at = $1
-    WHERE status = 'failed'
+    WHERE status IN ('dead_letter', 'failed')
       AND stage = $2
       AND scope_id = ANY($3)
       AND failure_class = $4
@@ -160,8 +160,9 @@ func NewRecoveryStore(db ExecQueryer) RecoveryStore {
 	return RecoveryStore{db: db}
 }
 
-// ReplayFailedWorkItems resets failed work items to pending for the given
-// stage and filter criteria.
+// ReplayFailedWorkItems resets terminal work items to pending for the given
+// stage and filter criteria. New Go runtime rows use dead_letter; legacy failed
+// rows remain replayable until they age out.
 func (s RecoveryStore) ReplayFailedWorkItems(
 	ctx context.Context,
 	filter recovery.ReplayFilter,

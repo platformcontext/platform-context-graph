@@ -40,19 +40,20 @@ func (s *postgresAdminStore) ListWorkItems(ctx context.Context, f WorkItemFilter
 func (s *postgresAdminStore) DeadLetterWorkItems(ctx context.Context, f DeadLetterFilter) ([]AdminWorkItem, error) {
 	now := s.time()
 	query, args := buildMutatingWorkItemsQuery(f.WorkItemIDs, f.ScopeID, f.Stage, f.FailureClass, f.Limit, 2, `
-SET status = 'failed',
+SET status = 'dead_letter',
     lease_owner = NULL,
     claim_until = NULL,
     visible_at = $1,
-    failure_class = COALESCE(NULLIF($2, ''), work.failure_class, 'operator_dead_letter'),
+    failure_class = COALESCE(NULLIF(work.failure_class, ''), 'operator_dead_letter'),
     failure_message = COALESCE(NULLIF(work.failure_message, ''), 'dead-lettered by operator'),
+    failure_details = COALESCE(NULLIF($2, ''), work.failure_details),
     updated_at = $1
 `)
 	args = append([]any{now, strings.TrimSpace(f.OperatorNote)}, args...)
 	return scanAdminWorkItems(ctx, s.db, query, args...)
 }
 
-func (s *postgresAdminStore) SkipRepositoryWorkItems(ctx context.Context, repoID string, _ string) ([]AdminWorkItem, error) {
+func (s *postgresAdminStore) SkipRepositoryWorkItems(ctx context.Context, repoID string, note string) ([]AdminWorkItem, error) {
 	now := s.time()
 	const query = `
 WITH selected AS (
@@ -64,12 +65,13 @@ WITH selected AS (
     LIMIT 100
 ), updated AS (
     UPDATE fact_work_items AS work
-    SET status = 'failed',
+    SET status = 'dead_letter',
         lease_owner = NULL,
         claim_until = NULL,
         visible_at = $2,
         failure_class = COALESCE(work.failure_class, 'operator_skipped'),
         failure_message = COALESCE(NULLIF(work.failure_message, ''), 'skipped by operator'),
+        failure_details = COALESCE(NULLIF($3, ''), work.failure_details),
         updated_at = $2
     FROM selected
     WHERE work.work_item_id = selected.work_item_id
@@ -90,7 +92,7 @@ WITH selected AS (
 )
 SELECT * FROM updated ORDER BY updated_at DESC, work_item_id ASC
 `
-	return scanAdminWorkItems(ctx, s.db, query, repoID, now)
+	return scanAdminWorkItems(ctx, s.db, query, repoID, now, strings.TrimSpace(note))
 }
 
 func (s *postgresAdminStore) ReplayFailedWorkItems(ctx context.Context, f ReplayWorkItemFilter) ([]AdminWorkItem, error) {
@@ -371,7 +373,7 @@ func buildMutatingWorkItemsQuery(
 WITH selected AS (
     SELECT work_item_id
     FROM fact_work_items
-    WHERE status = 'failed'
+    WHERE status IN ('dead_letter', 'failed')
 `)
 	args := make([]any, 0, 5)
 	if len(workItemIDs) > 0 {

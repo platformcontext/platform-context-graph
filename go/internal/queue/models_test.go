@@ -81,15 +81,15 @@ func TestWorkItemTransitionLifecycle(t *testing.T) {
 		t.Fatalf("Retry().FailureRecord = %#v, want timeout failure", retrying.FailureRecord)
 	}
 
-	failed, err := retrying.Fail(start)
+	deadLettered, err := retrying.Fail(start)
 	if err != nil {
 		t.Fatalf("Fail() error = %v, want nil", err)
 	}
-	if got, want := failed.Status, StatusFailed; got != want {
+	if got, want := deadLettered.Status, StatusDeadLetter; got != want {
 		t.Fatalf("Fail().Status = %q, want %q", got, want)
 	}
 
-	replayed, err := failed.Replay(start)
+	replayed, err := deadLettered.Replay(start)
 	if err != nil {
 		t.Fatalf("Replay() error = %v, want nil", err)
 	}

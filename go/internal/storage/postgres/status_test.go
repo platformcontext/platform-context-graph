@@ -52,13 +52,13 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 			},
 			{
 				rows: [][]any{
-					{"repository", int64(3), int64(1), int64(0), 90.0},
-					{"shared-platform", int64(1), int64(0), int64(1), 30.0},
+					{"repository", int64(3), int64(1), int64(0), int64(0), 90.0},
+					{"shared-platform", int64(1), int64(0), int64(1), int64(0), 30.0},
 				},
 			},
 			{
 				rows: [][]any{
-					{int64(9), int64(4), int64(1), int64(2), int64(1), int64(3), int64(1), 90.0, int64(0)},
+					{int64(9), int64(4), int64(1), int64(2), int64(1), int64(3), int64(1), int64(0), 90.0, int64(0)},
 				},
 			},
 		},
@@ -77,7 +77,8 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 		InFlight:             2,
 		Retrying:             1,
 		Succeeded:            3,
-		Failed:               1,
+		Failed:               0,
+		DeadLetter:           1,
 		OldestOutstandingAge: 90 * time.Second,
 		OverdueClaims:        0,
 	}

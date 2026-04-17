@@ -252,6 +252,7 @@ func proofDomainBacklogRows(
 	type domainAggregate struct {
 		outstanding int64
 		retrying    int64
+		deadLetter  int64
 		failed      int64
 		oldest      time.Time
 	}
@@ -273,6 +274,9 @@ func proofDomainBacklogRows(
 		if item.status == "retrying" {
 			aggregate.retrying++
 		}
+		if item.status == "dead_letter" {
+			aggregate.deadLetter++
+		}
 		if item.status == "failed" {
 			aggregate.failed++
 		}
@@ -280,7 +284,8 @@ func proofDomainBacklogRows(
 
 	domains := make([]string, 0, len(aggregates))
 	for domain, aggregate := range aggregates {
-		if aggregate.outstanding == 0 && aggregate.retrying == 0 && aggregate.failed == 0 {
+		if aggregate.outstanding == 0 && aggregate.retrying == 0 &&
+			aggregate.deadLetter == 0 && aggregate.failed == 0 {
 			continue
 		}
 		domains = append(domains, domain)
@@ -298,6 +303,7 @@ func proofDomainBacklogRows(
 			domain,
 			aggregate.outstanding,
 			aggregate.retrying,
+			aggregate.deadLetter,
 			aggregate.failed,
 			oldestAgeSeconds,
 		})
@@ -315,6 +321,7 @@ func proofQueueSnapshotRow(
 	var inFlightCount int64
 	var retryingCount int64
 	var succeededCount int64
+	var deadLetterCount int64
 	var failedCount int64
 	var overdueClaimCount int64
 	var oldestOutstanding time.Time
@@ -336,6 +343,8 @@ func proofQueueSnapshotRow(
 			outstandingCount++
 		case "succeeded":
 			succeededCount++
+		case "dead_letter":
+			deadLetterCount++
 		case "failed":
 			failedCount++
 		}
@@ -360,6 +369,7 @@ func proofQueueSnapshotRow(
 		inFlightCount,
 		retryingCount,
 		succeededCount,
+		deadLetterCount,
 		failedCount,
 		oldestOutstandingAgeSeconds,
 		overdueClaimCount,

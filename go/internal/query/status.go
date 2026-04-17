@@ -174,6 +174,7 @@ func queueToMap(q status.QueueSnapshot) map[string]any {
 		"in_flight":                 q.InFlight,
 		"retrying":                  q.Retrying,
 		"succeeded":                 q.Succeeded,
+		"dead_letter":               q.DeadLetter,
 		"failed":                    q.Failed,
 		"oldest_outstanding_age":    q.OldestOutstandingAge.Seconds(),
 		"oldest_outstanding_age_ms": q.OldestOutstandingAge.Milliseconds(),
@@ -217,6 +218,7 @@ func stageSummariesToSlice(stages []status.StageSummary) []map[string]any {
 			"running":   s.Running,
 			"retrying":  s.Retrying,
 			"succeeded": s.Succeeded,
+			"dead_letter": s.DeadLetter,
 			"failed":    s.Failed,
 		})
 	}
@@ -235,6 +237,7 @@ func domainBacklogsToSlice(domains []status.DomainBacklog) []map[string]any {
 			"domain":      d.Domain,
 			"outstanding": d.Outstanding,
 			"retrying":    d.Retrying,
+			"dead_letter": d.DeadLetter,
 			"failed":      d.Failed,
 			"oldest_age":  d.OldestAge.Seconds(),
 		})

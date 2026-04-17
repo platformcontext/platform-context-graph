@@ -126,6 +126,7 @@ func renderStatusMetrics(serviceName string, report statuspkg.Report) string {
 	writeGauge("pcg_runtime_queue_in_flight", map[string]string{"service_name": serviceName}, strconv.Itoa(queue.InFlight))
 	writeGauge("pcg_runtime_queue_retrying", map[string]string{"service_name": serviceName}, strconv.Itoa(queue.Retrying))
 	writeGauge("pcg_runtime_queue_succeeded", map[string]string{"service_name": serviceName}, strconv.Itoa(queue.Succeeded))
+	writeGauge("pcg_runtime_queue_dead_letter", map[string]string{"service_name": serviceName}, strconv.Itoa(queue.DeadLetter))
 	writeGauge("pcg_runtime_queue_failed", map[string]string{"service_name": serviceName}, strconv.Itoa(queue.Failed))
 	writeGauge("pcg_runtime_queue_overdue_claims", map[string]string{"service_name": serviceName}, strconv.Itoa(queue.OverdueClaims))
 	writeGauge(
@@ -155,6 +156,7 @@ func renderStatusMetrics(serviceName string, report statuspkg.Report) string {
 		writeGauge("pcg_runtime_stage_items", mergeLabels(labels, "status", "running"), strconv.Itoa(row.Running))
 		writeGauge("pcg_runtime_stage_items", mergeLabels(labels, "status", "retrying"), strconv.Itoa(row.Retrying))
 		writeGauge("pcg_runtime_stage_items", mergeLabels(labels, "status", "succeeded"), strconv.Itoa(row.Succeeded))
+		writeGauge("pcg_runtime_stage_items", mergeLabels(labels, "status", "dead_letter"), strconv.Itoa(row.DeadLetter))
 		writeGauge("pcg_runtime_stage_items", mergeLabels(labels, "status", "failed"), strconv.Itoa(row.Failed))
 	}
 
@@ -165,6 +167,7 @@ func renderStatusMetrics(serviceName string, report statuspkg.Report) string {
 		}
 		writeGauge("pcg_runtime_domain_outstanding", labels, strconv.Itoa(row.Outstanding))
 		writeGauge("pcg_runtime_domain_retrying", labels, strconv.Itoa(row.Retrying))
+		writeGauge("pcg_runtime_domain_dead_letter", labels, strconv.Itoa(row.DeadLetter))
 		writeGauge("pcg_runtime_domain_failed", labels, strconv.Itoa(row.Failed))
 		writeGauge(
 			"pcg_runtime_domain_oldest_age_seconds",

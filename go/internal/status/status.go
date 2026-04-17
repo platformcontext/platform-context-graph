@@ -47,6 +47,7 @@ type QueueSnapshot struct {
 	Retrying             int
 	Succeeded            int
 	Failed               int
+	DeadLetter           int
 	OldestOutstandingAge time.Duration
 	OverdueClaims        int
 }
@@ -57,6 +58,7 @@ type DomainBacklog struct {
 	Outstanding int
 	Retrying    int
 	Failed      int
+	DeadLetter  int
 	OldestAge   time.Duration
 }
 
@@ -100,6 +102,7 @@ type StageSummary struct {
 	Retrying  int    `json:"retrying"`
 	Succeeded int    `json:"succeeded"`
 	Failed    int    `json:"failed"`
+	DeadLetter int   `json:"dead_letter"`
 }
 
 // Report is the operator-facing summary rendered by CLI and future admin APIs.
@@ -203,10 +206,11 @@ func RenderText(report Report) string {
 	lines := []string{
 		fmt.Sprintf("Health: %s", report.Health.State),
 		fmt.Sprintf(
-			"Queue: outstanding=%d in_flight=%d retrying=%d failed=%d oldest=%s overdue_claims=%d",
+			"Queue: outstanding=%d in_flight=%d retrying=%d dead_letter=%d failed=%d oldest=%s overdue_claims=%d",
 			report.Queue.Outstanding,
 			report.Queue.InFlight,
 			report.Queue.Retrying,
+			report.Queue.DeadLetter,
 			report.Queue.Failed,
 			report.Queue.OldestOutstandingAge,
 			report.Queue.OverdueClaims,
@@ -231,13 +235,14 @@ func RenderText(report Report) string {
 			lines = append(
 				lines,
 				fmt.Sprintf(
-					"  %s pending=%d claimed=%d running=%d retrying=%d succeeded=%d failed=%d",
+					"  %s pending=%d claimed=%d running=%d retrying=%d succeeded=%d dead_letter=%d failed=%d",
 					row.Stage,
 					row.Pending,
 					row.Claimed,
 					row.Running,
 					row.Retrying,
 					row.Succeeded,
+					row.DeadLetter,
 					row.Failed,
 				),
 			)
@@ -249,10 +254,11 @@ func RenderText(report Report) string {
 			lines = append(
 				lines,
 				fmt.Sprintf(
-					"  %s outstanding=%d retrying=%d failed=%d oldest=%s",
+					"  %s outstanding=%d retrying=%d dead_letter=%d failed=%d oldest=%s",
 					row.Domain,
 					row.Outstanding,
 					row.Retrying,
+					row.DeadLetter,
 					row.Failed,
 					row.OldestAge,
 				),
@@ -284,10 +290,13 @@ func evaluateHealth(queue QueueSnapshot, generationTotals map[string]int, opts O
 			},
 		}
 	}
-	if queue.Failed > 0 || generationTotals["failed"] > 0 {
-		reasons := make([]string, 0, 2)
+	if queue.DeadLetter > 0 || queue.Failed > 0 || generationTotals["failed"] > 0 {
+		reasons := make([]string, 0, 3)
+		if queue.DeadLetter > 0 {
+			reasons = append(reasons, fmt.Sprintf("%d work items are dead-lettered", queue.DeadLetter))
+		}
 		if queue.Failed > 0 {
-			reasons = append(reasons, fmt.Sprintf("%d work items are terminally failed", queue.Failed))
+			reasons = append(reasons, fmt.Sprintf("%d legacy work items remain failed", queue.Failed))
 		}
 		if generationTotals["failed"] > 0 {
 			reasons = append(reasons, fmt.Sprintf("%d generations are failed", generationTotals["failed"]))
@@ -339,6 +348,8 @@ func summarizeStages(rows []StageStatusCount) []StageSummary {
 			stageSummary.Succeeded += row.Count
 		case "failed":
 			stageSummary.Failed += row.Count
+		case "dead_letter":
+			stageSummary.DeadLetter += row.Count
 		}
 	}
 

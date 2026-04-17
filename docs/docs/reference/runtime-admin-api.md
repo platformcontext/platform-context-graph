@@ -79,6 +79,7 @@ The JSON response follows the shared status report shape from
 - `health`
 - `flow`
 - `queue`
+  The queue payload now distinguishes current `dead_letter` rows from any legacy `failed` rows that still need replay or cleanup during cutover.
 - `retry_policies`
 - `scope_activity`
 - `generation_history`

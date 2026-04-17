@@ -337,7 +337,7 @@ func TestReducerQueueFailMarksRetryableErrorTerminalWhenAttemptBudgetExhausted(t
 	query := db.execs[0].query
 	for _, want := range []string{
 		"UPDATE fact_work_items",
-		"status = 'failed'",
+		"status = 'dead_letter'",
 		"failure_class = $2",
 	} {
 		if !strings.Contains(query, want) {

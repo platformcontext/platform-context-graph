@@ -21,7 +21,10 @@ const (
 	StatusRetrying WorkItemStatus = "retrying"
 	// StatusSucceeded means the item finished successfully.
 	StatusSucceeded WorkItemStatus = "succeeded"
+	// StatusDeadLetter means the item exhausted retries or was quarantined.
+	StatusDeadLetter WorkItemStatus = "dead_letter"
 	// StatusFailed means the item is terminally failed.
+	// Deprecated: retained only so legacy rows can still be replayed.
 	StatusFailed WorkItemStatus = "failed"
 )
 
@@ -127,14 +130,14 @@ func (w WorkItem) Retry(now time.Time, nextAttempt time.Time, failure FailureRec
 	return cloned, nil
 }
 
-// Fail moves the item into a terminal failed state.
+// Fail moves the item into a terminal dead-letter state.
 func (w WorkItem) Fail(now time.Time) (WorkItem, error) {
 	if w.Status != StatusRunning && w.Status != StatusClaimed && w.Status != StatusRetrying {
 		return WorkItem{}, fmt.Errorf("cannot fail work item in status %q", w.Status)
 	}
 
 	cloned := w.clone()
-	cloned.Status = StatusFailed
+	cloned.Status = StatusDeadLetter
 	cloned.ClaimUntil = nil
 	cloned.VisibleAt = nil
 	if cloned.RetryState != nil {
@@ -160,9 +163,9 @@ func (w WorkItem) Succeed() (WorkItem, error) {
 	return cloned, nil
 }
 
-// Replay returns a terminally failed item to the pending state.
+// Replay returns a terminal dead-lettered item to the pending state.
 func (w WorkItem) Replay(now time.Time) (WorkItem, error) {
-	if w.Status != StatusFailed {
+	if w.Status != StatusDeadLetter && w.Status != StatusFailed {
 		return WorkItem{}, fmt.Errorf("cannot replay work item in status %q", w.Status)
 	}
 

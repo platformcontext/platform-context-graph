@@ -230,7 +230,7 @@ func TestBuildReportClassifiesDegradedFailures(t *testing.T) {
 				{Name: "failed", Count: 1},
 			},
 			Queue: status.QueueSnapshot{
-				Failed: 2,
+				DeadLetter: 2,
 			},
 		},
 		status.DefaultOptions(),
@@ -239,8 +239,8 @@ func TestBuildReportClassifiesDegradedFailures(t *testing.T) {
 	if report.Health.State != "degraded" {
 		t.Fatalf("BuildReport().Health.State = %q, want %q", report.Health.State, "degraded")
 	}
-	if !strings.Contains(strings.Join(report.Health.Reasons, " "), "failed") {
-		t.Fatalf("BuildReport().Health.Reasons = %v, want mention of failures", report.Health.Reasons)
+	if !strings.Contains(strings.Join(report.Health.Reasons, " "), "dead-letter") {
+		t.Fatalf("BuildReport().Health.Reasons = %v, want mention of dead-lettered work", report.Health.Reasons)
 	}
 }
 
@@ -314,6 +314,7 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 				Outstanding:          3,
 				InFlight:             1,
 				Retrying:             1,
+				DeadLetter:           1,
 				OldestOutstandingAge: 90 * time.Second,
 			},
 			StageCounts: []status.StageStatusCount{
@@ -335,13 +336,13 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 
 	rendered := status.RenderText(report)
 	for _, want := range []string{
-		"Health: progressing",
-		"Queue: outstanding=3 in_flight=1 retrying=1 failed=0 oldest=1m30s",
+		"Health: degraded",
+		"Queue: outstanding=3 in_flight=1 retrying=1 dead_letter=1 failed=0 oldest=1m30s",
 		"Scope activity: active=2 changed=1 unchanged=1",
 		"Scope statuses: active=3",
 		"Generation history: active=1 pending=0 completed=2 superseded=1 failed=0 other=0",
-		"projector pending=0 claimed=0 running=1 retrying=1 succeeded=0 failed=0",
-		"repository outstanding=2 retrying=1 failed=0 oldest=1m30s",
+		"projector pending=0 claimed=0 running=1 retrying=1 succeeded=0 dead_letter=0 failed=0",
+		"repository outstanding=2 retrying=1 dead_letter=0 failed=0 oldest=1m30s",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("RenderText() missing %q in output:\n%s", want, rendered)
@@ -377,7 +378,7 @@ func TestRenderTextDoesNotRepeatTopLevelSummaries(t *testing.T) {
 
 	rendered := status.RenderText(report)
 	for _, want := range []string{
-		"Queue: outstanding=1 in_flight=1 retrying=0 failed=0 oldest=30s overdue_claims=0",
+		"Queue: outstanding=1 in_flight=1 retrying=0 dead_letter=0 failed=0 oldest=30s overdue_claims=0",
 		"Scope activity: active=4 changed=2 unchanged=2",
 		"Scope statuses: active=2",
 		"Generation history: active=0 pending=0 completed=3 superseded=1 failed=0 other=0",

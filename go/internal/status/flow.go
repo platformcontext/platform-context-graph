@@ -91,12 +91,13 @@ func stageSummaryText(rows []StageSummary, stage string) string {
 			continue
 		}
 		return fmt.Sprintf(
-			"pending=%d claimed=%d running=%d retrying=%d succeeded=%d failed=%d",
+			"pending=%d claimed=%d running=%d retrying=%d succeeded=%d dead_letter=%d failed=%d",
 			row.Pending,
 			row.Claimed,
 			row.Running,
 			row.Retrying,
 			row.Succeeded,
+			row.DeadLetter,
 			row.Failed,
 		)
 	}
@@ -106,10 +107,11 @@ func stageSummaryText(rows []StageSummary, stage string) string {
 
 func queuePressureText(queue QueueSnapshot) string {
 	return fmt.Sprintf(
-		"outstanding=%d in_flight=%d retrying=%d failed=%d oldest=%s overdue_claims=%d",
+		"outstanding=%d in_flight=%d retrying=%d dead_letter=%d failed=%d oldest=%s overdue_claims=%d",
 		queue.Outstanding,
 		queue.InFlight,
 		queue.Retrying,
+		queue.DeadLetter,
 		queue.Failed,
 		queue.OldestOutstandingAge,
 		queue.OverdueClaims,
@@ -126,6 +128,7 @@ func domainBacklogText(rows []DomainBacklog) string {
 		row.Domain,
 		fmt.Sprintf("outstanding=%d", row.Outstanding),
 		fmt.Sprintf("retrying=%d", row.Retrying),
+		fmt.Sprintf("dead_letter=%d", row.DeadLetter),
 		fmt.Sprintf("failed=%d", row.Failed),
 		fmt.Sprintf("oldest=%s", row.OldestAge),
 	}

@@ -114,7 +114,7 @@ func TestProjectorQueueFailMarksGenerationFailedWithoutClearingOtherActiveGenera
 		"UPDATE ingestion_scopes",
 		"active_generation_id = CASE",
 		"UPDATE fact_work_items",
-		"status = 'failed'",
+		"status = 'dead_letter'",
 	} {
 		if !strings.Contains(query, want) {
 			t.Fatalf("Fail() query missing %q:\n%s", want, query)
@@ -201,7 +201,7 @@ func TestProjectorQueueFailMarksRetryableErrorTerminalWhenAttemptBudgetExhausted
 		"UPDATE scope_generations",
 		"status = 'failed'",
 		"UPDATE fact_work_items",
-		"status = 'failed'",
+		"status = 'dead_letter'",
 	} {
 		if !strings.Contains(query, want) {
 			t.Fatalf("Fail() terminal query missing %q:\n%s", want, query)

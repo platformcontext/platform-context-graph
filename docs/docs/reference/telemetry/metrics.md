@@ -149,7 +149,7 @@ Each metric entry includes:
 ### `pcg_runtime_queue_*`
 
 - Type: Gauge family
-- Description: Shared queue depth, pending, in-flight, retrying, succeeded, failed, overdue-claim, and oldest-outstanding-age metrics for the runtime work queue.
+- Description: Shared queue depth, pending, in-flight, retrying, succeeded, dead-letter, legacy-failed, overdue-claim, and oldest-outstanding-age metrics for the runtime work queue.
 - How to leverage: This is the first dashboard to open when a runtime feels slow. It tells you whether the service is starved, saturated, retrying, or simply draining cleanly.
 
 ### `pcg_runtime_stage_items`
@@ -158,10 +158,10 @@ Each metric entry includes:
 - Description: Per-stage work-item counts labeled by stage and queue status.
 - How to leverage: Use it to spot whether pressure is concentrated in collector, projector, or reducer behavior instead of treating the whole data plane as one opaque backlog.
 
-### `pcg_runtime_domain_outstanding`, `pcg_runtime_domain_retrying`, `pcg_runtime_domain_failed`, `pcg_runtime_domain_oldest_age_seconds`
+### `pcg_runtime_domain_outstanding`, `pcg_runtime_domain_retrying`, `pcg_runtime_domain_dead_letter`, `pcg_runtime_domain_failed`, `pcg_runtime_domain_oldest_age_seconds`
 
 - Type: Gauge family
-- Description: Domain-specific backlog and age metrics for runtime work that fans out by reducer or projection domain.
+- Description: Domain-specific backlog and age metrics for runtime work that fans out by reducer or projection domain, including explicit dead-letter pressure alongside any legacy failed rows.
 - How to leverage: These metrics are the operator-facing answer to “which slice of the platform is actually stuck?” and are especially useful once more ingestors and reducers land.
 
 ## Git Collector And Indexing

@@ -54,6 +54,7 @@ ORDER BY stage, status
 SELECT domain,
        COUNT(*) FILTER (WHERE status IN ('pending', 'claimed', 'running', 'retrying')) AS outstanding_count,
        COUNT(*) FILTER (WHERE status = 'retrying') AS retrying_count,
+       COUNT(*) FILTER (WHERE status = 'dead_letter') AS dead_letter_count,
        COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
        COALESCE(
          EXTRACT(
@@ -68,7 +69,7 @@ SELECT domain,
        ) AS oldest_outstanding_age_seconds
 FROM fact_work_items
 GROUP BY domain
-HAVING COUNT(*) FILTER (WHERE status IN ('pending', 'claimed', 'running', 'retrying', 'failed')) > 0
+HAVING COUNT(*) FILTER (WHERE status IN ('pending', 'claimed', 'running', 'retrying', 'dead_letter', 'failed')) > 0
 ORDER BY outstanding_count DESC, oldest_outstanding_age_seconds DESC, domain ASC
 `
 	queueSnapshotQuery = `
@@ -78,6 +79,7 @@ SELECT COUNT(*) AS total_count,
        COUNT(*) FILTER (WHERE status IN ('claimed', 'running')) AS in_flight_count,
        COUNT(*) FILTER (WHERE status = 'retrying') AS retrying_count,
        COUNT(*) FILTER (WHERE status = 'succeeded') AS succeeded_count,
+       COUNT(*) FILTER (WHERE status = 'dead_letter') AS dead_letter_count,
        COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
        COALESCE(
          EXTRACT(
@@ -369,12 +371,14 @@ func listDomainBacklogs(
 		var domain string
 		var outstandingCount int64
 		var retryingCount int64
+		var deadLetterCount int64
 		var failedCount int64
 		var oldestOutstandingAgeSeconds float64
 		if scanErr := rows.Scan(
 			&domain,
 			&outstandingCount,
 			&retryingCount,
+			&deadLetterCount,
 			&failedCount,
 			&oldestOutstandingAgeSeconds,
 		); scanErr != nil {
@@ -384,6 +388,7 @@ func listDomainBacklogs(
 			Domain:      domain,
 			Outstanding: int(outstandingCount),
 			Retrying:    int(retryingCount),
+			DeadLetter:  int(deadLetterCount),
 			Failed:      int(failedCount),
 			OldestAge:   durationFromSeconds(oldestOutstandingAgeSeconds),
 		})
@@ -419,6 +424,7 @@ func readQueueSnapshot(
 	var inFlightCount int64
 	var retryingCount int64
 	var succeededCount int64
+	var deadLetterCount int64
 	var failedCount int64
 	var oldestOutstandingAgeSeconds float64
 	var overdueClaimCount int64
@@ -429,6 +435,7 @@ func readQueueSnapshot(
 		&inFlightCount,
 		&retryingCount,
 		&succeededCount,
+		&deadLetterCount,
 		&failedCount,
 		&oldestOutstandingAgeSeconds,
 		&overdueClaimCount,
@@ -446,6 +453,7 @@ func readQueueSnapshot(
 		InFlight:             int(inFlightCount),
 		Retrying:             int(retryingCount),
 		Succeeded:            int(succeededCount),
+		DeadLetter:           int(deadLetterCount),
 		Failed:               int(failedCount),
 		OldestOutstandingAge: durationFromSeconds(oldestOutstandingAgeSeconds),
 		OverdueClaims:        int(overdueClaimCount),

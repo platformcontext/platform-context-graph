@@ -40,6 +40,7 @@ func TestStatusMetricsHandlerServesRuntimeMetrics(t *testing.T) {
 				Retrying:             1,
 				Succeeded:            2,
 				Failed:               0,
+				DeadLetter:           1,
 				OldestOutstandingAge: 45 * time.Second,
 				OverdueClaims:        0,
 			},
@@ -70,8 +71,9 @@ func TestStatusMetricsHandlerServesRuntimeMetrics(t *testing.T) {
 		`pcg_runtime_scope_unchanged{service_name="collector-git"} 4`,
 		`pcg_runtime_refresh_skipped_total{service_name="collector-git"} 0`,
 		`pcg_runtime_queue_outstanding{service_name="collector-git"} 2`,
+		`pcg_runtime_queue_dead_letter{service_name="collector-git"} 1`,
 		`pcg_runtime_queue_oldest_outstanding_age_seconds{service_name="collector-git"} 45`,
-		`pcg_runtime_health_state{service_name="collector-git",state="progressing"} 1`,
+		`pcg_runtime_health_state{service_name="collector-git",state="degraded"} 1`,
 		`pcg_runtime_retry_policy_max_attempts{service_name="collector-git",stage="projector"} 4`,
 		`pcg_runtime_retry_policy_retry_delay_seconds{service_name="collector-git",stage="projector"} 42`,
 		`pcg_runtime_stage_items{service_name="collector-git",stage="projector",status="running"} 1`,
@@ -90,7 +92,7 @@ func TestStatusMetricsHandlerReportsQueueFailureAndOverdueClaims(t *testing.T) {
 			Queue: statuspkg.QueueSnapshot{
 				Outstanding:          3,
 				InFlight:             0,
-				Failed:               2,
+				DeadLetter:           2,
 				OverdueClaims:        1,
 				OldestOutstandingAge: 45 * time.Second,
 			},
@@ -109,7 +111,7 @@ func TestStatusMetricsHandlerReportsQueueFailureAndOverdueClaims(t *testing.T) {
 	}
 	body := recorder.Body.String()
 	for _, want := range []string{
-		`pcg_runtime_queue_failed{service_name="reducer"} 2`,
+		`pcg_runtime_queue_dead_letter{service_name="reducer"} 2`,
 		`pcg_runtime_queue_overdue_claims{service_name="reducer"} 1`,
 		`pcg_runtime_health_state{service_name="reducer",state="stalled"} 1`,
 	} {

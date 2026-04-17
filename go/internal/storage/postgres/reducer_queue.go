@@ -90,7 +90,7 @@ WHERE work_item_id = $2
 
 const failReducerWorkQuery = `
 UPDATE fact_work_items
-SET status = 'failed',
+SET status = 'dead_letter',
     lease_owner = NULL,
     claim_until = NULL,
     visible_at = NULL,

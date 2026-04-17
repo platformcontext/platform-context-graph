@@ -167,7 +167,7 @@ scope_update AS (
     WHERE scope_id = $5
 )
 UPDATE fact_work_items
-SET status = 'failed',
+SET status = 'dead_letter',
     lease_owner = NULL,
     claim_until = NULL,
     visible_at = NULL,

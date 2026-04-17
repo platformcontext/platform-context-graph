@@ -43,8 +43,8 @@ func TestRecoveryStoreReplayFailedWorkItemsDefaultFilter(t *testing.T) {
 	if len(db.queries) != 1 {
 		t.Fatalf("query count = %d, want 1", len(db.queries))
 	}
-	if !strings.Contains(db.queries[0].query, "status = 'failed'") {
-		t.Fatalf("query missing failed filter: %s", db.queries[0].query)
+	if !strings.Contains(db.queries[0].query, "status IN ('dead_letter', 'failed')") {
+		t.Fatalf("query missing terminal filter: %s", db.queries[0].query)
 	}
 	if strings.Contains(db.queries[0].query, "scope_id = ANY") {
 		t.Fatal("default filter should not include scope_id clause")

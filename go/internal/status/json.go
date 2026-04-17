@@ -48,6 +48,7 @@ type queueJSON struct {
 	Retrying                    int     `json:"retrying"`
 	Succeeded                   int     `json:"succeeded"`
 	Failed                      int     `json:"failed"`
+	DeadLetter                  int     `json:"dead_letter"`
 	OverdueClaims               int     `json:"overdue_claims"`
 	OldestOutstandingAge        string  `json:"oldest_outstanding_age"`
 	OldestOutstandingAgeSeconds float64 `json:"oldest_outstanding_age_seconds"`
@@ -73,6 +74,7 @@ type domainBacklogJSON struct {
 	Outstanding      int     `json:"outstanding"`
 	Retrying         int     `json:"retrying"`
 	Failed           int     `json:"failed"`
+	DeadLetter       int     `json:"dead_letter"`
 	OldestAge        string  `json:"oldest_age"`
 	OldestAgeSeconds float64 `json:"oldest_age_seconds"`
 }
@@ -86,6 +88,7 @@ func queueJSONFromReport(queue QueueSnapshot) queueJSON {
 		Retrying:                    queue.Retrying,
 		Succeeded:                   queue.Succeeded,
 		Failed:                      queue.Failed,
+		DeadLetter:                  queue.DeadLetter,
 		OverdueClaims:               queue.OverdueClaims,
 		OldestOutstandingAge:        queue.OldestOutstandingAge.String(),
 		OldestOutstandingAgeSeconds: queue.OldestOutstandingAge.Seconds(),
@@ -104,6 +107,7 @@ func domainBacklogsJSON(rows []DomainBacklog) []domainBacklogJSON {
 			Outstanding:      row.Outstanding,
 			Retrying:         row.Retrying,
 			Failed:           row.Failed,
+			DeadLetter:       row.DeadLetter,
 			OldestAge:        row.OldestAge.String(),
 			OldestAgeSeconds: row.OldestAge.Seconds(),
 		})
