@@ -114,6 +114,12 @@ Not every verb lives at the same layer:
   evidence, but that remains read-side detail rather than a current canonical
   relationship type
 
+The resolver-owned contract stops at the six canonical relationship types in
+the resolution section. Runtime topology edges such as `PROVISIONS_PLATFORM`,
+`DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE` stay on the read side where
+they are documented: repository context, entity context, workload context,
+deployment traces, and platform counts.
+
 A family is not done because a parser emitted metadata. It is done only when
 the right verb survives persistence, projection, and query-visible
 verification.
@@ -166,7 +172,11 @@ Canonical relationship types today are:
 - `USES_MODULE`
 - `RUNS_ON`
 
-Typed relationships are canonical. Downstream graph materialization and query layers also use related runtime edges such as `PROVISIONS_PLATFORM`, `DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE`, but those are not currently resolver-owned relationship types.
+Typed relationships are canonical. Downstream graph materialization and query
+layers also use related runtime edges such as `PROVISIONS_PLATFORM`,
+`DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE`, but those are not resolver-owned
+relationship types and should only surface on the documented read-side topology
+and runtime views.
 
 ### Resolution Precedence Order
 

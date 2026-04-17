@@ -82,6 +82,13 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 
+	if got, want := resp["workload_count"], float64(1); got != want {
+		t.Fatalf("workload_count = %#v, want %#v", got, want)
+	}
+	if got, want := resp["platform_count"], float64(1); got != want {
+		t.Fatalf("platform_count = %#v, want %#v", got, want)
+	}
+
 	overview, ok := resp["relationship_overview"].(map[string]any)
 	if !ok {
 		t.Fatalf("relationship_overview type = %T, want map[string]any", resp["relationship_overview"])
@@ -142,6 +149,24 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 		t.Fatalf("iac_driven[0].evidence_type = %#v, want %#v", got, want)
 	}
 
+	relationshipTypes, ok := overview["relationship_types"].([]any)
+	if !ok {
+		t.Fatalf("relationship_types type = %T, want []any", overview["relationship_types"])
+	}
+	if len(relationshipTypes) != 3 {
+		t.Fatalf("len(relationship_types) = %d, want 3", len(relationshipTypes))
+	}
+	for _, want := range []string{"DEPENDS_ON", "DEPLOYS_FROM", "DISCOVERS_CONFIG_IN"} {
+		if !containsStringAny(relationshipTypes, want) {
+			t.Fatalf("relationship_types missing %q", want)
+		}
+	}
+	for _, runtimeEdge := range []string{"PROVISIONS_PLATFORM", "DEFINES", "INSTANCE_OF"} {
+		if containsStringAny(relationshipTypes, runtimeEdge) {
+			t.Fatalf("relationship_types unexpectedly includes runtime edge %q", runtimeEdge)
+		}
+	}
+
 	if otherRelationships, ok := overview["other_relationships"].([]any); ok && len(otherRelationships) != 0 {
 		t.Fatalf("len(other_relationships) = %d, want 0 after family partitioning", len(otherRelationships))
 	}
@@ -153,4 +178,14 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 	if !strings.Contains(strings.ToLower(story), "iac-driven") {
 		t.Fatalf("story = %q, want IaC-driven relationship narrative", story)
 	}
+}
+
+func containsStringAny(values []any, want string) bool {
+	for _, value := range values {
+		got, ok := value.(string)
+		if ok && got == want {
+			return true
+		}
+	}
+	return false
 }

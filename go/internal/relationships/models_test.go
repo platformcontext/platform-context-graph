@@ -83,6 +83,50 @@ func TestRelationshipTypeConstants(t *testing.T) {
 	}
 }
 
+func TestResolverOwnedRelationshipVocabulary(t *testing.T) {
+	t.Parallel()
+
+	got := []RelationshipType{
+		RelDeploysFrom,
+		RelDiscoversConfigIn,
+		RelRunsOn,
+		RelProvisionsDependencyFor,
+		RelDependsOn,
+		RelUsesModule,
+	}
+	want := map[RelationshipType]struct{}{
+		RelDeploysFrom:             {},
+		RelDiscoversConfigIn:       {},
+		RelRunsOn:                  {},
+		RelProvisionsDependencyFor: {},
+		RelDependsOn:               {},
+		RelUsesModule:              {},
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("len(got) = %d, want %d", len(got), len(want))
+	}
+
+	seen := make(map[RelationshipType]struct{}, len(got))
+	for _, rel := range got {
+		seen[rel] = struct{}{}
+	}
+
+	for rel := range want {
+		if _, ok := seen[rel]; !ok {
+			t.Fatalf("missing resolver-owned relationship type %q", rel)
+		}
+	}
+
+	for _, runtimeEdge := range []string{"PROVISIONS_PLATFORM", "DEFINES", "INSTANCE_OF", "DEPLOYMENT_SOURCE"} {
+		for _, rel := range got {
+			if string(rel) == runtimeEdge {
+				t.Fatalf("runtime edge %q must not be part of the resolver-owned vocabulary", runtimeEdge)
+			}
+		}
+	}
+}
+
 func TestResolutionSourceConstants(t *testing.T) {
 	t.Parallel()
 

@@ -65,10 +65,12 @@ type schemaDocument struct {
 }
 
 type ProviderSchemaInfo struct {
-	ProviderKey   string
-	ProviderName  string
-	FormatVersion string
-	ResourceTypes map[string]map[string]AttributeSchema
+	ProviderKey           string
+	ProviderName          string
+	ProviderKeys          []string
+	FormatVersion         string
+	ResourceTypes         map[string]map[string]AttributeSchema
+	ProviderResourceTypes map[string]map[string]map[string]AttributeSchema
 }
 
 func (p *ProviderSchemaInfo) ResourceCount() int {
@@ -99,31 +101,37 @@ func LoadProviderSchema(schemaPath string) (*ProviderSchemaInfo, error) {
 		providerKeys = append(providerKeys, providerKey)
 	}
 	sort.Strings(providerKeys)
-	providerKey := providerKeys[0]
-	providerData := raw.ProviderSchemas[providerKey]
-
-	resourceTypes := make(map[string]map[string]AttributeSchema, len(providerData.ResourceSchemas))
-	for resourceType, schema := range providerData.ResourceSchemas {
-		attrs := copyAttributeMap(schema.Block.Attributes)
-		for _, nestedKey := range nestedIdentityBlocks {
-			nested, ok := schema.Block.BlockTypes[nestedKey]
-			if !ok {
-				continue
-			}
-			for attrName, attrDef := range nested.Block.Attributes {
-				if _, exists := attrs[attrName]; !exists {
-					attrs[attrName] = attrDef
+	providerResourceTypes := make(map[string]map[string]map[string]AttributeSchema, len(providerKeys))
+	resourceTypes := make(map[string]map[string]AttributeSchema)
+	for _, providerKey := range providerKeys {
+		providerData := raw.ProviderSchemas[providerKey]
+		providerResources := make(map[string]map[string]AttributeSchema, len(providerData.ResourceSchemas))
+		for resourceType, schema := range providerData.ResourceSchemas {
+			attrs := copyAttributeMap(schema.Block.Attributes)
+			for _, nestedKey := range nestedIdentityBlocks {
+				nested, ok := schema.Block.BlockTypes[nestedKey]
+				if !ok {
+					continue
+				}
+				for attrName, attrDef := range nested.Block.Attributes {
+					if _, exists := attrs[attrName]; !exists {
+						attrs[attrName] = attrDef
+					}
 				}
 			}
+			providerResources[resourceType] = attrs
+			resourceTypes[resourceType] = copyAttributeMap(attrs)
 		}
-		resourceTypes[resourceType] = attrs
+		providerResourceTypes[providerKey] = providerResources
 	}
 
 	return &ProviderSchemaInfo{
-		ProviderKey:   providerKey,
-		ProviderName:  filepath.Base(providerKey),
-		FormatVersion: valueOrDefault(raw.FormatVersion, "unknown"),
-		ResourceTypes: resourceTypes,
+		ProviderKey:           providerKeys[0],
+		ProviderName:          filepath.Base(providerKeys[0]),
+		ProviderKeys:          providerKeys,
+		FormatVersion:         valueOrDefault(raw.FormatVersion, "unknown"),
+		ResourceTypes:         resourceTypes,
+		ProviderResourceTypes: providerResourceTypes,
 	}, nil
 }
 

@@ -1,6 +1,9 @@
 package reducer
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestGraphProjectionPhaseKeyValidate(t *testing.T) {
 	t.Parallel()
@@ -79,5 +82,46 @@ func TestGraphProjectionPhaseKeyValidateRejectsBlankFields(t *testing.T) {
 				t.Fatal("Validate() error = nil, want non-nil")
 			}
 		})
+	}
+}
+
+func TestGraphProjectionPhaseRepairValidate(t *testing.T) {
+	t.Parallel()
+
+	repair := GraphProjectionPhaseRepair{
+		Key: GraphProjectionPhaseKey{
+			ScopeID:          "scope-a",
+			AcceptanceUnitID: "repo-a",
+			SourceRunID:      "run-1",
+			GenerationID:     "gen-1",
+			Keyspace:         GraphProjectionKeyspaceCodeEntitiesUID,
+		},
+		Phase:         GraphProjectionPhaseSemanticNodesCommitted,
+		CommittedAt:   time.Date(2026, time.April, 17, 10, 0, 0, 0, time.UTC),
+		EnqueuedAt:    time.Date(2026, time.April, 17, 10, 0, 1, 0, time.UTC),
+		NextAttemptAt: time.Date(2026, time.April, 17, 10, 0, 1, 0, time.UTC),
+	}
+	if err := repair.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
+	}
+}
+
+func TestGraphProjectionPhaseRepairValidateRejectsBlankPhase(t *testing.T) {
+	t.Parallel()
+
+	repair := GraphProjectionPhaseRepair{
+		Key: GraphProjectionPhaseKey{
+			ScopeID:          "scope-a",
+			AcceptanceUnitID: "repo-a",
+			SourceRunID:      "run-1",
+			GenerationID:     "gen-1",
+			Keyspace:         GraphProjectionKeyspaceCodeEntitiesUID,
+		},
+		CommittedAt:   time.Date(2026, time.April, 17, 10, 0, 0, 0, time.UTC),
+		EnqueuedAt:    time.Date(2026, time.April, 17, 10, 0, 1, 0, time.UTC),
+		NextAttemptAt: time.Date(2026, time.April, 17, 10, 0, 1, 0, time.UTC),
+	}
+	if err := repair.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want non-nil")
 	}
 }

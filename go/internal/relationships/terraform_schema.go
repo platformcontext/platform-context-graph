@@ -71,21 +71,44 @@ func RegisterSchemaDrivenTerraformExtractors(schemaDir string) map[string]int {
 			continue
 		}
 
-		registeredCount := 0
-		for resourceType, attributes := range schema.ResourceTypes {
-			normalized := normalizeResourceType(resourceType)
-			if _, exists := terraformResourceExtractors[normalized]; exists {
+		providerResourceTypes := schema.ProviderResourceTypes
+		if len(providerResourceTypes) == 0 && len(schema.ResourceTypes) > 0 {
+			providerResourceTypes = map[string]map[string]map[string]terraformschema.AttributeSchema{
+				schema.ProviderKey: schema.ResourceTypes,
+			}
+		}
+
+		providerKeys := schema.ProviderKeys
+		if len(providerKeys) == 0 {
+			providerKeys = make([]string, 0, len(providerResourceTypes))
+			for providerKey := range providerResourceTypes {
+				providerKeys = append(providerKeys, providerKey)
+			}
+			sort.Strings(providerKeys)
+		}
+
+		for _, providerKey := range providerKeys {
+			resourceTypes := providerResourceTypes[providerKey]
+			if len(resourceTypes) == 0 {
 				continue
 			}
 
-			identityKeys := terraformschema.InferIdentityKeys(attributes)
-			category := terraformschema.ClassifyResourceCategory(resourceType)
-			terraformResourceExtractors[normalized] = []terraformResourceExtractor{
-				makeTerraformSchemaExtractor(identityKeys, category),
+			registeredCount := 0
+			for resourceType, attributes := range resourceTypes {
+				normalized := normalizeResourceType(resourceType)
+				if _, exists := terraformResourceExtractors[normalized]; exists {
+					continue
+				}
+
+				identityKeys := terraformschema.InferIdentityKeys(attributes)
+				category := terraformschema.ClassifyResourceCategory(resourceType)
+				terraformResourceExtractors[normalized] = []terraformResourceExtractor{
+					makeTerraformSchemaExtractor(identityKeys, category),
+				}
+				registeredCount++
 			}
-			registeredCount++
+			summary[filepath.Base(providerKey)] += registeredCount
 		}
-		summary[schema.ProviderName] = registeredCount
 	}
 
 	if len(summary) > 0 {

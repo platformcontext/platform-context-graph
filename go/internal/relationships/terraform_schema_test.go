@@ -1,6 +1,7 @@
 package relationships
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -23,6 +24,58 @@ func TestRegisterSchemaDrivenTerraformExtractorsRegistersFixtureTypes(t *testing
 	extractors := getTerraformResourceExtractors("aws_wafv2_web_acl")
 	if len(extractors) == 0 {
 		t.Fatal("expected aws_wafv2_web_acl extractor to be registered")
+	}
+}
+
+func TestRegisterSchemaDrivenTerraformExtractorsRegistersMultipleProviders(t *testing.T) {
+	resetTerraformSchemaRegistryForTest()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "multi-provider-schema.json")
+	content := []byte(`{
+  "format_version": "1.0",
+  "provider_schemas": {
+    "registry.terraform.io/hashicorp/google": {
+      "resource_schemas": {
+        "google_storage_bucket": {
+          "block": {
+            "attributes": {
+              "name": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "registry.terraform.io/hashicorp/aws": {
+      "resource_schemas": {
+        "aws_s3_bucket": {
+          "block": {
+            "attributes": {
+              "bucket": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+
+	summary := RegisterSchemaDrivenTerraformExtractors(dir)
+	if got := summary["aws"]; got == 0 {
+		t.Fatalf("summary[aws] = %d, want > 0", got)
+	}
+	if got := summary["google"]; got == 0 {
+		t.Fatalf("summary[google] = %d, want > 0", got)
+	}
+
+	if extractors := getTerraformResourceExtractors("aws_s3_bucket"); len(extractors) == 0 {
+		t.Fatal("expected aws_s3_bucket extractor to be registered")
+	}
+	if extractors := getTerraformResourceExtractors("google_storage_bucket"); len(extractors) == 0 {
+		t.Fatal("expected google_storage_bucket extractor to be registered")
 	}
 }
 

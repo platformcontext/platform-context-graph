@@ -13,8 +13,8 @@ func TestBootstrapDefinitionsAreOrderedAndComplete(t *testing.T) {
 	t.Parallel()
 
 	defs := BootstrapDefinitions()
-	if len(defs) != 12 {
-		t.Fatalf("BootstrapDefinitions() len = %d, want 12", len(defs))
+	if len(defs) != 13 {
+		t.Fatalf("BootstrapDefinitions() len = %d, want 13", len(defs))
 	}
 
 	wantNames := []string{
@@ -30,6 +30,7 @@ func TestBootstrapDefinitionsAreOrderedAndComplete(t *testing.T) {
 		"relationship_tables",
 		"shared_projection_acceptance",
 		"graph_projection_phase_state",
+		"graph_projection_phase_repair_queue",
 	}
 	for i, want := range wantNames {
 		if defs[i].Name != want {

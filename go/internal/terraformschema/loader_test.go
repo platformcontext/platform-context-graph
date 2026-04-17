@@ -61,6 +61,75 @@ func TestLoadProviderSchemaReturnsResourceCount(t *testing.T) {
 	}
 }
 
+func TestLoadProviderSchemaHandlesMultipleProviders(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "multi-provider-schema.json")
+	content := []byte(`{
+  "format_version": "1.0",
+  "provider_schemas": {
+    "registry.terraform.io/hashicorp/google": {
+      "resource_schemas": {
+        "google_storage_bucket": {
+          "block": {
+            "attributes": {
+              "name": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "registry.terraform.io/hashicorp/aws": {
+      "resource_schemas": {
+        "aws_s3_bucket": {
+          "block": {
+            "attributes": {
+              "bucket": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+
+	schema, err := LoadProviderSchema(path)
+	if err != nil {
+		t.Fatalf("LoadProviderSchema() error = %v", err)
+	}
+	if schema == nil {
+		t.Fatal("LoadProviderSchema() = nil, want schema")
+	}
+
+	assertStringSliceEqual(t, schema.ProviderKeys, []string{
+		"registry.terraform.io/hashicorp/aws",
+		"registry.terraform.io/hashicorp/google",
+	})
+	if got, want := schema.ProviderName, "aws"; got != want {
+		t.Fatalf("ProviderName = %q, want %q", got, want)
+	}
+	if got, want := schema.ResourceCount(), 2; got != want {
+		t.Fatalf("ResourceCount() = %d, want %d", got, want)
+	}
+
+	for providerKey, resourceType := range map[string]string{
+		"registry.terraform.io/hashicorp/aws":    "aws_s3_bucket",
+		"registry.terraform.io/hashicorp/google": "google_storage_bucket",
+	} {
+		providerResources, ok := schema.ProviderResourceTypes[providerKey]
+		if !ok {
+			t.Fatalf("ProviderResourceTypes missing %q", providerKey)
+		}
+		if _, ok := providerResources[resourceType]; !ok {
+			t.Fatalf("ProviderResourceTypes[%q] missing %q", providerKey, resourceType)
+		}
+		if _, ok := schema.ResourceTypes[resourceType]; !ok {
+			t.Fatalf("ResourceTypes missing %q", resourceType)
+		}
+	}
+}
+
 func TestLoadProviderSchemaReturnsNilForMissingFile(t *testing.T) {
 	schema, err := LoadProviderSchema(filepath.Join(t.TempDir(), "missing.json"))
 	if err != nil {
