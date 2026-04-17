@@ -122,3 +122,30 @@ func TestParseTerragruntConfigExtractsJoinedHelperPaths(t *testing.T) {
 		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
 	}
 }
+
+func TestParseTerragruntConfigExtractsParentDirJoinedHelperPaths(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "terragrunt.hcl")
+	source := []byte(`locals {
+  parent_runtime = templatefile(join("/", [get_parent_terragrunt_dir(), "templates/runtime.json"]), {})
+  parent_global  = file(join("/", [get_parent_terragrunt_dir(), "global.yaml"]))
+}
+`)
+
+	file, diags := hclparse.NewParser().ParseHCL(source, filePath)
+	if diags.HasErrors() {
+		t.Fatalf("ParseHCL() diagnostics = %s", diags.Error())
+	}
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		t.Fatalf("file.Body = %T, want *hclsyntax.Body", file.Body)
+	}
+
+	config := parseTerragruntConfig(body, source, filePath)
+
+	if got, want := config["local_config_asset_paths"], "global.yaml,templates/runtime.json"; got != want {
+		t.Fatalf("local_config_asset_paths = %#v, want %#v", got, want)
+	}
+}
