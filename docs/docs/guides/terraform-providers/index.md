@@ -28,20 +28,19 @@ batches are scanned against that catalog, and matching rows are persisted to
 
 ## Why These Schemas Exist
 
-Historically, the old Python platform loaded the output of
-`terraform providers schema -json` so it could reason about provider resource
-shapes instead of hard-coding one extractor per Terraform resource type.
+PCG uses the output of `terraform providers schema -json` so it can reason
+about provider resource shapes instead of hard-coding one extractor per
+Terraform resource type.
 
-That purpose has not gone away. What changed is ownership:
+That gives the runtime three important properties:
 
-- the schema assets are still generated from `terraform providers schema -json`
-- the runtime loader and extractor registration are now Go-owned
-- the normal runtime path uses those assets to emit schema-driven Terraform
-  relationship evidence without any Python bridge
+- the schema assets are generated from real provider metadata
+- the runtime loader and extractor registration stay generic
+- the normal runtime path can emit schema-driven Terraform relationship
+  evidence without special-casing one provider family at a time
 
 If you see packaged provider schemas in the repository, treat them as a
-required Go runtime dependency for Terraform relationship extraction, not as a
-leftover migration artifact.
+required Go runtime dependency for Terraform relationship extraction.
 
 ## How It Works
 
@@ -105,7 +104,7 @@ Example:
 ```hcl
 resource "aws_lambda_function" "api_handler" {
   function_name = "checkout-api"
-  runtime       = "python3.12"
+  runtime       = "provided.al2023"
   role          = aws_iam_role.lambda_role.arn
 }
 ```

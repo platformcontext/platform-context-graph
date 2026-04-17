@@ -29,23 +29,36 @@ endpoints mounted by a long-running runtime itself.
 
 ## Mounted Endpoints
 
-The shared mounted runtime contract currently covers:
+Every runtime that mounts the shared admin surface exposes:
 
 - `GET` and `HEAD` `/healthz`
 - `GET` and `HEAD` `/readyz`
 - `GET` and `HEAD` `/admin/status`
+
+When the runtime also mounts a metrics handler, it exposes:
+
+- `GET` and `HEAD` `/metrics`
+
+Runtimes that mount the Go recovery handler also expose:
+
 - `POST` `/admin/replay`
 - `POST` `/admin/refinalize`
 
-`/metrics` remains runtime-specific and is mounted only when a metrics handler
-is provided by that service. The shared runtime metrics families are documented
-in [Telemetry Metrics](telemetry/metrics.md).
+Current runtime shape:
+
+- API: shared probes, status, and metrics
+- MCP server: shared probes, status, and metrics
+- Ingester: shared probes, status, metrics, plus recovery routes
+- Reducer: shared probes, status, and metrics
+
+The shared runtime metrics families are documented in
+[Telemetry Metrics](telemetry/metrics.md).
 
 Unsupported verbs return `405 Method Not Allowed` with an `Allow` header
 listing the methods supported by that endpoint. For GET/HEAD-only endpoints
 (`/healthz`, `/readyz`, `/admin/status`), the header is `Allow: GET, HEAD`.
-For POST-only endpoints (`/admin/replay`, `/admin/refinalize`), the header is
-`Allow: POST`.
+When recovery routes are mounted, `/admin/replay` and `/admin/refinalize`
+return `Allow: POST` for all non-`POST` requests.
 
 If you need the public API admin surface instead of the runtime-local one, use
 the `/api/v0/openapi.json` contract for:
@@ -79,8 +92,8 @@ The JSON response follows the shared status report shape from
 - `health`
 - `flow`
 - `queue`
-  The queue payload now distinguishes current `dead_letter` rows from any
-  legacy `failed` rows that still need replay or cleanup.
+  The queue payload distinguishes `dead_letter` rows from `failed` rows when
+  both appear in the same snapshot.
 - `retry_policies`
 - `scope_activity`
 - `generation_history`
@@ -124,12 +137,12 @@ Generation transition entries include:
 The shared mounted runtime admin surface is implemented through:
 
 - `go/internal/status/http.go` for report rendering
-- `go/internal/runtime/admin.go` for the shared probe/admin mux, including the
-  `/admin/replay` and `/admin/refinalize` recovery endpoints
+- `go/internal/runtime/admin.go` for the shared probe/admin mux
 - `go/internal/runtime/status_server.go` for mounted status-server wiring
 - `go/internal/runtime/http_server.go` for lifecycle-owned HTTP serving
+- `go/internal/runtime/recovery_handler.go` for optional recovery mounts
 
-That means new ingestors should not build bespoke probe or status endpoints.
+That means new runtimes should not build bespoke probe or status endpoints.
 They should reuse the shared mounted contract and only provide the service-
-specific backing reader or metrics handler. The Go runtime is the source of
-truth for mounted recovery and status behavior today.
+specific backing reader, metrics handler, and optional recovery handler. The Go
+runtime is the source of truth for mounted recovery and status behavior today.

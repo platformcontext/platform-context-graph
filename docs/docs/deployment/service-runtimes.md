@@ -33,14 +33,14 @@ Current platform reality:
 - `collector-git`, `ingester`, and `bootstrap-index` own repository selection,
   repo sync, snapshot collection, parsing, content shaping, and fact emission
 - local `pcg index`, `pcg workspace index`, `pcg watch`, and package indexing
-  all hand off to Go binaries rather than a deleted Python coordinator path
+  all hand off to Go binaries
 - when `SCIP_INDEXER=true`, the collector owns SCIP language detection,
   external `scip-*` execution, protobuf reduction, and Go tree-sitter
-  supplementation without Python delegation
+  supplementation
 - Terraform provider-schema assets are packaged and loaded from
   `go/internal/terraformschema/schemas/*.json.gz`
-- Python no longer owns any deployed or long-running runtime
-- the API, MCP, ingester, reducer, collector proof lane, and bootstrap helpers
+- the API, MCP, ingester, reducer, local verification runtimes, and bootstrap
+  helpers
   emit structured JSON logs through the shared Go telemetry logger
 
 ## Runtime Contract
@@ -64,19 +64,17 @@ Current platform reality:
 - Shared `/admin/status` reports the live runtime stage, backlog, and failure
   state where mounted.
 - `GET /api/v0/status/index` is the normalized Go-owned completeness route.
-- `GET /api/v0/index-status` is the legacy compatibility alias for the same
-  completeness payload.
+- `GET /api/v0/index-status` serves the same completeness payload.
 - `GET /api/v0/repositories/{repo_id}/coverage` narrows the completeness view
   to the repository rows that still need attention.
-- Run-scoped completeness routes remain a bounded parity note in the current contract.
 - A service can be healthy while indexing is incomplete. Operators should use
   completeness routes before assuming a full run has finished.
 - `bootstrap-index` remains a one-shot helper for empty or recovered
   environments, not a steady-state health target.
 
-## Local Proof Runtimes
+## Local Verification Runtimes
 
-The repo also has three local proof runtimes that exercise the Go data plane
+The repo also has three local verification runtimes that exercise the Go data plane
 directly.
 
 They are not yet separate deployed Kubernetes workloads in the public chart,
@@ -89,10 +87,6 @@ but they do follow the same shared admin contract:
 `collector-git` owns cycle orchestration, source-mode repository selection,
 repo sync, durable fact commit, per-repo snapshot collection, content shaping,
 the optional SCIP collector path, and the shared admin surface in Go.
-
-The remaining hardening work is validation and evidence refresh, not
-runtime ownership. The merge target remains full Go service ownership with no
-normal-path Python delegation.
 
 ## Admin Contract
 
@@ -125,15 +119,13 @@ Current runtime status:
   transport-specific routes
 - the API runtime mounts that shared contract today
 - `collector-git`, `projector`, and `reducer` all mount that shared admin
-  surface in their local proof lanes
-- the collector proof lane now uses native Go selection, repo sync, snapshot
-  collection, content shaping, and optional SCIP execution/parsing
+  surface in their local verification lanes
+- the collector verification lane now uses native Go selection, repo sync,
+  snapshot collection, content shaping, and optional SCIP execution/parsing
 - the collector now emits Go-owned parser follow-up facts for workload identity
   and canonical code-call materialization, and the reducer owns the resulting
   `CALLS` edge reconciliation path
-- the deleted Python bridge shims are no longer part of the platform
-- parser, admin, and runtime ownership are Go-owned; remaining work is parity
-  hardening and validation rather than preserving a dual-runtime architecture
+- parser, admin, and runtime ownership are Go-owned
 
 ## Incremental Refresh And Reconciliation
 
@@ -156,8 +148,8 @@ normal freshness path.
 
 The public runtime names remain `platform-context-graph`, `mcp-server`,
 `ingester`, and `resolution-engine`. Operators should still scale, monitor, and
-troubleshoot those service identities, but the deployed processes are now Go
-programs rather than Python CLI shims.
+troubleshoot those service identities, and the deployed processes are the Go
+runtime binaries documented on this page.
 
 ## Deployed Flow
 
@@ -501,9 +493,8 @@ steady-state Kubernetes service in the public chart.
 - keep the workspace mounted only on the ingester in Kubernetes
 - use direct `/metrics` endpoints for local verification
 - use `ServiceMonitor` only for the long-running Kubernetes runtimes
-- treat the local proof runtimes as milestone-validation tools unless and until
-  the public deployment contract promotes them into steady-state deployed
-  shapes
+- treat the local verification runtimes as operator and service-validation
+  tools
 - treat the shared admin/status report as the first place to look for live,
   inferred, backlog, and failure state
 - prefer incremental scope refresh and reconciliation over platform-wide

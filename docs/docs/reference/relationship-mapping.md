@@ -82,9 +82,8 @@ Keep `CONTAINS*` when the query is actually about the tree, not just about locat
 
 ## Contract-First Relationship Verbs
 
-The historical Python relationship pipeline and fixture corpus were organized
-around verb coverage, not parser checklists. The Go platform keeps that same
-contract explicit.
+The relationship pipeline is organized around verb coverage, not parser
+checklists. The platform keeps that contract explicit.
 
 These verbs define the relationship-parity bar:
 
@@ -114,7 +113,8 @@ Not every verb lives at the same layer:
   relationship type
 
 A family is not done because a parser emitted metadata. It is done only when
-the right verb survives persistence, projection, and query-visible proof.
+the right verb survives persistence, projection, and query-visible
+verification.
 
 ## Story-First Answer Contract
 
@@ -254,7 +254,8 @@ The Go graph needs to keep these distinctions visible:
 
 - repos that provision platforms versus repos that provision application
   dependencies
-- dual runtime paths for the same logical service during migration
+- control-plane and workload repositories that participate in the same
+  delivery chain
 - workload-level dependencies expressed through canonical `DEPENDS_ON` and
   the workload-instance runtime chain, not a separate `WORKLOAD_DEPENDS_ON`
   relationship type
@@ -289,9 +290,9 @@ The current mapping and enrichment flow understands these families:
 | Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR` on the resolver path plus downstream platform/runtime context such as `PROVISIONS_PLATFORM` where the materialized graph proves it |
 | Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config, local config assets | Same semantic family as Terraform; parser output keeps `read_terragrunt_config()` opaque, while the read path now surfaces `dependency.config_path`, `read_terragrunt_config`, `include`, `file`, `templatefile`, `*.tfvars`, local-variable-backed config assets, helper-composed Terraform template assets, nested local interpolation inside helper-built defaults, direct legacy `file(lookup(...))` config assets, local module-source assets, helper-built `terraform.source` values such as `${get_repo_root()}/terraform-module-...`, joined sidecar helper paths such as `join("/", [path_relative_to_include(), "global.yaml"])`, `join("/", [get_terragrunt_dir(), "templates/runtime.json"])`, `join("/", [get_parent_terragrunt_dir(), "templates/runtime.json"])`, `join("/", [get_repo_root(), "config/runtime.yaml"])`, and `join("/", [path.module, "templates/runtime.json"])`, and local-backed helper expressions such as `join("/", [get_repo_root(), "accounts/${local.account_name}/account.yaml"])` plus nested local-backed template selection via `lookup(..., "${path.module}/batch/${local.container_template}")` on the normal `TerraformModule` surface. When those helper/config paths are explicitly repo-bearing, the canonical Go evidence path now also promotes them as `DISCOVERS_CONFIG_IN` with helper-kind details instead of collapsing them into read-side-only provenance. |
 | GitHub Actions | reusable workflow calls, checkout targets, action repos, deploy steps, command gating | Reusable workflow refs, explicit cross-repo checkout, and explicit repo-bearing workflow inputs such as `automation-repo`, `workflow_input_repository`, and list-form `workflow_input_repositories` values from workflow source content emit canonical repo evidence on the Go relationship path. The Go query/read path also preserves those same workflow-input repositories when they arrive through extracted metadata. Step-level action repositories such as `hashicorp/setup-terraform@v3` and `peter-evans/create-pull-request@v5` now also emit truthful canonical `DEPENDS_ON` evidence on the Go relationship path instead of staying invisible until query-time. Repo-local workflow files under `.github/workflows/*` also surface as read-side `workflow_artifacts` in repository context and story delivery paths, and those workflow artifacts now preserve local reusable workflow paths, reusable-workflow repositories, explicit checkout repositories, step-level action repositories, explicit workflow-input repositories, list-form `workflow_input_repositories`, run-command counts, derived delivery-command families from real `run:` steps, repo-local delivery paths from Terraform `-chdir`, Terragrunt working directories, Helm chart paths, kubectl manifests, Ansible playbooks/inventories/vars, and Compose file refs, plus trigger events, workflow inputs, actual gating-condition text, matrix metadata, permissions scopes, concurrency groups, job environments, job timeout metadata, and `needs` detail text on the Go read path. Repo-local `uses: ./.github/workflows/...` calls now also emit canonical same-repo `DEPLOYS_FROM` evidence on the Go relationship path while staying distinct from cross-repo reusable-workflow edges and shell-command delivery families |
-| Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Explicit shared-library refs, including `library(...)` step forms, and explicit GitHub repository URLs emit canonical repo evidence. Those canonical facts also preserve the parser-proven controller metadata bundle in evidence details, including entry points, pipeline calls, shell commands, Ansible playbook hints, and config/pre-deploy flags. The Go query path surfaces those controller-artifact summaries directly, and the real `ansible_jenkins_automation` fixture now locks that controller lane down with parser, relationship, and query proof |
+| Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Explicit shared-library refs, including `library(...)` step forms, and explicit GitHub repository URLs emit canonical repo evidence. Those canonical facts also preserve the parser-proven controller metadata bundle in evidence details, including entry points, pipeline calls, shell commands, Ansible playbook hints, and config/pre-deploy flags. The Go query path surfaces those controller-artifact summaries directly, and the real `ansible_jenkins_automation` fixture now locks that controller lane down with parser, relationship, and query verification |
 | Ansible | playbooks, inventories, `group_vars`, `host_vars`, targeted roles, task entrypoints | The Go path classifies inventories, vars, playbooks, role roots, and task entrypoints explicitly, and playbook content that truthfully resolves against the repo catalog emits canonical role-reference evidence. Jenkins-driven controller artifacts plus repository deployment/story shaping also carry adjacent Ansible inventories, vars, and task entrypoints instead of dropping them on the floor. Root-level playbooks such as `deploy.yml` now participate in canonical role-reference discovery when their content truthfully resolves to a repo, and the same fixture corpus locks that behavior down |
-| Docker / Compose | Dockerfile build/runtime hints, Compose services, image wiring, env/config links, dependency hints | Docker Compose build contexts, including shorthand `build: ../repo`, and image refs now emit canonical deploy-source evidence in focused relationship proof, explicit `depends_on` service names now emit canonical dependency evidence when they resolve truthfully through the repo catalog, Dockerfile source labels such as `org.opencontainers.image.source` now emit truthful canonical `DEPLOYS_FROM` evidence, and the Go read side surfaces runtime artifact summaries for both Compose services and Dockerfile stages, including Compose `env_file`, `configs`, and `secrets` linkage metadata. Those same repo-local Compose file references now also feed `config_paths`, `shared_config_paths`, `delivery_paths`, and topology-story config provenance on the Go query path instead of staying runtime-only metadata. The relationship-platform compose proof verifies the live Go runtime for the current Compose deploy-source lane, `depends_on` signals, and the real `service-worker-jobs/Dockerfile` runtime artifact lane, while focused relationship tests plus reducer proof keep build-context, image, and `depends_on` evidence pinned independently. Plain Docker base images and `COPY --from` stage aliases remain bounded read-side signals rather than fake repo edges, which matches the old platform behavior instead of leaving a parity hole |
+| Docker / Compose | Dockerfile build/runtime hints, Compose services, image wiring, env/config links, dependency hints | Docker Compose build contexts, including shorthand `build: ../repo`, and image refs now emit canonical deploy-source evidence in focused relationship verification, explicit `depends_on` service names now emit canonical dependency evidence when they resolve truthfully through the repo catalog, Dockerfile source labels such as `org.opencontainers.image.source` now emit truthful canonical `DEPLOYS_FROM` evidence, and the Go read side surfaces runtime artifact summaries for both Compose services and Dockerfile stages, including Compose `env_file`, `configs`, and `secrets` linkage metadata. Those same repo-local Compose file references now also feed `config_paths`, `shared_config_paths`, `delivery_paths`, and topology-story config provenance on the Go query path instead of staying runtime-only metadata. The relationship-platform compose verification covers the current Compose deploy-source lane, `depends_on` signals, and the real `service-worker-jobs/Dockerfile` runtime artifact lane, while focused relationship tests plus reducer verification keep build-context, image, and `depends_on` evidence pinned independently. Plain Docker base images and `COPY --from` stage aliases remain bounded read-side signals rather than fake repo edges, which keeps the relationship set truthful |
 | ArgoCD | ApplicationSet discovery targets, deploy-source repo URLs, destination clusters | `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, and `RUNS_ON` |
 | Helm | chart metadata, values files, chart dependency references | `DEPLOYS_FROM` |
 | Kustomize | `resources`, base references, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
@@ -340,8 +341,8 @@ batches are matched against that catalog, and evidence rows are persisted to
   `go/internal/terraformschema` and `go/internal/relationships`
 - the packaged schema assets live under
   `go/internal/terraformschema/schemas/*.json.gz`
-- Python no longer owns any part of the Terraform relationship runtime
-  boundary today
+- Terraform relationship extraction is runtime-owned by the Go relationship and
+  provider-schema packages today
 
 ## Terraform-Managed Runtime Variants
 
@@ -460,14 +461,14 @@ Examples include:
 
 Use deployment artifacts to enrich answers and summaries. Do not treat them as a replacement for the underlying relationship edge.
 
-## Fixture-Corpus Proof Shape
+## Fixture-Corpus Verification
 
-The historical fixture corpus is still the best truth test for the current platform state. It
+The fixture corpus is the best truth test for the current platform state. It
 proves the relationship workflow across service repos, Helm/Kustomize deploy
 repos, ArgoCD delivery repos, controller-driven automation repos, and shared
 infrastructure/runtime Terraform repos.
 
-The minimum proof shape is:
+The minimum verification shape is:
 
 1. extract evidence from the right family
 2. resolve the correct verb
@@ -475,13 +476,13 @@ The minimum proof shape is:
 4. project the active generation into Neo4j
 5. surface the same meaning through query, story, and trace outputs
 
-The remaining open corpus families are:
+The current expansion lanes are:
 
 - broader Terraform and Terragrunt config-asset extraction beyond the current
   Kustomize policy-document, Terragrunt `dependency.config_path`, Terragrunt
   `read_terragrunt_config()` / `include`, local `file()` / `templatefile()`,
   `*.tfvars` / `*.tfvars.json`, and local module-source read paths,
-  plus shared-infra runtime-chain proof
+  plus shared-infra runtime-chain verification
 - broader GitHub Actions repo-local command/path provenance beyond the current explicit repo-bearing evidence and the now-proven read-side run-command family surfacing
 - broader Docker / Docker Compose deployment/runtime evidence beyond the now-proven Compose build-context, explicit `depends_on`, image-ref, and read-side runtime artifact surfacing
 
@@ -505,9 +506,8 @@ They should help answer:
 
 They should not be used to invent deployment or provisioning relationships by themselves.
 
-`shared_config_paths` is now fed by the Go normal read path
-from related repositories rather than a deleted Python bridge. The current
-Go-backed sources are:
+`shared_config_paths` is fed by the Go normal read path from related
+repositories. The current Go-backed sources are:
 
 - Kustomize-reachable policy documents that reference SSM parameter families
 - Terragrunt `dependency.config_path` values

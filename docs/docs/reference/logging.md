@@ -41,8 +41,8 @@ Common structured dimensions used by the Go data plane include:
 - `pipeline_phase`
 - `request_id`
 
-Unlike the older Python logging contract, `event_name` is **optional** on the
-Go path. It is present only where a call site explicitly attaches
+`event_name` is **optional** on the Go path. It is present only where a call
+site explicitly attaches
 `telemetry.EventAttr(...)`.
 
 ## Event Names That Are Current

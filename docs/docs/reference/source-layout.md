@@ -1,9 +1,8 @@
 # Source Layout
 
-PlatformContextGraph is now organized around Go-owned runtime and domain
-packages. The historical Python service tree has been deleted.
-Only fixture inputs under `tests/fixtures/` still use Python source files, and
-those exist solely to exercise parser behavior.
+PlatformContextGraph is organized around Go-owned runtime and domain packages.
+Fixture inputs under `tests/fixtures/` exist to exercise parser behavior and
+ecosystem relationships.
 
 Pair this page with the [Collector Authoring Guide](../guides/collector-authoring.md).
 That guide explains boundary rules; this page explains where those boundaries
@@ -13,7 +12,7 @@ live in the repository today.
 
 | Path | Responsibility |
 | :--- | :--- |
-| `go/cmd/` | buildable binaries for API, MCP, CLI, ingester, reducer, bootstrap, and proof runtimes |
+| `go/cmd/` | buildable binaries for API, MCP, CLI, ingester, reducer, bootstrap, and local verification runtimes |
 | `go/internal/app/` | runtime composition, configuration, and shared service wiring |
 | `go/internal/collector/` | Git collection, discovery, snapshotting, and fact shaping |
 | `go/internal/content/` | content shaping and content-store persistence |
@@ -45,14 +44,15 @@ The service boundary is explicit in `go/cmd/`:
 - `mcp-server/`: MCP server binary
 - `pcg/`: top-level CLI
 - `bootstrap-index/`: one-shot indexing seed
-- `collector-git/`: local proof collector runtime
+- `collector-git/`: local collector verification runtime
 - `ingester/`: deployed ingestion runtime
-- `projector/`: local proof projector runtime
+- `projector/`: local projector verification runtime
 - `reducer/`: deployed reduction and repair runtime
 - `admin-status/`: local status renderer
 
-The normal runtime contract is Go-owned end to end. Do not reintroduce service
-logic in a compatibility shell outside these binaries.
+The normal runtime contract is implemented through these binaries. Do not
+reintroduce service logic in an alternate shell, bridge process, or secondary
+runtime tree outside these binaries.
 
 ## Collector, Parser, And Projection Ownership
 
@@ -109,15 +109,5 @@ artifacts:
 If provider schemas move or change format, update both the runtime code and the
 operator docs so the dependency remains explicit.
 
-## What Is Gone
-
-The following ownership has been removed:
-
-- Python runtime entrypoints
-- Python API/MCP/CLI service code
-- Python collector and parser runtime bridges
-- Python finalization and repair bridges
-- Python packaged Terraform runtime ownership
-
-If an older note or plan disagrees with this page, treat this page and the
-published runtime/workflow docs as the current architecture.
+If another note disagrees with this page, treat this page and the published
+runtime/workflow docs as the current architecture.

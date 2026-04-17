@@ -64,8 +64,8 @@ These settings control the shared structured logging and OTEL tracing behavior u
 | **`PCG_LOG_FORMAT`** | `json` | Log output format. `json` is the production standard. `text` is only for local debugging. |
 | **`ENABLE_APP_LOGS`** | `INFO` | Application log threshold (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, `DISABLED`). |
 | **`LIBRARY_LOG_LEVEL`** | `WARNING` | Log threshold for noisy third-party libraries such as `neo4j`, `asyncio`, and `urllib3`. |
-| **`DEBUG_LOGS`** | `false` | Enables the legacy debug-file sink. When enabled, it writes the same JSON envelope used on stdout. |
-| **`DEBUG_LOG_PATH`** | `~/mcp_debug.log` | Legacy debug-file path used only when `DEBUG_LOGS=true`. |
+| **`DEBUG_LOGS`** | `false` | Enables the optional debug-file sink. When enabled, it writes the same JSON envelope used on stdout. |
+| **`DEBUG_LOG_PATH`** | `~/mcp_debug.log` | Debug-file path used only when `DEBUG_LOGS=true`. |
 | **`LOG_FILE_PATH`** | app home logs path | Optional structured file sink for process logs. Stdout JSON is still the canonical output. |
 
 Notes:
@@ -101,7 +101,7 @@ bootstrap, reducer, and watch flows.
 | **`PCG_SHARED_PROJECTION_POLL_INTERVAL`** | `5s` | Idle poll interval for shared projection work. |
 | **`PCG_SHARED_PROJECTION_LEASE_TTL`** | `60s` | Lease duration for shared-projection partition claims. |
 
-Removed Python-era parser controls:
+Unsupported runtime controls:
 
 - `PCG_REPO_FILE_PARSE_MULTIPROCESS`
 - `PCG_MULTIPROCESS_START_METHOD`
@@ -111,7 +111,7 @@ Removed Python-era parser controls:
 
 `pcg index` launches the Go `bootstrap-index` runtime in direct filesystem
 mode, and `pcg watch` hands off to the Go ingester runtime. Neither command
-uses the deleted Python multiprocess parser controls anymore.
+uses these unsupported controls.
 
 ### Indexing Scope
 
@@ -253,15 +253,14 @@ replace the canonical workspace source model.
 
 ## Recovery Commands
 
-Recovery surfaces still exist for operator use, but they are Go-owned repair
-endpoints rather than a separate runtime model.
+Recovery surfaces are part of the Go runtime and API admin contracts.
 
-- `pcg finalize` has been removed. Recovery is owned by the Go ingester at
-  `/admin/refinalize` and `/admin/replay`.
-- Recovery no longer depends on bridge stages or Python post-commit ownership.
+- runtime-local recovery mounts are exposed by the ingester at
+  `/admin/refinalize` and `/admin/replay`
+- API-admin recovery routes are exposed under `/api/v0/admin/*`
 - `pcg workspace index` and `pcg workspace watch` remain valuable for local
-  proof and workstation workflows, but the canonical deployed write plane is
-  still the split `ingester` plus `resolution-engine` runtime model.
+  development and workstation workflows, while the deployed write plane stays
+  split across `ingester` and `resolution-engine`
 
 If you are tuning or operating a deployed environment, start with the runtime
 and queue settings for the service you are scaling. Use the repair commands

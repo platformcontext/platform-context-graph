@@ -45,12 +45,13 @@ export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_cont
 Local compose keeps auth at the Go API boundary.
 
 - If `PCG_API_KEY` is explicitly set for the running `platform-context-graph`
-  container, the compose proof scripts use it as the bearer token.
+  container, the compose verification scripts use it as the bearer token.
 - If no explicit env token is present, the Go runtime can reuse a persisted
   token from `PCG_HOME/.env` or generate one when
-  `PCG_AUTO_GENERATE_API_KEY=true`, and the proof scripts check that same file.
+  `PCG_AUTO_GENERATE_API_KEY=true`, and the verification scripts check that
+  same file.
 - If neither source contains a token, the local stack runs without bearer auth
-  and the proof scripts omit the header.
+  and the verification scripts omit the header.
 - There is no separate auth service, login flow, or OAuth dependency in this
   local contract.
 
@@ -83,7 +84,7 @@ absolute path to a real directory.
 | Admin replay flow | `cd go && go test ./internal/query ./internal/recovery ./internal/runtime -count=1` |
 | Repo hygiene gates | `git diff --check` |
 
-## Go Platform Conversion Gate
+## Go Runtime Package Gate
 
 Use this gate when validating the Go-owned runtime and collector wiring.
 
@@ -123,9 +124,8 @@ The canonical packaged schemas live under:
 - `go/internal/terraformschema/schemas/*.json.gz`
 
 If this gate fails, fix the Go loader or the Go relationship extraction path.
-Do not reintroduce a Python wrapper.
 
-The relationship-platform compose proof now validates the full Go-owned
+The relationship-platform compose verification now validates the full Go-owned
 cross-repo path, including:
 
 - repository selection from the fixture corpus via `PCG_REPOSITORY_RULES_JSON`
@@ -134,17 +134,18 @@ cross-repo path, including:
   contexts surface `controller_driven`, `workflow_driven`, and `iac_driven`
   relationship families
 
-## No-Python Runtime Gate
+## Runtime Tree Hygiene
 
-The runtime-ownership bar is now structural rather than pytest-based.
+The deployable runtime tree is Go-only. Use this check when you need to confirm
+that no runtime implementation has drifted outside the documented Go packages.
 
 ```bash
 rg --files . -g '*.py' | rg -v '^(\\./)?tests/fixtures/'
 ```
 
-That command should return no runtime Python files. Only fixture data under
-`tests/fixtures/` and clearly offline-only docs/CI toolchains are allowed to
-remain in Python.
+That command should return no runtime Python files. Fixture data under
+`tests/fixtures/` and explicitly offline-only tooling can still carry Python
+source when they are not part of the deployable runtime.
 
 ## Bootstrap Projection Concurrency
 
@@ -264,14 +265,13 @@ reducer service
         3 domains × K partitions = 3K work items per cycle
 ```
 
-## Live Runtime Proof Gates
+## Live Runtime Verification Scripts
 
 These scripts allocate their own local ports, start only the required
 compose-backed infrastructure, and tear the stack down automatically unless
 `PCG_KEEP_COMPOSE_STACK=true` is set.
 
-They are shell-native Go-runtime proofs now. They do not call deleted Python
-`tests/e2e/*compose.py` harnesses.
+They are shell-native Go-runtime verification scripts.
 
 Run them one at a time. They all reuse the same local Compose project name, so
 parallel runs will fight over container and network ownership even if the host
@@ -289,8 +289,8 @@ ports differ.
 `verify_relationship_platform_compose.sh` exports exact repository rules for the
 checked-in relationship fixture corpus before booting Compose. That corpus keeps
 fixture metadata at its root, so explicit rules prevent the metadata file from
-collapsing the whole corpus into a single synthetic repository during proof
-runs.
+collapsing the whole corpus into a single synthetic repository during
+verification runs.
 
 ## Local Full Stack
 

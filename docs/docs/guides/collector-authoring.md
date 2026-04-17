@@ -4,7 +4,7 @@ Use this guide when adding a new collector family such as AWS, Kubernetes,
 SQL/data systems, or another source that should feed the shared PCG data plane.
 The Git parser/runtime is Go-owned, so new collector work
 should start from the current Go service and parser boundaries documented here
-rather than reopening migration seams.
+rather than introducing alternate runtime seams.
 
 The goal is not to teach one collector how to fit the current Git path. The
 goal is to make every new ingestor follow the same platform contract so the
@@ -23,12 +23,11 @@ system can grow without core rewrites.
   code.
 - New collectors must reuse the shared admin, telemetry, logging, and
   configurability contract.
-- Do not reintroduce the deleted Python post-commit finalization bridge.
-- Do not start a new ingestor family by reintroducing deleted migration seams,
-  compatibility bridges, or non-Go runtime ownership.
+- Do not add post-commit sidecar repair hooks or alternate runtime ownership
+  for normal-path production behavior.
 
-If a design needs bespoke post-commit or repair behavior in Python, it is
-almost certainly landing in the wrong place.
+If a design needs bespoke post-commit or repair behavior outside the shared Go
+runtime, it is almost certainly landing in the wrong place.
 
 ## The Collector Contract
 
