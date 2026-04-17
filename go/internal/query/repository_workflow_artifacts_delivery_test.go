@@ -114,3 +114,59 @@ jobs:
 		t.Fatalf("delivery_command_families = %#v, want none", got)
 	}
 }
+
+func TestBuildRepositoryWorkflowArtifactsExtractsWorkflowLocalDeliveryPaths(t *testing.T) {
+	t.Parallel()
+
+	artifacts := buildRepositoryWorkflowArtifacts([]FileContent{
+		{
+			RelativePath: ".github/workflows/deploy-platform.yml",
+			ArtifactType: "github_actions_workflow",
+			Content: `name: deploy-platform
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: terraform -chdir=terraform/environments/prod apply -auto-approve
+      - run: terragrunt run-all apply --terragrunt-working-dir infra/live/prod
+      - run: helm upgrade --install edge-api ./charts/edge-api
+      - run: kubectl apply -f deploy/prod.yaml
+      - run: ansible-playbook deploy/site.yml -i inventory/prod.ini --extra-vars @vars/prod.yml
+      - run: docker compose -f deploy/docker-compose.yaml up -d --build
+`,
+		},
+	})
+	if artifacts == nil {
+		t.Fatal("buildRepositoryWorkflowArtifacts() = nil, want workflow_artifacts")
+	}
+
+	rows, ok := artifacts["workflow_artifacts"].([]map[string]any)
+	if !ok {
+		t.Fatalf("workflow_artifacts type = %T, want []map[string]any", artifacts["workflow_artifacts"])
+	}
+	if len(rows) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(rows))
+	}
+
+	row := rows[0]
+	if got, want := StringSliceVal(row, "delivery_local_paths"), []string{
+		"charts/edge-api",
+		"deploy/docker-compose.yaml",
+		"deploy/prod.yaml",
+		"deploy/site.yml",
+		"infra/live/prod",
+		"inventory/prod.ini",
+		"terraform/environments/prod",
+		"vars/prod.yml",
+	}; len(got) != len(want) {
+		t.Fatalf("delivery_local_paths length = %d, want %d; values=%#v", len(got), len(want), got)
+	} else {
+		for index, wantValue := range want {
+			if got[index] != wantValue {
+				t.Fatalf("delivery_local_paths[%d] = %q, want %q", index, got[index], wantValue)
+			}
+		}
+	}
+}

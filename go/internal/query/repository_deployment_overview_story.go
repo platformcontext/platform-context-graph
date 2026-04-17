@@ -159,6 +159,9 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 			if commandCount := intValue(row, "command_count"); commandCount > 0 {
 				line += fmt.Sprintf(" with %d run command(s)", commandCount)
 			}
+			if deliveryLocalPaths := stringSliceValue(row, "delivery_local_paths"); len(deliveryLocalPaths) > 0 {
+				line += fmt.Sprintf(" using local paths %s", strings.Join(deliveryLocalPaths, ", "))
+			}
 			if deliveryFamilies := stringSliceValue(row, "delivery_command_families"); len(deliveryFamilies) > 0 {
 				line += fmt.Sprintf(" and delivery families %s", strings.Join(deliveryFamilies, ", "))
 			}

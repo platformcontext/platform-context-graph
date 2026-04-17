@@ -49,7 +49,11 @@ Go-owned parity work in the normal runtime path:
   `env_file`, `configs`, and `secrets` linkage metadata while the same
   repo-local Compose file references now also feed `config_paths`,
   `shared_config_paths`, `delivery_paths`, and topology-story config
-  provenance on the normal Go read path
+  provenance on the normal Go read path. Repo-local GitHub Actions workflow
+  artifacts now also surface repo-local delivery paths for Terraform
+  `-chdir`, Terragrunt working directories, Helm chart paths, kubectl
+  manifests, Ansible playbooks/inventories/vars, and Compose file refs on the
+  Go read path without inventing canonical repo edges from those hints alone
 - end-to-end validation and instrumentation proof for those flows
 
 The API/MCP query surfacing infrastructure is parity-complete: every
@@ -140,15 +144,18 @@ honest signoff:
   `workflow_input_repositories`, while the relationship path now promotes
   those list-form workflow-input repositories from raw workflow source as
   truthful canonical `DISCOVERS_CONFIG_IN` edges too. The read path also
-  preserves run-command counts, derived delivery-command families, trigger
-  events, workflow inputs, actual gating-condition text, `needs` details,
-  matrix metadata, permissions scopes, concurrency groups, job environments,
-  and job timeout metadata on repo-local workflow artifacts, and the
-  Jenkins-plus-Ansible controller path now also carries inventories,
-  `group_vars` / `host_vars`, and task entrypoint context through repository
-  controller artifacts and deployment/story shaping. Broader repo-local
-  workflow command/path provenance beyond the current family-level surfacing
-  still needs current-truth validation; Terraform variable-file promotion, local-variable-
+  preserves run-command counts, derived delivery-command families, repo-local
+  delivery paths for Terraform `-chdir`, Terragrunt working directories, Helm
+  chart paths, kubectl manifests, Ansible playbooks/inventories/vars, and
+  Compose file refs, plus trigger events, workflow inputs, actual
+  gating-condition text, `needs` details, matrix metadata, permissions
+  scopes, concurrency groups, job environments, and job timeout metadata on
+  repo-local workflow artifacts, and the Jenkins-plus-Ansible controller path
+  now also carries inventories, `group_vars` / `host_vars`, and task
+  entrypoint context through repository controller artifacts and
+  deployment/story shaping. The remaining workflow gap is canonical promotion
+  for repo-local workflow hints when explicit repo-bearing evidence is absent;
+  Terraform variable-file promotion, local-variable-
   backed `file(local.foo)` / `templatefile(local.bar, ...)` config assets,
   lookup-backed local config assets, helper-composed `join("", [path.module,
   "/..."])` and `join("/", [path.module, "..."])` template assets, nested

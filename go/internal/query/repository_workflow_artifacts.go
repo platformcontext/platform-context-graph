@@ -66,6 +66,10 @@ func enrichWorkflowArtifactRow(row map[string]any, content string) {
 		row["delivery_command_families"] = deliveryCommandFamilies
 		signals = append(signals, "delivery_command_families")
 	}
+	if deliveryLocalPaths := workflowDeliveryLocalPaths(runCommands); len(deliveryLocalPaths) > 0 {
+		row["delivery_local_paths"] = deliveryLocalPaths
+		signals = append(signals, "delivery_local_paths")
+	}
 	if len(workflowInputs) > 0 {
 		row["workflow_inputs"] = workflowInputs
 	}

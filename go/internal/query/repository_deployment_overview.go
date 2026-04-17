@@ -133,6 +133,7 @@ func buildOverviewDeliveryPaths(deploymentArtifacts map[string]any) []map[string
 		}
 		copyStringSliceField(entry, row, "run_commands")
 		copyStringSliceField(entry, row, "delivery_command_families")
+		copyStringSliceField(entry, row, "delivery_local_paths")
 		copyStringSliceField(entry, row, "gating_conditions")
 		copyStringSliceField(entry, row, "needs_dependencies")
 		copyStringSliceField(entry, row, "trigger_events")
