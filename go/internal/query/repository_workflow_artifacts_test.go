@@ -129,6 +129,39 @@ jobs:
 	}
 }
 
+func TestBuildRepositoryWorkflowArtifactsIncludesWorkflowInputRepositoriesListForm(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryWorkflowArtifacts([]FileContent{
+		{
+			RelativePath: ".github/workflows/dispatch.yaml",
+			ArtifactType: "github_actions_workflow",
+			Content: `name: Dispatch
+jobs:
+  dispatch-command:
+    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    with:
+      workflow_input_repositories:
+        - boatsgroup/core-engineering-automation
+        - boatsgroup/automation-fallback
+`,
+		},
+	})
+	if got == nil {
+		t.Fatal("buildRepositoryWorkflowArtifacts() = nil, want workflow_artifacts")
+	}
+
+	rows := mapSliceValue(got, "workflow_artifacts")
+	if len(rows) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(rows))
+	}
+
+	row := rows[0]
+	if got, want := StringSliceVal(row, "workflow_input_repositories"), []string{"boatsgroup/automation-fallback", "boatsgroup/core-engineering-automation"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("workflow_artifacts[0].workflow_input_repositories = %#v, want %#v", got, want)
+	}
+}
+
 func TestBuildRepositoryWorkflowArtifactsIncludesCheckoutRepositories(t *testing.T) {
 	t.Parallel()
 

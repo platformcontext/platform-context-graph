@@ -94,7 +94,7 @@ func githubActionsSourceRelationships(entity EntityContent) []githubActionsRelat
 			if leadingWhitespaceWidth(lines[j]) < leadingWhitespaceWidth(lines[i]) {
 				break
 			}
-			for _, key := range []string{"workflow_input_repository", "automation-repo", "automation_repo"} {
+			for _, key := range []string{"workflow_input_repository", "workflow_input_repositories", "automation-repo", "automation_repo"} {
 				repoValue, ok := yamlScalarValue(lines[j], key)
 				if !ok {
 					continue
@@ -168,7 +168,7 @@ func entityLooksLikeGitHubActionsWorkflow(entity EntityContent) bool {
 
 func githubActionsWorkflowInputRepositoryMetadata(metadata map[string]any) []string {
 	refs := make([]string, 0, 2)
-	for _, key := range []string{"workflow_input_repository", "automation-repo", "automation_repo"} {
+	for _, key := range []string{"workflow_input_repository", "workflow_input_repositories", "automation-repo", "automation_repo"} {
 		refs = append(refs, metadataStringSlice(metadata, key)...)
 	}
 	return refs

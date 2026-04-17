@@ -136,10 +136,11 @@ honest signoff:
   dependencies such as `hashicorp/setup-terraform` as canonical `DEPENDS_ON`
   evidence, and the read path now preserves local reusable workflow paths,
   reusable-workflow repositories, explicit checkout repositories, step-level
-  action repositories, explicit workflow-input repositories, and run-command
-  counts, trigger events, workflow inputs, matrix metadata, permissions
-  scopes, concurrency groups, job environments, and job timeout metadata on
-  repo-local workflow artifacts, and the
+  action repositories, explicit workflow-input repositories, list-form
+  `workflow_input_repositories`, and run-command counts, trigger events,
+  workflow inputs, matrix metadata, permissions scopes, concurrency groups,
+  job environments, and job timeout metadata on repo-local workflow
+  artifacts, and the
   Jenkins-plus-Ansible controller path now also carries inventories,
   `group_vars` / `host_vars`, and task entrypoint context through repository
   controller artifacts and deployment/story shaping. Broader controller-driven
