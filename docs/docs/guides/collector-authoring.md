@@ -2,9 +2,9 @@
 
 Use this guide when adding a new collector family such as AWS, Kubernetes,
 SQL/data systems, or another source that should feed the shared PCG data plane.
-The Git parser/runtime is Go-owned, so new collector work
-should start from the current Go service and parser boundaries documented here
-rather than introducing alternate runtime seams.
+The current parser/runtime stack is implemented in the checked-in services, so
+new collector work should start from the current service and parser boundaries
+documented here rather than introducing alternate runtime seams.
 
 The goal is not to teach one collector how to fit the current Git path. The
 goal is to make every new ingestor follow the same platform contract so the
@@ -118,7 +118,7 @@ At minimum, a new collector should ship with:
 
 - unit tests for normalization, identity, and fact serialization
 - replay or fixture-backed integration tests for one full scope generation
-- projector or reducer parity tests when the collector changes downstream
+- projector or reducer integration tests when the collector changes downstream
   materialization
 - telemetry and logging verification for the new runtime
 - local operator runbook updates

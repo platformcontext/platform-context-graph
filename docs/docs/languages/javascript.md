@@ -38,7 +38,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - End-to-end indexing: `supported`
 - Notes:
 - Real-repo validation covers React, Next.js, Express, Hapi, and bounded AWS
-  and GCP SDK evidence through the Go-owned parser and indexing path.
+  and GCP SDK evidence through the current parser and indexing path.
 - JSDoc and method-kind semantics already survive parse and content
   materialization, the graph-backed `language-query` path now returns
   those fields directly from graph rows, and `code/search` now preserves

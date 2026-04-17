@@ -1,7 +1,7 @@
 # Contributing Parser Support
 
-Parser support in PlatformContextGraph is now Go-owned. The canonical parser
-contract lives in the checked-in Go runtime:
+Parser support in PlatformContextGraph lives in the checked-in parser
+packages:
 
 ```text
 go/internal/parser/registry.go
@@ -11,7 +11,7 @@ go/internal/parser/*_test.go
 
 The public parser pages under `docs/docs/languages/`, plus
 `feature-matrix.md` and `support-maturity.md`, are checked-in documentation for
-that Go runtime. Keep them aligned with the implementation and tests when a
+that runtime. Keep them aligned with the implementation and tests when a
 parser contract changes.
 
 ## Contract Model
@@ -22,10 +22,10 @@ Every parser contract should remain explicit in three places:
 - implementation in the language-specific parser files
 - verification in parser-level and integration tests
 
-Framework and ecosystem semantics are also Go-owned. When you expand semantic
-coverage, update the relevant parser implementation and tests, then update the
-public language pages to match what the runtime actually emits and what the
-graph surfaces end to end.
+Framework and ecosystem semantics follow the same runtime contract. When you
+expand semantic coverage, update the relevant parser implementation and tests,
+then update the public language pages to match what the runtime actually emits
+and what the graph surfaces end to end.
 
 ### Status semantics
 

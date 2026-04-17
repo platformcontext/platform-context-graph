@@ -100,7 +100,7 @@ flowchart LR
 - The API does not parse repositories or drain queues.
 - The MCP server is a separate Go runtime that serves MCP transport and uses
   the same canonical graph and content backends for read operations.
-- Admin and status reads use the same Go-owned runtime/reporting model as the
+- Admin and status reads use the same shared runtime/reporting model as the
   operator surface.
 
 ### What To Check When Reads Look Wrong

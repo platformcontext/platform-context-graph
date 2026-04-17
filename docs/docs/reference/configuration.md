@@ -79,7 +79,7 @@ Notes:
 
 ### Concurrency Controls
 
-These settings are the public knobs for the Go-owned collector, projector,
+These settings are the public knobs for the collector, projector,
 bootstrap, reducer, and watch flows.
 
 | Key | Default | Description |
@@ -241,7 +241,7 @@ pcg workspace watch
 - `sync` materializes the matching repositories into `PCG_REPOS_DIR` without starting a manual index run
 - `index` launches the Go `bootstrap-index` runtime against the configured
   workspace using direct filesystem mode, so local workspace indexing follows
-  the same Go-owned parser and write path as the deployed data plane
+  the same parser and write path as the deployed data plane
 - `status` reports the configured workspace path plus the latest checkpointed workspace index summary
 - `watch` watches the materialized workspace in repo-partitioned mode and can optionally rediscover newly added repos with `--sync-interval-seconds`
 

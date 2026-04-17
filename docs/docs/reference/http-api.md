@@ -43,8 +43,8 @@ whether the latest published Go checkpoint is finished.
     - `GET /metrics`
   Those routes are documented by `docs/openapi/runtime-admin-v1.yaml`, not the
   public `/api/v0` OpenAPI schema.
-- `GET /api/v0/status/index` returns the current Go-owned checkpoint summary.
-- `GET /api/v0/index-status` returns the same Go-owned checkpoint summary.
+- `GET /api/v0/status/index` returns the current checkpoint summary.
+- `GET /api/v0/index-status` returns the same checkpoint summary.
 - `GET /api/v0/status/ingesters` is the canonical ingester-status list route.
 - `GET /api/v0/status/ingesters/{ingester}` is the canonical ingester-status
   detail route.

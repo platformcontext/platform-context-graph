@@ -36,7 +36,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - End-to-end indexing: `supported`
 - Notes:
   - Real-repo validation covers React and Next.js evidence through the
-    Go-owned parser and indexing path.
+    current parser and indexing path.
   - TSX type aliases now persist as first-class `TypeAlias` graph nodes,
     TSX components now persist as first-class `Component` graph nodes, and
     TSX fragment shorthand now persists as first-class `Function` graph nodes

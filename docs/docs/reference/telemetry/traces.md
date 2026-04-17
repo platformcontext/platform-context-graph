@@ -8,11 +8,10 @@ graph write?**
 Use metrics to detect a problem first, then use traces to explain which stage,
 store, or runtime spent the time.
 
-## Current Go Trace Contract
+## Current Trace Contract
 
-The platform is Go-owned. The trace contract is therefore the Go data
-plane contract from `go/internal/telemetry/contract.go` plus the read-path
-query wrappers.
+The trace contract is the current data-plane contract from
+`go/internal/telemetry/contract.go` plus the read-path query wrappers.
 
 The stable span families are:
 

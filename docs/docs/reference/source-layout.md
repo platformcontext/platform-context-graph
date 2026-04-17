@@ -1,6 +1,6 @@
 # Source Layout
 
-PlatformContextGraph is organized around Go-owned runtime and domain packages.
+PlatformContextGraph is organized around runtime and domain packages.
 Fixture inputs under `tests/fixtures/` exist to exercise parser behavior and
 ecosystem relationships.
 

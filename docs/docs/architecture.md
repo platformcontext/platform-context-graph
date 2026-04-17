@@ -1,6 +1,6 @@
 # System Architecture
 
-PlatformContextGraph is a Go-owned platform that turns repository content,
+PlatformContextGraph is a platform that turns repository content,
 infrastructure definitions, deployment metadata, and runtime evidence into one
 queryable graph.
 
@@ -263,7 +263,7 @@ Use these docs together:
 
 ## Terraform Provider Schemas
 
-Terraform provider schema assets are a runtime dependency of the Go-owned
+Terraform provider schema assets are a runtime dependency of the current
 relationship path, not optional reference material.
 
 - assets live in `go/internal/terraformschema/schemas/*.json.gz`

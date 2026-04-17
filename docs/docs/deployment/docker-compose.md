@@ -52,7 +52,7 @@ That script:
 - starts the local compose stack from a clean state
 - waits for bootstrap indexing plus API and ingester health
 - selects a live scope from the compose Postgres state
-- calls the Go-owned ingester `/admin/refinalize` endpoint from inside the
+- calls the ingester `/admin/refinalize` endpoint from inside the
   compose network
 - captures the before/after admin status payload when the flow fails
 - prints the Jaeger URL, selected `scope_id`, and useful logs for debugging

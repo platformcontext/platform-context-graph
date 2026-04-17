@@ -32,7 +32,7 @@ the reported state is live or inferred.
   checkpointed completeness view exposed by the Go API.
 - `/admin/status` proves the live stage, backlog, and failure view for a
   runtime.
-- `POST /admin/refinalize` and `POST /admin/replay` are the Go-owned recovery
+- `POST /admin/refinalize` and `POST /admin/replay` are the runtime recovery
   controls on the ingester runtime.
 - A service can be healthy while indexing is incomplete. Use all three views
   when you are deciding whether to restart, reindex, or wait.
@@ -67,7 +67,7 @@ flowchart LR
 
 ## Incremental Refresh And Reconciliation Signals
 
-The current Go-owned runtime uses incremental refresh and reconciliation, not
+The current runtime uses incremental refresh and reconciliation, not
 full re-indexing, as the normal freshness model.
 
 Watch these signals together:
@@ -145,7 +145,8 @@ For shared-write debugging specifically:
   different mental model for collector, projector, reducer, or future Go
   services.
 - Use the report before restarting a service or forcing a broader re-index.
-- The normal runtime path is Go-owned end to end.
+- The normal runtime path runs end to end through the current platform
+  services.
 - Current observability expansion lanes are broader workflow/controller
   verification, broader IaC helper-built path-expression reduction, and the
   telemetry coverage that keeps those flows operable.

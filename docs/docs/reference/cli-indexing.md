@@ -6,7 +6,7 @@ These commands are the foundation of PlatformContextGraph. They allow you to add
 
 Adds a code repository to the graph database. This is the first step for any project.
 
-For directory and workspace targets, this command launches the Go-owned
+For directory and workspace targets, this command launches the
 `bootstrap-index` runtime in direct filesystem mode.
 
 !!! info "Excluding Files (.pcgignore)"
@@ -63,12 +63,12 @@ Indexed Repositories:
 
 Starts a real-time monitor. If you edit a file, the graph updates instantly.
 
-The watch path is now Go-owned end to end for normal local refreshes:
+The watch path runs end to end through the current local refresh flow:
 
 - when the watched repo or workspace is missing index state, the initial scan
   launches the Go `bootstrap-index` runtime
-- after startup, filesystem events are debounced into repo-level Go reindex
-  runs through the same Go-owned indexing path
+- after startup, filesystem events are debounced into repo-level reindex runs
+  through the same indexing path
 
 !!! warning "Foreground Process"
     This command runs in the foreground. Open a new terminal tab to keep it running.

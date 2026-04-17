@@ -1,7 +1,7 @@
 # Local Testing Runbook
 
 This is the default verification runbook for engineers, Claude, and Codex on
-the current Go-owned platform.
+the current platform.
 
 Use it to answer:
 
@@ -86,7 +86,7 @@ absolute path to a real directory.
 
 ## Go Runtime Package Gate
 
-Use this gate when validating the Go-owned runtime and collector wiring.
+Use this gate when validating the current runtime and collector wiring.
 
 Current ownership:
 
@@ -125,7 +125,7 @@ The canonical packaged schemas live under:
 
 If this gate fails, fix the Go loader or the Go relationship extraction path.
 
-The relationship-platform compose verification now validates the full Go-owned
+The relationship-platform compose verification now validates the full
 cross-repo path, including:
 
 - repository selection from the fixture corpus via `PCG_REPOSITORY_RULES_JSON`

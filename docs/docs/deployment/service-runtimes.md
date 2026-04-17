@@ -29,7 +29,7 @@ MCP, that mount `go/internal/runtime`:
 
 Current platform reality:
 
-- the platform runtime is Go-owned end to end
+- the platform runtime is implemented end to end in the checked-in services
 - `collector-git`, `ingester`, and `bootstrap-index` own repository selection,
   repo sync, snapshot collection, parsing, content shaping, and fact emission
 - local `pcg index`, `pcg workspace index`, `pcg watch`, and package indexing
@@ -68,7 +68,7 @@ Current platform reality:
   and mounted `/api/*` routes for transport-specific behavior.
 - Shared `/admin/status` reports the live runtime stage, backlog, and failure
   state where mounted.
-- `GET /api/v0/status/index` is the normalized Go-owned completeness route.
+- `GET /api/v0/status/index` is the normalized completeness route.
 - `GET /api/v0/index-status` serves the same completeness payload.
 - `GET /api/v0/repositories/{repo_id}/coverage` narrows the completeness view
   to the repository rows that still need attention.
@@ -127,13 +127,13 @@ Current runtime status:
   surface in their local verification lanes
 - the collector verification lane now uses native Go selection, repo sync,
   snapshot collection, content shaping, and optional SCIP execution/parsing
-- the collector now emits Go-owned parser follow-up facts for workload identity
+- the collector now emits parser follow-up facts for workload identity
   and canonical code-call materialization, and the reducer owns the resulting
   `CALLS` edge reconciliation path
 - the projector and reducer now coordinate edge-domain writes through the
   durable `graph_projection_phase_state` table instead of assuming the
   canonical and semantic node phases finished in lock-step
-- parser, admin, and runtime ownership are Go-owned
+- parser, admin, and runtime behavior live in the current platform services
 
 ## Incremental Refresh And Reconciliation
 
@@ -254,7 +254,7 @@ process.
 - own the shared workspace in Kubernetes
 - parse repository snapshots
 - emit facts into Postgres
-- hand off durable projection work to the Go-owned write plane
+- hand off durable projection work to the current write plane
 
 ### Why it stays stateful
 

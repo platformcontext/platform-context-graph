@@ -87,7 +87,7 @@ Keep `CONTAINS*` when the query is actually about the tree, not just about locat
 The relationship pipeline is organized around verb coverage, not parser
 checklists. The platform keeps that contract explicit.
 
-These verbs define the relationship-parity bar:
+These verbs define the relationship contract:
 
 - `PROVISIONS_DEPENDENCY_FOR`
 - `PROVISIONS_PLATFORM`
@@ -357,7 +357,7 @@ Current truth:
 Do not downcast a mixed repo to “Terraform repo”, “Argo CD repo”, or “service
 repo” if the indexed content proves more than one family is present.
 
-Terraform provider-schema support is now Go-owned:
+Terraform provider-schema support is part of the current runtime:
 
 The normal Postgres ingestion boundary now proves that runtime ownership in
 practice: repository facts are loaded back into a catalog, Terraform fact

@@ -33,7 +33,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Real-repo validation: `supported (bounded)`
 - End-to-end indexing: `supported (bounded)`
 - Notes:
-  - SQL support is Go-owned end to end for native SQL parsing, migration extraction, embedded SQL link hints, and the JSON-backed dbt and data-intelligence families.
+  - SQL support runs end to end through the current parser, migration extraction, embedded SQL link hints, and the JSON-backed dbt and data-intelligence families.
 - The remaining dbt lineage limits
   (unresolved references, truly opaque templated expressions, complex macros,
   and some derived expressions) are bounded non-goals for the documented SQL
@@ -68,7 +68,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   `go/internal/parser/engine_sql_test.go`,
   `go/internal/parser/sql_core_parity_test.go`, and
   `go/internal/parser/sql_parity_test.go`.
-- The Go-owned content and query fallback path now also has checked-in SQL-core
+- The current content and query fallback path now also has checked-in SQL-core
   proof in `go/internal/content/shape/materialize_sql_test.go` and
   `go/internal/query/entity_content_sql_core_fallback_test.go`.
 - Compiled-model lineage still carries explicit unresolved limits for
@@ -80,7 +80,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 ## Data-Intelligence Path
 
-The SQL and analytics runtime is Go-owned end to end.
+The SQL and analytics runtime is implemented end to end in the current platform.
 
 - Native SQL parsing and schema-object extraction live in `go/internal/parser/sql_language.go`
 - Migration intelligence lives in `go/internal/parser/sql_migrations.go`

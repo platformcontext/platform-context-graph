@@ -9,7 +9,7 @@ Use this page to answer:
 
 - what is already closed in Go
 - what is only partially closed
-- what still needs a targeted parity push before cutover
+- what still needs targeted closure work before the platform can be called fully closed
 
 ## Status Legend
 
@@ -23,7 +23,7 @@ Use this page to answer:
 
 | Area | Status | Current truth | Primary evidence | What still needs closure |
 | --- | --- | --- | --- | --- |
-| Long-running Go runtimes | `Closed` | API, MCP, ingester, reducer, and bootstrap runtime shapes are Go-owned | `go/cmd/api`, `go/cmd/mcp-server`, `go/cmd/ingester`, `go/cmd/reducer`, `go/cmd/bootstrap-index`; runtime docs and local testing runbook | Keep deployment docs aligned as runtime wiring evolves |
+| Long-running runtimes | `Closed` | API, MCP, ingester, reducer, and bootstrap runtime shapes are implemented in the checked-in services | `go/cmd/api`, `go/cmd/mcp-server`, `go/cmd/ingester`, `go/cmd/reducer`, `go/cmd/bootstrap-index`; runtime docs and local testing runbook | Keep deployment docs aligned as runtime wiring evolves |
 | Shared runtime admin contract | `Closed` | `/healthz`, `/readyz`, `/admin/status`, and optional `/metrics` are mounted through shared Go runtime packages | `go/internal/runtime/*`, `go/internal/status/*`, `docs/docs/reference/runtime-admin-api.md` | Continue using the shared contract for new services instead of bespoke probes |
 | Structured Go telemetry | `Closed` | Go runtimes emit JSON logs plus OTEL metrics/traces through shared telemetry packages | `go/internal/runtime/observability.go`, `go/internal/telemetry` references in docs and tests | Keep field names stable for operator tooling |
 | Terraform provider-schema packaging | `Closed` | Provider schemas are packaged in-repo and loaded from `go/internal/terraformschema/schemas/*.json.gz` | `go/internal/terraformschema/*`, provider docs under `docs/docs/guides/terraform-providers/` | Broader provider coverage can expand later without changing runtime ownership |

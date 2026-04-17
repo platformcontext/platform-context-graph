@@ -4,7 +4,7 @@ PlatformContextGraph uses a **schema-driven approach** to extract infrastructure
 
 ## Runtime Ownership
 
-Terraform provider-schema support is now Go-owned.
+Terraform provider-schema support ships in the current runtime.
 
 The canonical packaged schema assets live under:
 

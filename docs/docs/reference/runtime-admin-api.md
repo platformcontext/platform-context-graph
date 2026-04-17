@@ -23,7 +23,7 @@ The checked-in OpenAPI contract for that runtime surface lives at:
 `docs/openapi/runtime-admin-v1.yaml`
 
 The runtime admin API is distinct from the public API admin routes. The public
-API exposes the Go-owned `/api/v0/admin/*` control and inspection surface in
+API exposes the `/api/v0/admin/*` control and inspection surface in
 `/api/v0/openapi.json`, while this page covers the service-local `/admin/*`
 endpoints mounted by a long-running runtime itself.
 
