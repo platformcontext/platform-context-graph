@@ -22,6 +22,7 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 				"repo_id":           "repo-a",
 				"target_repo_id":    "repo-b",
 				"relationship_type": "DEPLOYS_FROM",
+				"evidence_type":     "argocd_application_source",
 			},
 		},
 		{
@@ -31,6 +32,7 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 				"repo_id":           "repo-a",
 				"target_repo_id":    "repo-c",
 				"relationship_type": "DISCOVERS_CONFIG_IN",
+				"evidence_type":     "github_actions_reusable_workflow_ref",
 			},
 		},
 		{
@@ -40,6 +42,7 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 				"repo_id":           "repo-a",
 				"target_repo_id":    "repo-d",
 				"relationship_type": "PROVISIONS_DEPENDENCY_FOR",
+				"evidence_type":     "terraform_module_source",
 			},
 		},
 		{
@@ -49,6 +52,7 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 				"repo_id":           "repo-a",
 				"target_repo_id":    "repo-e",
 				"relationship_type": "USES_MODULE",
+				"evidence_type":     "terraform_module_source",
 			},
 		},
 	}
@@ -64,6 +68,15 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 	for _, want := range []string{"DEPLOYS_FROM", "DISCOVERS_CONFIG_IN", "PROVISIONS_DEPENDENCY_FOR", "USES_MODULE"} {
 		if !strings.Contains(cypher, want) {
 			t.Fatalf("cypher missing %s branch: %s", want, cypher)
+		}
+	}
+	rowsOut, ok := executor.calls[0].Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows type = %T, want []map[string]any", executor.calls[0].Parameters["rows"])
+	}
+	for _, row := range rowsOut {
+		if row["evidence_type"] == nil || row["evidence_type"] == "" {
+			t.Fatalf("row missing evidence_type: %#v", row)
 		}
 	}
 }

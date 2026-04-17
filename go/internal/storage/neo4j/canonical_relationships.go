@@ -6,6 +6,7 @@ type CanonicalRepoRelationshipParams struct {
 	RepoID           string
 	TargetRepoID     string
 	RelationshipType string
+	EvidenceType     string
 }
 
 // CanonicalRunsOnParams holds the parameters for a repository-scoped RUNS_ON
@@ -23,6 +24,7 @@ FOREACH (_ IN CASE WHEN row.relationship_type = 'DEPLOYS_FROM' THEN [1] ELSE [] 
     SET rel.confidence = 0.9,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
+        rel.evidence_type = row.evidence_type,
         rel.relationship_type = row.relationship_type
 )
 FOREACH (_ IN CASE WHEN row.relationship_type = 'DISCOVERS_CONFIG_IN' THEN [1] ELSE [] END |
@@ -30,6 +32,7 @@ FOREACH (_ IN CASE WHEN row.relationship_type = 'DISCOVERS_CONFIG_IN' THEN [1] E
     SET rel.confidence = 0.9,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
+        rel.evidence_type = row.evidence_type,
         rel.relationship_type = row.relationship_type
 )
 FOREACH (_ IN CASE WHEN row.relationship_type = 'PROVISIONS_DEPENDENCY_FOR' THEN [1] ELSE [] END |
@@ -37,6 +40,7 @@ FOREACH (_ IN CASE WHEN row.relationship_type = 'PROVISIONS_DEPENDENCY_FOR' THEN
     SET rel.confidence = 0.9,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
+        rel.evidence_type = row.evidence_type,
         rel.relationship_type = row.relationship_type
 )
 FOREACH (_ IN CASE WHEN row.relationship_type = 'USES_MODULE' THEN [1] ELSE [] END |
@@ -44,6 +48,7 @@ FOREACH (_ IN CASE WHEN row.relationship_type = 'USES_MODULE' THEN [1] ELSE [] E
     SET rel.confidence = 0.9,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
+        rel.evidence_type = row.evidence_type,
         rel.relationship_type = row.relationship_type
 )
 FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type = '' OR row.relationship_type = 'DEPENDS_ON' THEN [1] ELSE [] END |
@@ -51,6 +56,7 @@ FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type =
     SET rel.confidence = 0.9,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
+        rel.evidence_type = row.evidence_type,
         rel.relationship_type = row.relationship_type
 )`
 
@@ -86,6 +92,7 @@ func BuildCanonicalRepoRelationshipUpsert(p CanonicalRepoRelationshipParams, evi
 			"repo_id":           p.RepoID,
 			"target_repo_id":    p.TargetRepoID,
 			"relationship_type": p.RelationshipType,
+			"evidence_type":     p.EvidenceType,
 			"evidence_source":   evidenceSource,
 		},
 	}

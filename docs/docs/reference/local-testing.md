@@ -125,6 +125,15 @@ The canonical packaged schemas live under:
 If this gate fails, fix the Go loader or the Go relationship extraction path.
 Do not reintroduce a Python wrapper.
 
+The relationship-platform compose proof now validates the full Go-owned
+cross-repo path, including:
+
+- repository selection from the fixture corpus via `PCG_REPOSITORY_RULES_JSON`
+- reducer normalization of repository IDs before edge writes
+- persistence of typed `evidence_type` metadata on repo edges so repository
+  contexts surface `controller_driven`, `workflow_driven`, and `iac_driven`
+  relationship families
+
 ## No-Python Runtime Gate
 
 The runtime-ownership bar is now structural rather than pytest-based.
@@ -276,6 +285,12 @@ ports differ.
 ./scripts/verify_relationship_platform_compose.sh
 ./scripts/verify_admin_refinalize_compose.sh
 ```
+
+`verify_relationship_platform_compose.sh` exports exact repository rules for the
+checked-in relationship fixture corpus before booting Compose. That corpus keeps
+fixture metadata at its root, so explicit rules prevent the metadata file from
+collapsing the whole corpus into a single synthetic repository during proof
+runs.
 
 ## Local Full Stack
 

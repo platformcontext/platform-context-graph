@@ -224,7 +224,7 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 		t.Fatalf("ReadStatusSnapshot() error = %v, want nil", err)
 	}
 	report := statuspkg.BuildReport(rawStatus, statuspkg.DefaultOptions())
-	if got, want := report.Health.State, "progressing"; got != want {
+	if got, want := report.Health.State, "healthy"; got != want {
 		t.Fatalf("status health = %q, want %q", got, want)
 	}
 	if got, want := report.Queue.Succeeded, 2; got != want {

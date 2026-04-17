@@ -99,6 +99,7 @@ func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
 		RepoID:           "repo-a",
 		TargetRepoID:     "repo-b",
 		RelationshipType: "DEPLOYS_FROM",
+		EvidenceType:     "argocd_application_source",
 	}, "resolver/cross-repo")
 
 	if stmt.Operation != OperationCanonicalUpsert {
@@ -109,6 +110,12 @@ func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
 	}
 	if stmt.Parameters["relationship_type"] != "DEPLOYS_FROM" {
 		t.Fatalf("relationship_type = %v", stmt.Parameters["relationship_type"])
+	}
+	if stmt.Parameters["evidence_type"] != "argocd_application_source" {
+		t.Fatalf("evidence_type = %v", stmt.Parameters["evidence_type"])
+	}
+	if !strings.Contains(stmt.Cypher, "rel.evidence_type = row.evidence_type") {
+		t.Fatalf("Cypher missing evidence_type write: %s", stmt.Cypher)
 	}
 }
 

@@ -140,6 +140,39 @@ func TestBuildReportClassifiesProgressingQueue(t *testing.T) {
 	}
 }
 
+func TestBuildReportTreatsActiveAuthoritativeGenerationAsHealthyWhenQueueDrained(t *testing.T) {
+	t.Parallel()
+
+	report := status.BuildReport(
+		status.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: status.ScopeActivitySnapshot{
+				Active:  3,
+				Changed: 0,
+			},
+			GenerationCounts: []status.NamedCount{
+				{Name: "active", Count: 3},
+				{Name: "completed", Count: 5},
+			},
+			Queue: status.QueueSnapshot{
+				Outstanding: 0,
+				InFlight:    0,
+				Pending:     0,
+				Retrying:    0,
+				Failed:      0,
+			},
+		},
+		status.DefaultOptions(),
+	)
+
+	if got, want := report.Health.State, "healthy"; got != want {
+		t.Fatalf("BuildReport().Health.State = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(report.Health.Reasons, " "), "no outstanding queue backlog"; got != want {
+		t.Fatalf("BuildReport().Health.Reasons = %q, want %q", got, want)
+	}
+}
+
 type fakeReader struct {
 	snapshot status.RawSnapshot
 	err      error

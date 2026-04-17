@@ -1122,6 +1122,32 @@ func TestDiscoverEvidenceFromGoCollectorContentFacts(t *testing.T) {
 	}
 }
 
+func TestDiscoverEvidenceNormalizesScopedSourceRepositoryID(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "git-repository-scope:repository:r_infra",
+			Payload: map[string]any{
+				"artifact_type": "terraform",
+				"relative_path": "main.tf",
+				"content":       `app_repo = "payments-service"`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repository:r_payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 1 {
+		t.Fatalf("len = %d, want 1", len(evidence))
+	}
+	if got, want := evidence[0].SourceRepoID, "repository:r_infra"; got != want {
+		t.Fatalf("source repo = %q, want %q", got, want)
+	}
+}
+
 // TestDiscoverEvidenceFromGoCollectorHelmFacts verifies Helm evidence
 // extraction using Go collector content fact format (content_path/content_body).
 func TestDiscoverEvidenceFromGoCollectorHelmFacts(t *testing.T) {

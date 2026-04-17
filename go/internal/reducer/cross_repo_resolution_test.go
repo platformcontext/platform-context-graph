@@ -216,6 +216,62 @@ func TestCrossRepoResolutionWritesDependencyEdges(t *testing.T) {
 	if got := row.Payload["target_repo_id"]; got != "app-repo" {
 		t.Fatalf("row target_repo_id = %v, want app-repo", got)
 	}
+	if got, want := row.Payload["evidence_type"], "terraform_app_repo"; got != want {
+		t.Fatalf("row evidence_type = %v, want %q", got, want)
+	}
+}
+
+func TestCrossRepoResolutionNormalizesScopedRepositoryIDs(t *testing.T) {
+	t.Parallel()
+
+	evidence := []relationships.EvidenceFact{
+		{
+			EvidenceKind:     relationships.EvidenceKindTerraformAppRepo,
+			RelationshipType: relationships.RelProvisionsDependencyFor,
+			SourceRepoID:     "git-repository-scope:repository:r_infra",
+			TargetRepoID:     "repository:r_app",
+			Confidence:       0.99,
+			Rationale:        "Terraform app_repo points at the target repository",
+		},
+	}
+
+	edgeWriter := &recordingEdgeWriter{}
+	persister := &fakeResolutionPersister{}
+
+	handler := CrossRepoRelationshipHandler{
+		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
+		EdgeWriter:     edgeWriter,
+		Persister:      persister,
+	}
+
+	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("Resolve() = %d, want 1", count)
+	}
+	if len(edgeWriter.retractCalls) != 1 || len(edgeWriter.retractCalls[0].rows) != 1 {
+		t.Fatalf("unexpected retract calls: %#v", edgeWriter.retractCalls)
+	}
+	if got, want := edgeWriter.retractCalls[0].rows[0].RepositoryID, "repository:r_infra"; got != want {
+		t.Fatalf("retract repository_id = %q, want %q", got, want)
+	}
+	if len(edgeWriter.writeCalls) != 1 || len(edgeWriter.writeCalls[0].rows) != 1 {
+		t.Fatalf("unexpected write calls: %#v", edgeWriter.writeCalls)
+	}
+	if got, want := edgeWriter.writeCalls[0].rows[0].Payload["repo_id"], "repository:r_infra"; got != want {
+		t.Fatalf("write repo_id = %v, want %q", got, want)
+	}
+	if got, want := edgeWriter.writeCalls[0].rows[0].Payload["target_repo_id"], "repository:r_app"; got != want {
+		t.Fatalf("write target_repo_id = %v, want %q", got, want)
+	}
+	if len(persister.resolved) != 1 {
+		t.Fatalf("persisted resolved = %d, want 1", len(persister.resolved))
+	}
+	if got, want := persister.resolved[0].SourceRepoID, "repository:r_infra"; got != want {
+		t.Fatalf("persisted source repo = %q, want %q", got, want)
+	}
 }
 
 func TestCrossRepoResolutionPersistsAuditTrail(t *testing.T) {

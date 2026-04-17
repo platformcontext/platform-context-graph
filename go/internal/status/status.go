@@ -297,7 +297,7 @@ func evaluateHealth(queue QueueSnapshot, generationTotals map[string]int, opts O
 			Reasons: reasons,
 		}
 	}
-	if queue.Outstanding > 0 || generationTotals["active"] > 0 || generationTotals["pending"] > 0 {
+	if queue.Outstanding > 0 || generationTotals["pending"] > 0 {
 		reason := "work remains queued"
 		if queue.InFlight > 0 {
 			reason = fmt.Sprintf("%d work items are currently in flight", queue.InFlight)

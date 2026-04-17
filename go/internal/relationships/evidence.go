@@ -119,7 +119,7 @@ func discoverFromEnvelope(
 	filePath, _ := envelope.Payload["relative_path"].(string)
 	content, _ := envelope.Payload["content"].(string)
 	parsedFileData, _ := envelope.Payload["parsed_file_data"].(map[string]any)
-	sourceRepoID := envelope.ScopeID
+	sourceRepoID := sourceRepositoryIDFromEnvelope(envelope)
 
 	// Fall back to Go collector content fact payload keys. The collector
 	// emits content_path and content_body instead of relative_path and
@@ -190,6 +190,24 @@ func discoverFromEnvelope(
 	}
 
 	return evidence
+}
+
+func sourceRepositoryIDFromEnvelope(envelope facts.Envelope) string {
+	if repoID, _ := envelope.Payload["repo_id"].(string); strings.TrimSpace(repoID) != "" {
+		return strings.TrimSpace(repoID)
+	}
+	return normalizeRepositoryIdentifier(envelope.ScopeID)
+}
+
+func normalizeRepositoryIdentifier(value string) string {
+	value = strings.TrimSpace(value)
+	if idx := strings.Index(value, "repository:"); idx > 0 {
+		prefix := value[:idx]
+		if strings.HasSuffix(prefix, "scope:") {
+			return value[idx:]
+		}
+	}
+	return value
 }
 
 // discoverTerraformEvidence applies Terraform regex patterns against file content.

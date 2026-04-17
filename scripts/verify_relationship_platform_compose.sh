@@ -10,13 +10,34 @@ JAEGER_PORT="${JAEGER_UI_PORT:-16686}"
 API_BASE_URL="http://localhost:${API_PORT}/api/v0"
 JAEGER_URL="http://localhost:${JAEGER_PORT}"
 TMP_DIR="$(mktemp -d)"
+RELATIONSHIP_PLATFORM_FIXTURE_ROOT="$REPO_ROOT/tests/fixtures/relationship_platform"
 REPOSITORIES_FILE="$TMP_DIR/repositories.json"
 CONTEXT_FILE="$TMP_DIR/repository-context.json"
 COVERAGE_FILE="$TMP_DIR/repository-coverage.json"
 INDEX_STATUS_FILE="$TMP_DIR/index-status.json"
+GRAPH_RELATIONSHIP_TYPES_FILE="$TMP_DIR/graph-relationship-types.txt"
 KEEP_STACK="${PCG_KEEP_COMPOSE_STACK:-false}"
 API_KEY=""
 COMPOSE_CMD=()
+
+build_relationship_platform_repo_rules_json() {
+    local root="$1"
+    local -a repo_ids=()
+
+    for entry in "$root"/*; do
+        if [[ ! -d "$entry" ]]; then
+            continue
+        fi
+        repo_ids+=("$(basename "$entry")")
+    done
+
+    if [[ ${#repo_ids[@]} -eq 0 ]]; then
+        echo "Relationship platform fixture root contains no repository directories: $root" >&2
+        return 1
+    fi
+
+    jq -cn --args '{exact: $ARGS.positional}' "${repo_ids[@]}"
+}
 COMPOSE_DISPLAY=""
 
 cleanup() {
@@ -100,6 +121,34 @@ wait_for_bootstrap_exit() {
     done
 
     echo "Timed out waiting for bootstrap-index to finish" >&2
+    return 1
+}
+
+wait_for_index_completion() {
+    local attempts="$1"
+    local sleep_seconds="$2"
+
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
+        if ! api_get "/index-status" "$INDEX_STATUS_FILE"; then
+            sleep "$sleep_seconds"
+            continue
+        fi
+
+        if jq -e '
+            (.status // "") == "healthy" and
+            ((.queue.outstanding // 0) == 0) and
+            ((.queue.in_flight // 0) == 0) and
+            ((.queue.pending // 0) == 0) and
+            ((.queue.retrying // 0) == 0) and
+            ((.queue.failed // 0) == 0)
+        ' "$INDEX_STATUS_FILE" >/dev/null; then
+            return 0
+        fi
+
+        sleep "$sleep_seconds"
+    done
+
+    echo "Timed out waiting for /index-status to report queue completion" >&2
     return 1
 }
 
@@ -192,6 +241,7 @@ api_get() {
 
 verify_api_surface() {
     local repo_id
+    local relationship_repo_id
 
     api_get "/repositories" "$REPOSITORIES_FILE"
     jq -e '
@@ -228,6 +278,53 @@ verify_api_surface() {
     jq -e 'type == "object" and length > 0' "$CONTEXT_FILE" >/dev/null
     jq -e 'type == "object" and length > 0' "$COVERAGE_FILE" >/dev/null
     jq -e 'type == "object" and length > 0' "$INDEX_STATUS_FILE" >/dev/null
+
+    relationship_repo_id="$(
+        jq -r '
+            def repo_ids:
+                if type == "array" then
+                    .[]
+                elif ((.repositories? // []) | length > 0) then
+                    .repositories[]
+                elif ((.items? // []) | length > 0) then
+                    .items[]
+                else
+                    empty
+                end;
+            [repo_ids | (.repo_id // .id // .repository_id // empty)] | .[]
+        ' "$REPOSITORIES_FILE" | while read -r candidate_repo_id; do
+            if [[ -z "$candidate_repo_id" ]]; then
+                continue
+            fi
+            api_get "/repositories/${candidate_repo_id}/context" "$CONTEXT_FILE"
+            if jq -e '
+                (.relationship_overview.relationship_count // 0) > 0 and
+                (
+                    ((.relationship_overview.controller_driven // []) | length) > 0 or
+                    ((.relationship_overview.workflow_driven // []) | length) > 0 or
+                    ((.relationship_overview.iac_driven // []) | length) > 0
+                )
+            ' "$CONTEXT_FILE" >/dev/null; then
+                printf "%s" "$candidate_repo_id"
+                break
+            fi
+        done
+    )"
+    if [[ -z "$relationship_repo_id" ]]; then
+        echo "Could not find a repository context with compose-backed typed relationship evidence." >&2
+        return 1
+    fi
+
+    api_get "/repositories/${relationship_repo_id}/context" "$CONTEXT_FILE"
+    jq -e '
+        (.relationship_overview.relationship_count // 0) > 0 and
+        ((.relationship_overview.story // "") | length) > 0 and
+        (
+            ((.relationship_overview.controller_driven // []) | length) > 0 or
+            ((.relationship_overview.workflow_driven // []) | length) > 0 or
+            ((.relationship_overview.iac_driven // []) | length) > 0
+        )
+    ' "$CONTEXT_FILE" >/dev/null
 }
 
 verify_graph_state() {
@@ -240,6 +337,18 @@ verify_graph_state() {
     result="$(printf '%s\n' "$result" | tail -n 1)"
     if ! printf '%s\n' "$result" | rg -q '^[1-9][0-9]*$'; then
         echo "Expected Repository nodes in Neo4j, got: $result" >&2
+        return 1
+    fi
+
+    "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
+        -u neo4j \
+        -p "${PCG_NEO4J_PASSWORD:-change-me}" \
+        --format plain \
+        "MATCH ()-[rel:DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->() RETURN DISTINCT type(rel) ORDER BY type(rel)" \
+        >"$GRAPH_RELATIONSHIP_TYPES_FILE"
+    if ! rg -q 'DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON' "$GRAPH_RELATIONSHIP_TYPES_FILE"; then
+        echo "Expected at least one typed relationship family in Neo4j, got:" >&2
+        cat "$GRAPH_RELATIONSHIP_TYPES_FILE" >&2
         return 1
     fi
 }
@@ -263,12 +372,22 @@ fi
 
 cd "$REPO_ROOT"
 
+if [[ -z "${PCG_FILESYSTEM_HOST_ROOT:-}" ]]; then
+    export PCG_FILESYSTEM_HOST_ROOT="$RELATIONSHIP_PLATFORM_FIXTURE_ROOT"
+fi
+if [[ -z "${PCG_REPOSITORY_RULES_JSON:-}" ]]; then
+    PCG_REPOSITORY_RULES_JSON="$(build_relationship_platform_repo_rules_json "$PCG_FILESYSTEM_HOST_ROOT")"
+    export PCG_REPOSITORY_RULES_JSON
+fi
+
 "${COMPOSE_CMD[@]}" down -v >/dev/null 2>&1 || true
 compose_started=false
 for attempt in 1 2; do
     configure_ports
     echo "Starting local compose stack..."
     echo "Using host ports: api=$PCG_HTTP_PORT postgres=$PCG_POSTGRES_PORT neo4j_bolt=$NEO4J_BOLT_PORT jaeger=$JAEGER_UI_PORT"
+    echo "Using fixture root: $PCG_FILESYSTEM_HOST_ROOT"
+    echo "Using repository rules: $PCG_REPOSITORY_RULES_JSON"
     if "${COMPOSE_CMD[@]}" up -d --build; then
         compose_started=true
         break
@@ -300,6 +419,9 @@ if [[ -n "$API_KEY" ]]; then
 else
     echo "No PCG_API_KEY is set in the API container; using unauthenticated local API access."
 fi
+
+echo "Waiting for /index-status queue completion..."
+wait_for_index_completion 180 5
 
 echo "Verifying relationship platform API and graph state..."
 verify_api_surface

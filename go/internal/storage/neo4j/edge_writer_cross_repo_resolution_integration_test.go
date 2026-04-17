@@ -103,9 +103,14 @@ func TestCrossRepoResolutionDispatchesTypedRelationshipsIntoNeo4jWrites(t *testi
 	}
 
 	gotRepoTypes := map[string]bool{}
+	gotEvidenceTypes := map[string]bool{}
 	for _, row := range typedRows {
 		relType, _ := row["relationship_type"].(string)
 		gotRepoTypes[relType] = true
+		evidenceType, _ := row["evidence_type"].(string)
+		if evidenceType != "" {
+			gotEvidenceTypes[evidenceType] = true
+		}
 	}
 	for _, want := range []string{
 		string(relationships.RelProvisionsDependencyFor),
@@ -114,6 +119,11 @@ func TestCrossRepoResolutionDispatchesTypedRelationshipsIntoNeo4jWrites(t *testi
 	} {
 		if !gotRepoTypes[want] {
 			t.Fatalf("typed repo rows missing relationship_type %q", want)
+		}
+	}
+	for _, want := range []string{"terraform_app_repo", "helm_chart_reference", "argocd_applicationset_discovery"} {
+		if !gotEvidenceTypes[want] {
+			t.Fatalf("typed repo rows missing evidence_type %q", want)
 		}
 	}
 

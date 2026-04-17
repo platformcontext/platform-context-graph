@@ -215,7 +215,11 @@ It also exercises the content-store contract:
 - `PCG_CONTENT_STORE_DSN` and `PCG_POSTGRES_DSN` are wired by default
 - host-side e2e runs can reach the bundled Postgres content store through `PCG_POSTGRES_PORT` (default `15432`)
 - file and entity content reads prefer Postgres and fall back to the server workspace
-- `PCG_REPOSITORY_RULES_JSON` can be set to structured exact or regex include rules for Git-backed sync
+- `PCG_REPOSITORY_RULES_JSON` can be set to structured exact or regex include rules for Git-backed sync, and Compose passes that override through to every Go runtime in the stack
+- compose-backed relationship proof relies on Go-written repo-edge
+  `evidence_type` metadata so API repository contexts can classify
+  controller-, workflow-, and IaC-driven relationships without any Python
+  read-path enrichment
 - the bundled local Postgres enables `pg_trgm` automatically through the content-store schema bootstrap
 - `OTEL_EXPORTER_OTLP_ENDPOINT` points at `http://otel-collector:4317` inside the Compose network
 - the local collector config lives at `deploy/observability/otel-collector-config.yaml`

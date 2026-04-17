@@ -150,36 +150,40 @@ func buildRowMap(
 			if platformID == "" {
 				return "", nil, false
 			}
-			return batchCanonicalRunsOnUpsertCypher, map[string]any{
+			rowMap := map[string]any{
 				"repo_id":         repoID,
 				"platform_id":     platformID,
 				"evidence_source": evidenceSource,
-			}, true
+			}
+			if evidenceType := payloadString(row.Payload, "evidence_type"); evidenceType != "" {
+				rowMap["evidence_type"] = evidenceType
+			}
+			return batchCanonicalRunsOnUpsertCypher, rowMap, true
 		}
 		if targetRepoID == "" {
 			return "", nil, false
 		}
 		if relationshipType == "" || relationshipType == "DEPENDS_ON" {
-			return batchCanonicalRepoDependencyUpsertCypher, map[string]any{
+			rowMap := map[string]any{
 				"repo_id":         repoID,
 				"target_repo_id":  targetRepoID,
 				"evidence_source": evidenceSource,
-			}, true
+			}
+			if evidenceType := payloadString(row.Payload, "evidence_type"); evidenceType != "" {
+				rowMap["evidence_type"] = evidenceType
+			}
+			return batchCanonicalRepoDependencyUpsertCypher, rowMap, true
 		}
-		if relationshipType == "DEPLOYS_FROM" || relationshipType == "DISCOVERS_CONFIG_IN" || relationshipType == "PROVISIONS_DEPENDENCY_FOR" {
-			return batchCanonicalTypedRepoRelationshipUpsertCypher, map[string]any{
-				"repo_id":           repoID,
-				"target_repo_id":    targetRepoID,
-				"relationship_type": relationshipType,
-				"evidence_source":   evidenceSource,
-			}, true
-		}
-		return batchCanonicalTypedRepoRelationshipUpsertCypher, map[string]any{
+		rowMap := map[string]any{
 			"repo_id":           repoID,
 			"target_repo_id":    targetRepoID,
 			"relationship_type": relationshipType,
 			"evidence_source":   evidenceSource,
-		}, true
+		}
+		if evidenceType := payloadString(row.Payload, "evidence_type"); evidenceType != "" {
+			rowMap["evidence_type"] = evidenceType
+		}
+		return batchCanonicalTypedRepoRelationshipUpsertCypher, rowMap, true
 
 	case reducer.DomainWorkloadDependency:
 		workloadID := payloadString(row.Payload, "workload_id")

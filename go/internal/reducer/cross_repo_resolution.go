@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -118,6 +119,8 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 		assertions,
 		relationships.DefaultConfidenceThreshold,
 	)
+	candidates = normalizeRelationshipCandidates(candidates)
+	resolved = normalizeResolvedRelationships(resolved)
 
 	slog.InfoContext(ctx, "cross-repo relationship resolution completed",
 		slog.String(telemetry.LogKeyScopeID, scopeID),
@@ -189,6 +192,47 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 	h.recordDuration(ctx, start, scopeID)
 
 	return edgeCount, nil
+}
+
+func normalizeRelationshipCandidates(candidates []relationships.Candidate) []relationships.Candidate {
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	normalized := make([]relationships.Candidate, len(candidates))
+	for i, candidate := range candidates {
+		candidate.SourceRepoID = normalizeReducerRepositoryID(candidate.SourceRepoID)
+		candidate.TargetRepoID = normalizeReducerRepositoryID(candidate.TargetRepoID)
+		normalized[i] = candidate
+	}
+	return normalized
+}
+
+func normalizeResolvedRelationships(
+	resolved []relationships.ResolvedRelationship,
+) []relationships.ResolvedRelationship {
+	if len(resolved) == 0 {
+		return nil
+	}
+
+	normalized := make([]relationships.ResolvedRelationship, len(resolved))
+	for i, relationship := range resolved {
+		relationship.SourceRepoID = normalizeReducerRepositoryID(relationship.SourceRepoID)
+		relationship.TargetRepoID = normalizeReducerRepositoryID(relationship.TargetRepoID)
+		normalized[i] = relationship
+	}
+	return normalized
+}
+
+func normalizeReducerRepositoryID(value string) string {
+	value = strings.TrimSpace(value)
+	if idx := strings.Index(value, "repository:"); idx > 0 {
+		prefix := value[:idx]
+		if strings.HasSuffix(prefix, "scope:") {
+			return value[idx:]
+		}
+	}
+	return value
 }
 
 // recordDuration records the cross-repo resolution duration metric.
@@ -265,6 +309,9 @@ func buildResolvedEdgeIntentRow(
 		"confidence":        r.Confidence,
 		"evidence_count":    r.EvidenceCount,
 		"resolution_source": string(r.ResolutionSource),
+	}
+	if evidenceType := resolvedRelationshipEvidenceType(r); evidenceType != "" {
+		payload["evidence_type"] = evidenceType
 	}
 
 	partitionKey := ""
