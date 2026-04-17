@@ -56,9 +56,9 @@ These items were not expanded into this migration:
 - OAuth or OIDC product flows
 - multi-tenant authorization design
 
-Those decisions were deferred intentionally and recorded in:
-
-- [Auth Boundary And Deferred User Management](../adrs/2026-04-16-auth-boundary-and-deferred-user-management.md)
+Those decisions were deferred intentionally. The current platform keeps auth at
+the API boundary for local and operator use and does not yet introduce a
+separate auth service, user-management surface, or OAuth/OIDC product flow.
 
 ## Not In Scope For This Migration
 

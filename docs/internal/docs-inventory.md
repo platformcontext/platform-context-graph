@@ -46,6 +46,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/reference/http-api.md` | HTTP API reference | active |
 | `docs/docs/reference/ingestion-observability.md` | Ingestion observability reference | active |
 | `docs/docs/reference/logging.md` | Logging and telemetry reference | active |
+| `docs/docs/reference/service-workflows.md` | Inter-service workflow and operator flow reference | active |
 | `docs/docs/reference/telemetry/index.md` | Telemetry overview and operator starting points | active |
 | `docs/docs/reference/telemetry/metrics.md` | Metric catalog and tuning recipes | active |
 | `docs/docs/reference/telemetry/traces.md` | Trace catalog and latency-debug recipes | active |
@@ -57,7 +58,6 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/reference/source-layout.md` | Source layout map | active |
 | `docs/docs/reference/local-testing.md` | Default local verification and testing runbook | active |
 | `docs/docs/reference/troubleshooting.md` | Troubleshooting guide | active |
-| `docs/docs/roadmap.md` | Public roadmap | active |
 | `docs/docs/use-cases.md` | Use cases | active |
 | `docs/docs/why-pcg.md` | Why PlatformContextGraph exists | active |
 | `docs/docs/languages/feature-matrix.md` | Parser feature matrix | active |
