@@ -28,32 +28,18 @@ The runtime migration is complete:
   explicitly offline-only docs/CI toolchains, not normal runtime or developer
   verification flow
 
-Feature-for-feature parity is not fully closed yet. The branch still has active
-Go-owned parity work in the normal runtime path:
+Feature-for-feature parity is closed for the supported Go-owned runtime and
+relationship surfaces on this branch.
 
-- ArgoCD destination-to-platform `RUNS_ON` materialization and the repo
-  read-model counts that depend on those canonical edges
-- explicit repo-bearing GitHub Actions inputs, reusable workflow refs, Jenkins
-  shared-library refs and repo URLs, Ansible inventories/playbooks/roles/task
-  entrypoints, and Docker Compose build/dependency/runtime hints are already
-  Go-owned and query-visible. The Go query path now also carries
-  Jenkins-adjacent Ansible inventories, `group_vars` / `host_vars`, and task
-  entrypoints through controller artifacts plus deployment/story shaping, but
-  broader controller-driven promotion and end-to-end proof still need
-  current-truth evidence; Terraform variable-file promotion is already proven
-  on the normal Go path, and Compose runtime summaries now retain
-  `env_file`, `configs`, and `secrets` linkage metadata while the same
-  repo-local Compose file references now also feed `config_paths`,
-  `shared_config_paths`, `delivery_paths`, and topology-story config
-  provenance on the normal Go read path. Repo-local GitHub Actions workflow
-  artifacts now also surface repo-local delivery paths for Terraform
-  `-chdir`, Terragrunt working directories, Helm chart paths, kubectl
-  manifests, Ansible playbooks/inventories/vars, and Compose file refs on the
-  Go read path without inventing canonical repo edges from those hints alone.
-  Repo-local reusable GitHub Actions workflow refs now also surface as
-  same-repo workflow provenance on the Go entity/query fallback path and emit
-  canonical same-repo `DEPLOYS_FROM` evidence on the relationship path.
-- end-to-end validation and instrumentation proof for those flows
+The remaining notes in this document are bounded follow-on enhancement lanes,
+not known Python-era parity blockers. The largest bounded areas are:
+
+- broader helper-built Terraform and Terragrunt path-expression collapsing when
+  checked-in source still cannot be reduced to an exact repo-relative asset
+- broader Docker base-image or stage-alias promotion beyond the currently
+  proven deploy-source and runtime-artifact lanes
+- broader mixed-corpus validation breadth, evidence refresh, and operator proof
+  to keep the current `pass` rows honest over time
 
 The API/MCP query surfacing infrastructure is parity-complete: every
 parser/graph family has checked-in query-level proof across entity
@@ -206,19 +192,21 @@ A feature family is parity complete only when all of the following are true:
 
 If any of those are missing, the feature is not parity complete.
 
-## Recommended Closure Order
+## Recommended Maintenance Order
 
-1. Finish broader workflow/controller relationship coverage and proof for
-   GitHub Actions, Jenkins/Groovy, Ansible, Docker, and Docker Compose
-2. Close the remaining broader IaC helper-built path-expression gap where
-   checked-in source still cannot be collapsed into exact repo-relative assets
-3. Refresh compose-backed and real-repo evidence, then lock docs to current truth
+1. Keep compose-backed and real-repo validation evidence current for the `pass`
+   rows in the parity matrix
+2. Treat broader helper-built IaC path collapsing as follow-on enhancement work
+   only when the checked-in source can still support truthful repo-relative
+   recovery
+3. Treat broader Docker base-image or stage-alias promotion as enhancement work
+   only if it can be done without inventing fake repo edges
 
 ## Companion Checklist
 
-Use [parity-closure-matrix.md](parity-closure-matrix.md) as the execution
-checklist for the remaining implementation, validation, and documentation
-closure work.
+Use [parity-closure-matrix.md](parity-closure-matrix.md) as the current branch
+truth for which surfaces are `pass`, `bounded`, or still need validation
+refresh.
 
 Use [merge-readiness-signoff.md](merge-readiness-signoff.md) for the final
 closed-versus-deferred branch signoff record.
