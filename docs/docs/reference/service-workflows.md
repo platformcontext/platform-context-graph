@@ -199,7 +199,6 @@ flowchart TD
 
 - [Relationship Mapping](../reference/relationship-mapping.md)
 - [Relationship Mapping Observability](../reference/relationship-mapping-observability.md)
-- [Parity Closure Matrix](../reference/parity-closure-matrix.md)
 
 ## 7. Telemetry Workflow
 
