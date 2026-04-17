@@ -1,0 +1,38 @@
+docs/docs/adrs/2026-04-17-semantic-entity-queue-throughput.md
+  26d0a7775258d320 1-616
+docs/docs/adrs/index.md
+  26d0a7775258d320 65-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "88637b632ab1190e16a1ca3618be8ac40f12e406",
+  "prompts": {
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 648,
+      "total_deletions": 0,
+      "accepted_lines": 822,
+      "overriden_lines": 0
+    }
+  }
+}
