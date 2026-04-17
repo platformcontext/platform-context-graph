@@ -501,8 +501,9 @@ steady-state Kubernetes service in the public chart.
 - keep the workspace mounted only on the ingester in Kubernetes
 - use direct `/metrics` endpoints for local verification
 - use `ServiceMonitor` only for the long-running Kubernetes runtimes
-- treat the local proof runtimes as milestone-validation tools until later
-  rewrite milestones promote them into steady-state deployed shapes
+- treat the local proof runtimes as milestone-validation tools unless and until
+  the public deployment contract promotes them into steady-state deployed
+  shapes
 - treat the shared admin/status report as the first place to look for live,
   inferred, backlog, and failure state
 - prefer incremental scope refresh and reconciliation over platform-wide

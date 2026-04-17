@@ -26,7 +26,7 @@ Remote mode facts for this release:
 - It is available for a limited set of query, status, bundle-upload, and admin commands.
 - Remote `find` and `analyze` commands do not support `--visual`.
 - `pcg admin reindex` queues a reindex request for the ingester to execute. The API process does not do the full reindex work inline.
-- `pcg admin facts replay` replays dead-lettered facts-first work items back to `pending`. It also accepts legacy `failed` rows so older terminal items are still recoverable during cutover. It requires at least one selector so operators do not accidentally replay the entire terminal set.
+- `pcg admin facts replay` replays dead-lettered facts-first work items back to `pending`. It also accepts legacy `failed` rows so older terminal items are still recoverable. It requires at least one selector so operators do not accidentally replay the entire terminal set.
 - `pcg admin facts dead-letter` moves selected work items into durable terminal state with an operator note.
 - `pcg admin facts backfill` creates a durable backfill request for a repository or source run.
 - `pcg admin facts replay-events` lists durable replay audit rows for incident review.
