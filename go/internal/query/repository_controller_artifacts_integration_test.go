@@ -11,6 +11,7 @@ import (
 func TestGetRepositoryContextIncludesJenkinsControllerArtifacts(t *testing.T) {
 	t.Parallel()
 
+	fixtureContent := readAnsibleJenkinsAutomationFixture(t, "Jenkinsfile")
 	db := openContentReaderTestDB(t, []contentReaderQueryResult{
 		{
 			columns: []string{
@@ -26,9 +27,7 @@ func TestGetRepositoryContextIncludesJenkinsControllerArtifacts(t *testing.T) {
 			},
 			rows: [][]driver.Value{
 				{
-					"repo-1", "Jenkinsfile", "abc123", `@Library('pipelines@v2') _
-pipelineDeploy(entry_point: 'dist/api.js')
-`,
+					"repo-1", "Jenkinsfile", "abc123", "",
 					"hash-jenkins", int64(12), "groovy", "groovy",
 				},
 			},
@@ -40,9 +39,7 @@ pipelineDeploy(entry_point: 'dist/api.js')
 			},
 			rows: [][]driver.Value{
 				{
-					"repo-1", "Jenkinsfile", "abc123", `@Library('pipelines@v2') _
-pipelineDeploy(entry_point: 'dist/api.js')
-`,
+					"repo-1", "Jenkinsfile", "abc123", fixtureContent,
 					"hash-jenkins", int64(12), "groovy", "groovy",
 				},
 			},
@@ -110,12 +107,12 @@ pipelineDeploy(entry_point: 'dist/api.js')
 	if got, want := row["path"], "Jenkinsfile"; got != want {
 		t.Fatalf("controller_artifacts[0].path = %#v, want %#v", got, want)
 	}
-	sharedLibraries, ok := row["shared_libraries"].([]any)
-	if !ok || len(sharedLibraries) != 1 || sharedLibraries[0] != "pipelines" {
-		t.Fatalf("controller_artifacts[0].shared_libraries = %#v, want [pipelines]", row["shared_libraries"])
+	pipelineCalls, ok := row["pipeline_calls"].([]any)
+	if !ok || len(pipelineCalls) != 1 || pipelineCalls[0] != "pipelineDeploy" {
+		t.Fatalf("controller_artifacts[0].pipeline_calls = %#v, want [pipelineDeploy]", row["pipeline_calls"])
 	}
-	entryPoints, ok := row["entry_points"].([]any)
-	if !ok || len(entryPoints) != 1 || entryPoints[0] != "dist/api.js" {
-		t.Fatalf("controller_artifacts[0].entry_points = %#v, want [dist/api.js]", row["entry_points"])
+	shellCommands, ok := row["shell_commands"].([]any)
+	if !ok || len(shellCommands) != 1 || shellCommands[0] != "./scripts/deploy.sh" {
+		t.Fatalf("controller_artifacts[0].shell_commands = %#v, want [./scripts/deploy.sh]", row["shell_commands"])
 	}
 }

@@ -282,6 +282,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 func TestGetRepositoryContextIncludesTerraformAndTerragruntInfrastructureFromContent(t *testing.T) {
 	t.Parallel()
 
+	fixtureContent := readAnsibleJenkinsAutomationFixture(t, "Jenkinsfile")
 	db := openContentReaderTestDB(t, []contentReaderQueryResult{
 		{
 			columns: []string{
@@ -310,12 +311,28 @@ func TestGetRepositoryContextIncludesTerraformAndTerragruntInfrastructureFromCon
 			},
 			rows: [][]driver.Value{
 				{
+					"repo-1", "Jenkinsfile", "abc123", "",
+					"hash-jenkins", int64(12), "groovy", "groovy",
+				},
+				{
 					"repo-1", "Dockerfile", "abc123", "",
 					"hash-docker", int64(30), "dockerfile", "dockerfile",
 				},
 				{
 					"repo-1", ".github/workflows/deploy.yaml", "abc123", "name: deploy\non:\n  push:\n",
 					"hash-gha", int64(40), "yaml", "github_actions_workflow",
+				},
+			},
+		},
+		{
+			columns: []string{
+				"repo_id", "relative_path", "commit_sha", "content",
+				"content_hash", "line_count", "language", "artifact_type",
+			},
+			rows: [][]driver.Value{
+				{
+					"repo-1", "Jenkinsfile", "abc123", fixtureContent,
+					"hash-jenkins", int64(12), "groovy", "groovy",
 				},
 			},
 		},
@@ -436,6 +453,32 @@ func TestGetRepositoryContextIncludesTerraformAndTerragruntInfrastructureFromCon
 	}
 	if got, want := workflowArtifact["workflow_name"], "deploy"; got != want {
 		t.Fatalf("workflow_artifacts[0].workflow_name = %#v, want %#v", got, want)
+	}
+
+	controllerArtifacts, ok := deploymentArtifacts["controller_artifacts"].([]any)
+	if !ok {
+		t.Fatalf("controller_artifacts type = %T, want []any", deploymentArtifacts["controller_artifacts"])
+	}
+	if len(controllerArtifacts) != 1 {
+		t.Fatalf("len(controller_artifacts) = %d, want 1", len(controllerArtifacts))
+	}
+	controllerArtifact, ok := controllerArtifacts[0].(map[string]any)
+	if !ok {
+		t.Fatalf("controller_artifacts[0] type = %T, want map[string]any", controllerArtifacts[0])
+	}
+	if got, want := controllerArtifact["path"], "Jenkinsfile"; got != want {
+		t.Fatalf("controller_artifacts[0].path = %#v, want %#v", got, want)
+	}
+	if got, want := controllerArtifact["controller_kind"], "jenkins_pipeline"; got != want {
+		t.Fatalf("controller_artifacts[0].controller_kind = %#v, want %#v", got, want)
+	}
+	pipelineCalls, ok := controllerArtifact["pipeline_calls"].([]any)
+	if !ok || len(pipelineCalls) != 1 || pipelineCalls[0] != "pipelineDeploy" {
+		t.Fatalf("controller_artifacts[0].pipeline_calls = %#v, want [pipelineDeploy]", controllerArtifact["pipeline_calls"])
+	}
+	shellCommands, ok := controllerArtifact["shell_commands"].([]any)
+	if !ok || len(shellCommands) != 1 || shellCommands[0] != "./scripts/deploy.sh" {
+		t.Fatalf("controller_artifacts[0].shell_commands = %#v, want [./scripts/deploy.sh]", controllerArtifact["shell_commands"])
 	}
 }
 

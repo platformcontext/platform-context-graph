@@ -90,6 +90,14 @@ value = ${var.name}
 			wantIACRelated: true,
 		},
 		{
+			name:           "github actions workflow is classified",
+			relativePath:   filepath.Join(".github", "workflows", "deploy.yaml"),
+			content:        "name: deploy\non:\n  push:\n",
+			wantArtifact:   "github_actions_workflow",
+			wantDialect:    "",
+			wantIACRelated: false,
+		},
+		{
 			name:         "terraform tfvars json stays on terraform artifact path",
 			relativePath: filepath.Join("infra", "terraform.tfvars.json"),
 			content: `{

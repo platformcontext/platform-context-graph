@@ -20,6 +20,8 @@ const (
 	EvidenceKindTerraformModuleSource EvidenceKind = "TERRAFORM_MODULE_SOURCE"
 	// EvidenceKindTerragruntDependencyConfigPath is a Terragrunt dependency config_path reference.
 	EvidenceKindTerragruntDependencyConfigPath EvidenceKind = "TERRAGRUNT_DEPENDENCY_CONFIG_PATH"
+	// EvidenceKindTerragruntConfigAssetPath is a Terragrunt helper or local config asset reference.
+	EvidenceKindTerragruntConfigAssetPath EvidenceKind = "TERRAGRUNT_CONFIG_ASSET_PATH"
 	// EvidenceKindHelmChart is a Helm Chart.yaml reference.
 	EvidenceKindHelmChart EvidenceKind = "HELM_CHART_REFERENCE"
 	// EvidenceKindHelmValues is a Helm values reference.

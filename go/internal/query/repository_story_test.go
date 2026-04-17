@@ -277,3 +277,69 @@ func TestBuildRepositoryStoryResponseIncludesDockerfileRuntimeArtifactsInDirectS
 		t.Fatalf("direct_story[0] = %q, want %q", got, want)
 	}
 }
+
+func TestBuildRepositoryStoryResponseIncludesWorkflowArtifactsForWorkflowOnlyRepo(t *testing.T) {
+	t.Parallel()
+
+	repo := RepoRef{ID: "repository:ci-workflows", Name: "ci-workflows"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		8,
+		[]string{"yaml"},
+		nil,
+		nil,
+		0,
+		map[string]any{
+			"families": []string{"github_actions"},
+			"deployment_artifacts": map[string]any{
+				"workflow_artifacts": []map[string]any{
+					{
+						"relative_path": ".github/workflows/deploy.yaml",
+						"artifact_type": "github_actions_workflow",
+						"workflow_name": "deploy",
+						"signals":       []string{"workflow_file"},
+					},
+				},
+			},
+		},
+		nil,
+	)
+
+	if gotStory, ok := got["story"].(string); !ok || gotStory == "" {
+		t.Fatalf("story = %#v, want non-empty string", got["story"])
+	}
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	if got, want := deploymentOverview["workload_count"], 0; got != want {
+		t.Fatalf("deployment_overview.workload_count = %#v, want %#v", got, want)
+	}
+	if got, want := deploymentOverview["platform_count"], 0; got != want {
+		t.Fatalf("deployment_overview.platform_count = %#v, want %#v", got, want)
+	}
+
+	deploymentArtifacts, ok := deploymentOverview["deployment_artifacts"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_artifacts type = %T, want map[string]any", deploymentOverview["deployment_artifacts"])
+	}
+	workflowArtifacts, ok := deploymentArtifacts["workflow_artifacts"].([]map[string]any)
+	if !ok {
+		t.Fatalf("workflow_artifacts type = %T, want []map[string]any", deploymentArtifacts["workflow_artifacts"])
+	}
+	if len(workflowArtifacts) != 1 {
+		t.Fatalf("len(workflow_artifacts) = %d, want 1", len(workflowArtifacts))
+	}
+
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	if len(directStory) != 1 {
+		t.Fatalf("len(direct_story) = %d, want 1", len(directStory))
+	}
+	if got, want := directStory[0], "Workflow delivery paths include .github/workflows/deploy.yaml as github_actions_workflow deploy (workflow_file)."; got != want {
+		t.Fatalf("direct_story[0] = %q, want %q", got, want)
+	}
+}

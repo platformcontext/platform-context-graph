@@ -370,6 +370,66 @@ func TestCrossRepoResolutionMultipleRelationshipTypes(t *testing.T) {
 	}
 }
 
+func TestCrossRepoResolutionPreservesGitHubActionsTypedRelationships(t *testing.T) {
+	t.Parallel()
+
+	evidence := []relationships.EvidenceFact{
+		{
+			EvidenceKind:     relationships.EvidenceKindGitHubActionsReusableWorkflow,
+			RelationshipType: relationships.RelDeploysFrom,
+			SourceRepoID:     "repo-service",
+			TargetRepoID:     "repo-automation",
+			Confidence:       0.93,
+		},
+		{
+			EvidenceKind:     relationships.EvidenceKindGitHubActionsWorkflowInputRepository,
+			RelationshipType: relationships.RelDiscoversConfigIn,
+			SourceRepoID:     "repo-service",
+			TargetRepoID:     "repo-automation",
+			Confidence:       0.90,
+		},
+	}
+
+	edgeWriter := &recordingEdgeWriter{}
+
+	handler := CrossRepoRelationshipHandler{
+		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
+		EdgeWriter:     edgeWriter,
+	}
+
+	count, err := handler.Resolve(context.Background(), "scope-gha", "gen-gha")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("Resolve() = %d, want 2", count)
+	}
+
+	if len(edgeWriter.writeCalls) != 1 {
+		t.Fatalf("expected 1 write call, got %d", len(edgeWriter.writeCalls))
+	}
+	rows := edgeWriter.writeCalls[0].rows
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 write rows, got %d", len(rows))
+	}
+
+	gotTypes := map[string]struct{}{}
+	for _, row := range rows {
+		gotTypes[stringValue(row.Payload["relationship_type"])] = struct{}{}
+		if got := stringValue(row.Payload["repo_id"]); got != "repo-service" {
+			t.Fatalf("row repo_id = %q, want %q", got, "repo-service")
+		}
+		if got := stringValue(row.Payload["target_repo_id"]); got != "repo-automation" {
+			t.Fatalf("row target_repo_id = %q, want %q", got, "repo-automation")
+		}
+	}
+	for _, want := range []string{string(relationships.RelDeploysFrom), string(relationships.RelDiscoversConfigIn)} {
+		if _, ok := gotTypes[want]; !ok {
+			t.Fatalf("missing relationship_type %q in write rows", want)
+		}
+	}
+}
+
 func TestCrossRepoResolutionDeduplicatesEvidence(t *testing.T) {
 	t.Parallel()
 

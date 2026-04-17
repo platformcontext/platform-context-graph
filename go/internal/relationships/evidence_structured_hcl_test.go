@@ -138,3 +138,70 @@ func TestDiscoverStructuredTerraformAndTerragruntEvidence(t *testing.T) {
 		})
 	}
 }
+
+func TestDiscoverStructuredTerragruntHelperConfigEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelope := facts.Envelope{
+		ScopeID: "repo-live",
+		Payload: map[string]any{
+			"relative_path": "env/prod/terragrunt.hcl",
+			"parsed_file_data": map[string]any{
+				"terragrunt_configs": []any{
+					map[string]any{
+						"name":                         "terragrunt",
+						"include_paths":                "../iac-eks-terragrunt-core/root.hcl",
+						"read_config_paths":            "../iac-eks-terragrunt-core/env.hcl",
+						"find_in_parent_folders_paths": "../iac-eks-terragrunt-core/global.yaml",
+						"local_config_asset_paths":     "../terraform-modules-aws/config/runtime.yaml",
+					},
+				},
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-terragrunt-core", Aliases: []string{"iac-eks-terragrunt-core"}},
+		{RepoID: "repo-terraform-modules-aws", Aliases: []string{"terraform-modules-aws"}},
+	}
+
+	evidence := DiscoverEvidence([]facts.Envelope{envelope}, catalog)
+	if len(evidence) != 4 {
+		t.Fatalf("len(evidence) = %d, want 4", len(evidence))
+	}
+
+	want := map[string]struct {
+		targetRepoID string
+	}{
+		"include_path": {
+			targetRepoID: "repo-terragrunt-core",
+		},
+		"read_config_path": {
+			targetRepoID: "repo-terragrunt-core",
+		},
+		"find_in_parent_folders_path": {
+			targetRepoID: "repo-terragrunt-core",
+		},
+		"local_config_asset_path": {
+			targetRepoID: "repo-terraform-modules-aws",
+		},
+	}
+	for _, item := range evidence {
+		if item.RelationshipType != RelDiscoversConfigIn {
+			t.Fatalf("RelationshipType = %q, want %q", item.RelationshipType, RelDiscoversConfigIn)
+		}
+		if item.EvidenceKind != EvidenceKindTerragruntConfigAssetPath {
+			t.Fatalf("EvidenceKind = %q, want %q", item.EvidenceKind, EvidenceKindTerragruntConfigAssetPath)
+		}
+		helperKind, _ := item.Details["helper_kind"].(string)
+		expected, ok := want[helperKind]
+		if !ok {
+			t.Fatalf("unexpected helper_kind %q in details %#v", helperKind, item.Details)
+		}
+		if item.TargetRepoID != expected.targetRepoID {
+			t.Fatalf("TargetRepoID for %q = %q, want %q", helperKind, item.TargetRepoID, expected.targetRepoID)
+		}
+		if got, wantPath := item.Details["config_path"], item.Details["matched_value"]; got != wantPath {
+			t.Fatalf("config_path %#v does not match matched_value %#v", got, wantPath)
+		}
+	}
+}

@@ -39,6 +39,7 @@ type evidenceKey struct {
 	SourceEntityID string
 	TargetEntityID string
 	Path           string
+	MatchedValue   string
 }
 
 // terraformPattern describes one regex-based Terraform evidence extractor.
@@ -142,6 +143,9 @@ func discoverFromEnvelope(
 
 	if len(parsedFileData) > 0 {
 		evidence = append(evidence, discoverStructuredTerraformEvidence(
+			sourceRepoID, filePath, parsedFileData, catalog, seen,
+		)...)
+		evidence = append(evidence, discoverStructuredTerragruntConfigEvidence(
 			sourceRepoID, filePath, parsedFileData, catalog, seen,
 		)...)
 	}
@@ -390,6 +394,7 @@ func matchCatalog(
 			SourceEntityID: "",
 			TargetEntityID: "",
 			Path:           filePath,
+			MatchedValue:   candidate,
 		}
 		if _, ok := seen[key]; ok {
 			continue
