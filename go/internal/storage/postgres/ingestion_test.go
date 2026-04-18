@@ -327,6 +327,66 @@ func TestIngestionStoreWaitForDeploymentMappingTerminalPollsUntilQueueDrains(t *
 	}
 }
 
+func TestIngestionStoreBackfillAllRelationshipEvidenceSkipsUnknownTargetGenerations(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 18, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{
+				rows: [][]any{
+					{[]byte(`{"repo_id":"repo-app","name":"app-repo"}`)},
+				},
+			},
+			{
+				rows: [][]any{
+					{"repo-other", "scope-other", "gen-other"},
+				},
+			},
+			{
+				rows: [][]any{
+					{
+						"fact-1",
+						"scope-infra",
+						"gen-infra",
+						"content",
+						"content:1",
+						"git",
+						"source-fact-1",
+						"",
+						"",
+						now,
+						false,
+						[]byte(`{"artifact_type":"terraform","relative_path":"main.tf","content":"app_repo = \"app-repo\""}`),
+					},
+				},
+			},
+		},
+	}
+	store := NewIngestionStore(db)
+	store.Now = func() time.Time { return now }
+
+	if err := store.BackfillAllRelationshipEvidence(context.Background(), nil, nil); err != nil {
+		t.Fatalf("BackfillAllRelationshipEvidence() error = %v, want nil", err)
+	}
+
+	for _, execCall := range db.execs {
+		if strings.Contains(execCall.query, "INSERT INTO relationship_evidence_facts") {
+			t.Fatalf("unexpected evidence insert for unknown target generation:\n%s", execCall.query)
+		}
+	}
+	foundPhasePublish := false
+	for _, execCall := range db.execs {
+		if strings.Contains(execCall.query, "INSERT INTO graph_projection_phase_state") {
+			foundPhasePublish = true
+			break
+		}
+	}
+	if !foundPhasePublish {
+		t.Fatal("expected backward evidence readiness publish")
+	}
+}
+
 type fakeTransactionalDB struct {
 	tx             *fakeTx
 	beginCalls     int

@@ -414,7 +414,12 @@ func (s IngestionStore) BackfillAllRelationshipEvidence(
 	for repoID, repoEvidence := range evidenceByTargetRepo {
 		repoGeneration, ok := repoGenerations[repoID]
 		if !ok {
-			return fmt.Errorf("deferred relationship evidence target repo %q has no active generation", repoID)
+			log.Printf(
+				"relationship_backfill_deferred_target_skipped=true target_repo_id=%q reason=%q",
+				repoID,
+				"missing_active_generation",
+			)
+			continue
 		}
 		if err := relationshipStore.UpsertEvidenceFacts(ctx, repoGeneration.GenerationID, repoEvidence); err != nil {
 			return fmt.Errorf("persist deferred relationship evidence for repo %q: %w", repoID, err)

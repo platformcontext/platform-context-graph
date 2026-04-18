@@ -1,8 +1,10 @@
 package reducer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
@@ -236,6 +238,41 @@ func TestCrossRepoResolutionUsesReadinessPrefetchWhenAvailable(t *testing.T) {
 	}
 	if len(edgeWriter.writeCalls) != 1 {
 		t.Fatalf("writeCalls = %d, want 1", len(edgeWriter.writeCalls))
+	}
+}
+
+func TestCrossRepoResolutionWarnsWhenReadinessGateBypassed(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(previous)
+
+	evidenceLoader := &fakeEvidenceFactLoader{
+		facts: []relationships.EvidenceFact{
+			{
+				EvidenceKind:     relationships.EvidenceKindTerraformAppRepo,
+				RelationshipType: relationships.RelProvisionsDependencyFor,
+				SourceRepoID:     "infra-repo",
+				TargetRepoID:     "app-repo",
+				Confidence:       0.99,
+			},
+		},
+	}
+	edgeWriter := &recordingEdgeWriter{}
+	handler := CrossRepoRelationshipHandler{
+		EvidenceLoader: evidenceLoader,
+		EdgeWriter:     edgeWriter,
+	}
+
+	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("Resolve() = %d, want 1 when gate wiring is absent", count)
+	}
+	if !bytes.Contains(logs.Bytes(), []byte("cross-repo readiness lookup not configured")) {
+		t.Fatalf("warning log = %q, want missing readiness warning", logs.String())
 	}
 }
 

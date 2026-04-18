@@ -98,6 +98,14 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 		}
 		readinessLookup = resolvedLookup
 	}
+	if hasReadinessKey && readinessLookup == nil {
+		slog.WarnContext(ctx, "cross-repo readiness lookup not configured; bypassing backward evidence gate",
+			slog.String(telemetry.LogKeyScopeID, scopeID),
+			slog.String(telemetry.LogKeyGenerationID, generationID),
+			slog.String("keyspace", string(GraphProjectionKeyspaceCrossRepoEvidence)),
+			slog.String("phase", string(GraphProjectionPhaseBackwardEvidenceCommitted)),
+		)
+	}
 	if hasReadinessKey && readinessLookup != nil {
 		ready, found := readinessLookup(readinessKey, GraphProjectionPhaseBackwardEvidenceCommitted)
 		if !found || !ready {
