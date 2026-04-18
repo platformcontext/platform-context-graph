@@ -231,7 +231,7 @@ func runPipelined(
 		return projectorErr
 	}
 
-	if err := cd.committer.WaitForDeploymentMappingTerminal(ctx, 15*time.Minute, 5*time.Second); err != nil {
+	if err := cd.committer.WaitForDeploymentMappingTerminal(ctx, 45*time.Minute, 10*time.Second); err != nil {
 		if logger != nil {
 			logger.ErrorContext(ctx, "wait for deployment_mapping terminal timed out",
 				slog.String("error", err.Error()),
