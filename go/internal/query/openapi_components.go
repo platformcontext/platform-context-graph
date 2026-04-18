@@ -203,6 +203,7 @@ const openAPIComponents = `  "components": {
           "observed_config_environments": {"type": "array", "items": {"type": "string"}},
           "api_surface": {"type": "object"},
           "deployment_overview": {"type": "object"},
+          "deployment_evidence": {"type": "object"},
           "story_sections": {"type": "array", "items": {"type": "object"}},
           "documentation_overview": {"type": "object"},
           "support_overview": {"type": "object"},

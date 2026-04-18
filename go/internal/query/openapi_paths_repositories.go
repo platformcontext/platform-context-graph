@@ -176,8 +176,15 @@ const openAPIPathsRepositories = `
                   "type": "object",
                   "properties": {
                     "repo_id": {"type": "string"},
+                    "completeness_state": {"type": "string"},
+                    "graph_available": {"type": "boolean"},
+                    "server_content_available": {"type": "boolean"},
+                    "graph_gap_count": {"type": "integer"},
+                    "content_gap_count": {"type": "integer"},
                     "file_count": {"type": "integer"},
                     "entity_count": {"type": "integer"},
+                    "content_last_indexed_at": {"type": "string"},
+                    "last_error": {"type": "string"},
                     "languages": {
                       "type": "array",
                       "items": {
@@ -187,7 +194,8 @@ const openAPIPathsRepositories = `
                           "file_count": {"type": "integer"}
                         }
                       }
-                    }
+                    },
+                    "summary": {"type": "object"}
                   }
                 }
               }

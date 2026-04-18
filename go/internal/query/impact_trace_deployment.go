@@ -92,6 +92,7 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	provisioningSourceChains := mapSliceValue(workloadContext, "provisioning_source_chains")
 	documentationOverview := mapValue(workloadContext, "documentation_overview")
 	supportOverview := mapValue(workloadContext, "support_overview")
+	deploymentEvidence := mapValue(workloadContext, "deployment_evidence")
 	k8sRelationships := buildK8sRelationships(k8sResources)
 	platforms := distinctSortedInstanceField(instances, "platform_name")
 	platformKinds := distinctSortedInstanceField(instances, "platform_kind")
@@ -103,6 +104,8 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		story = story + " " + provenanceStory
 	}
 	deploymentOverview := buildServiceDeploymentOverview(workloadContext)
+	deliveryPaths := buildDeliveryPaths(deploymentSources, cloudResources, k8sResources, imageRefs, k8sRelationships)
+	deliveryPaths = mergeTraceRepositoryDeliveryPaths(deliveryPaths, deploymentEvidence)
 	deploymentOverview["deployment_source_count"] = len(deploymentSources)
 	deploymentOverview["cloud_resource_count"] = len(cloudResources)
 	deploymentOverview["k8s_resource_count"] = len(k8sResources)
@@ -134,7 +137,7 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		"k8s_relationships":       k8sRelationships,
 		"deployment_facts":        deploymentFacts,
 		"controller_driven_paths": buildControllerDrivenPaths(platforms, platformKinds),
-		"delivery_paths":          buildDeliveryPaths(deploymentSources, cloudResources, k8sResources, imageRefs, k8sRelationships),
+		"delivery_paths":          deliveryPaths,
 		"story":                   story,
 		"story_sections":          buildStorySections(platforms, platformKinds, environments),
 		"deployment_overview":     deploymentOverview,
@@ -173,6 +176,9 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	}
 	if len(supportOverview) > 0 {
 		response["support_overview"] = supportOverview
+	}
+	if len(deploymentEvidence) > 0 {
+		response["deployment_evidence"] = deploymentEvidence
 	}
 
 	return response

@@ -57,6 +57,7 @@ const openAPIPathsImpact = `
                     "gitops_overview": {"type": "object"},
                     "consumer_repositories": {"type": "array", "items": {"type": "object"}},
                     "provisioning_source_chains": {"type": "array", "items": {"type": "object"}},
+                    "deployment_evidence": {"type": "object"},
                     "documentation_overview": {"type": "object"},
                     "support_overview": {"type": "object"},
                     "controller_overview": {

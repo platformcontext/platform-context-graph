@@ -15,20 +15,20 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 		{
 			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
 			rows: [][]driver.Value{
-				{"repo-api-node-boats", "deploy/qa/ingress.yaml", "sha-1", "", "hash-1", int64(8), "yaml", "yaml"},
-				{"repo-api-node-boats", "specs/index.yaml", "sha-2", "", "hash-2", int64(15), "yaml", "yaml"},
+				{"repo-service-edge-api", "deploy/staging/ingress.yaml", "sha-1", "", "hash-1", int64(8), "yaml", "yaml"},
+				{"repo-service-edge-api", "specs/index.yaml", "sha-2", "", "hash-2", int64(15), "yaml", "yaml"},
 			},
 		},
 		{
 			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
 			rows: [][]driver.Value{
-				{"repo-api-node-boats", "deploy/qa/ingress.yaml", "sha-1", "spec:\n  rules:\n    - host: api-node-boats.qa.bgrp.io\n", "hash-1", int64(8), "yaml", "yaml"},
+				{"repo-service-edge-api", "deploy/staging/ingress.yaml", "sha-1", "spec:\n  rules:\n    - host: service-edge-api.staging.example.test\n", "hash-1", int64(8), "yaml", "yaml"},
 			},
 		},
 		{
 			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
 			rows: [][]driver.Value{
-				{"repo-api-node-boats", "specs/index.yaml", "sha-2", "openapi: 3.0.3\ninfo:\n  version: v1\nservers:\n  - url: https://api-node-boats.qa.bgrp.io\npaths:\n  /boats:\n    get:\n      operationId: listBoats\n", "hash-2", int64(15), "yaml", "yaml"},
+				{"repo-service-edge-api", "specs/index.yaml", "sha-2", "openapi: 3.0.3\ninfo:\n  version: v1\nservers:\n  - url: https://service-edge-api.staging.example.test\npaths:\n  /widgets:\n    get:\n      operationId: listWidgets\n", "hash-2", int64(15), "yaml", "yaml"},
 			},
 		},
 		{
@@ -50,44 +50,76 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 			},
 			rows: [][]driver.Value{
 				{
-					"terraform-module-1", "repo-terraform-stack", "env/qa/main.tf", "TerraformModule", "service_module",
+					"terraform-module-1", "repo-terraform-stack", "env/staging/main.tf", "TerraformModule", "service_module",
 					int64(1), int64(10), "hcl", `module "service" { source = "../../modules/service" }`,
 					[]byte(`{"source":"../../modules/service"}`),
 				},
 			},
 		},
+		{
+			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
+			rows: [][]driver.Value{
+				{"repo-service-edge-api", ".github/workflows/deploy.yaml", "sha-5", "name: deploy\non:\n  workflow_dispatch:\njobs:\n  deploy:\n    steps:\n      - run: helm upgrade --install service-edge-api ./charts/service-edge-api\n", "hash-5", int64(12), "yaml", "github_actions_workflow"},
+				{"repo-service-edge-api", "Jenkinsfile", "sha-6", "@Library('pipelines') _\npipelineDeploy()\nsh 'ansible-playbook deploy.yml -i inventory/staging.ini'\n", "hash-6", int64(16), "groovy", "groovy"},
+				{"repo-service-edge-api", "charts/service-edge-api/values-staging.yaml", "sha-7", "service:\n  name: service-edge-api\n", "hash-7", int64(9), "yaml", "helm_values"},
+				{"repo-service-edge-api", "group_vars/all.yml", "sha-8", "env: staging\n", "hash-8", int64(4), "yaml", "ansible_vars"},
+				{"repo-service-edge-api", "inventory/staging.ini", "sha-9", "[staging]\nservice-edge-api\n", "hash-9", int64(4), "ini", "ansible_inventory"},
+			},
+		},
+		{
+			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
+			rows: [][]driver.Value{
+				{"repo-service-edge-api", "Jenkinsfile", "sha-6", "@Library('pipelines') _\npipelineDeploy()\nsh 'ansible-playbook deploy.yml -i inventory/staging.ini'\n", "hash-6", int64(16), "groovy", "groovy"},
+			},
+		},
+		{
+			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
+			rows: [][]driver.Value{
+				{"repo-service-edge-api", ".github/workflows/deploy.yaml", "sha-5", "name: deploy\non:\n  workflow_dispatch:\njobs:\n  deploy:\n    steps:\n      - run: helm upgrade --install service-edge-api ./charts/service-edge-api\n", "hash-5", int64(12), "yaml", "github_actions_workflow"},
+			},
+		},
 	})
 
 	workloadContext := map[string]any{
-		"id":        "workload:api-node-boats",
-		"name":      "api-node-boats",
+		"id":        "workload:service-edge-api",
+		"name":      "service-edge-api",
 		"kind":      "Deployment",
-		"repo_id":   "repo-api-node-boats",
-		"repo_name": "api-node-boats",
+		"repo_id":   "repo-service-edge-api",
+		"repo_name": "service-edge-api",
 		"instances": []map[string]any{
 			{
-				"instance_id":   "instance:qa",
-				"platform_name": "qa-eks",
+				"instance_id":   "instance:staging",
+				"platform_name": "staging-eks",
 				"platform_kind": "eks",
-				"environment":   "qa",
+				"environment":   "staging",
 			},
 		},
 		"dependencies": []map[string]any{
 			{"type": "DEPENDS_ON", "target_name": "shared-lib"},
 		},
+		"infrastructure": []map[string]any{
+			{
+				"type":      "HelmValues",
+				"name":      "service-edge-api",
+				"file_path": "charts/service-edge-api/values-staging.yaml",
+			},
+		},
 	}
 
 	err := enrichServiceQueryContext(context.Background(), fakeGraphReader{
 		run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+			if strings.Contains(cypher, "RETURN related.id AS repo_id, related.name AS repo_name") {
+				return nil, nil
+			}
 			if strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN") {
-				if got, want := params["repo_id"], "repo-api-node-boats"; got != want {
+				if got, want := params["repo_id"], "repo-service-edge-api"; got != want {
 					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
 				}
 				return []map[string]any{
 					{
-						"repo_id":            "repo-terraform-stack",
-						"repo_name":          "terraform-stack-qa",
-						"relationship_type":  "PROVISIONS_DEPENDENCY_FOR",
+						"repo_id":             "repo-terraform-stack",
+						"repo_name":           "terraform-stack-staging",
+						"relationship_type":   "PROVISIONS_DEPENDENCY_FOR",
 						"relationship_reason": "terraform_provider_reference",
 					},
 				}, nil
@@ -96,16 +128,16 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 		},
 		runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
 			if strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id}) RETURN") {
-				if got, want := params["repo_id"], "repo-api-node-boats"; got != want {
+				if got, want := params["repo_id"], "repo-service-edge-api"; got != want {
 					t.Fatalf("repo params[repo_id] = %#v, want %#v", got, want)
 				}
 				return map[string]any{
-					"id":         "repo-api-node-boats",
-					"name":       "api-node-boats",
-					"path":       "/repos/api-node-boats",
-					"local_path": "/repos/api-node-boats",
-					"remote_url": "https://github.com/acme/api-node-boats",
-					"repo_slug":  "acme/api-node-boats",
+					"id":         "repo-service-edge-api",
+					"name":       "service-edge-api",
+					"path":       "/repos/service-edge-api",
+					"local_path": "/repos/service-edge-api",
+					"remote_url": "https://github.com/example/service-edge-api",
+					"repo_slug":  "example/service-edge-api",
 					"has_remote": true,
 				}, nil
 			}
@@ -119,8 +151,9 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 	if got := len(mapSliceValue(workloadContext, "hostnames")); got != 1 {
 		t.Fatalf("len(hostnames) = %d, want 1", got)
 	}
-	if got, want := StringSliceVal(workloadContext, "observed_config_environments"), []string{"qa"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("observed_config_environments = %#v, want %#v", got, want)
+	observedEnvironments := StringSliceVal(workloadContext, "observed_config_environments")
+	if !containsString(observedEnvironments, "staging") {
+		t.Fatalf("observed_config_environments = %#v, want to include %q", observedEnvironments, "staging")
 	}
 
 	apiSurface := mapValue(workloadContext, "api_surface")
@@ -143,17 +176,44 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 	if len(provisioningChains) != 1 {
 		t.Fatalf("len(provisioning_source_chains) = %d, want 1", len(provisioningChains))
 	}
-	if got, want := StringVal(provisioningChains[0], "repository"), "terraform-stack-qa"; got != want {
+	if got, want := StringVal(provisioningChains[0], "repository"), "terraform-stack-staging"; got != want {
 		t.Fatalf("provisioning_source_chains[0].repository = %q, want %q", got, want)
 	}
 
 	documentationOverview := mapValue(workloadContext, "documentation_overview")
-	if got, want := documentationOverview["repo_slug"], "acme/api-node-boats"; got != want {
+	if got, want := documentationOverview["repo_slug"], "example/service-edge-api"; got != want {
 		t.Fatalf("documentation_overview.repo_slug = %#v, want %#v", got, want)
 	}
 
 	supportOverview := mapValue(workloadContext, "support_overview")
 	if got, want := supportOverview["consumer_repository_count"], 2; got != want {
 		t.Fatalf("support_overview.consumer_repository_count = %#v, want %#v", got, want)
+	}
+
+	deploymentEvidence := mapValue(workloadContext, "deployment_evidence")
+	if len(deploymentEvidence) == 0 {
+		t.Fatal("deployment_evidence = nil, want repository-backed deployment evidence")
+	}
+	if got, want := StringSliceVal(deploymentEvidence, "tool_families"), []string{"ansible", "github_actions", "helm", "jenkins"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("deployment_evidence.tool_families = %#v, want %#v", got, want)
+	}
+	deliveryPaths := mapSliceValue(deploymentEvidence, "delivery_paths")
+	if len(deliveryPaths) < 2 {
+		t.Fatalf("len(deployment_evidence.delivery_paths) = %d, want at least 2", len(deliveryPaths))
+	}
+	deliveryWorkflows := mapSliceValue(deploymentEvidence, "delivery_workflows")
+	if len(deliveryWorkflows) != 1 {
+		t.Fatalf("len(deployment_evidence.delivery_workflows) = %d, want 1", len(deliveryWorkflows))
+	}
+	if got, want := StringVal(deliveryWorkflows[0], "controller_kind"), "jenkins_pipeline"; got != want {
+		t.Fatalf("deployment_evidence.delivery_workflows[0].controller_kind = %#v, want %#v", got, want)
+	}
+
+	deploymentOverview := mapValue(workloadContext, "deployment_overview")
+	if got, want := deploymentOverview["delivery_path_count"], len(deliveryPaths); got != want {
+		t.Fatalf("deployment_overview.delivery_path_count = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(deploymentOverview, "deployment_tool_families"), []string{"ansible", "github_actions", "helm", "jenkins"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("deployment_overview.deployment_tool_families = %#v, want %#v", got, want)
 	}
 }

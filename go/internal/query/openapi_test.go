@@ -301,6 +301,7 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		"gitops_overview",
 		"consumer_repositories",
 		"provisioning_source_chains",
+		"deployment_evidence",
 		"documentation_overview",
 		"support_overview",
 		"controller_overview",
@@ -340,6 +341,46 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	} {
 		if _, ok := repositoryStorySchema[field]; !ok {
 			t.Fatalf("repositories/{repo_id}/story response schema missing %s", field)
+		}
+	}
+
+	serviceContextPath := mustMapField(t, paths, "/api/v0/services/{service_name}/context")
+	serviceContextGet := mustMapField(t, serviceContextPath, "get")
+	serviceContextResponses := mustMapField(t, serviceContextGet, "responses")
+	serviceContextOK := mustMapField(t, serviceContextResponses, "200")
+	serviceContextContent := mustMapField(t, mustMapField(t, serviceContextOK, "content"), "application/json")
+	serviceContextSchema := mustMapField(t, serviceContextContent, "schema")
+	if got, want := serviceContextSchema["$ref"], "#/components/schemas/WorkloadContext"; got != want {
+		t.Fatalf("services/{service_name}/context schema ref = %#v, want %#v", got, want)
+	}
+	workloadContextSchema := mustMapField(t, schemas, "WorkloadContext")
+	workloadContextProperties := mustMapField(t, workloadContextSchema, "properties")
+	if _, ok := workloadContextProperties["deployment_evidence"]; !ok {
+		t.Fatal("WorkloadContext schema missing deployment_evidence")
+	}
+
+	repositoryCoveragePath := mustMapField(t, paths, "/api/v0/repositories/{repo_id}/coverage")
+	repositoryCoverageGet := mustMapField(t, repositoryCoveragePath, "get")
+	repositoryCoverageResponses := mustMapField(t, repositoryCoverageGet, "responses")
+	repositoryCoverageOK := mustMapField(t, repositoryCoverageResponses, "200")
+	repositoryCoverageContent := mustMapField(t, mustMapField(t, repositoryCoverageOK, "content"), "application/json")
+	repositoryCoverageSchema := mustMapField(t, mustMapField(t, repositoryCoverageContent, "schema"), "properties")
+	for _, field := range []string{
+		"repo_id",
+		"completeness_state",
+		"graph_available",
+		"server_content_available",
+		"graph_gap_count",
+		"content_gap_count",
+		"file_count",
+		"entity_count",
+		"content_last_indexed_at",
+		"last_error",
+		"languages",
+		"summary",
+	} {
+		if _, ok := repositoryCoverageSchema[field]; !ok {
+			t.Fatalf("repositories/{repo_id}/coverage response schema missing %s", field)
 		}
 	}
 
