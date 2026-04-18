@@ -235,7 +235,8 @@ func runPipelined(
 	// naturally see the gate open when they run (backward_evidence is already
 	// committed by BackfillAllRelationshipEvidence above). A small number of
 	// in-flight items may succeed between now and the reopen pass — those
-	// stragglers are caught by the normal repair runner.
+	// stragglers are NOT automatically replayed today and require manual admin
+	// replay or a future automated straggler-replay mechanism.
 	if err := cd.committer.ReopenDeploymentMappingWorkItems(ctx, tracer, instruments); err != nil {
 		if logger != nil {
 			logger.ErrorContext(ctx, "reopen deployment_mapping work items failed",

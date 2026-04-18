@@ -112,6 +112,11 @@ type Instruments struct {
 	// Evidence discovery metrics (during ingestion)
 	EvidenceFactsDiscovered metric.Int64Counter
 
+	// Deferred bootstrap backfill and reopen metrics
+	DeferredBackfillDuration    metric.Float64Histogram
+	DeferredBackfillEvidence    metric.Int64Counter
+	DeploymentMappingReopened   metric.Int64Counter
+
 	// Cross-repo resolution metrics
 	CrossRepoResolutionDuration metric.Float64Histogram
 	CrossRepoEvidenceLoaded     metric.Int64Counter
@@ -595,6 +600,34 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register EvidenceFactsDiscovered counter: %w", err)
+	}
+
+	// Deferred bootstrap backfill and reopen instruments
+	backfillBuckets := []float64{0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300}
+	inst.DeferredBackfillDuration, err = meter.Float64Histogram(
+		"pcg_dp_deferred_backfill_duration_seconds",
+		metric.WithDescription("Duration of corpus-wide deferred backward evidence backfill"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(backfillBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register DeferredBackfillDuration histogram: %w", err)
+	}
+
+	inst.DeferredBackfillEvidence, err = meter.Int64Counter(
+		"pcg_dp_deferred_backfill_evidence_total",
+		metric.WithDescription("Total evidence facts discovered during deferred bootstrap backfill"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register DeferredBackfillEvidence counter: %w", err)
+	}
+
+	inst.DeploymentMappingReopened, err = meter.Int64Counter(
+		"pcg_dp_deployment_mapping_reopened_total",
+		metric.WithDescription("Total deployment_mapping work items reopened after deferred backfill"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register DeploymentMappingReopened counter: %w", err)
 	}
 
 	// Cross-repo resolution instruments

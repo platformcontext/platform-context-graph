@@ -184,8 +184,8 @@ FOREACH (_ IN CASE WHEN row.relationship_type IS NULL AND (row.call_kind IS NULL
 // --- Batched UNWIND Cypher (inheritance edges) ---
 
 const batchCanonicalInheritanceEdgeUpsertCypher = `UNWIND $rows AS row
-MATCH (child {uid: row.child_entity_id})
-MATCH (parent {uid: row.parent_entity_id})
+MATCH (child:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.child_entity_id})
+MATCH (parent:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.parent_entity_id})
 FOREACH (_ IN CASE WHEN row.relationship_type = 'OVERRIDES' THEN [1] ELSE [] END |
     MERGE (child)-[rel:OVERRIDES]->(parent)
     SET rel.confidence = 0.95,
@@ -211,8 +211,8 @@ FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type =
 // --- Batched UNWIND Cypher (SQL relationship edges) ---
 
 const batchCanonicalSQLRelationshipUpsertCypher = `UNWIND $rows AS row
-MATCH (source {uid: row.source_entity_id})
-MATCH (target {uid: row.target_entity_id})
+MATCH (source:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.source_entity_id})
+MATCH (target:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.target_entity_id})
 FOREACH (_ IN CASE WHEN row.relationship_type = 'REFERENCES_TABLE' THEN [1] ELSE [] END |
     MERGE (source)-[rel:REFERENCES_TABLE]->(target)
     SET rel.confidence = 0.95,

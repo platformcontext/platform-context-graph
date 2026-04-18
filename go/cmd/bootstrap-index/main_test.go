@@ -209,17 +209,12 @@ func (f *fakeSource) Next(context.Context) (collector.CollectedGeneration, bool,
 }
 
 type fakeCommitter struct {
-	mu               sync.Mutex
-	calls            []string
-	backfillCalls    int
-	waitCalls        int
-	reopenCalls      int
-	backfillErr      error
-	waitErr          error
-	reopenErr        error
-	waitTimeout      time.Duration
-	waitPollInterval time.Duration
-	waitHook         func() error
+	mu            sync.Mutex
+	calls         []string
+	backfillCalls int
+	reopenCalls   int
+	backfillErr   error
+	reopenErr     error
 }
 
 func (f *fakeCommitter) CommitScopeGeneration(
@@ -245,25 +240,6 @@ func (f *fakeCommitter) BackfillAllRelationshipEvidence(
 	f.calls = append(f.calls, "backfill")
 	f.backfillCalls++
 	return f.backfillErr
-}
-
-func (f *fakeCommitter) WaitForDeploymentMappingTerminal(
-	_ context.Context,
-	timeout time.Duration,
-	pollInterval time.Duration,
-) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.calls = append(f.calls, "wait")
-	f.waitCalls++
-	f.waitTimeout = timeout
-	f.waitPollInterval = pollInterval
-	if f.waitHook != nil {
-		if err := f.waitHook(); err != nil {
-			return err
-		}
-	}
-	return f.waitErr
 }
 
 func (f *fakeCommitter) ReopenDeploymentMappingWorkItems(
@@ -681,14 +657,8 @@ func TestPipelinedBootstrapRunsDeferredBackfillWorkflow(t *testing.T) {
 		t.Fatalf("runPipelined() error = %v, want nil", err)
 	}
 
-	if got, want := committer.snapshotCalls(), []string{"backfill", "wait", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
+	if got, want := committer.snapshotCalls(), []string{"backfill", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("workflow calls = %v, want %v", got, want)
-	}
-	if got, want := committer.waitTimeout, 60*time.Second; got != want {
-		t.Fatalf("wait timeout = %v, want %v", got, want)
-	}
-	if got, want := committer.waitPollInterval, time.Second; got != want {
-		t.Fatalf("wait poll interval = %v, want %v", got, want)
 	}
 	if got := sink.acked.Load(); got != 0 {
 		t.Fatalf("runPipelined() acked = %d, want 0", got)
@@ -726,37 +696,6 @@ func TestPipelinedBootstrapBackfillFailureIsFatal(t *testing.T) {
 	}
 }
 
-func TestPipelinedBootstrapWaitFailureIsFatal(t *testing.T) {
-	t.Parallel()
-
-	waitErr := errors.New("wait failed")
-	committer := &fakeCommitter{waitErr: waitErr}
-
-	err := runPipelined(
-		context.Background(),
-		collectorDeps{source: &fakeSource{generations: nil}, committer: committer},
-		projectorDeps{
-			workSource: &concurrentWorkSource{items: nil},
-			factStore:  &fakeFactStore{},
-			runner:     &fakeProjectionRunner{},
-			workSink:   &concurrentWorkSink{},
-		},
-		2,
-		nil,
-		nil,
-		nil,
-	)
-	if err == nil {
-		t.Fatal("runPipelined() error = nil, want non-nil")
-	}
-	if !errors.Is(err, waitErr) {
-		t.Fatalf("runPipelined() error = %v, want wrapping %v", err, waitErr)
-	}
-	if got, want := committer.snapshotCalls(), []string{"backfill", "wait"}; fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("workflow calls = %v, want %v", got, want)
-	}
-}
-
 func TestPipelinedBootstrapReopenFailureIsFatal(t *testing.T) {
 	t.Parallel()
 
@@ -783,23 +722,16 @@ func TestPipelinedBootstrapReopenFailureIsFatal(t *testing.T) {
 	if !errors.Is(err, reopenErr) {
 		t.Fatalf("runPipelined() error = %v, want wrapping %v", err, reopenErr)
 	}
-	if got, want := committer.snapshotCalls(), []string{"backfill", "wait", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
+	if got, want := committer.snapshotCalls(), []string{"backfill", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("workflow calls = %v, want %v", got, want)
 	}
 }
 
-func TestPipelinedBootstrapWaitsForProjectorDrainBeforeReducerWait(t *testing.T) {
+func TestPipelinedBootstrapWaitsForProjectorDrainBeforeReopen(t *testing.T) {
 	t.Parallel()
 
 	sink := &concurrentWorkSink{}
-	committer := &fakeCommitter{
-		waitHook: func() error {
-			if got := sink.acked.Load(); got != 1 {
-				return fmt.Errorf("projector not drained before reducer wait: acked=%d", got)
-			}
-			return nil
-		},
-	}
+	committer := &fakeCommitter{}
 
 	err := runPipelined(
 		context.Background(),
@@ -821,6 +753,13 @@ func TestPipelinedBootstrapWaitsForProjectorDrainBeforeReducerWait(t *testing.T)
 	)
 	if err != nil {
 		t.Fatalf("runPipelined() error = %v, want nil", err)
+	}
+	// Projector must have drained (acked the work item) before reopen ran.
+	if got := sink.acked.Load(); got != 1 {
+		t.Fatalf("projector not drained before reopen: acked=%d, want 1", got)
+	}
+	if got, want := committer.snapshotCalls(), []string{"backfill", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("workflow calls = %v, want %v", got, want)
 	}
 }
 

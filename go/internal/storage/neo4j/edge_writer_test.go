@@ -764,6 +764,12 @@ func TestEdgeWriterWriteEdgesInheritanceDispatch(t *testing.T) {
 	if !strings.Contains(executor.calls[0].Cypher, "INHERITS") {
 		t.Fatalf("cypher missing INHERITS: %s", executor.calls[0].Cypher)
 	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (child:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.child_entity_id})") {
+		t.Fatalf("cypher missing labeled child match: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (parent:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.parent_entity_id})") {
+		t.Fatalf("cypher missing labeled parent match: %s", executor.calls[0].Cypher)
+	}
 	if !strings.Contains(executor.calls[0].Cypher, "UNWIND") {
 		t.Fatalf("cypher missing UNWIND: %s", executor.calls[0].Cypher)
 	}
@@ -830,6 +836,12 @@ func TestEdgeWriterWriteEdgesSQLRelationshipDispatch(t *testing.T) {
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "REFERENCES_TABLE") {
 		t.Fatalf("cypher missing REFERENCES_TABLE: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.source_entity_id})") {
+		t.Fatalf("cypher missing labeled source match: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (target:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.target_entity_id})") {
+		t.Fatalf("cypher missing labeled target match: %s", executor.calls[0].Cypher)
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "HAS_COLUMN") {
 		t.Fatalf("cypher missing HAS_COLUMN branch: %s", executor.calls[0].Cypher)

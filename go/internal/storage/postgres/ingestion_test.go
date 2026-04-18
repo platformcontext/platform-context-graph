@@ -301,32 +301,6 @@ func TestIngestionStoreCommitScopeGenerationSkipsRelationshipBackfillWhenConfigu
 	}
 }
 
-func TestIngestionStoreWaitForDeploymentMappingTerminalPollsUntilQueueDrains(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC)
-	db := &fakeTransactionalDB{
-		tx: &fakeTx{},
-		queryResponses: []queueFakeRows{
-			{rows: [][]any{{2}}},
-			{rows: [][]any{{0}}},
-		},
-	}
-	store := NewIngestionStore(db)
-	store.Now = func() time.Time {
-		current := now
-		now = now.Add(time.Millisecond)
-		return current
-	}
-
-	if err := store.WaitForDeploymentMappingTerminal(context.Background(), time.Second, 0); err != nil {
-		t.Fatalf("WaitForDeploymentMappingTerminal() error = %v, want nil", err)
-	}
-	if got, want := len(db.queries), 2; got != want {
-		t.Fatalf("query count = %d, want %d", got, want)
-	}
-}
-
 func TestIngestionStoreBackfillAllRelationshipEvidenceSkipsUnknownTargetGenerations(t *testing.T) {
 	t.Parallel()
 

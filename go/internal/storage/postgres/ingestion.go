@@ -373,12 +373,13 @@ func (s IngestionStore) now() time.Time {
 func (s IngestionStore) BackfillAllRelationshipEvidence(
 	ctx context.Context,
 	tracer trace.Tracer,
-	_ *telemetry.Instruments,
+	instruments *telemetry.Instruments,
 ) error {
 	if s.db == nil {
 		return fmt.Errorf("ingestion store db is required")
 	}
 
+	start := time.Now()
 	if tracer != nil {
 		var span trace.Span
 		ctx, span = tracer.Start(ctx, "relationship.backfill_deferred")
@@ -402,12 +403,14 @@ func (s IngestionStore) BackfillAllRelationshipEvidence(
 		return fmt.Errorf("load latest facts for deferred relationship backfill: %w", err)
 	}
 
+	var totalEvidence int64
 	evidenceByTargetRepo := make(map[string][]relationships.EvidenceFact)
 	for _, fact := range relationships.DiscoverEvidence(activeFacts, catalog) {
 		if strings.TrimSpace(fact.TargetRepoID) == "" {
 			continue
 		}
 		evidenceByTargetRepo[fact.TargetRepoID] = append(evidenceByTargetRepo[fact.TargetRepoID], fact)
+		totalEvidence++
 	}
 
 	relationshipStore := NewRelationshipStore(s.db)
@@ -446,61 +449,34 @@ func (s IngestionStore) BackfillAllRelationshipEvidence(
 		return fmt.Errorf("publish backward evidence readiness: %w", err)
 	}
 
+	dur := time.Since(start).Seconds()
+	if instruments != nil {
+		instruments.DeferredBackfillDuration.Record(ctx, dur)
+		instruments.DeferredBackfillEvidence.Add(ctx, totalEvidence)
+	}
+	log.Printf("deferred_backfill_completed evidence_facts=%d readiness_rows=%d duration_s=%.2f",
+		totalEvidence, len(phaseRows), dur)
+
 	return nil
-}
-
-// WaitForDeploymentMappingTerminal blocks until all reducer deployment_mapping
-// work items reach a terminal status or the timeout expires.
-func (s IngestionStore) WaitForDeploymentMappingTerminal(
-	ctx context.Context,
-	timeout time.Duration,
-	pollInterval time.Duration,
-) error {
-	if s.db == nil {
-		return fmt.Errorf("ingestion store db is required")
-	}
-	if timeout <= 0 {
-		return fmt.Errorf("timeout must be positive")
-	}
-	if pollInterval < 0 {
-		return fmt.Errorf("poll interval must not be negative")
-	}
-
-	start := s.now()
-	deadline := start.Add(timeout)
-	queue := ReducerQueue{db: s.db, Now: s.Now}
-	for {
-		inFlight, err := queue.CountInFlightByDomain(ctx, reducer.DomainDeploymentMapping)
-		if err != nil {
-			return err
-		}
-		if inFlight == 0 {
-			log.Printf("deployment_mapping terminal wait completed in %.1fs", s.now().Sub(start).Seconds())
-			return nil
-		}
-		if !s.now().Before(deadline) {
-			return fmt.Errorf("timed out waiting for deployment_mapping work items to reach terminal status (%d still in-flight after %.0fs)", inFlight, s.now().Sub(start).Seconds())
-		}
-		log.Printf("deployment_mapping terminal wait: %d in-flight, %.0fs elapsed", inFlight, s.now().Sub(start).Seconds())
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(pollInterval):
-		}
-	}
 }
 
 // ReopenDeploymentMappingWorkItems replays succeeded deployment_mapping work
 // items after deferred backward evidence is committed.
 func (s IngestionStore) ReopenDeploymentMappingWorkItems(
 	ctx context.Context,
-	_ trace.Tracer,
-	_ *telemetry.Instruments,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
 ) error {
 	if s.db == nil {
 		return fmt.Errorf("ingestion store db is required")
 	}
+
+	if tracer != nil {
+		var span trace.Span
+		ctx, span = tracer.Start(ctx, "bootstrap.reopen_deployment_mapping")
+		defer span.End()
+	}
+
 	workItemIDs, err := listSucceededDeploymentMappingWorkItemIDs(ctx, s.db)
 	if err != nil {
 		return err
@@ -511,6 +487,12 @@ func (s IngestionStore) ReopenDeploymentMappingWorkItems(
 			return fmt.Errorf("reopen deployment_mapping work items: %w", err)
 		}
 	}
+
+	if instruments != nil {
+		instruments.DeploymentMappingReopened.Add(ctx, int64(len(workItemIDs)))
+	}
+	log.Printf("deployment_mapping_reopened count=%d", len(workItemIDs))
+
 	return nil
 }
 
