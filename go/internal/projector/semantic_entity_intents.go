@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 )
@@ -42,18 +41,8 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 	}
 
 	repoID, _ := payloadString(fact.Payload, "repo_id")
-	relativePath, _ := payloadString(fact.Payload, "relative_path")
-	if relativePath == "" {
-		relativePath = strings.TrimSpace(fact.SourceRef.SourceURI)
-	}
-	entityName, _ := payloadString(fact.Payload, "entity_name")
-	startLine, _ := payloadInt(fact.Payload, "start_line")
-
-	entityID, _ := payloadString(fact.Payload, "entity_id")
-	if entityID == "" {
-		entityID = content.CanonicalEntityID(repoID, relativePath, entityType, entityName, startLine)
-	}
-	if entityID == "" {
+	repoID = strings.TrimSpace(repoID)
+	if repoID == "" {
 		return ReducerIntent{}, false
 	}
 
@@ -61,11 +50,19 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 		ScopeID:      fact.ScopeID,
 		GenerationID: fact.GenerationID,
 		Domain:       reducer.DomainSemanticEntityMaterialization,
-		EntityKey:    entityID,
+		EntityKey:    semanticEntityAcceptanceUnitKey(repoID),
 		Reason:       fmt.Sprintf("semantic entity follow-up for %s", entityType),
 		FactID:       fact.FactID,
 		SourceSystem: fact.SourceRef.SourceSystem,
 	}, true
+}
+
+func semanticEntityAcceptanceUnitKey(repoID string) string {
+	repoID = strings.TrimSpace(repoID)
+	if repoID == "" {
+		return ""
+	}
+	return "repo:" + repoID
 }
 
 func isTypeScriptModuleSemanticEntity(payload map[string]any, entityType string) bool {

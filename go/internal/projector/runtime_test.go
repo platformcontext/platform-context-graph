@@ -627,19 +627,19 @@ func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedef
 			t.Fatalf("intents[%d].Domain = %q, want %q", i, got, want)
 		}
 	}
-	if got, want := intents[0].EntityKey, "annotation-1"; got != want {
+	if got, want := intents[0].EntityKey, "repo:repository:r_12345678"; got != want {
 		t.Fatalf("intents[0].EntityKey = %q, want %q", got, want)
 	}
-	if got, want := intents[1].EntityKey, "component-1"; got != want {
+	if got, want := intents[1].EntityKey, "repo:repository:r_12345678"; got != want {
 		t.Fatalf("intents[1].EntityKey = %q, want %q", got, want)
 	}
-	if got, want := intents[2].EntityKey, "js-function-1"; got != want {
+	if got, want := intents[2].EntityKey, "repo:repository:r_12345678"; got != want {
 		t.Fatalf("intents[2].EntityKey = %q, want %q", got, want)
 	}
-	if got, want := intents[3].EntityKey, "typealias-1"; got != want {
+	if got, want := intents[3].EntityKey, "repo:repository:r_12345678"; got != want {
 		t.Fatalf("intents[3].EntityKey = %q, want %q", got, want)
 	}
-	if got, want := intents[4].EntityKey, "typedef-1"; got != want {
+	if got, want := intents[4].EntityKey, "repo:repository:r_12345678"; got != want {
 		t.Fatalf("intents[4].EntityKey = %q, want %q", got, want)
 	}
 }
@@ -687,7 +687,7 @@ func TestBuildReducerIntentQueuesJavaScriptCallableSemanticEntities(t *testing.T
 	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
 		t.Fatalf("intent.Domain = %q, want %q", got, want)
 	}
-	if got, want := intent.EntityKey, "js-function-1"; got != want {
+	if got, want := intent.EntityKey, "repo:repo-1"; got != want {
 		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
 	}
 }

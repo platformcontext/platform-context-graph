@@ -33,7 +33,7 @@ func TestBuildSemanticEntityReducerIntentQueuesRustImplBlockSemanticEntities(t *
 	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
 		t.Fatalf("intent.Domain = %q, want %q", got, want)
 	}
-	if got, want := intent.EntityKey, "impl-1"; got != want {
+	if got, want := intent.EntityKey, "repo:repo-1"; got != want {
 		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
 	}
 	if got, want := intent.Reason, "semantic entity follow-up for ImplBlock"; got != want {
@@ -66,7 +66,7 @@ func TestBuildSemanticEntityReducerIntentQueuesPythonFunctionSemanticEntities(t 
 	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
 		t.Fatalf("intent.Domain = %q, want %q", got, want)
 	}
-	if got, want := intent.EntityKey, "function-1"; got != want {
+	if got, want := intent.EntityKey, "repo:repo-1"; got != want {
 		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
 	}
 }
@@ -95,7 +95,7 @@ func TestBuildSemanticEntityReducerIntentQueuesElixirGuardSemanticEntities(t *te
 	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
 		t.Fatalf("intent.Domain = %q, want %q", got, want)
 	}
-	if got, want := intent.EntityKey, "function-guard-1"; got != want {
+	if got, want := intent.EntityKey, "repo:repo-1"; got != want {
 		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
 	}
 	if got, want := intent.Reason, "semantic entity follow-up for Function"; got != want {
@@ -156,7 +156,7 @@ func TestBuildSemanticEntityReducerIntentQueuesTypeScriptModuleSemanticEntities(
 			if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
 				t.Fatalf("intent.Domain = %q, want %q", got, want)
 			}
-			want := tt.payload["entity_id"].(string)
+			want := "repo:repo-1"
 			if got := intent.EntityKey; got != want {
 				t.Fatalf("intent.EntityKey = %q, want %q", got, want)
 			}

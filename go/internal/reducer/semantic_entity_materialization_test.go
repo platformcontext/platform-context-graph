@@ -627,6 +627,220 @@ func TestSemanticEntityMaterializationPublishesSemanticNodesCommitted(t *testing
 	}
 }
 
+func TestSemanticEntityMaterializationHandlerFiltersToTargetRepo(t *testing.T) {
+	t.Parallel()
+
+	loader := &fakeSemanticEntityFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "repository",
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"source_run_id": "run-1",
+				},
+			},
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "repository",
+				Payload: map[string]any{
+					"repo_id":       "repo-2",
+					"source_run_id": "run-2",
+				},
+			},
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "content_entity",
+				SourceRef: facts.Ref{
+					SourceURI: "/repo-1/src/Logged.java",
+				},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "annotation-1",
+					"relative_path": "src/Logged.java",
+					"entity_type":   "Annotation",
+					"entity_name":   "Logged",
+					"language":      "java",
+					"start_line":    12,
+					"end_line":      12,
+				},
+			},
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "content_entity",
+				SourceRef: facts.Ref{
+					SourceURI: "/repo-2/src/types.h",
+				},
+				Payload: map[string]any{
+					"repo_id":       "repo-2",
+					"entity_id":     "typedef-2",
+					"relative_path": "src/types.h",
+					"entity_type":   "Typedef",
+					"entity_name":   "other_int",
+					"language":      "c",
+					"start_line":    4,
+					"end_line":      4,
+					"entity_metadata": map[string]any{
+						"type": "int",
+					},
+				},
+			},
+		},
+	}
+	writer := &recordingSemanticEntityWriter{
+		result: SemanticEntityWriteResult{CanonicalWrites: 1},
+	}
+	publisher := &recordingSemanticEntityPhasePublisher{}
+
+	handler := SemanticEntityMaterializationHandler{
+		FactLoader:     loader,
+		Writer:         writer,
+		PhasePublisher: publisher,
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-repo-1",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		SourceSystem: "git",
+		Domain:       DomainSemanticEntityMaterialization,
+		Cause:        "semantic entity follow-up",
+		EntityKeys:   []string{"repo:repo-1"},
+		Status:       IntentStatusClaimed,
+		EnqueuedAt:   time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(writer.writes), 1; got != want {
+		t.Fatalf("writer writes = %d, want %d", got, want)
+	}
+	if got, want := writer.writes[0].RepoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("writer RepoIDs = %v, want %v", got, want)
+	}
+	if got, want := len(writer.writes[0].Rows), 1; got != want {
+		t.Fatalf("writer Rows = %d, want %d", got, want)
+	}
+	if got, want := writer.writes[0].Rows[0].RepoID, "repo-1"; got != want {
+		t.Fatalf("writer row repo = %q, want %q", got, want)
+	}
+	if got, want := len(publisher.calls), 1; got != want {
+		t.Fatalf("publisher calls = %d, want %d", got, want)
+	}
+	if got, want := len(publisher.calls[0]), 1; got != want {
+		t.Fatalf("published rows = %d, want %d", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.AcceptanceUnitID, "repo-1"; got != want {
+		t.Fatalf("published acceptance unit = %q, want %q", got, want)
+	}
+}
+
+func TestSemanticEntityMaterializationHandlerResolvesLegacyEntityKeyToTargetRepo(t *testing.T) {
+	t.Parallel()
+
+	loader := &fakeSemanticEntityFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "repository",
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"source_run_id": "run-1",
+				},
+			},
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "repository",
+				Payload: map[string]any{
+					"repo_id":       "repo-2",
+					"source_run_id": "run-2",
+				},
+			},
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "content_entity",
+				SourceRef: facts.Ref{
+					SourceURI: "/repo-1/src/Logged.java",
+				},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "annotation-1",
+					"relative_path": "src/Logged.java",
+					"entity_type":   "Annotation",
+					"entity_name":   "Logged",
+					"language":      "java",
+					"start_line":    12,
+					"end_line":      12,
+				},
+			},
+			{
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				FactKind:     "content_entity",
+				SourceRef: facts.Ref{
+					SourceURI: "/repo-2/src/types.h",
+				},
+				Payload: map[string]any{
+					"repo_id":       "repo-2",
+					"entity_id":     "typedef-2",
+					"relative_path": "src/types.h",
+					"entity_type":   "Typedef",
+					"entity_name":   "other_int",
+					"language":      "c",
+					"start_line":    4,
+					"end_line":      4,
+					"entity_metadata": map[string]any{
+						"type": "int",
+					},
+				},
+			},
+		},
+	}
+	writer := &recordingSemanticEntityWriter{
+		result: SemanticEntityWriteResult{CanonicalWrites: 1},
+	}
+	publisher := &recordingSemanticEntityPhasePublisher{}
+
+	handler := SemanticEntityMaterializationHandler{
+		FactLoader:     loader,
+		Writer:         writer,
+		PhasePublisher: publisher,
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "legacy-intent-1",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		SourceSystem: "git",
+		Domain:       DomainSemanticEntityMaterialization,
+		Cause:        "semantic entity follow-up",
+		EntityKeys:   []string{"annotation-1"},
+		Status:       IntentStatusClaimed,
+		EnqueuedAt:   time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := writer.writes[0].RepoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("writer RepoIDs = %v, want %v", got, want)
+	}
+	if got, want := len(writer.writes[0].Rows), 1; got != want {
+		t.Fatalf("writer Rows = %d, want %d", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.AcceptanceUnitID, "repo-1"; got != want {
+		t.Fatalf("published acceptance unit = %q, want %q", got, want)
+	}
+}
+
 func TestSemanticEntityMaterializationEnqueuesRepairWhenPublishFails(t *testing.T) {
 	t.Parallel()
 

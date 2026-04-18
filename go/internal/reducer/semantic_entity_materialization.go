@@ -76,7 +76,8 @@ func (h SemanticEntityMaterializationHandler) Handle(
 		return Result{}, fmt.Errorf("load facts for semantic entity materialization: %w", err)
 	}
 
-	repoIDs, rows := ExtractSemanticEntityRows(envelopes)
+	targetRepoID := semanticTargetRepoID(intent, envelopes)
+	repoIDs, rows := ExtractSemanticEntityRowsForRepo(envelopes, targetRepoID)
 	if len(repoIDs) == 0 && len(rows) == 0 {
 		return Result{
 			IntentID:        intent.IntentID,
@@ -138,6 +139,46 @@ func (h SemanticEntityMaterializationHandler) publishSemanticGraphPhases(
 	return nil
 }
 
+func semanticTargetRepoID(intent Intent, envelopes []facts.Envelope) string {
+	if len(intent.EntityKeys) == 0 {
+		return ""
+	}
+
+	key := strings.TrimSpace(intent.EntityKeys[0])
+	if key == "" {
+		return ""
+	}
+	if repoID, ok := semanticAcceptanceUnitRepoID(key); ok {
+		return repoID
+	}
+	for _, env := range envelopes {
+		if env.FactKind != "content_entity" {
+			continue
+		}
+		if semanticPayloadString(env.Payload, "entity_id") != key {
+			continue
+		}
+		if repoID := semanticPayloadString(env.Payload, "repo_id"); repoID != "" {
+			return repoID
+		}
+	}
+	return ""
+}
+
+func semanticAcceptanceUnitRepoID(key string) (string, bool) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", false
+	}
+	if strings.HasPrefix(key, "repo:") {
+		repoID := strings.TrimSpace(strings.TrimPrefix(key, "repo:"))
+		if repoID != "" {
+			return repoID, true
+		}
+	}
+	return "", false
+}
+
 func semanticGraphPhaseStates(
 	generationID string,
 	envelopes []facts.Envelope,
@@ -190,11 +231,22 @@ func semanticGraphPhaseStates(
 // ExtractSemanticEntityRows returns the touched repository IDs and canonical
 // semantic rows extracted from fact envelopes.
 func ExtractSemanticEntityRows(envelopes []facts.Envelope) ([]string, []SemanticEntityRow) {
+	return ExtractSemanticEntityRowsForRepo(envelopes, "")
+}
+
+// ExtractSemanticEntityRowsForRepo returns the touched repository IDs and
+// canonical semantic rows extracted from fact envelopes, optionally filtered
+// to one repo acceptance unit.
+func ExtractSemanticEntityRowsForRepo(envelopes []facts.Envelope, targetRepoID string) ([]string, []SemanticEntityRow) {
 	if len(envelopes) == 0 {
 		return nil, nil
 	}
 
+	targetRepoID = strings.TrimSpace(targetRepoID)
 	repoIDs := collectSemanticRepoIDs(envelopes)
+	if targetRepoID != "" {
+		repoIDs = filterSemanticRepoIDs(repoIDs, targetRepoID)
+	}
 	rows := make([]SemanticEntityRow, 0)
 	for _, env := range envelopes {
 		if env.FactKind != "content_entity" {
@@ -203,6 +255,9 @@ func ExtractSemanticEntityRows(envelopes []facts.Envelope) ([]string, []Semantic
 
 		repoID := semanticPayloadString(env.Payload, "repo_id")
 		entityType := semanticPayloadString(env.Payload, "entity_type")
+		if targetRepoID != "" && repoID != targetRepoID {
+			continue
+		}
 		if repoID == "" || !isSemanticEntityType(env.Payload, entityType) {
 			continue
 		}
@@ -248,4 +303,16 @@ func ExtractSemanticEntityRows(envelopes []facts.Envelope) ([]string, []Semantic
 	})
 
 	return repoIDs, rows
+}
+
+func filterSemanticRepoIDs(repoIDs []string, targetRepoID string) []string {
+	if targetRepoID == "" {
+		return repoIDs
+	}
+	for _, repoID := range repoIDs {
+		if repoID == targetRepoID {
+			return []string{repoID}
+		}
+	}
+	return nil
 }

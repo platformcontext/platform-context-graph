@@ -31,7 +31,7 @@ func TestBuildSemanticEntityReducerIntentQueuesTSXFunctionFragmentSemanticEntiti
 	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
 		t.Fatalf("intent.Domain = %q, want %q", got, want)
 	}
-	if got, want := intent.EntityKey, "function-tsx-1"; got != want {
+	if got, want := intent.EntityKey, "repo:repo-1"; got != want {
 		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
 	}
 }
@@ -60,7 +60,7 @@ func TestBuildSemanticEntityReducerIntentQueuesTSXVariableComponentTypeSemanticE
 	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
 		t.Fatalf("intent.Domain = %q, want %q", got, want)
 	}
-	if got, want := intent.EntityKey, "variable-tsx-1"; got != want {
+	if got, want := intent.EntityKey, "repo:repo-1"; got != want {
 		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
 	}
 }
