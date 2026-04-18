@@ -381,7 +381,11 @@ func (h *EntityHandler) getServiceContext(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ctx, err := h.fetchWorkloadContext(r.Context(), "w.name = $service_name", map[string]any{"service_name": serviceName})
+	ctx, err := h.fetchWorkloadContext(
+		r.Context(),
+		"w.name = $service_name OR w.id = $service_name",
+		map[string]any{"service_name": serviceName},
+	)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -403,7 +407,11 @@ func (h *EntityHandler) getServiceStory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ctx, err := h.fetchWorkloadContext(r.Context(), "w.name = $service_name", map[string]any{"service_name": serviceName})
+	ctx, err := h.fetchWorkloadContext(
+		r.Context(),
+		"w.name = $service_name OR w.id = $service_name",
+		map[string]any{"service_name": serviceName},
+	)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return

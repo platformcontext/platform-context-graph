@@ -6,6 +6,8 @@ import (
 	"net/http"
 )
 
+const repositorySelectorWhereClause = "r.id = $repo_selector OR r.name = $repo_selector"
+
 // RepositoryHandler exposes HTTP routes for repository queries.
 type RepositoryHandler struct {
 	Neo4j   GraphReader
@@ -60,16 +62,16 @@ func (h *RepositoryHandler) listRepositories(w http.ResponseWriter, r *http.Requ
 // enriched context including entry points, infrastructure entities, language
 // distribution, cross-repo relationships, and consumer repositories.
 func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.Request) {
-	repoID := PathParam(r, "repo_id")
-	if repoID == "" {
+	repoSelector := PathParam(r, "repo_id")
+	if repoSelector == "" {
 		WriteError(w, http.StatusBadRequest, "repo_id is required")
 		return
 	}
 	ctx := r.Context()
-	params := map[string]any{"repo_id": repoID}
+	params := map[string]any{"repo_selector": repoSelector}
 
 	baseCypher := fmt.Sprintf(`
-		MATCH (r:Repository) WHERE r.id = $repo_id
+		MATCH (r:Repository) WHERE %s
 		OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
 		OPTIONAL MATCH (r)-[:DEFINES]->(w:Workload)
 		OPTIONAL MATCH (r)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
@@ -79,7 +81,7 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		       count(DISTINCT w) as workload_count,
 		       count(DISTINCT p) as platform_count,
 		       count(DISTINCT dep) as dependency_count
-	`, RepoProjection("r"))
+	`, repositorySelectorWhereClause, RepoProjection("r"))
 
 	baseRow, err := h.Neo4j.RunSingle(ctx, baseCypher, params)
 	if err != nil {
@@ -90,6 +92,8 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		WriteError(w, http.StatusNotFound, "repository not found")
 		return
 	}
+	repoID := StringVal(baseRow, "id")
+	params = map[string]any{"repo_id": repoID}
 
 	result := map[string]any{
 		"repository":       RepoRefFromRow(baseRow),
@@ -240,7 +244,7 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 	}
 
 	cypher := fmt.Sprintf(`
-		MATCH (r:Repository) WHERE r.id = $repo_id
+		MATCH (r:Repository) WHERE %s
 		OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
 		WITH r, count(DISTINCT f) as file_count, collect(DISTINCT f.language) as languages
 		OPTIONAL MATCH (r)-[:DEFINES]->(w:Workload)
@@ -254,9 +258,9 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		       workload_names,
 		       platform_types,
 		       count(DISTINCT dep) as dependency_count
-	`, RepoProjection("r"))
+	`, repositorySelectorWhereClause, RepoProjection("r"))
 
-	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_id": repoID})
+	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_selector": repoID})
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -265,6 +269,7 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		WriteError(w, http.StatusNotFound, "repository not found")
 		return
 	}
+	repoID = StringVal(row, "id")
 
 	repo := RepoRefFromRow(row)
 	fileCount := IntVal(row, "file_count")
@@ -331,7 +336,7 @@ func (h *RepositoryHandler) getRepositoryStats(w http.ResponseWriter, r *http.Re
 	}
 
 	cypher := fmt.Sprintf(`
-		MATCH (r:Repository) WHERE r.id = $repo_id
+		MATCH (r:Repository) WHERE %s
 		OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
 		WITH r, count(f) as file_count, collect(DISTINCT f.language) as languages
 		OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f2:File)-[:CONTAINS]->(e)
@@ -340,9 +345,9 @@ func (h *RepositoryHandler) getRepositoryStats(w http.ResponseWriter, r *http.Re
 		       languages,
 		       count(DISTINCT e) as entity_count,
 		       collect(DISTINCT labels(e)[0]) as entity_types
-	`, RepoProjection("r"))
+	`, repositorySelectorWhereClause, RepoProjection("r"))
 
-	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_id": repoID})
+	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_selector": repoID})
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -372,8 +377,8 @@ func (h *RepositoryHandler) getRepositoryCoverage(w http.ResponseWriter, r *http
 	}
 
 	// Check if repository exists
-	cypher := "MATCH (r:Repository) WHERE r.id = $repo_id RETURN r.id as id"
-	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_id": repoID})
+	cypher := fmt.Sprintf("MATCH (r:Repository) WHERE %s RETURN r.id as id", repositorySelectorWhereClause)
+	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_selector": repoID})
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -382,6 +387,7 @@ func (h *RepositoryHandler) getRepositoryCoverage(w http.ResponseWriter, r *http
 		WriteError(w, http.StatusNotFound, "repository not found")
 		return
 	}
+	repoID = StringVal(row, "id")
 
 	// Get content store coverage
 	coverage, err := h.queryContentStoreCoverage(r.Context(), repoID)

@@ -365,18 +365,18 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 
 	cypher := `
 		MATCH (e) WHERE e.id = $entity_id
-		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
-		OPTIONAL MATCH (e)-[r]->()
-		OPTIONAL MATCH ()-[r2]->(e)
+		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(repo:Repository)
+		OPTIONAL MATCH (e)-[outgoingRel]->()
+		OPTIONAL MATCH ()-[incomingRel]->(e)
 		RETURN e.id as id, e.name as name, labels(e) as labels,
 		       f.relative_path as file_path,
-		       r.id as repo_id, r.name as repo_name,
+		       repo.id as repo_id, repo.name as repo_name,
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line,
-		       count(DISTINCT r) as outgoing_count,
-		       count(DISTINCT r2) as incoming_count,
-		       count(DISTINCT r) + count(DISTINCT r2) as total_relationships
+		       count(DISTINCT outgoingRel) as outgoing_count,
+		       count(DISTINCT incomingRel) as incoming_count,
+		       count(DISTINCT outgoingRel) + count(DISTINCT incomingRel) as total_relationships
 ` + graphSemanticMetadataProjection() + `
 	`
 

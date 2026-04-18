@@ -190,6 +190,74 @@ func TestHandleComplexityPreservesPythonGraphMetadataWithoutContent(t *testing.T
 	}
 }
 
+func TestHandleComplexityBuildsNonConflictingCypher(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if got, want := strings.Count(cypher, " as repo_name"), 1; got != want {
+					t.Fatalf("strings.Count(cypher, \" as repo_name\") = %d, want %d; cypher=%q", got, want, cypher)
+				}
+				for _, fragment := range []string{
+					"(repo:Repository)",
+					"(e)-[outgoingRel]->()",
+					"()-[incomingRel]->(e)",
+					"count(DISTINCT outgoingRel)",
+					"count(DISTINCT incomingRel)",
+				} {
+					if !strings.Contains(cypher, fragment) {
+						t.Fatalf("cypher = %q, want fragment %q", cypher, fragment)
+					}
+				}
+				for _, fragment := range []string{
+					"(r:Repository)",
+					"(e)-[r]->()",
+					"()-[r2]->(e)",
+					"count(DISTINCT r)",
+					"count(DISTINCT r2)",
+					"e.repo_name as repo_name",
+				} {
+					if strings.Contains(cypher, fragment) {
+						t.Fatalf("cypher = %q, must not contain %q", cypher, fragment)
+					}
+				}
+				if got, want := params["entity_id"], "function-1"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				return map[string]any{
+					"id":                  "function-1",
+					"name":                "handler",
+					"labels":              []any{"Function"},
+					"file_path":           "src/routes.py",
+					"repo_id":             "repo-1",
+					"repo_name":           "payments",
+					"language":            "python",
+					"start_line":          int64(10),
+					"end_line":            int64(14),
+					"outgoing_count":      int64(1),
+					"incoming_count":      int64(2),
+					"total_relationships": int64(3),
+				}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/complexity",
+		bytes.NewBufferString(`{"entity_id":"function-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+}
+
 func TestHandleComplexityPreservesTypeScriptGraphMetadataWithoutContent(t *testing.T) {
 	t.Parallel()
 

@@ -108,6 +108,39 @@ func TestHandleRelationshipsMatchesGraphEntityByExactName(t *testing.T) {
 	}
 }
 
+func TestRelationshipGraphRowCypherAvoidsDuplicateRepoNameAndVariableReuse(t *testing.T) {
+	t.Parallel()
+
+	cypher := relationshipGraphRowCypher("e.id = $entity_id")
+
+	if got, want := strings.Count(cypher, " as repo_name"), 1; got != want {
+		t.Fatalf("strings.Count(cypher, \" as repo_name\") = %d, want %d; cypher=%q", got, want, cypher)
+	}
+	for _, fragment := range []string{
+		"(repo:Repository)",
+		"(e)-[outgoingRel]->(target)",
+		"(source)-[incomingRel]->(e)",
+		"type(outgoingRel)",
+		"type(incomingRel)",
+	} {
+		if !strings.Contains(cypher, fragment) {
+			t.Fatalf("cypher = %q, want fragment %q", cypher, fragment)
+		}
+	}
+	for _, fragment := range []string{
+		"(r:Repository)",
+		"(e)-[r]->(target)",
+		"(source)-[r2]->(e)",
+		"type(r)",
+		"type(r2)",
+		"e.repo_name as repo_name",
+	} {
+		if strings.Contains(cypher, fragment) {
+			t.Fatalf("cypher = %q, must not contain %q", cypher, fragment)
+		}
+	}
+}
+
 func TestHandleRelationshipsNormalizesGraphBackedTSXComponentCalls(t *testing.T) {
 	t.Parallel()
 

@@ -2,12 +2,69 @@ package query
 
 import (
 	"net/http"
+	"strings"
 )
 
 // InfraHandler serves HTTP endpoints for querying infrastructure resources
 // and relationships from the Neo4j canonical graph.
 type InfraHandler struct {
-	Neo4j *Neo4jReader
+	Neo4j GraphReader
+}
+
+var infraCategoryLabels = map[string][]string{
+	"k8s": {
+		"K8sResource",
+		"KustomizeOverlay",
+	},
+	"terraform": {
+		"TerraformResource",
+		"TerraformModule",
+		"TerraformVariable",
+		"TerraformOutput",
+		"TerraformDataSource",
+		"TerraformProvider",
+		"TerraformLocal",
+		"TerraformBlock",
+		"TerragruntConfig",
+		"TerragruntDependency",
+		"CloudFormationResource",
+	},
+	"argocd": {
+		"ArgoCDApplication",
+		"ArgoCDApplicationSet",
+	},
+	"crossplane": {
+		"CrossplaneXRD",
+		"CrossplaneComposition",
+		"CrossplaneClaim",
+	},
+	"helm": {
+		"HelmChart",
+		"HelmValues",
+	},
+}
+
+var allInfraLabels = []string{
+	"K8sResource",
+	"KustomizeOverlay",
+	"TerraformResource",
+	"TerraformModule",
+	"TerraformVariable",
+	"TerraformOutput",
+	"TerraformDataSource",
+	"TerraformProvider",
+	"TerraformLocal",
+	"TerraformBlock",
+	"TerragruntConfig",
+	"TerragruntDependency",
+	"CloudFormationResource",
+	"ArgoCDApplication",
+	"ArgoCDApplicationSet",
+	"CrossplaneXRD",
+	"CrossplaneComposition",
+	"CrossplaneClaim",
+	"HelmChart",
+	"HelmValues",
 }
 
 // Mount registers infrastructure query routes on the given mux.
@@ -22,9 +79,10 @@ func (h *InfraHandler) Mount(mux *http.ServeMux) {
 // Body: {"query": "...", "kind": "...", "limit": 50}
 func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Query string `json:"query"`
-		Kind  string `json:"kind"`
-		Limit int    `json:"limit"`
+		Query    string `json:"query"`
+		Kind     string `json:"kind"`
+		Category string `json:"category"`
+		Limit    int    `json:"limit"`
 	}
 	if err := ReadJSON(r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
@@ -39,27 +97,44 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 		req.Limit = 50
 	}
 
+	labels := allInfraLabels
+	if category := strings.TrimSpace(req.Category); category != "" {
+		mapped, ok := infraCategoryLabels[strings.ToLower(category)]
+		if !ok {
+			WriteError(w, http.StatusBadRequest, "unsupported category")
+			return
+		}
+		labels = mapped
+	}
+
 	cypher := `
 		MATCH (n)
-		WHERE any(label IN labels(n) WHERE label IN ['Platform', 'WorkloadInstance', 'Workload'])
-		  AND (n.name CONTAINS $query OR n.id CONTAINS $query)
+		WHERE any(label IN labels(n) WHERE label IN $labels)
+		  AND (
+		       n.name CONTAINS $query
+		       OR n.id CONTAINS $query
+		       OR coalesce(n.kind, '') CONTAINS $query
+		       OR coalesce(n.source, '') CONTAINS $query
+		       OR coalesce(n.config_path, '') CONTAINS $query
+		  )
 	`
 
-	// Apply kind filter if provided
 	if req.Kind != "" {
-		cypher += " AND n.kind = $kind"
+		cypher += " AND (n.kind = $kind OR coalesce(n.resource_type, '') = $kind)"
 	}
 
 	cypher += `
 		RETURN n.id as id, n.name as name, labels(n) as labels,
-		       n.kind as kind, n.provider as provider, n.environment as environment
+		       n.kind as kind, n.provider as provider, n.environment as environment,
+		       n.source as source, n.config_path as config_path
 		ORDER BY n.name
 		LIMIT $limit
 	`
 
 	params := map[string]any{
-		"query": req.Query,
-		"limit": req.Limit,
+		"query":  req.Query,
+		"limit":  req.Limit,
+		"labels": labels,
 	}
 	if req.Kind != "" {
 		params["kind"] = req.Kind
@@ -80,6 +155,8 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 			"kind":        StringVal(row, "kind"),
 			"provider":    StringVal(row, "provider"),
 			"environment": StringVal(row, "environment"),
+			"source":      StringVal(row, "source"),
+			"config_path": StringVal(row, "config_path"),
 		})
 	}
 

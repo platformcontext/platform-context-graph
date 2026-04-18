@@ -113,6 +113,67 @@ func stringSlice(args map[string]any, key string) []any {
 	return result
 }
 
+func firstString(values []any) string {
+	if len(values) == 0 {
+		return ""
+	}
+	value, _ := values[0].(string)
+	return value
+}
+
+func normalizeQualifiedIdentifier(value string) string {
+	if head, tail, ok := strings.Cut(value, ":"); ok && head != "" && tail != "" {
+		return tail
+	}
+	return value
+}
+
+func resolveEntityBody(args map[string]any) map[string]any {
+	body := map[string]any{}
+
+	if name := str(args, "name"); name != "" {
+		body["name"] = name
+	} else if query := str(args, "query"); query != "" {
+		body["name"] = query
+	}
+	if kind := str(args, "type"); kind != "" {
+		body["type"] = kind
+	} else if kinds := stringSlice(args, "types"); len(kinds) > 0 {
+		body["type"] = firstString(kinds)
+	}
+	if repoID := str(args, "repo_id"); repoID != "" {
+		body["repo_id"] = repoID
+	}
+
+	return body
+}
+
+func contentSearchBody(args map[string]any) map[string]any {
+	body := map[string]any{
+		"query": str(args, "query"),
+		"limit": intOr(args, "limit", 10),
+	}
+	if body["query"] == "" {
+		body["query"] = str(args, "pattern")
+	}
+
+	repoIDs := stringSlice(args, "repo_ids")
+	switch len(repoIDs) {
+	case 0:
+		if repoID := str(args, "repo_id"); repoID != "" {
+			body["repo_id"] = repoID
+		}
+	case 1:
+		if repoID := firstString(repoIDs); repoID != "" {
+			body["repo_id"] = repoID
+		}
+	default:
+		body["repo_ids"] = repoIDs
+	}
+
+	return body
+}
+
 func parseMaxDepth(args map[string]any, defaultDepth int) int {
 	if depth, ok := args["max_depth"].(float64); ok {
 		return int(depth)
@@ -241,7 +302,7 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 
 	// ── Entities ──
 	case "resolve_entity":
-		return &route{method: "POST", path: "/api/v0/entities/resolve", body: args}, nil
+		return &route{method: "POST", path: "/api/v0/entities/resolve", body: resolveEntityBody(args)}, nil
 	case "get_entity_context":
 		q := map[string]string{}
 		if env := str(args, "environment"); env != "" {
@@ -265,13 +326,13 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 		if env := str(args, "environment"); env != "" {
 			q["environment"] = env
 		}
-		return &route{method: "GET", path: "/api/v0/services/" + url.PathEscape(str(args, "workload_id")) + "/context", query: q}, nil
+		return &route{method: "GET", path: "/api/v0/services/" + url.PathEscape(normalizeQualifiedIdentifier(str(args, "workload_id"))) + "/context", query: q}, nil
 	case "get_service_story":
 		q := map[string]string{}
 		if env := str(args, "environment"); env != "" {
 			q["environment"] = env
 		}
-		return &route{method: "GET", path: "/api/v0/services/" + url.PathEscape(str(args, "workload_id")) + "/story", query: q}, nil
+		return &route{method: "GET", path: "/api/v0/services/" + url.PathEscape(normalizeQualifiedIdentifier(str(args, "workload_id"))) + "/story", query: q}, nil
 
 	// ── Content ──
 	case "get_file_content":
@@ -285,9 +346,9 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 			"entity_id": str(args, "entity_id"),
 		}}, nil
 	case "search_file_content":
-		return &route{method: "POST", path: "/api/v0/content/files/search", body: args}, nil
+		return &route{method: "POST", path: "/api/v0/content/files/search", body: contentSearchBody(args)}, nil
 	case "search_entity_content":
-		return &route{method: "POST", path: "/api/v0/content/entities/search", body: args}, nil
+		return &route{method: "POST", path: "/api/v0/content/entities/search", body: contentSearchBody(args)}, nil
 
 	// ── Infra ──
 	case "find_infra_resources":

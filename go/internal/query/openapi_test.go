@@ -133,6 +133,21 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 
 	searchPath := mustMapField(t, paths, "/api/v0/content/entities/search")
 	searchPost := mustMapField(t, searchPath, "post")
+	searchRequestBody := mustMapField(t, searchPost, "requestBody")
+	searchRequestContent := mustMapField(t, mustMapField(t, searchRequestBody, "content"), "application/json")
+	searchRequestSchema := mustMapField(t, searchRequestContent, "schema")
+	searchRequestProperties := mustMapField(t, searchRequestSchema, "properties")
+	if _, ok := searchRequestProperties["repo_ids"]; !ok {
+		t.Fatal("content/entities/search schema missing repo_ids property")
+	}
+	if _, ok := searchRequestProperties["pattern"]; !ok {
+		t.Fatal("content/entities/search schema missing pattern property")
+	}
+	searchRequestRequirements, ok := searchRequestSchema["allOf"].([]any)
+	if !ok || len(searchRequestRequirements) != 2 {
+		t.Fatalf("content/entities/search schema allOf = %#v, want 2 requirement groups", searchRequestSchema["allOf"])
+	}
+
 	searchResponses := mustMapField(t, searchPost, "responses")
 	searchOK := mustMapField(t, searchResponses, "200")
 	searchContent := mustMapField(t, mustMapField(t, searchOK, "content"), "application/json")

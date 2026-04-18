@@ -8,7 +8,7 @@ import (
 
 // CompareHandler provides environment comparison endpoints.
 type CompareHandler struct {
-	Neo4j *Neo4jReader
+	Neo4j GraphReader
 }
 
 // Mount registers comparison routes on the given mux.
@@ -143,12 +143,12 @@ func (h *CompareHandler) environmentSnapshot(ctx context.Context, workloadID, en
 	})
 
 	if err != nil || instanceRow == nil {
-		// Instance not found
 		return map[string]any{
 			"environment":     environment,
-			"status":          "missing",
+			"status":          "unsupported",
 			"instance":        nil,
 			"cloud_resources": []map[string]any{},
+			"reason":          "no materialized workload instance found for environment",
 		}
 	}
 
@@ -212,7 +212,7 @@ func diffCloudResources(left, right []map[string]any, leftEnv, rightEnv string) 
 		rightMap[StringVal(r, "id")] = r
 	}
 
-	var changed []map[string]any
+	changed := make([]map[string]any, 0)
 
 	// Resources in right but not left = added
 	for id, r := range rightMap {
@@ -264,7 +264,11 @@ func computeConfidence(left, right map[string]any, changed []map[string]any) (fl
 	leftStatus := StringVal(left, "status")
 	rightStatus := StringVal(right, "status")
 
-	// If either environment is missing, confidence is 0
+	// If either environment cannot be materialized, the comparison is not yet
+	// supported for this workload/environment pair.
+	if leftStatus == "unsupported" || rightStatus == "unsupported" {
+		return 0.0, "Comparison unsupported: one or both environments do not have materialized workload instances"
+	}
 	if leftStatus == "missing" || rightStatus == "missing" {
 		return 0.0, "One or both environments not found"
 	}

@@ -2,6 +2,116 @@ package mcp
 
 import "testing"
 
+func TestResolveRouteMapsResolveEntityQueryToName(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("resolve_entity", map[string]any{
+		"query":       "api-node-boats",
+		"types":       []any{"workload"},
+		"environment": "qa",
+		"limit":       float64(5),
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if route.path != "/api/v0/entities/resolve" {
+		t.Fatalf("route.path = %q, want /api/v0/entities/resolve", route.path)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["name"], "api-node-boats"; got != want {
+		t.Fatalf("body[name] = %#v, want %#v", got, want)
+	}
+	if got, want := body["type"], "workload"; got != want {
+		t.Fatalf("body[type] = %#v, want %#v", got, want)
+	}
+	if _, exists := body["query"]; exists {
+		t.Fatalf("body should not contain query, got %#v", body["query"])
+	}
+	if _, exists := body["types"]; exists {
+		t.Fatalf("body should not contain types, got %#v", body["types"])
+	}
+}
+
+func TestResolveRouteMapsQualifiedServiceIDToServicePath(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("get_service_context", map[string]any{
+		"workload_id": "workload:api-node-boats",
+		"environment": "prod",
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if got, want := route.path, "/api/v0/services/api-node-boats/context"; got != want {
+		t.Fatalf("route.path = %q, want %q", got, want)
+	}
+	if got, want := route.query["environment"], "prod"; got != want {
+		t.Fatalf("route.query[environment] = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveRouteMapsSearchFileContentPatternAndRepoIDs(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("search_file_content", map[string]any{
+		"pattern":  "api-node-boats",
+		"repo_ids": []any{"repo://boats", "repo://shared"},
+		"limit":    float64(25),
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if got, want := route.path, "/api/v0/content/files/search"; got != want {
+		t.Fatalf("route.path = %q, want %q", got, want)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["query"], "api-node-boats"; got != want {
+		t.Fatalf("body[query] = %#v, want %#v", got, want)
+	}
+	repoIDs, ok := body["repo_ids"].([]any)
+	if !ok {
+		t.Fatalf("body[repo_ids] type = %T, want []any", body["repo_ids"])
+	}
+	if got, want := len(repoIDs), 2; got != want {
+		t.Fatalf("len(body[repo_ids]) = %d, want %d", got, want)
+	}
+	if _, exists := body["pattern"]; exists {
+		t.Fatalf("body should not contain pattern, got %#v", body["pattern"])
+	}
+}
+
+func TestResolveRouteMapsSearchEntityContentSingleRepoID(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("search_entity_content", map[string]any{
+		"pattern":  "api-node-boats",
+		"repo_ids": []any{"repo://boats"},
+		"limit":    float64(10),
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["query"], "api-node-boats"; got != want {
+		t.Fatalf("body[query] = %#v, want %#v", got, want)
+	}
+	if got, want := body["repo_id"], "repo://boats"; got != want {
+		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
+	}
+	if _, exists := body["repo_ids"]; exists {
+		t.Fatalf("body should not contain repo_ids, got %#v", body["repo_ids"])
+	}
+}
+
 func TestResolveRouteMapsAnalyzeCodeRelationshipsCallers(t *testing.T) {
 	t.Parallel()
 

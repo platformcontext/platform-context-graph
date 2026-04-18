@@ -1,6 +1,7 @@
 package query
 
 import (
+	"errors"
 	"net/http"
 )
 
@@ -125,29 +126,17 @@ func (h *ContentHandler) readEntity(w http.ResponseWriter, r *http.Request) {
 // POST /api/v0/content/files/search
 // Body: {"repo_id": "...", "query": "...", "limit": 50}
 func (h *ContentHandler) searchFiles(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		RepoID string `json:"repo_id"`
-		Query  string `json:"query"`
-		Limit  int    `json:"limit"`
+	req, err := readContentSearchRequest(r)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	if err := ReadJSON(r, &req); err != nil {
+	if err := req.validate(); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if req.RepoID == "" {
-		WriteError(w, http.StatusBadRequest, "repo_id is required")
-		return
-	}
-	if req.Query == "" {
-		WriteError(w, http.StatusBadRequest, "query is required")
-		return
-	}
-	if req.Limit <= 0 {
-		req.Limit = 50
-	}
-
-	results, err := h.Content.SearchFileContent(r.Context(), req.RepoID, req.Query, req.Limit)
+	results, err := h.Content.SearchFileContent(r.Context(), req.repoID(), req.pattern(), req.limit())
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -163,29 +152,17 @@ func (h *ContentHandler) searchFiles(w http.ResponseWriter, r *http.Request) {
 // POST /api/v0/content/entities/search
 // Body: {"repo_id": "...", "query": "...", "limit": 50}
 func (h *ContentHandler) searchEntities(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		RepoID string `json:"repo_id"`
-		Query  string `json:"query"`
-		Limit  int    `json:"limit"`
+	req, err := readContentSearchRequest(r)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	if err := ReadJSON(r, &req); err != nil {
+	if err := req.validate(); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if req.RepoID == "" {
-		WriteError(w, http.StatusBadRequest, "repo_id is required")
-		return
-	}
-	if req.Query == "" {
-		WriteError(w, http.StatusBadRequest, "query is required")
-		return
-	}
-	if req.Limit <= 0 {
-		req.Limit = 50
-	}
-
-	results, err := h.Content.SearchEntityContent(r.Context(), req.RepoID, req.Query, req.Limit)
+	results, err := h.Content.SearchEntityContent(r.Context(), req.repoID(), req.pattern(), req.limit())
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -195,4 +172,57 @@ func (h *ContentHandler) searchEntities(w http.ResponseWriter, r *http.Request) 
 		"results": results,
 		"count":   len(results),
 	})
+}
+
+type contentSearchRequest struct {
+	RepoID  string   `json:"repo_id"`
+	RepoIDs []string `json:"repo_ids"`
+	Query   string   `json:"query"`
+	Pattern string   `json:"pattern"`
+	Limit   int      `json:"limit"`
+}
+
+func readContentSearchRequest(r *http.Request) (contentSearchRequest, error) {
+	var req contentSearchRequest
+	if err := ReadJSON(r, &req); err != nil {
+		return contentSearchRequest{}, err
+	}
+	return req, nil
+}
+
+func (req contentSearchRequest) validate() error {
+	if len(req.RepoIDs) > 1 {
+		return errors.New("repo_ids may contain at most one value")
+	}
+	if req.repoID() == "" {
+		return errors.New("repo_id is required")
+	}
+	if req.pattern() == "" {
+		return errors.New("query is required")
+	}
+	return nil
+}
+
+func (req contentSearchRequest) repoID() string {
+	if req.RepoID != "" {
+		return req.RepoID
+	}
+	if len(req.RepoIDs) == 1 {
+		return req.RepoIDs[0]
+	}
+	return ""
+}
+
+func (req contentSearchRequest) pattern() string {
+	if req.Query != "" {
+		return req.Query
+	}
+	return req.Pattern
+}
+
+func (req contentSearchRequest) limit() int {
+	if req.Limit > 0 {
+		return req.Limit
+	}
+	return 50
 }

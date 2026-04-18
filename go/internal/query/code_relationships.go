@@ -119,18 +119,18 @@ func (h *CodeHandler) relationshipsGraphRow(
 func relationshipGraphRowCypher(predicate string) string {
 	return `
 		MATCH (e) WHERE ` + predicate + `
-		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
-		OPTIONAL MATCH (e)-[r]->(target)
-		OPTIONAL MATCH (source)-[r2]->(e)
+		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(repo:Repository)
+		OPTIONAL MATCH (e)-[outgoingRel]->(target)
+		OPTIONAL MATCH (source)-[incomingRel]->(e)
 		RETURN e.id as id, e.name as name, labels(e) as labels,
 		       f.relative_path as file_path,
-		       r.id as repo_id, r.name as repo_name,
+		       repo.id as repo_id, repo.name as repo_name,
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line,
 ` + graphSemanticMetadataProjection() + `
-		       collect(DISTINCT {direction: 'outgoing', type: type(r), call_kind: r.call_kind, reason: r.reason, target_name: target.name, target_id: target.id}) as outgoing,
-		       collect(DISTINCT {direction: 'incoming', type: type(r2), call_kind: r2.call_kind, reason: r2.reason, source_name: source.name, source_id: source.id}) as incoming
+		       collect(DISTINCT {direction: 'outgoing', type: type(outgoingRel), call_kind: outgoingRel.call_kind, reason: outgoingRel.reason, target_name: target.name, target_id: target.id}) as outgoing,
+		       collect(DISTINCT {direction: 'incoming', type: type(incomingRel), call_kind: incomingRel.call_kind, reason: incomingRel.reason, source_name: source.name, source_id: source.id}) as incoming
 		LIMIT 2
 	`
 }

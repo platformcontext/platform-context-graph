@@ -122,10 +122,32 @@ const openAPIPathsContent = `
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["repo_id", "query"],
+                "allOf": [
+                  {
+                    "anyOf": [
+                      {"required": ["repo_id"]},
+                      {"required": ["repo_ids"]}
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {"required": ["query"]},
+                      {"required": ["pattern"]}
+                    ]
+                  }
+                ],
                 "properties": {
                   "repo_id": {"type": "string"},
+                  "repo_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional alias for repo_id. At most one repository is currently supported."
+                  },
                   "query": {"type": "string"},
+                  "pattern": {
+                    "type": "string",
+                    "description": "Alias for query used by MCP content-search tools."
+                  },
                   "limit": {"type": "integer", "default": 50}
                 }
               }
@@ -164,10 +186,32 @@ const openAPIPathsContent = `
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["repo_id", "query"],
+                "allOf": [
+                  {
+                    "anyOf": [
+                      {"required": ["repo_id"]},
+                      {"required": ["repo_ids"]}
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {"required": ["query"]},
+                      {"required": ["pattern"]}
+                    ]
+                  }
+                ],
                 "properties": {
                   "repo_id": {"type": "string"},
+                  "repo_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional alias for repo_id. At most one repository is currently supported."
+                  },
                   "query": {"type": "string"},
+                  "pattern": {
+                    "type": "string",
+                    "description": "Alias for query used by MCP content-search tools."
+                  },
                   "limit": {"type": "integer", "default": 50}
                 }
               }

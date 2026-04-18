@@ -367,6 +367,35 @@ func TestHandleSearchReturnsGraphBackedPythonDecoratedClassWithoutContent(t *tes
 	}
 }
 
+func TestSearchGraphEntitiesDoesNotDuplicateRepoNameProjection(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if got, want := strings.Count(cypher, " as repo_name"), 1; got != want {
+					t.Fatalf("strings.Count(cypher, \" as repo_name\") = %d, want %d; cypher=%q", got, want, cypher)
+				}
+				if strings.Contains(cypher, "e.repo_name as repo_name") {
+					t.Fatalf("cypher = %q, must not alias entity repo_name onto the canonical repo_name column", cypher)
+				}
+				if got, want := params["repo_id"], "repo-1"; got != want {
+					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{}, nil
+			},
+		},
+	}
+
+	results, err := handler.searchGraphEntities(context.Background(), "repo-1", "Service", "typescript", 10)
+	if err != nil {
+		t.Fatalf("searchGraphEntities() error = %v, want nil", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("len(results) = %d, want 0", len(results))
+	}
+}
+
 func TestEnrichGraphSearchResultsWithContentMetadataSkipsUnmatchedRows(t *testing.T) {
 	t.Parallel()
 

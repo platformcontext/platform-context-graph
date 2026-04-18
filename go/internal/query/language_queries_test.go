@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -93,6 +94,17 @@ func TestBuildLanguageCypher_Directory(t *testing.T) {
 	}
 	if !searchString(cypher, ".java") {
 		t.Error("cypher should contain .java extension filter")
+	}
+}
+
+func TestBuildLanguageCypher_FunctionDoesNotDuplicateRepoNameAlias(t *testing.T) {
+	cypher, _ := buildLanguageCypher("python", "Function", "handler", "repo-1", 10)
+
+	if got, want := strings.Count(cypher, " as repo_name"), 1; got != want {
+		t.Fatalf("strings.Count(cypher, \" as repo_name\") = %d, want %d; cypher=%q", got, want, cypher)
+	}
+	if strings.Contains(cypher, "e.repo_name as repo_name") {
+		t.Fatalf("cypher = %q, must not alias entity repo_name onto the canonical repo_name column", cypher)
 	}
 }
 

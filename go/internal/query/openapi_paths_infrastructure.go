@@ -17,6 +17,10 @@ const openAPIPathsInfrastructure = `
                 "properties": {
                   "query": {"type": "string"},
                   "kind": {"type": "string"},
+                  "category": {
+                    "type": "string",
+                    "enum": ["k8s", "terraform", "argocd", "crossplane", "helm"]
+                  },
                   "limit": {"type": "integer", "default": 50}
                 }
               }

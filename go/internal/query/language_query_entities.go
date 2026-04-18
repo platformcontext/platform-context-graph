@@ -232,7 +232,7 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	if v := StringVal(row, "deployment_name"); v != "" {
 		metadata["deployment_name"] = v
 	}
-	if v := StringVal(row, "repo_name"); v != "" {
+	if v := StringVal(row, "entity_repo_name"); v != "" {
 		metadata["repo_name"] = v
 	}
 	if v := StringVal(row, "create_deploy"); v != "" {
@@ -290,7 +290,7 @@ func graphSemanticMetadataProjection() string {
 		       e.inputs as inputs,
 		       e.locals as locals,
 		       e.deployment_name as deployment_name,
-		       e.repo_name as repo_name,
+		       e.repo_name as entity_repo_name,
 		       e.create_deploy as create_deploy,
 		       e.cluster_name as cluster_name,
 		       e.zone_id as zone_id,
