@@ -285,6 +285,9 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	traceDeploymentResponse := mustMapField(t, mustMapField(t, traceDeploymentContent, "schema"), "properties")
 	for _, field := range []string{
 		"subject",
+		"hostnames",
+		"observed_config_environments",
+		"api_surface",
 		"deployment_sources",
 		"cloud_resources",
 		"k8s_resources",
@@ -296,6 +299,10 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		"story_sections",
 		"deployment_overview",
 		"gitops_overview",
+		"consumer_repositories",
+		"provisioning_source_chains",
+		"documentation_overview",
+		"support_overview",
 		"controller_overview",
 		"runtime_overview",
 		"deployment_fact_summary",

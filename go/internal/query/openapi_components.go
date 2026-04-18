@@ -199,6 +199,15 @@ const openAPIComponents = `  "components": {
           "kind": {"type": "string"},
           "repo_id": {"type": "string"},
           "repo_name": {"type": "string"},
+          "hostnames": {"type": "array", "items": {"type": "object"}},
+          "observed_config_environments": {"type": "array", "items": {"type": "string"}},
+          "api_surface": {"type": "object"},
+          "deployment_overview": {"type": "object"},
+          "story_sections": {"type": "array", "items": {"type": "object"}},
+          "documentation_overview": {"type": "object"},
+          "support_overview": {"type": "object"},
+          "consumer_repositories": {"type": "array", "items": {"type": "object"}},
+          "provisioning_source_chains": {"type": "array", "items": {"type": "object"}},
           "instances": {
             "type": "array",
             "items": {

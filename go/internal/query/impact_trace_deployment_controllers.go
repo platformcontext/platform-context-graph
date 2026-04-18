@@ -3,7 +3,6 @@ package query
 import (
 	"context"
 	"fmt"
-	"slices"
 )
 
 var controllerEntityTypes = map[string]string{
@@ -27,29 +26,38 @@ func (h *ImpactHandler) fetchControllerEntities(
 			return nil, fmt.Errorf("list controller entities for %s: %w", repoID, err)
 		}
 		for _, entity := range entities {
-			controllerKind, ok := controllerEntityTypes[entity.EntityType]
+			controller, ok := buildDeploymentSourceControllerEntity(entity)
 			if !ok {
 				continue
 			}
-			controllers = append(controllers, map[string]any{
-				"entity_id":              entity.EntityID,
-				"entity_type":            entity.EntityType,
-				"entity_name":            entity.EntityName,
-				"controller_kind":        controllerKind,
-				"repo_id":                entity.RepoID,
-				"relative_path":          entity.RelativePath,
-				"source_repo":            metadataNonEmptyStringValue(entity.Metadata, "source_repo"),
-				"source_path":            metadataNonEmptyStringValue(entity.Metadata, "source_path"),
-				"generator_source_repos": slices.Clone(metadataStringSlice(entity.Metadata, "generator_source_repos")),
-				"generator_source_paths": slices.Clone(metadataStringSlice(entity.Metadata, "generator_source_paths")),
-				"template_source_repos":  slices.Clone(metadataStringSlice(entity.Metadata, "template_source_repos")),
-				"template_source_paths":  slices.Clone(metadataStringSlice(entity.Metadata, "template_source_paths")),
-				"dest_server":            metadataNonEmptyStringValue(entity.Metadata, "dest_server"),
-				"dest_namespace":         metadataNonEmptyStringValue(entity.Metadata, "dest_namespace"),
-			})
+			controllers = append(controllers, controller)
 		}
 	}
 	return controllers, nil
+}
+
+func (h *ImpactHandler) fetchDeploymentSourceGitOps(
+	ctx context.Context,
+	serviceName string,
+	deploymentSources []map[string]any,
+) ([]map[string]any, []map[string]any, []string, error) {
+	if h == nil || h.Content == nil || len(deploymentSources) == 0 {
+		return nil, nil, nil, nil
+	}
+
+	repoIDs := uniqueNonEmptyRepoIDs(deploymentSources)
+	entities := make([]EntityContent, 0, len(repoIDs)*8)
+	for _, repoID := range repoIDs {
+		rows, err := h.Content.ListRepoEntities(ctx, repoID, repositorySemanticEntityLimit)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("list deployment source entities for %s: %w", repoID, err)
+		}
+		entities = append(entities, rows...)
+	}
+
+	controllers := selectRelevantDeploymentSourceControllers(serviceName, deploymentSources, entities)
+	k8sResources, imageRefs := collectDeploymentSourceK8sResources(controllers, entities)
+	return controllers, k8sResources, imageRefs, nil
 }
 
 func buildControllerOverview(

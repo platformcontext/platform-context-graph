@@ -41,6 +41,9 @@ const openAPIPathsImpact = `
                     "repo_name": {"type": "string"},
                     "story": {"type": "string"},
                     "instances": {"type": "array", "items": {"type": "object"}},
+                    "hostnames": {"type": "array", "items": {"type": "object"}},
+                    "observed_config_environments": {"type": "array", "items": {"type": "string"}},
+                    "api_surface": {"type": "object"},
                     "deployment_sources": {"type": "array", "items": {"type": "object"}},
                     "cloud_resources": {"type": "array", "items": {"type": "object"}},
                     "k8s_resources": {"type": "array", "items": {"type": "object"}},
@@ -52,6 +55,10 @@ const openAPIPathsImpact = `
                     "story_sections": {"type": "array", "items": {"type": "object"}},
                     "deployment_overview": {"type": "object"},
                     "gitops_overview": {"type": "object"},
+                    "consumer_repositories": {"type": "array", "items": {"type": "object"}},
+                    "provisioning_source_chains": {"type": "array", "items": {"type": "object"}},
+                    "documentation_overview": {"type": "object"},
+                    "support_overview": {"type": "object"},
                     "controller_overview": {
                       "type": "object",
                       "properties": {

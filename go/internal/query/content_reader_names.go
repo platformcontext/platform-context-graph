@@ -8,6 +8,65 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// SearchFileContentAnyRepo searches file content by pattern across all repos.
+func (cr *ContentReader) SearchFileContentAnyRepo(
+	ctx context.Context,
+	pattern string,
+	limit int,
+) ([]FileContent, error) {
+	ctx, span := cr.tracer.Start(ctx, "postgres.query",
+		trace.WithAttributes(
+			attribute.String("db.system", "postgresql"),
+			attribute.String("db.operation", "search_file_content_any_repo"),
+			attribute.String("db.sql.table", "content_files"),
+		),
+	)
+	defer span.End()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := cr.db.QueryContext(ctx, `
+		SELECT repo_id, relative_path, coalesce(commit_sha, ''),
+		       '', content_hash, line_count, coalesce(language, ''),
+		       coalesce(artifact_type, '')
+		FROM content_files
+		WHERE content ILIKE '%' || $1 || '%'
+		ORDER BY repo_id, relative_path
+		LIMIT $2
+	`, pattern, limit)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("search file content across repos: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []FileContent
+	for rows.Next() {
+		var file FileContent
+		if err := rows.Scan(
+			&file.RepoID,
+			&file.RelativePath,
+			&file.CommitSHA,
+			&file.Content,
+			&file.ContentHash,
+			&file.LineCount,
+			&file.Language,
+			&file.ArtifactType,
+		); err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("scan cross-repo file search result: %w", err)
+		}
+		results = append(results, file)
+	}
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		return results, err
+	}
+	return results, nil
+}
+
 // SearchEntitiesByNameAnyRepo searches content entities by name across all repos.
 func (cr *ContentReader) SearchEntitiesByNameAnyRepo(
 	ctx context.Context,

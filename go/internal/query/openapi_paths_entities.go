@@ -185,7 +185,16 @@ const openAPIPathsEntities = `
                   "type": "object",
                   "properties": {
                     "service_name": {"type": "string"},
-                    "story": {"type": "string"}
+                    "story": {"type": "string"},
+                    "story_sections": {"type": "array", "items": {"type": "object"}},
+                    "deployment_overview": {"type": "object"},
+                    "hostnames": {"type": "array", "items": {"type": "object"}},
+                    "observed_config_environments": {"type": "array", "items": {"type": "string"}},
+                    "api_surface": {"type": "object"},
+                    "consumer_repositories": {"type": "array", "items": {"type": "object"}},
+                    "provisioning_source_chains": {"type": "array", "items": {"type": "object"}},
+                    "documentation_overview": {"type": "object"},
+                    "support_overview": {"type": "object"}
                   }
                 }
               }

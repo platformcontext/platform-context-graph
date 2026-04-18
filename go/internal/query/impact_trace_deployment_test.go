@@ -341,3 +341,91 @@ func TestBuildDeploymentTraceResponseNarratesTypedControllerProvenance(t *testin
 		t.Fatalf("story = %q, want deployment source repo", story)
 	}
 }
+
+func TestBuildDeploymentTraceResponseIncludesServiceEvidenceConsumersAndProvisioningChains(t *testing.T) {
+	t.Parallel()
+
+	ctx := map[string]any{
+		"id":        "workload:api-node-boats",
+		"name":      "api-node-boats",
+		"kind":      "service",
+		"repo_id":   "repo-api-node-boats",
+		"repo_name": "api-node-boats",
+		"instances": []map[string]any{
+			{
+				"instance_id":   "workload-instance:api-node-boats:qa",
+				"platform_name": "ecs-qa",
+				"platform_kind": "ecs_service",
+				"environment":   "qa",
+			},
+			{
+				"instance_id":   "workload-instance:api-node-boats:production",
+				"platform_name": "eks-prod",
+				"platform_kind": "argocd_applicationset",
+				"environment":   "production",
+			},
+		},
+		"hostnames": []map[string]any{
+			{"hostname": "api-node-boats.qa.bgrp.io", "environment": "qa"},
+			{"hostname": "api-node-boats.prod.bgrp.io", "environment": "production"},
+		},
+		"api_surface": map[string]any{
+			"endpoint_count": 2,
+			"api_versions":   []string{"v3"},
+			"docs_routes":    []string{"/_specs"},
+			"spec_files":     []string{"specs/index.yaml"},
+		},
+		"consumer_repositories": []map[string]any{
+			{
+				"repository":     "api-node-saved-search",
+				"repo_id":        "repo-consumer-1",
+				"evidence_kinds": []string{"repository_reference", "hostname_reference"},
+				"matched_values": []string{"api-node-boats", "api-node-boats.qa.bgrp.io"},
+				"sample_paths":   []string{"config/local.json"},
+			},
+		},
+		"provisioning_source_chains": []map[string]any{
+			{
+				"repository": "helm-charts",
+				"repo_id":    "repo-helm",
+				"modules":    []string{"envoy_gateway", "irsa"},
+			},
+		},
+		"documentation_overview": map[string]any{
+			"spec_files":  []string{"specs/index.yaml"},
+			"docs_routes": []string{"/_specs"},
+		},
+		"support_overview": map[string]any{
+			"consumer_count":            1,
+			"provisioning_chain_count":  1,
+			"hostname_count":            2,
+			"documented_endpoint_count": 2,
+		},
+	}
+
+	got := buildDeploymentTraceResponse("api-node-boats", ctx)
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+	if _, ok := deploymentOverview["hostnames"]; !ok {
+		t.Fatal("deployment_overview.hostnames missing, want service entrypoint evidence")
+	}
+	if _, ok := deploymentOverview["api_surface"]; !ok {
+		t.Fatal("deployment_overview.api_surface missing, want API evidence")
+	}
+
+	if _, ok := got["consumer_repositories"]; !ok {
+		t.Fatal("consumer_repositories missing, want query-time service consumer evidence")
+	}
+	if _, ok := got["provisioning_source_chains"]; !ok {
+		t.Fatal("provisioning_source_chains missing, want IaC chain evidence")
+	}
+	if _, ok := got["documentation_overview"]; !ok {
+		t.Fatal("documentation_overview missing, want service documentation summary")
+	}
+	if _, ok := got["support_overview"]; !ok {
+		t.Fatal("support_overview missing, want service support summary")
+	}
+}

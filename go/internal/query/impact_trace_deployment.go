@@ -38,6 +38,10 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 		WriteError(w, http.StatusNotFound, "service not found")
 		return
 	}
+	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich service trace context: %v", err))
+		return
+	}
 	if workloadID := safeStr(ctx, "id"); workloadID != "" {
 		deploymentSources, err := h.fetchDeploymentSources(r.Context(), workloadID, safeStr(ctx, "repo_id"))
 		if err != nil {
@@ -54,11 +58,17 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query k8s resources: %v", err))
 			return
 		}
-		controllerEntities, err := h.fetchControllerEntities(r.Context(), deploymentSources)
+		controllerEntities, deploymentRepoK8s, deploymentRepoImages, err := h.fetchDeploymentSourceGitOps(
+			r.Context(),
+			safeStr(ctx, "name"),
+			deploymentSources,
+		)
 		if err != nil {
-			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query controller entities: %v", err))
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query deployment source gitops evidence: %v", err))
 			return
 		}
+		k8sResources = mergeDeploymentTraceRows(k8sResources, deploymentRepoK8s)
+		imageRefs = uniqueSortedStrings(append(append([]string{}, imageRefs...), deploymentRepoImages...))
 		ctx["deployment_sources"] = deploymentSources
 		ctx["cloud_resources"] = cloudResources
 		ctx["k8s_resources"] = k8sResources
@@ -76,6 +86,12 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	k8sResources, _ := workloadContext["k8s_resources"].([]map[string]any)
 	imageRefs, _ := workloadContext["image_refs"].([]string)
 	controllerEntities, _ := workloadContext["controller_entities"].([]map[string]any)
+	hostnames := mapSliceValue(workloadContext, "hostnames")
+	apiSurface := mapValue(workloadContext, "api_surface")
+	consumerRepositories := mapSliceValue(workloadContext, "consumer_repositories")
+	provisioningSourceChains := mapSliceValue(workloadContext, "provisioning_source_chains")
+	documentationOverview := mapValue(workloadContext, "documentation_overview")
+	supportOverview := mapValue(workloadContext, "support_overview")
 	k8sRelationships := buildK8sRelationships(k8sResources)
 	platforms := distinctSortedInstanceField(instances, "platform_name")
 	platformKinds := distinctSortedInstanceField(instances, "platform_kind")
@@ -86,6 +102,17 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	if provenanceStory := buildDeploymentProvenanceStory(controllerEntities, deploymentSources); provenanceStory != "" {
 		story = story + " " + provenanceStory
 	}
+	deploymentOverview := buildServiceDeploymentOverview(workloadContext)
+	deploymentOverview["deployment_source_count"] = len(deploymentSources)
+	deploymentOverview["cloud_resource_count"] = len(cloudResources)
+	deploymentOverview["k8s_resource_count"] = len(k8sResources)
+	deploymentOverview["image_ref_count"] = len(imageRefs)
+	deploymentOverview["platform_kinds"] = platformKinds
+	deploymentOverview["platforms"] = platforms
+	deploymentOverview["environments"] = mergeStringSets(
+		environments,
+		StringSliceVal(workloadContext, "observed_config_environments"),
+	)
 
 	response := map[string]any{
 		"service_name": serviceName,
@@ -110,21 +137,10 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		"delivery_paths":          buildDeliveryPaths(deploymentSources, cloudResources, k8sResources, imageRefs, k8sRelationships),
 		"story":                   story,
 		"story_sections":          buildStorySections(platforms, platformKinds, environments),
-		"deployment_overview": map[string]any{
-			"instance_count":          len(instances),
-			"environment_count":       len(environments),
-			"platform_count":          len(platforms),
-			"deployment_source_count": len(deploymentSources),
-			"cloud_resource_count":    len(cloudResources),
-			"k8s_resource_count":      len(k8sResources),
-			"image_ref_count":         len(imageRefs),
-			"platforms":               platforms,
-			"platform_kinds":          platformKinds,
-			"environments":            environments,
-		},
-		"controller_overview": buildControllerOverview(platforms, platformKinds, controllerEntities),
-		"gitops_overview":     buildGitOpsOverview(platforms, platformKinds),
-		"runtime_overview":    buildRuntimeOverview(environments),
+		"deployment_overview":     deploymentOverview,
+		"controller_overview":     buildControllerOverview(platforms, platformKinds, controllerEntities),
+		"gitops_overview":         buildGitOpsOverview(platforms, platformKinds),
+		"runtime_overview":        buildRuntimeOverview(environments),
 		"deployment_fact_summary": map[string]any{
 			"instance_count":            len(instances),
 			"environment_count":         len(environments),
@@ -139,6 +155,24 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 			"overall_confidence_reason": "platform_instances_observed",
 		},
 		"drilldowns": buildDeploymentDrilldowns(serviceName, safeStr(workloadContext, "id")),
+	}
+	if len(hostnames) > 0 {
+		response["hostnames"] = hostnames
+	}
+	if len(apiSurface) > 0 {
+		response["api_surface"] = apiSurface
+	}
+	if len(consumerRepositories) > 0 {
+		response["consumer_repositories"] = consumerRepositories
+	}
+	if len(provisioningSourceChains) > 0 {
+		response["provisioning_source_chains"] = provisioningSourceChains
+	}
+	if len(documentationOverview) > 0 {
+		response["documentation_overview"] = documentationOverview
+	}
+	if len(supportOverview) > 0 {
+		response["support_overview"] = supportOverview
 	}
 
 	return response
@@ -478,4 +512,28 @@ func distinctSortedInstanceField(instances []map[string]any, key string) []strin
 	}
 	sort.Strings(result)
 	return result
+}
+
+func mergeDeploymentTraceRows(left []map[string]any, right []map[string]any) []map[string]any {
+	if len(left) == 0 {
+		return right
+	}
+	if len(right) == 0 {
+		return left
+	}
+	seen := make(map[string]struct{}, len(left)+len(right))
+	merged := make([]map[string]any, 0, len(left)+len(right))
+	for _, row := range append(append([]map[string]any{}, left...), right...) {
+		key := StringVal(row, "entity_id")
+		if key == "" {
+			key = StringVal(row, "qualified_name") + "|" + StringVal(row, "relative_path")
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		merged = append(merged, row)
+	}
+	sortDeploymentTraceMaps(merged)
+	return merged
 }

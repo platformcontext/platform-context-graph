@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // EntityHandler exposes HTTP routes for entity queries.
@@ -395,6 +396,10 @@ func (h *EntityHandler) getServiceContext(w http.ResponseWriter, r *http.Request
 		WriteError(w, http.StatusNotFound, "service not found")
 		return
 	}
+	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich service context: %v", err))
+		return
+	}
 
 	WriteJSON(w, http.StatusOK, ctx)
 }
@@ -421,12 +426,12 @@ func (h *EntityHandler) getServiceStory(w http.ResponseWriter, r *http.Request) 
 		WriteError(w, http.StatusNotFound, "service not found")
 		return
 	}
+	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich service story: %v", err))
+		return
+	}
 
-	story := buildWorkloadStory(ctx)
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"service_name": serviceName,
-		"story":        story,
-	})
+	WriteJSON(w, http.StatusOK, buildServiceStoryResponse(serviceName, ctx))
 }
 
 // fetchWorkloadContext queries Neo4j for workload context with a custom WHERE
@@ -553,6 +558,25 @@ func buildWorkloadStory(ctx map[string]any) string {
 			story += " (" + platformKind + ")"
 		}
 		story += ";"
+	}
+	if hostnames := hostnameLabels(mapSliceValue(ctx, "hostnames")); len(hostnames) > 0 {
+		story += " Public entrypoints: " + strings.Join(hostnames, ", ") + "."
+	}
+	if apiSurface := mapValue(ctx, "api_surface"); len(apiSurface) > 0 {
+		story += fmt.Sprintf(
+			" API surface exposes %d endpoint(s) across %d spec file(s).",
+			IntVal(apiSurface, "endpoint_count"),
+			IntVal(apiSurface, "spec_count"),
+		)
+		if docsRoutes := StringSliceVal(apiSurface, "docs_routes"); len(docsRoutes) > 0 {
+			story += " Docs routes: " + strings.Join(docsRoutes, ", ") + "."
+		}
+	}
+	if consumers := mapSliceValue(ctx, "consumer_repositories"); len(consumers) > 0 {
+		story += fmt.Sprintf(" Observed %d consumer repos from graph and content evidence.", len(consumers))
+	}
+	if provisioningChains := mapSliceValue(ctx, "provisioning_source_chains"); len(provisioningChains) > 0 {
+		story += fmt.Sprintf(" Provisioning chains span %d repo(s).", len(provisioningChains))
 	}
 	return story
 }
