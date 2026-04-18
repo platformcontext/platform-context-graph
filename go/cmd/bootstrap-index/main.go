@@ -39,7 +39,6 @@ type graphDeps struct {
 type bootstrapCommitter interface {
 	collector.Committer
 	BackfillAllRelationshipEvidence(context.Context, trace.Tracer, *telemetry.Instruments) error
-	WaitForDeploymentMappingTerminal(context.Context, time.Duration, time.Duration) error
 	ReopenDeploymentMappingWorkItems(context.Context, trace.Tracer, *telemetry.Instruments) error
 }
 
@@ -223,24 +222,20 @@ func runPipelined(
 		return fmt.Errorf("deferred backfill fatal: %w", errors.Join(err, projectorErr))
 	}
 
-	// Wait for the source-local projector to drain before replaying reducer work.
-	// Otherwise deployment_mapping items that are emitted after the terminal wait
-	// starts can miss the reopen pass and remain soft-gated forever.
+	// Wait for the source-local projector to drain before reopening reducer work.
+	// Otherwise deployment_mapping items emitted after the reopen pass starts
+	// could miss reopening and remain soft-gated.
 	projectorErr := <-errc
 	if projectorErr != nil {
 		return projectorErr
 	}
 
-	if err := cd.committer.WaitForDeploymentMappingTerminal(ctx, 45*time.Minute, 10*time.Second); err != nil {
-		if logger != nil {
-			logger.ErrorContext(ctx, "wait for deployment_mapping terminal timed out",
-				slog.String("error", err.Error()),
-				telemetry.FailureClassAttr("deployment_mapping_terminal_timeout"),
-			)
-		}
-		return fmt.Errorf("deployment_mapping terminal wait fatal: %w", err)
-	}
-
+	// Reopen only the deployment_mapping items that already succeeded with the
+	// cross-repo readiness gate closed. Items still pending or claimed will
+	// naturally see the gate open when they run (backward_evidence is already
+	// committed by BackfillAllRelationshipEvidence above). A small number of
+	// in-flight items may succeed between now and the reopen pass — those
+	// stragglers are caught by the normal repair runner.
 	if err := cd.committer.ReopenDeploymentMappingWorkItems(ctx, tracer, instruments); err != nil {
 		if logger != nil {
 			logger.ErrorContext(ctx, "reopen deployment_mapping work items failed",
