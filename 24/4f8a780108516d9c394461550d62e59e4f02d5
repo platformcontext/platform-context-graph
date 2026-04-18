@@ -1,0 +1,59 @@
+go/internal/storage/neo4j/edge_writer_test.go
+  073a74ac3999a938 767-772,839-844
+go/cmd/bootstrap-index/main_test.go
+  26d0a7775258d320 212-217,660,725,730,734,757-762
+go/internal/storage/postgres/ingestion.go
+  26d0a7775258d320 376,382,406,413,452-455,457-458,460,467-468,473-479,490-495
+go/internal/telemetry/instruments.go
+  26d0a7775258d320 115-119,605-632
+go/cmd/bootstrap-index/main.go
+  26d0a7775258d320 238-239
+go/internal/storage/neo4j/canonical.go
+  073a74ac3999a938 187-188,214-215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "244f8a780108516d9c394461550d62e59e4f02d5",
+  "prompts": {
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 109,
+      "total_deletions": 3668,
+      "accepted_lines": 109,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 526,
+      "total_deletions": 103,
+      "accepted_lines": 1455,
+      "overriden_lines": 0
+    },
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 582,
+      "overriden_lines": 0
+    }
+  }
+}
