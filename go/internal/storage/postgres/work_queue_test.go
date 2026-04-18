@@ -395,6 +395,8 @@ func TestBootstrapWorkItemSchemaIncludesPayloadAndLeaseOwner(t *testing.T) {
 
 type fakeExecQueryer struct {
 	execs          []fakeExecCall
+	execErrors     []error
+	execResults    []sql.Result
 	queries        []fakeQueryCall
 	queryResponses []queueFakeRows
 }
@@ -415,6 +417,16 @@ func (f *fakeExecQueryer) ExecContext(
 	args ...any,
 ) (sql.Result, error) {
 	f.execs = append(f.execs, fakeExecCall{query: query, args: args})
+	if len(f.execErrors) > 0 {
+		err := f.execErrors[0]
+		f.execErrors = f.execErrors[1:]
+		return nil, err
+	}
+	if len(f.execResults) > 0 {
+		result := f.execResults[0]
+		f.execResults = f.execResults[1:]
+		return result, nil
+	}
 	return fakeResult{}, nil
 }
 

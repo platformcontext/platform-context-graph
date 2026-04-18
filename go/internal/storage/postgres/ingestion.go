@@ -8,7 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
@@ -137,12 +140,67 @@ WHERE scope.scope_id = $1
 LIMIT 1
 `
 
+const activeRepositoryGenerationsQuery = `
+WITH latest_generations AS (
+    SELECT
+        generation.scope_id,
+        COALESCE(
+            scope.active_generation_id,
+            (
+                SELECT generation_id
+                FROM scope_generations AS candidate
+                WHERE candidate.scope_id = generation.scope_id
+                ORDER BY candidate.ingested_at DESC, candidate.generation_id DESC
+                LIMIT 1
+            )
+        ) AS generation_id
+    FROM scope_generations AS generation
+    LEFT JOIN ingestion_scopes AS scope
+      ON scope.scope_id = generation.scope_id
+    GROUP BY generation.scope_id, scope.active_generation_id
+)
+SELECT DISTINCT ON (repo_id)
+    repo_id,
+    fact.scope_id,
+    fact.generation_id
+FROM (
+    SELECT
+        COALESCE(
+            fact.payload->>'repo_id',
+            fact.payload->>'graph_id',
+            fact.payload->>'name',
+            ''
+        ) AS repo_id,
+        fact.scope_id,
+        fact.generation_id,
+        fact.observed_at,
+        fact.fact_id
+    FROM fact_records AS fact
+    JOIN latest_generations AS latest
+      ON latest.scope_id = fact.scope_id
+     AND latest.generation_id = fact.generation_id
+    WHERE fact.fact_kind = 'repository'
+) AS fact
+WHERE repo_id <> ''
+ORDER BY repo_id, observed_at DESC, fact_id DESC
+`
+
+const listSucceededDeploymentMappingWorkItemsQuery = `
+SELECT work_item_id
+FROM fact_work_items
+WHERE stage = 'reducer'
+  AND domain = 'deployment_mapping'
+  AND status = 'succeeded'
+ORDER BY updated_at ASC, work_item_id ASC
+`
+
 // IngestionStore owns the durable commit boundary for scope generations, facts,
 // and projector follow-up work.
 type IngestionStore struct {
-	db       ExecQueryer
-	beginner Beginner
-	Now      func() time.Time
+	db                       ExecQueryer
+	beginner                 Beginner
+	Now                      func() time.Time
+	SkipRelationshipBackfill bool
 }
 
 // NewIngestionStore constructs a transactional storage boundary for projection
@@ -276,15 +334,17 @@ func (s IngestionStore) CommitScopeGeneration(
 	); err != nil {
 		return err
 	}
-	if err := backfillRelationshipEvidenceForNewRepositories(
-		ctx,
-		tx,
-		relationshipStore,
-		generation.GenerationID,
-		knownRepoIDs,
-		currentGenerationRepoIDs,
-	); err != nil {
-		return err
+	if !s.SkipRelationshipBackfill {
+		if err := backfillRelationshipEvidenceForNewRepositories(
+			ctx,
+			tx,
+			relationshipStore,
+			generation.GenerationID,
+			knownRepoIDs,
+			currentGenerationRepoIDs,
+		); err != nil {
+			return err
+		}
 	}
 
 	queue := ProjectorQueue{db: tx, Now: s.now}
@@ -306,6 +366,144 @@ func (s IngestionStore) now() time.Time {
 	}
 
 	return time.Now().UTC()
+}
+
+// BackfillAllRelationshipEvidence runs a single corpus-wide backward evidence
+// discovery pass and publishes readiness for the active repository generations.
+func (s IngestionStore) BackfillAllRelationshipEvidence(
+	ctx context.Context,
+	tracer trace.Tracer,
+	_ *telemetry.Instruments,
+) error {
+	if s.db == nil {
+		return fmt.Errorf("ingestion store db is required")
+	}
+
+	if tracer != nil {
+		var span trace.Span
+		ctx, span = tracer.Start(ctx, "relationship.backfill_deferred")
+		defer span.End()
+	}
+
+	catalog, err := loadRepositoryCatalog(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("load repository catalog for deferred relationship backfill: %w", err)
+	}
+	repoGenerations, err := loadActiveRepositoryGenerations(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("load active repository generations for deferred relationship backfill: %w", err)
+	}
+	if len(repoGenerations) == 0 {
+		return nil
+	}
+
+	activeFacts, err := loadLatestRelationshipFacts(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("load latest facts for deferred relationship backfill: %w", err)
+	}
+
+	evidenceByTargetRepo := make(map[string][]relationships.EvidenceFact)
+	for _, fact := range relationships.DiscoverEvidence(activeFacts, catalog) {
+		if strings.TrimSpace(fact.TargetRepoID) == "" {
+			continue
+		}
+		evidenceByTargetRepo[fact.TargetRepoID] = append(evidenceByTargetRepo[fact.TargetRepoID], fact)
+	}
+
+	relationshipStore := NewRelationshipStore(s.db)
+	for repoID, repoEvidence := range evidenceByTargetRepo {
+		repoGeneration, ok := repoGenerations[repoID]
+		if !ok {
+			return fmt.Errorf("deferred relationship evidence target repo %q has no active generation", repoID)
+		}
+		if err := relationshipStore.UpsertEvidenceFacts(ctx, repoGeneration.GenerationID, repoEvidence); err != nil {
+			return fmt.Errorf("persist deferred relationship evidence for repo %q: %w", repoID, err)
+		}
+	}
+
+	now := s.now()
+	phaseRows := make([]reducer.GraphProjectionPhaseState, 0, len(repoGenerations))
+	for _, repoGeneration := range repoGenerations {
+		phaseRows = append(phaseRows, reducer.GraphProjectionPhaseState{
+			Key: reducer.GraphProjectionPhaseKey{
+				ScopeID:          repoGeneration.ScopeID,
+				AcceptanceUnitID: repoGeneration.ScopeID,
+				SourceRunID:      repoGeneration.GenerationID,
+				GenerationID:     repoGeneration.GenerationID,
+				Keyspace:         reducer.GraphProjectionKeyspaceCrossRepoEvidence,
+			},
+			Phase:       reducer.GraphProjectionPhaseBackwardEvidenceCommitted,
+			CommittedAt: now,
+			UpdatedAt:   now,
+		})
+	}
+	if err := NewGraphProjectionPhaseStateStore(s.db).PublishGraphProjectionPhases(ctx, phaseRows); err != nil {
+		return fmt.Errorf("publish backward evidence readiness: %w", err)
+	}
+
+	return nil
+}
+
+// WaitForDeploymentMappingTerminal blocks until all reducer deployment_mapping
+// work items reach a terminal status or the timeout expires.
+func (s IngestionStore) WaitForDeploymentMappingTerminal(
+	ctx context.Context,
+	timeout time.Duration,
+	pollInterval time.Duration,
+) error {
+	if s.db == nil {
+		return fmt.Errorf("ingestion store db is required")
+	}
+	if timeout <= 0 {
+		return fmt.Errorf("timeout must be positive")
+	}
+	if pollInterval < 0 {
+		return fmt.Errorf("poll interval must not be negative")
+	}
+
+	deadline := s.now().Add(timeout)
+	queue := ReducerQueue{db: s.db, Now: s.Now}
+	for {
+		inFlight, err := queue.CountInFlightByDomain(ctx, reducer.DomainDeploymentMapping)
+		if err != nil {
+			return err
+		}
+		if inFlight == 0 {
+			return nil
+		}
+		if !s.now().Before(deadline) {
+			return fmt.Errorf("timed out waiting for deployment_mapping work items to reach terminal status")
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+}
+
+// ReopenDeploymentMappingWorkItems replays succeeded deployment_mapping work
+// items after deferred backward evidence is committed.
+func (s IngestionStore) ReopenDeploymentMappingWorkItems(
+	ctx context.Context,
+	_ trace.Tracer,
+	_ *telemetry.Instruments,
+) error {
+	if s.db == nil {
+		return fmt.Errorf("ingestion store db is required")
+	}
+	workItemIDs, err := listSucceededDeploymentMappingWorkItemIDs(ctx, s.db)
+	if err != nil {
+		return err
+	}
+	queue := ReducerQueue{db: s.db, Now: s.Now}
+	for _, workItemID := range workItemIDs {
+		if _, err := queue.ReopenSucceeded(ctx, workItemID); err != nil {
+			return fmt.Errorf("reopen deployment_mapping work items: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s IngestionStore) shouldSkipUnchangedGeneration(
@@ -473,6 +671,71 @@ func catalogRepoIDs(catalog []relationships.CatalogEntry) map[string]struct{} {
 		repoIDs[entry.RepoID] = struct{}{}
 	}
 	return repoIDs
+}
+
+type repositoryGenerationIdentity struct {
+	RepoID       string
+	ScopeID      string
+	GenerationID string
+}
+
+func loadActiveRepositoryGenerations(
+	ctx context.Context,
+	queryer Queryer,
+) (map[string]repositoryGenerationIdentity, error) {
+	if queryer == nil {
+		return nil, nil
+	}
+
+	rows, err := queryer.QueryContext(ctx, activeRepositoryGenerationsQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]repositoryGenerationIdentity)
+	for rows.Next() {
+		var identity repositoryGenerationIdentity
+		if err := rows.Scan(&identity.RepoID, &identity.ScopeID, &identity.GenerationID); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(identity.RepoID) == "" {
+			continue
+		}
+		result[identity.RepoID] = identity
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func listSucceededDeploymentMappingWorkItemIDs(
+	ctx context.Context,
+	queryer Queryer,
+) ([]string, error) {
+	rows, err := queryer.QueryContext(ctx, listSucceededDeploymentMappingWorkItemsQuery)
+	if err != nil {
+		return nil, fmt.Errorf("list succeeded deployment_mapping work items: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	workItemIDs := make([]string, 0)
+	for rows.Next() {
+		var workItemID string
+		if err := rows.Scan(&workItemID); err != nil {
+			return nil, fmt.Errorf("scan succeeded deployment_mapping work item: %w", err)
+		}
+		if strings.TrimSpace(workItemID) == "" {
+			continue
+		}
+		workItemIDs = append(workItemIDs, workItemID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list succeeded deployment_mapping work items: %w", err)
+	}
+	return workItemIDs, nil
 }
 
 func payloadRepoID(payload map[string]any) string {

@@ -30,6 +30,8 @@ type DefaultHandlers struct {
 	// for canonical and semantic node writers.
 	GraphProjectionPhasePublisher GraphProjectionPhasePublisher
 	GraphProjectionRepairQueue    GraphProjectionPhaseRepairQueue
+	ReadinessLookup               GraphProjectionReadinessLookup
+	ReadinessPrefetch             GraphProjectionReadinessPrefetch
 
 	// CodeCallEdgeWriter is retained for compatibility with older reducer tests
 	// and wiring. Code-call materialization no longer uses it directly.
@@ -109,12 +111,14 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			var crossRepoResolver *CrossRepoRelationshipHandler
 			if handlers.EvidenceFactLoader != nil && handlers.RepoDependencyEdgeWriter != nil {
 				crossRepoResolver = &CrossRepoRelationshipHandler{
-					EvidenceLoader: handlers.EvidenceFactLoader,
-					Assertions:     handlers.AssertionLoader,
-					Persister:      handlers.ResolutionPersister,
-					EdgeWriter:     handlers.RepoDependencyEdgeWriter,
-					Tracer:         handlers.Tracer,
-					Instruments:    handlers.Instruments,
+					EvidenceLoader:    handlers.EvidenceFactLoader,
+					Assertions:        handlers.AssertionLoader,
+					Persister:         handlers.ResolutionPersister,
+					EdgeWriter:        handlers.RepoDependencyEdgeWriter,
+					ReadinessLookup:   handlers.ReadinessLookup,
+					ReadinessPrefetch: handlers.ReadinessPrefetch,
+					Tracer:            handlers.Tracer,
+					Instruments:       handlers.Instruments,
 				}
 			}
 			def.Handler = PlatformMaterializationHandler{

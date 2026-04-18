@@ -45,12 +45,14 @@ type ResolutionPersister interface {
 //  4. Persists candidates and resolved edges for audit trail
 //  5. Writes resolved edges to Neo4j via EdgeWriter
 type CrossRepoRelationshipHandler struct {
-	EvidenceLoader EvidenceFactLoader
-	Assertions     AssertionLoader
-	Persister      ResolutionPersister
-	EdgeWriter     SharedProjectionEdgeWriter
-	Tracer         trace.Tracer
-	Instruments    *telemetry.Instruments
+	EvidenceLoader    EvidenceFactLoader
+	Assertions        AssertionLoader
+	Persister         ResolutionPersister
+	EdgeWriter        SharedProjectionEdgeWriter
+	ReadinessLookup   GraphProjectionReadinessLookup
+	ReadinessPrefetch GraphProjectionReadinessPrefetch
+	Tracer            trace.Tracer
+	Instruments       *telemetry.Instruments
 }
 
 // Resolve executes the cross-repo relationship resolution pipeline for one
@@ -82,6 +84,32 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 		slog.String(telemetry.LogKeyGenerationID, generationID),
 		slog.String(telemetry.LogKeyDomain, "cross_repo_resolution"),
 	)
+
+	readinessLookup := h.ReadinessLookup
+	readinessKey, hasReadinessKey := crossRepoBackwardEvidenceReadinessKey(scopeID, generationID)
+	if hasReadinessKey && h.ReadinessPrefetch != nil {
+		resolvedLookup, err := h.ReadinessPrefetch(
+			ctx,
+			[]GraphProjectionPhaseKey{readinessKey},
+			GraphProjectionPhaseBackwardEvidenceCommitted,
+		)
+		if err != nil {
+			return 0, fmt.Errorf("prefetch graph projection readiness: %w", err)
+		}
+		readinessLookup = resolvedLookup
+	}
+	if hasReadinessKey && readinessLookup != nil {
+		ready, found := readinessLookup(readinessKey, GraphProjectionPhaseBackwardEvidenceCommitted)
+		if !found || !ready {
+			slog.InfoContext(ctx, "cross-repo resolution gated",
+				slog.String(telemetry.LogKeyScopeID, scopeID),
+				slog.String(telemetry.LogKeyGenerationID, generationID),
+				slog.String("reason", "backward_evidence_not_committed"),
+			)
+			h.recordDuration(ctx, start, scopeID)
+			return 0, nil
+		}
+	}
 
 	// Step 1: Load persisted evidence facts.
 	evidenceFacts, err := h.EvidenceLoader.ListEvidenceFacts(ctx, generationID)
@@ -233,6 +261,23 @@ func normalizeReducerRepositoryID(value string) string {
 		}
 	}
 	return value
+}
+
+func crossRepoBackwardEvidenceReadinessKey(
+	scopeID string,
+	generationID string,
+) (GraphProjectionPhaseKey, bool) {
+	key := GraphProjectionPhaseKey{
+		ScopeID:          strings.TrimSpace(scopeID),
+		AcceptanceUnitID: strings.TrimSpace(scopeID),
+		SourceRunID:      strings.TrimSpace(generationID),
+		GenerationID:     strings.TrimSpace(generationID),
+		Keyspace:         GraphProjectionKeyspaceCrossRepoEvidence,
+	}
+	if err := key.Validate(); err != nil {
+		return GraphProjectionPhaseKey{}, false
+	}
+	return key, true
 }
 
 // recordDuration records the cross-repo resolution duration metric.

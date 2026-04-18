@@ -15,6 +15,9 @@ const (
 	// GraphProjectionKeyspaceCodeEntitiesUID represents the Neo4j uniqueness
 	// domain keyed by code entity uid values.
 	GraphProjectionKeyspaceCodeEntitiesUID GraphProjectionKeyspace = "code_entities_uid"
+	// GraphProjectionKeyspaceCrossRepoEvidence represents the reducer readiness
+	// domain for deferred backward relationship evidence during bootstrap.
+	GraphProjectionKeyspaceCrossRepoEvidence GraphProjectionKeyspace = "cross_repo_evidence"
 )
 
 // GraphProjectionPhase identifies one durable readiness milestone for a graph
@@ -28,6 +31,10 @@ const (
 	// GraphProjectionPhaseSemanticNodesCommitted is published after semantic
 	// entity reducer node writes commit successfully.
 	GraphProjectionPhaseSemanticNodesCommitted GraphProjectionPhase = "semantic_nodes_committed"
+	// GraphProjectionPhaseBackwardEvidenceCommitted is published after deferred
+	// backward relationship evidence is durably committed for one
+	// scope-generation slice.
+	GraphProjectionPhaseBackwardEvidenceCommitted GraphProjectionPhase = "backward_evidence_committed"
 )
 
 // GraphProjectionPhaseKey identifies one bounded graph-write readiness slice.

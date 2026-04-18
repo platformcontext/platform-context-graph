@@ -142,14 +142,24 @@ func (s *RelationshipStore) UpsertEvidenceFacts(
 	}
 
 	now := time.Now().UTC()
-	for i, f := range facts {
-		evidenceID := relationshipDigest("evidence", generationID,
-			string(f.EvidenceKind), f.SourceRepoID, f.TargetRepoID, fmt.Sprintf("%d", i),
-		)
+	for _, f := range facts {
 		detailsJSON, err := json.Marshal(f.Details)
 		if err != nil {
 			return fmt.Errorf("marshal evidence details: %w", err)
 		}
+		evidenceID := relationshipDigest(
+			"evidence",
+			generationID,
+			string(f.EvidenceKind),
+			string(f.RelationshipType),
+			f.SourceRepoID,
+			f.TargetRepoID,
+			f.SourceEntityID,
+			f.TargetEntityID,
+			fmt.Sprintf("%.12g", f.Confidence),
+			f.Rationale,
+			string(detailsJSON),
+		)
 		if _, err := s.db.ExecContext(ctx, insertEvidenceFactSQL,
 			evidenceID,
 			generationID,

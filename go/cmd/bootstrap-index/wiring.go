@@ -60,9 +60,12 @@ func buildBootstrapCollector(
 		Logger:                 logger,
 	}
 
+	committer := postgres.NewIngestionStore(instrumentedDB)
+	committer.SkipRelationshipBackfill = true
+
 	return collectorDeps{
 		source:    source,
-		committer: postgres.NewIngestionStore(instrumentedDB),
+		committer: committer,
 	}, nil
 }
 

@@ -152,6 +152,8 @@ func buildReducerService(
 		CodeCallIntentWriter:               codeCallIntentWriter,
 		GraphProjectionPhasePublisher:      graphProjectionStateStore,
 		GraphProjectionRepairQueue:         graphProjectionRepairQueue,
+		ReadinessLookup:                    graphProjectionReadinessLookup,
+		ReadinessPrefetch:                  graphProjectionReadinessPrefetch,
 		SemanticEntityWriter:               sourceneo4j.NewSemanticEntityWriter(neo4jExec, neo4jBatchSize(getenv)),
 		SQLRelationshipEdgeWriter:          edgeWriterForHandlers,
 		InheritanceEdgeWriter:              edgeWriterForHandlers,

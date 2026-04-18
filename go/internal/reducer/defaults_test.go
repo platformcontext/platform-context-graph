@@ -310,3 +310,43 @@ func TestDefaultHandlersWiresCrossRepoResolver(t *testing.T) {
 		t.Fatal("expected edge write calls from cross-repo resolution")
 	}
 }
+
+func TestNewDefaultRegistryWiresCrossRepoReadinessDependencies(t *testing.T) {
+	t.Parallel()
+
+	readinessLookup := func(GraphProjectionPhaseKey, GraphProjectionPhase) (bool, bool) {
+		return false, false
+	}
+	readinessPrefetch := func(_ context.Context, _ []GraphProjectionPhaseKey, _ GraphProjectionPhase) (GraphProjectionReadinessLookup, error) {
+		return readinessLookup, nil
+	}
+
+	registry, err := NewDefaultRegistry(DefaultHandlers{
+		PlatformMaterializationWriter: &recordingPlatformMaterializationWriter{},
+		EvidenceFactLoader:            &fakeEvidenceFactLoader{},
+		RepoDependencyEdgeWriter:      &recordingEdgeWriter{},
+		ReadinessLookup:               readinessLookup,
+		ReadinessPrefetch:             readinessPrefetch,
+	})
+	if err != nil {
+		t.Fatalf("NewDefaultRegistry() error = %v", err)
+	}
+
+	def, ok := registry.Definition(DomainDeploymentMapping)
+	if !ok {
+		t.Fatal("deployment mapping definition missing")
+	}
+	handler, ok := def.Handler.(PlatformMaterializationHandler)
+	if !ok {
+		t.Fatalf("deployment mapping handler type = %T, want PlatformMaterializationHandler", def.Handler)
+	}
+	if handler.CrossRepoResolver == nil {
+		t.Fatal("CrossRepoResolver = nil, want non-nil")
+	}
+	if handler.CrossRepoResolver.ReadinessLookup == nil {
+		t.Fatal("ReadinessLookup = nil, want non-nil")
+	}
+	if handler.CrossRepoResolver.ReadinessPrefetch == nil {
+		t.Fatal("ReadinessPrefetch = nil, want non-nil")
+	}
+}

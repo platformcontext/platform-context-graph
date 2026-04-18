@@ -217,6 +217,49 @@ func TestRelationshipStoreUpsertEvidenceFacts(t *testing.T) {
 	}
 }
 
+func TestRelationshipStoreUpsertEvidenceFactsUsesStableContentIdentity(t *testing.T) {
+	t.Parallel()
+
+	db := newRelationshipTestDB()
+	store := NewRelationshipStore(db)
+	ctx := context.Background()
+
+	genID, err := store.CreateGeneration(ctx, "repo_deps", "run-003b")
+	if err != nil {
+		t.Fatalf("CreateGeneration: %v", err)
+	}
+
+	evidenceA := relationships.EvidenceFact{
+		EvidenceKind:     relationships.EvidenceKindTerraformAppRepo,
+		RelationshipType: relationships.RelProvisionsDependencyFor,
+		SourceRepoID:     "repo-infra",
+		TargetRepoID:     "repo-api",
+		Confidence:       0.99,
+		Rationale:        "app_repo match",
+		Details:          map[string]any{"path": "main.tf"},
+	}
+	evidenceB := relationships.EvidenceFact{
+		EvidenceKind:     relationships.EvidenceKindTerraformModuleSource,
+		RelationshipType: relationships.RelUsesModule,
+		SourceRepoID:     "repo-app",
+		TargetRepoID:     "repo-module",
+		Confidence:       0.97,
+		Rationale:        "module source match",
+		Details:          map[string]any{"source": "github.com/acme/repo-module"},
+	}
+
+	if err := store.UpsertEvidenceFacts(ctx, genID, []relationships.EvidenceFact{evidenceA, evidenceB}); err != nil {
+		t.Fatalf("UpsertEvidenceFacts(first): %v", err)
+	}
+	if err := store.UpsertEvidenceFacts(ctx, genID, []relationships.EvidenceFact{evidenceB, evidenceA}); err != nil {
+		t.Fatalf("UpsertEvidenceFacts(second): %v", err)
+	}
+
+	if got, want := len(db.evidenceFacts), 2; got != want {
+		t.Fatalf("evidence count after reordered replay = %d, want %d", got, want)
+	}
+}
+
 func TestRelationshipStoreUpsertCandidates(t *testing.T) {
 	t.Parallel()
 
@@ -336,15 +379,15 @@ type resolvedRecord struct {
 }
 
 type assertionRecord struct {
-	sourceRepoID     string
-	targetRepoID     string
-	sourceEntityID   string
-	targetEntityID   string
-	relType          string
-	decision         string
-	reason           string
-	actor            string
-	updatedAt        time.Time
+	sourceRepoID   string
+	targetRepoID   string
+	sourceEntityID string
+	targetEntityID string
+	relType        string
+	decision       string
+	reason         string
+	actor          string
+	updatedAt      time.Time
 }
 
 // relationshipTestDB is an in-memory mock of ExecQueryer for relationship
@@ -645,5 +688,5 @@ func (r *relationshipRows) Scan(dest ...any) error {
 	return nil
 }
 
-func (r *relationshipRows) Err() error  { return nil }
+func (r *relationshipRows) Err() error   { return nil }
 func (r *relationshipRows) Close() error { return nil }

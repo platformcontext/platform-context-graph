@@ -13,9 +13,11 @@ import (
 type fakeEvidenceFactLoader struct {
 	facts []relationships.EvidenceFact
 	err   error
+	calls int
 }
 
 func (f *fakeEvidenceFactLoader) ListEvidenceFacts(_ context.Context, _ string) ([]relationships.EvidenceFact, error) {
+	f.calls++
 	return f.facts, f.err
 }
 
@@ -98,6 +100,142 @@ func TestCrossRepoResolutionSkipsWhenNoEvidence(t *testing.T) {
 	}
 	if len(edgeWriter.writeCalls) != 0 {
 		t.Fatalf("expected 0 write calls, got %d", len(edgeWriter.writeCalls))
+	}
+}
+
+func TestCrossRepoResolutionGatesUntilBackwardEvidenceCommitted(t *testing.T) {
+	t.Parallel()
+
+	evidenceLoader := &fakeEvidenceFactLoader{
+		facts: []relationships.EvidenceFact{
+			{
+				EvidenceKind:     relationships.EvidenceKindTerraformAppRepo,
+				RelationshipType: relationships.RelProvisionsDependencyFor,
+				SourceRepoID:     "infra-repo",
+				TargetRepoID:     "app-repo",
+				Confidence:       0.99,
+			},
+		},
+	}
+	edgeWriter := &recordingEdgeWriter{}
+	handler := CrossRepoRelationshipHandler{
+		EvidenceLoader: evidenceLoader,
+		EdgeWriter:     edgeWriter,
+		ReadinessLookup: func(key GraphProjectionPhaseKey, phase GraphProjectionPhase) (bool, bool) {
+			if got, want := key.ScopeID, "scope-1"; got != want {
+				t.Fatalf("ScopeID = %q, want %q", got, want)
+			}
+			if got, want := key.AcceptanceUnitID, "scope-1"; got != want {
+				t.Fatalf("AcceptanceUnitID = %q, want %q", got, want)
+			}
+			if got, want := key.SourceRunID, "gen-1"; got != want {
+				t.Fatalf("SourceRunID = %q, want %q", got, want)
+			}
+			if got, want := key.GenerationID, "gen-1"; got != want {
+				t.Fatalf("GenerationID = %q, want %q", got, want)
+			}
+			if got, want := key.Keyspace, GraphProjectionKeyspaceCrossRepoEvidence; got != want {
+				t.Fatalf("Keyspace = %q, want %q", got, want)
+			}
+			if got, want := phase, GraphProjectionPhaseBackwardEvidenceCommitted; got != want {
+				t.Fatalf("phase = %q, want %q", got, want)
+			}
+			return false, false
+		},
+	}
+
+	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Resolve() = %d, want 0 when readiness is missing", count)
+	}
+	if evidenceLoader.calls != 0 {
+		t.Fatalf("evidence loader calls = %d, want 0 when gated", evidenceLoader.calls)
+	}
+	if len(edgeWriter.retractCalls) != 0 {
+		t.Fatalf("retractCalls = %d, want 0 when gated", len(edgeWriter.retractCalls))
+	}
+	if len(edgeWriter.writeCalls) != 0 {
+		t.Fatalf("writeCalls = %d, want 0 when gated", len(edgeWriter.writeCalls))
+	}
+}
+
+func TestCrossRepoResolutionUsesReadinessPrefetchWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	evidenceLoader := &fakeEvidenceFactLoader{
+		facts: []relationships.EvidenceFact{
+			{
+				EvidenceKind:     relationships.EvidenceKindTerraformAppRepo,
+				RelationshipType: relationships.RelProvisionsDependencyFor,
+				SourceRepoID:     "infra-repo",
+				TargetRepoID:     "app-repo",
+				Confidence:       0.99,
+			},
+		},
+	}
+	edgeWriter := &recordingEdgeWriter{}
+	prefetchCalls := 0
+	handler := CrossRepoRelationshipHandler{
+		EvidenceLoader: evidenceLoader,
+		EdgeWriter:     edgeWriter,
+		ReadinessLookup: func(GraphProjectionPhaseKey, GraphProjectionPhase) (bool, bool) {
+			t.Fatal("ReadinessLookup should be replaced by prefetched lookup")
+			return false, false
+		},
+		ReadinessPrefetch: func(_ context.Context, keys []GraphProjectionPhaseKey, phase GraphProjectionPhase) (GraphProjectionReadinessLookup, error) {
+			prefetchCalls++
+			if got, want := phase, GraphProjectionPhaseBackwardEvidenceCommitted; got != want {
+				t.Fatalf("phase = %q, want %q", got, want)
+			}
+			if len(keys) != 1 {
+				t.Fatalf("prefetch keys = %d, want 1", len(keys))
+			}
+			key := keys[0]
+			if got, want := key.ScopeID, "scope-1"; got != want {
+				t.Fatalf("ScopeID = %q, want %q", got, want)
+			}
+			if got, want := key.AcceptanceUnitID, "scope-1"; got != want {
+				t.Fatalf("AcceptanceUnitID = %q, want %q", got, want)
+			}
+			if got, want := key.SourceRunID, "gen-1"; got != want {
+				t.Fatalf("SourceRunID = %q, want %q", got, want)
+			}
+			if got, want := key.GenerationID, "gen-1"; got != want {
+				t.Fatalf("GenerationID = %q, want %q", got, want)
+			}
+			if got, want := key.Keyspace, GraphProjectionKeyspaceCrossRepoEvidence; got != want {
+				t.Fatalf("Keyspace = %q, want %q", got, want)
+			}
+			return func(lookupKey GraphProjectionPhaseKey, lookupPhase GraphProjectionPhase) (bool, bool) {
+				if lookupKey != key {
+					t.Fatalf("lookup key = %#v, want %#v", lookupKey, key)
+				}
+				if lookupPhase != phase {
+					t.Fatalf("lookup phase = %q, want %q", lookupPhase, phase)
+				}
+				return true, true
+			}, nil
+		},
+	}
+
+	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("Resolve() = %d, want 1 when readiness is committed", count)
+	}
+	if prefetchCalls != 1 {
+		t.Fatalf("prefetch calls = %d, want 1", prefetchCalls)
+	}
+	if evidenceLoader.calls != 1 {
+		t.Fatalf("evidence loader calls = %d, want 1 after readiness", evidenceLoader.calls)
+	}
+	if len(edgeWriter.writeCalls) != 1 {
+		t.Fatalf("writeCalls = %d, want 1", len(edgeWriter.writeCalls))
 	}
 }
 

@@ -36,9 +36,16 @@ type graphDeps struct {
 	close  func() error
 }
 
+type bootstrapCommitter interface {
+	collector.Committer
+	BackfillAllRelationshipEvidence(context.Context, trace.Tracer, *telemetry.Instruments) error
+	WaitForDeploymentMappingTerminal(context.Context, time.Duration, time.Duration) error
+	ReopenDeploymentMappingWorkItems(context.Context, trace.Tracer, *telemetry.Instruments) error
+}
+
 type collectorDeps struct {
 	source    collector.Source
-	committer collector.Committer
+	committer bootstrapCommitter
 }
 
 type projectorDeps struct {
@@ -204,8 +211,45 @@ func runPipelined(
 		return errors.Join(collectorErr, projectorErr)
 	}
 
-	// Collector succeeded — wait for projector to drain remaining queue.
+	if err := cd.committer.BackfillAllRelationshipEvidence(ctx, tracer, instruments); err != nil {
+		if logger != nil {
+			logger.ErrorContext(ctx, "deferred relationship backfill failed",
+				slog.String("error", err.Error()),
+				telemetry.FailureClassAttr("backfill_deferred_failure"),
+			)
+		}
+		cancel()
+		projectorErr := <-errc
+		return fmt.Errorf("deferred backfill fatal: %w", errors.Join(err, projectorErr))
+	}
+
+	// Wait for the source-local projector to drain before replaying reducer work.
+	// Otherwise deployment_mapping items that are emitted after the terminal wait
+	// starts can miss the reopen pass and remain soft-gated forever.
 	projectorErr := <-errc
+	if projectorErr != nil {
+		return projectorErr
+	}
+
+	if err := cd.committer.WaitForDeploymentMappingTerminal(ctx, 60*time.Second, time.Second); err != nil {
+		if logger != nil {
+			logger.ErrorContext(ctx, "wait for deployment_mapping terminal timed out",
+				slog.String("error", err.Error()),
+				telemetry.FailureClassAttr("deployment_mapping_terminal_timeout"),
+			)
+		}
+		return fmt.Errorf("deployment_mapping terminal wait fatal: %w", err)
+	}
+
+	if err := cd.committer.ReopenDeploymentMappingWorkItems(ctx, tracer, instruments); err != nil {
+		if logger != nil {
+			logger.ErrorContext(ctx, "reopen deployment_mapping work items failed",
+				slog.String("error", err.Error()),
+				telemetry.FailureClassAttr("reopen_deployment_mapping_failure"),
+			)
+		}
+		return fmt.Errorf("reopen deployment_mapping fatal: %w", err)
+	}
 
 	totalDuration := time.Since(pipelineStart).Seconds()
 	if logger != nil {

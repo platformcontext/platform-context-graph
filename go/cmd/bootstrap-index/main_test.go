@@ -208,7 +208,19 @@ func (f *fakeSource) Next(context.Context) (collector.CollectedGeneration, bool,
 	return gen, true, nil
 }
 
-type fakeCommitter struct{}
+type fakeCommitter struct {
+	mu               sync.Mutex
+	calls            []string
+	backfillCalls    int
+	waitCalls        int
+	reopenCalls      int
+	backfillErr      error
+	waitErr          error
+	reopenErr        error
+	waitTimeout      time.Duration
+	waitPollInterval time.Duration
+	waitHook         func() error
+}
 
 func (f *fakeCommitter) CommitScopeGeneration(
 	_ context.Context,
@@ -221,6 +233,55 @@ func (f *fakeCommitter) CommitScopeGeneration(
 		}
 	}
 	return nil
+}
+
+func (f *fakeCommitter) BackfillAllRelationshipEvidence(
+	_ context.Context,
+	_ trace.Tracer,
+	_ *telemetry.Instruments,
+) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "backfill")
+	f.backfillCalls++
+	return f.backfillErr
+}
+
+func (f *fakeCommitter) WaitForDeploymentMappingTerminal(
+	_ context.Context,
+	timeout time.Duration,
+	pollInterval time.Duration,
+) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "wait")
+	f.waitCalls++
+	f.waitTimeout = timeout
+	f.waitPollInterval = pollInterval
+	if f.waitHook != nil {
+		if err := f.waitHook(); err != nil {
+			return err
+		}
+	}
+	return f.waitErr
+}
+
+func (f *fakeCommitter) ReopenDeploymentMappingWorkItems(
+	_ context.Context,
+	_ trace.Tracer,
+	_ *telemetry.Instruments,
+) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "reopen")
+	f.reopenCalls++
+	return f.reopenErr
+}
+
+func (f *fakeCommitter) snapshotCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.calls...)
 }
 
 type fakeWorkSource struct {
@@ -599,6 +660,170 @@ func TestPipelinedBootstrapCollectorErrorCancelsProjector(t *testing.T) {
 	}
 }
 
+func TestPipelinedBootstrapRunsDeferredBackfillWorkflow(t *testing.T) {
+	t.Parallel()
+
+	source := &fakeSource{generations: nil}
+	ws := &concurrentWorkSource{items: nil}
+	sink := &concurrentWorkSink{}
+	committer := &fakeCommitter{}
+
+	cd := collectorDeps{source: source, committer: committer}
+	pd := projectorDeps{
+		workSource: ws,
+		factStore:  &fakeFactStore{},
+		runner:     &fakeProjectionRunner{},
+		workSink:   sink,
+	}
+
+	err := runPipelined(context.Background(), cd, pd, 2, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("runPipelined() error = %v, want nil", err)
+	}
+
+	if got, want := committer.snapshotCalls(), []string{"backfill", "wait", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("workflow calls = %v, want %v", got, want)
+	}
+	if got, want := committer.waitTimeout, 60*time.Second; got != want {
+		t.Fatalf("wait timeout = %v, want %v", got, want)
+	}
+	if got, want := committer.waitPollInterval, time.Second; got != want {
+		t.Fatalf("wait poll interval = %v, want %v", got, want)
+	}
+	if got := sink.acked.Load(); got != 0 {
+		t.Fatalf("runPipelined() acked = %d, want 0", got)
+	}
+}
+
+func TestPipelinedBootstrapBackfillFailureIsFatal(t *testing.T) {
+	t.Parallel()
+
+	backfillErr := errors.New("backfill failed")
+	committer := &fakeCommitter{backfillErr: backfillErr}
+
+	err := runPipelined(
+		context.Background(),
+		collectorDeps{source: &fakeSource{generations: nil}, committer: committer},
+		projectorDeps{
+			workSource: &concurrentWorkSource{items: nil},
+			factStore:  &fakeFactStore{},
+			runner:     &fakeProjectionRunner{},
+			workSink:   &concurrentWorkSink{},
+		},
+		2,
+		nil,
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("runPipelined() error = nil, want non-nil")
+	}
+	if !errors.Is(err, backfillErr) {
+		t.Fatalf("runPipelined() error = %v, want wrapping %v", err, backfillErr)
+	}
+	if got, want := committer.snapshotCalls(), []string{"backfill"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("workflow calls = %v, want %v", got, want)
+	}
+}
+
+func TestPipelinedBootstrapWaitFailureIsFatal(t *testing.T) {
+	t.Parallel()
+
+	waitErr := errors.New("wait failed")
+	committer := &fakeCommitter{waitErr: waitErr}
+
+	err := runPipelined(
+		context.Background(),
+		collectorDeps{source: &fakeSource{generations: nil}, committer: committer},
+		projectorDeps{
+			workSource: &concurrentWorkSource{items: nil},
+			factStore:  &fakeFactStore{},
+			runner:     &fakeProjectionRunner{},
+			workSink:   &concurrentWorkSink{},
+		},
+		2,
+		nil,
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("runPipelined() error = nil, want non-nil")
+	}
+	if !errors.Is(err, waitErr) {
+		t.Fatalf("runPipelined() error = %v, want wrapping %v", err, waitErr)
+	}
+	if got, want := committer.snapshotCalls(), []string{"backfill", "wait"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("workflow calls = %v, want %v", got, want)
+	}
+}
+
+func TestPipelinedBootstrapReopenFailureIsFatal(t *testing.T) {
+	t.Parallel()
+
+	reopenErr := errors.New("reopen failed")
+	committer := &fakeCommitter{reopenErr: reopenErr}
+
+	err := runPipelined(
+		context.Background(),
+		collectorDeps{source: &fakeSource{generations: nil}, committer: committer},
+		projectorDeps{
+			workSource: &concurrentWorkSource{items: nil},
+			factStore:  &fakeFactStore{},
+			runner:     &fakeProjectionRunner{},
+			workSink:   &concurrentWorkSink{},
+		},
+		2,
+		nil,
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("runPipelined() error = nil, want non-nil")
+	}
+	if !errors.Is(err, reopenErr) {
+		t.Fatalf("runPipelined() error = %v, want wrapping %v", err, reopenErr)
+	}
+	if got, want := committer.snapshotCalls(), []string{"backfill", "wait", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("workflow calls = %v, want %v", got, want)
+	}
+}
+
+func TestPipelinedBootstrapWaitsForProjectorDrainBeforeReducerWait(t *testing.T) {
+	t.Parallel()
+
+	sink := &concurrentWorkSink{}
+	committer := &fakeCommitter{
+		waitHook: func() error {
+			if got := sink.acked.Load(); got != 1 {
+				return fmt.Errorf("projector not drained before reducer wait: acked=%d", got)
+			}
+			return nil
+		},
+	}
+
+	err := runPipelined(
+		context.Background(),
+		collectorDeps{source: &fakeSource{generations: nil}, committer: committer},
+		projectorDeps{
+			workSource: &concurrentWorkSource{
+				items: []projector.ScopeGenerationWork{
+					{Scope: scope.IngestionScope{ScopeID: "s1"}},
+				},
+			},
+			factStore: &fakeFactStore{},
+			runner:    &delayedProjectionRunner{delay: 50 * time.Millisecond},
+			workSink:  sink,
+		},
+		2,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("runPipelined() error = %v, want nil", err)
+	}
+}
+
 // --- additional fakes for pipelined tests ---
 
 type slowSource struct {
@@ -677,6 +902,24 @@ func (f *failingProjectionRunner) Project(
 	f.count++
 	if f.count > f.failAfter {
 		return projector.Result{}, f.err
+	}
+	return projector.Result{}, nil
+}
+
+type delayedProjectionRunner struct {
+	delay time.Duration
+}
+
+func (d *delayedProjectionRunner) Project(
+	ctx context.Context,
+	_ scope.IngestionScope,
+	_ scope.ScopeGeneration,
+	_ []facts.Envelope,
+) (projector.Result, error) {
+	select {
+	case <-ctx.Done():
+		return projector.Result{}, ctx.Err()
+	case <-time.After(d.delay):
 	}
 	return projector.Result{}, nil
 }
