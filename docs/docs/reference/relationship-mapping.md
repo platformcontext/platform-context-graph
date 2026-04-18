@@ -280,7 +280,7 @@ Do not flatten every mapping into `DEPENDS_ON`. The more specific typed edge is 
 Write the edge in the direction of the behavior being explained.
 
 - `gitops-control-plane -[:DISCOVERS_CONFIG_IN]-> platform-observability`
-- `payments-api -[:DEPLOYS_FROM]-> helm-charts`
+- `payments-api -[:DEPLOYS_FROM]-> deployment-charts`
 - `terraform-stack-search -[:PROVISIONS_DEPENDENCY_FOR]-> search-api`
 
 If the source is the control plane, keep the control-plane source on the left. If the source is the deployed workload or service, keep that workload on the left.
@@ -347,7 +347,7 @@ The important constraint is not the tool name itself. The important constraint i
 The Go read path now treats mixed-source repositories as first-class, not as a
 single inferred repo type.
 
-That matters for repositories like `iac-eks-argocd` or self-service repos that
+That matters for repositories like `gitops-runtime-config` or self-service repos that
 legitimately contain several families at once:
 
 - Argo CD Applications and ApplicationSets
@@ -576,7 +576,7 @@ between generic public registry refs and repo-owned private registry refs.
 Generic public registry references such as `terraform-aws-modules/eks/aws` or
 `tfr:///terraform-aws-modules/eks/aws` stay non-repo-bearing and do not create
 cross-repo edges. Private host-backed refs such as
-`boatsgroup.pe.jfrog.io/TF__BG/lambda-function/aws` are treated as repo-bearing
+`packages.example.test/terraform/lambda-function/aws` are treated as repo-bearing
 module sources when they resolve to a known local module monorepo alias such as
 `terraform-modules-aws`.
 

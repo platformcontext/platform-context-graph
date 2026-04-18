@@ -5,7 +5,7 @@
 #
 # Usage:
 #   ./scripts/local-integration-test.sh                    # Tier 1 (10 repos)
-#   ./scripts/local-integration-test.sh --tier2            # Tier 2 (10 + youboat)
+#   ./scripts/local-integration-test.sh --tier2            # Tier 2 (10 + legacy portal)
 #   ./scripts/local-integration-test.sh --workspace-only   # Just prepare workspace, don't start compose
 #   ./scripts/local-integration-test.sh --validate-only    # Just run validation against running stack
 #
@@ -40,22 +40,22 @@ done
 
 # Tier 1 repos (10 repos, ~2,060 parseable files)
 TIER1_REPOS=(
-    "$HOME/repos/mobius/iac-eks-argocd"
-    "$HOME/repos/mobius/helm-charts"
-    "$HOME/repos/mobius/iac-eks-addons"
-    "$HOME/repos/mobius/iac-eks-crossplane"
-    "$HOME/repos/mobius/iac-eks-observability"
-    "$HOME/repos/mobius/crossplane-xrd-irsa-role"
-    "$HOME/repos/terraform-modules/terraform-module-core-irsa"
-    "$HOME/repos/services/api-node-boats"
-    "$HOME/repos/services/api-node-bw-home"
-    "$HOME/repos/terraform-stacks/terraform-stack-boattrader"
+    "$HOME/repos/examples/gitops-runtime-config"
+    "$HOME/repos/examples/deployment-charts"
+    "$HOME/repos/examples/cluster-addons"
+    "$HOME/repos/examples/platform-compositions"
+    "$HOME/repos/examples/observability-config"
+    "$HOME/repos/examples/crossplane-xrd-runtime-role"
+    "$HOME/repos/terraform-modules/terraform-module-runtime-identity"
+    "$HOME/repos/services/sample-service-api"
+    "$HOME/repos/services/sample-home-api"
+    "$HOME/repos/terraform-stacks/terraform-stack-marketplace"
 )
 
 # Tier 2 adds stress test repos
 TIER2_REPOS=(
-    "$HOME/repos/services/websites-php-youboat"
-    "$HOME/repos/terraform-stacks/terraform-stack-youboat"
+    "$HOME/repos/services/legacy-portal-php"
+    "$HOME/repos/terraform-stacks/terraform-stack-legacy-portal"
 )
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }

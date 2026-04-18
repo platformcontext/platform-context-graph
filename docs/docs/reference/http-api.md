@@ -316,9 +316,9 @@ This route is the HTTP inspection mode for operators:
 
 Use it for prompts like:
 
-- "Explain the deployment flow for api-node-boats using PCG only."
-- "Explain the network flow for api-node-boats using PCG only."
-- "What depends on api-node-boats and what does it depend on?"
+- "Explain the deployment flow for sample-service-api using PCG only."
+- "Explain the network flow for sample-service-api using PCG only."
+- "What depends on sample-service-api and what does it depend on?"
 
 This route is designed for non-expert users who should not have to know which
 deployment, GitOps, Terraform, workflow, or support repositories to inspect

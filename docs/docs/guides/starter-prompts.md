@@ -73,8 +73,8 @@ Good substitutions:
 ### Documentation and support
 
 - "Explain this service to a new engineer, then cite the repos, manifests, and files that matter most."
-- "Generate an architecture and deployment explainer for `platformcontextgraph` in `ops-qa`."
-- "Create a support runbook for `api-node-boats` in `prod`, including the fastest places to investigate request, auth, config, and deploy issues."
+- "Generate an architecture and deployment explainer for `platformcontextgraph` in `env-qa`."
+- "Create a support runbook for `sample-service-api` in `production`, including the fastest places to investigate request, auth, config, and deploy issues."
 - "Show me the source and docs evidence behind this explanation."
 - "Trace this service from ArgoCD values layers to rendered Kubernetes resources, then tell me which files I should read first."
 

@@ -226,7 +226,7 @@ Profile-specific keys:
 Example:
 
 ```bash
-pcg config set PCG_SERVICE_URL_QA https://mcp-pcg.qa.ops.bgrp.io
+pcg config set PCG_SERVICE_URL_QA https://pcg.qa.example.test
 pcg config set PCG_API_KEY_QA your-token-here
 pcg config set PCG_SERVICE_PROFILE QA
 ```
@@ -247,7 +247,7 @@ pcg admin facts decisions --profile qa --repository-id repository:r_payments --s
 Check remote workspace status:
 
 ```bash
-pcg workspace status --service-url https://mcp-pcg.qa.ops.bgrp.io --api-key "$PCG_API_KEY"
+pcg workspace status --service-url https://pcg.qa.example.test --api-key "$PCG_API_KEY"
 ```
 
 Check checkpointed status:
