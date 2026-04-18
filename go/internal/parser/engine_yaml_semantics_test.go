@@ -77,7 +77,7 @@ spec:
           - matrix:
               generators:
                 - git:
-                    repoURL: https://github.com/boatsgroup/helm-charts
+                    repoURL: https://github.com/example-org/deployment-charts
                     files:
                       - path: argocd/api-node-search/overlays/*/config.yaml
                 - list:
@@ -108,7 +108,7 @@ spec:
 	}
 
 	assertNamedBucketContains(t, got, "argocd_applicationsets", "api-node-search")
-	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "source_repos", "https://github.com/boatsgroup/helm-charts")
+	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "source_repos", "https://github.com/example-org/deployment-charts")
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "source_paths", "argocd/api-node-search/overlays/*/config.yaml,argocd/api-node-search/overlays/{{.environment}}")
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "source_roots", "argocd/api-node-search/")
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "generators", "git,list,matrix,merge,plugin")

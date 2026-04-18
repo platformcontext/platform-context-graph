@@ -22,7 +22,7 @@ func TestContentReaderSearchFileContentAnyRepo(t *testing.T) {
 			},
 			rows: [][]driver.Value{
 				{
-					"helm-charts", "charts/api-node-boats/values-qa.yaml", "", "",
+					"deployment-charts", "charts/sample-service-api/values-qa.yaml", "", "",
 					"hash-1", int64(18), "yaml", "helm_values",
 				},
 			},
@@ -30,14 +30,14 @@ func TestContentReaderSearchFileContentAnyRepo(t *testing.T) {
 	})
 
 	reader := NewContentReader(db)
-	results, err := reader.SearchFileContentAnyRepo(context.Background(), "api-node-boats", 10)
+	results, err := reader.SearchFileContentAnyRepo(context.Background(), "sample-service-api", 10)
 	if err != nil {
 		t.Fatalf("SearchFileContentAnyRepo() error = %v, want nil", err)
 	}
 	if len(results) != 1 {
 		t.Fatalf("len(results) = %d, want 1", len(results))
 	}
-	if got, want := results[0].RepoID, "helm-charts"; got != want {
+	if got, want := results[0].RepoID, "deployment-charts"; got != want {
 		t.Fatalf("results[0].RepoID = %#v, want %#v", got, want)
 	}
 
@@ -47,7 +47,7 @@ func TestContentReaderSearchFileContentAnyRepo(t *testing.T) {
 	if got, want := len(recorder.args[0]), 2; got != want {
 		t.Fatalf("len(query args) = %d, want %d", got, want)
 	}
-	if got, want := recorder.args[0][0], "api-node-boats"; got != want {
+	if got, want := recorder.args[0][0], "sample-service-api"; got != want {
 		t.Fatalf("query arg pattern = %#v, want %#v", got, want)
 	}
 	if got, want := numericDriverValue(t, recorder.args[0][1]), int64(10); got != want {

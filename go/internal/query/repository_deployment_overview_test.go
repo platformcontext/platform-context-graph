@@ -406,8 +406,8 @@ func TestBuildRepositoryDeploymentOverviewIncludesWorkflowInputRepositoriesInDel
 						"relative_path":                  ".github/workflows/dispatch.yaml",
 						"artifact_type":                  "github_actions_workflow",
 						"workflow_name":                  "dispatch",
-						"reusable_workflow_repositories": []string{"boatsgroup/core-engineering-automation"},
-						"workflow_input_repositories":    []string{"boatsgroup/automation-fallback", "boatsgroup/core-engineering-automation"},
+						"reusable_workflow_repositories": []string{"example-org/shared-automation"},
+						"workflow_input_repositories":    []string{"example-org/automation-fallback", "example-org/shared-automation"},
 						"signals":                        []string{"workflow_file", "reusable_workflow_refs", "workflow_input_repositories"},
 					},
 				},
@@ -422,7 +422,7 @@ func TestBuildRepositoryDeploymentOverviewIncludesWorkflowInputRepositoriesInDel
 	if len(deliveryPaths) != 1 {
 		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
 	}
-	if got, want := StringSliceVal(deliveryPaths[0], "workflow_input_repositories"), []string{"boatsgroup/automation-fallback", "boatsgroup/core-engineering-automation"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	if got, want := StringSliceVal(deliveryPaths[0], "workflow_input_repositories"), []string{"example-org/automation-fallback", "example-org/shared-automation"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("delivery_paths[0].workflow_input_repositories = %#v, want %#v", got, want)
 	}
 
@@ -433,7 +433,7 @@ func TestBuildRepositoryDeploymentOverviewIncludesWorkflowInputRepositoriesInDel
 	if len(topologyStory) != 1 {
 		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
 	}
-	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/dispatch.yaml as github_actions_workflow dispatch via reusable workflow repos boatsgroup/core-engineering-automation and workflow input repos boatsgroup/automation-fallback, boatsgroup/core-engineering-automation (workflow_file, reusable_workflow_refs, workflow_input_repositories)."; got != want {
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/dispatch.yaml as github_actions_workflow dispatch via reusable workflow repos example-org/shared-automation and workflow input repos example-org/automation-fallback, example-org/shared-automation (workflow_file, reusable_workflow_refs, workflow_input_repositories)."; got != want {
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 }
@@ -452,7 +452,7 @@ func TestBuildRepositoryDeploymentOverviewIncludesCheckoutRepositoriesInDelivery
 						"relative_path":         ".github/workflows/deploy.yaml",
 						"artifact_type":         "github_actions_workflow",
 						"workflow_name":         "deploy",
-						"checkout_repositories": []string{"boatsgroup/deployment-helm", "boatsgroup/deployment-kustomize"},
+						"checkout_repositories": []string{"example-org/deployment-helm", "example-org/deployment-kustomize"},
 						"signals":               []string{"workflow_file", "checkout_repositories"},
 					},
 				},
@@ -467,7 +467,7 @@ func TestBuildRepositoryDeploymentOverviewIncludesCheckoutRepositoriesInDelivery
 	if len(deliveryPaths) != 1 {
 		t.Fatalf("len(delivery_paths) = %d, want 1", len(deliveryPaths))
 	}
-	if got, want := StringSliceVal(deliveryPaths[0], "checkout_repositories"), []string{"boatsgroup/deployment-helm", "boatsgroup/deployment-kustomize"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	if got, want := StringSliceVal(deliveryPaths[0], "checkout_repositories"), []string{"example-org/deployment-helm", "example-org/deployment-kustomize"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("delivery_paths[0].checkout_repositories = %#v, want %#v", got, want)
 	}
 
@@ -478,7 +478,7 @@ func TestBuildRepositoryDeploymentOverviewIncludesCheckoutRepositoriesInDelivery
 	if len(topologyStory) != 1 {
 		t.Fatalf("len(topology_story) = %d, want 1", len(topologyStory))
 	}
-	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy.yaml as github_actions_workflow deploy via checkout repos boatsgroup/deployment-helm, boatsgroup/deployment-kustomize (workflow_file, checkout_repositories)."; got != want {
+	if got, want := topologyStory[0], "Workflow delivery paths include .github/workflows/deploy.yaml as github_actions_workflow deploy via checkout repos example-org/deployment-helm, example-org/deployment-kustomize (workflow_file, checkout_repositories)."; got != want {
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 }

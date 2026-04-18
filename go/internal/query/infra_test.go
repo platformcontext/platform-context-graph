@@ -33,7 +33,7 @@ func TestSearchInfraResourcesUsesInfrastructureLabelsForCategory(t *testing.T) {
 		runRows: []map[string]any{
 			{
 				"id":          "k8s:configmap:boats",
-				"name":        "api-node-boats",
+				"name":        "sample-service-api",
 				"labels":      []any{"K8sResource"},
 				"kind":        "ConfigMap",
 				"provider":    "kubernetes",
@@ -51,7 +51,7 @@ func TestSearchInfraResourcesUsesInfrastructureLabelsForCategory(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v0/infra/resources/search",
-		bytes.NewBufferString(`{"query":"api-node-boats","category":"k8s","limit":5}`),
+		bytes.NewBufferString(`{"query":"sample-service-api","category":"k8s","limit":5}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -95,7 +95,7 @@ func TestSearchInfraResourcesRejectsUnknownCategory(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v0/infra/resources/search",
-		bytes.NewBufferString(`{"query":"api-node-boats","category":"unknown"}`),
+		bytes.NewBufferString(`{"query":"sample-service-api","category":"unknown"}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

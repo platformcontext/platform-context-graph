@@ -6,7 +6,7 @@ func TestResolveRouteMapsResolveEntityQueryToName(t *testing.T) {
 	t.Parallel()
 
 	route, err := resolveRoute("resolve_entity", map[string]any{
-		"query":       "api-node-boats",
+		"query":       "sample-service-api",
 		"types":       []any{"workload"},
 		"environment": "qa",
 		"limit":       float64(5),
@@ -21,7 +21,7 @@ func TestResolveRouteMapsResolveEntityQueryToName(t *testing.T) {
 	if !ok {
 		t.Fatalf("route.body type = %T, want map[string]any", route.body)
 	}
-	if got, want := body["name"], "api-node-boats"; got != want {
+	if got, want := body["name"], "sample-service-api"; got != want {
 		t.Fatalf("body[name] = %#v, want %#v", got, want)
 	}
 	if got, want := body["type"], "workload"; got != want {
@@ -39,13 +39,13 @@ func TestResolveRouteMapsQualifiedServiceIDToServicePath(t *testing.T) {
 	t.Parallel()
 
 	route, err := resolveRoute("get_service_context", map[string]any{
-		"workload_id": "workload:api-node-boats",
+		"workload_id": "workload:sample-service-api",
 		"environment": "prod",
 	})
 	if err != nil {
 		t.Fatalf("resolveRoute() error = %v, want nil", err)
 	}
-	if got, want := route.path, "/api/v0/services/api-node-boats/context"; got != want {
+	if got, want := route.path, "/api/v0/services/sample-service-api/context"; got != want {
 		t.Fatalf("route.path = %q, want %q", got, want)
 	}
 	if got, want := route.query["environment"], "prod"; got != want {
@@ -57,7 +57,7 @@ func TestResolveRouteMapsSearchFileContentPatternAndRepoIDs(t *testing.T) {
 	t.Parallel()
 
 	route, err := resolveRoute("search_file_content", map[string]any{
-		"pattern":  "api-node-boats",
+		"pattern":  "sample-service-api",
 		"repo_ids": []any{"repo://boats", "repo://shared"},
 		"limit":    float64(25),
 	})
@@ -71,7 +71,7 @@ func TestResolveRouteMapsSearchFileContentPatternAndRepoIDs(t *testing.T) {
 	if !ok {
 		t.Fatalf("route.body type = %T, want map[string]any", route.body)
 	}
-	if got, want := body["query"], "api-node-boats"; got != want {
+	if got, want := body["query"], "sample-service-api"; got != want {
 		t.Fatalf("body[query] = %#v, want %#v", got, want)
 	}
 	repoIDs, ok := body["repo_ids"].([]any)
@@ -90,7 +90,7 @@ func TestResolveRouteMapsSearchEntityContentSingleRepoID(t *testing.T) {
 	t.Parallel()
 
 	route, err := resolveRoute("search_entity_content", map[string]any{
-		"pattern":  "api-node-boats",
+		"pattern":  "sample-service-api",
 		"repo_ids": []any{"repo://boats"},
 		"limit":    float64(10),
 	})
@@ -101,7 +101,7 @@ func TestResolveRouteMapsSearchEntityContentSingleRepoID(t *testing.T) {
 	if !ok {
 		t.Fatalf("route.body type = %T, want map[string]any", route.body)
 	}
-	if got, want := body["query"], "api-node-boats"; got != want {
+	if got, want := body["query"], "sample-service-api"; got != want {
 		t.Fatalf("body[query] = %#v, want %#v", got, want)
 	}
 	if got, want := body["repo_id"], "repo://boats"; got != want {

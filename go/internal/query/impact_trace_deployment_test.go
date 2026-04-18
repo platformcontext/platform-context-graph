@@ -346,28 +346,28 @@ func TestBuildDeploymentTraceResponseIncludesServiceEvidenceConsumersAndProvisio
 	t.Parallel()
 
 	ctx := map[string]any{
-		"id":        "workload:api-node-boats",
-		"name":      "api-node-boats",
+		"id":        "workload:sample-service-api",
+		"name":      "sample-service-api",
 		"kind":      "service",
-		"repo_id":   "repo-api-node-boats",
-		"repo_name": "api-node-boats",
+		"repo_id":   "repo-sample-service-api",
+		"repo_name": "sample-service-api",
 		"instances": []map[string]any{
 			{
-				"instance_id":   "workload-instance:api-node-boats:qa",
+				"instance_id":   "workload-instance:sample-service-api:qa",
 				"platform_name": "ecs-qa",
 				"platform_kind": "ecs_service",
 				"environment":   "qa",
 			},
 			{
-				"instance_id":   "workload-instance:api-node-boats:production",
+				"instance_id":   "workload-instance:sample-service-api:production",
 				"platform_name": "eks-prod",
 				"platform_kind": "argocd_applicationset",
 				"environment":   "production",
 			},
 		},
 		"hostnames": []map[string]any{
-			{"hostname": "api-node-boats.qa.bgrp.io", "environment": "qa"},
-			{"hostname": "api-node-boats.prod.bgrp.io", "environment": "production"},
+			{"hostname": "sample-service-api.qa.example.test", "environment": "qa"},
+			{"hostname": "sample-service-api.production.example.test", "environment": "production"},
 		},
 		"api_surface": map[string]any{
 			"endpoint_count": 2,
@@ -380,7 +380,7 @@ func TestBuildDeploymentTraceResponseIncludesServiceEvidenceConsumersAndProvisio
 				"repository":     "api-node-saved-search",
 				"repo_id":        "repo-consumer-1",
 				"evidence_kinds": []string{"repository_reference", "hostname_reference"},
-				"matched_values": []string{"api-node-boats", "api-node-boats.qa.bgrp.io"},
+				"matched_values": []string{"sample-service-api", "sample-service-api.qa.example.test"},
 				"sample_paths":   []string{"config/local.json"},
 			},
 		},
@@ -403,7 +403,7 @@ func TestBuildDeploymentTraceResponseIncludesServiceEvidenceConsumersAndProvisio
 		},
 	}
 
-	got := buildDeploymentTraceResponse("api-node-boats", ctx)
+	got := buildDeploymentTraceResponse("sample-service-api", ctx)
 
 	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
 	if !ok {

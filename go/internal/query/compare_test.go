@@ -35,8 +35,8 @@ func TestCompareEnvironmentsReturnsExplicitUnsupportedWhenInstancesAreNotMateria
 	handler := &CompareHandler{
 		Neo4j: fakeCompareGraphReader{
 			workloadRow: map[string]any{
-				"id":      "workload:api-node-boats",
-				"name":    "api-node-boats",
+				"id":      "workload:sample-service-api",
+				"name":    "sample-service-api",
 				"kind":    "service",
 				"repo_id": "repository:r_472ddee5",
 			},
@@ -46,7 +46,7 @@ func TestCompareEnvironmentsReturnsExplicitUnsupportedWhenInstancesAreNotMateria
 	mux := http.NewServeMux()
 	handler.Mount(mux)
 
-	body := bytes.NewBufferString(`{"workload_id":"workload:api-node-boats","left":"qa","right":"prod"}`)
+	body := bytes.NewBufferString(`{"workload_id":"workload:sample-service-api","left":"qa","right":"prod"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/compare/environments", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

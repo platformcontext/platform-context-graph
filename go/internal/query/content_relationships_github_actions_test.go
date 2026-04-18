@@ -141,9 +141,9 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesAutomationRepos
 		Language:     "yaml",
 		SourceCache: `jobs:
   dispatch-command:
-    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    uses: example-org/shared-automation/.github/workflows/node-api-command-processing.yml@v2
     with:
-      automation-repo: 'boatsgroup/core-engineering-automation'
+      automation-repo: 'example-org/shared-automation'
       automation-repo-ref: 'refs/tags/v2'
 `,
 	})
@@ -159,7 +159,7 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesAutomationRepos
 	if got, want := second["type"], "DISCOVERS_CONFIG_IN"; got != want {
 		t.Fatalf("relationships.outgoing[1][type] = %#v, want %#v", got, want)
 	}
-	if got, want := second["target_name"], "boatsgroup/core-engineering-automation"; got != want {
+	if got, want := second["target_name"], "example-org/shared-automation"; got != want {
 		t.Fatalf("relationships.outgoing[1][target_name] = %#v, want %#v", got, want)
 	}
 	if got, want := second["reason"], "github_actions_workflow_input_repository"; got != want {
@@ -179,9 +179,9 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 		Language:     "yaml",
 		SourceCache: `jobs:
   dispatch-command:
-    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    uses: example-org/shared-automation/.github/workflows/node-api-command-processing.yml@v2
     with:
-      workflow_input_repository: 'boatsgroup/core-engineering-automation'
+      workflow_input_repository: 'example-org/shared-automation'
 `,
 	})
 	if err != nil {
@@ -196,7 +196,7 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 	if got, want := second["type"], "DISCOVERS_CONFIG_IN"; got != want {
 		t.Fatalf("relationships.outgoing[1][type] = %#v, want %#v", got, want)
 	}
-	if got, want := second["target_name"], "boatsgroup/core-engineering-automation"; got != want {
+	if got, want := second["target_name"], "example-org/shared-automation"; got != want {
 		t.Fatalf("relationships.outgoing[1][target_name] = %#v, want %#v", got, want)
 	}
 	if got, want := second["reason"], "github_actions_workflow_input_repository"; got != want {
@@ -216,11 +216,11 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 		Language:     "yaml",
 		SourceCache: `jobs:
   dispatch-command:
-    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    uses: example-org/shared-automation/.github/workflows/node-api-command-processing.yml@v2
     with:
       workflow_input_repositories:
-        - boatsgroup/core-engineering-automation
-        - boatsgroup/automation-fallback
+        - example-org/shared-automation
+        - example-org/automation-fallback
 `,
 	})
 	if err != nil {
@@ -235,7 +235,7 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 	if got, want := first["type"], "DEPLOYS_FROM"; got != want {
 		t.Fatalf("relationships.outgoing[0][type] = %#v, want %#v", got, want)
 	}
-	if got, want := first["target_name"], "boatsgroup/core-engineering-automation"; got != want {
+	if got, want := first["target_name"], "example-org/shared-automation"; got != want {
 		t.Fatalf("relationships.outgoing[0][target_name] = %#v, want %#v", got, want)
 	}
 
@@ -243,7 +243,7 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 	if got, want := second["type"], "DISCOVERS_CONFIG_IN"; got != want {
 		t.Fatalf("relationships.outgoing[1][type] = %#v, want %#v", got, want)
 	}
-	if got, want := second["target_name"], "boatsgroup/core-engineering-automation"; got != want {
+	if got, want := second["target_name"], "example-org/shared-automation"; got != want {
 		t.Fatalf("relationships.outgoing[1][target_name] = %#v, want %#v", got, want)
 	}
 	if got, want := second["reason"], "github_actions_workflow_input_repository"; got != want {
@@ -254,7 +254,7 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 	if got, want := third["type"], "DISCOVERS_CONFIG_IN"; got != want {
 		t.Fatalf("relationships.outgoing[2][type] = %#v, want %#v", got, want)
 	}
-	if got, want := third["target_name"], "boatsgroup/automation-fallback"; got != want {
+	if got, want := third["target_name"], "example-org/automation-fallback"; got != want {
 		t.Fatalf("relationships.outgoing[2][target_name] = %#v, want %#v", got, want)
 	}
 	if got, want := third["reason"], "github_actions_workflow_input_repository"; got != want {
@@ -273,8 +273,8 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 		EntityName:   "pr-command-dispatch",
 		Metadata: map[string]any{
 			"workflow_input_repositories": []any{
-				"boatsgroup/core-engineering-automation",
-				"boatsgroup/automation-fallback",
+				"example-org/shared-automation",
+				"example-org/automation-fallback",
 			},
 		},
 	})
@@ -290,7 +290,7 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 	if got, want := first["type"], "DISCOVERS_CONFIG_IN"; got != want {
 		t.Fatalf("relationships.outgoing[0][type] = %#v, want %#v", got, want)
 	}
-	if got, want := first["target_name"], "boatsgroup/core-engineering-automation"; got != want {
+	if got, want := first["target_name"], "example-org/shared-automation"; got != want {
 		t.Fatalf("relationships.outgoing[0][target_name] = %#v, want %#v", got, want)
 	}
 	if got, want := first["reason"], "github_actions_workflow_input_repository"; got != want {
@@ -301,7 +301,7 @@ func TestBuildContentRelationshipSetGitHubActionsWorkflowPromotesWorkflowInputRe
 	if got, want := second["type"], "DISCOVERS_CONFIG_IN"; got != want {
 		t.Fatalf("relationships.outgoing[1][type] = %#v, want %#v", got, want)
 	}
-	if got, want := second["target_name"], "boatsgroup/automation-fallback"; got != want {
+	if got, want := second["target_name"], "example-org/automation-fallback"; got != want {
 		t.Fatalf("relationships.outgoing[1][target_name] = %#v, want %#v", got, want)
 	}
 	if got, want := second["reason"], "github_actions_workflow_input_repository"; got != want {

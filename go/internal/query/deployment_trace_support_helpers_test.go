@@ -44,7 +44,7 @@ func TestLoadProvisioningSourceChainsBuildsCompactTerraformEvidence(t *testing.T
 				if !strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN") {
 					t.Fatalf("cypher = %q, want provisioning relationship filter", cypher)
 				}
-				if got, want := params["repo_id"], "repo-api-node-boats"; got != want {
+				if got, want := params["repo_id"], "repo-sample-service-api"; got != want {
 					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
 				}
 				return []map[string]any{
@@ -64,7 +64,7 @@ func TestLoadProvisioningSourceChainsBuildsCompactTerraformEvidence(t *testing.T
 			},
 		},
 		NewContentReader(db),
-		"repo-api-node-boats",
+		"repo-sample-service-api",
 	)
 	if err != nil {
 		t.Fatalf("loadProvisioningSourceChains() error = %v, want nil", err)
@@ -142,7 +142,7 @@ func TestLoadConsumerRepositoryEnrichmentPreservesDualViews(t *testing.T) {
 				if !strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN") {
 					t.Fatalf("cypher = %q, want provisioning relationship filter", cypher)
 				}
-				if got, want := params["repo_id"], "repo-api-node-boats"; got != want {
+				if got, want := params["repo_id"], "repo-sample-service-api"; got != want {
 					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
 				}
 				return []map[string]any{
@@ -162,9 +162,9 @@ func TestLoadConsumerRepositoryEnrichmentPreservesDualViews(t *testing.T) {
 			},
 		},
 		NewContentReader(db),
-		"repo-api-node-boats",
-		"api-node-boats",
-		[]string{"api-node-boats.qa.bgrp.io"},
+		"repo-sample-service-api",
+		"sample-service-api",
+		[]string{"sample-service-api.qa.example.test"},
 	)
 	if err != nil {
 		t.Fatalf("loadConsumerRepositoryEnrichment() error = %v, want nil", err)
@@ -190,7 +190,7 @@ func TestLoadConsumerRepositoryEnrichmentPreservesDualViews(t *testing.T) {
 	if got, want := StringSliceVal(first, "evidence_kinds"), []string{"hostname_reference", "repository_reference"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("got[0][evidence_kinds] = %#v, want %#v", got, want)
 	}
-	if got, want := StringSliceVal(first, "matched_values"), []string{"api-node-boats", "api-node-boats.qa.bgrp.io"}; !reflect.DeepEqual(got, want) {
+	if got, want := StringSliceVal(first, "matched_values"), []string{"sample-service-api", "sample-service-api.qa.example.test"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("got[0][matched_values] = %#v, want %#v", got, want)
 	}
 	if got, want := StringSliceVal(first, "sample_paths"), []string{"config/service.json", "deploy/values.yaml"}; !reflect.DeepEqual(got, want) {
@@ -234,16 +234,16 @@ func TestLoadConsumerRepositoryEnrichmentFindsCrossRepoConsumersOutsideGraphCand
 				if !strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN") {
 					t.Fatalf("cypher = %q, want provisioning relationship filter", cypher)
 				}
-				if got, want := params["repo_id"], "repo-api-node-boats"; got != want {
+				if got, want := params["repo_id"], "repo-sample-service-api"; got != want {
 					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
 				}
 				return nil, nil
 			},
 		},
 		NewContentReader(db),
-		"repo-api-node-boats",
-		"api-node-boats",
-		[]string{"api-node-boats.qa.bgrp.io"},
+		"repo-sample-service-api",
+		"sample-service-api",
+		[]string{"sample-service-api.qa.example.test"},
 	)
 	if err != nil {
 		t.Fatalf("loadConsumerRepositoryEnrichment() error = %v, want nil", err)
@@ -263,8 +263,8 @@ func TestLoadConsumerRepositoryEnrichmentFindsCrossRepoConsumersOutsideGraphCand
 		t.Fatalf("consumer[consumer_kinds] = %#v, want %#v", got, want)
 	}
 	if got, want := StringSliceVal(consumer, "matched_values"), []string{
-		"api-node-boats",
-		"api-node-boats.qa.bgrp.io",
+		"sample-service-api",
+		"sample-service-api.qa.example.test",
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("consumer[matched_values] = %#v, want %#v", got, want)
 	}

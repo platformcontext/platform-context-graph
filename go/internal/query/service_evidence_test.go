@@ -12,29 +12,29 @@ func TestLoadServiceQueryEvidenceExtractsHostnamesEnvironmentsAndOpenAPISpecs(t 
 
 	reader := &stubServiceEvidenceReader{
 		files: []FileContent{
-			{RepoID: "repo-api-node-boats", RelativePath: "deploy/qa/ingress.yaml"},
-			{RepoID: "repo-api-node-boats", RelativePath: "deploy/prod/ingress.yaml"},
-			{RepoID: "repo-api-node-boats", RelativePath: "specs/index.yaml"},
-			{RepoID: "repo-api-node-boats", RelativePath: "src/server.js"},
+			{RepoID: "repo-sample-service-api", RelativePath: "deploy/qa/ingress.yaml"},
+			{RepoID: "repo-sample-service-api", RelativePath: "deploy/prod/ingress.yaml"},
+			{RepoID: "repo-sample-service-api", RelativePath: "specs/index.yaml"},
+			{RepoID: "repo-sample-service-api", RelativePath: "src/server.js"},
 		},
 		fileContent: map[string]string{
 			"deploy/qa/ingress.yaml": `
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: api-node-boats
+  name: sample-service-api
 spec:
   rules:
-    - host: api-node-boats.qa.example.com
+    - host: sample-service-api.qa.example.com
 `,
 			"deploy/prod/ingress.yaml": `
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: api-node-boats
+  name: sample-service-api
 spec:
   rules:
-    - host: api-node-boats.prod.example.com
+    - host: sample-service-api.production.example.com
 `,
 			"specs/index.yaml": `
 openapi: 3.0.3
@@ -42,7 +42,7 @@ info:
   title: Boats API
   version: v1
 servers:
-  - url: https://api-node-boats.qa.example.com
+  - url: https://sample-service-api.qa.example.com
 paths:
   /boats:
     get:
@@ -60,7 +60,7 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(spec))
 		},
 	}
 
-	evidence, err := loadServiceQueryEvidence(context.Background(), reader, "repo-api-node-boats", "api-node-boats")
+	evidence, err := loadServiceQueryEvidence(context.Background(), reader, "repo-sample-service-api", "sample-service-api")
 	if err != nil {
 		t.Fatalf("loadServiceQueryEvidence() error = %v, want nil", err)
 	}
@@ -70,8 +70,8 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(spec))
 		gotHostnames = append(gotHostnames, row.Hostname)
 	}
 	wantHostnames := []string{
-		"api-node-boats.prod.example.com",
-		"api-node-boats.qa.example.com",
+		"sample-service-api.production.example.com",
+		"sample-service-api.qa.example.com",
 	}
 	if !slices.Equal(gotHostnames, wantHostnames) {
 		t.Fatalf("hostnames = %#v, want %#v", gotHostnames, wantHostnames)
@@ -118,7 +118,7 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(spec))
 	if got, want := spec.OperationIDCount, 3; got != want {
 		t.Fatalf("api_specs[0].OperationIDCount = %d, want %d", got, want)
 	}
-	if got, want := spec.Hostnames, []string{"api-node-boats.qa.example.com"}; !slices.Equal(got, want) {
+	if got, want := spec.Hostnames, []string{"sample-service-api.qa.example.com"}; !slices.Equal(got, want) {
 		t.Fatalf("api_specs[0].Hostnames = %#v, want %#v", got, want)
 	}
 }
@@ -128,7 +128,7 @@ func TestLoadServiceQueryEvidenceMarksJavaScriptSpecFilesAsSpecEvidence(t *testi
 
 	reader := &stubServiceEvidenceReader{
 		files: []FileContent{
-			{RepoID: "repo-api-node-boats", RelativePath: "src/spec.js"},
+			{RepoID: "repo-sample-service-api", RelativePath: "src/spec.js"},
 		},
 		fileContent: map[string]string{
 			"src/spec.js": `
@@ -139,7 +139,7 @@ module.exports = {
 		},
 	}
 
-	evidence, err := loadServiceQueryEvidence(context.Background(), reader, "repo-api-node-boats", "api-node-boats")
+	evidence, err := loadServiceQueryEvidence(context.Background(), reader, "repo-sample-service-api", "sample-service-api")
 	if err != nil {
 		t.Fatalf("loadServiceQueryEvidence() error = %v, want nil", err)
 	}
@@ -164,7 +164,7 @@ func TestLoadServiceQueryEvidencePropagatesReaderErrors(t *testing.T) {
 		listErr: errors.New("boom"),
 	}
 
-	_, err := loadServiceQueryEvidence(context.Background(), reader, "repo-api-node-boats", "api-node-boats")
+	_, err := loadServiceQueryEvidence(context.Background(), reader, "repo-sample-service-api", "sample-service-api")
 	if err == nil {
 		t.Fatal("loadServiceQueryEvidence() error = nil, want non-nil")
 	}

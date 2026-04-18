@@ -104,10 +104,10 @@ func TestBuildRepositoryWorkflowArtifactsIncludesWorkflowInputRepositories(t *te
 			Content: `name: Dispatch
 jobs:
   dispatch-command:
-    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    uses: example-org/shared-automation/.github/workflows/node-api-command-processing.yml@v2
     with:
-      workflow_input_repository: boatsgroup/core-engineering-automation
-      automation-repo: boatsgroup/automation-fallback
+      workflow_input_repository: example-org/shared-automation
+      automation-repo: example-org/automation-fallback
 `,
 		},
 	})
@@ -121,10 +121,10 @@ jobs:
 	}
 
 	row := rows[0]
-	if got, want := StringSliceVal(row, "reusable_workflow_repositories"), []string{"boatsgroup/core-engineering-automation"}; len(got) != len(want) || got[0] != want[0] {
+	if got, want := StringSliceVal(row, "reusable_workflow_repositories"), []string{"example-org/shared-automation"}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("workflow_artifacts[0].reusable_workflow_repositories = %#v, want %#v", got, want)
 	}
-	if got, want := StringSliceVal(row, "workflow_input_repositories"), []string{"boatsgroup/automation-fallback", "boatsgroup/core-engineering-automation"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	if got, want := StringSliceVal(row, "workflow_input_repositories"), []string{"example-org/automation-fallback", "example-org/shared-automation"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("workflow_artifacts[0].workflow_input_repositories = %#v, want %#v", got, want)
 	}
 }
@@ -139,11 +139,11 @@ func TestBuildRepositoryWorkflowArtifactsIncludesWorkflowInputRepositoriesListFo
 			Content: `name: Dispatch
 jobs:
   dispatch-command:
-    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    uses: example-org/shared-automation/.github/workflows/node-api-command-processing.yml@v2
     with:
       workflow_input_repositories:
-        - boatsgroup/core-engineering-automation
-        - boatsgroup/automation-fallback
+        - example-org/shared-automation
+        - example-org/automation-fallback
 `,
 		},
 	})
@@ -157,7 +157,7 @@ jobs:
 	}
 
 	row := rows[0]
-	if got, want := StringSliceVal(row, "workflow_input_repositories"), []string{"boatsgroup/automation-fallback", "boatsgroup/core-engineering-automation"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	if got, want := StringSliceVal(row, "workflow_input_repositories"), []string{"example-org/automation-fallback", "example-org/shared-automation"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("workflow_artifacts[0].workflow_input_repositories = %#v, want %#v", got, want)
 	}
 }
@@ -176,10 +176,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: boatsgroup/deployment-kustomize
+          repository: example-org/deployment-kustomize
       - uses: actions/checkout@v4
         with:
-          repository: boatsgroup/deployment-helm
+          repository: example-org/deployment-helm
 `,
 		},
 	})
@@ -193,7 +193,7 @@ jobs:
 	}
 
 	row := rows[0]
-	if got, want := StringSliceVal(row, "checkout_repositories"), []string{"boatsgroup/deployment-helm", "boatsgroup/deployment-kustomize"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	if got, want := StringSliceVal(row, "checkout_repositories"), []string{"example-org/deployment-helm", "example-org/deployment-kustomize"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("workflow_artifacts[0].checkout_repositories = %#v, want %#v", got, want)
 	}
 }

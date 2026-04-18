@@ -19,22 +19,22 @@ func TestSelectRelevantDeploymentSourceControllersFiltersToServiceScopedArgoCDRo
 		{
 			EntityID:     "app-1",
 			RepoID:       "repo-helm",
-			RelativePath: "services/api-node-boats/argocd/application.yaml",
+			RelativePath: "services/sample-service-api/argocd/application.yaml",
 			EntityType:   "ArgoCDApplication",
-			EntityName:   "api-node-boats",
+			EntityName:   "sample-service-api",
 			Metadata: map[string]any{
-				"source_path": "services/api-node-boats/overlays/prod",
+				"source_path": "services/sample-service-api/overlays/prod",
 			},
 		},
 		{
 			EntityID:     "appset-1",
 			RepoID:       "repo-helm",
-			RelativePath: "services/api-node-boats/argocd/appset.yaml",
+			RelativePath: "services/sample-service-api/argocd/appset.yaml",
 			EntityType:   "ArgoCDApplicationSet",
-			EntityName:   "api-node-boats",
+			EntityName:   "sample-service-api",
 			Metadata: map[string]any{
 				"generator_source_paths": "services/*/config.yaml",
-				"template_source_paths":  "services/api-node-boats/overlays/prod",
+				"template_source_paths":  "services/sample-service-api/overlays/prod",
 			},
 		},
 		{
@@ -50,16 +50,16 @@ func TestSelectRelevantDeploymentSourceControllersFiltersToServiceScopedArgoCDRo
 		{
 			EntityID:     "other-repo-app",
 			RepoID:       "repo-other",
-			RelativePath: "services/api-node-boats/argocd/application.yaml",
+			RelativePath: "services/sample-service-api/argocd/application.yaml",
 			EntityType:   "ArgoCDApplication",
-			EntityName:   "api-node-boats",
+			EntityName:   "sample-service-api",
 			Metadata: map[string]any{
-				"source_path": "services/api-node-boats/overlays/prod",
+				"source_path": "services/sample-service-api/overlays/prod",
 			},
 		},
 	}
 
-	got := selectRelevantDeploymentSourceControllers("api-node-boats", deploymentSources, entities)
+	got := selectRelevantDeploymentSourceControllers("sample-service-api", deploymentSources, entities)
 	if len(got) != 2 {
 		t.Fatalf("len(selectRelevantDeploymentSourceControllers()) = %d, want 2", len(got))
 	}
@@ -73,10 +73,10 @@ func TestSelectRelevantDeploymentSourceControllersFiltersToServiceScopedArgoCDRo
 	if got, want := StringVal(got[0], "controller_kind"), "argocd_application"; got != want {
 		t.Fatalf("controllers[0].controller_kind = %q, want %q", got, want)
 	}
-	if got, want := StringVal(got[0], "source_root"), "services/api-node-boats/overlays/prod"; got != want {
+	if got, want := StringVal(got[0], "source_root"), "services/sample-service-api/overlays/prod"; got != want {
 		t.Fatalf("controllers[0].source_root = %q, want %q", got, want)
 	}
-	if got, want := stringSliceMapValue(got[1], "source_roots"), []string{"services/api-node-boats/overlays/prod"}; !reflect.DeepEqual(got, want) {
+	if got, want := stringSliceMapValue(got[1], "source_roots"), []string{"services/sample-service-api/overlays/prod"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("controllers[1].source_roots = %#v, want %#v", got, want)
 	}
 	if got, want := stringSliceMapValue(got[1], "discovery_roots"), []string{"services"}; !reflect.DeepEqual(got, want) {
@@ -90,12 +90,12 @@ func TestCollectDeploymentSourceK8sResourcesIncludesRootScopedAssetsWithAttribut
 	controllerEntities := []map[string]any{
 		{
 			"entity_id":       "app-1",
-			"entity_name":     "api-node-boats",
+			"entity_name":     "sample-service-api",
 			"controller_kind": "argocd_application",
 			"repo_id":         "repo-helm",
-			"relative_path":   "services/api-node-boats/argocd/application.yaml",
-			"source_root":     "services/api-node-boats/overlays/prod",
-			"source_roots":    []string{"services/api-node-boats/overlays/prod"},
+			"relative_path":   "services/sample-service-api/argocd/application.yaml",
+			"source_root":     "services/sample-service-api/overlays/prod",
+			"source_roots":    []string{"services/sample-service-api/overlays/prod"},
 		},
 	}
 
@@ -103,41 +103,41 @@ func TestCollectDeploymentSourceK8sResourcesIncludesRootScopedAssetsWithAttribut
 		{
 			EntityID:     "deploy-1",
 			RepoID:       "repo-helm",
-			RelativePath: "services/api-node-boats/overlays/prod/deployment.yaml",
+			RelativePath: "services/sample-service-api/overlays/prod/deployment.yaml",
 			EntityType:   "K8sResource",
-			EntityName:   "api-node-boats",
+			EntityName:   "sample-service-api",
 			Metadata: map[string]any{
 				"kind":             "Deployment",
-				"qualified_name":   "boats/Deployment/api-node-boats",
-				"container_images": []any{"ghcr.io/acme/api-node-boats:1.2.3"},
+				"qualified_name":   "samples/Deployment/sample-service-api",
+				"container_images": []any{"ghcr.io/acme/sample-service-api:1.2.3"},
 			},
 		},
 		{
 			EntityID:     "config-1",
 			RepoID:       "repo-helm",
-			RelativePath: "services/api-node-boats/overlays/prod/configmap.yaml",
+			RelativePath: "services/sample-service-api/overlays/prod/configmap.yaml",
 			EntityType:   "K8sResource",
-			EntityName:   "api-node-boats-config",
+			EntityName:   "sample-service-api-config",
 			Metadata: map[string]any{
 				"kind":           "ConfigMap",
-				"qualified_name": "boats/ConfigMap/api-node-boats-config",
+				"qualified_name": "samples/ConfigMap/sample-service-api-config",
 			},
 		},
 		{
 			EntityID:     "irsa-1",
 			RepoID:       "repo-helm",
-			RelativePath: "services/api-node-boats/overlays/prod/irsa.yaml",
+			RelativePath: "services/sample-service-api/overlays/prod/irsa.yaml",
 			EntityType:   "K8sResource",
-			EntityName:   "api-node-boats",
+			EntityName:   "sample-service-api",
 			Metadata: map[string]any{
 				"kind":           "XIRSARole",
-				"qualified_name": "boats/XIRSARole/api-node-boats",
+				"qualified_name": "samples/XIRSARole/sample-service-api",
 			},
 		},
 		{
 			EntityID:     "dashboard-1",
 			RepoID:       "repo-helm",
-			RelativePath: "services/api-node-boats/overlays/prod/dashboards/request-latency.json",
+			RelativePath: "services/sample-service-api/overlays/prod/dashboards/request-latency.json",
 			EntityType:   "DashboardAsset",
 			EntityName:   "request-latency",
 			Metadata: map[string]any{
@@ -161,7 +161,7 @@ func TestCollectDeploymentSourceK8sResourcesIncludesRootScopedAssetsWithAttribut
 	if len(got) != 4 {
 		t.Fatalf("len(collectDeploymentSourceK8sResources()) = %d, want 4", len(got))
 	}
-	if got, want := imageRefs, []string{"ghcr.io/acme/api-node-boats:1.2.3"}; !reflect.DeepEqual(got, want) {
+	if got, want := imageRefs, []string{"ghcr.io/acme/sample-service-api:1.2.3"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("imageRefs = %#v, want %#v", got, want)
 	}
 
@@ -169,7 +169,7 @@ func TestCollectDeploymentSourceK8sResourcesIncludesRootScopedAssetsWithAttribut
 	if got, want := StringVal(first, "repo_id"), "repo-helm"; got != want {
 		t.Fatalf("resources[0].repo_id = %q, want %q", got, want)
 	}
-	if got, want := StringVal(first, "source_root"), "services/api-node-boats/overlays/prod"; got != want {
+	if got, want := StringVal(first, "source_root"), "services/sample-service-api/overlays/prod"; got != want {
 		t.Fatalf("resources[0].source_root = %q, want %q", got, want)
 	}
 	if got, want := StringVal(first, "controller_kind"), "argocd_application"; got != want {

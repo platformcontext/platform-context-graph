@@ -143,7 +143,7 @@ func TestDiscoverTerragruntModuleSourceEvidence(t *testing.T) {
 				"artifact_type": "terragrunt",
 				"relative_path": "env/dev/terragrunt.hcl",
 				"content": `terraform {
-  source = "git::git@github.com:boatsgroup/terraform-module-eks.git//wrapper?ref=${feature.version.value}"
+  source = "git::git@github.com:example-org/terraform-module-eks.git//wrapper?ref=${feature.version.value}"
 }`,
 			},
 		},
@@ -434,16 +434,16 @@ func TestDiscoverGitHubActionsAutomationRepositoryEvidence(t *testing.T) {
 				"content": `name: 'Pull Request: Command Dispatch'
 jobs:
   dispatch-command:
-    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    uses: example-org/shared-automation/.github/workflows/node-api-command-processing.yml@v2
     with:
-      automation-repo: 'boatsgroup/core-engineering-automation'
+      automation-repo: 'example-org/shared-automation'
       automation-repo-ref: 'refs/tags/v2'
 `,
 			},
 		},
 	}
 	catalog := []CatalogEntry{
-		{RepoID: "repo-automation", Aliases: []string{"core-engineering-automation", "boatsgroup/core-engineering-automation"}},
+		{RepoID: "repo-automation", Aliases: []string{"shared-automation", "example-org/shared-automation"}},
 	}
 
 	evidence := DiscoverEvidence(envelopes, catalog)
@@ -473,15 +473,15 @@ func TestDiscoverGitHubActionsWorkflowInputRepositoryEvidence(t *testing.T) {
 				"content": `name: 'Pull Request: Command Dispatch'
 jobs:
   dispatch-command:
-    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2
+    uses: example-org/shared-automation/.github/workflows/node-api-command-processing.yml@v2
     with:
-      workflow_input_repository: 'boatsgroup/core-engineering-automation'
+      workflow_input_repository: 'example-org/shared-automation'
 `,
 			},
 		},
 	}
 	catalog := []CatalogEntry{
-		{RepoID: "repo-automation", Aliases: []string{"core-engineering-automation", "boatsgroup/core-engineering-automation"}},
+		{RepoID: "repo-automation", Aliases: []string{"shared-automation", "example-org/shared-automation"}},
 	}
 
 	evidence := DiscoverEvidence(envelopes, catalog)
@@ -510,18 +510,18 @@ func TestDiscoverGitHubActionsWorkflowInputRepositoriesEvidence(t *testing.T) {
 				"relative_path": ".github/workflows/deploy.yaml",
 				"content": `jobs:
   deploy:
-    uses: boatsgroup/core-engineering-automation/.github/workflows/deploy.yaml@main
+    uses: example-org/shared-automation/.github/workflows/deploy.yaml@main
     with:
       workflow_input_repositories:
-        - boatsgroup/automation-fallback
-        - boatsgroup/core-engineering-automation
+        - example-org/automation-fallback
+        - example-org/shared-automation
 `,
 			},
 		},
 	}
 	catalog := []CatalogEntry{
-		{RepoID: "repo-automation-fallback", Aliases: []string{"boatsgroup/automation-fallback", "automation-fallback"}},
-		{RepoID: "repo-core-automation", Aliases: []string{"boatsgroup/core-engineering-automation", "core-engineering-automation"}},
+		{RepoID: "repo-automation-fallback", Aliases: []string{"example-org/automation-fallback", "automation-fallback"}},
+		{RepoID: "repo-core-automation", Aliases: []string{"example-org/shared-automation", "shared-automation"}},
 	}
 
 	evidence := DiscoverEvidence(envelopes, catalog)
@@ -771,13 +771,13 @@ func TestDiscoverJenkinsGitHubRepositoryEvidence(t *testing.T) {
 			Payload: map[string]any{
 				"relative_path": "Jenkinsfile",
 				"content": `node {
-  git url: "https://github.com/boatsgroup/terraform-modules-aws.git"
+  git url: "https://github.com/example-org/terraform-modules-aws.git"
 }`,
 				"parsed_file_data": map[string]any{
 					"pipeline_calls": []any{"deployService"},
 					"entry_points":   []any{"dist/api.js"},
 					"shell_commands": []any{
-						`git clone https://github.com/boatsgroup/terraform-modules-aws.git`,
+						`git clone https://github.com/example-org/terraform-modules-aws.git`,
 					},
 					"use_configd": true,
 				},

@@ -191,9 +191,9 @@ func TestDefaultEngineParsePathJSONStripsHelmDirectivePreamble(t *testing.T) {
 		`{{- $env := required "env is required" .Values.env | trim -}}
 {{- $accountId := required "accountId is required" .Values.accountId | trim -}}
 {
-  "api-node-boats": {
+  "sample-service-api": {
     "client": {
-      "hostname": "api-node-boats.{{ $env }}.bgrp.io",
+      "hostname": "sample-service-api.{{ $env }}.example.test",
       "port": 3081
     }
   }
@@ -211,7 +211,7 @@ func TestDefaultEngineParsePathJSONStripsHelmDirectivePreamble(t *testing.T) {
 		t.Fatalf("ParsePath() error = %v, want nil", err)
 	}
 
-	if got, want := jsonTopLevelKeys(t, got), []string{"api-node-boats"}; !reflect.DeepEqual(got, want) {
+	if got, want := jsonTopLevelKeys(t, got), []string{"sample-service-api"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("json top-level keys = %#v, want %#v", got, want)
 	}
 }

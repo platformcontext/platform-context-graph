@@ -58,7 +58,7 @@ func TestDiscoverTerraformRegistryMonorepoModuleSourceEvidence(t *testing.T) {
 			artifactType: "terraform_hcl",
 			relativePath: "shared/pending-provisioning.tf",
 			content: `module "queue" {
-  source = "boatsgroup.pe.jfrog.io/TF__BG/lambda-function/aws"
+  source = "packages.example.test/terraform/lambda-function/aws"
 }
 `,
 		},
@@ -67,7 +67,7 @@ func TestDiscoverTerraformRegistryMonorepoModuleSourceEvidence(t *testing.T) {
 			artifactType: "terragrunt",
 			relativePath: "env/dev/terragrunt.hcl",
 			content: `terraform {
-  source = "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws"
+  source = "packages.example.test/terraform/ecs-application/aws"
 }
 `,
 		},
