@@ -466,7 +466,8 @@ func (s IngestionStore) WaitForDeploymentMappingTerminal(
 		return fmt.Errorf("poll interval must not be negative")
 	}
 
-	deadline := s.now().Add(timeout)
+	start := s.now()
+	deadline := start.Add(timeout)
 	queue := ReducerQueue{db: s.db, Now: s.Now}
 	for {
 		inFlight, err := queue.CountInFlightByDomain(ctx, reducer.DomainDeploymentMapping)
@@ -474,11 +475,13 @@ func (s IngestionStore) WaitForDeploymentMappingTerminal(
 			return err
 		}
 		if inFlight == 0 {
+			log.Printf("deployment_mapping terminal wait completed in %.1fs", s.now().Sub(start).Seconds())
 			return nil
 		}
 		if !s.now().Before(deadline) {
-			return fmt.Errorf("timed out waiting for deployment_mapping work items to reach terminal status")
+			return fmt.Errorf("timed out waiting for deployment_mapping work items to reach terminal status (%d still in-flight after %.0fs)", inFlight, s.now().Sub(start).Seconds())
 		}
+		log.Printf("deployment_mapping terminal wait: %d in-flight, %.0fs elapsed", inFlight, s.now().Sub(start).Seconds())
 
 		select {
 		case <-ctx.Done():
