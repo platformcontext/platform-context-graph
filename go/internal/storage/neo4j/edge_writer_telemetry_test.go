@@ -47,7 +47,7 @@ func TestEdgeWriterWriteEdgesCodeCallIsolationRecordsBatchTelemetry(t *testing.T
 	}
 	wantAttrs := map[string]string{"domain": reducer.DomainCodeCalls}
 	assertInt64CounterValue(t, rm, "pcg_dp_code_call_edge_batches_total", wantAttrs, 2)
-	assertHistogramCount(t, rm, "pcg_dp_code_call_edge_batch_duration_seconds", wantAttrs, 2)
+	assertFloat64HistogramCount(t, rm, "pcg_dp_code_call_edge_batch_duration_seconds", wantAttrs, 2)
 }
 
 func TestEdgeWriterWriteEdgesNonCodeCallDoesNotRecordCodeCallBatchTelemetry(t *testing.T) {
@@ -85,6 +85,77 @@ func TestEdgeWriterWriteEdgesNonCodeCallDoesNotRecordCodeCallBatchTelemetry(t *t
 	assertMetricMissing(t, rm, "pcg_dp_code_call_edge_batch_duration_seconds")
 }
 
+func TestEdgeWriterWriteEdgesInheritanceRecordsSharedGroupTelemetry(t *testing.T) {
+	t.Parallel()
+
+	metricReader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricReader))
+	instruments, err := telemetry.NewInstruments(meterProvider.Meter("test"))
+	if err != nil {
+		t.Fatalf("NewInstruments() error = %v", err)
+	}
+
+	executor := &recordingGroupExecutor{}
+	writer := NewEdgeWriter(executor, 2)
+	writer.Instruments = instruments
+	writer.InheritanceGroupBatchSize = 1
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{IntentID: "i1", RepositoryID: "repo-a", Payload: map[string]any{"child_entity_id": "entity:class:a", "parent_entity_id": "entity:class:b", "repo_id": "repo-a", "relationship_type": "INHERITS"}},
+		{IntentID: "i2", RepositoryID: "repo-a", Payload: map[string]any{"child_entity_id": "entity:class:c", "parent_entity_id": "entity:class:d", "repo_id": "repo-a", "relationship_type": "INHERITS"}},
+		{IntentID: "i3", RepositoryID: "repo-a", Payload: map[string]any{"child_entity_id": "entity:class:e", "parent_entity_id": "entity:class:f", "repo_id": "repo-a", "relationship_type": "INHERITS"}},
+	}
+
+	if err := writer.WriteEdges(context.Background(), reducer.DomainInheritanceEdges, rows, "reducer/inheritance"); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+
+	var rm metricdata.ResourceMetrics
+	if err := metricReader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+
+	wantAttrs := map[string]string{"domain": reducer.DomainInheritanceEdges}
+	assertInt64CounterValue(t, rm, "pcg_dp_shared_edge_write_groups_total", wantAttrs, 2)
+	assertFloat64HistogramCount(t, rm, "pcg_dp_shared_edge_write_group_duration_seconds", wantAttrs, 2)
+	assertInt64HistogramCount(t, rm, "pcg_dp_shared_edge_write_group_statement_count", wantAttrs, 2)
+}
+
+func TestEdgeWriterWriteEdgesRepoDependencyRecordsSharedGroupTelemetry(t *testing.T) {
+	t.Parallel()
+
+	metricReader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricReader))
+	instruments, err := telemetry.NewInstruments(meterProvider.Meter("test"))
+	if err != nil {
+		t.Fatalf("NewInstruments() error = %v", err)
+	}
+
+	executor := &recordingGroupExecutor{}
+	writer := NewEdgeWriter(executor, 2)
+	writer.Instruments = instruments
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{IntentID: "i1", RepositoryID: "repo-a", Payload: map[string]any{"repo_id": "repo-a", "target_repo_id": "repo-b"}},
+		{IntentID: "i2", RepositoryID: "repo-a", Payload: map[string]any{"repo_id": "repo-a", "target_repo_id": "repo-c"}},
+		{IntentID: "i3", RepositoryID: "repo-a", Payload: map[string]any{"repo_id": "repo-a", "target_repo_id": "repo-d"}},
+	}
+
+	if err := writer.WriteEdges(context.Background(), reducer.DomainRepoDependency, rows, "finalization/workloads"); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+
+	var rm metricdata.ResourceMetrics
+	if err := metricReader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+
+	wantAttrs := map[string]string{"domain": reducer.DomainRepoDependency}
+	assertInt64CounterValue(t, rm, "pcg_dp_shared_edge_write_groups_total", wantAttrs, 1)
+	assertFloat64HistogramCount(t, rm, "pcg_dp_shared_edge_write_group_duration_seconds", wantAttrs, 1)
+	assertInt64HistogramCount(t, rm, "pcg_dp_shared_edge_write_group_statement_count", wantAttrs, 1)
+}
+
 func assertInt64CounterValue(
 	t *testing.T,
 	rm metricdata.ResourceMetrics,
@@ -117,7 +188,7 @@ func assertInt64CounterValue(
 	t.Fatalf("metric %s with attrs %v not found", metricName, wantAttrs)
 }
 
-func assertHistogramCount(
+func assertFloat64HistogramCount(
 	t *testing.T,
 	rm metricdata.ResourceMetrics,
 	metricName string,
@@ -134,6 +205,38 @@ func assertHistogramCount(
 			histogram, ok := metricRecord.Data.(metricdata.Histogram[float64])
 			if !ok {
 				t.Fatalf("metric %s data = %T, want metricdata.Histogram[float64]", metricName, metricRecord.Data)
+			}
+			for _, point := range histogram.DataPoints {
+				if attributesMatch(point.Attributes, wantAttrs) {
+					if got := point.Count; got != wantCount {
+						t.Fatalf("metric %s count = %d, want %d", metricName, got, wantCount)
+					}
+					return
+				}
+			}
+		}
+	}
+
+	t.Fatalf("metric %s with attrs %v not found", metricName, wantAttrs)
+}
+
+func assertInt64HistogramCount(
+	t *testing.T,
+	rm metricdata.ResourceMetrics,
+	metricName string,
+	wantAttrs map[string]string,
+	wantCount uint64,
+) {
+	t.Helper()
+
+	for _, scopeMetric := range rm.ScopeMetrics {
+		for _, metricRecord := range scopeMetric.Metrics {
+			if metricRecord.Name != metricName {
+				continue
+			}
+			histogram, ok := metricRecord.Data.(metricdata.Histogram[int64])
+			if !ok {
+				t.Fatalf("metric %s data = %T, want metricdata.Histogram[int64]", metricName, metricRecord.Data)
 			}
 			for _, point := range histogram.DataPoints {
 				if attributesMatch(point.Attributes, wantAttrs) {

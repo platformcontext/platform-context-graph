@@ -92,6 +92,12 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	if got, want := codeCallEdgeWriter.CodeCallGroupBatchSize, defaultCodeCallEdgeGroupBatchSize; got != want {
 		t.Fatalf("code call edge group batch size = %d, want %d", got, want)
 	}
+	if got, want := codeCallEdgeWriter.InheritanceGroupBatchSize, defaultInheritanceEdgeGroupBatchSize; got != want {
+		t.Fatalf("inheritance edge group batch size = %d, want %d", got, want)
+	}
+	if got, want := codeCallEdgeWriter.SQLRelationshipGroupBatchSize, defaultSQLRelationshipEdgeGroupBatchSize; got != want {
+		t.Fatalf("sql relationship edge group batch size = %d, want %d", got, want)
+	}
 	if service.GraphProjectionPhaseRepairer == nil {
 		t.Fatal("buildReducerService() graph projection repairer = nil, want non-nil")
 	}
@@ -112,6 +118,43 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	}
 	if got := service.GraphProjectionPhaseRepairer.Config.RetryDelay; got <= 0 {
 		t.Fatalf("buildReducerService() graph projection repair retry delay = %v, want positive", got)
+	}
+}
+
+func TestBuildReducerServiceWiresSharedEdgeGroupBatchOverrides(t *testing.T) {
+	t.Parallel()
+
+	env := map[string]string{
+		inheritanceEdgeGroupBatchSizeEnv:     "3",
+		sqlRelationshipEdgeGroupBatchSizeEnv: "4",
+	}
+	getenv := func(key string) string { return env[key] }
+
+	db := &fakeReducerDB{}
+	service, err := buildReducerService(
+		db,
+		stubNeo4jExecutor{},
+		stubCypherExecutor{},
+		postgres.NewSharedIntentStore(db),
+		stubCypherReader{},
+		getenv,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildReducerService() error = %v", err)
+	}
+
+	edgeWriter, ok := service.SharedProjectionRunner.EdgeWriter.(*sourceneo4j.EdgeWriter)
+	if !ok {
+		t.Fatalf("shared projection edge writer type = %T, want *neo4j.EdgeWriter", service.SharedProjectionRunner.EdgeWriter)
+	}
+	if got, want := edgeWriter.InheritanceGroupBatchSize, 3; got != want {
+		t.Fatalf("inheritance edge group batch size = %d, want %d", got, want)
+	}
+	if got, want := edgeWriter.SQLRelationshipGroupBatchSize, 4; got != want {
+		t.Fatalf("sql relationship edge group batch size = %d, want %d", got, want)
 	}
 }
 

@@ -89,10 +89,13 @@ type Instruments struct {
 	BatchClaimSize metric.Int64Histogram
 
 	// Neo4j batch write metrics
-	Neo4jBatchSize       metric.Float64Histogram
-	Neo4jBatchesExecuted metric.Int64Counter
-	CodeCallEdgeBatches  metric.Int64Counter
-	CodeCallEdgeDuration metric.Float64Histogram
+	Neo4jBatchSize                     metric.Float64Histogram
+	Neo4jBatchesExecuted               metric.Int64Counter
+	SharedEdgeWriteGroups              metric.Int64Counter
+	SharedEdgeWriteGroupDuration       metric.Float64Histogram
+	SharedEdgeWriteGroupStatementCount metric.Int64Histogram
+	CodeCallEdgeBatches                metric.Int64Counter
+	CodeCallEdgeDuration               metric.Float64Histogram
 
 	// Canonical projection metrics
 	CanonicalNodesWritten       metric.Int64Counter
@@ -113,9 +116,9 @@ type Instruments struct {
 	EvidenceFactsDiscovered metric.Int64Counter
 
 	// Deferred bootstrap backfill and reopen metrics
-	DeferredBackfillDuration    metric.Float64Histogram
-	DeferredBackfillEvidence    metric.Int64Counter
-	DeploymentMappingReopened   metric.Int64Counter
+	DeferredBackfillDuration  metric.Float64Histogram
+	DeferredBackfillEvidence  metric.Int64Counter
+	DeploymentMappingReopened metric.Int64Counter
 
 	// Cross-repo resolution metrics
 	CrossRepoResolutionDuration metric.Float64Histogram
@@ -488,6 +491,35 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register Neo4jBatchesExecuted counter: %w", err)
+	}
+
+	inst.SharedEdgeWriteGroups, err = meter.Int64Counter(
+		"pcg_dp_shared_edge_write_groups_total",
+		metric.WithDescription("Total grouped shared-edge write transactions by domain"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedEdgeWriteGroups counter: %w", err)
+	}
+
+	sharedEdgeWriteGroupDurationBuckets := []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
+	inst.SharedEdgeWriteGroupDuration, err = meter.Float64Histogram(
+		"pcg_dp_shared_edge_write_group_duration_seconds",
+		metric.WithDescription("Duration of each grouped shared-edge write transaction by domain"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(sharedEdgeWriteGroupDurationBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedEdgeWriteGroupDuration histogram: %w", err)
+	}
+
+	sharedEdgeWriteGroupStatementBuckets := []float64{1, 2, 4, 8, 16, 32, 64, 128}
+	inst.SharedEdgeWriteGroupStatementCount, err = meter.Int64Histogram(
+		"pcg_dp_shared_edge_write_group_statement_count",
+		metric.WithDescription("Number of statements executed in each grouped shared-edge write transaction by domain"),
+		metric.WithExplicitBucketBoundaries(sharedEdgeWriteGroupStatementBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedEdgeWriteGroupStatementCount histogram: %w", err)
 	}
 
 	inst.CodeCallEdgeBatches, err = meter.Int64Counter(

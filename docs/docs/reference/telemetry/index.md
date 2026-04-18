@@ -137,6 +137,12 @@ For shared-write debugging specifically:
 - Metrics answer claim latency, worker activity, stage duration, stage output
   volume, stage failures, dead-letter pressure, and shared authoritative
   follow-up backlog.
+- The shared-edge bounded-group path also exposes
+  `pcg_dp_shared_edge_write_groups_total`,
+  `pcg_dp_shared_edge_write_group_duration_seconds`, and
+  `pcg_dp_shared_edge_write_group_statement_count` with `domain` attributes so
+  operators can distinguish one monster grouped write from many bounded groups
+  during reducer convergence.
 - The `code_call` deadlock-elimination path also exposes
   `pcg_dp_code_call_edge_batches_total` and
   `pcg_dp_code_call_edge_batch_duration_seconds` so operators can measure the
@@ -177,6 +183,9 @@ When validating shared-write runtime changes in staging or production:
 1. Start with `pcg_dp_queue_depth`, `pcg_dp_queue_oldest_age_seconds`,
    `pcg_dp_shared_projection_cycles_total`,
    `pcg_dp_shared_projection_stale_intents_total`,
+   `pcg_dp_shared_edge_write_groups_total`,
+   `pcg_dp_shared_edge_write_group_duration_seconds`,
+   `pcg_dp_shared_edge_write_group_statement_count`,
    `pcg_dp_code_call_edge_batches_total`, and
    `pcg_dp_code_call_edge_batch_duration_seconds`.
 2. Confirm backlog trends are flat-to-down, not simply that pods are up.

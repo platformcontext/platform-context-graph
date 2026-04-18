@@ -131,9 +131,12 @@ func buildReducerService(
 	codeCallCfg := loadCodeCallProjectionConfig(getenv)
 	repairCfg := loadGraphProjectionPhaseRepairConfig(getenv)
 	codeCallEdgeBatchSize, codeCallEdgeGroupBatchSize := loadCodeCallEdgeWriterTuning(getenv)
+	inheritanceEdgeGroupBatchSize, sqlRelationshipEdgeGroupBatchSize := loadSharedEdgeWriterGroupTuning(getenv)
 
 	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	edgeWriterForHandlers.Instruments = instruments
+	edgeWriterForHandlers.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize
+	edgeWriterForHandlers.SQLRelationshipGroupBatchSize = sqlRelationshipEdgeGroupBatchSize
 	relationshipStore := postgres.NewRelationshipStore(database)
 	codeCallIntentWriter := postgres.NewCodeCallIntentWriterWithInstruments(database, instruments)
 	acceptedGenerationPrefetch := postgres.NewAcceptedGenerationPrefetch(database)
@@ -174,6 +177,8 @@ func buildReducerService(
 	edgeWriter.Instruments = instruments
 	edgeWriter.CodeCallBatchSize = codeCallEdgeBatchSize
 	edgeWriter.CodeCallGroupBatchSize = codeCallEdgeGroupBatchSize
+	edgeWriter.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize
+	edgeWriter.SQLRelationshipGroupBatchSize = sqlRelationshipEdgeGroupBatchSize
 
 	retryCfg, err := loadReducerQueueConfig(getenv)
 	if err != nil {

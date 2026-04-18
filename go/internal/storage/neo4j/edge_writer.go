@@ -15,11 +15,13 @@ import (
 // domain-specific canonical Cypher statements through a Neo4j Executor.
 // Writes are batched using UNWIND for efficiency.
 type EdgeWriter struct {
-	executor               Executor
-	BatchSize              int
-	CodeCallBatchSize      int
-	CodeCallGroupBatchSize int
-	Instruments            *telemetry.Instruments
+	executor                      Executor
+	BatchSize                     int
+	CodeCallBatchSize             int
+	CodeCallGroupBatchSize        int
+	InheritanceGroupBatchSize     int
+	SQLRelationshipGroupBatchSize int
+	Instruments                   *telemetry.Instruments
 }
 
 // NewEdgeWriter returns an EdgeWriter backed by the given Executor.
@@ -47,6 +49,25 @@ func (w *EdgeWriter) codeCallGroupBatchSize() int {
 		return 0
 	}
 	return w.CodeCallGroupBatchSize
+}
+
+func (w *EdgeWriter) groupBatchSizeForDomain(domain string) int {
+	switch domain {
+	case reducer.DomainCodeCalls:
+		return w.codeCallGroupBatchSize()
+	case reducer.DomainInheritanceEdges:
+		if w.InheritanceGroupBatchSize <= 0 {
+			return 0
+		}
+		return w.InheritanceGroupBatchSize
+	case reducer.DomainSQLRelationships:
+		if w.SQLRelationshipGroupBatchSize <= 0 {
+			return 0
+		}
+		return w.SQLRelationshipGroupBatchSize
+	default:
+		return 0
+	}
 }
 
 // WriteEdges writes canonical domain edges for the given rows using batched
@@ -97,8 +118,7 @@ func (w *EdgeWriter) WriteEdges(
 
 	// Prefer atomic grouped execution; fall back to sequential.
 	if ge, ok := w.executor.(GroupExecutor); ok {
-		if domain == reducer.DomainCodeCalls && w.codeCallGroupBatchSize() > 0 {
-			groupSize := w.codeCallGroupBatchSize()
+		if groupSize := w.groupBatchSizeForDomain(domain); groupSize > 0 {
 			for i := 0; i < len(stmts); i += groupSize {
 				end := i + groupSize
 				if end > len(stmts) {
@@ -108,13 +128,19 @@ func (w *EdgeWriter) WriteEdges(
 				if err := ge.ExecuteGroup(ctx, stmts[i:end]); err != nil {
 					return WrapRetryableNeo4jError(err)
 				}
-				w.recordCodeCallBatch(ctx, time.Since(start).Seconds(), stmts[i:end])
+				duration := time.Since(start).Seconds()
+				w.recordGroupedWrite(ctx, domain, duration, stmts[i:end])
+				if domain == reducer.DomainCodeCalls {
+					w.recordCodeCallBatch(ctx, duration)
+				}
 			}
 			return nil
 		}
+		start := time.Now()
 		if err := ge.ExecuteGroup(ctx, stmts); err != nil {
 			return WrapRetryableNeo4jError(err)
 		}
+		w.recordGroupedWrite(ctx, domain, time.Since(start).Seconds(), stmts)
 		return nil
 	}
 
@@ -124,14 +150,32 @@ func (w *EdgeWriter) WriteEdges(
 			return WrapRetryableNeo4jError(err)
 		}
 		if domain == reducer.DomainCodeCalls {
-			w.recordCodeCallBatch(ctx, time.Since(start).Seconds(), []Statement{stmt})
+			w.recordCodeCallBatch(ctx, time.Since(start).Seconds())
 		}
 	}
 	return nil
 }
 
-func (w *EdgeWriter) recordCodeCallBatch(ctx context.Context, duration float64, stmts []Statement) {
+func (w *EdgeWriter) recordGroupedWrite(
+	ctx context.Context,
+	domain string,
+	duration float64,
+	stmts []Statement,
+) {
 	if w.Instruments == nil || len(stmts) == 0 {
+		return
+	}
+
+	attrs := metric.WithAttributes(
+		telemetry.AttrDomain(domain),
+	)
+	w.Instruments.SharedEdgeWriteGroups.Add(ctx, 1, attrs)
+	w.Instruments.SharedEdgeWriteGroupDuration.Record(ctx, duration, attrs)
+	w.Instruments.SharedEdgeWriteGroupStatementCount.Record(ctx, int64(len(stmts)), attrs)
+}
+
+func (w *EdgeWriter) recordCodeCallBatch(ctx context.Context, duration float64) {
+	if w.Instruments == nil {
 		return
 	}
 

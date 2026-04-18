@@ -685,6 +685,130 @@ func TestEdgeWriterWriteEdgesNonCodeCallsKeepSingleManagedGroup(t *testing.T) {
 	}
 }
 
+func TestEdgeWriterWriteEdgesInheritanceChunkManagedGroups(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingGroupExecutor{}
+	writer := NewEdgeWriter(executor, 2)
+	writer.InheritanceGroupBatchSize = 1
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:     "i1",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"child_entity_id":   "entity:class:child-1",
+				"parent_entity_id":  "entity:class:parent-1",
+				"repo_id":           "repo-a",
+				"relationship_type": "INHERITS",
+			},
+		},
+		{
+			IntentID:     "i2",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"child_entity_id":   "entity:class:child-2",
+				"parent_entity_id":  "entity:class:parent-2",
+				"repo_id":           "repo-a",
+				"relationship_type": "INHERITS",
+			},
+		},
+		{
+			IntentID:     "i3",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"child_entity_id":   "entity:class:child-3",
+				"parent_entity_id":  "entity:class:parent-3",
+				"repo_id":           "repo-a",
+				"relationship_type": "INHERITS",
+			},
+		},
+	}
+
+	if err := writer.WriteEdges(context.Background(), reducer.DomainInheritanceEdges, rows, "reducer/inheritance"); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.groupCalls), 2; got != want {
+		t.Fatalf("ExecuteGroup calls = %d, want %d", got, want)
+	}
+	if got, want := len(executor.groupCalls[0]), 1; got != want {
+		t.Fatalf("len(groupCalls[0]) = %d, want %d", got, want)
+	}
+	if got, want := len(executor.groupCalls[1]), 1; got != want {
+		t.Fatalf("len(groupCalls[1]) = %d, want %d", got, want)
+	}
+	firstBatchRows := executor.groupCalls[0][0].Parameters["rows"].([]map[string]any)
+	if got, want := len(firstBatchRows), 2; got != want {
+		t.Fatalf("len(first batch rows) = %d, want %d", got, want)
+	}
+	secondBatchRows := executor.groupCalls[1][0].Parameters["rows"].([]map[string]any)
+	if got, want := len(secondBatchRows), 1; got != want {
+		t.Fatalf("len(second batch rows) = %d, want %d", got, want)
+	}
+}
+
+func TestEdgeWriterWriteEdgesSQLRelationshipsChunkManagedGroups(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingGroupExecutor{}
+	writer := NewEdgeWriter(executor, 2)
+	writer.SQLRelationshipGroupBatchSize = 1
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:     "i1",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"source_entity_id":  "entity:sql:view:1",
+				"target_entity_id":  "entity:sql:table:1",
+				"repo_id":           "repo-a",
+				"relationship_type": "REFERENCES_TABLE",
+			},
+		},
+		{
+			IntentID:     "i2",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"source_entity_id":  "entity:sql:view:2",
+				"target_entity_id":  "entity:sql:table:2",
+				"repo_id":           "repo-a",
+				"relationship_type": "REFERENCES_TABLE",
+			},
+		},
+		{
+			IntentID:     "i3",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"source_entity_id":  "entity:sql:view:3",
+				"target_entity_id":  "entity:sql:table:3",
+				"repo_id":           "repo-a",
+				"relationship_type": "REFERENCES_TABLE",
+			},
+		},
+	}
+
+	if err := writer.WriteEdges(context.Background(), reducer.DomainSQLRelationships, rows, "reducer/sql-relationships"); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.groupCalls), 2; got != want {
+		t.Fatalf("ExecuteGroup calls = %d, want %d", got, want)
+	}
+	if got, want := len(executor.groupCalls[0]), 1; got != want {
+		t.Fatalf("len(groupCalls[0]) = %d, want %d", got, want)
+	}
+	if got, want := len(executor.groupCalls[1]), 1; got != want {
+		t.Fatalf("len(groupCalls[1]) = %d, want %d", got, want)
+	}
+	firstBatchRows := executor.groupCalls[0][0].Parameters["rows"].([]map[string]any)
+	if got, want := len(firstBatchRows), 2; got != want {
+		t.Fatalf("len(first batch rows) = %d, want %d", got, want)
+	}
+	secondBatchRows := executor.groupCalls[1][0].Parameters["rows"].([]map[string]any)
+	if got, want := len(secondBatchRows), 1; got != want {
+		t.Fatalf("len(second batch rows) = %d, want %d", got, want)
+	}
+}
+
 func TestBatchedWriteEdgesUsesUNWINDCypher(t *testing.T) {
 	t.Parallel()
 
