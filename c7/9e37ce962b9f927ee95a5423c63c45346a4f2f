@@ -1,0 +1,77 @@
+go/internal/query/repository_deployment_overview_test.go
+  073a74ac3999a938 409-410,425,436,455,470,481
+go/internal/relationships/evidence_test.go
+  073a74ac3999a938 146,437,439,446,476,478,484,513,516-517,523-524,774,780
+go/internal/parser/json_language_test.go
+  073a74ac3999a938 194,196,214
+go/internal/query/impact_trace_deployment_test.go
+  073a74ac3999a938 349-350,352-353,356,362,369-370,383,406
+go/internal/mcp/dispatch_test.go
+  073a74ac3999a938 9,24,42,48,60,74,93,104
+go/internal/query/impact_trace_deployment_gitops_helpers_test.go
+  073a74ac3999a938 22,24,26,32,34,37,53,55,57,62,76,79,93,96-98,106,108,111-112,118,120,123,129,131,134,140,164,172
+go/internal/parser/engine_yaml_semantics_test.go
+  073a74ac3999a938 80,111
+go/internal/query/infra_test.go
+  073a74ac3999a938 36,54,98
+go/internal/query/repository_workflow_artifacts_test.go
+  073a74ac3999a938 107,109-110,124,127,142,145-146,160,179,182,196
+go/internal/query/compare_test.go
+  073a74ac3999a938 38-39,49
+go/internal/query/content_reader_cross_repo_test.go
+  073a74ac3999a938 25,33,40,50
+go/internal/query/content_relationships_github_actions_test.go
+  073a74ac3999a938 144,146,162,182,184,199,219,222-223,238,246,257,276-277,293,304
+go/internal/query/deployment_trace_support_helpers_test.go
+  073a74ac3999a938 47,67,145,165-167,193,237,244-246,266-267
+go/internal/query/service_evidence_test.go
+  073a74ac3999a938 15-18,25,28,34,37,45,63,73-74,121,131,142,167
+go/internal/relationships/evidence_terraform_test.go
+  073a74ac3999a938 61,70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "c79e37ce962b9f927ee95a5423c63c45346a4f2f",
+  "prompts": {
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 142,
+      "total_deletions": 142,
+      "accepted_lines": 966,
+      "overriden_lines": 0
+    },
+    "26d0a7775258d320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d525e62-6c04-41f6-b94e-d6834277f750",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1976,
+      "overriden_lines": 0
+    },
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 582,
+      "overriden_lines": 0
+    }
+  }
+}
