@@ -240,7 +240,7 @@ func (s *Server) handleHTTPMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := s.handleMessage(r.Context(), &req)
+	resp := s.handleMessage(r.Context(), &req, r.Header.Get("Authorization"))
 
 	// Check for an SSE session.
 	sessionID := r.URL.Query().Get("sessionId")
@@ -307,7 +307,7 @@ func (s *Server) Run(ctx context.Context) error {
 			continue
 		}
 
-		resp := s.handleMessage(ctx, &req)
+		resp := s.handleMessage(ctx, &req, "")
 		if resp == nil {
 			continue // notification, no response needed
 		}
@@ -320,7 +320,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
-func (s *Server) handleMessage(ctx context.Context, req *jsonrpcRequest) *jsonrpcResponse {
+func (s *Server) handleMessage(ctx context.Context, req *jsonrpcRequest, authHeader string) *jsonrpcResponse {
 	switch req.Method {
 	case "initialize":
 		return &jsonrpcResponse{
@@ -353,7 +353,7 @@ func (s *Server) handleMessage(ctx context.Context, req *jsonrpcRequest) *jsonrp
 		if err := json.Unmarshal(req.Params, &params); err != nil {
 			return s.errorResponse(req.ID, -32602, "invalid params")
 		}
-		result, err := dispatchTool(ctx, s.handler, params.Name, params.Arguments, s.logger)
+		result, err := dispatchTool(ctx, s.handler, params.Name, params.Arguments, authHeader, s.logger)
 		if err != nil {
 			return &jsonrpcResponse{
 				JSONRPC: "2.0",

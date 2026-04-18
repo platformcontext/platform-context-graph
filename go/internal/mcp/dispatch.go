@@ -15,7 +15,7 @@ import (
 )
 
 // dispatchTool routes an MCP tool call to the appropriate internal HTTP endpoint.
-func dispatchTool(ctx context.Context, handler http.Handler, toolName string, args map[string]any, logger *slog.Logger) (any, error) {
+func dispatchTool(ctx context.Context, handler http.Handler, toolName string, args map[string]any, authHeader string, logger *slog.Logger) (any, error) {
 	route, err := resolveRoute(toolName, args)
 	if err != nil {
 		return nil, err
@@ -38,6 +38,9 @@ func dispatchTool(ctx context.Context, handler http.Handler, toolName string, ar
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
 	}
 	// Set query parameters
 	if len(route.query) > 0 {
