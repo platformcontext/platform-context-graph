@@ -122,25 +122,39 @@ func buildDeploymentTraceProvenanceOverview(
 	deploymentEvidence map[string]any,
 	lineage []map[string]any,
 ) map[string]any {
-	if len(lineage) == 0 {
-		return nil
-	}
-
 	families := make([]string, 0, len(lineage)*2)
 	workflowCount := 0
 	controllerCount := 0
-	for _, row := range lineage {
-		switch traceString(row, "source_kind") {
+	for _, row := range traceMapSlice(deploymentEvidence, "delivery_paths") {
+		switch traceString(row, "kind") {
 		case "workflow_artifact":
 			workflowCount++
+			workflowFamilies := append([]string{"github_actions"}, traceStringSlice(row, "delivery_command_families")...)
+			families = append(families, workflowFamilies...)
 		case "controller_artifact":
 			controllerCount++
+			switch controllerKind := traceString(row, "controller_kind"); controllerKind {
+			case "jenkins_pipeline":
+				families = append(families, "jenkins")
+				if len(traceMapSlice(row, "ansible_playbook_hints")) > 0 {
+					families = append(families, "ansible")
+				}
+			case "":
+			default:
+				families = append(families, controllerKind)
+			}
 		}
+	}
+	for _, row := range lineage {
 		families = append(families, traceStringSlice(row, "provenance_families")...)
+	}
+	families = traceUniqueSortedStrings(families)
+	if len(families) == 0 && workflowCount == 0 && controllerCount == 0 && len(lineage) == 0 {
+		return nil
 	}
 
 	return map[string]any{
-		"families":                  traceUniqueSortedStrings(families),
+		"families":                  families,
 		"artifact_lineage_count":    len(lineage),
 		"workflow_artifact_count":   workflowCount,
 		"controller_artifact_count": controllerCount,

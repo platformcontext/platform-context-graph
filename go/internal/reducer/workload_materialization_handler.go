@@ -59,10 +59,12 @@ type WorkloadProjectionInputLoader interface {
 // runtime platforms). It loads facts from the content store, extracts workload
 // candidates, builds projection rows, and writes them to Neo4j.
 type WorkloadMaterializationHandler struct {
-	FactLoader     FactLoader
-	ResolvedLoader ResolvedRelationshipLoader
-	InputLoader    WorkloadProjectionInputLoader
-	Materializer   *WorkloadMaterializer
+	FactLoader                    FactLoader
+	ResolvedLoader                ResolvedRelationshipLoader
+	InputLoader                   WorkloadProjectionInputLoader
+	Materializer                  *WorkloadMaterializer
+	DependencyLookup              WorkloadDependencyGraphLookup
+	WorkloadDependencyEdgeWriter  SharedProjectionEdgeWriter
 }
 
 // Handle executes the workload materialization reduction path.
@@ -107,6 +109,39 @@ func (h WorkloadMaterializationHandler) Handle(
 		materializeResult.InstancesWritten +
 		materializeResult.DeploymentSourcesWritten +
 		materializeResult.RuntimePlatformsWritten
+
+	if h.DependencyLookup != nil && h.WorkloadDependencyEdgeWriter != nil {
+		dependencyRows, retractRows, err := ReconcileWorkloadDependencyEdges(
+			ctx,
+			projection.RepoDescriptors,
+			h.DependencyLookup,
+		)
+		if err != nil {
+			return Result{}, fmt.Errorf("reconcile workload dependencies: %w", err)
+		}
+		if len(retractRows) > 0 {
+			if err := h.WorkloadDependencyEdgeWriter.RetractEdges(
+				ctx,
+				DomainWorkloadDependency,
+				retractRows,
+				EvidenceSourceWorkloads,
+			); err != nil {
+				return Result{}, fmt.Errorf("retract workload dependencies: %w", err)
+			}
+			totalWrites += len(retractRows)
+		}
+		if writeRows := BuildWorkloadDependencyIntentRowsFromEdges(dependencyRows); len(writeRows) > 0 {
+			if err := h.WorkloadDependencyEdgeWriter.WriteEdges(
+				ctx,
+				DomainWorkloadDependency,
+				writeRows,
+				EvidenceSourceWorkloads,
+			); err != nil {
+				return Result{}, fmt.Errorf("write workload dependencies: %w", err)
+			}
+			totalWrites += len(writeRows)
+		}
+	}
 
 	return Result{
 		IntentID: intent.IntentID,

@@ -18,14 +18,14 @@ repository_relationships:
     source: infra-runtime-modern
     target: infra-modules-shared
   - type: DEPLOYS_FROM
-    source: service-edge-api
-    target: deployment-helm
+    source: deployment-helm
+    target: service-edge-api
   - type: DEPLOYS_FROM
-    source: service-worker-jobs
-    target: deployment-helm
+    source: deployment-helm
+    target: service-worker-jobs
   - type: DEPLOYS_FROM
-    source: service-edge-api
-    target: deployment-kustomize
+    source: deployment-kustomize
+    target: service-edge-api
   - type: DEPLOYS_FROM
     source: service-edge-api
     target: delivery-legacy-automation
@@ -35,8 +35,8 @@ repository_relationships:
     target: service-worker-jobs
     evidence_type: docker_compose_build_context
   - type: DEPLOYS_FROM
-    source: service-worker-jobs
-    target: deployment-kustomize
+    source: deployment-kustomize
+    target: service-worker-jobs
   - type: DISCOVERS_CONFIG_IN
     source: delivery-argocd
     target: deployment-kustomize

@@ -366,7 +366,7 @@ func fetchDeploymentSourcesFromGraph(
 	workloadID string,
 	repoID string,
 ) ([]map[string]any, error) {
-	rows, err := reader.Run(ctx, `
+	canonicalRows, err := reader.Run(ctx, `
 		MATCH (w:Workload {id: $workload_id})<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:DEPLOYMENT_SOURCE]->(repo:Repository)
 		RETURN DISTINCT repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence, rel.reason as reason
 		ORDER BY repo_name
@@ -376,8 +376,9 @@ func fetchDeploymentSourcesFromGraph(
 	if err != nil {
 		return nil, err
 	}
-	if len(rows) == 0 && strings.TrimSpace(repoID) != "" {
-		rows, err = reader.Run(ctx, `
+	repositoryRows := []map[string]any{}
+	if strings.TrimSpace(repoID) != "" {
+		repositoryRows, err = reader.Run(ctx, `
 			MATCH (targetRepo:Repository {id: $repo_id})<-[rel:DEPLOYS_FROM]-(repo:Repository)
 			RETURN DISTINCT repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence,
 			       coalesce(rel.reason, rel.evidence_type, 'repository_deploys_from') as reason
@@ -389,6 +390,7 @@ func fetchDeploymentSourcesFromGraph(
 			return nil, err
 		}
 	}
+	rows := mergeDeploymentSourceRows(canonicalRows, repositoryRows)
 	sources := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		sources = append(sources, map[string]any{
@@ -399,6 +401,35 @@ func fetchDeploymentSourcesFromGraph(
 		})
 	}
 	return sources, nil
+}
+
+func mergeDeploymentSourceRows(
+	canonicalRows []map[string]any,
+	repositoryRows []map[string]any,
+) []map[string]any {
+	merged := make([]map[string]any, 0, len(canonicalRows)+len(repositoryRows))
+	seen := make(map[string]struct{}, len(canonicalRows)+len(repositoryRows))
+	appendRow := func(row map[string]any) {
+		key := StringVal(row, "repo_id")
+		if key == "" {
+			key = StringVal(row, "repo_name")
+		}
+		if key == "" {
+			return
+		}
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		merged = append(merged, row)
+	}
+	for _, row := range canonicalRows {
+		appendRow(row)
+	}
+	for _, row := range repositoryRows {
+		appendRow(row)
+	}
+	return merged
 }
 
 func buildDeploymentFactSummary(

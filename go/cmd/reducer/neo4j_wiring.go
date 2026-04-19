@@ -10,6 +10,7 @@ import (
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/query"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -156,6 +157,51 @@ func (r neo4jSessionRunner) QueryCypherExists(ctx context.Context, cypher string
 	return hasNext, nil
 }
 
+// Run executes a read-only Cypher query and returns row maps. This implements
+// query.GraphReader for reducer-local graph lookups.
+func (r neo4jSessionRunner) Run(ctx context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+	if r.Driver == nil {
+		return nil, fmt.Errorf("neo4j driver is required")
+	}
+
+	session := r.Driver.NewSession(ctx, neo4jdriver.SessionConfig{
+		AccessMode:   neo4jdriver.AccessModeRead,
+		DatabaseName: r.DatabaseName,
+	})
+	defer func() { _ = session.Close(ctx) }()
+
+	result, err := session.Run(ctx, cypher, params)
+	if err != nil {
+		return nil, err
+	}
+	records, err := result.Collect(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	rows := make([]map[string]any, 0, len(records))
+	for _, record := range records {
+		row := make(map[string]any, len(record.Keys))
+		for i, key := range record.Keys {
+			row[key] = record.Values[i]
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+// RunSingle executes a read-only Cypher query and returns the first row.
+func (r neo4jSessionRunner) RunSingle(ctx context.Context, cypher string, params map[string]any) (map[string]any, error) {
+	rows, err := r.Run(ctx, cypher, params)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return rows[0], nil
+}
+
 // reducerNeo4jDriverCloser wraps driver close with a timeout.
 type reducerNeo4jDriverCloser struct {
 	Driver neo4jdriver.DriverWithContext
@@ -177,10 +223,10 @@ func (c reducerNeo4jDriverCloser) Close() error {
 func openReducerNeo4jAdapters(
 	parent context.Context,
 	getenv func(string) string,
-) (sourceneo4j.Executor, reducer.CypherExecutor, sourceneo4j.CypherReader, io.Closer, error) {
+) (sourceneo4j.Executor, reducer.CypherExecutor, sourceneo4j.CypherReader, query.GraphReader, io.Closer, error) {
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	runner := neo4jSessionRunner{
@@ -190,6 +236,7 @@ func openReducerNeo4jAdapters(
 
 	return reducerNeo4jExecutor{session: runner},
 		reducerCypherExecutor{session: runner},
+		runner,
 		runner,
 		reducerNeo4jDriverCloser{Driver: driver},
 		nil

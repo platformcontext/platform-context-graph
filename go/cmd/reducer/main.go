@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
+	"github.com/platformcontext/platform-context-graph/go/internal/query"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
@@ -63,7 +64,7 @@ func run(parent context.Context) error {
 		return fmt.Errorf("register observable gauges: %w", err)
 	}
 
-	neo4jExecutor, cypherExecutor, neo4jReader, neo4jCloser, err := openReducerNeo4jAdapters(parent, os.Getenv)
+	neo4jExecutor, cypherExecutor, neo4jReader, graphReader, neo4jCloser, err := openReducerNeo4jAdapters(parent, os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -81,7 +82,7 @@ func run(parent context.Context) error {
 		Instruments: instruments,
 	}
 	intentStore := postgres.NewSharedIntentStore(instrumentedDB)
-	serviceRunner, err := buildReducerService(instrumentedDB, instrumentedNeo4j, cypherExecutor, intentStore, neo4jReader, os.Getenv, tracer, instruments, logger)
+	serviceRunner, err := buildReducerService(instrumentedDB, instrumentedNeo4j, cypherExecutor, intentStore, neo4jReader, graphReader, os.Getenv, tracer, instruments, logger)
 	if err != nil {
 		return err
 	}
@@ -122,6 +123,7 @@ func buildReducerService(
 	cypherExec reducer.CypherExecutor,
 	intentStore *postgres.SharedIntentStore,
 	neo4jReader sourceneo4j.CypherReader,
+	graphReader query.GraphReader,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
@@ -165,6 +167,7 @@ func buildReducerService(
 			ResolvedLoader: relationshipStore,
 			ScopeResolver:  postgres.RepoScopeResolver{DB: database},
 		},
+		WorkloadDependencyLookup:           neo4jWorkloadDependencyLookup{reader: graphReader},
 		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
 		CloudAssetResolutionWriter:         reducer.PostgresCloudAssetResolutionWriter{DB: database},
 		PlatformMaterializationWriter:      reducer.PostgresPlatformMaterializationWriter{DB: database},
@@ -186,6 +189,7 @@ func buildReducerService(
 		ResolvedRelationshipLoader:         relationshipStore,
 		RepoDependencyIntentWriter:         repoDependencyIntentWriter,
 		RepoDependencyEdgeWriter:           edgeWriterForHandlers,
+		WorkloadDependencyEdgeWriter:       edgeWriterForHandlers,
 		GenerationCheck:                    postgres.NewGenerationFreshnessCheck(database),
 		Tracer:                             tracer,
 		Instruments:                        instruments,
@@ -235,15 +239,16 @@ func buildReducerService(
 			Logger:              logger,
 		},
 		RepoDependencyProjectionRunner: &reducer.RepoDependencyProjectionRunner{
-			IntentReader:        intentStore,
-			LeaseManager:        intentStore,
-			EdgeWriter:          edgeWriter,
-			AcceptedGen:         postgres.NewAcceptedGenerationLookup(database),
-			AcceptedGenPrefetch: acceptedGenerationPrefetch,
-			Config:              repoDependencyCfg,
-			Tracer:              tracer,
-			Instruments:         instruments,
-			Logger:              logger,
+			IntentReader:                    intentStore,
+			LeaseManager:                    intentStore,
+			EdgeWriter:                      edgeWriter,
+			WorkloadMaterializationReplayer: workQueue,
+			AcceptedGen:                     postgres.NewAcceptedGenerationLookup(database),
+			AcceptedGenPrefetch:             acceptedGenerationPrefetch,
+			Config:                          repoDependencyCfg,
+			Tracer:                          tracer,
+			Instruments:                     instruments,
+			Logger:                          logger,
 		},
 		GraphProjectionPhaseRepairer: &reducer.GraphProjectionPhaseRepairer{
 			Queue:       graphProjectionRepairQueue,

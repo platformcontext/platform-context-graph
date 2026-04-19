@@ -47,7 +47,7 @@ func TestFetchDeploymentSourcesFallsBackToRepositoryDeployEdgesWhenNoCanonicalSo
 	}
 }
 
-func TestFetchDeploymentSourcesPrefersCanonicalInstanceSources(t *testing.T) {
+func TestFetchDeploymentSourcesMergesCanonicalAndRepositorySources(t *testing.T) {
 	t.Parallel()
 
 	got, err := fetchDeploymentSourcesFromGraph(t.Context(), fakeRepoGraphReader{
@@ -73,11 +73,48 @@ func TestFetchDeploymentSourcesPrefersCanonicalInstanceSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetchDeploymentSources() error = %v, want nil", err)
 	}
-	if len(got) != 1 {
-		t.Fatalf("len(fetchDeploymentSources()) = %d, want 1", len(got))
+	if len(got) != 2 {
+		t.Fatalf("len(fetchDeploymentSources()) = %d, want 2", len(got))
 	}
 	if got[0]["repo_name"] != "runtime-deploy" {
 		t.Fatalf("fetchDeploymentSources()[0].repo_name = %#v, want %#v", got[0]["repo_name"], "runtime-deploy")
+	}
+	if got[1]["repo_name"] != "legacy-deploy" {
+		t.Fatalf("fetchDeploymentSources()[1].repo_name = %#v, want %#v", got[1]["repo_name"], "legacy-deploy")
+	}
+}
+
+func TestFetchDeploymentSourcesDedupesCanonicalAndRepositoryOverlap(t *testing.T) {
+	t.Parallel()
+
+	got, err := fetchDeploymentSourcesFromGraph(t.Context(), fakeRepoGraphReader{
+		runByMatch: map[string][]map[string]any{
+			"MATCH (w:Workload {id: $workload_id})<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:DEPLOYMENT_SOURCE]->(repo:Repository)": {
+				{
+					"repo_id":    "repo-runtime-deploy",
+					"repo_name":  "runtime-deploy",
+					"confidence": 0.97,
+					"reason":     "canonical_instance_deployment_source",
+				},
+			},
+			"coalesce(rel.reason, rel.evidence_type, 'repository_deploys_from') as reason": {
+				{
+					"repo_id":    "repo-runtime-deploy",
+					"repo_name":  "runtime-deploy",
+					"confidence": 0.62,
+					"reason":     "repository_deploys_from",
+				},
+			},
+		},
+	}, "workload:service-edge-api", "repository:r_service_edge_api")
+	if err != nil {
+		t.Fatalf("fetchDeploymentSources() error = %v, want nil", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len(fetchDeploymentSources()) = %d, want 1", len(got))
+	}
+	if got[0]["reason"] != "canonical_instance_deployment_source" {
+		t.Fatalf("fetchDeploymentSources()[0].reason = %#v, want %#v", got[0]["reason"], "canonical_instance_deployment_source")
 	}
 }
 

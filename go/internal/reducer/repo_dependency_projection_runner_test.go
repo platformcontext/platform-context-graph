@@ -373,6 +373,103 @@ func TestRepoDependencyProjectionRunnerRehydratesCompletedContributorRows(t *tes
 	}
 }
 
+func TestRepoDependencyProjectionRunnerReplaysWorkloadMaterializationForActiveRepoDependencyWrites(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 19, 13, 0, 0, 0, time.UTC)
+	repoID := "repository:r_repo_a"
+	reader := &fakeRepoDependencyIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			repoDependencyIntentRow(
+				"active-1", "scope-a", repoID, repoID, "run-1", "gen-1", now,
+				map[string]any{
+					"repo_id":           repoID,
+					"target_repo_id":    "repository:r_target_1",
+					"relationship_type": "DEPENDS_ON",
+					"evidence_source":   crossRepoEvidenceSource,
+				},
+			),
+		},
+		pendingByAcceptanceUnit: map[string][]SharedProjectionIntentRow{
+			repoID: {
+				repoDependencyIntentRow(
+					"active-1", "scope-a", repoID, repoID, "run-1", "gen-1", now,
+					map[string]any{
+						"repo_id":           repoID,
+						"target_repo_id":    "repository:r_target_1",
+						"relationship_type": "DEPENDS_ON",
+						"evidence_source":   crossRepoEvidenceSource,
+					},
+				),
+				repoDependencyIntentRow(
+					"active-2", "scope-a", repoID, repoID, "run-2", "gen-1", now.Add(time.Second),
+					map[string]any{
+						"repo_id":           repoID,
+						"target_repo_id":    "repository:r_target_2",
+						"relationship_type": "DEPLOYS_FROM",
+						"evidence_source":   crossRepoEvidenceSource,
+					},
+				),
+				repoDependencyIntentRow(
+					"active-3", "scope-b", repoID, repoID, "run-3", "gen-2", now.Add(2*time.Second),
+					map[string]any{
+						"repo_id":           repoID,
+						"target_repo_id":    "repository:r_target_3",
+						"relationship_type": "DEPENDS_ON",
+						"evidence_source":   defaultEvidenceSource,
+					},
+				),
+			},
+		},
+		leaseGranted: true,
+	}
+	writer := &recordingCodeCallProjectionEdgeWriter{}
+	replayer := &recordingWorkloadMaterializationReplayer{}
+	runner := RepoDependencyProjectionRunner{
+		IntentReader:                    reader,
+		LeaseManager:                    reader,
+		EdgeWriter:                      writer,
+		WorkloadMaterializationReplayer: replayer,
+		AcceptedGen: func(key SharedProjectionAcceptanceKey) (string, bool) {
+			switch key.SourceRunID {
+			case "run-1", "run-2":
+				return "gen-1", true
+			case "run-3":
+				return "gen-2", true
+			default:
+				return "", false
+			}
+		},
+		Config: RepoDependencyProjectionRunnerConfig{PollInterval: 10 * time.Millisecond},
+	}
+
+	_, err := runner.processOnce(context.Background(), now)
+	if err != nil {
+		t.Fatalf("processOnce() error = %v, want nil", err)
+	}
+	if got, want := len(replayer.calls), 2; got != want {
+		t.Fatalf("replayer calls = %d, want %d", got, want)
+	}
+	if got, want := replayer.calls[0].scopeID, "scope-a"; got != want {
+		t.Fatalf("replayer calls[0].scopeID = %q, want %q", got, want)
+	}
+	if got, want := replayer.calls[0].generationID, "gen-1"; got != want {
+		t.Fatalf("replayer calls[0].generationID = %q, want %q", got, want)
+	}
+	if got, want := replayer.calls[0].entityKey, "repo:r_repo_a"; got != want {
+		t.Fatalf("replayer calls[0].entityKey = %q, want %q", got, want)
+	}
+	if got, want := replayer.calls[1].scopeID, "scope-b"; got != want {
+		t.Fatalf("replayer calls[1].scopeID = %q, want %q", got, want)
+	}
+	if got, want := replayer.calls[1].generationID, "gen-2"; got != want {
+		t.Fatalf("replayer calls[1].generationID = %q, want %q", got, want)
+	}
+	if got, want := replayer.calls[1].entityKey, "repo:r_repo_a"; got != want {
+		t.Fatalf("replayer calls[1].entityKey = %q, want %q", got, want)
+	}
+}
+
 func TestRepoDependencyProjectionRunnerLoadAllAcceptanceUnitIntentsRejectsOversizedSlice(t *testing.T) {
 	t.Parallel()
 

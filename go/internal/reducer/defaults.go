@@ -21,6 +21,7 @@ type DefaultHandlers struct {
 	InfrastructurePlatformMaterializer *InfrastructurePlatformMaterializer
 	SemanticEntityWriter               SemanticEntityWriter
 	WorkloadProjectionInputLoader      WorkloadProjectionInputLoader
+	WorkloadDependencyLookup           WorkloadDependencyGraphLookup
 
 	// FactLoader loads fact envelopes for workload and infrastructure
 	// platform materialization.
@@ -63,6 +64,7 @@ type DefaultHandlers struct {
 	// from durable repo-dependency intents. Optional; nil disables the
 	// repo-dependency projection runner.
 	RepoDependencyEdgeWriter SharedProjectionEdgeWriter
+	WorkloadDependencyEdgeWriter SharedProjectionEdgeWriter
 
 	// GenerationCheck reports whether an intent's generation is still current.
 	// Nil disables the guard and lets all intents execute unconditionally.
@@ -138,10 +140,12 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			}
 		case DomainWorkloadMaterialization:
 			def.Handler = WorkloadMaterializationHandler{
-				FactLoader:     handlers.FactLoader,
-				ResolvedLoader: handlers.ResolvedRelationshipLoader,
-				InputLoader:    handlers.WorkloadProjectionInputLoader,
-				Materializer:   handlers.WorkloadMaterializer,
+				FactLoader:                   handlers.FactLoader,
+				ResolvedLoader:               handlers.ResolvedRelationshipLoader,
+				InputLoader:                  handlers.WorkloadProjectionInputLoader,
+				Materializer:                 handlers.WorkloadMaterializer,
+				DependencyLookup:             handlers.WorkloadDependencyLookup,
+				WorkloadDependencyEdgeWriter: handlers.WorkloadDependencyEdgeWriter,
 			}
 		case DomainCodeCallMaterialization:
 			def.Handler = CodeCallMaterializationHandler{

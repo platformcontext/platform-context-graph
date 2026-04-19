@@ -420,14 +420,14 @@ verify_graph_state() {
         "service-edge-api workload should depend on service-worker-jobs" \
         "$GRAPH_QUERY_FILE"
     pcg_neo4j_count_equals \
-        "MATCH (:Repository {name:'service-edge-api'})-[:DEPLOYS_FROM]->(:Repository {name:'deployment-helm'}) RETURN count(*)" \
+        "MATCH (:Repository {name:'deployment-helm'})-[:DEPLOYS_FROM]->(:Repository {name:'service-edge-api'}) RETURN count(*)" \
         "1" \
-        "service-edge-api repository should have a DEPLOYS_FROM edge to deployment-helm" \
+        "deployment-helm repository should have a DEPLOYS_FROM edge to service-edge-api" \
         "$GRAPH_QUERY_FILE"
     pcg_neo4j_count_equals \
-        "MATCH (:Repository {name:'service-edge-api'})-[:DEPLOYS_FROM]->(:Repository {name:'deployment-kustomize'}) RETURN count(*)" \
+        "MATCH (:Repository {name:'deployment-kustomize'})-[:DEPLOYS_FROM]->(:Repository {name:'service-edge-api'}) RETURN count(*)" \
         "1" \
-        "service-edge-api repository should have a DEPLOYS_FROM edge to deployment-kustomize" \
+        "deployment-kustomize repository should have a DEPLOYS_FROM edge to service-edge-api" \
         "$GRAPH_QUERY_FILE"
     pcg_neo4j_count_equals \
         "MATCH (:Repository {name:'service-edge-api'})-[:DEPLOYS_FROM]->(:Repository {name:'delivery-legacy-automation'}) RETURN count(*)" \

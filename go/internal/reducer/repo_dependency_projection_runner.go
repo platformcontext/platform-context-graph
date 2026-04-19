@@ -70,13 +70,14 @@ func (c RepoDependencyProjectionRunnerConfig) leaseOwner() string {
 // source repository at a time so repo-wide retractions cannot race with
 // partition-sliced snapshots.
 type RepoDependencyProjectionRunner struct {
-	IntentReader        RepoDependencyProjectionIntentReader
-	LeaseManager        PartitionLeaseManager
-	EdgeWriter          SharedProjectionEdgeWriter
-	AcceptedGen         AcceptedGenerationLookup
-	AcceptedGenPrefetch AcceptedGenerationPrefetch
-	Config              RepoDependencyProjectionRunnerConfig
-	Wait                func(context.Context, time.Duration) error
+	IntentReader                    RepoDependencyProjectionIntentReader
+	LeaseManager                    PartitionLeaseManager
+	EdgeWriter                      SharedProjectionEdgeWriter
+	WorkloadMaterializationReplayer WorkloadMaterializationReplayer
+	AcceptedGen                     AcceptedGenerationLookup
+	AcceptedGenPrefetch             AcceptedGenerationPrefetch
+	Config                          RepoDependencyProjectionRunnerConfig
+	Wait                            func(context.Context, time.Duration) error
 
 	Tracer      trace.Tracer
 	Instruments *telemetry.Instruments
@@ -197,6 +198,11 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 		result.RetractedRows = retractedRows
 		result.UpsertedRows = writtenRows
 		r.recordRepoDependencyCycle(ctx, acceptanceUnitID, active, writtenRows, writtenGroups, cycleStart)
+		if r.WorkloadMaterializationReplayer != nil {
+			if err := r.replayWorkloadMaterialization(ctx, active); err != nil {
+				return result, fmt.Errorf("replay workload materialization after repo dependency projection: %w", err)
+			}
+		}
 	}
 
 	processedIDs := make([]string, 0, len(staleIDs)+len(active))
@@ -448,6 +454,29 @@ func repoDependencyPollBackoff(base time.Duration, consecutiveEmpty int) time.Du
 	return backoff
 }
 
+type workloadMaterializationReplayRequest struct {
+	scopeID      string
+	generationID string
+	entityKey    string
+}
+
+func (r *RepoDependencyProjectionRunner) replayWorkloadMaterialization(
+	ctx context.Context,
+	rows []SharedProjectionIntentRow,
+) error {
+	for _, request := range repoDependencyReplayRequests(rows) {
+		if _, err := r.WorkloadMaterializationReplayer.ReplayWorkloadMaterialization(
+			ctx,
+			request.scopeID,
+			request.generationID,
+			request.entityKey,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func repoDependencyAcceptanceUnitID(row SharedProjectionIntentRow) (string, bool) {
 	if value := strings.TrimSpace(row.AcceptanceUnitID); value != "" {
 		return value, true
@@ -459,6 +488,59 @@ func repoDependencyAcceptanceUnitID(row SharedProjectionIntentRow) (string, bool
 		return value, true
 	}
 	return "", false
+}
+
+func repoDependencyReplayRequests(rows []SharedProjectionIntentRow) []workloadMaterializationReplayRequest {
+	seen := make(map[string]struct{}, len(rows))
+	requests := make([]workloadMaterializationReplayRequest, 0, len(rows))
+	for _, row := range rows {
+		scopeID := strings.TrimSpace(row.ScopeID)
+		generationID := strings.TrimSpace(row.GenerationID)
+		entityKey := repoDependencyReplayEntityKey(row)
+		if scopeID == "" || generationID == "" || entityKey == "" {
+			continue
+		}
+		key := scopeID + "|" + generationID + "|" + entityKey
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		requests = append(requests, workloadMaterializationReplayRequest{
+			scopeID:      scopeID,
+			generationID: generationID,
+			entityKey:    entityKey,
+		})
+	}
+	sort.Slice(requests, func(i, j int) bool {
+		if requests[i].scopeID != requests[j].scopeID {
+			return requests[i].scopeID < requests[j].scopeID
+		}
+		if requests[i].generationID != requests[j].generationID {
+			return requests[i].generationID < requests[j].generationID
+		}
+		return requests[i].entityKey < requests[j].entityKey
+	})
+	return requests
+}
+
+func repoDependencyReplayEntityKey(row SharedProjectionIntentRow) string {
+	repoID := strings.TrimSpace(row.RepositoryID)
+	if repoID == "" {
+		repoID = strings.TrimSpace(repoDependencyPayloadString(row, "repo_id"))
+	}
+	if repoID == "" {
+		repoID = strings.TrimSpace(row.AcceptanceUnitID)
+	}
+	if repoID == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(repoID), "repo:") {
+		return repoID
+	}
+	if alias := normalizedEntityKey(repoID); alias != "" {
+		return "repo:" + alias
+	}
+	return "repo:" + repoID
 }
 
 func buildRepoDependencyRetractRows(repositoryIDs []string) []SharedProjectionIntentRow {
