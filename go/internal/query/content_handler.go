@@ -192,9 +192,6 @@ func readContentSearchRequest(r *http.Request) (contentSearchRequest, error) {
 }
 
 func (req contentSearchRequest) validate() error {
-	if len(req.RepoIDs) > 1 {
-		return errors.New("repo_ids may contain at most one value")
-	}
 	if req.pattern() == "" {
 		return errors.New("query is required")
 	}
@@ -225,9 +222,44 @@ func (req contentSearchRequest) limit() int {
 	return 50
 }
 
+func (req contentSearchRequest) explicitRepoIDs() []string {
+	if req.RepoID != "" {
+		return nil
+	}
+
+	repoIDs := make([]string, 0, len(req.RepoIDs))
+	seen := make(map[string]struct{}, len(req.RepoIDs))
+	for _, repoID := range req.RepoIDs {
+		if repoID == "" {
+			continue
+		}
+		if _, ok := seen[repoID]; ok {
+			continue
+		}
+		seen[repoID] = struct{}{}
+		repoIDs = append(repoIDs, repoID)
+	}
+	return repoIDs
+}
+
 func (h *ContentHandler) searchFilesByScope(ctx context.Context, req contentSearchRequest) ([]FileContent, error) {
 	if repoID := req.repoID(); repoID != "" {
 		return h.Content.SearchFileContent(ctx, repoID, req.pattern(), req.limit())
+	}
+	if repoIDs := req.explicitRepoIDs(); len(repoIDs) > 0 {
+		results := make([]FileContent, 0, req.limit())
+		for _, repoID := range repoIDs {
+			remaining := req.limit() - len(results)
+			if remaining <= 0 {
+				break
+			}
+			rows, err := h.Content.SearchFileContent(ctx, repoID, req.pattern(), remaining)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, rows...)
+		}
+		return results, nil
 	}
 	return h.Content.SearchFileContentAnyRepo(ctx, req.pattern(), req.limit())
 }
@@ -235,6 +267,21 @@ func (h *ContentHandler) searchFilesByScope(ctx context.Context, req contentSear
 func (h *ContentHandler) searchEntitiesByScope(ctx context.Context, req contentSearchRequest) ([]EntityContent, error) {
 	if repoID := req.repoID(); repoID != "" {
 		return h.Content.SearchEntityContent(ctx, repoID, req.pattern(), req.limit())
+	}
+	if repoIDs := req.explicitRepoIDs(); len(repoIDs) > 0 {
+		results := make([]EntityContent, 0, req.limit())
+		for _, repoID := range repoIDs {
+			remaining := req.limit() - len(results)
+			if remaining <= 0 {
+				break
+			}
+			rows, err := h.Content.SearchEntityContent(ctx, repoID, req.pattern(), remaining)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, rows...)
+		}
+		return results, nil
 	}
 	return h.Content.SearchEntityContentAnyRepo(ctx, req.pattern(), req.limit())
 }

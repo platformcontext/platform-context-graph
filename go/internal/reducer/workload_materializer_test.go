@@ -52,7 +52,15 @@ func TestWorkloadMaterializerWritesWorkloads(t *testing.T) {
 
 	projection := &ProjectionResult{
 		WorkloadRows: []WorkloadRow{
-			{RepoID: "repo-1", WorkloadID: "workload:my-api", WorkloadKind: "service", WorkloadName: "my-api"},
+			{
+				RepoID:         "repo-1",
+				WorkloadID:     "workload:my-api",
+				WorkloadKind:   "service",
+				WorkloadName:   "my-api",
+				Classification: "service",
+				Confidence:     0.97,
+				Provenance:     []string{"k8s_resource"},
+			},
 		},
 	}
 
@@ -68,6 +76,19 @@ func TestWorkloadMaterializerWritesWorkloads(t *testing.T) {
 	}
 	if !containsCypher(executor.calls, "MERGE (w:Workload {id: row.workload_id})") {
 		t.Fatal("missing Workload MERGE cypher")
+	}
+	rows := executor.calls[0].Parameters["rows"].([]map[string]any)
+	if got, want := rows[0]["classification"], "service"; got != want {
+		t.Fatalf("classification = %#v, want %#v", got, want)
+	}
+	if got, want := rows[0]["materialization_confidence"], 0.97; got != want {
+		t.Fatalf("materialization_confidence = %#v, want %#v", got, want)
+	}
+	if got, want := rows[0]["materialization_provenance"], []string{"k8s_resource"}; len(got.([]string)) != len(want) || got.([]string)[0] != want[0] {
+		t.Fatalf("materialization_provenance = %#v, want %#v", got, want)
+	}
+	if !containsCypher(executor.calls, "w.classification = row.classification") {
+		t.Fatal("missing workload classification cypher")
 	}
 }
 
@@ -115,6 +136,8 @@ func TestWorkloadMaterializerWritesDeploymentSources(t *testing.T) {
 				Environment:      "production",
 				InstanceID:       "workload-instance:my-api:production",
 				WorkloadName:     "my-api",
+				Confidence:       0.96,
+				Provenance:       []string{"argocd_application_source", "dockerfile_runtime"},
 			},
 		},
 	}
@@ -128,6 +151,13 @@ func TestWorkloadMaterializerWritesDeploymentSources(t *testing.T) {
 	}
 	if !containsCypher(executor.calls, "MERGE (i)-[rel:DEPLOYMENT_SOURCE]->(deployment_repo)") {
 		t.Fatal("missing DEPLOYMENT_SOURCE MERGE cypher")
+	}
+	rows := executor.calls[0].Parameters["rows"].([]map[string]any)
+	if got, want := rows[0]["deployment_confidence"], 0.96; got != want {
+		t.Fatalf("deployment_confidence = %#v, want %#v", got, want)
+	}
+	if !containsCypher(executor.calls, "rel.confidence = row.deployment_confidence") {
+		t.Fatal("missing deployment confidence cypher")
 	}
 }
 

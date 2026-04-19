@@ -103,6 +103,15 @@ func TestExtractWorkloadCandidatesFromArgoCDApplicationFacts(t *testing.T) {
 	if c.RepoName != "api-service" {
 		t.Errorf("RepoName = %q, want api-service", c.RepoName)
 	}
+	if got, want := c.Classification, "service"; got != want {
+		t.Errorf("Classification = %q, want %q", got, want)
+	}
+	if got, want := c.Confidence, 0.95; got < want {
+		t.Errorf("Confidence = %f, want >= %f", got, want)
+	}
+	if len(c.Provenance) == 0 || c.Provenance[0] != "argocd_application" {
+		t.Errorf("Provenance = %v, want first entry argocd_application", c.Provenance)
+	}
 }
 
 func TestExtractWorkloadCandidatesSkipsRepoWithoutWorkloadSignals(t *testing.T) {
@@ -243,5 +252,99 @@ func TestExtractWorkloadCandidatesOverlayEnvironments(t *testing.T) {
 	envs := deploymentEnvs["repo-app"]
 	if len(envs) != 2 {
 		t.Fatalf("deployment environments for repo-app = %v, want 2 entries", envs)
+	}
+}
+
+func TestExtractWorkloadCandidatesIncludesDockerfileRuntimeSignals(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repo-edge-api",
+				"name":     "edge-api",
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-1",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-edge-api",
+				"artifact_type": "dockerfile",
+				"relative_path": "Dockerfile",
+				"parsed_file_data": map[string]any{
+					"dockerfile_stages": []any{
+						map[string]any{"name": "runtime"},
+					},
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	candidates, _ := ExtractWorkloadCandidates(envelopes)
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+
+	candidate := candidates[0]
+	if got, want := candidate.Classification, "service"; got != want {
+		t.Fatalf("Classification = %q, want %q", got, want)
+	}
+	if got, want := candidate.Confidence, 0.75; got < want {
+		t.Fatalf("Confidence = %f, want >= %f", got, want)
+	}
+	if len(candidate.Provenance) == 0 || candidate.Provenance[0] != "dockerfile_runtime" {
+		t.Fatalf("Provenance = %v, want first entry dockerfile_runtime", candidate.Provenance)
+	}
+}
+
+func TestExtractWorkloadCandidatesClassifiesJenkinsOnlyRepoAsUtility(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repo-automation",
+				"name":     "automation-shared",
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-1",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-automation",
+				"artifact_type": "groovy",
+				"relative_path": "Jenkinsfile",
+				"parsed_file_data": map[string]any{
+					"jenkins_pipeline_calls": []any{"deployShared"},
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	candidates, _ := ExtractWorkloadCandidates(envelopes)
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+
+	candidate := candidates[0]
+	if got, want := candidate.Classification, "utility"; got != want {
+		t.Fatalf("Classification = %q, want %q", got, want)
+	}
+	if got, want := candidate.Confidence, 0.60; got >= want {
+		t.Fatalf("Confidence = %f, want < %f for utility-only candidate", got, want)
+	}
+	if len(candidate.Provenance) == 0 || candidate.Provenance[0] != "jenkins_pipeline" {
+		t.Fatalf("Provenance = %v, want first entry jenkins_pipeline", candidate.Provenance)
 	}
 }

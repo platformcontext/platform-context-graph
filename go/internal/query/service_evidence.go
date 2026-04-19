@@ -66,6 +66,8 @@ type ServiceAPIEndpointEvidence struct {
 var (
 	serviceHostnamePattern  = regexp.MustCompile(`(?i)\b(?:https?://)?((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62})\b`)
 	serviceDocsRoutePattern = regexp.MustCompile(`(?i)['"](/[^'"]+)['"]`)
+	serviceHostnameKeyPattern = regexp.MustCompile(`(?i)(?:^|[\s\[{,])["']?(?:host|hostname|url|origin|endpoint|ingress|server_name|base_url|baseurl|public_url|publicurl|service_url|serviceurl|api_url|apiurl)["']?\s*:`)
+	serviceHostnameEnvKeyPattern = regexp.MustCompile(`(?i)\b(?:host|hostname|url|origin|endpoint|base_url|public_url|service_url|api_url|ingress)\b\s*=`)
 )
 
 const serviceEvidenceFileLimit = 5000
@@ -234,13 +236,7 @@ func extractObservedHostnames(content string) []string {
 	seen := map[string]struct{}{}
 	hostnames := make([]string, 0)
 	for _, line := range strings.Split(content, "\n") {
-		lowerLine := strings.ToLower(line)
-		if !strings.Contains(lowerLine, "://") &&
-			!strings.Contains(lowerLine, "host") &&
-			!strings.Contains(lowerLine, "hostname") &&
-			!strings.Contains(lowerLine, "server") &&
-			!strings.Contains(lowerLine, "url") &&
-			!strings.Contains(lowerLine, "origin") {
+		if !lineLikelyContainsHostname(line) {
 			continue
 		}
 		matches := serviceHostnamePattern.FindAllStringSubmatch(line, -1)
@@ -261,6 +257,17 @@ func extractObservedHostnames(content string) []string {
 	}
 	sort.Strings(hostnames)
 	return hostnames
+}
+
+func lineLikelyContainsHostname(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return false
+	}
+	if strings.Contains(strings.ToLower(trimmed), "://") {
+		return true
+	}
+	return serviceHostnameKeyPattern.MatchString(trimmed) || serviceHostnameEnvKeyPattern.MatchString(trimmed)
 }
 
 func inferObservedEnvironments(relativePath string, content string, hostnames []string) []string {

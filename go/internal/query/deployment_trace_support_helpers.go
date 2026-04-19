@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+const (
+	defaultIndirectEvidenceSearchLimit = 25
+	maxIndirectEvidenceSearchLimit     = 100
+)
+
 type provisioningRepositoryCandidate struct {
 	RepoID              string
 	RepoName            string
@@ -93,7 +98,15 @@ func loadConsumerRepositoryEnrichment(
 	serviceName string,
 	hostnames []string,
 ) ([]map[string]any, error) {
-	return loadConsumerRepositoryEnrichmentWithLimit(ctx, graph, content, serviceRepoID, serviceName, hostnames, 0)
+	return loadConsumerRepositoryEnrichmentWithLimit(
+		ctx,
+		graph,
+		content,
+		serviceRepoID,
+		serviceName,
+		hostnames,
+		defaultIndirectEvidenceSearchLimit,
+	)
 }
 
 func loadConsumerRepositoryEnrichmentWithLimit(
@@ -157,8 +170,16 @@ func loadConsumerRepositoryEnrichmentWithLimit(
 	}
 
 	sort.Slice(consumers, func(i, j int) bool {
+		leftScore := consumerRepositorySortScore(consumers[i])
+		rightScore := consumerRepositorySortScore(consumers[j])
+		if leftScore != rightScore {
+			return leftScore > rightScore
+		}
 		return StringVal(consumers[i], "repository") < StringVal(consumers[j], "repository")
 	})
+	if limit > 0 && len(consumers) > limit {
+		consumers = consumers[:limit]
+	}
 	return consumers, nil
 }
 
@@ -269,7 +290,7 @@ func searchConsumerEvidenceAnyRepo(
 		return evidenceByRepo, nil
 	}
 	if limit <= 0 {
-		limit = 100
+		limit = defaultIndirectEvidenceSearchLimit
 	}
 
 	if serviceName = strings.TrimSpace(serviceName); serviceName != "" {
@@ -344,6 +365,25 @@ func appendConsumerEvidence(entry map[string]any, evidence traceEvidenceAccumula
 	entry["consumer_kinds"] = consumerKinds
 }
 
+func consumerRepositorySortScore(entry map[string]any) int {
+	score := 0
+	for _, kind := range StringSliceVal(entry, "consumer_kinds") {
+		switch kind {
+		case "graph_provisioning_consumer":
+			score += 100
+		case "service_reference_consumer", "hostname_reference_consumer":
+			score += 15
+		default:
+			score += 5
+		}
+	}
+	score += len(StringSliceVal(entry, "graph_relationship_types")) * 10
+	score += len(StringSliceVal(entry, "evidence_kinds")) * 5
+	score += len(StringSliceVal(entry, "matched_values")) * 3
+	score += len(StringSliceVal(entry, "sample_paths"))
+	return score
+}
+
 func newTraceEvidenceAccumulator() traceEvidenceAccumulator {
 	return traceEvidenceAccumulator{
 		samplePaths:   map[string]struct{}{},
@@ -391,11 +431,11 @@ func containsString(values []string, candidate string) bool {
 
 func boundedTraceEnrichmentLimit(maxDepth int) int {
 	if maxDepth <= 0 {
-		return 0
+		return defaultIndirectEvidenceSearchLimit
 	}
 	limit := maxDepth * 10
-	if limit > 100 {
-		return 100
+	if limit > maxIndirectEvidenceSearchLimit {
+		return maxIndirectEvidenceSearchLimit
 	}
 	return limit
 }

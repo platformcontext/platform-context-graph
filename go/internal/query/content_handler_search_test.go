@@ -121,10 +121,23 @@ func TestContentHandlerSearchEntitiesAcceptsPatternAndRepoIDs(t *testing.T) {
 	}
 }
 
-func TestContentHandlerSearchFilesRejectsMultipleRepoIDs(t *testing.T) {
+func TestContentHandlerSearchFilesBoundsExplicitMultiRepoSearch(t *testing.T) {
 	t.Parallel()
 
-	db, _ := openRecordingContentSearchDB(t, nil)
+	db, recorder := openRecordingContentSearchDB(t, []contentSearchQueryResult{
+		{
+			columns: []string{
+				"repo_id", "relative_path", "commit_sha", "content",
+				"content_hash", "line_count", "language", "artifact_type",
+			},
+			rows: [][]driver.Value{
+				{
+					"repo-1", "src/one.ts", "", "",
+					"hash-1", int64(11), "typescript", "source",
+				},
+			},
+		},
+	})
 	handler := &ContentHandler{Content: NewContentReader(db)}
 	mux := http.NewServeMux()
 	handler.Mount(mux)
@@ -132,21 +145,89 @@ func TestContentHandlerSearchFilesRejectsMultipleRepoIDs(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v0/content/files/search",
-		bytes.NewBufferString(`{"pattern":"renderApp","repo_ids":["repo-1","repo-2"]}`),
+		bytes.NewBufferString(`{"pattern":"renderApp","repo_ids":["repo-1","repo-2"],"limit":1}`),
 	)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	if got, want := len(recorder.args), 1; got != want {
+		t.Fatalf("len(recorder.args) = %d, want %d", got, want)
+	}
+	if got, want := recorder.args[0][0], "repo-1"; got != want {
+		t.Fatalf("first query repo_id = %#v, want %#v", got, want)
+	}
+	if got, want := recorder.args[0][1], "renderApp"; got != want {
+		t.Fatalf("first query pattern = %#v, want %#v", got, want)
+	}
+	if got, want := numericDriverValue(t, recorder.args[0][2]), int64(1); got != want {
+		t.Fatalf("first query limit = %d, want %d", got, want)
 	}
 
 	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
 	}
-	if got, want := resp["detail"], "repo_ids may contain at most one value"; got != want {
-		t.Fatalf("error detail = %#v, want %#v", got, want)
+	if got, want := int(resp["count"].(float64)), 1; got != want {
+		t.Fatalf("response count = %d, want %d", got, want)
+	}
+}
+
+func TestContentHandlerSearchEntitiesBoundsExplicitMultiRepoSearch(t *testing.T) {
+	t.Parallel()
+
+	db, recorder := openRecordingContentSearchDB(t, []contentSearchQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"entity-1", "repo-1", "src/one.ts", "Function", "renderApp",
+					int64(5), int64(9), "typescript", "function renderApp() {}", []byte(`{"kind":"handler"}`),
+				},
+			},
+		},
+	})
+	handler := &ContentHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/content/entities/search",
+		bytes.NewBufferString(`{"pattern":"renderApp","repo_ids":["repo-1","repo-2"],"limit":1}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	if got, want := len(recorder.args), 1; got != want {
+		t.Fatalf("len(recorder.args) = %d, want %d", got, want)
+	}
+	if got, want := recorder.args[0][0], "repo-1"; got != want {
+		t.Fatalf("first query repo_id = %#v, want %#v", got, want)
+	}
+	if got, want := recorder.args[0][1], "renderApp"; got != want {
+		t.Fatalf("first query pattern = %#v, want %#v", got, want)
+	}
+	if got, want := numericDriverValue(t, recorder.args[0][2]), int64(1); got != want {
+		t.Fatalf("first query limit = %d, want %d", got, want)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := int(resp["count"].(float64)), 1; got != want {
+		t.Fatalf("response count = %d, want %d", got, want)
 	}
 }
 

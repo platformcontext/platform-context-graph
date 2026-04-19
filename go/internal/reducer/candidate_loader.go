@@ -14,6 +14,8 @@ type repoSignals struct {
 	resourceKinds map[string]struct{}
 	namespaces    map[string]struct{}
 	hasArgoCD     bool
+	confidence    float64
+	provenance    []string
 }
 
 // ExtractWorkloadCandidates builds workload candidates and deployment overlay
@@ -71,6 +73,7 @@ func ExtractWorkloadCandidates(envelopes []facts.Envelope) ([]WorkloadCandidate,
 
 		extractK8sSignals(fileData, sig)
 		extractArgoCDSignals(fileData, sig)
+		extractArtifactSignals(payloadStr(env.Payload, "artifact_type"), relativePath, fileData, sig)
 		extractOverlayEnvs(repoID, relativePath, deploymentEnvs)
 	}
 
@@ -81,16 +84,20 @@ func ExtractWorkloadCandidates(envelopes []facts.Envelope) ([]WorkloadCandidate,
 		if sig == nil {
 			continue
 		}
-		if len(sig.resourceKinds) == 0 && !sig.hasArgoCD {
+		if len(sig.resourceKinds) == 0 && !sig.hasArgoCD && len(sig.provenance) == 0 {
 			continue
 		}
 
-		candidates = append(candidates, WorkloadCandidate{
+		candidate := WorkloadCandidate{
 			RepoID:        repoID,
 			RepoName:      repoName,
 			ResourceKinds: sortedKeys(sig.resourceKinds),
 			Namespaces:    sortedKeys(sig.namespaces),
-		})
+			Confidence:    sig.confidence,
+			Provenance:    append([]string(nil), sig.provenance...),
+		}
+		candidate.Classification = InferWorkloadClassification(candidate)
+		candidates = append(candidates, candidate)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
@@ -124,6 +131,9 @@ func extractK8sSignals(fileData map[string]any, sig *repoSignals) {
 			sig.namespaces[ns] = struct{}{}
 		}
 	}
+	if len(resources) > 0 {
+		sig.addProvenance("k8s_resource", 0.98)
+	}
 }
 
 func extractArgoCDSignals(fileData map[string]any, sig *repoSignals) {
@@ -134,8 +144,58 @@ func extractArgoCDSignals(fileData map[string]any, sig *repoSignals) {
 		}
 		if len(apps) > 0 {
 			sig.hasArgoCD = true
+			sig.addProvenance("argocd_application", 0.95)
 		}
 	}
+}
+
+func extractArtifactSignals(
+	artifactType, relativePath string,
+	fileData map[string]any,
+	sig *repoSignals,
+) {
+	switch strings.ToLower(strings.TrimSpace(artifactType)) {
+	case "dockerfile":
+		if len(sliceValue(fileData["dockerfile_stages"])) > 0 {
+			sig.addProvenance("dockerfile_runtime", 0.80)
+		}
+	case "docker_compose":
+		if relativePath != "" {
+			sig.addProvenance("docker_compose_runtime", 0.78)
+		}
+	case "cloudformation_template", "cloudformation_serverless":
+		if hasCloudFormationSignals(fileData) {
+			sig.addProvenance("cloudformation_template", 0.58)
+		}
+	case "groovy":
+		if isJenkinsArtifact(relativePath, fileData) {
+			sig.addProvenance("jenkins_pipeline", 0.42)
+		}
+	case "github_actions_workflow":
+		sig.addProvenance("github_actions_workflow", 0.45)
+	}
+}
+
+func hasCloudFormationSignals(fileData map[string]any) bool {
+	for _, key := range []string{
+		"cloudformation_resources",
+		"cloudformation_parameters",
+		"cloudformation_outputs",
+		"cloudformation_cross_stack_imports",
+		"cloudformation_cross_stack_exports",
+	} {
+		if len(sliceValue(fileData[key])) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func isJenkinsArtifact(relativePath string, fileData map[string]any) bool {
+	if strings.EqualFold(strings.TrimSpace(relativePath), "Jenkinsfile") {
+		return true
+	}
+	return len(sliceValue(fileData["jenkins_pipeline_calls"])) > 0
 }
 
 func extractOverlayEnvs(repoID, relativePath string, deploymentEnvs map[string]map[string]struct{}) {
@@ -178,4 +238,27 @@ func sortedKeys(m map[string]struct{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func sliceValue(value any) []any {
+	items, _ := value.([]any)
+	return items
+}
+
+func (s *repoSignals) addProvenance(kind string, confidence float64) {
+	if s == nil || kind == "" {
+		return
+	}
+	for _, existing := range s.provenance {
+		if existing == kind {
+			if confidence > s.confidence {
+				s.confidence = confidence
+			}
+			return
+		}
+	}
+	s.provenance = append(s.provenance, kind)
+	if confidence > s.confidence {
+		s.confidence = confidence
+	}
 }

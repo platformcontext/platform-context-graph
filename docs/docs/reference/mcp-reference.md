@@ -83,6 +83,14 @@ Use these tools when the user is asking for a narrative answer such as
 - `delivery_paths`
 - `deployment_fact_summary`
 
+Repository and service deployment summaries may also expose grouped delivery-family fields inside
+`deployment_overview`:
+
+- `delivery_family_paths`
+- `delivery_family_story`
+- `delivery_workflows`
+- `shared_config_paths`
+
 When the deployment repos contain ArgoCD controller entities, `controller_overview`
 also includes those concrete controller records under `entities`.
 

@@ -14,7 +14,13 @@ func applyResolvedDeploymentSources(
 		return candidates
 	}
 
-	deploymentRepoBySource := make(map[string]string, len(resolved))
+	type deploymentSourceMetadata struct {
+		repoID     string
+		confidence float64
+		provenance string
+	}
+
+	deploymentRepoBySource := make(map[string]deploymentSourceMetadata, len(resolved))
 	for _, relationship := range resolved {
 		if relationship.RelationshipType != relationships.RelDeploysFrom {
 			continue
@@ -25,10 +31,19 @@ func applyResolvedDeploymentSources(
 		if !hasArgoDeploymentEvidence(relationship.Details) {
 			continue
 		}
-		if _, exists := deploymentRepoBySource[relationship.SourceRepoID]; exists {
+		provenance := argoDeploymentProvenance(relationship.Details)
+		if provenance == "" {
+			provenance = "argocd_application_source"
+		}
+		existing, exists := deploymentRepoBySource[relationship.SourceRepoID]
+		if exists && existing.confidence >= relationship.Confidence {
 			continue
 		}
-		deploymentRepoBySource[relationship.SourceRepoID] = relationship.TargetRepoID
+		deploymentRepoBySource[relationship.SourceRepoID] = deploymentSourceMetadata{
+			repoID:     relationship.TargetRepoID,
+			confidence: relationship.Confidence,
+			provenance: provenance,
+		}
 	}
 
 	if len(deploymentRepoBySource) == 0 {
@@ -38,8 +53,15 @@ func applyResolvedDeploymentSources(
 	enriched := make([]WorkloadCandidate, len(candidates))
 	for i, candidate := range candidates {
 		enriched[i] = candidate
-		if deploymentRepoID, ok := deploymentRepoBySource[candidate.RepoID]; ok {
-			enriched[i].DeploymentRepoID = deploymentRepoID
+		if metadata, ok := deploymentRepoBySource[candidate.RepoID]; ok {
+			enriched[i].DeploymentRepoID = metadata.repoID
+			if metadata.confidence > enriched[i].Confidence {
+				enriched[i].Confidence = metadata.confidence
+			}
+			enriched[i].Provenance = appendUniqueString(enriched[i].Provenance, metadata.provenance)
+			if enriched[i].Classification == "" {
+				enriched[i].Classification = InferWorkloadClassification(enriched[i])
+			}
 		}
 	}
 
@@ -63,6 +85,18 @@ func hasArgoDeploymentEvidence(details map[string]any) bool {
 	return false
 }
 
+func argoDeploymentProvenance(details map[string]any) string {
+	for _, kind := range toStringSlice(details["evidence_kinds"]) {
+		switch relationships.EvidenceKind(kind) {
+		case relationships.EvidenceKindArgoCDApplicationSetDeploySource:
+			return "argocd_applicationset_deploy_source"
+		case relationships.EvidenceKindArgoCDAppSource:
+			return "argocd_application_source"
+		}
+	}
+	return ""
+}
+
 func toStringSlice(value any) []string {
 	switch typed := value.(type) {
 	case []string:
@@ -84,4 +118,16 @@ func toStringSlice(value any) []string {
 		}
 		return []string{text}
 	}
+}
+
+func appendUniqueString(values []string, value string) []string {
+	if value == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
 }

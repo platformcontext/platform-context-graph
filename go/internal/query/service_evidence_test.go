@@ -166,6 +166,24 @@ module.exports = {
 	}
 }
 
+func TestExtractObservedHostnamesFiltersCodeLikeDottedIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	content := `
+const server = "console.log"
+module.exports = {
+  origin: "https://sample-service-api.qa.example.com",
+  logger: "module.exports",
+}
+`
+
+	got := extractObservedHostnames(content)
+	want := []string{"sample-service-api.qa.example.com"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("extractObservedHostnames() = %#v, want %#v", got, want)
+	}
+}
+
 func TestLoadServiceQueryEvidencePropagatesReaderErrors(t *testing.T) {
 	t.Parallel()
 

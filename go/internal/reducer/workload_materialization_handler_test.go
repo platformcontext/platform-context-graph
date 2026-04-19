@@ -225,6 +225,192 @@ func TestWorkloadMaterializationHandlerUsesArgoDeploymentSourceRelationships(t *
 	}
 }
 
+func TestWorkloadMaterializationHandlerSeedsRuntimeCandidateFromArgoDeploymentSource(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	loader := &stubFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactID:   "fact-repo",
+				FactKind: "repository",
+				Payload: map[string]any{
+					"graph_id": "repo-edge-api",
+					"name":     "edge-api",
+				},
+				ObservedAt: now,
+			},
+			{
+				FactID:   "fact-repo-deploy",
+				FactKind: "repository",
+				Payload: map[string]any{
+					"graph_id": "repo-platform-deploy",
+					"name":     "platform-deploy",
+				},
+				ObservedAt: now,
+			},
+			{
+				FactID:   "fact-file",
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-edge-api",
+					"artifact_type": "dockerfile",
+					"relative_path": "Dockerfile",
+					"parsed_file_data": map[string]any{
+						"dockerfile_stages": []any{
+							map[string]any{"name": "runtime"},
+						},
+					},
+				},
+				ObservedAt: now,
+			},
+			{
+				FactID:   "fact-file-deploy",
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-platform-deploy",
+					"artifact_type": "argocd",
+					"relative_path": "overlays/production/application.yaml",
+					"parsed_file_data": map[string]any{
+						"argocd_applications": []any{
+							map[string]any{"name": "edge-api"},
+						},
+					},
+				},
+				ObservedAt: now,
+			},
+		},
+	}
+	relationshipLoader := &stubResolvedRelationshipLoader{
+		resolved: []relationships.ResolvedRelationship{
+			{
+				SourceRepoID:     "repo-edge-api",
+				TargetRepoID:     "repo-platform-deploy",
+				RelationshipType: relationships.RelDeploysFrom,
+				Confidence:       0.96,
+				Details: map[string]any{
+					"evidence_kinds": []any{
+						string(relationships.EvidenceKindArgoCDAppSource),
+					},
+				},
+			},
+		},
+	}
+
+	executor := &recordingCypherExecutor{}
+	handler := WorkloadMaterializationHandler{
+		FactLoader:     loader,
+		ResolvedLoader: relationshipLoader,
+		Materializer:   NewWorkloadMaterializer(executor),
+	}
+
+	candidates, deploymentEnvironments := ExtractWorkloadCandidates(loader.envelopes)
+	if got, want := deploymentEnvironments["repo-platform-deploy"], []string{"production"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("deploymentEnvironments[repo-platform-deploy] = %v, want %v", got, want)
+	}
+	candidates = applyResolvedDeploymentSources(candidates, relationshipLoader.resolved)
+	if got, want := candidates[0].DeploymentRepoID, "repo-platform-deploy"; got != want {
+		t.Fatalf("candidates[0].DeploymentRepoID = %q, want %q", got, want)
+	}
+	projection := BuildProjectionRows(candidates, deploymentEnvironments)
+	if got := len(projection.InstanceRows); got != 1 {
+		t.Fatalf("len(projection.InstanceRows) = %d, want 1", got)
+	}
+	if got := len(projection.DeploymentSourceRows); got != 1 {
+		t.Fatalf("len(projection.DeploymentSourceRows) = %d, want 1", got)
+	}
+
+	intent := Intent{
+		IntentID:        "intent-wm-runtime-argo",
+		ScopeID:         "scope-edge-api",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "facts projected",
+		EntityKeys:      []string{"repo-edge-api"},
+		RelatedScopeIDs: []string{"scope-edge-api"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	result, err := handler.Handle(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if got := result.CanonicalWrites; got == 0 {
+		t.Fatal("CanonicalWrites = 0, want > 0")
+	}
+	if !recordedCallContainsParam(executor.calls, "deployment_repo_id", "repo-platform-deploy") {
+		t.Fatalf("missing deployment_repo_id row for repo-platform-deploy; calls=%#v", executor.calls)
+	}
+	if !recordedCallContainsParam(executor.calls, "materialization_confidence", "0.96") {
+		t.Fatal("missing materialization_confidence row for seeded runtime candidate")
+	}
+}
+
+func TestWorkloadMaterializationHandlerSkipsUtilityOnlyCandidate(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	loader := &stubFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactID:   "fact-repo",
+				FactKind: "repository",
+				Payload: map[string]any{
+					"graph_id": "repo-automation",
+					"name":     "automation-shared",
+				},
+				ObservedAt: now,
+			},
+			{
+				FactID:   "fact-file",
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-automation",
+					"artifact_type": "groovy",
+					"relative_path": "Jenkinsfile",
+					"parsed_file_data": map[string]any{
+						"jenkins_pipeline_calls": []any{"deployShared"},
+					},
+				},
+				ObservedAt: now,
+			},
+		},
+	}
+	executor := &recordingCypherExecutor{}
+	handler := WorkloadMaterializationHandler{
+		FactLoader:   loader,
+		Materializer: NewWorkloadMaterializer(executor),
+	}
+
+	intent := Intent{
+		IntentID:        "intent-wm-utility",
+		ScopeID:         "scope-automation",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "facts projected",
+		EntityKeys:      []string{"repo-automation"},
+		RelatedScopeIDs: []string{"scope-automation"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	result, err := handler.Handle(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if got := result.CanonicalWrites; got != 0 {
+		t.Fatalf("CanonicalWrites = %d, want 0 for utility-only candidate", got)
+	}
+	if got := len(executor.calls); got != 0 {
+		t.Fatalf("len(executor.calls) = %d, want 0", got)
+	}
+}
+
 func TestWorkloadMaterializationHandlerRejectsMissingDomain(t *testing.T) {
 	t.Parallel()
 

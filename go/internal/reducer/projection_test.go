@@ -54,6 +54,62 @@ func TestInferWorkloadKindNameTakesPrecedenceOverResourceKinds(t *testing.T) {
 	}
 }
 
+func TestInferWorkloadClassificationService(t *testing.T) {
+	t.Parallel()
+
+	candidate := WorkloadCandidate{
+		RepoName:      "edge-api",
+		ResourceKinds: []string{"deployment", "service"},
+		Provenance:    []string{"k8s_resource"},
+	}
+
+	if got := InferWorkloadClassification(candidate); got != "service" {
+		t.Fatalf("InferWorkloadClassification() = %q, want service", got)
+	}
+}
+
+func TestInferWorkloadClassificationJob(t *testing.T) {
+	t.Parallel()
+
+	candidate := WorkloadCandidate{
+		RepoName:      "nightly-batch",
+		ResourceKinds: []string{"job"},
+		Provenance:    []string{"k8s_resource"},
+	}
+
+	if got := InferWorkloadClassification(candidate); got != "job" {
+		t.Fatalf("InferWorkloadClassification() = %q, want job", got)
+	}
+}
+
+func TestInferWorkloadClassificationUtility(t *testing.T) {
+	t.Parallel()
+
+	candidate := WorkloadCandidate{
+		RepoName:   "automation-shared",
+		Provenance: []string{"jenkins_pipeline"},
+		Confidence: 0.42,
+		Namespaces: nil,
+	}
+
+	if got := InferWorkloadClassification(candidate); got != "utility" {
+		t.Fatalf("InferWorkloadClassification() = %q, want utility", got)
+	}
+}
+
+func TestInferWorkloadClassificationInfrastructure(t *testing.T) {
+	t.Parallel()
+
+	candidate := WorkloadCandidate{
+		RepoName:   "network-stack",
+		Provenance: []string{"cloudformation_template"},
+	}
+
+	if got := InferWorkloadClassification(candidate); got != "infrastructure" {
+		t.Fatalf("InferWorkloadClassification() = %q, want infrastructure", got)
+	}
+}
+
 func TestExtractOverlayEnvironmentsBasic(t *testing.T) {
 	t.Parallel()
 	paths := []string{
@@ -285,5 +341,66 @@ func TestBuildProjectionRowsNoRuntimePlatformWithoutKubernetesKinds(t *testing.T
 
 	if len(result.RuntimePlatformRows) != 0 {
 		t.Fatalf("RuntimePlatformRows len = %d, want 0", len(result.RuntimePlatformRows))
+	}
+}
+
+func TestBuildProjectionRowsSkipsUtilityCandidates(t *testing.T) {
+	t.Parallel()
+
+	result := BuildProjectionRows([]WorkloadCandidate{
+		{
+			RepoID:         "repo-utility",
+			RepoName:       "automation-shared",
+			Classification: "utility",
+			Confidence:     0.42,
+			Provenance:     []string{"jenkins_pipeline"},
+		},
+	}, nil)
+
+	if got := len(result.WorkloadRows); got != 0 {
+		t.Fatalf("len(WorkloadRows) = %d, want 0 for utility candidate", got)
+	}
+	if got := len(result.InstanceRows); got != 0 {
+		t.Fatalf("len(InstanceRows) = %d, want 0 for utility candidate", got)
+	}
+}
+
+func TestBuildProjectionRowsCarriesClassificationConfidenceAndProvenance(t *testing.T) {
+	t.Parallel()
+
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:           "repo-edge-api",
+			RepoName:         "edge-api",
+			DeploymentRepoID: "repo-platform-deploy",
+			Classification:   "service",
+			Confidence:       0.96,
+			Provenance:       []string{"argocd_application_source", "dockerfile_runtime"},
+			ResourceKinds:    []string{"deployment"},
+		},
+	}
+	deploymentEnvs := map[string][]string{
+		"repo-platform-deploy": {"production"},
+	}
+
+	result := BuildProjectionRows(candidates, deploymentEnvs)
+	if got := len(result.WorkloadRows); got != 1 {
+		t.Fatalf("len(WorkloadRows) = %d, want 1", got)
+	}
+	workload := result.WorkloadRows[0]
+	if got, want := workload.Classification, "service"; got != want {
+		t.Fatalf("Classification = %q, want %q", got, want)
+	}
+	if got, want := workload.Confidence, 0.96; got != want {
+		t.Fatalf("Confidence = %f, want %f", got, want)
+	}
+	if got, want := workload.Provenance, []string{"argocd_application_source", "dockerfile_runtime"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("Provenance = %v, want %v", got, want)
+	}
+	if got := len(result.DeploymentSourceRows); got != 1 {
+		t.Fatalf("len(DeploymentSourceRows) = %d, want 1", got)
+	}
+	if got, want := result.DeploymentSourceRows[0].Confidence, 0.96; got != want {
+		t.Fatalf("Deployment source confidence = %f, want %f", got, want)
 	}
 }

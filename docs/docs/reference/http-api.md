@@ -166,6 +166,14 @@ Repository story responses are shaped around:
 - `limitations`
 - `drilldowns`
 
+Within `deployment_overview`, repository story responses may also include:
+
+- `delivery_family_paths`
+- `delivery_family_story`
+- `delivery_paths`
+- `delivery_workflows`
+- `shared_config_paths`
+
 When repository entities carry semantic signals, repository story responses
 also:
 
@@ -197,6 +205,11 @@ Deployment-oriented trace responses are shaped around:
 - `delivery_paths`
 - `deployment_fact_summary`
 - `drilldowns`
+
+When repository-backed delivery-family synthesis is available, trace responses
+may also surface those grouped summaries through `deployment_overview`, such
+as `delivery_family_paths`, `delivery_family_story`, `delivery_workflows`, and
+`shared_config_paths`.
 
 When controller evidence is recoverable from the deployment repositories,
 `controller_overview` may also include concrete controller entity records in

@@ -20,6 +20,9 @@ type WorkloadCandidate struct {
 	ResourceKinds    []string
 	Namespaces       []string
 	DeploymentRepoID string
+	Classification   string
+	Confidence       float64
+	Provenance       []string
 }
 
 // ProjectionStats tracks counts produced during projection row building.
@@ -31,20 +34,26 @@ type ProjectionStats struct {
 
 // WorkloadRow is one canonical workload upsert payload.
 type WorkloadRow struct {
-	RepoID       string
-	WorkloadID   string
-	WorkloadKind string
-	WorkloadName string
+	RepoID         string
+	WorkloadID     string
+	WorkloadKind   string
+	WorkloadName   string
+	Classification string
+	Confidence     float64
+	Provenance     []string
 }
 
 // InstanceRow is one canonical workload instance upsert payload.
 type InstanceRow struct {
-	Environment  string
-	InstanceID   string
-	RepoID       string
-	WorkloadID   string
-	WorkloadKind string
-	WorkloadName string
+	Environment    string
+	InstanceID     string
+	RepoID         string
+	WorkloadID     string
+	WorkloadKind   string
+	WorkloadName   string
+	Classification string
+	Confidence     float64
+	Provenance     []string
 }
 
 // DeploymentSourceRow is one canonical deployment source edge payload.
@@ -53,6 +62,8 @@ type DeploymentSourceRow struct {
 	Environment      string
 	InstanceID       string
 	WorkloadName     string
+	Confidence       float64
+	Provenance       []string
 }
 
 // RuntimePlatformRow is one canonical runtime platform upsert payload.
@@ -77,12 +88,12 @@ type RepoDescriptor struct {
 
 // ProjectionResult holds all outputs from BuildProjectionRows.
 type ProjectionResult struct {
-	Stats               ProjectionStats
-	WorkloadRows        []WorkloadRow
-	InstanceRows        []InstanceRow
+	Stats                ProjectionStats
+	WorkloadRows         []WorkloadRow
+	InstanceRows         []InstanceRow
 	DeploymentSourceRows []DeploymentSourceRow
-	RuntimePlatformRows []RuntimePlatformRow
-	RepoDescriptors     []RepoDescriptor
+	RuntimePlatformRows  []RuntimePlatformRow
+	RepoDescriptors      []RepoDescriptor
 }
 
 // InferWorkloadKind infers a workload kind from its name and matched runtime
@@ -100,6 +111,38 @@ func InferWorkloadKind(name string, resourceKinds []string) string {
 	}
 	if strings.Contains(normalized, "batch") {
 		return "batch"
+	}
+	return "service"
+}
+
+// InferWorkloadClassification groups candidates into broad materialization
+// classes. Only service and job classifications are allowed to become
+// canonical workloads in Wave 1B to avoid weak controller signals creating
+// false-positive graph truth.
+func InferWorkloadClassification(candidate WorkloadCandidate) string {
+	if hasProvenance(candidate.Provenance, "cloudformation_template") {
+		return "infrastructure"
+	}
+	if hasAnyResourceKind(candidate.ResourceKinds, "job", "cronjob") {
+		return "job"
+	}
+	if hasProvenance(candidate.Provenance,
+		"k8s_resource",
+		"argocd_application",
+		"argocd_application_source",
+		"argocd_applicationset_deploy_source",
+		"dockerfile_runtime",
+		"docker_compose_runtime",
+	) || hasAnyResourceKind(candidate.ResourceKinds,
+		"deployment",
+		"service",
+		"statefulset",
+		"daemonset",
+	) {
+		return "service"
+	}
+	if hasProvenance(candidate.Provenance, "jenkins_pipeline", "github_actions_workflow") {
+		return "utility"
 	}
 	return "service"
 }
@@ -143,8 +186,18 @@ func BuildProjectionRows(
 		if candidate.RepoID == "" || candidate.RepoName == "" {
 			continue
 		}
+		classification := candidate.Classification
+		if classification == "" {
+			classification = InferWorkloadClassification(candidate)
+		}
+		if !isMaterializableWorkloadClassification(classification) {
+			continue
+		}
+
 		workloadID := fmt.Sprintf("workload:%s", candidate.RepoName)
 		workloadKind := InferWorkloadKind(candidate.RepoName, candidate.ResourceKinds)
+		confidence := normalizedCandidateConfidence(candidate.Confidence)
+		provenance := append([]string(nil), candidate.Provenance...)
 
 		result.RepoDescriptors = append(result.RepoDescriptors, RepoDescriptor{
 			RepoID:     candidate.RepoID,
@@ -155,10 +208,13 @@ func BuildProjectionRows(
 		if _, ok := seenWorkloads[workloadID]; !ok {
 			seenWorkloads[workloadID] = struct{}{}
 			result.WorkloadRows = append(result.WorkloadRows, WorkloadRow{
-				RepoID:       candidate.RepoID,
-				WorkloadID:   workloadID,
-				WorkloadKind: workloadKind,
-				WorkloadName: candidate.RepoName,
+				RepoID:         candidate.RepoID,
+				WorkloadID:     workloadID,
+				WorkloadKind:   workloadKind,
+				WorkloadName:   candidate.RepoName,
+				Classification: classification,
+				Confidence:     confidence,
+				Provenance:     provenance,
 			})
 			result.Stats.Workloads++
 		}
@@ -183,12 +239,15 @@ func BuildProjectionRows(
 			if _, ok := seenInstances[instanceID]; !ok {
 				seenInstances[instanceID] = struct{}{}
 				result.InstanceRows = append(result.InstanceRows, InstanceRow{
-					Environment:  environment,
-					InstanceID:   instanceID,
-					RepoID:       candidate.RepoID,
-					WorkloadID:   workloadID,
-					WorkloadKind: workloadKind,
-					WorkloadName: candidate.RepoName,
+					Environment:    environment,
+					InstanceID:     instanceID,
+					RepoID:         candidate.RepoID,
+					WorkloadID:     workloadID,
+					WorkloadKind:   workloadKind,
+					WorkloadName:   candidate.RepoName,
+					Classification: classification,
+					Confidence:     confidence,
+					Provenance:     provenance,
 				})
 				result.Stats.Instances++
 			}
@@ -202,6 +261,8 @@ func BuildProjectionRows(
 						Environment:      environment,
 						InstanceID:       instanceID,
 						WorkloadName:     candidate.RepoName,
+						Confidence:       confidence,
+						Provenance:       provenance,
 					})
 					result.Stats.DeploymentSources++
 				}
@@ -235,4 +296,44 @@ func BuildProjectionRows(
 	}
 
 	return result
+}
+
+func isMaterializableWorkloadClassification(classification string) bool {
+	switch strings.TrimSpace(strings.ToLower(classification)) {
+	case "service", "job":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizedCandidateConfidence(confidence float64) float64 {
+	if confidence > 0 {
+		return confidence
+	}
+	return 0.90
+}
+
+func hasAnyResourceKind(resourceKinds []string, wanted ...string) bool {
+	for _, kind := range resourceKinds {
+		normalized := strings.ToLower(strings.TrimSpace(kind))
+		for _, candidate := range wanted {
+			if normalized == candidate {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasProvenance(provenance []string, wanted ...string) bool {
+	for _, value := range provenance {
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		for _, candidate := range wanted {
+			if normalized == candidate {
+				return true
+			}
+		}
+	}
+	return false
 }

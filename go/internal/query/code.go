@@ -363,22 +363,27 @@ func normalizeDecoratorName(value string) string {
 // handleComplexity returns relationship-based complexity metrics for an entity.
 func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RepoID   string `json:"repo_id"`
-		EntityID string `json:"entity_id"`
+		RepoID       string `json:"repo_id"`
+		EntityID     string `json:"entity_id"`
+		FunctionName string `json:"function_name"`
+		Limit        int    `json:"limit"`
 	}
 	if err := ReadJSON(r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	if req.EntityID == "" {
-		WriteError(w, http.StatusBadRequest, "entity_id is required")
+	ctx := r.Context()
+	if req.EntityID == "" && req.FunctionName == "" {
+		results, err := h.listMostComplexFunctions(ctx, req.RepoID, req.Limit)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{"repo_id": req.RepoID, "results": results})
 		return
 	}
 
-	ctx := r.Context()
-
-	row, err := h.lookupComplexityRow(ctx, req.EntityID, req.RepoID)
+	row, err := h.lookupComplexityRow(ctx, req.EntityID, req.FunctionName, req.RepoID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -398,6 +403,7 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 		"language":            StringVal(row, "language"),
 		"start_line":          IntVal(row, "start_line"),
 		"end_line":            IntVal(row, "end_line"),
+		"complexity":          IntVal(row, "complexity"),
 		"outgoing_count":      IntVal(row, "outgoing_count"),
 		"incoming_count":      IntVal(row, "incoming_count"),
 		"total_relationships": IntVal(row, "total_relationships"),
@@ -420,7 +426,10 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, enriched[0])
 }
 
-func (h *CodeHandler) lookupComplexityRow(ctx context.Context, entityID, repoID string) (map[string]any, error) {
+func (h *CodeHandler) lookupComplexityRow(ctx context.Context, entityID, functionName, repoID string) (map[string]any, error) {
+	if functionName != "" {
+		return h.lookupComplexityRowByName(ctx, functionName, repoID)
+	}
 	row, err := h.runComplexityQuery(ctx, `
 		MATCH (e) WHERE e.id = $entity_id
 		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(repo:Repository)
@@ -432,38 +441,14 @@ func (h *CodeHandler) lookupComplexityRow(ctx context.Context, entityID, repoID 
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line,
+		       coalesce(e.cyclomatic_complexity, 0) as complexity,
 		       count(DISTINCT outgoingRel) as outgoing_count,
 		       count(DISTINCT incomingRel) as incoming_count,
 		       count(DISTINCT outgoingRel) + count(DISTINCT incomingRel) as total_relationships
 `+graphSemanticMetadataProjection()+`
 	`, map[string]any{"entity_id": entityID})
 	if row == nil {
-		params := map[string]any{"entity_name": entityID}
-		cypher := `
-			MATCH (e)
-			OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(repo:Repository)
-			WHERE e.name = $entity_name
-		`
-		if repoID != "" {
-			cypher += " AND repo.id = $repo_id"
-			params["repo_id"] = repoID
-		}
-		cypher += `
-			OPTIONAL MATCH (e)-[outgoingRel]->()
-			OPTIONAL MATCH ()-[incomingRel]->(e)
-			RETURN e.id as id, e.name as name, labels(e) as labels,
-			       f.relative_path as file_path,
-			       repo.id as repo_id, repo.name as repo_name,
-			       coalesce(e.language, f.language) as language,
-			       e.start_line as start_line,
-			       e.end_line as end_line,
-			       count(DISTINCT outgoingRel) as outgoing_count,
-			       count(DISTINCT incomingRel) as incoming_count,
-			       count(DISTINCT outgoingRel) + count(DISTINCT incomingRel) as total_relationships
-` + graphSemanticMetadataProjection() + `
-			LIMIT 1
-		`
-		return h.runComplexityQuery(ctx, cypher, params)
+		return h.lookupComplexityRowByName(ctx, entityID, repoID)
 	}
 	return row, err
 }

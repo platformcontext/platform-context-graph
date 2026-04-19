@@ -229,6 +229,8 @@ read-side summary.
 The current derived summaries include:
 
 - `deployment_artifacts`
+- `delivery_family_paths`
+- `delivery_family_story`
 - `delivery_workflows`
 - `delivery_paths`
 - `consumers`
@@ -581,11 +583,12 @@ module sources when they resolve to a known local module monorepo alias such as
 `terraform-modules-aws`.
 
 The same Go read path now also preserves per-repo config provenance in
-`deployment_overview.delivery_paths` and `deployment_overview.topology_story`
-even when a path appears in only one repository. That means Terragrunt
-includes, dependency config paths, local `file()` / `templatefile()` assets,
-and other repo-local config rows no longer disappear unless another repo
-shares the same path.
+`deployment_overview.delivery_paths`, `deployment_overview.delivery_family_paths`,
+`deployment_overview.delivery_family_story`, and
+`deployment_overview.topology_story` even when a path appears in only one
+repository. That means Terragrunt includes, dependency config paths, local
+`file()` / `templatefile()` assets, and other repo-local config rows no longer
+disappear unless another repo shares the same path.
 
 The compose-backed relationship verification now also exercises
 `POST /api/v0/impact/trace-deployment-chain` on the live fixture stack so the

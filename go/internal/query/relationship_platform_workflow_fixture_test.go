@@ -334,6 +334,99 @@ func TestRelationshipPlatformWorkerDockerfileSurfacesRuntimeStory(t *testing.T) 
 	}
 }
 
+func TestRelationshipPlatformServiceEdgeSynthesizesMixedDeliveryFamilies(t *testing.T) {
+	t.Parallel()
+
+	controllerArtifacts := buildRepositoryControllerArtifacts("service-edge-api", []FileContent{
+		{
+			RelativePath: "Jenkinsfile",
+			ArtifactType: "groovy",
+			Content:      readRelationshipPlatformFixture(t, "service-edge-api", "Jenkinsfile"),
+		},
+	})
+	runtimeArtifacts := buildRepositoryRuntimeArtifacts([]FileContent{
+		{
+			RelativePath: "docker-compose.yaml",
+			ArtifactType: "docker_compose",
+			Content:      readRelationshipPlatformFixture(t, "service-edge-api", "docker-compose.yaml"),
+		},
+	})
+	cloudFormationArtifacts := map[string]any{
+		"deployment_artifacts": []map[string]any{
+			{
+				"relative_path": "infra/api-service.yaml",
+				"artifact_type": "cloudformation_serverless",
+				"artifact_name": "service-edge-api",
+			},
+		},
+	}
+	deploymentArtifacts := mergeDeploymentArtifactMaps(controllerArtifacts, runtimeArtifacts)
+	deploymentArtifacts = mergeDeploymentArtifactMaps(deploymentArtifacts, cloudFormationArtifacts)
+	if deploymentArtifacts == nil {
+		t.Fatal("deploymentArtifacts = nil, want mixed delivery artifacts")
+	}
+
+	overview := BuildRepositoryDeploymentOverview(
+		[]string{"service-edge-api"},
+		[]string{"ecs", "kubernetes"},
+		[]string{"argocd", "cloudformation", "docker_compose", "jenkins", "terraform"},
+		map[string]any{
+			"deployment_artifacts": deploymentArtifacts,
+			"relationship_overview": map[string]any{
+				"controller_driven": []map[string]any{
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "deployment-kustomize",
+						"target_id":     "repo-deployment-kustomize",
+						"evidence_type": "argocd_applicationset_discovery",
+					},
+				},
+			},
+		},
+	)
+
+	deliveryFamilyPaths, ok := overview["delivery_family_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_family_paths type = %T, want []map[string]any", overview["delivery_family_paths"])
+	}
+	if len(deliveryFamilyPaths) != 4 {
+		t.Fatalf("len(delivery_family_paths) = %d, want 4", len(deliveryFamilyPaths))
+	}
+	for _, family := range []string{"cloudformation", "docker_compose", "gitops", "jenkins"} {
+		requireRelationshipPlatformDeliveryFamily(t, deliveryFamilyPaths, family)
+	}
+
+	deliveryFamilyStory, ok := overview["delivery_family_story"].([]string)
+	if !ok {
+		t.Fatalf("delivery_family_story type = %T, want []string", overview["delivery_family_story"])
+	}
+	wantStory := []string{
+		"CloudFormation serverless delivery is evidenced by infra/api-service.yaml via cloudformation_serverless.",
+		"Docker Compose runtime evidence is present via docker-compose.yaml for service edge-api; treat it as development/runtime evidence unless stronger production deployment proof exists.",
+		"GitOps delivery is evidenced by DEPLOYS_FROM deployment-kustomize via argocd_applicationset_discovery.",
+		"Jenkins delivery is evidenced by Jenkinsfile via jenkins_pipeline.",
+	}
+	if len(deliveryFamilyStory) != len(wantStory) {
+		t.Fatalf("len(delivery_family_story) = %d, want %d", len(deliveryFamilyStory), len(wantStory))
+	}
+	for index, want := range wantStory {
+		if got := deliveryFamilyStory[index]; got != want {
+			t.Fatalf("delivery_family_story[%d] = %q, want %q", index, got, want)
+		}
+	}
+}
+
+func requireRelationshipPlatformDeliveryFamily(t *testing.T, rows []map[string]any, family string) {
+	t.Helper()
+
+	for _, row := range rows {
+		if StringVal(row, "family") == family {
+			return
+		}
+	}
+	t.Fatalf("delivery_family_paths = %#v, want family %q", rows, family)
+}
+
 func readRelationshipPlatformFixture(t *testing.T, parts ...string) string {
 	t.Helper()
 

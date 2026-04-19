@@ -350,7 +350,7 @@ func TestBuildRepositoryStoryResponsePreservesDockerAndComposeRelationshipEviden
 			"families": []string{"argocd", "github_actions", "docker", "docker_compose", "terraform"},
 			"relationship_overview": map[string]any{
 				"relationship_count": 6,
-				"story": "Controller-driven relationships: DEPLOYS_FROM infra-configs via argocd_application_source. Workflow-driven relationships: DEPLOYS_FROM ci-workflows via github_actions_reusable_workflow_ref. IaC-driven relationships: DEPLOYS_FROM runtime-image via dockerfile_source_label. IaC-driven relationships: DEPLOYS_FROM ../api via docker_compose_build_context. IaC-driven relationships: DEPLOYS_FROM ghcr.io/acme/api:1.2.3 via docker_compose_image. IaC-driven relationships: DEPENDS_ON database via docker_compose_depends_on.",
+				"story":              "Controller-driven relationships: DEPLOYS_FROM infra-configs via argocd_application_source. Workflow-driven relationships: DEPLOYS_FROM ci-workflows via github_actions_reusable_workflow_ref. IaC-driven relationships: DEPLOYS_FROM runtime-image via dockerfile_source_label. IaC-driven relationships: DEPLOYS_FROM ../api via docker_compose_build_context. IaC-driven relationships: DEPLOYS_FROM ghcr.io/acme/api:1.2.3 via docker_compose_image. IaC-driven relationships: DEPENDS_ON database via docker_compose_depends_on.",
 				"controller_driven": []map[string]any{
 					{
 						"type":          "DEPLOYS_FROM",
@@ -483,6 +483,144 @@ func TestBuildRepositoryStoryResponsePreservesDockerAndComposeRelationshipEviden
 			t.Fatalf("direct_story = %#v, want line %q", directStory, want)
 		}
 	}
+}
+
+func TestRepositoryStoryDeliveryParitySynthesizesDeliveryFamilyParityWithoutCollapsingControllers(t *testing.T) {
+	t.Parallel()
+
+	repo := RepoRef{ID: "repository:payments-service", Name: "payments-service"}
+	got := buildRepositoryStoryResponse(
+		repo,
+		18,
+		[]string{"yaml", "groovy"},
+		[]string{"payments-api"},
+		nil,
+		1,
+		map[string]any{
+			"families": []string{"cloudformation", "docker_compose", "jenkins"},
+			"relationship_overview": map[string]any{
+				"controller_driven": []map[string]any{
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "delivery-configs",
+						"target_id":     "repo-gitops",
+						"evidence_type": "argocd_application_source",
+					},
+				},
+			},
+			"deployment_artifacts": map[string]any{
+				"controller_artifacts": []map[string]any{
+					{
+						"path":            "Jenkinsfile",
+						"controller_kind": "jenkins_pipeline",
+					},
+				},
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "infra/serverless.yml",
+						"artifact_type": "cloudformation_serverless",
+						"artifact_name": "payments-stack",
+					},
+					{
+						"relative_path": "docker-compose.yaml",
+						"artifact_type": "docker_compose",
+						"service_name":  "api",
+					},
+				},
+			},
+		},
+		nil,
+	)
+
+	deploymentOverview, ok := got["deployment_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_overview type = %T, want map[string]any", got["deployment_overview"])
+	}
+
+	deliveryFamilyPaths, ok := deploymentOverview["delivery_family_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_family_paths type = %T, want []map[string]any", deploymentOverview["delivery_family_paths"])
+	}
+	if len(deliveryFamilyPaths) != 4 {
+		t.Fatalf("len(delivery_family_paths) = %d, want 4", len(deliveryFamilyPaths))
+	}
+	for _, family := range []string{"cloudformation", "docker_compose", "gitops", "jenkins"} {
+		if requireRepositoryStoryDeliveryFamily(deliveryFamilyPaths, family) == nil {
+			t.Fatalf("delivery_family_paths = %#v, want family %q", deliveryFamilyPaths, family)
+		}
+	}
+
+	deliveryFamilyStory, ok := deploymentOverview["delivery_family_story"].([]string)
+	if !ok {
+		t.Fatalf("delivery_family_story type = %T, want []string", deploymentOverview["delivery_family_story"])
+	}
+	wantLines := []string{
+		"CloudFormation serverless delivery is evidenced by infra/serverless.yml via cloudformation_serverless.",
+		"Docker Compose runtime evidence is present via docker-compose.yaml for service api; treat it as development/runtime evidence unless stronger production deployment proof exists.",
+		"GitOps delivery is evidenced by DEPLOYS_FROM delivery-configs via argocd_application_source.",
+		"Jenkins delivery is evidenced by Jenkinsfile via jenkins_pipeline.",
+	}
+	if len(deliveryFamilyStory) != len(wantLines) {
+		t.Fatalf("len(delivery_family_story) = %d, want %d", len(deliveryFamilyStory), len(wantLines))
+	}
+	for _, want := range wantLines {
+		if !containsExactLine(deliveryFamilyStory, want) {
+			t.Fatalf("delivery_family_story = %#v, want line %q", deliveryFamilyStory, want)
+		}
+	}
+
+	story, ok := got["story"].(string)
+	if !ok {
+		t.Fatalf("story type = %T, want string", got["story"])
+	}
+	for _, want := range wantLines {
+		if !containsSubstring(story, want) {
+			t.Fatalf("story = %q, want %q", story, want)
+		}
+	}
+
+	gitopsOverview, ok := got["gitops_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("gitops_overview type = %T, want map[string]any", got["gitops_overview"])
+	}
+	if got, want := gitopsOverview["enabled"], true; got != want {
+		t.Fatalf("gitops_overview.enabled = %#v, want %#v", got, want)
+	}
+	if !containsStringValue(StringSliceVal(gitopsOverview, "tool_families"), "argocd") {
+		t.Fatalf("gitops_overview.tool_families = %#v, want argocd", gitopsOverview["tool_families"])
+	}
+
+	directStory, ok := deploymentOverview["direct_story"].([]string)
+	if !ok {
+		t.Fatalf("direct_story type = %T, want []string", deploymentOverview["direct_story"])
+	}
+	if !containsExactLine(directStory, "Controller delivery paths include Jenkinsfile via jenkins_pipeline.") {
+		t.Fatalf("direct_story = %#v, want Jenkins controller artifact line preserved", directStory)
+	}
+	if !containsExactLine(directStory, "Runtime artifacts include cloudformation_serverless stage payments-stack in infra/serverless.yml.") {
+		t.Fatalf("direct_story = %#v, want CloudFormation artifact line preserved", directStory)
+	}
+	if !containsExactLine(directStory, "Runtime artifacts include docker_compose service api in docker-compose.yaml.") {
+		t.Fatalf("direct_story = %#v, want Compose artifact line preserved", directStory)
+	}
+}
+
+func requireRepositoryStoryDeliveryFamily(rows []map[string]any, family string) map[string]any {
+	for _, row := range rows {
+		if StringVal(row, "family") == family {
+			return row
+		}
+	}
+	return nil
+}
+
+func containsStringValue(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func containsExactLine(lines []string, want string) bool {

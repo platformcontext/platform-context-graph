@@ -71,6 +71,8 @@ func buildServiceDeploymentEvidenceFromOverview(overview map[string]any) map[str
 		"deployment_artifacts",
 		"shared_config_paths",
 		"delivery_paths",
+		"delivery_family_paths",
+		"delivery_family_story",
 		"delivery_workflows",
 		"topology_story",
 	} {
@@ -98,6 +100,11 @@ func collectServiceDeploymentToolFamilies(overview map[string]any) []string {
 		switch strings.TrimSpace(StringVal(row, "controller_kind")) {
 		case "jenkins_pipeline":
 			families["jenkins"] = struct{}{}
+		}
+	}
+	for _, row := range mapSliceValue(overview, "delivery_family_paths") {
+		if toolFamily := strings.TrimSpace(StringVal(row, "tool_family")); toolFamily != "" {
+			families[toolFamily] = struct{}{}
 		}
 	}
 

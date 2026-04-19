@@ -96,11 +96,14 @@ func (m *WorkloadMaterializer) Materialize(
 		rows := make([]map[string]any, len(projection.WorkloadRows))
 		for i, row := range projection.WorkloadRows {
 			rows[i] = map[string]any{
-				"repo_id":         row.RepoID,
-				"workload_id":     row.WorkloadID,
-				"workload_name":   row.WorkloadName,
-				"workload_kind":   row.WorkloadKind,
-				"evidence_source": EvidenceSourceWorkloads,
+				"repo_id":                    row.RepoID,
+				"workload_id":                row.WorkloadID,
+				"workload_name":              row.WorkloadName,
+				"workload_kind":              row.WorkloadKind,
+				"classification":             row.Classification,
+				"materialization_confidence": row.Confidence,
+				"materialization_provenance": row.Provenance,
+				"evidence_source":            EvidenceSourceWorkloads,
 			}
 		}
 		if err := m.executeBatched(ctx, batchWorkloadUpsertCypher, rows); err != nil {
@@ -114,13 +117,16 @@ func (m *WorkloadMaterializer) Materialize(
 		rows := make([]map[string]any, len(projection.InstanceRows))
 		for i, row := range projection.InstanceRows {
 			rows[i] = map[string]any{
-				"workload_id":     row.WorkloadID,
-				"instance_id":     row.InstanceID,
-				"workload_name":   row.WorkloadName,
-				"workload_kind":   row.WorkloadKind,
-				"environment":     row.Environment,
-				"repo_id":         row.RepoID,
-				"evidence_source": EvidenceSourceWorkloads,
+				"workload_id":                row.WorkloadID,
+				"instance_id":                row.InstanceID,
+				"workload_name":              row.WorkloadName,
+				"workload_kind":              row.WorkloadKind,
+				"classification":             row.Classification,
+				"environment":                row.Environment,
+				"repo_id":                    row.RepoID,
+				"materialization_confidence": row.Confidence,
+				"materialization_provenance": row.Provenance,
+				"evidence_source":            EvidenceSourceWorkloads,
 			}
 		}
 		if err := m.executeBatched(ctx, batchWorkloadInstanceUpsertCypher, rows); err != nil {
@@ -134,9 +140,11 @@ func (m *WorkloadMaterializer) Materialize(
 		rows := make([]map[string]any, len(projection.DeploymentSourceRows))
 		for i, row := range projection.DeploymentSourceRows {
 			rows[i] = map[string]any{
-				"instance_id":        row.InstanceID,
-				"deployment_repo_id": row.DeploymentRepoID,
-				"evidence_source":    EvidenceSourceWorkloads,
+				"instance_id":           row.InstanceID,
+				"deployment_repo_id":    row.DeploymentRepoID,
+				"deployment_confidence": normalizedCandidateConfidence(row.Confidence),
+				"deployment_provenance": row.Provenance,
+				"evidence_source":       EvidenceSourceWorkloads,
 			}
 		}
 		if err := m.executeBatched(ctx, batchDeploymentSourceUpsertCypher, rows); err != nil {
@@ -229,10 +237,13 @@ MERGE (w:Workload {id: row.workload_id})
 SET w.type = 'workload',
     w.name = row.workload_name,
     w.kind = row.workload_kind,
+    w.classification = row.classification,
     w.repo_id = row.repo_id,
+    w.materialization_confidence = row.materialization_confidence,
+    w.materialization_provenance = row.materialization_provenance,
     w.evidence_source = row.evidence_source
 MERGE (repo)-[rel:DEFINES]->(w)
-SET rel.confidence = 1.0,
+SET rel.confidence = row.materialization_confidence,
     rel.reason = 'Repository defines workload',
     rel.evidence_source = row.evidence_source`
 
@@ -242,12 +253,15 @@ MERGE (i:WorkloadInstance {id: row.instance_id})
 SET i.type = 'workload_instance',
     i.name = row.workload_name,
     i.kind = row.workload_kind,
+    i.classification = row.classification,
     i.environment = row.environment,
     i.workload_id = row.workload_id,
     i.repo_id = row.repo_id,
+    i.materialization_confidence = row.materialization_confidence,
+    i.materialization_provenance = row.materialization_provenance,
     i.evidence_source = row.evidence_source
 MERGE (i)-[rel:INSTANCE_OF]->(w)
-SET rel.confidence = 1.0,
+SET rel.confidence = row.materialization_confidence,
     rel.reason = 'Workload instance belongs to workload',
     rel.evidence_source = row.evidence_source`
 
@@ -255,8 +269,9 @@ SET rel.confidence = 1.0,
 MATCH (i:WorkloadInstance {id: row.instance_id})
 MATCH (deployment_repo:Repository {id: row.deployment_repo_id})
 MERGE (i)-[rel:DEPLOYMENT_SOURCE]->(deployment_repo)
-SET rel.confidence = 0.98,
+SET rel.confidence = row.deployment_confidence,
     rel.reason = 'Deployment manifests for workload instance live in deployment repository',
+    rel.provenance = row.deployment_provenance,
     rel.evidence_source = row.evidence_source`
 
 	batchRuntimePlatformUpsertCypher = `UNWIND $rows AS row

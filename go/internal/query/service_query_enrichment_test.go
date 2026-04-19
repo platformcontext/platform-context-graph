@@ -183,8 +183,11 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 	if len(consumers) != 2 {
 		t.Fatalf("len(consumer_repositories) = %d, want 2", len(consumers))
 	}
-	if got, want := StringVal(consumers[0], "repository"), "repo-consumer-9"; got != want {
+	if got, want := StringVal(consumers[0], "repository"), "terraform-stack-staging"; got != want {
 		t.Fatalf("consumer_repositories[0].repository = %q, want %q", got, want)
+	}
+	if got, want := StringVal(consumers[1], "repository"), "repo-consumer-9"; got != want {
+		t.Fatalf("consumer_repositories[1].repository = %q, want %q", got, want)
 	}
 
 	provisioningChains := mapSliceValue(workloadContext, "provisioning_source_chains")
@@ -236,7 +239,7 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 	}
 }
 
-func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitSearchesAllUniqueHostnames(t *testing.T) {
+func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitUsesBoundedDefaultSearchLimit(t *testing.T) {
 	t.Parallel()
 
 	db, recorder := openRecordingContentReaderDB(t, []recordingContentReaderQueryResult{
@@ -252,8 +255,8 @@ func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitSearchesAllUniqueHostn
 		context.Background(),
 		fakeGraphReader{
 			run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
-				if strings.Contains(cypher, "LIMIT $limit") {
-					t.Fatalf("cypher = %q, want no trace limit in default enrichment path", cypher)
+				if !strings.Contains(cypher, "LIMIT $limit") {
+					t.Fatalf("cypher = %q, want bounded default limit in enrichment path", cypher)
 				}
 				return nil, nil
 			},
@@ -284,7 +287,7 @@ func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitSearchesAllUniqueHostn
 			t.Fatalf("recorder.args[%d][0] type = %T, want string", i, recorder.args[i][0])
 		}
 		gotSearchTerms = append(gotSearchTerms, term)
-		if got, want := numericDriverValue(t, recorder.args[i][1]), int64(100); got != want {
+		if got, want := numericDriverValue(t, recorder.args[i][1]), int64(25); got != want {
 			t.Fatalf("search limit = %d, want %d for default any-repo search", got, want)
 		}
 	}
@@ -295,7 +298,6 @@ func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitSearchesAllUniqueHostn
 		"sample-service.extra.example.test",
 		"sample-service.prod.example.test",
 		"sample-service.qa.example.test",
-		"sample-service.stage.example.test",
 	}
 	if !reflect.DeepEqual(gotSearchTerms, wantSearchTerms) {
 		t.Fatalf("search terms = %#v, want %#v", gotSearchTerms, wantSearchTerms)

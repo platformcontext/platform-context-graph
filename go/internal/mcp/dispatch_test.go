@@ -112,6 +112,65 @@ func TestResolveRouteMapsSearchEntityContentSingleRepoID(t *testing.T) {
 	}
 }
 
+func TestResolveRouteMapsCalculateCyclomaticComplexityToFunctionName(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("calculate_cyclomatic_complexity", map[string]any{
+		"function_name": "search",
+		"repo_id":       "repo-1",
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if got, want := route.path, "/api/v0/code/complexity"; got != want {
+		t.Fatalf("route.path = %q, want %q", got, want)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["function_name"], "search"; got != want {
+		t.Fatalf("body[function_name] = %#v, want %#v", got, want)
+	}
+	if got, want := body["repo_id"], "repo-1"; got != want {
+		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
+	}
+	if _, exists := body["entity_id"]; exists {
+		t.Fatalf("body should not contain entity_id, got %#v", body["entity_id"])
+	}
+}
+
+func TestResolveRouteMapsFindMostComplexFunctionsWithoutEntitySelector(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("find_most_complex_functions", map[string]any{
+		"repo_id": "repo-1",
+		"limit":   float64(7),
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if got, want := route.path, "/api/v0/code/complexity"; got != want {
+		t.Fatalf("route.path = %q, want %q", got, want)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["repo_id"], "repo-1"; got != want {
+		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
+	}
+	if got, want := body["limit"], 7; got != want {
+		t.Fatalf("body[limit] = %#v, want %#v", got, want)
+	}
+	if _, exists := body["entity_id"]; exists {
+		t.Fatalf("body should not contain entity_id, got %#v", body["entity_id"])
+	}
+	if _, exists := body["function_name"]; exists {
+		t.Fatalf("body should not contain function_name, got %#v", body["function_name"])
+	}
+}
+
 func TestResolveRouteMapsAnalyzeCodeRelationshipsCallers(t *testing.T) {
 	t.Parallel()
 

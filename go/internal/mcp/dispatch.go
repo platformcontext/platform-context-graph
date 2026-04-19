@@ -246,7 +246,7 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 		}}, nil
 	case "calculate_cyclomatic_complexity":
 		return &route{method: "POST", path: "/api/v0/code/complexity", body: map[string]any{
-			"entity_id": str(args, "function_name"), "repo_id": str(args, "repo_id"),
+			"function_name": str(args, "function_name"), "repo_id": str(args, "repo_id"),
 		}}, nil
 	case "find_most_complex_functions":
 		return &route{method: "POST", path: "/api/v0/code/complexity", body: map[string]any{

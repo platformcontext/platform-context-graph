@@ -694,3 +694,202 @@ func TestBuildRepositoryDeploymentOverviewIncludesLocalWorkflowCallPaths(t *test
 		t.Fatalf("topology_story[0] = %q, want %q", got, want)
 	}
 }
+
+func TestBuildRepositoryDeploymentOverviewSynthesizesDualDeliveryFamilies(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		nil,
+		[]string{"cloudformation", "jenkins"},
+		map[string]any{
+			"deployment_artifacts": map[string]any{
+				"controller_artifacts": []map[string]any{
+					{
+						"path":            "Jenkinsfile",
+						"controller_kind": "jenkins_pipeline",
+					},
+				},
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "infra/serverless.yml",
+						"artifact_type": "cloudformation_serverless",
+						"artifact_name": "payments-stack",
+						"signals":       []string{"template_file", "serverless_transform"},
+					},
+				},
+			},
+		},
+	)
+
+	deliveryFamilyPaths, ok := got["delivery_family_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_family_paths type = %T, want []map[string]any", got["delivery_family_paths"])
+	}
+	if len(deliveryFamilyPaths) != 2 {
+		t.Fatalf("len(delivery_family_paths) = %d, want 2", len(deliveryFamilyPaths))
+	}
+
+	jenkins := requireDeliveryFamilyPath(t, deliveryFamilyPaths, "jenkins")
+	if got, want := jenkins["mode"], "controller_delivery"; got != want {
+		t.Fatalf("jenkins.mode = %#v, want %#v", got, want)
+	}
+	if got, want := jenkins["path"], "Jenkinsfile"; got != want {
+		t.Fatalf("jenkins.path = %#v, want %#v", got, want)
+	}
+	if got, want := jenkins["production_evidence"], true; got != want {
+		t.Fatalf("jenkins.production_evidence = %#v, want %#v", got, want)
+	}
+
+	cloudFormation := requireDeliveryFamilyPath(t, deliveryFamilyPaths, "cloudformation")
+	if got, want := cloudFormation["mode"], "serverless_delivery"; got != want {
+		t.Fatalf("cloudformation.mode = %#v, want %#v", got, want)
+	}
+	if got, want := cloudFormation["path"], "infra/serverless.yml"; got != want {
+		t.Fatalf("cloudformation.path = %#v, want %#v", got, want)
+	}
+	if got, want := cloudFormation["artifact_type"], "cloudformation_serverless"; got != want {
+		t.Fatalf("cloudformation.artifact_type = %#v, want %#v", got, want)
+	}
+	if got, want := cloudFormation["production_evidence"], true; got != want {
+		t.Fatalf("cloudformation.production_evidence = %#v, want %#v", got, want)
+	}
+
+	deliveryFamilyStory, ok := got["delivery_family_story"].([]string)
+	if !ok {
+		t.Fatalf("delivery_family_story type = %T, want []string", got["delivery_family_story"])
+	}
+	wantStory := []string{
+		"CloudFormation serverless delivery is evidenced by infra/serverless.yml via cloudformation_serverless.",
+		"Jenkins delivery is evidenced by Jenkinsfile via jenkins_pipeline.",
+	}
+	if len(deliveryFamilyStory) != len(wantStory) {
+		t.Fatalf("len(delivery_family_story) = %d, want %d", len(deliveryFamilyStory), len(wantStory))
+	}
+	for index, want := range wantStory {
+		if deliveryFamilyStory[index] != want {
+			t.Fatalf("delivery_family_story[%d] = %q, want %q", index, deliveryFamilyStory[index], want)
+		}
+	}
+}
+
+func TestBuildRepositoryDeploymentOverviewElevatesGitOpsFamilyFromArgoRelationshipEvidence(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		nil,
+		nil,
+		map[string]any{
+			"relationship_overview": map[string]any{
+				"controller_driven": []map[string]any{
+					{
+						"type":          "DEPLOYS_FROM",
+						"target_name":   "delivery-configs",
+						"target_id":     "repo-argocd",
+						"evidence_type": "argocd_application_source",
+					},
+				},
+			},
+		},
+	)
+
+	deliveryFamilyPaths, ok := got["delivery_family_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_family_paths type = %T, want []map[string]any", got["delivery_family_paths"])
+	}
+	if len(deliveryFamilyPaths) != 1 {
+		t.Fatalf("len(delivery_family_paths) = %d, want 1", len(deliveryFamilyPaths))
+	}
+
+	gitops := requireDeliveryFamilyPath(t, deliveryFamilyPaths, "gitops")
+	if got, want := gitops["mode"], "gitops_delivery"; got != want {
+		t.Fatalf("gitops.mode = %#v, want %#v", got, want)
+	}
+	if got, want := gitops["target_name"], "delivery-configs"; got != want {
+		t.Fatalf("gitops.target_name = %#v, want %#v", got, want)
+	}
+	if got, want := gitops["evidence_type"], "argocd_application_source"; got != want {
+		t.Fatalf("gitops.evidence_type = %#v, want %#v", got, want)
+	}
+	if got, want := gitops["production_evidence"], true; got != want {
+		t.Fatalf("gitops.production_evidence = %#v, want %#v", got, want)
+	}
+
+	deliveryFamilyStory, ok := got["delivery_family_story"].([]string)
+	if !ok {
+		t.Fatalf("delivery_family_story type = %T, want []string", got["delivery_family_story"])
+	}
+	if len(deliveryFamilyStory) != 1 {
+		t.Fatalf("len(delivery_family_story) = %d, want 1", len(deliveryFamilyStory))
+	}
+	if got, want := deliveryFamilyStory[0], "GitOps delivery is evidenced by DEPLOYS_FROM delivery-configs via argocd_application_source."; got != want {
+		t.Fatalf("delivery_family_story[0] = %q, want %q", got, want)
+	}
+}
+
+func TestBuildRepositoryDeploymentOverviewMarksComposeAsDevelopmentRuntimeEvidence(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRepositoryDeploymentOverview(
+		[]string{"payments-api"},
+		nil,
+		[]string{"docker_compose"},
+		map[string]any{
+			"deployment_artifacts": map[string]any{
+				"deployment_artifacts": []map[string]any{
+					{
+						"relative_path": "docker-compose.yaml",
+						"artifact_type": "docker_compose",
+						"service_name":  "api",
+					},
+				},
+			},
+		},
+	)
+
+	deliveryFamilyPaths, ok := got["delivery_family_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_family_paths type = %T, want []map[string]any", got["delivery_family_paths"])
+	}
+	if len(deliveryFamilyPaths) != 1 {
+		t.Fatalf("len(delivery_family_paths) = %d, want 1", len(deliveryFamilyPaths))
+	}
+
+	compose := requireDeliveryFamilyPath(t, deliveryFamilyPaths, "docker_compose")
+	if got, want := compose["mode"], "development_runtime"; got != want {
+		t.Fatalf("docker_compose.mode = %#v, want %#v", got, want)
+	}
+	if got, want := compose["path"], "docker-compose.yaml"; got != want {
+		t.Fatalf("docker_compose.path = %#v, want %#v", got, want)
+	}
+	if got, want := compose["service_name"], "api"; got != want {
+		t.Fatalf("docker_compose.service_name = %#v, want %#v", got, want)
+	}
+	if got, want := compose["production_evidence"], false; got != want {
+		t.Fatalf("docker_compose.production_evidence = %#v, want %#v", got, want)
+	}
+
+	deliveryFamilyStory, ok := got["delivery_family_story"].([]string)
+	if !ok {
+		t.Fatalf("delivery_family_story type = %T, want []string", got["delivery_family_story"])
+	}
+	if len(deliveryFamilyStory) != 1 {
+		t.Fatalf("len(delivery_family_story) = %d, want 1", len(deliveryFamilyStory))
+	}
+	if got, want := deliveryFamilyStory[0], "Docker Compose runtime evidence is present via docker-compose.yaml for service api; treat it as development/runtime evidence unless stronger production deployment proof exists."; got != want {
+		t.Fatalf("delivery_family_story[0] = %q, want %q", got, want)
+	}
+}
+
+func requireDeliveryFamilyPath(t *testing.T, rows []map[string]any, family string) map[string]any {
+	t.Helper()
+
+	for _, row := range rows {
+		if StringVal(row, "family") == family {
+			return row
+		}
+	}
+	t.Fatalf("delivery_family_paths = %#v, want family %q", rows, family)
+	return nil
+}

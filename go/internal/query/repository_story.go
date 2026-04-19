@@ -24,6 +24,12 @@ func buildRepositoryStoryResponse(
 	}
 	relationshipOverview := mapValue(infrastructureOverview, "relationship_overview")
 	semanticStory := buildRepositorySemanticStory(semanticOverview)
+	deploymentOverview := BuildRepositoryDeploymentOverview(
+		filteredWorkloads,
+		filteredPlatforms,
+		infraFamilies,
+		infrastructureOverview,
+	)
 	limitations := []string{"coverage_not_computed"}
 	if len(filteredPlatforms) == 0 {
 		limitations = append(limitations, "deployment_surface_unknown")
@@ -58,15 +64,10 @@ func buildRepositoryStoryResponse(
 				"summary": fmt.Sprintf("%d workload(s) and %d platform signal(s)", len(filteredWorkloads), len(filteredPlatforms)),
 			},
 		},
-		"deployment_overview": BuildRepositoryDeploymentOverview(
-			filteredWorkloads,
-			filteredPlatforms,
-			infraFamilies,
-			infrastructureOverview,
-		),
+		"deployment_overview": deploymentOverview,
 		"gitops_overview": map[string]any{
-			"enabled":          containsGitOpsSignals(filteredPlatforms, infraFamilies),
-			"tool_families":    mergeStringSets(filteredPlatforms, infraFamilies),
+			"enabled":          containsRepositoryGitOpsSignals(filteredPlatforms, infraFamilies, deploymentOverview),
+			"tool_families":    repositoryGitOpsToolFamilies(filteredPlatforms, infraFamilies, deploymentOverview),
 			"observed_targets": filteredWorkloads,
 		},
 		"documentation_overview": map[string]any{
@@ -113,6 +114,9 @@ func buildRepositoryStoryResponse(
 		response["infrastructure_overview"] = infrastructureOverview
 	}
 	if deploymentOverview, ok := response["deployment_overview"].(map[string]any); ok {
+		if deliveryFamilyStory := stringSliceMapValue(deploymentOverview, "delivery_family_story"); len(deliveryFamilyStory) > 0 {
+			response["story"] = response["story"].(string) + " " + strings.Join(deliveryFamilyStory, " ")
+		}
 		topologyStory := stringSliceMapValue(deploymentOverview, "topology_story")
 		directStory := focusedDeploymentStory(topologyStory)
 		deploymentOverview["direct_story"] = directStory
@@ -198,6 +202,28 @@ func containsGitOpsSignals(platforms []string, infraFamilies []string) bool {
 		}
 	}
 	return false
+}
+
+func containsRepositoryGitOpsSignals(platforms []string, infraFamilies []string, deploymentOverview map[string]any) bool {
+	if containsGitOpsSignals(platforms, infraFamilies) {
+		return true
+	}
+	for _, row := range mapSliceValue(deploymentOverview, "delivery_family_paths") {
+		if StringVal(row, "family") == "gitops" {
+			return true
+		}
+	}
+	return false
+}
+
+func repositoryGitOpsToolFamilies(platforms []string, infraFamilies []string, deploymentOverview map[string]any) []string {
+	toolFamilies := mergeStringSets(platforms, infraFamilies)
+	for _, row := range mapSliceValue(deploymentOverview, "delivery_family_paths") {
+		if toolFamily := StringVal(row, "tool_family"); toolFamily != "" {
+			toolFamilies = mergeStringSets(toolFamilies, []string{toolFamily})
+		}
+	}
+	return toolFamilies
 }
 
 func mergeStringSets(left []string, right []string) []string {

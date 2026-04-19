@@ -234,6 +234,70 @@ func buildOverviewTopologyStory(deliveryPaths []map[string]any, sharedConfigPath
 	return story
 }
 
+func buildOverviewDeliveryFamilyStory(deliveryFamilyPaths []map[string]any) []string {
+	if len(deliveryFamilyPaths) == 0 {
+		return nil
+	}
+
+	story := make([]string, 0, len(deliveryFamilyPaths))
+	for _, row := range deliveryFamilyPaths {
+		switch StringVal(row, "family") {
+		case "cloudformation":
+			path := strings.TrimSpace(StringVal(row, "path"))
+			artifactType := strings.TrimSpace(StringVal(row, "artifact_type"))
+			if path == "" || artifactType == "" {
+				continue
+			}
+			story = append(story, fmt.Sprintf(
+				"CloudFormation serverless delivery is evidenced by %s via %s.",
+				path,
+				artifactType,
+			))
+		case "docker_compose":
+			path := strings.TrimSpace(StringVal(row, "path"))
+			serviceName := strings.TrimSpace(StringVal(row, "service_name"))
+			if path == "" {
+				continue
+			}
+			line := fmt.Sprintf(
+				"Docker Compose runtime evidence is present via %s",
+				path,
+			)
+			if serviceName != "" {
+				line += fmt.Sprintf(" for service %s", serviceName)
+			}
+			line += "; treat it as development/runtime evidence unless stronger production deployment proof exists."
+			story = append(story, line)
+		case "gitops":
+			relType := strings.TrimSpace(StringVal(row, "type"))
+			targetName := strings.TrimSpace(StringVal(row, "target_name"))
+			evidenceType := strings.TrimSpace(StringVal(row, "evidence_type"))
+			if relType == "" || targetName == "" || evidenceType == "" {
+				continue
+			}
+			story = append(story, fmt.Sprintf(
+				"GitOps delivery is evidenced by %s %s via %s.",
+				relType,
+				targetName,
+				evidenceType,
+			))
+		case "jenkins":
+			path := strings.TrimSpace(StringVal(row, "path"))
+			controllerKind := strings.TrimSpace(StringVal(row, "controller_kind"))
+			if path == "" || controllerKind == "" {
+				continue
+			}
+			story = append(story, fmt.Sprintf(
+				"Jenkins delivery is evidenced by %s via %s.",
+				path,
+				controllerKind,
+			))
+		}
+	}
+
+	return story
+}
+
 func buildRuntimeArtifactStoryLine(artifactType, artifactName, serviceName, path, baseImage, cmd string) string {
 	switch {
 	case serviceName != "":

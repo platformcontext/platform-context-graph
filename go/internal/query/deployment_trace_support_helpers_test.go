@@ -269,3 +269,80 @@ func TestLoadConsumerRepositoryEnrichmentFindsCrossRepoConsumersOutsideGraphCand
 		t.Fatalf("consumer[matched_values] = %#v, want %#v", got, want)
 	}
 }
+
+func TestLoadConsumerRepositoryEnrichmentWithLimitCapsMergedConsumersByEvidenceStrength(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
+			rows: [][]driver.Value{
+				{"repo-consumer-1", "config/service.json", "sha-1", "", "hash-1", int64(3), "json", "json"},
+				{"repo-consumer-3", "config/service.json", "sha-2", "", "hash-2", int64(3), "json", "json"},
+			},
+		},
+		{
+			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
+			rows: [][]driver.Value{
+				{"repo-consumer-1", "deploy/values.yaml", "sha-3", "", "hash-3", int64(5), "yaml", "yaml"},
+				{"repo-consumer-4", "deploy/values.yaml", "sha-4", "", "hash-4", int64(5), "yaml", "yaml"},
+			},
+		},
+	})
+
+	got, err := loadConsumerRepositoryEnrichmentWithLimit(
+		context.Background(),
+		fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if got, want := params["limit"], 2; got != want {
+					t.Fatalf("params[limit] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{
+					{
+						"repo_id":             "repo-consumer-1",
+						"repo_name":           "alpha-consumer",
+						"relationship_type":   "PROVISIONS_DEPENDENCY_FOR",
+						"relationship_reason": "terraform_provider_reference",
+					},
+					{
+						"repo_id":             "repo-consumer-2",
+						"repo_name":           "beta-consumer",
+						"relationship_type":   "USES_MODULE",
+						"relationship_reason": "terraform_module_source_path",
+					},
+				}, nil
+			},
+		},
+		NewContentReader(db),
+		"repo-sample-service-api",
+		"sample-service-api",
+		[]string{"sample-service-api.qa.example.test"},
+		2,
+	)
+	if err != nil {
+		t.Fatalf("loadConsumerRepositoryEnrichmentWithLimit() error = %v, want nil", err)
+	}
+	if gotLen, wantLen := len(got), 2; gotLen != wantLen {
+		t.Fatalf("len(loadConsumerRepositoryEnrichmentWithLimit()) = %d, want %d", gotLen, wantLen)
+	}
+	if gotRepo, wantRepo := StringVal(got[0], "repository"), "alpha-consumer"; gotRepo != wantRepo {
+		t.Fatalf("got[0][repository] = %q, want %q", gotRepo, wantRepo)
+	}
+	if gotRepo, wantRepo := StringVal(got[1], "repository"), "beta-consumer"; gotRepo != wantRepo {
+		t.Fatalf("got[1][repository] = %q, want %q", gotRepo, wantRepo)
+	}
+}
+
+func TestBoundedTraceEnrichmentLimitUsesOperatorSafeDefault(t *testing.T) {
+	t.Parallel()
+
+	if got, want := boundedTraceEnrichmentLimit(0), 25; got != want {
+		t.Fatalf("boundedTraceEnrichmentLimit(0) = %d, want %d", got, want)
+	}
+	if got, want := boundedTraceEnrichmentLimit(3), 30; got != want {
+		t.Fatalf("boundedTraceEnrichmentLimit(3) = %d, want %d", got, want)
+	}
+	if got, want := boundedTraceEnrichmentLimit(25), 100; got != want {
+		t.Fatalf("boundedTraceEnrichmentLimit(25) = %d, want %d", got, want)
+	}
+}

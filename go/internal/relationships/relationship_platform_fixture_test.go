@@ -103,6 +103,77 @@ func TestRelationshipPlatformFixtureComposeEmitsCrossRepoEvidence(t *testing.T) 
 	}
 }
 
+func TestRelationshipPlatformFixtureApplicationSetEmitsGitOpsDiscoveryEvidence(t *testing.T) {
+	t.Parallel()
+
+	content := readRelationshipPlatformFixture(
+		t,
+		"delivery-argocd",
+		"applicationsets",
+		"platform-apps.yaml",
+	)
+
+	evidence := DiscoverEvidence(
+		[]facts.Envelope{
+			{
+				ScopeID: "delivery-argocd",
+				Payload: map[string]any{
+					"artifact_type": "yaml",
+					"relative_path": "applicationsets/platform-apps.yaml",
+					"content":       content,
+				},
+			},
+		},
+		[]CatalogEntry{
+			{RepoID: "deployment-kustomize", Aliases: []string{"deployment-kustomize"}},
+		},
+	)
+
+	appSetEvidence, ok := findEvidenceByKind(evidence, EvidenceKindArgoCDApplicationSetDiscovery)
+	if !ok {
+		t.Fatal("missing applicationset discovery evidence for relationship-platform fixture")
+	}
+	if got, want := appSetEvidence.TargetRepoID, "deployment-kustomize"; got != want {
+		t.Fatalf("applicationset target repo = %q, want %q", got, want)
+	}
+	if got, want := appSetEvidence.RelationshipType, RelDiscoversConfigIn; got != want {
+		t.Fatalf("applicationset relationship type = %q, want %q", got, want)
+	}
+}
+
+func TestRelationshipPlatformFixtureTerragruntEmitsProvisioningEvidence(t *testing.T) {
+	t.Parallel()
+
+	content := readRelationshipPlatformFixture(t, "infra-runtime-modern", "terragrunt.hcl")
+
+	evidence := DiscoverEvidence(
+		[]facts.Envelope{
+			{
+				ScopeID: "infra-runtime-modern",
+				Payload: map[string]any{
+					"artifact_type": "terragrunt",
+					"relative_path": "terragrunt.hcl",
+					"content":       content,
+				},
+			},
+		},
+		[]CatalogEntry{
+			{RepoID: "infra-modules-shared", Aliases: []string{"infra-modules-shared"}},
+		},
+	)
+
+	moduleEvidence, ok := findEvidenceByKind(evidence, EvidenceKindTerraformModuleSource)
+	if !ok {
+		t.Fatal("missing terraform module source evidence for relationship-platform fixture")
+	}
+	if got, want := moduleEvidence.TargetRepoID, "infra-modules-shared"; got != want {
+		t.Fatalf("terragrunt module target repo = %q, want %q", got, want)
+	}
+	if got, want := moduleEvidence.RelationshipType, RelUsesModule; got != want {
+		t.Fatalf("terragrunt module relationship type = %q, want %q", got, want)
+	}
+}
+
 func TestRelationshipPlatformFixtureLocalWorkflowDoesNotEmitCanonicalRepoEvidence(t *testing.T) {
 	t.Parallel()
 

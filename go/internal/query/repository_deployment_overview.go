@@ -13,6 +13,9 @@ func BuildRepositoryDeploymentOverview(
 	infraFamilies []string,
 	infrastructureOverview map[string]any,
 ) map[string]any {
+	deploymentArtifacts := mapValue(infrastructureOverview, "deployment_artifacts")
+	relationshipOverview := mapValue(infrastructureOverview, "relationship_overview")
+
 	overview := map[string]any{
 		"workload_count":          len(workloads),
 		"platform_count":          len(platforms),
@@ -20,8 +23,6 @@ func BuildRepositoryDeploymentOverview(
 		"platforms":               platforms,
 		"infrastructure_families": infraFamilies,
 	}
-
-	deploymentArtifacts := mapValue(infrastructureOverview, "deployment_artifacts")
 	if len(deploymentArtifacts) > 0 {
 		overview["deployment_artifacts"] = deploymentArtifacts
 	}
@@ -39,6 +40,15 @@ func BuildRepositoryDeploymentOverview(
 	deliveryWorkflows := buildOverviewDeliveryWorkflows(deploymentArtifacts)
 	if len(deliveryWorkflows) > 0 {
 		overview["delivery_workflows"] = deliveryWorkflows
+	}
+
+	deliveryFamilyPaths := buildOverviewDeliveryFamilyPaths(deploymentArtifacts, relationshipOverview)
+	if len(deliveryFamilyPaths) > 0 {
+		overview["delivery_family_paths"] = deliveryFamilyPaths
+	}
+	deliveryFamilyStory := buildOverviewDeliveryFamilyStory(deliveryFamilyPaths)
+	if len(deliveryFamilyStory) > 0 {
+		overview["delivery_family_story"] = deliveryFamilyStory
 	}
 
 	topologyStory := buildOverviewTopologyStory(deliveryPaths, sharedConfigPaths)
@@ -225,6 +235,100 @@ func copyStringSliceField(dst map[string]any, src map[string]any, key string) {
 	if values := stringSliceValue(src, key); len(values) > 0 {
 		dst[key] = values
 	}
+}
+
+func buildOverviewDeliveryFamilyPaths(
+	deploymentArtifacts map[string]any,
+	relationshipOverview map[string]any,
+) []map[string]any {
+	paths := make([]map[string]any, 0)
+	seen := map[string]struct{}{}
+	appendPath := func(row map[string]any) {
+		if len(row) == 0 {
+			return
+		}
+		key := strings.Join([]string{
+			StringVal(row, "family"),
+			StringVal(row, "mode"),
+			StringVal(row, "path"),
+			StringVal(row, "target_name"),
+			StringVal(row, "evidence_type"),
+		}, "|")
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		paths = append(paths, row)
+	}
+
+	for _, row := range mapSliceValue(deploymentArtifacts, "controller_artifacts") {
+		if strings.TrimSpace(StringVal(row, "controller_kind")) != "jenkins_pipeline" {
+			continue
+		}
+		appendPath(map[string]any{
+			"family":              "jenkins",
+			"tool_family":         "jenkins",
+			"mode":                "controller_delivery",
+			"path":                strings.TrimSpace(StringVal(row, "path")),
+			"controller_kind":     "jenkins_pipeline",
+			"production_evidence": true,
+		})
+	}
+
+	for _, row := range mapSliceValue(deploymentArtifacts, "deployment_artifacts") {
+		path := strings.TrimSpace(StringVal(row, "relative_path"))
+		switch strings.TrimSpace(StringVal(row, "artifact_type")) {
+		case "cloudformation_serverless":
+			appendPath(map[string]any{
+				"family":              "cloudformation",
+				"tool_family":         "cloudformation",
+				"mode":                "serverless_delivery",
+				"path":                path,
+				"artifact_type":       "cloudformation_serverless",
+				"artifact_name":       strings.TrimSpace(StringVal(row, "artifact_name")),
+				"production_evidence": true,
+			})
+		case "docker_compose":
+			appendPath(map[string]any{
+				"family":              "docker_compose",
+				"tool_family":         "docker_compose",
+				"mode":                "development_runtime",
+				"path":                path,
+				"artifact_type":       "docker_compose",
+				"service_name":        strings.TrimSpace(StringVal(row, "service_name")),
+				"production_evidence": false,
+			})
+		}
+	}
+
+	for _, row := range mapSliceValue(relationshipOverview, "controller_driven") {
+		evidenceType := strings.TrimSpace(StringVal(row, "evidence_type"))
+		if !strings.HasPrefix(evidenceType, "argocd_") {
+			continue
+		}
+		appendPath(map[string]any{
+			"family":              "gitops",
+			"tool_family":         "argocd",
+			"mode":                "gitops_delivery",
+			"type":                strings.TrimSpace(StringVal(row, "type")),
+			"target_name":         strings.TrimSpace(StringVal(row, "target_name")),
+			"target_id":           strings.TrimSpace(StringVal(row, "target_id")),
+			"evidence_type":       evidenceType,
+			"production_evidence": true,
+		})
+	}
+
+	sort.Slice(paths, func(i, j int) bool {
+		if left, right := StringVal(paths[i], "family"), StringVal(paths[j], "family"); left != right {
+			return left < right
+		}
+		if left, right := StringVal(paths[i], "path"), StringVal(paths[j], "path"); left != right {
+			return left < right
+		}
+		return StringVal(paths[i], "target_name") < StringVal(paths[j], "target_name")
+	})
+
+	return paths
 }
 
 func buildSharedConfigPaths(deploymentArtifacts map[string]any) []map[string]any {
