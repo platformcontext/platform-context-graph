@@ -147,6 +147,51 @@ The canonical Git path is:
 sync -> discover -> parse -> emit facts -> enqueue work -> reducer -> graph/content projection
 ```
 
+### Bootstrap Pipeline Phase Ordering (MUST READ before editing any reducer/projector)
+
+The bootstrap-index orchestrator (`go/cmd/bootstrap-index/main.go`) drives a
+multi-pass pipeline with strict phase ordering. Editing any domain handler
+without understanding this sequence WILL produce bugs that only surface in
+full E2E runs.
+
+```text
+Phase 1 — Collection + First-Pass Reduction (parallel)
+  bootstrap-index collects 896 repos (snapshot → emit facts → enqueue work)
+  resolution-engine drains work queue in domain priority order:
+    source_local ─────────────────┐
+    deployable_unit_correlation ──┤
+    workload_identity ────────────┤  All run in first pass.
+    workload_materialization ─────┤  NO resolved_relationships exist yet.
+    inheritance_materialization ──┤
+    code_call_materialization ────┤
+    sql_relationship_materialization ┘
+    deployment_mapping ───────────── ALL 896 PENDING (runs last or concurrently)
+
+Phase 2 — Backfill (after all projections complete)
+  bootstrap-index calls BackfillAllRelationshipEvidence()
+    → scans relationship_candidates + fact evidence
+    → populates relationship_evidence_facts
+    → publishes readiness rows for all 896 generations
+
+Phase 3 — Deployment Mapping Reopen
+  bootstrap-index calls ReopenDeploymentMappingWorkItems()
+    → reopens 895 succeeded deployment_mapping items
+    → resolution-engine processes them with evidence
+    → creates resolved_relationships (DEPLOYS_FROM, DEPENDS_ON, etc.)
+
+Phase 4 — ??? Second-pass consumers (GAP as of 2026-04-19)
+  workload_materialization needs resolved_relationships to:
+    - enrich candidates with DeploymentRepoID
+    - resolve environments from deployment repo overlays
+    - produce WorkloadInstance nodes
+  BUT: no mechanism currently reopens workload_materialization after Phase 3.
+  This is the active gap being fixed.
+```
+
+**Key rule**: Any domain that consumes `resolved_relationships` MUST have a
+re-trigger mechanism after Phase 3 completes. If you add a new domain that
+reads resolved_relationships, you MUST also add its reopen step.
+
 Important ownership boundaries:
 
 - `go/internal/collector/` owns Git collection
