@@ -248,6 +248,9 @@ func extractObservedHostnames(content string) []string {
 			if hostname == "" {
 				continue
 			}
+			if isLikelyFalsePositiveHostname(hostname) {
+				continue
+			}
 			if _, ok := seen[hostname]; ok {
 				continue
 			}
@@ -257,6 +260,65 @@ func extractObservedHostnames(content string) []string {
 	}
 	sort.Strings(hostnames)
 	return hostnames
+}
+
+// isLikelyFalsePositiveHostname rejects regex matches that look like file
+// names, code property chains, or test matchers rather than real hostnames.
+func isLikelyFalsePositiveHostname(hostname string) bool {
+	// Reject file extensions masquerading as TLDs.
+	lastDot := strings.LastIndex(hostname, ".")
+	if lastDot < 0 {
+		return true
+	}
+	tld := hostname[lastDot+1:]
+	if _, blocked := falsePositiveTLDs[tld]; blocked {
+		return true
+	}
+
+	// Reject code property chains: any segment contains camelCase or
+	// underscore patterns that don't appear in real hostnames.
+	for _, segment := range strings.Split(hostname, ".") {
+		if containsCamelCase(segment) {
+			return true
+		}
+	}
+
+	// Reject single-character segments (x.jpg, a.b.c patterns).
+	parts := strings.Split(hostname, ".")
+	for _, part := range parts {
+		if len(part) == 0 {
+			return true
+		}
+	}
+	if len(parts[0]) <= 1 && len(parts) <= 2 {
+		return true
+	}
+
+	return false
+}
+
+var falsePositiveTLDs = map[string]struct{}{
+	// File extensions
+	"jpg": {}, "jpeg": {}, "png": {}, "gif": {}, "svg": {}, "ico": {},
+	"webp": {}, "bmp": {}, "zip": {}, "tar": {}, "gz": {}, "pdf": {},
+	"doc": {}, "docx": {}, "xls": {}, "xlsx": {}, "css": {}, "js": {},
+	"ts": {}, "mjs": {}, "cjs": {}, "json": {}, "yaml": {}, "yml": {},
+	"xml": {}, "html": {}, "htm": {}, "txt": {}, "log": {}, "md": {},
+	"csv": {}, "sql": {}, "proto": {}, "lock": {}, "toml": {},
+	// Code property/method names
+	"debug": {}, "info": {}, "error": {}, "warn": {}, "value": {},
+	"url": {}, "includes": {}, "replace": {}, "register": {},
+	"tostring": {}, "exports": {}, "equal": {}, "client": {},
+	"stub": {}, "spark": {}, "img": {}, "type": {},
+	"plugin": {}, "length": {}, "push": {}, "map": {},
+	"filter": {}, "reduce": {}, "keys": {}, "values": {},
+	"then": {}, "catch": {}, "resolve": {}, "reject": {},
+}
+
+var camelCaseRE = regexp.MustCompile(`[a-z][A-Z]`)
+
+func containsCamelCase(s string) bool {
+	return camelCaseRE.MatchString(s)
 }
 
 func lineLikelyContainsHostname(line string) bool {

@@ -184,6 +184,30 @@ module.exports = {
 	}
 }
 
+func TestExtractObservedHostnamesRejectsFileExtensionsAndCamelCase(t *testing.T) {
+	t.Parallel()
+
+	content := `
+host: "api.qa.boattrader.com"
+url: "https://recos-ranker-service.dap-dev.brgp.io"
+image: "12345.jpg"
+logo: "sea-ray-logo.png"
+url: "thumbnail.gif"
+archive: "scripts.zip"
+ref: "logger.debug"
+expect: "to.equal"
+property: "mediaItem.mediaType"
+chain: "externalmediaitem.externalUrl"
+stub: "sandbox.stub"
+`
+
+	got := extractObservedHostnames(content)
+	want := []string{"api.qa.boattrader.com", "recos-ranker-service.dap-dev.brgp.io"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("extractObservedHostnames() = %#v, want %#v", got, want)
+	}
+}
+
 func TestLoadServiceQueryEvidencePropagatesReaderErrors(t *testing.T) {
 	t.Parallel()
 
