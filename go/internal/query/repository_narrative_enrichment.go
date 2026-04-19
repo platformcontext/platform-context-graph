@@ -193,7 +193,7 @@ func buildRepositoryDocumentationOverview(
 			seenRoutes[route] = struct{}{}
 			docRoutes = append(docRoutes, route)
 		}
-		if spec, ok := extractAPISpecEvidence(file); ok {
+		if spec, ok := extractAPISpecEvidence(file, nil); ok {
 			if isRepositoryAPISpecEvidence(spec) {
 				if _, ok := seenSpecs[spec.RelativePath]; !ok {
 					seenSpecs[spec.RelativePath] = struct{}{}

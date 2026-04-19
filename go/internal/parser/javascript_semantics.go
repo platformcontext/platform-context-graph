@@ -258,7 +258,17 @@ func detectNextJSSemantics(path string, source string) (map[string]any, bool) {
 	return nextjs, true
 }
 
+func javaScriptHasExpressImport(source string) bool {
+	return strings.Contains(source, `require("express")`) ||
+		strings.Contains(source, `require('express')`) ||
+		strings.Contains(source, `from "express"`) ||
+		strings.Contains(source, `from 'express'`)
+}
+
 func detectExpressSemantics(source string) (map[string]any, bool) {
+	if !javaScriptHasExpressImport(source) {
+		return nil, false
+	}
 	matches := javaScriptExpressRouteRe.FindAllStringSubmatch(source, -1)
 	if len(matches) == 0 {
 		return nil, false

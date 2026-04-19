@@ -82,6 +82,21 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	if got := service.CodeCallProjectionRunner.Config.BatchLimit; got <= 0 {
 		t.Fatalf("buildReducerService() code call batch limit = %d, want positive", got)
 	}
+	if service.RepoDependencyProjectionRunner == nil {
+		t.Fatal("buildReducerService() repo dependency projection runner = nil, want non-nil")
+	}
+	if got := service.RepoDependencyProjectionRunner.Config.PollInterval; got <= 0 {
+		t.Fatalf("buildReducerService() repo dependency poll interval = %v, want positive", got)
+	}
+	if got := service.RepoDependencyProjectionRunner.Config.LeaseOwner; got != defaultRepoDependencyProjectionLeaseOwner {
+		t.Fatalf("buildReducerService() repo dependency lease owner = %q, want %q", got, defaultRepoDependencyProjectionLeaseOwner)
+	}
+	if got := service.RepoDependencyProjectionRunner.Config.LeaseTTL; got <= 0 {
+		t.Fatalf("buildReducerService() repo dependency lease TTL = %v, want positive", got)
+	}
+	if got := service.RepoDependencyProjectionRunner.Config.BatchLimit; got <= 0 {
+		t.Fatalf("buildReducerService() repo dependency batch limit = %d, want positive", got)
+	}
 	codeCallEdgeWriter, ok := service.CodeCallProjectionRunner.EdgeWriter.(*sourceneo4j.EdgeWriter)
 	if !ok {
 		t.Fatalf("code call edge writer type = %T, want *neo4j.EdgeWriter", service.CodeCallProjectionRunner.EdgeWriter)

@@ -30,7 +30,6 @@ const (
 // by the partition worker.
 var sharedProjectionDomains = []string{
 	DomainPlatformInfra,
-	DomainRepoDependency,
 	DomainWorkloadDependency,
 	DomainInheritanceEdges,
 	DomainSQLRelationships,

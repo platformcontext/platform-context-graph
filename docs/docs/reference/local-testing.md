@@ -390,6 +390,30 @@ docker compose logs ingester | tail -50
 docker compose logs resolution-engine | tail -50
 ```
 
+### Sync the local MCP client config
+
+When the Compose stack auto-picks ports or generates a fresh bearer token, resync
+the checked-in `.mcp.json` before using Codex or another MCP client against the
+local stack:
+
+```bash
+./scripts/sync_local_compose_mcp.sh
+```
+
+That helper:
+
+- discovers the live published `mcp-server` and API ports from `docker-compose`
+- reads the current bearer token from the running `mcp-server` container
+- updates only the `pcg-local-compose` entry in `.mcp.json`
+- preserves remote entries such as `pcg-e2e`
+- probes MCP health, MCP `tools/list`, and API `index-status`
+
+If you only want to patch `.mcp.json` without running the probes:
+
+```bash
+PCG_SKIP_PROBES=true ./scripts/sync_local_compose_mcp.sh
+```
+
 ### Health and pipeline status
 
 Replace `localhost:8080` with the appropriate host and port if using

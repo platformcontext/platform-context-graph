@@ -18,10 +18,11 @@ type serviceEvidenceReader interface {
 }
 
 type ServiceQueryEvidence struct {
-	Hostnames    []ServiceHostnameEvidence    `json:"hostnames,omitempty"`
-	Environments []ServiceEnvironmentEvidence `json:"environments,omitempty"`
-	DocsRoutes   []ServiceDocsRouteEvidence   `json:"docs_routes,omitempty"`
-	APISpecs     []ServiceAPISpecEvidence     `json:"api_specs,omitempty"`
+	Hostnames       []ServiceHostnameEvidence    `json:"hostnames,omitempty"`
+	Environments    []ServiceEnvironmentEvidence `json:"environments,omitempty"`
+	DocsRoutes      []ServiceDocsRouteEvidence   `json:"docs_routes,omitempty"`
+	APISpecs        []ServiceAPISpecEvidence     `json:"api_specs,omitempty"`
+	FrameworkRoutes []FrameworkRouteEvidence      `json:"framework_routes,omitempty"`
 }
 
 type ServiceHostnameEvidence struct {
@@ -61,6 +62,15 @@ type ServiceAPIEndpointEvidence struct {
 	Path         string   `json:"path"`
 	Methods      []string `json:"methods,omitempty"`
 	OperationIDs []string `json:"operation_ids,omitempty"`
+}
+
+// FrameworkRouteEvidence captures routes detected by parser framework_semantics
+// (Express, Hapi, FastAPI, Flask) from fact_records.
+type FrameworkRouteEvidence struct {
+	Framework    string   `json:"framework"`
+	RelativePath string   `json:"relative_path"`
+	RoutePaths   []string `json:"route_paths"`
+	RouteMethods []string `json:"route_methods"`
 }
 
 var (
@@ -171,7 +181,7 @@ func loadServiceQueryEvidence(
 			})
 		}
 
-		if spec, ok := extractAPISpecEvidence(hydrated); ok {
+		if spec, ok := extractAPISpecEvidence(hydrated, buildSpecFileResolver(reader, ctx, repoID)); ok {
 			key := spec.RelativePath
 			if _, ok := seenSpecs[key]; ok {
 				continue
@@ -438,7 +448,12 @@ func extractDocsRoutes(content string) []string {
 	return routes
 }
 
-func extractAPISpecEvidence(file FileContent) (ServiceAPISpecEvidence, bool) {
+// specFileResolver resolves a relative $ref path from a base spec file and
+// returns the raw content of the referenced file. Returns empty string when
+// the reference cannot be resolved.
+type specFileResolver func(baseRelativePath, ref string) string
+
+func extractAPISpecEvidence(file FileContent, resolver specFileResolver) (ServiceAPISpecEvidence, bool) {
 	format := serviceEvidenceFormat(file.RelativePath)
 	if !isPotentialAPISpecPath(file.RelativePath) {
 		return ServiceAPISpecEvidence{}, false
@@ -446,6 +461,7 @@ func extractAPISpecEvidence(file FileContent) (ServiceAPISpecEvidence, bool) {
 
 	doc, err := parseLooseYAMLDocument(file.Content)
 	if err == nil {
+		resolveOpenAPIPathRefs(doc, file.RelativePath, resolver)
 		if spec, ok := buildOpenAPISpecEvidence(file.RelativePath, format, doc); ok {
 			return spec, true
 		}
@@ -456,6 +472,55 @@ func extractAPISpecEvidence(file FileContent) (ServiceAPISpecEvidence, bool) {
 		Format:       format,
 		Parsed:       false,
 	}, true
+}
+
+// resolveOpenAPIPathRefs resolves $ref entries in the paths object of an
+// OpenAPI document. It handles two patterns:
+//  1. Whole-paths $ref: paths: { $ref: './paths/index.yaml' }
+//  2. Per-path-item $ref: paths: { /route: { $ref: './paths/route.yaml' } }
+func resolveOpenAPIPathRefs(doc map[string]any, baseRelativePath string, resolver specFileResolver) {
+	if resolver == nil {
+		return
+	}
+	paths := serviceMapValue(doc["paths"])
+	if len(paths) == 0 {
+		return
+	}
+
+	// Case 1: whole-paths $ref — the paths map itself contains only a $ref key.
+	if ref, ok := paths["$ref"].(string); ok && len(paths) == 1 {
+		content := resolver(baseRelativePath, ref)
+		if content == "" {
+			return
+		}
+		resolved, err := parseLooseYAMLDocument(content)
+		if err != nil {
+			return
+		}
+		doc["paths"] = resolved
+		return
+	}
+
+	// Case 2: per-path-item $ref — individual path items reference external files.
+	for route, rawPathItem := range paths {
+		pathItemMap := serviceMapValue(rawPathItem)
+		if pathItemMap == nil {
+			continue
+		}
+		ref, ok := pathItemMap["$ref"].(string)
+		if !ok || ref == "" {
+			continue
+		}
+		content := resolver(baseRelativePath, ref)
+		if content == "" {
+			continue
+		}
+		resolved, err := parseLooseYAMLDocument(content)
+		if err != nil {
+			continue
+		}
+		paths[route] = resolved
+	}
 }
 
 func buildOpenAPISpecEvidence(relativePath string, format string, doc map[string]any) (ServiceAPISpecEvidence, bool) {
@@ -547,6 +612,26 @@ func parseLooseYAMLDocument(content string) (map[string]any, error) {
 		return nil, err
 	}
 	return document, nil
+}
+
+// buildSpecFileResolver creates a specFileResolver closure that reads
+// referenced files via the serviceEvidenceReader.
+func buildSpecFileResolver(reader serviceEvidenceReader, ctx context.Context, repoID string) specFileResolver {
+	return func(baseRelativePath, ref string) string {
+		if reader == nil || ref == "" {
+			return ""
+		}
+		// Resolve relative path against the base spec file's directory.
+		baseDir := filepath.Dir(baseRelativePath)
+		resolved := filepath.Join(baseDir, ref)
+		resolved = filepath.Clean(resolved)
+
+		fc, err := reader.GetFileContent(ctx, repoID, resolved)
+		if err != nil || fc == nil {
+			return ""
+		}
+		return fc.Content
+	}
 }
 
 func serviceEvidenceFormat(relativePath string) string {

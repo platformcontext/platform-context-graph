@@ -10,7 +10,7 @@ import (
 func TestCrossRepoResolutionPromotesDockerfileSourceLabelToCanonicalDeploysFrom(t *testing.T) {
 	t.Parallel()
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{
 			facts: []relationships.EvidenceFact{
@@ -23,7 +23,7 @@ func TestCrossRepoResolutionPromotesDockerfileSourceLabelToCanonicalDeploysFrom(
 				},
 			},
 		},
-		EdgeWriter: edgeWriter,
+		IntentWriter: intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-dockerfile", "gen-dockerfile")
@@ -33,11 +33,11 @@ func TestCrossRepoResolutionPromotesDockerfileSourceLabelToCanonicalDeploysFrom(
 	if count != 1 {
 		t.Fatalf("Resolve() = %d, want 1", count)
 	}
-	if len(edgeWriter.writeCalls) != 1 || len(edgeWriter.writeCalls[0].rows) != 1 {
-		t.Fatalf("writeCalls = %#v, want 1 row", edgeWriter.writeCalls)
+	if len(intentWriter.rows) != 1 || len(intentWriter.rows[0]) != 1 {
+		t.Fatalf("intent writes = %#v, want 1 row", intentWriter.rows)
 	}
 
-	row := edgeWriter.writeCalls[0].rows[0]
+	row := intentWriter.rows[0][0]
 	if got, want := stringValue(row.Payload["relationship_type"]), string(relationships.RelDeploysFrom); got != want {
 		t.Fatalf("relationship_type = %q, want %q", got, want)
 	}

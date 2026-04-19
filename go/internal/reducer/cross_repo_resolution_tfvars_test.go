@@ -10,7 +10,7 @@ import (
 func TestCrossRepoResolutionPromotesTerraformVariableFileEvidence(t *testing.T) {
 	t.Parallel()
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{
 			facts: []relationships.EvidenceFact{
@@ -30,7 +30,7 @@ func TestCrossRepoResolutionPromotesTerraformVariableFileEvidence(t *testing.T) 
 				},
 			},
 		},
-		EdgeWriter: edgeWriter,
+		IntentWriter: intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -40,14 +40,11 @@ func TestCrossRepoResolutionPromotesTerraformVariableFileEvidence(t *testing.T) 
 	if count != 1 {
 		t.Fatalf("Resolve() = %d, want 1", count)
 	}
-	if len(edgeWriter.writeCalls) != 1 {
-		t.Fatalf("write call count = %d, want 1", len(edgeWriter.writeCalls))
-	}
-	if got, want := edgeWriter.writeCalls[0].evidenceSource, crossRepoEvidenceSource; got != want {
-		t.Fatalf("evidenceSource = %q, want %q", got, want)
+	if len(intentWriter.rows) != 1 {
+		t.Fatalf("intent write count = %d, want 1", len(intentWriter.rows))
 	}
 
-	rows := edgeWriter.writeCalls[0].rows
+	rows := intentWriter.rows[0]
 	if len(rows) != 1 {
 		t.Fatalf("write row count = %d, want 1", len(rows))
 	}

@@ -511,6 +511,47 @@ func assertNestedStringSliceEqual(
 	}
 }
 
+func TestDetectExpressSemanticRequiresImport(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "src", "hooks", "useGraphFilters.js")
+	writeTestFile(
+		t,
+		filePath,
+		`import React, { useState, useMemo, useEffect } from "react";
+
+const urlSearchParams = new URLSearchParams(window.location.search);
+const searchParams = Object.fromEntries(urlSearchParams.entries());
+const cookies = document.cookie;
+
+function getFilters() {
+  urlSearchParams.get("soldDateRange");
+  searchParams.get("year");
+  cookies.get("soldDate");
+  searchParams.delete("year");
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	// Without an express import, no express framework should be detected.
+	assertFrameworksEqual(t, got, "react")
+	semantics := frameworkSemanticsMap(t, got)
+	if _, ok := semantics["express"]; ok {
+		t.Fatal("express section present without express import, want absent")
+	}
+}
+
 func frameworkSemanticsMap(t *testing.T, payload map[string]any) map[string]any {
 	t.Helper()
 

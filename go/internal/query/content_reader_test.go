@@ -449,3 +449,74 @@ func TestContentReaderMetadataFixtureIsValidJSON(t *testing.T) {
 		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
 	}
 }
+
+func TestParseFrameworkSemanticsExtractsHapiAndExpressRoutes(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"frameworks": ["hapi", "express"],
+		"hapi": {
+			"route_methods": ["GET", "POST"],
+			"route_paths": ["/elastic", "/alias/{index}/create"],
+			"server_symbols": ["server"]
+		},
+		"express": {
+			"route_methods": ["GET"],
+			"route_paths": ["/health"],
+			"server_symbols": ["app"]
+		}
+	}`)
+
+	results := parseFrameworkSemantics("src/routes.js", raw)
+	if len(results) != 2 {
+		t.Fatalf("len(results) = %d, want 2", len(results))
+	}
+
+	// Results are in framework order from JSON array
+	hapi := results[0]
+	if hapi.Framework != "hapi" {
+		t.Fatalf("results[0].Framework = %q, want \"hapi\"", hapi.Framework)
+	}
+	if len(hapi.RoutePaths) != 2 {
+		t.Fatalf("hapi.RoutePaths = %v, want 2 paths", hapi.RoutePaths)
+	}
+	if hapi.RelativePath != "src/routes.js" {
+		t.Fatalf("hapi.RelativePath = %q, want \"src/routes.js\"", hapi.RelativePath)
+	}
+
+	express := results[1]
+	if express.Framework != "express" {
+		t.Fatalf("results[1].Framework = %q, want \"express\"", express.Framework)
+	}
+	if len(express.RoutePaths) != 1 || express.RoutePaths[0] != "/health" {
+		t.Fatalf("express.RoutePaths = %v, want [\"/health\"]", express.RoutePaths)
+	}
+}
+
+func TestParseFrameworkSemanticsSkipsEmptyFrameworks(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"frameworks": []}`)
+	results := parseFrameworkSemantics("file.py", raw)
+	if len(results) != 0 {
+		t.Fatalf("len(results) = %d, want 0 for empty frameworks", len(results))
+	}
+}
+
+func TestParseFrameworkSemanticsSkipsFrameworkWithNoRoutes(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"frameworks": ["fastapi"],
+		"fastapi": {
+			"route_methods": ["GET"],
+			"route_paths": [],
+			"server_symbols": ["app"]
+		}
+	}`)
+
+	results := parseFrameworkSemantics("api/main.py", raw)
+	if len(results) != 0 {
+		t.Fatalf("len(results) = %d, want 0 for framework with empty route_paths", len(results))
+	}
+}

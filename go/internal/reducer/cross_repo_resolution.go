@@ -36,21 +36,26 @@ type ResolutionPersister interface {
 	ActivateResolutionGeneration(ctx context.Context, generationID, scopeID string) error
 }
 
+// RepoDependencyIntentWriter persists durable repo-dependency projection
+// intents plus their authoritative acceptance rows.
+type RepoDependencyIntentWriter interface {
+	UpsertIntents(ctx context.Context, rows []SharedProjectionIntentRow) error
+}
+
 // CrossRepoRelationshipHandler resolves cross-repository relationships from
-// persisted evidence facts and writes DEPENDS_ON, DEPLOYS_FROM, and
-// PROVISIONS_DEPENDENCY_FOR edges via the shared projection edge writer.
+// persisted evidence facts and emits durable repo-dependency projection intents.
 //
 // The handler runs as part of the deployment_mapping reducer domain. It:
 //  1. Loads evidence facts persisted during ingestion
 //  2. Loads assertions from the assertion store
 //  3. Runs relationships.Resolve() to produce candidates and resolved edges
 //  4. Persists candidates and resolved edges for audit trail
-//  5. Writes resolved edges to Neo4j via EdgeWriter
+//  5. Emits repo-owned shared-projection intents for later canonical writes
 type CrossRepoRelationshipHandler struct {
 	EvidenceLoader    EvidenceFactLoader
 	Assertions        AssertionLoader
 	Persister         ResolutionPersister
-	EdgeWriter        SharedProjectionEdgeWriter
+	IntentWriter      RepoDependencyIntentWriter
 	ReadinessLookup   GraphProjectionReadinessLookup
 	ReadinessPrefetch GraphProjectionReadinessPrefetch
 	Tracer            trace.Tracer
@@ -58,13 +63,13 @@ type CrossRepoRelationshipHandler struct {
 }
 
 // Resolve executes the cross-repo relationship resolution pipeline for one
-// generation. Returns the number of canonical edges written.
+// generation. Returns the number of durable intents emitted.
 func (h *CrossRepoRelationshipHandler) Resolve(
 	ctx context.Context,
 	scopeID string,
 	generationID string,
 ) (int, error) {
-	if h.EvidenceLoader == nil || h.EdgeWriter == nil {
+	if h.EvidenceLoader == nil || h.IntentWriter == nil {
 		return 0, nil
 	}
 
@@ -181,37 +186,27 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 		}
 	}
 
-	// Step 5: Convert resolved relationships to edge writes.
+	// Step 5: Convert resolved relationships to durable repo-dependency intents.
+	// The repo-owned projection runner reconstructs the full active snapshot for
+	// each source repository before touching canonical graph edges.
 	if len(resolved) == 0 {
 		h.recordDuration(ctx, start, scopeID)
 		return 0, nil
 	}
 
-	repoIDs := collectResolvedRepoIDs(resolved)
-	retractRows := buildRetractRowsFromRepoIDs(repoIDs)
-
-	if err := h.EdgeWriter.RetractEdges(
-		ctx,
-		DomainRepoDependency,
-		retractRows,
-		crossRepoEvidenceSource,
-	); err != nil {
-		return 0, fmt.Errorf("retract cross-repo dependency edges: %w", err)
+	writeRows, routeCounts := buildResolvedEdgeIntentRows(
+		resolved,
+		scopeID,
+		crossRepoContributionSourceRunID(scopeID),
+		generationID,
+	)
+	if len(writeRows) == 0 {
+		h.recordDuration(ctx, start, scopeID)
+		return 0, nil
 	}
-
-	writeRows, routeCounts := buildResolvedEdgeIntentRows(resolved, scopeID, generationID)
-	if len(writeRows) > 0 {
-		if err := h.EdgeWriter.WriteEdges(
-			ctx,
-			DomainRepoDependency,
-			writeRows,
-			crossRepoEvidenceSource,
-		); err != nil {
-			return 0, fmt.Errorf("write cross-repo dependency edges: %w", err)
-		}
+	if err := h.IntentWriter.UpsertIntents(ctx, writeRows); err != nil {
+		return 0, fmt.Errorf("upsert cross-repo dependency intents: %w", err)
 	}
-
-	edgeCount := len(writeRows)
 
 	if h.Instruments != nil {
 		for relationshipType, count := range routeCounts {
@@ -228,11 +223,12 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 		slog.String(telemetry.LogKeyScopeID, scopeID),
 		slog.String(telemetry.LogKeyGenerationID, generationID),
 		slog.Any("relationship_route_counts", routeCounts),
+		slog.Int("intent_count", len(writeRows)),
 	)
 
 	h.recordDuration(ctx, start, scopeID)
 
-	return edgeCount, nil
+	return len(writeRows), nil
 }
 
 func normalizeRelationshipCandidates(candidates []relationships.Candidate) []relationships.Candidate {
@@ -303,31 +299,12 @@ func (h *CrossRepoRelationshipHandler) recordDuration(ctx context.Context, start
 	}
 }
 
-// collectResolvedRepoIDs extracts unique source repo IDs from resolved
-// relationships.
-func collectResolvedRepoIDs(resolved []relationships.ResolvedRelationship) []string {
-	seen := make(map[string]struct{}, len(resolved))
-	var repoIDs []string
-	for _, r := range resolved {
-		if r.SourceRepoID == "" {
-			continue
-		}
-		if _, ok := seen[r.SourceRepoID]; ok {
-			continue
-		}
-		seen[r.SourceRepoID] = struct{}{}
-		repoIDs = append(repoIDs, r.SourceRepoID)
+func crossRepoContributionSourceRunID(scopeID string) string {
+	scopeID = strings.TrimSpace(scopeID)
+	if scopeID == "" {
+		return "repo_dependency"
 	}
-	return repoIDs
-}
-
-// buildRetractRowsFromRepoIDs builds retract intent rows for repo IDs.
-func buildRetractRowsFromRepoIDs(repoIDs []string) []SharedProjectionIntentRow {
-	rows := make([]SharedProjectionIntentRow, 0, len(repoIDs))
-	for _, repoID := range repoIDs {
-		rows = append(rows, SharedProjectionIntentRow{RepositoryID: repoID})
-	}
-	return rows
+	return "repo_dependency:" + scopeID
 }
 
 // buildResolvedEdgeIntentRows converts resolved relationships to shared
@@ -335,6 +312,7 @@ func buildRetractRowsFromRepoIDs(repoIDs []string) []SharedProjectionIntentRow {
 func buildResolvedEdgeIntentRows(
 	resolved []relationships.ResolvedRelationship,
 	scopeID string,
+	sourceRunID string,
 	generationID string,
 ) ([]SharedProjectionIntentRow, map[string]int) {
 	now := time.Now().UTC()
@@ -342,7 +320,13 @@ func buildResolvedEdgeIntentRows(
 	routeCounts := make(map[string]int)
 
 	for _, r := range resolved {
-		row, routeType, ok := buildResolvedEdgeIntentRow(r, scopeID, generationID, now)
+		row, routeType, ok := buildResolvedEdgeIntentRow(
+			r,
+			scopeID,
+			sourceRunID,
+			generationID,
+			now,
+		)
 		if !ok {
 			continue
 		}
@@ -356,6 +340,7 @@ func buildResolvedEdgeIntentRows(
 func buildResolvedEdgeIntentRow(
 	r relationships.ResolvedRelationship,
 	scopeID string,
+	sourceRunID string,
 	generationID string,
 	createdAt time.Time,
 ) (SharedProjectionIntentRow, string, bool) {
@@ -407,7 +392,7 @@ func buildResolvedEdgeIntentRow(
 		ScopeID:          scopeID,
 		AcceptanceUnitID: r.SourceRepoID,
 		RepositoryID:     r.SourceRepoID,
-		SourceRunID:      generationID,
+		SourceRunID:      strings.TrimSpace(sourceRunID),
 		GenerationID:     generationID,
 		Payload:          payload,
 		CreatedAt:        createdAt,

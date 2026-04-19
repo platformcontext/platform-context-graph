@@ -43,6 +43,92 @@ func TestBuildServiceAPISurfaceIncludesEndpointDetails(t *testing.T) {
 	}
 }
 
+func TestBuildServiceAPISurfaceMergesFrameworkRoutes(t *testing.T) {
+	t.Parallel()
+
+	surface := buildServiceAPISurface(ServiceQueryEvidence{
+		FrameworkRoutes: []FrameworkRouteEvidence{
+			{
+				Framework:    "hapi",
+				RelativePath: "src/routes/boats.js",
+				RoutePaths:   []string{"/elastic", "/alias/{index}/create", "/schema/{index}"},
+				RouteMethods: []string{"GET", "POST", "PUT"},
+			},
+			{
+				Framework:    "fastapi",
+				RelativePath: "api/main.py",
+				RoutePaths:   []string{"/boats", "/boats/{id}"},
+				RouteMethods: []string{"GET", "POST"},
+			},
+		},
+	})
+
+	if surface == nil {
+		t.Fatal("surface = nil, want non-nil when framework routes present")
+	}
+	endpoints := mapSliceValue(surface, "endpoints")
+	if len(endpoints) != 5 {
+		t.Fatalf("len(endpoints) = %d, want 5", len(endpoints))
+	}
+	// Verify framework_route_count is tracked
+	if got, want := IntVal(surface, "framework_route_count"), 5; got != want {
+		t.Fatalf("framework_route_count = %d, want %d", got, want)
+	}
+	// Verify frameworks list
+	frameworks := StringSliceVal(surface, "frameworks")
+	if len(frameworks) != 2 {
+		t.Fatalf("frameworks = %v, want [fastapi hapi]", frameworks)
+	}
+	// Verify endpoints have source = "framework"
+	for _, ep := range endpoints {
+		if StringVal(ep, "source") != "framework" {
+			t.Fatalf("endpoint source = %q, want \"framework\"", StringVal(ep, "source"))
+		}
+	}
+}
+
+func TestBuildServiceAPISurfaceCombinesSpecAndFrameworkRoutes(t *testing.T) {
+	t.Parallel()
+
+	surface := buildServiceAPISurface(ServiceQueryEvidence{
+		APISpecs: []ServiceAPISpecEvidence{
+			{
+				RelativePath:  "specs/index.yaml",
+				Format:        "yaml",
+				Parsed:        true,
+				SpecVersion:   "3.0.3",
+				EndpointCount: 1,
+				MethodCount:   1,
+				Endpoints: []ServiceAPIEndpointEvidence{
+					{Path: "/health", Methods: []string{"get"}},
+				},
+			},
+		},
+		FrameworkRoutes: []FrameworkRouteEvidence{
+			{
+				Framework:    "express",
+				RelativePath: "src/app.js",
+				RoutePaths:   []string{"/boats", "/boats/:id"},
+				RouteMethods: []string{"GET", "POST"},
+			},
+		},
+	})
+
+	if surface == nil {
+		t.Fatal("surface = nil, want non-nil")
+	}
+	endpoints := mapSliceValue(surface, "endpoints")
+	if len(endpoints) != 3 {
+		t.Fatalf("len(endpoints) = %d, want 3 (1 spec + 2 framework)", len(endpoints))
+	}
+	if got, want := IntVal(surface, "endpoint_count"), 1; got != want {
+		t.Fatalf("endpoint_count (spec) = %d, want %d", got, want)
+	}
+	if got, want := IntVal(surface, "framework_route_count"), 2; got != want {
+		t.Fatalf("framework_route_count = %d, want %d", got, want)
+	}
+}
+
 func TestBuildServiceEntrypointsSeparatesPublicAndInternalSignals(t *testing.T) {
 	t.Parallel()
 

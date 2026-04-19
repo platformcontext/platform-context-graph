@@ -10,7 +10,7 @@ import (
 func TestCrossRepoResolutionPromotesDockerComposeEvidenceToCanonicalDeploysFrom(t *testing.T) {
 	t.Parallel()
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{
 			facts: []relationships.EvidenceFact{
@@ -23,7 +23,7 @@ func TestCrossRepoResolutionPromotesDockerComposeEvidenceToCanonicalDeploysFrom(
 				},
 			},
 		},
-		EdgeWriter: edgeWriter,
+		IntentWriter: intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -33,13 +33,10 @@ func TestCrossRepoResolutionPromotesDockerComposeEvidenceToCanonicalDeploysFrom(
 	if count != 1 {
 		t.Fatalf("Resolve() = %d, want 1", count)
 	}
-	if len(edgeWriter.writeCalls) != 1 {
-		t.Fatalf("write call count = %d, want 1", len(edgeWriter.writeCalls))
+	if len(intentWriter.rows) != 1 {
+		t.Fatalf("intent write count = %d, want 1", len(intentWriter.rows))
 	}
-	if got, want := edgeWriter.writeCalls[0].evidenceSource, crossRepoEvidenceSource; got != want {
-		t.Fatalf("evidenceSource = %q, want %q", got, want)
-	}
-	rows := edgeWriter.writeCalls[0].rows
+	rows := intentWriter.rows[0]
 	if len(rows) != 1 {
 		t.Fatalf("write row count = %d, want 1", len(rows))
 	}
@@ -58,7 +55,7 @@ func TestCrossRepoResolutionPromotesDockerComposeEvidenceToCanonicalDeploysFrom(
 func TestCrossRepoResolutionPromotesDockerComposeBuildContextToCanonicalDeploysFrom(t *testing.T) {
 	t.Parallel()
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{
 			facts: []relationships.EvidenceFact{
@@ -71,7 +68,7 @@ func TestCrossRepoResolutionPromotesDockerComposeBuildContextToCanonicalDeploysF
 				},
 			},
 		},
-		EdgeWriter: edgeWriter,
+		IntentWriter: intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-build", "gen-build")
@@ -81,11 +78,11 @@ func TestCrossRepoResolutionPromotesDockerComposeBuildContextToCanonicalDeploysF
 	if count != 1 {
 		t.Fatalf("Resolve() = %d, want 1", count)
 	}
-	if len(edgeWriter.writeCalls) != 1 || len(edgeWriter.writeCalls[0].rows) != 1 {
-		t.Fatalf("writeCalls = %#v, want 1 row", edgeWriter.writeCalls)
+	if len(intentWriter.rows) != 1 || len(intentWriter.rows[0]) != 1 {
+		t.Fatalf("intent writes = %#v, want 1 row", intentWriter.rows)
 	}
 
-	row := edgeWriter.writeCalls[0].rows[0]
+	row := intentWriter.rows[0][0]
 	if got, want := stringValue(row.Payload["relationship_type"]), string(relationships.RelDeploysFrom); got != want {
 		t.Fatalf("relationship_type = %q, want %q", got, want)
 	}
@@ -100,7 +97,7 @@ func TestCrossRepoResolutionPromotesDockerComposeBuildContextToCanonicalDeploysF
 func TestCrossRepoResolutionPromotesDockerComposeDependsOnToCanonicalDependency(t *testing.T) {
 	t.Parallel()
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{
 			facts: []relationships.EvidenceFact{
@@ -113,7 +110,7 @@ func TestCrossRepoResolutionPromotesDockerComposeDependsOnToCanonicalDependency(
 				},
 			},
 		},
-		EdgeWriter: edgeWriter,
+		IntentWriter: intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-depends", "gen-depends")
@@ -123,11 +120,11 @@ func TestCrossRepoResolutionPromotesDockerComposeDependsOnToCanonicalDependency(
 	if count != 1 {
 		t.Fatalf("Resolve() = %d, want 1", count)
 	}
-	if len(edgeWriter.writeCalls) != 1 || len(edgeWriter.writeCalls[0].rows) != 1 {
-		t.Fatalf("writeCalls = %#v, want 1 row", edgeWriter.writeCalls)
+	if len(intentWriter.rows) != 1 || len(intentWriter.rows[0]) != 1 {
+		t.Fatalf("intent writes = %#v, want 1 row", intentWriter.rows)
 	}
 
-	row := edgeWriter.writeCalls[0].rows[0]
+	row := intentWriter.rows[0][0]
 	if got, want := stringValue(row.Payload["relationship_type"]), string(relationships.RelDependsOn); got != want {
 		t.Fatalf("relationship_type = %q, want %q", got, want)
 	}

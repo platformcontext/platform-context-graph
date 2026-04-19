@@ -12,6 +12,7 @@ import (
 type fakeNeo4jSession struct {
 	calls []fakeCypherCall
 	err   error
+	errs  []error
 }
 
 type fakeCypherCall struct {
@@ -21,6 +22,11 @@ type fakeCypherCall struct {
 
 func (s *fakeNeo4jSession) RunCypher(ctx context.Context, cypher string, params map[string]any) error {
 	s.calls = append(s.calls, fakeCypherCall{Cypher: cypher, Parameters: params})
+	if len(s.errs) > 0 {
+		err := s.errs[0]
+		s.errs = s.errs[1:]
+		return err
+	}
 	return s.err
 }
 
@@ -104,5 +110,25 @@ func TestReducerCypherExecutorPropagatesError(t *testing.T) {
 	err := executor.ExecuteCypher(context.Background(), "MERGE (w:Workload)", nil)
 	if err == nil {
 		t.Fatal("ExecuteCypher() error = nil, want non-nil")
+	}
+}
+
+func TestReducerCypherExecutorRetriesTransientDeadlock(t *testing.T) {
+	t.Parallel()
+
+	session := &fakeNeo4jSession{
+		errs: []error{
+			errors.New("Neo4jError: Neo.TransientError.Transaction.DeadlockDetected (deadlock cycle)"),
+			nil,
+		},
+	}
+	executor := reducerCypherExecutor{session: session}
+
+	err := executor.ExecuteCypher(context.Background(), "MERGE (w:Workload {id: $id})", map[string]any{"id": "workload:retry"})
+	if err != nil {
+		t.Fatalf("ExecuteCypher() error = %v, want nil after retry", err)
+	}
+	if got, want := len(session.calls), 2; got != want {
+		t.Fatalf("session calls = %d, want %d", got, want)
 	}
 }

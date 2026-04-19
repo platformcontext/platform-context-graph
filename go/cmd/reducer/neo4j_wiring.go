@@ -30,7 +30,7 @@ type reducerNeo4jExecutor struct {
 }
 
 func (e reducerNeo4jExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
-	return e.session.RunCypher(ctx, stmt.Cypher, stmt.Parameters)
+	return executeReducerCypherWithRetry(ctx, e.session, stmt)
 }
 
 // ExecuteGroup runs all statements in a single Neo4j transaction with
@@ -46,7 +46,30 @@ type reducerCypherExecutor struct {
 }
 
 func (e reducerCypherExecutor) ExecuteCypher(ctx context.Context, cypher string, params map[string]any) error {
-	return e.session.RunCypher(ctx, cypher, params)
+	return executeReducerCypherWithRetry(ctx, e.session, sourceneo4j.Statement{
+		Operation:  sourceneo4j.OperationCanonicalUpsert,
+		Cypher:     cypher,
+		Parameters: params,
+	})
+}
+
+type cypherRunnerStatementExecutor struct {
+	runner cypherRunner
+}
+
+func (e cypherRunnerStatementExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
+	return e.runner.RunCypher(ctx, stmt.Cypher, stmt.Parameters)
+}
+
+func executeReducerCypherWithRetry(
+	ctx context.Context,
+	runner cypherRunner,
+	stmt sourceneo4j.Statement,
+) error {
+	retrying := sourceneo4j.RetryingExecutor{
+		Inner: cypherRunnerStatementExecutor{runner: runner},
+	}
+	return retrying.Execute(ctx, stmt)
 }
 
 // neo4jSessionRunner wraps a Neo4j driver into the cypherRunner interface,

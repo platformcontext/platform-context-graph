@@ -262,7 +262,7 @@ func TestParseDomainAcceptsDeployableUnitCorrelation(t *testing.T) {
 func TestDefaultHandlersWiresCrossRepoResolver(t *testing.T) {
 	t.Parallel()
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	evidenceLoader := &fakeEvidenceFactLoader{
 		facts: []relationships.EvidenceFact{
 			{
@@ -286,8 +286,8 @@ func TestDefaultHandlersWiresCrossRepoResolver(t *testing.T) {
 		PlatformMaterializationWriter: &recordingPlatformMaterializationWriter{
 			result: PlatformMaterializationWriteResult{CanonicalWrites: 1},
 		},
-		EvidenceFactLoader:       evidenceLoader,
-		RepoDependencyEdgeWriter: edgeWriter,
+		EvidenceFactLoader:         evidenceLoader,
+		RepoDependencyIntentWriter: intentWriter,
 	})
 	if err != nil {
 		t.Fatalf("NewDefaultRuntime() error = %v, want nil", err)
@@ -318,8 +318,8 @@ func TestDefaultHandlersWiresCrossRepoResolver(t *testing.T) {
 		t.Fatalf("result.CanonicalWrites = %d, want %d", got, want)
 	}
 
-	if len(edgeWriter.writeCalls) == 0 {
-		t.Fatal("expected edge write calls from cross-repo resolution")
+	if len(intentWriter.rows) == 0 {
+		t.Fatal("expected repo-dependency intent writes from cross-repo resolution")
 	}
 }
 
@@ -335,10 +335,10 @@ func TestNewDefaultRegistryWiresCrossRepoReadinessDependencies(t *testing.T) {
 
 	registry, err := NewDefaultRegistry(DefaultHandlers{
 		PlatformMaterializationWriter: &recordingPlatformMaterializationWriter{},
-		EvidenceFactLoader:            &fakeEvidenceFactLoader{},
-		RepoDependencyEdgeWriter:      &recordingEdgeWriter{},
-		ReadinessLookup:               readinessLookup,
-		ReadinessPrefetch:             readinessPrefetch,
+		EvidenceFactLoader:         &fakeEvidenceFactLoader{},
+		RepoDependencyIntentWriter: &recordingRepoDependencyIntentWriter{},
+		ReadinessLookup:            readinessLookup,
+		ReadinessPrefetch:          readinessPrefetch,
 	})
 	if err != nil {
 		t.Fatalf("NewDefaultRegistry() error = %v", err)

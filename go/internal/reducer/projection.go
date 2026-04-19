@@ -129,13 +129,23 @@ func InferWorkloadKind(name string, resourceKinds []string) string {
 // canonical workloads in Wave 1B to avoid weak controller signals creating
 // false-positive graph truth.
 func InferWorkloadClassification(candidate WorkloadCandidate) string {
-	if hasProvenance(candidate.Provenance, "cloudformation_template") {
-		return "infrastructure"
-	}
 	if hasAnyResourceKind(candidate.ResourceKinds, "job", "cronjob") {
 		return "job"
 	}
-	if hasProvenance(candidate.Provenance,
+	if hasServiceClassificationSignals(candidate) {
+		return "service"
+	}
+	if hasProvenance(candidate.Provenance, "cloudformation_template") {
+		return "infrastructure"
+	}
+	if hasProvenance(candidate.Provenance, "argocd_application", "jenkins_pipeline", "github_actions_workflow") {
+		return "utility"
+	}
+	return "service"
+}
+
+func hasServiceClassificationSignals(candidate WorkloadCandidate) bool {
+	return hasProvenance(candidate.Provenance,
 		"argocd_application_source",
 		"argocd_applicationset_deploy_source",
 		"kustomize_resource",
@@ -147,13 +157,7 @@ func InferWorkloadClassification(candidate WorkloadCandidate) string {
 		"service",
 		"statefulset",
 		"daemonset",
-	) {
-		return "service"
-	}
-	if hasProvenance(candidate.Provenance, "argocd_application", "jenkins_pipeline", "github_actions_workflow") {
-		return "utility"
-	}
-	return "service"
+	)
 }
 
 // ExtractOverlayEnvironments extracts environment names from repo-relative

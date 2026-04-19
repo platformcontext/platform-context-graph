@@ -129,6 +129,7 @@ func buildReducerService(
 ) (reducer.Service, error) {
 	sharedCfg := reducer.LoadSharedProjectionConfig(getenv)
 	codeCallCfg := loadCodeCallProjectionConfig(getenv)
+	repoDependencyCfg := loadRepoDependencyProjectionConfig(getenv)
 	repairCfg := loadGraphProjectionPhaseRepairConfig(getenv)
 	codeCallEdgeBatchSize, codeCallEdgeGroupBatchSize := loadCodeCallEdgeWriterTuning(getenv)
 	inheritanceEdgeGroupBatchSize, sqlRelationshipEdgeGroupBatchSize := loadSharedEdgeWriterGroupTuning(getenv)
@@ -140,6 +141,7 @@ func buildReducerService(
 	relationshipStore := postgres.NewRelationshipStore(database)
 	factStore := postgres.NewFactStore(database)
 	codeCallIntentWriter := postgres.NewCodeCallIntentWriterWithInstruments(database, instruments)
+	repoDependencyIntentWriter := postgres.NewSharedIntentAcceptanceWriterWithInstruments(database, instruments)
 	acceptedGenerationPrefetch := postgres.NewAcceptedGenerationPrefetch(database)
 	graphProjectionStateStore := postgres.NewGraphProjectionPhaseStateStore(database)
 	graphProjectionRepairQueue := postgres.NewGraphProjectionPhaseRepairQueueStore(database)
@@ -182,6 +184,7 @@ func buildReducerService(
 		AssertionLoader:                    relationshipStore,
 		ResolutionPersister:                relationshipStore,
 		ResolvedRelationshipLoader:         relationshipStore,
+		RepoDependencyIntentWriter:         repoDependencyIntentWriter,
 		RepoDependencyEdgeWriter:           edgeWriterForHandlers,
 		GenerationCheck:                    postgres.NewGenerationFreshnessCheck(database),
 		Tracer:                             tracer,
@@ -227,6 +230,17 @@ func buildReducerService(
 			ReadinessLookup:     graphProjectionReadinessLookup,
 			ReadinessPrefetch:   graphProjectionReadinessPrefetch,
 			Config:              codeCallCfg,
+			Tracer:              tracer,
+			Instruments:         instruments,
+			Logger:              logger,
+		},
+		RepoDependencyProjectionRunner: &reducer.RepoDependencyProjectionRunner{
+			IntentReader:        intentStore,
+			LeaseManager:        intentStore,
+			EdgeWriter:          edgeWriter,
+			AcceptedGen:         postgres.NewAcceptedGenerationLookup(database),
+			AcceptedGenPrefetch: acceptedGenerationPrefetch,
+			Config:              repoDependencyCfg,
 			Tracer:              tracer,
 			Instruments:         instruments,
 			Logger:              logger,

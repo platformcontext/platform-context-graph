@@ -14,64 +14,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderAdmitsServiceEdgeAPIStyleCandida
 	now := time.Now().UTC()
 	loader := CorrelatedWorkloadProjectionInputLoader{
 		FactLoader: &stubFactLoader{
-			envelopes: []facts.Envelope{
-				{
-					FactID:   "fact-repo-edge",
-					ScopeID:  "scope-edge",
-					FactKind: "repository",
-					Payload: map[string]any{
-						"graph_id": "repository:r_service_edge_api",
-						"name":     "service-edge-api",
-					},
-					ObservedAt: now,
-				},
-				{
-					FactID:   "fact-dockerfile-edge",
-					ScopeID:  "scope-edge",
-					FactKind: "file",
-					Payload: map[string]any{
-						"repo_id":       "repository:r_service_edge_api",
-						"language":      "dockerfile",
-						"relative_path": "Dockerfile",
-						"parsed_file_data": map[string]any{
-							"dockerfile_stages": []any{map[string]any{"name": "runtime"}},
-						},
-					},
-					ObservedAt: now,
-				},
-				{
-					FactID:   "fact-jenkins-edge",
-					ScopeID:  "scope-edge",
-					FactKind: "file",
-					Payload: map[string]any{
-						"repo_id":       "repository:r_service_edge_api",
-						"language":      "groovy",
-						"relative_path": "Jenkinsfile",
-						"parsed_file_data": map[string]any{},
-					},
-					ObservedAt: now,
-				},
-				{
-					FactID:   "fact-k8s-edge",
-					ScopeID:  "scope-edge",
-					FactKind: "file",
-					Payload: map[string]any{
-						"repo_id":       "repository:r_service_edge_api",
-						"language":      "yaml",
-						"relative_path": "k8s/deployment.yaml",
-						"parsed_file_data": map[string]any{
-							"k8s_resources": []any{
-								map[string]any{
-									"kind":      "Deployment",
-									"name":      "service-edge-api",
-									"namespace": "modern",
-								},
-							},
-						},
-					},
-					ObservedAt: now,
-				},
-			},
+			envelopes: relationshipPlatformServiceEdgeAPIEnvelopes(now),
 		},
 	}
 
@@ -116,64 +59,7 @@ func TestWorkloadMaterializationHandlerWritesServiceEdgeAPIWorkloadWithoutEnviro
 	now := time.Now().UTC()
 	handler := WorkloadMaterializationHandler{
 		FactLoader: &stubFactLoader{
-			envelopes: []facts.Envelope{
-				{
-					FactID:   "fact-repo-edge",
-					ScopeID:  "scope-edge",
-					FactKind: "repository",
-					Payload: map[string]any{
-						"graph_id": "repository:r_service_edge_api",
-						"name":     "service-edge-api",
-					},
-					ObservedAt: now,
-				},
-				{
-					FactID:   "fact-dockerfile-edge",
-					ScopeID:  "scope-edge",
-					FactKind: "file",
-					Payload: map[string]any{
-						"repo_id":       "repository:r_service_edge_api",
-						"language":      "dockerfile",
-						"relative_path": "Dockerfile",
-						"parsed_file_data": map[string]any{
-							"dockerfile_stages": []any{map[string]any{"name": "runtime"}},
-						},
-					},
-					ObservedAt: now,
-				},
-				{
-					FactID:   "fact-jenkins-edge",
-					ScopeID:  "scope-edge",
-					FactKind: "file",
-					Payload: map[string]any{
-						"repo_id":       "repository:r_service_edge_api",
-						"language":      "groovy",
-						"relative_path": "Jenkinsfile",
-						"parsed_file_data": map[string]any{},
-					},
-					ObservedAt: now,
-				},
-				{
-					FactID:   "fact-k8s-edge",
-					ScopeID:  "scope-edge",
-					FactKind: "file",
-					Payload: map[string]any{
-						"repo_id":       "repository:r_service_edge_api",
-						"language":      "yaml",
-						"relative_path": "k8s/deployment.yaml",
-						"parsed_file_data": map[string]any{
-							"k8s_resources": []any{
-								map[string]any{
-									"kind":      "Deployment",
-									"name":      "service-edge-api",
-									"namespace": "modern",
-								},
-							},
-						},
-					},
-					ObservedAt: now,
-				},
-			},
+			envelopes: relationshipPlatformServiceEdgeAPIEnvelopes(now),
 		},
 		Materializer: NewWorkloadMaterializer(&recordingCypherExecutor{}),
 	}
@@ -215,5 +101,116 @@ func TestWorkloadMaterializationHandlerWritesServiceEdgeAPIWorkloadWithoutEnviro
 	}
 	if !recordedCallContainsParam(recordingExecutor.calls, "workload_name", "service-edge-api") {
 		t.Fatal("missing workload_name row for service-edge-api")
+	}
+}
+
+func relationshipPlatformServiceEdgeAPIEnvelopes(now time.Time) []facts.Envelope {
+	return []facts.Envelope{
+		{
+			FactID:   "fact-repo-edge",
+			ScopeID:  "scope-edge",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repository:r_service_edge_api",
+				"name":     "service-edge-api",
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-dockerfile-edge",
+			ScopeID:  "scope-edge",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repository:r_service_edge_api",
+				"language":      "dockerfile",
+				"relative_path": "Dockerfile",
+				"parsed_file_data": map[string]any{
+					"dockerfile_stages": []any{map[string]any{"name": "runtime"}},
+				},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-jenkins-edge",
+			ScopeID:  "scope-edge",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repository:r_service_edge_api",
+				"language":         "groovy",
+				"relative_path":    "Jenkinsfile",
+				"parsed_file_data": map[string]any{},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-actions-edge",
+			ScopeID:  "scope-edge",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repository:r_service_edge_api",
+				"language":      "yaml",
+				"relative_path": ".github/workflows/deploy-legacy.yml",
+				"parsed_file_data": map[string]any{
+					"github_actions_workflow_triggers": []any{"push"},
+					"github_actions_reusable_workflow_refs": []any{
+						map[string]any{"uses": "platformcontext/delivery-legacy-automation/.github/workflows/promote-edge-api.yml@main"},
+					},
+				},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-compose-edge",
+			ScopeID:  "scope-edge",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repository:r_service_edge_api",
+				"language":      "yaml",
+				"relative_path": "docker-compose.yaml",
+				"parsed_file_data": map[string]any{
+					"docker_compose_services": []any{
+						map[string]any{"service_name": "edge-api"},
+						map[string]any{"service_name": "service-worker-jobs"},
+					},
+				},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-k8s-edge",
+			ScopeID:  "scope-edge",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repository:r_service_edge_api",
+				"language":      "yaml",
+				"relative_path": "k8s/deployment.yaml",
+				"parsed_file_data": map[string]any{
+					"k8s_resources": []any{
+						map[string]any{
+							"kind":      "Deployment",
+							"name":      "service-edge-api",
+							"namespace": "modern",
+						},
+					},
+				},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-cloudformation-edge",
+			ScopeID:  "scope-edge",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repository:r_service_edge_api",
+				"language":      "yaml",
+				"relative_path": "infra/api-service.yaml",
+				"parsed_file_data": map[string]any{
+					"cloudformation_resources": []any{
+						map[string]any{"type": "AWS::ECS::Service"},
+					},
+				},
+			},
+			ObservedAt: now,
+		},
 	}
 }

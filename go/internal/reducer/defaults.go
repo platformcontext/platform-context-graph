@@ -57,9 +57,11 @@ type DefaultHandlers struct {
 	AssertionLoader            AssertionLoader
 	ResolutionPersister        ResolutionPersister
 	ResolvedRelationshipLoader ResolvedRelationshipLoader
+	RepoDependencyIntentWriter RepoDependencyIntentWriter
 
 	// RepoDependencyEdgeWriter writes cross-repo dependency edges resolved
-	// from evidence facts. Optional; nil disables cross-repo edge writes.
+	// from durable repo-dependency intents. Optional; nil disables the
+	// repo-dependency projection runner.
 	RepoDependencyEdgeWriter SharedProjectionEdgeWriter
 
 	// GenerationCheck reports whether an intent's generation is still current.
@@ -115,12 +117,12 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			def.Handler = CloudAssetResolutionHandler{Writer: handlers.CloudAssetResolutionWriter}
 		case DomainDeploymentMapping:
 			var crossRepoResolver *CrossRepoRelationshipHandler
-			if handlers.EvidenceFactLoader != nil && handlers.RepoDependencyEdgeWriter != nil {
+			if handlers.EvidenceFactLoader != nil && handlers.RepoDependencyIntentWriter != nil {
 				crossRepoResolver = &CrossRepoRelationshipHandler{
 					EvidenceLoader:    handlers.EvidenceFactLoader,
 					Assertions:        handlers.AssertionLoader,
 					Persister:         handlers.ResolutionPersister,
-					EdgeWriter:        handlers.RepoDependencyEdgeWriter,
+					IntentWriter:      handlers.RepoDependencyIntentWriter,
 					ReadinessLookup:   handlers.ReadinessLookup,
 					ReadinessPrefetch: handlers.ReadinessPrefetch,
 					Tracer:            handlers.Tracer,

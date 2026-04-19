@@ -41,11 +41,11 @@ func TestCrossRepoResolutionPreservesTypedRelationshipFamilies(t *testing.T) {
 		},
 	}
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -56,10 +56,10 @@ func TestCrossRepoResolutionPreservesTypedRelationshipFamilies(t *testing.T) {
 		t.Fatalf("Resolve() = %d, want 4", count)
 	}
 
-	if len(edgeWriter.writeCalls) != 1 {
-		t.Fatalf("expected 1 write call, got %d", len(edgeWriter.writeCalls))
+	if len(intentWriter.rows) != 1 {
+		t.Fatalf("expected 1 intent write, got %d", len(intentWriter.rows))
 	}
-	rows := edgeWriter.writeCalls[0].rows
+	rows := intentWriter.rows[0]
 	if len(rows) != 4 {
 		t.Fatalf("expected 4 write rows, got %d", len(rows))
 	}

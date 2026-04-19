@@ -53,38 +53,12 @@ func (f *fakeResolutionPersister) ActivateResolutionGeneration(_ context.Context
 	return nil
 }
 
-type recordingEdgeWriter struct {
-	writeCalls   []edgeWriteCall
-	retractCalls []edgeRetractCall
+type recordingRepoDependencyIntentWriter struct {
+	rows [][]SharedProjectionIntentRow
 }
 
-type edgeWriteCall struct {
-	domain         string
-	rows           []SharedProjectionIntentRow
-	evidenceSource string
-}
-
-type edgeRetractCall struct {
-	domain         string
-	rows           []SharedProjectionIntentRow
-	evidenceSource string
-}
-
-func (r *recordingEdgeWriter) WriteEdges(_ context.Context, domain string, rows []SharedProjectionIntentRow, evidenceSource string) error {
-	r.writeCalls = append(r.writeCalls, edgeWriteCall{
-		domain:         domain,
-		rows:           rows,
-		evidenceSource: evidenceSource,
-	})
-	return nil
-}
-
-func (r *recordingEdgeWriter) RetractEdges(_ context.Context, domain string, rows []SharedProjectionIntentRow, evidenceSource string) error {
-	r.retractCalls = append(r.retractCalls, edgeRetractCall{
-		domain:         domain,
-		rows:           rows,
-		evidenceSource: evidenceSource,
-	})
+func (r *recordingRepoDependencyIntentWriter) UpsertIntents(_ context.Context, rows []SharedProjectionIntentRow) error {
+	r.rows = append(r.rows, append([]SharedProjectionIntentRow(nil), rows...))
 	return nil
 }
 
@@ -93,10 +67,10 @@ func (r *recordingEdgeWriter) RetractEdges(_ context.Context, domain string, row
 func TestCrossRepoResolutionSkipsWhenNoEvidence(t *testing.T) {
 	t.Parallel()
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: nil},
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -106,8 +80,8 @@ func TestCrossRepoResolutionSkipsWhenNoEvidence(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("Resolve() = %d, want 0", count)
 	}
-	if len(edgeWriter.writeCalls) != 0 {
-		t.Fatalf("expected 0 write calls, got %d", len(edgeWriter.writeCalls))
+	if len(intentWriter.rows) != 0 {
+		t.Fatalf("expected 0 intent writes, got %d", len(intentWriter.rows))
 	}
 }
 
@@ -125,10 +99,10 @@ func TestCrossRepoResolutionGatesUntilBackwardEvidenceCommitted(t *testing.T) {
 			},
 		},
 	}
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: evidenceLoader,
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 		ReadinessLookup: func(key GraphProjectionPhaseKey, phase GraphProjectionPhase) (bool, bool) {
 			if got, want := key.ScopeID, "scope-1"; got != want {
 				t.Fatalf("ScopeID = %q, want %q", got, want)
@@ -162,11 +136,8 @@ func TestCrossRepoResolutionGatesUntilBackwardEvidenceCommitted(t *testing.T) {
 	if evidenceLoader.calls != 0 {
 		t.Fatalf("evidence loader calls = %d, want 0 when gated", evidenceLoader.calls)
 	}
-	if len(edgeWriter.retractCalls) != 0 {
-		t.Fatalf("retractCalls = %d, want 0 when gated", len(edgeWriter.retractCalls))
-	}
-	if len(edgeWriter.writeCalls) != 0 {
-		t.Fatalf("writeCalls = %d, want 0 when gated", len(edgeWriter.writeCalls))
+	if len(intentWriter.rows) != 0 {
+		t.Fatalf("intent writes = %d, want 0 when gated", len(intentWriter.rows))
 	}
 }
 
@@ -184,11 +155,11 @@ func TestCrossRepoResolutionUsesReadinessPrefetchWhenAvailable(t *testing.T) {
 			},
 		},
 	}
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	prefetchCalls := 0
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: evidenceLoader,
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 		ReadinessLookup: func(GraphProjectionPhaseKey, GraphProjectionPhase) (bool, bool) {
 			t.Fatal("ReadinessLookup should be replaced by prefetched lookup")
 			return false, false
@@ -242,8 +213,8 @@ func TestCrossRepoResolutionUsesReadinessPrefetchWhenAvailable(t *testing.T) {
 	if evidenceLoader.calls != 1 {
 		t.Fatalf("evidence loader calls = %d, want 1 after readiness", evidenceLoader.calls)
 	}
-	if len(edgeWriter.writeCalls) != 1 {
-		t.Fatalf("writeCalls = %d, want 1", len(edgeWriter.writeCalls))
+	if len(intentWriter.rows) != 1 {
+		t.Fatalf("intent writes = %d, want 1", len(intentWriter.rows))
 	}
 }
 
@@ -264,10 +235,10 @@ func TestCrossRepoResolutionWarnsWhenReadinessGateBypassed(t *testing.T) {
 			},
 		},
 	}
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: evidenceLoader,
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -287,7 +258,7 @@ func TestCrossRepoResolutionSkipsWhenNilLoader(t *testing.T) {
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: nil,
-		EdgeWriter:     &recordingEdgeWriter{},
+		IntentWriter:   &recordingRepoDependencyIntentWriter{},
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -299,7 +270,7 @@ func TestCrossRepoResolutionSkipsWhenNilLoader(t *testing.T) {
 	}
 }
 
-func TestCrossRepoResolutionSkipsWhenNilEdgeWriter(t *testing.T) {
+func TestCrossRepoResolutionSkipsWhenNilIntentWriter(t *testing.T) {
 	t.Parallel()
 
 	handler := CrossRepoRelationshipHandler{
@@ -314,7 +285,7 @@ func TestCrossRepoResolutionSkipsWhenNilEdgeWriter(t *testing.T) {
 				},
 			},
 		},
-		EdgeWriter: nil,
+		IntentWriter: nil,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -331,7 +302,7 @@ func TestCrossRepoResolutionPropagatesEvidenceLoaderError(t *testing.T) {
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{err: fmt.Errorf("db timeout")},
-		EdgeWriter:     &recordingEdgeWriter{},
+		IntentWriter:   &recordingRepoDependencyIntentWriter{},
 	}
 
 	_, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -354,12 +325,12 @@ func TestCrossRepoResolutionWritesDependencyEdges(t *testing.T) {
 		},
 	}
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	persister := &fakeResolutionPersister{}
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 		Persister:      persister,
 	}
 
@@ -371,26 +342,14 @@ func TestCrossRepoResolutionWritesDependencyEdges(t *testing.T) {
 		t.Fatalf("Resolve() = %d, want 1", count)
 	}
 
-	// Verify retraction happened first.
-	if len(edgeWriter.retractCalls) != 1 {
-		t.Fatalf("expected 1 retract call, got %d", len(edgeWriter.retractCalls))
+	if len(intentWriter.rows) != 1 {
+		t.Fatalf("expected 1 intent write, got %d", len(intentWriter.rows))
 	}
-	if edgeWriter.retractCalls[0].domain != DomainRepoDependency {
-		t.Fatalf("retract domain = %q, want %q", edgeWriter.retractCalls[0].domain, DomainRepoDependency)
-	}
-
-	// Verify write call.
-	if len(edgeWriter.writeCalls) != 1 {
-		t.Fatalf("expected 1 write call, got %d", len(edgeWriter.writeCalls))
-	}
-	if edgeWriter.writeCalls[0].domain != DomainRepoDependency {
-		t.Fatalf("write domain = %q, want %q", edgeWriter.writeCalls[0].domain, DomainRepoDependency)
-	}
-	if len(edgeWriter.writeCalls[0].rows) != 1 {
-		t.Fatalf("expected 1 write row, got %d", len(edgeWriter.writeCalls[0].rows))
+	if len(intentWriter.rows[0]) != 1 {
+		t.Fatalf("expected 1 intent row, got %d", len(intentWriter.rows[0]))
 	}
 
-	row := edgeWriter.writeCalls[0].rows[0]
+	row := intentWriter.rows[0][0]
 	if got := row.Payload["repo_id"]; got != "infra-repo" {
 		t.Fatalf("row repo_id = %v, want infra-repo", got)
 	}
@@ -399,6 +358,12 @@ func TestCrossRepoResolutionWritesDependencyEdges(t *testing.T) {
 	}
 	if got, want := row.Payload["evidence_type"], "terraform_app_repo"; got != want {
 		t.Fatalf("row evidence_type = %v, want %q", got, want)
+	}
+	if got, want := row.ScopeID, "scope-1"; got != want {
+		t.Fatalf("row ScopeID = %q, want %q", got, want)
+	}
+	if got, want := row.SourceRunID, crossRepoContributionSourceRunID("scope-1"); got != want {
+		t.Fatalf("row SourceRunID = %q, want %q", got, want)
 	}
 
 	// Verify generation was activated for downstream consumers.
@@ -424,12 +389,12 @@ func TestCrossRepoResolutionNormalizesScopedRepositoryIDs(t *testing.T) {
 		},
 	}
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	persister := &fakeResolutionPersister{}
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 		Persister:      persister,
 	}
 
@@ -440,19 +405,13 @@ func TestCrossRepoResolutionNormalizesScopedRepositoryIDs(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("Resolve() = %d, want 1", count)
 	}
-	if len(edgeWriter.retractCalls) != 1 || len(edgeWriter.retractCalls[0].rows) != 1 {
-		t.Fatalf("unexpected retract calls: %#v", edgeWriter.retractCalls)
+	if len(intentWriter.rows) != 1 || len(intentWriter.rows[0]) != 1 {
+		t.Fatalf("unexpected intent writes: %#v", intentWriter.rows)
 	}
-	if got, want := edgeWriter.retractCalls[0].rows[0].RepositoryID, "repository:r_infra"; got != want {
-		t.Fatalf("retract repository_id = %q, want %q", got, want)
-	}
-	if len(edgeWriter.writeCalls) != 1 || len(edgeWriter.writeCalls[0].rows) != 1 {
-		t.Fatalf("unexpected write calls: %#v", edgeWriter.writeCalls)
-	}
-	if got, want := edgeWriter.writeCalls[0].rows[0].Payload["repo_id"], "repository:r_infra"; got != want {
+	if got, want := intentWriter.rows[0][0].Payload["repo_id"], "repository:r_infra"; got != want {
 		t.Fatalf("write repo_id = %v, want %q", got, want)
 	}
-	if got, want := edgeWriter.writeCalls[0].rows[0].Payload["target_repo_id"], "repository:r_app"; got != want {
+	if got, want := intentWriter.rows[0][0].Payload["target_repo_id"], "repository:r_app"; got != want {
 		t.Fatalf("write target_repo_id = %v, want %q", got, want)
 	}
 	if len(persister.resolved) != 1 {
@@ -481,7 +440,7 @@ func TestCrossRepoResolutionPersistsAuditTrail(t *testing.T) {
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
-		EdgeWriter:     &recordingEdgeWriter{},
+		IntentWriter:   &recordingRepoDependencyIntentWriter{},
 		Persister:      persister,
 	}
 
@@ -523,12 +482,12 @@ func TestCrossRepoResolutionRespectsAssertionRejections(t *testing.T) {
 		},
 	}
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
 		Assertions:     &fakeAssertionLoader{assertions: assertions},
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -554,11 +513,11 @@ func TestCrossRepoResolutionFiltersLowConfidence(t *testing.T) {
 		},
 	}
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -592,11 +551,11 @@ func TestCrossRepoResolutionMultipleRelationshipTypes(t *testing.T) {
 		},
 	}
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -607,11 +566,11 @@ func TestCrossRepoResolutionMultipleRelationshipTypes(t *testing.T) {
 		t.Fatalf("Resolve() = %d, want 2", count)
 	}
 
-	if len(edgeWriter.writeCalls) != 1 {
-		t.Fatalf("expected 1 write call, got %d", len(edgeWriter.writeCalls))
+	if len(intentWriter.rows) != 1 {
+		t.Fatalf("expected 1 intent write, got %d", len(intentWriter.rows))
 	}
-	if len(edgeWriter.writeCalls[0].rows) != 2 {
-		t.Fatalf("expected 2 write rows, got %d", len(edgeWriter.writeCalls[0].rows))
+	if len(intentWriter.rows[0]) != 2 {
+		t.Fatalf("expected 2 intent rows, got %d", len(intentWriter.rows[0]))
 	}
 }
 
@@ -635,11 +594,11 @@ func TestCrossRepoResolutionPreservesGitHubActionsTypedRelationships(t *testing.
 		},
 	}
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-gha", "gen-gha")
@@ -650,10 +609,10 @@ func TestCrossRepoResolutionPreservesGitHubActionsTypedRelationships(t *testing.
 		t.Fatalf("Resolve() = %d, want 2", count)
 	}
 
-	if len(edgeWriter.writeCalls) != 1 {
-		t.Fatalf("expected 1 write call, got %d", len(edgeWriter.writeCalls))
+	if len(intentWriter.rows) != 1 {
+		t.Fatalf("expected 1 intent write, got %d", len(intentWriter.rows))
 	}
-	rows := edgeWriter.writeCalls[0].rows
+	rows := intentWriter.rows[0]
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 write rows, got %d", len(rows))
 	}
@@ -698,11 +657,11 @@ func TestCrossRepoResolutionDeduplicatesEvidence(t *testing.T) {
 		},
 	}
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: evidence},
-		EdgeWriter:     edgeWriter,
+		IntentWriter:   intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")

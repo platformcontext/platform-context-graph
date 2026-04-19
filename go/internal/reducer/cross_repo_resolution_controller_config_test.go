@@ -59,7 +59,7 @@ func TestCrossRepoResolutionPreservesControllerAndConfigEvidenceFamilies(t *test
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			edgeWriter := &recordingEdgeWriter{}
+			intentWriter := &recordingRepoDependencyIntentWriter{}
 			handler := CrossRepoRelationshipHandler{
 				EvidenceLoader: &fakeEvidenceFactLoader{facts: []relationships.EvidenceFact{
 					{
@@ -70,7 +70,7 @@ func TestCrossRepoResolutionPreservesControllerAndConfigEvidenceFamilies(t *test
 						Confidence:       0.92,
 					},
 				}},
-				EdgeWriter: edgeWriter,
+				IntentWriter: intentWriter,
 			}
 
 			count, err := handler.Resolve(context.Background(), "scope-controller", "gen-controller")
@@ -80,14 +80,14 @@ func TestCrossRepoResolutionPreservesControllerAndConfigEvidenceFamilies(t *test
 			if count != 1 {
 				t.Fatalf("Resolve() = %d, want 1", count)
 			}
-			if len(edgeWriter.writeCalls) != 1 {
-				t.Fatalf("expected 1 write call, got %d", len(edgeWriter.writeCalls))
+			if len(intentWriter.rows) != 1 {
+				t.Fatalf("expected 1 intent write, got %d", len(intentWriter.rows))
 			}
-			if len(edgeWriter.writeCalls[0].rows) != 1 {
-				t.Fatalf("expected 1 write row, got %d", len(edgeWriter.writeCalls[0].rows))
+			if len(intentWriter.rows[0]) != 1 {
+				t.Fatalf("expected 1 intent row, got %d", len(intentWriter.rows[0]))
 			}
 
-			row := edgeWriter.writeCalls[0].rows[0]
+			row := intentWriter.rows[0][0]
 			if got := stringValue(row.Payload["repo_id"]); got != "repo-service" {
 				t.Fatalf("row repo_id = %q, want %q", got, "repo-service")
 			}
@@ -107,7 +107,7 @@ func TestCrossRepoResolutionPreservesControllerAndConfigEvidenceFamilies(t *test
 func TestCrossRepoResolutionPreservesLocalReusableWorkflowAsSameRepoDeploySource(t *testing.T) {
 	t.Parallel()
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	handler := CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeEvidenceFactLoader{facts: []relationships.EvidenceFact{
 			{
@@ -118,7 +118,7 @@ func TestCrossRepoResolutionPreservesLocalReusableWorkflowAsSameRepoDeploySource
 				Confidence:       0.86,
 			},
 		}},
-		EdgeWriter: edgeWriter,
+		IntentWriter: intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-workflow", "gen-workflow")
@@ -128,11 +128,11 @@ func TestCrossRepoResolutionPreservesLocalReusableWorkflowAsSameRepoDeploySource
 	if count != 1 {
 		t.Fatalf("Resolve() = %d, want 1", count)
 	}
-	if len(edgeWriter.writeCalls) != 1 || len(edgeWriter.writeCalls[0].rows) != 1 {
-		t.Fatalf("writeCalls = %#v, want 1 row", edgeWriter.writeCalls)
+	if len(intentWriter.rows) != 1 || len(intentWriter.rows[0]) != 1 {
+		t.Fatalf("intent writes = %#v, want 1 row", intentWriter.rows)
 	}
 
-	row := edgeWriter.writeCalls[0].rows[0]
+	row := intentWriter.rows[0][0]
 	if got, want := stringValue(row.Payload["repo_id"]), "repo-service"; got != want {
 		t.Fatalf("row repo_id = %q, want %q", got, want)
 	}

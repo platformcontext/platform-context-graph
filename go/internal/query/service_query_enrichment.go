@@ -47,6 +47,16 @@ func enrichServiceQueryContextWithOptions(
 		return fmt.Errorf("load service query evidence: %w", err)
 	}
 
+	// Load framework-detected routes from fact_records when ContentReader
+	// is available (it has access to the same Postgres database).
+	if content != nil {
+		frameworkRoutes, err := content.ListFrameworkRoutes(ctx, repoID)
+		if err != nil {
+			return fmt.Errorf("load framework routes: %w", err)
+		}
+		evidence.FrameworkRoutes = frameworkRoutes
+	}
+
 	if hostnames := buildServiceHostnameRows(evidence.Hostnames); len(hostnames) > 0 {
 		workloadContext["hostnames"] = hostnames
 	}
@@ -387,7 +397,7 @@ func hostnameLabels(rows []map[string]any) []string {
 }
 
 func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
-	if len(evidence.APISpecs) == 0 && len(evidence.DocsRoutes) == 0 {
+	if len(evidence.APISpecs) == 0 && len(evidence.DocsRoutes) == 0 && len(evidence.FrameworkRoutes) == 0 {
 		return nil
 	}
 
@@ -432,7 +442,37 @@ func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
 		return StringVal(endpoints[i], "spec_path") < StringVal(endpoints[j], "spec_path")
 	})
 
-	return map[string]any{
+	// Merge framework-detected routes into the endpoint list.
+	frameworkRouteCount := 0
+	frameworkSet := map[string]struct{}{}
+	for _, fr := range evidence.FrameworkRoutes {
+		frameworkSet[fr.Framework] = struct{}{}
+		for _, routePath := range fr.RoutePaths {
+			endpoints = append(endpoints, map[string]any{
+				"path":      routePath,
+				"methods":   lowerStrings(fr.RouteMethods),
+				"source":    "framework",
+				"framework": fr.Framework,
+				"spec_path": fr.RelativePath,
+			})
+			frameworkRouteCount++
+		}
+	}
+	frameworks := make([]string, 0, len(frameworkSet))
+	for fw := range frameworkSet {
+		frameworks = append(frameworks, fw)
+	}
+	sort.Strings(frameworks)
+
+	// Re-sort endpoints after framework routes added.
+	sort.Slice(endpoints, func(i, j int) bool {
+		if StringVal(endpoints[i], "path") != StringVal(endpoints[j], "path") {
+			return StringVal(endpoints[i], "path") < StringVal(endpoints[j], "path")
+		}
+		return StringVal(endpoints[i], "spec_path") < StringVal(endpoints[j], "spec_path")
+	})
+
+	result := map[string]any{
 		"spec_count":         len(evidence.APISpecs),
 		"parsed_spec_count":  parsedSpecCount,
 		"spec_paths":         uniqueSortedStrings(specPaths),
@@ -445,6 +485,11 @@ func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
 		"hostnames":          hostnames,
 		"endpoints":          endpoints,
 	}
+	if frameworkRouteCount > 0 {
+		result["framework_route_count"] = frameworkRouteCount
+		result["frameworks"] = frameworks
+	}
+	return result
 }
 
 func serviceEvidenceHostnames(evidence ServiceQueryEvidence) []string {
@@ -475,6 +520,15 @@ func serviceEvidenceEnvironmentNames(rows []ServiceEnvironmentEvidence) []string
 		values = append(values, row.Environment)
 	}
 	return uniqueSortedStrings(values)
+}
+
+func lowerStrings(values []string) []string {
+	result := make([]string, len(values))
+	for i, v := range values {
+		result[i] = strings.ToLower(v)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func uniqueSortedStrings(values []string) []string {

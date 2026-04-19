@@ -144,6 +144,17 @@ ORDER BY created_at ASC, intent_id ASC
 LIMIT $5
 `
 
+const listAcceptanceUnitDomainIntentsSQL = `
+SELECT intent_id, projection_domain, partition_key, scope_id,
+       acceptance_unit_id, repository_id,
+       source_run_id, generation_id, payload, created_at, completed_at
+FROM shared_projection_intents
+WHERE acceptance_unit_id = $1
+  AND projection_domain = $2
+ORDER BY created_at ASC, intent_id ASC
+LIMIT $3
+`
+
 const claimPartitionLeaseSQL = `
 INSERT INTO shared_projection_partition_leases (
     projection_domain, partition_id, partition_count,
@@ -425,6 +436,33 @@ func (s *SharedIntentStore) ListPendingAcceptanceUnitIntents(
 		key.ScopeID,
 		key.AcceptanceUnitID,
 		key.SourceRunID,
+		domain,
+		l,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sqlRows.Close() }()
+
+	return scanSharedIntentRows(sqlRows)
+}
+
+// ListAcceptanceUnitDomainIntents lists all intents, including already
+// completed ones, for one acceptance unit and projection domain. Repo-owned
+// execution uses this full slice to reconstruct the authoritative snapshot
+// across multiple contributing scopes before retracting repo-wide edges.
+func (s *SharedIntentStore) ListAcceptanceUnitDomainIntents(
+	ctx context.Context,
+	acceptanceUnitID string,
+	domain string,
+	limit int,
+) ([]reducer.SharedProjectionIntentRow, error) {
+	l := max(limit, 1)
+
+	sqlRows, err := s.db.QueryContext(
+		ctx,
+		listAcceptanceUnitDomainIntentsSQL,
+		acceptanceUnitID,
 		domain,
 		l,
 	)

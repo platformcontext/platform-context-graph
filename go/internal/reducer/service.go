@@ -64,6 +64,10 @@ type Service struct {
 	// concurrently with the main claim/execute/ack loop. Nil disables the lane.
 	CodeCallProjectionRunner *CodeCallProjectionRunner
 
+	// RepoDependencyProjectionRunner runs the source-repo-owned repo dependency
+	// projection lane concurrently with the main reducer loop. Nil disables it.
+	RepoDependencyProjectionRunner *RepoDependencyProjectionRunner
+
 	// GraphProjectionPhaseRepairer retries exact readiness publications that
 	// failed after the underlying graph write already committed.
 	GraphProjectionPhaseRepairer *GraphProjectionPhaseRepairer
@@ -122,6 +126,16 @@ func (s Service) Run(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			if err := s.CodeCallProjectionRunner.Run(ctx); err != nil {
+				recordErr(err)
+			}
+		}()
+	}
+
+	if s.RepoDependencyProjectionRunner != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.RepoDependencyProjectionRunner.Run(ctx); err != nil {
 				recordErr(err)
 			}
 		}()

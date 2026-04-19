@@ -32,6 +32,11 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 				{"repo-service-edge-api", "specs/index.yaml", "sha-2", "openapi: 3.0.3\ninfo:\n  version: v1\nservers:\n  - url: https://service-edge-api.staging.example.test\npaths:\n  /widgets:\n    get:\n      operationId: listWidgets\n", "hash-2", int64(15), "yaml", "yaml"},
 			},
 		},
+		// ListFrameworkRoutes query — no framework routes for this test.
+		{
+			columns: []string{"relative_path", "framework_semantics"},
+			rows:    [][]driver.Value{},
+		},
 		{
 			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
 			rows: [][]driver.Value{

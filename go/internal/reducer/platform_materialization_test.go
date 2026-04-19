@@ -209,7 +209,7 @@ func TestPlatformMaterializationHandlerCallsCrossRepoResolver(t *testing.T) {
 		},
 	}
 
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	replayer := &recordingWorkloadMaterializationReplayer{}
 	handler := PlatformMaterializationHandler{
 		Writer:                          writer,
@@ -227,7 +227,7 @@ func TestPlatformMaterializationHandlerCallsCrossRepoResolver(t *testing.T) {
 					},
 				},
 			},
-			EdgeWriter: edgeWriter,
+			IntentWriter: intentWriter,
 		},
 	}
 
@@ -253,11 +253,8 @@ func TestPlatformMaterializationHandlerCallsCrossRepoResolver(t *testing.T) {
 		t.Fatalf("result.CanonicalWrites = %d, want %d", got, want)
 	}
 
-	if len(edgeWriter.writeCalls) != 1 {
-		t.Fatalf("expected 1 edge write call, got %d", len(edgeWriter.writeCalls))
-	}
-	if edgeWriter.writeCalls[0].domain != DomainRepoDependency {
-		t.Fatalf("edge write domain = %q, want %q", edgeWriter.writeCalls[0].domain, DomainRepoDependency)
+	if len(intentWriter.rows) != 1 {
+		t.Fatalf("expected 1 repo dependency intent write, got %d", len(intentWriter.rows))
 	}
 	if got, want := len(replayer.calls), 1; got != want {
 		t.Fatalf("replayer calls = %d, want %d", got, want)
@@ -317,7 +314,7 @@ func TestPlatformMaterializationHandlerDoesNotReplayWithoutCrossRepoWrites(t *te
 		WorkloadMaterializationReplayer: replayer,
 		CrossRepoResolver: &CrossRepoRelationshipHandler{
 			EvidenceLoader: &fakeEvidenceFactLoader{},
-			EdgeWriter:     &recordingEdgeWriter{},
+			IntentWriter:   &recordingRepoDependencyIntentWriter{},
 		},
 	}
 
@@ -348,7 +345,7 @@ func TestPlatformMaterializationHandlerReplaysWorkloadMaterializationAcrossRelat
 	writer := &recordingPlatformMaterializationWriter{
 		result: PlatformMaterializationWriteResult{CanonicalWrites: 1},
 	}
-	edgeWriter := &recordingEdgeWriter{}
+	intentWriter := &recordingRepoDependencyIntentWriter{}
 	replayer := &recordingWorkloadMaterializationReplayer{}
 	handler := PlatformMaterializationHandler{
 		Writer:                          writer,
@@ -366,7 +363,7 @@ func TestPlatformMaterializationHandlerReplaysWorkloadMaterializationAcrossRelat
 					},
 				},
 			},
-			EdgeWriter: edgeWriter,
+			IntentWriter: intentWriter,
 		},
 	}
 

@@ -208,6 +208,137 @@ stub: "sandbox.stub"
 	}
 }
 
+func TestLoadServiceQueryEvidenceResolvesOpenAPIPathsRef(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubServiceEvidenceReader{
+		files: []FileContent{
+			{RepoID: "repo-api", RelativePath: "specs/index.yaml"},
+			{RepoID: "repo-api", RelativePath: "api/paths/index.yaml"},
+		},
+		fileContent: map[string]string{
+			"specs/index.yaml": `
+openapi: 3.0.3
+info:
+  title: Boats API
+  version: v1
+paths:
+  $ref: '../api/paths/index.yaml'
+`,
+			"api/paths/index.yaml": `
+/boats:
+  get:
+    operationId: listBoats
+  post:
+    operationId: createBoat
+/boats/{id}:
+  get:
+    operationId: getBoat
+`,
+		},
+	}
+
+	evidence, err := loadServiceQueryEvidence(context.Background(), reader, "repo-api", "api")
+	if err != nil {
+		t.Fatalf("loadServiceQueryEvidence() error = %v", err)
+	}
+
+	// Find the parsed spec (the main openapi file)
+	var spec *ServiceAPISpecEvidence
+	for i := range evidence.APISpecs {
+		if evidence.APISpecs[i].Parsed && evidence.APISpecs[i].RelativePath == "specs/index.yaml" {
+			spec = &evidence.APISpecs[i]
+			break
+		}
+	}
+	if spec == nil {
+		t.Fatal("parsed spec for specs/index.yaml not found")
+	}
+	if got, want := spec.EndpointCount, 2; got != want {
+		t.Fatalf("EndpointCount = %d, want %d", got, want)
+	}
+	if got, want := spec.MethodCount, 3; got != want {
+		t.Fatalf("MethodCount = %d, want %d", got, want)
+	}
+	if got, want := spec.OperationIDCount, 3; got != want {
+		t.Fatalf("OperationIDCount = %d, want %d", got, want)
+	}
+	for _, ep := range spec.Endpoints {
+		if ep.Path == "$ref" {
+			t.Fatal("$ref must not appear as an endpoint path")
+		}
+	}
+	if got, want := spec.Endpoints[0].Path, "/boats"; got != want {
+		t.Fatalf("Endpoints[0].Path = %q, want %q", got, want)
+	}
+}
+
+func TestLoadServiceQueryEvidenceResolvesPerPathItemRef(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubServiceEvidenceReader{
+		files: []FileContent{
+			{RepoID: "repo-api", RelativePath: "specs/openapi.yaml"},
+			{RepoID: "repo-api", RelativePath: "api/paths/boats.yaml"},
+		},
+		fileContent: map[string]string{
+			"specs/openapi.yaml": `
+openapi: 3.0.3
+info:
+  title: Boats API
+  version: v2
+paths:
+  /boats:
+    $ref: '../api/paths/boats.yaml'
+  /health:
+    get:
+      operationId: healthCheck
+`,
+			"api/paths/boats.yaml": `
+get:
+  operationId: listBoats
+post:
+  operationId: createBoat
+`,
+		},
+	}
+
+	evidence, err := loadServiceQueryEvidence(context.Background(), reader, "repo-api", "api")
+	if err != nil {
+		t.Fatalf("loadServiceQueryEvidence() error = %v", err)
+	}
+
+	var spec *ServiceAPISpecEvidence
+	for i := range evidence.APISpecs {
+		if evidence.APISpecs[i].Parsed && evidence.APISpecs[i].RelativePath == "specs/openapi.yaml" {
+			spec = &evidence.APISpecs[i]
+			break
+		}
+	}
+	if spec == nil {
+		t.Fatal("parsed spec for specs/openapi.yaml not found")
+	}
+	if got, want := spec.EndpointCount, 2; got != want {
+		t.Fatalf("EndpointCount = %d, want %d", got, want)
+	}
+	if got, want := spec.MethodCount, 3; got != want {
+		t.Fatalf("MethodCount = %d, want %d", got, want)
+	}
+	if got, want := spec.OperationIDCount, 3; got != want {
+		t.Fatalf("OperationIDCount = %d, want %d", got, want)
+	}
+	// /boats should have methods from resolved ref
+	for _, ep := range spec.Endpoints {
+		if ep.Path == "/boats" {
+			if len(ep.Methods) != 2 {
+				t.Fatalf("/boats methods = %v, want [get post]", ep.Methods)
+			}
+			return
+		}
+	}
+	t.Fatal("/boats endpoint not found in resolved spec")
+}
+
 func TestLoadServiceQueryEvidencePropagatesReaderErrors(t *testing.T) {
 	t.Parallel()
 
