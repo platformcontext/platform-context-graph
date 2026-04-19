@@ -3,6 +3,7 @@ package reducer
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/correlation/engine"
@@ -14,6 +15,7 @@ import (
 type CorrelatedWorkloadProjectionInputLoader struct {
 	FactLoader     FactLoader
 	ResolvedLoader ResolvedRelationshipLoader
+	ScopeResolver  DeploymentRepoScopeResolver
 }
 
 // LoadWorkloadProjectionInputs loads workload candidates, enriches them with
@@ -38,6 +40,12 @@ func (l CorrelatedWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
 			return nil, nil, fmt.Errorf("load resolved relationships for correlated workload projection: %w", err)
 		}
 		candidates = applyResolvedDeploymentSources(candidates, resolved)
+	}
+
+	if l.ScopeResolver != nil {
+		deploymentEnvironments = l.enrichDeploymentRepoEnvironments(
+			ctx, candidates, deploymentEnvironments,
+		)
 	}
 
 	if len(intent.EntityKeys) > 0 {
@@ -88,6 +96,69 @@ func admittedCorrelatedWorkloadCandidates(
 	}
 
 	return admitted, nil
+}
+
+// enrichDeploymentRepoEnvironments loads facts from deployment repos that are
+// not the source repo, extracts overlay environments, and merges them into the
+// deploymentEnvironments map. This enables cross-repo environment resolution
+// when the source repo is deployed via a separate helm-charts/argocd repo.
+func (l CorrelatedWorkloadProjectionInputLoader) enrichDeploymentRepoEnvironments(
+	ctx context.Context,
+	candidates []WorkloadCandidate,
+	deploymentEnvironments map[string][]string,
+) map[string][]string {
+	// Collect unique deployment repo IDs that differ from the source repo
+	// and don't already have environments.
+	needed := make(map[string]struct{})
+	sourceRepos := make(map[string]struct{})
+	for _, c := range candidates {
+		sourceRepos[c.RepoID] = struct{}{}
+	}
+	for _, c := range candidates {
+		if c.DeploymentRepoID == "" {
+			continue
+		}
+		if _, isSameRepo := sourceRepos[c.DeploymentRepoID]; isSameRepo {
+			continue
+		}
+		if _, hasEnvs := deploymentEnvironments[c.DeploymentRepoID]; hasEnvs {
+			continue
+		}
+		needed[c.DeploymentRepoID] = struct{}{}
+	}
+	if len(needed) == 0 {
+		return deploymentEnvironments
+	}
+
+	repoIDs := make([]string, 0, len(needed))
+	for id := range needed {
+		repoIDs = append(repoIDs, id)
+	}
+
+	identities, err := l.ScopeResolver.ResolveRepoActiveGenerations(ctx, repoIDs)
+	if err != nil {
+		slog.Warn("resolve deployment repo active generations",
+			"error", err, "repo_ids", repoIDs)
+		return deploymentEnvironments
+	}
+
+	for repoID, identity := range identities {
+		envelopes, err := l.FactLoader.ListFacts(ctx, identity.ScopeID, identity.GenerationID)
+		if err != nil {
+			slog.Warn("load deployment repo facts for environment extraction",
+				"error", err, "repo_id", repoID,
+				"scope_id", identity.ScopeID, "generation_id", identity.GenerationID)
+			continue
+		}
+		envs := ExtractOverlayEnvironmentsFromEnvelopes(envelopes)
+		for envRepoID, environments := range envs {
+			if _, exists := deploymentEnvironments[envRepoID]; !exists {
+				deploymentEnvironments[envRepoID] = environments
+			}
+		}
+	}
+
+	return deploymentEnvironments
 }
 
 func correlatedWorkloadName(

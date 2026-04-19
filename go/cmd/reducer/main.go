@@ -161,6 +161,7 @@ func buildReducerService(
 		WorkloadProjectionInputLoader: reducer.CorrelatedWorkloadProjectionInputLoader{
 			FactLoader:     factStore,
 			ResolvedLoader: relationshipStore,
+			ScopeResolver:  postgres.RepoScopeResolver{DB: database},
 		},
 		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
 		CloudAssetResolutionWriter:         reducer.PostgresCloudAssetResolutionWriter{DB: database},

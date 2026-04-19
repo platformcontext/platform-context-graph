@@ -32,6 +32,19 @@ type GenerationScopedResolvedRelationshipLoader interface {
 	) ([]relationships.ResolvedRelationship, error)
 }
 
+// RepoScopeIdentity holds the active scope and generation for a repository.
+type RepoScopeIdentity struct {
+	ScopeID      string
+	GenerationID string
+}
+
+// DeploymentRepoScopeResolver resolves repository graph IDs to their active
+// scope and generation identities, enabling cross-repo fact loading during
+// workload materialization.
+type DeploymentRepoScopeResolver interface {
+	ResolveRepoActiveGenerations(ctx context.Context, repoIDs []string) (map[string]RepoScopeIdentity, error)
+}
+
 // WorkloadProjectionInputLoader can provide already-correlated workload
 // candidates and environment overlays for workload materialization.
 type WorkloadProjectionInputLoader interface {

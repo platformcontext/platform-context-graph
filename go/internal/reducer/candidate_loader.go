@@ -112,6 +112,31 @@ func ExtractWorkloadCandidates(envelopes []facts.Envelope) ([]WorkloadCandidate,
 	return candidates, envResult
 }
 
+// ExtractOverlayEnvironmentsFromEnvelopes extracts deployment overlay
+// environments from file fact envelopes without building full workload
+// candidates. Used for cross-repo environment loading where only the overlay
+// paths matter.
+func ExtractOverlayEnvironmentsFromEnvelopes(envelopes []facts.Envelope) map[string][]string {
+	deploymentEnvs := make(map[string]map[string]struct{})
+	for _, env := range envelopes {
+		if env.FactKind != "file" {
+			continue
+		}
+		repoID := payloadStr(env.Payload, "repo_id")
+		if repoID == "" {
+			continue
+		}
+		relativePath := payloadStr(env.Payload, "relative_path")
+		extractOverlayEnvs(repoID, relativePath, deploymentEnvs)
+	}
+
+	result := make(map[string][]string, len(deploymentEnvs))
+	for repoID, envSet := range deploymentEnvs {
+		result[repoID] = sortedKeys(envSet)
+	}
+	return result
+}
+
 func extractK8sSignals(fileData map[string]any, sig *repoSignals) {
 	resources, ok := fileData["k8s_resources"].([]any)
 	if !ok {
