@@ -41,6 +41,39 @@ If a change affects Docker Compose, also read
 real directories, not symlinks. On macOS, `/tmp` resolves through a symlink and
 is not a safe default bind root.
 
+## Correlation Truth Gates
+
+Use the `pcg-correlation-truth` skill whenever a change touches workload
+admission, deployable-unit correlation, materialization, deployment tracing, or
+query truth in `go/internal/reducer`, `go/internal/query`, `go/internal/graph`,
+`go/internal/relationships`, or correlation verification fixtures.
+
+- Do not change correlation logic until you can explain the full path from raw
+  evidence -> candidate -> admission -> projection row -> graph write -> query
+  surface.
+- Every correlation or materialization change MUST include one positive case,
+  one negative case, and one ambiguous case. If one of those classes is missing,
+  stop and add it before claiming the design is understood.
+- Prove both sides of the contract: what SHOULD materialize and what MUST remain
+  provenance-only. Utility repos, controller repos, deployment repos, and
+  ambiguous multi-unit repos are mandatory edge-case categories.
+- Namespace, folder, or repo-name heuristics MUST NOT invent environment or
+  platform truth unless the value matches an explicit environment alias or is
+  backed by stronger deployment evidence.
+- Reducer completion timing is not valid proof. After the final logic patch, run
+  a fresh rebuild/restart path and re-check the graph before concluding a miss
+  is timing-related.
+- Validation MUST compare fixture intent, reducer graph truth, and API/query
+  truth. If any of the three disagree, do not wave it through as "close enough";
+  explain the mismatch or keep digging.
+- Required proof for correlation-changing work:
+  focused Go tests for the touched packages, a fresh compose correlation run, a
+  direct graph inspection of the canonical nodes/edges, and the affected
+  query/API surfaces.
+- Deployment-story or service-story changes MUST validate repo context, service
+  context, and deployment trace together because one surface can look healthy
+  while another still lies.
+
 ## Service Ownership
 
 - `app/` chooses the runtime role
