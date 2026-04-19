@@ -121,6 +121,15 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(spec))
 	if got, want := spec.Hostnames, []string{"sample-service-api.qa.example.com"}; !slices.Equal(got, want) {
 		t.Fatalf("api_specs[0].Hostnames = %#v, want %#v", got, want)
 	}
+	if len(spec.Endpoints) != 2 {
+		t.Fatalf("len(api_specs[0].Endpoints) = %d, want 2", len(spec.Endpoints))
+	}
+	if got, want := spec.Endpoints[0].Path, "/boats"; got != want {
+		t.Fatalf("api_specs[0].Endpoints[0].Path = %q, want %q", got, want)
+	}
+	if got, want := spec.Endpoints[1].OperationIDs, []string{"getBoat"}; !slices.Equal(got, want) {
+		t.Fatalf("api_specs[0].Endpoints[1].OperationIDs = %#v, want %#v", got, want)
+	}
 }
 
 func TestLoadServiceQueryEvidenceMarksJavaScriptSpecFilesAsSpecEvidence(t *testing.T) {

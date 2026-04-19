@@ -254,7 +254,7 @@ func graphResultMetadata(row map[string]any) map[string]any {
 }
 
 func graphSemanticMetadataProjection() string {
-	return `,
+	return `
 		       e.docstring as docstring,
 		       e.method_kind as method_kind,
 		       e.constructor_kind as constructor_kind,

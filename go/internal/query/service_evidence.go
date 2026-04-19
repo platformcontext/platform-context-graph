@@ -44,22 +44,31 @@ type ServiceDocsRouteEvidence struct {
 }
 
 type ServiceAPISpecEvidence struct {
-	RelativePath     string   `json:"relative_path"`
-	Format           string   `json:"format"`
-	Parsed           bool     `json:"parsed"`
-	SpecVersion      string   `json:"spec_version,omitempty"`
-	APIVersion       string   `json:"api_version,omitempty"`
-	EndpointCount    int      `json:"endpoint_count,omitempty"`
-	MethodCount      int      `json:"method_count,omitempty"`
-	OperationIDCount int      `json:"operation_id_count,omitempty"`
-	DocsRoutes       []string `json:"docs_routes,omitempty"`
-	Hostnames        []string `json:"hostnames,omitempty"`
+	RelativePath     string                       `json:"relative_path"`
+	Format           string                       `json:"format"`
+	Parsed           bool                         `json:"parsed"`
+	SpecVersion      string                       `json:"spec_version,omitempty"`
+	APIVersion       string                       `json:"api_version,omitempty"`
+	EndpointCount    int                          `json:"endpoint_count,omitempty"`
+	MethodCount      int                          `json:"method_count,omitempty"`
+	OperationIDCount int                          `json:"operation_id_count,omitempty"`
+	DocsRoutes       []string                     `json:"docs_routes,omitempty"`
+	Hostnames        []string                     `json:"hostnames,omitempty"`
+	Endpoints        []ServiceAPIEndpointEvidence `json:"endpoints,omitempty"`
+}
+
+type ServiceAPIEndpointEvidence struct {
+	Path         string   `json:"path"`
+	Methods      []string `json:"methods,omitempty"`
+	OperationIDs []string `json:"operation_ids,omitempty"`
 }
 
 var (
 	serviceHostnamePattern  = regexp.MustCompile(`(?i)\b(?:https?://)?((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62})\b`)
-	serviceDocsRoutePattern = regexp.MustCompile(`(?i)['"](/[^'"]*(?:docs|swagger|openapi)[^'"]*)['"]`)
+	serviceDocsRoutePattern = regexp.MustCompile(`(?i)['"](/[^'"]+)['"]`)
 )
+
+const serviceEvidenceFileLimit = 5000
 
 var environmentAliases = []struct {
 	canonical string
@@ -88,7 +97,7 @@ func loadServiceQueryEvidence(
 		return ServiceQueryEvidence{}, nil
 	}
 
-	files, err := reader.ListRepoFiles(ctx, repoID, repositorySemanticEntityLimit)
+	files, err := reader.ListRepoFiles(ctx, repoID, serviceEvidenceFileLimit)
 	if err != nil {
 		return ServiceQueryEvidence{}, fmt.Errorf("list service evidence files: %w", err)
 	}
@@ -320,6 +329,9 @@ func extractDocsRoutes(content string) []string {
 		if route == "" {
 			continue
 		}
+		if !looksLikeDocsRoute(route) {
+			continue
+		}
 		if _, ok := seen[route]; ok {
 			continue
 		}
@@ -364,23 +376,38 @@ func buildOpenAPISpecEvidence(relativePath string, format string, doc map[string
 	operationIDCount := 0
 	methodCount := 0
 	docsRoutes := make([]string, 0)
+	endpoints := make([]ServiceAPIEndpointEvidence, 0, len(paths))
 	for route, rawOperation := range paths {
 		routeMap := serviceMapValue(rawOperation)
+		methods := make([]string, 0, len(routeMap))
+		operationIDs := make([]string, 0, len(routeMap))
 		for method, rawOperationSpec := range routeMap {
 			if _, ok := openAPIMethodNames[strings.ToLower(method)]; !ok {
 				continue
 			}
 			methodCount++
+			methods = append(methods, strings.ToLower(method))
 			operationMap := serviceMapValue(rawOperationSpec)
-			if serviceStringValue(operationMap["operationId"]) != "" {
+			if operationID := serviceStringValue(operationMap["operationId"]); operationID != "" {
 				operationIDCount++
+				operationIDs = append(operationIDs, operationID)
 			}
 		}
+		sort.Strings(methods)
+		sort.Strings(operationIDs)
+		endpoints = append(endpoints, ServiceAPIEndpointEvidence{
+			Path:         route,
+			Methods:      methods,
+			OperationIDs: operationIDs,
+		})
 		if looksLikeDocsRoute(route) {
 			docsRoutes = append(docsRoutes, route)
 		}
 	}
 	sort.Strings(docsRoutes)
+	sort.Slice(endpoints, func(i, j int) bool {
+		return endpoints[i].Path < endpoints[j].Path
+	})
 
 	hostnames := make([]string, 0)
 	seenHostnames := map[string]struct{}{}
@@ -414,6 +441,7 @@ func buildOpenAPISpecEvidence(relativePath string, format string, doc map[string
 		OperationIDCount: operationIDCount,
 		DocsRoutes:       docsRoutes,
 		Hostnames:        hostnames,
+		Endpoints:        endpoints,
 	}, true
 }
 
@@ -451,7 +479,22 @@ func isPotentialAPISpecPath(relativePath string) bool {
 
 func looksLikeDocsRoute(route string) bool {
 	lower := strings.ToLower(route)
-	return strings.Contains(lower, "docs") || strings.Contains(lower, "swagger") || strings.Contains(lower, "openapi")
+	if strings.Contains(lower, "docs") || strings.Contains(lower, "swagger") || strings.Contains(lower, "openapi") {
+		return true
+	}
+	for _, segment := range strings.FieldsFunc(lower, func(r rune) bool {
+		switch r {
+		case '/', '_', '-', '.', ':':
+			return true
+		default:
+			return false
+		}
+	}) {
+		if segment == "spec" || segment == "specs" {
+			return true
+		}
+	}
+	return false
 }
 
 func hostnameFromURL(raw string) string {

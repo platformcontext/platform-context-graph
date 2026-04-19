@@ -105,7 +105,8 @@ func wireAPI(
 			StatusReader: pgstatus.NewStatusStore(pgstatus.SQLQueryer{DB: db}),
 		},
 		Compare: &query.CompareHandler{
-			Neo4j: neo4jReader,
+			Neo4j:   neo4jReader,
+			Content: contentReader,
 		},
 	}
 

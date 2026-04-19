@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -25,6 +26,11 @@ func TestResolveEntityReturnsGraphBackedPythonDecoratedClassWithPythonSemantics(
 				}
 				if want := "e.decorators as decorators"; !strings.Contains(cypher, want) {
 					t.Fatalf("cypher = %q, want %q", cypher, want)
+				}
+				if matched, err := regexp.MatchString(`,\s*,`, cypher); err != nil {
+					t.Fatalf("regexp.MatchString() error = %v, want nil", err)
+				} else if matched {
+					t.Fatalf("cypher contains a duplicated projection separator: %q", cypher)
 				}
 				return []map[string]any{
 					{

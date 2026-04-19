@@ -150,3 +150,70 @@ func (cr *ContentReader) SearchEntitiesByNameAnyRepo(
 	}
 	return results, nil
 }
+
+// SearchEntityContentAnyRepo searches entity source cache by pattern across all repos.
+func (cr *ContentReader) SearchEntityContentAnyRepo(
+	ctx context.Context,
+	pattern string,
+	limit int,
+) ([]EntityContent, error) {
+	ctx, span := cr.tracer.Start(ctx, "postgres.query",
+		trace.WithAttributes(
+			attribute.String("db.system", "postgresql"),
+			attribute.String("db.operation", "search_entity_content_any_repo"),
+			attribute.String("db.sql.table", "content_entities"),
+		),
+	)
+	defer span.End()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := cr.db.QueryContext(ctx, `
+		SELECT entity_id, repo_id, relative_path, entity_type, entity_name,
+		       start_line, end_line, coalesce(language, ''), coalesce(source_cache, ''),
+		       metadata
+		FROM content_entities
+		WHERE source_cache ILIKE '%' || $1 || '%'
+		ORDER BY repo_id, relative_path, start_line
+		LIMIT $2
+	`, pattern, limit)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("search entity content across repos: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []EntityContent
+	for rows.Next() {
+		var entity EntityContent
+		var rawMetadata []byte
+		if err := rows.Scan(
+			&entity.EntityID,
+			&entity.RepoID,
+			&entity.RelativePath,
+			&entity.EntityType,
+			&entity.EntityName,
+			&entity.StartLine,
+			&entity.EndLine,
+			&entity.Language,
+			&entity.SourceCache,
+			&rawMetadata,
+		); err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("scan cross-repo entity search result: %w", err)
+		}
+		entity.Metadata, err = decodeEntityMetadata(rawMetadata)
+		if err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("scan cross-repo entity search result: %w", err)
+		}
+		results = append(results, entity)
+	}
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		return results, err
+	}
+	return results, nil
+}

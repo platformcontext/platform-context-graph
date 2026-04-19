@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"errors"
 	"net/http"
 )
@@ -136,7 +137,7 @@ func (h *ContentHandler) searchFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results, err := h.Content.SearchFileContent(r.Context(), req.repoID(), req.pattern(), req.limit())
+	results, err := h.searchFilesByScope(r.Context(), req)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -162,7 +163,7 @@ func (h *ContentHandler) searchEntities(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	results, err := h.Content.SearchEntityContent(r.Context(), req.repoID(), req.pattern(), req.limit())
+	results, err := h.searchEntitiesByScope(r.Context(), req)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -194,9 +195,6 @@ func (req contentSearchRequest) validate() error {
 	if len(req.RepoIDs) > 1 {
 		return errors.New("repo_ids may contain at most one value")
 	}
-	if req.repoID() == "" {
-		return errors.New("repo_id is required")
-	}
 	if req.pattern() == "" {
 		return errors.New("query is required")
 	}
@@ -225,4 +223,18 @@ func (req contentSearchRequest) limit() int {
 		return req.Limit
 	}
 	return 50
+}
+
+func (h *ContentHandler) searchFilesByScope(ctx context.Context, req contentSearchRequest) ([]FileContent, error) {
+	if repoID := req.repoID(); repoID != "" {
+		return h.Content.SearchFileContent(ctx, repoID, req.pattern(), req.limit())
+	}
+	return h.Content.SearchFileContentAnyRepo(ctx, req.pattern(), req.limit())
+}
+
+func (h *ContentHandler) searchEntitiesByScope(ctx context.Context, req contentSearchRequest) ([]EntityContent, error) {
+	if repoID := req.repoID(); repoID != "" {
+		return h.Content.SearchEntityContent(ctx, repoID, req.pattern(), req.limit())
+	}
+	return h.Content.SearchEntityContentAnyRepo(ctx, req.pattern(), req.limit())
 }

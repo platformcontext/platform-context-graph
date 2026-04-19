@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -255,6 +256,47 @@ func TestResolveEntityReturnsGraphBackedJavaScriptFunctionWithJavaScriptSemantic
 	}
 	if got, want := profile["surface_kind"], "javascript_method"; got != want {
 		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
+func TestGetEntityContextUsesSharedSemanticProjectionSeparatorContract(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeGraphReader{
+			runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if got, want := params["entity_id"], "entity-1"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				if matched, err := regexp.MatchString(`deploy_entry_point as deploy_entry_point\s*r\.id as repo_id`, cypher); err != nil {
+					t.Fatalf("regexp.MatchString() error = %v, want nil", err)
+				} else if matched {
+					t.Fatalf("cypher is missing the separator after the shared semantic projection: %q", cypher)
+				}
+				return map[string]any{
+					"id":            "entity-1",
+					"labels":        []any{"Function"},
+					"name":          "handlePayment",
+					"file_path":     "src/payments.ts",
+					"repo_id":       "repo-1",
+					"repo_name":     "payments",
+					"language":      "typescript",
+					"start_line":    int64(10),
+					"end_line":      int64(32),
+					"relationships": []any{},
+				}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/entity-1/context", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
 	}
 }
 

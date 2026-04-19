@@ -457,7 +457,7 @@ func buildEntityCypherWithSemanticFilter(
 		       f.relative_path as file_path,
 		       r.id as repo_id, r.name as repo_name,
 		       coalesce(e.language, f.language) as language,
-		       e.start_line as start_line, e.end_line as end_line
+		       e.start_line as start_line, e.end_line as end_line,
 ` + graphSemanticMetadataProjection() + `
 		ORDER BY f.relative_path, e.name
 		LIMIT $limit

@@ -396,6 +396,58 @@ func TestSearchGraphEntitiesDoesNotDuplicateRepoNameProjection(t *testing.T) {
 	}
 }
 
+func TestHandleSearchAllowsCrossRepoQueriesWhenRepoScopeIsOmitted(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if _, ok := params["repo_id"]; ok {
+					t.Fatalf("params[repo_id] = %#v, want repo_id omitted for cross-repo search", params["repo_id"])
+				}
+				if strings.Contains(cypher, "r.id = $repo_id") {
+					t.Fatalf("cypher = %q, want no repo filter when repo scope is omitted", cypher)
+				}
+				return []map[string]any{
+					{
+						"entity_id":  "func:ts:search",
+						"name":       "search",
+						"labels":     []any{"Function"},
+						"file_path":  "src/search.ts",
+						"repo_id":    "repo-2",
+						"repo_name":  "repo-2",
+						"language":   "typescript",
+						"start_line": int64(4),
+						"end_line":   int64(18),
+					},
+				}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/search",
+		bytes.NewBufferString(`{"query":"search","language":"typescript"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := resp["source"], "graph"; got != want {
+		t.Fatalf("resp[source] = %#v, want %#v", got, want)
+	}
+}
+
 func TestEnrichGraphSearchResultsWithContentMetadataSkipsUnmatchedRows(t *testing.T) {
 	t.Parallel()
 

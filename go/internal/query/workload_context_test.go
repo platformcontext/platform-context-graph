@@ -149,13 +149,8 @@ func TestGetWorkloadContextReturnsEnrichedResponse(t *testing.T) {
 		t.Fatalf("len(infrastructure) = %d, want 1", len(infra))
 	}
 
-	// Entry points from repo enrichment
-	entryPoints, ok := resp["entry_points"].([]any)
-	if !ok {
-		t.Fatalf("entry_points type = %T, want []any", resp["entry_points"])
-	}
-	if len(entryPoints) != 1 {
-		t.Fatalf("len(entry_points) = %d, want 1", len(entryPoints))
+	if _, exists := resp["entry_points"]; exists {
+		t.Fatalf("entry_points = %#v, want omitted for workload context", resp["entry_points"])
 	}
 }
 
@@ -395,5 +390,42 @@ func TestGetServiceContextOmitsRepoEntryPoints(t *testing.T) {
 
 	if _, exists := resp["entry_points"]; exists {
 		t.Fatalf("entry_points = %#v, want omitted for service context", resp["entry_points"])
+	}
+}
+
+func TestBuildWorkloadStorySurfacesObservedServiceSignalsWithoutMaterializedInstances(t *testing.T) {
+	t.Parallel()
+
+	ctx := map[string]any{
+		"name":      "sample-service-api",
+		"kind":      "service",
+		"repo_name": "sample-service-api",
+		"instances": []map[string]any{},
+		"observed_config_environments": []string{
+			"production",
+			"qa",
+		},
+		"hostnames": []map[string]any{
+			{"hostname": "sample-service-api.qa.example.com"},
+			{"hostname": "sample-service-api.production.example.com"},
+		},
+		"api_surface": map[string]any{
+			"endpoint_count": 21,
+			"spec_count":     1,
+			"docs_routes":    []string{"/_specs"},
+		},
+	}
+
+	story := buildWorkloadStory(ctx)
+	for _, fragment := range []string{
+		"No materialized workload instances found.",
+		"Observed config environments: production, qa.",
+		"Public entrypoints: sample-service-api.production.example.com, sample-service-api.qa.example.com.",
+		"API surface exposes 21 endpoint(s) across 1 spec file(s).",
+		"Docs routes: /_specs.",
+	} {
+		if !strings.Contains(story, fragment) {
+			t.Fatalf("story = %q, want fragment %q", story, fragment)
+		}
 	}
 }

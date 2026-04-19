@@ -1,8 +1,14 @@
 # Go build artifacts
 go/bin/
+go/admin-status
 go/api
+go/bootstrap-data-plane
 go/bootstrap-index
+go/collector-git
+go/ingester
+go/mcp-server
 go/pcg
+go/projector
 go/reducer
 *.exe
 *.exe~

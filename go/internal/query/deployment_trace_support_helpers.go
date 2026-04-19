@@ -28,7 +28,17 @@ func loadProvisioningSourceChains(
 	content *ContentReader,
 	serviceRepoID string,
 ) ([]map[string]any, error) {
-	candidates, err := queryProvisioningRepositoryCandidates(ctx, graph, serviceRepoID)
+	return loadProvisioningSourceChainsWithLimit(ctx, graph, content, serviceRepoID, 0)
+}
+
+func loadProvisioningSourceChainsWithLimit(
+	ctx context.Context,
+	graph GraphReader,
+	content *ContentReader,
+	serviceRepoID string,
+	limit int,
+) ([]map[string]any, error) {
+	candidates, err := queryProvisioningRepositoryCandidates(ctx, graph, serviceRepoID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -83,15 +93,28 @@ func loadConsumerRepositoryEnrichment(
 	serviceName string,
 	hostnames []string,
 ) ([]map[string]any, error) {
-	candidates, err := queryProvisioningRepositoryCandidates(ctx, graph, serviceRepoID)
+	return loadConsumerRepositoryEnrichmentWithLimit(ctx, graph, content, serviceRepoID, serviceName, hostnames, 0)
+}
+
+func loadConsumerRepositoryEnrichmentWithLimit(
+	ctx context.Context,
+	graph GraphReader,
+	content *ContentReader,
+	serviceRepoID string,
+	serviceName string,
+	hostnames []string,
+	limit int,
+) ([]map[string]any, error) {
+	candidates, err := queryProvisioningRepositoryCandidates(ctx, graph, serviceRepoID, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	trimmedHostnames := make([]string, 0, len(hostnames))
-	for _, hostname := range hostnames {
-		if hostname = strings.TrimSpace(hostname); hostname != "" {
-			trimmedHostnames = append(trimmedHostnames, hostname)
+	trimmedHostnames := normalizedIndirectEvidenceHostnames(hostnames)
+	if limit > 0 {
+		trimmedHostnames = boundedIndirectEvidenceHostnames(trimmedHostnames)
+		if len(trimmedHostnames) > limit {
+			trimmedHostnames = trimmedHostnames[:limit]
 		}
 	}
 
@@ -110,7 +133,7 @@ func loadConsumerRepositoryEnrichment(
 	}
 
 	if content != nil {
-		contentEvidence, err := searchConsumerEvidenceAnyRepo(ctx, content, serviceRepoID, serviceName, trimmedHostnames)
+		contentEvidence, err := searchConsumerEvidenceAnyRepo(ctx, content, serviceRepoID, serviceName, trimmedHostnames, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -143,19 +166,26 @@ func queryProvisioningRepositoryCandidates(
 	ctx context.Context,
 	graph GraphReader,
 	serviceRepoID string,
+	limit int,
 ) ([]provisioningRepositoryCandidate, error) {
 	if graph == nil || strings.TrimSpace(serviceRepoID) == "" {
 		return nil, nil
 	}
 
-	rows, err := graph.Run(ctx, `
+	query := `
 		MATCH (target:Repository {id: $repo_id})<-[rel:PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN]-(repo:Repository)
 		RETURN repo.id AS repo_id,
 		       repo.name AS repo_name,
 		       type(rel) AS relationship_type,
 		       coalesce(rel.reason, rel.evidence_type, '') AS relationship_reason
 		ORDER BY repo.name, relationship_type
-	`, map[string]any{"repo_id": serviceRepoID})
+	`
+	params := map[string]any{"repo_id": serviceRepoID}
+	if limit > 0 {
+		query += " LIMIT $limit"
+		params["limit"] = limit
+	}
+	rows, err := graph.Run(ctx, query, params)
 	if err != nil {
 		return nil, fmt.Errorf("query provisioning repository candidates: %w", err)
 	}
@@ -232,21 +262,25 @@ func searchConsumerEvidenceAnyRepo(
 	serviceRepoID string,
 	serviceName string,
 	hostnames []string,
+	limit int,
 ) (map[string]traceEvidenceAccumulator, error) {
 	evidenceByRepo := map[string]traceEvidenceAccumulator{}
 	if content == nil {
 		return evidenceByRepo, nil
 	}
+	if limit <= 0 {
+		limit = 100
+	}
 
 	if serviceName = strings.TrimSpace(serviceName); serviceName != "" {
-		rows, err := content.SearchFileContentAnyRepo(ctx, serviceName, 100)
+		rows, err := content.SearchFileContentAnyRepo(ctx, serviceName, limit)
 		if err != nil {
 			return evidenceByRepo, fmt.Errorf("search consumer evidence for service name: %w", err)
 		}
 		collectSearchRowsByRepo(evidenceByRepo, rows, serviceRepoID, "repository_reference", serviceName)
 	}
 	for _, hostname := range hostnames {
-		rows, err := content.SearchFileContentAnyRepo(ctx, hostname, 100)
+		rows, err := content.SearchFileContentAnyRepo(ctx, hostname, limit)
 		if err != nil {
 			return evidenceByRepo, fmt.Errorf("search consumer evidence for hostname %q: %w", hostname, err)
 		}
@@ -353,4 +387,125 @@ func containsString(values []string, candidate string) bool {
 		}
 	}
 	return false
+}
+
+func boundedTraceEnrichmentLimit(maxDepth int) int {
+	if maxDepth <= 0 {
+		return 0
+	}
+	limit := maxDepth * 10
+	if limit > 100 {
+		return 100
+	}
+	return limit
+}
+
+func normalizedIndirectEvidenceHostnames(hostnames []string) []string {
+	if len(hostnames) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	normalized := make([]string, 0, len(hostnames))
+	for _, hostname := range hostnames {
+		hostname = strings.TrimSpace(hostname)
+		if hostname == "" {
+			continue
+		}
+		if _, ok := seen[hostname]; ok {
+			continue
+		}
+		seen[hostname] = struct{}{}
+		normalized = append(normalized, hostname)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func buildStorySections(platforms, platformKinds, environments []string) []map[string]any {
+	sections := []map[string]any{
+		{
+			"title":   "deployment",
+			"summary": fmt.Sprintf("%d platform target(s) across %d environment(s)", len(platforms), len(environments)),
+		},
+	}
+	if len(platformKinds) > 0 {
+		sections = append(sections, map[string]any{
+			"title":   "controllers",
+			"summary": fmt.Sprintf("Observed controller families: %s", joinOrNone(platformKinds)),
+		})
+	}
+	return sections
+}
+
+func buildGitOpsOverview(platforms, platformKinds []string) map[string]any {
+	enabled := false
+	for _, kind := range platformKinds {
+		if kind == "argocd_application" || kind == "argocd_applicationset" {
+			enabled = true
+			break
+		}
+	}
+	return map[string]any{
+		"enabled":          enabled,
+		"tool_families":    platformKinds,
+		"observed_targets": platforms,
+	}
+}
+
+func buildRuntimeOverview(environments []string) map[string]any {
+	return map[string]any{
+		"environment_count": len(environments),
+		"environments":      environments,
+	}
+}
+
+func buildDeploymentFacts(
+	platforms []string,
+	platformKinds []string,
+	environments []string,
+	deploymentSources []map[string]any,
+) []map[string]any {
+	facts := make([]map[string]any, 0, len(platforms)+len(environments)+len(deploymentSources))
+	for i, platform := range platforms {
+		fact := map[string]any{
+			"type":       "RUNS_ON_PLATFORM",
+			"target":     platform,
+			"confidence": 1.0,
+		}
+		if i < len(platformKinds) {
+			fact["kind"] = platformKinds[i]
+		}
+		facts = append(facts, fact)
+	}
+	for _, environment := range environments {
+		facts = append(facts, map[string]any{
+			"type":       "OBSERVED_IN_ENVIRONMENT",
+			"target":     environment,
+			"confidence": 1.0,
+		})
+	}
+	for _, source := range deploymentSources {
+		facts = append(facts, map[string]any{
+			"type":       "DEPLOYS_FROM",
+			"target":     safeStr(source, "repo_name"),
+			"target_id":  safeStr(source, "repo_id"),
+			"confidence": floatVal(source, "confidence"),
+			"reason":     safeStr(source, "reason"),
+		})
+	}
+	return facts
+}
+
+func buildControllerDrivenPaths(platforms, platformKinds []string) []map[string]any {
+	paths := make([]map[string]any, 0, len(platforms))
+	for i, platform := range platforms {
+		path := map[string]any{
+			"controller": platform,
+		}
+		if i < len(platformKinds) && platformKinds[i] != "" {
+			path["controller_kind"] = platformKinds[i]
+		}
+		paths = append(paths, path)
+	}
+	return paths
 }

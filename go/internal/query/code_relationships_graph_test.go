@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -115,6 +116,11 @@ func TestRelationshipGraphRowCypherAvoidsDuplicateRepoNameAndVariableReuse(t *te
 
 	if got, want := strings.Count(cypher, " as repo_name"), 1; got != want {
 		t.Fatalf("strings.Count(cypher, \" as repo_name\") = %d, want %d; cypher=%q", got, want, cypher)
+	}
+	if matched, err := regexp.MatchString(`,\s*,`, cypher); err != nil {
+		t.Fatalf("regexp.MatchString() error = %v, want nil", err)
+	} else if matched {
+		t.Fatalf("cypher contains a duplicated projection separator: %q", cypher)
 	}
 	for _, fragment := range []string{
 		"(repo:Repository)",

@@ -143,9 +143,9 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if _, ok := searchRequestProperties["pattern"]; !ok {
 		t.Fatal("content/entities/search schema missing pattern property")
 	}
-	searchRequestRequirements, ok := searchRequestSchema["allOf"].([]any)
+	searchRequestRequirements, ok := searchRequestSchema["anyOf"].([]any)
 	if !ok || len(searchRequestRequirements) != 2 {
-		t.Fatalf("content/entities/search schema allOf = %#v, want 2 requirement groups", searchRequestSchema["allOf"])
+		t.Fatalf("content/entities/search schema anyOf = %#v, want 2 pattern requirement variants", searchRequestSchema["anyOf"])
 	}
 
 	searchResponses := mustMapField(t, searchPost, "responses")
@@ -286,8 +286,11 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	for _, field := range []string{
 		"subject",
 		"hostnames",
+		"entrypoints",
+		"network_paths",
 		"observed_config_environments",
 		"api_surface",
+		"dependents",
 		"deployment_sources",
 		"cloud_resources",
 		"k8s_resources",
@@ -355,8 +358,10 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	}
 	workloadContextSchema := mustMapField(t, schemas, "WorkloadContext")
 	workloadContextProperties := mustMapField(t, workloadContextSchema, "properties")
-	if _, ok := workloadContextProperties["deployment_evidence"]; !ok {
-		t.Fatal("WorkloadContext schema missing deployment_evidence")
+	for _, field := range []string{"deployment_evidence", "entrypoints", "network_paths", "dependents"} {
+		if _, ok := workloadContextProperties[field]; !ok {
+			t.Fatalf("WorkloadContext schema missing %s", field)
+		}
 	}
 
 	repositoryCoveragePath := mustMapField(t, paths, "/api/v0/repositories/{repo_id}/coverage")

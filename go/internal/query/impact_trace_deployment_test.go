@@ -1,6 +1,7 @@
 package query
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -284,6 +285,63 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	}
 }
 
+func TestTraceEnrichmentOptionsDirectOnlySkipsIndirectEvidence(t *testing.T) {
+	t.Parallel()
+
+	options := traceEnrichmentOptions(traceDeploymentChainRequest{
+		ServiceName:               "payments-api",
+		DirectOnly:                true,
+		IncludeRelatedModuleUsage: true,
+	})
+
+	if options.includeConsumers {
+		t.Fatal("includeConsumers = true, want false when direct_only is enabled")
+	}
+	if options.includeProvisioningChains {
+		t.Fatal("includeProvisioningChains = true, want false when direct_only is enabled")
+	}
+}
+
+func TestTraceEnrichmentOptionsHonorsRelatedModuleUsageFlag(t *testing.T) {
+	t.Parallel()
+
+	options := traceEnrichmentOptions(traceDeploymentChainRequest{
+		ServiceName:               "payments-api",
+		IncludeRelatedModuleUsage: true,
+	})
+
+	if !options.includeConsumers {
+		t.Fatal("includeConsumers = false, want true for non-direct trace")
+	}
+	if !options.includeProvisioningChains {
+		t.Fatal("includeProvisioningChains = false, want true when related module usage is requested")
+	}
+}
+
+func TestBoundedIndirectEvidenceHostnamesTrimsDeduplicatesAndCaps(t *testing.T) {
+	t.Parallel()
+
+	got := boundedIndirectEvidenceHostnames([]string{
+		"",
+		"api.qa.example.test",
+		" api.qa.example.test ",
+		"api.prod.example.test",
+		"api.stage.example.test",
+		"api.dev.example.test",
+		"api.extra.example.test",
+	})
+
+	want := []string{
+		"api.dev.example.test",
+		"api.prod.example.test",
+		"api.qa.example.test",
+		"api.stage.example.test",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("boundedIndirectEvidenceHostnames() = %#v, want %#v", got, want)
+	}
+}
+
 func TestBuildDeploymentTraceResponseNarratesTypedControllerProvenance(t *testing.T) {
 	t.Parallel()
 
@@ -369,11 +427,20 @@ func TestBuildDeploymentTraceResponseIncludesServiceEvidenceConsumersAndProvisio
 			{"hostname": "sample-service-api.qa.example.test", "environment": "qa"},
 			{"hostname": "sample-service-api.production.example.test", "environment": "production"},
 		},
+		"entrypoints": []map[string]any{
+			{"type": "hostname", "target": "sample-service-api.qa.example.test", "environment": "qa", "visibility": "public"},
+		},
+		"network_paths": []map[string]any{
+			{"path_type": "hostname_to_runtime", "from": "sample-service-api.qa.example.test", "to": "eks-qa", "environment": "qa"},
+		},
 		"api_surface": map[string]any{
 			"endpoint_count": 2,
 			"api_versions":   []string{"v3"},
 			"docs_routes":    []string{"/_specs"},
 			"spec_files":     []string{"specs/index.yaml"},
+		},
+		"dependents": []map[string]any{
+			{"repository": "deployment-helm", "repo_id": "repo-helm", "relationship_types": []string{"DEPLOYS_FROM"}},
 		},
 		"consumer_repositories": []map[string]any{
 			{
@@ -412,10 +479,22 @@ func TestBuildDeploymentTraceResponseIncludesServiceEvidenceConsumersAndProvisio
 	if _, ok := deploymentOverview["hostnames"]; !ok {
 		t.Fatal("deployment_overview.hostnames missing, want service entrypoint evidence")
 	}
+	if _, ok := deploymentOverview["entrypoints"]; !ok {
+		t.Fatal("deployment_overview.entrypoints missing, want typed service entrypoints")
+	}
 	if _, ok := deploymentOverview["api_surface"]; !ok {
 		t.Fatal("deployment_overview.api_surface missing, want API evidence")
 	}
 
+	if _, ok := got["entrypoints"]; !ok {
+		t.Fatal("entrypoints missing, want typed service entrypoints")
+	}
+	if _, ok := got["network_paths"]; !ok {
+		t.Fatal("network_paths missing, want evidence-backed entrypoint routing")
+	}
+	if _, ok := got["dependents"]; !ok {
+		t.Fatal("dependents missing, want graph-derived dependent repositories")
+	}
 	if _, ok := got["consumer_repositories"]; !ok {
 		t.Fatal("consumer_repositories missing, want query-time service consumer evidence")
 	}

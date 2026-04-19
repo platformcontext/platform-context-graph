@@ -129,7 +129,7 @@ func relationshipGraphRowCypher(predicate string) string {
 		       e.start_line as start_line,
 		       e.end_line as end_line,
 ` + graphSemanticMetadataProjection() + `
-		       collect(DISTINCT {direction: 'outgoing', type: type(outgoingRel), call_kind: outgoingRel.call_kind, reason: outgoingRel.reason, target_name: target.name, target_id: target.id}) as outgoing,
+		       ,collect(DISTINCT {direction: 'outgoing', type: type(outgoingRel), call_kind: outgoingRel.call_kind, reason: outgoingRel.reason, target_name: target.name, target_id: target.id}) as outgoing,
 		       collect(DISTINCT {direction: 'incoming', type: type(incomingRel), call_kind: incomingRel.call_kind, reason: incomingRel.reason, source_name: source.name, source_id: source.id}) as incoming
 		LIMIT 2
 	`

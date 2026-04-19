@@ -144,7 +144,8 @@ func newRouter(db *sql.DB, neo4jReader *query.Neo4jReader, contentReader *query.
 			StatusReader: pgstatus.NewStatusStore(pgstatus.SQLQueryer{DB: db}),
 		},
 		Compare: &query.CompareHandler{
-			Neo4j: neo4jReader,
+			Neo4j:   neo4jReader,
+			Content: contentReader,
 		},
 		Admin: &query.AdminHandler{
 			Store: query.NewPostgresAdminStore(db),

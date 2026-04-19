@@ -13,10 +13,10 @@ const openAPIPathsCode = `
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["query", "repo_id"],
+                "required": ["query"],
                 "properties": {
                   "query": {"type": "string", "description": "Search pattern"},
-                  "repo_id": {"type": "string", "description": "Repository ID"},
+                  "repo_id": {"type": "string", "description": "Optional repository ID"},
                   "language": {"type": "string", "description": "Optional language filter"},
                   "limit": {"type": "integer", "description": "Max results (default 50)", "default": 50}
                 }

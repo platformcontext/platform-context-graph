@@ -7,11 +7,29 @@ import (
 	"strings"
 )
 
+type serviceQueryEnrichmentOptions struct {
+	DirectOnly                bool
+	IncludeRelatedModuleUsage bool
+	MaxDepth                  int
+}
+
 func enrichServiceQueryContext(
 	ctx context.Context,
 	graph GraphReader,
 	content *ContentReader,
 	workloadContext map[string]any,
+) error {
+	return enrichServiceQueryContextWithOptions(ctx, graph, content, workloadContext, serviceQueryEnrichmentOptions{
+		IncludeRelatedModuleUsage: true,
+	})
+}
+
+func enrichServiceQueryContextWithOptions(
+	ctx context.Context,
+	graph GraphReader,
+	content *ContentReader,
+	workloadContext map[string]any,
+	opts serviceQueryEnrichmentOptions,
 ) error {
 	delete(workloadContext, "entry_points")
 	if len(workloadContext) == 0 || content == nil {
@@ -32,6 +50,9 @@ func enrichServiceQueryContext(
 	if hostnames := buildServiceHostnameRows(evidence.Hostnames); len(hostnames) > 0 {
 		workloadContext["hostnames"] = hostnames
 	}
+	if entrypoints := buildServiceEntrypoints(workloadContext, evidence); len(entrypoints) > 0 {
+		workloadContext["entrypoints"] = entrypoints
+	}
 
 	instanceEnvironments, _ := workloadContext["instances"].([]map[string]any)
 	observedEnvironments := mergeStringSets(
@@ -45,23 +66,39 @@ func enrichServiceQueryContext(
 	if apiSurface := buildServiceAPISurface(evidence); len(apiSurface) > 0 {
 		workloadContext["api_surface"] = apiSurface
 	}
+	if networkPaths := buildServiceNetworkPaths(workloadContext, mapSliceValue(workloadContext, "entrypoints")); len(networkPaths) > 0 {
+		workloadContext["network_paths"] = networkPaths
+	}
 
 	if graph != nil {
 		hostnames := serviceEvidenceHostnames(evidence)
-		consumers, err := loadConsumerRepositoryEnrichment(ctx, graph, content, repoID, serviceName, hostnames)
-		if err != nil {
-			return fmt.Errorf("load consumer repository enrichment: %w", err)
-		}
-		if len(consumers) > 0 {
-			workloadContext["consumer_repositories"] = consumers
+		traceLimit := boundedTraceEnrichmentLimit(opts.MaxDepth)
+		if !opts.DirectOnly {
+			dependentCandidates, err := queryProvisioningRepositoryCandidates(ctx, graph, repoID, traceLimit)
+			if err != nil {
+				return fmt.Errorf("load graph dependents: %w", err)
+			}
+			if dependents := buildGraphDependents(dependentCandidates); len(dependents) > 0 {
+				workloadContext["dependents"] = dependents
+			}
+
+			consumers, err := loadConsumerRepositoryEnrichmentWithLimit(ctx, graph, content, repoID, serviceName, hostnames, traceLimit)
+			if err != nil {
+				return fmt.Errorf("load consumer repository enrichment: %w", err)
+			}
+			if len(consumers) > 0 {
+				workloadContext["consumer_repositories"] = consumers
+			}
 		}
 
-		provisioningChains, err := loadProvisioningSourceChains(ctx, graph, content, repoID)
-		if err != nil {
-			return fmt.Errorf("load provisioning source chains: %w", err)
-		}
-		if len(provisioningChains) > 0 {
-			workloadContext["provisioning_source_chains"] = provisioningChains
+		if opts.IncludeRelatedModuleUsage {
+			provisioningChains, err := loadProvisioningSourceChainsWithLimit(ctx, graph, content, repoID, traceLimit)
+			if err != nil {
+				return fmt.Errorf("load provisioning source chains: %w", err)
+			}
+			if len(provisioningChains) > 0 {
+				workloadContext["provisioning_source_chains"] = provisioningChains
+			}
 		}
 	}
 
@@ -95,6 +132,9 @@ func buildServiceStoryResponse(serviceName string, workloadContext map[string]an
 		"documentation_overview",
 		"support_overview",
 		"hostnames",
+		"entrypoints",
+		"network_paths",
+		"dependents",
 		"observed_config_environments",
 		"api_surface",
 		"consumer_repositories",
@@ -127,8 +167,18 @@ func buildServiceDeploymentOverview(workloadContext map[string]any) map[string]a
 		overview["hostname_count"] = len(hostnames)
 		overview["hostnames"] = hostnames
 	}
+	if entrypoints := mapSliceValue(workloadContext, "entrypoints"); len(entrypoints) > 0 {
+		overview["entrypoint_count"] = len(entrypoints)
+		overview["entrypoints"] = entrypoints
+	}
+	if networkPaths := mapSliceValue(workloadContext, "network_paths"); len(networkPaths) > 0 {
+		overview["network_path_count"] = len(networkPaths)
+	}
 	if apiSurface := mapValue(workloadContext, "api_surface"); len(apiSurface) > 0 {
 		overview["api_surface"] = apiSurface
+	}
+	if dependents := mapSliceValue(workloadContext, "dependents"); len(dependents) > 0 {
+		overview["dependent_count"] = len(dependents)
 	}
 	if consumers := mapSliceValue(workloadContext, "consumer_repositories"); len(consumers) > 0 {
 		overview["consumer_repository_count"] = len(consumers)
@@ -173,6 +223,12 @@ func buildServiceStorySections(workloadContext map[string]any) []map[string]any 
 			"summary": fmt.Sprintf("%d observed hostname entrypoint(s)", len(hostnames)),
 		})
 	}
+	if networkPaths := mapSliceValue(workloadContext, "network_paths"); len(networkPaths) > 0 {
+		sections = append(sections, map[string]any{
+			"title":   "network",
+			"summary": fmt.Sprintf("%d evidence-backed network path(s) connect entrypoints to runtime targets", len(networkPaths)),
+		})
+	}
 	if apiSurface := mapValue(workloadContext, "api_surface"); len(apiSurface) > 0 {
 		sections = append(sections, map[string]any{
 			"title": "api",
@@ -188,6 +244,12 @@ func buildServiceStorySections(workloadContext map[string]any) []map[string]any 
 		sections = append(sections, map[string]any{
 			"title":   "consumers",
 			"summary": fmt.Sprintf("%d consumer repo(s) observed from graph and content evidence", len(consumers)),
+		})
+	}
+	if dependents := mapSliceValue(workloadContext, "dependents"); len(dependents) > 0 {
+		sections = append(sections, map[string]any{
+			"title":   "dependents",
+			"summary": fmt.Sprintf("%d graph-derived dependent repo(s) observed from typed relationships", len(dependents)),
 		})
 	}
 	if provisioningChains := mapSliceValue(workloadContext, "provisioning_source_chains"); len(provisioningChains) > 0 {
@@ -258,10 +320,13 @@ func buildServiceDocumentationOverview(
 func buildServiceSupportOverview(workloadContext map[string]any) map[string]any {
 	overview := map[string]any{
 		"dependency_count":           len(mapSliceValue(workloadContext, "dependencies")),
+		"dependent_count":            len(mapSliceValue(workloadContext, "dependents")),
 		"consumer_repository_count":  len(mapSliceValue(workloadContext, "consumer_repositories")),
 		"provisioning_source_count":  len(mapSliceValue(workloadContext, "provisioning_source_chains")),
 		"observed_environment_count": len(StringSliceVal(workloadContext, "observed_config_environments")),
 		"entrypoint_host_count":      len(mapSliceValue(workloadContext, "hostnames")),
+		"entrypoint_count":           len(mapSliceValue(workloadContext, "entrypoints")),
+		"network_path_count":         len(mapSliceValue(workloadContext, "network_paths")),
 		"has_api_surface":            len(mapValue(workloadContext, "api_surface")) > 0,
 		"has_documentation_overview": len(mapValue(workloadContext, "documentation_overview")) > 0,
 	}
@@ -319,6 +384,7 @@ func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
 	specPaths := make([]string, 0, len(evidence.APISpecs))
 	specVersions := make([]string, 0, len(evidence.APISpecs))
 	apiVersions := make([]string, 0, len(evidence.APISpecs))
+	endpoints := make([]map[string]any, 0)
 	endpointCount := 0
 	methodCount := 0
 	operationIDCount := 0
@@ -337,8 +403,22 @@ func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
 		if spec.APIVersion != "" {
 			apiVersions = append(apiVersions, spec.APIVersion)
 		}
+		for _, endpoint := range spec.Endpoints {
+			endpoints = append(endpoints, map[string]any{
+				"path":          endpoint.Path,
+				"methods":       append([]string(nil), endpoint.Methods...),
+				"operation_ids": append([]string(nil), endpoint.OperationIDs...),
+				"spec_path":     spec.RelativePath,
+			})
+		}
 	}
 	sort.Strings(specPaths)
+	sort.Slice(endpoints, func(i, j int) bool {
+		if StringVal(endpoints[i], "path") != StringVal(endpoints[j], "path") {
+			return StringVal(endpoints[i], "path") < StringVal(endpoints[j], "path")
+		}
+		return StringVal(endpoints[i], "spec_path") < StringVal(endpoints[j], "spec_path")
+	})
 
 	return map[string]any{
 		"spec_count":         len(evidence.APISpecs),
@@ -351,6 +431,7 @@ func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
 		"operation_id_count": operationIDCount,
 		"docs_routes":        docsRoutes,
 		"hostnames":          hostnames,
+		"endpoints":          endpoints,
 	}
 }
 

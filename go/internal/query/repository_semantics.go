@@ -26,6 +26,7 @@ func buildRepositorySemanticOverviewWithFiles(
 	surfaceKindCounts := map[string]int{}
 	entityTypeCounts := map[string]int{}
 	infraFamilyCounts := map[string]int{}
+	frameworkCounts := map[string]int{}
 	entityCount := 0
 
 	for _, entity := range entities {
@@ -51,6 +52,9 @@ func buildRepositorySemanticOverviewWithFiles(
 		if surfaceKind, ok := profile["surface_kind"].(string); ok && surfaceKind != "" {
 			surfaceKindCounts[surfaceKind]++
 		}
+		if framework, ok := profile["framework"].(string); ok && framework != "" {
+			frameworkCounts[framework]++
+		}
 		if signals, ok := profile["signals"].([]string); ok {
 			for _, signal := range signals {
 				if signal != "" {
@@ -67,6 +71,7 @@ func buildRepositorySemanticOverviewWithFiles(
 	overview := map[string]any{
 		"entity_count":        entityCount,
 		"language_counts":     languageCounts,
+		"framework_counts":    frameworkCounts,
 		"signal_counts":       signalCounts,
 		"surface_kind_counts": surfaceKindCounts,
 		"entity_type_counts":  entityTypeCounts,

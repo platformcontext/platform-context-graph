@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -149,6 +150,146 @@ func TestContentHandlerSearchFilesRejectsMultipleRepoIDs(t *testing.T) {
 	}
 }
 
+func TestContentHandlerSearchFilesUsesAnyRepoWhenRepoScopeOmitted(t *testing.T) {
+	t.Parallel()
+
+	db, recorder := openRecordingContentSearchDB(t, []contentSearchQueryResult{
+		{
+			columns: []string{
+				"repo_id", "relative_path", "commit_sha", "content",
+				"content_hash", "line_count", "language", "artifact_type",
+			},
+			rows: [][]driver.Value{
+				{
+					"repo-2", "src/app.ts", "", "",
+					"hash-1", int64(24), "typescript", "source",
+				},
+			},
+		},
+	})
+
+	handler := &ContentHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/content/files/search",
+		bytes.NewBufferString(`{"pattern":"renderApp","limit":10}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	if len(recorder.args) != 1 {
+		t.Fatalf("len(recorder.args) = %d, want 1", len(recorder.args))
+	}
+	if got, want := len(recorder.args[0]), 2; got != want {
+		t.Fatalf("len(query args) = %d, want %d", got, want)
+	}
+	if got, want := recorder.args[0][0], "renderApp"; got != want {
+		t.Fatalf("query arg pattern = %#v, want %#v", got, want)
+	}
+	if got, want := numericDriverValue(t, recorder.args[0][1]), int64(10); got != want {
+		t.Fatalf("query arg limit = %d, want %d", got, want)
+	}
+	if strings.Contains(recorder.queries[0], "repo_id =") {
+		t.Fatalf("query = %q, want any-repo search without repo filter", recorder.queries[0])
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := int(resp["count"].(float64)), 1; got != want {
+		t.Fatalf("response count = %d, want %d", got, want)
+	}
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("resp[results] = %#v, want one any-repo file result", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[results][0] type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["repo_id"], "repo-2"; got != want {
+		t.Fatalf("result[repo_id] = %#v, want %#v", got, want)
+	}
+}
+
+func TestContentHandlerSearchEntitiesUsesAnyRepoWhenRepoScopeOmitted(t *testing.T) {
+	t.Parallel()
+
+	db, recorder := openRecordingContentSearchDB(t, []contentSearchQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"entity-2", "repo-2", "src/app.ts", "Function", "renderApp",
+					int64(10), int64(20), "typescript", "function renderApp() {}", []byte(`{"kind":"handler"}`),
+				},
+			},
+		},
+	})
+
+	handler := &ContentHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/content/entities/search",
+		bytes.NewBufferString(`{"pattern":"renderApp","limit":10}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	if len(recorder.args) != 1 {
+		t.Fatalf("len(recorder.args) = %d, want 1", len(recorder.args))
+	}
+	if got, want := len(recorder.args[0]), 2; got != want {
+		t.Fatalf("len(query args) = %d, want %d", got, want)
+	}
+	if got, want := recorder.args[0][0], "renderApp"; got != want {
+		t.Fatalf("query arg pattern = %#v, want %#v", got, want)
+	}
+	if got, want := numericDriverValue(t, recorder.args[0][1]), int64(10); got != want {
+		t.Fatalf("query arg limit = %d, want %d", got, want)
+	}
+	if strings.Contains(recorder.queries[0], "repo_id =") {
+		t.Fatalf("query = %q, want any-repo search without repo filter", recorder.queries[0])
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := int(resp["count"].(float64)), 1; got != want {
+		t.Fatalf("response count = %d, want %d", got, want)
+	}
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("resp[results] = %#v, want one any-repo entity result", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[results][0] type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["repo_id"], "repo-2"; got != want {
+		t.Fatalf("result[repo_id] = %#v, want %#v", got, want)
+	}
+}
+
 type contentSearchQueryResult struct {
 	columns []string
 	rows    [][]driver.Value
@@ -156,7 +297,8 @@ type contentSearchQueryResult struct {
 }
 
 type recordingContentSearch struct {
-	args [][]driver.Value
+	queries []string
+	args    [][]driver.Value
 }
 
 func openRecordingContentSearchDB(t *testing.T, results []contentSearchQueryResult) (*sql.DB, *recordingContentSearch) {
@@ -210,7 +352,9 @@ func (c *contentSearchConn) Begin() (driver.Tx, error) {
 	return nil, fmt.Errorf("Begin not implemented")
 }
 
-func (c *contentSearchConn) QueryContext(_ context.Context, _ string, args []driver.NamedValue) (driver.Rows, error) {
+func (c *contentSearchConn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	c.recorder.queries = append(c.recorder.queries, query)
+
 	recorded := make([]driver.Value, 0, len(args))
 	for _, arg := range args {
 		recorded = append(recorded, arg.Value)

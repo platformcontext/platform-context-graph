@@ -122,19 +122,9 @@ const openAPIPathsContent = `
             "application/json": {
               "schema": {
                 "type": "object",
-                "allOf": [
-                  {
-                    "anyOf": [
-                      {"required": ["repo_id"]},
-                      {"required": ["repo_ids"]}
-                    ]
-                  },
-                  {
-                    "anyOf": [
-                      {"required": ["query"]},
-                      {"required": ["pattern"]}
-                    ]
-                  }
+                "anyOf": [
+                  {"required": ["query"]},
+                  {"required": ["pattern"]}
                 ],
                 "properties": {
                   "repo_id": {"type": "string"},
@@ -186,19 +176,9 @@ const openAPIPathsContent = `
             "application/json": {
               "schema": {
                 "type": "object",
-                "allOf": [
-                  {
-                    "anyOf": [
-                      {"required": ["repo_id"]},
-                      {"required": ["repo_ids"]}
-                    ]
-                  },
-                  {
-                    "anyOf": [
-                      {"required": ["query"]},
-                      {"required": ["pattern"]}
-                    ]
-                  }
+                "anyOf": [
+                  {"required": ["query"]},
+                  {"required": ["pattern"]}
                 ],
                 "properties": {
                   "repo_id": {"type": "string"},

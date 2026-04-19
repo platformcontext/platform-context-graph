@@ -147,9 +147,9 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 		       f.relative_path as file_path,
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
-		       e.end_line as end_line
+		       e.end_line as end_line,
 ` + graphSemanticMetadataProjection() + `
-		       r.id as repo_id, r.name as repo_name,
+		       ,r.id as repo_id, r.name as repo_name,
 		       collect(DISTINCT {type: type(rel), target_name: target.name, target_id: target.id}) as relationships
 	`
 
@@ -343,6 +343,10 @@ func (h *EntityHandler) getWorkloadContext(w http.ResponseWriter, r *http.Reques
 		WriteError(w, http.StatusNotFound, "workload not found")
 		return
 	}
+	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich workload context: %v", err))
+		return
+	}
 
 	WriteJSON(w, http.StatusOK, ctx)
 }
@@ -363,6 +367,10 @@ func (h *EntityHandler) getWorkloadStory(w http.ResponseWriter, r *http.Request)
 
 	if ctx == nil {
 		WriteError(w, http.StatusNotFound, "workload not found")
+		return
+	}
+	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich workload story: %v", err))
 		return
 	}
 
@@ -544,7 +552,24 @@ func buildWorkloadStory(ctx map[string]any) string {
 	}
 	instances, ok := ctx["instances"].([]map[string]any)
 	if !ok || len(instances) == 0 {
-		return story + " No deployed instances found."
+		story += " No materialized workload instances found."
+		if observedEnvironments := StringSliceVal(ctx, "observed_config_environments"); len(observedEnvironments) > 0 {
+			story += " Observed config environments: " + strings.Join(observedEnvironments, ", ") + "."
+		}
+		if hostnames := hostnameLabels(mapSliceValue(ctx, "hostnames")); len(hostnames) > 0 {
+			story += " Public entrypoints: " + strings.Join(hostnames, ", ") + "."
+		}
+		if apiSurface := mapValue(ctx, "api_surface"); len(apiSurface) > 0 {
+			story += fmt.Sprintf(
+				" API surface exposes %d endpoint(s) across %d spec file(s).",
+				IntVal(apiSurface, "endpoint_count"),
+				IntVal(apiSurface, "spec_count"),
+			)
+			if docsRoutes := StringSliceVal(apiSurface, "docs_routes"); len(docsRoutes) > 0 {
+				story += " Docs routes: " + strings.Join(docsRoutes, ", ") + "."
+			}
+		}
+		return story
 	}
 	instCount := "1 instance"
 	if len(instances) > 1 {

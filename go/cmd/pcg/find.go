@@ -100,8 +100,7 @@ func runFindPattern(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
 	var result any
 	err := client.Post("/api/v0/code/search", map[string]any{
-		"query":       args[0],
-		"search_type": "pattern",
+		"query": args[0],
 	}, &result)
 	if err != nil {
 		return err
@@ -114,8 +113,7 @@ func runFindType(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
 	var result any
 	err := client.Post("/api/v0/code/search", map[string]any{
-		"query":       args[0],
-		"search_type": "type",
+		"query": args[0],
 	}, &result)
 	if err != nil {
 		return err
@@ -128,8 +126,7 @@ func runFindVariable(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
 	var result any
 	err := client.Post("/api/v0/code/search", map[string]any{
-		"query":       args[0],
-		"search_type": "variable",
+		"query": args[0],
 	}, &result)
 	if err != nil {
 		return err
@@ -155,8 +152,7 @@ func runFindDecorator(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
 	var result any
 	err := client.Post("/api/v0/code/search", map[string]any{
-		"query":       args[0],
-		"search_type": "decorator",
+		"query": args[0],
 	}, &result)
 	if err != nil {
 		return err
@@ -169,8 +165,7 @@ func runFindArgument(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
 	var result any
 	err := client.Post("/api/v0/code/search", map[string]any{
-		"query":       args[0],
-		"search_type": "argument",
+		"query": args[0],
 	}, &result)
 	if err != nil {
 		return err

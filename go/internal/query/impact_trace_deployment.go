@@ -15,6 +15,44 @@ type traceDeploymentChainRequest struct {
 	IncludeRelatedModuleUsage bool   `json:"include_related_module_usage"`
 }
 
+type traceEnrichmentConfig struct {
+	includeConsumers          bool
+	includeProvisioningChains bool
+	maxDepth                  int
+}
+
+func traceEnrichmentOptions(req traceDeploymentChainRequest) traceEnrichmentConfig {
+	includeConsumers := !req.DirectOnly
+	return traceEnrichmentConfig{
+		includeConsumers:          includeConsumers,
+		includeProvisioningChains: includeConsumers && req.IncludeRelatedModuleUsage,
+		maxDepth:                  req.MaxDepth,
+	}
+}
+func boundedIndirectEvidenceHostnames(hostnames []string) []string {
+	if len(hostnames) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	bounded := make([]string, 0, len(hostnames))
+	for _, hostname := range hostnames {
+		hostname = strings.TrimSpace(hostname)
+		if hostname == "" {
+			continue
+		}
+		if _, ok := seen[hostname]; ok {
+			continue
+		}
+		seen[hostname] = struct{}{}
+		bounded = append(bounded, hostname)
+		if len(bounded) == 4 {
+			break
+		}
+	}
+	sort.Strings(bounded)
+	return bounded
+}
+
 // traceDeploymentChain returns a story-first deployment trace for a service.
 // POST /api/v0/impact/trace-deployment-chain
 func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +76,12 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 		WriteError(w, http.StatusNotFound, "service not found")
 		return
 	}
-	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+	traceOptions := traceEnrichmentOptions(req)
+	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
+		DirectOnly:                !traceOptions.includeConsumers,
+		IncludeRelatedModuleUsage: traceOptions.includeProvisioningChains,
+		MaxDepth:                  traceOptions.maxDepth,
+	}); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich service trace context: %v", err))
 		return
 	}
@@ -87,7 +130,10 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	imageRefs, _ := workloadContext["image_refs"].([]string)
 	controllerEntities, _ := workloadContext["controller_entities"].([]map[string]any)
 	hostnames := mapSliceValue(workloadContext, "hostnames")
+	entrypoints := mapSliceValue(workloadContext, "entrypoints")
+	networkPaths := mapSliceValue(workloadContext, "network_paths")
 	apiSurface := mapValue(workloadContext, "api_surface")
+	dependents := mapSliceValue(workloadContext, "dependents")
 	consumerRepositories := mapSliceValue(workloadContext, "consumer_repositories")
 	provisioningSourceChains := mapSliceValue(workloadContext, "provisioning_source_chains")
 	documentationOverview := mapValue(workloadContext, "documentation_overview")
@@ -99,9 +145,25 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	environments := distinctSortedInstanceField(instances, "environment")
 	mappingMode := deploymentMappingMode(platformKinds)
 	deploymentFacts := buildDeploymentFacts(platforms, platformKinds, environments, deploymentSources)
+	artifactLineage := buildDeploymentTraceArtifactLineage(
+		controllerEntities,
+		deploymentEvidence,
+		k8sResources,
+		hostnames,
+		apiSurface,
+	)
+	provenanceOverview := buildDeploymentTraceProvenanceOverview(
+		controllerEntities,
+		deploymentSources,
+		deploymentEvidence,
+		artifactLineage,
+	)
 	story := buildWorkloadStory(workloadContext)
 	if provenanceStory := buildDeploymentProvenanceStory(controllerEntities, deploymentSources); provenanceStory != "" {
-		story = story + " " + provenanceStory
+		story = appendDeploymentTraceStory(story, provenanceStory)
+	}
+	if workflowStory := buildDeploymentTraceWorkflowProvenanceStory(deploymentEvidence); workflowStory != "" {
+		story = appendDeploymentTraceStory(story, workflowStory)
 	}
 	deploymentOverview := buildServiceDeploymentOverview(workloadContext)
 	deliveryPaths := buildDeliveryPaths(deploymentSources, cloudResources, k8sResources, imageRefs, k8sRelationships)
@@ -116,6 +178,12 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		environments,
 		StringSliceVal(workloadContext, "observed_config_environments"),
 	)
+	if len(provenanceOverview) > 0 {
+		deploymentOverview["provenance_families"] = StringSliceVal(provenanceOverview, "families")
+	}
+	if len(artifactLineage) > 0 {
+		deploymentOverview["artifact_lineage_count"] = len(artifactLineage)
+	}
 
 	response := map[string]any{
 		"service_name": serviceName,
@@ -159,11 +227,26 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		},
 		"drilldowns": buildDeploymentDrilldowns(serviceName, safeStr(workloadContext, "id")),
 	}
+	if len(provenanceOverview) > 0 {
+		response["provenance_overview"] = provenanceOverview
+	}
+	if len(artifactLineage) > 0 {
+		response["artifact_lineage"] = artifactLineage
+	}
 	if len(hostnames) > 0 {
 		response["hostnames"] = hostnames
 	}
+	if len(entrypoints) > 0 {
+		response["entrypoints"] = entrypoints
+	}
+	if len(networkPaths) > 0 {
+		response["network_paths"] = networkPaths
+	}
 	if len(apiSurface) > 0 {
 		response["api_surface"] = apiSurface
+	}
+	if len(dependents) > 0 {
+		response["dependents"] = dependents
 	}
 	if len(consumerRepositories) > 0 {
 		response["consumer_repositories"] = consumerRepositories
@@ -182,95 +265,6 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	}
 
 	return response
-}
-
-func buildStorySections(platforms, platformKinds, environments []string) []map[string]any {
-	sections := []map[string]any{
-		{
-			"title":   "deployment",
-			"summary": fmt.Sprintf("%d platform target(s) across %d environment(s)", len(platforms), len(environments)),
-		},
-	}
-	if len(platformKinds) > 0 {
-		sections = append(sections, map[string]any{
-			"title":   "controllers",
-			"summary": fmt.Sprintf("Observed controller families: %s", joinOrNone(platformKinds)),
-		})
-	}
-	return sections
-}
-
-func buildGitOpsOverview(platforms, platformKinds []string) map[string]any {
-	enabled := false
-	for _, kind := range platformKinds {
-		if kind == "argocd_application" || kind == "argocd_applicationset" {
-			enabled = true
-			break
-		}
-	}
-	return map[string]any{
-		"enabled":          enabled,
-		"tool_families":    platformKinds,
-		"observed_targets": platforms,
-	}
-}
-
-func buildRuntimeOverview(environments []string) map[string]any {
-	return map[string]any{
-		"environment_count": len(environments),
-		"environments":      environments,
-	}
-}
-
-func buildDeploymentFacts(
-	platforms []string,
-	platformKinds []string,
-	environments []string,
-	deploymentSources []map[string]any,
-) []map[string]any {
-	facts := make([]map[string]any, 0, len(platforms)+len(environments)+len(deploymentSources))
-	for i, platform := range platforms {
-		fact := map[string]any{
-			"type":       "RUNS_ON_PLATFORM",
-			"target":     platform,
-			"confidence": 1.0,
-		}
-		if i < len(platformKinds) {
-			fact["kind"] = platformKinds[i]
-		}
-		facts = append(facts, fact)
-	}
-	for _, environment := range environments {
-		facts = append(facts, map[string]any{
-			"type":       "OBSERVED_IN_ENVIRONMENT",
-			"target":     environment,
-			"confidence": 1.0,
-		})
-	}
-	for _, source := range deploymentSources {
-		facts = append(facts, map[string]any{
-			"type":       "DEPLOYS_FROM",
-			"target":     safeStr(source, "repo_name"),
-			"target_id":  safeStr(source, "repo_id"),
-			"confidence": floatVal(source, "confidence"),
-			"reason":     safeStr(source, "reason"),
-		})
-	}
-	return facts
-}
-
-func buildControllerDrivenPaths(platforms, platformKinds []string) []map[string]any {
-	paths := make([]map[string]any, 0, len(platforms))
-	for i, platform := range platforms {
-		path := map[string]any{
-			"controller": platform,
-		}
-		if i < len(platformKinds) && platformKinds[i] != "" {
-			path["controller_kind"] = platformKinds[i]
-		}
-		paths = append(paths, path)
-	}
-	return paths
 }
 
 func buildDeliveryPaths(
@@ -330,61 +324,6 @@ func buildDeploymentDrilldowns(serviceName, workloadID string) map[string]any {
 		"service_story_path":    "/api/v0/services/" + serviceName + "/story",
 		"workload_context_path": "/api/v0/workloads/" + workloadID + "/context",
 	}
-}
-
-func buildDeploymentProvenanceStory(controllerEntities, deploymentSources []map[string]any) string {
-	parts := make([]string, 0, 2)
-	if len(controllerEntities) > 0 {
-		summaries := make([]string, 0, len(controllerEntities))
-		for _, controller := range controllerEntities {
-			summary := StringVal(controller, "entity_name")
-			if summary == "" {
-				summary = StringVal(controller, "entity_id")
-			}
-			if controllerKind := StringVal(controller, "controller_kind"); controllerKind != "" {
-				summary += " (" + controllerKind + ")"
-			}
-			if sourceRepo := StringVal(controller, "source_repo"); sourceRepo != "" {
-				summary += " from " + sourceRepo
-			}
-			summaries = append(summaries, summary)
-		}
-		parts = append(parts, "Controller provenance: "+joinSentenceFragments(summaries)+".")
-	}
-	if len(deploymentSources) > 0 {
-		summaries := make([]string, 0, len(deploymentSources))
-		for _, source := range deploymentSources {
-			summary := StringVal(source, "repo_name")
-			if summary == "" {
-				summary = StringVal(source, "repo_id")
-			}
-			if reason := StringVal(source, "reason"); reason != "" {
-				summary += " via " + reason
-			}
-			summaries = append(summaries, summary)
-		}
-		parts = append(parts, "Deployment sources: "+joinSentenceFragments(summaries)+".")
-	}
-	return strings.Join(parts, " ")
-}
-
-func deploymentMappingMode(platformKinds []string) string {
-	for _, kind := range platformKinds {
-		if kind == "argocd_application" || kind == "argocd_applicationset" {
-			return "controller"
-		}
-	}
-	if len(platformKinds) > 0 {
-		return "evidence_only"
-	}
-	return "none"
-}
-
-func joinOrNone(values []string) string {
-	if len(values) == 0 {
-		return "none"
-	}
-	return fmt.Sprintf("%v", values)
 }
 
 func (h *ImpactHandler) fetchDeploymentSources(

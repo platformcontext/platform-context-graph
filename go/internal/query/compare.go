@@ -2,13 +2,21 @@ package query
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 )
 
+type compareGraphReader interface {
+	Run(context.Context, string, map[string]any) ([]map[string]any, error)
+	RunSingle(context.Context, string, map[string]any) (map[string]any, error)
+}
+
 // CompareHandler provides environment comparison endpoints.
 type CompareHandler struct {
-	Neo4j GraphReader
+	Neo4j   compareGraphReader
+	Content serviceEvidenceReader
 }
 
 // Mount registers comparison routes on the given mux.
@@ -26,21 +34,21 @@ type compareEnvironmentsRequest struct {
 // compareEnvironments handles POST /api/v0/compare/environments.
 func (h *CompareHandler) compareEnvironments(w http.ResponseWriter, r *http.Request) {
 	var req compareEnvironmentsRequest
-	if err := ReadJSON(r, &req); err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
+	if err := readCompareJSON(r, &req); err != nil {
+		writeCompareError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if req.WorkloadID == "" {
-		WriteError(w, http.StatusBadRequest, "workload_id is required")
+		writeCompareError(w, http.StatusBadRequest, "workload_id is required")
 		return
 	}
 	if req.Left == "" {
-		WriteError(w, http.StatusBadRequest, "left environment is required")
+		writeCompareError(w, http.StatusBadRequest, "left environment is required")
 		return
 	}
 	if req.Right == "" {
-		WriteError(w, http.StatusBadRequest, "right environment is required")
+		writeCompareError(w, http.StatusBadRequest, "right environment is required")
 		return
 	}
 
@@ -49,7 +57,7 @@ func (h *CompareHandler) compareEnvironments(w http.ResponseWriter, r *http.Requ
 	// Fetch workload
 	workload, err := h.fetchWorkload(ctx, req.WorkloadID)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err.Error())
+		writeCompareError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -75,18 +83,35 @@ func (h *CompareHandler) compareEnvironments(w http.ResponseWriter, r *http.Requ
 			"confidence": 0.0,
 			"reason":     "Workload '" + req.WorkloadID + "' not found",
 		}
-		WriteJSON(w, http.StatusOK, resp)
+		writeCompareJSON(w, http.StatusOK, resp)
 		return
 	}
 
 	// Fetch environment snapshots
-	leftSnap := h.environmentSnapshot(ctx, req.WorkloadID, req.Left)
-	rightSnap := h.environmentSnapshot(ctx, req.WorkloadID, req.Right)
+	serviceEvidence, err := h.loadServiceEvidence(ctx, workload)
+	if err != nil {
+		writeCompareError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	leftSnap, err := h.environmentSnapshot(ctx, workload, req.Left, serviceEvidence)
+	if err != nil {
+		writeCompareError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	rightSnap, err := h.environmentSnapshot(ctx, workload, req.Right, serviceEvidence)
+	if err != nil {
+		writeCompareError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	// Compute diff
-	leftResources := leftSnap["cloud_resources"].([]map[string]any)
-	rightResources := rightSnap["cloud_resources"].([]map[string]any)
-	changed := diffCloudResources(leftResources, rightResources, req.Left, req.Right)
+	changed := []map[string]any{}
+	if compareStringVal(leftSnap, "status") == "present" && compareStringVal(rightSnap, "status") == "present" {
+		leftResources := compareMapSlice(leftSnap, "cloud_resources")
+		rightResources := compareMapSlice(rightSnap, "cloud_resources")
+		changed = diffCloudResources(leftResources, rightResources, req.Left, req.Right)
+	}
 
 	// Compute overall confidence
 	confidence, reason := computeConfidence(leftSnap, rightSnap, changed)
@@ -102,7 +127,7 @@ func (h *CompareHandler) compareEnvironments(w http.ResponseWriter, r *http.Requ
 		"reason":     reason,
 	}
 
-	WriteJSON(w, http.StatusOK, resp)
+	writeCompareJSON(w, http.StatusOK, resp)
 }
 
 // fetchWorkload queries Neo4j for the workload by ID.
@@ -119,15 +144,20 @@ func (h *CompareHandler) fetchWorkload(ctx context.Context, workloadID string) (
 		return nil, nil
 	}
 	return map[string]any{
-		"id":      StringVal(row, "id"),
-		"name":    StringVal(row, "name"),
-		"kind":    StringVal(row, "kind"),
-		"repo_id": StringVal(row, "repo_id"),
+		"id":      compareStringVal(row, "id"),
+		"name":    compareStringVal(row, "name"),
+		"kind":    compareStringVal(row, "kind"),
+		"repo_id": compareStringVal(row, "repo_id"),
 	}, nil
 }
 
 // environmentSnapshot fetches the instance and cloud resources for one environment.
-func (h *CompareHandler) environmentSnapshot(ctx context.Context, workloadID, environment string) map[string]any {
+func (h *CompareHandler) environmentSnapshot(
+	ctx context.Context,
+	workload map[string]any,
+	environment string,
+	serviceEvidence ServiceQueryEvidence,
+) (map[string]any, error) {
 	// Find the workload instance for this environment
 	instanceCypher := `
 		MATCH (i:WorkloadInstance)
@@ -138,26 +168,41 @@ func (h *CompareHandler) environmentSnapshot(ctx context.Context, workloadID, en
 		LIMIT 1
 	`
 	instanceRow, err := h.Neo4j.RunSingle(ctx, instanceCypher, map[string]any{
-		"workload_id": workloadID,
+		"workload_id": compareStringVal(workload, "id"),
 		"environment": environment,
 	})
 
-	if err != nil || instanceRow == nil {
+	if err != nil {
+		return nil, err
+	}
+	if instanceRow == nil {
+		provenance := inferredEnvironmentProvenance(environment, serviceEvidence)
+		if len(provenance) > 0 {
+			return map[string]any{
+				"environment":     environment,
+				"status":          "inferred",
+				"instance":        nil,
+				"cloud_resources": []map[string]any{},
+				"provenance":      provenance,
+				"reason":          "environment inferred from service evidence; no materialized workload instance found",
+			}, nil
+		}
 		return map[string]any{
 			"environment":     environment,
 			"status":          "unsupported",
 			"instance":        nil,
 			"cloud_resources": []map[string]any{},
-			"reason":          "no materialized workload instance found for environment",
-		}
+			"provenance":      []map[string]any{},
+			"reason":          "no materialized workload instance or inferable service evidence found for environment",
+		}, nil
 	}
 
 	instance := map[string]any{
-		"id":          StringVal(instanceRow, "id"),
-		"name":        StringVal(instanceRow, "name"),
-		"kind":        StringVal(instanceRow, "kind"),
-		"environment": StringVal(instanceRow, "environment"),
-		"workload_id": StringVal(instanceRow, "workload_id"),
+		"id":          compareStringVal(instanceRow, "id"),
+		"name":        compareStringVal(instanceRow, "name"),
+		"kind":        compareStringVal(instanceRow, "kind"),
+		"environment": compareStringVal(instanceRow, "environment"),
+		"workload_id": compareStringVal(instanceRow, "workload_id"),
 	}
 
 	// Fetch cloud resources
@@ -170,25 +215,24 @@ func (h *CompareHandler) environmentSnapshot(ctx context.Context, workloadID, en
 		ORDER BY c.name
 	`
 	resourceRows, err := h.Neo4j.Run(ctx, resourcesCypher, map[string]any{
-		"instance_id": StringVal(instanceRow, "id"),
+		"instance_id": compareStringVal(instanceRow, "id"),
 	})
 
-	var cloudResources []map[string]any
-	if err == nil && resourceRows != nil {
-		cloudResources = make([]map[string]any, 0, len(resourceRows))
-		for _, row := range resourceRows {
-			cloudResources = append(cloudResources, map[string]any{
-				"id":          StringVal(row, "id"),
-				"name":        StringVal(row, "name"),
-				"environment": StringVal(row, "environment"),
-				"kind":        StringVal(row, "kind"),
-				"provider":    StringVal(row, "provider"),
-				"confidence":  floatVal(row, "confidence"),
-				"reason":      StringVal(row, "reason"),
-			})
-		}
-	} else {
-		cloudResources = []map[string]any{}
+	if err != nil {
+		return nil, err
+	}
+
+	cloudResources := make([]map[string]any, 0, len(resourceRows))
+	for _, row := range resourceRows {
+		cloudResources = append(cloudResources, map[string]any{
+			"id":          compareStringVal(row, "id"),
+			"name":        compareStringVal(row, "name"),
+			"environment": compareStringVal(row, "environment"),
+			"kind":        compareStringVal(row, "kind"),
+			"provider":    compareStringVal(row, "provider"),
+			"confidence":  floatVal(row, "confidence"),
+			"reason":      compareStringVal(row, "reason"),
+		})
 	}
 
 	return map[string]any{
@@ -196,7 +240,16 @@ func (h *CompareHandler) environmentSnapshot(ctx context.Context, workloadID, en
 		"status":          "present",
 		"instance":        instance,
 		"cloud_resources": cloudResources,
-	}
+		"provenance": []map[string]any{
+			{
+				"kind":   "materialized_workload_instance",
+				"source": "graph",
+				"value":  compareStringVal(instance, "id"),
+				"reason": "materialized_workload_instance",
+			},
+		},
+		"reason": "materialized workload instance found for environment",
+	}, nil
 }
 
 // diffCloudResources computes added/removed resources between two snapshots.
@@ -204,12 +257,12 @@ func diffCloudResources(left, right []map[string]any, leftEnv, rightEnv string) 
 	// Build lookup maps by resource ID
 	leftMap := make(map[string]map[string]any)
 	for _, r := range left {
-		leftMap[StringVal(r, "id")] = r
+		leftMap[compareStringVal(r, "id")] = r
 	}
 
 	rightMap := make(map[string]map[string]any)
 	for _, r := range right {
-		rightMap[StringVal(r, "id")] = r
+		rightMap[compareStringVal(r, "id")] = r
 	}
 
 	changed := make([]map[string]any, 0)
@@ -218,12 +271,12 @@ func diffCloudResources(left, right []map[string]any, leftEnv, rightEnv string) 
 	for id, r := range rightMap {
 		if _, exists := leftMap[id]; !exists {
 			changed = append(changed, map[string]any{
-				"id":          StringVal(r, "id"),
-				"name":        StringVal(r, "name"),
-				"kind":        StringVal(r, "kind"),
-				"provider":    StringVal(r, "provider"),
+				"id":          compareStringVal(r, "id"),
+				"name":        compareStringVal(r, "name"),
+				"kind":        compareStringVal(r, "kind"),
+				"provider":    compareStringVal(r, "provider"),
 				"confidence":  floatVal(r, "confidence"),
-				"reason":      StringVal(r, "reason"),
+				"reason":      compareStringVal(r, "reason"),
 				"change":      "added",
 				"environment": rightEnv,
 			})
@@ -234,12 +287,12 @@ func diffCloudResources(left, right []map[string]any, leftEnv, rightEnv string) 
 	for id, r := range leftMap {
 		if _, exists := rightMap[id]; !exists {
 			changed = append(changed, map[string]any{
-				"id":          StringVal(r, "id"),
-				"name":        StringVal(r, "name"),
-				"kind":        StringVal(r, "kind"),
-				"provider":    StringVal(r, "provider"),
+				"id":          compareStringVal(r, "id"),
+				"name":        compareStringVal(r, "name"),
+				"kind":        compareStringVal(r, "kind"),
+				"provider":    compareStringVal(r, "provider"),
 				"confidence":  floatVal(r, "confidence"),
-				"reason":      StringVal(r, "reason"),
+				"reason":      compareStringVal(r, "reason"),
 				"change":      "removed",
 				"environment": leftEnv,
 			})
@@ -253,7 +306,7 @@ func diffCloudResources(left, right []map[string]any, leftEnv, rightEnv string) 
 		if confI != confJ {
 			return confI > confJ
 		}
-		return StringVal(changed[i], "name") < StringVal(changed[j], "name")
+		return compareStringVal(changed[i], "name") < compareStringVal(changed[j], "name")
 	})
 
 	return changed
@@ -261,16 +314,16 @@ func diffCloudResources(left, right []map[string]any, leftEnv, rightEnv string) 
 
 // computeConfidence calculates overall confidence and reason for the comparison.
 func computeConfidence(left, right map[string]any, changed []map[string]any) (float64, string) {
-	leftStatus := StringVal(left, "status")
-	rightStatus := StringVal(right, "status")
+	leftStatus := compareStringVal(left, "status")
+	rightStatus := compareStringVal(right, "status")
 
 	// If either environment cannot be materialized, the comparison is not yet
 	// supported for this workload/environment pair.
 	if leftStatus == "unsupported" || rightStatus == "unsupported" {
-		return 0.0, "Comparison unsupported: one or both environments do not have materialized workload instances"
+		return 0.0, "Comparison unsupported: one or both environments lack materialized instances and inferable environment evidence"
 	}
-	if leftStatus == "missing" || rightStatus == "missing" {
-		return 0.0, "One or both environments not found"
+	if leftStatus != "present" || rightStatus != "present" {
+		return 0.35, "Comparison limited to inferred environment evidence; cloud resource differences require materialized workload instances"
 	}
 
 	// If no changes, confidence is 1.0
@@ -285,7 +338,19 @@ func computeConfidence(left, right map[string]any, changed []map[string]any) (fl
 	}
 	avgConfidence := sum / float64(len(changed))
 
-	return avgConfidence, "Comparison based on cloud resource differences"
+	return avgConfidence, "Comparison based on materialized cloud resource differences"
+}
+
+func (h *CompareHandler) loadServiceEvidence(ctx context.Context, workload map[string]any) (ServiceQueryEvidence, error) {
+	if h.Content == nil {
+		return ServiceQueryEvidence{}, nil
+	}
+	repoID := compareStringVal(workload, "repo_id")
+	serviceName := compareStringVal(workload, "name")
+	if repoID == "" || serviceName == "" {
+		return ServiceQueryEvidence{}, nil
+	}
+	return loadServiceQueryEvidence(ctx, h.Content, repoID, serviceName)
 }
 
 // floatVal safely extracts a float64 from a map value.
@@ -306,4 +371,67 @@ func floatVal(row map[string]any, key string) float64 {
 	default:
 		return 0.0
 	}
+}
+
+func compareMapSlice(value map[string]any, key string) []map[string]any {
+	if len(value) == 0 {
+		return nil
+	}
+	raw, ok := value[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	if typed, ok := raw.([]map[string]any); ok {
+		return typed
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	result := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		row, ok := item.(map[string]any)
+		if ok {
+			result = append(result, row)
+		}
+	}
+	return result
+}
+
+func compareStringVal(row map[string]any, key string) string {
+	value, ok := row[key]
+	if !ok || value == nil {
+		return ""
+	}
+	if typed, ok := value.(string); ok {
+		return typed
+	}
+	return fmt.Sprintf("%v", value)
+}
+
+func writeCompareJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(value)
+}
+
+func writeCompareError(w http.ResponseWriter, status int, message string) {
+	writeCompareJSON(w, status, map[string]any{
+		"error":  http.StatusText(status),
+		"detail": message,
+	})
+}
+
+func readCompareJSON(r *http.Request, value any) error {
+	if r.Body == nil {
+		return fmt.Errorf("request body is required")
+	}
+	defer func() { _ = r.Body.Close() }()
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(value); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	return nil
 }

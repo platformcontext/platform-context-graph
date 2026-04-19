@@ -285,6 +285,7 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		return
 	}
 	var infrastructureOverview map[string]any
+	narrativeFiles := []FileContent(nil)
 	if h.Content != nil {
 		files, err := h.Content.ListRepoFiles(r.Context(), repoID, repositorySemanticEntityLimit)
 		if err != nil {
@@ -308,6 +309,11 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		if deploymentOverview != nil {
 			infrastructureOverview = deploymentOverview
 		}
+		narrativeFiles, err = hydrateRepositoryNarrativeFiles(r.Context(), h.Content, repoID, files)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("hydrate repository narrative files failed: %v", err))
+			return
+		}
 		relationships := queryRepoDependencies(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID})
 		if relationshipOverview := buildRepositoryRelationshipOverview(relationships); relationshipOverview != nil {
 			if infrastructureOverview == nil {
@@ -317,7 +323,7 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	WriteJSON(w, http.StatusOK, buildRepositoryStoryResponse(
+	response := buildRepositoryStoryResponse(
 		repo,
 		fileCount,
 		languages,
@@ -326,7 +332,10 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		dependencyCount,
 		infrastructureOverview,
 		semanticOverview,
-	))
+	)
+	enrichRepositoryStoryResponseWithEvidence(response, semanticOverview, narrativeFiles)
+
+	WriteJSON(w, http.StatusOK, response)
 }
 
 // getRepositoryStats returns repository statistics including entity counts.

@@ -55,10 +55,6 @@ func (h *CodeHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "query is required")
 		return
 	}
-	if req.RepoID == "" {
-		WriteError(w, http.StatusBadRequest, "repo_id is required")
-		return
-	}
 	if req.Limit <= 0 {
 		req.Limit = 50
 	}
@@ -106,12 +102,15 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 
 	cypher := `
 		MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
-		WHERE r.id = $repo_id AND e.name CONTAINS $query
+		WHERE e.name CONTAINS $query
 	`
 	params := map[string]any{
-		"repo_id": repoID,
-		"query":   query,
-		"limit":   limit,
+		"query": query,
+		"limit": limit,
+	}
+	if repoID != "" {
+		cypher += " AND r.id = $repo_id"
+		params["repo_id"] = repoID
 	}
 
 	if language != "" {
@@ -125,7 +124,7 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 		       r.id as repo_id, r.name as repo_name,
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
-		       e.end_line as end_line
+		       e.end_line as end_line,
 ` + graphSemanticMetadataProjection() + `
 		ORDER BY e.name
 		LIMIT $limit
@@ -161,13 +160,29 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 
 // searchEntityContent searches entity source code in the content store.
 func (h *CodeHandler) searchEntityContent(ctx context.Context, repoID, pattern, language string, limit int) ([]map[string]any, error) {
-	nameMatches, err := h.Content.SearchEntitiesByName(ctx, repoID, "", pattern, limit)
-	if err != nil {
-		return nil, err
-	}
-	sourceMatches, err := h.Content.SearchEntityContent(ctx, repoID, pattern, limit)
-	if err != nil {
-		return nil, err
+	var (
+		nameMatches   []EntityContent
+		sourceMatches []EntityContent
+		err           error
+	)
+	if repoID != "" {
+		nameMatches, err = h.Content.SearchEntitiesByName(ctx, repoID, "", pattern, limit)
+		if err != nil {
+			return nil, err
+		}
+		sourceMatches, err = h.Content.SearchEntityContent(ctx, repoID, pattern, limit)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		nameMatches, err = h.Content.SearchEntitiesByNameAnyRepo(ctx, "", pattern, limit)
+		if err != nil {
+			return nil, err
+		}
+		sourceMatches, err = h.Content.SearchEntityContentAnyRepo(ctx, pattern, limit)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	allowedLanguages := make(map[string]struct{})
@@ -245,7 +260,7 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		       r.id as repo_id, r.name as repo_name,
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
-		       e.end_line as end_line
+		       e.end_line as end_line,
 ` + graphSemanticMetadataProjection() + `
 		ORDER BY f.relative_path, e.name
 		LIMIT 100
@@ -363,24 +378,7 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	cypher := `
-		MATCH (e) WHERE e.id = $entity_id
-		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(repo:Repository)
-		OPTIONAL MATCH (e)-[outgoingRel]->()
-		OPTIONAL MATCH ()-[incomingRel]->(e)
-		RETURN e.id as id, e.name as name, labels(e) as labels,
-		       f.relative_path as file_path,
-		       repo.id as repo_id, repo.name as repo_name,
-		       coalesce(e.language, f.language) as language,
-		       e.start_line as start_line,
-		       e.end_line as end_line,
-		       count(DISTINCT outgoingRel) as outgoing_count,
-		       count(DISTINCT incomingRel) as incoming_count,
-		       count(DISTINCT outgoingRel) + count(DISTINCT incomingRel) as total_relationships
-` + graphSemanticMetadataProjection() + `
-	`
-
-	row, err := h.Neo4j.RunSingle(ctx, cypher, map[string]any{"entity_id": req.EntityID})
+	row, err := h.lookupComplexityRow(ctx, req.EntityID, req.RepoID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -420,4 +418,56 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, enriched[0])
+}
+
+func (h *CodeHandler) lookupComplexityRow(ctx context.Context, entityID, repoID string) (map[string]any, error) {
+	row, err := h.runComplexityQuery(ctx, `
+		MATCH (e) WHERE e.id = $entity_id
+		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(repo:Repository)
+		OPTIONAL MATCH (e)-[outgoingRel]->()
+		OPTIONAL MATCH ()-[incomingRel]->(e)
+		RETURN e.id as id, e.name as name, labels(e) as labels,
+		       f.relative_path as file_path,
+		       repo.id as repo_id, repo.name as repo_name,
+		       coalesce(e.language, f.language) as language,
+		       e.start_line as start_line,
+		       e.end_line as end_line,
+		       count(DISTINCT outgoingRel) as outgoing_count,
+		       count(DISTINCT incomingRel) as incoming_count,
+		       count(DISTINCT outgoingRel) + count(DISTINCT incomingRel) as total_relationships
+`+graphSemanticMetadataProjection()+`
+	`, map[string]any{"entity_id": entityID})
+	if row == nil {
+		params := map[string]any{"entity_name": entityID}
+		cypher := `
+			MATCH (e)
+			OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(repo:Repository)
+			WHERE e.name = $entity_name
+		`
+		if repoID != "" {
+			cypher += " AND repo.id = $repo_id"
+			params["repo_id"] = repoID
+		}
+		cypher += `
+			OPTIONAL MATCH (e)-[outgoingRel]->()
+			OPTIONAL MATCH ()-[incomingRel]->(e)
+			RETURN e.id as id, e.name as name, labels(e) as labels,
+			       f.relative_path as file_path,
+			       repo.id as repo_id, repo.name as repo_name,
+			       coalesce(e.language, f.language) as language,
+			       e.start_line as start_line,
+			       e.end_line as end_line,
+			       count(DISTINCT outgoingRel) as outgoing_count,
+			       count(DISTINCT incomingRel) as incoming_count,
+			       count(DISTINCT outgoingRel) + count(DISTINCT incomingRel) as total_relationships
+` + graphSemanticMetadataProjection() + `
+			LIMIT 1
+		`
+		return h.runComplexityQuery(ctx, cypher, params)
+	}
+	return row, err
+}
+
+func (h *CodeHandler) runComplexityQuery(ctx context.Context, cypher string, params map[string]any) (map[string]any, error) {
+	return h.Neo4j.RunSingle(ctx, cypher, params)
 }
