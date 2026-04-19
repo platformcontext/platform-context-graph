@@ -351,6 +351,112 @@ func TestWorkloadMaterializationHandlerSeedsRuntimeCandidateFromArgoDeploymentSo
 	}
 }
 
+func TestWorkloadMaterializationHandlerUsesKustomizeDeploymentSourceReversedDirection(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	loader := &stubFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactID:   "fact-repo-app",
+				FactKind: "repository",
+				Payload: map[string]any{
+					"graph_id": "repo-my-api",
+					"name":     "my-api",
+				},
+				ObservedAt: now,
+			},
+			{
+				FactID:   "fact-repo-deploy",
+				FactKind: "repository",
+				Payload: map[string]any{
+					"graph_id": "repo-helm-charts",
+					"name":     "helm-charts",
+				},
+				ObservedAt: now,
+			},
+			{
+				FactID:   "fact-file-app",
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-my-api",
+					"language":      "dockerfile",
+					"relative_path": "Dockerfile",
+					"parsed_file_data": map[string]any{
+						"dockerfile_stages": []any{
+							map[string]any{"name": "runtime"},
+						},
+					},
+				},
+				ObservedAt: now,
+			},
+			{
+				FactID:   "fact-file-deploy",
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-helm-charts",
+					"language":      "yaml",
+					"relative_path": "overlays/production/my-api.yaml",
+					"parsed_file_data": map[string]any{
+						"k8s_resources": []any{
+							map[string]any{"name": "my-api", "kind": "Deployment", "namespace": "apps"},
+						},
+					},
+				},
+				ObservedAt: now,
+			},
+		},
+	}
+	// Kustomize evidence: source=deploy_repo, target=app_repo (reversed from ArgoCD).
+	relationshipLoader := &stubResolvedRelationshipLoader{
+		resolved: []relationships.ResolvedRelationship{
+			{
+				SourceRepoID:     "repo-helm-charts",
+				TargetRepoID:     "repo-my-api",
+				RelationshipType: relationships.RelDeploysFrom,
+				Confidence:       0.90,
+				Details: map[string]any{
+					"evidence_kinds": []any{
+						string(relationships.EvidenceKindKustomizeResource),
+					},
+				},
+			},
+		},
+	}
+
+	executor := &recordingCypherExecutor{}
+	handler := WorkloadMaterializationHandler{
+		FactLoader:     loader,
+		ResolvedLoader: relationshipLoader,
+		Materializer:   NewWorkloadMaterializer(executor),
+	}
+
+	intent := Intent{
+		IntentID:     "intent-kustomize-deploy",
+		ScopeID:      "scope-my-api",
+		GenerationID: "gen-1",
+		SourceSystem: "git",
+		Domain:       DomainWorkloadMaterialization,
+		Cause:        "facts projected",
+		EntityKeys:   []string{"repo-my-api"},
+		EnqueuedAt:   now,
+		AvailableAt:  now,
+		Status:       IntentStatusPending,
+	}
+
+	result, err := handler.Handle(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if result.CanonicalWrites == 0 {
+		t.Fatal("CanonicalWrites = 0, want > 0")
+	}
+	// Verify my-api candidate got DeploymentRepoID = helm-charts (reversed direction).
+	if !recordedCallContainsParam(executor.calls, "deployment_repo_id", "repo-helm-charts") {
+		t.Fatal("missing deployment_repo_id=repo-helm-charts; Kustomize direction reversal failed")
+	}
+}
+
 func TestWorkloadMaterializationHandlerSkipsUtilityOnlyCandidate(t *testing.T) {
 	t.Parallel()
 

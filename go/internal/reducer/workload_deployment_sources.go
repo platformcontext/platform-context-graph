@@ -28,19 +28,28 @@ func applyResolvedDeploymentSources(
 		if relationship.SourceRepoID == "" || relationship.TargetRepoID == "" {
 			continue
 		}
-		if !hasArgoDeploymentEvidence(relationship.Details) {
+		if !hasDeploymentEvidence(relationship.Details) {
 			continue
 		}
 		provenance := argoDeploymentProvenance(relationship.Details)
 		if provenance == "" {
 			provenance = "argocd_application_source"
 		}
-		existing, exists := deploymentRepoBySource[relationship.SourceRepoID]
+
+		// Direction depends on evidence kind:
+		// - ArgoCD: source=app, target=deploy_repo (app defines where it deploys from)
+		// - Kustomize/Helm: source=deploy_repo, target=app (deploy repo references app)
+		appRepoID, deployRepoID := relationship.SourceRepoID, relationship.TargetRepoID
+		if isDeployRepoOriginatedEvidence(relationship.Details) {
+			appRepoID, deployRepoID = relationship.TargetRepoID, relationship.SourceRepoID
+		}
+
+		existing, exists := deploymentRepoBySource[appRepoID]
 		if exists && existing.confidence >= relationship.Confidence {
 			continue
 		}
-		deploymentRepoBySource[relationship.SourceRepoID] = deploymentSourceMetadata{
-			repoID:     relationship.TargetRepoID,
+		deploymentRepoBySource[appRepoID] = deploymentSourceMetadata{
+			repoID:     deployRepoID,
 			confidence: relationship.Confidence,
 			provenance: provenance,
 		}
@@ -69,6 +78,13 @@ func applyResolvedDeploymentSources(
 }
 
 func hasArgoDeploymentEvidence(details map[string]any) bool {
+	return hasDeploymentEvidence(details)
+}
+
+// hasDeploymentEvidence returns true when the resolved relationship carries
+// evidence kinds that indicate a deployment source linkage (ArgoCD, Kustomize,
+// or Helm).
+func hasDeploymentEvidence(details map[string]any) bool {
 	rawKinds, ok := details["evidence_kinds"]
 	if !ok {
 		return false
@@ -77,11 +93,33 @@ func hasArgoDeploymentEvidence(details map[string]any) bool {
 	for _, kind := range toStringSlice(rawKinds) {
 		switch relationships.EvidenceKind(kind) {
 		case relationships.EvidenceKindArgoCDAppSource,
-			relationships.EvidenceKindArgoCDApplicationSetDeploySource:
+			relationships.EvidenceKindArgoCDApplicationSetDeploySource,
+			relationships.EvidenceKindKustomizeResource,
+			relationships.EvidenceKindHelmValues,
+			relationships.EvidenceKindHelmChart:
 			return true
 		}
 	}
 
+	return false
+}
+
+// isDeployRepoOriginatedEvidence returns true when the evidence was discovered
+// inside the deployment repo (Kustomize/Helm), meaning the source is the deploy
+// repo and target is the app. ArgoCD evidence originates in the app repo.
+func isDeployRepoOriginatedEvidence(details map[string]any) bool {
+	rawKinds, ok := details["evidence_kinds"]
+	if !ok {
+		return false
+	}
+	for _, kind := range toStringSlice(rawKinds) {
+		switch relationships.EvidenceKind(kind) {
+		case relationships.EvidenceKindKustomizeResource,
+			relationships.EvidenceKindHelmValues,
+			relationships.EvidenceKindHelmChart:
+			return true
+		}
+	}
 	return false
 }
 
@@ -92,6 +130,10 @@ func argoDeploymentProvenance(details map[string]any) string {
 			return "argocd_applicationset_deploy_source"
 		case relationships.EvidenceKindArgoCDAppSource:
 			return "argocd_application_source"
+		case relationships.EvidenceKindKustomizeResource:
+			return "kustomize_resource"
+		case relationships.EvidenceKindHelmValues, relationships.EvidenceKindHelmChart:
+			return "helm_deployment"
 		}
 	}
 	return ""
