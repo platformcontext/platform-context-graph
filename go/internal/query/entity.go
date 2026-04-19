@@ -449,7 +449,8 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 	cypher := fmt.Sprintf(`
 		MATCH (w:Workload) WHERE %s
 		OPTIONAL MATCH (r:Repository)-[:DEFINES]->(w)
-		OPTIONAL MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
+		OPTIONAL MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)
+		OPTIONAL MATCH (i)-[:RUNS_ON]->(p:Platform)
 		RETURN w.id as id, w.name as name, w.kind as kind,
 		       r.id as repo_id, r.name as repo_name,
 		       collect(DISTINCT {instance_id: i.id, platform_name: p.name, platform_kind: p.kind, environment: i.environment}) as instances
