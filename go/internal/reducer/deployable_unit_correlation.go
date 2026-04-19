@@ -142,10 +142,16 @@ func deployableUnitRulePack(candidate WorkloadCandidate) rules.RulePack {
 	switch {
 	case hasProvenance(candidate.Provenance, "argocd_application_source", "argocd_applicationset_deploy_source", "argocd_application"):
 		return rules.ArgoCDRulePack()
+	case hasProvenance(candidate.Provenance, "kustomize_resource"):
+		return rules.KustomizeRulePack()
 	case hasProvenance(candidate.Provenance, "helm_deployment"):
 		return rules.HelmRulePack()
 	case hasProvenance(candidate.Provenance, "dockerfile_runtime"):
 		return rules.DockerfileRulePack()
+	case hasProvenance(candidate.Provenance, "docker_compose_runtime"):
+		return rules.DockerComposeRulePack()
+	case hasProvenance(candidate.Provenance, "cloudformation_template"):
+		return rules.CloudFormationRulePack()
 	case hasProvenance(candidate.Provenance, "jenkins_pipeline"):
 		return rules.JenkinsRulePack()
 	case hasProvenance(candidate.Provenance, "github_actions_workflow"):
@@ -280,9 +286,17 @@ func deployableUnitStructuralEvidence(
 			evidenceType = "dockerfile"
 			key = "image"
 			value = unitKey
+		case strings.HasPrefix(provenance, "docker_compose_runtime"):
+			evidenceType = "docker_compose"
+			key = "service"
+			value = unitKey
 		case strings.HasPrefix(provenance, "argocd_application"):
 			evidenceType = "argocd"
 			key = "application"
+			value = unitKey
+		case strings.HasPrefix(provenance, "kustomize_resource"):
+			evidenceType = "kustomize"
+			key = "resource"
 			value = unitKey
 		case strings.HasPrefix(provenance, "helm_deployment"):
 			evidenceType = "helm"
@@ -299,6 +313,10 @@ func deployableUnitStructuralEvidence(
 		case strings.HasPrefix(provenance, "terraform"):
 			evidenceType = "terraform_config"
 			key = "module"
+			value = unitKey
+		case strings.HasPrefix(provenance, "cloudformation_template"):
+			evidenceType = "cloudformation"
+			key = "stack"
 			value = unitKey
 		default:
 			continue

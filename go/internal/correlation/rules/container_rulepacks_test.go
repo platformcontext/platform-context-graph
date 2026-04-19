@@ -7,11 +7,14 @@ func TestContainerRulePacksShipFirstPartyCoverageForSupportedFamilies(t *testing
 
 	packs := []RulePack{
 		DockerfileRulePack(),
+		DockerComposeRulePack(),
 		GitHubActionsRulePack(),
 		JenkinsRulePack(),
 		HelmRulePack(),
 		ArgoCDRulePack(),
+		KustomizeRulePack(),
 		TerraformConfigRulePack(),
+		CloudFormationRulePack(),
 	}
 
 	for _, pack := range packs {
@@ -50,11 +53,14 @@ func TestContainerRulePacksReturnsStableOrder(t *testing.T) {
 	got := ContainerRulePacks()
 	want := []string{
 		"dockerfile",
+		"docker_compose",
 		"github_actions",
 		"jenkins",
 		"helm",
 		"argocd",
+		"kustomize",
 		"terraform_config",
+		"cloudformation",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("len(ContainerRulePacks()) = %d, want %d", len(got), len(want))
@@ -62,6 +68,33 @@ func TestContainerRulePacksReturnsStableOrder(t *testing.T) {
 	for i := range want {
 		if got[i].Name != want[i] {
 			t.Fatalf("ContainerRulePacks()[%d].Name = %q, want %q", i, got[i].Name, want[i])
+		}
+	}
+}
+
+func TestFirstPartyRulePacksShipCoverageForSupportedFamilies(t *testing.T) {
+	t.Parallel()
+
+	got := FirstPartyRulePacks()
+	want := []string{
+		"dockerfile",
+		"docker_compose",
+		"github_actions",
+		"jenkins",
+		"helm",
+		"argocd",
+		"kustomize",
+		"terraform_config",
+		"terragrunt",
+		"ansible",
+		"cloudformation",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len(FirstPartyRulePacks()) = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].Name != want[i] {
+			t.Fatalf("FirstPartyRulePacks()[%d].Name = %q, want %q", i, got[i].Name, want[i])
 		}
 	}
 }

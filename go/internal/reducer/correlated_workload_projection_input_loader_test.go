@@ -9,7 +9,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
-func TestCorrelatedWorkloadProjectionInputLoaderRejectsLowConfidenceDockerfileOnlyCandidate(t *testing.T) {
+func TestCorrelatedWorkloadProjectionInputLoaderAdmitsDockerfileCandidate(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
@@ -62,8 +62,11 @@ func TestCorrelatedWorkloadProjectionInputLoaderRejectsLowConfidenceDockerfileOn
 	if err != nil {
 		t.Fatalf("LoadWorkloadProjectionInputs() error = %v", err)
 	}
-	if len(candidates) != 0 {
-		t.Fatalf("len(candidates) = %d, want 0 for low-confidence Dockerfile-only evidence", len(candidates))
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1 for Dockerfile candidate above confidence floor", len(candidates))
+	}
+	if candidates[0].RepoName != "service-repo" {
+		t.Fatalf("candidates[0].RepoName = %q, want service-repo", candidates[0].RepoName)
 	}
 }
 

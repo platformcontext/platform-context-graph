@@ -142,6 +142,7 @@ func streamFacts(
 
 	// Reducer follow-up facts — trigger downstream materialization domains.
 	ch <- workloadIdentityFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
+	ch <- deployableUnitCorrelationFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
 	ch <- workloadMaterializationFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
 	ch <- codeCallMaterializationFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
 	ch <- deploymentMappingFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
@@ -377,6 +378,31 @@ func workloadIdentityFactEnvelope(
 		generationID,
 		observedAt,
 		"shared_followup:"+repoID+":workload_identity",
+		payload,
+		repoPath,
+	)
+}
+
+func deployableUnitCorrelationFactEnvelope(
+	repoPath string,
+	repoID string,
+	scopeID string,
+	generationID string,
+	observedAt time.Time,
+) facts.Envelope {
+	payload := map[string]any{
+		"reducer_domain": "deployable_unit_correlation",
+		"entity_key":     "repo:" + filepath.Base(repoPath),
+		"reason":         "repository snapshot emitted deployable-unit correlation follow-up",
+		"repo_id":        repoID,
+	}
+
+	return factEnvelope(
+		"shared_followup",
+		scopeID,
+		generationID,
+		observedAt,
+		"shared_followup:"+repoID+":deployable_unit_correlation",
 		payload,
 		repoPath,
 	)

@@ -156,11 +156,17 @@ func extractArtifactSignals(
 ) {
 	lang := strings.ToLower(strings.TrimSpace(language))
 
+	// Helm chart: Chart.yaml with chart_type indicates a packaged deployment.
+	if chartType := strings.TrimSpace(fmt.Sprint(fileData["chart_type"])); chartType != "" && chartType != "<nil>" {
+		sig.addProvenance("helm_chart", 0.92)
+		return
+	}
+
 	// Dockerfile: language is "dockerfile" and has parsed stages.
 	if lang == "dockerfile" && len(sliceValue(fileData["dockerfile_stages"])) > 0 {
-		sig.addProvenance("dockerfile_runtime", 0.80)
+		sig.addProvenance("dockerfile_runtime", 0.88)
 		if relativePath != "" {
-			sig.addProvenance("dockerfile_runtime:"+relativePath, 0.80)
+			sig.addProvenance("dockerfile_runtime:"+relativePath, 0.88)
 		}
 		return
 	}

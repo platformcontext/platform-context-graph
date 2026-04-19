@@ -134,7 +134,7 @@ func TestDeployableUnitCorrelationHandleReturnsNoCandidates(t *testing.T) {
 	}
 }
 
-func TestDeployableUnitCorrelationHandleRejectsDockerfileOnlyCandidate(t *testing.T) {
+func TestDeployableUnitCorrelationHandleAdmitsDockerfileOnlyCandidate(t *testing.T) {
 	t.Parallel()
 
 	handler := DeployableUnitCorrelationHandler{
@@ -162,17 +162,11 @@ func TestDeployableUnitCorrelationHandleRejectsDockerfileOnlyCandidate(t *testin
 	if err != nil {
 		t.Fatalf("Handle() error = %v, want nil", err)
 	}
-	if got.CanonicalWrites != 0 {
-		t.Fatalf("Handle().CanonicalWrites = %d, want 0", got.CanonicalWrites)
+	if !strings.Contains(got.EvidenceSummary, "admitted=1") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want admitted=1", got.EvidenceSummary)
 	}
-	if !strings.Contains(got.EvidenceSummary, "admitted=0") {
-		t.Fatalf("Handle().EvidenceSummary = %q, want admitted=0", got.EvidenceSummary)
-	}
-	if !strings.Contains(got.EvidenceSummary, "rejected=1") {
-		t.Fatalf("Handle().EvidenceSummary = %q, want rejected=1", got.EvidenceSummary)
-	}
-	if !strings.Contains(got.EvidenceSummary, "low_confidence=1") {
-		t.Fatalf("Handle().EvidenceSummary = %q, want low_confidence=1", got.EvidenceSummary)
+	if !strings.Contains(got.EvidenceSummary, "rejected=0") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want rejected=0", got.EvidenceSummary)
 	}
 }
 
