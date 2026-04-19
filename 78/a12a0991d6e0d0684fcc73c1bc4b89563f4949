@@ -1,0 +1,380 @@
+go/internal/correlation/admission/admission.go
+  fd73f686cb9c9a3f 1-9,18,20-21,28-30,36,38-40,66-67
+go/internal/correlation/model/types_test.go
+  fd73f686cb9c9a3f 1-32,34-42
+  e3b65c01ef3641bb 33,43-56
+tests/fixtures/correlation_dsl/service-compose/docker-compose.yaml
+  fd73f686cb9c9a3f 1-15
+tests/fixtures/correlation_dsl/multi-dockerfile-repo/Dockerfile
+  073a74ac3999a938 1-10
+go/internal/relationships/github_actions_evidence.go
+  cdaccc4e8ad67c8b 13,33-41,46,52-59,84,90-97,122-123
+docs/docs/adrs/2026-04-18-reducer-full-convergence-optimization.md
+  fd73f686cb9c9a3f 1-391
+go/internal/correlation/observability_test.go
+  fd73f686cb9c9a3f 1-65
+go/internal/reducer/correlated_workload_projection_input_loader_test.go
+  fd73f686cb9c9a3f 1-148
+docs/internal/2026-04-17-collector-reducer-briefing.md
+  fd73f686cb9c9a3f 1-109
+go/internal/correlation/engine/engine.go
+  fd73f686cb9c9a3f 1-44,46-56,58,62-127
+  71a5eaabc1c3d962 45,57,59-61
+tests/fixtures/correlation_dsl/multi-dockerfile-repo/server.py
+  fd73f686cb9c9a3f 1-15
+tests/fixtures/correlation_dsl/deploy-repo/argocd/shared-config/base/configmap.yaml
+  fd73f686cb9c9a3f 1-8
+go/internal/reducer/deployable_unit_correlation_test.go
+  2f106aac49f6f83c 288-351
+  fd73f686cb9c9a3f 1-287,352-406
+go/internal/relationships/evidence_terraform_test.go
+  fd73f686cb9c9a3f 187-192
+go/internal/scope/scope_test.go
+  fd73f686cb9c9a3f 28-143
+go/internal/correlation/observability.go
+  073a74ac3999a938 1-39
+go/internal/correlation/rules/terraform_config_rules.go
+  fd73f686cb9c9a3f 1-7,18-26
+  12c82310f1810f40 8-17
+tests/fixtures/correlation_dsl/deploy-repo/argocd/service-gha/base/application.yaml
+  fd73f686cb9c9a3f 1-18
+tests/fixtures/correlation_dsl/service-jenkins-ansible/group_vars/all.yml
+  fd73f686cb9c9a3f 1-3
+go/internal/reducer/workload_materialization_handler.go
+  fd73f686cb9c9a3f 24-32,62,64,101-128
+  073a74ac3999a938 40
+docs/docs/adrs/2026-04-18-bootstrap-relationship-backfill-quadratic-cost.md
+  fd73f686cb9c9a3f 1-1041
+go/cmd/reducer/main.go
+  fd73f686cb9c9a3f 141,150-157,163
+scripts/verify_correlation_dsl_compose.sh
+  073a74ac3999a938 453-455
+  09a8a42e668e3290 367
+  12c82310f1810f40 13-18,23-25,29-54,56-62,65-93,96-112,115-125,128-129,133,136-140,164-171,174-185,188-193,195-201,204-207,210-213,216-223,225-265,267-273,276-289,292-304,306-316,318-366,368-369,375-377,383-393,420-421,423-424,426-427,430,432,434-437,441-452,456-457,459-462
+  15e7dba4194d8b43 26,130-132,134,149,370-374,378-379
+  04fdd0ea9019ae6b 27,135,142-147,150-163,380,395-413,470,473,478
+  fd73f686cb9c9a3f 1-12,19-22,55,63-64,94-95,113-114,126-127,141,148,172-173,186-187,194,202-203,208-209,214-215,224,266,274-275,290-291,305,317,381-382,394,414-419,422,425,428-429,431,433,438-440,458,463-469,471-472,474-477
+tests/fixtures/correlation_dsl/service-jenkins-ansible/inventory/prod.ini
+  fd73f686cb9c9a3f 1-2
+docs/superpowers/plans/2026-04-18-bootstrap-e2e-validation-and-reducer-convergence-follow-up.md
+  fd73f686cb9c9a3f 1-141
+go/internal/query/code.go
+  073a74ac3999a938 74-79,92-97
+go/internal/query/entity.go
+  073a74ac3999a938 130,216-218,222-235
+go/internal/correlation/rules/dockerfile_rules.go
+  fd73f686cb9c9a3f 1-7,18-26
+  12c82310f1810f40 8-17
+tests/fixtures/correlation_dsl/service-jenkins-ansible/roles/service_deploy/tasks/main.yml
+  fd73f686cb9c9a3f 1-5
+go/internal/correlation/rules/schema.go
+  e3b65c01ef3641bb 45-48,131-136
+  fd73f686cb9c9a3f 1-18,43-44,49-54,56-64,75-77,108-117,123-130,137-139
+  073a74ac3999a938 19-42,55,65-74,78-107,118-122
+tests/fixtures/correlation_dsl/service-jenkins-ansible/playbooks/deploy.yml
+  fd73f686cb9c9a3f 1-5
+go/internal/correlation/engine/engine_test.go
+  fd73f686cb9c9a3f 1-130,231-252
+  cdaccc4e8ad67c8b 131-230
+docs/docs/adrs/2026-04-19-deployable-unit-correlation-and-materialization-framework.md
+  fd73f686cb9c9a3f 1-556
+tests/fixtures/correlation_dsl/README.md
+  073a74ac3999a938 1-48
+scripts/lib/correlation_dsl_compose_common.sh
+  fd73f686cb9c9a3f 1-59
+docs/docs/adrs/2026-04-19-multi-source-correlation-dsl-and-collector-readiness.md
+  fd73f686cb9c9a3f 1-849
+tests/fixtures/correlation_dsl/terraform-stack-gha/shared/main.tf
+  fd73f686cb9c9a3f 1-23
+tests/fixtures/correlation_dsl/multi-dockerfile-repo/deploy/kubernetes/deployment.yaml
+  fd73f686cb9c9a3f 1-20
+docs/superpowers/plans/2026-04-19-ci-cd-relationship-parity-across-delivery-families-implementation.md
+  fd73f686cb9c9a3f 1-351
+tests/fixtures/correlation_dsl/service-jenkins/app.py
+  fd73f686cb9c9a3f 1-15
+tests/fixtures/correlation_dsl/service-gha/Dockerfile
+  073a74ac3999a938 1-10
+go/internal/reducer/infrastructure_platform_extractor_test.go
+  fd73f686cb9c9a3f 249-293
+go/internal/reducer/defaults.go
+  fd73f686cb9c9a3f 7,13-16,22,73-76,108,139,167-183
+go/internal/correlation/rules/github_actions_rules.go
+  fd73f686cb9c9a3f 1-7,18-26
+  12c82310f1810f40 8-17
+tests/fixtures/correlation_dsl/service-gha/app.py
+  fd73f686cb9c9a3f 1-15
+go/internal/correlation/admission/admission_test.go
+  fd73f686cb9c9a3f 1-6,8-15,17-20,22-27,31-38,40-43,45-49,53-61,63-66,68,117-118
+  71a5eaabc1c3d962 7,21,28-30,44,50-52,67,69-116
+  e3b65c01ef3641bb 16,39,62
+go/internal/reducer/projection.go
+  ae01bd5327d647be 14-15,22,192-197,335
+  fd73f686cb9c9a3f 249-253
+docs/docs/adrs/2026-04-18-query-time-service-enrichment-gap.md
+  fd73f686cb9c9a3f 52-55,70-71,76-79,81,103-104,110,154-155,181,189-309,336-342,346-347,360-370,391-395,404,409-438,520-562,694-695,697-794,887-897,959,991-1387
+go/internal/reducer/projection_test.go
+  fd73f686cb9c9a3f 198-199,352-353,376-377,392-393,525-560
+  ae01bd5327d647be 291-292,442-485
+  073a74ac3999a938 410-411
+go/internal/reducer/workload_materialization_handler_test.go
+  fd73f686cb9c9a3f 522-583,664-679
+tests/fixtures/correlation_dsl/service-jenkins/Dockerfile
+  073a74ac3999a938 1-10
+go/internal/correlation/rules/container_rulepacks_test.go
+  fd73f686cb9c9a3f 1-39,43-76
+  2f106aac49f6f83c 40-42
+go/internal/reducer/intent.go
+  fd73f686cb9c9a3f 19-21,166,168-169,172-178
+docs/superpowers/plans/2026-04-19-multi-source-correlation-dsl-and-collector-readiness-implementation.md
+  fd73f686cb9c9a3f 1-722
+docs/internal/2026-04-17-future-aws-collector-design-constraints.md
+  fd73f686cb9c9a3f 1-233
+go/internal/correlation/rules/schema_test.go
+  fd73f686cb9c9a3f 1-10,21-55,81-89
+  71a5eaabc1c3d962 11-20,56-80
+go/internal/correlation/rules/helm_rules.go
+  fd73f686cb9c9a3f 1-7,18-26
+  12c82310f1810f40 8-17
+go/internal/reducer/deployable_unit_correlation.go
+  fd73f686cb9c9a3f 1-5,7-73,75-79,81-124,127-165,178-182,185-186,191-197,199,210-217,219-228,230-239,241-250,252-255,257,260-261,368,370-382
+  cdaccc4e8ad67c8b 6,125-126,166-177,183-184,187-190,198,200-208,218,229,240,251,256,258-259,262,317-367,369
+  2f106aac49f6f83c 74,80
+  71a5eaabc1c3d962 209,263-316
+tests/fixtures/correlation_dsl/service-jenkins-ansible/Jenkinsfile
+  073a74ac3999a938 1-9
+go/internal/reducer/domain.go
+  fd73f686cb9c9a3f 9-18
+go/internal/correlation/explain/explain.go
+  fd73f686cb9c9a3f 1-77
+go/internal/query/correlation_dsl_fixture_test.go
+  fd73f686cb9c9a3f 1-166
+go/internal/reducer/infrastructure_platform_extractor.go
+  fd73f686cb9c9a3f 34,41-43,45-47,51,55-58,61,64-65,68-72,75-77,173-183
+go/internal/query/code_relationships.go
+  073a74ac3999a938 13,38,44,94,108-115,178,184,196,205-213
+go/internal/query/content_handler.go
+  073a74ac3999a938 146,169,282-296
+go/internal/reducer/defaults_test.go
+  fd73f686cb9c9a3f 250-261,365-402
+  073a74ac3999a938 405-431
+docs/docs/adrs/2026-04-19-ci-cd-relationship-parity-across-delivery-families.md
+  fd73f686cb9c9a3f 1-447
+tests/fixtures/correlation_dsl/service-compose/app.py
+  fd73f686cb9c9a3f 1-8
+go/internal/relationships/structured_family_evidence.go
+  cdaccc4e8ad67c8b 1-228
+tests/fixtures/correlation_dsl/service-jenkins/Jenkinsfile
+  073a74ac3999a938 1-17
+go/internal/reducer/workload_materializer_test.go
+  fd73f686cb9c9a3f 164-195
+go/internal/relationships/evidence_test.go
+  cdaccc4e8ad67c8b 245-319,425-516,551-559,759-769,950-952,1003-1008,1054-1058
+go/internal/reducer/candidate_loader_test.go
+  fd73f686cb9c9a3f 351-393
+docs/superpowers/plans/2026-04-18-query-time-service-enrichment-gap-implementation.md
+  fd73f686cb9c9a3f 1-462
+tests/fixtures/correlation_dsl/service-gha/deploy/kubernetes/deployment.yaml
+  fd73f686cb9c9a3f 1-20
+go/internal/correlation/explain/explain_test.go
+  cdaccc4e8ad67c8b 46-76
+  fd73f686cb9c9a3f 1-45
+tests/fixtures/correlation_dsl/service-jenkins-ansible/host_vars/web-prod.yml
+  fd73f686cb9c9a3f 1-2
+go/internal/correlation/rules/argocd_rules.go
+  fd73f686cb9c9a3f 1-7,18-26
+  12c82310f1810f40 8-17
+go/internal/correlation/model/types.go
+  fd73f686cb9c9a3f 1-19,43-44,52-70,74-80,86-88
+  e3b65c01ef3641bb 20-25,28-42,45-51,71-73,81-85,89-110
+  073a74ac3999a938 26-27
+tests/fixtures/correlation_dsl/service-gha/.github/workflows/deploy.yml
+  fd73f686cb9c9a3f 1-23
+go/internal/reducer/workload_materializer.go
+  fd73f686cb9c9a3f 145
+go/internal/reducer/candidate_loader.go
+  12c82310f1810f40 162-164
+  fd73f686cb9c9a3f 216-217
+go/internal/correlation/rules/jenkins_rules.go
+  fd73f686cb9c9a3f 1-7,18-26
+  12c82310f1810f40 8-17
+go/internal/scope/scope.go
+  fd73f686cb9c9a3f 15-24,33-38,72-73,76-77
+docs/internal/2026-04-17-inline-shared-followup-investigation.md
+  fd73f686cb9c9a3f 1-223
+go/internal/reducer/service_test.go
+  fd73f686cb9c9a3f 241-284
+tests/fixtures/correlation_dsl/terraform-stack-jenkins/shared/main.tf
+  fd73f686cb9c9a3f 1-23
+docs/superpowers/plans/2026-04-17-neo4j-deadlock-elimination-hardening-implementation.md
+  fd73f686cb9c9a3f 1-464
+go/internal/parser/engine_yaml_semantics_test.go
+  fd73f686cb9c9a3f 54,164,255,297,304
+docs/docs/reference/local-testing.md
+  fd73f686cb9c9a3f 80,141-147
+  073a74ac3999a938 149-163
+go/internal/correlation/rules/container_rulepacks.go
+  fd73f686cb9c9a3f 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "78a12a0991d6e0d0684fcc73c1bc4b89563f4949",
+  "prompts": {
+    "04fdd0ea9019ae6b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da61e-5bab-7ab2-a8d3-fff60ed18e81",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 45,
+      "total_deletions": 28,
+      "accepted_lines": 45,
+      "overriden_lines": 0
+    },
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 299,
+      "total_deletions": 16596,
+      "accepted_lines": 338,
+      "overriden_lines": 0
+    },
+    "09a8a42e668e3290": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da61d-47a2-7a92-8da0-a57540b65bb5",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "12c82310f1810f40": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da60b-d98a-7fc2-8eb4-3dbf76ac50ed",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 499,
+      "total_deletions": 467,
+      "accepted_lines": 400,
+      "overriden_lines": 0
+    },
+    "15e7dba4194d8b43": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da61d-4605-7851-a842-709c98daa0f8",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 16,
+      "total_deletions": 5,
+      "accepted_lines": 13,
+      "overriden_lines": 0
+    },
+    "2f106aac49f6f83c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da60b-d92c-7641-aafb-afe87641545f",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 69,
+      "total_deletions": 1,
+      "accepted_lines": 69,
+      "overriden_lines": 0
+    },
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 17,
+      "overriden_lines": 0
+    },
+    "71a5eaabc1c3d962": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da60b-d877-75d2-8799-4f51ecc7466e",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 153,
+      "total_deletions": 5,
+      "accepted_lines": 153,
+      "overriden_lines": 0
+    },
+    "ae01bd5327d647be": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da638-03aa-7001-9836-1c21410b2ace",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 53,
+      "total_deletions": 2,
+      "accepted_lines": 53,
+      "overriden_lines": 0
+    },
+    "cdaccc4e8ad67c8b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da60b-d812-7d33-807c-2515daecff3b",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 682,
+      "total_deletions": 24,
+      "accepted_lines": 682,
+      "overriden_lines": 0
+    },
+    "e3b65c01ef3641bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da5e4-74b6-7522-898a-cf108b4c04c6",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 86,
+      "overriden_lines": 0
+    },
+    "fd73f686cb9c9a3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "84c49d72-a249-4917-a2bf-08ba4698fd03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 9489,
+      "total_deletions": 98,
+      "accepted_lines": 9601,
+      "overriden_lines": 9
+    }
+  }
+}
