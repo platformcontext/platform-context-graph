@@ -33,8 +33,9 @@ func (f *fakeAssertionLoader) ListAssertions(_ context.Context, _ *relationships
 }
 
 type fakeResolutionPersister struct {
-	candidates []relationships.Candidate
-	resolved   []relationships.ResolvedRelationship
+	candidates           []relationships.Candidate
+	resolved             []relationships.ResolvedRelationship
+	activatedGenerations []string
 }
 
 func (f *fakeResolutionPersister) UpsertCandidates(_ context.Context, _ string, candidates []relationships.Candidate) error {
@@ -44,6 +45,11 @@ func (f *fakeResolutionPersister) UpsertCandidates(_ context.Context, _ string, 
 
 func (f *fakeResolutionPersister) UpsertResolved(_ context.Context, _ string, resolved []relationships.ResolvedRelationship) error {
 	f.resolved = append(f.resolved, resolved...)
+	return nil
+}
+
+func (f *fakeResolutionPersister) ActivateResolutionGeneration(_ context.Context, generationID, _ string) error {
+	f.activatedGenerations = append(f.activatedGenerations, generationID)
 	return nil
 }
 
@@ -393,6 +399,14 @@ func TestCrossRepoResolutionWritesDependencyEdges(t *testing.T) {
 	}
 	if got, want := row.Payload["evidence_type"], "terraform_app_repo"; got != want {
 		t.Fatalf("row evidence_type = %v, want %q", got, want)
+	}
+
+	// Verify generation was activated for downstream consumers.
+	if len(persister.activatedGenerations) != 1 {
+		t.Fatalf("activatedGenerations count = %d, want 1", len(persister.activatedGenerations))
+	}
+	if got, want := persister.activatedGenerations[0], "gen-1"; got != want {
+		t.Fatalf("activatedGenerations[0] = %q, want %q", got, want)
 	}
 }
 

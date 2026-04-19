@@ -150,6 +150,12 @@ SET status = 'active', activated_at = $1
 WHERE generation_id = $2 AND scope = $3
 `
 
+const activateResolutionGenerationSQL = `
+INSERT INTO relationship_generations (generation_id, scope, status, created_at, activated_at)
+VALUES ($1, $2, 'active', $3, $4)
+ON CONFLICT (generation_id) DO UPDATE SET status = 'active', activated_at = $4
+`
+
 const insertEvidenceFactSQL = `
 INSERT INTO relationship_evidence_facts (
     evidence_id, generation_id, evidence_kind, relationship_type,

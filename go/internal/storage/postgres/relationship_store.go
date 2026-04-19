@@ -131,6 +131,24 @@ func (s *RelationshipStore) CommitGeneration(
 	return nil
 }
 
+// ActivateResolutionGeneration creates and activates a relationship generation
+// in a single idempotent operation. This makes resolved relationships visible
+// to downstream consumers (e.g. workload materialization) that query by scope.
+func (s *RelationshipStore) ActivateResolutionGeneration(
+	ctx context.Context,
+	generationID string,
+	scopeID string,
+) error {
+	now := time.Now().UTC()
+	_, err := s.db.ExecContext(ctx, activateResolutionGenerationSQL,
+		generationID, scopeID, now, now,
+	)
+	if err != nil {
+		return fmt.Errorf("activate resolution generation: %w", err)
+	}
+	return nil
+}
+
 // UpsertEvidenceFacts persists evidence facts for a generation.
 func (s *RelationshipStore) UpsertEvidenceFacts(
 	ctx context.Context,

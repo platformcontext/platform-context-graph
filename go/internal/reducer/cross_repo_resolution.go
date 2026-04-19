@@ -28,10 +28,12 @@ type AssertionLoader interface {
 }
 
 // ResolutionPersister persists resolution outputs (candidates and resolved
-// relationships) for audit trail.
+// relationships) for audit trail and activates the generation so downstream
+// consumers (e.g. workload materialization) can query resolved relationships.
 type ResolutionPersister interface {
 	UpsertCandidates(ctx context.Context, generationID string, candidates []relationships.Candidate) error
 	UpsertResolved(ctx context.Context, generationID string, resolved []relationships.ResolvedRelationship) error
+	ActivateResolutionGeneration(ctx context.Context, generationID, scopeID string) error
 }
 
 // CrossRepoRelationshipHandler resolves cross-repository relationships from
@@ -166,13 +168,16 @@ func (h *CrossRepoRelationshipHandler) Resolve(
 		slog.Int("resolved_count", len(resolved)),
 	)
 
-	// Step 4: Persist audit trail.
+	// Step 4: Persist audit trail and activate generation for downstream queries.
 	if h.Persister != nil {
 		if err := h.Persister.UpsertCandidates(ctx, generationID, candidates); err != nil {
 			return 0, fmt.Errorf("persist candidates: %w", err)
 		}
 		if err := h.Persister.UpsertResolved(ctx, generationID, resolved); err != nil {
 			return 0, fmt.Errorf("persist resolved: %w", err)
+		}
+		if err := h.Persister.ActivateResolutionGeneration(ctx, generationID, scopeID); err != nil {
+			return 0, fmt.Errorf("activate resolution generation: %w", err)
 		}
 	}
 
