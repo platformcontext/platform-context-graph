@@ -274,7 +274,7 @@ func TestExtractWorkloadCandidatesIncludesDockerfileRuntimeSignals(t *testing.T)
 			FactKind: "file",
 			Payload: map[string]any{
 				"repo_id":       "repo-edge-api",
-				"artifact_type": "dockerfile",
+				"language":      "dockerfile",
 				"relative_path": "Dockerfile",
 				"parsed_file_data": map[string]any{
 					"dockerfile_stages": []any{
@@ -322,7 +322,7 @@ func TestExtractWorkloadCandidatesClassifiesJenkinsOnlyRepoAsUtility(t *testing.
 			FactKind: "file",
 			Payload: map[string]any{
 				"repo_id":       "repo-automation",
-				"artifact_type": "groovy",
+				"language":      "groovy",
 				"relative_path": "Jenkinsfile",
 				"parsed_file_data": map[string]any{
 					"jenkins_pipeline_calls": []any{"deployShared"},
