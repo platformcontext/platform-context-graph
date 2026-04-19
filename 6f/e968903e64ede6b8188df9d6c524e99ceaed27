@@ -1,0 +1,135 @@
+go/internal/query/repository_story_delivery_parity_test.go
+  85841f1dd77a5734 353,488-623
+docs/docs/reference/http-api.md
+  073a74ac3999a938 169-176,209-212
+go/internal/query/repository_deployment_overview_test.go
+  073a74ac3999a938 697-895
+go/internal/reducer/candidate_loader.go
+  073a74ac3999a938 17-18,76,87,91,96-100,134-136,147-188,191-198,242-263
+go/internal/reducer/candidate_loader_test.go
+  073a74ac3999a938 106-114,257-348
+go/internal/query/service_evidence_test.go
+  073a74ac3999a938 169-186
+go/internal/mcp/dispatch.go
+  073a74ac3999a938 249
+go/internal/relationships/relationship_platform_fixture_test.go
+  073a74ac3999a938 106-176
+go/internal/query/code_cypher_test.go
+  073a74ac3999a938 4,184-321
+go/internal/query/content_handler_search_test.go
+  073a74ac3999a938 124,127-140,148-203,208-222,229-230
+go/internal/reducer/workload_materializer.go
+  4fef247a947a5db5 99-106,120-129,143-147,240,242-243,246,256,260-261,264,272,274
+go/internal/query/deployment_trace_support_helpers_test.go
+  073a74ac3999a938 272-348
+go/internal/reducer/projection.go
+  4fef247a947a5db5 23-25,37-43,48-56,65-66,91-93,95-96,118-149,189-196,199-200,211-217,242-250,264-265,300-338
+go/internal/reducer/workload_materializer_test.go
+  4fef247a947a5db5 55-63,80-92,139-140,155-160
+go/internal/query/relationship_platform_workflow_fixture_test.go
+  073a74ac3999a938 337-429
+go/internal/query/repository_deployment_overview_story.go
+  073a74ac3999a938 237-300
+go/internal/query/repository_story.go
+  073a74ac3999a938 27-32,67,69-70,117-119,207-226
+go/internal/query/code_cypher.go
+  073a74ac3999a938 161-243
+go/internal/mcp/dispatch_test.go
+  073a74ac3999a938 115-173
+go/internal/query/service_deployment_evidence.go
+  073a74ac3999a938 74-75,105-107
+go/internal/reducer/workload_materialization_handler_test.go
+  073a74ac3999a938 228-413
+go/internal/query/code.go
+  073a74ac3999a938 366-369,375-382,386,406,429-432,444,451
+go/internal/query/repository_deployment_overview.go
+  073a74ac3999a938 16-18,45-53,240-331
+go/internal/query/content_handler.go
+  073a74ac3999a938 225-244,249-263,271-284
+go/internal/reducer/workload_deployment_sources.go
+  073a74ac3999a938 17-23,34-39,42-46,56-64,88-99,122-132
+docs/docs/reference/mcp-reference.md
+  073a74ac3999a938 86-93
+go/internal/query/service_query_enrichment_test.go
+  073a74ac3999a938 186,189-191,242,258-259,290
+go/internal/query/service_evidence.go
+  073a74ac3999a938 69-70,239,262-270
+go/internal/query/deployment_trace_support_helpers.go
+  073a74ac3999a938 10-14,101-109,173-177,180-182,293,368-386,434,437-438
+docs/docs/reference/relationship-mapping.md
+  073a74ac3999a938 232-233,586-591
+go/internal/reducer/projection_test.go
+  4fef247a947a5db5 57-112,346-404
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "6fe968903e64ede6b8188df9d6c524e99ceaed27",
+  "prompts": {
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 5305,
+      "total_deletions": 164,
+      "accepted_lines": 5305,
+      "overriden_lines": 0
+    },
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 17,
+      "overriden_lines": 0
+    },
+    "4fef247a947a5db5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da40a-e07d-7311-accb-23a87d08f847",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 307,
+      "total_deletions": 44,
+      "accepted_lines": 307,
+      "overriden_lines": 0
+    },
+    "85841f1dd77a5734": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da40a-e0c5-7840-9867-9a6d6862d7af",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 139,
+      "total_deletions": 1,
+      "accepted_lines": 139,
+      "overriden_lines": 0
+    },
+    "fd73f686cb9c9a3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "84c49d72-a249-4917-a2bf-08ba4698fd03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 625,
+      "total_deletions": 0,
+      "accepted_lines": 589,
+      "overriden_lines": 0
+    }
+  }
+}
