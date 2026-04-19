@@ -275,10 +275,26 @@ func isLikelyFalsePositiveHostname(hostname string) bool {
 		return true
 	}
 
+	// Reject compound-word TLDs that indicate code properties (e.g.
+	// "baseurl", "cdnprefix", "mediatype"). Real TLDs don't contain
+	// these substrings.
+	for _, keyword := range codeCompoundKeywords {
+		if strings.Contains(tld, keyword) {
+			return true
+		}
+	}
+
 	// Reject code property chains: any segment contains camelCase or
 	// underscore patterns that don't appear in real hostnames.
 	for _, segment := range strings.Split(hostname, ".") {
 		if containsCamelCase(segment) {
+			return true
+		}
+	}
+
+	// Reject if any segment is in the code identifier blocklist.
+	for _, segment := range strings.Split(hostname, ".") {
+		if _, blocked := falsePositiveSegments[segment]; blocked {
 			return true
 		}
 	}
@@ -295,6 +311,17 @@ func isLikelyFalsePositiveHostname(hostname string) bool {
 	}
 
 	return false
+}
+
+var codeCompoundKeywords = []string{
+	"url", "uri", "prefix", "suffix", "path", "type",
+	"config", "handler", "helper", "builder", "generator",
+	"factory", "controller", "middleware",
+}
+
+var falsePositiveSegments = map[string]struct{}{
+	"exports": {}, "module": {}, "internals": {}, "require": {},
+	"prototype": {}, "constructor": {}, "this": {},
 }
 
 var falsePositiveTLDs = map[string]struct{}{
