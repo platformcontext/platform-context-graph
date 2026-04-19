@@ -9,7 +9,12 @@ import (
 // Evidence source constant for workload finalization.
 const EvidenceSourceWorkloads = "finalization/workloads"
 
-var overlayEnvironmentRE = regexp.MustCompile(`(?:^|/)overlays/([^/]+)/`)
+var environmentPathPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?:^|/)overlays/([^/]+)/`),
+	regexp.MustCompile(`(?:^|/)(?:env|environments)/([^/]+)/`),
+	regexp.MustCompile(`(?:^|/)inventory/([^/.]+)(?:\.[^/]+)?$`),
+	regexp.MustCompile(`(?:^|/)group_vars/([^/.]+)(?:\.[^/]+)?$`),
+}
 
 const workloadMaterializationMinConfidence = 0.82
 
@@ -72,6 +77,7 @@ type DeploymentSourceRow struct {
 // RuntimePlatformRow is one canonical runtime platform upsert payload.
 type RuntimePlatformRow struct {
 	Environment      string
+	Confidence       float64
 	InstanceID       string
 	PlatformID       string
 	PlatformKind     string
@@ -130,10 +136,10 @@ func InferWorkloadClassification(candidate WorkloadCandidate) string {
 		return "job"
 	}
 	if hasProvenance(candidate.Provenance,
-		"k8s_resource",
-		"argocd_application",
 		"argocd_application_source",
 		"argocd_applicationset_deploy_source",
+		"kustomize_resource",
+		"helm_deployment",
 		"dockerfile_runtime",
 		"docker_compose_runtime",
 	) || hasAnyResourceKind(candidate.ResourceKinds,
@@ -144,31 +150,34 @@ func InferWorkloadClassification(candidate WorkloadCandidate) string {
 	) {
 		return "service"
 	}
-	if hasProvenance(candidate.Provenance, "jenkins_pipeline", "github_actions_workflow") {
+	if hasProvenance(candidate.Provenance, "argocd_application", "jenkins_pipeline", "github_actions_workflow") {
 		return "utility"
 	}
 	return "service"
 }
 
 // ExtractOverlayEnvironments extracts environment names from repo-relative
-// overlay paths using the pattern overlays/<env>/.
+// deployment/config paths using bounded family-specific path conventions.
 func ExtractOverlayEnvironments(paths []string) []string {
 	seen := make(map[string]struct{})
 	var environments []string
 	for _, raw := range paths {
-		match := overlayEnvironmentRE.FindStringSubmatch(raw)
-		if match == nil {
-			continue
+		for _, pattern := range environmentPathPatterns {
+			match := pattern.FindStringSubmatch(raw)
+			if match == nil {
+				continue
+			}
+			env := strings.TrimSpace(match[1])
+			if env == "" {
+				continue
+			}
+			if _, ok := seen[env]; ok {
+				break
+			}
+			seen[env] = struct{}{}
+			environments = append(environments, env)
+			break
 		}
-		env := strings.TrimSpace(match[1])
-		if env == "" {
-			continue
-		}
-		if _, ok := seen[env]; ok {
-			continue
-		}
-		seen[env] = struct{}{}
-		environments = append(environments, env)
 	}
 	return environments
 }
@@ -240,18 +249,11 @@ func BuildProjectionRows(
 		}
 		if len(environments) == 0 {
 			for _, ns := range candidate.Namespaces {
-				ns = strings.TrimSpace(ns)
-				if ns != "" {
-					environments = append(environments, ns)
+				if environment := namespaceEnvironmentFallback(ns); environment != "" {
+					environments = append(environments, environment)
 				}
 			}
 		}
-		// Fallback: materializable workloads with no determinable environment
-		// still need at least one instance to represent the deployed workload.
-		if len(environments) == 0 {
-			environments = []string{"default"}
-		}
-
 		platformKind := InferRuntimePlatformKind(candidate.ResourceKinds)
 
 		for _, environment := range environments {
@@ -307,6 +309,7 @@ func BuildProjectionRows(
 			seenRuntimePlatforms[rpKey] = struct{}{}
 			result.RuntimePlatformRows = append(result.RuntimePlatformRows, RuntimePlatformRow{
 				Environment:  environment,
+				Confidence:   confidence,
 				InstanceID:   instanceID,
 				PlatformID:   platformID,
 				PlatformKind: platformKind,
@@ -333,6 +336,19 @@ func normalizedCandidateConfidence(confidence float64) float64 {
 		return confidence
 	}
 	return 0
+}
+
+func namespaceEnvironmentFallback(namespace string) string {
+	namespace = strings.TrimSpace(namespace)
+	if namespace == "" {
+		return ""
+	}
+	switch strings.ToLower(namespace) {
+	case "prod", "production", "qa", "stage", "staging", "dev", "development", "test", "sandbox", "preview":
+		return namespace
+	default:
+		return ""
+	}
 }
 
 func candidateWorkloadName(candidate WorkloadCandidate) string {

@@ -14,6 +14,7 @@ type DefaultHandlers struct {
 	WorkloadIdentityWriter           WorkloadIdentityWriter
 	CloudAssetResolutionWriter       CloudAssetResolutionWriter
 	PlatformMaterializationWriter    PlatformMaterializationWriter
+	WorkloadMaterializationReplayer  WorkloadMaterializationReplayer
 
 	// Neo4j-backed adapters for canonical graph writes.
 	WorkloadMaterializer               *WorkloadMaterializer
@@ -127,10 +128,11 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 				}
 			}
 			def.Handler = PlatformMaterializationHandler{
-				Writer:                     handlers.PlatformMaterializationWriter,
-				FactLoader:                 handlers.FactLoader,
-				InfrastructureMaterializer: handlers.InfrastructurePlatformMaterializer,
-				CrossRepoResolver:          crossRepoResolver,
+				Writer:                          handlers.PlatformMaterializationWriter,
+				FactLoader:                      handlers.FactLoader,
+				InfrastructureMaterializer:      handlers.InfrastructurePlatformMaterializer,
+				CrossRepoResolver:               crossRepoResolver,
+				WorkloadMaterializationReplayer: handlers.WorkloadMaterializationReplayer,
 			}
 		case DomainWorkloadMaterialization:
 			def.Handler = WorkloadMaterializationHandler{

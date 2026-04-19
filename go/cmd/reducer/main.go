@@ -145,6 +145,13 @@ func buildReducerService(
 	graphProjectionRepairQueue := postgres.NewGraphProjectionPhaseRepairQueueStore(database)
 	graphProjectionReadinessLookup := postgres.NewGraphProjectionReadinessLookup(database)
 	graphProjectionReadinessPrefetch := postgres.NewGraphProjectionReadinessPrefetch(database)
+	retryCfg, err := loadReducerQueueConfig(getenv)
+	if err != nil {
+		return reducer.Service{}, err
+	}
+	workQueue := postgres.NewReducerQueue(database, "reducer", time.Minute)
+	workQueue.RetryDelay = retryCfg.RetryDelay
+	workQueue.MaxAttempts = retryCfg.MaxAttempts
 
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
 		DeployableUnitCorrelationHandler: reducer.DeployableUnitCorrelationHandler{
@@ -158,6 +165,7 @@ func buildReducerService(
 		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
 		CloudAssetResolutionWriter:         reducer.PostgresCloudAssetResolutionWriter{DB: database},
 		PlatformMaterializationWriter:      reducer.PostgresPlatformMaterializationWriter{DB: database},
+		WorkloadMaterializationReplayer:    workQueue,
 		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
 		FactLoader:                         factStore,
@@ -188,14 +196,6 @@ func buildReducerService(
 	edgeWriter.CodeCallGroupBatchSize = codeCallEdgeGroupBatchSize
 	edgeWriter.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize
 	edgeWriter.SQLRelationshipGroupBatchSize = sqlRelationshipEdgeGroupBatchSize
-
-	retryCfg, err := loadReducerQueueConfig(getenv)
-	if err != nil {
-		return reducer.Service{}, err
-	}
-	workQueue := postgres.NewReducerQueue(database, "reducer", time.Minute)
-	workQueue.RetryDelay = retryCfg.RetryDelay
-	workQueue.MaxAttempts = retryCfg.MaxAttempts
 
 	workers := loadReducerWorkerCount(getenv)
 	return reducer.Service{

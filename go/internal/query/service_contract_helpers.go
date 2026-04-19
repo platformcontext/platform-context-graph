@@ -98,23 +98,30 @@ func inferDocsRouteEnvironment(route string, relativePath string, workloadContex
 	if len(values) > 0 {
 		return values[0]
 	}
-	instances, _ := workloadContext["instances"].([]map[string]any)
-	if len(instances) == 1 {
-		return StringVal(instances[0], "environment")
-	}
 	return ""
 }
 
 func matchingRuntimeInstance(instances []map[string]any, environment string) map[string]any {
-	if environment != "" {
-		for _, instance := range instances {
-			if StringVal(instance, "environment") == environment {
-				return instance
-			}
-		}
-	}
-	if len(instances) == 0 {
+	if environment == "" {
 		return nil
 	}
-	return instances[0]
+	normalizedEnvironment := canonicalEnvironmentAlias(environment)
+	for _, instance := range instances {
+		instanceEnvironment := StringVal(instance, "environment")
+		if instanceEnvironment == environment {
+			return instance
+		}
+		if normalizedEnvironment != "" && canonicalEnvironmentAlias(instanceEnvironment) == normalizedEnvironment {
+			return instance
+		}
+	}
+	return nil
+}
+
+func canonicalEnvironmentAlias(environment string) string {
+	values := detectEnvironmentAliases(environment)
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }

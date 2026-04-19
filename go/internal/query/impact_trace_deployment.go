@@ -142,9 +142,10 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	k8sRelationships := buildK8sRelationships(k8sResources)
 	platforms := distinctSortedInstanceField(instances, "platform_name")
 	platformKinds := distinctSortedInstanceField(instances, "platform_kind")
-	environments := distinctSortedInstanceField(instances, "environment")
-	mappingMode := deploymentMappingMode(platformKinds)
-	deploymentFacts := buildDeploymentFacts(platforms, platformKinds, environments, deploymentSources)
+	materializedEnvironments := distinctSortedInstanceField(instances, "environment")
+	configEnvironments := StringSliceVal(workloadContext, "observed_config_environments")
+	mappingMode := deploymentMappingMode(platformKinds, deploymentSources)
+	deploymentFacts := buildDeploymentFacts(instances, deploymentSources)
 	artifactLineage := buildDeploymentTraceArtifactLineage(
 		controllerEntities,
 		deploymentEvidence,
@@ -174,16 +175,30 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	deploymentOverview["image_ref_count"] = len(imageRefs)
 	deploymentOverview["platform_kinds"] = platformKinds
 	deploymentOverview["platforms"] = platforms
-	deploymentOverview["environments"] = mergeStringSets(
-		environments,
-		StringSliceVal(workloadContext, "observed_config_environments"),
-	)
+	deploymentOverview["environments"] = materializedEnvironments
+	deploymentOverview["materialized_environments"] = materializedEnvironments
+	if len(configEnvironments) > 0 {
+		deploymentOverview["config_environments"] = configEnvironments
+	}
 	if len(provenanceOverview) > 0 {
 		deploymentOverview["provenance_families"] = StringSliceVal(provenanceOverview, "families")
 	}
 	if len(artifactLineage) > 0 {
 		deploymentOverview["artifact_lineage_count"] = len(artifactLineage)
 	}
+	deploymentFactSummary := buildDeploymentFactSummary(
+		workloadContext,
+		instances,
+		materializedEnvironments,
+		configEnvironments,
+		platforms,
+		deploymentSources,
+		cloudResources,
+		k8sResources,
+		imageRefs,
+		deploymentFacts,
+		mappingMode,
+	)
 
 	response := map[string]any{
 		"service_name": serviceName,
@@ -207,25 +222,13 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		"controller_driven_paths": buildControllerDrivenPaths(platforms, platformKinds),
 		"delivery_paths":          deliveryPaths,
 		"story":                   story,
-		"story_sections":          buildStorySections(platforms, platformKinds, environments),
+		"story_sections":          buildStorySections(platforms, platformKinds, materializedEnvironments),
 		"deployment_overview":     deploymentOverview,
 		"controller_overview":     buildControllerOverview(platforms, platformKinds, controllerEntities),
 		"gitops_overview":         buildGitOpsOverview(platforms, platformKinds),
-		"runtime_overview":        buildRuntimeOverview(environments),
-		"deployment_fact_summary": map[string]any{
-			"instance_count":            len(instances),
-			"environment_count":         len(environments),
-			"platform_count":            len(platforms),
-			"deployment_source_count":   len(deploymentSources),
-			"cloud_resource_count":      len(cloudResources),
-			"k8s_resource_count":        len(k8sResources),
-			"image_ref_count":           len(imageRefs),
-			"fact_count":                len(deploymentFacts),
-			"has_repository":            safeStr(workloadContext, "repo_id") != "",
-			"mapping_mode":              mappingMode,
-			"overall_confidence_reason": "platform_instances_observed",
-		},
-		"drilldowns": buildDeploymentDrilldowns(serviceName, safeStr(workloadContext, "id")),
+		"runtime_overview":        buildRuntimeOverview(materializedEnvironments),
+		"deployment_fact_summary": deploymentFactSummary,
+		"drilldowns":              buildDeploymentDrilldowns(serviceName, safeStr(workloadContext, "id")),
 	}
 	if len(provenanceOverview) > 0 {
 		response["provenance_overview"] = provenanceOverview
@@ -344,21 +347,27 @@ func fetchDeploymentSourcesFromGraph(
 	repoID string,
 ) ([]map[string]any, error) {
 	rows, err := reader.Run(ctx, `
-		CALL {
-			MATCH (w:Workload {id: $workload_id})<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:DEPLOYMENT_SOURCE]->(repo:Repository)
-			RETURN repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence, rel.reason as reason
-			UNION
-			MATCH (targetRepo:Repository {id: $repo_id})<-[rel:DEPLOYS_FROM]-(repo:Repository)
-			RETURN repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence, coalesce(rel.reason, rel.evidence_type, 'repository_deploys_from') as reason
-		}
-		RETURN DISTINCT repo_id, repo_name, confidence, reason
+		MATCH (w:Workload {id: $workload_id})<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:DEPLOYMENT_SOURCE]->(repo:Repository)
+		RETURN DISTINCT repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence, rel.reason as reason
 		ORDER BY repo_name
 	`, map[string]any{
 		"workload_id": workloadID,
-		"repo_id":     repoID,
 	})
 	if err != nil {
 		return nil, err
+	}
+	if len(rows) == 0 && strings.TrimSpace(repoID) != "" {
+		rows, err = reader.Run(ctx, `
+			MATCH (targetRepo:Repository {id: $repo_id})<-[rel:DEPLOYS_FROM]-(repo:Repository)
+			RETURN DISTINCT repo.id as repo_id, repo.name as repo_name, rel.confidence as confidence,
+			       coalesce(rel.reason, rel.evidence_type, 'repository_deploys_from') as reason
+			ORDER BY repo_name
+		`, map[string]any{
+			"repo_id": repoID,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	sources := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
@@ -370,6 +379,103 @@ func fetchDeploymentSourcesFromGraph(
 		})
 	}
 	return sources, nil
+}
+
+func buildDeploymentFactSummary(
+	workloadContext map[string]any,
+	instances []map[string]any,
+	materializedEnvironments []string,
+	configEnvironments []string,
+	platforms []string,
+	deploymentSources []map[string]any,
+	cloudResources []map[string]any,
+	k8sResources []map[string]any,
+	imageRefs []string,
+	deploymentFacts []map[string]any,
+	mappingMode string,
+) map[string]any {
+	overallConfidence, confidenceReason := deploymentOverallConfidence(instances, deploymentSources, configEnvironments)
+	summary := map[string]any{
+		"instance_count":                 len(instances),
+		"environment_count":              len(materializedEnvironments),
+		"materialized_environment_count": len(materializedEnvironments),
+		"config_environment_count":       len(configEnvironments),
+		"platform_count":                 len(platforms),
+		"deployment_source_count":        len(deploymentSources),
+		"cloud_resource_count":           len(cloudResources),
+		"k8s_resource_count":             len(k8sResources),
+		"image_ref_count":                len(imageRefs),
+		"fact_count":                     len(deploymentFacts),
+		"has_repository":                 safeStr(workloadContext, "repo_id") != "",
+		"mapping_mode":                   mappingMode,
+		"overall_confidence":             overallConfidence,
+		"overall_confidence_reason":      confidenceReason,
+	}
+	if limitations := deploymentFactSummaryLimitations(instances, configEnvironments); len(limitations) > 0 {
+		summary["limitations"] = limitations
+	}
+	return summary
+}
+
+func deploymentOverallConfidence(
+	instances []map[string]any,
+	deploymentSources []map[string]any,
+	configEnvironments []string,
+) (float64, string) {
+	if len(instances) > 0 {
+		minConfidence := 1.0
+		found := false
+		for _, instance := range instances {
+			confidence := firstPositiveFloat(
+				floatVal(instance, "materialization_confidence"),
+				floatVal(instance, "platform_confidence"),
+			)
+			if confidence <= 0 {
+				continue
+			}
+			found = true
+			if confidence < minConfidence {
+				minConfidence = confidence
+			}
+		}
+		if found {
+			return minConfidence, "materialized_runtime_instances"
+		}
+		return 0.9, "materialized_runtime_instances"
+	}
+	if len(deploymentSources) > 0 {
+		minConfidence := 1.0
+		found := false
+		for _, source := range deploymentSources {
+			confidence := floatVal(source, "confidence")
+			if confidence <= 0 {
+				continue
+			}
+			found = true
+			if confidence < minConfidence {
+				minConfidence = confidence
+			}
+		}
+		if found {
+			return minConfidence, "canonical_deployment_sources"
+		}
+		return 0.75, "canonical_deployment_sources"
+	}
+	if len(configEnvironments) > 0 {
+		return 0.45, "config_only_evidence"
+	}
+	return 0, "no_deployment_evidence"
+}
+
+func deploymentFactSummaryLimitations(instances []map[string]any, configEnvironments []string) []string {
+	if len(instances) == 0 && len(configEnvironments) == 0 {
+		return nil
+	}
+	limitations := []string{}
+	if len(instances) == 0 && len(configEnvironments) > 0 {
+		limitations = append(limitations, "config_environments_present_without_materialized_runtime_instances")
+	}
+	return limitations
 }
 
 func (h *ImpactHandler) fetchCloudResources(ctx context.Context, workloadID string) ([]map[string]any, error) {

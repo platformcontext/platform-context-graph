@@ -33,7 +33,7 @@ func (l CorrelatedWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
 
 	candidates, deploymentEnvironments := ExtractWorkloadCandidates(envelopes)
 	if l.ResolvedLoader != nil {
-		resolved, err := l.ResolvedLoader.GetResolvedRelationships(ctx, intent.ScopeID)
+		resolved, err := loadResolvedRelationshipsForIntent(ctx, l.ResolvedLoader, intent)
 		if err != nil {
 			return nil, nil, fmt.Errorf("load resolved relationships for correlated workload projection: %w", err)
 		}

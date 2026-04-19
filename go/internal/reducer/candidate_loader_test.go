@@ -103,7 +103,7 @@ func TestExtractWorkloadCandidatesFromArgoCDApplicationFacts(t *testing.T) {
 	if c.RepoName != "api-service" {
 		t.Errorf("RepoName = %q, want api-service", c.RepoName)
 	}
-	if got, want := c.Classification, "service"; got != want {
+	if got, want := c.Classification, "utility"; got != want {
 		t.Errorf("Classification = %q, want %q", got, want)
 	}
 	if got, want := c.Confidence, 0.95; got < want {
@@ -111,6 +111,65 @@ func TestExtractWorkloadCandidatesFromArgoCDApplicationFacts(t *testing.T) {
 	}
 	if len(c.Provenance) == 0 || c.Provenance[0] != "argocd_application" {
 		t.Errorf("Provenance = %v, want first entry argocd_application", c.Provenance)
+	}
+}
+
+func TestExtractWorkloadCandidatesKeepsConfigOnlyArgoCDRepoAsUtility(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repo-deploy",
+				"name":     "deploy-repo",
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-argocd",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id": "repo-deploy",
+				"parsed_file_data": map[string]any{
+					"argocd_applications": []any{
+						map[string]any{
+							"name":        "service-gha",
+							"source_repo": "https://github.com/org/service-gha",
+							"source_path": "deploy/kubernetes",
+						},
+					},
+				},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-configmap",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id": "repo-deploy",
+				"parsed_file_data": map[string]any{
+					"k8s_resources": []any{
+						map[string]any{
+							"name":      "shared-config",
+							"kind":      "ConfigMap",
+							"namespace": "argocd",
+						},
+					},
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	candidates, _ := ExtractWorkloadCandidates(envelopes)
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+	if got, want := candidates[0].Classification, "utility"; got != want {
+		t.Fatalf("Classification = %q, want %q", got, want)
 	}
 }
 

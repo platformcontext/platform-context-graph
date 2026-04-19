@@ -10,6 +10,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/correlation/engine"
 	correlationmodel "github.com/platformcontext/platform-context-graph/go/internal/correlation/model"
 	"github.com/platformcontext/platform-context-graph/go/internal/correlation/rules"
+	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
 const deployableUnitCorrelationFallbackThreshold = 0.90
@@ -49,7 +50,7 @@ func (h DeployableUnitCorrelationHandler) Handle(
 
 	candidates, _ := ExtractWorkloadCandidates(envelopes)
 	if h.ResolvedLoader != nil {
-		resolved, err := h.ResolvedLoader.GetResolvedRelationships(ctx, intent.ScopeID)
+		resolved, err := loadResolvedRelationshipsForIntent(ctx, h.ResolvedLoader, intent)
 		if err != nil {
 			return Result{}, fmt.Errorf("load resolved relationships for deployable unit correlation: %w", err)
 		}
@@ -93,9 +94,30 @@ func deployableUnitCorrelationEntityKeys(intent Intent) (map[string]struct{}, er
 
 	normalized := make(map[string]struct{}, len(entityKeys))
 	for _, key := range entityKeys {
-		normalized[strings.ToLower(strings.TrimSpace(key))] = struct{}{}
+		raw := strings.ToLower(strings.TrimSpace(key))
+		if raw != "" {
+			normalized[raw] = struct{}{}
+		}
+		if alias := normalizedEntityKey(key); alias != "" {
+			normalized[alias] = struct{}{}
+		}
 	}
 	return normalized, nil
+}
+
+func loadResolvedRelationshipsForIntent(
+	ctx context.Context,
+	loader ResolvedRelationshipLoader,
+	intent Intent,
+) ([]relationships.ResolvedRelationship, error) {
+	if generationScoped, ok := loader.(GenerationScopedResolvedRelationshipLoader); ok {
+		return generationScoped.GetResolvedRelationshipsForGeneration(
+			ctx,
+			intent.ScopeID,
+			intent.GenerationID,
+		)
+	}
+	return loader.GetResolvedRelationships(ctx, intent.ScopeID)
 }
 
 func filterDeployableUnitCandidates(
@@ -104,7 +126,7 @@ func filterDeployableUnitCandidates(
 ) []WorkloadCandidate {
 	filtered := make([]WorkloadCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
-		for _, key := range []string{candidate.RepoID, candidate.RepoName} {
+		for _, key := range candidateIdentityKeys(candidate) {
 			if _, ok := entityKeys[strings.ToLower(strings.TrimSpace(key))]; ok {
 				filtered = append(filtered, candidate)
 				break
@@ -112,6 +134,40 @@ func filterDeployableUnitCandidates(
 		}
 	}
 	return filtered
+}
+
+func candidateIdentityKeys(candidate WorkloadCandidate) []string {
+	keys := make([]string, 0, 4)
+	appendCandidateIdentityKey := func(value string) {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" {
+			return
+		}
+		for _, existing := range keys {
+			if existing == value {
+				return
+			}
+		}
+		keys = append(keys, value)
+	}
+
+	appendCandidateIdentityKey(candidate.RepoID)
+	appendCandidateIdentityKey(candidate.RepoName)
+	appendCandidateIdentityKey(normalizedEntityKey(candidate.RepoID))
+	appendCandidateIdentityKey(normalizedEntityKey(candidate.RepoName))
+
+	return keys
+}
+
+func normalizedEntityKey(key string) string {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if key == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(key, ":"); idx >= 0 && idx < len(key)-1 {
+		return strings.TrimSpace(key[idx+1:])
+	}
+	return key
 }
 
 func evaluateDeployableUnitCandidates(
@@ -140,12 +196,18 @@ func evaluateDeployableUnitCandidates(
 
 func deployableUnitRulePack(candidate WorkloadCandidate) rules.RulePack {
 	switch {
-	case hasProvenance(candidate.Provenance, "argocd_application_source", "argocd_applicationset_deploy_source", "argocd_application"):
+	case hasProvenance(candidate.Provenance, "argocd_application_source", "argocd_applicationset_deploy_source"):
 		return rules.ArgoCDRulePack()
 	case hasProvenance(candidate.Provenance, "kustomize_resource"):
 		return rules.KustomizeRulePack()
 	case hasProvenance(candidate.Provenance, "helm_deployment"):
 		return rules.HelmRulePack()
+	case hasProvenance(candidate.Provenance, "jenkins_pipeline") &&
+		hasProvenance(candidate.Provenance, "dockerfile_runtime"):
+		return rules.JenkinsRulePack()
+	case hasProvenance(candidate.Provenance, "github_actions_workflow") &&
+		hasProvenance(candidate.Provenance, "dockerfile_runtime"):
+		return rules.GitHubActionsRulePack()
 	case hasProvenance(candidate.Provenance, "dockerfile_runtime"):
 		return rules.DockerfileRulePack()
 	case hasProvenance(candidate.Provenance, "docker_compose_runtime"):
@@ -191,7 +253,7 @@ func deployableUnitModelCandidate(
 ) correlationmodel.Candidate {
 	evidence := make([]correlationmodel.EvidenceAtom, 0, len(candidate.Provenance)+len(candidate.ResourceKinds)+len(candidate.Namespaces)+2)
 	confidence := normalizedCandidateConfidence(candidate.Confidence)
-	if ambiguous && candidate.DeploymentRepoID != "" {
+	if ambiguous && !deployableUnitMatchesPrimaryIdentity(candidate, unitKey) {
 		confidence = boundedAmbiguousDeployableUnitConfidence(confidence)
 	}
 	evidence = append(evidence, correlationmodel.EvidenceAtom{
@@ -385,6 +447,20 @@ func boundedAmbiguousDeployableUnitConfidence(confidence float64) float64 {
 		return 0.79
 	}
 	return confidence
+}
+
+func deployableUnitMatchesPrimaryIdentity(candidate WorkloadCandidate, unitKey string) bool {
+	unitKey = strings.ToLower(strings.TrimSpace(unitKey))
+	if unitKey == "" {
+		return false
+	}
+	if unitKey == strings.ToLower(strings.TrimSpace(candidate.RepoName)) {
+		return true
+	}
+	if unitKey == strings.ToLower(strings.TrimSpace(candidate.WorkloadName)) {
+		return true
+	}
+	return false
 }
 
 func deployableUnitCorrelationSummary(evaluatedCandidates int, summary correlation.Summary) string {

@@ -33,6 +33,12 @@ type PlatformMaterializationWriter interface {
 	WritePlatformMaterialization(context.Context, PlatformMaterializationWrite) (PlatformMaterializationWriteResult, error)
 }
 
+// WorkloadMaterializationReplayer requeues workload materialization after
+// stronger deployment evidence becomes available for the same scope generation.
+type WorkloadMaterializationReplayer interface {
+	ReplayWorkloadMaterialization(ctx context.Context, scopeID, generationID, entityKey string) (bool, error)
+}
+
 // PlatformMaterializationHandler reduces one platform materialization intent
 // into a bounded canonical write request. When FactLoader and
 // InfrastructureMaterializer are set, the handler also writes
@@ -40,10 +46,11 @@ type PlatformMaterializationWriter interface {
 // is set, the handler also resolves cross-repo dependency edges from
 // persisted evidence facts after platform materialization completes.
 type PlatformMaterializationHandler struct {
-	Writer                     PlatformMaterializationWriter
-	FactLoader                 FactLoader
-	InfrastructureMaterializer *InfrastructurePlatformMaterializer
-	CrossRepoResolver          *CrossRepoRelationshipHandler
+	Writer                          PlatformMaterializationWriter
+	FactLoader                      FactLoader
+	InfrastructureMaterializer      *InfrastructurePlatformMaterializer
+	CrossRepoResolver               *CrossRepoRelationshipHandler
+	WorkloadMaterializationReplayer WorkloadMaterializationReplayer
 }
 
 // Handle executes the platform materialization reduction path.
@@ -98,6 +105,17 @@ func (h PlatformMaterializationHandler) Handle(
 			return Result{}, fmt.Errorf("cross-repo relationship resolution: %w", err)
 		}
 		canonicalWrites += crossRepoWrites
+		if crossRepoWrites > 0 && h.WorkloadMaterializationReplayer != nil {
+			replayEntityKey := workloadMaterializationReplayEntityKey(intent)
+			if _, err := h.WorkloadMaterializationReplayer.ReplayWorkloadMaterialization(
+				ctx,
+				intent.ScopeID,
+				intent.GenerationID,
+				replayEntityKey,
+			); err != nil {
+				return Result{}, fmt.Errorf("replay workload materialization: %w", err)
+			}
+		}
 	}
 
 	evidenceSummary := strings.TrimSpace(writeResult.EvidenceSummary)
@@ -144,4 +162,17 @@ func platformMaterializationWriteFromIntent(intent Intent) (PlatformMaterializat
 		EntityKeys:      entityKeys,
 		RelatedScopeIDs: relatedScopeIDs,
 	}, nil
+}
+
+func workloadMaterializationReplayEntityKey(intent Intent) string {
+	for _, entityKey := range intent.EntityKeys {
+		entityKey = strings.TrimSpace(entityKey)
+		if entityKey == "" {
+			continue
+		}
+		if alias := normalizedEntityKey(entityKey); alias != "" {
+			return "repo:" + alias
+		}
+	}
+	return "repo:" + strings.TrimSpace(intent.ScopeID)
 }

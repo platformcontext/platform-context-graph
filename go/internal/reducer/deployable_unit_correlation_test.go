@@ -134,7 +134,7 @@ func TestDeployableUnitCorrelationHandleReturnsNoCandidates(t *testing.T) {
 	}
 }
 
-func TestDeployableUnitCorrelationHandleAdmitsDockerfileOnlyCandidate(t *testing.T) {
+func TestDeployableUnitCorrelationHandleRejectsDockerfileOnlyCandidate(t *testing.T) {
 	t.Parallel()
 
 	handler := DeployableUnitCorrelationHandler{
@@ -162,11 +162,11 @@ func TestDeployableUnitCorrelationHandleAdmitsDockerfileOnlyCandidate(t *testing
 	if err != nil {
 		t.Fatalf("Handle() error = %v, want nil", err)
 	}
-	if !strings.Contains(got.EvidenceSummary, "admitted=1") {
-		t.Fatalf("Handle().EvidenceSummary = %q, want admitted=1", got.EvidenceSummary)
+	if !strings.Contains(got.EvidenceSummary, "admitted=0") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want admitted=0", got.EvidenceSummary)
 	}
-	if !strings.Contains(got.EvidenceSummary, "rejected=0") {
-		t.Fatalf("Handle().EvidenceSummary = %q, want rejected=0", got.EvidenceSummary)
+	if !strings.Contains(got.EvidenceSummary, "rejected=1") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want rejected=1", got.EvidenceSummary)
 	}
 }
 
@@ -279,6 +279,57 @@ func TestDeployableUnitCorrelationHandleFiltersByEntityKeys(t *testing.T) {
 	}
 }
 
+func TestDeployableUnitCorrelationHandleAcceptsWorkloadPrefixedEntityKey(t *testing.T) {
+	t.Parallel()
+
+	factLoader := &stubDeployableUnitFactLoader{
+		envelopes: deployableUnitCorrelationEnvelopes(
+			"repo-edge-api",
+			"edge-api",
+			[]map[string]any{
+				{
+					"repo_id":       "repo-edge-api",
+					"language":      "dockerfile",
+					"relative_path": "Dockerfile",
+					"parsed_file_data": map[string]any{
+						"dockerfile_stages": []any{
+							map[string]any{"name": "runtime"},
+						},
+					},
+				},
+			},
+		),
+	}
+	resolvedLoader := &stubDeployableUnitResolvedLoader{
+		resolved: []relationships.ResolvedRelationship{
+			{
+				SourceRepoID:     "repo-edge-api",
+				TargetRepoID:     "repo-deployments",
+				RelationshipType: relationships.RelDeploysFrom,
+				Confidence:       0.94,
+				Details: map[string]any{
+					"evidence_kinds": []string{
+						string(relationships.EvidenceKindArgoCDAppSource),
+					},
+				},
+			},
+		},
+	}
+
+	handler := DeployableUnitCorrelationHandler{
+		FactLoader:     factLoader,
+		ResolvedLoader: resolvedLoader,
+	}
+
+	got, err := handler.Handle(context.Background(), deployableUnitIntent("workload:edge-api"))
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if !strings.Contains(got.EvidenceSummary, "admitted=1") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want admitted=1", got.EvidenceSummary)
+	}
+}
+
 func TestDeployableUnitCorrelationHandleSplitsMultipleDockerfilesConservatively(t *testing.T) {
 	t.Parallel()
 
@@ -340,6 +391,111 @@ func TestDeployableUnitCorrelationHandleSplitsMultipleDockerfilesConservatively(
 	}
 	if !strings.Contains(got.EvidenceSummary, "rejected=2") {
 		t.Fatalf("Handle().EvidenceSummary = %q, want rejected=2", got.EvidenceSummary)
+	}
+}
+
+func TestDeployableUnitCorrelationHandleAdmitsJenkinsBackedServiceCandidate(t *testing.T) {
+	t.Parallel()
+
+	handler := DeployableUnitCorrelationHandler{
+		FactLoader: &stubDeployableUnitFactLoader{
+			envelopes: deployableUnitCorrelationEnvelopes(
+				"repo-service-jenkins",
+				"service-jenkins",
+				[]map[string]any{
+					{
+						"repo_id":       "repo-service-jenkins",
+						"language":      "dockerfile",
+						"relative_path": "Dockerfile",
+						"parsed_file_data": map[string]any{
+							"dockerfile_stages": []any{
+								map[string]any{"name": "runtime"},
+							},
+						},
+					},
+					{
+						"repo_id":       "repo-service-jenkins",
+						"language":      "groovy",
+						"relative_path": "Jenkinsfile",
+						"parsed_file_data": map[string]any{
+							"jenkins_pipeline_calls": []any{"deployShared"},
+						},
+					},
+				},
+			),
+		},
+	}
+
+	got, err := handler.Handle(context.Background(), deployableUnitIntent("service-jenkins"))
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if !strings.Contains(got.EvidenceSummary, "admitted=1") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want admitted=1", got.EvidenceSummary)
+	}
+	if !strings.Contains(got.EvidenceSummary, "rejected=0") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want rejected=0", got.EvidenceSummary)
+	}
+}
+
+func TestDeployableUnitCorrelationHandleRejectsSecondaryDockerfileWithoutIndependentEvidence(t *testing.T) {
+	t.Parallel()
+
+	handler := DeployableUnitCorrelationHandler{
+		FactLoader: &stubDeployableUnitFactLoader{
+			envelopes: deployableUnitCorrelationEnvelopes(
+				"repo-multi",
+				"multi-dockerfile-repo",
+				[]map[string]any{
+					{
+						"repo_id":       "repo-multi",
+						"language":      "dockerfile",
+						"relative_path": "Dockerfile",
+						"parsed_file_data": map[string]any{
+							"dockerfile_stages": []any{
+								map[string]any{"name": "runtime"},
+							},
+						},
+					},
+					{
+						"repo_id":       "repo-multi",
+						"language":      "dockerfile",
+						"relative_path": "Dockerfile.test",
+						"parsed_file_data": map[string]any{
+							"dockerfile_stages": []any{
+								map[string]any{"name": "runtime"},
+							},
+						},
+					},
+					{
+						"repo_id": "repo-multi",
+						"parsed_file_data": map[string]any{
+							"k8s_resources": []any{
+								map[string]any{
+									"name":      "multi-dockerfile-repo",
+									"kind":      "Deployment",
+									"namespace": "production",
+								},
+							},
+						},
+					},
+				},
+			),
+		},
+	}
+
+	got, err := handler.Handle(context.Background(), deployableUnitIntent("multi-dockerfile-repo"))
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if !strings.Contains(got.EvidenceSummary, "evaluated 2 deployable unit candidate") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want two evaluated candidates", got.EvidenceSummary)
+	}
+	if !strings.Contains(got.EvidenceSummary, "admitted=1") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want admitted=1", got.EvidenceSummary)
+	}
+	if !strings.Contains(got.EvidenceSummary, "rejected=1") {
+		t.Fatalf("Handle().EvidenceSummary = %q, want rejected=1", got.EvidenceSummary)
 	}
 }
 

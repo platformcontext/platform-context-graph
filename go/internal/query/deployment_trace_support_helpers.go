@@ -500,28 +500,36 @@ func buildRuntimeOverview(environments []string) map[string]any {
 }
 
 func buildDeploymentFacts(
-	platforms []string,
-	platformKinds []string,
-	environments []string,
+	instances []map[string]any,
 	deploymentSources []map[string]any,
 ) []map[string]any {
-	facts := make([]map[string]any, 0, len(platforms)+len(environments)+len(deploymentSources))
-	for i, platform := range platforms {
-		fact := map[string]any{
-			"type":       "RUNS_ON_PLATFORM",
-			"target":     platform,
-			"confidence": 1.0,
+	facts := make([]map[string]any, 0, len(instances)*2+len(deploymentSources))
+	for _, instance := range instances {
+		platform := StringVal(instance, "platform_name")
+		if platform == "" {
+			continue
 		}
-		if i < len(platformKinds) {
-			fact["kind"] = platformKinds[i]
+		fact := map[string]any{
+			"type":   "RUNS_ON_PLATFORM",
+			"target": platform,
+			"confidence": firstPositiveFloat(
+				floatVal(instance, "platform_confidence"),
+				floatVal(instance, "materialization_confidence"),
+			),
+		}
+		if kind := StringVal(instance, "platform_kind"); kind != "" {
+			fact["kind"] = kind
+		}
+		if reason := StringVal(instance, "platform_reason"); reason != "" {
+			fact["reason"] = reason
 		}
 		facts = append(facts, fact)
 	}
-	for _, environment := range environments {
+	for _, environment := range distinctSortedInstanceField(instances, "environment") {
 		facts = append(facts, map[string]any{
-			"type":       "OBSERVED_IN_ENVIRONMENT",
+			"type":       "MATERIALIZED_IN_ENVIRONMENT",
 			"target":     environment,
-			"confidence": 1.0,
+			"confidence": averageInstanceConfidenceForEnvironment(instances, environment),
 		})
 	}
 	for _, source := range deploymentSources {
@@ -534,6 +542,36 @@ func buildDeploymentFacts(
 		})
 	}
 	return facts
+}
+
+func averageInstanceConfidenceForEnvironment(instances []map[string]any, environment string) float64 {
+	total := 0.0
+	count := 0
+	for _, instance := range instances {
+		if StringVal(instance, "environment") != environment {
+			continue
+		}
+		if confidence := firstPositiveFloat(
+			floatVal(instance, "materialization_confidence"),
+			floatVal(instance, "platform_confidence"),
+		); confidence > 0 {
+			total += confidence
+			count++
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return total / float64(count)
+}
+
+func firstPositiveFloat(candidates ...float64) float64 {
+	for _, candidate := range candidates {
+		if candidate > 0 {
+			return candidate
+		}
+	}
+	return 0
 }
 
 func buildControllerDrivenPaths(platforms, platformKinds []string) []map[string]any {

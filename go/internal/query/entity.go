@@ -464,10 +464,19 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 		MATCH (w:Workload) WHERE %s
 		OPTIONAL MATCH (r:Repository)-[:DEFINES]->(w)
 		OPTIONAL MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)
-		OPTIONAL MATCH (i)-[:RUNS_ON]->(p:Platform)
+		OPTIONAL MATCH (i)-[runsOn:RUNS_ON]->(p:Platform)
 		RETURN w.id as id, w.name as name, w.kind as kind,
 		       r.id as repo_id, r.name as repo_name,
-		       collect(DISTINCT {instance_id: i.id, platform_name: p.name, platform_kind: p.kind, environment: i.environment}) as instances
+		       collect(DISTINCT {
+		           instance_id: i.id,
+		           platform_name: p.name,
+		           platform_kind: p.kind,
+		           environment: i.environment,
+		           materialization_confidence: i.materialization_confidence,
+		           materialization_provenance: i.materialization_provenance,
+		           platform_confidence: runsOn.confidence,
+		           platform_reason: runsOn.reason
+		       }) as instances
 	`, whereClause)
 
 	row, err := h.Neo4j.RunSingle(ctx, cypher, params)
@@ -519,10 +528,14 @@ func extractInstances(row map[string]any) []map[string]any {
 	return extractCollection(row, "instances", func(m map[string]any) (map[string]any, bool) {
 		if instID := StringVal(m, "instance_id"); instID != "" {
 			return map[string]any{
-				"instance_id":   instID,
-				"platform_name": StringVal(m, "platform_name"),
-				"platform_kind": StringVal(m, "platform_kind"),
-				"environment":   StringVal(m, "environment"),
+				"instance_id":                instID,
+				"platform_name":              StringVal(m, "platform_name"),
+				"platform_kind":              StringVal(m, "platform_kind"),
+				"environment":                StringVal(m, "environment"),
+				"materialization_confidence": floatVal(m, "materialization_confidence"),
+				"materialization_provenance": StringSliceVal(m, "materialization_provenance"),
+				"platform_confidence":        floatVal(m, "platform_confidence"),
+				"platform_reason":            StringVal(m, "platform_reason"),
 			}, true
 		}
 		return nil, false

@@ -210,8 +210,10 @@ func TestPlatformMaterializationHandlerCallsCrossRepoResolver(t *testing.T) {
 	}
 
 	edgeWriter := &recordingEdgeWriter{}
+	replayer := &recordingWorkloadMaterializationReplayer{}
 	handler := PlatformMaterializationHandler{
-		Writer: writer,
+		Writer:                          writer,
+		WorkloadMaterializationReplayer: replayer,
 		CrossRepoResolver: &CrossRepoRelationshipHandler{
 			EvidenceLoader: &fakeEvidenceFactLoader{
 				facts: []relationships.EvidenceFact{
@@ -257,6 +259,15 @@ func TestPlatformMaterializationHandlerCallsCrossRepoResolver(t *testing.T) {
 	if edgeWriter.writeCalls[0].domain != DomainRepoDependency {
 		t.Fatalf("edge write domain = %q, want %q", edgeWriter.writeCalls[0].domain, DomainRepoDependency)
 	}
+	if got, want := len(replayer.calls), 1; got != want {
+		t.Fatalf("replayer calls = %d, want %d", got, want)
+	}
+	if got, want := replayer.calls[0].scopeID, "scope-1"; got != want {
+		t.Fatalf("replayer scope_id = %q, want %q", got, want)
+	}
+	if got, want := replayer.calls[0].generationID, "gen-1"; got != want {
+		t.Fatalf("replayer generation_id = %q, want %q", got, want)
+	}
 }
 
 func TestPlatformMaterializationHandlerSkipsCrossRepoWhenNilResolver(t *testing.T) {
@@ -291,6 +302,43 @@ func TestPlatformMaterializationHandlerSkipsCrossRepoWhenNilResolver(t *testing.
 	}
 }
 
+func TestPlatformMaterializationHandlerDoesNotReplayWithoutCrossRepoWrites(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingPlatformMaterializationWriter{
+		result: PlatformMaterializationWriteResult{CanonicalWrites: 1},
+	}
+	replayer := &recordingWorkloadMaterializationReplayer{}
+	handler := PlatformMaterializationHandler{
+		Writer:                          writer,
+		WorkloadMaterializationReplayer: replayer,
+		CrossRepoResolver: &CrossRepoRelationshipHandler{
+			EvidenceLoader: &fakeEvidenceFactLoader{},
+			EdgeWriter:     &recordingEdgeWriter{},
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:        "intent-pm-no-replay",
+		ScopeID:         "scope-1",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainDeploymentMapping,
+		Cause:           "platform discovered",
+		EntityKeys:      []string{"platform:ecs:aws:cluster"},
+		RelatedScopeIDs: []string{"scope-1"},
+		EnqueuedAt:      time.Date(2026, time.April, 13, 12, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 13, 12, 0, 0, 0, time.UTC),
+		Status:          IntentStatusClaimed,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(replayer.calls), 0; got != want {
+		t.Fatalf("replayer calls = %d, want %d", got, want)
+	}
+}
+
 type recordingPlatformMaterializationWriter struct {
 	requests []PlatformMaterializationWrite
 	result   PlatformMaterializationWriteResult
@@ -303,4 +351,27 @@ func (w *recordingPlatformMaterializationWriter) WritePlatformMaterialization(
 ) (PlatformMaterializationWriteResult, error) {
 	w.requests = append(w.requests, request)
 	return w.result, w.err
+}
+
+type recordingWorkloadMaterializationReplayer struct {
+	calls []workloadMaterializationReplayCall
+	err   error
+}
+
+type workloadMaterializationReplayCall struct {
+	scopeID      string
+	generationID string
+}
+
+func (r *recordingWorkloadMaterializationReplayer) ReplayWorkloadMaterialization(
+	_ context.Context,
+	scopeID string,
+	generationID string,
+	_ string,
+) (bool, error) {
+	r.calls = append(r.calls, workloadMaterializationReplayCall{
+		scopeID:      scopeID,
+		generationID: generationID,
+	})
+	return true, r.err
 }

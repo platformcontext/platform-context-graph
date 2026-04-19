@@ -178,6 +178,131 @@ func TestReducerQueueReopenSucceededWrapsExecError(t *testing.T) {
 	}
 }
 
+func TestReducerQueueReplayDomainReopensSucceededWorkItem(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 19, 10, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		execResults: []sql.Result{rowsAffectedResult{rowsAffected: 1}},
+	}
+	queue := ReducerQueue{
+		db:  db,
+		Now: func() time.Time { return now },
+	}
+
+	replayed, err := queue.ReplayDomain(context.Background(), "scope-1", "gen-1", reducer.DomainWorkloadMaterialization)
+	if err != nil {
+		t.Fatalf("ReplayDomain() error = %v, want nil", err)
+	}
+	if !replayed {
+		t.Fatal("ReplayDomain() replayed = false, want true")
+	}
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+
+	query := db.execs[0].query
+	for _, want := range []string{
+		"UPDATE fact_work_items",
+		"scope_id = $2",
+		"generation_id = $3",
+		"domain = $4",
+		"status = 'succeeded'",
+		"status = 'pending'",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("ReplayDomain query missing %q:\n%s", want, query)
+		}
+	}
+	if got, want := db.execs[0].args[0], now; got != want {
+		t.Fatalf("updated_at arg = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[1], "scope-1"; got != want {
+		t.Fatalf("scope arg = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[2], "gen-1"; got != want {
+		t.Fatalf("generation arg = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[3], string(reducer.DomainWorkloadMaterialization); got != want {
+		t.Fatalf("domain arg = %v, want %v", got, want)
+	}
+}
+
+func TestReducerQueueReplayDomainReturnsFalseWhenNoSucceededRowMatches(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{
+		execResults: []sql.Result{rowsAffectedResult{}},
+	}
+	queue := ReducerQueue{db: db}
+
+	replayed, err := queue.ReplayDomain(context.Background(), "scope-1", "gen-1", reducer.DomainWorkloadMaterialization)
+	if err != nil {
+		t.Fatalf("ReplayDomain() error = %v, want nil", err)
+	}
+	if replayed {
+		t.Fatal("ReplayDomain() replayed = true, want false")
+	}
+}
+
+func TestReducerQueueReplayWorkloadMaterializationEnqueuesReplayWhenNoSucceededRowExists(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 19, 10, 30, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		execResults: []sql.Result{
+			rowsAffectedResult{},
+			rowsAffectedResult{rowsAffected: 1},
+		},
+	}
+	queue := ReducerQueue{
+		db:            db,
+		LeaseOwner:    "reducer",
+		LeaseDuration: time.Minute,
+		Now:           func() time.Time { return now },
+	}
+
+	replayed, err := queue.ReplayWorkloadMaterialization(
+		context.Background(),
+		"scope-1",
+		"gen-1",
+		"repo:service-gha",
+	)
+	if err != nil {
+		t.Fatalf("ReplayWorkloadMaterialization() error = %v, want nil", err)
+	}
+	if !replayed {
+		t.Fatal("ReplayWorkloadMaterialization() replayed = false, want true")
+	}
+	if got, want := len(db.execs), 2; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+
+	enqueueQuery := db.execs[1].query
+	if !strings.Contains(enqueueQuery, "INSERT INTO fact_work_items") {
+		t.Fatalf("enqueue query missing insert:\n%s", enqueueQuery)
+	}
+	if got, want := db.execs[1].args[1], "scope-1"; got != want {
+		t.Fatalf("enqueue scope arg = %v, want %v", got, want)
+	}
+	if got, want := db.execs[1].args[2], "gen-1"; got != want {
+		t.Fatalf("enqueue generation arg = %v, want %v", got, want)
+	}
+	if got, want := db.execs[1].args[3], string(reducer.DomainWorkloadMaterialization); got != want {
+		t.Fatalf("enqueue domain arg = %v, want %v", got, want)
+	}
+	payload, ok := db.execs[1].args[5].([]byte)
+	if !ok {
+		t.Fatalf("enqueue payload type = %T, want []byte", db.execs[1].args[5])
+	}
+	if !strings.Contains(string(payload), "deployment mapping resolved stronger evidence") {
+		t.Fatalf("enqueue payload = %s, want replay reason", payload)
+	}
+	if !strings.Contains(string(payload), "repo:service-gha") {
+		t.Fatalf("enqueue payload = %s, want replay entity key", payload)
+	}
+}
+
 func TestReducerQueueCountInFlightByDomainReturnsCount(t *testing.T) {
 	t.Parallel()
 

@@ -358,3 +358,47 @@ func (s *RelationshipStore) GetResolvedRelationships(
 	}
 	return result, sqlRows.Err()
 }
+
+// GetResolvedRelationshipsForGeneration returns resolved relationships for one
+// exact relationship generation inside a scope.
+func (s *RelationshipStore) GetResolvedRelationshipsForGeneration(
+	ctx context.Context,
+	scopeID string,
+	generationID string,
+) ([]relationships.ResolvedRelationship, error) {
+	sqlRows, err := s.db.QueryContext(ctx, listResolvedByGenerationSQL, scopeID, generationID)
+	if err != nil {
+		return nil, fmt.Errorf("list resolved by generation: %w", err)
+	}
+	defer func() { _ = sqlRows.Close() }()
+
+	var result []relationships.ResolvedRelationship
+	for sqlRows.Next() {
+		var r relationships.ResolvedRelationship
+		var relType, resSrc string
+		var detailsBytes []byte
+		if err := sqlRows.Scan(
+			&r.SourceRepoID,
+			&r.TargetRepoID,
+			&r.SourceEntityID,
+			&r.TargetEntityID,
+			&relType,
+			&r.Confidence,
+			&r.EvidenceCount,
+			&r.Rationale,
+			&resSrc,
+			&detailsBytes,
+		); err != nil {
+			return nil, fmt.Errorf("scan resolved by generation: %w", err)
+		}
+		r.RelationshipType = relationships.RelationshipType(relType)
+		r.ResolutionSource = relationships.ResolutionSource(resSrc)
+		if len(detailsBytes) > 0 {
+			if err := json.Unmarshal(detailsBytes, &r.Details); err != nil {
+				return nil, fmt.Errorf("unmarshal resolved by generation details: %w", err)
+			}
+		}
+		result = append(result, r)
+	}
+	return result, sqlRows.Err()
+}

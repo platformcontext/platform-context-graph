@@ -21,6 +21,17 @@ type ResolvedRelationshipLoader interface {
 	) ([]relationships.ResolvedRelationship, error)
 }
 
+// GenerationScopedResolvedRelationshipLoader can return resolved
+// relationships for one exact scope generation, avoiding mixed active
+// snapshots when multiple relationship generations exist for the same scope.
+type GenerationScopedResolvedRelationshipLoader interface {
+	GetResolvedRelationshipsForGeneration(
+		ctx context.Context,
+		scopeID string,
+		generationID string,
+	) ([]relationships.ResolvedRelationship, error)
+}
+
 // WorkloadProjectionInputLoader can provide already-correlated workload
 // candidates and environment overlays for workload materialization.
 type WorkloadProjectionInputLoader interface {
@@ -103,27 +114,16 @@ func (h WorkloadMaterializationHandler) loadProjectionInputs(
 	ctx context.Context,
 	intent Intent,
 ) ([]WorkloadCandidate, map[string][]string, error) {
-	if h.InputLoader != nil {
-		candidates, deploymentEnvironments, err := h.InputLoader.LoadWorkloadProjectionInputs(ctx, intent)
-		if err != nil {
-			return nil, nil, fmt.Errorf("load workload projection inputs: %w", err)
+	inputLoader := h.InputLoader
+	if inputLoader == nil {
+		inputLoader = CorrelatedWorkloadProjectionInputLoader{
+			FactLoader:     h.FactLoader,
+			ResolvedLoader: h.ResolvedLoader,
 		}
-		return candidates, deploymentEnvironments, nil
 	}
-
-	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	candidates, deploymentEnvironments, err := inputLoader.LoadWorkloadProjectionInputs(ctx, intent)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load facts for workload materialization: %w", err)
+		return nil, nil, fmt.Errorf("load workload projection inputs: %w", err)
 	}
-
-	candidates, deploymentEnvironments := ExtractWorkloadCandidates(envelopes)
-	if h.ResolvedLoader != nil {
-		resolved, err := h.ResolvedLoader.GetResolvedRelationships(ctx, intent.ScopeID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("load resolved relationships for workload materialization: %w", err)
-		}
-		candidates = applyResolvedDeploymentSources(candidates, resolved)
-	}
-
 	return candidates, deploymentEnvironments, nil
 }

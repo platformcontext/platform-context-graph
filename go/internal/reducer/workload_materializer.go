@@ -158,15 +158,16 @@ func (m *WorkloadMaterializer) Materialize(
 		rows := make([]map[string]any, len(projection.RuntimePlatformRows))
 		for i, row := range projection.RuntimePlatformRows {
 			rows[i] = map[string]any{
-				"instance_id":       row.InstanceID,
-				"platform_id":       row.PlatformID,
-				"platform_name":     row.PlatformName,
-				"platform_kind":     row.PlatformKind,
-				"platform_provider": row.PlatformProvider,
-				"environment":       row.Environment,
-				"platform_region":   row.PlatformRegion,
-				"platform_locator":  row.PlatformLocator,
-				"evidence_source":   EvidenceSourceWorkloads,
+				"instance_id":         row.InstanceID,
+				"platform_id":         row.PlatformID,
+				"platform_name":       row.PlatformName,
+				"platform_kind":       row.PlatformKind,
+				"platform_provider":   row.PlatformProvider,
+				"environment":         row.Environment,
+				"platform_region":     row.PlatformRegion,
+				"platform_locator":    row.PlatformLocator,
+				"platform_confidence": row.Confidence,
+				"evidence_source":     EvidenceSourceWorkloads,
 			}
 		}
 		if err := m.executeBatched(ctx, batchRuntimePlatformUpsertCypher, rows); err != nil {
@@ -286,7 +287,10 @@ SET p.type = 'platform',
     p.region = row.platform_region,
     p.locator = row.platform_locator
 MERGE (i)-[rel:RUNS_ON]->(p)
-SET rel.confidence = 1.0,
+SET rel.confidence = CASE
+        WHEN row.platform_confidence IS NULL OR row.platform_confidence <= 0 THEN 0.9
+        ELSE row.platform_confidence
+    END,
     rel.reason = 'Workload instance runs on inferred platform',
     rel.evidence_source = row.evidence_source`
 

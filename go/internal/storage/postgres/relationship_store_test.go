@@ -185,6 +185,84 @@ func TestRelationshipStoreUpsertAndGetResolved(t *testing.T) {
 	}
 }
 
+func TestRelationshipStoreActivateResolutionGenerationSupersedesOlderActiveGeneration(t *testing.T) {
+	t.Parallel()
+
+	db := newRelationshipTestDB()
+	store := NewRelationshipStore(db)
+	ctx := context.Background()
+
+	if err := store.ActivateResolutionGeneration(ctx, "gen-old", "repo_deps"); err != nil {
+		t.Fatalf("ActivateResolutionGeneration(old): %v", err)
+	}
+	if err := store.ActivateResolutionGeneration(ctx, "gen-new", "repo_deps"); err != nil {
+		t.Fatalf("ActivateResolutionGeneration(new): %v", err)
+	}
+
+	if got, want := db.generations["gen-old"].status, "superseded"; got != want {
+		t.Fatalf("old generation status = %q, want %q", got, want)
+	}
+	if got, want := db.generations["gen-new"].status, "active"; got != want {
+		t.Fatalf("new generation status = %q, want %q", got, want)
+	}
+}
+
+func TestRelationshipStoreGetResolvedRelationshipsForGeneration(t *testing.T) {
+	t.Parallel()
+
+	db := newRelationshipTestDB()
+	store := NewRelationshipStore(db)
+	ctx := context.Background()
+
+	if err := store.ActivateResolutionGeneration(ctx, "gen-old", "repo_deps"); err != nil {
+		t.Fatalf("ActivateResolutionGeneration(old): %v", err)
+	}
+	if err := store.UpsertResolved(ctx, "gen-old", []relationships.ResolvedRelationship{
+		{
+			SourceRepoID:     "repo-old",
+			TargetRepoID:     "repo-api",
+			SourceEntityID:   "repo-old",
+			TargetEntityID:   "repo-api",
+			RelationshipType: relationships.RelDeploysFrom,
+			Confidence:       0.91,
+			EvidenceCount:    1,
+			Rationale:        "old",
+			ResolutionSource: relationships.ResolutionSourceInferred,
+		},
+	}); err != nil {
+		t.Fatalf("UpsertResolved(old): %v", err)
+	}
+	if err := store.ActivateResolutionGeneration(ctx, "gen-new", "repo_deps"); err != nil {
+		t.Fatalf("ActivateResolutionGeneration(new): %v", err)
+	}
+	if err := store.UpsertResolved(ctx, "gen-new", []relationships.ResolvedRelationship{
+		{
+			SourceRepoID:     "repo-new",
+			TargetRepoID:     "repo-api",
+			SourceEntityID:   "repo-new",
+			TargetEntityID:   "repo-api",
+			RelationshipType: relationships.RelDeploysFrom,
+			Confidence:       0.97,
+			EvidenceCount:    2,
+			Rationale:        "new",
+			ResolutionSource: relationships.ResolutionSourceInferred,
+		},
+	}); err != nil {
+		t.Fatalf("UpsertResolved(new): %v", err)
+	}
+
+	result, err := store.GetResolvedRelationshipsForGeneration(ctx, "repo_deps", "gen-new")
+	if err != nil {
+		t.Fatalf("GetResolvedRelationshipsForGeneration: %v", err)
+	}
+	if got, want := len(result), 1; got != want {
+		t.Fatalf("len = %d, want %d", got, want)
+	}
+	if got, want := result[0].SourceRepoID, "repo-new"; got != want {
+		t.Fatalf("source_repo_id = %q, want %q", got, want)
+	}
+}
+
 func TestRelationshipStoreUpsertEvidenceFacts(t *testing.T) {
 	t.Parallel()
 
@@ -430,19 +508,42 @@ func (db *relationshipTestDB) ExecContext(_ context.Context, query string, args 
 		return proofResult{}, nil
 
 	case strings.Contains(query, "INSERT INTO relationship_generations"):
-		runID := ""
-		if args[2] != nil {
-			runID = args[2].(string)
+		if strings.Contains(query, "run_id") {
+			runID := ""
+			if args[2] != nil {
+				runID = args[2].(string)
+			}
+			db.generations[args[0].(string)] = generationRecord{
+				scope:  args[1].(string),
+				runID:  runID,
+				status: "pending",
+			}
+			return proofResult{}, nil
+		}
+		scope := args[1].(string)
+		for id, gen := range db.generations {
+			if gen.scope != scope || id == args[0].(string) || gen.status != "active" {
+				continue
+			}
+			gen.status = "superseded"
+			db.generations[id] = gen
 		}
 		db.generations[args[0].(string)] = generationRecord{
-			scope:  args[1].(string),
-			runID:  runID,
-			status: "pending",
+			scope:  scope,
+			status: "active",
 		}
 		return proofResult{}, nil
 
 	case strings.Contains(query, "UPDATE relationship_generations"):
 		genID := args[1].(string)
+		scope := args[2].(string)
+		for id, gen := range db.generations {
+			if gen.scope != scope || id == genID || gen.status != "active" {
+				continue
+			}
+			gen.status = "superseded"
+			db.generations[id] = gen
+		}
 		if gen, ok := db.generations[genID]; ok {
 			now := args[0].(time.Time)
 			gen.status = "active"
@@ -516,9 +617,14 @@ func (db *relationshipTestDB) QueryContext(_ context.Context, query string, args
 	case strings.Contains(query, "FROM relationship_assertions"):
 		return db.queryAssertions(func(_ assertionRecord) bool { return true }), nil
 
+	case strings.Contains(query, "FROM resolved_relationships") && strings.Contains(query, "g.generation_id = $2"):
+		scopeID := args[0].(string)
+		generationID := args[1].(string)
+		return db.queryResolved(scopeID, generationID), nil
+
 	case strings.Contains(query, "FROM resolved_relationships"):
 		scopeID := args[0].(string)
-		return db.queryResolved(scopeID), nil
+		return db.queryResolved(scopeID, ""), nil
 
 	default:
 		return nil, fmt.Errorf("unexpected query: %s", query)
@@ -561,13 +667,17 @@ func (db *relationshipTestDB) queryAssertions(filter func(assertionRecord) bool)
 	return newRelationshipRows(rows)
 }
 
-func (db *relationshipTestDB) queryResolved(scopeID string) *relationshipRows {
+func (db *relationshipTestDB) queryResolved(scopeID string, generationID string) *relationshipRows {
 	// Find active generation for scope.
 	var activeGenID string
-	for genID, gen := range db.generations {
-		if gen.scope == scopeID && gen.status == "active" {
-			activeGenID = genID
-			break
+	if generationID != "" {
+		activeGenID = generationID
+	} else {
+		for genID, gen := range db.generations {
+			if gen.scope == scopeID && gen.status == "active" {
+				activeGenID = genID
+				break
+			}
 		}
 	}
 	if activeGenID == "" {

@@ -53,11 +53,14 @@ func appendDeploymentTraceStory(base string, addition string) string {
 	return base + " " + addition
 }
 
-func deploymentMappingMode(platformKinds []string) string {
+func deploymentMappingMode(platformKinds []string, deploymentSources []map[string]any) string {
 	for _, kind := range platformKinds {
 		if kind == "argocd_application" || kind == "argocd_applicationset" {
 			return "controller"
 		}
+	}
+	if len(deploymentSources) > 0 {
+		return "deployment_source"
 	}
 	if len(platformKinds) > 0 {
 		return "evidence_only"

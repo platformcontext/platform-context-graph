@@ -144,6 +144,28 @@ func TestExtractOverlayEnvironmentsDeduplicates(t *testing.T) {
 	}
 }
 
+func TestExtractOverlayEnvironmentsSupportsJenkinsAndTerraformPathConventions(t *testing.T) {
+	t.Parallel()
+	paths := []string{
+		"inventory/staging.ini",
+		"group_vars/monitoring.yml",
+		"env/prod/main.tf",
+	}
+	got := ExtractOverlayEnvironments(paths)
+	if len(got) != 3 {
+		t.Fatalf("ExtractOverlayEnvironments() len = %d, want 3", len(got))
+	}
+	if got[0] != "staging" {
+		t.Fatalf("got[0] = %q, want staging", got[0])
+	}
+	if got[1] != "monitoring" {
+		t.Fatalf("got[1] = %q, want monitoring", got[1])
+	}
+	if got[2] != "prod" {
+		t.Fatalf("got[2] = %q, want prod", got[2])
+	}
+}
+
 func TestExtractOverlayEnvironmentsNoMatch(t *testing.T) {
 	t.Parallel()
 	paths := []string{"src/main.go", "README.md"}
@@ -523,12 +545,9 @@ func TestBuildProjectionRowsCarriesClassificationConfidenceAndProvenance(t *test
 	}
 }
 
-func TestBuildProjectionRowsDefaultEnvironmentFallback(t *testing.T) {
+func TestBuildProjectionRowsDoesNotInventDefaultEnvironmentInstance(t *testing.T) {
 	t.Parallel()
 
-	// A Dockerfile+Jenkins candidate with no namespaces, no overlays, and no
-	// deployment repo should still produce one "default" instance when above
-	// the materialization confidence floor.
 	candidates := []WorkloadCandidate{
 		{
 			RepoID:         "repo-boattrader",
@@ -544,17 +563,46 @@ func TestBuildProjectionRowsDefaultEnvironmentFallback(t *testing.T) {
 	if got := result.Stats.Workloads; got != 1 {
 		t.Fatalf("Stats.Workloads = %d, want 1", got)
 	}
-	if got := result.Stats.Instances; got != 1 {
-		t.Fatalf("Stats.Instances = %d, want 1", got)
+	if got := result.Stats.Instances; got != 0 {
+		t.Fatalf("Stats.Instances = %d, want 0 when no environment evidence exists", got)
 	}
-	inst := result.InstanceRows[0]
-	if got, want := inst.Environment, "default"; got != want {
-		t.Fatalf("Environment = %q, want %q", got, want)
+	if got := len(result.InstanceRows); got != 0 {
+		t.Fatalf("len(InstanceRows) = %d, want 0 when no environment evidence exists", got)
 	}
-	if got, want := inst.InstanceID, "workload-instance:api-node-boattrader:default"; got != want {
-		t.Fatalf("InstanceID = %q, want %q", got, want)
+	if got := len(result.RuntimePlatformRows); got != 0 {
+		t.Fatalf("len(RuntimePlatformRows) = %d, want 0 when no environment evidence exists", got)
 	}
-	if got, want := inst.WorkloadName, "api-node-boattrader"; got != want {
-		t.Fatalf("WorkloadName = %q, want %q", got, want)
+	if got := len(result.DeploymentSourceRows); got != 0 {
+		t.Fatalf("len(DeploymentSourceRows) = %d, want 0 when no runtime instance exists", got)
+	}
+}
+
+func TestBuildProjectionRowsSkipsNamespaceFallbackForNonEnvironmentNamespace(t *testing.T) {
+	t.Parallel()
+
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:         "repo-service-gha",
+			RepoName:       "service-gha",
+			Classification: "service",
+			Confidence:     0.98,
+			Namespaces:     []string{"service-gha"},
+			Provenance:     []string{"k8s_resource", "dockerfile_runtime"},
+		},
+	}
+
+	result := BuildProjectionRows(candidates, nil)
+
+	if got := result.Stats.Workloads; got != 1 {
+		t.Fatalf("Stats.Workloads = %d, want 1", got)
+	}
+	if got := result.Stats.Instances; got != 0 {
+		t.Fatalf("Stats.Instances = %d, want 0 for non-environment namespace fallback", got)
+	}
+	if got := len(result.InstanceRows); got != 0 {
+		t.Fatalf("len(InstanceRows) = %d, want 0 for non-environment namespace fallback", got)
+	}
+	if got := len(result.RuntimePlatformRows); got != 0 {
+		t.Fatalf("len(RuntimePlatformRows) = %d, want 0 for non-environment namespace fallback", got)
 	}
 }

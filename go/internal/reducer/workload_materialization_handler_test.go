@@ -135,6 +135,70 @@ func TestWorkloadMaterializationHandlerNoCandidatesSucceeds(t *testing.T) {
 	}
 }
 
+func TestWorkloadMaterializationHandlerUsesCorrelatedInputsByDefault(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	loader := &stubFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactID:   "fact-repo",
+				FactKind: "repository",
+				Payload: map[string]any{
+					"graph_id": "repo-service",
+					"name":     "service-repo",
+				},
+				ObservedAt: now,
+			},
+			{
+				FactID:   "fact-file",
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id":       "repo-service",
+					"language":      "dockerfile",
+					"relative_path": "Dockerfile",
+					"parsed_file_data": map[string]any{
+						"dockerfile_stages": []any{
+							map[string]any{"name": "runtime"},
+						},
+					},
+				},
+				ObservedAt: now,
+			},
+		},
+	}
+
+	handler := WorkloadMaterializationHandler{
+		FactLoader:   loader,
+		Materializer: NewWorkloadMaterializer(&recordingCypherExecutor{}),
+	}
+
+	intent := Intent{
+		IntentID:        "intent-wm-correlation-default",
+		ScopeID:         "scope-service",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "facts projected",
+		EntityKeys:      []string{"repo-service"},
+		RelatedScopeIDs: []string{"scope-service"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	result, err := handler.Handle(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if result.Status != ResultStatusSucceeded {
+		t.Fatalf("Status = %q, want succeeded", result.Status)
+	}
+	if got, want := result.CanonicalWrites, 0; got != want {
+		t.Fatalf("CanonicalWrites = %d, want %d for low-confidence dockerfile-only evidence", got, want)
+	}
+}
+
 func TestWorkloadMaterializationHandlerUsesArgoDeploymentSourceRelationships(t *testing.T) {
 	t.Parallel()
 
@@ -160,7 +224,7 @@ func TestWorkloadMaterializationHandlerUsesArgoDeploymentSourceRelationships(t *
 							map[string]any{
 								"name":      "service-edge-api",
 								"kind":      "Deployment",
-								"namespace": "modern",
+								"namespace": "production",
 							},
 						},
 					},
@@ -313,10 +377,10 @@ func TestWorkloadMaterializationHandlerSeedsRuntimeCandidateFromArgoDeploymentSo
 		t.Fatalf("candidates[0].DeploymentRepoID = %q, want %q", got, want)
 	}
 	projection := BuildProjectionRows(candidates, deploymentEnvironments)
-	// Two instances: edge-api (via DeploymentRepoID → platform-deploy overlays)
-	// and platform-deploy itself (via its own RepoID overlays, ArgoCD provenance).
-	if got := len(projection.InstanceRows); got != 2 {
-		t.Fatalf("len(projection.InstanceRows) = %d, want 2", got)
+	// One instance: edge-api inherits the deployment repo overlay environment.
+	// The deployment repo itself stays provenance-only and must not materialize.
+	if got := len(projection.InstanceRows); got != 1 {
+		t.Fatalf("len(projection.InstanceRows) = %d, want 1", got)
 	}
 	if got := len(projection.DeploymentSourceRows); got != 1 {
 		t.Fatalf("len(projection.DeploymentSourceRows) = %d, want 1", got)

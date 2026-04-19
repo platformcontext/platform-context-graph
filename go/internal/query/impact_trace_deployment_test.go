@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestFetchDeploymentSourcesIncludesRepositoryDeployEdges(t *testing.T) {
+func TestFetchDeploymentSourcesFallsBackToRepositoryDeployEdgesWhenNoCanonicalSourcesExist(t *testing.T) {
 	t.Parallel()
 
 	got, err := fetchDeploymentSourcesFromGraph(t.Context(), fakeRepoGraphReader{
@@ -44,6 +44,40 @@ func TestFetchDeploymentSourcesIncludesRepositoryDeployEdges(t *testing.T) {
 	}
 	if got[1]["reason"] != "kustomize_resource_reference" {
 		t.Fatalf("fetchDeploymentSources()[1].reason = %#v, want %#v", got[1]["reason"], "kustomize_resource_reference")
+	}
+}
+
+func TestFetchDeploymentSourcesPrefersCanonicalInstanceSources(t *testing.T) {
+	t.Parallel()
+
+	got, err := fetchDeploymentSourcesFromGraph(t.Context(), fakeRepoGraphReader{
+		runByMatch: map[string][]map[string]any{
+			"MATCH (w:Workload {id: $workload_id})<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:DEPLOYMENT_SOURCE]->(repo:Repository)": {
+				{
+					"repo_id":    "repo-runtime-deploy",
+					"repo_name":  "runtime-deploy",
+					"confidence": 0.97,
+					"reason":     "canonical_instance_deployment_source",
+				},
+			},
+			"coalesce(rel.reason, rel.evidence_type, 'repository_deploys_from') as reason": {
+				{
+					"repo_id":    "repo-legacy-deploy",
+					"repo_name":  "legacy-deploy",
+					"confidence": 0.62,
+					"reason":     "repository_deploys_from",
+				},
+			},
+		},
+	}, "workload:service-edge-api", "repository:r_service_edge_api")
+	if err != nil {
+		t.Fatalf("fetchDeploymentSources() error = %v, want nil", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len(fetchDeploymentSources()) = %d, want 1", len(got))
+	}
+	if got[0]["repo_name"] != "runtime-deploy" {
+		t.Fatalf("fetchDeploymentSources()[0].repo_name = %#v, want %#v", got[0]["repo_name"], "runtime-deploy")
 	}
 }
 
@@ -210,6 +244,28 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	}
 	if factSummary["mapping_mode"] != "controller" {
 		t.Fatalf("deployment_fact_summary.mapping_mode = %#v, want %q", factSummary["mapping_mode"], "controller")
+	}
+	if _, ok := factSummary["overall_confidence"]; !ok {
+		t.Fatal("deployment_fact_summary.overall_confidence missing")
+	}
+	if factSummary["overall_confidence_reason"] != "materialized_runtime_instances" {
+		t.Fatalf(
+			"deployment_fact_summary.overall_confidence_reason = %#v, want %q",
+			factSummary["overall_confidence_reason"],
+			"materialized_runtime_instances",
+		)
+	}
+	if factSummary["materialized_environment_count"] != 2 {
+		t.Fatalf(
+			"deployment_fact_summary.materialized_environment_count = %#v, want 2",
+			factSummary["materialized_environment_count"],
+		)
+	}
+	if factSummary["config_environment_count"] != 0 {
+		t.Fatalf(
+			"deployment_fact_summary.config_environment_count = %#v, want 0",
+			factSummary["config_environment_count"],
+		)
 	}
 
 	deploymentFacts, ok := got["deployment_facts"].([]map[string]any)

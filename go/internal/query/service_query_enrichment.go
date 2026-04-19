@@ -151,17 +151,21 @@ func buildServiceStoryResponse(serviceName string, workloadContext map[string]an
 func buildServiceDeploymentOverview(workloadContext map[string]any) map[string]any {
 	instances, _ := workloadContext["instances"].([]map[string]any)
 	platforms := distinctSortedInstanceField(instances, "platform_name")
-	observedEnvironments := mergeStringSets(
-		distinctSortedInstanceField(instances, "environment"),
-		StringSliceVal(workloadContext, "observed_config_environments"),
-	)
+	materializedEnvironments := distinctSortedInstanceField(instances, "environment")
+	configEnvironments := StringSliceVal(workloadContext, "observed_config_environments")
 
 	overview := map[string]any{
-		"instance_count":    len(instances),
-		"environment_count": len(observedEnvironments),
-		"platform_count":    len(platforms),
-		"platforms":         platforms,
-		"environments":      observedEnvironments,
+		"instance_count":                 len(instances),
+		"environment_count":              len(materializedEnvironments),
+		"materialized_environment_count": len(materializedEnvironments),
+		"config_environment_count":       len(configEnvironments),
+		"platform_count":                 len(platforms),
+		"platforms":                      platforms,
+		"environments":                   materializedEnvironments,
+		"materialized_environments":      materializedEnvironments,
+	}
+	if len(configEnvironments) > 0 {
+		overview["config_environments"] = configEnvironments
 	}
 	if hostnames := mapSliceValue(workloadContext, "hostnames"); len(hostnames) > 0 {
 		overview["hostname_count"] = len(hostnames)

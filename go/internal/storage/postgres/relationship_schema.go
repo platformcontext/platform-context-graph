@@ -145,12 +145,26 @@ VALUES ($1, $2, $3, 'pending', $4)
 `
 
 const activateGenerationSQL = `
+WITH deactivate AS (
+    UPDATE relationship_generations
+    SET status = 'superseded'
+    WHERE scope = $3
+      AND generation_id <> $2
+      AND status = 'active'
+)
 UPDATE relationship_generations
 SET status = 'active', activated_at = $1
 WHERE generation_id = $2 AND scope = $3
 `
 
 const activateResolutionGenerationSQL = `
+WITH deactivate AS (
+    UPDATE relationship_generations
+    SET status = 'superseded'
+    WHERE scope = $2
+      AND generation_id <> $1
+      AND status = 'active'
+)
 INSERT INTO relationship_generations (generation_id, scope, status, created_at, activated_at)
 VALUES ($1, $2, 'active', $3, $4)
 ON CONFLICT (generation_id) DO UPDATE SET status = 'active', activated_at = $4
@@ -206,6 +220,22 @@ JOIN relationship_generations AS g
   ON g.generation_id = r.generation_id
 WHERE g.scope = $1
   AND g.status = 'active'
+ORDER BY COALESCE(r.source_entity_id, r.source_repo_id),
+         COALESCE(r.target_entity_id, r.target_repo_id),
+         r.relationship_type
+`
+
+const listResolvedByGenerationSQL = `
+SELECT r.source_repo_id, r.target_repo_id,
+       COALESCE(r.source_entity_id, r.source_repo_id),
+       COALESCE(r.target_entity_id, r.target_repo_id),
+       r.relationship_type, r.confidence, r.evidence_count,
+       r.rationale, r.resolution_source, r.details
+FROM resolved_relationships AS r
+JOIN relationship_generations AS g
+  ON g.generation_id = r.generation_id
+WHERE g.scope = $1
+  AND g.generation_id = $2
 ORDER BY COALESCE(r.source_entity_id, r.source_repo_id),
          COALESCE(r.target_entity_id, r.target_repo_id),
          r.relationship_type

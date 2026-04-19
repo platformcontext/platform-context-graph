@@ -4,7 +4,7 @@ package rules
 func DockerfileRulePack() RulePack {
 	return RulePack{
 		Name:                   "dockerfile",
-		MinAdmissionConfidence: 0.88,
+		MinAdmissionConfidence: 0.90,
 		RequiredEvidence: []EvidenceRequirement{
 			{
 				Name:     "runtime-image",

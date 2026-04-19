@@ -83,6 +83,9 @@ func TestBuildServiceEntrypointsSeparatesPublicAndInternalSignals(t *testing.T) 
 	if got, want := StringVal(entrypoints[0], "type"), "docs_route"; got != want {
 		t.Fatalf("entrypoints[0].type = %q, want %q", got, want)
 	}
+	if got := StringVal(entrypoints[0], "environment"); got != "" {
+		t.Fatalf("entrypoints[0].environment = %q, want empty without explicit evidence", got)
+	}
 	if got, want := StringVal(entrypoints[1], "visibility"), "public"; got != want {
 		t.Fatalf("entrypoints[1].visibility = %q, want %q", got, want)
 	}
@@ -128,6 +131,42 @@ func TestBuildServiceNetworkPathsConnectsEntrypointsToObservedRuntimeTargets(t *
 	}
 	if got, want := StringVal(paths[1], "to"), "sample-eks"; got != want {
 		t.Fatalf("paths[1].to = %q, want %q", got, want)
+	}
+}
+
+func TestBuildServiceNetworkPathsDoesNotFallBackToFirstRuntimeWithoutEnvironmentMatch(t *testing.T) {
+	t.Parallel()
+
+	workloadContext := map[string]any{
+		"name": "sample-service-api",
+		"instances": []map[string]any{
+			{
+				"instance_id":   "instance:sample-service-api:qa",
+				"platform_name": "sample-eks-qa",
+				"platform_kind": "eks",
+				"environment":   "qa",
+			},
+			{
+				"instance_id":   "instance:sample-service-api:prod",
+				"platform_name": "sample-eks-prod",
+				"platform_kind": "eks",
+				"environment":   "prod",
+			},
+		},
+	}
+	entrypoints := []map[string]any{
+		{
+			"type":        "docs_route",
+			"target":      "/_specs",
+			"environment": "",
+			"visibility":  "internal",
+			"reason":      "docs_route_reference",
+		},
+	}
+
+	paths := buildServiceNetworkPaths(workloadContext, entrypoints)
+	if len(paths) != 0 {
+		t.Fatalf("len(network_paths) = %d, want 0 without an environment match", len(paths))
 	}
 }
 
