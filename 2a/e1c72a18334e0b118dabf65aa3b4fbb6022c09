@@ -1,0 +1,88 @@
+CLAUDE.md
+  fd73f686cb9c9a3f 150-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "2ae1c72a18334e0b118dabf65aa3b4fbb6022c09",
+  "prompts": {
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 230,
+      "total_deletions": 66,
+      "accepted_lines": 230,
+      "overriden_lines": 0
+    },
+    "0f076cc9d18245fc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da684-3ae1-7f31-a40d-bfa6416d77a4",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 105,
+      "total_deletions": 0,
+      "accepted_lines": 105,
+      "overriden_lines": 0
+    },
+    "34edbe2421875f6a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da684-3c8c-79d0-9f78-595b0e0560e7",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 22,
+      "total_deletions": 2,
+      "accepted_lines": 22,
+      "overriden_lines": 0
+    },
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 17,
+      "overriden_lines": 0
+    },
+    "afaff32908d8a1e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da66b-c12c-7253-9d5c-020b804a425e",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 84,
+      "total_deletions": 1,
+      "accepted_lines": 81,
+      "overriden_lines": 3
+    },
+    "fd73f686cb9c9a3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "84c49d72-a249-4917-a2bf-08ba4698fd03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 814,
+      "total_deletions": 53,
+      "accepted_lines": 863,
+      "overriden_lines": 1
+    }
+  }
+}
