@@ -159,6 +159,9 @@ func extractArtifactSignals(
 	// Dockerfile: language is "dockerfile" and has parsed stages.
 	if lang == "dockerfile" && len(sliceValue(fileData["dockerfile_stages"])) > 0 {
 		sig.addProvenance("dockerfile_runtime", 0.80)
+		if relativePath != "" {
+			sig.addProvenance("dockerfile_runtime:"+relativePath, 0.80)
+		}
 		return
 	}
 
@@ -210,7 +213,8 @@ func isJenkinsArtifact(relativePath string, fileData map[string]any) bool {
 	if strings.EqualFold(strings.TrimSpace(relativePath), "Jenkinsfile") {
 		return true
 	}
-	return len(sliceValue(fileData["jenkins_pipeline_calls"])) > 0
+	return len(sliceValue(fileData["jenkins_pipeline_calls"])) > 0 ||
+		len(sliceValue(fileData["pipeline_calls"])) > 0
 }
 
 func extractOverlayEnvs(repoID, relativePath string, deploymentEnvs map[string]map[string]struct{}) {

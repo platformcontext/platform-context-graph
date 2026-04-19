@@ -519,6 +519,68 @@ func TestWorkloadMaterializationHandlerSkipsUtilityOnlyCandidate(t *testing.T) {
 	}
 }
 
+func TestWorkloadMaterializationHandlerUsesPreCorrelatedInputLoader(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	inputLoader := &stubWorkloadProjectionInputLoader{
+		candidates: []WorkloadCandidate{
+			{
+				RepoID:           "repo-precorrelated",
+				RepoName:         "precorrelated-service",
+				ResourceKinds:    []string{"deployment"},
+				Namespaces:       []string{"production"},
+				DeploymentRepoID: "repo-delivery",
+				Classification:   "service",
+				Confidence:       0.97,
+				Provenance:       []string{"argocd_application_source"},
+			},
+		},
+		deploymentEnvironments: map[string][]string{
+			"repo-delivery": {"production"},
+		},
+	}
+	factLoader := &stubFactLoader{}
+	executor := &recordingCypherExecutor{}
+
+	handler := WorkloadMaterializationHandler{
+		FactLoader:   factLoader,
+		InputLoader:  inputLoader,
+		Materializer: NewWorkloadMaterializer(executor),
+	}
+
+	intent := Intent{
+		IntentID:        "intent-wm-precorrelated",
+		ScopeID:         "scope-precorrelated",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "precorrelated inputs ready",
+		EntityKeys:      []string{"repo-precorrelated"},
+		RelatedScopeIDs: []string{"scope-precorrelated"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	result, err := handler.Handle(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if result.CanonicalWrites == 0 {
+		t.Fatal("CanonicalWrites = 0, want > 0")
+	}
+	if inputLoader.calls != 1 {
+		t.Fatalf("InputLoader calls = %d, want 1", inputLoader.calls)
+	}
+	if factLoader.calls != 0 {
+		t.Fatalf("FactLoader calls = %d, want 0 when pre-correlated inputs are provided", factLoader.calls)
+	}
+	if !recordedCallContainsParam(executor.calls, "deployment_repo_id", "repo-delivery") {
+		t.Fatal("missing deployment_repo_id row for repo-delivery")
+	}
+}
+
 func TestWorkloadMaterializationHandlerRejectsMissingDomain(t *testing.T) {
 	t.Parallel()
 
@@ -597,6 +659,24 @@ func (f *stubResolvedRelationshipLoader) GetResolvedRelationships(
 ) ([]relationships.ResolvedRelationship, error) {
 	f.calls++
 	return f.resolved, nil
+}
+
+type stubWorkloadProjectionInputLoader struct {
+	candidates             []WorkloadCandidate
+	deploymentEnvironments map[string][]string
+	err                    error
+	calls                  int
+}
+
+func (f *stubWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
+	_ context.Context,
+	_ Intent,
+) ([]WorkloadCandidate, map[string][]string, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, nil, f.err
+	}
+	return f.candidates, f.deploymentEnvironments, nil
 }
 
 type recordingCypherExecutor struct {

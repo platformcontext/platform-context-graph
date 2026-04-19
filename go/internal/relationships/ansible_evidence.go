@@ -33,6 +33,7 @@ func discoverAnsibleDocumentEvidence(
 ) []EvidenceFact {
 	var evidence []EvidenceFact
 	for _, candidate := range ansibleRoleCandidates(document) {
+		refKind, refName, normalized := normalizeAnsibleReference(candidate)
 		evidence = append(evidence, matchCatalog(
 			sourceRepoID,
 			candidate.value,
@@ -44,11 +45,20 @@ func discoverAnsibleDocumentEvidence(
 			"ansible",
 			catalog,
 			seen,
-			map[string]any{
-				"role_name":     candidate.roleName,
-				"source_ref":    candidate.value,
-				"reference_key": candidate.key,
-			},
+			withFirstPartyRefDetails(
+				map[string]any{
+					"role_name":      candidate.roleName,
+					"source_ref":     candidate.value,
+					"reference_key":  candidate.key,
+					"reference_name": refName,
+				},
+				refKind,
+				refName,
+				candidate.value,
+				"",
+				"",
+				normalized,
+			),
 		)...)
 	}
 	return evidence

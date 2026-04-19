@@ -142,7 +142,7 @@ func (m *WorkloadMaterializer) Materialize(
 			rows[i] = map[string]any{
 				"instance_id":           row.InstanceID,
 				"deployment_repo_id":    row.DeploymentRepoID,
-				"deployment_confidence": normalizedCandidateConfidence(row.Confidence),
+				"deployment_confidence": row.Confidence,
 				"deployment_provenance": row.Provenance,
 				"evidence_source":       EvidenceSourceWorkloads,
 			}

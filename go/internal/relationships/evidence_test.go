@@ -242,6 +242,81 @@ func TestDiscoverHelmValuesEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverStructuredHelmEvidenceIncludesNormalizedFirstPartyDetails(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-deploy",
+			Payload: map[string]any{
+				"artifact_type": "helm",
+				"relative_path": "charts/app/Chart.yaml",
+				"parsed_file_data": map[string]any{
+					"helm_charts": []any{
+						map[string]any{
+							"name":                    "payments",
+							"dependencies":            "payments-service",
+							"dependency_repositories": "file://../payments-service",
+						},
+					},
+				},
+			},
+		},
+		{
+			ScopeID: "repo-deploy",
+			Payload: map[string]any{
+				"artifact_type": "helm",
+				"relative_path": "charts/app/values.yaml",
+				"parsed_file_data": map[string]any{
+					"helm_values": []any{
+						map[string]any{
+							"name":               "values",
+							"image_repositories": "ghcr.io/example/payments-service:1.2.3",
+						},
+					},
+				},
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 3 {
+		t.Fatalf("len(evidence) = %d, want 3", len(evidence))
+	}
+
+	var sawDependencyRepository bool
+	var sawImageRepository bool
+	for _, item := range evidence {
+		switch item.Details["first_party_ref_kind"] {
+		case "helm_dependency_repository":
+			sawDependencyRepository = true
+			if got, want := item.Details["first_party_ref_normalized"], "../payments-service"; got != want {
+				t.Fatalf("dependency repository normalized = %#v, want %#v", got, want)
+			}
+			if got, want := item.Details["helm_chart_name"], "payments"; got != want {
+				t.Fatalf("helm_chart_name = %#v, want %#v", got, want)
+			}
+		case "helm_image_repository":
+			sawImageRepository = true
+			if got, want := item.Details["first_party_ref_normalized"], "ghcr.io/example/payments-service"; got != want {
+				t.Fatalf("image repository normalized = %#v, want %#v", got, want)
+			}
+			if got, want := item.Details["helm_values_name"], "values"; got != want {
+				t.Fatalf("helm_values_name = %#v, want %#v", got, want)
+			}
+		}
+	}
+	if !sawDependencyRepository {
+		t.Fatal("missing normalized Helm dependency repository evidence details")
+	}
+	if !sawImageRepository {
+		t.Fatal("missing normalized Helm image repository evidence details")
+	}
+}
+
 func TestDiscoverKustomizeEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -347,6 +422,98 @@ spec:
 	}
 }
 
+func TestDiscoverStructuredArgoCDEvidenceIncludesNormalizedFirstPartyDetails(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"artifact_type": "argocd",
+				"relative_path": "apps/payments.yaml",
+				"parsed_file_data": map[string]any{
+					"argocd_applications": []any{
+						map[string]any{
+							"name":            "payments",
+							"source_repo":     "https://github.com/myorg/payments-service.git",
+							"source_path":     "deploy/overlays/prod",
+							"source_root":     "deploy/",
+							"source_revision": "main",
+							"dest_name":       "prod-cluster",
+						},
+					},
+					"argocd_applicationsets": []any{
+						map[string]any{
+							"name":                   "payments-appset",
+							"generator_source_repos": "https://github.com/myorg/payments-config.git",
+							"generator_source_paths": "argocd/payments/*/config.yaml",
+							"source_roots":           "argocd/payments/",
+							"template_source_repos":  "https://github.com/myorg/payments-service.git",
+							"template_source_paths":  "deploy/overlays/prod",
+							"template_source_roots":  "deploy/",
+							"dest_name":              "prod-cluster",
+						},
+					},
+				},
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-config", Aliases: []string{"payments-config"}},
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if len(evidence) != 4 {
+		t.Fatalf("len(evidence) = %d, want 4", len(evidence))
+	}
+
+	var sawAppSource bool
+	var sawDiscovery bool
+	var sawDeploySource bool
+	for _, item := range evidence {
+		switch item.EvidenceKind {
+		case EvidenceKindArgoCDAppSource:
+			sawAppSource = true
+			if got, want := item.Details["first_party_ref_kind"], "argocd_application_source"; got != want {
+				t.Fatalf("application ref kind = %#v, want %#v", got, want)
+			}
+			if got, want := item.Details["first_party_ref_path"], "deploy/overlays/prod"; got != want {
+				t.Fatalf("application ref path = %#v, want %#v", got, want)
+			}
+			if got, want := item.Details["first_party_ref_root"], "deploy/"; got != want {
+				t.Fatalf("application ref root = %#v, want %#v", got, want)
+			}
+		case EvidenceKindArgoCDApplicationSetDiscovery:
+			sawDiscovery = true
+			if got, want := item.Details["first_party_ref_kind"], "argocd_applicationset_discovery"; got != want {
+				t.Fatalf("appset discovery ref kind = %#v, want %#v", got, want)
+			}
+			if got, want := item.Details["first_party_ref_root"], "argocd/payments/"; got != want {
+				t.Fatalf("appset discovery ref root = %#v, want %#v", got, want)
+			}
+		case EvidenceKindArgoCDApplicationSetDeploySource:
+			sawDeploySource = true
+			if got, want := item.Details["first_party_ref_kind"], "argocd_applicationset_template_source"; got != want {
+				t.Fatalf("appset deploy ref kind = %#v, want %#v", got, want)
+			}
+			if got, want := item.Details["first_party_ref_root"], "deploy/"; got != want {
+				t.Fatalf("appset deploy ref root = %#v, want %#v", got, want)
+			}
+		}
+	}
+
+	if !sawAppSource {
+		t.Fatal("missing structured ArgoCD application evidence")
+	}
+	if !sawDiscovery {
+		t.Fatal("missing structured ArgoCD ApplicationSet discovery evidence")
+	}
+	if !sawDeploySource {
+		t.Fatal("missing structured ArgoCD ApplicationSet deploy evidence")
+	}
+}
+
 func TestDiscoverGitHubActionsReusableWorkflowEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -380,6 +547,15 @@ jobs:
 	}
 	if evidence[0].TargetRepoID != "repo-deploy" {
 		t.Fatalf("target = %q, want %q", evidence[0].TargetRepoID, "repo-deploy")
+	}
+	if got, want := evidence[0].Details["first_party_ref_kind"], "github_actions_reusable_workflow"; got != want {
+		t.Fatalf("first_party_ref_kind = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["first_party_ref_path"], ".github/workflows/deploy.yaml"; got != want {
+		t.Fatalf("first_party_ref_path = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["first_party_ref_version"], "main"; got != want {
+		t.Fatalf("first_party_ref_version = %#v, want %#v", got, want)
 	}
 }
 
@@ -580,6 +756,17 @@ jobs:
 	if !hasRelationshipType(evidence, RelDependsOn) {
 		t.Fatalf("missing %q evidence", RelDependsOn)
 	}
+	for _, item := range evidence {
+		if item.EvidenceKind != EvidenceKindGitHubActionsActionRepository {
+			continue
+		}
+		if got, want := item.Details["first_party_ref_kind"], "github_actions_action"; got != want {
+			t.Fatalf("first_party_ref_kind = %#v, want %#v", got, want)
+		}
+		if got, ok := item.Details["first_party_ref_version"].(string); !ok || got == "" {
+			t.Fatalf("first_party_ref_version = %#v, want non-empty string", item.Details["first_party_ref_version"])
+		}
+	}
 }
 
 func TestDiscoverGitHubActionsLocalReusableWorkflowEvidence(t *testing.T) {
@@ -760,6 +947,9 @@ func TestDiscoverJenkinsSharedLibraryEvidenceTrimsVersionSuffix(t *testing.T) {
 	if got, want := evidence[0].Details["shared_library"], "pipelines"; got != want {
 		t.Fatalf("shared_library = %#v, want %#v", got, want)
 	}
+	if got, want := evidence[0].Details["first_party_ref_kind"], "jenkins_shared_library"; got != want {
+		t.Fatalf("first_party_ref_kind = %#v, want %#v", got, want)
+	}
 }
 
 func TestDiscoverJenkinsGitHubRepositoryEvidence(t *testing.T) {
@@ -810,6 +1000,12 @@ func TestDiscoverJenkinsGitHubRepositoryEvidence(t *testing.T) {
 	if got, want := evidence[0].Details["use_configd"], true; got != want {
 		t.Fatalf("use_configd = %#v, want %#v", got, want)
 	}
+	if got, want := evidence[0].Details["first_party_ref_kind"], "jenkins_repository"; got != want {
+		t.Fatalf("first_party_ref_kind = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["first_party_ref_name"], "terraform-modules-aws"; got != want {
+		t.Fatalf("first_party_ref_name = %#v, want %#v", got, want)
+	}
 }
 
 func TestDiscoverAnsibleRoleReferenceEvidenceIncludesResolvedMetadata(t *testing.T) {
@@ -854,6 +1050,12 @@ func TestDiscoverAnsibleRoleReferenceEvidenceIncludesResolvedMetadata(t *testing
 	}
 	if got, want := evidence[0].Details["source_ref"], "git+https://github.com/myorg/payments-service.git"; got != want {
 		t.Fatalf("source_ref = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["first_party_ref_kind"], "ansible_role_source"; got != want {
+		t.Fatalf("first_party_ref_kind = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["first_party_ref_name"], "payments-service"; got != want {
+		t.Fatalf("first_party_ref_name = %#v, want %#v", got, want)
 	}
 }
 

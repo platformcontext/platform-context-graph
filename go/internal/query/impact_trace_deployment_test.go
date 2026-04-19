@@ -508,3 +508,62 @@ func TestBuildDeploymentTraceResponseIncludesServiceEvidenceConsumersAndProvisio
 		t.Fatal("support_overview missing, want service support summary")
 	}
 }
+
+func TestBuildDeploymentTraceResponseDeduplicatesRepositoryDeliveryPaths(t *testing.T) {
+	t.Parallel()
+
+	ctx := map[string]any{
+		"id":        "workload-1",
+		"name":      "payments-api",
+		"kind":      "service",
+		"repo_id":   "repo-1",
+		"repo_name": "payments",
+		"instances": []map[string]any{
+			{
+				"instance_id":   "inst-1",
+				"platform_name": "payments-argocd",
+				"platform_kind": "argocd_application",
+				"environment":   "prod",
+			},
+		},
+		"deployment_sources": []map[string]any{
+			{
+				"repo_id":    "repo-helm",
+				"repo_name":  "deployment-helm",
+				"confidence": 0.98,
+			},
+		},
+		"deployment_evidence": map[string]any{
+			"delivery_paths": []map[string]any{
+				{
+					"type":   "deployment_source",
+					"target": "deployment-helm",
+				},
+				{
+					"kind": "workflow_artifact",
+					"path": ".github/workflows/deploy.yaml",
+				},
+				{
+					"kind": "workflow_artifact",
+					"path": ".github/workflows/deploy.yaml",
+				},
+			},
+		},
+	}
+
+	got := buildDeploymentTraceResponse("payments-api", ctx)
+
+	deliveryPaths, ok := got["delivery_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
+	}
+	if gotCount, want := len(deliveryPaths), 2; gotCount != want {
+		t.Fatalf("len(delivery_paths) = %d, want %d", gotCount, want)
+	}
+	if got, want := StringVal(deliveryPaths[0], "target"), "deployment-helm"; got != want {
+		t.Fatalf("delivery_paths[0].target = %q, want %q", got, want)
+	}
+	if got, want := StringVal(deliveryPaths[1], "type"), "repository_delivery_artifact"; got != want {
+		t.Fatalf("delivery_paths[1].type = %q, want %q", got, want)
+	}
+}

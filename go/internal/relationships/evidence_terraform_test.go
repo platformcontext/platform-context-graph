@@ -184,6 +184,12 @@ func TestDiscoverTerraformAndTerragruntHelperBuiltPathEvidence(t *testing.T) {
 			if got, want := evidence[0].TargetRepoID, tt.wantTarget; got != want {
 				t.Fatalf("TargetRepoID = %q, want %q", got, want)
 			}
+			if got, ok := evidence[0].Details["first_party_ref_kind"].(string); !ok || got == "" {
+				t.Fatalf("first_party_ref_kind = %#v, want non-empty string", evidence[0].Details["first_party_ref_kind"])
+			}
+			if got, ok := evidence[0].Details["first_party_ref_normalized"].(string); !ok || got == "" {
+				t.Fatalf("first_party_ref_normalized = %#v, want non-empty string", evidence[0].Details["first_party_ref_normalized"])
+			}
 		})
 	}
 }

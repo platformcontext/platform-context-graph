@@ -127,6 +127,7 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 
 	WriteJSON(w, http.StatusOK, map[string]any{
 		"entities": entities,
+		"matches":  entities,
 		"count":    len(entities),
 	})
 }
@@ -212,13 +213,26 @@ func (h *EntityHandler) resolveEntityFromContent(
 	limit int,
 ) ([]map[string]any, error) {
 	if h == nil || h.Content == nil || repoID == "" || name == "" {
-		return nil, nil
+		if h == nil || h.Content == nil || name == "" {
+			return nil, nil
+		}
 	}
 
 	entityType := contentEntityTypeForResolve(typeName)
-	rows, err := h.Content.SearchEntitiesByName(ctx, repoID, entityType, name, limit)
-	if err != nil {
-		return nil, err
+	var (
+		rows []EntityContent
+		err  error
+	)
+	if repoID != "" {
+		rows, err = h.Content.SearchEntitiesByName(ctx, repoID, entityType, name, limit)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		rows, err = h.Content.SearchEntitiesByNameAnyRepo(ctx, entityType, name, limit)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	results := make([]map[string]any, 0, len(rows))

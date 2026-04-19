@@ -17,7 +17,15 @@ func discoverJenkinsEvidence(
 	commonDetails := jenkinsEvidenceDetails(parsedFileData)
 
 	for _, library := range jenkinsSharedLibraries(parsedFileData) {
-		details := cloneDetails(commonDetails)
+		details := withFirstPartyRefDetails(
+			cloneDetails(commonDetails),
+			"jenkins_shared_library",
+			library,
+			"",
+			"",
+			"",
+			library,
+		)
 		details["shared_library"] = library
 		evidence = append(evidence, matchCatalog(
 			sourceRepoID, library, filePath,
@@ -28,8 +36,18 @@ func discoverJenkinsEvidence(
 	}
 
 	for _, repoRef := range jenkinsGitHubRepoRefs(content, parsedFileData) {
-		details := cloneDetails(commonDetails)
+		repositoryName := normalizeRepositoryURLName(repoRef)
+		details := withFirstPartyRefDetails(
+			cloneDetails(commonDetails),
+			"jenkins_repository",
+			repositoryName,
+			"",
+			"",
+			"",
+			repositoryName,
+		)
 		details["repository_ref"] = repoRef
+		details["repository_name"] = repositoryName
 		evidence = append(evidence, matchCatalog(
 			sourceRepoID, repoRef, filePath,
 			EvidenceKindJenkinsGitHubRepository, RelDiscoversConfigIn, 0.92,

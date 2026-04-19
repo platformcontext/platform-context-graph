@@ -10,6 +10,7 @@ import (
 type relationshipsRequest struct {
 	EntityID         string `json:"entity_id"`
 	Name             string `json:"name"`
+	RepoID           string `json:"repo_id"`
 	Direction        string `json:"direction"`
 	RelationshipType string `json:"relationship_type"`
 }
@@ -34,13 +35,13 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 	relationshipType := strings.ToUpper(strings.TrimSpace(req.RelationshipType))
 	ctx := r.Context()
 
-	row, err := h.relationshipsGraphRow(ctx, req.EntityID, req.Name)
+	row, err := h.relationshipsGraphRow(ctx, req.EntityID, req.Name, req.RepoID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if row == nil {
-		response, fallbackErr := h.relationshipsFromContent(ctx, req.EntityID, req.Name)
+		response, fallbackErr := h.relationshipsFromContent(ctx, req.EntityID, req.Name, req.RepoID)
 		if fallbackErr != nil {
 			WriteError(w, http.StatusInternalServerError, fallbackErr.Error())
 			return
@@ -90,6 +91,7 @@ func (h *CodeHandler) relationshipsGraphRow(
 	ctx context.Context,
 	entityID string,
 	name string,
+	repoID string,
 ) (map[string]any, error) {
 	if h == nil || h.Neo4j == nil {
 		return nil, nil
@@ -102,6 +104,14 @@ func (h *CodeHandler) relationshipsGraphRow(
 	}
 	if strings.TrimSpace(name) == "" {
 		return nil, nil
+	}
+	if strings.TrimSpace(repoID) != "" {
+		return h.Neo4j.RunSingle(ctx, relationshipGraphRowCypher(
+			"e.name = $name AND EXISTS { MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(repo:Repository) WHERE repo.id = $repo_id }",
+		), map[string]any{
+			"name":    name,
+			"repo_id": repoID,
+		})
 	}
 
 	rows, err := h.Neo4j.Run(ctx, relationshipGraphRowCypher("e.name = $name"), map[string]any{
@@ -165,12 +175,13 @@ func (h *CodeHandler) relationshipsFromContent(
 	ctx context.Context,
 	entityID string,
 	name string,
+	repoID string,
 ) (map[string]any, error) {
 	if h == nil || h.Content == nil {
 		return nil, nil
 	}
 
-	entity, err := h.resolveRelationshipEntity(ctx, entityID, name)
+	entity, err := h.resolveRelationshipEntity(ctx, entityID, name, repoID)
 	if err != nil || entity == nil {
 		return nil, err
 	}
@@ -182,6 +193,7 @@ func (h *CodeHandler) resolveRelationshipEntity(
 	ctx context.Context,
 	entityID string,
 	name string,
+	repoID string,
 ) (*EntityContent, error) {
 	if strings.TrimSpace(entityID) != "" {
 		return h.Content.GetEntityContent(ctx, entityID)
@@ -190,7 +202,15 @@ func (h *CodeHandler) resolveRelationshipEntity(
 		return nil, nil
 	}
 
-	matches, err := h.Content.SearchEntitiesByNameAnyRepo(ctx, "", name, 2)
+	var (
+		matches []EntityContent
+		err     error
+	)
+	if strings.TrimSpace(repoID) != "" {
+		matches, err = h.Content.SearchEntitiesByName(ctx, repoID, "", name, 2)
+	} else {
+		matches, err = h.Content.SearchEntitiesByNameAnyRepo(ctx, "", name, 2)
+	}
 	if err != nil {
 		return nil, err
 	}

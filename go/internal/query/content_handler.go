@@ -143,10 +143,7 @@ func (h *ContentHandler) searchFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"results": results,
-		"count":   len(results),
-	})
+	WriteJSON(w, http.StatusOK, contentSearchResponse(results))
 }
 
 // searchEntities searches entity source cache by pattern.
@@ -169,10 +166,7 @@ func (h *ContentHandler) searchEntities(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"results": results,
-		"count":   len(results),
-	})
+	WriteJSON(w, http.StatusOK, contentSearchResponse(results))
 }
 
 type contentSearchRequest struct {
@@ -284,4 +278,20 @@ func (h *ContentHandler) searchEntitiesByScope(ctx context.Context, req contentS
 		return results, nil
 	}
 	return h.Content.SearchEntityContentAnyRepo(ctx, req.pattern(), req.limit())
+}
+
+func contentSearchResponse(results any) map[string]any {
+	count := 0
+	switch typed := results.(type) {
+	case []FileContent:
+		count = len(typed)
+	case []EntityContent:
+		count = len(typed)
+	}
+	return map[string]any{
+		"results":        results,
+		"matches":        results,
+		"count":          count,
+		"source_backend": "postgres_content_store",
+	}
 }

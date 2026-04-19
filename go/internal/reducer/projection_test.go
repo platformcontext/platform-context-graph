@@ -195,6 +195,8 @@ func TestBuildProjectionRowsSingleCandidate(t *testing.T) {
 			ResourceKinds:    []string{"Deployment", "Service"},
 			Namespaces:       []string{"production"},
 			DeploymentRepoID: "",
+			Confidence:       0.98,
+			Provenance:       []string{"k8s_resource"},
 		},
 	}
 	result := BuildProjectionRows(candidates, nil)
@@ -240,6 +242,44 @@ func TestBuildProjectionRowsSingleCandidate(t *testing.T) {
 	}
 }
 
+func TestBuildProjectionRowsUsesExplicitWorkloadName(t *testing.T) {
+	t.Parallel()
+
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:           "repo-1",
+			RepoName:         "monolith-repo",
+			WorkloadName:     "api",
+			ResourceKinds:    []string{"Deployment"},
+			Namespaces:       []string{"production"},
+			DeploymentRepoID: "deploy-repo-1",
+			Classification:   "service",
+			Confidence:       0.96,
+			Provenance:       []string{"argocd_application_source"},
+		},
+	}
+	deploymentEnvs := map[string][]string{
+		"deploy-repo-1": {"production"},
+	}
+
+	result := BuildProjectionRows(candidates, deploymentEnvs)
+	if len(result.WorkloadRows) != 1 {
+		t.Fatalf("len(WorkloadRows) = %d, want 1", len(result.WorkloadRows))
+	}
+	if got, want := result.WorkloadRows[0].WorkloadID, "workload:api"; got != want {
+		t.Fatalf("WorkloadID = %q, want %q", got, want)
+	}
+	if got, want := result.WorkloadRows[0].WorkloadName, "api"; got != want {
+		t.Fatalf("WorkloadName = %q, want %q", got, want)
+	}
+	if len(result.InstanceRows) != 1 {
+		t.Fatalf("len(InstanceRows) = %d, want 1", len(result.InstanceRows))
+	}
+	if got, want := result.InstanceRows[0].InstanceID, "workload-instance:api:production"; got != want {
+		t.Fatalf("InstanceID = %q, want %q", got, want)
+	}
+}
+
 func TestBuildProjectionRowsWithDeploymentEnvironments(t *testing.T) {
 	t.Parallel()
 	candidates := []WorkloadCandidate{
@@ -248,6 +288,8 @@ func TestBuildProjectionRowsWithDeploymentEnvironments(t *testing.T) {
 			RepoName:         "my-api",
 			ResourceKinds:    []string{"Deployment"},
 			DeploymentRepoID: "deploy-repo-1",
+			Confidence:       0.95,
+			Provenance:       []string{"argocd_application_source"},
 		},
 	}
 	deploymentEnvs := map[string][]string{
@@ -307,6 +349,8 @@ func TestBuildProjectionRowsRuntimePlatformFromResourceKinds(t *testing.T) {
 			RepoName:      "my-api",
 			ResourceKinds: []string{"Deployment", "Service"},
 			Namespaces:    []string{"production"},
+			Confidence:    0.98,
+			Provenance:    []string{"k8s_resource"},
 		},
 	}
 	result := BuildProjectionRows(candidates, nil)
@@ -329,8 +373,8 @@ func TestBuildProjectionRowsRuntimePlatformFromResourceKinds(t *testing.T) {
 func TestBuildProjectionRowsDeduplicatesWorkloads(t *testing.T) {
 	t.Parallel()
 	candidates := []WorkloadCandidate{
-		{RepoID: "repo-1", RepoName: "my-api", Namespaces: []string{"prod"}},
-		{RepoID: "repo-1", RepoName: "my-api", Namespaces: []string{"staging"}},
+		{RepoID: "repo-1", RepoName: "my-api", Namespaces: []string{"prod"}, Confidence: 0.98},
+		{RepoID: "repo-1", RepoName: "my-api", Namespaces: []string{"staging"}, Confidence: 0.98},
 	}
 	result := BuildProjectionRows(candidates, nil)
 
@@ -345,8 +389,8 @@ func TestBuildProjectionRowsDeduplicatesWorkloads(t *testing.T) {
 func TestBuildProjectionRowsDeduplicatesInstances(t *testing.T) {
 	t.Parallel()
 	candidates := []WorkloadCandidate{
-		{RepoID: "repo-1", RepoName: "my-api", Namespaces: []string{"prod"}},
-		{RepoID: "repo-1", RepoName: "my-api", Namespaces: []string{"prod"}},
+		{RepoID: "repo-1", RepoName: "my-api", Namespaces: []string{"prod"}, Confidence: 0.98},
+		{RepoID: "repo-1", RepoName: "my-api", Namespaces: []string{"prod"}, Confidence: 0.98},
 	}
 	result := BuildProjectionRows(candidates, nil)
 
@@ -363,6 +407,8 @@ func TestBuildProjectionRowsNoRuntimePlatformWithoutKubernetesKinds(t *testing.T
 			RepoName:      "my-lib",
 			ResourceKinds: []string{},
 			Namespaces:    []string{"production"},
+			Confidence:    0.85,
+			Provenance:    []string{"dockerfile_runtime"},
 		},
 	}
 	result := BuildProjectionRows(candidates, nil)
@@ -390,6 +436,50 @@ func TestBuildProjectionRowsSkipsUtilityCandidates(t *testing.T) {
 	}
 	if got := len(result.InstanceRows); got != 0 {
 		t.Fatalf("len(InstanceRows) = %d, want 0 for utility candidate", got)
+	}
+}
+
+func TestBuildProjectionRowsSkipsCandidatesWithoutConfidence(t *testing.T) {
+	t.Parallel()
+
+	result := BuildProjectionRows([]WorkloadCandidate{
+		{
+			RepoID:         "repo-missing-confidence",
+			RepoName:       "missing-confidence-api",
+			Classification: "service",
+			ResourceKinds:  []string{"deployment"},
+			Namespaces:     []string{"production"},
+		},
+	}, nil)
+
+	if got := len(result.WorkloadRows); got != 0 {
+		t.Fatalf("len(WorkloadRows) = %d, want 0 for missing-confidence candidate", got)
+	}
+	if got := len(result.InstanceRows); got != 0 {
+		t.Fatalf("len(InstanceRows) = %d, want 0 for missing-confidence candidate", got)
+	}
+}
+
+func TestBuildProjectionRowsSkipsCandidatesBelowMaterializationConfidenceFloor(t *testing.T) {
+	t.Parallel()
+
+	result := BuildProjectionRows([]WorkloadCandidate{
+		{
+			RepoID:         "repo-low-confidence",
+			RepoName:       "dockerfile-only-api",
+			Classification: "service",
+			Confidence:     0.80,
+			Provenance:     []string{"dockerfile_runtime"},
+			ResourceKinds:  []string{"deployment"},
+			Namespaces:     []string{"production"},
+		},
+	}, nil)
+
+	if got := len(result.WorkloadRows); got != 0 {
+		t.Fatalf("len(WorkloadRows) = %d, want 0 for below-threshold candidate", got)
+	}
+	if got := len(result.InstanceRows); got != 0 {
+		t.Fatalf("len(InstanceRows) = %d, want 0 for below-threshold candidate", got)
 	}
 }
 
@@ -430,5 +520,41 @@ func TestBuildProjectionRowsCarriesClassificationConfidenceAndProvenance(t *test
 	}
 	if got, want := result.DeploymentSourceRows[0].Confidence, 0.96; got != want {
 		t.Fatalf("Deployment source confidence = %f, want %f", got, want)
+	}
+}
+
+func TestBuildProjectionRowsDefaultEnvironmentFallback(t *testing.T) {
+	t.Parallel()
+
+	// A Dockerfile+Jenkins candidate with no namespaces, no overlays, and no
+	// deployment repo should still produce one "default" instance when above
+	// the materialization confidence floor.
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:         "repo-boattrader",
+			RepoName:       "api-node-boattrader",
+			Classification: "service",
+			Confidence:     0.85,
+			Provenance:     []string{"dockerfile_runtime", "jenkins_pipeline"},
+		},
+	}
+
+	result := BuildProjectionRows(candidates, nil)
+
+	if got := result.Stats.Workloads; got != 1 {
+		t.Fatalf("Stats.Workloads = %d, want 1", got)
+	}
+	if got := result.Stats.Instances; got != 1 {
+		t.Fatalf("Stats.Instances = %d, want 1", got)
+	}
+	inst := result.InstanceRows[0]
+	if got, want := inst.Environment, "default"; got != want {
+		t.Fatalf("Environment = %q, want %q", got, want)
+	}
+	if got, want := inst.InstanceID, "workload-instance:api-node-boattrader:default"; got != want {
+		t.Fatalf("InstanceID = %q, want %q", got, want)
+	}
+	if got, want := inst.WorkloadName, "api-node-boattrader"; got != want {
+		t.Fatalf("WorkloadName = %q, want %q", got, want)
 	}
 }

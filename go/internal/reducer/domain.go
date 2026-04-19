@@ -6,15 +6,16 @@ import (
 )
 
 var knownDomains = map[Domain]struct{}{
-	DomainWorkloadIdentity:              {},
-	DomainCloudAssetResolution:          {},
-	DomainDeploymentMapping:             {},
-	DomainDataLineage:                   {},
-	DomainOwnership:                     {},
-	DomainGovernance:                    {},
-	DomainWorkloadMaterialization:       {},
-	DomainCodeCallMaterialization:       {},
-	DomainSemanticEntityMaterialization:      {},
+	DomainWorkloadIdentity:               {},
+	DomainDeployableUnitCorrelation:      {},
+	DomainCloudAssetResolution:           {},
+	DomainDeploymentMapping:              {},
+	DomainDataLineage:                    {},
+	DomainOwnership:                      {},
+	DomainGovernance:                     {},
+	DomainWorkloadMaterialization:        {},
+	DomainCodeCallMaterialization:        {},
+	DomainSemanticEntityMaterialization:  {},
 	DomainSQLRelationshipMaterialization: {},
 	DomainInheritanceMaterialization:     {},
 }

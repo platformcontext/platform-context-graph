@@ -138,6 +138,7 @@ func buildReducerService(
 	edgeWriterForHandlers.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize
 	edgeWriterForHandlers.SQLRelationshipGroupBatchSize = sqlRelationshipEdgeGroupBatchSize
 	relationshipStore := postgres.NewRelationshipStore(database)
+	factStore := postgres.NewFactStore(database)
 	codeCallIntentWriter := postgres.NewCodeCallIntentWriterWithInstruments(database, instruments)
 	acceptedGenerationPrefetch := postgres.NewAcceptedGenerationPrefetch(database)
 	graphProjectionStateStore := postgres.NewGraphProjectionPhaseStateStore(database)
@@ -146,12 +147,20 @@ func buildReducerService(
 	graphProjectionReadinessPrefetch := postgres.NewGraphProjectionReadinessPrefetch(database)
 
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
+		DeployableUnitCorrelationHandler: reducer.DeployableUnitCorrelationHandler{
+			FactLoader:     factStore,
+			ResolvedLoader: relationshipStore,
+		},
+		WorkloadProjectionInputLoader: reducer.CorrelatedWorkloadProjectionInputLoader{
+			FactLoader:     factStore,
+			ResolvedLoader: relationshipStore,
+		},
 		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
 		CloudAssetResolutionWriter:         reducer.PostgresCloudAssetResolutionWriter{DB: database},
 		PlatformMaterializationWriter:      reducer.PostgresPlatformMaterializationWriter{DB: database},
 		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
-		FactLoader:                         postgres.NewFactStore(database),
+		FactLoader:                         factStore,
 		CodeCallIntentWriter:               codeCallIntentWriter,
 		GraphProjectionPhasePublisher:      graphProjectionStateStore,
 		GraphProjectionRepairQueue:         graphProjectionRepairQueue,

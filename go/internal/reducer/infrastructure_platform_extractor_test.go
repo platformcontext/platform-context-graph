@@ -246,3 +246,48 @@ func TestExtractInfrastructurePlatformRowsNoDescriptorForS3Only(t *testing.T) {
 		t.Fatalf("len(rows) = %d, want 0 (S3-only repos have no platform)", len(rows))
 	}
 }
+
+func TestExtractInfrastructurePlatformRowsSupportsCurrentCollectorFactShape(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo-1",
+			ScopeID:  "scope-infra-eks",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repo:infra-eks",
+				"name":     "infra-eks",
+			},
+		},
+		{
+			FactID:   "fact-file-1",
+			ScopeID:  "scope-infra-eks",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id": "repo:infra-eks",
+				"parsed_file_data": map[string]any{
+					"terraform_resources": []any{
+						map[string]any{
+							"name":          "aws_eks_cluster.prod",
+							"resource_type": "aws_eks_cluster",
+							"resource_name": "prod",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	rows := ExtractInfrastructurePlatformRows(envelopes)
+
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0].RepoID, "repo:infra-eks"; got != want {
+		t.Fatalf("RepoID = %q, want %q", got, want)
+	}
+	if got, want := rows[0].PlatformKind, "eks"; got != want {
+		t.Fatalf("PlatformKind = %q, want %q", got, want)
+	}
+}

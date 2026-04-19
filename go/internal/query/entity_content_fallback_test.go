@@ -74,6 +74,67 @@ func TestResolveEntityFallsBackToContentEntities(t *testing.T) {
 	}
 }
 
+func TestResolveEntityFallsBackToAnyRepoContentMatchesAndAliases(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"function-1", "repo-2", "src/handler.py", "Function", "handler",
+					int64(12), int64(20), "python", "async def handler(): ...", []byte(`{"decorators":["@route"],"async":true}`),
+				},
+			},
+		},
+	})
+
+	handler := &EntityHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/entities/resolve",
+		bytes.NewBufferString(`{"name":"handler","type":"function"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	entities, ok := resp["entities"].([]any)
+	if !ok || len(entities) != 1 {
+		t.Fatalf("entities = %#v, want one cross-repo content-backed entity", resp["entities"])
+	}
+	matches, ok := resp["matches"].([]any)
+	if !ok || len(matches) != 1 {
+		t.Fatalf("matches = %#v, want alias for one entity", resp["matches"])
+	}
+	if !reflect.DeepEqual(matches, entities) {
+		t.Fatalf("matches = %#v, want alias of entities %#v", matches, entities)
+	}
+	entity, ok := entities[0].(map[string]any)
+	if !ok {
+		t.Fatalf("entity type = %T, want map[string]any", entities[0])
+	}
+	if got, want := entity["repo_id"], "repo-2"; got != want {
+		t.Fatalf("entity[repo_id] = %#v, want %#v", got, want)
+	}
+	if got, want := entity["semantic_summary"], "Function handler is async and uses decorators @route."; got != want {
+		t.Fatalf("entity[semantic_summary] = %#v, want %#v", got, want)
+	}
+}
+
 func TestResolveEntityReturnsGraphBackedTypeScriptClassWithTypeScriptSemantics(t *testing.T) {
 	t.Parallel()
 

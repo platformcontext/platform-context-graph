@@ -51,6 +51,7 @@ spec:
 	assertNamedBucketContains(t, got, "argocd_applications", "iac-eks-addons")
 	assertBucketContainsFieldValue(t, got, "argocd_applications", "source_repo", "https://github.com/myorg/iac-eks-argocd.git")
 	assertBucketContainsFieldValue(t, got, "argocd_applications", "source_path", "overlays/production/addons/cert-manager")
+	assertBucketContainsFieldValue(t, got, "argocd_applications", "source_root", "overlays/")
 	assertBucketContainsFieldValue(t, got, "argocd_applications", "dest_server", "https://kubernetes.default.svc")
 	assertBucketContainsFieldValue(t, got, "argocd_applications", "dest_namespace", "cert-manager")
 	assertBucketContainsFieldValue(t, got, "argocd_applications", "sync_policy", "automated(prune=true,selfHeal=true,allowEmpty=true),syncOptions=CreateNamespace=true|PruneLast=true")
@@ -160,6 +161,7 @@ spec:
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "generator_source_paths", "argocd/platform/*/config.yaml")
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "template_source_repos", "https://github.com/myorg/platform-runtime.git")
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "template_source_paths", "deploy/overlays/prod")
+	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "template_source_roots", "deploy/")
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "dest_server", "https://kubernetes.default.svc")
 }
 
@@ -250,6 +252,7 @@ version: 0.1.0
 appVersion: 1.0.0
 dependencies:
   - name: redis
+    repository: https://charts.example.test/redis
 `,
 	)
 
@@ -291,12 +294,14 @@ image:
 	}
 	assertNamedBucketContains(t, chartPayload, "helm_charts", "my-api-chart")
 	assertBucketContainsFieldValue(t, chartPayload, "helm_charts", "dependencies", "redis")
+	assertBucketContainsFieldValue(t, chartPayload, "helm_charts", "dependency_repositories", "https://charts.example.test/redis")
 
 	valuesPayload, err := engine.ParsePath(repoRoot, valuesPath, false, Options{})
 	if err != nil {
 		t.Fatalf("ParsePath(%q) error = %v, want nil", valuesPath, err)
 	}
 	assertNamedBucketContains(t, valuesPayload, "helm_values", "values")
+	assertBucketContainsFieldValue(t, valuesPayload, "helm_values", "image_repositories", "ghcr.io/example/app")
 	assertBucketContainsFieldValue(t, valuesPayload, "helm_values", "top_level_keys", "image,replicaCount")
 }
 

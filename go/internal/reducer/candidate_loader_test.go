@@ -348,3 +348,46 @@ func TestExtractWorkloadCandidatesClassifiesJenkinsOnlyRepoAsUtility(t *testing.
 		t.Fatalf("Provenance = %v, want first entry jenkins_pipeline", candidate.Provenance)
 	}
 }
+
+func TestExtractWorkloadCandidatesRecognizesGroovyPipelineCallsOutsideJenkinsfile(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repo-release-automation",
+				"name":     "release-automation",
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-1",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-release-automation",
+				"language":      "groovy",
+				"relative_path": "vars/releasePipeline.groovy",
+				"parsed_file_data": map[string]any{
+					"pipeline_calls": []any{"pipeline"},
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	candidates, _ := ExtractWorkloadCandidates(envelopes)
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+
+	candidate := candidates[0]
+	if got, want := candidate.Classification, "utility"; got != want {
+		t.Fatalf("Classification = %q, want %q", got, want)
+	}
+	if len(candidate.Provenance) == 0 || candidate.Provenance[0] != "jenkins_pipeline" {
+		t.Fatalf("Provenance = %v, want first entry jenkins_pipeline", candidate.Provenance)
+	}
+}

@@ -247,6 +247,18 @@ func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
 	}
 }
 
+func TestParseDomainAcceptsDeployableUnitCorrelation(t *testing.T) {
+	t.Parallel()
+
+	got, err := ParseDomain(" deployable_unit_correlation ")
+	if err != nil {
+		t.Fatalf("ParseDomain() error = %v, want nil", err)
+	}
+	if got != DomainDeployableUnitCorrelation {
+		t.Fatalf("ParseDomain() = %q, want %q", got, DomainDeployableUnitCorrelation)
+	}
+}
+
 func TestDefaultHandlersWiresCrossRepoResolver(t *testing.T) {
 	t.Parallel()
 
@@ -348,5 +360,72 @@ func TestNewDefaultRegistryWiresCrossRepoReadinessDependencies(t *testing.T) {
 	}
 	if handler.CrossRepoResolver.ReadinessPrefetch == nil {
 		t.Fatal("ReadinessPrefetch = nil, want non-nil")
+	}
+}
+
+func TestNewDefaultRegistryRegistersDeployableUnitCorrelationAdditively(t *testing.T) {
+	t.Parallel()
+
+	handler := HandlerFunc(func(context.Context, Intent) (Result, error) {
+		return Result{Status: ResultStatusSucceeded}, nil
+	})
+
+	definitions := implementedDefaultDomainDefinitions(DefaultHandlers{
+		DeployableUnitCorrelationHandler: handler,
+	})
+	if got := len(definitions); got != len(DefaultDomainDefinitions())+1 {
+		t.Fatalf("len(implementedDefaultDomainDefinitions()) = %d, want %d", got, len(DefaultDomainDefinitions())+1)
+	}
+
+	registry, err := NewDefaultRegistry(DefaultHandlers{
+		WorkloadIdentityWriter:           &recordingWorkloadIdentityWriter{},
+		DeployableUnitCorrelationHandler: handler,
+	})
+	if err != nil {
+		t.Fatalf("NewDefaultRegistry() error = %v, want nil", err)
+	}
+
+	def, ok := registry.Definition(DomainDeployableUnitCorrelation)
+	if !ok {
+		t.Fatal("deployable_unit_correlation definition missing from default registry")
+	}
+	if def.Domain != DomainDeployableUnitCorrelation {
+		t.Fatalf("Definition(DomainDeployableUnitCorrelation).Domain = %q, want %q", def.Domain, DomainDeployableUnitCorrelation)
+	}
+	if def.Summary == "" {
+		t.Fatal("Definition(DomainDeployableUnitCorrelation).Summary = empty, want non-empty")
+	}
+	if def.Handler == nil {
+		t.Fatal("Definition(DomainDeployableUnitCorrelation).Handler = nil, want non-nil")
+	}
+	if def.TruthContract.CanonicalKind != "deployable_unit_correlation" {
+		t.Fatalf("Definition(DomainDeployableUnitCorrelation).TruthContract.CanonicalKind = %q, want %q", def.TruthContract.CanonicalKind, "deployable_unit_correlation")
+	}
+}
+
+func TestNewDefaultRegistryWiresWorkloadProjectionInputLoader(t *testing.T) {
+	t.Parallel()
+
+	inputLoader := &stubWorkloadProjectionInputLoader{}
+
+	registry, err := NewDefaultRegistry(DefaultHandlers{
+		FactLoader:                    &stubFactLoader{},
+		WorkloadMaterializer:          NewWorkloadMaterializer(&recordingCypherExecutor{}),
+		WorkloadProjectionInputLoader: inputLoader,
+	})
+	if err != nil {
+		t.Fatalf("NewDefaultRegistry() error = %v", err)
+	}
+
+	def, ok := registry.Definition(DomainWorkloadMaterialization)
+	if !ok {
+		t.Fatal("workload materialization definition missing")
+	}
+	handler, ok := def.Handler.(WorkloadMaterializationHandler)
+	if !ok {
+		t.Fatalf("handler type = %T, want WorkloadMaterializationHandler", def.Handler)
+	}
+	if handler.InputLoader != inputLoader {
+		t.Fatalf("InputLoader = %T, want %T", handler.InputLoader, inputLoader)
 	}
 }

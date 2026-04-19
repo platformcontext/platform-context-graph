@@ -21,6 +21,15 @@ type ResolvedRelationshipLoader interface {
 	) ([]relationships.ResolvedRelationship, error)
 }
 
+// WorkloadProjectionInputLoader can provide already-correlated workload
+// candidates and environment overlays for workload materialization.
+type WorkloadProjectionInputLoader interface {
+	LoadWorkloadProjectionInputs(
+		ctx context.Context,
+		intent Intent,
+	) ([]WorkloadCandidate, map[string][]string, error)
+}
+
 // WorkloadMaterializationHandler reduces one workload materialization intent
 // into canonical graph writes (workloads, instances, deployment sources,
 // runtime platforms). It loads facts from the content store, extracts workload
@@ -28,6 +37,7 @@ type ResolvedRelationshipLoader interface {
 type WorkloadMaterializationHandler struct {
 	FactLoader     FactLoader
 	ResolvedLoader ResolvedRelationshipLoader
+	InputLoader    WorkloadProjectionInputLoader
 	Materializer   *WorkloadMaterializer
 }
 
@@ -49,18 +59,9 @@ func (h WorkloadMaterializationHandler) Handle(
 		return Result{}, fmt.Errorf("workload materialization materializer is required")
 	}
 
-	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	candidates, deploymentEnvironments, err := h.loadProjectionInputs(ctx, intent)
 	if err != nil {
-		return Result{}, fmt.Errorf("load facts for workload materialization: %w", err)
-	}
-
-	candidates, deploymentEnvironments := ExtractWorkloadCandidates(envelopes)
-	if h.ResolvedLoader != nil {
-		resolved, err := h.ResolvedLoader.GetResolvedRelationships(ctx, intent.ScopeID)
-		if err != nil {
-			return Result{}, fmt.Errorf("load resolved relationships for workload materialization: %w", err)
-		}
-		candidates = applyResolvedDeploymentSources(candidates, resolved)
+		return Result{}, err
 	}
 	if len(candidates) == 0 {
 		return Result{
@@ -96,4 +97,33 @@ func (h WorkloadMaterializationHandler) Handle(
 		),
 		CanonicalWrites: totalWrites,
 	}, nil
+}
+
+func (h WorkloadMaterializationHandler) loadProjectionInputs(
+	ctx context.Context,
+	intent Intent,
+) ([]WorkloadCandidate, map[string][]string, error) {
+	if h.InputLoader != nil {
+		candidates, deploymentEnvironments, err := h.InputLoader.LoadWorkloadProjectionInputs(ctx, intent)
+		if err != nil {
+			return nil, nil, fmt.Errorf("load workload projection inputs: %w", err)
+		}
+		return candidates, deploymentEnvironments, nil
+	}
+
+	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load facts for workload materialization: %w", err)
+	}
+
+	candidates, deploymentEnvironments := ExtractWorkloadCandidates(envelopes)
+	if h.ResolvedLoader != nil {
+		resolved, err := h.ResolvedLoader.GetResolvedRelationships(ctx, intent.ScopeID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("load resolved relationships for workload materialization: %w", err)
+		}
+		candidates = applyResolvedDeploymentSources(candidates, resolved)
+	}
+
+	return candidates, deploymentEnvironments, nil
 }

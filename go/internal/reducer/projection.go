@@ -11,12 +11,15 @@ const EvidenceSourceWorkloads = "finalization/workloads"
 
 var overlayEnvironmentRE = regexp.MustCompile(`(?:^|/)overlays/([^/]+)/`)
 
+const workloadMaterializationMinConfidence = 0.82
+
 // WorkloadCandidate holds one candidate row for workload projection. This is
 // the Go equivalent of the Python candidate_rows dict produced by
 // _load_candidate_rows.
 type WorkloadCandidate struct {
 	RepoID           string
 	RepoName         string
+	WorkloadName     string
 	ResourceKinds    []string
 	Namespaces       []string
 	DeploymentRepoID string
@@ -186,6 +189,14 @@ func BuildProjectionRows(
 		if candidate.RepoID == "" || candidate.RepoName == "" {
 			continue
 		}
+		workloadName := candidateWorkloadName(candidate)
+		if workloadName == "" {
+			continue
+		}
+		confidence := normalizedCandidateConfidence(candidate.Confidence)
+		if confidence < workloadMaterializationMinConfidence {
+			continue
+		}
 		classification := candidate.Classification
 		if classification == "" {
 			classification = InferWorkloadClassification(candidate)
@@ -194,9 +205,8 @@ func BuildProjectionRows(
 			continue
 		}
 
-		workloadID := fmt.Sprintf("workload:%s", candidate.RepoName)
-		workloadKind := InferWorkloadKind(candidate.RepoName, candidate.ResourceKinds)
-		confidence := normalizedCandidateConfidence(candidate.Confidence)
+		workloadID := fmt.Sprintf("workload:%s", workloadName)
+		workloadKind := InferWorkloadKind(workloadName, candidate.ResourceKinds)
 		provenance := append([]string(nil), candidate.Provenance...)
 
 		result.RepoDescriptors = append(result.RepoDescriptors, RepoDescriptor{
@@ -211,7 +221,7 @@ func BuildProjectionRows(
 				RepoID:         candidate.RepoID,
 				WorkloadID:     workloadID,
 				WorkloadKind:   workloadKind,
-				WorkloadName:   candidate.RepoName,
+				WorkloadName:   workloadName,
 				Classification: classification,
 				Confidence:     confidence,
 				Provenance:     provenance,
@@ -236,11 +246,16 @@ func BuildProjectionRows(
 				}
 			}
 		}
+		// Fallback: materializable workloads with no determinable environment
+		// still need at least one instance to represent the deployed workload.
+		if len(environments) == 0 {
+			environments = []string{"default"}
+		}
 
 		platformKind := InferRuntimePlatformKind(candidate.ResourceKinds)
 
 		for _, environment := range environments {
-			instanceID := fmt.Sprintf("workload-instance:%s:%s", candidate.RepoName, environment)
+			instanceID := fmt.Sprintf("workload-instance:%s:%s", workloadName, environment)
 
 			if _, ok := seenInstances[instanceID]; !ok {
 				seenInstances[instanceID] = struct{}{}
@@ -250,7 +265,7 @@ func BuildProjectionRows(
 					RepoID:         candidate.RepoID,
 					WorkloadID:     workloadID,
 					WorkloadKind:   workloadKind,
-					WorkloadName:   candidate.RepoName,
+					WorkloadName:   workloadName,
 					Classification: classification,
 					Confidence:     confidence,
 					Provenance:     provenance,
@@ -266,7 +281,7 @@ func BuildProjectionRows(
 						DeploymentRepoID: candidate.DeploymentRepoID,
 						Environment:      environment,
 						InstanceID:       instanceID,
-						WorkloadName:     candidate.RepoName,
+						WorkloadName:     workloadName,
 						Confidence:       confidence,
 						Provenance:       provenance,
 					})
@@ -317,7 +332,14 @@ func normalizedCandidateConfidence(confidence float64) float64 {
 	if confidence > 0 {
 		return confidence
 	}
-	return 0.90
+	return 0
+}
+
+func candidateWorkloadName(candidate WorkloadCandidate) string {
+	if name := strings.TrimSpace(candidate.WorkloadName); name != "" {
+		return name
+	}
+	return strings.TrimSpace(candidate.RepoName)
 }
 
 func hasAnyResourceKind(resourceKinds []string, wanted ...string) bool {

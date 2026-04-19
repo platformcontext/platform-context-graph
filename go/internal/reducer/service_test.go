@@ -238,6 +238,50 @@ func TestServiceRunWorksWithoutSharedProjectionRunner(t *testing.T) {
 	}
 }
 
+func TestIntentValidateAllowsSourceNeutralRelatedScopes(t *testing.T) {
+	t.Parallel()
+
+	intent := Intent{
+		IntentID:        "intent-aws-1",
+		ScopeID:         "account-123456789012",
+		GenerationID:    "generation-aws-1",
+		SourceSystem:    "aws",
+		Domain:          DomainCloudAssetResolution,
+		Cause:           "runtime inventory changed",
+		EntityKeys:      []string{"aws:ecs:service:payments"},
+		RelatedScopeIDs: []string{"region-us-east-1", "cluster-prod-use1"},
+		EnqueuedAt:      time.Date(2026, time.April, 19, 10, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 19, 10, 0, 0, 0, time.UTC),
+		Status:          IntentStatusPending,
+	}
+
+	if err := intent.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
+	}
+}
+
+func TestIntentValidateRejectsDuplicateRelatedScopes(t *testing.T) {
+	t.Parallel()
+
+	intent := Intent{
+		IntentID:        "intent-state-1",
+		ScopeID:         "state-snapshot-prod",
+		GenerationID:    "generation-state-1",
+		SourceSystem:    "terraform_state",
+		Domain:          DomainDeploymentMapping,
+		Cause:           "state snapshot refreshed",
+		EntityKeys:      []string{"deployable:payments-api"},
+		RelatedScopeIDs: []string{"account-123456789012", " region-us-east-1 ", "region-us-east-1"},
+		EnqueuedAt:      time.Date(2026, time.April, 19, 10, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 19, 10, 0, 0, 0, time.UTC),
+		Status:          IntentStatusPending,
+	}
+
+	if err := intent.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want non-nil")
+	}
+}
+
 type stubReducerWorkSource struct {
 	mu         sync.Mutex
 	claimCalls int

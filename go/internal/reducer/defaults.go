@@ -4,19 +4,22 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
+	"github.com/platformcontext/platform-context-graph/go/internal/truth"
 )
 
 // DefaultHandlers captures the reducer-owned backend adapters available for the
 // default domain catalog.
 type DefaultHandlers struct {
-	WorkloadIdentityWriter        WorkloadIdentityWriter
-	CloudAssetResolutionWriter    CloudAssetResolutionWriter
-	PlatformMaterializationWriter PlatformMaterializationWriter
+	DeployableUnitCorrelationHandler Handler
+	WorkloadIdentityWriter           WorkloadIdentityWriter
+	CloudAssetResolutionWriter       CloudAssetResolutionWriter
+	PlatformMaterializationWriter    PlatformMaterializationWriter
 
 	// Neo4j-backed adapters for canonical graph writes.
 	WorkloadMaterializer               *WorkloadMaterializer
 	InfrastructurePlatformMaterializer *InfrastructurePlatformMaterializer
 	SemanticEntityWriter               SemanticEntityWriter
+	WorkloadProjectionInputLoader      WorkloadProjectionInputLoader
 
 	// FactLoader loads fact envelopes for workload and infrastructure
 	// platform materialization.
@@ -67,8 +70,10 @@ type DefaultHandlers struct {
 	Instruments *telemetry.Instruments
 }
 
-// NewDefaultRegistry constructs the canonical reducer catalog for the domains
-// implemented by the current rewrite slice.
+// NewDefaultRegistry constructs the canonical reducer catalog for the default
+// domain definitions, wiring handlers for the domains implemented today and
+// allowing additive registration of source-neutral domains when handlers are
+// provided explicitly.
 func NewDefaultRegistry(handlers DefaultHandlers) (Registry, error) {
 	registry := NewRegistry()
 	for _, def := range implementedDefaultDomainDefinitions(handlers) {
@@ -100,7 +105,7 @@ func NewDefaultRuntime(handlers DefaultHandlers) (*Runtime, error) {
 }
 
 func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefinition {
-	definitions := make([]DomainDefinition, 0, len(DefaultDomainDefinitions()))
+	definitions := make([]DomainDefinition, 0, len(DefaultDomainDefinitions())+1)
 	for _, def := range DefaultDomainDefinitions() {
 		switch def.Domain {
 		case DomainWorkloadIdentity:
@@ -131,6 +136,7 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			def.Handler = WorkloadMaterializationHandler{
 				FactLoader:     handlers.FactLoader,
 				ResolvedLoader: handlers.ResolvedRelationshipLoader,
+				InputLoader:    handlers.WorkloadProjectionInputLoader,
 				Materializer:   handlers.WorkloadMaterializer,
 			}
 		case DomainCodeCallMaterialization:
@@ -155,10 +161,26 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 				FactLoader: handlers.FactLoader,
 				EdgeWriter: handlers.InheritanceEdgeWriter,
 			}
-		default:
-			continue
 		}
 		definitions = append(definitions, def)
+	}
+	if handlers.DeployableUnitCorrelationHandler != nil {
+		definitions = append(definitions, DomainDefinition{
+			Domain:  DomainDeployableUnitCorrelation,
+			Summary: "correlate deployable-unit candidates across sources before workload admission",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+			TruthContract: truth.Contract{
+				CanonicalKind: "deployable_unit_correlation",
+				SourceLayers: []truth.Layer{
+					truth.LayerSourceDeclaration,
+				},
+			},
+			Handler: handlers.DeployableUnitCorrelationHandler,
+		})
 	}
 
 	return definitions

@@ -31,35 +31,50 @@ func ExtractInfrastructurePlatformRows(envelopes []facts.Envelope) []Infrastruct
 
 	// Pass 1: collect repo identity per scope from repository facts.
 	repoByScope := make(map[string]*terraformRepoSignals)
+	repoByID := make(map[string]*terraformRepoSignals)
 	for i := range envelopes {
 		env := &envelopes[i]
 		if env.FactKind != "repository" {
 			continue
 		}
 		repoID := payloadStr(env.Payload, "repo_id")
+		if repoID == "" {
+			repoID = payloadStr(env.Payload, "graph_id")
+		}
 		repoName := payloadStr(env.Payload, "repo_name")
+		if repoName == "" {
+			repoName = payloadStr(env.Payload, "name")
+		}
 		if repoID == "" {
 			continue
 		}
-		repoByScope[env.ScopeID] = &terraformRepoSignals{
+		signals := &terraformRepoSignals{
 			RepoID:   repoID,
 			RepoName: repoName,
 		}
+		repoByID[repoID] = signals
+		if env.ScopeID != "" {
+			repoByScope[env.ScopeID] = signals
+		}
 	}
 
-	// Pass 2: scan parsed_file_data facts for Terraform buckets.
+	// Pass 2: scan Terraform-bearing file facts for Terraform buckets.
 	for i := range envelopes {
 		env := &envelopes[i]
-		if env.FactKind != "parsed_file_data" {
-			continue
-		}
-		signals, ok := repoByScope[env.ScopeID]
+		payload, ok := terraformSignalPayload(env)
 		if !ok {
 			continue
 		}
-		extractTerraformResourceSignals(env.Payload, signals)
-		extractTerraformModuleSignals(env.Payload, signals)
-		extractTerraformDataSourceSignals(env.Payload, signals)
+		signals := repoByScope[env.ScopeID]
+		if signals == nil {
+			signals = repoByID[payloadStr(env.Payload, "repo_id")]
+		}
+		if signals == nil {
+			continue
+		}
+		extractTerraformResourceSignals(payload, signals)
+		extractTerraformModuleSignals(payload, signals)
+		extractTerraformDataSourceSignals(payload, signals)
 	}
 
 	// Pass 3: infer platform descriptors for repos with Terraform signals.
@@ -154,4 +169,16 @@ func hasTerraformSignals(signals *terraformRepoSignals) bool {
 	return len(signals.ResourceTypes) > 0 ||
 		len(signals.ModuleSources) > 0 ||
 		len(signals.DataTypes) > 0
+}
+
+func terraformSignalPayload(env *facts.Envelope) (map[string]any, bool) {
+	switch env.FactKind {
+	case "parsed_file_data":
+		return env.Payload, true
+	case "file":
+		payload, ok := env.Payload["parsed_file_data"].(map[string]any)
+		return payload, ok
+	default:
+		return nil, false
+	}
 }

@@ -161,6 +161,38 @@ func TestWorkloadMaterializerWritesDeploymentSources(t *testing.T) {
 	}
 }
 
+func TestWorkloadMaterializerPreservesZeroDeploymentConfidence(t *testing.T) {
+	t.Parallel()
+
+	executor := &fakeNeo4jExecutor{}
+	m := NewWorkloadMaterializer(executor)
+
+	projection := &ProjectionResult{
+		DeploymentSourceRows: []DeploymentSourceRow{
+			{
+				DeploymentRepoID: "deploy-repo-1",
+				Environment:      "production",
+				InstanceID:       "workload-instance:my-api:production",
+				WorkloadName:     "my-api",
+				Confidence:       0,
+				Provenance:       []string{"unknown"},
+			},
+		},
+	}
+
+	result, err := m.Materialize(context.Background(), projection)
+	if err != nil {
+		t.Fatalf("Materialize() error = %v", err)
+	}
+	if result.DeploymentSourcesWritten != 1 {
+		t.Fatalf("DeploymentSourcesWritten = %d, want 1", result.DeploymentSourcesWritten)
+	}
+	rows := executor.calls[0].Parameters["rows"].([]map[string]any)
+	if got, want := rows[0]["deployment_confidence"], 0.0; got != want {
+		t.Fatalf("deployment_confidence = %#v, want %#v", got, want)
+	}
+}
+
 func TestWorkloadMaterializerWritesRuntimePlatforms(t *testing.T) {
 	t.Parallel()
 

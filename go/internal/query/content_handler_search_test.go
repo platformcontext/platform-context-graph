@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -298,6 +299,60 @@ func TestContentHandlerSearchFilesUsesAnyRepoWhenRepoScopeOmitted(t *testing.T) 
 	}
 	if got, want := result["repo_id"], "repo-2"; got != want {
 		t.Fatalf("result[repo_id] = %#v, want %#v", got, want)
+	}
+}
+
+func TestContentHandlerSearchFilesReturnsCompatibilityAliases(t *testing.T) {
+	t.Parallel()
+
+	db, _ := openRecordingContentSearchDB(t, []contentSearchQueryResult{
+		{
+			columns: []string{
+				"repo_id", "relative_path", "commit_sha", "content",
+				"content_hash", "line_count", "language", "artifact_type",
+			},
+			rows: [][]driver.Value{
+				{
+					"repo-1", "src/app.ts", "", "",
+					"hash-1", int64(24), "typescript", "source",
+				},
+			},
+		},
+	})
+
+	handler := &ContentHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/content/files/search",
+		bytes.NewBufferString(`{"pattern":"renderApp","repo_ids":["repo-1"],"limit":10}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one result", resp["results"])
+	}
+	matches, ok := resp["matches"].([]any)
+	if !ok || len(matches) != 1 {
+		t.Fatalf("matches = %#v, want alias for one result", resp["matches"])
+	}
+	if !reflect.DeepEqual(matches, results) {
+		t.Fatalf("matches = %#v, want alias of results %#v", matches, results)
+	}
+	if got, want := resp["source_backend"], "postgres_content_store"; got != want {
+		t.Fatalf("source_backend = %#v, want %#v", got, want)
 	}
 }
 

@@ -77,6 +77,7 @@ absolute path to a real directory.
 | Parser platform or collector snapshot flow | `cd go && go test ./internal/parser ./internal/collector/discovery ./internal/collector -count=1` |
 | Terraform provider-schema evidence or relationship extraction | `cd go && go test ./internal/terraformschema ./internal/relationships ./internal/storage/postgres -count=1` |
 | Compose, Helm, or deployable runtime shape | `cd go && go test ./cmd/api ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1` and `helm lint deploy/helm/platform-context-graph` |
+| Correlation DSL fixture corpus or compose verification lane | `./scripts/verify_correlation_dsl_compose.sh` |
 | Facts-first indexing, queue, or resolution flow | `cd go && go test ./internal/projector ./internal/reducer ./internal/storage/postgres -count=1` |
 | Queue ack visibility or lease diagnosis | `cd go && go test ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry -count=1` and `cd go && go vet ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry` |
 | Recovery, replay, or repair controls | `cd go && go test ./internal/recovery ./internal/runtime ./internal/status -count=1` |
@@ -136,6 +137,29 @@ cross-repo path, including:
 - persistence of typed `evidence_type` metadata on repo edges so repository
   contexts surface `controller_driven`, `workflow_driven`, and `iac_driven`
   relationship families
+
+The correlation DSL compose verification exercises the generic multi-repo
+fixture corpus, exact filesystem repository selection, and the current
+admitted-versus-provenance-only proof scaffolding:
+
+```bash
+./scripts/verify_correlation_dsl_compose.sh
+```
+
+The verifier now checks the fixture tree before Compose starts and then
+confirms repository-context coverage for these open-source-safe delivery
+families:
+
+- GitHub Actions plus Dockerfile (`service-gha`)
+- Jenkins plus Dockerfile (`service-jenkins`)
+- Jenkins plus Ansible handoff (`service-jenkins-ansible`)
+- Docker Compose runtime artifacts (`service-compose`)
+- Terraform stack repositories (`terraform-stack-gha`, `terraform-stack-jenkins`)
+- Mixed Dockerfile admission and rejection cases (`multi-dockerfile-repo`)
+
+On failure, the script prints the last verification step, `docker compose ps`,
+the expected repository set derived from the fixture root, the latest API
+payload captures, a resolution-engine metrics sample, and the Jaeger URL.
 
 ## Runtime Tree Hygiene
 

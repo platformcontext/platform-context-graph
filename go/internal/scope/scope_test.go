@@ -25,6 +25,122 @@ func TestIngestionScopeValidate(t *testing.T) {
 	}
 }
 
+func TestIngestionScopeValidateAllowsAdditionalCollectorKinds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		sourceSystem  string
+		collectorKind CollectorKind
+	}{
+		{
+			name:          "aws",
+			sourceSystem:  "aws",
+			collectorKind: CollectorAWS,
+		},
+		{
+			name:          "terraform_state",
+			sourceSystem:  "terraform_state",
+			collectorKind: CollectorTerraformState,
+		},
+		{
+			name:          "webhook",
+			sourceSystem:  "webhook",
+			collectorKind: CollectorWebhook,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			scope := IngestionScope{
+				ScopeID:       "scope-123",
+				SourceSystem:  tt.sourceSystem,
+				ScopeKind:     KindRepository,
+				CollectorKind: tt.collectorKind,
+				PartitionKey:  "partition-123",
+			}
+
+			if err := scope.Validate(); err != nil {
+				t.Fatalf("Validate() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestIngestionScopeValidateAllowsAdditionalScopeKinds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		sourceSystem  string
+		scopeID       string
+		scopeKind     ScopeKind
+		collectorKind CollectorKind
+		partitionKey  string
+	}{
+		{
+			name:          "account",
+			sourceSystem:  "aws",
+			scopeID:       "account-123456789012",
+			scopeKind:     KindAccount,
+			collectorKind: CollectorAWS,
+			partitionKey:  "account-123456789012",
+		},
+		{
+			name:          "region",
+			sourceSystem:  "aws",
+			scopeID:       "region-us-east-1",
+			scopeKind:     KindRegion,
+			collectorKind: CollectorAWS,
+			partitionKey:  "account-123456789012",
+		},
+		{
+			name:          "cluster",
+			sourceSystem:  "aws",
+			scopeID:       "cluster-prod-use1",
+			scopeKind:     KindCluster,
+			collectorKind: CollectorAWS,
+			partitionKey:  "account-123456789012",
+		},
+		{
+			name:          "state_snapshot",
+			sourceSystem:  "terraform_state",
+			scopeID:       "state-snapshot-prod",
+			scopeKind:     KindStateSnapshot,
+			collectorKind: CollectorTerraformState,
+			partitionKey:  "terraform-state-prod",
+		},
+		{
+			name:          "event_trigger",
+			sourceSystem:  "webhook",
+			scopeID:       "event-github-actions-123",
+			scopeKind:     KindEventTrigger,
+			collectorKind: CollectorWebhook,
+			partitionKey:  "org-456",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			scope := IngestionScope{
+				ScopeID:       tt.scopeID,
+				SourceSystem:  tt.sourceSystem,
+				ScopeKind:     tt.scopeKind,
+				CollectorKind: tt.collectorKind,
+				PartitionKey:  tt.partitionKey,
+			}
+
+			if err := scope.Validate(); err != nil {
+				t.Fatalf("Validate() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestIngestionScopeValidateRejectsBlankIdentifiers(t *testing.T) {
 	t.Parallel()
 

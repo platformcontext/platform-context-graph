@@ -12,6 +12,16 @@ type ScopeKind string
 const (
 	// KindRepository represents a repository snapshot scope.
 	KindRepository ScopeKind = "repository"
+	// KindAccount represents a cloud account or subscription scope.
+	KindAccount ScopeKind = "account"
+	// KindRegion represents a cloud region scope.
+	KindRegion ScopeKind = "region"
+	// KindCluster represents a runtime or orchestration cluster scope.
+	KindCluster ScopeKind = "cluster"
+	// KindStateSnapshot represents a point-in-time state snapshot scope.
+	KindStateSnapshot ScopeKind = "state_snapshot"
+	// KindEventTrigger represents an event-driven freshness trigger scope.
+	KindEventTrigger ScopeKind = "event_trigger"
 )
 
 // CollectorKind identifies the collector family that owns the scope.
@@ -20,6 +30,12 @@ type CollectorKind string
 const (
 	// CollectorGit represents the Git repository collector.
 	CollectorGit CollectorKind = "git"
+	// CollectorAWS represents the cloud inventory collector.
+	CollectorAWS CollectorKind = "aws"
+	// CollectorTerraformState represents the Terraform state collector.
+	CollectorTerraformState CollectorKind = "terraform_state"
+	// CollectorWebhook represents the event/webhook collector.
+	CollectorWebhook CollectorKind = "webhook"
 )
 
 // TriggerKind identifies how a generation was produced.
@@ -53,12 +69,12 @@ var allowedGenerationTransitions = map[GenerationStatus]map[GenerationStatus]str
 	},
 	GenerationStatusActive: {
 		GenerationStatusSuperseded: {},
-		GenerationStatusCompleted: {},
-		GenerationStatusFailed:    {},
+		GenerationStatusCompleted:  {},
+		GenerationStatusFailed:     {},
 	},
 	GenerationStatusSuperseded: {},
-	GenerationStatusCompleted: {},
-	GenerationStatusFailed:    {},
+	GenerationStatusCompleted:  {},
+	GenerationStatusFailed:     {},
 }
 
 // IngestionScope is the durable identity for a source-local scope.

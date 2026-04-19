@@ -23,10 +23,14 @@ func parseArgoCDApplication(document map[string]any, metadata map[string]any, pa
 		"source_repo":     strings.TrimSpace(fmt.Sprint(source["repoURL"])),
 		"source_path":     strings.TrimSpace(fmt.Sprint(source["path"])),
 		"source_revision": strings.TrimSpace(fmt.Sprint(source["targetRevision"])),
+		"dest_name":       strings.TrimSpace(fmt.Sprint(destination["name"])),
 		"dest_server":     strings.TrimSpace(fmt.Sprint(destination["server"])),
 		"dest_namespace":  strings.TrimSpace(fmt.Sprint(destination["namespace"])),
 		"path":            path,
 		"lang":            "yaml",
+	}
+	if sourceRoot := normalizeArgoSourceRoot(strings.TrimSpace(fmt.Sprint(source["path"]))); sourceRoot != "" {
+		row["source_root"] = sourceRoot
 	}
 	if labels := collectMetadataLabels(metadata); labels != "" {
 		row["labels"] = labels
@@ -65,6 +69,8 @@ func parseArgoCDApplicationSet(document map[string]any, metadata map[string]any,
 	sourceRepos := append(append([]string(nil), generatorSourceRepos...), templateSourceRepos...)
 	sourcePaths := append(append([]string(nil), generatorSourcePaths...), templateSourcePaths...)
 	dedupedPaths := dedupeNonEmptyStrings(sourcePaths)
+	generatorRoots := normalizeArgoSourceRoots(generatorSourcePaths)
+	templateRoots := normalizeArgoSourceRoots(templateSourcePaths)
 	sourceRoots := make([]string, 0, len(dedupedPaths))
 	for _, sourcePath := range dedupedPaths {
 		if root := normalizeArgoSourceRoot(sourcePath); root != "" {
@@ -77,18 +83,31 @@ func parseArgoCDApplicationSet(document map[string]any, metadata map[string]any,
 		"namespace":              strings.TrimSpace(fmt.Sprint(metadata["namespace"])),
 		"generators":             strings.Join(dedupeAndSortStrings(generatorTypes), ","),
 		"project":                strings.TrimSpace(fmt.Sprint(templateSpec["project"])),
+		"dest_name":              strings.TrimSpace(fmt.Sprint(nestedMapValue(templateSpec, "destination", "name"))),
 		"dest_server":            strings.TrimSpace(fmt.Sprint(nestedMapValue(templateSpec, "destination", "server"))),
 		"dest_namespace":         strings.TrimSpace(fmt.Sprint(nestedMapValue(templateSpec, "destination", "namespace"))),
 		"source_repos":           strings.Join(dedupeNonEmptyStrings(sourceRepos), ","),
 		"source_paths":           strings.Join(dedupedPaths, ","),
 		"generator_source_repos": strings.Join(dedupeNonEmptyStrings(generatorSourceRepos), ","),
 		"generator_source_paths": strings.Join(dedupeNonEmptyStrings(generatorSourcePaths), ","),
+		"generator_source_roots": strings.Join(generatorRoots, ","),
 		"template_source_repos":  strings.Join(dedupeNonEmptyStrings(templateSourceRepos), ","),
 		"template_source_paths":  strings.Join(dedupeNonEmptyStrings(templateSourcePaths), ","),
+		"template_source_roots":  strings.Join(templateRoots, ","),
 		"source_roots":           strings.Join(dedupeNonEmptyStrings(sourceRoots), ","),
 		"path":                   path,
 		"lang":                   "yaml",
 	}
+}
+
+func normalizeArgoSourceRoots(paths []string) []string {
+	roots := make([]string, 0, len(paths))
+	for _, sourcePath := range dedupeNonEmptyStrings(paths) {
+		if root := normalizeArgoSourceRoot(sourcePath); root != "" {
+			roots = append(roots, root)
+		}
+	}
+	return dedupeNonEmptyStrings(roots)
 }
 
 func collectArgoGeneratorKinds(generator map[string]any, kinds *[]string) {

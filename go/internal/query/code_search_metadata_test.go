@@ -446,6 +446,20 @@ func TestHandleSearchAllowsCrossRepoQueriesWhenRepoScopeIsOmitted(t *testing.T) 
 	if got, want := resp["source"], "graph"; got != want {
 		t.Fatalf("resp[source] = %#v, want %#v", got, want)
 	}
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("resp[results] = %#v, want one graph-backed result", resp["results"])
+	}
+	matches, ok := resp["matches"].([]any)
+	if !ok || len(matches) != 1 {
+		t.Fatalf("resp[matches] = %#v, want one compatibility alias result", resp["matches"])
+	}
+	if !reflect.DeepEqual(matches, results) {
+		t.Fatalf("resp[matches] = %#v, want alias of resp[results] %#v", matches, results)
+	}
+	if got, want := resp["source_backend"], "graph"; got != want {
+		t.Fatalf("resp[source_backend] = %#v, want %#v", got, want)
+	}
 }
 
 func TestEnrichGraphSearchResultsWithContentMetadataSkipsUnmatchedRows(t *testing.T) {

@@ -71,10 +71,12 @@ func (h *CodeHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	// If graph search returns results, return them
 	if len(graphResults) > 0 {
 		WriteJSON(w, http.StatusOK, map[string]any{
-			"source":  "graph",
-			"query":   req.Query,
-			"repo_id": req.RepoID,
-			"results": graphResults,
+			"source":         "graph",
+			"source_backend": "graph",
+			"query":          req.Query,
+			"repo_id":        req.RepoID,
+			"results":        graphResults,
+			"matches":        graphResults,
 		})
 		return
 	}
@@ -87,10 +89,12 @@ func (h *CodeHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
-		"source":  "content",
-		"query":   req.Query,
-		"repo_id": req.RepoID,
-		"results": contentResults,
+		"source":         "content",
+		"source_backend": "postgres_content_store",
+		"query":          req.Query,
+		"repo_id":        req.RepoID,
+		"results":        contentResults,
+		"matches":        contentResults,
 	})
 }
 

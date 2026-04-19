@@ -149,6 +149,12 @@ func discoverFromEnvelope(
 		evidence = append(evidence, discoverStructuredTerragruntConfigEvidence(
 			sourceRepoID, filePath, parsedFileData, catalog, seen,
 		)...)
+		evidence = append(evidence, discoverStructuredHelmEvidence(
+			sourceRepoID, filePath, parsedFileData, catalog, seen,
+		)...)
+		evidence = append(evidence, discoverStructuredArgoCDEvidence(
+			sourceRepoID, filePath, parsedFileData, catalog, seen,
+		)...)
 	}
 
 	switch {
@@ -359,7 +365,18 @@ func discoverStructuredTerraformEvidence(
 				"terraform-module-source",
 				catalog,
 				seen,
-				map[string]any{"source_ref": source},
+				withFirstPartyRefDetails(
+					map[string]any{
+						"module_name": module["name"],
+						"source_ref":  source,
+					},
+					"terraform_module_source",
+					payloadString(module, "name"),
+					"",
+					"",
+					"",
+					normalizeTerraformFirstPartyRef(source),
+				),
 			)...)
 		}
 	}
@@ -393,7 +410,18 @@ func discoverStructuredTerraformEvidence(
 				"terragrunt-dependency-config-path",
 				catalog,
 				seen,
-				map[string]any{"config_path": configPath},
+				withFirstPartyRefDetails(
+					map[string]any{
+						"dependency_name": dependency["name"],
+						"config_path":     configPath,
+					},
+					"terragrunt_dependency_config_path",
+					payloadString(dependency, "name"),
+					configPath,
+					"",
+					"",
+					normalizeTerraformFirstPartyRef(configPath),
+				),
 			)...)
 		}
 	}

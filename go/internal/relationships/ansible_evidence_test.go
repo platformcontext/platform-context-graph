@@ -103,4 +103,10 @@ func TestDiscoverAnsibleImportPlaybookEvidenceStaysOnPlaybooks(t *testing.T) {
 	if got, want := evidence[0].Details["path"], "playbooks/site.yml"; got != want {
 		t.Fatalf("path = %#v, want %#v", got, want)
 	}
+	if got, want := evidence[0].Details["first_party_ref_kind"], "ansible_import_playbook"; got != want {
+		t.Fatalf("first_party_ref_kind = %#v, want %#v", got, want)
+	}
+	if got, want := evidence[0].Details["first_party_ref_name"], "payments-service"; got != want {
+		t.Fatalf("first_party_ref_name = %#v, want %#v", got, want)
+	}
 }

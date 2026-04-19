@@ -16,6 +16,9 @@ type Domain string
 const (
 	// DomainWorkloadIdentity resolves canonical workload identity.
 	DomainWorkloadIdentity Domain = "workload_identity"
+	// DomainDeployableUnitCorrelation correlates cross-source deployable-unit
+	// evidence before workload admission and materialization.
+	DomainDeployableUnitCorrelation Domain = "deployable_unit_correlation"
 	// DomainCloudAssetResolution resolves canonical cloud asset identity.
 	DomainCloudAssetResolution Domain = "cloud_asset_resolution"
 	// DomainDeploymentMapping resolves deployment relationships.
@@ -160,10 +163,19 @@ func (i Intent) Validate() error {
 			return errors.New("entity_keys must not contain blank values")
 		}
 	}
+	var seenRelatedScopes map[string]struct{}
 	for _, scopeID := range i.RelatedScopeIDs {
-		if strings.TrimSpace(scopeID) == "" {
+		normalizedScopeID := strings.TrimSpace(scopeID)
+		if normalizedScopeID == "" {
 			return errors.New("related_scope_ids must not contain blank values")
 		}
+		if seenRelatedScopes == nil {
+			seenRelatedScopes = make(map[string]struct{}, len(i.RelatedScopeIDs))
+		}
+		if _, exists := seenRelatedScopes[normalizedScopeID]; exists {
+			return errors.New("related_scope_ids must not contain duplicate values")
+		}
+		seenRelatedScopes[normalizedScopeID] = struct{}{}
 	}
 
 	return nil

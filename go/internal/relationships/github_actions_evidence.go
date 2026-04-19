@@ -10,6 +10,7 @@ func discoverGitHubActionsEvidence(
 	var evidence []EvidenceFact
 	for _, document := range parseYAMLDocuments(content) {
 		for _, workflowPath := range githubActionsLocalReusableWorkflowPaths(document) {
+			_, normalizedPath, version := parseGitHubRefParts(workflowPath)
 			key := evidenceKey{
 				EvidenceKind: EvidenceKindGitHubActionsLocalReusableWorkflow,
 				SourceRepoID: sourceRepoID,
@@ -29,21 +30,33 @@ func discoverGitHubActionsEvidence(
 				Confidence:       0.86,
 				Rationale:        "GitHub Actions reuses deployment logic from a workflow file in the same repository",
 				Details: map[string]any{
-					"path":                filePath,
-					"matched_alias":       sourceRepoID,
-					"matched_value":       workflowPath,
-					"extractor":           "github_actions",
-					"local_workflow_path": workflowPath,
+					"path":                       filePath,
+					"matched_alias":              sourceRepoID,
+					"matched_value":              workflowPath,
+					"extractor":                  "github_actions",
+					"local_workflow_path":        workflowPath,
+					"first_party_ref_kind":       "github_actions_local_workflow",
+					"first_party_ref_path":       normalizedPath,
+					"first_party_ref_version":    version,
+					"first_party_ref_normalized": normalizedPath,
 				},
 			})
 		}
 		for _, candidate := range githubActionsReusableWorkflowRefs(document) {
+			repo, workflowPath, version := parseGitHubRefParts(candidate)
 			evidence = append(evidence, matchCatalog(
 				sourceRepoID, candidate, filePath,
 				EvidenceKindGitHubActionsReusableWorkflow, RelDeploysFrom, 0.93,
 				"GitHub Actions reusable workflow references deployment logic in the target repository",
 				"github_actions", catalog, seen, map[string]any{
-					"workflow_ref": candidate,
+					"workflow_ref":               candidate,
+					"workflow_repo":              repo,
+					"workflow_path":              workflowPath,
+					"workflow_ref_name":          version,
+					"first_party_ref_kind":       "github_actions_reusable_workflow",
+					"first_party_ref_path":       workflowPath,
+					"first_party_ref_version":    version,
+					"first_party_ref_normalized": strings.TrimPrefix(candidate, "./"),
 				},
 			)...)
 		}
@@ -68,12 +81,20 @@ func discoverGitHubActionsEvidence(
 			)...)
 		}
 		for _, candidate := range githubActionsActionRepositoryRefs(document) {
+			repo, actionPath, version := parseGitHubRefParts(candidate)
 			evidence = append(evidence, matchCatalog(
 				sourceRepoID, candidate, filePath,
 				EvidenceKindGitHubActionsActionRepository, RelDependsOn, 0.88,
 				"GitHub Actions step uses the target repository as an action dependency",
 				"github_actions", catalog, seen, map[string]any{
-					"action_repository": candidate,
+					"action_repository":          candidate,
+					"action_repo":                repo,
+					"action_path":                actionPath,
+					"action_ref_name":            version,
+					"first_party_ref_kind":       "github_actions_action",
+					"first_party_ref_path":       actionPath,
+					"first_party_ref_version":    version,
+					"first_party_ref_normalized": strings.TrimPrefix(candidate, "./"),
 				},
 			)...)
 		}
@@ -98,8 +119,8 @@ func githubActionsReusableWorkflowRefs(document map[string]any) []string {
 		if !ok {
 			continue
 		}
-		if workflowRef := reusableWorkflowRepoRef(stringValue(job["uses"])); workflowRef != "" {
-			refs = append(refs, workflowRef)
+		if uses := strings.TrimSpace(stringValue(job["uses"])); uses != "" && reusableWorkflowRepoRef(uses) != "" {
+			refs = append(refs, uses)
 		}
 	}
 
@@ -277,10 +298,6 @@ func githubActionsActionRepoRef(value string) string {
 	}
 	if strings.HasPrefix(trimmed, "actions/checkout@") {
 		return ""
-	}
-	at := strings.Index(trimmed, "@")
-	if at >= 0 {
-		trimmed = trimmed[:at]
 	}
 	if strings.HasPrefix(trimmed, "./") || strings.HasPrefix(trimmed, ".github/") {
 		return ""
