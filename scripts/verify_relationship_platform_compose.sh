@@ -4,9 +4,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+RUNTIME_LIB="$REPO_ROOT/scripts/lib/compose_verification_runtime_common.sh"
+ASSERT_LIB="$REPO_ROOT/scripts/lib/compose_verification_assertions.sh"
 API_PORT="${PCG_HTTP_PORT:-8080}"
 NEO4J_BOLT_PORT="${NEO4J_BOLT_PORT:-7687}"
 JAEGER_PORT="${JAEGER_UI_PORT:-16686}"
+NEO4J_HTTP_PORT_BASE="${NEO4J_HTTP_PORT:-17474}"
+NEO4J_BOLT_PORT_BASE="${NEO4J_BOLT_PORT:-17687}"
+PCG_POSTGRES_PORT_BASE="${PCG_POSTGRES_PORT:-25432}"
+PCG_HTTP_PORT_BASE="${PCG_HTTP_PORT:-18080}"
+JAEGER_UI_PORT_BASE="${JAEGER_UI_PORT:-26686}"
+OTEL_COLLECTOR_OTLP_GRPC_PORT_BASE="${OTEL_COLLECTOR_OTLP_GRPC_PORT:-24317}"
+OTEL_COLLECTOR_OTLP_HTTP_PORT_BASE="${OTEL_COLLECTOR_OTLP_HTTP_PORT:-24318}"
+OTEL_COLLECTOR_PROMETHEUS_PORT_BASE="${OTEL_COLLECTOR_PROMETHEUS_PORT:-29464}"
 API_BASE_URL="http://localhost:${API_PORT}/api/v0"
 JAEGER_URL="http://localhost:${JAEGER_PORT}"
 TMP_DIR="$(mktemp -d)"
@@ -16,9 +26,15 @@ CONTEXT_FILE="$TMP_DIR/repository-context.json"
 COVERAGE_FILE="$TMP_DIR/repository-coverage.json"
 INDEX_STATUS_FILE="$TMP_DIR/index-status.json"
 GRAPH_RELATIONSHIP_TYPES_FILE="$TMP_DIR/graph-relationship-types.txt"
+SERVICE_CONTEXT_FILE="$TMP_DIR/service-context.json"
+TRACE_FILE="$TMP_DIR/trace-deployment.json"
+GRAPH_QUERY_FILE="$TMP_DIR/graph-query.txt"
+HTTP_STATUS_FILE="$TMP_DIR/http-status.txt"
 KEEP_STACK="${PCG_KEEP_COMPOSE_STACK:-false}"
 API_KEY=""
 COMPOSE_CMD=()
+source "$RUNTIME_LIB"
+source "$ASSERT_LIB"
 
 build_relationship_platform_repo_rules_json() {
     local root="$1"
@@ -64,129 +80,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-require_tool() {
-    local tool_name="$1"
-    if ! command -v "$tool_name" >/dev/null 2>&1; then
-        echo "Missing required tool: $tool_name" >&2
-        exit 1
-    fi
-}
-
-wait_for_http() {
-    local url="$1"
-    local attempts="$2"
-    local sleep_seconds="$3"
-
-    for ((attempt = 1; attempt <= attempts; attempt++)); do
-        if curl -fsS "$url" >/dev/null 2>&1; then
-            return 0
-        fi
-        sleep "$sleep_seconds"
-    done
-    echo "Timed out waiting for $url" >&2
-    return 1
-}
-
-wait_for_bootstrap_exit() {
-    local timeout_seconds="$1"
-    local deadline=$((SECONDS + timeout_seconds))
-
-    while ((SECONDS < deadline)); do
-        local container_id
-        container_id="$("${COMPOSE_CMD[@]}" ps -a -q bootstrap-index)"
-        if [[ -z "$container_id" ]]; then
-            sleep 2
-            continue
-        fi
-        local state
-        state="$(docker inspect --format='{{.State.Status}}' "$container_id" 2>/dev/null || true)"
-        if [[ -z "$state" ]]; then
-            sleep 2
-            continue
-        fi
-        if [[ "$state" == "exited" ]]; then
-            local exit_code
-            exit_code="$(docker inspect --format='{{.State.ExitCode}}' "$container_id" 2>/dev/null || true)"
-            if [[ -z "$exit_code" ]]; then
-                sleep 2
-                continue
-            fi
-            if [[ "$exit_code" != "0" ]]; then
-                echo "bootstrap-index exited with code $exit_code" >&2
-                return 1
-            fi
-            return 0
-        fi
-        sleep 2
-    done
-
-    echo "Timed out waiting for bootstrap-index to finish" >&2
-    return 1
-}
-
-wait_for_index_completion() {
-    local attempts="$1"
-    local sleep_seconds="$2"
-
-    for ((attempt = 1; attempt <= attempts; attempt++)); do
-        if ! api_get "/index-status" "$INDEX_STATUS_FILE"; then
-            sleep "$sleep_seconds"
-            continue
-        fi
-
-        if jq -e '
-            (.status // "") == "healthy" and
-            ((.queue.outstanding // 0) == 0) and
-            ((.queue.in_flight // 0) == 0) and
-            ((.queue.pending // 0) == 0) and
-            ((.queue.retrying // 0) == 0) and
-            ((.queue.failed // 0) == 0)
-        ' "$INDEX_STATUS_FILE" >/dev/null; then
-            return 0
-        fi
-
-        sleep "$sleep_seconds"
-    done
-
-    echo "Timed out waiting for /index-status to report queue completion" >&2
-    return 1
-}
-
-read_api_key() {
-    "${COMPOSE_CMD[@]}" exec -T platform-context-graph sh -lc \
-        'token="${PCG_API_KEY:-}";
-         if [ -n "$token" ]; then
-             printf %s "$token";
-             exit 0;
-         fi
-         home="${PCG_HOME:-/data/.platform-context-graph}";
-         if [ -f "$home/.env" ]; then
-             sed -n "s/^PCG_API_KEY=//p" "$home/.env" | tail -n 1 | tr -d "\n";
-         fi'
-}
-
-pick_port() {
-    local start_port="$1"
-    local port
-    for ((port = start_port; port < start_port + 200; port++)); do
-        if ! nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
-            echo "$port"
-            return 0
-        fi
-    done
-    echo "no free port found near $start_port" >&2
-    return 1
-}
-
 configure_ports() {
-    export NEO4J_HTTP_PORT="$(pick_port "${NEO4J_HTTP_PORT:-17474}")"
-    export NEO4J_BOLT_PORT="$(pick_port "${NEO4J_BOLT_PORT:-17687}")"
-    export PCG_POSTGRES_PORT="$(pick_port "${PCG_POSTGRES_PORT:-25432}")"
-    export PCG_HTTP_PORT="$(pick_port "${PCG_HTTP_PORT:-18080}")"
-    export JAEGER_UI_PORT="$(pick_port "${JAEGER_UI_PORT:-26686}")"
-    export OTEL_COLLECTOR_OTLP_GRPC_PORT="$(pick_port "${OTEL_COLLECTOR_OTLP_GRPC_PORT:-24317}")"
-    export OTEL_COLLECTOR_OTLP_HTTP_PORT="$(pick_port "${OTEL_COLLECTOR_OTLP_HTTP_PORT:-24318}")"
-    export OTEL_COLLECTOR_PROMETHEUS_PORT="$(pick_port "${OTEL_COLLECTOR_PROMETHEUS_PORT:-29464}")"
+    local retry_offset="${1:-0}"
+
+    pcg_reset_reserved_ports
+    pcg_assign_reserved_port NEO4J_HTTP_PORT "$((NEO4J_HTTP_PORT_BASE + retry_offset))"
+    pcg_assign_reserved_port NEO4J_BOLT_PORT "$((NEO4J_BOLT_PORT_BASE + retry_offset))"
+    pcg_assign_reserved_port PCG_POSTGRES_PORT "$((PCG_POSTGRES_PORT_BASE + retry_offset))"
+    pcg_assign_reserved_port PCG_HTTP_PORT "$((PCG_HTTP_PORT_BASE + retry_offset))"
+    pcg_assign_reserved_port JAEGER_UI_PORT "$((JAEGER_UI_PORT_BASE + retry_offset))"
+    pcg_assign_reserved_port OTEL_COLLECTOR_OTLP_GRPC_PORT "$((OTEL_COLLECTOR_OTLP_GRPC_PORT_BASE + retry_offset))"
+    pcg_assign_reserved_port OTEL_COLLECTOR_OTLP_HTTP_PORT "$((OTEL_COLLECTOR_OTLP_HTTP_PORT_BASE + retry_offset))"
+    pcg_assign_reserved_port OTEL_COLLECTOR_PROMETHEUS_PORT "$((OTEL_COLLECTOR_PROMETHEUS_PORT_BASE + retry_offset))"
 
     API_PORT="$PCG_HTTP_PORT"
     NEO4J_BOLT_PORT="$NEO4J_BOLT_PORT"
@@ -234,28 +139,6 @@ api_get() {
             >"$output_file"
     else
         curl -fsS \
-            "$API_BASE_URL$path" \
-            >"$output_file"
-    fi
-}
-
-api_post_json() {
-    local path="$1"
-    local payload="$2"
-    local output_file="$3"
-    if [[ -n "$API_KEY" ]]; then
-        curl -fsS \
-            -X POST \
-            -H "Authorization: Bearer $API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$payload" \
-            "$API_BASE_URL$path" \
-            >"$output_file"
-    else
-        curl -fsS \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -d "$payload" \
             "$API_BASE_URL$path" \
             >"$output_file"
     fi
@@ -344,7 +227,7 @@ verify_service_worker_jobs_context() {
 }
 
 verify_trace_deployment_chain() {
-    api_post_json "/impact/trace-deployment-chain" '{"service_name":"service-edge-api"}' "$CONTEXT_FILE"
+    pcg_api_post_json "/impact/trace-deployment-chain" '{"service_name":"service-edge-api"}' "$TRACE_FILE"
     jq -e '
         (.service_name // "") == "service-edge-api" and
         ((.story // "") | length) > 0 and
@@ -354,8 +237,39 @@ verify_trace_deployment_chain() {
         ((.k8s_resources // []) | any((.relative_path // "") == "k8s/deployment.yaml")) and
         ((.controller_overview.controller_count // 0) >= 1) and
         ((.delivery_paths // []) | any((.type // "") == "deployment_source" and (.target // "") == "deployment-kustomize")) and
-        ((.delivery_paths // []) | any((.type // "") == "deployment_source" and (.target // "") == "deployment-helm"))
-    ' "$CONTEXT_FILE" >/dev/null
+        ((.delivery_paths // []) | any((.type // "") == "deployment_source" and (.target // "") == "deployment-helm")) and
+        ((.deployment_overview.provenance_families // []) | index("github_actions")) and
+        ((.deployment_overview.provenance_families // []) | index("jenkins"))
+    ' "$TRACE_FILE" >/dev/null
+}
+
+verify_service_contexts() {
+    api_get "/services/service-worker-jobs/context" "$SERVICE_CONTEXT_FILE"
+    pcg_assert_json_query "$SERVICE_CONTEXT_FILE" '
+        (.id // "") == "workload:service-worker-jobs" and
+        (.name // "") == "service-worker-jobs" and
+        (.repo_name // "") == "service-worker-jobs" and
+        ((.instances // []) | any(
+            (.environment // "") == "modern" and
+            ((.platform_kind // "") | ascii_downcase) == "kubernetes"
+        )) and
+        ((.deployment_overview.environment_count // 0) >= 1)
+    ' "service-worker-jobs service context did not prove its materialized modern kubernetes instance"
+
+    api_get "/services/service-edge-api/context" "$SERVICE_CONTEXT_FILE"
+    pcg_assert_json_query "$SERVICE_CONTEXT_FILE" '
+        (.id // "") == "workload:service-edge-api" and
+        (.name // "") == "service-edge-api" and
+        (.repo_name // "") == "service-edge-api" and
+        ((.instances // []) | any(
+            (.environment // "") == "modern" and
+            ((.platform_kind // "") | ascii_downcase) == "kubernetes"
+        )) and
+        ((.dependencies // []) | any(
+            (.type // "") == "DEPENDS_ON" and
+            (.target_name // "") == "service-worker-jobs"
+        ))
+    ' "service-edge-api service context did not prove workload identity, modern instance, and service dependency truth"
 }
 
 verify_api_surface() {
@@ -447,40 +361,74 @@ verify_api_surface() {
 
     verify_service_edge_api_context
     verify_service_worker_jobs_context
+    verify_service_contexts
     verify_trace_deployment_chain
 }
 
 verify_graph_state() {
-    local result
-    result="$("${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
-        -u neo4j \
-        -p "${PCG_NEO4J_PASSWORD:-change-me}" \
-        --format plain \
-        "MATCH (n:Repository) RETURN count(n) AS count")"
-    result="$(printf '%s\n' "$result" | tail -n 1)"
-    if ! printf '%s\n' "$result" | rg -q '^[1-9][0-9]*$'; then
-        echo "Expected Repository nodes in Neo4j, got: $result" >&2
+    pcg_neo4j_query_to_file "MATCH (n:Repository) RETURN count(n) AS count" "$GRAPH_QUERY_FILE"
+    if ! tail -n 1 "$GRAPH_QUERY_FILE" | rg -q '^[1-9][0-9]*$'; then
+        echo "Expected Repository nodes in Neo4j, got:" >&2
+        cat "$GRAPH_QUERY_FILE" >&2
         return 1
     fi
 
-    "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
-        -u neo4j \
-        -p "${PCG_NEO4J_PASSWORD:-change-me}" \
-        --format plain \
+    pcg_neo4j_query_to_file \
         "MATCH ()-[rel:DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->() RETURN DISTINCT type(rel) ORDER BY type(rel)" \
-        >"$GRAPH_RELATIONSHIP_TYPES_FILE"
+        "$GRAPH_RELATIONSHIP_TYPES_FILE"
     if ! rg -q 'DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON' "$GRAPH_RELATIONSHIP_TYPES_FILE"; then
         echo "Expected at least one typed relationship family in Neo4j, got:" >&2
         cat "$GRAPH_RELATIONSHIP_TYPES_FILE" >&2
         return 1
     fi
+
+    pcg_neo4j_count_equals \
+        "MATCH (:Repository {name:'service-edge-api'})-[:DEFINES]->(:Workload {id:'workload:service-edge-api'}) RETURN count(*)" \
+        "1" \
+        "service-edge-api should materialize exactly one workload node" \
+        "$GRAPH_QUERY_FILE"
+    pcg_neo4j_count_equals \
+        "MATCH (:Workload {id:'workload:service-edge-api'})<-[:INSTANCE_OF]-(:WorkloadInstance {id:'workload-instance:service-edge-api:modern'}) RETURN count(*)" \
+        "1" \
+        "service-edge-api should materialize a modern workload instance" \
+        "$GRAPH_QUERY_FILE"
+    pcg_neo4j_count_equals \
+        "MATCH (:WorkloadInstance {id:'workload-instance:service-edge-api:modern'})-[:DEPLOYMENT_SOURCE]->(:Repository {name:'deployment-kustomize'}) RETURN count(*)" \
+        "1" \
+        "service-edge-api modern instance should point at deployment-kustomize as a deployment source" \
+        "$GRAPH_QUERY_FILE"
+    pcg_neo4j_count_equals \
+        "MATCH (:WorkloadInstance {id:'workload-instance:service-edge-api:modern'})-[:RUNS_ON]->(:Platform {kind:'kubernetes', name:'modern'}) RETURN count(*)" \
+        "1" \
+        "service-edge-api modern instance should run on the modern kubernetes platform" \
+        "$GRAPH_QUERY_FILE"
+    pcg_neo4j_count_equals \
+        "MATCH (:Workload {id:'workload:service-edge-api'})-[:DEPENDS_ON]->(:Workload {id:'workload:service-worker-jobs'}) RETURN count(*)" \
+        "1" \
+        "service-edge-api workload should depend on service-worker-jobs" \
+        "$GRAPH_QUERY_FILE"
+    pcg_neo4j_count_equals \
+        "MATCH (:Repository {name:'service-edge-api'})-[:DEPLOYS_FROM]->(:Repository {name:'deployment-helm'}) RETURN count(*)" \
+        "1" \
+        "service-edge-api repository should have a DEPLOYS_FROM edge to deployment-helm" \
+        "$GRAPH_QUERY_FILE"
+    pcg_neo4j_count_equals \
+        "MATCH (:Repository {name:'service-edge-api'})-[:DEPLOYS_FROM]->(:Repository {name:'deployment-kustomize'}) RETURN count(*)" \
+        "1" \
+        "service-edge-api repository should have a DEPLOYS_FROM edge to deployment-kustomize" \
+        "$GRAPH_QUERY_FILE"
+    pcg_neo4j_count_equals \
+        "MATCH (:Repository {name:'service-edge-api'})-[:DEPLOYS_FROM]->(:Repository {name:'delivery-legacy-automation'}) RETURN count(*)" \
+        "1" \
+        "service-edge-api repository should retain reusable-workflow DEPLOYS_FROM evidence to delivery-legacy-automation" \
+        "$GRAPH_QUERY_FILE"
 }
 
-require_tool curl
-require_tool docker
-require_tool jq
-require_tool nc
-require_tool rg
+pcg_require_tool curl
+pcg_require_tool docker
+pcg_require_tool jq
+pcg_require_tool nc
+pcg_require_tool rg
 
 if docker compose version >/dev/null 2>&1; then
     COMPOSE_CMD=(docker compose)
@@ -506,9 +454,9 @@ fi
 "${COMPOSE_CMD[@]}" down -v >/dev/null 2>&1 || true
 compose_started=false
 for attempt in 1 2; do
-    configure_ports
+    configure_ports "$(((attempt - 1) * 10))"
     echo "Starting local compose stack..."
-    echo "Using host ports: api=$PCG_HTTP_PORT postgres=$PCG_POSTGRES_PORT neo4j_bolt=$NEO4J_BOLT_PORT jaeger=$JAEGER_UI_PORT"
+    echo "Using host ports: api=$PCG_HTTP_PORT postgres=$PCG_POSTGRES_PORT neo4j_bolt=$NEO4J_BOLT_PORT jaeger=$JAEGER_UI_PORT otel_grpc=$OTEL_COLLECTOR_OTLP_GRPC_PORT otel_http=$OTEL_COLLECTOR_OTLP_HTTP_PORT otel_prom=$OTEL_COLLECTOR_PROMETHEUS_PORT"
     echo "Using fixture root: $PCG_FILESYSTEM_HOST_ROOT"
     echo "Using repository rules: $PCG_REPOSITORY_RULES_JSON"
     if "${COMPOSE_CMD[@]}" up -d --build; then
@@ -530,13 +478,13 @@ fi
 
 refresh_compose_ports
 echo "Waiting for bootstrap indexing to finish..."
-wait_for_bootstrap_exit 600
+pcg_compose_wait_for_bootstrap_exit 600
 
 echo "Waiting for API health..."
-wait_for_http "http://localhost:${API_PORT}/health" 60 2
+pcg_compose_wait_for_http "http://localhost:${API_PORT}/health" 60 2
 
 echo "Reading API bearer token from the running API container..."
-API_KEY="$(read_api_key)"
+API_KEY="$(pcg_compose_read_api_key)"
 if [[ -n "$API_KEY" ]]; then
     echo "Found PCG_API_KEY in the API container environment."
 else
@@ -544,7 +492,7 @@ else
 fi
 
 echo "Waiting for /index-status queue completion..."
-wait_for_index_completion 180 5
+pcg_compose_wait_for_index_completion 180 5 "$INDEX_STATUS_FILE"
 
 echo "Verifying relationship platform API and graph state..."
 verify_api_surface

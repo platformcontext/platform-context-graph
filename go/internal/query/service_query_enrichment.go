@@ -122,6 +122,7 @@ func enrichServiceQueryContextWithOptions(
 }
 
 func buildServiceStoryResponse(serviceName string, workloadContext map[string]any) map[string]any {
+	serviceName = canonicalServiceName(serviceName, workloadContext)
 	response := map[string]any{
 		"service_name":        serviceName,
 		"story":               buildWorkloadStory(workloadContext),
@@ -146,6 +147,13 @@ func buildServiceStoryResponse(serviceName string, workloadContext map[string]an
 		}
 	}
 	return response
+}
+
+func canonicalServiceName(requestedServiceName string, workloadContext map[string]any) string {
+	if canonicalName := safeStr(workloadContext, "name"); canonicalName != "" {
+		return canonicalName
+	}
+	return strings.TrimSpace(requestedServiceName)
 }
 
 func buildServiceDeploymentOverview(workloadContext map[string]any) map[string]any {

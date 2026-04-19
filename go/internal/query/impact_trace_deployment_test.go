@@ -81,6 +81,50 @@ func TestFetchDeploymentSourcesPrefersCanonicalInstanceSources(t *testing.T) {
 	}
 }
 
+func TestFetchServiceTraceContextAcceptsQualifiedWorkloadID(t *testing.T) {
+	t.Parallel()
+
+	ctx, err := fetchServiceTraceContext(
+		t.Context(),
+		fakeWorkloadGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"w.name = $service_name OR w.id = $service_name": {
+					"id":        "workload:service-edge-api",
+					"name":      "service-edge-api",
+					"kind":      "service",
+					"repo_id":   "repo-service-edge-api",
+					"repo_name": "service-edge-api",
+					"instances": []any{
+						map[string]any{
+							"instance_id":   "instance:service-edge-api:modern",
+							"platform_name": "modern-cluster",
+							"platform_kind": "kubernetes",
+							"environment":   "modern",
+						},
+					},
+				},
+			},
+			runByMatch: map[string][]map[string]any{
+				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {},
+				"K8sResource OR":                      {},
+				"fn.name IN":                          {},
+			},
+		},
+		nil,
+		"workload:service-edge-api",
+		traceEnrichmentOptions(traceDeploymentChainRequest{ServiceName: "workload:service-edge-api"}),
+	)
+	if err != nil {
+		t.Fatalf("fetchServiceTraceContext() error = %v, want nil", err)
+	}
+	if got, want := safeStr(ctx, "id"), "workload:service-edge-api"; got != want {
+		t.Fatalf("context.id = %#v, want %#v", got, want)
+	}
+	if got, want := safeStr(ctx, "name"), "service-edge-api"; got != want {
+		t.Fatalf("context.name = %#v, want %#v", got, want)
+	}
+}
+
 func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	t.Parallel()
 
@@ -338,6 +382,33 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	}
 	if drilldowns["service_context_path"] == "" {
 		t.Fatal("drilldowns.service_context_path is empty, want service context route")
+	}
+}
+
+func TestBuildDeploymentTraceResponseUsesCanonicalServiceNameAndDrilldowns(t *testing.T) {
+	t.Parallel()
+
+	got := buildDeploymentTraceResponse("workload:service-edge-api", map[string]any{
+		"id":        "workload:service-edge-api",
+		"name":      "service-edge-api",
+		"kind":      "service",
+		"repo_id":   "repo-service-edge-api",
+		"repo_name": "service-edge-api",
+	})
+
+	if got["service_name"] != "service-edge-api" {
+		t.Fatalf("service_name = %#v, want %q", got["service_name"], "service-edge-api")
+	}
+
+	drilldowns, ok := got["drilldowns"].(map[string]any)
+	if !ok {
+		t.Fatalf("drilldowns type = %T, want map[string]any", got["drilldowns"])
+	}
+	if got, want := drilldowns["service_context_path"], "/api/v0/services/service-edge-api/context"; got != want {
+		t.Fatalf("drilldowns.service_context_path = %#v, want %#v", got, want)
+	}
+	if got, want := drilldowns["service_story_path"], "/api/v0/services/service-edge-api/story"; got != want {
+		t.Fatalf("drilldowns.service_story_path = %#v, want %#v", got, want)
 	}
 }
 

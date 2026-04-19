@@ -3,12 +3,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMMON_LIB="$REPO_ROOT/scripts/lib/correlation_dsl_compose_common.sh"
+RUNTIME_LIB="$REPO_ROOT/scripts/lib/compose_verification_runtime_common.sh"
+ASSERT_LIB="$REPO_ROOT/scripts/lib/compose_verification_assertions.sh"
 TMP_DIR="$(mktemp -d)"
 CORRELATION_FIXTURE_ROOT="$REPO_ROOT/tests/fixtures/correlation_dsl"
 REPOSITORIES_FILE="$TMP_DIR/repositories.json"
 CONTEXT_FILE="$TMP_DIR/repository-context.json"
+SERVICE_CONTEXT_FILE="$TMP_DIR/service-context.json"
 INDEX_STATUS_FILE="$TMP_DIR/index-status.json"
 RESOLUTION_METRICS_FILE="$TMP_DIR/resolution-engine-metrics.txt"
+GRAPH_QUERY_FILE="$TMP_DIR/graph-query.txt"
+HTTP_STATUS_FILE="$TMP_DIR/http-status.txt"
 KEEP_STACK="${PCG_KEEP_COMPOSE_STACK:-false}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-pcg-correlation-dsl-$$}"
 API_PORT="${PCG_HTTP_PORT:-8080}"
@@ -26,6 +31,9 @@ FIXTURE_REPO_NAMES=()
 RESERVED_HOST_PORTS=()
 PICKED_PORT=""
 source "$COMMON_LIB"
+source "$RUNTIME_LIB"
+source "$ASSERT_LIB"
+
 cleanup() {
 	local exit_code=$?
 	if [[ "$exit_code" -ne 0 ]]; then
@@ -50,79 +58,6 @@ cleanup() {
 	[[ "$KEEP_STACK" == "true" ]] || "${COMPOSE_CMD[@]}" down -v >/dev/null 2>&1 || true
 	rm -rf "$TMP_DIR"
 	exit "$exit_code"
-}
-trap cleanup EXIT
-wait_for_http() {
-	local url="$1" attempts="$2" sleep_seconds="$3"
-	for ((attempt = 1; attempt <= attempts; attempt++)); do
-		curl -fsS "$url" >/dev/null 2>&1 && return 0
-		/bin/sleep "$sleep_seconds"
-	done
-	echo "Timed out waiting for $url" >&2
-	return 1
-}
-wait_for_bootstrap_exit() {
-	local deadline=$((SECONDS + $1))
-	while ((SECONDS < deadline)); do
-		local container_id state exit_code
-		container_id="$("${COMPOSE_CMD[@]}" ps -a -q bootstrap-index)"
-		[[ -n "$container_id" ]] || {
-			/bin/sleep 2
-			continue
-		}
-		state="$(docker inspect --format='{{.State.Status}}' "$container_id" 2>/dev/null || true)"
-		[[ -n "$state" ]] || {
-			/bin/sleep 2
-			continue
-		}
-		if [[ "$state" == "exited" ]]; then
-			exit_code="$(docker inspect --format='{{.State.ExitCode}}' "$container_id" 2>/dev/null || true)"
-			[[ -n "$exit_code" ]] || {
-				/bin/sleep 2
-				continue
-			}
-			[[ "$exit_code" == "0" ]] || {
-				echo "bootstrap-index exited with code $exit_code" >&2
-				return 1
-			}
-			return 0
-		fi
-		/bin/sleep 2
-	done
-	echo "Timed out waiting for bootstrap-index to finish" >&2
-	return 1
-}
-wait_for_index_completion() {
-	local attempts="$1" sleep_seconds="$2"
-	for ((attempt = 1; attempt <= attempts; attempt++)); do
-		if api_get "/index-status" "$INDEX_STATUS_FILE" &&
-			jq -e '
-				(.status // "") == "healthy" and
-				((.queue.outstanding // 0) == 0) and
-				((.queue.in_flight // 0) == 0) and
-				((.queue.pending // 0) == 0) and
-				((.queue.retrying // 0) == 0) and
-				((.queue.failed // 0) == 0)
-			' "$INDEX_STATUS_FILE" >/dev/null; then
-			return 0
-		fi
-		/bin/sleep "$sleep_seconds"
-	done
-	echo "Timed out waiting for /index-status to report queue completion" >&2
-	return 1
-}
-read_api_key() {
-	"${COMPOSE_CMD[@]}" exec -T platform-context-graph sh -lc '
-		token="${PCG_API_KEY:-}"
-		if [ -n "$token" ]; then
-			printf %s "$token"
-			exit 0
-		fi
-		home="${PCG_HOME:-/data/.platform-context-graph}"
-		if [ -f "$home/.env" ]; then
-			sed -n "s/^PCG_API_KEY=//p" "$home/.env" | tail -n 1 | tr -d "\n"
-		fi
-	'
 }
 pick_port() {
 	local start_port="$1" port
@@ -191,14 +126,6 @@ api_get() {
 	else
 		curl -fsS "$API_BASE_URL$path" >"$output_file"
 	fi
-}
-assert_json_query() {
-	local file="$1" query="$2" description="$3"
-	jq -e "$query" "$file" >/dev/null || {
-		echo "$description" >&2
-		cat "$file" >&2
-		return 1
-	}
 }
 require_fixture_file() {
 	[[ -f "$1" ]] || {
@@ -274,7 +201,7 @@ verify_repository_selection() {
 }
 verify_service_gha_context() {
 	fetch_repo_context "service-gha"
-	assert_json_query "$CONTEXT_FILE" '
+	pcg_assert_json_query "$CONTEXT_FILE" '
 		(.repository.name // "") == "service-gha" and
 		((.infrastructure_overview.artifact_family_counts.github_actions // 0) >= 1) and
 		((.infrastructure_overview.artifact_family_counts.docker // 0) >= 1) and
@@ -290,7 +217,7 @@ verify_service_gha_context() {
 }
 verify_service_jenkins_context() {
 	fetch_repo_context "service-jenkins"
-	assert_json_query "$CONTEXT_FILE" '
+	pcg_assert_json_query "$CONTEXT_FILE" '
 		(.repository.name // "") == "service-jenkins" and
 		((.infrastructure_overview.artifact_family_counts.docker // 0) >= 1) and
 		((.deployment_artifacts.controller_artifacts // []) | any(
@@ -305,7 +232,7 @@ verify_service_jenkins_context() {
 }
 verify_service_jenkins_ansible_context() {
 	fetch_repo_context "service-jenkins-ansible"
-	assert_json_query "$CONTEXT_FILE" '
+	pcg_assert_json_query "$CONTEXT_FILE" '
 		(.repository.name // "") == "service-jenkins-ansible" and
 		((.infrastructure_overview.artifact_family_counts.ansible // 0) >= 4) and
 		((.deployment_artifacts.controller_artifacts // []) | any(
@@ -317,7 +244,7 @@ verify_service_jenkins_ansible_context() {
 }
 verify_service_compose_context() {
 	fetch_repo_context "service-compose"
-	assert_json_query "$CONTEXT_FILE" '
+	pcg_assert_json_query "$CONTEXT_FILE" '
 		(.repository.name // "") == "service-compose" and
 		((.infrastructure_overview.artifact_family_counts.docker // 0) >= 1) and
 		((.deployment_artifacts.deployment_artifacts // []) | any(
@@ -336,13 +263,13 @@ verify_service_compose_context() {
 }
 verify_terraform_contexts() {
 	fetch_repo_context "terraform-stack-gha"
-	assert_json_query "$CONTEXT_FILE" '
+	pcg_assert_json_query "$CONTEXT_FILE" '
 		(.repository.name // "") == "terraform-stack-gha" and
 		((.infrastructure_overview.entity_family_counts.terraform // 0) >= 1) and
 		((.infrastructure_overview.families // []) | index("terraform"))
 	' "terraform-stack-gha context missing Terraform entity-family coverage"
 	fetch_repo_context "terraform-stack-jenkins"
-	assert_json_query "$CONTEXT_FILE" '
+	pcg_assert_json_query "$CONTEXT_FILE" '
 		(.repository.name // "") == "terraform-stack-jenkins" and
 		((.infrastructure_overview.entity_family_counts.terraform // 0) >= 1) and
 		((.infrastructure_overview.families // []) | index("terraform"))
@@ -350,7 +277,7 @@ verify_terraform_contexts() {
 }
 verify_multi_dockerfile_context() {
 	fetch_repo_context "multi-dockerfile-repo"
-	assert_json_query "$CONTEXT_FILE" '
+	pcg_assert_json_query "$CONTEXT_FILE" '
 		(.repository.name // "") == "multi-dockerfile-repo" and
 		((.infrastructure_overview.artifact_family_counts.docker // 0) >= 2) and
 		((.deployment_artifacts.deployment_artifacts // []) | any(
@@ -392,6 +319,63 @@ verify_graph_state() {
 		return 1
 	}
 }
+
+verify_service_query_truth() {
+	api_get "/services/service-gha/context" "$SERVICE_CONTEXT_FILE"
+	pcg_assert_json_query "$SERVICE_CONTEXT_FILE" '
+		(.id // "") == "workload:service-gha" and
+		(.name // "") == "service-gha" and
+		(.repo_name // "") == "service-gha" and
+		((.instances // []) | length) == 0 and
+		(
+			((.observed_config_environments // []) | index("test")) or
+			((.deployment_overview.config_environments // []) | index("test"))
+		)
+	' "service-gha service context did not prove workload identity plus observed test configuration"
+
+	api_get "/services/service-jenkins/context" "$SERVICE_CONTEXT_FILE"
+	pcg_assert_json_query "$SERVICE_CONTEXT_FILE" '
+		(.id // "") == "workload:service-jenkins" and
+		(.name // "") == "service-jenkins" and
+		(.repo_name // "") == "service-jenkins" and
+		((.instances // []) | length) == 0
+	' "service-jenkins service context did not prove workload identity without invented instances"
+
+	pcg_api_expect_status GET "/services/service-jenkins-ansible/context" "" 404 "$HTTP_STATUS_FILE" "$SERVICE_CONTEXT_FILE"
+}
+
+verify_workload_graph_truth() {
+	pcg_neo4j_count_equals \
+		"MATCH (:Repository {name:'service-gha'})-[:DEFINES]->(:Workload {name:'service-gha'}) RETURN count(*)" \
+		"1" \
+		"service-gha should materialize exactly one workload definition" \
+		"$GRAPH_QUERY_FILE"
+	pcg_neo4j_count_equals \
+		"MATCH (:Repository {name:'service-jenkins'})-[:DEFINES]->(:Workload {name:'service-jenkins'}) RETURN count(*)" \
+		"1" \
+		"service-jenkins should materialize exactly one workload definition" \
+		"$GRAPH_QUERY_FILE"
+	pcg_neo4j_count_equals \
+		"MATCH (:Repository {name:'service-jenkins-ansible'})-[:DEFINES]->(:Workload) RETURN count(*)" \
+		"0" \
+		"service-jenkins-ansible must remain provenance-only and not materialize a workload" \
+		"$GRAPH_QUERY_FILE"
+	pcg_neo4j_count_equals \
+		"MATCH (:Workload {name:'service-gha'})<-[:INSTANCE_OF]-(:WorkloadInstance) RETURN count(*)" \
+		"0" \
+		"service-gha should not invent workload instances without explicit environment evidence" \
+		"$GRAPH_QUERY_FILE"
+	pcg_neo4j_count_equals \
+		"MATCH (:Workload {name:'service-jenkins'})<-[:INSTANCE_OF]-(:WorkloadInstance) RETURN count(*)" \
+		"0" \
+		"service-jenkins should not invent workload instances without explicit environment evidence" \
+		"$GRAPH_QUERY_FILE"
+	pcg_neo4j_count_equals \
+		"MATCH (:Workload {name:'shared-config'}) RETURN count(*)" \
+		"0" \
+		"shared-config provenance must not materialize as a workload" \
+		"$GRAPH_QUERY_FILE"
+}
 log_api_key_mode() {
 	if [[ -n "$API_KEY" ]]; then
 		echo "Found PCG_API_KEY in the API container environment."
@@ -408,14 +392,16 @@ run_context_verifications() {
 	run_verification_step "service-compose context" verify_service_compose_context
 	run_verification_step "terraform contexts" verify_terraform_contexts
 	run_verification_step "multi-dockerfile context" verify_multi_dockerfile_context
+	run_verification_step "service query truth" verify_service_query_truth
 	run_verification_step "graph state" verify_graph_state
+	run_verification_step "workload graph truth" verify_workload_graph_truth
 	run_verification_step "resolution-engine metrics" capture_resolution_metrics
 }
-require_tool curl
-require_tool docker
-require_tool jq
-require_tool nc
-require_tool rg
+pcg_require_tool curl
+pcg_require_tool docker
+pcg_require_tool jq
+pcg_require_tool nc
+pcg_require_tool rg
 if docker compose version >/dev/null 2>&1; then
 	COMPOSE_CMD=(docker compose)
 	COMPOSE_DISPLAY="docker compose"
@@ -462,14 +448,14 @@ done
 }
 refresh_compose_ports
 echo "Waiting for bootstrap indexing to finish..."
-wait_for_bootstrap_exit 600
+pcg_compose_wait_for_bootstrap_exit 600
 echo "Waiting for API health..."
-wait_for_http "http://localhost:${API_PORT}/health" 60 2
+pcg_compose_wait_for_http "http://localhost:${API_PORT}/health" 60 2
 echo "Reading API bearer token from the running API container..."
-API_KEY="$(read_api_key)"
+API_KEY="$(pcg_compose_read_api_key)"
 log_api_key_mode
 echo "Waiting for /index-status queue completion..."
-wait_for_index_completion 180 5
+pcg_compose_wait_for_index_completion 180 5 "$INDEX_STATUS_FILE"
 run_context_verifications
 echo "Correlation DSL compose verification passed."
 echo "API: $API_BASE_URL"

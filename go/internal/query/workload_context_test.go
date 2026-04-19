@@ -335,6 +335,61 @@ func TestGetServiceStoryAcceptsPlainServiceName(t *testing.T) {
 	}
 }
 
+func TestGetServiceStoryAcceptsQualifiedWorkloadIDAndNormalizesServiceName(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeWorkloadGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"w.name = $service_name OR w.id = $service_name": {
+					"id":        "workload:service-edge-api",
+					"name":      "service-edge-api",
+					"kind":      "Deployment",
+					"repo_id":   "repo-1",
+					"repo_name": "service-edge-api",
+					"instances": []any{
+						map[string]any{
+							"instance_id":   "inst-1",
+							"platform_name": "eks-prod",
+							"platform_kind": "EKS",
+							"environment":   "production",
+						},
+					},
+				},
+			},
+			runByMatch: map[string][]map[string]any{
+				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {},
+				"K8sResource OR":                      {},
+				"fn.name IN":                          {},
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/services/workload:service-edge-api/story", nil)
+	req.SetPathValue("service_name", "workload:service-edge-api")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	if got, want := resp["service_name"], "service-edge-api"; got != want {
+		t.Fatalf("service_name = %v, want %v", got, want)
+	}
+	if got, ok := resp["story"].(string); !ok || !strings.Contains(got, "Workload service-edge-api") {
+		t.Fatalf("story = %#v, want narrative for service-edge-api", resp["story"])
+	}
+}
+
 func TestGetServiceContextOmitsRepoEntryPoints(t *testing.T) {
 	t.Parallel()
 

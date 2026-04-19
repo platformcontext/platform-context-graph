@@ -66,23 +66,14 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	entityHandler := &EntityHandler{Neo4j: h.Neo4j}
-	ctx, err := entityHandler.fetchWorkloadContext(r.Context(), "w.name = $service_name", map[string]any{"service_name": req.ServiceName})
+	traceOptions := traceEnrichmentOptions(req)
+	ctx, err := fetchServiceTraceContext(r.Context(), h.Neo4j, h.Content, req.ServiceName, traceOptions)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
 	}
 	if ctx == nil {
 		WriteError(w, http.StatusNotFound, "service not found")
-		return
-	}
-	traceOptions := traceEnrichmentOptions(req)
-	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
-		DirectOnly:                !traceOptions.includeConsumers,
-		IncludeRelatedModuleUsage: traceOptions.includeProvisioningChains,
-		MaxDepth:                  traceOptions.maxDepth,
-	}); err != nil {
-		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich service trace context: %v", err))
 		return
 	}
 	if workloadID := safeStr(ctx, "id"); workloadID != "" {
@@ -122,7 +113,36 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 	WriteJSON(w, http.StatusOK, buildDeploymentTraceResponse(req.ServiceName, ctx))
 }
 
+func fetchServiceTraceContext(
+	ctx context.Context,
+	graph GraphReader,
+	content *ContentReader,
+	serviceName string,
+	traceOptions traceEnrichmentConfig,
+) (map[string]any, error) {
+	entityHandler := &EntityHandler{Neo4j: graph, Content: content}
+	workloadContext, err := entityHandler.fetchWorkloadContext(
+		ctx,
+		serviceLookupWhereClause,
+		map[string]any{"service_name": serviceName},
+	)
+	if err != nil || workloadContext == nil {
+		return workloadContext, err
+	}
+
+	if err := enrichServiceQueryContextWithOptions(ctx, graph, content, workloadContext, serviceQueryEnrichmentOptions{
+		DirectOnly:                !traceOptions.includeConsumers,
+		IncludeRelatedModuleUsage: traceOptions.includeProvisioningChains,
+		MaxDepth:                  traceOptions.maxDepth,
+	}); err != nil {
+		return nil, fmt.Errorf("enrich service trace context: %w", err)
+	}
+
+	return workloadContext, nil
+}
+
 func buildDeploymentTraceResponse(serviceName string, workloadContext map[string]any) map[string]any {
+	serviceName = canonicalServiceName(serviceName, workloadContext)
 	instances, _ := workloadContext["instances"].([]map[string]any)
 	deploymentSources, _ := workloadContext["deployment_sources"].([]map[string]any)
 	cloudResources, _ := workloadContext["cloud_resources"].([]map[string]any)

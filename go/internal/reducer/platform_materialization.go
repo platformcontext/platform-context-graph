@@ -107,13 +107,15 @@ func (h PlatformMaterializationHandler) Handle(
 		canonicalWrites += crossRepoWrites
 		if crossRepoWrites > 0 && h.WorkloadMaterializationReplayer != nil {
 			replayEntityKey := workloadMaterializationReplayEntityKey(intent)
-			if _, err := h.WorkloadMaterializationReplayer.ReplayWorkloadMaterialization(
-				ctx,
-				intent.ScopeID,
-				intent.GenerationID,
-				replayEntityKey,
-			); err != nil {
-				return Result{}, fmt.Errorf("replay workload materialization: %w", err)
+			for _, scopeID := range workloadMaterializationReplayScopes(intent) {
+				if _, err := h.WorkloadMaterializationReplayer.ReplayWorkloadMaterialization(
+					ctx,
+					scopeID,
+					intent.GenerationID,
+					replayEntityKey,
+				); err != nil {
+					return Result{}, fmt.Errorf("replay workload materialization: %w", err)
+				}
 			}
 		}
 	}
@@ -167,7 +169,13 @@ func platformMaterializationWriteFromIntent(intent Intent) (PlatformMaterializat
 func workloadMaterializationReplayEntityKey(intent Intent) string {
 	for _, entityKey := range intent.EntityKeys {
 		entityKey = strings.TrimSpace(entityKey)
-		if entityKey == "" {
+		if strings.HasPrefix(strings.ToLower(entityKey), "repo:") {
+			return entityKey
+		}
+	}
+	for _, entityKey := range intent.EntityKeys {
+		entityKey = strings.TrimSpace(entityKey)
+		if entityKey == "" || isNonRepositoryReplayKey(entityKey) {
 			continue
 		}
 		if alias := normalizedEntityKey(entityKey); alias != "" {
@@ -175,4 +183,16 @@ func workloadMaterializationReplayEntityKey(intent Intent) string {
 		}
 	}
 	return "repo:" + strings.TrimSpace(intent.ScopeID)
+}
+
+func workloadMaterializationReplayScopes(intent Intent) []string {
+	return uniqueSortedStrings(append(intent.RelatedScopeIDs, intent.ScopeID))
+}
+
+func isNonRepositoryReplayKey(entityKey string) bool {
+	lower := strings.ToLower(strings.TrimSpace(entityKey))
+	return strings.HasPrefix(lower, "platform:") ||
+		strings.HasPrefix(lower, "aws:") ||
+		strings.HasPrefix(lower, "tfstate:") ||
+		strings.HasPrefix(lower, "cloud:")
 }

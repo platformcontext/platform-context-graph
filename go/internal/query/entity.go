@@ -30,6 +30,8 @@ type resolveEntityRequest struct {
 	RepoID string `json:"repo_id"`
 }
 
+const serviceLookupWhereClause = "w.name = $service_name OR w.id = $service_name"
+
 // resolveEntity resolves an entity by name and optional type/repo filters.
 func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 	var req resolveEntityRequest
@@ -406,7 +408,7 @@ func (h *EntityHandler) getServiceContext(w http.ResponseWriter, r *http.Request
 
 	ctx, err := h.fetchWorkloadContext(
 		r.Context(),
-		"w.name = $service_name OR w.id = $service_name",
+		serviceLookupWhereClause,
 		map[string]any{"service_name": serviceName},
 	)
 	if err != nil {
@@ -436,7 +438,7 @@ func (h *EntityHandler) getServiceStory(w http.ResponseWriter, r *http.Request) 
 
 	ctx, err := h.fetchWorkloadContext(
 		r.Context(),
-		"w.name = $service_name OR w.id = $service_name",
+		serviceLookupWhereClause,
 		map[string]any{"service_name": serviceName},
 	)
 	if err != nil {

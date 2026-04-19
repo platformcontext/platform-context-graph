@@ -238,7 +238,7 @@ func TestPlatformMaterializationHandlerCallsCrossRepoResolver(t *testing.T) {
 		SourceSystem:    "git",
 		Domain:          DomainDeploymentMapping,
 		Cause:           "platform discovered",
-		EntityKeys:      []string{"platform:kubernetes:aws:prod-cluster"},
+		EntityKeys:      []string{"platform:kubernetes:aws:prod-cluster", "repo:service-edge-api"},
 		RelatedScopeIDs: []string{"scope-1"},
 		EnqueuedAt:      time.Date(2026, time.April, 13, 12, 0, 0, 0, time.UTC),
 		AvailableAt:     time.Date(2026, time.April, 13, 12, 0, 0, 0, time.UTC),
@@ -267,6 +267,9 @@ func TestPlatformMaterializationHandlerCallsCrossRepoResolver(t *testing.T) {
 	}
 	if got, want := replayer.calls[0].generationID, "gen-1"; got != want {
 		t.Fatalf("replayer generation_id = %q, want %q", got, want)
+	}
+	if got, want := replayer.calls[0].entityKey, "repo:service-edge-api"; got != want {
+		t.Fatalf("replayer entity_key = %q, want %q", got, want)
 	}
 }
 
@@ -339,6 +342,87 @@ func TestPlatformMaterializationHandlerDoesNotReplayWithoutCrossRepoWrites(t *te
 	}
 }
 
+func TestPlatformMaterializationHandlerReplaysWorkloadMaterializationAcrossRelatedScopes(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingPlatformMaterializationWriter{
+		result: PlatformMaterializationWriteResult{CanonicalWrites: 1},
+	}
+	edgeWriter := &recordingEdgeWriter{}
+	replayer := &recordingWorkloadMaterializationReplayer{}
+	handler := PlatformMaterializationHandler{
+		Writer:                          writer,
+		WorkloadMaterializationReplayer: replayer,
+		CrossRepoResolver: &CrossRepoRelationshipHandler{
+			EvidenceLoader: &fakeEvidenceFactLoader{
+				facts: []relationships.EvidenceFact{
+					{
+						EvidenceKind:     relationships.EvidenceKindKustomizeResource,
+						RelationshipType: relationships.RelDeploysFrom,
+						SourceRepoID:     "deployment-kustomize",
+						TargetRepoID:     "service-edge-api",
+						Confidence:       0.99,
+						Rationale:        "kustomize overlay references the application repo",
+					},
+				},
+			},
+			EdgeWriter: edgeWriter,
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:        "intent-pm-related-replay",
+		ScopeID:         "scope-delivery",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainDeploymentMapping,
+		Cause:           "cross-repo deployment evidence resolved",
+		EntityKeys:      []string{"platform:kubernetes:aws:modern-cluster:modern:us-east-1", "repo:service-edge-api"},
+		RelatedScopeIDs: []string{"scope-app", "scope-delivery", "scope-app"},
+		EnqueuedAt:      time.Date(2026, time.April, 19, 12, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 19, 12, 0, 0, 0, time.UTC),
+		Status:          IntentStatusClaimed,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+
+	if got, want := len(replayer.calls), 2; got != want {
+		t.Fatalf("replayer calls = %d, want %d", got, want)
+	}
+	if got, want := replayer.calls[0].scopeID, "scope-app"; got != want {
+		t.Fatalf("replayer calls[0].scopeID = %q, want %q", got, want)
+	}
+	if got, want := replayer.calls[1].scopeID, "scope-delivery"; got != want {
+		t.Fatalf("replayer calls[1].scopeID = %q, want %q", got, want)
+	}
+	for i, call := range replayer.calls {
+		if got, want := call.entityKey, "repo:service-edge-api"; got != want {
+			t.Fatalf("replayer calls[%d].entityKey = %q, want %q", i, got, want)
+		}
+		if got, want := call.generationID, "gen-1"; got != want {
+			t.Fatalf("replayer calls[%d].generationID = %q, want %q", i, got, want)
+		}
+	}
+}
+
+func TestWorkloadMaterializationReplayEntityKeyPrefersRepositoryKey(t *testing.T) {
+	t.Parallel()
+
+	intent := Intent{
+		EntityKeys: []string{
+			"platform:kubernetes:aws:modern-cluster:modern:us-east-1",
+			"repo:service-edge-api",
+			"platform:ecs:aws:legacy-edge",
+		},
+		ScopeID: "scope-delivery",
+	}
+
+	if got, want := workloadMaterializationReplayEntityKey(intent), "repo:service-edge-api"; got != want {
+		t.Fatalf("workloadMaterializationReplayEntityKey() = %q, want %q", got, want)
+	}
+}
+
 type recordingPlatformMaterializationWriter struct {
 	requests []PlatformMaterializationWrite
 	result   PlatformMaterializationWriteResult
@@ -361,17 +445,19 @@ type recordingWorkloadMaterializationReplayer struct {
 type workloadMaterializationReplayCall struct {
 	scopeID      string
 	generationID string
+	entityKey    string
 }
 
 func (r *recordingWorkloadMaterializationReplayer) ReplayWorkloadMaterialization(
 	_ context.Context,
 	scopeID string,
 	generationID string,
-	_ string,
+	entityKey string,
 ) (bool, error) {
 	r.calls = append(r.calls, workloadMaterializationReplayCall{
 		scopeID:      scopeID,
 		generationID: generationID,
+		entityKey:    entityKey,
 	})
 	return true, r.err
 }
