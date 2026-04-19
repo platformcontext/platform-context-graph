@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -331,13 +332,17 @@ func (s *RelationshipStore) GetResolvedRelationships(
 	var result []relationships.ResolvedRelationship
 	for sqlRows.Next() {
 		var r relationships.ResolvedRelationship
+		var sourceRepoID sql.NullString
+		var targetRepoID sql.NullString
+		var sourceEntityID sql.NullString
+		var targetEntityID sql.NullString
 		var relType, resSrc string
 		var detailsBytes []byte
 		if err := sqlRows.Scan(
-			&r.SourceRepoID,
-			&r.TargetRepoID,
-			&r.SourceEntityID,
-			&r.TargetEntityID,
+			&sourceRepoID,
+			&targetRepoID,
+			&sourceEntityID,
+			&targetEntityID,
 			&relType,
 			&r.Confidence,
 			&r.EvidenceCount,
@@ -347,6 +352,10 @@ func (s *RelationshipStore) GetResolvedRelationships(
 		); err != nil {
 			return nil, fmt.Errorf("scan resolved: %w", err)
 		}
+		r.SourceRepoID = nullableString(sourceRepoID)
+		r.TargetRepoID = nullableString(targetRepoID)
+		r.SourceEntityID = nullableString(sourceEntityID)
+		r.TargetEntityID = nullableString(targetEntityID)
 		r.RelationshipType = relationships.RelationshipType(relType)
 		r.ResolutionSource = relationships.ResolutionSource(resSrc)
 		if len(detailsBytes) > 0 {
@@ -375,13 +384,17 @@ func (s *RelationshipStore) GetResolvedRelationshipsForGeneration(
 	var result []relationships.ResolvedRelationship
 	for sqlRows.Next() {
 		var r relationships.ResolvedRelationship
+		var sourceRepoID sql.NullString
+		var targetRepoID sql.NullString
+		var sourceEntityID sql.NullString
+		var targetEntityID sql.NullString
 		var relType, resSrc string
 		var detailsBytes []byte
 		if err := sqlRows.Scan(
-			&r.SourceRepoID,
-			&r.TargetRepoID,
-			&r.SourceEntityID,
-			&r.TargetEntityID,
+			&sourceRepoID,
+			&targetRepoID,
+			&sourceEntityID,
+			&targetEntityID,
 			&relType,
 			&r.Confidence,
 			&r.EvidenceCount,
@@ -391,6 +404,10 @@ func (s *RelationshipStore) GetResolvedRelationshipsForGeneration(
 		); err != nil {
 			return nil, fmt.Errorf("scan resolved by generation: %w", err)
 		}
+		r.SourceRepoID = nullableString(sourceRepoID)
+		r.TargetRepoID = nullableString(targetRepoID)
+		r.SourceEntityID = nullableString(sourceEntityID)
+		r.TargetEntityID = nullableString(targetEntityID)
 		r.RelationshipType = relationships.RelationshipType(relType)
 		r.ResolutionSource = relationships.ResolutionSource(resSrc)
 		if len(detailsBytes) > 0 {
@@ -401,4 +418,11 @@ func (s *RelationshipStore) GetResolvedRelationshipsForGeneration(
 		result = append(result, r)
 	}
 	return result, sqlRows.Err()
+}
+
+func nullableString(value sql.NullString) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String
 }

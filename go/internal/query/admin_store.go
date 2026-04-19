@@ -109,7 +109,7 @@ SET status = 'pending',
     failure_details = NULL,
     updated_at = $1
 `)
-	args = append([]any{now, strings.TrimSpace(f.OperatorNote)}, args...)
+	args = append([]any{now}, args...)
 	items, err := scanAdminWorkItems(ctx, s.db, query, args...)
 	if err != nil {
 		return nil, err
