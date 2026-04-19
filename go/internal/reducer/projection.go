@@ -219,9 +219,15 @@ func BuildProjectionRows(
 			result.Stats.Workloads++
 		}
 
-		// Resolve environments: deployment overlay environments first, then
-		// namespace fallback.
-		environments := deploymentEnvironments[candidate.DeploymentRepoID]
+		// Resolve environments: deployment overlay environments first (by
+		// deployment repo when linked, otherwise source repo), then namespace
+		// fallback.
+		var environments []string
+		if candidate.DeploymentRepoID != "" {
+			environments = deploymentEnvironments[candidate.DeploymentRepoID]
+		} else {
+			environments = deploymentEnvironments[candidate.RepoID]
+		}
 		if len(environments) == 0 {
 			for _, ns := range candidate.Namespaces {
 				ns = strings.TrimSpace(ns)

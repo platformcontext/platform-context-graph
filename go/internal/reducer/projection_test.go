@@ -271,6 +271,34 @@ func TestBuildProjectionRowsWithDeploymentEnvironments(t *testing.T) {
 	}
 }
 
+func TestBuildProjectionRowsUsesRepoIDOverlaysWhenNoDeploymentRepo(t *testing.T) {
+	t.Parallel()
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:         "repo-self-deploy",
+			RepoName:       "self-deploy-api",
+			ResourceKinds:  []string{"Deployment"},
+			Classification: "service",
+			Confidence:     0.98,
+			Provenance:     []string{"k8s_resource"},
+		},
+	}
+	deploymentEnvs := map[string][]string{
+		"repo-self-deploy": {"staging", "production"},
+	}
+	result := BuildProjectionRows(candidates, deploymentEnvs)
+
+	if result.Stats.Instances != 2 {
+		t.Fatalf("Stats.Instances = %d, want 2", result.Stats.Instances)
+	}
+	if result.InstanceRows[0].Environment != "staging" {
+		t.Fatalf("InstanceRows[0].Environment = %q, want staging", result.InstanceRows[0].Environment)
+	}
+	if result.InstanceRows[1].Environment != "production" {
+		t.Fatalf("InstanceRows[1].Environment = %q, want production", result.InstanceRows[1].Environment)
+	}
+}
+
 func TestBuildProjectionRowsRuntimePlatformFromResourceKinds(t *testing.T) {
 	t.Parallel()
 	candidates := []WorkloadCandidate{

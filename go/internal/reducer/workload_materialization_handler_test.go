@@ -313,8 +313,10 @@ func TestWorkloadMaterializationHandlerSeedsRuntimeCandidateFromArgoDeploymentSo
 		t.Fatalf("candidates[0].DeploymentRepoID = %q, want %q", got, want)
 	}
 	projection := BuildProjectionRows(candidates, deploymentEnvironments)
-	if got := len(projection.InstanceRows); got != 1 {
-		t.Fatalf("len(projection.InstanceRows) = %d, want 1", got)
+	// Two instances: edge-api (via DeploymentRepoID → platform-deploy overlays)
+	// and platform-deploy itself (via its own RepoID overlays, ArgoCD provenance).
+	if got := len(projection.InstanceRows); got != 2 {
+		t.Fatalf("len(projection.InstanceRows) = %d, want 2", got)
 	}
 	if got := len(projection.DeploymentSourceRows); got != 1 {
 		t.Fatalf("len(projection.DeploymentSourceRows) = %d, want 1", got)
