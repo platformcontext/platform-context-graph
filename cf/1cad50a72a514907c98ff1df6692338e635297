@@ -1,0 +1,123 @@
+go/internal/reducer/defaults.go
+  fd73f686cb9c9a3f 17,135
+  073a74ac3999a938 131-134
+go/internal/query/entity.go
+  073a74ac3999a938 467,470-479,531-538
+go/internal/query/service_query_enrichment.go
+  fd73f686cb9c9a3f 154-155,158-168
+go/internal/query/service_contract_helpers_test.go
+  fd73f686cb9c9a3f 86-88,137-172
+go/internal/query/deployment_trace_support_helpers.go
+  fd73f686cb9c9a3f 575-576
+  073a74ac3999a938 503,506-511,513-521,523-524,528,530,532,547-574
+go/internal/storage/postgres/reducer_queue_test.go
+  fd73f686cb9c9a3f 181-247,259-262,268-269,301
+  afaff32908d8a1e9 248-258,263-267,270-300,302-305
+go/internal/reducer/deployable_unit_correlation_test.go
+  0f076cc9d18245fc 397-501
+  fd73f686cb9c9a3f 137,165-166,168-169,282-329
+go/internal/storage/postgres/relationship_store_test.go
+  073a74ac3999a938 511-529,532-533
+go/internal/query/service_contract_helpers.go
+  fd73f686cb9c9a3f 105-115,118-124,126
+go/internal/storage/postgres/reducer_queue_replay.go
+  fd73f686cb9c9a3f 30-48,88-136,140-142,148,166-167
+  afaff32908d8a1e9 9,57-60,137-139,143-147,149-165
+go/internal/reducer/deployable_unit_correlation.go
+  fd73f686cb9c9a3f 464-465
+  34edbe2421875f6a 199,205-210,256,452-463
+go/cmd/reducer/main.go
+  fd73f686cb9c9a3f 168
+go/internal/reducer/correlated_workload_projection_input_loader_test.go
+  fd73f686cb9c9a3f 12,65-66
+go/internal/correlation/rules/dockerfile_rules.go
+  fd73f686cb9c9a3f 7
+go/internal/reducer/platform_materialization.go
+  fd73f686cb9c9a3f 36-41,53,108-118,166-178
+  073a74ac3999a938 49-52
+go/internal/storage/postgres/relationship_store.go
+  fd73f686cb9c9a3f 361-404
+go/internal/query/impact_trace_deployment_story_helpers.go
+  fd73f686cb9c9a3f 56,62-63
+go/internal/query/impact_trace_deployment.go
+  073a74ac3999a938 145-148,178-182,189-201,225,229-231,350-351,359-371,384-478
+go/internal/query/impact_trace_deployment_test.go
+  fd73f686cb9c9a3f 9,50-83,248-268
+go/internal/reducer/platform_materialization_test.go
+  fd73f686cb9c9a3f 213,216,262-270,305-312,314-341,355-377
+  073a74ac3999a938 215,313
+go/internal/reducer/workload_materializer.go
+  fd73f686cb9c9a3f 161-170,290-293
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "cf1cad50a72a514907c98ff1df6692338e635297",
+  "prompts": {
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 230,
+      "overriden_lines": 0
+    },
+    "0f076cc9d18245fc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da684-3ae1-7f31-a40d-bfa6416d77a4",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 105,
+      "overriden_lines": 0
+    },
+    "34edbe2421875f6a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da684-3c8c-79d0-9f78-595b0e0560e7",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 22,
+      "overriden_lines": 0
+    },
+    "afaff32908d8a1e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da66b-c12c-7253-9d5c-020b804a425e",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 81,
+      "overriden_lines": 0
+    },
+    "fd73f686cb9c9a3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "84c49d72-a249-4917-a2bf-08ba4698fd03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1461,
+      "overriden_lines": 0
+    }
+  }
+}
