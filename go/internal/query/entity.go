@@ -119,6 +119,7 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 	for i := range entities {
 		attachSemanticSummary(entities[i])
 	}
+	entities = normalizeResolvedEntities(entities, 20)
 	if len(entities) == 0 {
 		entities, err = h.resolveEntityFromContent(r.Context(), req.Name, req.Type, req.RepoID, 20)
 		if err != nil {
