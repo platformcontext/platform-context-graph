@@ -14,6 +14,15 @@ workflow-coordinator, and resolution-engine workloads with:
 - Flexible service exposure (ClusterIP, LoadBalancer, Ingress, Gateway API)
 - Hardened defaults such as public API docs disabled unless explicitly re-enabled
 
+Important routing notes:
+
+- `mcpServer.enabled=true` only makes the MCP runtime externally reachable when
+  you also route ingress or gateway traffic to `backend: mcp`.
+- Each `exposure.ingress` or `exposure.gateway` block targets exactly one
+  backend at a time: `api` or `mcp`.
+- If you want separate public API and MCP hostnames, add an additional
+  Ingress or HTTPRoute from your overlay or GitOps layer.
+
 ## Render locally
 
 ```bash

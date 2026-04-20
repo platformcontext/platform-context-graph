@@ -408,6 +408,33 @@ That helper:
 - preserves remote entries such as `pcg-e2e`
 - probes MCP health, MCP `tools/list`, and API `index-status`
 
+Use the same `COMPOSE_PROJECT_NAME` value here that you used for
+`docker compose up` if you ran a named stack:
+
+```bash
+COMPOSE_PROJECT_NAME=pcg-one-repo ./scripts/sync_local_compose_mcp.sh
+```
+
+The default target file is the repo-local `.mcp.json`, which is the config we
+use for Codex and Claude in this repository. If you need to update a different
+client config file, override it:
+
+```bash
+PCG_MCP_CONFIG_FILE="$HOME/path/to/mcp.json" \
+./scripts/sync_local_compose_mcp.sh
+```
+
+If you want a different server key than `pcg-local-compose`, override the entry
+name too:
+
+```bash
+PCG_LOCAL_MCP_SERVER_NAME=pcg-local-one-repo \
+./scripts/sync_local_compose_mcp.sh
+```
+
+After the file changes, restart the Codex or Claude session so the client
+reloads the MCP config and current bearer token.
+
 If you only want to patch `.mcp.json` without running the probes:
 
 ```bash

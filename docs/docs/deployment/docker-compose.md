@@ -24,6 +24,62 @@ Run it with:
 docker compose up --build
 ```
 
+## Index One Repo Or Multiple Repos From Your Machine
+
+For local code-mapping work, point Compose at a real host directory that
+contains the repositories you want to index.
+
+The simplest pattern is a dedicated parent directory under your home folder:
+
+```bash
+mkdir -p "$HOME/pcg-local-index"
+```
+
+Then place one or more Git checkouts under that directory:
+
+```text
+$HOME/pcg-local-index/
+  repo-one/
+  repo-two/
+  repo-three/
+```
+
+For a single repo:
+
+```bash
+PCG_FILESYSTEM_HOST_ROOT="$HOME/pcg-local-index" \
+PCG_REPOSITORY_RULES_JSON='{"exact":["repo-one"]}' \
+docker compose up --build
+```
+
+For multiple repos:
+
+```bash
+PCG_FILESYSTEM_HOST_ROOT="$HOME/pcg-local-index" \
+PCG_REPOSITORY_RULES_JSON='{"exact":["repo-one","repo-two","repo-three"]}' \
+docker compose up --build
+```
+
+Notes:
+
+- In the local filesystem flow, exact rules usually match the repository
+  directory names under `PCG_FILESYSTEM_HOST_ROOT`.
+- If you want the least surprise for a single-repo run, create a dedicated
+  parent directory that contains only that one checkout.
+- Every repository directory must contain a real `.git` directory.
+- Use a real absolute path under your home directory, not a symlink and not
+  macOS `/tmp`.
+
+If you want to isolate runs from each other, set a dedicated Compose project
+name and reuse it for every follow-up command:
+
+```bash
+COMPOSE_PROJECT_NAME=pcg-one-repo \
+PCG_FILESYSTEM_HOST_ROOT="$HOME/pcg-local-index" \
+PCG_REPOSITORY_RULES_JSON='{"exact":["repo-one"]}' \
+docker compose up --build
+```
+
 To start the workflow coordinator alongside the default stack, add the profile
 explicitly:
 
@@ -254,3 +310,78 @@ It also exercises the content-store contract:
 - the bundled local Postgres enables `pg_trgm` automatically through the content-store schema bootstrap
 - `OTEL_EXPORTER_OTLP_ENDPOINT` points at `http://otel-collector:4317` inside the Compose network
 - the local collector config lives at `deploy/observability/otel-collector-config.yaml`
+
+## Sync The Local MCP Config For Codex Or Claude
+
+When the Compose stack auto-picks ports or generates a fresh bearer token,
+resync the local MCP config before using Codex or Claude against the stack:
+
+```bash
+./scripts/sync_local_compose_mcp.sh
+```
+
+That helper:
+
+- discovers the live published `mcp-server` and API ports from the running
+  Compose stack
+- reads the current bearer token from the `mcp-server` container
+- updates only the `pcg-local-compose` entry in the repo-local `.mcp.json`
+- preserves remote entries such as `pcg-e2e`
+- probes MCP health, MCP `tools/list`, and API `index-status`
+
+If you launched Compose with a custom project name, use the same name when you
+sync:
+
+```bash
+COMPOSE_PROJECT_NAME=pcg-one-repo ./scripts/sync_local_compose_mcp.sh
+```
+
+By default the helper writes the repo-local `.mcp.json`, which is the practical
+config file we use for Codex and Claude in this repository.
+
+If one client needs a different config file, point the helper at it
+explicitly:
+
+```bash
+PCG_MCP_CONFIG_FILE="$HOME/path/to/mcp.json" \
+./scripts/sync_local_compose_mcp.sh
+```
+
+If you want a different local entry name than `pcg-local-compose`, override it:
+
+```bash
+PCG_LOCAL_MCP_SERVER_NAME=pcg-local-one-repo \
+./scripts/sync_local_compose_mcp.sh
+```
+
+If you only want to patch the config file without running the health probes:
+
+```bash
+PCG_SKIP_PROBES=true ./scripts/sync_local_compose_mcp.sh
+```
+
+After `.mcp.json` changes, restart the Codex or Claude session so the client
+reloads the MCP server list and current bearer token.
+
+## Shut The Local Stack Down
+
+Stop the stack but keep the volumes:
+
+```bash
+docker compose down
+```
+
+Stop the stack and remove the local Neo4j, Postgres, and PCG data volumes:
+
+```bash
+docker compose down -v --remove-orphans
+```
+
+If you used a custom Compose project name, include it on shutdown too:
+
+```bash
+COMPOSE_PROJECT_NAME=pcg-one-repo docker compose down -v --remove-orphans
+```
+
+Use the volume-removing form when you want a truly fresh local index on the
+next startup.

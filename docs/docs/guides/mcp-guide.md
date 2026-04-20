@@ -14,6 +14,64 @@ pcg mcp setup
 
 The wizard writes or updates configuration for supported clients (Claude, Cursor, VS Code) and gives you a config snippet for manual wiring.
 
+## Use The Local Compose MCP With Codex Or Claude
+
+For local graph-backed testing, the easiest path is the Compose stack plus the
+repo-local `.mcp.json`.
+
+1. Start Compose against the repositories you want to index.
+2. Run `./scripts/sync_local_compose_mcp.sh` to update the
+   `pcg-local-compose` entry in `.mcp.json`.
+3. Restart the Codex or Claude session so the client reloads the local MCP
+   config and bearer token.
+4. Ask a small smoke-test question such as:
+   - "resolve `DeployableUnitCorrelationHandler`"
+   - "who calls `publishIntentGraphPhase`?"
+   - "show me the contents of `go/internal/reducer/deployable_unit_correlation.go`"
+
+Example, single repo:
+
+```bash
+PCG_FILESYSTEM_HOST_ROOT="$HOME/pcg-local-index" \
+PCG_REPOSITORY_RULES_JSON='{"exact":["platform-context-graph"]}' \
+docker compose up --build
+
+./scripts/sync_local_compose_mcp.sh
+```
+
+Example, multiple repos:
+
+```bash
+PCG_FILESYSTEM_HOST_ROOT="$HOME/pcg-local-index" \
+PCG_REPOSITORY_RULES_JSON='{"exact":["repo-one","repo-two","repo-three"]}' \
+docker compose up --build
+
+./scripts/sync_local_compose_mcp.sh
+```
+
+If you started Compose with a custom project name, pass the same project name
+when syncing:
+
+```bash
+COMPOSE_PROJECT_NAME=pcg-one-repo ./scripts/sync_local_compose_mcp.sh
+```
+
+If one client needs a different config file, point the helper at it:
+
+```bash
+PCG_MCP_CONFIG_FILE="$HOME/path/to/mcp.json" \
+./scripts/sync_local_compose_mcp.sh
+```
+
+To stop and fully reset the local stack:
+
+```bash
+docker compose down -v --remove-orphans
+```
+
+For the broader Compose workflow and shutdown details, see
+[Docker Compose](../deployment/docker-compose.md).
+
 ## Start the server
 
 For stdio-based MCP (local, single-user):
@@ -25,8 +83,11 @@ pcg mcp start
 For a shared deployment over HTTP:
 
 ```bash
-pcg serve start --host 0.0.0.0 --port 8080
+pcg mcp start
 ```
+
+In the deployable split-service shape, the dedicated `mcp-server` runtime is
+the MCP HTTP endpoint. Do not point MCP clients at the HTTP API runtime.
 
 ## Canonical Versus Repair Surfaces
 
