@@ -173,6 +173,10 @@ func (s StatusStore) ReadStatusSnapshot(ctx context.Context, asOf time.Time) (st
 	if err != nil {
 		return statuspkg.RawSnapshot{}, err
 	}
+	coordinatorSnapshot, err := readCoordinatorSnapshot(ctx, s.queryer, asOf.UTC())
+	if err != nil {
+		return statuspkg.RawSnapshot{}, err
+	}
 
 	return statuspkg.RawSnapshot{
 		AsOf:                  asOf.UTC(),
@@ -184,6 +188,7 @@ func (s StatusStore) ReadStatusSnapshot(ctx context.Context, asOf time.Time) (st
 		StageCounts:           stageCounts,
 		DomainBacklogs:        domainBacklogs,
 		Queue:                 queueSnapshot,
+		Coordinator:           coordinatorSnapshot,
 	}, nil
 }
 

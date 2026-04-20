@@ -40,6 +40,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-resolution-engine" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "pcg.workflowCoordinatorFullname" -}}
+{{- printf "%s-workflow-coordinator" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "pcg.apiMetricsServiceName" -}}
 {{- printf "%s-api-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -50,6 +54,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- define "pcg.resolutionEngineMetricsServiceName" -}}
 {{- printf "%s-resolution-engine-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "pcg.workflowCoordinatorMetricsServiceName" -}}
+{{- printf "%s-workflow-coordinator-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "pcg.apiSelectorLabels" -}}
@@ -65,6 +73,11 @@ app.kubernetes.io/component: ingester
 {{- define "pcg.resolutionEngineSelectorLabels" -}}
 {{- include "pcg.selectorLabels" . }}
 app.kubernetes.io/component: resolution-engine
+{{- end -}}
+
+{{- define "pcg.workflowCoordinatorSelectorLabels" -}}
+{{- include "pcg.selectorLabels" . }}
+app.kubernetes.io/component: workflow-coordinator
 {{- end -}}
 
 {{- define "pcg.serviceAccountName" -}}

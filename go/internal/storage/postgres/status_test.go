@@ -130,9 +130,12 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 	if got.DomainBacklogs[0].OldestAge != 90*time.Second {
 		t.Fatalf("ReadRawSnapshot().DomainBacklogs[0].OldestAge = %v, want %v", got.DomainBacklogs[0].OldestAge, 90*time.Second)
 	}
+	if got.Coordinator != nil {
+		t.Fatalf("ReadRawSnapshot().Coordinator = %#v, want nil", got.Coordinator)
+	}
 
-	if len(queryer.queries) != 6 {
-		t.Fatalf("QueryContext() call count = %d, want 6", len(queryer.queries))
+	if len(queryer.queries) != 11 {
+		t.Fatalf("QueryContext() call count = %d, want 11", len(queryer.queries))
 	}
 	for _, want := range []string{
 		"FROM ingestion_scopes",
@@ -184,6 +187,60 @@ func TestStatusQueriesUseAggregateFilterSyntax(t *testing.T) {
 	}
 }
 
+func TestReadCoordinatorSnapshotHandlesNullableDeactivatedAtAndCreatedAtBacklogFallback(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 20, 15, 45, 0, 0, time.UTC)
+	queryer := &fakeQueryer{
+		responses: []fakeRows{
+			{
+				rows: [][]any{
+					{
+						"collector-git-default",
+						"git",
+						"continuous",
+						true,
+						true,
+						false,
+						"",
+						now.Add(-15 * time.Second),
+						now.Add(-5 * time.Second),
+						nil,
+					},
+				},
+			},
+			{rows: [][]any{}},
+			{rows: [][]any{}},
+			{rows: [][]any{}},
+			{
+				rows: [][]any{
+					{int64(1), int64(0), 42.0},
+				},
+			},
+		},
+	}
+
+	got, err := readCoordinatorSnapshot(context.Background(), queryer, now)
+	if err != nil {
+		t.Fatalf("readCoordinatorSnapshot() error = %v, want nil", err)
+	}
+	if got == nil {
+		t.Fatal("readCoordinatorSnapshot() = nil, want snapshot")
+	}
+	if len(got.CollectorInstances) != 1 {
+		t.Fatalf("readCoordinatorSnapshot().CollectorInstances len = %d, want 1", len(got.CollectorInstances))
+	}
+	if !got.CollectorInstances[0].DeactivatedAt.IsZero() {
+		t.Fatalf("readCoordinatorSnapshot().CollectorInstances[0].DeactivatedAt = %v, want zero", got.CollectorInstances[0].DeactivatedAt)
+	}
+	if got.OldestPendingAge != 42*time.Second {
+		t.Fatalf("readCoordinatorSnapshot().OldestPendingAge = %v, want %v", got.OldestPendingAge, 42*time.Second)
+	}
+	if !strings.Contains(workflowCoordinatorClaimSnapshotQuery, "MIN(COALESCE(visible_at, created_at))") {
+		t.Fatalf("workflowCoordinatorClaimSnapshotQuery missing created_at fallback:\n%s", workflowCoordinatorClaimSnapshotQuery)
+	}
+}
+
 type fakeQueryer struct {
 	responses []fakeRows
 	queries   []string
@@ -192,6 +249,9 @@ type fakeQueryer struct {
 func (q *fakeQueryer) QueryContext(_ context.Context, query string, _ ...any) (Rows, error) {
 	q.queries = append(q.queries, query)
 	if len(q.responses) == 0 {
+		if isWorkflowCoordinatorStatusQuery(query) {
+			return &fakeRows{}, nil
+		}
 		return nil, fmt.Errorf("unexpected query: %s", query)
 	}
 
@@ -229,6 +289,18 @@ func (r *fakeRows) Scan(dest ...any) error {
 				return fmt.Errorf("row[%d] type = %T, want string", i, row[i])
 			}
 			*target = value
+		case *bool:
+			value, ok := row[i].(bool)
+			if !ok {
+				return fmt.Errorf("row[%d] type = %T, want bool", i, row[i])
+			}
+			*target = value
+		case *int:
+			value, ok := row[i].(int64)
+			if !ok {
+				return fmt.Errorf("row[%d] type = %T, want int64 for int target", i, row[i])
+			}
+			*target = int(value)
 		case *int64:
 			value, ok := row[i].(int64)
 			if !ok {

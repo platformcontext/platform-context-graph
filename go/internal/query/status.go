@@ -19,8 +19,10 @@ type StatusHandler struct {
 // Mount registers status query routes on the given mux.
 func (h *StatusHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v0/status/pipeline", h.getPipelineStatus)
+	mux.HandleFunc("GET /api/v0/status/collectors", h.listCollectors)
 	mux.HandleFunc("GET /api/v0/status/ingesters", h.listIngesters)
 	mux.HandleFunc("GET /api/v0/status/ingesters/{ingester}", h.getIngesterStatus)
+	mux.HandleFunc("GET /api/v0/collectors", h.listCollectors)
 	mux.HandleFunc("GET /api/v0/ingesters", h.listIngesters)
 	mux.HandleFunc("GET /api/v0/ingesters/{ingester}", h.getIngesterStatus)
 	mux.HandleFunc("GET /api/v0/status/index", h.getIndexStatus)
@@ -44,6 +46,44 @@ func (h *StatusHandler) getPipelineStatus(w http.ResponseWriter, r *http.Request
 	WriteJSON(w, http.StatusOK, statusReportToMap(report))
 }
 
+// listCollectors returns the known coordinator-managed collector instances.
+func (h *StatusHandler) listCollectors(w http.ResponseWriter, r *http.Request) {
+	if h.StatusReader == nil {
+		WriteError(w, http.StatusServiceUnavailable, "status reader not configured")
+		return
+	}
+
+	report, err := status.LoadReport(r.Context(), h.StatusReader, time.Now(), status.DefaultOptions())
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("load status: %v", err))
+		return
+	}
+
+	collectors := []map[string]any{}
+	if report.Coordinator != nil {
+		collectors = make([]map[string]any, 0, len(report.Coordinator.CollectorInstances))
+		for _, instance := range report.Coordinator.CollectorInstances {
+			collectors = append(collectors, map[string]any{
+				"instance_id":      instance.InstanceID,
+				"collector_kind":   instance.CollectorKind,
+				"mode":             instance.Mode,
+				"enabled":          instance.Enabled,
+				"bootstrap":        instance.Bootstrap,
+				"claims_enabled":   instance.ClaimsEnabled,
+				"display_name":     instance.DisplayName,
+				"last_observed_at": instance.LastObservedAt.Format(time.RFC3339),
+				"updated_at":       instance.UpdatedAt.Format(time.RFC3339),
+				"deactivated_at":   nullableRFC3339(instance.DeactivatedAt),
+			})
+		}
+	}
+
+	WriteJSON(w, http.StatusOK, map[string]any{
+		"collectors": collectors,
+		"count":      len(collectors),
+	})
+}
+
 // listIngesters returns the known ingesters with basic health info.
 func (h *StatusHandler) listIngesters(w http.ResponseWriter, r *http.Request) {
 	ingesters := []map[string]any{
@@ -60,6 +100,9 @@ func (h *StatusHandler) listIngesters(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			ingesters[0]["health"] = report.Health.State
 			ingesters[0]["queue_outstanding"] = report.Queue.Outstanding
+			if report.Coordinator != nil {
+				ingesters[0]["collector_instances"] = len(report.Coordinator.CollectorInstances)
+			}
 		}
 	}
 
@@ -100,6 +143,7 @@ func (h *StatusHandler) getIngesterStatus(w http.ResponseWriter, r *http.Request
 		"runtime_family":  "ingester",
 		"health":          healthToMap(report.Health),
 		"queue":           queueToMap(report.Queue),
+		"coordinator":     coordinatorToMap(report.Coordinator),
 		"scope_activity":  scopeActivityToMap(report.ScopeActivity),
 		"stage_summaries": stageSummariesToSlice(report.StageSummaries),
 		"domain_backlogs": domainBacklogsToSlice(report.DomainBacklogs),
@@ -133,6 +177,7 @@ func (h *StatusHandler) getIndexStatus(w http.ResponseWriter, r *http.Request) {
 		"reasons":          report.Health.Reasons,
 		"repository_count": repoCount,
 		"queue":            queueToMap(report.Queue),
+		"coordinator":      coordinatorToMap(report.Coordinator),
 		"scope_activity":   scopeActivityToMap(report.ScopeActivity),
 	})
 }
@@ -142,6 +187,7 @@ func statusReportToMap(r status.Report) map[string]any {
 	result := map[string]any{
 		"as_of":                  r.AsOf.Format(time.RFC3339),
 		"health":                 healthToMap(r.Health),
+		"coordinator":            coordinatorToMap(r.Coordinator),
 		"queue":                  queueToMap(r.Queue),
 		"scope_activity":         scopeActivityToMap(r.ScopeActivity),
 		"generation_history":     generationHistoryToMap(r.GenerationHistory),
@@ -212,14 +258,14 @@ func stageSummariesToSlice(stages []status.StageSummary) []map[string]any {
 	result := make([]map[string]any, 0, len(stages))
 	for _, s := range stages {
 		result = append(result, map[string]any{
-			"stage":     s.Stage,
-			"pending":   s.Pending,
-			"claimed":   s.Claimed,
-			"running":   s.Running,
-			"retrying":  s.Retrying,
-			"succeeded": s.Succeeded,
+			"stage":       s.Stage,
+			"pending":     s.Pending,
+			"claimed":     s.Claimed,
+			"running":     s.Running,
+			"retrying":    s.Retrying,
+			"succeeded":   s.Succeeded,
 			"dead_letter": s.DeadLetter,
-			"failed":    s.Failed,
+			"failed":      s.Failed,
 		})
 	}
 	return result
@@ -261,6 +307,56 @@ func flowSummariesToSlice(flows []status.FlowSummary) []map[string]any {
 		})
 	}
 	return result
+}
+
+func coordinatorToMap(snapshot *status.CoordinatorSnapshot) map[string]any {
+	if snapshot == nil {
+		return map[string]any{}
+	}
+
+	instances := make([]map[string]any, 0, len(snapshot.CollectorInstances))
+	for _, instance := range snapshot.CollectorInstances {
+		instances = append(instances, map[string]any{
+			"instance_id":      instance.InstanceID,
+			"collector_kind":   instance.CollectorKind,
+			"mode":             instance.Mode,
+			"enabled":          instance.Enabled,
+			"bootstrap":        instance.Bootstrap,
+			"claims_enabled":   instance.ClaimsEnabled,
+			"display_name":     instance.DisplayName,
+			"last_observed_at": instance.LastObservedAt.Format(time.RFC3339),
+			"updated_at":       instance.UpdatedAt.Format(time.RFC3339),
+			"deactivated_at":   nullableRFC3339(instance.DeactivatedAt),
+		})
+	}
+
+	return map[string]any{
+		"collector_instances":     instances,
+		"run_status_counts":       namedCountsToSlice(snapshot.RunStatusCounts),
+		"work_item_status_counts": namedCountsToSlice(snapshot.WorkItemStatusCounts),
+		"completeness_counts":     namedCountsToSlice(snapshot.CompletenessCounts),
+		"active_claims":           snapshot.ActiveClaims,
+		"overdue_claims":          snapshot.OverdueClaims,
+		"oldest_pending_age":      snapshot.OldestPendingAge.Seconds(),
+	}
+}
+
+func namedCountsToSlice(rows []status.NamedCount) []map[string]any {
+	result := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, map[string]any{
+			"name":  row.Name,
+			"count": row.Count,
+		})
+	}
+	return result
+}
+
+func nullableRFC3339(value time.Time) any {
+	if value.IsZero() {
+		return nil
+	}
+	return value.Format(time.RFC3339)
 }
 
 // retryPoliciesToSlice converts []RetryPolicySummary to a slice of maps.

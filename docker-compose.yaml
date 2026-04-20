@@ -344,6 +344,46 @@ services:
       jaeger:
         condition: service_started
 
+  workflow-coordinator:
+    profiles:
+      - workflow-coordinator
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/usr/local/bin/pcg-workflow-coordinator"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "${PCG_WORKFLOW_COORDINATOR_HTTP_PORT:-18082}:8080"
+      - "${PCG_WORKFLOW_COORDINATOR_METRICS_PORT:-19469}:9464"
+    environment:
+      PCG_CONTENT_STORE_DSN: postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@postgres:5432/platform_context_graph
+      PCG_POSTGRES_DSN: postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@postgres:5432/platform_context_graph
+      PCG_HOME: /tmp/.platform-context-graph
+      HOME: /tmp
+      PCG_DEPLOYMENT_ENVIRONMENT: local-compose
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      PCG_PROMETHEUS_METRICS_ENABLED: "true"
+      PCG_PROMETHEUS_METRICS_PORT: "9464"
+      PCG_COLLECTOR_INSTANCES_JSON: '${PCG_COLLECTOR_INSTANCES_JSON:-[{"instance_id":"collector-git-default","collector_kind":"git","mode":"continuous","enabled":true,"bootstrap":true,"configuration":{"source":"local-compose"}}]}'
+      PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE: ${PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE:-dark}
+      PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED: "${PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED:-false}"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
+      jaeger:
+        condition: service_started
+
   # Production (8+ vCPU): PCG_REDUCER_WORKERS=8, PCG_SHARED_PROJECTION_WORKERS=4,
   # PCG_SHARED_PROJECTION_PARTITION_COUNT=8, PCG_REDUCER_BATCH_CLAIM_SIZE=64
   resolution-engine:

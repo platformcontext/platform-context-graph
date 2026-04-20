@@ -507,3 +507,49 @@ func TestRenderJSONIncludesFlowSummaries(t *testing.T) {
 		t.Fatalf("RenderJSON() = %s, want no exported-case stage keys", payload)
 	}
 }
+
+func TestRenderJSONNormalizesCoordinatorSnapshot(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 20, 15, 45, 0, 0, time.UTC)
+	report := status.BuildReport(
+		status.RawSnapshot{
+			AsOf: now,
+			Coordinator: &status.CoordinatorSnapshot{
+				CollectorInstances: []status.CollectorInstanceSummary{{
+					InstanceID:     "collector-git-default",
+					CollectorKind:  "git",
+					Mode:           "continuous",
+					Enabled:        true,
+					Bootstrap:      true,
+					ClaimsEnabled:  false,
+					LastObservedAt: now,
+					UpdatedAt:      now,
+				}},
+				RunStatusCounts:      []status.NamedCount{{Name: "collection_pending", Count: 1}},
+				WorkItemStatusCounts: []status.NamedCount{{Name: "claimed", Count: 1}},
+				ActiveClaims:         1,
+			},
+		},
+		status.DefaultOptions(),
+	)
+
+	payload, err := status.RenderJSON(report)
+	if err != nil {
+		t.Fatalf("RenderJSON() error = %v, want nil", err)
+	}
+
+	body := string(payload)
+	if !strings.Contains(body, "\"collector_instances\"") {
+		t.Fatalf("RenderJSON() = %s, want coordinator collector instances", payload)
+	}
+	if !strings.Contains(body, "\"name\": \"collection_pending\"") {
+		t.Fatalf("RenderJSON() = %s, want lower-case named count keys", payload)
+	}
+	if strings.Contains(body, "\"Name\"") {
+		t.Fatalf("RenderJSON() = %s, want no exported-case named count keys", payload)
+	}
+	if strings.Contains(body, "0001-01-01T00:00:00Z") {
+		t.Fatalf("RenderJSON() = %s, want zero deactivated_at omitted", payload)
+	}
+}

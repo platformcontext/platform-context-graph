@@ -126,6 +126,39 @@
         "resources": { "type": "object" }
       }
     },
+    "workflowCoordinator": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "deploymentMode": {
+          "type": "string",
+          "enum": ["dark"]
+        },
+        "claimsEnabled": { "type": "boolean" },
+        "collectorInstances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "instance_id": { "type": "string" },
+              "collector_kind": { "type": "string" },
+              "mode": { "type": "string" },
+              "enabled": { "type": "boolean" },
+              "bootstrap": { "type": "boolean" },
+              "claims_enabled": { "type": "boolean" },
+              "display_name": { "type": "string" },
+              "configuration": {}
+            },
+            "required": ["instance_id", "collector_kind", "mode", "enabled"],
+            "additionalProperties": false
+          }
+        },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
+        "connectionTuning": { "$ref": "#/definitions/connectionTuning" },
+        "resources": { "type": "object" }
+      }
+    },
     "api": {
       "type": "object",
       "properties": {

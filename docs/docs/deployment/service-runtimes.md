@@ -44,7 +44,7 @@ Current platform reality:
   `canonical_nodes_committed` is published by the projector,
   `semantic_nodes_committed` is published by semantic-entity materialization,
   and reducer-owned edge domains wait for that state before writing
-- the API, MCP, ingester, reducer, local verification runtimes, and bootstrap
+- the API, MCP, ingester, workflow-coordinator, reducer, local verification runtimes, and bootstrap
   helpers emit structured JSON logs through the shared Go telemetry logger
 
 ## Runtime Contract
@@ -55,12 +55,13 @@ Current platform reality:
 | API | HTTP API, query reads, admin endpoints | `pcg api start --host 0.0.0.0 --port 8080` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | MCP Server | MCP tool transport plus mounted query passthrough | `pcg mcp start` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Ingester | repo sync, parsing, fact emission, workspace ownership | `/usr/local/bin/pcg-ingester` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
+| Workflow Coordinator | scheduling, trigger intake, claims, completeness, run orchestration | `/usr/local/bin/pcg-workflow-coordinator` | Postgres + Neo4j | internal admin/status service plus `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `/usr/local/bin/pcg-reducer` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + Neo4j | OTEL export only; no mounted runtime `/metrics` endpoint | one-shot local helper |
 
 ## Health, Status, And Completeness
 
-- API, MCP, ingester, reducer, and other long-running runtimes that mount
+- API, MCP, ingester, workflow-coordinator, reducer, and other long-running runtimes that mount
   `go/internal/runtime` use `/healthz`, `/readyz`, `/admin/status`, and
   `/metrics`.
 - The MCP server also exposes `GET /health`, `GET /sse`, `POST /mcp/message`,
@@ -126,6 +127,7 @@ Current runtime status:
 - the MCP runtime now composes that shared admin surface alongside its
   transport-specific routes
 - the API runtime mounts that shared contract today
+- the workflow-coordinator runtime mounts that shared contract in dark mode
 - `collector-git`, `projector`, and `reducer` all mount that shared admin
   surface in their local verification lanes
 - the collector verification lane now uses native Go selection, repo sync,
@@ -136,7 +138,7 @@ Current runtime status:
 - the projector and reducer now coordinate edge-domain writes through the
   durable `graph_projection_phase_state` table instead of assuming the
   canonical and semantic node phases finished in lock-step
-- parser, admin, and runtime behavior live in the current platform services
+- parser, admin, runtime, and workflow-coordinator behavior live in the current platform services
 
 ## Incremental Refresh And Reconciliation
 
@@ -144,6 +146,7 @@ PCG should refresh incrementally by default and reconcile instead of forcing a
 full re-index whenever possible.
 
 - the `ingester` should reconcile only the scopes and generations that changed
+- the `workflow-coordinator` should stay dark until claim ownership is enabled
 - the `resolution-engine` should drain queued follow-up work and shared
   corrections from durable state
 - `bootstrap-index` remains the one-shot escape hatch for empty environments or
@@ -158,9 +161,9 @@ normal freshness path.
 ## Naming Note
 
 The public runtime names remain `platform-context-graph`, `mcp-server`,
-`ingester`, and `resolution-engine`. Operators should still scale, monitor, and
-troubleshoot those service identities, and the deployed processes are the Go
-runtime binaries documented on this page.
+`ingester`, `workflow-coordinator`, and `resolution-engine`. Operators should
+still scale, monitor, and troubleshoot those service identities, and the
+deployed processes are the Go runtime binaries documented on this page.
 
 ## Deployed Flow
 
@@ -336,6 +339,47 @@ In Kubernetes, size the Postgres connection pool to accommodate the total
 concurrent workers across all reducer replicas. Each worker holds one
 connection during claim/execute/ack.
 
+## Workflow Coordinator
+
+### Responsibilities
+
+- normalize triggers and schedule requests
+- claim workflow work items and fenced claim epochs
+- publish run state and completeness summaries
+- expose the shared admin/status contract during dark rollout
+
+### Does not own
+
+- canonical graph reconciliation
+- reducer-owned convergence truth
+- repository sync or parsing
+- permanent production claim ownership during the dark rollout slice
+
+### Deployments
+
+- Compose service profile: `workflow-coordinator`
+- Helm template:
+  `deploy/helm/platform-context-graph/templates/deployment-workflow-coordinator.yaml`
+- Internal admin/metrics service:
+  `deploy/helm/platform-context-graph/templates/service-workflow-coordinator.yaml`
+
+### Signals to watch
+
+- active runs
+- stale claims
+- queue age
+- claim contention
+- collection-complete versus reducer-converged state
+
+The coordinator ships dark by default in this slice:
+
+- `workflowCoordinator.enabled` defaults to `false`
+- `workflowCoordinator.collectorInstances` defaults to `[]`
+- `PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE=dark`
+- `PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED=false`
+- the shared `/admin/status` surface stays on so operators can validate the
+  control plane before ownership is enabled
+
 ## DB Migrate (Schema Init Container)
 
 `pcg-bootstrap-data-plane` applies all Postgres and Neo4j schema DDL then
@@ -485,6 +529,8 @@ Compose exposes direct runtime scrape endpoints you can curl:
 - API: `http://localhost:19464/metrics`
 - Ingester: `http://localhost:19465/metrics`
 - Resolution Engine: `http://localhost:19466/metrics`
+- Workflow Coordinator: `http://localhost:19469/metrics` when the optional
+  profile is enabled
 
 ### Kubernetes
 
@@ -493,6 +539,7 @@ render `ServiceMonitor` resources for:
 
 - API
 - Ingester
+- Workflow Coordinator
 - Resolution Engine
 
 `ServiceMonitor` does not apply to the bootstrap helper because it is not a
@@ -500,7 +547,7 @@ steady-state Kubernetes service in the public chart.
 
 ## Operator Defaults
 
-- treat API, ingester, and resolution-engine as separate scaling units
+- treat API, ingester, workflow-coordinator, and resolution-engine as separate scaling units
 - keep the workspace mounted only on the ingester in Kubernetes
 - use direct `/metrics` endpoints for local verification
 - use `ServiceMonitor` only for the long-running Kubernetes runtimes

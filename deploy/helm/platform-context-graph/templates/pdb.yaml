@@ -26,6 +26,21 @@ spec:
       {{- include "pcg.resolutionEngineSelectorLabels" . | nindent 6 }}
 ---
 {{- end }}
+{{- if .Values.workflowCoordinator.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pcg.workflowCoordinatorFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workflow-coordinator
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "pcg.workflowCoordinatorSelectorLabels" . | nindent 6 }}
+---
+{{- end }}
 {{- if .Values.repoSync.enabled }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget

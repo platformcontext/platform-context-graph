@@ -3,7 +3,11 @@ package app
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
+	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -188,6 +192,64 @@ func TestMountStatusServerComposesRuntimeLifecycle(t *testing.T) {
 	}
 }
 
+func TestMountStatusServerStartsDedicatedMetricsServer(t *testing.T) {
+	t.Setenv("PCG_LISTEN_ADDR", reserveTCPAddress(t))
+	t.Setenv("PCG_METRICS_ADDR", reserveTCPAddress(t))
+
+	base, err := NewHosted("workflow-coordinator", runtime.ContextRunner{})
+	if err != nil {
+		t.Fatalf("NewHosted() error = %v, want nil", err)
+	}
+
+	mounted, err := MountStatusServer(base, &fakeStatusReader{
+		snapshot: statuspkg.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			Queue: statuspkg.QueueSnapshot{
+				Outstanding: 2,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MountStatusServer() error = %v, want nil", err)
+	}
+
+	if err := mounted.Lifecycle.Start(context.Background()); err != nil {
+		t.Fatalf("Lifecycle.Start() error = %v, want nil", err)
+	}
+	defer func() {
+		_ = mounted.Lifecycle.Stop(context.Background())
+	}()
+
+	statusResponse, err := http.Get("http://" + mounted.Config.ListenAddr + "/admin/status?format=json")
+	if err != nil {
+		t.Fatalf("GET admin status error = %v, want nil", err)
+	}
+	defer func() {
+		_ = statusResponse.Body.Close()
+	}()
+	if got, want := statusResponse.StatusCode, http.StatusOK; got != want {
+		t.Fatalf("GET admin status code = %d, want %d", got, want)
+	}
+
+	metricsResponse, err := http.Get("http://" + mounted.Config.MetricsAddr + "/metrics")
+	if err != nil {
+		t.Fatalf("GET metrics error = %v, want nil", err)
+	}
+	defer func() {
+		_ = metricsResponse.Body.Close()
+	}()
+	body, err := io.ReadAll(metricsResponse.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v, want nil", err)
+	}
+	if got, want := metricsResponse.StatusCode, http.StatusOK; got != want {
+		t.Fatalf("GET metrics code = %d, want %d", got, want)
+	}
+	if got := string(body); !strings.Contains(got, `pcg_runtime_queue_outstanding{service_name="workflow-coordinator"} 2`) {
+		t.Fatalf("GET metrics body = %q, want queue metric", got)
+	}
+}
+
 type stubLifecycle struct {
 	startCalls int
 	stopCalls  int
@@ -223,4 +285,18 @@ func (r *fakeStatusReader) ReadStatusSnapshot(context.Context, time.Time) (statu
 		return statuspkg.RawSnapshot{}, r.err
 	}
 	return r.snapshot, nil
+}
+
+func reserveTCPAddress(t *testing.T) string {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v, want nil", err)
+	}
+	addr := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatalf("listener.Close() error = %v, want nil", err)
+	}
+	return addr
 }

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 )
@@ -13,7 +15,16 @@ func MountStatusServer(app Application, reader statuspkg.Reader, opts ...runtime
 		return Application{}, err
 	}
 
-	app.Lifecycle = ComposeLifecycles(app.Lifecycle, adminServer)
+	lifecycle := ComposeLifecycles(app.Lifecycle, adminServer)
+	if metricsAddr := strings.TrimSpace(app.Config.MetricsAddr); metricsAddr != "" && metricsAddr != strings.TrimSpace(app.Config.ListenAddr) {
+		metricsServer, err := runtimecfg.NewStatusMetricsServer(app.Config, reader, opts...)
+		if err != nil {
+			return Application{}, err
+		}
+		lifecycle = ComposeLifecycles(lifecycle, metricsServer)
+	}
+
+	app.Lifecycle = lifecycle
 	return app, nil
 }
 

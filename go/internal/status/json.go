@@ -12,6 +12,7 @@ func RenderJSON(report Report) ([]byte, error) {
 	payload := struct {
 		AsOf                  string                     `json:"as_of"`
 		Health                HealthSummary              `json:"health"`
+		Coordinator           *coordinatorSnapshotJSON   `json:"coordinator,omitempty"`
 		Flow                  []flowSummaryJSON          `json:"flow"`
 		Queue                 queueJSON                  `json:"queue"`
 		RetryPolicies         []retryPolicyJSON          `json:"retry_policies"`
@@ -25,6 +26,7 @@ func RenderJSON(report Report) ([]byte, error) {
 	}{
 		AsOf:                  report.AsOf.UTC().Format(time.RFC3339),
 		Health:                report.Health,
+		Coordinator:           coordinatorJSON(report.Coordinator),
 		Flow:                  flowSummariesJSON(report.FlowSummaries),
 		Queue:                 queueJSONFromReport(report.Queue),
 		RetryPolicies:         retryPoliciesJSON(report.RetryPolicies),
@@ -67,6 +69,35 @@ type generationHistoryJSON struct {
 	Superseded int `json:"superseded"`
 	Failed     int `json:"failed"`
 	Other      int `json:"other"`
+}
+
+type namedCountJSON struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+type collectorInstanceJSON struct {
+	InstanceID     string  `json:"instance_id"`
+	CollectorKind  string  `json:"collector_kind"`
+	Mode           string  `json:"mode"`
+	Enabled        bool    `json:"enabled"`
+	Bootstrap      bool    `json:"bootstrap"`
+	ClaimsEnabled  bool    `json:"claims_enabled"`
+	DisplayName    string  `json:"display_name,omitempty"`
+	LastObservedAt string  `json:"last_observed_at"`
+	UpdatedAt      string  `json:"updated_at"`
+	DeactivatedAt  *string `json:"deactivated_at,omitempty"`
+}
+
+type coordinatorSnapshotJSON struct {
+	CollectorInstances   []collectorInstanceJSON `json:"collector_instances"`
+	RunStatusCounts      []namedCountJSON        `json:"run_status_counts"`
+	WorkItemStatusCounts []namedCountJSON        `json:"work_item_status_counts"`
+	CompletenessCounts   []namedCountJSON        `json:"completeness_counts"`
+	ActiveClaims         int                     `json:"active_claims"`
+	OverdueClaims        int                     `json:"overdue_claims"`
+	OldestPendingAge     string                  `json:"oldest_pending_age"`
+	OldestPendingSeconds float64                 `json:"oldest_pending_age_seconds"`
 }
 
 type domainBacklogJSON struct {
@@ -114,4 +145,56 @@ func domainBacklogsJSON(rows []DomainBacklog) []domainBacklogJSON {
 	}
 
 	return projected
+}
+
+func coordinatorJSON(snapshot *CoordinatorSnapshot) *coordinatorSnapshotJSON {
+	if snapshot == nil {
+		return nil
+	}
+
+	instances := make([]collectorInstanceJSON, 0, len(snapshot.CollectorInstances))
+	for _, instance := range snapshot.CollectorInstances {
+		instances = append(instances, collectorInstanceJSON{
+			InstanceID:     instance.InstanceID,
+			CollectorKind:  instance.CollectorKind,
+			Mode:           instance.Mode,
+			Enabled:        instance.Enabled,
+			Bootstrap:      instance.Bootstrap,
+			ClaimsEnabled:  instance.ClaimsEnabled,
+			DisplayName:    instance.DisplayName,
+			LastObservedAt: instance.LastObservedAt.UTC().Format(time.RFC3339),
+			UpdatedAt:      instance.UpdatedAt.UTC().Format(time.RFC3339),
+			DeactivatedAt:  nullableRFC3339String(instance.DeactivatedAt),
+		})
+	}
+
+	return &coordinatorSnapshotJSON{
+		CollectorInstances:   instances,
+		RunStatusCounts:      namedCountsJSON(snapshot.RunStatusCounts),
+		WorkItemStatusCounts: namedCountsJSON(snapshot.WorkItemStatusCounts),
+		CompletenessCounts:   namedCountsJSON(snapshot.CompletenessCounts),
+		ActiveClaims:         snapshot.ActiveClaims,
+		OverdueClaims:        snapshot.OverdueClaims,
+		OldestPendingAge:     snapshot.OldestPendingAge.String(),
+		OldestPendingSeconds: snapshot.OldestPendingAge.Seconds(),
+	}
+}
+
+func namedCountsJSON(rows []NamedCount) []namedCountJSON {
+	projected := make([]namedCountJSON, 0, len(rows))
+	for _, row := range rows {
+		projected = append(projected, namedCountJSON{
+			Name:  row.Name,
+			Count: row.Count,
+		})
+	}
+	return projected
+}
+
+func nullableRFC3339String(value time.Time) *string {
+	if value.IsZero() {
+		return nil
+	}
+	formatted := value.UTC().Format(time.RFC3339)
+	return &formatted
 }

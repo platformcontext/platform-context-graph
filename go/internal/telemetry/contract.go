@@ -41,6 +41,7 @@ const (
 	MetricDimensionNodeType      = "node_type"
 	MetricDimensionEdgeType      = "edge_type"
 	MetricDimensionWritePhase    = "write_phase"
+	MetricDimensionOutcome       = "outcome"
 )
 
 // Span names define the stable data-plane tracing contract.
@@ -107,6 +108,7 @@ var metricDimensionKeys = []string{
 	MetricDimensionNodeType,
 	MetricDimensionEdgeType,
 	MetricDimensionWritePhase,
+	MetricDimensionOutcome,
 }
 
 var spanNames = []string{

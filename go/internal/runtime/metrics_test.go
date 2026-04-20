@@ -170,3 +170,87 @@ func TestStatusMetricsHandlerSupportsHeadWithoutBody(t *testing.T) {
 		t.Fatalf("HEAD /metrics body = %q, want empty", got)
 	}
 }
+
+func TestStatusMetricsHandlerIncludesCoordinatorSnapshotMetrics(t *testing.T) {
+	handler, err := NewStatusMetricsHandler("workflow-coordinator", &fakeStatusReader{
+		snapshot: statuspkg.RawSnapshot{
+			AsOf: time.Date(2026, 4, 20, 16, 0, 0, 0, time.UTC),
+			Coordinator: &statuspkg.CoordinatorSnapshot{
+				CollectorInstances: []statuspkg.CollectorInstanceSummary{
+					{
+						InstanceID:    "collector-git-default",
+						CollectorKind: "git",
+						Mode:          "continuous",
+						Enabled:       true,
+						Bootstrap:     true,
+						ClaimsEnabled: false,
+					},
+					{
+						InstanceID:     "collector-git-legacy",
+						CollectorKind:  "git",
+						Mode:           "continuous",
+						Enabled:        true,
+						Bootstrap:      false,
+						ClaimsEnabled:  false,
+						DeactivatedAt:  time.Date(2026, 4, 20, 15, 45, 0, 0, time.UTC),
+						LastObservedAt: time.Date(2026, 4, 20, 15, 30, 0, 0, time.UTC),
+					},
+					{
+						InstanceID:    "aws-prod",
+						CollectorKind: "aws-cloud",
+						Mode:          "scheduled",
+						Enabled:       true,
+						Bootstrap:     false,
+						ClaimsEnabled: true,
+					},
+				},
+				RunStatusCounts: []statuspkg.NamedCount{
+					{Name: "collection_pending", Count: 2},
+					{Name: "complete", Count: 1},
+				},
+				WorkItemStatusCounts: []statuspkg.NamedCount{
+					{Name: "pending", Count: 3},
+					{Name: "claimed", Count: 1},
+				},
+				CompletenessCounts: []statuspkg.NamedCount{
+					{Name: "collection_active", Count: 1},
+					{Name: "reducer_converging", Count: 2},
+				},
+				ActiveClaims:     4,
+				OverdueClaims:    1,
+				OldestPendingAge: 95 * time.Second,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewStatusMetricsHandler() error = %v, want nil", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	handler.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("GET /metrics status = %d, want %d", got, want)
+	}
+	body := recorder.Body.String()
+	for _, want := range []string{
+		`pcg_runtime_coordinator_active_claims{service_name="workflow-coordinator"} 4`,
+		`pcg_runtime_coordinator_overdue_claims{service_name="workflow-coordinator"} 1`,
+		`pcg_runtime_coordinator_oldest_pending_age_seconds{service_name="workflow-coordinator"} 95`,
+		`pcg_runtime_coordinator_collector_instances_total{service_name="workflow-coordinator"} 3`,
+		`pcg_runtime_coordinator_collector_instances{bootstrap="true",claims_enabled="false",collector_kind="git",enabled="true",lifecycle="active",mode="continuous",service_name="workflow-coordinator"} 1`,
+		`pcg_runtime_coordinator_collector_instances{bootstrap="false",claims_enabled="false",collector_kind="git",enabled="true",lifecycle="deactivated",mode="continuous",service_name="workflow-coordinator"} 1`,
+		`pcg_runtime_coordinator_collector_instances{bootstrap="false",claims_enabled="true",collector_kind="aws-cloud",enabled="true",lifecycle="active",mode="scheduled",service_name="workflow-coordinator"} 1`,
+		`pcg_runtime_coordinator_run_status{service_name="workflow-coordinator",status="collection_pending"} 2`,
+		`pcg_runtime_coordinator_run_status{service_name="workflow-coordinator",status="complete"} 1`,
+		`pcg_runtime_coordinator_work_item_status{service_name="workflow-coordinator",status="pending"} 3`,
+		`pcg_runtime_coordinator_work_item_status{service_name="workflow-coordinator",status="claimed"} 1`,
+		`pcg_runtime_coordinator_completeness{service_name="workflow-coordinator",state="collection_active"} 1`,
+		`pcg_runtime_coordinator_completeness{service_name="workflow-coordinator",state="reducer_converging"} 2`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("GET /metrics body missing %q\nbody:\n%s", want, body)
+		}
+	}
+}

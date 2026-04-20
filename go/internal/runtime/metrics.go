@@ -175,8 +175,163 @@ func renderStatusMetrics(serviceName string, report statuspkg.Report) string {
 			fmt.Sprintf("%.0f", row.OldestAge.Seconds()),
 		)
 	}
+	writeCoordinatorMetrics(writeGauge, serviceName, report.Coordinator)
 
 	return builder.String()
+}
+
+func writeCoordinatorMetrics(
+	writeGauge func(name string, labels map[string]string, value string),
+	serviceName string,
+	snapshot *statuspkg.CoordinatorSnapshot,
+) {
+	if snapshot == nil {
+		return
+	}
+
+	baseLabels := map[string]string{"service_name": serviceName}
+	writeGauge("pcg_runtime_coordinator_active_claims", baseLabels, strconv.Itoa(snapshot.ActiveClaims))
+	writeGauge("pcg_runtime_coordinator_overdue_claims", baseLabels, strconv.Itoa(snapshot.OverdueClaims))
+	writeGauge(
+		"pcg_runtime_coordinator_oldest_pending_age_seconds",
+		baseLabels,
+		fmt.Sprintf("%.0f", snapshot.OldestPendingAge.Seconds()),
+	)
+	writeGauge(
+		"pcg_runtime_coordinator_collector_instances_total",
+		baseLabels,
+		strconv.Itoa(len(snapshot.CollectorInstances)),
+	)
+
+	for _, row := range summarizeCollectorInstances(snapshot.CollectorInstances) {
+		writeGauge(
+			"pcg_runtime_coordinator_collector_instances",
+			map[string]string{
+				"service_name":   serviceName,
+				"collector_kind": row.CollectorKind,
+				"mode":           row.Mode,
+				"enabled":        strconv.FormatBool(row.Enabled),
+				"bootstrap":      strconv.FormatBool(row.Bootstrap),
+				"claims_enabled": strconv.FormatBool(row.ClaimsEnabled),
+				"lifecycle":      row.Lifecycle,
+			},
+			strconv.Itoa(row.Count),
+		)
+	}
+
+	for _, row := range snapshot.RunStatusCounts {
+		if strings.TrimSpace(row.Name) == "" || row.Count == 0 {
+			continue
+		}
+		writeGauge(
+			"pcg_runtime_coordinator_run_status",
+			map[string]string{
+				"service_name": serviceName,
+				"status":       row.Name,
+			},
+			strconv.Itoa(row.Count),
+		)
+	}
+
+	for _, row := range snapshot.WorkItemStatusCounts {
+		if strings.TrimSpace(row.Name) == "" || row.Count == 0 {
+			continue
+		}
+		writeGauge(
+			"pcg_runtime_coordinator_work_item_status",
+			map[string]string{
+				"service_name": serviceName,
+				"status":       row.Name,
+			},
+			strconv.Itoa(row.Count),
+		)
+	}
+
+	for _, row := range snapshot.CompletenessCounts {
+		if strings.TrimSpace(row.Name) == "" || row.Count == 0 {
+			continue
+		}
+		writeGauge(
+			"pcg_runtime_coordinator_completeness",
+			map[string]string{
+				"service_name": serviceName,
+				"state":        row.Name,
+			},
+			strconv.Itoa(row.Count),
+		)
+	}
+}
+
+type collectorInstanceMetricRow struct {
+	CollectorKind string
+	Mode          string
+	Enabled       bool
+	Bootstrap     bool
+	ClaimsEnabled bool
+	Lifecycle     string
+	Count         int
+}
+
+func summarizeCollectorInstances(instances []statuspkg.CollectorInstanceSummary) []collectorInstanceMetricRow {
+	if len(instances) == 0 {
+		return nil
+	}
+
+	counts := make(map[string]collectorInstanceMetricRow)
+	for _, instance := range instances {
+		row := collectorInstanceMetricRow{
+			CollectorKind: strings.TrimSpace(instance.CollectorKind),
+			Mode:          strings.TrimSpace(instance.Mode),
+			Enabled:       instance.Enabled,
+			Bootstrap:     instance.Bootstrap,
+			ClaimsEnabled: instance.ClaimsEnabled,
+			Lifecycle:     "active",
+			Count:         1,
+		}
+		if !instance.DeactivatedAt.IsZero() {
+			row.Lifecycle = "deactivated"
+		}
+		key := strings.Join([]string{
+			row.CollectorKind,
+			row.Mode,
+			strconv.FormatBool(row.Enabled),
+			strconv.FormatBool(row.Bootstrap),
+			strconv.FormatBool(row.ClaimsEnabled),
+			row.Lifecycle,
+		}, "\x00")
+		if existing, ok := counts[key]; ok {
+			existing.Count++
+			counts[key] = existing
+			continue
+		}
+		counts[key] = row
+	}
+
+	rows := make([]collectorInstanceMetricRow, 0, len(counts))
+	for _, row := range counts {
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		left := rows[i]
+		right := rows[j]
+		switch {
+		case left.CollectorKind != right.CollectorKind:
+			return left.CollectorKind < right.CollectorKind
+		case left.Mode != right.Mode:
+			return left.Mode < right.Mode
+		case left.Enabled != right.Enabled:
+			return !left.Enabled && right.Enabled
+		case left.Bootstrap != right.Bootstrap:
+			return !left.Bootstrap && right.Bootstrap
+		case left.ClaimsEnabled != right.ClaimsEnabled:
+			return !left.ClaimsEnabled && right.ClaimsEnabled
+		case left.Lifecycle != right.Lifecycle:
+			return left.Lifecycle < right.Lifecycle
+		default:
+			return left.Count < right.Count
+		}
+	})
+	return rows
 }
 
 func mergeLabels(labels map[string]string, key, value string) map[string]string {

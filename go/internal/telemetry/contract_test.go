@@ -24,6 +24,7 @@ func TestMetricDimensionKeys(t *testing.T) {
 		"node_type",
 		"edge_type",
 		"write_phase",
+		"outcome",
 	}
 
 	got := MetricDimensionKeys()

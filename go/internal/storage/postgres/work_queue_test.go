@@ -437,6 +437,9 @@ func (f *fakeExecQueryer) QueryContext(
 ) (Rows, error) {
 	f.queries = append(f.queries, fakeQueryCall{query: query, args: args})
 	if len(f.queryResponses) == 0 {
+		if isWorkflowCoordinatorStatusQuery(query) {
+			return &queueFakeRows{}, nil
+		}
 		return nil, fmt.Errorf("unexpected query: %s", query)
 	}
 
@@ -447,6 +450,14 @@ func (f *fakeExecQueryer) QueryContext(
 	}
 
 	return &rows, nil
+}
+
+func isWorkflowCoordinatorStatusQuery(query string) bool {
+	return strings.Contains(query, "FROM collector_instances") ||
+		strings.Contains(query, "FROM workflow_runs") ||
+		strings.Contains(query, "FROM workflow_work_items") ||
+		strings.Contains(query, "FROM workflow_run_completeness") ||
+		strings.Contains(query, "FROM workflow_claims")
 }
 
 type queueFakeRows struct {
@@ -516,6 +527,12 @@ func (r *queueFakeRows) Scan(dest ...any) error {
 			value, ok := row[i].(sql.NullInt64)
 			if !ok {
 				return fmt.Errorf("row[%d] type = %T, want sql.NullInt64", i, row[i])
+			}
+			*target = value
+		case *sql.NullTime:
+			value, ok := row[i].(sql.NullTime)
+			if !ok {
+				return fmt.Errorf("row[%d] type = %T, want sql.NullTime", i, row[i])
 			}
 			*target = value
 		default:

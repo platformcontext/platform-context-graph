@@ -19,6 +19,7 @@ RUN cd go && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldf
     && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-ingester ./cmd/ingester \
     && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-bootstrap-index ./cmd/bootstrap-index \
     && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-reducer ./cmd/reducer \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-workflow-coordinator ./cmd/workflow-coordinator \
     && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-projector ./cmd/projector \
     && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-collector-git ./cmd/collector-git \
     && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-bootstrap-data-plane ./cmd/bootstrap-data-plane \
@@ -40,8 +41,9 @@ RUN adduser -D -u 10001 pcg \
 ENV HOME=/data
 ENV PCG_HOME=/data/.platform-context-graph
 
-# Expose the combined service port
-EXPOSE 8080
+# Expose the shared admin/status and metrics ports used by the long-running
+# runtime shapes in this image.
+EXPOSE 8080 9464
 
 WORKDIR /data
 USER pcg

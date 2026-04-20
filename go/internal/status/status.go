@@ -74,6 +74,7 @@ type RawSnapshot struct {
 	DomainBacklogs        []DomainBacklog
 	RetryPolicies         []RetryPolicySummary
 	Queue                 QueueSnapshot
+	Coordinator           *CoordinatorSnapshot
 }
 
 // Reader loads the raw status snapshot from an underlying storage backend.
@@ -95,14 +96,14 @@ type HealthSummary struct {
 
 // StageSummary collapses queue counts into one row per stage.
 type StageSummary struct {
-	Stage     string `json:"stage"`
-	Pending   int    `json:"pending"`
-	Claimed   int    `json:"claimed"`
-	Running   int    `json:"running"`
-	Retrying  int    `json:"retrying"`
-	Succeeded int    `json:"succeeded"`
-	Failed    int    `json:"failed"`
-	DeadLetter int   `json:"dead_letter"`
+	Stage      string `json:"stage"`
+	Pending    int    `json:"pending"`
+	Claimed    int    `json:"claimed"`
+	Running    int    `json:"running"`
+	Retrying   int    `json:"retrying"`
+	Succeeded  int    `json:"succeeded"`
+	Failed     int    `json:"failed"`
+	DeadLetter int    `json:"dead_letter"`
 }
 
 // Report is the operator-facing summary rendered by CLI and future admin APIs.
@@ -119,6 +120,7 @@ type Report struct {
 	GenerationTotals      map[string]int
 	StageSummaries        []StageSummary
 	DomainBacklogs        []DomainBacklog
+	Coordinator           *CoordinatorSnapshot
 }
 
 // DefaultOptions returns the baseline operator heuristics for this first live
@@ -184,6 +186,7 @@ func BuildReport(raw RawSnapshot, opts Options) Report {
 		GenerationTotals:      generationTotals,
 		StageSummaries:        stageSummaries,
 		DomainBacklogs:        domainBacklogs,
+		Coordinator:           cloneCoordinatorSnapshot(raw.Coordinator),
 	}
 }
 
@@ -228,6 +231,7 @@ func RenderText(report Report) string {
 	if len(report.Health.Reasons) > 0 {
 		lines = append(lines, fmt.Sprintf("Reasons: %s", strings.Join(report.Health.Reasons, "; ")))
 	}
+	lines = append(lines, renderCoordinatorLines(report.Coordinator)...)
 	lines = append(lines, renderFlowLines(report.FlowSummaries)...)
 	if len(report.StageSummaries) > 0 {
 		lines = append(lines, "Stages:")

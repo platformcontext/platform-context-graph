@@ -222,6 +222,9 @@ func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...a
 		}
 		return db.claimReducerWork(args[0].(time.Time), args[2].(string), args[3].(time.Time))
 	default:
+		if isWorkflowCoordinatorStatusQuery(query) {
+			return newProofRows(nil), nil
+		}
 		return nil, fmt.Errorf("unexpected query: %s", query)
 	}
 }

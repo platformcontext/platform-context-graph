@@ -11,6 +11,8 @@ The repository includes a Docker Compose stack that mirrors the deployable-servi
 7. start the MCP server service
 8. run the ingester service, which keeps the repo-sync loop running in the background
 9. run the standalone resolution-engine loop
+10. optionally start the workflow-coordinator profile for admin/status,
+    metrics, and control-plane validation
 
 Compose files:
 - `docker-compose.yaml`
@@ -21,6 +23,25 @@ Run it with:
 ```bash
 docker compose up --build
 ```
+
+To start the workflow coordinator alongside the default stack, add the profile
+explicitly:
+
+```bash
+docker compose --profile workflow-coordinator up --build
+```
+
+The profile defaults to dark mode. To exercise the active control-plane path
+locally, override the coordinator env at compose launch time:
+
+```bash
+PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE=active \
+PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED=true \
+docker compose --profile workflow-coordinator up --build
+```
+
+When that profile is enabled, the coordinator publishes `/healthz`,
+`/readyz`, and `/admin/status` on the published HTTP port alongside `/metrics`.
 
 For the exact verification matrix around Compose, package tests, and docs
 checks, use the [Local Testing Runbook](../reference/local-testing.md).
@@ -36,6 +57,8 @@ same thing a `ServiceMonitor` would scrape:
 - a Prometheus-format `/metrics` endpoint on `platform-context-graph`
 - a Prometheus-format `/metrics` endpoint on `mcp-server`
 - a Prometheus-format `/metrics` endpoint on `ingester`
+- a Prometheus-format `/metrics` endpoint on `workflow-coordinator` when the
+  optional profile is enabled
 - a Prometheus-format `/metrics` endpoint on `resolution-engine`
 
 Those endpoints carry the current Go metric split:
@@ -93,6 +116,7 @@ For direct runtime scraping, Compose also enables per-runtime Prometheus endpoin
 - API: `http://localhost:19464/metrics`
 - MCP Server: `http://localhost:19468/metrics`
 - Ingester: `http://localhost:19465/metrics`
+- Workflow Coordinator: `http://localhost:19469/metrics` when the profile is enabled
 - Resolution Engine: `http://localhost:19466/metrics`
 
 Those defaults are configurable through:
@@ -100,6 +124,8 @@ Those defaults are configurable through:
 - `PCG_API_METRICS_PORT`
 - `PCG_MCP_METRICS_PORT`
 - `PCG_INGESTER_METRICS_PORT`
+- `PCG_WORKFLOW_COORDINATOR_HTTP_PORT`
+- `PCG_WORKFLOW_COORDINATOR_METRICS_PORT`
 - `PCG_RESOLUTION_ENGINE_METRICS_PORT`
 
 ## Local Metrics Checks
@@ -110,6 +136,7 @@ To verify the endpoints manually:
 curl http://localhost:19464/metrics | head
 curl http://localhost:19468/metrics | head
 curl http://localhost:19465/metrics | head
+curl http://localhost:19469/metrics | head
 curl http://localhost:19466/metrics | head
 ```
 
@@ -127,6 +154,10 @@ watch -n 2 'curl -fsS http://localhost:19464/metrics | rg "^(pcg_dp_|pcg_runtime
 
 ```bash
 watch -n 2 'curl -fsS http://localhost:19465/metrics | rg "^(pcg_dp_|pcg_runtime_)" | head -40'
+```
+
+```bash
+watch -n 2 'curl -fsS http://localhost:19469/metrics | rg "^(pcg_dp_|pcg_runtime_)" | head -40'
 ```
 
 ```bash
@@ -150,8 +181,8 @@ environment:
 - `PCG_LARGE_REPO_MAX_CONCURRENT`
 
 Compose passes the Go controls through to `bootstrap-index`, `ingester`,
-`resolution-engine`, and `platform-context-graph`, so local and containerized
-runs stay aligned with the Go runtime/data-plane stack.
+`workflow-coordinator`, `resolution-engine`, and `platform-context-graph`, so
+local and containerized runs stay aligned with the Go runtime/data-plane stack.
 
 Health and completeness are separate checks in Compose, too:
 
@@ -194,6 +225,8 @@ OTEL_COLLECTOR_OTLP_GRPC_PORT=24317 \
 OTEL_COLLECTOR_PROMETHEUS_PORT=29464 \
 PCG_API_METRICS_PORT=21464 \
 PCG_INGESTER_METRICS_PORT=21465 \
+PCG_WORKFLOW_COORDINATOR_HTTP_PORT=21467 \
+PCG_WORKFLOW_COORDINATOR_METRICS_PORT=21469 \
 PCG_RESOLUTION_ENGINE_METRICS_PORT=21466 \
 docker compose up --build
 ```
@@ -213,6 +246,7 @@ It also exercises the content-store contract:
 - host-side e2e runs can reach the bundled Postgres content store through `PCG_POSTGRES_PORT` (default `15432`)
 - file and entity content reads prefer Postgres and fall back to the server workspace
 - `PCG_REPOSITORY_RULES_JSON` can be set to structured exact or regex include rules for Git-backed sync, and Compose passes that override through to every Go runtime in the stack
+- `PCG_COLLECTOR_INSTANCES_JSON` configures the workflow-coordinator desired collector set in local Compose; the optional coordinator profile defaults it to one Git collector instance so dark-mode status has a concrete control-plane row to reconcile
 - compose-backed relationship verification relies on Go-written repo-edge
   `evidence_type` metadata so API repository contexts can classify
   controller-, workflow-, and IaC-driven relationships without any Python

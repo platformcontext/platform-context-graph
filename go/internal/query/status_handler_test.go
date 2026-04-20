@@ -92,3 +92,47 @@ func TestStatusHandlerLegacyIngesterAliases(t *testing.T) {
 		t.Fatalf("payload[ingester] = %#v, want %#v", got, want)
 	}
 }
+
+func TestStatusHandlerCollectorsRouteExposesCoordinatorInstances(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	handler := &StatusHandler{
+		StatusReader: fakeStatusReader{
+			snapshot: statuspkg.RawSnapshot{
+				AsOf: now,
+				Coordinator: &statuspkg.CoordinatorSnapshot{
+					CollectorInstances: []statuspkg.CollectorInstanceSummary{{
+						InstanceID:     "collector-git-default",
+						CollectorKind:  "git",
+						Mode:           "continuous",
+						Enabled:        true,
+						Bootstrap:      true,
+						ClaimsEnabled:  false,
+						LastObservedAt: now,
+						UpdatedAt:      now,
+					}},
+				},
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/status/collectors", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusOK; got != want {
+		t.Fatalf("GET /api/v0/status/collectors status = %d, want %d", got, want)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := int(payload["count"].(float64)), 1; got != want {
+		t.Fatalf("payload[count] = %d, want %d", got, want)
+	}
+}
