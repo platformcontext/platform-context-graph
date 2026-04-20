@@ -519,7 +519,7 @@ Phased:
 - [x] Create `go/internal/reducer/aws/` package skeleton
 - [x] Create `go/internal/reducer/dsl/` package scaffolding (evaluator,
       drift evaluator, publication of `cross_source_anchor_ready`)
-- [ ] Create `go/internal/reducer/tags/normalizer` (tag normalization pack)
+- [x] Create `go/internal/reducer/tags/normalizer` (tag normalization pack)
 
 ### Phase 4 — Collector implementation
 
