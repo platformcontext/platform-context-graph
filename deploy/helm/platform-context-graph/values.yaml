@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/platformcontext/platform-context-graph
-  tag: "v0.0.49"
+  tag: "v0.1.0"
   pullPolicy: IfNotPresent
 
 serviceAccount:
@@ -73,6 +73,8 @@ api:
       memory: 8Gi
 
 mcpServer:
+  # When enabled without exposure.ingress.backend=mcp or exposure.gateway.backend=mcp,
+  # the MCP runtime stays cluster-internal only.
   enabled: true
   replicas: 1
   revisionHistoryLimit: 3
@@ -153,6 +155,8 @@ workflowCoordinator:
 exposure:
   ingress:
     enabled: false
+    # Each ingress block routes to exactly one backend: api or mcp.
+    # Use an overlay-owned additional Ingress if you need both public API and MCP hostnames.
     backend: api
     className: ""
     annotations: {}
@@ -160,6 +164,8 @@ exposure:
     tls: []
   gateway:
     enabled: false
+    # Each gateway block routes to exactly one backend: api or mcp.
+    # Use an overlay-owned additional HTTPRoute if you need both public API and MCP hostnames.
     backend: api
     hostnames: []
     parentRefs: []

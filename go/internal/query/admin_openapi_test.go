@@ -9,8 +9,8 @@ func TestOpenAPISpecAdminPathsMatchMountedContract(t *testing.T) {
 	t.Parallel()
 
 	var spec map[string]any
-	if err := json.Unmarshal([]byte(OpenAPISpec), &spec); err != nil {
-		t.Fatalf("json.Unmarshal(OpenAPISpec) error = %v, want nil", err)
+	if err := json.Unmarshal([]byte(OpenAPISpec()), &spec); err != nil {
+		t.Fatalf("json.Unmarshal(OpenAPISpec()) error = %v, want nil", err)
 	}
 
 	paths := mustMapField(t, spec, "paths")

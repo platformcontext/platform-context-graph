@@ -5,6 +5,8 @@ RUN apk add --no-cache git gcc musl-dev
 
 WORKDIR /build
 
+ARG PCG_VERSION=dev
+
 # Copy Go module files and download dependencies
 COPY go/go.mod go/go.sum ./go/
 RUN cd go && go mod download
@@ -13,17 +15,18 @@ RUN cd go && go mod download
 COPY go/ ./go/
 
 # Build all Go binaries (CGO required for tree-sitter parser bindings)
-RUN cd go && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg ./cmd/pcg \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-api ./cmd/api \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-mcp-server ./cmd/mcp-server \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-ingester ./cmd/ingester \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-bootstrap-index ./cmd/bootstrap-index \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-reducer ./cmd/reducer \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-workflow-coordinator ./cmd/workflow-coordinator \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-projector ./cmd/projector \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-collector-git ./cmd/collector-git \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-bootstrap-data-plane ./cmd/bootstrap-data-plane \
-    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -o /go-bin/pcg-admin-status ./cmd/admin-status
+RUN cd go && LDFLAGS="-s -w -extldflags '-static' -X github.com/platformcontext/platform-context-graph/go/internal/buildinfo.Version=${PCG_VERSION}" \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg ./cmd/pcg \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-api ./cmd/api \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-mcp-server ./cmd/mcp-server \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-ingester ./cmd/ingester \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-bootstrap-index ./cmd/bootstrap-index \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-reducer ./cmd/reducer \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-workflow-coordinator ./cmd/workflow-coordinator \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-projector ./cmd/projector \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-collector-git ./cmd/collector-git \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-bootstrap-data-plane ./cmd/bootstrap-data-plane \
+    && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="${LDFLAGS}" -o /go-bin/pcg-admin-status ./cmd/admin-status
 
 # Production stage
 FROM alpine:3.21

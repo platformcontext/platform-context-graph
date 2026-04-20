@@ -27,7 +27,9 @@ jobs:
 
       - name: Build Go CLI
         working-directory: go
-        run: CGO_ENABLED=1 go build -o pcg ./cmd/pcg
+        run: |
+          VERSION="${GITHUB_SHA::12}"
+          CGO_ENABLED=1 go build -ldflags "-X github.com/platformcontext/platform-context-graph/go/internal/buildinfo.Version=${VERSION}" -o pcg ./cmd/pcg
 
       - name: Run Go tests
         working-directory: go

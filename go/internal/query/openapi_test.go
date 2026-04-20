@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 )
 
 func TestServeOpenAPI(t *testing.T) {
@@ -40,6 +42,9 @@ func TestServeOpenAPI(t *testing.T) {
 
 	if info["title"] != "Platform Context Graph API" {
 		t.Errorf("unexpected title: %v", info["title"])
+	}
+	if got, want := info["version"], buildinfo.AppVersion(); got != want {
+		t.Fatalf("expected info.version %v, got %v", want, got)
 	}
 
 	paths, ok := spec["paths"].(map[string]interface{})
@@ -116,8 +121,8 @@ func TestAPIRouter_OpenAPIEndpoint(t *testing.T) {
 
 func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	var spec map[string]any
-	if err := json.Unmarshal([]byte(OpenAPISpec), &spec); err != nil {
-		t.Fatalf("json.Unmarshal(OpenAPISpec) error = %v, want nil", err)
+	if err := json.Unmarshal([]byte(OpenAPISpec()), &spec); err != nil {
+		t.Fatalf("json.Unmarshal(OpenAPISpec()) error = %v, want nil", err)
 	}
 
 	paths := mustMapField(t, spec, "paths")

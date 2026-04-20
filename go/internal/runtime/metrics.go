@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
@@ -85,6 +86,7 @@ func renderStatusMetrics(serviceName string, report statuspkg.Report) string {
 	baseLabels := map[string]string{
 		"service_name":      serviceName,
 		"service_namespace": telemetry.DefaultServiceNamespace,
+		"version":           buildinfo.AppVersion(),
 	}
 
 	writeGauge("pcg_runtime_info", baseLabels, "1")

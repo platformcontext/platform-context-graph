@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 )
 
 const (
@@ -207,6 +209,7 @@ func deriveScopeActivity(scopeTotals map[string]int, generationTotals map[string
 // RenderText returns a compact admin-panel-style text summary.
 func RenderText(report Report) string {
 	lines := []string{
+		fmt.Sprintf("Version: %s", buildinfo.AppVersion()),
 		fmt.Sprintf("Health: %s", report.Health.State),
 		fmt.Sprintf(
 			"Queue: outstanding=%d in_flight=%d retrying=%d dead_letter=%d failed=%d oldest=%s overdue_claims=%d",

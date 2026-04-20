@@ -5,7 +5,7 @@ const openAPISpecPrefix = `{
   "info": {
     "title": "Platform Context Graph API",
     "description": "Query API for the Platform Context Graph canonical knowledge graph. Provides read access to repositories, entities, code analysis, content, infrastructure, impact analysis, pipeline status, and environment comparison.",
-    "version": "0.1.0",
+    "version": "__PCG_VERSION__",
     "contact": {
       "name": "Platform Context Graph"
     }

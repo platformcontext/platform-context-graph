@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/status"
 )
 
@@ -48,6 +49,9 @@ func TestHTTPHandlerRendersTextByDefault(t *testing.T) {
 	if got := recorder.Body.String(); !strings.Contains(got, "Health: progressing") {
 		t.Fatalf("ServeHTTP() body = %q, want text status report", got)
 	}
+	if got := recorder.Body.String(); !strings.Contains(got, "Version: "+buildinfo.AppVersion()) {
+		t.Fatalf("ServeHTTP() body = %q, want version line", got)
+	}
 }
 
 func TestHTTPHandlerRendersJSONWhenRequested(t *testing.T) {
@@ -72,6 +76,9 @@ func TestHTTPHandlerRendersJSONWhenRequested(t *testing.T) {
 	}
 	if got := recorder.Body.String(); !strings.Contains(got, "\"health\"") {
 		t.Fatalf("ServeHTTP() body = %q, want json report", got)
+	}
+	if got := recorder.Body.String(); !strings.Contains(got, "\"version\": \""+buildinfo.AppVersion()+"\"") {
+		t.Fatalf("ServeHTTP() body = %q, want version field", got)
 	}
 }
 

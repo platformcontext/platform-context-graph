@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 )
 
 var (
@@ -51,7 +53,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show the installed application version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("PlatformContextGraph %s\n", version)
+		fmt.Printf("PlatformContextGraph %s\n", buildinfo.AppVersion())
 	},
 }
 

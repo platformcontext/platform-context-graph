@@ -11,6 +11,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 )
 
 // JSON-RPC 2.0 message types
@@ -333,7 +335,7 @@ func (s *Server) handleMessage(ctx context.Context, req *jsonrpcRequest, authHea
 				},
 				ServerInfo: mcpServerInfo{
 					Name:    "pcg-mcp-server",
-					Version: "1.0.0",
+					Version: buildinfo.AppVersion(),
 				},
 			},
 		}

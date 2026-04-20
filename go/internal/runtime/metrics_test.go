@@ -65,7 +65,7 @@ func TestStatusMetricsHandlerServesRuntimeMetrics(t *testing.T) {
 	}
 	body := recorder.Body.String()
 	for _, want := range []string{
-		`pcg_runtime_info{service_name="collector-git",service_namespace="platform-context-graph"} 1`,
+		`pcg_runtime_info{service_name="collector-git",service_namespace="platform-context-graph",version="dev"} 1`,
 		`pcg_runtime_scope_active{service_name="collector-git"} 7`,
 		`pcg_runtime_scope_changed{service_name="collector-git"} 3`,
 		`pcg_runtime_scope_unchanged{service_name="collector-git"} 4`,

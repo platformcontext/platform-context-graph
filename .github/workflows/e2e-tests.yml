@@ -26,10 +26,12 @@ jobs:
           BIN_DIR="${GITHUB_WORKSPACE}/bin"
           mkdir -p "${BIN_DIR}"
           echo "${BIN_DIR}" >> "${GITHUB_PATH}"
-          CGO_ENABLED=1 go build -o "${BIN_DIR}/pcg-bootstrap-index" ./cmd/bootstrap-index
-          CGO_ENABLED=1 go build -o "${BIN_DIR}/pcg-api" ./cmd/api
-          CGO_ENABLED=1 go build -o "${BIN_DIR}/pcg-ingester" ./cmd/ingester
-          CGO_ENABLED=1 go build -o "${BIN_DIR}/pcg-reducer" ./cmd/reducer
+          VERSION="${GITHUB_SHA::12}"
+          LDFLAGS="-X github.com/platformcontext/platform-context-graph/go/internal/buildinfo.Version=${VERSION}"
+          CGO_ENABLED=1 go build -ldflags "${LDFLAGS}" -o "${BIN_DIR}/pcg-bootstrap-index" ./cmd/bootstrap-index
+          CGO_ENABLED=1 go build -ldflags "${LDFLAGS}" -o "${BIN_DIR}/pcg-api" ./cmd/api
+          CGO_ENABLED=1 go build -ldflags "${LDFLAGS}" -o "${BIN_DIR}/pcg-ingester" ./cmd/ingester
+          CGO_ENABLED=1 go build -ldflags "${LDFLAGS}" -o "${BIN_DIR}/pcg-reducer" ./cmd/reducer
 
       - name: Start Docker-backed Neo4j and Postgres
         env:

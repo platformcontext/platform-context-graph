@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 )
 
 func testServer() *Server {
@@ -46,6 +48,17 @@ func TestHandleHTTPMessage_Initialize(t *testing.T) {
 	}
 	if resp.Error != nil {
 		t.Errorf("unexpected error: %v", resp.Error)
+	}
+	result, ok := resp.Result.(map[string]any)
+	if !ok {
+		t.Fatalf("initialize result = %#v, want object", resp.Result)
+	}
+	serverInfo, ok := result["serverInfo"].(map[string]any)
+	if !ok {
+		t.Fatalf("initialize serverInfo = %#v, want object", result["serverInfo"])
+	}
+	if got, want := serverInfo["version"], buildinfo.AppVersion(); got != want {
+		t.Fatalf("initialize server version = %#v, want %#v", got, want)
 	}
 }
 

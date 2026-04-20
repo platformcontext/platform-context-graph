@@ -5,11 +5,14 @@ import (
 	"time"
 
 	"slices"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 )
 
 // RenderJSON returns a stable machine-readable projection of the report.
 func RenderJSON(report Report) ([]byte, error) {
 	payload := struct {
+		Version               string                     `json:"version"`
 		AsOf                  string                     `json:"as_of"`
 		Health                HealthSummary              `json:"health"`
 		Coordinator           *coordinatorSnapshotJSON   `json:"coordinator,omitempty"`
@@ -24,6 +27,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Stages                []StageSummary             `json:"stages"`
 		Domains               []domainBacklogJSON        `json:"domains"`
 	}{
+		Version:               buildinfo.AppVersion(),
 		AsOf:                  report.AsOf.UTC().Format(time.RFC3339),
 		Health:                report.Health,
 		Coordinator:           coordinatorJSON(report.Coordinator),

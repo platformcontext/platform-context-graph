@@ -42,7 +42,12 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: |
-          go build -trimpath -ldflags="-s -w" -o ../dist/${{ matrix.artifact_name }} ./cmd/pcg
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${GITHUB_SHA::12}"
+          fi
+          go build -trimpath -ldflags="-s -w -X github.com/platformcontext/platform-context-graph/go/internal/buildinfo.Version=${VERSION}" -o ../dist/${{ matrix.artifact_name }} ./cmd/pcg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

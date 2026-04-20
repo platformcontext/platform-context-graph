@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/status"
 )
 
@@ -79,6 +80,7 @@ func (h *StatusHandler) listCollectors(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
+		"version":    buildinfo.AppVersion(),
 		"collectors": collectors,
 		"count":      len(collectors),
 	})
@@ -107,6 +109,7 @@ func (h *StatusHandler) listIngesters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
+		"version":   buildinfo.AppVersion(),
 		"ingesters": ingesters,
 		"count":     len(ingesters),
 	})
@@ -139,6 +142,7 @@ func (h *StatusHandler) getIngesterStatus(w http.ResponseWriter, r *http.Request
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
+		"version":         buildinfo.AppVersion(),
 		"ingester":        ingester,
 		"runtime_family":  "ingester",
 		"health":          healthToMap(report.Health),
@@ -173,6 +177,7 @@ func (h *StatusHandler) getIndexStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
+		"version":          buildinfo.AppVersion(),
 		"status":           report.Health.State,
 		"reasons":          report.Health.Reasons,
 		"repository_count": repoCount,
@@ -185,6 +190,7 @@ func (h *StatusHandler) getIndexStatus(w http.ResponseWriter, r *http.Request) {
 // statusReportToMap converts a status.Report to a JSON-friendly map.
 func statusReportToMap(r status.Report) map[string]any {
 	result := map[string]any{
+		"version":                buildinfo.AppVersion(),
 		"as_of":                  r.AsOf.Format(time.RFC3339),
 		"health":                 healthToMap(r.Health),
 		"coordinator":            coordinatorToMap(r.Coordinator),
