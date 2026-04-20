@@ -1,0 +1,64 @@
+docs/docs/adrs/2026-04-20-multi-source-reducer-and-consumer-contract.md
+  649e3b78719b4b3c 4
+docs/docs/adrs/2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md
+  649e3b78719b4b3c 759-774
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "0f41f77584cb4d739752560616d3218972c45678",
+  "prompts": {
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 18,
+      "overriden_lines": 0
+    },
+    "649e3b78719b4b3c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "be1df2f5-3ae2-4a80-bc9c-73eb10aa0aff",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 15,
+      "total_deletions": 13,
+      "accepted_lines": 15,
+      "overriden_lines": 0
+    },
+    "d630fda454f61c51": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c336f54-8019-4224-9be9-8719ee4cb92b",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 56,
+      "overriden_lines": 0
+    },
+    "fd73f686cb9c9a3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "84c49d72-a249-4917-a2bf-08ba4698fd03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 86,
+      "overriden_lines": 0
+    }
+  }
+}
