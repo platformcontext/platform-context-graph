@@ -431,7 +431,9 @@ db-migrate:
 
 In EKS, add `pcg-bootstrap-data-plane` as an `initContainer` on every
 Deployment and StatefulSet that needs database access. The init container
-runs before the main container starts, ensuring schemas exist.
+runs before the main container starts, ensuring schemas exist. The public Helm
+chart now follows that contract for the API, MCP server, ingester,
+workflow-coordinator, and resolution-engine workloads.
 
 ```yaml
 # Example: API Deployment

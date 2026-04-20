@@ -39,6 +39,8 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        {{- include "pcg.renderDataPlaneBootstrapInitContainer" . | nindent 8 }}
       containers:
         - name: resolution-engine
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

@@ -142,12 +142,15 @@ In practice, that means:
 
 ## Runtime Model
 
-The deployed platform has three long-running runtimes plus one one-shot helper:
+The deployed platform has five long-running runtimes plus two one-shot helpers:
 
 | Runtime | What it owns | Default command |
 | --- | --- | --- |
-| API | HTTP API, MCP surface, graph and content reads, admin endpoints | `pcg api start --host 0.0.0.0 --port 8080` |
+| DB Migrate | Postgres + Neo4j schema DDL before the long-running workloads start | `/usr/local/bin/pcg-bootstrap-data-plane` |
+| API | HTTP API, graph and content reads, admin endpoints | `pcg api start --host 0.0.0.0 --port 8080` |
+| MCP Server | MCP transport plus mounted query routes | `pcg mcp start` |
 | Ingester | repo sync, workspace ownership, parsing, fact emission | `/usr/local/bin/pcg-ingester` |
+| Workflow Coordinator | trigger intake, claims, completeness, and dark-mode control-plane validation | `/usr/local/bin/pcg-workflow-coordinator` |
 | Resolution Engine | queue draining, fact loading, projection, retries, recovery | `/usr/local/bin/pcg-reducer` |
 | Bootstrap Index | initial one-shot indexing before steady-state sync | `/usr/local/bin/pcg-bootstrap-index` |
 
@@ -165,8 +168,8 @@ PCG ships with first-class observability for operators and performance work:
 - OTLP metrics and traces
 - JSON logs
 - direct Prometheus-format `/metrics` endpoints per runtime
-- optional Kubernetes `ServiceMonitor` resources for API, ingester, and
-  resolution-engine
+- optional Kubernetes `ServiceMonitor` resources for API, MCP, ingester,
+  workflow-coordinator, and resolution-engine
 
 In local Compose runs, you can inspect the runtime scrape endpoints directly:
 

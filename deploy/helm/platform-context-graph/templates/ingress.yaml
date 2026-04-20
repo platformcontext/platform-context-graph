@@ -23,7 +23,7 @@ spec:
             pathType: {{ .pathType | default "Prefix" }}
             backend:
               service:
-                name: {{ include "pcg.fullname" $ }}
+                name: {{ include "pcg.exposureBackendServiceName" (dict "root" $ "backend" $.Values.exposure.ingress.backend) }}
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}

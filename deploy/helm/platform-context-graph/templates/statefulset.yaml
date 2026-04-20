@@ -41,6 +41,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
+        {{- include "pcg.renderDataPlaneBootstrapInitContainer" . | nindent 8 }}
         - name: workspace-setup
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}

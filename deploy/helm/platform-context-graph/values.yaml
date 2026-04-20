@@ -72,6 +72,31 @@ api:
       cpu: 2000m
       memory: 8Gi
 
+mcpServer:
+  enabled: true
+  replicas: 1
+  revisionHistoryLimit: 3
+  connectionTuning:
+    postgres:
+      maxOpenConns: ""
+      maxIdleConns: ""
+      connMaxLifetime: ""
+      connMaxIdleTime: ""
+      pingTimeout: ""
+    neo4j:
+      maxConnectionPoolSize: ""
+      maxConnectionLifetime: ""
+      connectionAcquisitionTimeout: ""
+      socketConnectTimeout: ""
+      verifyTimeout: ""
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+
 resolutionEngine:
   enabled: true
   replicas: 1
@@ -128,12 +153,14 @@ workflowCoordinator:
 exposure:
   ingress:
     enabled: false
+    backend: api
     className: ""
     annotations: {}
     hosts: []
     tls: []
   gateway:
     enabled: false
+    backend: api
     hostnames: []
     parentRefs: []
 

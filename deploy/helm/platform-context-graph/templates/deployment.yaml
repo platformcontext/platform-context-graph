@@ -38,11 +38,13 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        {{- include "pcg.renderDataPlaneBootstrapInitContainer" . | nindent 8 }}
       containers:
         - name: platform-context-graph
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["pcg", "serve", "start", "--host", "0.0.0.0", "--port", {{ .Values.service.port | quote }}]
+          command: ["pcg", "api", "start", "--host", "0.0.0.0", "--port", {{ .Values.service.port | quote }}]
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:

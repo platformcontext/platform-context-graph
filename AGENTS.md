@@ -9,11 +9,14 @@ Read these first before changing runtime, deployment, or observability behavior:
 
 ## Runtime Contract
 
-The deployed platform has three long-running runtimes plus one one-shot bootstrap flow:
+The deployed platform has five long-running runtimes plus two one-shot bootstrap helpers:
 
 - **API**: `pcg api start --host 0.0.0.0 --port 8080`
+- **MCP Server**: `pcg mcp start`
 - **Ingester**: `/usr/local/bin/pcg-ingester`
+- **Workflow Coordinator**: `/usr/local/bin/pcg-workflow-coordinator`
 - **Resolution Engine**: `/usr/local/bin/pcg-reducer`
+- **DB Migrate**: `/usr/local/bin/pcg-bootstrap-data-plane`
 - **Bootstrap Index**: `/usr/local/bin/pcg-bootstrap-index`
 
 Build once, run many:

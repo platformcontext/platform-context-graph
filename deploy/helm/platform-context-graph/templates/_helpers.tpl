@@ -32,6 +32,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-api" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "pcg.mcpServerFullname" -}}
+{{- printf "%s-mcp-server" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "pcg.ingesterFullname" -}}
 {{- printf "%s-ingester" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -46,6 +50,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- define "pcg.apiMetricsServiceName" -}}
 {{- printf "%s-api-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "pcg.mcpServerMetricsServiceName" -}}
+{{- printf "%s-mcp-server-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "pcg.ingesterMetricsServiceName" -}}
@@ -63,6 +71,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "pcg.apiSelectorLabels" -}}
 {{- include "pcg.selectorLabels" . }}
 app.kubernetes.io/component: api
+{{- end -}}
+
+{{- define "pcg.mcpServerSelectorLabels" -}}
+{{- include "pcg.selectorLabels" . }}
+app.kubernetes.io/component: mcp-server
 {{- end -}}
 
 {{- define "pcg.ingesterSelectorLabels" -}}
@@ -160,6 +173,45 @@ app.kubernetes.io/component: workflow-coordinator
 - name: PCG_POSTGRES_DSN
   value: {{ .Values.contentStore.dsn | quote }}
 {{- end }}
+{{- end -}}
+
+{{- define "pcg.exposureBackendServiceName" -}}
+{{- if eq .backend "mcp" -}}
+{{- include "pcg.mcpServerFullname" .root -}}
+{{- else -}}
+{{- include "pcg.fullname" .root -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "pcg.renderDataPlaneBootstrapInitContainer" -}}
+- name: db-migrate
+  image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+  imagePullPolicy: {{ .Values.image.pullPolicy }}
+  command: ["/usr/local/bin/pcg-bootstrap-data-plane"]
+  securityContext:
+    {{- toYaml .Values.initContainerSecurityContext | nindent 4 }}
+  env:
+    - name: PCG_HOME
+      value: /tmp/.platform-context-graph
+    - name: HOME
+      value: /tmp
+    - name: NEO4J_URI
+      value: {{ .Values.neo4j.uri | quote }}
+    {{- include "pcg.renderContentStoreEnv" . | nindent 4 }}
+    - name: NEO4J_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.neo4j.auth.secretName }}
+          key: {{ .Values.neo4j.auth.usernameKey }}
+    - name: NEO4J_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.neo4j.auth.secretName }}
+          key: {{ .Values.neo4j.auth.passwordKey }}
+    {{- include "pcg.renderEnvMap" .Values.env | nindent 4 }}
+  volumeMounts:
+    - name: tmp
+      mountPath: /tmp
 {{- end -}}
 
 {{- define "pcg.renderConnectionTuningEnv" -}}

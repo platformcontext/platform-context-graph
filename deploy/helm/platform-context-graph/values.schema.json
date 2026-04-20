@@ -168,6 +168,16 @@
         "resources": { "type": "object" }
       }
     },
+    "mcpServer": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
+        "connectionTuning": { "$ref": "#/definitions/connectionTuning" },
+        "resources": { "type": "object" }
+      }
+    },
     "ingester": {
       "type": "object",
       "properties": {
@@ -294,13 +304,21 @@
         "ingress": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": { "type": "boolean" },
+            "backend": {
+              "type": "string",
+              "enum": ["api", "mcp"]
+            }
           }
         },
         "gateway": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": { "type": "boolean" },
+            "backend": {
+              "type": "string",
+              "enum": ["api", "mcp"]
+            }
           }
         }
       }
