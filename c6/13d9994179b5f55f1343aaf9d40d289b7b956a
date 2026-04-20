@@ -1,0 +1,31 @@
+docs/docs/adrs/2026-04-20-pre-merge-validation-local-mcp-and-iac-chart-parity.md
+  073a74ac3999a938 1-365
+docs/docs/guides/mcp-guide.md
+  073a74ac3999a938 17-74,86,89-90
+docs/docs/reference/local-testing.md
+  073a74ac3999a938 411-437
+deploy/helm/platform-context-graph/README.md
+  073a74ac3999a938 17-25
+docs/docs/deployment/docker-compose.md
+  073a74ac3999a938 27-82,313-387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "c613d9994179b5f55f1343aaf9d40d289b7b956a",
+  "prompts": {
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1188,
+      "total_deletions": 2,
+      "accepted_lines": 600,
+      "overriden_lines": 0
+    }
+  }
+}
