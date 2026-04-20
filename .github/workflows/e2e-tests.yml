@@ -23,10 +23,13 @@ jobs:
       - name: Build Go binaries
         working-directory: go
         run: |
-          CGO_ENABLED=1 go build -o /usr/local/bin/pcg-bootstrap-index ./cmd/bootstrap-index
-          CGO_ENABLED=1 go build -o /usr/local/bin/pcg-api ./cmd/api
-          CGO_ENABLED=1 go build -o /usr/local/bin/pcg-ingester ./cmd/ingester
-          CGO_ENABLED=1 go build -o /usr/local/bin/pcg-reducer ./cmd/reducer
+          BIN_DIR="${GITHUB_WORKSPACE}/bin"
+          mkdir -p "${BIN_DIR}"
+          echo "${BIN_DIR}" >> "${GITHUB_PATH}"
+          CGO_ENABLED=1 go build -o "${BIN_DIR}/pcg-bootstrap-index" ./cmd/bootstrap-index
+          CGO_ENABLED=1 go build -o "${BIN_DIR}/pcg-api" ./cmd/api
+          CGO_ENABLED=1 go build -o "${BIN_DIR}/pcg-ingester" ./cmd/ingester
+          CGO_ENABLED=1 go build -o "${BIN_DIR}/pcg-reducer" ./cmd/reducer
 
       - name: Start Docker-backed Neo4j and Postgres
         env:

@@ -9,6 +9,10 @@ import (
 // publicHTTPPaths lists routes that bypass authentication.
 var publicHTTPPaths = map[string]bool{
 	"/health":              true,
+	"/healthz":             true,
+	"/readyz":              true,
+	"/metrics":             true,
+	"/admin/status":        true,
 	"/api/v0/health":       true,
 	"/api/v0/openapi.json": true,
 }

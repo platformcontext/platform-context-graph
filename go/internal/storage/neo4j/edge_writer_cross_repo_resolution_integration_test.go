@@ -20,6 +20,20 @@ func (f *fakeCrossRepoEvidenceLoader) ListEvidenceFacts(
 	return f.facts, nil
 }
 
+type recordingIntentWriter struct {
+	rows [][]reducer.SharedProjectionIntentRow
+}
+
+func (r *recordingIntentWriter) UpsertIntents(
+	_ context.Context,
+	rows []reducer.SharedProjectionIntentRow,
+) error {
+	copied := make([]reducer.SharedProjectionIntentRow, len(rows))
+	copy(copied, rows)
+	r.rows = append(r.rows, copied)
+	return nil
+}
+
 func TestCrossRepoResolutionDispatchesTypedRelationshipsIntoNeo4jWrites(t *testing.T) {
 	t.Parallel()
 
@@ -54,10 +68,11 @@ func TestCrossRepoResolutionDispatchesTypedRelationshipsIntoNeo4jWrites(t *testi
 		},
 	}
 
+	intentWriter := &recordingIntentWriter{}
 	executor := &recordingExecutor{}
 	handler := reducer.CrossRepoRelationshipHandler{
 		EvidenceLoader: &fakeCrossRepoEvidenceLoader{facts: evidence},
-		EdgeWriter:     NewEdgeWriter(executor, 0),
+		IntentWriter:   intentWriter,
 	}
 
 	count, err := handler.Resolve(context.Background(), "scope-1", "gen-1")
@@ -68,19 +83,45 @@ func TestCrossRepoResolutionDispatchesTypedRelationshipsIntoNeo4jWrites(t *testi
 		t.Fatalf("Resolve() = %d, want 4", count)
 	}
 
-	if got, want := len(executor.calls), 3; got != want {
+	if got, want := len(intentWriter.rows), 1; got != want {
+		t.Fatalf("intent writes = %d, want %d", got, want)
+	}
+	intents := intentWriter.rows[0]
+	if got, want := len(intents), 4; got != want {
+		t.Fatalf("intent row count = %d, want %d", got, want)
+	}
+
+	writer := NewEdgeWriter(executor, 0)
+	if err := writer.WriteEdges(
+		context.Background(),
+		reducer.DomainRepoDependency,
+		intents,
+		"resolver/cross-repo",
+	); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+
+	if got, want := len(executor.calls), 2; got != want {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
 
-	retract := executor.calls[0]
-	if retract.Operation != OperationCanonicalRetract {
-		t.Fatalf("retract operation = %q, want %q", retract.Operation, OperationCanonicalRetract)
-	}
-	if !strings.Contains(retract.Cypher, "RUNS_ON") {
-		t.Fatalf("retract cypher missing RUNS_ON branch: %s", retract.Cypher)
+	var typedRepoWrite *Statement
+	var runsOnWrite *Statement
+	for i := range executor.calls {
+		call := &executor.calls[i]
+		switch {
+		case strings.Contains(call.Cypher, "MERGE (i)-[rel:RUNS_ON]->(p)"):
+			runsOnWrite = call
+		case strings.Contains(call.Cypher, "DEPLOYS_FROM") ||
+			strings.Contains(call.Cypher, "DISCOVERS_CONFIG_IN") ||
+			strings.Contains(call.Cypher, "PROVISIONS_DEPENDENCY_FOR"):
+			typedRepoWrite = call
+		}
 	}
 
-	typedRepoWrite := executor.calls[1]
+	if typedRepoWrite == nil {
+		t.Fatal("typed repo write call not found")
+	}
 	if typedRepoWrite.Operation != OperationCanonicalUpsert {
 		t.Fatalf("typed repo write operation = %q, want %q", typedRepoWrite.Operation, OperationCanonicalUpsert)
 	}
@@ -127,7 +168,9 @@ func TestCrossRepoResolutionDispatchesTypedRelationshipsIntoNeo4jWrites(t *testi
 		}
 	}
 
-	runsOnWrite := executor.calls[2]
+	if runsOnWrite == nil {
+		t.Fatal("runs_on write call not found")
+	}
 	if runsOnWrite.Operation != OperationCanonicalUpsert {
 		t.Fatalf("runs_on write operation = %q, want %q", runsOnWrite.Operation, OperationCanonicalUpsert)
 	}

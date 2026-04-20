@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -43,4 +45,4 @@ jobs:
           mkdocs build --strict --clean --config-file docs/mkdocs.yml
 
       - name: Check whitespace hygiene
-        run: git diff --check HEAD~1 || true
+        run: git diff --check HEAD~1

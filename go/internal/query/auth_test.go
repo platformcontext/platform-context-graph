@@ -96,6 +96,10 @@ func TestAuthMiddleware_PublicPaths(t *testing.T) {
 
 	publicPaths := []string{
 		"/health",
+		"/healthz",
+		"/readyz",
+		"/metrics",
+		"/admin/status",
 		"/api/v0/health",
 		"/api/v0/openapi.json",
 	}

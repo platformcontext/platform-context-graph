@@ -150,44 +150,50 @@ app.kubernetes.io/component: resolution-engine
 {{- end -}}
 
 {{- define "pcg.renderConnectionTuningEnv" -}}
-{{- with .postgres.maxOpenConns }}
+{{- with . }}
+{{- with .postgres }}
+{{- with .maxOpenConns }}
 - name: PCG_POSTGRES_MAX_OPEN_CONNS
   value: {{ . | quote }}
 {{- end }}
-{{- with .postgres.maxIdleConns }}
+{{- with .maxIdleConns }}
 - name: PCG_POSTGRES_MAX_IDLE_CONNS
   value: {{ . | quote }}
 {{- end }}
-{{- with .postgres.connMaxLifetime }}
+{{- with .connMaxLifetime }}
 - name: PCG_POSTGRES_CONN_MAX_LIFETIME
   value: {{ . | quote }}
 {{- end }}
-{{- with .postgres.connMaxIdleTime }}
+{{- with .connMaxIdleTime }}
 - name: PCG_POSTGRES_CONN_MAX_IDLE_TIME
   value: {{ . | quote }}
 {{- end }}
-{{- with .postgres.pingTimeout }}
+{{- with .pingTimeout }}
 - name: PCG_POSTGRES_PING_TIMEOUT
   value: {{ . | quote }}
 {{- end }}
-{{- with .neo4j.maxConnectionPoolSize }}
+{{- end }}
+{{- with .neo4j }}
+{{- with .maxConnectionPoolSize }}
 - name: PCG_NEO4J_MAX_CONNECTION_POOL_SIZE
   value: {{ . | quote }}
 {{- end }}
-{{- with .neo4j.maxConnectionLifetime }}
+{{- with .maxConnectionLifetime }}
 - name: PCG_NEO4J_MAX_CONNECTION_LIFETIME
   value: {{ . | quote }}
 {{- end }}
-{{- with .neo4j.connectionAcquisitionTimeout }}
+{{- with .connectionAcquisitionTimeout }}
 - name: PCG_NEO4J_CONNECTION_ACQUISITION_TIMEOUT
   value: {{ . | quote }}
 {{- end }}
-{{- with .neo4j.socketConnectTimeout }}
+{{- with .socketConnectTimeout }}
 - name: PCG_NEO4J_SOCKET_CONNECT_TIMEOUT
   value: {{ . | quote }}
 {{- end }}
-{{- with .neo4j.verifyTimeout }}
+{{- with .verifyTimeout }}
 - name: PCG_NEO4J_VERIFY_TIMEOUT
   value: {{ . | quote }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end -}}
