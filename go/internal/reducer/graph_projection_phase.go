@@ -46,6 +46,10 @@ const (
 	// GraphProjectionPhaseCanonicalNodesCommitted is published after canonical
 	// projector node writes commit successfully.
 	GraphProjectionPhaseCanonicalNodesCommitted GraphProjectionPhase = "canonical_nodes_committed"
+	// GraphProjectionPhaseDeployableUnitCorrelation is published after the
+	// deployable-unit correlation pass finishes one bounded slice, including
+	// slices that intentionally admit zero candidates.
+	GraphProjectionPhaseDeployableUnitCorrelation GraphProjectionPhase = "deployable_unit_correlation"
 	// GraphProjectionPhaseSemanticNodesCommitted is published after semantic
 	// entity reducer node writes commit successfully.
 	GraphProjectionPhaseSemanticNodesCommitted GraphProjectionPhase = "semantic_nodes_committed"

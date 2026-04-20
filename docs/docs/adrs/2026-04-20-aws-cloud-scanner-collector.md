@@ -10,7 +10,9 @@
 - `2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md`
 - `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md`
 - `2026-04-20-terraform-state-collector.md`
-- `2026-04-20-multi-source-reducer-and-consumer-contract.md` — **fact-field back-propagation source. This ADR MUST be amended with the §7.2 required envelope fields (`arn` required enumeration, `resource_type` frozen enum, `tags_normalized` post-normalizer, `correlation_anchors`, fallback keys for resource types without ARNs) before aws implementation begins.**
+- `2026-04-20-multi-source-reducer-and-consumer-contract.md` — fact-field
+  back-propagation source for the reducer/consumer contract this ADR now
+  incorporates directly.
 
 ---
 
@@ -261,6 +263,40 @@ Scope: `ScopeKind.account` with attributes `(account_id, region)`. No new
 scope kind is introduced; the multi-source correlation ADR already committed
 to `account`, and adding `cloud_region` now would splinter scope identity.
 Region is carried as a scope attribute.
+
+### Required Reducer/Consumer Contract Fields
+
+The accepted multi-source reducer/consumer ADR freezes the AWS scanner fields
+that downstream joins and drift queries require. These are first-class fact
+fields, not query-time reconstructions.
+
+Add to `aws_resource_fact`:
+
+- `arn` — required for every resource type that has an ARN
+- `resource_type` — frozen enum matching the reducer-owned canonical label
+- `correlation_anchors` — `[]string` containing deterministic join anchors
+  such as ARN, normalized hostname, image digest, or normalized tags
+
+Add to the shared AWS fact envelope:
+
+- `scope_id`
+- `collector_kind=aws`
+- `generation_id`
+- `fence_token`
+- `source_confidence`
+
+Normalization contract:
+
+- the scanner emits raw `tags`
+- `tags_normalized` is populated later by `reducer/tags/normalizer`
+- downstream queries must treat `tags_normalized` as a canonical-node field,
+  not a raw collector field
+
+Resources without ARNs must document a deterministic fallback key family in
+the collector implementation plan. Examples include ECS task-definition
+family+revision or IAM policy version identity. Those fallback keys must also
+be surfaced through `correlation_anchors`; they must never remain implicit in
+opaque payload blobs.
 
 Generation: monotonic per `(account_id, region, service_kind)`, assigned by
 the scanner at claim start from a coordinator-provided monotonic counter.

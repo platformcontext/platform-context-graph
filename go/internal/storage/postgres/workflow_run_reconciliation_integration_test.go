@@ -96,6 +96,18 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsRequiresMatchingSco
 		{
 			Key: reducer.GraphProjectionPhaseKey{
 				ScopeID:          scopeValue.ScopeID,
+				AcceptanceUnitID: "integration-repo-mismatch",
+				SourceRunID:      wrongGeneration.GenerationID,
+				GenerationID:     wrongGeneration.GenerationID,
+				Keyspace:         reducer.GraphProjectionKeyspaceDeployableUnitUID,
+			},
+			Phase:       reducer.GraphProjectionPhaseDeployableUnitCorrelation,
+			CommittedAt: now,
+			UpdatedAt:   now,
+		},
+		{
+			Key: reducer.GraphProjectionPhaseKey{
+				ScopeID:          scopeValue.ScopeID,
 				AcceptanceUnitID: "workload:integration-repo-mismatch",
 				SourceRunID:      wrongGeneration.GenerationID,
 				GenerationID:     wrongGeneration.GenerationID,
@@ -157,6 +169,15 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsRequiresMatchingSco
 		string(scope.CollectorGit),
 		string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
 		string(reducer.GraphProjectionPhaseSemanticNodesCommitted),
+		workflow.CompletenessStatusPending,
+	)
+	mustCompletenessStatus(
+		t,
+		db,
+		run.RunID,
+		string(scope.CollectorGit),
+		string(reducer.GraphProjectionKeyspaceDeployableUnitUID),
+		string(reducer.GraphProjectionPhaseDeployableUnitCorrelation),
 		workflow.CompletenessStatusPending,
 	)
 	mustCompletenessStatus(

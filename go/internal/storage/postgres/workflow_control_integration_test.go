@@ -389,6 +389,18 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsUsesReducerPhaseTru
 		{
 			Key: reducer.GraphProjectionPhaseKey{
 				ScopeID:          scopeValue.ScopeID,
+				AcceptanceUnitID: "integration-repo-1",
+				SourceRunID:      generation.GenerationID,
+				GenerationID:     generation.GenerationID,
+				Keyspace:         reducer.GraphProjectionKeyspaceDeployableUnitUID,
+			},
+			Phase:       reducer.GraphProjectionPhaseDeployableUnitCorrelation,
+			CommittedAt: now,
+			UpdatedAt:   now,
+		},
+		{
+			Key: reducer.GraphProjectionPhaseKey{
+				ScopeID:          scopeValue.ScopeID,
 				AcceptanceUnitID: "workload:integration-repo-1",
 				SourceRunID:      generation.GenerationID,
 				GenerationID:     generation.GenerationID,
@@ -450,6 +462,15 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsUsesReducerPhaseTru
 		string(scope.CollectorGit),
 		string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
 		"semantic_nodes_committed",
+		workflow.CompletenessStatusReady,
+	)
+	mustCompletenessStatus(
+		t,
+		db,
+		run.RunID,
+		string(scope.CollectorGit),
+		string(reducer.GraphProjectionKeyspaceDeployableUnitUID),
+		string(reducer.GraphProjectionPhaseDeployableUnitCorrelation),
 		workflow.CompletenessStatusReady,
 	)
 	mustCompletenessStatus(

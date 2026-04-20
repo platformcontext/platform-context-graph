@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/correlation"
 	"github.com/platformcontext/platform-context-graph/go/internal/correlation/engine"
@@ -21,6 +22,7 @@ const deployableUnitCorrelationFallbackThreshold = 0.90
 type DeployableUnitCorrelationHandler struct {
 	FactLoader     FactLoader
 	ResolvedLoader ResolvedRelationshipLoader
+	PhasePublisher GraphProjectionPhasePublisher
 }
 
 // Handle executes the deployable-unit correlation reduction path.
@@ -59,6 +61,16 @@ func (h DeployableUnitCorrelationHandler) Handle(
 
 	candidates = filterDeployableUnitCandidates(candidates, entityKeys)
 	if len(candidates) == 0 {
+		if err := publishIntentGraphPhase(
+			ctx,
+			h.PhasePublisher,
+			intent,
+			GraphProjectionKeyspaceDeployableUnitUID,
+			GraphProjectionPhaseDeployableUnitCorrelation,
+			time.Now().UTC(),
+		); err != nil {
+			return Result{}, err
+		}
 		return Result{
 			IntentID:        intent.IntentID,
 			Domain:          DomainDeployableUnitCorrelation,
@@ -73,6 +85,16 @@ func (h DeployableUnitCorrelationHandler) Handle(
 	}
 	summary := correlation.BuildSummary(evaluation)
 	evaluatedCandidateCount := len(evaluation.Results)
+	if err := publishIntentGraphPhase(
+		ctx,
+		h.PhasePublisher,
+		intent,
+		GraphProjectionKeyspaceDeployableUnitUID,
+		GraphProjectionPhaseDeployableUnitCorrelation,
+		time.Now().UTC(),
+	); err != nil {
+		return Result{}, err
+	}
 
 	return Result{
 		IntentID:        intent.IntentID,

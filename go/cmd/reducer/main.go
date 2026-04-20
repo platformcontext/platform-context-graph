@@ -161,6 +161,7 @@ func buildReducerService(
 		DeployableUnitCorrelationHandler: reducer.DeployableUnitCorrelationHandler{
 			FactLoader:     factStore,
 			ResolvedLoader: relationshipStore,
+			PhasePublisher: graphProjectionStateStore,
 		},
 		WorkloadProjectionInputLoader: reducer.CorrelatedWorkloadProjectionInputLoader{
 			FactLoader:     factStore,

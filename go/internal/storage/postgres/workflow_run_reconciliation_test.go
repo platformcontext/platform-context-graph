@@ -56,6 +56,12 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUpdatesRunAndCompleteness(t *t
 					},
 					{
 						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceDeployableUnitUID),
+						string(reducer.GraphProjectionPhaseDeployableUnitCorrelation),
+						1,
+					},
+					{
+						string(scope.CollectorGit),
 						string(reducer.GraphProjectionKeyspaceServiceUID),
 						string(reducer.GraphProjectionPhaseCanonicalNodesCommitted),
 						1,
@@ -85,7 +91,7 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUpdatesRunAndCompleteness(t *t
 	if got, want := reconciled, 1; got != want {
 		t.Fatalf("reconciled = %d, want %d", got, want)
 	}
-	if got, want := len(db.execs), 6; got != want {
+	if got, want := len(db.execs), 7; got != want {
 		t.Fatalf("exec count = %d, want %d", got, want)
 	}
 	if !strings.Contains(db.execs[0].query, "UPDATE workflow_runs") {
@@ -148,6 +154,12 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUsesTransactionWhenAvailable(t
 					},
 					{
 						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceDeployableUnitUID),
+						string(reducer.GraphProjectionPhaseDeployableUnitCorrelation),
+						1,
+					},
+					{
+						string(scope.CollectorGit),
 						string(reducer.GraphProjectionKeyspaceServiceUID),
 						string(reducer.GraphProjectionPhaseCanonicalNodesCommitted),
 						1,
@@ -203,7 +215,7 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUsesTransactionWhenAvailable(t
 	if tx.rolledBack {
 		t.Fatal("transaction rolled back after successful commit, want false")
 	}
-	if got, want := len(tx.execs), 6; got != want {
+	if got, want := len(tx.execs), 7; got != want {
 		t.Fatalf("transaction exec count = %d, want %d", got, want)
 	}
 	if !strings.Contains(tx.execs[0].query, "UPDATE workflow_runs") {

@@ -573,6 +573,14 @@ Cardinality caps:
 Account alias dimension: published on **spans and logs only**, not on
 metric labels (account alias is high-churn string).
 
+Reducer/consumer field contract carried by emitted AWS facts:
+
+- `arn`
+- `resource_type`
+- `correlation_anchors`
+- shared `source_confidence`
+- raw `tags` emitted here; `tags_normalized` is reducer-owned post-normalizer output
+
 ### 6.2 Spans
 
 | Span | Required attributes |
@@ -756,7 +764,7 @@ implementation may begin.
 - [ ] Section 9 accuracy checkpoints have test fixtures committed
 - [ ] Section 10 security review signed off (this is not optional — credentials)
 - [x] Section 11 open questions resolved (proposal table)
-- [ ] **Consumer contract sign-off** — ADR `2026-04-20-multi-source-reducer-and-consumer-contract.md` accepted, and this plan's fact envelope updated with §7.2 required fields (`arn`, `account_id`, `region`, `resource_type`, `tags[]`, `correlation_anchors`, `name_from_tag`, `created_at`, `last_seen_at`)
+- [x] **Consumer contract sign-off** — ADR `2026-04-20-multi-source-reducer-and-consumer-contract.md` accepted, and this plan's fact envelope updated with §7.2 required fields (`arn`, `account_id`, `region`, `resource_type`, `tags[]`, `correlation_anchors`, `name_from_tag`, `created_at`, `last_seen_at`, shared `source_confidence`)
 - [ ] Principal engineer sign-off
 - [ ] Principal SRE sign-off
 - [ ] Security sign-off

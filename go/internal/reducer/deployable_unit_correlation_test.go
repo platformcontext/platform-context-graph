@@ -112,7 +112,9 @@ func TestDeployableUnitCorrelationHandleRequiresEntityKeys(t *testing.T) {
 func TestDeployableUnitCorrelationHandleReturnsNoCandidates(t *testing.T) {
 	t.Parallel()
 
+	publisher := &recordingGraphProjectionPhasePublisher{}
 	handler := DeployableUnitCorrelationHandler{
+		PhasePublisher: publisher,
 		FactLoader: &stubDeployableUnitFactLoader{
 			envelopes: deployableUnitCorrelationEnvelopes(
 				"repo-docs",
@@ -131,6 +133,15 @@ func TestDeployableUnitCorrelationHandleReturnsNoCandidates(t *testing.T) {
 	}
 	if got.EvidenceSummary != "no deployable unit candidates found" {
 		t.Fatalf("Handle().EvidenceSummary = %q, want no-candidates summary", got.EvidenceSummary)
+	}
+	if got, want := len(publisher.calls), 1; got != want {
+		t.Fatalf("publisher calls = %d, want %d", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.Keyspace, GraphProjectionKeyspaceDeployableUnitUID; got != want {
+		t.Fatalf("published keyspace = %q, want %q", got, want)
+	}
+	if got, want := publisher.calls[0][0].Phase, GraphProjectionPhaseDeployableUnitCorrelation; got != want {
+		t.Fatalf("published phase = %q, want %q", got, want)
 	}
 }
 
@@ -210,6 +221,7 @@ func TestDeployableUnitCorrelationHandleAdmitsResolvedDeploymentEvidence(t *test
 	handler := DeployableUnitCorrelationHandler{
 		FactLoader:     factLoader,
 		ResolvedLoader: resolvedLoader,
+		PhasePublisher: &recordingGraphProjectionPhasePublisher{},
 	}
 
 	got, err := handler.Handle(context.Background(), deployableUnitIntent("edge-api"))
@@ -227,6 +239,58 @@ func TestDeployableUnitCorrelationHandleAdmitsResolvedDeploymentEvidence(t *test
 	}
 	if !strings.Contains(got.EvidenceSummary, "rejected=0") {
 		t.Fatalf("Handle().EvidenceSummary = %q, want rejected=0", got.EvidenceSummary)
+	}
+}
+
+func TestDeployableUnitCorrelationHandlePublishesPhaseForAdmittedCandidate(t *testing.T) {
+	t.Parallel()
+
+	publisher := &recordingGraphProjectionPhasePublisher{}
+	handler := DeployableUnitCorrelationHandler{
+		PhasePublisher: publisher,
+		FactLoader: &stubDeployableUnitFactLoader{
+			envelopes: deployableUnitCorrelationEnvelopes(
+				"repo-service-jenkins",
+				"service-jenkins",
+				[]map[string]any{
+					{
+						"repo_id":       "repo-service-jenkins",
+						"language":      "dockerfile",
+						"relative_path": "Dockerfile",
+						"parsed_file_data": map[string]any{
+							"dockerfile_stages": []any{
+								map[string]any{"name": "runtime"},
+							},
+						},
+					},
+					{
+						"repo_id":       "repo-service-jenkins",
+						"language":      "groovy",
+						"relative_path": "Jenkinsfile",
+						"parsed_file_data": map[string]any{
+							"jenkins_pipeline_calls": []any{"deployShared"},
+						},
+					},
+				},
+			),
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), deployableUnitIntent("service-jenkins"))
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(publisher.calls), 1; got != want {
+		t.Fatalf("publisher calls = %d, want %d", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.Keyspace, GraphProjectionKeyspaceDeployableUnitUID; got != want {
+		t.Fatalf("published keyspace = %q, want %q", got, want)
+	}
+	if got, want := publisher.calls[0][0].Phase, GraphProjectionPhaseDeployableUnitCorrelation; got != want {
+		t.Fatalf("published phase = %q, want %q", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.AcceptanceUnitID, "service-jenkins"; got != want {
+		t.Fatalf("acceptance unit id = %q, want %q", got, want)
 	}
 }
 

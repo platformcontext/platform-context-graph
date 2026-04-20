@@ -23,9 +23,6 @@ var collectorContracts = map[scope.CollectorKind]CollectorContract{
 			reducer.GraphProjectionKeyspaceDeployableUnitUID,
 			reducer.GraphProjectionKeyspaceServiceUID,
 		},
-		// deployable_unit_uid is part of the accepted git-side canonical shape,
-		// but it is not yet a first-class completion gate because the current
-		// reducer does not publish a dedicated deployable-unit checkpoint.
 		RequiredPhases: []PhaseRequirement{
 			{
 				Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
@@ -35,6 +32,11 @@ var collectorContracts = map[scope.CollectorKind]CollectorContract{
 			{
 				Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
 				PhaseName: reducer.GraphProjectionPhaseSemanticNodesCommitted,
+				Required:  true,
+			},
+			{
+				Keyspace:  reducer.GraphProjectionKeyspaceDeployableUnitUID,
+				PhaseName: reducer.GraphProjectionPhaseDeployableUnitCorrelation,
 				Required:  true,
 			},
 			{

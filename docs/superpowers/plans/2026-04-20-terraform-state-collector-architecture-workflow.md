@@ -448,6 +448,14 @@ Cardinality caps:
 - `error_class` frozen enum (8)
 - `provider` bounded to top 20 providers by observed count; rest bucketed as `other`
 
+Reducer/consumer field contract carried by emitted tfstate facts:
+
+- `provider_resolved_arn`
+- `module_source_path`
+- `module_source_kind`
+- `correlation_anchors`
+- shared `source_confidence`
+
 ### 6.2 Spans
 
 | Span | Required attributes |
@@ -618,7 +626,7 @@ implementation may begin.
 - [ ] Section 9 accuracy checkpoints have test fixtures committed
 - [ ] Section 10 security review signed off
 - [x] Section 11 open questions resolved (proposal table)
-- [ ] **Consumer contract sign-off** — ADR `2026-04-20-multi-source-reducer-and-consumer-contract.md` accepted, and this plan's fact envelope updated with §7.1 required fields (`provider_resolved_arn`, `module_source_path`, `module_source_kind`, `correlation_anchors`)
+- [x] **Consumer contract sign-off** — ADR `2026-04-20-multi-source-reducer-and-consumer-contract.md` accepted, and this plan's fact envelope updated with §7.1 required fields (`provider_resolved_arn`, `module_source_path`, `module_source_kind`, `correlation_anchors`, shared `source_confidence`)
 - [ ] Principal engineer sign-off
 - [ ] Principal SRE sign-off
 - [ ] Security sign-off

@@ -443,11 +443,28 @@ From the decisions above, the coordinator registry
 (`RequiredPhasesForCollector`) extends as follows:
 
 ```go
-git        → [code_entities_uid, deployable_unit_uid, service_uid]
+git        → [code_entities_uid.canonical_nodes_committed,
+              code_entities_uid.semantic_nodes_committed,
+              deployable_unit_uid.deployable_unit_correlation,
+              service_uid.canonical_nodes_committed,
+              service_uid.deployment_mapping,
+              service_uid.workload_materialization]
 terraform_state → [terraform_resource_uid, terraform_module_uid, cross_source_anchor_ready]
 aws        → [cloud_resource_uid, cross_source_anchor_ready]
 webhook    → [webhook_event_uid, cross_source_anchor_ready] // future
 ```
+
+Git-specific readiness note:
+
+- `deployable_unit_uid` is a first-class completion gate, but it is **not**
+  a `canonical_nodes_committed` publication today.
+- The truthful reducer publication is
+  `deployable_unit_uid.deployable_unit_correlation`, emitted by
+  `reducer/deployable_unit_correlation` after the bounded admission pass
+  finishes.
+- This phase must publish even when the bounded slice admits zero candidates,
+  because completion means "the deployable-unit decision is final for this
+  slice," not "a canonical node was created."
 
 New shared phase: `cross_source_anchor_ready`
 
@@ -480,19 +497,21 @@ Phased:
 ### Phase 1 — Contract freeze (docs only, no code)
 
 - [x] This ADR
-- [ ] Amend tfstate ADR with §7.1 field additions
-- [ ] Amend aws ADR with §7.2 field additions
-- [ ] Update collector plan §6 telemetry specs with new field enums
+- [x] Amend tfstate ADR with §7.1 field additions
+- [x] Amend aws ADR with §7.2 field additions
+- [x] Update collector plans with the accepted reducer/consumer field enums
 - [ ] Update coordinator ADR to reference this ADR and note that the
       "real remaining work beyond this slice" (codex note) is tracked here
 
 ### Phase 2 — Coordinator registry extension
 
-- [ ] Add `cross_source_anchor_ready` to phase enum
-- [ ] Extend `RequiredPhasesForCollector` map (see §8)
-- [ ] Add deployment_mapping + workload_materialization as first-class
+- [x] Add `cross_source_anchor_ready` to phase enum
+- [x] Extend `RequiredPhasesForCollector` map (see §8)
+- [x] Add deployment_mapping + workload_materialization as first-class
       published phases (reducer changes publish rows)
-- [ ] Coordinator run reconciliation tests extended for new phases
+- [x] Add truthful git deployable-unit readiness publication
+      (`deployable_unit_uid.deployable_unit_correlation`)
+- [x] Coordinator run reconciliation tests extended for new phases
 
 ### Phase 3 — Reducer scaffolding
 

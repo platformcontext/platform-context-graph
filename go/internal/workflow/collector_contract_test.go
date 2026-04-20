@@ -25,6 +25,47 @@ func TestCollectorContractForGitIncludesAcceptedCanonicalKeyspaces(t *testing.T)
 	}
 }
 
+func TestRequiredPhasesForCollectorIncludesGitDeployableUnitGate(t *testing.T) {
+	t.Parallel()
+
+	requirements := RequiredPhasesForCollector(scope.CollectorGit)
+	want := []PhaseRequirement{
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+			PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+			Required:  true,
+		},
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+			PhaseName: reducer.GraphProjectionPhaseSemanticNodesCommitted,
+			Required:  true,
+		},
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceDeployableUnitUID,
+			PhaseName: reducer.GraphProjectionPhaseDeployableUnitCorrelation,
+			Required:  true,
+		},
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
+			PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+			Required:  true,
+		},
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
+			PhaseName: reducer.GraphProjectionPhaseDeploymentMapping,
+			Required:  true,
+		},
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
+			PhaseName: reducer.GraphProjectionPhaseWorkloadMaterialization,
+			Required:  true,
+		},
+	}
+	if !reflect.DeepEqual(requirements, want) {
+		t.Fatalf("RequiredPhasesForCollector(git) = %#v, want %#v", requirements, want)
+	}
+}
+
 func TestRequiredPhasesForCollectorIncludesTerraformStateAnchorGate(t *testing.T) {
 	t.Parallel()
 

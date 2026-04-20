@@ -10,7 +10,9 @@
 - `2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md`
 - `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md`
 - `2026-04-20-aws-cloud-scanner-collector.md`
-- `2026-04-20-multi-source-reducer-and-consumer-contract.md` — **fact-field back-propagation source. This ADR MUST be amended with the §7.1 required envelope fields (`provider_resolved_arn`, `module_source_path`, `module_source_kind`, `correlation_anchors`) before tfstate implementation begins.**
+- `2026-04-20-multi-source-reducer-and-consumer-contract.md` — fact-field
+  back-propagation source for the reducer/consumer contract this ADR now
+  incorporates directly.
 
 ---
 
@@ -257,6 +259,45 @@ Each fact carries:
 
 Facts are emitted in streaming fashion during state parsing; the collector
 must not buffer an entire state file in memory as Go structs before emitting.
+
+### Required Reducer/Consumer Contract Fields
+
+The accepted multi-source reducer/consumer ADR freezes the tfstate envelope
+fields that downstream joins depend on. These are not optional derived
+attributes; they are first-class collector outputs.
+
+Add to `terraform_state_resource`:
+
+- `provider_resolved_arn` — nullable string; populated when provider schema
+  can deterministically resolve the resource identity into an ARN
+- `module_source_path` — nullable string; normalized terminal module source
+  path such as `github.com/org/repo//modules/service?ref=v1.2.3`
+- `module_source_kind` — enum `{git, registry, local, unknown}`
+- `correlation_anchors` — non-empty `[]string` when anchors are known, for
+  example `[arn:..., tag:Service=foo, tag:Environment=prod]`
+
+Add to `terraform_state_module`:
+
+- `source_kind`
+- `source_path`
+
+Shared envelope expectations for every tfstate fact:
+
+- `scope_id`
+- `collector_kind=terraform_state`
+- `generation_id`
+- `fence_token`
+- `source_confidence`
+
+Reducer/consumer implication:
+
+- `provider_resolved_arn` is the deterministic join key for
+  `trace_arn_to_code`, `find_orphaned_state`, and `find_unmanaged_resources`
+- `module_source_path` and `module_source_kind` are the deterministic join
+  keys from Terraform state back to Git-owned module sources
+- `correlation_anchors` are the bounded DSL inputs for
+  `cross_source_anchor_ready`; they must not be reconstructed later at query
+  time from opaque attribute maps
 
 ### Secret Redaction Policy
 
