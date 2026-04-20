@@ -93,6 +93,21 @@ func TestRequiredPhasesForCollectorIncludesWebhookAnchorGate(t *testing.T) {
 	}
 }
 
+func TestCollectorContractForWebhookIncludesAcceptedCanonicalKeyspaces(t *testing.T) {
+	t.Parallel()
+
+	contract, ok := CollectorContractFor(scope.CollectorWebhook)
+	if !ok {
+		t.Fatalf("CollectorContractFor(%q) found = false, want true", scope.CollectorWebhook)
+	}
+	want := []reducer.GraphProjectionKeyspace{
+		reducer.GraphProjectionKeyspaceWebhookEventUID,
+	}
+	if !reflect.DeepEqual(contract.CanonicalKeyspaces, want) {
+		t.Fatalf("CanonicalKeyspaces = %#v, want %#v", contract.CanonicalKeyspaces, want)
+	}
+}
+
 func TestCollectorContractForReturnsClonedSlices(t *testing.T) {
 	t.Parallel()
 

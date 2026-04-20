@@ -2,6 +2,7 @@ package tags
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
@@ -13,16 +14,27 @@ type RuntimeContract struct {
 	CanonicalKeyspaces []reducer.GraphProjectionKeyspace
 }
 
+var defaultRuntimeContract = RuntimeContract{
+	Components: []string{
+		"normalizer",
+	},
+	CanonicalKeyspaces: []reducer.GraphProjectionKeyspace{
+		reducer.GraphProjectionKeyspaceCloudResourceUID,
+	},
+}
+
 // DefaultRuntimeContract returns the accepted tag-normalization scaffold.
 func DefaultRuntimeContract() RuntimeContract {
-	return RuntimeContract{
-		Components: []string{
-			"normalizer",
-		},
-		CanonicalKeyspaces: []reducer.GraphProjectionKeyspace{
-			reducer.GraphProjectionKeyspaceCloudResourceUID,
-		},
-	}
+	contract := defaultRuntimeContract
+	contract.Components = slices.Clone(defaultRuntimeContract.Components)
+	contract.CanonicalKeyspaces = slices.Clone(defaultRuntimeContract.CanonicalKeyspaces)
+	return contract
+}
+
+// RuntimeContractTemplate returns a defensive copy of the accepted
+// tag-normalization scaffold.
+func RuntimeContractTemplate() RuntimeContract {
+	return DefaultRuntimeContract()
 }
 
 // Validate checks that the scaffold does not contain blank ownership metadata.

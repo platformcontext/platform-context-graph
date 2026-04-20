@@ -2,6 +2,7 @@ package dsl
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
@@ -20,38 +21,49 @@ type RuntimeContract struct {
 	Checkpoints []PublishedCheckpoint
 }
 
+var defaultRuntimeContract = RuntimeContract{
+	Components: []string{
+		"evaluator",
+		"drift_evaluator",
+		"deployment_mapping",
+		"workload_materialization",
+	},
+	Checkpoints: []PublishedCheckpoint{
+		{
+			Keyspace: reducer.GraphProjectionKeyspaceTerraformResourceUID,
+			Phase:    reducer.GraphProjectionPhaseCrossSourceAnchorReady,
+		},
+		{
+			Keyspace: reducer.GraphProjectionKeyspaceCloudResourceUID,
+			Phase:    reducer.GraphProjectionPhaseCrossSourceAnchorReady,
+		},
+		{
+			Keyspace: reducer.GraphProjectionKeyspaceWebhookEventUID,
+			Phase:    reducer.GraphProjectionPhaseCrossSourceAnchorReady,
+		},
+		{
+			Keyspace: reducer.GraphProjectionKeyspaceServiceUID,
+			Phase:    reducer.GraphProjectionPhaseDeploymentMapping,
+		},
+		{
+			Keyspace: reducer.GraphProjectionKeyspaceServiceUID,
+			Phase:    reducer.GraphProjectionPhaseWorkloadMaterialization,
+		},
+	},
+}
+
 // DefaultRuntimeContract returns the accepted DSL reducer scaffold.
 func DefaultRuntimeContract() RuntimeContract {
-	return RuntimeContract{
-		Components: []string{
-			"evaluator",
-			"drift_evaluator",
-			"deployment_mapping",
-			"workload_materialization",
-		},
-		Checkpoints: []PublishedCheckpoint{
-			{
-				Keyspace: reducer.GraphProjectionKeyspaceTerraformResourceUID,
-				Phase:    reducer.GraphProjectionPhaseCrossSourceAnchorReady,
-			},
-			{
-				Keyspace: reducer.GraphProjectionKeyspaceCloudResourceUID,
-				Phase:    reducer.GraphProjectionPhaseCrossSourceAnchorReady,
-			},
-			{
-				Keyspace: reducer.GraphProjectionKeyspaceWebhookEventUID,
-				Phase:    reducer.GraphProjectionPhaseCrossSourceAnchorReady,
-			},
-			{
-				Keyspace: reducer.GraphProjectionKeyspaceServiceUID,
-				Phase:    reducer.GraphProjectionPhaseDeploymentMapping,
-			},
-			{
-				Keyspace: reducer.GraphProjectionKeyspaceServiceUID,
-				Phase:    reducer.GraphProjectionPhaseWorkloadMaterialization,
-			},
-		},
-	}
+	contract := defaultRuntimeContract
+	contract.Components = slices.Clone(defaultRuntimeContract.Components)
+	contract.Checkpoints = slices.Clone(defaultRuntimeContract.Checkpoints)
+	return contract
+}
+
+// RuntimeContractTemplate returns a defensive copy of the accepted DSL reducer
+// scaffold.
+func RuntimeContractTemplate() RuntimeContract {
+	return DefaultRuntimeContract()
 }
 
 // Validate checks that the scaffold does not contain blank ownership metadata.

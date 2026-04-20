@@ -2,6 +2,7 @@ package tfstate
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
@@ -20,25 +21,36 @@ type RuntimeContract struct {
 	Checkpoints []PublishedCheckpoint
 }
 
+var defaultRuntimeContract = RuntimeContract{
+	Components: []string{
+		"resource_projector",
+		"module_projector",
+		"output_projector",
+	},
+	Checkpoints: []PublishedCheckpoint{
+		{
+			Keyspace: reducer.GraphProjectionKeyspaceTerraformResourceUID,
+			Phase:    reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+		},
+		{
+			Keyspace: reducer.GraphProjectionKeyspaceTerraformModuleUID,
+			Phase:    reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+		},
+	},
+}
+
 // DefaultRuntimeContract returns the accepted Terraform state reducer scaffold.
 func DefaultRuntimeContract() RuntimeContract {
-	return RuntimeContract{
-		Components: []string{
-			"resource_projector",
-			"module_projector",
-			"output_projector",
-		},
-		Checkpoints: []PublishedCheckpoint{
-			{
-				Keyspace: reducer.GraphProjectionKeyspaceTerraformResourceUID,
-				Phase:    reducer.GraphProjectionPhaseCanonicalNodesCommitted,
-			},
-			{
-				Keyspace: reducer.GraphProjectionKeyspaceTerraformModuleUID,
-				Phase:    reducer.GraphProjectionPhaseCanonicalNodesCommitted,
-			},
-		},
-	}
+	contract := defaultRuntimeContract
+	contract.Components = slices.Clone(defaultRuntimeContract.Components)
+	contract.Checkpoints = slices.Clone(defaultRuntimeContract.Checkpoints)
+	return contract
+}
+
+// RuntimeContractTemplate returns a defensive copy of the accepted Terraform
+// state reducer scaffold.
+func RuntimeContractTemplate() RuntimeContract {
+	return DefaultRuntimeContract()
 }
 
 // Validate checks that the scaffold does not contain blank ownership metadata.

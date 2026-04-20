@@ -2,6 +2,7 @@ package aws
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
@@ -20,22 +21,33 @@ type RuntimeContract struct {
 	Checkpoints []PublishedCheckpoint
 }
 
+var defaultRuntimeContract = RuntimeContract{
+	Components: []string{
+		"resource_projector",
+		"relationship_projector",
+		"dns_projector",
+		"image_projector",
+	},
+	Checkpoints: []PublishedCheckpoint{
+		{
+			Keyspace: reducer.GraphProjectionKeyspaceCloudResourceUID,
+			Phase:    reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+		},
+	},
+}
+
 // DefaultRuntimeContract returns the accepted AWS reducer scaffold.
 func DefaultRuntimeContract() RuntimeContract {
-	return RuntimeContract{
-		Components: []string{
-			"resource_projector",
-			"relationship_projector",
-			"dns_projector",
-			"image_projector",
-		},
-		Checkpoints: []PublishedCheckpoint{
-			{
-				Keyspace: reducer.GraphProjectionKeyspaceCloudResourceUID,
-				Phase:    reducer.GraphProjectionPhaseCanonicalNodesCommitted,
-			},
-		},
-	}
+	contract := defaultRuntimeContract
+	contract.Components = slices.Clone(defaultRuntimeContract.Components)
+	contract.Checkpoints = slices.Clone(defaultRuntimeContract.Checkpoints)
+	return contract
+}
+
+// RuntimeContract returns a defensive copy of the accepted AWS reducer
+// scaffold.
+func RuntimeContractTemplate() RuntimeContract {
+	return DefaultRuntimeContract()
 }
 
 // Validate checks that the scaffold does not contain blank ownership metadata.
