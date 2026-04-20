@@ -63,7 +63,7 @@ type DefaultHandlers struct {
 	// RepoDependencyEdgeWriter writes cross-repo dependency edges resolved
 	// from durable repo-dependency intents. Optional; nil disables the
 	// repo-dependency projection runner.
-	RepoDependencyEdgeWriter SharedProjectionEdgeWriter
+	RepoDependencyEdgeWriter     SharedProjectionEdgeWriter
 	WorkloadDependencyEdgeWriter SharedProjectionEdgeWriter
 
 	// GenerationCheck reports whether an intent's generation is still current.
@@ -114,9 +114,15 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 	for _, def := range DefaultDomainDefinitions() {
 		switch def.Domain {
 		case DomainWorkloadIdentity:
-			def.Handler = WorkloadIdentityHandler{Writer: handlers.WorkloadIdentityWriter}
+			def.Handler = WorkloadIdentityHandler{
+				Writer:         handlers.WorkloadIdentityWriter,
+				PhasePublisher: handlers.GraphProjectionPhasePublisher,
+			}
 		case DomainCloudAssetResolution:
-			def.Handler = CloudAssetResolutionHandler{Writer: handlers.CloudAssetResolutionWriter}
+			def.Handler = CloudAssetResolutionHandler{
+				Writer:         handlers.CloudAssetResolutionWriter,
+				PhasePublisher: handlers.GraphProjectionPhasePublisher,
+			}
 		case DomainDeploymentMapping:
 			var crossRepoResolver *CrossRepoRelationshipHandler
 			if handlers.EvidenceFactLoader != nil && handlers.RepoDependencyIntentWriter != nil {
@@ -137,6 +143,7 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 				InfrastructureMaterializer:      handlers.InfrastructurePlatformMaterializer,
 				CrossRepoResolver:               crossRepoResolver,
 				WorkloadMaterializationReplayer: handlers.WorkloadMaterializationReplayer,
+				PhasePublisher:                  handlers.GraphProjectionPhasePublisher,
 			}
 		case DomainWorkloadMaterialization:
 			def.Handler = WorkloadMaterializationHandler{
@@ -146,6 +153,7 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 				Materializer:                 handlers.WorkloadMaterializer,
 				DependencyLookup:             handlers.WorkloadDependencyLookup,
 				WorkloadDependencyEdgeWriter: handlers.WorkloadDependencyEdgeWriter,
+				PhasePublisher:               handlers.GraphProjectionPhasePublisher,
 			}
 		case DomainCodeCallMaterialization:
 			def.Handler = CodeCallMaterializationHandler{

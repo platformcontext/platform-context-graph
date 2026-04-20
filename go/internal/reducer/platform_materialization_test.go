@@ -133,6 +133,44 @@ func TestPlatformMaterializationHandlerDefaultEvidenceSummary(t *testing.T) {
 	}
 }
 
+func TestPlatformMaterializationHandlerPublishesDeploymentMappingPhase(t *testing.T) {
+	t.Parallel()
+
+	publisher := &recordingGraphProjectionPhasePublisher{}
+	handler := PlatformMaterializationHandler{
+		Writer: &recordingPlatformMaterializationWriter{
+			result: PlatformMaterializationWriteResult{CanonicalWrites: 1},
+		},
+		PhasePublisher: publisher,
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:        "intent-pm-phase",
+		ScopeID:         "scope-1",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainDeploymentMapping,
+		Cause:           "platform discovered",
+		EntityKeys:      []string{"workload:service-edge-api"},
+		RelatedScopeIDs: []string{"scope-1"},
+		EnqueuedAt:      time.Date(2026, time.April, 13, 12, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 13, 12, 0, 0, 0, time.UTC),
+		Status:          IntentStatusClaimed,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(publisher.calls), 1; got != want {
+		t.Fatalf("publisher call count = %d, want %d", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.Keyspace, GraphProjectionKeyspaceServiceUID; got != want {
+		t.Fatalf("published keyspace = %q, want %q", got, want)
+	}
+	if got, want := publisher.calls[0][0].Phase, GraphProjectionPhaseDeploymentMapping; got != want {
+		t.Fatalf("published phase = %q, want %q", got, want)
+	}
+}
+
 func TestPlatformMaterializationHandlerRejectsMissingEntityKeys(t *testing.T) {
 	t.Parallel()
 

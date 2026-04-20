@@ -54,6 +54,24 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUpdatesRunAndCompleteness(t *t
 						string(reducer.GraphProjectionPhaseSemanticNodesCommitted),
 						1,
 					},
+					{
+						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceServiceUID),
+						string(reducer.GraphProjectionPhaseCanonicalNodesCommitted),
+						1,
+					},
+					{
+						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceServiceUID),
+						string(reducer.GraphProjectionPhaseDeploymentMapping),
+						1,
+					},
+					{
+						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceServiceUID),
+						string(reducer.GraphProjectionPhaseWorkloadMaterialization),
+						1,
+					},
 				},
 			},
 		},
@@ -67,7 +85,7 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUpdatesRunAndCompleteness(t *t
 	if got, want := reconciled, 1; got != want {
 		t.Fatalf("reconciled = %d, want %d", got, want)
 	}
-	if got, want := len(db.execs), 3; got != want {
+	if got, want := len(db.execs), 6; got != want {
 		t.Fatalf("exec count = %d, want %d", got, want)
 	}
 	if !strings.Contains(db.execs[0].query, "UPDATE workflow_runs") {
@@ -75,6 +93,9 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUpdatesRunAndCompleteness(t *t
 	}
 	if !strings.Contains(db.execs[1].query, "INSERT INTO workflow_run_completeness") {
 		t.Fatalf("second exec missing workflow_run_completeness upsert: %s", db.execs[1].query)
+	}
+	if got, want := db.execs[1].args[2], string(reducer.GraphProjectionKeyspaceCodeEntitiesUID); got != want {
+		t.Fatalf("first completeness keyspace arg = %v, want %q", got, want)
 	}
 }
 
@@ -103,7 +124,7 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUsesTransactionWhenAvailable(t
 		queryResponses: []queueFakeRows{
 			{
 				rows: [][]any{{
-					string(scope.CollectorTerraformState),
+					string(scope.CollectorGit),
 					1,
 					0,
 					0,
@@ -114,15 +135,33 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUsesTransactionWhenAvailable(t
 			{
 				rows: [][]any{
 					{
-						string(scope.CollectorTerraformState),
+						string(scope.CollectorGit),
 						string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
 						string(reducer.GraphProjectionPhaseCanonicalNodesCommitted),
 						1,
 					},
 					{
-						string(scope.CollectorTerraformState),
+						string(scope.CollectorGit),
 						string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
 						string(reducer.GraphProjectionPhaseSemanticNodesCommitted),
+						1,
+					},
+					{
+						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceServiceUID),
+						string(reducer.GraphProjectionPhaseCanonicalNodesCommitted),
+						1,
+					},
+					{
+						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceServiceUID),
+						string(reducer.GraphProjectionPhaseDeploymentMapping),
+						1,
+					},
+					{
+						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceServiceUID),
+						string(reducer.GraphProjectionPhaseWorkloadMaterialization),
 						1,
 					},
 				},
@@ -164,7 +203,7 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUsesTransactionWhenAvailable(t
 	if tx.rolledBack {
 		t.Fatal("transaction rolled back after successful commit, want false")
 	}
-	if got, want := len(tx.execs), 3; got != want {
+	if got, want := len(tx.execs), 6; got != want {
 		t.Fatalf("transaction exec count = %d, want %d", got, want)
 	}
 	if !strings.Contains(tx.execs[0].query, "UPDATE workflow_runs") {
@@ -172,5 +211,8 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUsesTransactionWhenAvailable(t
 	}
 	if !strings.Contains(tx.execs[1].query, "INSERT INTO workflow_run_completeness") {
 		t.Fatalf("second tx exec missing workflow_run_completeness upsert: %s", tx.execs[1].query)
+	}
+	if got, want := tx.execs[1].args[2], string(reducer.GraphProjectionKeyspaceCodeEntitiesUID); got != want {
+		t.Fatalf("first transactional completeness keyspace arg = %v, want %q", got, want)
 	}
 }

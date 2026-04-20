@@ -90,6 +90,8 @@ func buildBootstrapProjector(
 		CanonicalWriter: canonicalWriter,
 		ContentWriter:   postgres.NewContentWriter(instrumentedDB),
 		IntentWriter:    reducerQueue,
+		PhasePublisher:  postgres.NewGraphProjectionPhaseStateStore(instrumentedDB),
+		RepairQueue:     postgres.NewGraphProjectionPhaseRepairQueueStore(instrumentedDB),
 		Tracer:          tracer,
 		Instruments:     instruments,
 	}

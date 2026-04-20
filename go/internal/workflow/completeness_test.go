@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
@@ -14,6 +15,7 @@ func TestCompletenessStateValidateAcceptsValidCheckpoint(t *testing.T) {
 	state := CompletenessState{
 		RunID:         "run-1",
 		CollectorKind: scope.CollectorGit,
+		Keyspace:      reducer.GraphProjectionKeyspaceCodeEntitiesUID,
 		PhaseName:     "canonical_nodes_committed",
 		Required:      true,
 		Status:        "ready",
@@ -33,6 +35,7 @@ func TestCompletenessStateValidateRejectsBlankStatus(t *testing.T) {
 	state := CompletenessState{
 		RunID:         "run-1",
 		CollectorKind: scope.CollectorGit,
+		Keyspace:      reducer.GraphProjectionKeyspaceCodeEntitiesUID,
 		PhaseName:     "canonical_nodes_committed",
 		ObservedAt:    now,
 		UpdatedAt:     now,

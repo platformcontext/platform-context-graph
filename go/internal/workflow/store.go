@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
@@ -39,6 +40,7 @@ type ClaimedWorkItem struct {
 type CompletenessState struct {
 	RunID         string
 	CollectorKind scope.CollectorKind
+	Keyspace      reducer.GraphProjectionKeyspace
 	PhaseName     string
 	Required      bool
 	Status        string

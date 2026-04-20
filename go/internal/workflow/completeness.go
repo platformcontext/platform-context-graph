@@ -13,6 +13,9 @@ func (c CompletenessState) Validate() error {
 	if err := validateIdentifier("collector_kind", string(c.CollectorKind)); err != nil {
 		return err
 	}
+	if err := validateIdentifier("keyspace", string(c.Keyspace)); err != nil {
+		return err
+	}
 	if err := validateIdentifier("phase_name", c.PhaseName); err != nil {
 		return err
 	}

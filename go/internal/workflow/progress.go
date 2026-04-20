@@ -108,7 +108,7 @@ type RunProgressSnapshot struct {
 // coordinator must observe for the supplied collector family.
 func RequiredPhasesForCollector(kind scope.CollectorKind) []PhaseRequirement {
 	switch kind {
-	case scope.CollectorGit, scope.CollectorAWS, scope.CollectorTerraformState:
+	case scope.CollectorGit:
 		return []PhaseRequirement{
 			{
 				Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
@@ -118,6 +118,21 @@ func RequiredPhasesForCollector(kind scope.CollectorKind) []PhaseRequirement {
 			{
 				Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
 				PhaseName: reducer.GraphProjectionPhaseSemanticNodesCommitted,
+				Required:  true,
+			},
+			{
+				Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
+				PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+				Required:  true,
+			},
+			{
+				Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
+				PhaseName: reducer.GraphProjectionPhaseDeploymentMapping,
+				Required:  true,
+			},
+			{
+				Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
+				PhaseName: reducer.GraphProjectionPhaseWorkloadMaterialization,
 				Required:  true,
 			},
 		}
@@ -185,6 +200,7 @@ func ReconcileRunProgress(snapshot RunProgressSnapshot, observedAt time.Time) (R
 			completeness = append(completeness, CompletenessState{
 				RunID:         snapshot.Run.RunID,
 				CollectorKind: collector.CollectorKind,
+				Keyspace:      requirement.Keyspace,
 				PhaseName:     string(requirement.PhaseName),
 				Required:      requirement.Required,
 				Status:        status,
@@ -232,6 +248,9 @@ func ReconcileRunProgress(snapshot RunProgressSnapshot, observedAt time.Time) (R
 
 	slices.SortFunc(completeness, func(left, right CompletenessState) int {
 		if cmp := strings.Compare(string(left.CollectorKind), string(right.CollectorKind)); cmp != 0 {
+			return cmp
+		}
+		if cmp := strings.Compare(string(left.Keyspace), string(right.Keyspace)); cmp != 0 {
 			return cmp
 		}
 		return strings.Compare(left.PhaseName, right.PhaseName)

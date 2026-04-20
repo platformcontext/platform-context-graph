@@ -3,6 +3,7 @@ package reducer
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
@@ -59,12 +60,13 @@ type WorkloadProjectionInputLoader interface {
 // runtime platforms). It loads facts from the content store, extracts workload
 // candidates, builds projection rows, and writes them to Neo4j.
 type WorkloadMaterializationHandler struct {
-	FactLoader                    FactLoader
-	ResolvedLoader                ResolvedRelationshipLoader
-	InputLoader                   WorkloadProjectionInputLoader
-	Materializer                  *WorkloadMaterializer
-	DependencyLookup              WorkloadDependencyGraphLookup
-	WorkloadDependencyEdgeWriter  SharedProjectionEdgeWriter
+	FactLoader                   FactLoader
+	ResolvedLoader               ResolvedRelationshipLoader
+	InputLoader                  WorkloadProjectionInputLoader
+	Materializer                 *WorkloadMaterializer
+	DependencyLookup             WorkloadDependencyGraphLookup
+	WorkloadDependencyEdgeWriter SharedProjectionEdgeWriter
+	PhasePublisher               GraphProjectionPhasePublisher
 }
 
 // Handle executes the workload materialization reduction path.
@@ -90,6 +92,16 @@ func (h WorkloadMaterializationHandler) Handle(
 		return Result{}, err
 	}
 	if len(candidates) == 0 {
+		if err := publishIntentGraphPhase(
+			ctx,
+			h.PhasePublisher,
+			intent,
+			GraphProjectionKeyspaceServiceUID,
+			GraphProjectionPhaseWorkloadMaterialization,
+			time.Now().UTC(),
+		); err != nil {
+			return Result{}, err
+		}
 		return Result{
 			IntentID:        intent.IntentID,
 			Domain:          DomainWorkloadMaterialization,
@@ -141,6 +153,16 @@ func (h WorkloadMaterializationHandler) Handle(
 			}
 			totalWrites += len(writeRows)
 		}
+	}
+	if err := publishIntentGraphPhase(
+		ctx,
+		h.PhasePublisher,
+		intent,
+		GraphProjectionKeyspaceServiceUID,
+		GraphProjectionPhaseWorkloadMaterialization,
+		time.Now().UTC(),
+	); err != nil {
+		return Result{}, err
 	}
 
 	return Result{

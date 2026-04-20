@@ -386,6 +386,42 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsUsesReducerPhaseTru
 			CommittedAt: now,
 			UpdatedAt:   now,
 		},
+		{
+			Key: reducer.GraphProjectionPhaseKey{
+				ScopeID:          scopeValue.ScopeID,
+				AcceptanceUnitID: "workload:integration-repo-1",
+				SourceRunID:      generation.GenerationID,
+				GenerationID:     generation.GenerationID,
+				Keyspace:         reducer.GraphProjectionKeyspaceServiceUID,
+			},
+			Phase:       reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+			CommittedAt: now,
+			UpdatedAt:   now,
+		},
+		{
+			Key: reducer.GraphProjectionPhaseKey{
+				ScopeID:          scopeValue.ScopeID,
+				AcceptanceUnitID: "workload:integration-repo-1",
+				SourceRunID:      generation.GenerationID,
+				GenerationID:     generation.GenerationID,
+				Keyspace:         reducer.GraphProjectionKeyspaceServiceUID,
+			},
+			Phase:       reducer.GraphProjectionPhaseDeploymentMapping,
+			CommittedAt: now,
+			UpdatedAt:   now,
+		},
+		{
+			Key: reducer.GraphProjectionPhaseKey{
+				ScopeID:          scopeValue.ScopeID,
+				AcceptanceUnitID: "workload:integration-repo-1",
+				SourceRunID:      generation.GenerationID,
+				GenerationID:     generation.GenerationID,
+				Keyspace:         reducer.GraphProjectionKeyspaceServiceUID,
+			},
+			Phase:       reducer.GraphProjectionPhaseWorkloadMaterialization,
+			CommittedAt: now,
+			UpdatedAt:   now,
+		},
 	}); err != nil {
 		t.Fatalf("phaseStore.Upsert() error = %v, want nil", err)
 	}
@@ -398,8 +434,51 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsUsesReducerPhaseTru
 		t.Fatalf("reconciled = %d, want %d", got, want)
 	}
 	mustWorkflowRunStatus(t, db, run.RunID, workflow.RunStatusComplete)
-	mustCompletenessStatus(t, db, run.RunID, string(scope.CollectorGit), "canonical_nodes_committed", workflow.CompletenessStatusReady)
-	mustCompletenessStatus(t, db, run.RunID, string(scope.CollectorGit), "semantic_nodes_committed", workflow.CompletenessStatusReady)
+	mustCompletenessStatus(
+		t,
+		db,
+		run.RunID,
+		string(scope.CollectorGit),
+		string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
+		"canonical_nodes_committed",
+		workflow.CompletenessStatusReady,
+	)
+	mustCompletenessStatus(
+		t,
+		db,
+		run.RunID,
+		string(scope.CollectorGit),
+		string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
+		"semantic_nodes_committed",
+		workflow.CompletenessStatusReady,
+	)
+	mustCompletenessStatus(
+		t,
+		db,
+		run.RunID,
+		string(scope.CollectorGit),
+		string(reducer.GraphProjectionKeyspaceServiceUID),
+		string(reducer.GraphProjectionPhaseCanonicalNodesCommitted),
+		workflow.CompletenessStatusReady,
+	)
+	mustCompletenessStatus(
+		t,
+		db,
+		run.RunID,
+		string(scope.CollectorGit),
+		string(reducer.GraphProjectionKeyspaceServiceUID),
+		string(reducer.GraphProjectionPhaseDeploymentMapping),
+		workflow.CompletenessStatusReady,
+	)
+	mustCompletenessStatus(
+		t,
+		db,
+		run.RunID,
+		string(scope.CollectorGit),
+		string(reducer.GraphProjectionKeyspaceServiceUID),
+		string(reducer.GraphProjectionPhaseWorkloadMaterialization),
+		workflow.CompletenessStatusReady,
+	)
 }
 
 func TestWorkflowControlStoreIntegrationHeartbeatUpdatesClaimAndWorkItemLeaseTogether(t *testing.T) {
@@ -602,7 +681,15 @@ WHERE run_id = $1
 	}
 }
 
-func mustCompletenessStatus(t *testing.T, db *sql.DB, runID string, collectorKind string, phaseName string, wantStatus string) {
+func mustCompletenessStatus(
+	t *testing.T,
+	db *sql.DB,
+	runID string,
+	collectorKind string,
+	keyspace string,
+	phaseName string,
+	wantStatus string,
+) {
 	t.Helper()
 	var gotStatus string
 	if err := db.QueryRowContext(context.Background(), `
@@ -610,12 +697,13 @@ SELECT status
 FROM workflow_run_completeness
 WHERE run_id = $1
   AND collector_kind = $2
-  AND phase_name = $3
-`, runID, collectorKind, phaseName).Scan(&gotStatus); err != nil {
-		t.Fatalf("query workflow completeness %q/%q error = %v, want nil", collectorKind, phaseName, err)
+  AND keyspace = $3
+  AND phase_name = $4
+`, runID, collectorKind, keyspace, phaseName).Scan(&gotStatus); err != nil {
+		t.Fatalf("query workflow completeness %q/%q/%q error = %v, want nil", collectorKind, keyspace, phaseName, err)
 	}
 	if gotStatus != wantStatus {
-		t.Fatalf("workflow completeness %q/%q status = %q, want %q", collectorKind, phaseName, gotStatus, wantStatus)
+		t.Fatalf("workflow completeness %q/%q/%q status = %q, want %q", collectorKind, keyspace, phaseName, gotStatus, wantStatus)
 	}
 }
 

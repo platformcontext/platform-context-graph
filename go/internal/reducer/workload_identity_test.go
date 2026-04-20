@@ -125,6 +125,47 @@ func TestWorkloadIdentityHandlerRejectsMissingEntityKeys(t *testing.T) {
 	}
 }
 
+func TestWorkloadIdentityHandlerPublishesServiceCanonicalPhase(t *testing.T) {
+	t.Parallel()
+
+	publisher := &recordingGraphProjectionPhasePublisher{}
+	handler := WorkloadIdentityHandler{
+		Writer: &recordingWorkloadIdentityWriter{
+			result: WorkloadIdentityWriteResult{CanonicalWrites: 1},
+		},
+		PhasePublisher: publisher,
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:        "intent-phase",
+		ScopeID:         "scope-123",
+		GenerationID:    "generation-456",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadIdentity,
+		Cause:           "shared identity follow-up required",
+		EntityKeys:      []string{"workload:platform-context-graph"},
+		RelatedScopeIDs: []string{"scope-123"},
+		EnqueuedAt:      time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		Status:          IntentStatusClaimed,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(publisher.calls), 1; got != want {
+		t.Fatalf("publisher call count = %d, want %d", got, want)
+	}
+	if got, want := len(publisher.calls[0]), 1; got != want {
+		t.Fatalf("published state count = %d, want %d", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.Keyspace, GraphProjectionKeyspaceServiceUID; got != want {
+		t.Fatalf("published keyspace = %q, want %q", got, want)
+	}
+	if got, want := publisher.calls[0][0].Phase, GraphProjectionPhaseCanonicalNodesCommitted; got != want {
+		t.Fatalf("published phase = %q, want %q", got, want)
+	}
+}
+
 func TestWorkloadIdentityHandlerRequiresCanonicalWriter(t *testing.T) {
 	t.Parallel()
 

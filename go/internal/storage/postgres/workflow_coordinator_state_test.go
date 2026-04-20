@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	"github.com/platformcontext/platform-context-graph/go/internal/workflow"
 )
@@ -88,6 +89,7 @@ func TestWorkflowControlStoreUpsertCompletenessStatesExecutesUpsert(t *testing.T
 	err := store.UpsertCompletenessStates(context.Background(), []workflow.CompletenessState{{
 		RunID:         "run-1",
 		CollectorKind: scope.CollectorGit,
+		Keyspace:      reducer.GraphProjectionKeyspaceCodeEntitiesUID,
 		PhaseName:     "canonical_nodes_committed",
 		Required:      true,
 		Status:        "ready",
@@ -103,6 +105,9 @@ func TestWorkflowControlStoreUpsertCompletenessStatesExecutesUpsert(t *testing.T
 	if !strings.Contains(db.execs[0].query, "INSERT INTO workflow_run_completeness") {
 		t.Fatalf("query missing workflow_run_completeness upsert: %s", db.execs[0].query)
 	}
+	if got, want := db.execs[0].args[2], string(reducer.GraphProjectionKeyspaceCodeEntitiesUID); got != want {
+		t.Fatalf("keyspace arg = %v, want %q", got, want)
+	}
 }
 
 func TestWorkflowCoordinatorStateSchemaIncludesExpectedTables(t *testing.T) {
@@ -111,6 +116,7 @@ func TestWorkflowCoordinatorStateSchemaIncludesExpectedTables(t *testing.T) {
 	for _, want := range []string{
 		"CREATE TABLE IF NOT EXISTS collector_instances",
 		"CREATE TABLE IF NOT EXISTS workflow_run_completeness",
+		"ADD COLUMN IF NOT EXISTS keyspace TEXT",
 		"claims_enabled BOOLEAN NOT NULL DEFAULT FALSE",
 	} {
 		if !strings.Contains(workflowCoordinatorStateSchemaSQL, want) {

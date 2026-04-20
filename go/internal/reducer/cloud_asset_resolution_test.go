@@ -106,6 +106,44 @@ func TestCloudAssetResolutionHandlerRejectsMissingEntityKeys(t *testing.T) {
 	}
 }
 
+func TestCloudAssetResolutionHandlerPublishesCloudCanonicalPhase(t *testing.T) {
+	t.Parallel()
+
+	publisher := &recordingGraphProjectionPhasePublisher{}
+	handler := CloudAssetResolutionHandler{
+		Writer: &recordingCloudAssetResolutionWriter{
+			result: CloudAssetResolutionWriteResult{CanonicalWrites: 1},
+		},
+		PhasePublisher: publisher,
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:        "intent-cloud-phase",
+		ScopeID:         "scope-123",
+		GenerationID:    "generation-456",
+		SourceSystem:    "git",
+		Domain:          DomainCloudAssetResolution,
+		Cause:           "shared cloud asset follow-up required",
+		EntityKeys:      []string{"aws:s3:bucket:logs-prod"},
+		RelatedScopeIDs: []string{"scope-123"},
+		EnqueuedAt:      time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		Status:          IntentStatusClaimed,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(publisher.calls), 1; got != want {
+		t.Fatalf("publisher call count = %d, want %d", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.Keyspace, GraphProjectionKeyspaceCloudResourceUID; got != want {
+		t.Fatalf("published keyspace = %q, want %q", got, want)
+	}
+	if got, want := publisher.calls[0][0].Phase, GraphProjectionPhaseCanonicalNodesCommitted; got != want {
+		t.Fatalf("published phase = %q, want %q", got, want)
+	}
+}
+
 func TestCloudAssetResolutionHandlerRequiresCanonicalWriter(t *testing.T) {
 	t.Parallel()
 

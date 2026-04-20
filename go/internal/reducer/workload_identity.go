@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // WorkloadIdentityWrite captures the bounded canonical reconciliation request
@@ -37,7 +38,8 @@ type WorkloadIdentityWriter interface {
 // WorkloadIdentityHandler reduces one workload identity intent into a bounded
 // canonical write request.
 type WorkloadIdentityHandler struct {
-	Writer WorkloadIdentityWriter
+	Writer         WorkloadIdentityWriter
+	PhasePublisher GraphProjectionPhasePublisher
 }
 
 // Handle executes the workload identity reduction path.
@@ -62,6 +64,16 @@ func (h WorkloadIdentityHandler) Handle(
 
 	writeResult, err := h.Writer.WriteWorkloadIdentity(ctx, request)
 	if err != nil {
+		return Result{}, err
+	}
+	if err := publishIntentGraphPhase(
+		ctx,
+		h.PhasePublisher,
+		intent,
+		GraphProjectionKeyspaceServiceUID,
+		GraphProjectionPhaseCanonicalNodesCommitted,
+		time.Now().UTC(),
+	); err != nil {
 		return Result{}, err
 	}
 

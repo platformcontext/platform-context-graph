@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // CloudAssetResolutionWrite captures the bounded canonical reconciliation
@@ -36,7 +37,8 @@ type CloudAssetResolutionWriter interface {
 // CloudAssetResolutionHandler reduces one cloud asset resolution intent into a
 // bounded canonical write request.
 type CloudAssetResolutionHandler struct {
-	Writer CloudAssetResolutionWriter
+	Writer         CloudAssetResolutionWriter
+	PhasePublisher GraphProjectionPhasePublisher
 }
 
 // Handle executes the cloud asset resolution path.
@@ -61,6 +63,16 @@ func (h CloudAssetResolutionHandler) Handle(
 
 	writeResult, err := h.Writer.WriteCloudAssetResolution(ctx, request)
 	if err != nil {
+		return Result{}, err
+	}
+	if err := publishIntentGraphPhase(
+		ctx,
+		h.PhasePublisher,
+		intent,
+		GraphProjectionKeyspaceCloudResourceUID,
+		GraphProjectionPhaseCanonicalNodesCommitted,
+		time.Now().UTC(),
+	); err != nil {
 		return Result{}, err
 	}
 

@@ -173,6 +173,33 @@ func TestBuildBootstrapCollectorUsesNativeSnapshotter(t *testing.T) {
 	}
 }
 
+func TestBuildBootstrapProjectorWiresPhasePublisherAndRepairQueue(t *testing.T) {
+	t.Parallel()
+
+	deps, err := buildBootstrapProjector(
+		context.Background(),
+		&fakeBootstrapSQLDB{},
+		&noopCanonicalWriter{},
+		func(string) string { return "" },
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildBootstrapProjector() error = %v, want nil", err)
+	}
+
+	runtime, ok := deps.runner.(projector.Runtime)
+	if !ok {
+		t.Fatalf("buildBootstrapProjector() runner type = %T, want projector.Runtime", deps.runner)
+	}
+	if runtime.PhasePublisher == nil {
+		t.Fatal("buildBootstrapProjector() PhasePublisher = nil, want non-nil")
+	}
+	if runtime.RepairQueue == nil {
+		t.Fatal("buildBootstrapProjector() RepairQueue = nil, want non-nil")
+	}
+}
+
 // --- fakes ---
 
 type fakeBootstrapDB struct {

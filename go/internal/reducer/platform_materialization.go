@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // PlatformMaterializationWrite captures the bounded canonical reconciliation
@@ -51,6 +52,7 @@ type PlatformMaterializationHandler struct {
 	InfrastructureMaterializer      *InfrastructurePlatformMaterializer
 	CrossRepoResolver               *CrossRepoRelationshipHandler
 	WorkloadMaterializationReplayer WorkloadMaterializationReplayer
+	PhasePublisher                  GraphProjectionPhasePublisher
 }
 
 // Handle executes the platform materialization reduction path.
@@ -127,6 +129,16 @@ func (h PlatformMaterializationHandler) Handle(
 			len(request.EntityKeys),
 			len(request.RelatedScopeIDs),
 		)
+	}
+	if err := publishIntentGraphPhase(
+		ctx,
+		h.PhasePublisher,
+		intent,
+		GraphProjectionKeyspaceServiceUID,
+		GraphProjectionPhaseDeploymentMapping,
+		time.Now().UTC(),
+	); err != nil {
+		return Result{}, err
 	}
 
 	return Result{

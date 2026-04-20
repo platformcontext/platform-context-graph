@@ -79,19 +79,27 @@ func (s *WorkflowControlStore) ReconcileWorkflowRuns(ctx context.Context, observ
 	}
 	defer func() { _ = rows.Close() }()
 
-	reconciled := 0
+	runs := make([]workflow.Run, 0)
 	for rows.Next() {
 		run, err := scanWorkflowRun(rows)
 		if err != nil {
 			return 0, fmt.Errorf("list workflow runs for reconciliation: %w", err)
 		}
+		runs = append(runs, run)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("list workflow runs for reconciliation: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("list workflow runs for reconciliation: %w", err)
+	}
+
+	reconciled := 0
+	for _, run := range runs {
 		if err := s.reconcileWorkflowRun(ctx, run, observedAt.UTC()); err != nil {
 			return 0, err
 		}
 		reconciled++
-	}
-	if err := rows.Err(); err != nil {
-		return 0, fmt.Errorf("list workflow runs for reconciliation: %w", err)
 	}
 	return reconciled, nil
 }

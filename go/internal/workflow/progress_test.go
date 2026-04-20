@@ -33,10 +33,13 @@ func TestReconcileRunProgressPendingCollection(t *testing.T) {
 	if got, want := run.Status, RunStatusCollectionPending; got != want {
 		t.Fatalf("run.Status = %q, want %q", got, want)
 	}
-	if got, want := len(completeness), 2; got != want {
+	if got, want := len(completeness), 5; got != want {
 		t.Fatalf("len(completeness) = %d, want %d", got, want)
 	}
 	for _, state := range completeness {
+		if state.Keyspace == "" {
+			t.Fatalf("phase %q keyspace = blank, want non-blank", state.PhaseName)
+		}
 		if got, want := state.Status, CompletenessStatusPending; got != want {
 			t.Fatalf("phase %q status = %q, want %q", state.PhaseName, got, want)
 		}
@@ -103,10 +106,13 @@ func TestReconcileRunProgressReducerConverging(t *testing.T) {
 		t.Fatalf("run.Status = %q, want %q", got, want)
 	}
 	if got, want := completeness[0].Status, CompletenessStatusReady; got != want {
-		t.Fatalf("canonical phase status = %q, want %q", got, want)
+		t.Fatalf("first phase status = %q, want %q", got, want)
+	}
+	if got, want := completeness[0].Keyspace, reducer.GraphProjectionKeyspaceCodeEntitiesUID; got != want {
+		t.Fatalf("first phase keyspace = %q, want %q", got, want)
 	}
 	if got, want := completeness[1].Status, CompletenessStatusPending; got != want {
-		t.Fatalf("semantic phase status = %q, want %q", got, want)
+		t.Fatalf("second phase status = %q, want %q", got, want)
 	}
 }
 
@@ -135,6 +141,18 @@ func TestReconcileRunProgressComplete(t *testing.T) {
 					Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
 					PhaseName: reducer.GraphProjectionPhaseSemanticNodesCommitted,
 				}: 1,
+				{
+					Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
+					PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+				}: 1,
+				{
+					Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
+					PhaseName: reducer.GraphProjectionPhaseDeploymentMapping,
+				}: 1,
+				{
+					Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
+					PhaseName: reducer.GraphProjectionPhaseWorkloadMaterialization,
+				}: 1,
 			},
 		}},
 	}, now)
@@ -148,6 +166,9 @@ func TestReconcileRunProgressComplete(t *testing.T) {
 		t.Fatal("run.FinishedAt = zero, want non-zero")
 	}
 	for _, state := range completeness {
+		if state.Keyspace == "" {
+			t.Fatalf("phase %q keyspace = blank, want non-blank", state.PhaseName)
+		}
 		if got, want := state.Status, CompletenessStatusReady; got != want {
 			t.Fatalf("phase %q status = %q, want %q", state.PhaseName, got, want)
 		}
@@ -186,28 +207,32 @@ func TestReconcileRunProgressFailed(t *testing.T) {
 		t.Fatalf("run.Status = %q, want %q", got, want)
 	}
 	for _, state := range completeness {
+		if state.Keyspace == "" {
+			t.Fatalf("phase %q keyspace = blank, want non-blank", state.PhaseName)
+		}
 		if got, want := state.Status, CompletenessStatusBlocked; got != want {
 			t.Fatalf("phase %q status = %q, want %q", state.PhaseName, got, want)
 		}
 	}
 }
 
-func TestRequiredPhasesForCollectorIncludesMultiCollectorFamilies(t *testing.T) {
+func TestRequiredPhasesForCollectorIncludesGitSecondPassGates(t *testing.T) {
 	t.Parallel()
 
-	for _, collectorKind := range []scope.CollectorKind{
-		scope.CollectorGit,
-		scope.CollectorAWS,
-		scope.CollectorTerraformState,
-	} {
-		requirements := RequiredPhasesForCollector(collectorKind)
-		if got, want := len(requirements), 2; got != want {
-			t.Fatalf("collector %q requirements = %d, want %d", collectorKind, got, want)
-		}
-		for _, requirement := range requirements {
-			if got, want := requirement.Keyspace, reducer.GraphProjectionKeyspaceCodeEntitiesUID; got != want {
-				t.Fatalf("collector %q keyspace = %q, want %q", collectorKind, got, want)
-			}
-		}
+	requirements := RequiredPhasesForCollector(scope.CollectorGit)
+	if got, want := len(requirements), 5; got != want {
+		t.Fatalf("collector %q requirements = %d, want %d", scope.CollectorGit, got, want)
+	}
+	if got, want := requirements[2].Keyspace, reducer.GraphProjectionKeyspaceServiceUID; got != want {
+		t.Fatalf("service canonical keyspace = %q, want %q", got, want)
+	}
+	if got, want := requirements[2].PhaseName, reducer.GraphProjectionPhaseCanonicalNodesCommitted; got != want {
+		t.Fatalf("service canonical phase = %q, want %q", got, want)
+	}
+	if got, want := requirements[3].PhaseName, reducer.GraphProjectionPhaseDeploymentMapping; got != want {
+		t.Fatalf("deployment mapping phase = %q, want %q", got, want)
+	}
+	if got, want := requirements[4].PhaseName, reducer.GraphProjectionPhaseWorkloadMaterialization; got != want {
+		t.Fatalf("workload materialization phase = %q, want %q", got, want)
 	}
 }

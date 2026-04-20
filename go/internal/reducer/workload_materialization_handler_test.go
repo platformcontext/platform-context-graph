@@ -105,8 +105,9 @@ func TestWorkloadMaterializationHandlerNoCandidatesSucceeds(t *testing.T) {
 	}
 
 	handler := WorkloadMaterializationHandler{
-		FactLoader:   loader,
-		Materializer: NewWorkloadMaterializer(&recordingCypherExecutor{}),
+		FactLoader:     loader,
+		Materializer:   NewWorkloadMaterializer(&recordingCypherExecutor{}),
+		PhasePublisher: &recordingGraphProjectionPhasePublisher{},
 	}
 
 	intent := Intent{
@@ -132,6 +133,58 @@ func TestWorkloadMaterializationHandlerNoCandidatesSucceeds(t *testing.T) {
 	}
 	if result.CanonicalWrites != 0 {
 		t.Fatalf("CanonicalWrites = %d, want 0 (no candidates)", result.CanonicalWrites)
+	}
+}
+
+func TestWorkloadMaterializationHandlerPublishesPhaseWhenNoCandidates(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	loader := &stubFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactID:   "fact-repo",
+				FactKind: "repository",
+				Payload: map[string]any{
+					"graph_id": "repo-docs",
+					"name":     "docs",
+				},
+				ObservedAt: now,
+			},
+		},
+	}
+	publisher := &recordingGraphProjectionPhasePublisher{}
+
+	handler := WorkloadMaterializationHandler{
+		FactLoader:     loader,
+		Materializer:   NewWorkloadMaterializer(&recordingCypherExecutor{}),
+		PhasePublisher: publisher,
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:        "intent-wm-phase-none",
+		ScopeID:         "scope-docs",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "facts projected",
+		EntityKeys:      []string{"repo-docs"},
+		RelatedScopeIDs: []string{"scope-docs"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if got, want := len(publisher.calls), 1; got != want {
+		t.Fatalf("publisher call count = %d, want %d", got, want)
+	}
+	if got, want := publisher.calls[0][0].Key.Keyspace, GraphProjectionKeyspaceServiceUID; got != want {
+		t.Fatalf("published keyspace = %q, want %q", got, want)
+	}
+	if got, want := publisher.calls[0][0].Phase, GraphProjectionPhaseWorkloadMaterialization; got != want {
+		t.Fatalf("published phase = %q, want %q", got, want)
 	}
 }
 
