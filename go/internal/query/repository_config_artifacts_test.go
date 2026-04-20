@@ -257,7 +257,7 @@ func TestBuildRepositoryConfigArtifactsExtractsTerragruntFindInParentFoldersSide
 
 	got := buildRepositoryConfigArtifacts("iac-terragrunt-core-infra", []FileContent{
 		{
-			RelativePath: "aws/accounts/ops-qa/us-east-1/ops-qa.network-us-east-1/root.hcl",
+			RelativePath: "aws/accounts/qa/us-east-1/qa.network-us-east-1/root.hcl",
 			Content: `locals {
   global_vars = try(
     yamldecode(file("${path_relative_to_include()}/global.yaml")),
@@ -280,7 +280,7 @@ func TestBuildRepositoryConfigArtifactsExtractsTerragruntFindInParentFoldersSide
 `,
 		},
 		{
-			RelativePath: "aws/accounts/ops-qa/us-east-1/ops-qa.network-us-east-1/services/ops-qa-eks/terragrunt.hcl",
+			RelativePath: "aws/accounts/qa/us-east-1/qa.network-us-east-1/services/qa-eks/terragrunt.hcl",
 			Content: `include "root" {
   path = find_in_parent_folders("root.hcl")
 }
@@ -532,9 +532,9 @@ func TestBuildRepositoryConfigArtifactsExtractsTerragruntGetRepoRootModuleSource
 
 	got := buildRepositoryConfigArtifacts("terragrunt-deployment", []FileContent{
 		{
-			RelativePath: "accounts/bg-dev/us-east-1/dev.network-us-east-1/services/boattrader/root.hcl",
+			RelativePath: "accounts/dev/us-east-1/dev.network-us-east-1/services/sample-service/root.hcl",
 			Content: `terraform {
-  source = "${get_repo_root()}/terraform-module-boattrader"
+  source = "${get_repo_root()}/terraform-module-sample-service"
 }
 `,
 		},
@@ -547,7 +547,7 @@ func TestBuildRepositoryConfigArtifactsExtractsTerragruntGetRepoRootModuleSource
 	if len(configPaths) != 1 {
 		t.Fatalf("len(config_paths) = %d, want 1", len(configPaths))
 	}
-	if got, want := configPaths[0]["path"], "terraform-module-boattrader"; got != want {
+	if got, want := configPaths[0]["path"], "terraform-module-sample-service"; got != want {
 		t.Fatalf("config_paths[0].path = %#v, want %#v", got, want)
 	}
 	if got, want := configPaths[0]["evidence_kind"], "terraform_module_source_path"; got != want {

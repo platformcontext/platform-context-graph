@@ -574,9 +574,9 @@ func TestDeployableUnitKeyFromPathPreservesExplicitUnitKeys(t *testing.T) {
 	}{
 		{
 			name:         "repo root dockerfile uses repo name",
-			repoName:     "api-node-boats",
+			repoName:     "sample-service-api",
 			relativePath: "Dockerfile",
-			want:         "api-node-boats",
+			want:         "sample-service-api",
 		},
 		{
 			name:         "named dockerfile remains distinct",
@@ -598,15 +598,15 @@ func TestDeployableUnitKeyFromPathPreservesExplicitUnitKeys(t *testing.T) {
 		},
 		{
 			name:         "support folder remote dockerfile collapses to repo service",
-			repoName:     "api-node-boattrader",
+			repoName:     "sample-service-api",
 			relativePath: "docker/remote/Dockerfile",
-			want:         "api-node-boattrader",
+			want:         "sample-service-api",
 		},
 		{
 			name:         "support folder local dockerfile collapses to repo service",
-			repoName:     "api-node-boattrader",
+			repoName:     "sample-service-api",
 			relativePath: "docker/local/Dockerfile",
-			want:         "api-node-boattrader",
+			want:         "sample-service-api",
 		},
 	}
 

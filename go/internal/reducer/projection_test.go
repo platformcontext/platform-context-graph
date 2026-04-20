@@ -550,8 +550,8 @@ func TestBuildProjectionRowsDoesNotInventDefaultEnvironmentInstance(t *testing.T
 
 	candidates := []WorkloadCandidate{
 		{
-			RepoID:         "repo-boattrader",
-			RepoName:       "api-node-boattrader",
+			RepoID:         "repo-sample-service",
+			RepoName:       "sample-service-api",
 			Classification: "service",
 			Confidence:     0.85,
 			Provenance:     []string{"dockerfile_runtime", "jenkins_pipeline"},

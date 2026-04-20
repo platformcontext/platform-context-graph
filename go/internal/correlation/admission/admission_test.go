@@ -13,7 +13,7 @@ func TestEvaluatePromotesCandidateAtOrAboveThreshold(t *testing.T) {
 	candidate := model.Candidate{
 		ID:             "candidate-1",
 		Kind:           "deployable_unit",
-		CorrelationKey: "boats",
+		CorrelationKey: "sample-service",
 		State:          model.CandidateStateProvisional,
 		Confidence:     0.8,
 	}
@@ -36,7 +36,7 @@ func TestEvaluateRejectsCandidateBelowThresholdButPreservesQueryability(t *testi
 	candidate := model.Candidate{
 		ID:             "candidate-2",
 		Kind:           "deployable_unit",
-		CorrelationKey: "boats",
+		CorrelationKey: "sample-service",
 		State:          model.CandidateStateProvisional,
 		Confidence:     0.42,
 	}
@@ -59,7 +59,7 @@ func TestEvaluateRejectsOutOfRangeThreshold(t *testing.T) {
 	candidate := model.Candidate{
 		ID:             "candidate-3",
 		Kind:           "deployable_unit",
-		CorrelationKey: "boats",
+		CorrelationKey: "sample-service",
 		State:          model.CandidateStateProvisional,
 		Confidence:     0.9,
 	}
@@ -75,7 +75,7 @@ func TestEvaluateRejectsCandidateThatMissesRequiredEvidenceStructure(t *testing.
 	candidate := model.Candidate{
 		ID:             "candidate-4",
 		Kind:           "deployable_unit",
-		CorrelationKey: "boats",
+		CorrelationKey: "sample-service",
 		State:          model.CandidateStateProvisional,
 		Confidence:     0.92,
 		Evidence: []model.EvidenceAtom{
@@ -83,9 +83,9 @@ func TestEvaluateRejectsCandidateThatMissesRequiredEvidenceStructure(t *testing.
 				ID:           "ev-1",
 				SourceSystem: "git",
 				EvidenceType: "dockerfile",
-				ScopeID:      "repo:boats",
+				ScopeID:      "repo:sample-service",
 				Key:          "repository",
-				Value:        "boats",
+				Value:        "sample-service",
 				Confidence:   0.92,
 			},
 		},

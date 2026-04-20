@@ -39,19 +39,19 @@ spec:
 			"specs/index.yaml": `
 openapi: 3.0.3
 info:
-  title: Boats API
+  title: Catalog API
   version: v1
 servers:
   - url: https://sample-service-api.qa.example.com
 paths:
-  /boats:
+  /catalog:
     get:
-      operationId: listBoats
+      operationId: listCatalogItems
     post:
-      operationId: createBoat
-  /boats/{id}:
+      operationId: createCatalogItem
+  /catalog/{id}:
     get:
-      operationId: getBoat
+      operationId: getCatalogItem
 `,
 			"src/server.js": `
 const swaggerUi = require('swagger-ui-express')
@@ -124,10 +124,10 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(spec))
 	if len(spec.Endpoints) != 2 {
 		t.Fatalf("len(api_specs[0].Endpoints) = %d, want 2", len(spec.Endpoints))
 	}
-	if got, want := spec.Endpoints[0].Path, "/boats"; got != want {
+	if got, want := spec.Endpoints[0].Path, "/catalog"; got != want {
 		t.Fatalf("api_specs[0].Endpoints[0].Path = %q, want %q", got, want)
 	}
-	if got, want := spec.Endpoints[1].OperationIDs, []string{"getBoat"}; !slices.Equal(got, want) {
+	if got, want := spec.Endpoints[1].OperationIDs, []string{"getCatalogItem"}; !slices.Equal(got, want) {
 		t.Fatalf("api_specs[0].Endpoints[1].OperationIDs = %#v, want %#v", got, want)
 	}
 }
@@ -188,8 +188,8 @@ func TestExtractObservedHostnamesRejectsFileExtensionsAndCamelCase(t *testing.T)
 	t.Parallel()
 
 	content := `
-host: "api.qa.boattrader.com"
-url: "https://recos-ranker-service.dap-dev.brgp.io"
+host: "api.qa.example.test"
+url: "https://ranking-service.dev.internal.example"
 image: "12345.jpg"
 logo: "sea-ray-logo.png"
 url: "thumbnail.gif"
@@ -202,7 +202,7 @@ stub: "sandbox.stub"
 `
 
 	got := extractObservedHostnames(content)
-	want := []string{"api.qa.boattrader.com", "recos-ranker-service.dap-dev.brgp.io"}
+	want := []string{"api.qa.example.test", "ranking-service.dev.internal.example"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("extractObservedHostnames() = %#v, want %#v", got, want)
 	}
@@ -220,20 +220,20 @@ func TestLoadServiceQueryEvidenceResolvesOpenAPIPathsRef(t *testing.T) {
 			"specs/index.yaml": `
 openapi: 3.0.3
 info:
-  title: Boats API
+  title: Catalog API
   version: v1
 paths:
   $ref: '../api/paths/index.yaml'
 `,
 			"api/paths/index.yaml": `
-/boats:
+/catalog:
   get:
-    operationId: listBoats
+    operationId: listCatalogItems
   post:
-    operationId: createBoat
-/boats/{id}:
+    operationId: createCatalogItem
+/catalog/{id}:
   get:
-    operationId: getBoat
+    operationId: getCatalogItem
 `,
 		},
 	}
@@ -268,7 +268,7 @@ paths:
 			t.Fatal("$ref must not appear as an endpoint path")
 		}
 	}
-	if got, want := spec.Endpoints[0].Path, "/boats"; got != want {
+	if got, want := spec.Endpoints[0].Path, "/catalog"; got != want {
 		t.Fatalf("Endpoints[0].Path = %q, want %q", got, want)
 	}
 }
@@ -279,26 +279,26 @@ func TestLoadServiceQueryEvidenceResolvesPerPathItemRef(t *testing.T) {
 	reader := &stubServiceEvidenceReader{
 		files: []FileContent{
 			{RepoID: "repo-api", RelativePath: "specs/openapi.yaml"},
-			{RepoID: "repo-api", RelativePath: "api/paths/boats.yaml"},
+			{RepoID: "repo-api", RelativePath: "api/paths/catalog.yaml"},
 		},
 		fileContent: map[string]string{
 			"specs/openapi.yaml": `
 openapi: 3.0.3
 info:
-  title: Boats API
+  title: Catalog API
   version: v2
 paths:
-  /boats:
-    $ref: '../api/paths/boats.yaml'
+  /catalog:
+    $ref: '../api/paths/catalog.yaml'
   /health:
     get:
       operationId: healthCheck
 `,
-			"api/paths/boats.yaml": `
+			"api/paths/catalog.yaml": `
 get:
-  operationId: listBoats
+  operationId: listCatalogItems
 post:
-  operationId: createBoat
+  operationId: createCatalogItem
 `,
 		},
 	}
@@ -327,16 +327,16 @@ post:
 	if got, want := spec.OperationIDCount, 3; got != want {
 		t.Fatalf("OperationIDCount = %d, want %d", got, want)
 	}
-	// /boats should have methods from resolved ref
+	// /catalog should have methods from resolved ref
 	for _, ep := range spec.Endpoints {
-		if ep.Path == "/boats" {
+		if ep.Path == "/catalog" {
 			if len(ep.Methods) != 2 {
-				t.Fatalf("/boats methods = %v, want [get post]", ep.Methods)
+				t.Fatalf("/catalog methods = %v, want [get post]", ep.Methods)
 			}
 			return
 		}
 	}
-	t.Fatal("/boats endpoint not found in resolved spec")
+	t.Fatal("/catalog endpoint not found in resolved spec")
 }
 
 func TestLoadServiceQueryEvidencePropagatesReaderErrors(t *testing.T) {

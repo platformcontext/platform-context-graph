@@ -30,7 +30,7 @@ func TestCandidateValidateRequiresConfidenceWithinUnitInterval(t *testing.T) {
 	candidate := Candidate{
 		ID:             "candidate-1",
 		Kind:           "deployable_unit",
-		CorrelationKey: "boats",
+		CorrelationKey: "sample-service",
 		State:          CandidateStateProvisional,
 		Confidence:     1.2,
 	}

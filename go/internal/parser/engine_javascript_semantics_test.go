@@ -72,7 +72,7 @@ func TestDefaultEngineParsePathTSXSemanticsAndComponents(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	filePath := filepath.Join(repoRoot, "src", "app", "[locale]", "boats", "page.tsx")
+	filePath := filepath.Join(repoRoot, "src", "app", "[locale]", "catalog", "page.tsx")
 	writeTestFile(
 		t,
 		filePath,
@@ -87,10 +87,10 @@ type User = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  return { title: "Boats" };
+  return { title: "Catalog" };
 }
 
-export default function BoatsPage() {
+export default function CatalogPage() {
   const [open, setOpen] = useState(false);
   useToolbarOverflow();
   return <button onClick={() => setOpen(!open)}>{String(open)}</button>;
@@ -109,14 +109,14 @@ export default function BoatsPage() {
 	}
 
 	assertNamedBucketContains(t, got, "type_aliases", "User")
-	assertNamedBucketContains(t, got, "components", "BoatsPage")
+	assertNamedBucketContains(t, got, "components", "CatalogPage")
 	assertFrameworksEqual(t, got, "nextjs", "react")
 	assertNestedStringValue(t, got, "react", "boundary", "client")
-	assertNestedStringSliceEqual(t, got, "react", "component_exports", []string{"BoatsPage"})
+	assertNestedStringSliceEqual(t, got, "react", "component_exports", []string{"CatalogPage"})
 	assertNestedStringSliceEqual(t, got, "react", "hooks_used", []string{"useState", "useToolbarOverflow"})
 	assertNestedStringValue(t, got, "nextjs", "module_kind", "page")
 	assertNestedStringValue(t, got, "nextjs", "metadata_exports", "dynamic")
-	assertNestedStringSliceEqual(t, got, "nextjs", "route_segments", []string{"[locale]", "boats"})
+	assertNestedStringSliceEqual(t, got, "nextjs", "route_segments", []string{"[locale]", "catalog"})
 	assertNestedStringValue(t, got, "nextjs", "runtime_boundary", "client")
 }
 

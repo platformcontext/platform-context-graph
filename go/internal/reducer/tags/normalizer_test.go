@@ -15,10 +15,10 @@ func TestNormalizationResultPhaseStatesBuildsCanonicalCloudStates(t *testing.T) 
 	result := NormalizationResult{
 		Resources: []NormalizedResource{
 			{
-				CanonicalResourceID: "cloud:ecs-service:api-node-boats",
+				CanonicalResourceID: "cloud:ecs-service:sample-service-api",
 				NormalizedTags: map[string]string{
-					"service":     "api-node-boats",
-					"environment": "ops-prod",
+					"service":     "sample-service-api",
+					"environment": "prod",
 				},
 			},
 		},
@@ -31,7 +31,7 @@ func TestNormalizationResultPhaseStatesBuildsCanonicalCloudStates(t *testing.T) 
 	if gotLen, want := len(got), 1; gotLen != want {
 		t.Fatalf("len(PhaseStates()) = %d, want %d", gotLen, want)
 	}
-	if gotID, want := got[0].Key.AcceptanceUnitID, "cloud:ecs-service:api-node-boats"; gotID != want {
+	if gotID, want := got[0].Key.AcceptanceUnitID, "cloud:ecs-service:sample-service-api"; gotID != want {
 		t.Fatalf("AcceptanceUnitID = %q, want %q", gotID, want)
 	}
 	if gotPhase, want := got[0].Phase, reducer.GraphProjectionPhaseCanonicalNodesCommitted; gotPhase != want {
@@ -44,8 +44,8 @@ func TestNormalizationResultPhaseStatesDedupesCanonicalResources(t *testing.T) {
 
 	result := NormalizationResult{
 		Resources: []NormalizedResource{
-			{CanonicalResourceID: "cloud:alb:boats", NormalizedTags: map[string]string{"service": "boats"}},
-			{CanonicalResourceID: "cloud:alb:boats", NormalizedTags: map[string]string{"environment": "ops-qa"}},
+			{CanonicalResourceID: "cloud:alb:sample-service", NormalizedTags: map[string]string{"service": "sample-service"}},
+			{CanonicalResourceID: "cloud:alb:sample-service", NormalizedTags: map[string]string{"environment": "qa"}},
 		},
 	}
 
@@ -64,7 +64,7 @@ func TestPublishNormalizationResultPublishesCanonicalStates(t *testing.T) {
 	publisher := &recordingTagPhasePublisher{}
 	result := NormalizationResult{
 		Resources: []NormalizedResource{
-			{CanonicalResourceID: "cloud:lambda:boats", NormalizedTags: map[string]string{"service": "boats"}},
+			{CanonicalResourceID: "cloud:lambda:sample-service", NormalizedTags: map[string]string{"service": "sample-service"}},
 		},
 	}
 

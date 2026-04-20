@@ -58,7 +58,7 @@ func TestResolveRouteMapsSearchFileContentPatternAndRepoIDs(t *testing.T) {
 
 	route, err := resolveRoute("search_file_content", map[string]any{
 		"pattern":  "sample-service-api",
-		"repo_ids": []any{"repo://boats", "repo://shared"},
+		"repo_ids": []any{"repo://sample-service", "repo://shared"},
 		"limit":    float64(25),
 	})
 	if err != nil {
@@ -91,7 +91,7 @@ func TestResolveRouteMapsSearchEntityContentSingleRepoID(t *testing.T) {
 
 	route, err := resolveRoute("search_entity_content", map[string]any{
 		"pattern":  "sample-service-api",
-		"repo_ids": []any{"repo://boats"},
+		"repo_ids": []any{"repo://sample-service"},
 		"limit":    float64(10),
 	})
 	if err != nil {
@@ -104,7 +104,7 @@ func TestResolveRouteMapsSearchEntityContentSingleRepoID(t *testing.T) {
 	if got, want := body["query"], "sample-service-api"; got != want {
 		t.Fatalf("body[query] = %#v, want %#v", got, want)
 	}
-	if got, want := body["repo_id"], "repo://boats"; got != want {
+	if got, want := body["repo_id"], "repo://sample-service"; got != want {
 		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
 	}
 	if _, exists := body["repo_ids"]; exists {

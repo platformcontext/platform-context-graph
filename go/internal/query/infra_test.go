@@ -32,7 +32,7 @@ func TestSearchInfraResourcesUsesInfrastructureLabelsForCategory(t *testing.T) {
 	reader := &recordingInfraGraphReader{
 		runRows: []map[string]any{
 			{
-				"id":          "k8s:configmap:boats",
+				"id":          "k8s:configmap:sample-service",
 				"name":        "sample-service-api",
 				"labels":      []any{"K8sResource"},
 				"kind":        "ConfigMap",

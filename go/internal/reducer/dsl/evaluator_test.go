@@ -15,7 +15,7 @@ func TestEvaluationResultPhaseStatesBuildsStableStates(t *testing.T) {
 	result := EvaluationResult{
 		Publications: []Publication{
 			{
-				AcceptanceUnitID: "service:api-node-boats",
+				AcceptanceUnitID: "service:sample-service-api",
 				Keyspace:         reducer.GraphProjectionKeyspaceServiceUID,
 				Phase:            reducer.GraphProjectionPhaseDeploymentMapping,
 				OutputKind:       OutputKindResolvedRelationship,
@@ -36,7 +36,7 @@ func TestEvaluationResultPhaseStatesBuildsStableStates(t *testing.T) {
 	if gotLen, want := len(got), 2; gotLen != want {
 		t.Fatalf("len(PhaseStates()) = %d, want %d", gotLen, want)
 	}
-	if gotKey, want := got[0].Key.AcceptanceUnitID, "service:api-node-boats"; gotKey != want {
+	if gotKey, want := got[0].Key.AcceptanceUnitID, "service:sample-service-api"; gotKey != want {
 		t.Fatalf("first AcceptanceUnitID = %q, want %q", gotKey, want)
 	}
 	if gotPhase, want := got[0].Phase, reducer.GraphProjectionPhaseDeploymentMapping; gotPhase != want {
@@ -86,7 +86,7 @@ func TestPublishEvaluationResultPublishesStates(t *testing.T) {
 	result := EvaluationResult{
 		Publications: []Publication{
 			{
-				AcceptanceUnitID: "cloud:lambda:api-node-boats",
+				AcceptanceUnitID: "cloud:lambda:sample-service-api",
 				Keyspace:         reducer.GraphProjectionKeyspaceCloudResourceUID,
 				Phase:            reducer.GraphProjectionPhaseCrossSourceAnchorReady,
 				OutputKind:       OutputKindDriftObservation,

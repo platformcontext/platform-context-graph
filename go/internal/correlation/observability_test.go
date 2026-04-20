@@ -17,7 +17,7 @@ func TestBuildSummaryCountsOutcomes(t *testing.T) {
 				Candidate: model.Candidate{
 					ID:               "winner",
 					Kind:             "deployable_unit",
-					CorrelationKey:   "boats",
+					CorrelationKey:   "sample-service",
 					State:            model.CandidateStateAdmitted,
 					Confidence:       0.92,
 					RejectionReasons: nil,
@@ -27,7 +27,7 @@ func TestBuildSummaryCountsOutcomes(t *testing.T) {
 				Candidate: model.Candidate{
 					ID:               "low-confidence",
 					Kind:             "deployable_unit",
-					CorrelationKey:   "boats-util",
+					CorrelationKey:   "sample-service-util",
 					State:            model.CandidateStateRejected,
 					Confidence:       0.41,
 					RejectionReasons: []model.RejectionReason{model.RejectionReasonLowConfidence},
@@ -37,7 +37,7 @@ func TestBuildSummaryCountsOutcomes(t *testing.T) {
 				Candidate: model.Candidate{
 					ID:               "tie-break-loser",
 					Kind:             "deployable_unit",
-					CorrelationKey:   "boats",
+					CorrelationKey:   "sample-service",
 					State:            model.CandidateStateRejected,
 					Confidence:       0.91,
 					RejectionReasons: []model.RejectionReason{model.RejectionReasonLostTieBreak},

@@ -15,9 +15,9 @@ func TestCorrelatedWorkloadName(t *testing.T) {
 	t.Parallel()
 
 	candidate := WorkloadCandidate{
-		RepoID:       "repo-boattrader",
-		RepoName:     "api-node-boattrader",
-		WorkloadName: "api-node-boattrader",
+		RepoID:       "repo-sample-service",
+		RepoName:     "sample-service-api",
+		WorkloadName: "sample-service-api",
 	}
 
 	testCases := []struct {
@@ -28,23 +28,23 @@ func TestCorrelatedWorkloadName(t *testing.T) {
 		{
 			name: "uses admitted scoped unit key",
 			evaluated: correlationmodel.Candidate{
-				CorrelationKey: "repo-boattrader:api-node-boattrader",
+				CorrelationKey: "repo-sample-service:sample-service-api",
 			},
-			want: "api-node-boattrader",
+			want: "sample-service-api",
 		},
 		{
 			name: "falls back for foreign correlation key",
 			evaluated: correlationmodel.Candidate{
 				CorrelationKey: "repo-other:remote",
 			},
-			want: "api-node-boattrader",
+			want: "sample-service-api",
 		},
 		{
 			name: "falls back for empty scoped suffix",
 			evaluated: correlationmodel.Candidate{
-				CorrelationKey: "repo-boattrader:",
+				CorrelationKey: "repo-sample-service:",
 			},
-			want: "api-node-boattrader",
+			want: "sample-service-api",
 		},
 	}
 
@@ -212,8 +212,8 @@ func TestCorrelatedWorkloadProjectionInputLoaderCollapsesDockerSupportVariantsTo
 					ScopeID:  "scope-service",
 					FactKind: "repository",
 					Payload: map[string]any{
-						"graph_id": "repo-boattrader",
-						"name":     "api-node-boattrader",
+						"graph_id": "repo-sample-service",
+						"name":     "sample-service-api",
 					},
 					ObservedAt: now,
 				},
@@ -222,7 +222,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderCollapsesDockerSupportVariantsTo
 					ScopeID:  "scope-service",
 					FactKind: "file",
 					Payload: map[string]any{
-						"repo_id":       "repo-boattrader",
+						"repo_id":       "repo-sample-service",
 						"language":      "dockerfile",
 						"relative_path": "docker/remote/Dockerfile",
 						"parsed_file_data": map[string]any{
@@ -236,7 +236,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderCollapsesDockerSupportVariantsTo
 					ScopeID:  "scope-service",
 					FactKind: "file",
 					Payload: map[string]any{
-						"repo_id":       "repo-boattrader",
+						"repo_id":       "repo-sample-service",
 						"language":      "dockerfile",
 						"relative_path": "docker/local/Dockerfile",
 						"parsed_file_data": map[string]any{
@@ -250,7 +250,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderCollapsesDockerSupportVariantsTo
 					ScopeID:  "scope-service",
 					FactKind: "file",
 					Payload: map[string]any{
-						"repo_id":       "repo-boattrader",
+						"repo_id":       "repo-sample-service",
 						"language":      "groovy",
 						"relative_path": "Jenkinsfile",
 						"parsed_file_data": map[string]any{
@@ -264,13 +264,13 @@ func TestCorrelatedWorkloadProjectionInputLoaderCollapsesDockerSupportVariantsTo
 	}
 
 	intent := Intent{
-		IntentID:        "intent-correlation-boattrader",
+		IntentID:        "intent-correlation-sample-service",
 		ScopeID:         "scope-service",
 		GenerationID:    "gen-1",
 		SourceSystem:    "git",
 		Domain:          DomainWorkloadMaterialization,
 		Cause:           "test",
-		EntityKeys:      []string{"repo-boattrader"},
+		EntityKeys:      []string{"repo-sample-service"},
 		RelatedScopeIDs: []string{"scope-service"},
 		EnqueuedAt:      now,
 		AvailableAt:     now,
@@ -284,7 +284,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderCollapsesDockerSupportVariantsTo
 	if got, want := len(candidates), 1; got != want {
 		t.Fatalf("len(candidates) = %d, want %d", got, want)
 	}
-	if got, want := candidates[0].WorkloadName, "api-node-boattrader"; got != want {
+	if got, want := candidates[0].WorkloadName, "sample-service-api"; got != want {
 		t.Fatalf("WorkloadName = %q, want %q", got, want)
 	}
 }
@@ -328,7 +328,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironmen
 			FactID: "fact-deploy-overlay-qa", ScopeID: "scope-deploy", FactKind: "file",
 			Payload: map[string]any{
 				"repo_id": "repo-deploy", "language": "yaml",
-				"relative_path":    "apps/my-service/overlays/bg-qa/kustomization.yaml",
+				"relative_path":    "apps/my-service/overlays/qa/kustomization.yaml",
 				"parsed_file_data": map[string]any{},
 			},
 			ObservedAt: now,
@@ -400,10 +400,10 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironmen
 	// Critical assertion: deployment repo overlay environments must be populated.
 	envs := deploymentEnvs["repo-deploy"]
 	if len(envs) != 2 {
-		t.Fatalf("deploymentEnvs[repo-deploy] = %v, want 2 environments (bg-qa, production)", envs)
+		t.Fatalf("deploymentEnvs[repo-deploy] = %v, want 2 environments (production, qa)", envs)
 	}
-	if envs[0] != "bg-qa" || envs[1] != "production" {
-		t.Fatalf("deploymentEnvs[repo-deploy] = %v, want [bg-qa production]", envs)
+	if envs[0] != "production" || envs[1] != "qa" {
+		t.Fatalf("deploymentEnvs[repo-deploy] = %v, want [production qa]", envs)
 	}
 }
 

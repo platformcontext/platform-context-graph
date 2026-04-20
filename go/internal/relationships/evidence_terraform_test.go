@@ -14,16 +14,16 @@ func TestDiscoverTerraformLocalModuleSourceEvidence(t *testing.T) {
 			ScopeID: "repo-fsbo",
 			Payload: map[string]any{
 				"artifact_type": "terraform_hcl",
-				"relative_path": "environments/bg-qa/prod_braintree_keys.tf",
+				"relative_path": "environments/qa/prod_payment_keys.tf",
 				"content": `module "api_key_default" {
-  source = "../../local-modules/braintree-api"
+  source = "../../local-modules/payment-api"
 }
 `,
 			},
 		},
 	}
 	catalog := []CatalogEntry{
-		{RepoID: "repo-braintree-api", Aliases: []string{"braintree-api"}},
+		{RepoID: "repo-payment-api", Aliases: []string{"payment-api"}},
 	}
 
 	evidence := DiscoverEvidence(envelopes, catalog)
@@ -36,10 +36,10 @@ func TestDiscoverTerraformLocalModuleSourceEvidence(t *testing.T) {
 	if got, want := evidence[0].RelationshipType, RelUsesModule; got != want {
 		t.Fatalf("RelationshipType = %q, want %q", got, want)
 	}
-	if got, want := evidence[0].TargetRepoID, "repo-braintree-api"; got != want {
+	if got, want := evidence[0].TargetRepoID, "repo-payment-api"; got != want {
 		t.Fatalf("TargetRepoID = %q, want %q", got, want)
 	}
-	if got, want := evidence[0].Details["source_ref"], "../../local-modules/braintree-api"; got != want {
+	if got, want := evidence[0].Details["source_ref"], "../../local-modules/payment-api"; got != want {
 		t.Fatalf("source_ref = %#v, want %#v", got, want)
 	}
 }
@@ -130,15 +130,15 @@ func TestDiscoverTerraformAndTerragruntHelperBuiltPathEvidence(t *testing.T) {
 				"terraform_modules": []any{
 					map[string]any{
 						"name":   "queue",
-						"source": `join("/", [get_repo_root(), "local-modules/braintree-api"])`,
+						"source": `join("/", [get_repo_root(), "local-modules/payments-api"])`,
 					},
 				},
 			},
 			catalog: []CatalogEntry{
-				{RepoID: "repo-braintree-api", Aliases: []string{"braintree-api"}},
+				{RepoID: "repo-payments-api", Aliases: []string{"payments-api"}},
 			},
 			wantKind:   EvidenceKindTerraformModuleSource,
-			wantTarget: "repo-braintree-api",
+			wantTarget: "repo-payments-api",
 		},
 		{
 			name:         "helper-built terragrunt dependency config path maps to target repository",

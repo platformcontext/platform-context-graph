@@ -212,11 +212,14 @@ func TestBuildReducerServiceWiresPostgresWorkloadIdentityWriter(t *testing.T) {
 	if got, want := result.Status, reducer.ResultStatusSucceeded; got != want {
 		t.Fatalf("Executor.Execute().Status = %q, want %q", got, want)
 	}
-	if got, want := len(db.execs), 1; got != want {
+	if got, want := len(db.execs), 2; got != want {
 		t.Fatalf("ExecContext calls = %d, want %d", got, want)
 	}
 	if got := db.execs[0].query; !strings.Contains(got, "INSERT INTO fact_records") {
 		t.Fatalf("ExecContext query = %q, want fact_records insert", got)
+	}
+	if got := db.execs[1].query; !strings.Contains(got, "INSERT INTO graph_projection_phase_state") {
+		t.Fatalf("ExecContext query = %q, want graph_projection_phase_state insert", got)
 	}
 }
 
@@ -250,11 +253,14 @@ func TestBuildReducerServiceWiresPostgresCloudAssetResolutionWriter(t *testing.T
 	if got, want := result.Status, reducer.ResultStatusSucceeded; got != want {
 		t.Fatalf("Executor.Execute().Status = %q, want %q", got, want)
 	}
-	if got, want := len(db.execs), 1; got != want {
+	if got, want := len(db.execs), 2; got != want {
 		t.Fatalf("ExecContext calls = %d, want %d", got, want)
 	}
 	if got := db.execs[0].query; !strings.Contains(got, "INSERT INTO fact_records") {
 		t.Fatalf("ExecContext query = %q, want fact_records insert", got)
+	}
+	if got := db.execs[1].query; !strings.Contains(got, "INSERT INTO graph_projection_phase_state") {
+		t.Fatalf("ExecContext query = %q, want graph_projection_phase_state insert", got)
 	}
 }
 

@@ -20,7 +20,7 @@ func TestEvaluateOrdersRulesDeterministicallyByPriorityThenName(t *testing.T) {
 		},
 	}
 
-	evaluation, err := Evaluate(pack, []model.Candidate{newCandidate("candidate-1", "boats", 0.9, nil)})
+	evaluation, err := Evaluate(pack, []model.Candidate{newCandidate("candidate-1", "sample-service", 0.9, nil)})
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v, want nil", err)
 	}
@@ -47,7 +47,7 @@ func TestEvaluateBoundsMatchFanOut(t *testing.T) {
 		},
 	}
 
-	candidate := newCandidate("candidate-1", "boats", 0.9, []model.EvidenceAtom{
+	candidate := newCandidate("candidate-1", "sample-service", 0.9, []model.EvidenceAtom{
 		newEvidence("ev-1"),
 		newEvidence("ev-2"),
 		newEvidence("ev-3"),
@@ -78,7 +78,7 @@ func TestEvaluatePreservesLowConfidenceRejectionReason(t *testing.T) {
 		},
 	}
 
-	evaluation, err := Evaluate(pack, []model.Candidate{newCandidate("candidate-1", "boats", 0.42, []model.EvidenceAtom{newEvidence("ev-1")})})
+	evaluation, err := Evaluate(pack, []model.Candidate{newCandidate("candidate-1", "sample-service", 0.42, []model.EvidenceAtom{newEvidence("ev-1")})})
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v, want nil", err)
 	}
@@ -106,8 +106,8 @@ func TestEvaluateUsesDeterministicTieBreakForSameCorrelationKey(t *testing.T) {
 		},
 	}
 
-	winnerA := newCandidate("candidate-a", "boats", 0.91, []model.EvidenceAtom{newEvidence("ev-a")})
-	winnerB := newCandidate("candidate-b", "boats", 0.91, []model.EvidenceAtom{newEvidence("ev-b")})
+	winnerA := newCandidate("candidate-a", "sample-service", 0.91, []model.EvidenceAtom{newEvidence("ev-a")})
+	winnerB := newCandidate("candidate-b", "sample-service", 0.91, []model.EvidenceAtom{newEvidence("ev-b")})
 
 	evaluation, err := Evaluate(pack, []model.Candidate{winnerB, winnerA})
 	if err != nil {
@@ -149,14 +149,14 @@ func TestEvaluatePreservesStructuralMismatchRejectionReason(t *testing.T) {
 		},
 	}
 
-	candidate := newCandidate("candidate-1", "boats", 0.9, []model.EvidenceAtom{
+	candidate := newCandidate("candidate-1", "sample-service", 0.9, []model.EvidenceAtom{
 		{
 			ID:           "ev-1",
 			SourceSystem: "git",
 			EvidenceType: "dockerfile",
-			ScopeID:      "repo:boats",
+			ScopeID:      "repo:sample-service",
 			Key:          "repository",
-			Value:        "boats",
+			Value:        "sample-service",
 			Confidence:   0.9,
 		},
 	})
@@ -196,14 +196,14 @@ func TestEvaluateAccumulatesAllFailedAdmissionReasonsInStableOrder(t *testing.T)
 		},
 	}
 
-	candidate := newCandidate("candidate-1", "boats", 0.42, []model.EvidenceAtom{
+	candidate := newCandidate("candidate-1", "sample-service", 0.42, []model.EvidenceAtom{
 		{
 			ID:           "ev-1",
 			SourceSystem: "git",
 			EvidenceType: "dockerfile",
-			ScopeID:      "repo:boats",
+			ScopeID:      "repo:sample-service",
 			Key:          "repository",
-			Value:        "boats",
+			Value:        "sample-service",
 			Confidence:   0.42,
 		},
 	})
@@ -244,9 +244,9 @@ func newEvidence(id string) model.EvidenceAtom {
 		ID:           id,
 		SourceSystem: "git",
 		EvidenceType: "dockerfile",
-		ScopeID:      "repo:boats",
+		ScopeID:      "repo:sample-service",
 		Key:          "image",
-		Value:        "boats",
+		Value:        "sample-service",
 		Confidence:   0.8,
 	}
 }

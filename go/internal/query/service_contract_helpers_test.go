@@ -50,14 +50,14 @@ func TestBuildServiceAPISurfaceMergesFrameworkRoutes(t *testing.T) {
 		FrameworkRoutes: []FrameworkRouteEvidence{
 			{
 				Framework:    "hapi",
-				RelativePath: "src/routes/boats.js",
+				RelativePath: "src/routes/catalog.js",
 				RoutePaths:   []string{"/elastic", "/alias/{index}/create", "/schema/{index}"},
 				RouteMethods: []string{"GET", "POST", "PUT"},
 			},
 			{
 				Framework:    "fastapi",
 				RelativePath: "api/main.py",
-				RoutePaths:   []string{"/boats", "/boats/{id}"},
+				RoutePaths:   []string{"/catalog", "/catalog/{id}"},
 				RouteMethods: []string{"GET", "POST"},
 			},
 		},
@@ -108,7 +108,7 @@ func TestBuildServiceAPISurfaceCombinesSpecAndFrameworkRoutes(t *testing.T) {
 			{
 				Framework:    "express",
 				RelativePath: "src/app.js",
-				RoutePaths:   []string{"/boats", "/boats/:id"},
+				RoutePaths:   []string{"/catalog", "/catalog/:id"},
 				RouteMethods: []string{"GET", "POST"},
 			},
 		},
