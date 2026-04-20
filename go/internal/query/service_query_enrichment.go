@@ -139,19 +139,7 @@ func buildServiceStoryResponse(serviceName string, workloadContext map[string]an
 		"story_sections":      buildServiceStorySections(workloadContext),
 		"deployment_overview": buildServiceDeploymentOverview(workloadContext),
 	}
-	for _, key := range []string{
-		"documentation_overview",
-		"support_overview",
-		"hostnames",
-		"entrypoints",
-		"network_paths",
-		"dependents",
-		"observed_config_environments",
-		"api_surface",
-		"consumer_repositories",
-		"provisioning_source_chains",
-		"deployment_evidence",
-	} {
+	for _, key := range []string{"documentation_overview", "support_overview"} {
 		if value, ok := workloadContext[key]; ok && value != nil {
 			response[key] = value
 		}

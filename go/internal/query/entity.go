@@ -119,6 +119,10 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 	for i := range entities {
 		attachSemanticSummary(entities[i])
 	}
+	if err := hydrateResolvedEntityRepoIdentity(r.Context(), h.Neo4j, entities); err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("hydrate entity repo identity: %v", err))
+		return
+	}
 	entities = normalizeResolvedEntities(entities, 20)
 	if len(entities) == 0 {
 		entities, err = h.resolveEntityFromContent(r.Context(), req.Name, req.Type, req.RepoID, 20)

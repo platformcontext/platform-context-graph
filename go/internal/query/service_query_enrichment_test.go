@@ -117,6 +117,21 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 			if strings.Contains(cypher, "RETURN related.id AS repo_id, related.name AS repo_name") {
 				return nil, nil
 			}
+			if strings.Contains(cypher, "MATCH (r:Repository) WHERE r.id IN $repo_ids") {
+				if got, want := params["repo_ids"], []string{"repo-consumer-9", "repo-terraform-stack"}; !reflect.DeepEqual(got, want) {
+					t.Fatalf("repo name params[repo_ids] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{
+					{
+						"repo_id":   "repo-consumer-9",
+						"repo_name": "api-node-saved-search",
+					},
+					{
+						"repo_id":   "repo-terraform-stack",
+						"repo_name": "terraform-stack-staging",
+					},
+				}, nil
+			}
 			if strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN") {
 				if got, want := params["repo_id"], "repo-service-edge-api"; got != want {
 					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
@@ -191,7 +206,7 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 	if got, want := StringVal(consumers[0], "repository"), "terraform-stack-staging"; got != want {
 		t.Fatalf("consumer_repositories[0].repository = %q, want %q", got, want)
 	}
-	if got, want := StringVal(consumers[1], "repository"), "repo-consumer-9"; got != want {
+	if got, want := StringVal(consumers[1], "repository"), "api-node-saved-search"; got != want {
 		t.Fatalf("consumer_repositories[1].repository = %q, want %q", got, want)
 	}
 
@@ -241,6 +256,85 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 	}
 	if got, want := StringSliceVal(deploymentOverview, "deployment_tool_families"), []string{"ansible", "github_actions", "helm", "jenkins"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("deployment_overview.deployment_tool_families = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildServiceStoryResponseKeepsStoryFirstShape(t *testing.T) {
+	t.Parallel()
+
+	workloadContext := map[string]any{
+		"name":  "service-edge-api",
+		"story": "ignored by builder",
+		"story_sections": []map[string]any{
+			{"title": "deployment", "summary": "1 instance"},
+		},
+		"deployment_overview": map[string]any{
+			"instance_count": 1,
+		},
+		"documentation_overview": map[string]any{
+			"repo_slug": "example/service-edge-api",
+		},
+		"support_overview": map[string]any{
+			"endpoint_count": 3,
+		},
+		"hostnames": []map[string]any{
+			{"hostname": "service-edge-api.qa.example.test"},
+		},
+		"entrypoints": []map[string]any{
+			{"type": "hostname", "target": "service-edge-api.qa.example.test"},
+		},
+		"network_paths": []map[string]any{
+			{"path_type": "hostname_to_runtime"},
+		},
+		"api_surface": map[string]any{
+			"endpoint_count": 3,
+			"endpoints": []map[string]any{
+				{"path": "/widgets"},
+			},
+		},
+		"dependents": []map[string]any{
+			{"repository": "deployment-helm"},
+		},
+		"consumer_repositories": []map[string]any{
+			{"repository": "api-node-saved-search"},
+		},
+		"provisioning_source_chains": []map[string]any{
+			{"repository": "terraform-stack-staging"},
+		},
+		"deployment_evidence": map[string]any{
+			"tool_families": []string{"github_actions", "helm"},
+		},
+	}
+
+	got := buildServiceStoryResponse("service-edge-api", workloadContext)
+
+	for _, key := range []string{
+		"service_name",
+		"story",
+		"story_sections",
+		"deployment_overview",
+		"documentation_overview",
+		"support_overview",
+	} {
+		if _, ok := got[key]; !ok {
+			t.Fatalf("response missing required story-first key %q: %#v", key, got)
+		}
+	}
+
+	for _, key := range []string{
+		"hostnames",
+		"entrypoints",
+		"network_paths",
+		"api_surface",
+		"dependents",
+		"consumer_repositories",
+		"provisioning_source_chains",
+		"deployment_evidence",
+		"observed_config_environments",
+	} {
+		if _, ok := got[key]; ok {
+			t.Fatalf("response[%q] = %#v, want omitted from story response", key, got[key])
+		}
 	}
 }
 

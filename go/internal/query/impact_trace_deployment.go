@@ -187,8 +187,14 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		story = appendDeploymentTraceStory(story, workflowStory)
 	}
 	deploymentOverview := buildServiceDeploymentOverview(workloadContext)
-	deliveryPaths := buildDeliveryPaths(deploymentSources, cloudResources, k8sResources, imageRefs, k8sRelationships)
-	deliveryPaths = mergeTraceRepositoryDeliveryPaths(deliveryPaths, deploymentEvidence)
+	deliveryPaths := buildNormalizedDeliveryPaths(
+		deploymentSources,
+		cloudResources,
+		k8sResources,
+		imageRefs,
+		k8sRelationships,
+		deploymentEvidence,
+	)
 	deploymentOverview["deployment_source_count"] = len(deploymentSources)
 	deploymentOverview["cloud_resource_count"] = len(cloudResources)
 	deploymentOverview["k8s_resource_count"] = len(k8sResources)

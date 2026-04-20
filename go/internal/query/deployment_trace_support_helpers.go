@@ -163,6 +163,9 @@ func loadConsumerRepositoryEnrichmentWithLimit(
 			appendConsumerEvidence(entry, evidence)
 		}
 	}
+	if err := backfillConsumerRepositoryDisplayNames(ctx, graph, consumersByRepo); err != nil {
+		return nil, err
+	}
 
 	consumers := make([]map[string]any, 0, len(consumersByRepo))
 	for _, entry := range consumersByRepo {
@@ -181,6 +184,44 @@ func loadConsumerRepositoryEnrichmentWithLimit(
 		consumers = consumers[:limit]
 	}
 	return consumers, nil
+}
+
+func backfillConsumerRepositoryDisplayNames(
+	ctx context.Context,
+	graph GraphReader,
+	consumersByRepo map[string]map[string]any,
+) error {
+	if graph == nil || len(consumersByRepo) == 0 {
+		return nil
+	}
+
+	repoIDs := make([]string, 0, len(consumersByRepo))
+	for repoID, entry := range consumersByRepo {
+		if repoID == "" {
+			continue
+		}
+		repository := StringVal(entry, "repository")
+		repoName := StringVal(entry, "repo_name")
+		if repoName == "" || repository == "" || repository == repoID {
+			repoIDs = append(repoIDs, repoID)
+		}
+	}
+
+	namesByID, err := queryRepositoryNamesByID(ctx, graph, repoIDs)
+	if err != nil {
+		return err
+	}
+	for repoID, repoName := range namesByID {
+		entry := consumersByRepo[repoID]
+		if entry == nil || repoName == "" {
+			continue
+		}
+		entry["repo_name"] = repoName
+		if repository := StringVal(entry, "repository"); repository == "" || repository == repoID {
+			entry["repository"] = repoName
+		}
+	}
+	return nil
 }
 
 func queryProvisioningRepositoryCandidates(
@@ -575,13 +616,18 @@ func firstPositiveFloat(candidates ...float64) float64 {
 }
 
 func buildControllerDrivenPaths(platforms, platformKinds []string) []map[string]any {
-	paths := make([]map[string]any, 0, len(platforms))
-	for i, platform := range platforms {
-		path := map[string]any{
-			"controller": platform,
-		}
+	paths := make([]map[string]any, 0, max(len(platforms), len(platformKinds)))
+	limit := max(len(platforms), len(platformKinds))
+	for i := range limit {
+		path := map[string]any{}
 		if i < len(platformKinds) && platformKinds[i] != "" {
 			path["controller_kind"] = platformKinds[i]
+		}
+		if i < len(platforms) && platforms[i] != "" {
+			path["observed_target"] = platforms[i]
+		}
+		if len(path) == 0 {
+			continue
 		}
 		paths = append(paths, path)
 	}

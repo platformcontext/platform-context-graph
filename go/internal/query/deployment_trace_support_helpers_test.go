@@ -139,26 +139,31 @@ func TestLoadConsumerRepositoryEnrichmentPreservesDualViews(t *testing.T) {
 		context.Background(),
 		fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if !strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN") {
-					t.Fatalf("cypher = %q, want provisioning relationship filter", cypher)
+				switch {
+				case strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN"):
+					if got, want := params["repo_id"], "repo-sample-service-api"; got != want {
+						t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+					}
+					return []map[string]any{
+						{
+							"repo_id":             "repo-consumer-1",
+							"repo_name":           "api-node-saved-search",
+							"relationship_type":   "PROVISIONS_DEPENDENCY_FOR",
+							"relationship_reason": "terraform_provider_reference",
+						},
+						{
+							"repo_id":             "repo-consumer-2",
+							"repo_name":           "terraform-stack-prod",
+							"relationship_type":   "USES_MODULE",
+							"relationship_reason": "terraform_module_source_path",
+						},
+					}, nil
+				case strings.Contains(cypher, "MATCH (r:Repository) WHERE r.id IN $repo_ids"):
+					return nil, nil
+				default:
+					t.Fatalf("cypher = %q, want provisioning or repo lookup query", cypher)
+					return nil, nil
 				}
-				if got, want := params["repo_id"], "repo-sample-service-api"; got != want {
-					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
-				}
-				return []map[string]any{
-					{
-						"repo_id":             "repo-consumer-1",
-						"repo_name":           "api-node-saved-search",
-						"relationship_type":   "PROVISIONS_DEPENDENCY_FOR",
-						"relationship_reason": "terraform_provider_reference",
-					},
-					{
-						"repo_id":             "repo-consumer-2",
-						"repo_name":           "terraform-stack-prod",
-						"relationship_type":   "USES_MODULE",
-						"relationship_reason": "terraform_module_source_path",
-					},
-				}, nil
 			},
 		},
 		NewContentReader(db),
@@ -231,13 +236,18 @@ func TestLoadConsumerRepositoryEnrichmentFindsCrossRepoConsumersOutsideGraphCand
 		context.Background(),
 		fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if !strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN") {
-					t.Fatalf("cypher = %q, want provisioning relationship filter", cypher)
+				switch {
+				case strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN"):
+					if got, want := params["repo_id"], "repo-sample-service-api"; got != want {
+						t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+					}
+					return nil, nil
+				case strings.Contains(cypher, "MATCH (r:Repository) WHERE r.id IN $repo_ids"):
+					return nil, nil
+				default:
+					t.Fatalf("cypher = %q, want provisioning or repo lookup query", cypher)
+					return nil, nil
 				}
-				if got, want := params["repo_id"], "repo-sample-service-api"; got != want {
-					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
-				}
-				return nil, nil
 			},
 		},
 		NewContentReader(db),
@@ -294,23 +304,37 @@ func TestLoadConsumerRepositoryEnrichmentWithLimitCapsMergedConsumersByEvidenceS
 		context.Background(),
 		fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if got, want := params["limit"], 2; got != want {
-					t.Fatalf("params[limit] = %#v, want %#v", got, want)
+				switch {
+				case strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN"):
+					if got, want := params["limit"], 2; got != want {
+						t.Fatalf("params[limit] = %#v, want %#v", got, want)
+					}
+					return []map[string]any{
+						{
+							"repo_id":             "repo-consumer-1",
+							"repo_name":           "alpha-consumer",
+							"relationship_type":   "PROVISIONS_DEPENDENCY_FOR",
+							"relationship_reason": "terraform_provider_reference",
+						},
+						{
+							"repo_id":             "repo-consumer-2",
+							"repo_name":           "beta-consumer",
+							"relationship_type":   "USES_MODULE",
+							"relationship_reason": "terraform_module_source_path",
+						},
+					}, nil
+				case strings.Contains(cypher, "MATCH (r:Repository) WHERE r.id IN $repo_ids"):
+					if got, want := params["repo_ids"], []string{"repo-consumer-1", "repo-consumer-2", "repo-consumer-3", "repo-consumer-4"}; !reflect.DeepEqual(got, want) {
+						t.Fatalf("params[repo_ids] = %#v, want %#v", got, want)
+					}
+					return []map[string]any{
+						{"repo_id": "repo-consumer-1", "repo_name": "alpha-consumer"},
+						{"repo_id": "repo-consumer-2", "repo_name": "beta-consumer"},
+					}, nil
+				default:
+					t.Fatalf("unexpected cypher = %q", cypher)
+					return nil, nil
 				}
-				return []map[string]any{
-					{
-						"repo_id":             "repo-consumer-1",
-						"repo_name":           "alpha-consumer",
-						"relationship_type":   "PROVISIONS_DEPENDENCY_FOR",
-						"relationship_reason": "terraform_provider_reference",
-					},
-					{
-						"repo_id":             "repo-consumer-2",
-						"repo_name":           "beta-consumer",
-						"relationship_type":   "USES_MODULE",
-						"relationship_reason": "terraform_module_source_path",
-					},
-				}, nil
 			},
 		},
 		NewContentReader(db),
@@ -330,6 +354,68 @@ func TestLoadConsumerRepositoryEnrichmentWithLimitCapsMergedConsumersByEvidenceS
 	}
 	if gotRepo, wantRepo := StringVal(got[1], "repository"), "beta-consumer"; gotRepo != wantRepo {
 		t.Fatalf("got[1][repository] = %q, want %q", gotRepo, wantRepo)
+	}
+}
+
+func TestLoadConsumerRepositoryEnrichmentBackfillsRepositoryNamesForContentOnlyConsumers(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
+			rows: [][]driver.Value{
+				{"repo-consumer-9", "configs/service.json", "sha-1", "", "hash-1", int64(3), "json", "json"},
+			},
+		},
+		{
+			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
+			rows: [][]driver.Value{
+				{"repo-consumer-9", "deploy/values.yaml", "sha-2", "", "hash-2", int64(5), "yaml", "yaml"},
+			},
+		},
+	})
+
+	got, err := loadConsumerRepositoryEnrichment(
+		context.Background(),
+		fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				switch {
+				case strings.Contains(cypher, "PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN"):
+					return nil, nil
+				case strings.Contains(cypher, "MATCH (r:Repository) WHERE r.id IN $repo_ids"):
+					if got, want := params["repo_ids"], []string{"repo-consumer-9"}; !reflect.DeepEqual(got, want) {
+						t.Fatalf("params[repo_ids] = %#v, want %#v", got, want)
+					}
+					return []map[string]any{
+						{
+							"repo_id":   "repo-consumer-9",
+							"repo_name": "api-node-saved-search",
+						},
+					}, nil
+				default:
+					t.Fatalf("unexpected cypher = %q", cypher)
+					return nil, nil
+				}
+			},
+		},
+		NewContentReader(db),
+		"repo-sample-service-api",
+		"sample-service-api",
+		[]string{"sample-service-api.qa.example.test"},
+	)
+	if err != nil {
+		t.Fatalf("loadConsumerRepositoryEnrichment() error = %v, want nil", err)
+	}
+	if gotLen, wantLen := len(got), 1; gotLen != wantLen {
+		t.Fatalf("len(loadConsumerRepositoryEnrichment()) = %d, want %d", gotLen, wantLen)
+	}
+
+	consumer := got[0]
+	if gotRepo, wantRepo := StringVal(consumer, "repository"), "api-node-saved-search"; gotRepo != wantRepo {
+		t.Fatalf("consumer[repository] = %q, want %q", gotRepo, wantRepo)
+	}
+	if gotRepoName, wantRepoName := StringVal(consumer, "repo_name"), "api-node-saved-search"; gotRepoName != wantRepoName {
+		t.Fatalf("consumer[repo_name] = %q, want %q", gotRepoName, wantRepoName)
 	}
 }
 

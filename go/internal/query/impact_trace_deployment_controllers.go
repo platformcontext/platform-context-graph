@@ -65,15 +65,69 @@ func buildControllerOverview(
 	platformKinds []string,
 	controllerEntities []map[string]any,
 ) map[string]any {
+	controllerNames := controllerEntityNames(controllerEntities)
+	controllerKinds := controllerOverviewKinds(controllerEntities, platformKinds)
+	controllerCount := len(controllerNames)
+	if controllerCount == 0 {
+		controllerCount = len(controllerKinds)
+	}
 	overview := map[string]any{
-		"controller_count": len(platforms),
-		"controllers":      platforms,
-		"controller_kinds": platformKinds,
+		"controller_count": controllerCount,
+		"controller_kinds": controllerKinds,
+	}
+	if len(controllerNames) > 0 {
+		overview["controllers"] = controllerNames
+	}
+	if len(platforms) > 0 {
+		overview["observed_targets"] = platforms
 	}
 	if len(controllerEntities) > 0 {
 		overview["entities"] = controllerEntities
 	}
 	return overview
+}
+
+func controllerEntityNames(controllerEntities []map[string]any) []string {
+	names := make([]string, 0, len(controllerEntities))
+	seen := make(map[string]struct{}, len(controllerEntities))
+	for _, entity := range controllerEntities {
+		name := StringVal(entity, "entity_name")
+		if name == "" {
+			name = StringVal(entity, "entity_id")
+		}
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names
+}
+
+func controllerOverviewKinds(controllerEntities []map[string]any, platformKinds []string) []string {
+	kinds := make([]string, 0, len(controllerEntities))
+	seen := make(map[string]struct{}, len(controllerEntities))
+	for _, entity := range controllerEntities {
+		kind := StringVal(entity, "controller_kind")
+		if kind == "" {
+			kind = controllerEntityTypes[StringVal(entity, "entity_type")]
+		}
+		if kind == "" {
+			continue
+		}
+		if _, ok := seen[kind]; ok {
+			continue
+		}
+		seen[kind] = struct{}{}
+		kinds = append(kinds, kind)
+	}
+	if len(kinds) > 0 {
+		return kinds
+	}
+	return platformKinds
 }
 
 func metadataNonEmptyStringValue(metadata map[string]any, key string) string {
