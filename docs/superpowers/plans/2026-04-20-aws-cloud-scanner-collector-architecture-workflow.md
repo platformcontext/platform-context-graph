@@ -285,6 +285,176 @@ No cycle:
 
 Deadlock-free by construction.
 
+### 3.5 Goroutine Choreography (concrete)
+
+Per worker, on claim accept:
+
+```go
+claimCtx, claimCancel := context.WithCancel(coordinatorCtx)
+pageCh      := make(chan *sdkPage, 2)    // pages are large; tight bound
+resourceCh  := make(chan ResourceFact, 128)
+batchCh     := make(chan []Fact, 4)
+errCh       := make(chan error, 4)
+creds       := sync.Pointer[aws.Credentials]{} // atomic swap on refresh
+```
+
+Goroutines (6 total per active claim):
+
+| G | Role | Inputs | Outputs | Exit condition |
+|---|---|---|---|---|
+| G1 | scan | SDK paginator + per-service token bucket | `*sdkPage` on `pageCh`; increments `api_calls_used` | budget exceeded, claimCtx cancel, EOF → checkpoint write + `close(pageCh)` |
+| G2 | decode+redact | reads `pageCh` | pushes `ResourceFact` on `resourceCh` | `pageCh` closed → `close(resourceCh)` |
+| G3 | batch | reads `resourceCh` | sends `[]Fact` on `batchCh` (2k OR 500ms) | `resourceCh` closed → final flush → `close(batchCh)` |
+| G4 | emit | reads `batchCh` | COMMIT tx per batch; error to `errCh` | `batchCh` closed → final ack |
+| G5 | heartbeat | 30s ticker | UPDATE heartbeat row | claimCtx done |
+| G6 | credential watcher | timer fires at `sts_ttl - 60s` | AssumeRole; atomic `creds.Store` | claimCtx done |
+
+Single-writer/single-reader per channel. Ordering preserved per service (SDK paginator is sequential; G2/G3/G4 are sequential consumers).
+
+### 3.6 Channel Sizing & Backpressure Propagation
+
+Buffer sizes are small to propagate pressure upstream:
+
+- `pageCh=2`: ≤ 16 MiB pending pages. If emit is slow → batch blocks → decode blocks reading `resourceCh` → pageCh fills → scan goroutine blocks BEFORE next `rate.Limiter.Wait()` → **no wasted API budget**.
+- `resourceCh=128`: ~512 KiB pending facts (128 × ~4 KiB).
+- `batchCh=4`: ≤ 32 MiB pending emits.
+
+**Token bucket interaction:** G1 calls `bucket.Wait(claimCtx)` before each SDK op. If `pageCh` is full, G1's send blocks — but G1 has NOT yet taken a token. Token only taken at next loop iteration after `pageCh` drains. Pressure pushes back to the bucket naturally; bucket never leaks tokens on backpressure.
+
+No unbounded channels. No goroutine leaks. No lost facts.
+
+### 3.7 Context Cancellation Tree
+
+```
+serviceCtx (process lifetime)
+  └── coordinatorCtx
+        └── claimCtx (per claim, cancelled on ack/reap/budget/error)
+              ├── scanCtx (inherits; SDK calls use middleware.WithContext)
+              ├── decodeCtx
+              ├── batchCtx
+              ├── emitCtx (COMMIT tx)
+              ├── heartbeatCtx (WithTimeout 5s per UPDATE)
+              └── credentialCtx (STS AssumeRole WithTimeout 10s)
+```
+
+Cancel triggers:
+- Heartbeat UPDATE fails → `claimCancel()`
+- Budget exhausted → G1 writes checkpoint → closes `pageCh` → natural drain — **no** claimCancel (allows in-flight emits to commit)
+- Fatal emit error → `claimCancel()`
+- Coordinator reap → `coordinatorCtx` cancelled
+- Lease expiry → worker sees fence mismatch on next emit; `claimCancel()`
+
+**Important:** credential refresh does NOT cancel claimCtx — it swaps credentials atomically without disrupting in-flight SDK calls (see §3.9).
+
+### 3.8 AWS SDK v2 Middleware Stack
+
+Per-client middleware ordering (top → bottom on outbound; reverse on inbound):
+
+1. `Initialize` — user-agent, request ID
+2. `Serialize` — marshal to HTTP request
+3. `Build` — signing metadata
+4. **`Retry`** — `aws.RetryModeAdaptive`, `MaxAttempts=3`, `MaxBackoffDelay=20s` (SDK native)
+5. **Custom rate-limit middleware** — registered with `middleware.After(retry.ClientRateLimiter)` so it fires AFTER retry decides to issue a call (retry-generated calls consume tokens)
+6. `Signer` — SigV4 with credentials from `aws.CredentialsCache`
+7. `Finalize` — HTTP RoundTrip
+8. `Deserialize` — parse response
+
+Rate limit placement rationale (critical):
+- Bucket **above** retry would let retried calls bypass the bucket → burst → throttle cascade.
+- Bucket **inside** retry (between decide-to-retry and issue) → each retry takes a token → correctly paced.
+- SDK's own adaptive retry has an internal bucket; ours is a second layer protecting against cross-client bursts within the same pod.
+
+Reference: `github.com/aws/aws-sdk-go-v2/aws/retry` + `middleware.Stack.Finalize.Add(rateLimitMW, middleware.After)` with name `"RateLimit"` placed after `"Retry"`.
+
+### 3.9 Credential Refresh Race
+
+Scenario: claim lease = 900s; STS credentials TTL = 900s; scan takes 800s and triggers refresh.
+
+Protocol (G6 credential watcher):
+
+```go
+// Fires at TTL - 60s (i.e., 14m in)
+if claimRemainingSeconds < 60 { return } // claim ending; skip refresh
+
+newCreds, err := sts.AssumeRole(credentialCtx, ...) // 10s timeout
+if err != nil {
+    emit warning(kind=credential_refresh_failed)
+    // continue with old creds; SDK will retry on ExpiredToken
+    return
+}
+oldPtr := creds.Swap(&newCreds)    // atomic
+zeroBytes(oldPtr)                  // explicit zero
+```
+
+SDK integration: `aws.CredentialsCache` wraps our swappable provider. Provider's `Retrieve(ctx)` returns `*creds.Load()` — always returns current pointer. Cache TTL set to 30s so cache picks up swap within 30s; in-flight requests that receive `ExpiredToken` auto-retry via the retry middleware, which re-signs with fresh credentials on the next attempt.
+
+**Race window:** in-flight request signed with old creds, lands at AWS after swap, gets `ExpiredToken` → retry → re-sign with new creds → succeeds. One wasted call maximum per refresh.
+
+**Failure handling:** refresh fails → warning emitted; claim continues with old creds until expiry; next request hits `ExpiredToken`; if coordinator lease still has >60s, G6 retries refresh; else G1 writes checkpoint and yields claim.
+
+### 3.10 Checkpoint Schema
+
+```sql
+CREATE TABLE collector_pagination_checkpoints (
+  claim_key        TEXT PRIMARY KEY,           -- 'instance/account/region/service'
+  fence_token      BIGINT NOT NULL,            -- fence at write time
+  next_token       TEXT,                       -- AWS NextToken (nullable: not mid-page)
+  scan_state       JSONB NOT NULL,             -- {"operation": "ListFunctions", "page_index": 47}
+  resources_seen   BIGINT NOT NULL DEFAULT 0,
+  api_calls_used   INT NOT NULL DEFAULT 0,
+  budget_ceiling   INT NOT NULL,               -- snapshot of ceiling at write (for resume validation)
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX ON collector_pagination_checkpoints (updated_at);
+```
+
+Write protocol:
+- Single writer: the worker holding the claim. No contention.
+- UPSERT on `claim_key`; `fence_token` must advance monotonically (constraint: `fence_token >= EXCLUDED.fence_token`) — rejects stale writes from reaped workers.
+
+Resume protocol (next claim on same key):
+- New worker reads: `SELECT * WHERE claim_key=$1 AND fence_token<=$2` (`$2` = new fence).
+- Validates `budget_ceiling` matches current config — if changed, discards checkpoint (config shift = clean start).
+- Replays `scan_state.operation` + `next_token` to resume pagination.
+
+TTL: janitor job deletes rows `updated_at < now() - interval '7 days'`.
+
+### 3.11 Partial-Run Ack Protocol
+
+```go
+type AWSClaimAck struct {
+    FenceToken          int64
+    ApiCallsUsed        int
+    ThrottleCount       int
+    ResourcesEmitted    int
+    Warnings            []WarningSummary
+    CheckpointPersisted bool   // true if yielded with checkpoint row
+    AckReason           string // "complete" | "partial_budget" | "partial_lease" | "partial_throttle" | "partial_queue_pressure"
+    CredRefreshCount    int    // for SRE visibility
+}
+```
+
+Coordinator validation:
+- `FenceToken != activeFence` → reject; worker was reaped; its emits already blocked by queue fence constraint.
+- `CheckpointPersisted=true, AckReason=partial_*` → mark claim batch partial; re-queue `claim_key` at next scheduled interval (NOT immediate — respects cadence + back-off).
+- `CheckpointPersisted=false, AckReason=complete` → remove any stale checkpoint row; advance claim state to `completed`.
+- `ThrottleCount > threshold` → coordinator increases interval for `(account, service)` by 2× until a clean run.
+
+### 3.12 Token Bucket Under Burst
+
+`golang.org/x/time/rate.Limiter` = token bucket.
+- Rate `r` tokens/sec = sustained TPS from §3.3 table.
+- Burst `b` = `r` (1s burst capacity).
+
+Worst-case cold start: 16 workers simultaneously pick claims for the same service → 16 `Wait(ctx)` calls on same limiter.
+- First `b` calls return immediately.
+- Remaining queue FIFO, served at rate `r`.
+- `Wait(ctx)` honors cancel → if claim cancels mid-wait, returns `ctx.Err()` without consuming token.
+
+**Fairness:** `rate.Limiter` uses FIFO queue for waiters. No starvation.
+
+**Across pods:** buckets are per-pod. N pods × bucket → effective rate = N × r. Multi-pod deployments must tune per-pod `r` = `quota / N_pods`. Runtime knob: `PCG_AWS_BUCKET_SCALE_FACTOR` (default 1.0; set to `1/N` when multi-pod).
+
 ---
 
 ## 4. Memory Budget Table

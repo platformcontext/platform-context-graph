@@ -271,6 +271,99 @@ No cycle possible:
 
 Deadlock-free by construction.
 
+### 3.5 Goroutine Choreography (concrete)
+
+Per worker, on claim accept:
+
+```go
+claimCtx, claimCancel := context.WithCancel(coordinatorCtx)
+parseCh   := make(chan *ResourceFact, 64) // bounded backpressure
+emitCh    := make(chan []Fact, 4)          // small; batch-flush serialized
+errCh     := make(chan error, 4)           // fan-in from all goroutines
+```
+
+Goroutines (5 total per active claim):
+
+| G | Role | Inputs | Outputs | Exit condition |
+|---|---|---|---|---|
+| G1 | claim+parse loop | `json.Decoder` on source body | sends `*ResourceFact` on `parseCh` | EOF or parseCtx cancel → `close(parseCh)` |
+| G2 | redact+batch | reads `parseCh` | sends `[]Fact` on `emitCh` when batch full (2k facts OR 500ms) | `parseCh` closed → final flush → `close(emitCh)` |
+| G3 | emit | reads `emitCh` | COMMIT tx per batch; error to `errCh` | `emitCh` closed → final ack |
+| G4 | heartbeat | ticker 30s | UPDATE heartbeat row | `claimCtx.Done()` |
+| G5 | fan-in error watcher | reads `errCh` | first error → `claimCancel()` | `claimCtx.Done()` |
+
+**Serialization invariants:**
+- G2 is the sole producer on `emitCh`; G3 is sole consumer — no multi-producer/multi-consumer channel.
+- G1 is single-writer on `parseCh`; G2 is single-reader.
+- Fact ordering per state file is preserved: G1 emits in JSON decode order; G2 appends in receive order; G3 commits batches in receive order. No reordering across the pipeline.
+
+### 3.6 Channel Sizing & Backpressure Propagation
+
+Channel buffer sizes are **deliberately small** so that slowness downstream pushes back through the pipeline naturally:
+
+- `parseCh=64`: ~256 KiB of pending resource facts (64 × ~4 KiB). If G3 is slow (queue tx stalls), G2 blocks sending to `emitCh`; G2's inbound receives block when `parseCh` fills; G1 blocks sending on `parseCh`; `json.Decoder.Token()` stops pulling from the source reader; S3/content-store TCP window shrinks; bytes stop flowing → **bounded memory**.
+- `emitCh=4`: at most 4 batches × ~8 MiB = 32 MiB queued emit work. Beyond that, G2 blocks.
+
+No unbounded channels. No goroutine leaks (every goroutine selects on `claimCtx.Done()`). No dropped facts.
+
+**Cancellation discipline:**
+- `claimCancel()` fires on: lease-expiry heartbeat failure, fatal emit error, parse timeout exceed, whole-state parse timeout (5m).
+- Every `select` includes `case <-claimCtx.Done(): return`.
+- `json.Decoder.Token()` does not accept ctx; wrap body reader with `ctxReader` that returns `ctx.Err()` on next `Read` after cancel — bounded by TCP chunk size (≤16 KiB latency to exit).
+
+### 3.7 Context Cancellation Tree
+
+```
+serviceCtx (process lifetime)
+  └── coordinatorCtx (set when worker registers)
+        └── claimCtx (per claim, cancelled on ack/reap/error)
+              ├── parseCtx (WithTimeout 5min — whole-state ceiling)
+              │     └── perResourceCtx (WithTimeout 30s — guards degenerate single-resource)
+              ├── emitCtx (inherits claimCtx; each COMMIT tx uses this)
+              ├── heartbeatCtx (WithTimeout 5s per UPDATE)
+              └── sourceReadCtx (inherits claimCtx; S3 GetObject + content-store reads)
+```
+
+Propagation rules:
+- Heartbeat UPDATE failure → `claimCancel()` → all children abort.
+- Parse timeout (5m) → `parseCtx` done → G1 exit → `close(parseCh)` → G2/G3 drain — **not** a hard cancel; allows partial-batch final flush.
+- Per-resource timeout (30s) → emit `attr_map_truncated` warning, skip resource, continue parse — does **not** cancel claimCtx.
+- Coordinator reap → `coordinatorCtx` cancelled → claimCtx cancelled.
+
+pgx honors ctx: stalled `COMMIT` aborts cleanly with `ctx.Err()`.
+
+### 3.8 Partial-Run Ack Protocol
+
+Ack envelope worker → coordinator:
+
+```go
+type ClaimAck struct {
+    FenceToken     int64
+    StateKeysDone  int      // keys successfully emitted
+    StateKeysTotal int      // keys in original batch
+    Resumable      bool     // true if coordinator should re-queue remaining
+    Warnings       []WarningSummary
+    ParseTimedOut  bool     // true if parseCtx 5m fired on any key
+    AckReason      string   // "complete" | "partial_lease" | "partial_timeout" | "partial_queue_pressure"
+}
+```
+
+Coordinator contract:
+- Ack with `FenceToken != activeFence` → **reject**; worker was reaped; emits were already ignored by queue constraint. Worker logs `stale_fence_ack` and exits.
+- Ack with `Resumable=true` → coordinator marks claim batch partial; remaining `StateKeys` re-queued at next interval tick (does not reopen immediately; respects refresh cadence).
+- Ack with `ParseTimedOut=true` → coordinator increments `tfstate_parse_timeouts_total`; affected StateKey gets 24h cooldown (prevents thrash on a genuinely broken state file).
+
+### 3.9 Content-Store Concurrency With Git Collector
+
+Tfstate local backend reads the state file from the Postgres content store, which is written by the Git collector (via reducer). Interaction:
+
+- **Reader (tfstate)** uses `READ COMMITTED` isolation (pgx default). Sees latest committed row; never sees uncommitted Git writes.
+- **Writer (reducer)** writes content-store rows as atomic per-file rows. A state file either exists at the new Git generation or it doesn't; no torn reads.
+- **Generation ordering:** coordinator gates tfstate run on Git generation (per ADR §coordinator). Tfstate never runs until Git collector has committed its generation — so the read always sees the intended snapshot.
+- **Postgres MVCC** guarantees readers never block writers and vice versa. No lock ordering hazard.
+
+**Failure mode:** if Git collector is mid-generation and tfstate somehow runs (coordinator bug), tfstate reads may see a prior generation's state file. This is safe: fact envelope carries `generation_id` = state serial (from the file content), not Git generation. Consumers key on state serial, so a stale Git generation merely delays fact updates — never corrupts.
+
 ---
 
 ## 4. Memory Budget Table
