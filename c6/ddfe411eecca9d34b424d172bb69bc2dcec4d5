@@ -1,0 +1,71 @@
+Dockerfile
+  073a74ac3999a938 8-9,18-29
+.github/workflows/macos.yml
+  073a74ac3999a938 30-32
+go/internal/mcp/server_test.go
+  073a74ac3999a938 14-15,52-61
+.github/workflows/build.yml
+  073a74ac3999a938 45-50
+deploy/argocd/base/values.yaml
+  073a74ac3999a938 3
+go/cmd/pcg/root.go
+  073a74ac3999a938 8-9,56
+deploy/helm/platform-context-graph/values.yaml
+  073a74ac3999a938 3,76-77,158-159,167-168
+.github/workflows/e2e-tests.yml
+  073a74ac3999a938 29-34
+go/internal/buildinfo/buildinfo.go
+  073a74ac3999a938 1-16
+go/internal/status/json.go
+  073a74ac3999a938 8-9,15,30
+go/internal/query/openapi.go
+  073a74ac3999a938 3-5,7-27,34
+go/internal/query/status.go
+  073a74ac3999a938 9,83,112,145,180,193
+go/internal/query/openapi_test.go
+  073a74ac3999a938 8-9,46-48,124-125
+go/internal/status/status.go
+  073a74ac3999a938 11-12,212
+go/internal/query/status_openapi_test.go
+  073a74ac3999a938 12-13
+go/internal/query/status_test.go
+  073a74ac3999a938 1-24
+go/internal/mcp/server.go
+  073a74ac3999a938 14-15,338
+go/internal/status/http_test.go
+  073a74ac3999a938 11,52-54,80-81
+go/internal/runtime/metrics_test.go
+  073a74ac3999a938 68
+go/internal/runtime/metrics.go
+  073a74ac3999a938 11,89
+go/internal/query/openapi_prefix.go
+  073a74ac3999a938 8
+deploy/helm/platform-context-graph/Chart.yaml
+  073a74ac3999a938 5-6
+go/internal/buildinfo/buildinfo_test.go
+  073a74ac3999a938 1-27
+go/internal/query/admin_openapi_test.go
+  073a74ac3999a938 12-13
+.github/workflows/docker-publish.yml
+  073a74ac3999a938 68-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "c6ddfe411eecca9d34b424d172bb69bc2dcec4d5",
+  "prompts": {
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 201,
+      "total_deletions": 58,
+      "accepted_lines": 220,
+      "overriden_lines": 0
+    }
+  }
+}
