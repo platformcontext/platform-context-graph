@@ -1,0 +1,100 @@
+deploy/helm/platform-context-graph/templates/networkpolicy.yaml
+  073a74ac3999a938 27-53
+deploy/helm/platform-context-graph/templates/validate.yaml
+  073a74ac3999a938 7-12
+deploy/helm/platform-context-graph/templates/httproute.yaml
+  073a74ac3999a938 28
+deploy/helm/platform-context-graph/templates/service-mcp-server.yaml
+  073a74ac3999a938 1-17
+deploy/helm/platform-context-graph/templates/ingress.yaml
+  073a74ac3999a938 26
+deploy/helm/platform-context-graph/templates/deployment.yaml
+  073a74ac3999a938 41-42,47
+README.md
+  073a74ac3999a938 145,149-151,153,171-172
+deploy/helm/platform-context-graph/README.md
+  073a74ac3999a938 3-4,7-9,11,13
+deploy/helm/platform-context-graph/templates/deployment-resolution-engine.yaml
+  073a74ac3999a938 42-43
+deploy/helm/platform-context-graph/templates/_helpers.tpl
+  073a74ac3999a938 35-38,55-58,76-80,178-214
+deploy/helm/platform-context-graph/values.yaml
+  073a74ac3999a938 75-99,156,163
+deploy/helm/platform-context-graph/templates/deployment-mcp-server.yaml
+  073a74ac3999a938 1-109
+AGENTS.md
+  073a74ac3999a938 12,15,17,19
+deploy/helm/platform-context-graph/templates/servicemonitor.yaml
+  073a74ac3999a938 23-45
+deploy/helm/platform-context-graph/values.schema.json
+  073a74ac3999a938 171-180,307-311,317-321
+docs/docs/deployment/service-runtimes.md
+  073a74ac3999a938 434-436
+deploy/helm/platform-context-graph/templates/statefulset.yaml
+  073a74ac3999a938 44
+deploy/helm/platform-context-graph/templates/deployment-workflow-coordinator.yaml
+  073a74ac3999a938 42-43
+deploy/helm/platform-context-graph/templates/service-mcp-server-metrics.yaml
+  073a74ac3999a938 1-18
+deploy/helm/platform-context-graph/templates/pdb.yaml
+  073a74ac3999a938 14-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "0170b8c852b726ff2922e9b3766cf6f27575a2b6",
+  "prompts": {
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 365,
+      "total_deletions": 393,
+      "accepted_lines": 365,
+      "overriden_lines": 0
+    },
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 18,
+      "overriden_lines": 0
+    },
+    "d630fda454f61c51": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c336f54-8019-4224-9be9-8719ee4cb92b",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 407,
+      "total_deletions": 45,
+      "accepted_lines": 405,
+      "overriden_lines": 0
+    },
+    "fd73f686cb9c9a3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "84c49d72-a249-4917-a2bf-08ba4698fd03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 85,
+      "overriden_lines": 0
+    }
+  }
+}
