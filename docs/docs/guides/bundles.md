@@ -1,72 +1,68 @@
 # Bundles
 
-Indexing a large repository takes minutes. If you want to explore a well-known project — or share your indexed graph with a teammate — you should not have to wait for a full re-index. Bundles let you skip it.
+Bundles are the explicit import path for prebuilt `.pcg` graph snapshots in the
+current Go platform.
 
-A `.pcg` bundle is a portable file containing pre-indexed graph data and metadata. Export one from your machine, load one from the registry, or request one on demand — and the graph is ready to query immediately.
+A `.pcg` bundle is a portable file containing pre-indexed graph data and
+metadata. Import a bundle when you want dependency or library internals without
+walking vendored source trees as part of the normal repository scan.
 
-Bundles are also the explicit opt-in path for dependency internals. Normal repository indexing excludes vendored and dependency directories (`vendor/`, `node_modules/`) by default. If you want the internals of React or Flask in your graph, load a bundle instead of indexing `node_modules/`.
+Normal repository indexing excludes vendored and dependency directories such as
+`vendor/` and `node_modules/` by default. Bundles are how you opt into that
+deeper graph content on purpose.
 
-## Load a pre-indexed bundle
+## Import a bundle
 
-The PCG registry publishes weekly bundles for popular open source projects via GitHub releases (`bundles-*`).
-
-```bash
-# Search for what's available
-pcg registry search react
-
-# Download and load into your graph
-pcg load react
-```
-
-The `load` command imports the bundle's graph data into your local database. Use `--clear` to replace existing data for that repo, or load additively by default.
-
-## Export your own bundle
-
-After indexing a repository locally, export it so others can skip the indexing step:
+Use the HTTP API to import a prebuilt `.pcg` file into the active graph
+database:
 
 ```bash
-pcg bundle export my-project.pcg --repo /path/to/repo
+curl -s \
+  -X POST http://localhost:8080/api/v0/bundles/import \
+  -F bundle=@vendor-lib.pcg \
+  -F clear_existing=true
 ```
 
-Share the `.pcg` file directly, or upload it to a PCG server:
+The import route accepts:
+
+- `multipart/form-data`
+- file field `bundle`
+- optional `clear_existing=true|false`
+
+## Search the bundle catalog
+
+The query surface also exposes a searchable bundle catalog view:
 
 ```bash
-pcg bundle upload my-project.pcg --service-url http://localhost:8080
+curl -s \
+  -X POST http://localhost:8080/api/v0/code/bundles \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"react","unique_only":true}'
 ```
 
-## Request an on-demand bundle
+If you use MCP, the matching tool is `search_registry_bundles`.
 
-For projects not in the weekly pre-indexed set, request a build. This triggers a GitHub Actions workflow that indexes the repo and publishes the bundle to the `on-demand-bundles` release:
+## Where bundles help
 
-```bash
-pcg registry request https://github.com/org/repo
-```
+- onboarding environments that need dependency internals preloaded
+- shared test fixtures for large library graphs
+- controlled imports of dependency source without indexing vendored trees in
+  every repository
+- service environments where a prebuilt bundle artifact is easier to ship than
+  a fresh dependency scan
 
-Check back with `pcg registry search` once the workflow completes.
+## Current shipped surface
 
-## Common flags
+The shipped Go platform documents and tests these bundle surfaces:
 
-| Flag | Effect |
-|------|--------|
-| `--repo` | Scope export to a specific repository path |
-| `--clear` | Replace existing graph data for the repo on load |
-| `--no-stats` | Skip post-load statistics output |
-| `--verbose` | Show detailed import progress |
-| `--unique` | Deduplicate entities during import |
+- `POST /api/v0/bundles/import`
+- `POST /api/v0/code/bundles`
+- MCP `search_registry_bundles`
 
-## When bundles help
-
-- **Onboarding** — new engineers load pre-indexed bundles instead of waiting for a full index of every repo
-- **Dependency internals** — get React, Django, or any library's call graph without indexing `node_modules/` in every app repo
-- **Sharing snapshots** — distribute a graph state without asking everyone to index locally
-- **CI caching** — export a bundle in CI and reuse it across pipeline stages
-
-## Current limitations
-
-Bundle workflows are CLI and HTTP today. MCP can load an existing bundle, but remote upload is a CLI + HTTP flow — there is no MCP tool for `bundle upload` yet.
+Public docs should not assume extra CLI wrappers beyond those shipped paths.
 
 ## Next steps
 
-- [CLI Reference](../reference/cli-reference.md) — full `pcg bundle` and `pcg registry` command docs
-- [HTTP API](../reference/http-api.md) — programmatic bundle import endpoint
+- [HTTP API](../reference/http-api.md) — bundle import and query routes
+- [Visualization](visualization.md) — read-only query visualization in Neo4j
 - [Quickstart](../getting-started/quickstart.md) — index your first repo from scratch

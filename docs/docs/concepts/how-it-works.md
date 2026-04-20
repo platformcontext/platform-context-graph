@@ -17,7 +17,9 @@ Each file is routed to the appropriate parser:
 - **Crossplane** — XRD and Claim definitions are extracted to map infrastructure provisioning
 - **CloudFormation** — resource and output definitions are parsed from JSON/YAML templates
 
-Language parsers are spec-driven — add a new language by writing a YAML spec and tree-sitter queries.
+Language parsing is owned by native Go packages. Add new parser capability by
+extending the Go parser or relationship packages with fixtures and focused
+tests.
 
 ## 3. Graph construction
 

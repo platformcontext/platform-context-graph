@@ -53,11 +53,12 @@ pcg mcp start
 
 ## Using fixtures in tests
 
-Fixture ecosystems back the integration test suite. Tests index a fixture, then query the resulting graph to verify parser correctness and relationship inference:
+Fixture ecosystems back the Go test suite. Tests index a fixture, then query
+the resulting graph to verify parser correctness and relationship inference:
 
 ```bash
-# Run integration tests that use fixture ecosystems
-uv run pytest tests/integration/ -k ecosystem
+# Run Go parser and collector tests that exercise fixture ecosystems
+cd go && go test ./internal/parser ./internal/collector ./internal/relationships -count=1
 ```
 
 ## Adding a new ecosystem

@@ -1,12 +1,17 @@
 # Deployment Overview
 
 PlatformContextGraph supports both a local full-stack workflow and a deployed
-split-service workflow. The supported production shape is a three-runtime
-deployment:
+split-service workflow. The current runtime surface includes four long-running
+Go runtimes:
 
-- **API** for HTTP and MCP
+- **API** for HTTP query traffic
+- **MCP Server** for MCP transport
 - **Ingester** for repository sync, parsing, and fact emission
 - **Resolution Engine** for queued projection and recovery workflows
+
+The currently packaged Helm and Argo CD deployment docs focus on API,
+ingester, and resolution-engine. The MCP server is also implemented as a
+separate Go runtime and is available in local Compose.
 
 Both the ingester and resolution-engine use the same facts-first data flow and
 write into external Neo4j and external Postgres.
@@ -15,8 +20,8 @@ write into external Neo4j and external Postgres.
 
 | Path | Best for | What you get |
 | --- | --- | --- |
-| [Docker Compose](docker-compose.md) | local full-stack testing | Neo4j, Postgres, OTEL collector, Jaeger, bootstrap-index, API, ingester, and resolution-engine |
-| [Helm](helm.md) | supported Kubernetes deployment | split API, ingester, and resolution-engine workloads with optional ServiceMonitor support |
+| [Docker Compose](docker-compose.md) | local full-stack testing | Neo4j, Postgres, OTEL collector, Jaeger, bootstrap-index, API, MCP server, ingester, and resolution-engine |
+| [Helm](helm.md) | supported Kubernetes deployment | split API, ingester, and resolution-engine workloads with optional ServiceMonitor support; MCP is a separate Go runtime surface |
 | [Argo CD](argocd.md) | GitOps-managed Kubernetes deployment | Helm-based deployment through GitOps overlays |
 | [Minimal Manifests](manifests.md) | smallest raw manifest example | a single-runtime API example, not the full split-service production shape |
 
@@ -30,8 +35,10 @@ flowchart LR
   D --> E["Resolution Engine"]
   E --> F["Neo4j graph"]
   E --> G["Postgres content store"]
-  H["API / MCP"] --> F
+  H["API"] --> F
   H --> G
+  I["MCP Server"] --> F
+  I --> G
 ```
 
 ## Platform Differences
@@ -40,6 +47,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | Runtime shape | full local stack | supported production shape | single-runtime example |
 | API | yes | yes | yes |
+| MCP Server | yes | separate runtime surface | no |
 | Ingester | yes | yes | no |
 | Resolution Engine | yes | yes | no |
 | Bootstrap Index | yes, one-shot service | manual or operator-run activity | no |

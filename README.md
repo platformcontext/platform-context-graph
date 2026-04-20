@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/docs-MkDocs-blue?style=flat-square" alt="Docs">
   </a>
   <img src="https://img.shields.io/badge/MCP-Compatible-green?style=flat-square" alt="MCP Compatible">
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/go-1.25%2B-00ADD8?style=flat-square&logo=go" alt="Go 1.25+">
   <img src="https://img.shields.io/badge/ghcr.io-image-2496ED?style=flat-square&logo=docker&logoColor=white" alt="GHCR Image">
   <img src="https://img.shields.io/badge/helm-OCI-0F1689?style=flat-square&logo=helm&logoColor=white" alt="Helm OCI Chart">
 </p>
@@ -69,17 +69,12 @@ Choose the path that matches what you want to do first.
 
 ### Try it locally with the CLI
 
-Install the CLI:
+Build the CLI from source:
 
 ```bash
-uv tool install platform-context-graph
-```
-
-Or run from source:
-
-```bash
-uv sync
-uv run pcg --help
+cd go && go build -o bin/ ./cmd/pcg
+export PATH="$PWD/bin:$PATH"
+pcg --help
 ```
 
 Index a repository and ask a question:
@@ -151,14 +146,14 @@ The deployed platform has three long-running runtimes plus one one-shot helper:
 
 | Runtime | What it owns | Default command |
 | --- | --- | --- |
-| API | HTTP API, MCP surface, graph and content reads, admin endpoints | `pcg serve start --host 0.0.0.0 --port 8080` |
-| Ingester | repo sync, workspace ownership, parsing, fact emission | `pcg internal repo-sync-loop` |
-| Resolution Engine | queue draining, fact loading, projection, retries, recovery | `pcg internal resolution-engine` |
-| Bootstrap Index | initial one-shot indexing before steady-state sync | `pcg internal bootstrap-index` |
+| API | HTTP API, MCP surface, graph and content reads, admin endpoints | `pcg api start --host 0.0.0.0 --port 8080` |
+| Ingester | repo sync, workspace ownership, parsing, fact emission | `/usr/local/bin/pcg-ingester` |
+| Resolution Engine | queue draining, fact loading, projection, retries, recovery | `/usr/local/bin/pcg-reducer` |
+| Bootstrap Index | initial one-shot indexing before steady-state sync | `/usr/local/bin/pcg-bootstrap-index` |
 
-The public runtime name is `ingester`. The internal command remains
-`pcg internal repo-sync-loop`. This keeps operator-facing naming stable while
-preserving a specific name for the long-running repository sync process.
+The public runtime name is `ingester`. Compose and Helm now start the
+long-running write plane through dedicated Go binaries rather than Python CLI
+runtime entrypoints.
 
 See [Service Runtimes](docs/docs/deployment/service-runtimes.md) for the
 complete runtime contract.
@@ -224,6 +219,8 @@ Start with the path that matches what you are doing:
   [System Architecture](docs/docs/architecture.md)
 - Verification:
   [Local Testing Runbook](docs/docs/reference/local-testing.md)
+- Local Compose:
+  [Docker Compose](docs/docs/deployment/docker-compose.md)
 
 ## Project Notes
 

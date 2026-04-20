@@ -1,161 +1,147 @@
 # Logging Standard
 
-For the operator-facing logs guide, see [Telemetry Logs](telemetry/logs.md).
+For the operator-facing log guide, also see
+[Telemetry Overview](telemetry/index.md).
 
-PlatformContextGraph writes one JSON document per log line everywhere: API, MCP, ingester, Falkor worker, and local CLI commands.
+PlatformContextGraph uses structured JSON logging on the Go runtimes. That is
+intentional: Grafana, Elasticsearch, Datadog, and similar tools can ingest the
+same shape without custom parsing.
 
-That is the standard on purpose. We want logs that are easy to ship, easy to parse, and easy to turn into dashboards without writing a custom parser for every service.
+## Current Go Contract
 
-## Canonical Envelope
+The logger contract comes from `go/internal/telemetry/logging.go`
+and the Go runtime entrypoints.
 
-Every log record uses the same top-level keys:
+Guaranteed top-level fields from the Go logger are:
 
 - `timestamp`
 - `severity_text`
-- `severity_number`
 - `message`
-- `event_name`
-- `logger_name`
 - `service_name`
 - `service_namespace`
-- `service_version`
-- `deployment_environment`
 - `component`
-- `transport`
 - `runtime_role`
-- `trace_id`
-- `span_id`
-- `request_id`
-- `correlation_id`
-- `exception_type`
-- `exception_message`
-- `exception_stacktrace`
-- `extra_keys`
 
-Rules:
-
-- `timestamp` is UTC RFC3339 with milliseconds
-- `extra_keys` is always present and always an object
-- custom dimensions belong under `extra_keys`, not as ad hoc top-level keys
-- reserved top-level keys are owned by the platform and cannot be overridden by call-site extras
-- `message` stays human-readable, but `event_name` is the stable machine key
-- stack traces stay inside one JSON record instead of spilling into multiline output
-
-The common fields are there so Loki, Elasticsearch, Grafana, or anything else that understands JSON can index the same shape every time:
-
-- `service_name`, `service_namespace`, and `service_version` identify the runtime
-- `component` and `transport` identify where the log came from
-- `runtime_role` tells you whether the process is acting as the API, the internal `ingester` runtime role used by the ingester service, the worker, or the CLI
-- `trace_id` and `span_id` let you jump from logs into the matching Jaeger trace
-- `request_id` and `correlation_id` keep a request together across boundaries
-
-## Why `extra_keys` Exists
-
-We still need room for operation-specific data, just not in a way that turns the log schema into a moving target.
-
-Use `extra_keys` for things like:
-
-- `repo_id`
-- `repo_slug`
-- `repo_path`
-- `run_id`
-- `phase`
-- `batch_type`
-- `rows`
-- `duration_seconds`
-- `backend`
-- `tool_name`
-- `query_name`
-
-This keeps dashboards stable. The envelope stays fixed, and the custom dimensions remain queryable.
-
-## Trace Correlation
-
-If a log is emitted inside an active OTEL span, it automatically carries:
+Trace-correlated logs also carry:
 
 - `trace_id`
 - `span_id`
+- `severity_number`
 
-Request boundaries also attach:
+Common structured dimensions used by the Go data plane include:
 
+- `scope_id`
+- `scope_kind`
+- `source_system`
+- `generation_id`
+- `collector_kind`
+- `domain`
+- `partition_key`
+- `failure_class`
+- `pipeline_phase`
 - `request_id`
-- `correlation_id`
 
-Current behavior:
+`event_name` is **optional** on the Go path. It is present only where a call
+site explicitly attaches
+`telemetry.EventAttr(...)`.
 
-- HTTP honors inbound `X-Request-ID` and generates one when it is missing
-- HTTP echoes `X-Request-ID` back in the response
-- MCP uses the JSON-RPC request ID when present and generates one otherwise
-- `correlation_id` defaults to `request_id` unless an upstream correlation ID is already available
+## Event Names That Are Current
 
-Jaeger is the right place to inspect the shape and timing of a slow request. Use the trace to find the slow span, then use the matching log lines to see the request-specific details.
+The explicit `event_name` values in the current Go code include:
 
-## Event Names
+- `runtime.startup.failed`
+- `runtime.shutdown.failed`
+- `runtime.server.listening`
+- `runtime.server.failed`
+- `runtime.server.stopped`
+- `runtime.neo4j.connected`
+- `runtime.postgres.connected`
+- `bootstrap.schema.started`
+- `bootstrap.postgres.applied`
+- `bootstrap.neo4j.applied`
 
-Keep the message readable, but treat `event_name` as the stable machine key.
+Do not treat examples such as `http.request.completed`,
+`mcp.request.received`, or `index.discovery.completed` as current universal Go
+events. Those are not the current canonical live event families.
 
-Good examples:
+## Phase-Scoped Runtime Logs
 
-- `http.request.completed`
-- `mcp.request.received`
-- `mcp.tool.completed`
-- `graph.batch.entity.flush`
-- `bundle.import.failed`
+Most of the Go write plane uses plain structured `slog` messages plus shared
+dimensions, not a separate event namespace per phase.
 
-The message can change. `event_name` should not drift casually.
+The important pattern is:
 
-## Ingestion Correlation
+- message stays human-readable
+- structured fields carry scope, domain, queue, and phase context
+- `pipeline_phase` is the stable phase filter for end-to-end debugging
 
-Indexing and repository-ingestion logs are easiest to group by these stable
-event families:
+Current phase values come from `go/internal/telemetry/logging.go`:
 
-- `index.discovery.*`
-- `index.parse.*`
-- `index.repository.*`
-- `index.finalization.*`
-- `indexing.repository_coverage.published`
+- `discovery`
+- `parsing`
+- `emission`
+- `projection`
+- `reduction`
+- `shared`
+- `query`
+- `serve`
 
-The most useful `extra_keys` fields for Grafana and Loki correlation are
-`run_id`, `repo_id`, `repo_name`, `repo_path`, `phase`, `status`, and
-`duration_seconds`. When you need the span and metric map, use
-[Ingestion Observability](ingestion-observability.md).
+Examples of current Go runtime messages include:
+
+- `bootstrap collection complete`
+- `bootstrap projection succeeded`
+- `bootstrap projection failed`
+- `cross-repo relationship resolution started`
+- `cross-repo relationship resolution completed`
+- `sql relationship materialization started`
+- `sql relationship materialization completed`
+- `inheritance materialization started`
+- `inheritance materialization completed`
+- `canonical atomic write completed`
+- `canonical sequential write completed`
+- `neo4j transient error, retrying`
+
+These are stable enough for operators to search, but they are not all promoted
+to `event_name`.
+
+## JSON Logging Rules
+
+- Keep logs in JSON in deployed environments.
+- Treat `event_name` as optional metadata, not a required top-level field.
+- Put operational dimensions in structured key/value fields, not in free-form
+  text.
+- Keep trace correlation intact by preserving `trace_id` and `span_id`.
+- Use `pipeline_phase` for end-to-end filtering across collector, projector,
+  reducer, and query/runtime surfaces.
 
 ## Example
 
 ```json
 {
-  "timestamp": "2026-03-25T21:14:33.482Z",
+  "timestamp": "2026-04-16T15:08:17.112345Z",
   "severity_text": "INFO",
-  "severity_number": 9,
-  "message": "HTTP request completed for GET /api/v0/repositories/{repo_id:path}/context",
-  "event_name": "http.request.completed",
-  "logger_name": "platform_context_graph.observability.runtime",
-  "service_name": "platform-context-graph-api",
-  "service_namespace": "platformcontext",
-  "service_version": "0.0.31",
-  "deployment_environment": "qa",
-  "component": "api",
-  "transport": "http",
-  "runtime_role": "api",
+  "message": "bootstrap projection succeeded",
+  "service_name": "bootstrap-index",
+  "service_namespace": "platform-context-graph",
+  "component": "bootstrap-index",
+  "runtime_role": "bootstrap-index",
   "trace_id": "5b2c4f1f0f0b54f8b7c1fb85ac20fd68",
   "span_id": "f1a4e1f0c3139f0a",
-  "request_id": "req-http-123",
-  "correlation_id": "req-http-123",
-  "exception_type": null,
-  "exception_message": null,
-  "exception_stacktrace": null,
-  "extra_keys": {
-    "http_method": "GET",
-    "http_route": "/api/v0/repositories/{repo_id:path}/context",
-    "http_status_code": 200,
-    "duration_seconds": 0.041352
-  }
+  "severity_number": 9,
+  "pipeline_phase": "projection",
+  "scope_id": "repository:payments",
+  "worker_id": 3,
+  "fact_count": 1234,
+  "duration_seconds": 2.5
 }
 ```
 
-## Operational Notes
+## Operator Guidance
 
-- Keep `PCG_LOG_FORMAT=json` in deployed environments.
-- Use `text` only when you are debugging locally and raw JSON is getting in the way.
-- The old file sinks still exist for compatibility, but they now write the same structured JSON shape instead of a separate plaintext format.
-- OTEL logs export is not required for this setup. JSON stdout is the canonical log transport.
+- Start with metrics to detect the failure or slowdown.
+- Pivot to traces to see which stage or store consumed time.
+- Use logs to extract scope IDs, failure classes, partition keys, and exact
+  retry/write context.
+
+That order keeps logs focused on explanation instead of using them as the
+first-line alerting signal.

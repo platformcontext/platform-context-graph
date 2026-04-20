@@ -8,9 +8,12 @@ Self-diagnostic tool. Runs a health check on your installation.
 
 **Checks performed:**
 
-*   Database connectivity (Neo4j / FalkorDB).
-*   Python version compatibility.
-*   Required dependencies.
+*   Config directory and `.env` presence.
+*   Go runtime binaries on `PATH` (`pcg-api`, `pcg-mcp-server`,
+    `pcg-bootstrap-index`, `pcg-ingester`, `pcg-reducer`).
+*   API health at the configured local base URL.
+*   Neo4j URI configuration.
+*   Postgres DSN configuration.
 
 **Usage:**
 ```bash

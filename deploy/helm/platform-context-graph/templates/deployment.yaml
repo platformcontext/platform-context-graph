@@ -46,8 +46,6 @@ spec:
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:
-            - name: PCG_RUNTIME_ROLE
-              value: "api"
             - name: PCG_HOME
               value: /tmp/.platform-context-graph
             - name: HOME
@@ -57,6 +55,7 @@ spec:
             - name: NEO4J_URI
               value: {{ .Values.neo4j.uri | quote }}
             {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
+            {{- include "pcg.renderConnectionTuningEnv" .Values.api.connectionTuning | nindent 12 }}
             {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "api") | nindent 12 }}
             {{- include "pcg.renderPrometheusEnv" . | nindent 12 }}
             - name: NEO4J_USERNAME

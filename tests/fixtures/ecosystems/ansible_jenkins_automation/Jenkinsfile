@@ -1,3 +1,7 @@
+@Library('controller-pipelines@main') _
+
+def automationRepo = 'https://github.com/platformcontext/automation-configs.git'
+
 pipeline {
   agent any
 
@@ -6,6 +10,7 @@ pipeline {
       steps {
         script {
           pipelineDeploy()
+          echo "Using ${automationRepo}"
           sh './scripts/deploy.sh'
         }
       }

@@ -51,51 +51,33 @@ run_benchmark() {
     exit_code=$(docker inspect --format='{{.State.ExitCode}}' platform-context-graph-bootstrap-index-1 2>/dev/null || echo "unknown")
 
     echo "  Exit code: $exit_code"
-    echo "  $finalization_line" | python3 -c "
-import sys, json
-for line in sys.stdin:
-    line = line.strip()
-    if not line:
-        continue
-    try:
-        j = json.loads(line.split('| ', 1)[-1])
-        ek = j.get('extra_keys', {})
-        print(f\"  Total: {ek.get('total_seconds', '?')}s\")
-        print(f\"  function_calls: {ek.get('function_calls_seconds', '?')}s\")
-        print(f\"  relationship_resolution: {ek.get('relationship_resolution_seconds', '?')}s\")
-    except:
-        print(f'  Raw: {line[:200]}')
-" 2>/dev/null || echo "  (could not parse timing)"
+    echo "  $finalization_line" \
+        | sed 's/^.*| //' \
+        | jq -r '
+            "  Total: \((.extra_keys.total_seconds // "?"))s",
+            "  function_calls: \((.extra_keys.function_calls_seconds // "?"))s",
+            "  relationship_resolution: \((.extra_keys.relationship_resolution_seconds // "?"))s"
+        ' 2>/dev/null || echo "  (could not parse timing)"
 
     # Save full logs
     docker-compose logs bootstrap-index 2>&1 > "$RESULTS_DIR/${name}_bootstrap.log"
 
     # Extract entity counts and repo discovery
     echo "  --- Entity summary ---"
-    rg "Committed graph entities" "$RESULTS_DIR/${name}_bootstrap.log" | python3 -c "
-import sys, json
-for line in sys.stdin:
-    try:
-        j = json.loads(line.strip().split('| ', 1)[-1])
-        ek = j.get('extra_keys', {})
-        repo = ek.get('repo_path', '?').split('/')[-1]
-        totals = ek.get('entity_totals', {})
-        total = sum(totals.values())
-        print(f'    {repo}: {total} entities ({totals})')
-    except:
-        pass
-" 2>/dev/null || true
+    rg "Committed graph entities" "$RESULTS_DIR/${name}_bootstrap.log" \
+        | sed 's/^.*| //' \
+        | jq -r '
+            .extra_keys as $extra
+            | ($extra.entity_totals // {}) as $totals
+            | "    \((($extra.repo_path // "?") | split("/") | last)): \(([$totals[]?] | add // 0)) entities (\($totals))"
+        ' 2>/dev/null || true
 
     echo "  --- Memory ---"
-    rg "After finalization" "$RESULTS_DIR/${name}_bootstrap.log" | tail -1 | python3 -c "
-import sys, json
-for line in sys.stdin:
-    try:
-        j = json.loads(line.strip().split('| ', 1)[-1])
-        print(f\"    {j.get('message', '?')}\")
-    except:
-        pass
-" 2>/dev/null || true
+    rg "After finalization" "$RESULTS_DIR/${name}_bootstrap.log" \
+        | tail -1 \
+        | sed 's/^.*| //' \
+        | jq -r '"    \(.message // "?")"' \
+        2>/dev/null || true
 
     echo ""
 }

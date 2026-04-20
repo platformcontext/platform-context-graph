@@ -3,6 +3,8 @@
 PlatformContextGraph resolves repository-to-repository relationships in a dynamic, evidence-backed flow. The important part is not just what edges exist, but when each stage runs, which stage owns truth, and which results are only derived summaries for answering questions.
 
 If you want public, example-driven diagrams of the relationship shapes this produces, see the [Relationship Graph Examples guide](../guides/relationship-graphs.md).
+If you want the logging, tracing, and verification companion for this flow, see
+[Relationship Mapping Observability](relationship-mapping-observability.md).
 
 The rule of thumb is:
 
@@ -37,17 +39,19 @@ flowchart TD
     B --> C[Evidence extraction]
     C --> D[Typed resolution]
     D --> E[Canonical resolved relationships]
-    E --> F[Neo4j projection]
-    E --> G[Derived summaries]
-    G --> H[Repo context enrichment]
-    F --> H
-    H --> I[MCP / API answer shaping]
-    I --> J[Truthfulness and completeness notes]
+    E --> F[Canonical node projection]
+    F --> G[Durable graph readiness phases]
+    G --> H[Shared edge projection]
+    E --> I[Derived summaries]
+    I --> J[Repo context enrichment]
+    H --> J
+    J --> K[MCP / API answer shaping]
+    K --> L[Truthfulness and completeness notes]
 
     classDef canonical fill:#e8f3ff,stroke:#2563eb,color:#0f172a;
     classDef derived fill:#ecfdf3,stroke:#059669,color:#052e16;
-    class D,E,F canonical;
-    class G,H,I,J derived;
+    class D,E,F,G,H canonical;
+    class I,J,K,L derived;
 ```
 
 ## Traversal Rules
@@ -60,6 +64,7 @@ The repo-to-file traversal rule is now explicit:
 That distinction matters because a lot of dynamic mapping work starts from repo-local files:
 
 - Terraform and Terragrunt evidence often starts as `Repository -> File -> TerraformModule`
+- Terragrunt helper-path provenance can also stay attached to `TerragruntConfig` metadata first, then surface on the query path as truthful config-discovery relationships such as `include`, `read_terragrunt_config`, `find_in_parent_folders`, and repo-local config assets
 - GitOps and workflow evidence often starts as `Repository -> File -> K8sResource` or `Repository -> File -> workflow/config entity`
 - MCP and query hot paths often need file counts, entrypoint scans, or content discovery without walking the directory tree
 
@@ -76,6 +81,52 @@ Repository -[:CONTAINS*]-> File
 ```
 
 Keep `CONTAINS*` when the query is actually about the tree, not just about locating files inside a repo.
+
+## Contract-First Relationship Verbs
+
+The relationship pipeline is organized around verb coverage, not parser
+checklists. The platform keeps that contract explicit.
+
+These resolver-owned verbs define the typed relationship contract:
+
+- `PROVISIONS_DEPENDENCY_FOR`
+- `RUNS_ON`
+- `DEPLOYS_FROM`
+- `DISCOVERS_CONFIG_IN`
+- `DEPENDS_ON`
+- `USES_MODULE`
+
+Related runtime-topology edges are still important, but they are reducer-owned
+or read-side graph structure rather than resolver-owned typed relationships:
+
+- `PROVISIONS_PLATFORM`
+- `DEFINES`
+- `INSTANCE_OF`
+- `DEPLOYMENT_SOURCE`
+
+Not every verb lives at the same layer:
+
+- repository-scoped canonical relationships include `DEPLOYS_FROM`,
+  `DISCOVERS_CONFIG_IN`, `PROVISIONS_DEPENDENCY_FOR`, `RUNS_ON`,
+  `USES_MODULE`, and compatibility `DEPENDS_ON`
+- runtime topology also depends on graph structure such as
+  `Repository -[:DEFINES]-> Workload`,
+  `Workload <-[:INSTANCE_OF]- WorkloadInstance`, and
+  `WorkloadInstance -[:RUNS_ON]-> Platform`
+- deployment-path answers may additionally expose derived
+  `DEPLOYMENT_SOURCE` context when they are backed by lower-layer canonical
+  evidence, but that remains read-side detail rather than a current canonical
+  relationship type
+
+The resolver-owned contract stops at the six canonical relationship types in
+the resolution section. Runtime topology edges such as `PROVISIONS_PLATFORM`,
+`DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE` stay on the read side where
+they are documented: repository context, entity context, workload context,
+deployment traces, and platform counts.
+
+A family is not done because a parser emitted metadata. It is done only when
+the right verb survives persistence, projection, and query-visible
+verification.
 
 ## Story-First Answer Contract
 
@@ -122,11 +173,14 @@ Canonical relationship types today are:
 - `DISCOVERS_CONFIG_IN`
 - `DEPLOYS_FROM`
 - `PROVISIONS_DEPENDENCY_FOR`
-
-- `PROVISIONS_PLATFORM`
+- `USES_MODULE`
 - `RUNS_ON`
 
-Typed relationships are canonical. A compatibility `DEPENDS_ON` edge may be derived later so older query surfaces still work, but the typed edge is the actual statement of meaning.
+Typed relationships are canonical. Downstream graph materialization and query
+layers also use related runtime edges such as `PROVISIONS_PLATFORM`,
+`DEFINES`, `INSTANCE_OF`, and `DEPLOYMENT_SOURCE`, but those are not
+resolver-owned relationship types and should only surface on the documented
+read-side topology and runtime views.
 
 ### Resolution Precedence Order
 
@@ -135,28 +189,74 @@ When multiple signals compete, resolve in this order:
 1. explicit assertions and rejections
 2. typed relationships with direct tool-semantic evidence
 3. typed relationships with weaker heuristic evidence
-4. compatibility `DEPENDS_ON` derived from stronger typed edges
+4. downstream compatibility shaping when a consumer still needs a generic `DEPENDS_ON` view
 5. generic fallback only if no stronger truthful type exists
 
 This is the main rule that keeps the graph from becoming a pile of vague `DEPENDS_ON` edges.
 
 ### 5. Derived summaries
 
-After resolution, repository context enrichment builds derived summaries from the resolved relationships and related config repositories. These summaries are for answering questions, not for redefining canonical truth.
+After resolution, repository context enrichment builds derived summaries from
+the resolved relationships plus normal read-path artifact extraction. These
+summaries are for answering questions, not for redefining canonical truth.
+
+### Graph Readiness Between Nodes And Shared Edges
+
+The Go write path now makes the graph-projection boundary explicit instead of
+assuming that every downstream edge writer can proceed as soon as canonical
+projection commits.
+
+Current runtime contract:
+
+- the projector publishes `canonical_nodes_committed` for a bounded
+  `(scope_id, acceptance_unit_id, source_run_id, generation_id, keyspace)`
+  slice after canonical node writes succeed
+- semantic-entity materialization publishes `semantic_nodes_committed` for the
+  same bounded slice after semantic node writes succeed
+- reducer-owned shared edge domains that depend on semantic nodes currently
+  wait for that semantic readiness before they write shared Neo4j edges
+
+Today that gating applies to:
+
+- `code_calls`
+- `sql_relationships`
+- `inheritance_edges`
+
+The durable readiness rows live in Postgres
+`graph_projection_phase_state`. This is canonical coordination state, not a
+read-side summary.
 
 The current derived summaries include:
 
 - `deployment_artifacts`
+- `delivery_family_paths`
+- `delivery_family_story`
 - `delivery_workflows`
 - `delivery_paths`
-- `consumer_repositories`
+- `consumers`
 - `shared_config_paths`
-- hostnames
-- API surface hints
+- `relationship_overview`
+- `deployment_overview`
+- `story`
 
 ### 6. Repo context enrichment
 
-The query layer uses the resolved relationships to look up related repositories and collect supporting context. This is where deployment artifacts are assembled from related repos and values-style files.
+The query layer uses the resolved relationships to look up related repositories
+and collect supporting context. This is where deployment artifacts are
+assembled from related repos and read-side artifact extraction such as
+Kustomize policy-document config paths, Terragrunt dependency `config_path`
+values, and Compose runtime hints.
+
+Repository-level platform counts and stories should follow the canonical
+runtime shape:
+
+- `Repository -[:DEFINES]-> Workload`
+- `Workload <-[:INSTANCE_OF]- WorkloadInstance`
+- `WorkloadInstance -[:RUNS_ON]-> Platform`
+
+Do not count platforms from a direct `Repository -[:RUNS_ON]-> Platform` hop in
+new query work. That shortcut undercounts once canonical runtime ownership
+stays on workload instances.
 
 ### 7. MCP / API answer shaping
 
@@ -182,14 +282,42 @@ Do not flatten every mapping into `DEPENDS_ON`. The more specific typed edge is 
 Write the edge in the direction of the behavior being explained.
 
 - `gitops-control-plane -[:DISCOVERS_CONFIG_IN]-> platform-observability`
-- `payments-api -[:DEPLOYS_FROM]-> helm-charts`
+- `payments-api -[:DEPLOYS_FROM]-> deployment-charts`
 - `terraform-stack-search -[:PROVISIONS_DEPENDENCY_FOR]-> search-api`
 
 If the source is the control plane, keep the control-plane source on the left. If the source is the deployed workload or service, keep that workload on the left.
 
+### Shared Infrastructure Must Stay First-Class
+
+The old relationship guides were explicit that shared infrastructure is core
+PCG behavior, not optional enrichment. Do not flatten shared runtime and
+network repositories into a generic dependency bucket just because the story
+gets shorter.
+
+The Go graph needs to keep these distinctions visible:
+
+- repos that provision platforms versus repos that provision application
+  dependencies
+- control-plane and workload repositories that participate in the same
+  delivery chain
+- workload-level dependencies expressed through canonical `DEPENDS_ON` and
+  the workload-instance runtime chain, not a separate `WORKLOAD_DEPENDS_ON`
+  relationship type
+- controller-driven delivery context that explains how a workload reaches a
+  runtime without inventing stronger canonical edges than the evidence
+  supports
+
 ### Typed Precedence
 
-When the same pair can be described by both a typed relationship and a generic `DEPENDS_ON`, the typed edge wins. The resolver suppresses the generic candidate for the same implied pair, then may derive a compatibility `DEPENDS_ON` edge from the typed result unless that generic edge was explicitly rejected.
+When the same pair can be described by both a typed relationship and a generic `DEPENDS_ON`, the typed edge wins. The resolver suppresses the weaker generic candidate for the same implied pair, while any compatibility `DEPENDS_ON` view remains a downstream concern rather than a current resolver guarantee.
+
+The Go reducer and canonical Neo4j writer now preserve that typed meaning end
+to end for repository-scoped relationship families such as:
+
+- `DEPLOYS_FROM`
+- `DISCOVERS_CONFIG_IN`
+- `PROVISIONS_DEPENDENCY_FOR`
+- `RUNS_ON`
 
 That keeps the graph:
 
@@ -203,16 +331,62 @@ The current mapping and enrichment flow understands these families:
 
 | Family | What it reads | What it is used for |
 | :--- | :--- | :--- |
-| Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR` and platform/runtime context |
-| Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config | Same semantic family as Terraform, with the same emphasis on truthful direction |
-| GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Delivery-path summaries and future deploy-source mappings when the repo link is explicit |
-| Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Delivery-path summaries and automation context |
+| Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR` on the resolver path plus downstream platform/runtime context such as `PROVISIONS_PLATFORM` where the materialized graph proves it |
+| Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config, local config assets | Same semantic family as Terraform; parser output keeps `read_terragrunt_config()` opaque, while the read path now surfaces `dependency.config_path`, `read_terragrunt_config`, `include`, `file`, `templatefile`, `*.tfvars`, local-variable-backed config assets, helper-composed Terraform template assets, nested local interpolation inside helper-built defaults, direct legacy `file(lookup(...))` config assets, local module-source assets, helper-built `terraform.source` values such as `${get_repo_root()}/terraform-module-...`, joined sidecar helper paths such as `join("/", [path_relative_to_include(), "global.yaml"])`, `join("/", [get_terragrunt_dir(), "templates/runtime.json"])`, `join("/", [get_parent_terragrunt_dir(), "templates/runtime.json"])`, `join("/", [get_repo_root(), "config/runtime.yaml"])`, and `join("/", [path.module, "templates/runtime.json"])`, and local-backed helper expressions such as `join("/", [get_repo_root(), "accounts/${local.account_name}/account.yaml"])` plus nested local-backed template selection via `lookup(..., "${path.module}/batch/${local.container_template}")` on the normal `TerraformModule` surface. When those helper/config paths are explicitly repo-bearing, the canonical Go evidence path now also promotes them as `DISCOVERS_CONFIG_IN` with helper-kind details instead of collapsing them into read-side-only provenance. |
+| GitHub Actions | reusable workflow calls, checkout targets, action repos, deploy steps, command gating | Reusable workflow refs, explicit cross-repo checkout, and explicit repo-bearing workflow inputs such as `automation-repo`, `workflow_input_repository`, and list-form `workflow_input_repositories` values from workflow source content emit canonical repo evidence on the Go relationship path. The Go query/read path also preserves those same workflow-input repositories when they arrive through extracted metadata. Step-level action repositories such as `hashicorp/setup-terraform@v3` and `peter-evans/create-pull-request@v5` now also emit truthful canonical `DEPENDS_ON` evidence on the Go relationship path instead of staying invisible until query-time. Repo-local workflow files under `.github/workflows/*` also surface as read-side `workflow_artifacts` in repository context and story delivery paths, and those workflow artifacts now preserve local reusable workflow paths, reusable-workflow repositories, explicit checkout repositories, step-level action repositories, explicit workflow-input repositories, list-form `workflow_input_repositories`, run-command counts, derived delivery-command families from real `run:` steps, repo-local delivery paths from Terraform `-chdir`, Terragrunt working directories, Helm chart paths, kubectl manifests, Ansible playbooks/inventories/vars, and Compose file refs, plus trigger events, workflow inputs, actual gating-condition text, matrix metadata, permissions scopes, concurrency groups, job environments, job timeout metadata, and `needs` detail text on the Go read path. Repo-local `uses: ./.github/workflows/...` calls now also emit canonical same-repo `DEPLOYS_FROM` evidence on the Go relationship path while staying distinct from cross-repo reusable-workflow edges and shell-command delivery families |
+| Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Explicit shared-library refs, including `library(...)` step forms, and explicit GitHub repository URLs emit canonical repo evidence. Those canonical facts also preserve the parser-proven controller metadata bundle in evidence details, including entry points, pipeline calls, shell commands, Ansible playbook hints, and config/pre-deploy flags. The Go query path surfaces those controller-artifact summaries directly, and the real `ansible_jenkins_automation` fixture now locks that controller lane down with parser, relationship, and query verification |
+| Ansible | playbooks, inventories, `group_vars`, `host_vars`, targeted roles, task entrypoints | The Go path classifies inventories, vars, playbooks, role roots, and task entrypoints explicitly, and playbook content that truthfully resolves against the repo catalog emits canonical role-reference evidence. Jenkins-driven controller artifacts plus repository deployment/story shaping also carry adjacent Ansible inventories, vars, and task entrypoints instead of dropping them on the floor. Root-level playbooks such as `deploy.yml` now participate in canonical role-reference discovery when their content truthfully resolves to a repo, and the same fixture corpus locks that behavior down |
+| Docker / Compose | Dockerfile build/runtime hints, Compose services, image wiring, env/config links, dependency hints | Docker Compose build contexts, including shorthand `build: ../repo`, and image refs now emit canonical deploy-source evidence in focused relationship verification, explicit `depends_on` service names now emit canonical dependency evidence when they resolve truthfully through the repo catalog, Dockerfile source labels such as `org.opencontainers.image.source` now emit truthful canonical `DEPLOYS_FROM` evidence, and the Go read side surfaces runtime artifact summaries for both Compose services and Dockerfile stages, including Compose `env_file`, `configs`, and `secrets` linkage metadata. Those same repo-local Compose file references now also feed `config_paths`, `shared_config_paths`, `delivery_paths`, and topology-story config provenance on the Go query path instead of staying runtime-only metadata. The relationship-platform compose verification covers the current Compose deploy-source lane, `depends_on` signals, and the real `service-worker-jobs/Dockerfile` runtime artifact lane, while focused relationship tests plus reducer verification keep build-context, image, and `depends_on` evidence pinned independently. Plain Docker base images and `COPY --from` stage aliases remain bounded read-side signals rather than fake repo edges, which keeps the relationship set truthful |
 | ArgoCD | ApplicationSet discovery targets, deploy-source repo URLs, destination clusters | `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, and `RUNS_ON` |
 | Helm | chart metadata, values files, chart dependency references | `DEPLOYS_FROM` |
-| Kustomize | `resources`, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
-| Platform / runtime context | workload and platform modeling resolved through mixed entity ids | `PROVISIONS_PLATFORM` and `RUNS_ON` |
+| Kustomize | `resources`, base references, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
+| Platform / runtime context | workload and platform modeling resolved through mixed entity ids | downstream graph/materialization edges such as `PROVISIONS_PLATFORM` and `RUNS_ON`, with repository query surfaces now also partitioning typed relationship summaries into controller-driven, workflow-driven, and IaC-driven buckets when the evidence supports it. The controller-driven bucket now covers ArgoCD, Jenkins, and Ansible evidence families instead of flattening Jenkins and Ansible into generic IaC summaries. |
 
 The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repository or platform meaning.
+
+### Mixed-Source Repositories
+
+The Go read path now treats mixed-source repositories as first-class, not as a
+single inferred repo type.
+
+That matters for repositories like `gitops-runtime-config` or self-service repos that
+legitimately contain several families at once:
+
+- Argo CD Applications and ApplicationSets
+- Kustomize overlays
+- Helm values or chart references
+- Terraform or Terragrunt modules
+- Dockerfiles or Docker Compose manifests
+- GitHub Actions workflows
+
+Current truth:
+
+- content-backed infrastructure summaries surface multiple infrastructure
+  families at once when the repo contains them
+- Docker and GitHub Actions are also surfaced as artifact families from the
+  content store, even when they are still evidence-driven rather than
+  first-class config entities in the repository context list
+- repository context, repository story, and semantic overview now report mixed
+  infrastructure/artifact families instead of flattening the repo to one
+  deployment surface
+
+Do not downcast a mixed repo to “Terraform repo”, “Argo CD repo”, or “service
+repo” if the indexed content proves more than one family is present.
+
+Terraform provider-schema support is part of the current runtime:
+
+The normal Postgres ingestion boundary now proves that runtime ownership in
+practice: repository facts are loaded back into a catalog, Terraform fact
+batches are matched against that catalog, and evidence rows are persisted to
+`relationship_evidence_facts` in the same transaction as the fact commit.
+
+- schema loading, identity-key inference, category classification, and
+  schema-driven generic Terraform evidence live in Go under
+  `go/internal/terraformschema` and `go/internal/relationships`
+- the packaged schema assets live under
+  `go/internal/terraformschema/schemas/*.json.gz`
+- Terraform relationship extraction is runtime-owned by the Go relationship and
+  provider-schema packages today
 
 ## Terraform-Managed Runtime Variants
 
@@ -316,19 +490,51 @@ If the feature skips straight to answer shaping, it will drift.
 
 Deployment artifacts are the derived pieces of repository context that help answer "what deploys from here?" after the canonical mapping has been resolved.
 
-They are assembled from related repositories and values-style config, not invented from a single repo in isolation.
+They are assembled from related repositories and normal read-path artifact
+extraction, not invented from a single repo in isolation.
 
 Examples include:
 
 - Helm chart references and chart sources
 - image repositories and tags
 - service ports and gateway hints
-- Kustomize resources and patches
+- Kustomize resources, base references, and patches
 - shared config paths across multiple deployment sources
 - consumer-only repositories that call or reference the service without deploying it
 - workflow refs that help explain the delivery path
 
 Use deployment artifacts to enrich answers and summaries. Do not treat them as a replacement for the underlying relationship edge.
+
+## Fixture-Corpus Verification
+
+The fixture corpus is the best truth test for the current platform state. It
+proves the relationship workflow across service repos, Helm/Kustomize deploy
+repos, ArgoCD delivery repos, controller-driven automation repos, and shared
+infrastructure/runtime Terraform repos.
+
+The minimum verification shape is:
+
+1. extract evidence from the right family
+2. resolve the correct verb
+3. persist it through the relationship store
+4. project the active generation into Neo4j
+5. surface the same meaning through query, story, and trace outputs
+
+The current expansion lanes are:
+
+- broader Terraform and Terragrunt config-asset extraction beyond the current
+  Kustomize policy-document, Terragrunt `dependency.config_path`, Terragrunt
+  `read_terragrunt_config()` / `include`, local `file()` / `templatefile()`,
+  `*.tfvars` / `*.tfvars.json`, and local module-source read paths,
+  plus shared-infra runtime-chain verification
+- broader GitHub Actions repo-local command/path provenance beyond the current explicit repo-bearing evidence and the now-proven read-side run-command family surfacing
+- broader Docker / Docker Compose deployment/runtime evidence beyond the now-proven Compose build-context, explicit `depends_on`, image-ref, and read-side runtime artifact surfacing
+
+For each family, ask the same questions:
+
+- which verb should this family prove
+- which stage owns that decision
+- what query, story, or trace proves it after projection
 
 ### Shared Config And Consumer Summaries
 
@@ -343,6 +549,59 @@ They should help answer:
 - which repos reference or call this service without deploying it
 
 They should not be used to invent deployment or provisioning relationships by themselves.
+
+`shared_config_paths` is fed by the Go normal read path from related
+repositories. The current Go-backed sources are:
+
+- Kustomize-reachable policy documents that reference SSM parameter families
+- Terragrunt `dependency.config_path` values
+- Terragrunt `read_terragrunt_config(...)` and `include` / `find_in_parent_folders(...)`
+  config references, including the default no-argument
+  `find_in_parent_folders()` form that resolves the parent `terragrunt.hcl`
+- local Terraform and Terragrunt `file(...)` / `templatefile(...)` config
+  assets when the path is repo-local and not a remote module source, including
+  simple local-variable-backed forms such as `file(local.config_file_path)` and
+  `templatefile(local.lifecycle_template, ...)` when the local resolves to a
+  checked-in repo-relative path, plus lookup-backed template locals such as
+  `templatefile(local.dashboard_template, ...)` and
+  `trimspace(templatefile(local.userdata_template, ...))` when those locals
+  resolve from `lookup(..., "${path.module}/templates/...")`, and legacy
+  interpolation-wrapped locals such as
+  `"${lookup(..., "${path.module}/templates/ecs/container.tpl")}"`
+  feeding `"${file(local.task_template)}"`
+- Terraform `*.tfvars` and `*.tfvars.json` files on the normal HCL path
+- local Terraform `module.source = "./..."` style module-asset paths when the
+  source is repo-local and not a registry or remote module ref
+
+For canonical `USES_MODULE` edges, the Go evidence path now distinguishes
+between generic public registry refs and repo-owned private registry refs.
+Generic public registry references such as `terraform-aws-modules/eks/aws` or
+`tfr:///terraform-aws-modules/eks/aws` stay non-repo-bearing and do not create
+cross-repo edges. Private host-backed refs such as
+`packages.example.test/terraform/lambda-function/aws` are treated as repo-bearing
+module sources when they resolve to a known local module monorepo alias such as
+`terraform-modules-aws`.
+
+The same Go read path now also preserves per-repo config provenance in
+`deployment_overview.delivery_paths`, `deployment_overview.delivery_family_paths`,
+`deployment_overview.delivery_family_story`, and
+`deployment_overview.topology_story` even when a path appears in only one
+repository. That means Terragrunt includes, dependency config paths, local
+`file()` / `templatefile()` assets, and other repo-local config rows no longer
+disappear unless another repo shares the same path.
+
+The compose-backed relationship verification now also exercises
+`POST /api/v0/impact/trace-deployment-chain` on the live fixture stack so the
+runtime-chain story is proven from the HTTP surface, not only from repository
+context summaries.
+
+Broader Terraform and Terragrunt helper-built path expressions still remain a
+future enhancement lane for any path that cannot be proven exactly from the
+checked-in source, but the service-level `path_relative_to_include(...)` split Terragrunt pattern is
+now covered on the Go read path in both named and unnamed helper forms for
+real repo-local YAML assets such as `account.yaml`, `region.yaml`, and
+`vpc.yaml`, without promoting remote-state
+keys into fake config provenance.
 
 ### Story Ordering
 
@@ -359,6 +618,15 @@ The top-level repository `story` is intentionally assembled in a fixed order so 
 That order matters. For example, shared config hints should not appear before the deployment path, and consumer-only repos should not crowd out ingress or platform context.
 
 `deployment_story` itself has an internal preference order:
+
+- direct controller and runtime delivery paths first
+- repo-local config provenance next
+- shared config family lines after the direct provenance they summarize
+
+The Go repository `direct_story` no longer strips shared-config family lines
+out of the first-glance narrative. If a repository has both direct delivery
+evidence and shared config families, the direct story now keeps both in order
+instead of hiding the shared-config portion behind a secondary field.
 
 1. workflow- and delivery-path-derived deployment lines
 2. reusable-workflow handoff plus canonical deploy/provision/runtime context when explicit command rows are missing
@@ -459,76 +727,13 @@ Keep canonical rules portable and open-source friendly.
 - Avoid hidden local knowledge that only works in one corpus.
 - If a heuristic is useful but narrow, keep it explainable and treat it as a heuristic, not a universal law.
 
-## Observability And Verification
+## Operational Companion
 
-Relationship mapping uses the shared observability contract.
+Keep the ownership and precedence rules in this document as the canonical
+design reference. Use
+[Relationship Mapping Observability](relationship-mapping-observability.md)
+when you need:
 
-### Logging
-
-Logs must stay JSON on stdout.
-
-- keep stable machine-readable `event_name` values
-- keep custom dimensions under `extra_keys`
-- keep trace and correlation fields intact
-- do not add ad hoc top-level log keys
-
-Current relationship events include:
-
-- `relationships.discover_file_evidence.completed`
-- `relationships.discover_gitops_evidence.completed`
-- `relationships.discover_evidence.completed`
-- `relationships.persist_generation.completed`
-- `relationships.project.completed`
-- `relationships.resolve.completed`
-- `relationships.resolve.failed`
-
-### OTEL
-
-Use OTEL spans around the extractor family and the overall resolve/project phases.
-
-Current span families include:
-
-- `pcg.relationships.discover_evidence`
-- `pcg.relationships.discover_evidence.file`
-- `pcg.relationships.discover_evidence.terraform`
-- `pcg.relationships.discover_evidence.helm`
-- `pcg.relationships.discover_evidence.kustomize`
-- `pcg.relationships.discover_evidence.gitops`
-- `pcg.relationships.discover_evidence.argocd`
-- `pcg.relationships.resolve_repository_dependencies`
-- `pcg.relationships.project`
-
-### Required Tests
-
-Every new mapping family should come with:
-
-- unit tests for the extractor
-- unit tests for resolver precedence or coexistence
-- a negative test that proves unrelated repos stay unrelated
-- a mixed-corpus validation run when the family changes answer shape
-
-For this slice, the important relationship tests are in:
-
-- `tests/unit/relationships/test_file_evidence.py`
-- `tests/unit/relationships/test_resolver.py`
-
-## Example Multi-Chain
-
-One useful pattern from the local corpus is:
-
-```text
-gitops-control-plane
-  DISCOVERS_CONFIG_IN -> platform-observability
-  DISCOVERS_CONFIG_IN -> helm-charts
-
-home-service
-  DEPLOYS_FROM -> helm-charts
-
-search-api
-  DEPLOYS_FROM -> helm-charts
-
-payments-api
-  DEPLOYS_FROM -> helm-charts
-```
-
-That is more truthful than flattening everything into a generic dependency chain. It preserves the control-plane meaning of the ArgoCD repo while keeping downstream deployment answers queryable.
+- the logging and tracing families for relationship mapping
+- the required verification expectations
+- example multi-hop relationship chains for operator debugging

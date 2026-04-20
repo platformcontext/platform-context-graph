@@ -72,6 +72,51 @@ services:
       timeout: 5s
       retries: 10
 
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/usr/local/bin/pcg-bootstrap-data-plane"]
+    healthcheck:
+      disable: true
+    environment:
+      DEFAULT_DATABASE: neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: ${PCG_NEO4J_PASSWORD:-change-me}
+      PCG_POSTGRES_DSN: postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@postgres:5432/platform_context_graph
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  workspace-setup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "0:0"
+    healthcheck:
+      disable: true
+    environment:
+      PCG_HOME: /data/.platform-context-graph
+      PCG_REPOS_DIR: /data/repos
+    volumes:
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
+      - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        mkdir -p /data/.platform-context-graph /data/repos
+        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi
+        chown -R 10001:10001 /data
+
   bootstrap-index:
     build:
       context: .
@@ -91,15 +136,9 @@ services:
       PCG_REPOS_DIR: /data/repos
       PCG_REPO_SOURCE_MODE: filesystem
       PCG_FILESYSTEM_ROOT: /fixtures
+      PCG_FILESYSTEM_DIRECT: ${PCG_FILESYSTEM_DIRECT:-}
       PCG_GIT_AUTH_METHOD: none
-      PCG_REPOSITORY_RULES_JSON: "[]"
-      PCG_REPO_FILE_PARSE_MULTIPROCESS: "${PCG_REPO_FILE_PARSE_MULTIPROCESS:-false}"
-      PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
-      PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
-      PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
-      INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
-      PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
+      PCG_REPOSITORY_RULES_JSON: ${PCG_REPOSITORY_RULES_JSON:-[]}
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
@@ -107,23 +146,27 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: none
+      PCG_PROJECTION_WORKERS: ${PCG_PROJECTION_WORKERS:-}
+      PCG_SNAPSHOT_WORKERS: ${PCG_SNAPSHOT_WORKERS:-}
+      PCG_PARSE_WORKERS: ${PCG_PARSE_WORKERS:-}
+      PCG_LARGE_REPO_FILE_THRESHOLD: ${PCG_LARGE_REPO_FILE_THRESHOLD:-}
+      PCG_LARGE_REPO_MAX_CONCURRENT: ${PCG_LARGE_REPO_MAX_CONCURRENT:-1}
+      GOMEMLIMIT: ${GOMEMLIMIT:-}
     volumes:
-      - pcg_data:/data
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
       - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        mkdir -p /data/repos && \
-        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
-        exec pcg internal bootstrap-index
+    command: ["/usr/local/bin/pcg-bootstrap-index"]
     depends_on:
-      neo4j:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+      workspace-setup:
+        condition: service_completed_successfully
       otel-collector:
         condition: service_started
       jaeger:
@@ -133,7 +176,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "serve", "start", "--host", "0.0.0.0", "--port", "8080"]
+    command: ["/usr/local/bin/pcg-api"]
     ports:
       - "${PCG_HTTP_PORT:-8080}:8080"
       - "${PCG_API_METRICS_PORT:-19464}:9464"
@@ -149,16 +192,9 @@ services:
       PCG_REPO_SOURCE_MODE: filesystem
       PCG_FILESYSTEM_ROOT: /fixtures
       PCG_GIT_AUTH_METHOD: none
-      PCG_REPOSITORY_RULES_JSON: "[]"
-      PCG_RUNTIME_ROLE: api
+      PCG_REPOSITORY_RULES_JSON: ${PCG_REPOSITORY_RULES_JSON:-[]}
+      PCG_API_KEY: ${PCG_API_KEY:-}
       PCG_AUTO_GENERATE_API_KEY: "true"
-      PCG_REPO_FILE_PARSE_MULTIPROCESS: "${PCG_REPO_FILE_PARSE_MULTIPROCESS:-false}"
-      PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
-      PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
-      PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
-      INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
-      PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
@@ -169,14 +205,18 @@ services:
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
-      - pcg_data:/data
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
     depends_on:
-      neo4j:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+      workspace-setup:
+        condition: service_completed_successfully
       otel-collector:
         condition: service_started
       jaeger:
@@ -187,12 +227,72 @@ services:
       timeout: 5s
       retries: 10
 
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/usr/local/bin/pcg-mcp-server"]
+    ports:
+      - "${PCG_MCP_PORT:-8081}:8080"
+      - "${PCG_MCP_METRICS_PORT:-19468}:9464"
+    environment:
+      DEFAULT_DATABASE: neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: ${PCG_NEO4J_PASSWORD:-change-me}
+      PCG_CONTENT_STORE_DSN: postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@postgres:5432/platform_context_graph
+      PCG_POSTGRES_DSN: postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@postgres:5432/platform_context_graph
+      PCG_HOME: /data/.platform-context-graph
+      PCG_REPOS_DIR: /data/repos
+      PCG_REPO_SOURCE_MODE: filesystem
+      PCG_FILESYSTEM_ROOT: /fixtures
+      PCG_GIT_AUTH_METHOD: none
+      PCG_REPOSITORY_RULES_JSON: ${PCG_REPOSITORY_RULES_JSON:-[]}
+      PCG_MCP_TRANSPORT: http
+      PCG_MCP_ADDR: ":8080"
+      PCG_API_KEY: ${PCG_API_KEY:-}
+      PCG_AUTO_GENERATE_API_KEY: "true"
+      PCG_DEPLOYMENT_ENVIRONMENT: local-compose
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      PCG_PROMETHEUS_METRICS_ENABLED: "true"
+      PCG_PROMETHEUS_METRICS_PORT: "9464"
+    volumes:
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
+      - ./:/app-src
+      - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      workspace-setup:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
   ingester:
     build:
       context: .
       dockerfile: Dockerfile
     healthcheck:
-      disable: true
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     ports:
       - "${PCG_INGESTER_METRICS_PORT:-19465}:9464"
     environment:
@@ -206,17 +306,9 @@ services:
       PCG_REPOS_DIR: /data/repos
       PCG_REPO_SOURCE_MODE: filesystem
       PCG_FILESYSTEM_ROOT: /fixtures
+      PCG_FILESYSTEM_DIRECT: ${PCG_FILESYSTEM_DIRECT:-}
       PCG_GIT_AUTH_METHOD: none
-      PCG_REPOSITORY_RULES_JSON: "[]"
-      PCG_REPO_SYNC_INITIAL_DELAY_SECONDS: "${PCG_REPO_SYNC_INITIAL_DELAY_SECONDS:-30}"
-      PCG_REPO_SYNC_INTERVAL_SECONDS: "${REPO_SYNC_INTERVAL_SECONDS:-900}"
-      PCG_REPO_FILE_PARSE_MULTIPROCESS: "${PCG_REPO_FILE_PARSE_MULTIPROCESS:-false}"
-      PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
-      PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
-      PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
-      INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
-      PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
+      PCG_REPOSITORY_RULES_JSON: ${PCG_REPOSITORY_RULES_JSON:-[]}
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
@@ -226,36 +318,44 @@ services:
       OTEL_LOGS_EXPORTER: none
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
+      PCG_SNAPSHOT_WORKERS: ${PCG_SNAPSHOT_WORKERS:-}
+      PCG_PROJECTOR_WORKERS: ${PCG_PROJECTOR_WORKERS:-}
+      PCG_PARSE_WORKERS: ${PCG_PARSE_WORKERS:-}
+      PCG_LARGE_REPO_FILE_THRESHOLD: ${PCG_LARGE_REPO_FILE_THRESHOLD:-}
+      PCG_LARGE_REPO_MAX_CONCURRENT: ${PCG_LARGE_REPO_MAX_CONCURRENT:-1}
+      GOMEMLIMIT: ${GOMEMLIMIT:-}
     volumes:
-      - pcg_data:/data
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
       - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
-        exec pcg internal repo-sync-loop
+    command: ["/usr/local/bin/pcg-ingester"]
     depends_on:
-      neo4j:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      bootstrap-index:
+        condition: service_completed_successfully
+      workspace-setup:
+        condition: service_completed_successfully
       otel-collector:
         condition: service_started
       jaeger:
         condition: service_started
-      bootstrap-index:
-        condition: service_completed_successfully
 
+  # Production (8+ vCPU): PCG_REDUCER_WORKERS=8, PCG_SHARED_PROJECTION_WORKERS=4,
+  # PCG_SHARED_PROJECTION_PARTITION_COUNT=8, PCG_REDUCER_BATCH_CLAIM_SIZE=64
   resolution-engine:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "internal", "resolution-engine"]
+    command: ["/usr/local/bin/pcg-reducer"]
     healthcheck:
-      disable: true
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     ports:
       - "${PCG_RESOLUTION_ENGINE_METRICS_PORT:-19466}:9464"
     environment:
@@ -271,15 +371,7 @@ services:
       PCG_REPO_SOURCE_MODE: filesystem
       PCG_FILESYSTEM_ROOT: /fixtures
       PCG_GIT_AUTH_METHOD: none
-      PCG_REPOSITORY_RULES_JSON: "[]"
-      PCG_RUNTIME_ROLE: resolution-engine
-      PCG_REPO_FILE_PARSE_MULTIPROCESS: "${PCG_REPO_FILE_PARSE_MULTIPROCESS:-false}"
-      PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
-      PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
-      PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
-      INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
-      PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
+      PCG_REPOSITORY_RULES_JSON: ${PCG_REPOSITORY_RULES_JSON:-[]}
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
@@ -289,15 +381,26 @@ services:
       OTEL_LOGS_EXPORTER: none
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
+      PCG_REDUCER_WORKERS: ${PCG_REDUCER_WORKERS:-4}
+      PCG_SHARED_PROJECTION_WORKERS: ${PCG_SHARED_PROJECTION_WORKERS:-2}
+      PCG_SHARED_PROJECTION_PARTITION_COUNT: ${PCG_SHARED_PROJECTION_PARTITION_COUNT:-4}
+      PCG_SHARED_PROJECTION_BATCH_LIMIT: ${PCG_SHARED_PROJECTION_BATCH_LIMIT:-200}
+      PCG_SHARED_PROJECTION_POLL_INTERVAL: ${PCG_SHARED_PROJECTION_POLL_INTERVAL:-500ms}
+      PCG_SHARED_PROJECTION_LEASE_TTL: ${PCG_SHARED_PROJECTION_LEASE_TTL:-}
+      PCG_REDUCER_BATCH_CLAIM_SIZE: ${PCG_REDUCER_BATCH_CLAIM_SIZE:-}
     volumes:
-      - pcg_data:/data
+      - type: volume
+        source: pcg_data
+        target: /data
+        volume:
+          nocopy: true
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
     depends_on:
-      neo4j:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+      workspace-setup:
+        condition: service_completed_successfully
       otel-collector:
         condition: service_started
       jaeger:

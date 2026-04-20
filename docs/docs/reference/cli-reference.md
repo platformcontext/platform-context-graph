@@ -23,10 +23,13 @@ Remote mode is explicit. A command only runs remotely when it supports remote ex
 Remote mode facts for this release:
 
 - It uses the HTTP API, not MCP.
-- It is available for a limited set of query, status, bundle-upload, and admin commands.
+- It is available for a limited set of query, status, and admin commands.
 - Remote `find` and `analyze` commands do not support `--visual`.
 - `pcg admin reindex` queues a reindex request for the ingester to execute. The API process does not do the full reindex work inline.
-- `pcg admin facts replay` replays dead-lettered facts-first work items back to `pending`. It requires at least one selector so operators do not accidentally replay the entire failed set.
+- `pcg admin facts replay` replays dead-lettered facts-first work items back
+  to `pending`. It also accepts `failed` rows when older terminal entries are
+  still present. It requires at least one selector so operators do not
+  accidentally replay the entire terminal set.
 - `pcg admin facts dead-letter` moves selected work items into durable terminal state with an operator note.
 - `pcg admin facts backfill` creates a durable backfill request for a repository or source run.
 - `pcg admin facts replay-events` lists durable replay audit rows for incident review.
@@ -53,20 +56,19 @@ These options apply at the root command level.
 | `pcg help` | Show the full root help screen. | No |
 | `pcg version` | Print the installed version. | No |
 | `pcg doctor` | Run local diagnostics. | No |
-| `pcg index [path]` | Index a local path. | No |
-| `pcg index-status [target]` | Show checkpointed index status for a local path or remote run. | Yes |
-| `pcg finalize` | Re-run finalization stages against an existing graph. | No |
-| `pcg clean` | Remove orphaned nodes and relationships. | No |
+| `pcg index [path]` | Index a local path by launching the Go `bootstrap-index` runtime. | No |
+| `pcg index-status` | Show the latest checkpointed index status. This is the completeness signal, not process health. | Yes |
+| `pcg finalize` | Compatibility stub. Prints the current ingester recovery endpoints and exits non-zero. | No |
+| `pcg clean` | Compatibility stub. Prints cleanup guidance and exits non-zero. | No |
 | `pcg stats [path]` | Show indexing statistics. | No |
-| `pcg delete <path>` | Delete one indexed repository. | No |
-| `pcg delete --all` | Delete every indexed repository. | No |
-| `pcg visualize` | Launch the interactive Playground UI. | No |
+| `pcg delete <path>` | Compatibility stub. Prints deletion guidance and exits non-zero. | No |
+| `pcg delete --all` | Compatibility stub. Prints deletion guidance and exits non-zero. | No |
 | `pcg list` | List indexed repositories. | No |
-| `pcg add-package` | Add a package dependency node. | No |
+| `pcg add-package` | Compatibility stub. Prints package-indexing guidance and exits non-zero. | No |
 | `pcg watch [path]` | Watch a local path and keep the graph updated. | No |
-| `pcg unwatch <path>` | Stop watching a path. | No |
-| `pcg watching` | List active watchers. | No |
-| `pcg query "<cypher>"` | Run a read-only Cypher query. | No |
+| `pcg unwatch <path>` | Compatibility stub. Prints watcher-lifecycle guidance and exits non-zero. | No |
+| `pcg watching` | Compatibility stub. Prints watcher-lifecycle guidance and exits non-zero. | No |
+| `pcg query "<query>"` | Run a language-query search against indexed code. | No |
 | `pcg start` | Deprecated root alias for `pcg mcp start`. | No |
 
 ### Workspace commands
@@ -75,9 +77,9 @@ These options apply at the root command level.
 
 | Command | Purpose | Remote-aware |
 | :--- | :--- | :--- |
-| `pcg workspace plan` | Preview which repositories the current workspace config selects. | No |
-| `pcg workspace sync` | Materialize the configured workspace without indexing it. | No |
-| `pcg workspace index` | Index the configured workspace. | No |
+| `pcg workspace plan` | Queue a workspace reindex plan through the Go admin reindex flow. | No |
+| `pcg workspace sync` | Queue a workspace sync through the Go admin reindex flow. | No |
+| `pcg workspace index` | Queue a workspace index through the Go admin reindex flow. | No |
 | `pcg workspace status` | Show workspace path and latest index summary. | Yes |
 | `pcg workspace watch` | Watch the materialized workspace. | No |
 
@@ -89,11 +91,11 @@ These options apply at the root command level.
 | :--- | :--- | :--- |
 | `pcg find name <name>` | Exact-name search. | Yes |
 | `pcg find pattern <text>` | Substring search. | Yes |
-| `pcg find type <type>` | List all nodes of one type. | No |
-| `pcg find variable <name>` | Find variables by name. | No |
-| `pcg find content <text>` | Full-text search in source content. | No |
-| `pcg find decorator <name>` | Find functions with a decorator. | No |
-| `pcg find argument <name>` | Find functions with a parameter name. | No |
+| `pcg find type <type>` | List all nodes of one type. | Yes |
+| `pcg find variable <name>` | Find variables by name. | Yes |
+| `pcg find content <text>` | Full-text search in source content. | Yes |
+| `pcg find decorator <name>` | Find functions with a decorator. | Yes |
+| `pcg find argument <name>` | Find functions with a parameter name. | Yes |
 
 ### Analysis commands
 
@@ -103,33 +105,27 @@ These options apply at the root command level.
 | :--- | :--- | :--- |
 | `pcg analyze calls <function>` | Show what a function calls. | Yes |
 | `pcg analyze callers <function>` | Show what calls a function. | Yes |
-| `pcg analyze chain <from> <to>` | Show the call chain between two functions. | Yes |
+| `pcg analyze chain <from> <to>` | Show the call chain between two functions. Supports `--depth`. | Yes |
 | `pcg analyze deps <module>` | Show import and dependency relationships. | Yes |
-| `pcg analyze tree <class>` | Show inheritance hierarchy. | No |
-| `pcg analyze complexity` | Show function complexity. | Yes |
-| `pcg analyze dead-code` | Find potentially unused functions and classes. | Yes |
+| `pcg analyze tree <class>` | Show inheritance hierarchy. | Yes |
+| `pcg analyze complexity` | Show relationship-based complexity metrics for one entity. | Yes |
+| `pcg analyze dead-code` | Find potentially unused entities, with optional `--repo-id`, `--exclude`, and `--fail-on-found`. | Yes |
 | `pcg analyze overrides <name>` | Find implementations across classes. | Yes |
 | `pcg analyze variable <name>` | Show variable definitions and usage. | Yes |
 
-### Admin, bundles, and registry
+### Admin commands
 
 | Command | Purpose | Remote-aware |
 | :--- | :--- | :--- |
 | `pcg admin reindex` | Queue a remote ingester reindex request. | Yes |
+| `pcg admin tuning-report` | Show shared-projection tuning state from the admin API. | Yes |
 | `pcg admin facts replay` | Replay failed facts-first work items through the admin API. | Yes |
-| `pcg admin facts dead-letter` | Move selected facts-first work items into terminal failed state. | Yes |
+| `pcg admin facts dead-letter` | Move selected facts-first work items into terminal dead-letter state. | Yes |
+| `pcg admin facts skip` | Mark selected facts-first work items as skipped with an operator note. | Yes |
 | `pcg admin facts backfill` | Create a durable fact backfill request. | Yes |
 | `pcg admin facts list` | List fact work items and durable failure metadata. | Yes |
 | `pcg admin facts decisions` | List persisted projection decisions and optional evidence. | Yes |
 | `pcg admin facts replay-events` | List durable replay audit rows. | Yes |
-| `pcg bundle export <file>` | Export the current graph to a `.pcg` bundle. | No |
-| `pcg bundle import <file>` | Import a `.pcg` bundle into the local database. | No |
-| `pcg bundle load <name-or-path>` | Load a local or registry bundle. | No |
-| `pcg bundle upload <file>` | Upload a bundle to a remote PCG HTTP service. | Yes |
-| `pcg registry list` | List registry bundles. | No |
-| `pcg registry search <term>` | Search registry bundles. | No |
-| `pcg registry download <name>` | Download a bundle. | No |
-| `pcg registry request <name>` | Request bundle generation. | No |
 
 ### Service, setup, and config commands
 
@@ -139,7 +135,7 @@ These options apply at the root command level.
 | `pcg mcp start` | Start the MCP server. |
 | `pcg mcp tools` | List MCP tools. |
 | `pcg api start` | Start the HTTP API server. |
-| `pcg serve start` | Start the combined HTTP API and MCP service. |
+| `pcg serve start` | Start the HTTP API runtime convenience process. Use `pcg mcp start` for MCP. |
 | `pcg neo4j setup` | Configure a Neo4j connection. |
 | `pcg config show` | Show current config values. |
 | `pcg config set <key> <value>` | Set one config value. |
@@ -152,18 +148,9 @@ These options apply at the root command level.
 
 | Command | Purpose |
 | :--- | :--- |
-| `pcg ecosystem generation` | Show the active relationship-resolution generation. |
-| `pcg ecosystem relationships` | List resolved repository relationships. |
-| `pcg ecosystem candidates` | List relationship candidates waiting for review. |
-| `pcg ecosystem assert-relationship` | Persist an explicit dependency assertion. |
-| `pcg ecosystem reject-relationship` | Persist an explicit dependency rejection. |
-| `pcg ecosystem index` | Index all repositories in a manifest. |
-| `pcg ecosystem status` | Show per-repository index status. |
-| `pcg ecosystem update` | Re-index only stale repositories. |
-| `pcg ecosystem link` | Build cross-repository relationships. |
-| `pcg ecosystem resolve` | Resolve evidence-backed repository dependencies. |
+| `pcg ecosystem index` | Compatibility stub. Prints guidance toward `pcg index`, `pcg workspace index`, or admin reindex flows. |
+| `pcg ecosystem status` | Compatibility stub. Prints guidance toward `pcg index-status`, `pcg workspace status`, or admin/status APIs. |
 | `pcg ecosystem overview` | Show ecosystem summary statistics. |
-| `pcg ecosystem query` | Run ecosystem-level queries. |
 
 ### Shortcuts
 
@@ -175,11 +162,8 @@ These are public aliases:
 | `pcg n` | `pcg neo4j setup` |
 | `pcg i` | `pcg index` |
 | `pcg ls` | `pcg list` |
-| `pcg rm` | `pcg delete` |
-| `pcg v` | `pcg visualize` |
+| `pcg rm` | `pcg delete` compatibility stub |
 | `pcg w` | `pcg watch` |
-| `pcg export` | `pcg bundle export` |
-| `pcg load` | `pcg bundle load` |
 
 ## Remote mode
 
@@ -190,19 +174,26 @@ Remote mode is available for:
 - `pcg index-status`
 - `pcg workspace status`
 - `pcg admin reindex`
+- `pcg admin tuning-report`
 - `pcg admin facts replay`
 - `pcg admin facts dead-letter`
+- `pcg admin facts skip`
 - `pcg admin facts backfill`
 - `pcg admin facts list`
 - `pcg admin facts decisions`
 - `pcg admin facts replay-events`
-- `pcg bundle upload`
 - `pcg find name`
 - `pcg find pattern`
+- `pcg find type`
+- `pcg find variable`
+- `pcg find content`
+- `pcg find decorator`
+- `pcg find argument`
 - `pcg analyze calls`
 - `pcg analyze callers`
 - `pcg analyze chain`
 - `pcg analyze deps`
+- `pcg analyze tree`
 - `pcg analyze complexity`
 - `pcg analyze dead-code`
 - `pcg analyze overrides`
@@ -235,7 +226,7 @@ Profile-specific keys:
 Example:
 
 ```bash
-pcg config set PCG_SERVICE_URL_QA https://mcp-pcg.qa.ops.bgrp.io
+pcg config set PCG_SERVICE_URL_QA https://pcg.qa.example.test
 pcg config set PCG_API_KEY_QA your-token-here
 pcg config set PCG_SERVICE_PROFILE QA
 ```
@@ -256,14 +247,17 @@ pcg admin facts decisions --profile qa --repository-id repository:r_payments --s
 Check remote workspace status:
 
 ```bash
-pcg workspace status --service-url https://mcp-pcg.qa.ops.bgrp.io --api-key "$PCG_API_KEY"
+pcg workspace status --service-url https://pcg.qa.example.test --api-key "$PCG_API_KEY"
 ```
 
-Check checkpointed run status:
+Check checkpointed status:
 
 ```bash
-pcg index-status f53c7855e3a12baf --profile qa
+pcg index-status --profile qa
 ```
+
+Treat `pcg index-status` as the latest checkpoint-completeness view. Use the
+runtime health/admin/status surfaces for liveness and stage progress instead.
 
 Queue a full workspace rebuild on a deployed ingester:
 
@@ -289,12 +283,6 @@ Run remote query commands:
 pcg find name handle_payment --profile qa
 pcg analyze callers handle_payment --profile qa
 pcg analyze complexity --profile qa
-```
-
-Upload a prebuilt bundle to a deployed service:
-
-```bash
-pcg bundle upload vendor-lib.pcg --profile qa --clear
 ```
 
 ## Local mode examples

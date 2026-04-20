@@ -6,8 +6,12 @@
 
 **Fix:**
 
-- macOS / Linux: add the relevant scripts directory to your shell profile
-- Windows: reinstall Python with PATH enabled, or prefer `uv tool install` / `pipx`
+Build the CLI from source and add it to your PATH:
+
+```bash
+cd go && go build -o bin/ ./cmd/pcg
+export PATH="$PWD/bin:$PATH"
+```
 
 ## Neo4j connection refused
 
@@ -21,6 +25,20 @@ docker start pcg-neo4j
 
 Then verify your `NEO4J_URI`, username, and password. Run `pcg doctor` to confirm.
 
+## API is healthy but indexing is incomplete
+
+**Cause:** The process health check only proves the API can serve. It does not
+mean the latest repository or run reached a completed checkpoint.
+
+**Fix:**
+
+1. Check checkpointed completeness with `pcg index-status`
+2. Inspect `GET /api/v0/status/index` or `GET /api/v0/index-status`
+3. Inspect the ingester `/admin/status` surface if you are debugging a
+   recovery or backlog issue
+4. Use `/admin/status` on the long-running runtimes to see live stage and
+   backlog state
+
 ## MCP client cannot find the server
 
 **Cause:** The client config was not updated, the command points at the wrong interpreter, or database credentials are missing.
@@ -31,7 +49,7 @@ Then verify your `NEO4J_URI`, username, and password. Run `pcg doctor` to confir
 2. Inspect the generated config snippet
 3. Run `pcg mcp start` manually and confirm it starts cleanly
 
-For this repository's checked-in MCP example, copy `.mcp.json.example` to `.mcp.json`, replace `<REPO_ROOT>` with your checkout path. Note that a host-run `uv run pcg mcp start` with only Neo4j credentials can answer graph queries, but content tools require the PostgreSQL DSN and container workspace mounts.
+For this repository's checked-in MCP example, copy `.mcp.json.example` to `.mcp.json`, replace `<REPO_ROOT>` with your checkout path. Note that a host-run `pcg mcp start` with only Neo4j credentials can answer graph queries, but content tools require the PostgreSQL DSN and container workspace mounts.
 
 ## HTTP API starts but queries fail
 
@@ -49,7 +67,7 @@ PCG should skip `.git`, `.terraform`, `.terragrunt-cache`, and similar cache tre
 
 If you suspect this is not happening:
 
-1. Check your `.pcgignore` and `IGNORE_DIRS` configuration
+1. Check your `.pcgignore` patterns and repository-source configuration
 2. Re-index with `pcg index <path> --force`
 3. Inspect file paths in the graph for hidden cache segments
 
@@ -79,6 +97,20 @@ Common causes:
 - Neo4j not ready before API startup (check depends_on health checks)
 - Workspace mount permissions
 - Port conflicts — override with `NEO4J_HTTP_PORT`, `NEO4J_BOLT_PORT`, `PCG_HTTP_PORT`
+
+## Docker Compose cannot see mounted repositories
+
+**Cause:** `PCG_FILESYSTEM_HOST_ROOT` points at a symlinked path or an unsafe
+temporary path.
+
+**Fix:**
+
+1. Use an absolute real directory for `PCG_FILESYSTEM_HOST_ROOT`
+2. Do not use `~` in Compose environment values
+3. On macOS, do not use `/tmp`; use a real directory such as
+   `$HOME/tmp/pcg-compose-repos`
+4. If you copied repositories for Compose testing, copy them into that real
+   directory instead of symlinking them there
 
 ## Kubernetes deployment is unhealthy
 

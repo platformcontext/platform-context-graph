@@ -1,7 +1,7 @@
 # Local Testing Runbook
 
-This is the default local verification runbook for engineers, Claude, and
-Codex.
+This is the default verification runbook for engineers, Claude, and Codex on
+the current platform.
 
 Use it to answer:
 
@@ -9,6 +9,16 @@ Use it to answer:
 - what is the minimum acceptable verification before I call work ready
 - how do I run the local full-stack workflow
 - how do I validate metrics, traces, and the facts-first pipeline
+
+## Start Here
+
+Treat this file as the verification source of truth.
+
+Before changing runtime or deployment behavior, also read:
+
+- [Service Runtimes](../deployment/service-runtimes.md)
+- [Docker Compose](../deployment/docker-compose.md)
+- [Telemetry Overview](./telemetry/index.md)
 
 ## Default Rule
 
@@ -28,455 +38,414 @@ export NEO4J_PASSWORD=change-me
 export DEFAULT_DATABASE=neo4j
 export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
 export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
 ```
+
+## Local API Auth
+
+Local compose keeps auth at the Go API boundary.
+
+- If `PCG_API_KEY` is explicitly set for the running `platform-context-graph`
+  container, the compose verification scripts use it as the bearer token.
+- If no explicit env token is present, the Go runtime can reuse a persisted
+  token from `PCG_HOME/.env` or generate one when
+  `PCG_AUTO_GENERATE_API_KEY=true`, and the verification scripts check that
+  same file.
+- If neither source contains a token, the local stack runs without bearer auth
+  and the verification scripts omit the header.
+- There is no separate auth service, login flow, or OAuth dependency in this
+  local contract.
+
+## Compose Host-Path Rules
+
+When you run the stack against host repositories, the bind root must be an
+absolute path to a real directory.
+
+- Do not use a symlinked path.
+- Do not rely on `~` expansion inside Compose files.
+- On macOS, do not use `/tmp` as the host root because Docker Desktop resolves
+  it through `/private/tmp`.
+- If you copied repositories for Compose testing, copy them into a real
+  directory under your home folder and point `PCG_FILESYSTEM_HOST_ROOT` there.
 
 ## Quick Verification Matrix
 
 | If you touched | Minimum verification |
 | --- | --- |
 | Docs, `CLAUDE.md`, `AGENTS.md`, or README files | `uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml` |
-| CLI/runtime wiring | `PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q` |
-| Compose, Helm, or deployable runtime shape | `PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q` and `helm lint deploy/helm/platform-context-graph` |
-| Facts-first indexing, queue, or resolution flow | `PYTHONPATH=src:. uv run pytest tests/integration/indexing/test_git_facts_end_to_end.py tests/integration/indexing/test_git_facts_projection_parity.py -q` |
-| Phase 3 recovery controls | `PYTHONPATH=src:. uv run pytest tests/unit/facts/test_fact_work_queue_recovery.py tests/unit/api/test_admin_facts_recovery_router.py tests/integration/cli/test_remote_cli.py -q` |
-| Facts-first telemetry or queue scaling | `PYTHONPATH=src:. uv run pytest tests/unit/observability/test_fact_resolution_telemetry.py tests/unit/observability/test_fact_runtime_scaling_telemetry.py tests/unit/observability/test_resolution_queue_sampler.py tests/unit/observability/test_facts_first_logging.py -q` |
-| Admin replay flow | `PYTHONPATH=src uv run pytest tests/integration/api/test_admin_facts_replay.py tests/integration/cli/test_admin_facts_replay_cli.py -q` |
-| Python file layout/quality gates | `python3 scripts/check_python_file_lengths.py --max-lines 500` and `git diff --check` |
+| CLI/runtime wiring | `cd go && go test ./cmd/pcg ./cmd/api ./cmd/mcp-server -count=1` |
+| Status/admin or completeness contract | `cd go && go test ./internal/status ./internal/query ./cmd/api -count=1` and `cd go && go vet ./internal/status ./internal/query ./cmd/api` |
+| Parser platform or collector snapshot flow | `cd go && go test ./internal/parser ./internal/collector/discovery ./internal/collector -count=1` |
+| Terraform provider-schema evidence or relationship extraction | `cd go && go test ./internal/terraformschema ./internal/relationships ./internal/storage/postgres -count=1` |
+| Compose, Helm, or deployable runtime shape | `cd go && go test ./cmd/api ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1` and `helm lint deploy/helm/platform-context-graph` |
+| Correlation DSL fixture corpus or compose verification lane | `./scripts/verify_correlation_dsl_compose.sh` |
+| Facts-first indexing, queue, or resolution flow | `cd go && go test ./internal/projector ./internal/reducer ./internal/storage/postgres -count=1` |
+| Queue ack visibility or lease diagnosis | `cd go && go test ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry -count=1` and `cd go && go vet ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry` |
+| Recovery, replay, or repair controls | `cd go && go test ./internal/recovery ./internal/runtime ./internal/status -count=1` |
+| Facts-first telemetry or queue scaling | `cd go && go test ./internal/telemetry ./internal/runtime ./internal/projector ./internal/reducer -count=1` |
+| Admin replay flow | `cd go && go test ./internal/query ./internal/recovery ./internal/runtime -count=1` |
+| Repo hygiene gates | `git diff --check` |
+
+## Go Runtime Package Gate
+
+Use this gate when validating the current runtime and collector wiring.
+
+Current ownership:
+
+- `collector-git` owns cycle orchestration, discovery, snapshotting, parsing,
+  content shaping, and durable fact commit
+- `projector` owns source-local materialization stages and decision recording
+- `reducer` owns queued shared projection, platform materialization,
+  dependency projection, repair flows, and recovery ownership
+- `status` owns scan/reindex request lifecycle
+- only long-running hosted runtimes that mount `go/internal/runtime` expose
+  `/healthz`, `/readyz`, `/metrics`, and `/admin/status`
+- one-shot helpers such as `bootstrap-index` emit telemetry through OTEL
+  exporters but do not mount the shared HTTP admin surface
+
+Focused Go package gate:
+
+```bash
+cd go
+go test ./internal/parser ./internal/collector/discovery ./internal/content/shape \
+  ./internal/collector ./cmd/collector-git ./cmd/ingester ./cmd/bootstrap-index \
+  ./internal/runtime ./internal/app ./internal/telemetry \
+  ./internal/storage/neo4j ./internal/storage/postgres \
+  ./internal/projector ./internal/reducer ./cmd/reducer -count=1
+```
+
+## Terraform Provider-Schema Gate
+
+Use this gate when touching the Terraform provider-schema runtime path or the
+schema-driven relationship extractors.
+
+```bash
+cd go
+go test ./internal/terraformschema ./internal/relationships ./internal/storage/postgres -count=1
+```
+
+The canonical packaged schemas live under:
+
+- `go/internal/terraformschema/schemas/*.json.gz`
+
+If this gate fails, fix the Go loader or the Go relationship extraction path.
+
+The relationship-platform compose verification now validates the full
+cross-repo path, including:
+
+- repository selection from the fixture corpus via `PCG_REPOSITORY_RULES_JSON`
+- reducer normalization of repository IDs before edge writes
+- persistence of typed `evidence_type` metadata on repo edges so repository
+  contexts surface `controller_driven`, `workflow_driven`, and `iac_driven`
+  relationship families
+
+The correlation DSL compose verification exercises the generic multi-repo
+fixture corpus, exact filesystem repository selection, and the current
+admitted-versus-provenance-only proof scaffolding:
+
+```bash
+./scripts/verify_correlation_dsl_compose.sh
+```
+
+The verifier now checks the fixture tree before Compose starts and then
+confirms repository-context coverage for these open-source-safe delivery
+families:
+
+- GitHub Actions plus Dockerfile (`service-gha`)
+- Jenkins plus Dockerfile (`service-jenkins`)
+- Jenkins plus Ansible handoff (`service-jenkins-ansible`)
+- Docker Compose runtime artifacts (`service-compose`)
+- Terraform stack repositories (`terraform-stack-gha`, `terraform-stack-jenkins`)
+- Mixed Dockerfile admission and rejection cases (`multi-dockerfile-repo`)
+
+On failure, the script prints the last verification step, `docker compose ps`,
+the expected repository set derived from the fixture root, the latest API
+payload captures, a resolution-engine metrics sample, and the Jaeger URL.
+
+## Runtime Tree Hygiene
+
+The deployable runtime tree is Go-only. Use this check when you need to confirm
+that no runtime implementation has drifted outside the documented Go packages.
+
+```bash
+rg --files . -g '*.py' | rg -v '^(\\./)?tests/fixtures/'
+```
+
+That command should return no runtime Python files. Fixture data under
+`tests/fixtures/` and explicitly offline-only tooling can still carry Python
+source when they are not part of the deployable runtime.
+
+## Bootstrap Projection Concurrency
+
+The `bootstrap-index` one-shot runtime runs projection concurrently using a
+goroutine worker pool. Each worker claims a scope-generation work item from
+the Postgres projector queue (`SELECT ... FOR UPDATE SKIP LOCKED`) and
+independently loads facts, projects, and acks.
+
+### Tuning
+
+| Env var | Default | Description |
+| --- | --- | --- |
+| `PCG_PROJECTION_WORKERS` | `min(NumCPU, 8)` | Number of concurrent projection goroutines |
+
+Set `PCG_PROJECTION_WORKERS=1` to force sequential processing (useful for
+debugging). Values above 8 are supported for machines with high core counts
+and fast I/O to Postgres and Neo4j.
+
+### Telemetry signals for tuning
+
+Go data-plane signals use the `pcg_dp_` prefix, and service-health/runtime
+gauges use the `pcg_runtime_` prefix on the same `/metrics` surface.
+
+| Signal | Type | What it tells you |
+| --- | --- | --- |
+| `pcg_dp_projector_run_duration_seconds` | histogram | Per-item projection wall time. High P95 on a single scope means a large repo is the bottleneck. |
+| `pcg_dp_queue_claim_duration_seconds{queue=projector}` | histogram | Time to claim work from Postgres. High values mean lock contention — reduce workers or tune Postgres. |
+| `pcg_dp_projections_completed_total{status}` | counter | Success/failure rate. Track `status=failed` for projection errors. |
+| `pcg_dp_facts_emitted_total` | counter | Total facts produced by the collector phase. |
+| `pcg_dp_facts_committed_total` | counter | Total facts durably committed before projection starts. |
+| `pcg_dp_collector_observe_duration_seconds` | histogram | Per-scope collection wall time. Dominated by Git discovery and parsing. |
+
+Structured JSON logs include `worker_id`, `scope_id`, `fact_count`,
+`duration_seconds`, and `pipeline_phase` on every projection line:
+
+```json
+{"message":"bootstrap projection succeeded","scope_id":"my-repo","worker_id":3,"fact_count":1234,"duration_seconds":2.5,"pipeline_phase":"projection"}
+```
+
+Filter by `pipeline_phase=projection` and group by `worker_id` to identify
+worker imbalance (one worker stuck on a large repo while others idle).
+
+### Concurrency model
+
+```text
+main goroutine
+  |
+  |-- drainCollector (sequential: sync -> discover -> parse -> commit)
+  |
+  |-- drainProjector (N goroutine workers)
+        |-- worker 0: Claim -> LoadFacts -> Project -> Ack (loop)
+        |-- worker 1: Claim -> LoadFacts -> Project -> Ack (loop)
+        |-- ...
+        |-- worker N-1: Claim -> LoadFacts -> Project -> Ack (loop)
+        |
+        On first error: cancel shared context -> all workers drain -> errors.Join
+```
+
+## Concurrency Tuning Reference
+
+All Go data plane services support environment-driven concurrency tuning.
+Set any variable to `1` to force sequential processing (useful for debugging).
+
+| Env Var | Default | Service | What It Controls |
+| --- | --- | --- | --- |
+| `PCG_PROJECTION_WORKERS` | `min(NumCPU, 8)` | Bootstrap-Index | Concurrent bootstrap projection goroutines |
+| `PCG_SNAPSHOT_WORKERS` | `min(NumCPU, 4)` | Ingester / Bootstrap | Concurrent repository snapshot goroutines |
+| `PCG_REDUCER_WORKERS` | 1 (sequential) | Reducer | Concurrent reducer intent execution goroutines |
+| `PCG_SHARED_PROJECTION_WORKERS` | 1 (sequential) | Reducer | Concurrent shared projection partition goroutines |
+| `PCG_SHARED_PROJECTION_PARTITION_COUNT` | 8 | Reducer | Number of partitions per shared projection domain |
+| `PCG_SHARED_PROJECTION_BATCH_LIMIT` | 100 | Reducer | Max intents processed per partition batch |
+| `PCG_SHARED_PROJECTION_POLL_INTERVAL` | 5s | Reducer | Shared projection cycle poll interval |
+| `PCG_SHARED_PROJECTION_LEASE_TTL` | 60s | Reducer | Partition lease time-to-live |
+
+### Queue diagnosis expectations
+
+For projector and reducer queue work, validate more than happy-path execution:
+
+- expired claims can be reclaimed by the normal claim SQL
+- overdue claims surface through status
+- ack failures emit dedicated logs and metrics instead of hiding inside generic
+  execution failures
+- structured logs keep failure class, queue name, and work item identity
+
+Use the telemetry guide together with the focused queue gate above when you
+touch those paths.
+
+### Collector Concurrency Model
+
+```text
+ingester / bootstrap-index
+  |
+  |-- GitSource.buildCollected (N snapshot workers)
+        |-- worker 0: SnapshotRepository -> buildFacts -> collect (loop)
+        |-- worker 1: SnapshotRepository -> buildFacts -> collect (loop)
+        |-- ...
+        |-- worker N-1: SnapshotRepository -> buildFacts -> collect (loop)
+        |
+        On first error: cancel shared context -> all workers drain
+```
+
+### Reducer Concurrency Model
+
+```text
+reducer service
+  |
+  |-- runMainLoop (N reducer workers)
+  |     |-- worker 0: Claim -> Execute -> Ack/Fail (loop)
+  |     |-- worker 1: Claim -> Execute -> Ack/Fail (loop)
+  |     |-- ...
+  |
+  |-- SharedProjectionRunner (M partition workers)
+        |-- worker 0: lease -> batch select -> edge write -> release (loop)
+        |-- worker 1: lease -> batch select -> edge write -> release (loop)
+        |-- ...
+        |
+        3 domains × K partitions = 3K work items per cycle
+```
+
+## Live Runtime Verification Scripts
+
+These scripts allocate their own local ports, start only the required
+compose-backed infrastructure, and tear the stack down automatically unless
+`PCG_KEEP_COMPOSE_STACK=true` is set.
+
+They are shell-native Go-runtime verification scripts.
+
+Run them one at a time. They all reuse the same local Compose project name, so
+parallel runs will fight over container and network ownership even if the host
+ports differ.
+
+```bash
+./scripts/verify_collector_git_runtime_compose.sh
+./scripts/verify_projector_runtime_compose.sh
+./scripts/verify_reducer_runtime_compose.sh
+./scripts/verify_incremental_refresh_compose.sh
+./scripts/verify_relationship_platform_compose.sh
+./scripts/verify_admin_refinalize_compose.sh
+```
+
+`verify_relationship_platform_compose.sh` exports exact repository rules for the
+checked-in relationship fixture corpus before booting Compose. That corpus keeps
+fixture metadata at its root, so explicit rules prevent the metadata file from
+collapsing the whole corpus into a single synthetic repository during
+verification runs.
 
 ## Local Full Stack
 
-Start the full stack:
+### With fixture ecosystems (default)
+
+Start the full stack with the bundled test fixtures:
 
 ```bash
 docker compose up --build
 ```
 
-This brings up:
+### With real repositories
+
+To test against real Git repositories from a local directory, set
+`PCG_FILESYSTEM_HOST_ROOT` to an absolute path containing one or more
+cloned repositories. Each subdirectory with a `.git` folder is
+discovered automatically.
+
+```bash
+PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos docker compose up --build
+```
+
+Port overrides are available when default ports conflict with other
+services (SSH tunnels, other Compose stacks, etc.):
+
+```bash
+PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos \
+  PCG_POSTGRES_PORT=25432 \
+  NEO4J_HTTP_PORT=27474 \
+  NEO4J_BOLT_PORT=27687 \
+  PCG_HTTP_PORT=28080 \
+  PCG_MCP_PORT=28081 \
+  JAEGER_UI_PORT=26686 \
+  docker compose up --build
+```
+
+**Important notes for real repo testing:**
+
+- The path must be a real directory (not a symlink). On macOS, `/tmp`
+  is a symlink to `/private/tmp` which Docker Desktop cannot resolve.
+  Use a path under `/Users/` or `/home/`.
+- Each repo subdirectory must contain a `.git` directory.
+- Large repo sets (10+ repos, thousands of files) require significant
+  memory. The bootstrap-index process holds all parsed facts in memory
+  during the commit phase. For large repo sets, use a machine with at
+  least 16 GB of RAM allocated to Docker.
+- Symlinks inside repositories are skipped during the filesystem copy
+  phase. This is intentional — symlinks cannot be reliably resolved
+  inside the container.
+
+### Services
+
+Both modes bring up:
 
 - Neo4j
 - Postgres
-- OTEL collector
-- Jaeger
-- `bootstrap-index`
-- `platform-context-graph`
-- `ingester`
-- `resolution-engine`
+- OTEL collector + Jaeger
+- `bootstrap-index` (one-shot, seeds the graph and fact store)
+- `platform-context-graph` (HTTP API)
+- `mcp-server` (MCP tool server)
+- `ingester` (ongoing repo sync)
+- `resolution-engine` (reducer / shared projection)
 
-Useful checks:
+### Useful checks
 
 ```bash
 docker compose ps
 docker compose logs bootstrap-index | tail -50
 docker compose logs ingester | tail -50
 docker compose logs resolution-engine | tail -50
-curl -s http://localhost:8080/health
 ```
 
-## Local Observability Checks
+### Sync the local MCP client config
 
-### Traces
-
-- Jaeger UI: `http://localhost:16686`
-- Collector Prometheus endpoint: `http://localhost:9464/metrics`
-
-### Direct Runtime Metrics
-
-Compose does not run a Kubernetes `ServiceMonitor`, but it does expose the same
-runtime `/metrics` endpoints that a `ServiceMonitor` would scrape:
-
-- API: `http://localhost:19464/metrics`
-- Ingester: `http://localhost:19465/metrics`
-- Resolution Engine: `http://localhost:19466/metrics`
-
-Quick checks:
+When the Compose stack auto-picks ports or generates a fresh bearer token, resync
+the checked-in `.mcp.json` before using Codex or another MCP client against the
+local stack:
 
 ```bash
-curl -fsS http://localhost:19464/metrics | head
-curl -fsS http://localhost:19465/metrics | head
-curl -fsS http://localhost:19466/metrics | head
+./scripts/sync_local_compose_mcp.sh
 ```
 
-Live watch examples:
+That helper:
+
+- discovers the live published `mcp-server` and API ports from `docker-compose`
+- reads the current bearer token from the running `mcp-server` container
+- updates only the `pcg-local-compose` entry in `.mcp.json`
+- preserves remote entries such as `pcg-e2e`
+- probes MCP health, MCP `tools/list`, and API `index-status`
+
+If you only want to patch `.mcp.json` without running the probes:
 
 ```bash
-watch -n 2 'curl -fsS http://localhost:19464/metrics | rg "^(pcg_http|pcg_mcp)" | head -40'
+PCG_SKIP_PROBES=true ./scripts/sync_local_compose_mcp.sh
 ```
+
+### Health and pipeline status
+
+Replace `localhost:8080` with the appropriate host and port if using
+overrides.
 
 ```bash
-watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^(pcg_fact|pcg_resolution)" | head -60'
+# Health probes
+curl -s http://localhost:8080/healthz
+curl -s http://localhost:8080/readyz
+
+# Pipeline summary (scopes, facts, work items, failures)
+curl -s http://localhost:8080/admin/status | jq .
+
+# Content store stats
+curl -s http://localhost:8080/api/v0/content/stats | jq .
+
+# Query the graph for repositories
+curl -s http://localhost:8080/api/v0/repositories | jq .
+
+# Query relationships (if any were built)
+curl -s 'http://localhost:8080/api/v0/query' \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "MATCH (n)-[r]->(m) RETURN labels(n)[0] AS from_type, type(r) AS rel, labels(m)[0] AS to_type, count(*) AS cnt ORDER BY cnt DESC LIMIT 20"}' \
+  | jq .
 ```
 
-## Shared-Write Tuning Report
+## Docs And Hygiene
 
-Use the local deterministic tuning report when you want a quick recommendation
-before changing shared-write partition or batch settings in staging.
-
-Readable table output:
-
-```bash
-PYTHONPATH=src:. uv run python scripts/shared_projection_tuning_report.py --format table
-```
-
-Machine-readable JSON output:
-
-```bash
-PYTHONPATH=src:. uv run python scripts/shared_projection_tuning_report.py --format json
-```
-
-To include platform shared-followup alongside dependency domains:
-
-```bash
-PYTHONPATH=src:. uv run python scripts/shared_projection_tuning_report.py --format table --include-platform
-```
-
-Use the report to pick a candidate setting, then validate that change in
-staging with:
-
-- `pcg_shared_projection_pending_intents`
-- `pcg_shared_projection_oldest_pending_age_seconds`
-- `pcg_fact_queue_depth`
-- `pcg_fact_queue_oldest_age_seconds`
-
-For deployed environments, `pcg workspace status --service-url ...` will also
-surface the live `shared_projection_tuning` recommendation whenever shared
-follow-up backlog is present.
-
-## Data Intelligence Foundation Gate
-
-Use this gate when a change touches the vendor-neutral data-intelligence core,
-canonical data entity types, or SQL/data impact-query surfacing.
-
-### Current branch coverage
-
-The current foundation slice proves:
-
-- canonical data-native entity types in the query/domain model
-- entity resolution for `data_asset`, `data_column`, `analytics_model`,
-  `query_execution`, `dashboard_asset`, and `data_quality_check`
-- generic entity context for vendor-neutral data entities
-- impact-query compatibility for data-asset and dashboard-style IDs
-- plugin registration foundations for future warehouse and BI replay adapters
-- dbt-style compiled manifest normalization through a checked-in replay fixture
-- supported-subset compiled SQL column lineage extraction
-- explicit partial coverage reporting for remaining unsupported derived
-  expressions
-- safe scalar wrapper coverage for `upper(column)`, `coalesce(column, 'literal')`,
-  `cast(column as type)`, and `date_trunc('day', column)`
-- `manifest.json` parsing through the targeted JSON lane
-- graph/content persistence registration for `AnalyticsModel`, `DataAsset`, and
-  `DataColumn`
-- post-commit compiled-analytics lineage materialization
-- content-entity context and generic impact responses can label declared versus
-  observed lineage evidence for data-native entities
-- replay-backed dashboard normalization through `bi_replay.json`
-- graph/content persistence registration for `DashboardAsset`
-- post-commit BI downstream materialization for `POWERS`
-- replay-backed semantic normalization through `semantic_replay.json`
-- semantic datasets and fields reusing `DataAsset` and `DataColumn`
-- post-commit semantic lineage materialization for `ASSET_DERIVES_FROM` and
-  `COLUMN_DERIVES_FROM`
-- replay-backed quality normalization through `quality_replay.json`
-- graph/content persistence registration for `DataQualityCheck`
-- post-commit quality assertion materialization for `ASSERTS_QUALITY_ON`
-- replay-backed governance normalization through `governance_replay.json`
-- graph/content persistence registration for `DataOwner` and `DataContract`
-- post-commit governance materialization for `OWNS` and
-  `DECLARES_CONTRACT_FOR`
-- governance overlays stamped onto `DataAsset` and `DataColumn` targets for
-  owner, contract, sensitivity, and protected-field metadata
-- persona-friendly `get_entity_context` summaries for data-native entities,
-  including lineage evidence, change classification, ownership, contract, and
-  downstream-impact summaries
-
-### Fast foundation gate
-
-```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/query/test_entity_resolution.py \
-  tests/unit/query/test_entity_context.py \
-  tests/unit/query/test_change_surface.py \
-  tests/unit/data_intelligence/test_plugins.py -q
-```
-
-### SQL + data-query regression gate
-
-```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/parsers/test_sql_parser.py \
-  tests/unit/parsers/test_python_sql_mappings.py \
-  tests/unit/parsers/test_go_sql_extraction.py \
-  tests/unit/relationships/test_sql_links.py \
-  tests/unit/query/test_change_surface.py \
-  tests/unit/mcp/test_ecosystem_sql_blast_radius.py -q
-```
-
-### Compiled analytics replay gate
-
-```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/data_intelligence/test_plugins.py \
-  tests/unit/data_intelligence/test_dbt_compiled_sql.py \
-  tests/unit/parsers/test_json_parser.py \
-  tests/unit/content/test_ingest.py \
-  tests/unit/relationships/test_data_intelligence_links.py \
-  tests/unit/tools/test_graph_builder_schema.py -q
-```
-
-### Warehouse replay gate
-
-```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/data_intelligence/test_plugins.py \
-  tests/unit/data_intelligence/test_warehouse_replay.py \
-  tests/unit/parsers/test_json_parser.py \
-  tests/unit/content/test_ingest.py \
-  tests/unit/relationships/test_data_intelligence_links.py \
-  tests/unit/query/test_repository_context_data_intelligence.py \
-  tests/unit/query/test_story_data_intelligence.py -q
-```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_warehouse_replay_graph.py \
-  tests/integration/test_mcp_data_intelligence_queries.py -q
-```
-
-### BI replay gate
-
-```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/data_intelligence/test_bi_replay.py \
-  tests/unit/parsers/test_json_parser.py \
-  tests/unit/content/test_ingest.py \
-  tests/unit/relationships/test_data_intelligence_links.py \
-  tests/unit/query/test_repository_context_data_intelligence.py \
-  tests/unit/query/test_story_data_intelligence.py -q
-```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_warehouse_replay_graph.py \
-  tests/integration/test_mcp_data_intelligence_queries.py -q
-```
-
-### Semantic replay gate
-
-```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/data_intelligence/test_semantic_replay.py \
-  tests/unit/parsers/test_json_parser.py \
-  tests/unit/content/test_ingest.py \
-  tests/unit/relationships/test_data_intelligence_links.py \
-  tests/unit/query/test_repository_context_data_intelligence.py \
-  tests/unit/query/test_story_data_intelligence.py \
-  tests/unit/query/test_change_surface.py -q
-```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_warehouse_replay_graph.py \
-  tests/integration/test_mcp_data_intelligence_queries.py -q
-```
-
-### Governance replay gate
-
-```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/data_intelligence/test_governance_replay.py \
-  tests/unit/parsers/test_json_governance_replay.py \
-  tests/unit/content/test_data_intelligence_ingest.py \
-  tests/unit/relationships/test_data_intelligence_governance_links.py \
-  tests/unit/query/test_repository_context_data_governance.py \
-  tests/unit/query/test_story_data_governance.py \
-  tests/unit/tools/test_graph_builder_schema.py -q
-```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_governance_replay_graph.py \
-  tests/integration/test_mcp_data_governance_queries.py -q
-```
-
-### Quality replay gate
-
-```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/data_intelligence/test_quality_replay.py \
-  tests/unit/parsers/test_json_parser.py \
-  tests/unit/content/test_ingest.py \
-  tests/unit/relationships/test_data_intelligence_links.py \
-  tests/unit/tools/test_graph_builder_schema.py \
-  tests/unit/query/test_repository_context_data_intelligence.py \
-  tests/unit/query/test_story_data_intelligence.py \
-  tests/unit/query/test_change_surface.py -q
-```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_warehouse_replay_graph.py \
-  tests/integration/test_mcp_data_intelligence_queries.py -q
-```
-
-### Declared vs observed reconciliation gate
-
-```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/query/test_repository_context_data_intelligence.py \
-  tests/unit/query/test_story_data_intelligence.py \
-  tests/unit/query/test_change_surface.py \
-  tests/unit/query/test_entity_context.py \
-  tests/unit/query/test_entity_resolution.py -q
-```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_sql_graph.py \
-  tests/integration/test_warehouse_replay_graph.py \
-  tests/integration/test_mcp_data_intelligence_queries.py -q
-```
-
-## Recommended Test Order
-
-### 1. Run the smallest targeted test first
-
-Start with the most local unit or integration suite that covers the files you
-touched.
-
-### 2. Verify the deployment contract if runtime shape changed
-
-```bash
-PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q
-helm lint deploy/helm/platform-context-graph
-```
-
-### 3. Verify facts-first parity if indexing changed
-
-```bash
-PYTHONPATH=src:. uv run pytest \
-  tests/integration/indexing/test_git_facts_end_to_end.py \
-  tests/integration/indexing/test_git_facts_projection_parity.py -q
-```
-
-### 4. Verify telemetry if observability changed
-
-```bash
-PYTHONPATH=src:. uv run pytest \
-  tests/unit/observability/test_fact_resolution_telemetry.py \
-  tests/unit/observability/test_fact_runtime_scaling_telemetry.py \
-  tests/unit/observability/test_resolution_queue_sampler.py \
-  tests/unit/observability/test_facts_first_logging.py -q
-```
-
-### 5. Verify recovery and admin controls if Phase 3 controls changed
-
-```bash
-PYTHONPATH=src:. uv run pytest \
-  tests/unit/facts/test_fact_work_queue_recovery.py \
-  tests/unit/api/test_admin_facts_recovery_router.py \
-  tests/integration/cli/test_remote_cli.py -q
-```
-
-### 6. Build docs if docs or instruction files changed
+Before calling a change ready:
 
 ```bash
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
   mkdocs build --strict --clean --config-file docs/mkdocs.yml
-```
-
-## Full Local Smoke For Release Candidates
-
-```bash
-PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q
-PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q
-PYTHONPATH=src:. uv run pytest \
-  tests/integration/indexing/test_git_facts_end_to_end.py \
-  tests/integration/indexing/test_git_facts_projection_parity.py -q
-PYTHONPATH=src:. uv run pytest \
-  tests/unit/observability/test_fact_resolution_telemetry.py \
-  tests/unit/observability/test_fact_runtime_scaling_telemetry.py \
-  tests/unit/observability/test_resolution_queue_sampler.py \
-  tests/unit/observability/test_facts_first_logging.py -q
-PYTHONPATH=src:. uv run pytest \
-  tests/unit/facts/test_fact_work_queue_recovery.py \
-  tests/unit/api/test_admin_facts_recovery_router.py \
-  tests/integration/cli/test_remote_cli.py -q
-python3 scripts/check_python_file_lengths.py --max-lines 500
 git diff --check
-uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
-  mkdocs build --strict --clean --config-file docs/mkdocs.yml
 ```
-
-## IaC Validation When The Deployment Repo Changes Too
-
-If the app change requires updates in `iac-eks-pcg`, also run there:
-
-```bash
-helm lint chart/ \
-  -f argocd/platformcontextgraph/base/app-values.yaml \
-  -f argocd/platformcontextgraph/overlays/ops-qa/app-values.yaml
-
-helm template platformcontextgraph chart/ \
-  -f argocd/platformcontextgraph/base/app-values.yaml \
-  -f argocd/platformcontextgraph/overlays/ops-qa/app-values.yaml >/tmp/pcg-chart.yaml
-
-kubectl kustomize argocd/platformcontextgraph/overlays/ops-qa >/tmp/pcg-kustomize.yaml
-```
-
-## Completion Gate
-
-Before Claude or Codex says a change is ready:
-
-1. identify the changed surface area
-2. run the matching checks from this page
-3. report the exact commands run
-4. report anything not run
-5. do not substitute "looks correct" for verification output

@@ -10,9 +10,8 @@
 #   ./scripts/test-nornicdb-compat.sh --keep        # Don't tear down on exit
 #
 # Prerequisites:
-#   - Docker and docker-compose (hyphenated) installed
-#   - uv and Python available on PATH
-#   - The neo4j Python driver installed (uv run handles this)
+#   - Docker plus docker compose or docker-compose
+#   - Current Go test toolchain for `./tests/run_tests.sh integration`
 
 set -euo pipefail
 
@@ -35,7 +34,14 @@ for arg in "$@"; do
     esac
 done
 
-COMPOSE="docker-compose -f $REPO_ROOT/docker-compose.yaml -f $REPO_ROOT/docker-compose.nornicdb.yml"
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker compose -f "$REPO_ROOT/docker-compose.yaml" -f "$REPO_ROOT/docker-compose.nornicdb.yml")
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose -f "$REPO_ROOT/docker-compose.yaml" -f "$REPO_ROOT/docker-compose.nornicdb.yml")
+else
+    echo "Missing required compose command: docker compose or docker-compose" >&2
+    exit 1
+fi
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
@@ -43,10 +49,10 @@ cleanup() {
     if [ "$KEEP" = false ]; then
         log "Tearing down NornicDB stack..."
         cd "$REPO_ROOT"
-        $COMPOSE down -v 2>/dev/null || true
+        "${COMPOSE_CMD[@]}" down -v 2>/dev/null || true
     else
         log "Stack left running (--keep). Tear down with:"
-        log "  $COMPOSE down -v"
+        log "  ${COMPOSE_CMD[*]} down -v"
     fi
 }
 
@@ -57,12 +63,12 @@ log "=== Step 1: Starting PCG stack with NornicDB ==="
 cd "$REPO_ROOT"
 
 # Clean up any previous run
-$COMPOSE down -v 2>/dev/null || true
+"${COMPOSE_CMD[@]}" down -v 2>/dev/null || true
 
 # Register cleanup trap
 trap cleanup EXIT
 
-$COMPOSE up $BUILD_FLAG -d 2>&1 | tail -10
+"${COMPOSE_CMD[@]}" up ${BUILD_FLAG:+$BUILD_FLAG} -d 2>&1 | tail -10
 
 # ---------------------------------------------------------------------------
 # 2. Wait for NornicDB to become healthy
@@ -72,13 +78,13 @@ log "=== Step 2: Waiting for NornicDB to be healthy ==="
 MAX_WAIT=120
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
-    CID=$($COMPOSE ps -q neo4j 2>/dev/null || true)
+    CID=$("${COMPOSE_CMD[@]}" ps -q neo4j 2>/dev/null || true)
     if [ -n "$CID" ]; then
         HEALTH=$(docker inspect --format '{{.State.Health.Status}}' "$CID" 2>/dev/null || echo "unknown")
     else
         HEALTH="starting"
     fi
-    if echo "$HEALTH" | grep -qi "healthy"; then
+    if echo "$HEALTH" | rg -qi "healthy"; then
         log "NornicDB is healthy after ${WAITED}s"
         break
     fi
@@ -104,54 +110,38 @@ log "=== Step 3: Bolt connectivity test ==="
 export NEO4J_URI=bolt://localhost:${NEO4J_BOLT_PORT:-7687}
 export NEO4J_USERNAME=neo4j
 export NEO4J_PASSWORD=${PCG_NEO4J_PASSWORD:-change-me}
-export DATABASE_TYPE=neo4j
 export NEO4J_DATABASE=nornic
-export PYTHONPATH="$REPO_ROOT/src"
-
-BOLT_RESULT=$(uv run python -c "
-from neo4j import GraphDatabase
-import os
-
-uri = os.environ['NEO4J_URI']
-user = os.environ['NEO4J_USERNAME']
-password = os.environ['NEO4J_PASSWORD']
-
-print(f'Connecting to {uri} as {user}...')
-driver = GraphDatabase.driver(uri, auth=(user, password))
-try:
-    with driver.session() as session:
-        result = session.run('RETURN 1 AS n')
-        record = result.single()
-        assert record is not None, 'No result from RETURN 1'
-        assert record['n'] == 1, f'Unexpected value: {record[\"n\"]}'
-        print('Bolt connectivity: OK')
-
-        # Test basic write + read
-        session.run('CREATE (t:_NornicDBTest {ts: timestamp()}) RETURN t')
-        count = session.run('MATCH (t:_NornicDBTest) RETURN count(t) AS cnt').single()['cnt']
-        print(f'Write/read test: OK (count={count})')
-
-        # Clean up
-        session.run('MATCH (t:_NornicDBTest) DELETE t')
-        print('Cleanup: OK')
-finally:
-    driver.close()
-
-print('All Bolt connectivity checks passed.')
-" 2>&1) || {
+BOLT_RESULT="$(
+    {
+        echo "Connecting to $NEO4J_URI as $NEO4J_USERNAME..."
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" --format plain "RETURN 1 AS n" | tail -n 1
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" "CREATE (t:_NornicDBTest {ts: timestamp()}) RETURN t;" >/dev/null
+        COUNT="$("${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" --format plain "MATCH (t:_NornicDBTest) RETURN count(t) AS cnt" | tail -n 1)"
+        echo "Write/read test: OK (count=${COUNT})"
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" "MATCH (t:_NornicDBTest) DELETE t;" >/dev/null
+        echo "Cleanup: OK"
+        echo "All Bolt connectivity checks passed."
+    } 2>&1
+)" || {
     log "FAIL: Bolt connectivity test failed"
     echo "$BOLT_RESULT"
     exit 1
 }
 
-echo "$BOLT_RESULT"
+if ! printf '%s\n' "$BOLT_RESULT" | rg -q '^1$'; then
+    log "FAIL: Bolt connectivity test did not return the expected sentinel"
+    echo "$BOLT_RESULT"
+    exit 1
+fi
+
+echo "$BOLT_RESULT" | sed '/^1$/d'
 
 # ---------------------------------------------------------------------------
 # 4. Wait for bootstrap indexer to complete
 # ---------------------------------------------------------------------------
 log "=== Step 4: Waiting for bootstrap indexer ==="
 
-BOOTSTRAP_CONTAINER=$($COMPOSE ps -q bootstrap-index 2>/dev/null || echo "")
+BOOTSTRAP_CONTAINER=$("${COMPOSE_CMD[@]}" ps -q bootstrap-index 2>/dev/null || echo "")
 if [ -z "$BOOTSTRAP_CONTAINER" ]; then
     log "WARNING: bootstrap-index container not found, skipping wait"
 else
@@ -164,7 +154,7 @@ else
             log "Bootstrap indexer exited with code $EXIT_CODE after ${WAITED}s"
             if [ "$EXIT_CODE" != "0" ]; then
                 log "ERROR: Bootstrap indexer failed"
-                $COMPOSE logs bootstrap-index 2>&1 | tail -40
+                "${COMPOSE_CMD[@]}" logs bootstrap-index 2>&1 | tail -40
                 exit 1
             fi
             break
@@ -178,7 +168,7 @@ else
 
     if [ $WAITED -ge $MAX_WAIT ]; then
         log "ERROR: Bootstrap indexer timed out after ${MAX_WAIT}s"
-        $COMPOSE logs bootstrap-index 2>&1 | tail -40
+        "${COMPOSE_CMD[@]}" logs bootstrap-index 2>&1 | tail -40
         exit 1
     fi
 fi
@@ -192,7 +182,7 @@ export PCG_CONTENT_STORE_DSN="postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-m
 export PCG_POSTGRES_DSN="$PCG_CONTENT_STORE_DSN"
 
 INTEGRATION_RESULT=0
-uv run python -m pytest "$REPO_ROOT/tests/integration/" -v --tb=short 2>&1 || INTEGRATION_RESULT=$?
+"$REPO_ROOT/tests/run_tests.sh" integration 2>&1 || INTEGRATION_RESULT=$?
 
 # ---------------------------------------------------------------------------
 # 6. Summary

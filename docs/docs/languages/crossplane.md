@@ -1,27 +1,27 @@
 # Crossplane Parser
 
-This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/parsers/capabilities/specs/crossplane.yaml`
+This page tracks the checked-in Go parser contract in the current repository state.
+Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
 - Language: `crossplane`
 - Family: `iac`
-- Parser: `InfraYAMLParser`
-- Entrypoint: `src/platform_context_graph/parsers/languages/yaml_infra.py`
+- Parser: `DefaultEngine (yaml)`
+- Entrypoint: `go/internal/parser/yaml_language.go`
 - Fixture repo: `tests/fixtures/ecosystems/crossplane_comprehensive/`
-- Unit test suite: `tests/unit/parsers/test_yaml_infra_parser.py`
-- Integration test suite: `tests/integration/test_iac_graph.py::TestCrossplaneGraph`
+- Unit test suite: `go/internal/parser/engine_yaml_semantics_test.go`
+- Integration validation: compose-backed fixture verification (see [Local Testing Runbook](../reference/local-testing.md))
 
 ## Capability Checklist
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Composite Resource Definitions (XRDs) | `composite-resource-definitions-xrds` | supported | `crossplane_xrds` | `name, line_number` | `node:CrossplaneXRD` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_xrd` | `tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_xrd_indexed` | - |
-| XRD group, kind, version | `xrd-group-kind-version` | supported | `properties` | `name, line_number, kind, group, version` | `property:XRD.properties` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_xrd` | `tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_xrd_indexed` | - |
-| Compositions | `compositions` | supported | `crossplane_compositions` | `name, line_number` | `node:CrossplaneComposition` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_composition` | `tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_composition_indexed` | - |
-| Composition composite type ref | `composition-composite-type-ref` | supported | `crossplane_compositions` | `name, line_number, composite_type_ref` | `property:Composition.composite_type_ref` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_composition` | `tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_composition_indexed` | - |
-| Composition resources list | `composition-resources-list` | supported | `k8s_resources` | `name, line_number, resources` | `property:Composition.resources` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version` | `tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_composition_indexed` | - |
-| Claims | `claims` | supported | `crossplane_claims` | `name, line_number` | `node:CrossplaneClaim` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_claim` | `tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_claim_indexed` | - |
-| Claim composite type ref | `claim-composite-type-ref` | supported | `crossplane_claims` | `name, line_number, composite_type_ref` | `property:Claim.composite_type_ref` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_claim` | `tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_claim_indexed` | - |
+| Composite Resource Definitions (XRDs) | `composite-resource-definitions-xrds` | supported | `crossplane_xrds` | `name, line_number` | `node:CrossplaneXRD` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources` | Compose-backed fixture verification | - |
+| XRD group, kind, version | `xrd-group-kind-version` | supported | `properties` | `name, line_number, kind, group, claim_kind` | `property:XRD.properties` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources` | Compose-backed fixture verification | - |
+| Compositions | `compositions` | supported | `crossplane_compositions` | `name, line_number` | `node:CrossplaneComposition` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources` | Compose-backed fixture verification | - |
+| Composition composite type ref | `composition-composite-type-ref` | supported | `crossplane_compositions` | `name, line_number, composite_api_version, composite_kind` | `property:Composition.composite_ref` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources` | Compose-backed fixture verification | - |
+| Composition resources list | `composition-resources-list` | supported | `crossplane_compositions` | `name, line_number, resource_count, resource_names` | `property:Composition.resources` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources` | Compose-backed fixture verification | - |
+| Claims | `claims` | supported | `crossplane_claims` | `name, line_number` | `node:CrossplaneClaim` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources` | Compose-backed fixture verification | - |
+| Claim API version | `claim-api-version` | supported | `crossplane_claims` | `name, line_number, api_version` | `property:Claim.api_version` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources` | Compose-backed fixture verification | - |
 
 ## Known Limitations
 - Composition patch transforms are not modeled as graph edges

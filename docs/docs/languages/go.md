@@ -1,28 +1,29 @@
 # Go Parser
 
-This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/parsers/capabilities/specs/go.yaml`
+This page tracks the checked-in Go parser contract in the current repository state.
+Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
 - Language: `go`
 - Family: `language`
-- Parser: `GoTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/parsers/languages/go.py`
+- Parser: `DefaultEngine (go)`
+- Entrypoint: `go/internal/parser/go_language.go`
 - Fixture repo: `tests/fixtures/ecosystems/go_comprehensive/`
-- Unit test suite: `tests/unit/parsers/test_go_parser.py`
-- Integration test suite: `tests/integration/test_language_graph.py::TestGoGraph`
+- Unit test suite: `go/internal/parser/engine_test.go`
+- Integration validation: compose-backed fixture verification (see `../reference/local-testing.md`)
 
 ## Capability Checklist
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Functions | `functions` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_go_parser.py::test_parse_functions` | `tests/integration/test_language_graph.py::TestGoGraph::test_runtime_surface` | - |
-| Structs | `structs` | supported | `classes` | `name, line_number` | `node:Class` | `tests/unit/parsers/test_go_parser.py::test_parse_structs` | `tests/integration/test_language_graph.py::TestGoGraph::test_runtime_surface` | - |
-| Interfaces | `interfaces` | supported | `interfaces` | `name, line_number` | `node:Interface` | `tests/unit/parsers/test_go_parser.py::test_parse_interfaces` | `tests/integration/test_language_graph.py::TestGoGraph::test_runtime_surface` | - |
-| Imports | `imports` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `tests/unit/parsers/test_go_parser.py::test_parse_imports` | `tests/integration/test_language_graph.py::TestGoGraph::test_runtime_surface` | - |
-| Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_go_parser.py::test_parse_function_calls` | `tests/integration/test_language_graph.py::TestGoGraph::test_runtime_surface` | - |
-| Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `tests/unit/parsers/test_go_parser.py::test_parse_package_vars` | `tests/integration/test_language_graph.py::TestGoGraph::test_runtime_surface` | - |
-| Methods (receivers) | `methods-receivers` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_go_parser.py::test_parse_methods` | `tests/integration/test_language_graph.py::TestGoGraph::test_runtime_surface` | - |
-| Generics | `generics` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_go_parser.py::test_parse_generics` | `tests/integration/test_language_graph.py::TestGoGraph::test_runtime_surface` | - |
+| Functions | `functions` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathGo` | Compose-backed fixture verification | - |
+| Structs | `structs` | supported | `classes` | `name, line_number` | `node:Class` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathGo` | Compose-backed fixture verification | - |
+| Interfaces | `interfaces` | supported | `interfaces` | `name, line_number` | `node:Interface` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathGo` | Compose-backed fixture verification | - |
+| Imports | `imports` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathGo` | Compose-backed fixture verification | - |
+| Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathGo` | Compose-backed fixture verification | - |
+| Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathGo` | Compose-backed fixture verification | - |
+| Methods (receivers) | `methods-receivers` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathGo` | Compose-backed fixture verification | - |
+| Generics | `generics` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathGoRichSemanticMetadata` | Compose-backed fixture verification | - |
+| Embedded SQL queries | `embedded-sql-queries` | supported | `embedded_sql_queries` | `function_name, function_line_number, table_name, operation, line_number, api` | `relationship:SQL link hints consumed by sql_links materialization` | `go/internal/parser/go_embedded_sql_test.go::TestDefaultEngineParsePathGoEmbeddedSQLQueries` | Compose-backed fixture verification | - |
 
 ## Known Limitations
 - Generic type constraints may not be fully captured

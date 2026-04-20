@@ -3,4 +3,4 @@
   roles:
     - { role: nginx, tags: ['nginx'] }
     - { role: php, tags: ['php'] }
-    - { role: portal-websites, tags: ['deploy-portal'] }
+    - { role: portal-websites, src: portal-websites, tags: ['deploy-portal'] }
