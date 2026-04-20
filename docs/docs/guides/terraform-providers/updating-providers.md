@@ -89,25 +89,16 @@ Packaging schema for provider: aws
 Found schema: schemas/aws.json
 Detected version: 5.110.0
 Removed old schema: aws-5.100.0.json.gz
-Packaged: src/platform_context_graph/relationships/terraform_evidence/schemas/aws-5.110.0.json.gz (1.2 MB)
+Packaged: go/internal/terraformschema/schemas/aws-5.110.0.json.gz (1.2 MB)
 ```
 
 ### 4. Verify the New Resource Types
 
-Check what changed:
+Check what changed by rerunning the Go schema and relationship suites:
 
 ```bash
-PYTHONPATH=src uv run python3 -c "
-from platform_context_graph.relationships.terraform_evidence._base import get_registered_resource_types
-
-registered = get_registered_resource_types()
-aws_types = [rt for rt in registered if rt.startswith('aws_')]
-
-print(f'Total AWS resource types: {len(aws_types)}')
-print(f'\nSample resource types:')
-for rt in sorted(aws_types)[:10]:
-    print(f'  {rt}')
-"
+cd go
+go test ./internal/terraformschema ./internal/relationships -count=1
 ```
 
 ### 5. Run Tests
@@ -115,14 +106,15 @@ for rt in sorted(aws_types)[:10]:
 Ensure the new schema loads correctly:
 
 ```bash
-PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py -v
+cd go
+go test ./internal/terraformschema ./internal/relationships -count=1
 ```
 
 ### 6. Commit the Changes
 
 ```bash
 git add terraform_providers/aws/versions.tf
-git add src/platform_context_graph/relationships/terraform_evidence/schemas/aws-5.110.0.json.gz
+git add go/internal/terraformschema/schemas/aws-5.110.0.json.gz
 git commit -m "chore: update AWS provider schema to 5.110.0"
 ```
 
@@ -147,10 +139,10 @@ To see what resource types were added or removed between versions, you can compa
 
 ```bash
 # Extract old schema (if you still have it)
-gunzip -c src/platform_context_graph/relationships/terraform_evidence/schemas/aws-5.100.0.json.gz > /tmp/aws-old.json
+gunzip -c go/internal/terraformschema/schemas/aws-5.100.0.json.gz > /tmp/aws-old.json
 
 # Extract new schema
-gunzip -c src/platform_context_graph/relationships/terraform_evidence/schemas/aws-5.110.0.json.gz > /tmp/aws-new.json
+gunzip -c go/internal/terraformschema/schemas/aws-5.110.0.json.gz > /tmp/aws-new.json
 
 # Compare resource counts
 echo "Old version:"
@@ -209,7 +201,7 @@ If a new provider version causes issues:
 The old schema file is preserved in git history, so you can also restore it directly:
 
 ```bash
-git checkout HEAD~1 -- src/platform_context_graph/relationships/terraform_evidence/schemas/aws-5.100.0.json.gz
+git checkout HEAD~1 -- go/internal/terraformschema/schemas/aws-5.100.0.json.gz
 git checkout HEAD~1 -- terraform_providers/aws/versions.tf
 ```
 

@@ -6,7 +6,10 @@ Commands for extracting insights from indexed code.
 
 ### `analyze callers`
 
-Find every function that calls a given function. Use this before refactoring to understand who depends on it.
+Find every function that calls a given function. Use this before refactoring to
+understand who depends on it. Under the hood this routes to
+`POST /api/v0/code/relationships` with `direction=incoming` and
+`relationship_type=CALLS`.
 
 ```bash
 pcg analyze callers process_payment
@@ -14,7 +17,9 @@ pcg analyze callers process_payment
 
 ### `analyze calls`
 
-The reverse — show what a function calls (its callees).
+The reverse — show what a function calls (its callees). Under the hood this
+routes to `POST /api/v0/code/relationships` with `direction=outgoing` and
+`relationship_type=CALLS`.
 
 ```bash
 pcg analyze calls process_payment
@@ -22,7 +27,9 @@ pcg analyze calls process_payment
 
 ### `analyze chain`
 
-Find the execution path between two functions. Useful for understanding how data flows from one entry point to another.
+Find the execution path between two functions. Useful for understanding how
+data flows from one entry point to another. Use `--depth` to raise or lower
+the traversal bound the Go API uses for shortest-path lookup.
 
 ```bash
 pcg analyze chain handle_request process_payment --depth 5
@@ -46,18 +53,23 @@ pcg analyze tree BaseProcessor
 
 ### `analyze complexity`
 
-Find functions with high cyclomatic complexity. The threshold controls the minimum complexity reported.
+Show relationship-based complexity metrics for a specific entity. The broader
+threshold-based quality-gate flow is still tracked separately in the parity
+matrix and is not yet part of the Go CLI contract.
 
 ```bash
-pcg analyze complexity --threshold 10
+pcg analyze complexity
 ```
 
 ### `analyze dead-code`
 
-Find functions with zero callers. Use `--exclude` to skip known entry points like route handlers.
+Find entities with zero incoming `CALLS`, `IMPORTS`, or `REFERENCES` edges.
+Use `--repo-id` to scope the scan to one canonical repository, `--exclude` to
+skip decorator-owned entry points such as route handlers, and `--fail-on-found`
+to turn the command into a CI gate.
 
 ```bash
-pcg analyze dead-code --exclude "@route"
+pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude "@route" --fail-on-found
 ```
 
 ### `analyze overrides`

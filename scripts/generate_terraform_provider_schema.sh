@@ -12,8 +12,8 @@
 # Output:
 #   schemas/<provider>.json  (raw, gitignored)
 #
-# The generated JSON is consumed by the Python schema loader at
-# src/platform_context_graph/relationships/terraform_evidence/provider_schema.py
+# The generated JSON is packaged for the Go-owned Terraform schema runtime
+# under go/internal/terraformschema/schemas.
 
 set -euo pipefail
 
@@ -43,15 +43,13 @@ generate_schema() {
     terraform providers schema -json > "$SCHEMAS_DIR/$provider.json"
 
     local resource_count
-    resource_count=$(python3 -c "
-import json, sys
-with open('$SCHEMAS_DIR/$provider.json') as f:
-    schema = json.load(f)
-for ps in schema.get('provider_schemas', {}).values():
-    print(len(ps.get('resource_schemas', {})))
-    sys.exit()
-print(0)
-")
+    resource_count="$(
+        jq -r '
+            .provider_schemas
+            | to_entries[0]?.value.resource_schemas
+            | length // 0
+        ' "$SCHEMAS_DIR/$provider.json"
+    )"
 
     local file_size
     file_size=$(du -h "$SCHEMAS_DIR/$provider.json" | cut -f1)
@@ -83,6 +81,6 @@ done
 echo "Schema generation complete. Files in $SCHEMAS_DIR/"
 echo ""
 echo "Next steps:"
-echo "  1. Verify: python3 -c \"import json; s=json.load(open('schemas/aws.json')); print(len(list(s['provider_schemas'].values())[0]['resource_schemas']), 'resource types')\""
+echo "  1. Verify: jq -r '.provider_schemas | to_entries[0]?.value.resource_schemas | length // 0' schemas/aws.json"
 echo "  2. Package for distribution: ./scripts/package_terraform_schemas.sh"
-echo "  3. Run tests: PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py -v"
+echo "  3. Run tests: (cd go && go test ./internal/terraformschema ./internal/relationships -count=1)"

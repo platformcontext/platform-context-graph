@@ -4,3 +4,9 @@
 {{- if and (eq .Values.repoSync.auth.method "ssh") (eq .Values.repoSync.source.mode "githubOrg") -}}
 {{- fail "repoSync.auth.method=ssh requires repoSync.source.mode=explicit or filesystem" -}}
 {{- end -}}
+{{- if and (eq .Values.exposure.ingress.backend "mcp") (not .Values.mcpServer.enabled) -}}
+{{- fail "exposure.ingress.backend=mcp requires mcpServer.enabled=true" -}}
+{{- end -}}
+{{- if and (eq .Values.exposure.gateway.backend "mcp") (not .Values.mcpServer.enabled) -}}
+{{- fail "exposure.gateway.backend=mcp requires mcpServer.enabled=true" -}}
+{{- end -}}

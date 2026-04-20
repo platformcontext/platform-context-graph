@@ -21,10 +21,12 @@ Code analysis with graph database integration, directly in VS Code.
 - VS Code 1.85.0 or higher
 - pcg CLI installed:
   ```bash
-  uv tool install platform-context-graph
+  cd go && go build -o bin/ ./cmd/pcg
   ```
 
-The extension auto-detects `pcg` from virtual environments (`.venv`, `venv`). If auto-detection fails, set the path manually via `pcg.cliPath` in settings.
+The extension auto-detects `pcg` from common local build locations and from
+your PATH. If auto-detection fails, set the path manually via `pcg.cliPath` in
+settings.
 
 ## Quick Start
 

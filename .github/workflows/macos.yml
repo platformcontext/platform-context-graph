@@ -11,36 +11,29 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          python-version: "3.12"
-
-      - name: Install system deps
-        run: |
-          brew update
-          brew install ripgrep || true
-
-      - name: Install PlatformContextGraph
-        run: |
-          pip install -e .
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
 
       - name: Debug info
         run: |
           uname -a
-          python --version
-          which python
+          go version
           df -h
 
-      - name: Run index (verbose)
+      - name: Build Go CLI
+        working-directory: go
         run: |
-          pcg index -f --debug || true
+          VERSION="${GITHUB_SHA::12}"
+          CGO_ENABLED=1 go build -ldflags "-X github.com/platformcontext/platform-context-graph/go/internal/buildinfo.Version=${VERSION}" -o pcg ./cmd/pcg
 
-      - name: Try find
-        run: |
-          pcg find content "def" --debug || true
+      - name: Run Go tests
+        working-directory: go
+        run: go test ./... -count=1 -timeout 300s
 
       - name: Upload logs
         if: always()

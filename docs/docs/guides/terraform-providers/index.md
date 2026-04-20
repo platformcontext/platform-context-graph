@@ -2,13 +2,53 @@
 
 PlatformContextGraph uses a **schema-driven approach** to extract infrastructure relationships from Terraform code. Instead of hand-writing extractors for each resource type, PCG automatically generates extractors from real Terraform provider schemas.
 
+## Runtime Ownership
+
+Terraform provider-schema support ships in the current runtime.
+
+The canonical packaged schema assets live under:
+
+- `go/internal/terraformschema/schemas/*.json.gz`
+
+The runtime path is:
+
+- `go/internal/terraformschema/*` for loading, identity-key inference, and
+  category classification
+- `go/internal/relationships/*` for schema-driven relationship extraction
+
+This matters because the provider schemas are not just an offline packaging
+detail. They are live runtime inputs used to register schema-driven extractors,
+load provider metadata, infer identity keys, classify service families, and
+emit infrastructure relationship evidence.
+
+That evidence path is proven through the Postgres ingestion
+transaction: repository facts are read back into a catalog, Terraform fact
+batches are scanned against that catalog, and matching rows are persisted to
+`relationship_evidence_facts` before the projector queue is enqueued.
+
+## Why These Schemas Exist
+
+PCG uses the output of `terraform providers schema -json` so it can reason
+about provider resource shapes instead of hard-coding one extractor per
+Terraform resource type.
+
+That gives the runtime three important properties:
+
+- the schema assets are generated from real provider metadata
+- the runtime loader and extractor registration stay generic
+- the normal runtime path can emit schema-driven Terraform relationship
+  evidence without special-casing one provider family at a time
+
+If you see packaged provider schemas in the repository, treat them as a
+required Go runtime dependency for Terraform relationship extraction.
+
 ## How It Works
 
 1. **Provider schemas** are generated from official Terraform provider binaries using `terraform providers schema -json`
 2. **Schemas are compressed** to `.json.gz` format with version tags (e.g., `aws-5.100.0.json.gz`)
-3. **Schemas ship inside the Python package** — no runtime downloads, works in Docker, pip installs, and development
+3. **Schemas ship inside the Go runtime tree** — no runtime downloads, works in Docker, local development, and deployed runtimes
 4. **Extractors auto-register** at import time for all resource types with name-like attributes
-5. **Zero manual maintenance** — adding providers or updating versions requires no code changes
+5. **Zero manual maintenance** — adding providers or updating versions requires no code changes in the generic extractor flow
 
 ## Supported Providers
 
@@ -64,7 +104,7 @@ Example:
 ```hcl
 resource "aws_lambda_function" "api_handler" {
   function_name = "checkout-api"
-  runtime       = "python3.12"
+  runtime       = "provided.al2023"
   role          = aws_iam_role.lambda_role.arn
 }
 ```
@@ -86,7 +126,7 @@ PCG automatically infers which attribute to use as the resource identifier:
    - `cluster_name`
    - `queue_name`
    - `topic_name`
-   - ... (see full list in `provider_schema.py`)
+   - ... (see current canonical list in `go/internal/terraformschema/categories.go`)
 
 2. **Fallback patterns**:
    - Any string attribute ending in `_name` (e.g., `db_name`, `role_name`)

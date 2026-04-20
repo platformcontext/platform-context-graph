@@ -5,7 +5,7 @@
 Make sure you have:
 
 - [ ] VS Code 1.85.0 or higher
-- [ ] pcg CLI installed (`uv tool install platform-context-graph` or `pip install platform-context-graph`)
+- [ ] pcg CLI built and available on PATH (`cd go && go build -o bin/ ./cmd/pcg`)
 - [ ] pcg is on your PATH (run `pcg --version` to verify)
 - [ ] A code project to index
 

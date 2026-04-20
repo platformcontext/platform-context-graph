@@ -32,6 +32,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-api" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "pcg.mcpServerFullname" -}}
+{{- printf "%s-mcp-server" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "pcg.ingesterFullname" -}}
 {{- printf "%s-ingester" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -40,8 +44,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-resolution-engine" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "pcg.workflowCoordinatorFullname" -}}
+{{- printf "%s-workflow-coordinator" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "pcg.apiMetricsServiceName" -}}
 {{- printf "%s-api-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "pcg.mcpServerMetricsServiceName" -}}
+{{- printf "%s-mcp-server-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "pcg.ingesterMetricsServiceName" -}}
@@ -52,9 +64,18 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-resolution-engine-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "pcg.workflowCoordinatorMetricsServiceName" -}}
+{{- printf "%s-workflow-coordinator-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "pcg.apiSelectorLabels" -}}
 {{- include "pcg.selectorLabels" . }}
 app.kubernetes.io/component: api
+{{- end -}}
+
+{{- define "pcg.mcpServerSelectorLabels" -}}
+{{- include "pcg.selectorLabels" . }}
+app.kubernetes.io/component: mcp-server
 {{- end -}}
 
 {{- define "pcg.ingesterSelectorLabels" -}}
@@ -65,6 +86,11 @@ app.kubernetes.io/component: ingester
 {{- define "pcg.resolutionEngineSelectorLabels" -}}
 {{- include "pcg.selectorLabels" . }}
 app.kubernetes.io/component: resolution-engine
+{{- end -}}
+
+{{- define "pcg.workflowCoordinatorSelectorLabels" -}}
+{{- include "pcg.selectorLabels" . }}
+app.kubernetes.io/component: workflow-coordinator
 {{- end -}}
 
 {{- define "pcg.serviceAccountName" -}}
@@ -146,5 +172,93 @@ app.kubernetes.io/component: resolution-engine
   value: {{ .Values.contentStore.dsn | quote }}
 - name: PCG_POSTGRES_DSN
   value: {{ .Values.contentStore.dsn | quote }}
+{{- end }}
+{{- end -}}
+
+{{- define "pcg.exposureBackendServiceName" -}}
+{{- if eq .backend "mcp" -}}
+{{- include "pcg.mcpServerFullname" .root -}}
+{{- else -}}
+{{- include "pcg.fullname" .root -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "pcg.renderDataPlaneBootstrapInitContainer" -}}
+- name: db-migrate
+  image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+  imagePullPolicy: {{ .Values.image.pullPolicy }}
+  command: ["/usr/local/bin/pcg-bootstrap-data-plane"]
+  securityContext:
+    {{- toYaml .Values.initContainerSecurityContext | nindent 4 }}
+  env:
+    - name: PCG_HOME
+      value: /tmp/.platform-context-graph
+    - name: HOME
+      value: /tmp
+    - name: NEO4J_URI
+      value: {{ .Values.neo4j.uri | quote }}
+    {{- include "pcg.renderContentStoreEnv" . | nindent 4 }}
+    - name: NEO4J_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.neo4j.auth.secretName }}
+          key: {{ .Values.neo4j.auth.usernameKey }}
+    - name: NEO4J_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.neo4j.auth.secretName }}
+          key: {{ .Values.neo4j.auth.passwordKey }}
+    {{- include "pcg.renderEnvMap" .Values.env | nindent 4 }}
+  volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+{{- end -}}
+
+{{- define "pcg.renderConnectionTuningEnv" -}}
+{{- with . }}
+{{- with .postgres }}
+{{- with .maxOpenConns }}
+- name: PCG_POSTGRES_MAX_OPEN_CONNS
+  value: {{ . | quote }}
+{{- end }}
+{{- with .maxIdleConns }}
+- name: PCG_POSTGRES_MAX_IDLE_CONNS
+  value: {{ . | quote }}
+{{- end }}
+{{- with .connMaxLifetime }}
+- name: PCG_POSTGRES_CONN_MAX_LIFETIME
+  value: {{ . | quote }}
+{{- end }}
+{{- with .connMaxIdleTime }}
+- name: PCG_POSTGRES_CONN_MAX_IDLE_TIME
+  value: {{ . | quote }}
+{{- end }}
+{{- with .pingTimeout }}
+- name: PCG_POSTGRES_PING_TIMEOUT
+  value: {{ . | quote }}
+{{- end }}
+{{- end }}
+{{- with .neo4j }}
+{{- with .maxConnectionPoolSize }}
+- name: PCG_NEO4J_MAX_CONNECTION_POOL_SIZE
+  value: {{ . | quote }}
+{{- end }}
+{{- with .maxConnectionLifetime }}
+- name: PCG_NEO4J_MAX_CONNECTION_LIFETIME
+  value: {{ . | quote }}
+{{- end }}
+{{- with .connectionAcquisitionTimeout }}
+- name: PCG_NEO4J_CONNECTION_ACQUISITION_TIMEOUT
+  value: {{ . | quote }}
+{{- end }}
+{{- with .socketConnectTimeout }}
+- name: PCG_NEO4J_SOCKET_CONNECT_TIMEOUT
+  value: {{ . | quote }}
+{{- end }}
+{{- with .verifyTimeout }}
+- name: PCG_NEO4J_VERIFY_TIMEOUT
+  value: {{ . | quote }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end -}}

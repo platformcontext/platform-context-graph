@@ -4,7 +4,7 @@
 #
 # Reads raw JSON schemas from schemas/, extracts the resolved provider version
 # from the corresponding .terraform.lock.hcl, and produces versioned gzipped
-# files in the Python package directory.
+# files in the Go-owned packaged schema directory.
 #
 # Naming convention: <provider>-<version>.json.gz
 #   e.g. aws-5.100.0.json.gz, google-6.50.0.json.gz
@@ -21,7 +21,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCHEMAS_DIR="$REPO_ROOT/schemas"
 PROVIDERS_DIR="$REPO_ROOT/terraform_providers"
-PACKAGE_DIR="$REPO_ROOT/src/platform_context_graph/relationships/terraform_evidence/schemas"
+PACKAGE_DIR="$REPO_ROOT/go/internal/terraformschema/schemas"
 
 mkdir -p "$PACKAGE_DIR"
 
@@ -38,7 +38,7 @@ package_schema() {
     # Extract version from lock file.
     local version
     if [[ -f "$lock_file" ]]; then
-        version=$(grep -A2 'provider "registry' "$lock_file" | grep 'version' | head -1 | sed 's/.*= "//' | sed 's/"//')
+        version=$(rg -U -o 'version\\s*=\\s*"[^\"]+"' "$lock_file" | head -1 | sed 's/.*"//' | sed 's/"$//')
     else
         echo "WARNING: No lock file at $lock_file — using 'unknown' version" >&2
         version="unknown"
@@ -80,5 +80,5 @@ echo ""
 echo "Packaged schemas in $PACKAGE_DIR/"
 ls -lh "$PACKAGE_DIR/"*.json.gz
 echo ""
-echo "These files are committed to git and ship with the Python package."
-echo "Run tests: PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py -v"
+echo "These files are committed to git and ship with the Go runtime."
+echo "Run tests: (cd go && go test ./internal/terraformschema ./internal/relationships -count=1)"

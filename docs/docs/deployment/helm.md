@@ -43,14 +43,10 @@ helm template platform-context-graph ./deploy/helm/platform-context-graph
 | `repoSync.source.rules` | Structured include rules for Git discovery |
 | `observability.otel.*` | OTLP settings for traces and metrics |
 | `observability.prometheus.*` | Prometheus scrape endpoint and `ServiceMonitor` settings |
-| `env.PCG_LOG_FORMAT` | Shared log format. Keep this at `json` in deployed environments. |
 
 Typical OTEL collector override:
 
 ```yaml
-env:
-  PCG_LOG_FORMAT: json
-
 observability:
   environment: ops-qa
   otel:
@@ -161,17 +157,15 @@ The external PostgreSQL instance must support the `pg_trgm` extension. PCG creat
 
 ## Logging And Tracing Defaults
 
-Production should keep two observability defaults in place:
-
-- `PCG_LOG_FORMAT=json`
-- OTLP trace export enabled through the existing `observability.otel.*` values
+Production should keep OTLP trace export enabled through the existing
+`observability.otel.*` values:
 
 That gives you:
 
-- newline-delimited JSON logs on stdout for log shipping
+- newline-delimited JSON logs on stderr for log shipping
 - OTEL traces for Jaeger and other trace backends
 - shared request and trace correlation fields across API, MCP, ingester, and resolution-engine logs
 
-PCG does not require the OTEL logs signal. The intended deployment shape is JSON stdout for logs and OTLP for traces.
+PCG does not require the OTEL logs signal. The intended deployment shape is JSON stderr logs plus OTLP traces.
 
 Use Jaeger when you need to answer a performance question. The trace tells you where time went; the JSON logs fill in the repo, batch, and request details around that span.

@@ -30,15 +30,16 @@ PCG includes mappings for common resource types across all major providers:
 
 ## Adding Custom Mappings
 
-To add service category mappings for a new provider or override existing ones, edit `provider_schema.py`.
+To add service category mappings for a new provider or override existing ones,
+edit `go/internal/terraformschema/categories.go`.
 
 ### Example: Datadog Provider
 
-```python title="src/platform_context_graph/relationships/terraform_evidence/provider_schema.py"
-SERVICE_CATEGORIES: dict[str, str] = {
-    # ... existing mappings ...
+```go title="go/internal/terraformschema/categories.go"
+var serviceCategories = map[string]string{
+    // ... existing mappings ...
 
-    # --- Datadog (datadog_ prefix) ---
+    // --- Datadog (datadog_ prefix) ---
     "monitor": "monitoring",
     "dashboard": "monitoring",
     "synthetics": "monitoring",
@@ -60,11 +61,11 @@ SERVICE_CATEGORIES: dict[str, str] = {
 
 If you have a custom internal provider:
 
-```python
-SERVICE_CATEGORIES: dict[str, str] = {
-    # ... existing mappings ...
+```go
+var serviceCategories = map[string]string{
+    // ... existing mappings ...
 
-    # --- Internal (mycompany_ prefix) ---
+    // --- Internal (mycompany_ prefix) ---
     "api_gateway": "networking",
     "worker_queue": "messaging",
     "feature_flag": "governance",
@@ -78,10 +79,10 @@ SERVICE_CATEGORIES: dict[str, str] = {
 
 Longer token sequences are tried before shorter ones:
 
-```python
-SERVICE_CATEGORIES = {
-    "cloudwatch_event": "messaging",  # Matches first
-    "cloudwatch": "monitoring",       # Matches second
+```go
+var serviceCategories = map[string]string{
+    "cloudwatch_event": "messaging", // Matches first
+    "cloudwatch": "monitoring",      // Matches second
 }
 ```
 
@@ -93,8 +94,8 @@ SERVICE_CATEGORIES = {
 
 Resources with multiple tokens try progressively shorter sequences:
 
-```python
-SERVICE_CATEGORIES = {
+```go
+var serviceCategories = map[string]string{
     "lambda": "compute",
 }
 ```
@@ -107,7 +108,7 @@ SERVICE_CATEGORIES = {
 
 Unmapped resource types default to `infrastructure`:
 
-```python
+```hcl
 # No mapping exists
 resource "random_password" "db_password" {
   length = 16
@@ -188,20 +189,9 @@ RETURN repo.name, res.name, res.resource_type
 
 Test your custom mappings:
 
-```python
-from platform_context_graph.relationships.terraform_evidence.provider_schema import (
-    classify_resource_category
-)
-
-# Test a resource type
-category = classify_resource_category("datadog_monitor")
-print(f"datadog_monitor → {category}")  # monitoring
-
-category = classify_resource_category("datadog_security_monitoring_rule")
-print(f"datadog_security_monitoring_rule → {category}")  # security
-
-category = classify_resource_category("random_password")
-print(f"random_password → {category}")  # infrastructure (default)
+```bash
+cd go
+go test ./internal/terraformschema -count=1
 ```
 
 ## Best Practices
@@ -235,9 +225,9 @@ Map equivalent resources to the same category:
 
 When adding mappings for a new provider, add a comment explaining the provider's naming conventions:
 
-```python
-# --- Datadog (datadog_ prefix) ---
-# Datadog uses *_monitoring for security products, direct names for observability
+```go
+// --- Datadog (datadog_ prefix) ---
+// Datadog uses *_monitoring for security products, direct names for observability
 "monitor": "monitoring",
 "security_monitoring": "security",
 ```
@@ -247,7 +237,8 @@ When adding mappings for a new provider, add a comment explaining the provider's
 Run tests to ensure your mappings load correctly:
 
 ```bash
-PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py::TestClassifyResourceCategory -v
+cd go
+go test ./internal/terraformschema -count=1
 ```
 
 ## See Also

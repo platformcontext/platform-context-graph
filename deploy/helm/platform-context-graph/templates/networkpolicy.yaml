@@ -24,6 +24,33 @@ spec:
   egress:
     - {}
 ---
+{{- if .Values.mcpServer.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "pcg.mcpServerFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-server
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "pcg.mcpServerSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+        {{- if .Values.observability.prometheus.enabled }}
+        - protocol: TCP
+          port: {{ .Values.observability.prometheus.port }}
+        {{- end }}
+  egress:
+    - {}
+{{- end }}
+---
 {{- if .Values.repoSync.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -74,6 +101,33 @@ spec:
     {{- else }}
     []
     {{- end }}
+  egress:
+    - {}
+{{- end }}
+---
+{{- if .Values.workflowCoordinator.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "pcg.workflowCoordinatorFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workflow-coordinator
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "pcg.workflowCoordinatorSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+        {{- if .Values.observability.prometheus.enabled }}
+        - protocol: TCP
+          port: {{ .Values.observability.prometheus.port }}
+        {{- end }}
   egress:
     - {}
 {{- end }}

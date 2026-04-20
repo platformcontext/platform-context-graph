@@ -1,15 +1,16 @@
 # Contributing to PlatformContextGraph
 
-Contributions are welcome. Small, well-scoped pull requests are preferred over broad refactors.
+Contributions are welcome. Small, well-scoped pull requests are preferred over
+broad refactors.
 
 ## Guidelines
 
 - Keep pull requests focused on a single problem or feature.
-- Match the existing code style and structure.
+- Match the existing Go-first runtime architecture and package boundaries.
 - Add or update tests when behavior changes.
-- Keep handwritten Python modules under `src/` at 500 lines or fewer.
-- Add Google-style docstrings for handwritten Python modules, classes, methods, and functions under `src/`.
+- Keep handwritten source files under the repo line limit.
 - Call out follow-up work separately instead of bundling unrelated cleanup.
+- Do not reintroduce Python runtime ownership on this migration branch.
 
 ## Development Setup
 
@@ -17,6 +18,7 @@ Contributions are welcome. Small, well-scoped pull requests are preferred over b
 2. Install the development environment:
 
 ```bash
+go version
 uv sync
 ```
 
@@ -31,10 +33,12 @@ git checkout -b feature/my-change
 Before opening a pull request:
 
 ```bash
-python3 scripts/check_python_file_lengths.py --max-lines 500
-python3 scripts/check_python_docstrings.py
-uv run black --check src tests
-./tests/run_tests.sh fast
+cd go
+go test ./cmd/pcg ./cmd/api ./cmd/mcp-server ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1
+go test ./internal/parser ./internal/collector ./internal/query ./internal/runtime ./internal/reducer ./internal/projector -count=1
+go test ./internal/terraformschema ./internal/relationships ./internal/storage/postgres -count=1
+golangci-lint run ./...
+git diff --check
 ```
 
 See [TESTING.md](TESTING.md) for the full test strategy and layer breakdown.
@@ -48,4 +52,5 @@ See [TESTING.md](TESTING.md) for the full test strategy and layer breakdown.
 
 ## Maintainer
 
-PlatformContextGraph is maintained by Allen Sanabria. GitHub: [@linuxdynasty](https://github.com/linuxdynasty)
+PlatformContextGraph is maintained by Allen Sanabria. GitHub:
+[@linuxdynasty](https://github.com/linuxdynasty)

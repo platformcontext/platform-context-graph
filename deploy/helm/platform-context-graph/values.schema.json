@@ -1,6 +1,44 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
+  "definitions": {
+    "poolSizeValue": {
+      "oneOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string" }
+      ]
+    },
+    "durationValue": {
+      "type": "string"
+    },
+    "postgresConnectionTuning": {
+      "type": "object",
+      "properties": {
+        "maxOpenConns": { "$ref": "#/definitions/poolSizeValue" },
+        "maxIdleConns": { "$ref": "#/definitions/poolSizeValue" },
+        "connMaxLifetime": { "$ref": "#/definitions/durationValue" },
+        "connMaxIdleTime": { "$ref": "#/definitions/durationValue" },
+        "pingTimeout": { "$ref": "#/definitions/durationValue" }
+      }
+    },
+    "neo4jConnectionTuning": {
+      "type": "object",
+      "properties": {
+        "maxConnectionPoolSize": { "$ref": "#/definitions/poolSizeValue" },
+        "maxConnectionLifetime": { "$ref": "#/definitions/durationValue" },
+        "connectionAcquisitionTimeout": { "$ref": "#/definitions/durationValue" },
+        "socketConnectTimeout": { "$ref": "#/definitions/durationValue" },
+        "verifyTimeout": { "$ref": "#/definitions/durationValue" }
+      }
+    },
+    "connectionTuning": {
+      "type": "object",
+      "properties": {
+        "postgres": { "$ref": "#/definitions/postgresConnectionTuning" },
+        "neo4j": { "$ref": "#/definitions/neo4jConnectionTuning" }
+      }
+    }
+  },
   "properties": {
     "service": {
       "type": "object",
@@ -84,6 +122,40 @@
         "enabled": { "type": "boolean" },
         "replicas": { "type": "integer", "minimum": 0 },
         "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
+        "connectionTuning": { "$ref": "#/definitions/connectionTuning" },
+        "resources": { "type": "object" }
+      }
+    },
+    "workflowCoordinator": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "deploymentMode": {
+          "type": "string",
+          "enum": ["dark"]
+        },
+        "claimsEnabled": { "type": "boolean" },
+        "collectorInstances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "instance_id": { "type": "string" },
+              "collector_kind": { "type": "string" },
+              "mode": { "type": "string" },
+              "enabled": { "type": "boolean" },
+              "bootstrap": { "type": "boolean" },
+              "claims_enabled": { "type": "boolean" },
+              "display_name": { "type": "string" },
+              "configuration": {}
+            },
+            "required": ["instance_id", "collector_kind", "mode", "enabled"],
+            "additionalProperties": false
+          }
+        },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
+        "connectionTuning": { "$ref": "#/definitions/connectionTuning" },
         "resources": { "type": "object" }
       }
     },
@@ -92,6 +164,17 @@
       "properties": {
         "replicas": { "type": "integer", "minimum": 0 },
         "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
+        "connectionTuning": { "$ref": "#/definitions/connectionTuning" },
+        "resources": { "type": "object" }
+      }
+    },
+    "mcpServer": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
+        "connectionTuning": { "$ref": "#/definitions/connectionTuning" },
         "resources": { "type": "object" }
       }
     },
@@ -100,6 +183,7 @@
       "properties": {
         "replicas": { "type": "integer", "minimum": 0 },
         "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
+        "connectionTuning": { "$ref": "#/definitions/connectionTuning" },
         "persistence": { "type": "object" },
         "resources": { "type": "object" }
       }
@@ -220,13 +304,21 @@
         "ingress": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": { "type": "boolean" },
+            "backend": {
+              "type": "string",
+              "enum": ["api", "mcp"]
+            }
           }
         },
         "gateway": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": { "type": "boolean" },
+            "backend": {
+              "type": "string",
+              "enum": ["api", "mcp"]
+            }
           }
         }
       }

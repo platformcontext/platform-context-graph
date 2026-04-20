@@ -30,7 +30,7 @@ Use the canonical ID from the response for the next calls.
 
 Follow the shared resource back through Terraform, configuration, and workload usage:
 
-`POST /api/v0/traces/resource-to-code`
+`POST /api/v0/impact/trace-resource-to-code`
 
 ```json
 {
@@ -73,7 +73,7 @@ This is where shared infrastructure becomes valuable: the graph can return every
 
 When you need a justification path:
 
-`POST /api/v0/paths/explain`
+`POST /api/v0/impact/explain-dependency-path`
 
 ```json
 {

@@ -10,16 +10,68 @@ The live OpenAPI spec is always canonical. If this page and the spec disagree, t
 - `GET /api/v0/docs` — Swagger UI
 - `GET /api/v0/redoc` — ReDoc
 
+For the mounted Go runtime admin surface, the checked-in OpenAPI contract lives
+in `docs/openapi/runtime-admin-v1.yaml`. That contract is separate from the
+public `/api/v0` schema because it belongs to the long-running runtime admin
+endpoints, not the public query API.
+
 ## Scope
 
-The public HTTP API exposes two surfaces:
+The public HTTP API exposes three operator-relevant surfaces:
 
 - a read/query surface for context, code, infra, and content retrieval
 - a small ingester control surface for runtime status and manual scan requests
+- a checkpoint surface for index completeness and admin reindex requests
 
 Use it to resolve entities, fetch context, search code, trace infra, compare environments, and inspect the deployed ingester state.
 
-Use the CLI for local indexing workflows. Use the Helm runtime for deployment-managed repository ingestion and steady-state sync.
+Use the CLI for local indexing workflows. Use the Helm runtime for
+deployment-managed repository ingestion and steady-state sync.
+
+## Health, Status, And Completeness
+
+Health checks answer whether a process can serve. Completeness checks answer
+whether the latest published Go checkpoint is finished.
+
+- `GET /health` reports API process health after dependency
+  initialization. It does not prove the latest index run finished.
+- The hosted API runtime also mounts the shared service-local admin surface on
+  the same listener:
+    - `GET /healthz`
+    - `GET /readyz`
+    - `GET /admin/status`
+    - `GET /metrics`
+  Those routes are documented by `docs/openapi/runtime-admin-v1.yaml`, not the
+  public `/api/v0` OpenAPI schema.
+- `GET /api/v0/status/index` returns the current checkpoint summary.
+- `GET /api/v0/index-status` returns the same checkpoint summary.
+- `GET /api/v0/status/ingesters` is the canonical ingester-status list route.
+- `GET /api/v0/status/ingesters/{ingester}` is the canonical ingester-status
+  detail route.
+- `GET /api/v0/ingesters` and `GET /api/v0/ingesters/{ingester}` return the
+  same ingester-status payloads.
+- `GET /api/v0/repositories/{repo_id}/coverage` returns durable repository
+  coverage rows for one repository.
+- Run-scoped completeness routes such as `/api/v0/index-runs/{run_id}` are not
+  part of the shipped public contract. Do not assume the
+  repository coverage route is run-scoped.
+- `POST /api/v0/admin/refinalize` re-enqueues active scope generations for
+  re-projection through the durable Go work queue.
+- `POST /api/v0/admin/reindex` persists an asynchronous reindex request; the
+  API process does not run the full reindex inline.
+- `GET /api/v0/admin/shared-projection/tuning-report` returns the operator
+  tuning report for shared-projection backlog behavior.
+- `POST /api/v0/admin/replay`, `POST /api/v0/admin/dead-letter`,
+  `POST /api/v0/admin/skip`, `POST /api/v0/admin/backfill`,
+  `POST /api/v0/admin/work-items/query`, `POST /api/v0/admin/decisions/query`,
+  and `POST /api/v0/admin/replay-events/query` expose the durable admin queue
+  and decision controls.
+- The service-local runtime admin surface remains separate from the public
+  `/api/v0` contract even when it is mounted on the same listener. Use
+  `/admin/status` when you need the runtime-local probe/status surface
+  described by `docs/openapi/runtime-admin-v1.yaml`. Use `/admin/replay` and
+  `/admin/refinalize` only on runtimes that mount the recovery handler, such
+  as the ingester.
 
 ## Model Basics
 
@@ -33,6 +85,7 @@ Use the CLI for local indexing workflows. Use the Helm runtime for deployment-ma
 - file-bearing query results should be interpreted using `repo_id + relative_path`, not an absolute server path.
 - `repo_access` indicates whether the caller may need to ask the user for a local checkout path or clone decision.
 - documentation-oriented clients should resolve canonical graph identity first, then use `repo_id + relative_path` or `entity_id` for exact evidence reads.
+- repository-oriented context, summary, story, stats, and file routes use canonical `repo_id` at the public boundary.
 
 ## Context API
 
@@ -59,6 +112,13 @@ Examples:
 
 - `GET /api/v0/entities/workload:payments-api/context`
 - `GET /api/v0/entities/workload-instance:payments-api:prod/context`
+
+Entity context responses may also include semantic narrative fields when the
+entity carries normalized semantic metadata:
+
+- `semantic_summary`
+- `semantic_profile`
+- `story`
 
 ### Get workload context
 
@@ -88,23 +148,78 @@ Service alias responses include `requested_as=service`.
 Use the story routes when the caller wants a structured narrative first and
 evidence second.
 
-Story responses are shaped around:
+Repository story responses now expose a structured narrative contract. Workload
+and service story responses stay narrative-first today. Use the deployment
+trace route when you need the richer deployment-mapping contract.
+
+Repository story responses are shaped around:
 
 - `subject`
 - `story`
 - `story_sections`
-- `deployment_overview` or `code_overview`
+- optional `semantic_overview`
+- `deployment_overview`
 - `gitops_overview`
 - `documentation_overview`
 - `support_overview`
-- `controller_overview`
-- `runtime_overview`
-- `evidence`
+- `coverage_summary`
 - `limitations`
-- `coverage`
 - `drilldowns`
 
-Deployment-oriented story responses may also include:
+Within `deployment_overview`, repository story responses may also include:
+
+- `delivery_family_paths`
+- `delivery_family_story`
+- `delivery_paths`
+- `delivery_workflows`
+- `shared_config_paths`
+
+When repository entities carry semantic signals, repository story responses
+also:
+
+- add a `semantics` entry into `story_sections`
+- embed semantic coverage text into the top-level `story`
+- expose aggregated semantic counts in `semantic_overview`
+
+Workload and service story responses are still shaped around:
+
+- `subject`
+- `story`
+- optional lightweight identifiers such as `subject`
+
+Deployment-oriented trace responses are shaped around:
+
+- `subject`
+- `story`
+- `story_sections`
+- `deployment_overview`
+- `gitops_overview`
+- `controller_overview`
+- `runtime_overview`
+- `deployment_sources`
+- `cloud_resources`
+- `k8s_resources`
+- `image_refs`
+- `k8s_relationships`
+- `controller_driven_paths`
+- `delivery_paths`
+- `deployment_fact_summary`
+- `drilldowns`
+
+When repository-backed delivery-family synthesis is available, trace responses
+may also surface those grouped summaries through `deployment_overview`, such
+as `delivery_family_paths`, `delivery_family_story`, `delivery_workflows`, and
+`shared_config_paths`.
+
+When controller evidence is recoverable from the deployment repositories,
+`controller_overview` may also include concrete controller entity records in
+`entities`.
+
+The current deployment-oriented trace route is:
+
+- `POST /api/v0/impact/trace-deployment-chain`
+
+Deployment-oriented trace responses may also include:
 
 - `deployment_facts`
 - `deployment_fact_summary`
@@ -131,7 +246,8 @@ Mapping modes are intentionally controller-agnostic:
 That lets the same story contract work across GitOps, IaC-driven, and controller-free estates without fabricating deployment tooling.
 
 HTTP story routes stay canonical-ID based. If the caller starts with a fuzzy
-name or alias, resolve first and then call the story route.
+name or alias, resolve first and then call the story route. Deployment traces
+start from service names because they are the operator-facing entrypoint.
 
 ### Get repository story
 
@@ -166,8 +282,9 @@ narratives. Use the context routes, trace routes, and content routes named in
 For documentation generation, use this HTTP flow:
 
 1. call a story route first
-2. read `story_sections`, `deployment_overview`, `gitops_overview`, `documentation_overview`, and `support_overview`
-3. only then call content routes for exact file or snippet evidence
+2. if it is a repository story, read `story_sections`, `deployment_overview`, `gitops_overview`, `documentation_overview`, `support_overview`, `coverage_summary`, and `limitations`
+3. if it is a workload or service story, pair it with `trace_deployment_chain` before you expect deployment overviews
+4. only then call content routes for exact file or snippet evidence
 
 For cross-repo documentation or support flows, phrase the caller intent the same
 way you would through MCP: tell PCG to scan all related repositories,
@@ -198,11 +315,23 @@ The response is investigation-first rather than story-first. Key fields:
 - `investigation_findings`
 - `recommended_next_calls`
 
+Coverage fields are meant to be truthful, not optimistic:
+
+- `complete` means the indexed repository coverage explicitly reported complete
+- `partial` means the indexed context or story limitations reported partial coverage
+- `unknown` means PCG cannot currently prove complete or partial coverage from indexed evidence alone
+
+This route is the HTTP inspection mode for operators:
+
+- story/context routes remain the canonical-first truth surface
+- investigation widens into evidence families and related repos on purpose
+- inspection mode should explain gaps and widening decisions, not silently act like a second canonical graph
+
 Use it for prompts like:
 
-- "Explain the deployment flow for api-node-boats using PCG only."
-- "Explain the network flow for api-node-boats using PCG only."
-- "What depends on api-node-boats and what does it depend on?"
+- "Explain the deployment flow for sample-service-api using PCG only."
+- "Explain the network flow for sample-service-api using PCG only."
+- "What depends on sample-service-api and what does it depend on?"
 
 This route is designed for non-expert users who should not have to know which
 deployment, GitOps, Terraform, workflow, or support repositories to inspect
@@ -220,6 +349,11 @@ Use these routes when you only need code relationships and do not need the full 
 Public code-query requests use canonical `repo_id` whenever a repository scope
 is part of the request. Results should be interpreted using `repo_id +
 relative_path`, not absolute server-local paths.
+
+`POST /api/v0/code/relationships` prefers `entity_id` when the caller already
+has a canonical entity. It also accepts `name` for fallback lookup, plus
+optional `direction` (`incoming` or `outgoing`) and `relationship_type`
+filters when the caller only needs one edge class.
 
 Example code-only workflow:
 
@@ -241,9 +375,13 @@ Example dead-code workflow:
 ```json
 {
   "repo_id": "repository:r_ab12cd34",
-  "scope": "repo"
+  "exclude_decorated_with": ["@route", "@app.route"]
 }
 ```
+
+`repo_id` is optional. When omitted, the Go API returns the first page of
+dead-code candidates across indexed repositories and uses content metadata to
+filter any decorator exclusions.
 
 ## Content API
 
@@ -299,7 +437,7 @@ Example file-content search:
 - `POST /api/v0/infra/relationships`
 - `GET /api/v0/ecosystem/overview`
 - `POST /api/v0/traces/resource-to-code`
-- `POST /api/v0/paths/explain`
+- `POST /api/v0/impact/explain-dependency-path`
 - `POST /api/v0/impact/change-surface`
 - `POST /api/v0/environments/compare`
 
@@ -327,13 +465,17 @@ For local or deployed indexing workflows, use the CLI and deployment runtime:
 - local: `pcg index <path>`
 - Kubernetes: repository ingestion is deployment-managed through the ingester runtime
 
-## Ingester API
+## Ingester Status API
 
-Use these routes to inspect or control the deployed ingester runtime without reaching into Kubernetes directly.
+Use these routes to inspect the deployed ingester runtime without reaching into
+Kubernetes directly.
 
-- `GET /api/v0/ingesters`
-- `GET /api/v0/ingesters/{ingester}`
-- `POST /api/v0/ingesters/{ingester}/scan`
+- Canonical:
+  - `GET /api/v0/status/ingesters`
+  - `GET /api/v0/status/ingesters/{ingester}`
+- Legacy `GET` aliases:
+  - `GET /api/v0/ingesters`
+  - `GET /api/v0/ingesters/{ingester}`
 
 The default ingester is `repository`.
 
@@ -347,7 +489,9 @@ Status responses are designed for remote operation and include:
 - repository progress counts
 - failure counts and last error details
 
-Manual scan requests are persisted for the ingester runtime to claim asynchronously; the API does not perform the scan inline.
+The shipped public API does not include a `POST /api/v0/ingesters/{ingester}/scan`
+route in the shipped platform. Use `POST /api/v0/admin/reindex` or deployment-managed
+ingestion instead of assuming a per-ingester public scan endpoint exists.
 
 ## Bundle Import API
 
@@ -363,4 +507,4 @@ Request contract:
 - optional form field: `clear_existing=true|false`
 
 The route imports the uploaded `.pcg` bundle into the active graph database and
-returns the same success/message shape as the CLI bundle import flow.
+returns a success/message response describing the import result.

@@ -13,12 +13,19 @@ For documentation-oriented answers, use a simple orchestration rule:
 
 Repository-bearing results may include `repo_access` metadata. If PCG is running remotely, treat repository identity as remote-first and use `repo_id`, `repo_slug`, and repo-relative paths before assuming any `local_path` exists on the user's machine.
 
+Canonical-first query behavior now has one explicit rule:
+
+- prefer canonical IDs at the tool boundary whenever the tool supports them
+- treat name-based repository lookup as a supported compatibility alias, not the canonical contract
+- use inspection-style tools when the caller wants evidence widening and coverage reporting, not a second truth model
+- inspection results may report `complete`, `partial`, or `unknown` coverage based on indexed evidence; they should not imply certainty the graph does not have
+
 Content-oriented tools use the same rule:
 
 - file lookup uses `repo_id + relative_path`
 - entity lookup uses `entity_id`
 - deployed MCP/API runtimes prefer the PostgreSQL content store and report `unavailable` when a row is not yet indexed
-- local helper flows may still use workspace or graph-cache fallbacks
+- local helper flows may use workspace or graph-cache fallbacks when the content store is not the answering backend
 - file and entity read responses include `source_backend` so the client can see whether PCG answered from `postgres`, `workspace`, `graph-cache`, or `unavailable`
 - content search tools require the PostgreSQL content store and return an error when it is disabled
 - `repo_access` prompting is only for workflows that truly need the user's local machine
@@ -44,7 +51,7 @@ These are the most commonly used tools for understanding code.
 | **`analyze_code_relationships`** | The swiss-army knife for call graphs and dependencies. | "Find all callers of `process_payment`." |
 | **`calculate_cyclomatic_complexity`** | Measure function complexity. | "What is the complexity of `main`?" |
 | **`find_most_complex_functions`** | List the hardest-to-maintain functions. | "Show me the 5 most complex functions." |
-| **`find_dead_code`** | Identify unused functions, optionally scoped by canonical `repo_id`. | "Find dead code in this repo, but ignore `@route`." |
+| **`find_dead_code`** | Identify unused entities, optionally scoped by canonical `repo_id`, and filter out known decorator-owned entry points. | "Find dead code in this repo, but ignore `@route`." |
 
 ## Story & Context
 
@@ -53,20 +60,39 @@ Use these tools when the user is asking for a narrative answer such as
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
-| **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
-| **`get_workload_story`** | Return a structured workload story using canonical workload identity, optionally scoped to one environment. Story payloads may include `gitops_overview`, `documentation_overview`, and `support_overview` when evidence exists. | "Show me how payments-api is deployed in prod." |
-| **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts. | "What can you tell me about payments-api in QA?" |
-| **`investigate_service`** | Orchestrated service investigation that widens across related repos, evidence families, and deployment planes, then reports coverage and recommended next calls. | "Explain the deployment flow for api-node-boats using PCG only." |
+| **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, optional `semantic_overview`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
+| **`get_workload_story`** | Return a narrative workload story using canonical workload identity, optionally scoped to one environment. Use `trace_deployment_chain` when you need the richer deployment-mapping fields such as `story_sections`, `deployment_overview`, `controller_overview`, or `deployment_fact_summary`. | "Show me how payments-api is deployed in prod." |
+| **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts; pair it with `trace_deployment_chain` for deployment-mapping detail. | "What can you tell me about payments-api in QA?" |
+| **`resolve_entity`** | Resolve fuzzy input into canonical entities before story or context calls. | "What canonical entity matches `payments prod rds`?" |
+| **`get_entity_context`** | Fetch full context for one canonical entity id. | "Show me the context for this resolved entity." |
 | **`get_repo_context`** | Durable drill-down for repository details after the story answer. | "Show me the full repo context behind that story." |
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
 | **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
 
-Story responses may now include deployment-mapping fields alongside the narrative:
+`trace_deployment_chain` now exposes the deployment-mapping fields that callers should use for deployment-specific answers:
 
 - `controller_overview`
 - `runtime_overview`
+- `deployment_sources`
+- `cloud_resources`
+- `k8s_resources`
+- `image_refs`
+- `k8s_relationships`
 - `deployment_facts`
+- `controller_driven_paths`
+- `delivery_paths`
 - `deployment_fact_summary`
+
+Repository and service deployment summaries may also expose grouped delivery-family fields inside
+`deployment_overview`:
+
+- `delivery_family_paths`
+- `delivery_family_story`
+- `delivery_workflows`
+- `shared_config_paths`
+
+When the deployment repos contain ArgoCD controller entities, `controller_overview`
+also includes those concrete controller records under `entities`.
 
 `deployment_facts` are normalized, evidence-backed facts such as:
 
@@ -80,7 +106,7 @@ Story responses may now include deployment-mapping fields alongside the narrativ
 - `EXPOSES_ENTRYPOINT`
 - `DELIVERY_PATH_PRESENT`
 
-`deployment_fact_summary` is the compact interpretation layer:
+Within `trace_deployment_chain`, `deployment_fact_summary` is the compact interpretation layer:
 
 - `mapping_mode=controller` means explicit controller evidence was found
 - `mapping_mode=iac` means explicit infrastructure-as-code evidence was found
@@ -105,24 +131,6 @@ Current threshold-code examples:
 
 This keeps the contract portable across ArgoCD, Flux, Terraform, CloudFormation, plain Kubernetes manifests, ECS, Lambda, and environments that do not use a controller at all.
 
-`investigate_service` is the new investigation-first companion to the story
-tools.
-
-Use it when:
-
-- the user asks a normal operator question and should not need prompt engineering
-- you want PCG to widen into deployment-adjacent repos automatically
-- you need explicit coverage reporting and recommended next calls
-
-The main output fields are:
-
-- `repositories_considered`
-- `repositories_with_evidence`
-- `evidence_families_found`
-- `coverage_summary`
-- `investigation_findings`
-- `recommended_next_calls`
-
 ## Content Retrieval & Search
 
 Tools for portable source retrieval and indexed content search.
@@ -137,43 +145,23 @@ Use these after story or context determines which files, snippets, or docs matte
 | **`search_file_content`** | Search indexed file text through the content store. | "Find every file that mentions `shared-payments-prod`." |
 | **`search_entity_content`** | Search cached entity snippets through the content store. | "Find entities whose source mentions `process_payment`." |
 
-## System & Management
+## Runtime & Repository Status
 
-Tools for managing the graph and background jobs.
-
-| Tool Name | Description | Natural Language Example |
-| :--- | :--- | :--- |
-| **`monitor_directory`** | Start monitoring a folder (Alias: `watch_directory`)| "Watch the `src` folder." |
-| **`list_watched_paths`** | See what is being monitored. | "What directories are being watched?" |
-| **`unwatch_directory`** | Stop monitoring a folder. | "Stop watching `src`." |
-| **`list_indexed_repositories`** | Show what projects are currently indexed. | "What repos are indexed?" |
-| **`get_repository_stats`** | Show counts of files, classes, LOC. | "Show stats for the backend repo." |
-| **`delete_repository`** | Remove a repo from the graph. | "Remove the frontend repo." |
-| **`add_code_to_graph`** | Manually add a specific path. | "Add the `lib` folder." |
-| **`add_package_to_graph`** | Index an external library/package. | "Add the `requests` library." |
-
-## Ingester Runtime
-
-Tools for inspecting the status of the deployed ingester runtimes.
+Tools for runtime health, completeness, and repository inventory.
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
+| **`get_index_status`** | Show the latest checkpointed completeness state. | "Is indexing complete right now?" |
 | **`list_ingesters`** | Show the latest persisted status for all configured ingesters. | "What ingesters are configured and what state are they in?" |
 | **`get_ingester_status`** | Show detailed status for one ingester runtime, including retry timing and repo progress counts. | "What is the repository ingester doing right now?" |
-
-## Job Control
-
-| Tool Name | Description | Natural Language Example |
-| :--- | :--- | :--- |
-| **`list_jobs`** | View all background tasks. | "Show me active jobs." |
-| **`check_job_status`** | Check if a specific job is done. | "Is job `xyz` finished?" |
+| **`list_indexed_repositories`** | Show what projects are currently indexed. | "What repos are indexed?" |
+| **`get_repository_stats`** | Show counts of files, classes, LOC. | "Show stats for the backend repo." |
 
 ## Bundles & Registry
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
-| **`search_registry_bundles`** | Find shared graphs in the cloud. | "Search for a `flask` bundle." |
-| **`load_bundle`** | Install a graph bundle. | "Load the `flask` bundle." |
+| **`search_registry_bundles`** | Search the bundle catalog view exposed by the query surface. | "Search for a `flask` bundle." |
 
 ## Advanced Querying
 

@@ -11,4 +11,6 @@ It covers:
 
 For parser-specific contribution rules (adding language or IaC support), see [Contributing Language Support](contributing-language-support.md).
 
-For the developer guide covering parser architecture, integration testing, and the spec-driven contract model, see [DEVELOPING.md](https://github.com/platformcontext/platform-context-graph/blob/main/DEVELOPING.md).
+For the developer guide covering the Go parser architecture, fixture-backed
+contract pages, compose verification, and runtime boundaries, see
+[DEVELOPING.md](https://github.com/platformcontext/platform-context-graph/blob/main/DEVELOPING.md).

@@ -8,10 +8,11 @@ Before you install PlatformContextGraph, decide which mode you want first:
 
 ## What PCG needs
 
-### Python runtime
+### Go runtime
 
-- Python 3.10 or newer
-- `uv`, `pipx`, or `pip` available for installation
+- Go 1.25 or newer if you are building from source
+- or prebuilt PCG binaries (`pcg`, `pcg-api`, `pcg-mcp-server`,
+  `pcg-bootstrap-index`, `pcg-ingester`, `pcg-reducer`) available on `PATH`
 
 ### Graph database
 

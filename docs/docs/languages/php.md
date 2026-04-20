@@ -1,33 +1,47 @@
 # PHP Parser
 
-This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/parsers/capabilities/specs/php.yaml`
+This page tracks the checked-in Go PHP parser and query contract in the current repository state.
+
+Canonical implementation:
+- Parser: `go/internal/parser/php_language.go`
+- Registry: `go/internal/parser/registry.go`
+- Query proof: `go/internal/query/*php*`
+- Fixture repo: `tests/fixtures/ecosystems/php_comprehensive/`
 
 ## Parser Contract
+
 - Language: `php`
 - Family: `language`
-- Parser: `PhpTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/parsers/languages/php.py`
-- Fixture repo: `tests/fixtures/ecosystems/php_comprehensive/`
-- Unit test suite: `tests/unit/parsers/test_php_parser.py`
-- Integration test suite: `tests/integration/test_language_graph.py::TestPhpGraph`
+- Parser: `DefaultEngine (php)`
+- Integration validation: compose-backed fixture verification via
+  `docs/docs/reference/local-testing.md`
 
 ## Capability Checklist
-| Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
-|-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Functions | `functions` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_php_parser.py::test_parse_functions` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
-| Methods | `methods` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_php_parser.py::test_parse_functions` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
-| Classes | `classes` | supported | `classes` | `name, line_number` | `node:Class` | `tests/unit/parsers/test_php_parser.py::test_parse_classes` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
-| Interfaces | `interfaces` | supported | `interfaces` | `name, line_number` | `node:Interface` | `tests/unit/parsers/test_php_parser.py::test_parse_interfaces` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
-| Traits | `traits` | supported | `traits` | `name, line_number` | `node:Trait` | `tests/unit/parsers/test_php_parser.py::test_parse_traits` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
-| Use declarations | `use-declarations` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `tests/unit/parsers/test_php_parser.py::test_parse_imports` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
-| Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_php_parser.py::test_parse_function_calls` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
-| Member method calls | `member-method-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_php_parser.py::test_parse_member_static_and_constructor_calls` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
-| Static method calls | `static-method-calls` | partial | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_php_parser.py::test_parse_member_static_and_constructor_calls` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | Static call syntax is covered in focused parser tests, but the comprehensive fixture repo currently proves only member-call and constructor-call graph edges end to end. |
-| Object creation (`new`) | `object-creation-new` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_php_parser.py::test_parse_member_static_and_constructor_calls` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
-| Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `tests/unit/parsers/test_php_parser.py::test_parse_variables` | `tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface` | - |
+
+| Capability | ID | Status | Evidence | Current truth |
+| --- | --- | --- | --- | --- |
+| Core declarations | `core-declarations` | supported | `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsFunctionParametersSourceAndContext`, `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsInheritanceAndImportMetadata` | Functions, methods, classes, interfaces, traits, variables, and grouped `use` declarations parse natively in Go. |
+| Trait adaptation aliases | `trait-adaptation-aliases` | supported | `go/internal/parser/php_language_trait_adaptation_test.go::TestDefaultEngineParsePathPHPEmitsTraitAdaptationMetadata`, `go/internal/reducer/inheritance_php_trait_adaptations_test.go::TestExtractInheritanceRowsMaterializesPHPTraitAdaptationOverrides`, `go/internal/query/code_relationships_graph_test.go::TestHandleRelationshipsReturnsGraphBackedPHPTraitMethodAliases` | Trait `insteadof` and `as` clauses materialize `OVERRIDES` plus class-level and method-level `ALIASES` edges on the normal Go path. |
+| Static receiver families | `static-receiver-families` | supported | `go/internal/parser/php_language_static_property_receiver_test.go::TestDefaultEngineParsePathPHPInfersParentAndStaticPropertyReceiverChains`, `go/internal/reducer/code_call_materialization_php_static_property_receiver_test.go::TestExtractCodeCallRowsResolvesPHPParentAndStaticPropertyReceiverChainsUsingTypedPropertyInference`, `go/internal/query/code_relationships_graph_kotlin_php_additional_test.go::TestHandleRelationshipsReturnsGraphBackedPHPParentAndStaticPropertyReceiverAccessChains` | Direct static calls, static-property receiver chains, parent/static property access chains, imported static alias chains, and direct `self`/`static` instantiation rows all materialize canonical graph edges and have public query proof. |
+| Typed property and alias receivers | `typed-property-and-alias-receivers` | supported | `go/internal/parser/php_language_alias_test.go::TestDefaultEngineParsePathPHPInfersAliasedNewExpressionReceiverCalls`, `go/internal/reducer/code_call_materialization_family_test.go::TestExtractCodeCallRowsResolvesPHPPropertyChainAliasCallsUsingTypedPropertyInference`, `go/internal/query/code_relationships_graph_kotlin_php_receivers_test.go::TestHandleRelationshipsReturnsGraphBackedPHPAliasedNewExpressionReceiverCalls` | Typed `$this` receivers, aliased `new` expressions, imported class aliases, and property-chain aliases all survive parser inference, reducer materialization, and graph-backed public query proof. |
+| Function-return receiver chains | `function-return-receiver-chains` | supported | `go/internal/parser/php_language_function_chain_test.go::TestDefaultEngineParsePathPHPInfersFreeFunctionReturnCallChainReceiverCalls`, `go/internal/reducer/code_call_materialization_php_function_receiver_chain_test.go::TestExtractCodeCallRowsResolvesPHPFreeFunctionReturnCallChainReceiverCallsUsingTypedPropertyInference`, `go/internal/query/code_relationships_graph_php_long_tail_test.go::TestHandleRelationshipsReturnsGraphBackedPHPFreeFunctionReturnCallChainReceiverCalls` | Same-file free-function return aliases, direct receiver chains, and return call chains all materialize canonical object-call edges on the Go path. |
+| Method-return receiver chains | `method-return-receiver-chains` | supported | `go/internal/parser/php_language_method_chain_test.go::TestDefaultEngineParsePathPHPInfersMethodReturnPropertyDereferenceReceiverCalls`, `go/internal/reducer/code_call_materialization_php_method_return_chain_test.go::TestExtractCodeCallRowsResolvesPHPMethodReturnPropertyDereferenceReceiverCallsUsingTypedPropertyInference`, `go/internal/query/code_relationships_graph_kotlin_php_additional_test.go::TestHandleRelationshipsReturnsGraphBackedPHPSameFileMethodReturnPropertyChainAliasCalls` | Method-return call chains, property dereference chains, and parenthesized method-return chains survive parser inference, reducer materialization, and graph-backed public query proof. |
+| Cross-file object-call families | `cross-file-object-call-families` | supported | `go/internal/reducer/code_call_materialization_cross_file_exact_test.go::TestExtractCodeCallRowsResolvesCrossFilePHPMethodReturnCallChainReceiverCallsUsingTypedPropertyInference`, `go/internal/query/code_relationships_graph_kotlin_php_test.go::TestHandleRelationshipsReturnsGraphBackedPHPCrossFileReturnTypeAliasedCalls`, `go/internal/query/code_relationships_graph_php_long_tail_test.go::TestHandleRelationshipsReturnsGraphBackedPHPCrossFileChainedStaticFactoryReturnCalls` | Cross-file return-type aliases, cross-file method-return chains, and cross-file chained static factory returns are all query-proven in the current platform. |
+| Nullsafe and anonymous-class receivers | `nullsafe-and-anonymous-class-receivers` | supported | `go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsNullsafeReceiverMetadata`, `go/internal/reducer/code_call_materialization_family_test.go::TestExtractCodeCallRowsResolvesPHPNullsafeReceiverChainsUsingTypedPropertyInference`, `go/internal/query/code_relationships_graph_php_long_tail_test.go::TestHandleRelationshipsReturnsGraphBackedPHPAnonymousClassReceiverCalls` | Nullsafe receiver chains and anonymous-class receiver calls both survive the full parser/reducer/query path. |
+
+## Current Truth
+
+- The current Go parser covers the documented PHP object-call and aliasing
+  families end to end.
+- The public Go `code/relationships` surface now has checked-in proof for the
+  bounded PHP receiver families covered on this page.
+- Remaining PHP work, if any, is net-new future enhancement work around fully
+  dynamic dispatch and reflection-heavy flows beyond the documented contract.
 
 ## Known Limitations
-- Trait `use` inside class bodies is not linked as an INHERITS relationship
-- Anonymous classes are not modeled as distinct nodes
-- Magic methods (`__get`, `__call`) are captured as regular methods without special classification
+
+- Trait adaptation semantics beyond the bounded alias and override paths remain
+  intentionally narrow.
+- Fully dynamic PHP dispatch, reflection-heavy call sites, and arbitrary
+  whole-program alias flow remain bounded future work beyond the documented
+  contract.

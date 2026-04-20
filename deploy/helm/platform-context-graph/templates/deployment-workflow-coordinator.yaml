@@ -1,0 +1,98 @@
+{{- if .Values.workflowCoordinator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pcg.workflowCoordinatorFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workflow-coordinator
+spec:
+  replicas: {{ .Values.workflowCoordinator.replicas }}
+  revisionHistoryLimit: {{ .Values.workflowCoordinator.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "pcg.workflowCoordinatorSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pcg.workflowCoordinatorSelectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "pcg.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "pcg.renderDataPlaneBootstrapInitContainer" . | nindent 8 }}
+      containers:
+        - name: workflow-coordinator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/usr/local/bin/pcg-workflow-coordinator"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          env:
+            - name: PCG_HOME
+              value: /tmp/.platform-context-graph
+            - name: HOME
+              value: /tmp
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
+            {{- include "pcg.renderConnectionTuningEnv" .Values.workflowCoordinator.connectionTuning | nindent 12 }}
+            {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "workflow-coordinator") | nindent 12 }}
+            {{- include "pcg.renderPrometheusEnv" . | nindent 12 }}
+            - name: PCG_COLLECTOR_INSTANCES_JSON
+              value: {{ toJson .Values.workflowCoordinator.collectorInstances | quote }}
+            - name: PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE
+              value: {{ .Values.workflowCoordinator.deploymentMode | quote }}
+            - name: PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED
+              value: {{ ternary "true" "false" .Values.workflowCoordinator.claimsEnabled | quote }}
+            {{- include "pcg.renderEnvMap" .Values.env | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            {{- if .Values.observability.prometheus.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.observability.prometheus.port }}
+              protocol: TCP
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.workflowCoordinator.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

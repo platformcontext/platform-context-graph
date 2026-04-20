@@ -1,172 +1,298 @@
 # System Architecture
 
-PlatformContextGraph connects source code, infrastructure definitions, workload
-topology, and graph-backed query surfaces in one model.
+PlatformContextGraph is a platform that turns repository content,
+infrastructure definitions, deployment metadata, and runtime evidence into one
+queryable graph.
 
-It runs in two practical modes:
+Use this page for the current architecture only:
 
-- **local mode** for CLI and stdio MCP workflows
-- **deployed mode** for the shared API, ingester, and resolution-engine
+- which runtimes exist
+- what each runtime owns
+- how data moves from repository discovery to query answers
+- which contracts are shared across services
+- where to look for the operator view
 
-Phase 1 clarified package ownership, Phase 2 switched Git indexing to a
-facts-first write path, and Phase 3 added durable recovery and explainability on
-top of that runtime.
+For runtime commands and deployment shapes, use
+[Service Runtimes](deployment/service-runtimes.md). For concrete operator
+validation, use [Local Testing](reference/local-testing.md). For metrics,
+traces, and logs, use [Telemetry Overview](reference/telemetry/index.md).
 
-The current write-domain architecture keeps repo-local graph refresh parallel
-while routing shared platform and dependency mutation through durable,
-partitioned follow-up domains keyed by stable lock identifiers. That preserves
-commit-worker throughput without letting concurrent writers fight over the same
-dense shared nodes.
+## Architecture At A Glance
 
-That split means steady-state health needs two different backlog views:
+PCG is split into a small number of clear service and storage boundaries:
 
-- the fact work queue tells you whether repository projection work is arriving,
-  waiting, retrying, or dead-lettering
-- the shared projection backlog tells you whether authoritative shared follow-up
-  domains are draining after repo-local projection finishes
+- **API** serves HTTP query, admin, and status traffic.
+- **MCP Server** serves MCP tool transport and mounts the read/query surface for
+  MCP clients.
+- **Ingester** discovers repositories, snapshots content, parses source and
+  IaC, and writes durable facts.
+- **Resolution Engine** drains queues, materializes canonical graph state, and
+  owns replay and recovery.
+- **Bootstrap Index** runs the same write path as a one-shot seeding flow.
+- **Postgres** stores facts, queues, status, recovery state, and content.
+- **Neo4j** stores canonical graph nodes and relationships.
 
-## Local Request Path
+The platform is intentionally facts-first:
+
+1. collectors produce durable facts
+2. source-local projection turns those facts into graph/content state
+3. reducer-owned work handles shared and cross-domain truth
+4. query surfaces read the canonical graph and content store
+
+## Runtime Topology
 
 ```mermaid
 flowchart LR
-  A["CLI or stdio MCP client"] --> B["Shared query layer"]
-  B --> C["Neo4j"]
-  B --> D["Postgres content store or local workspace fallback"]
-```
-
-## Deployed Data Plane
-
-```mermaid
-flowchart LR
-  A["Ingester"] --> B["Parse repository snapshot"]
-  B --> C["Postgres fact store"]
-  C --> D["Fact work queue"]
-  D --> E["Resolution Engine"]
-  E --> F["Canonical graph projection"]
-  F --> G["Neo4j"]
+  A["Ingester"] --> B["Repository discovery and snapshotting"]
+  B --> C["Parser and relationship extraction"]
+  C --> D["Postgres fact store"]
+  D --> E["Projector queue"]
+  E --> F["Resolution Engine"]
+  F --> G["Neo4j canonical graph"]
   F --> H["Postgres content store"]
-  I["API / MCP"] --> G
-  I --> H
+  I["API"] --> G
+  I["API"] --> H
+  J["MCP Server"] --> G
+  J["MCP Server"] --> H
 ```
 
-## Deployed Control Plane
+## Service Boundaries
+
+### API
+
+The API owns:
+
+- HTTP query routes
+- OpenAPI surface
+- public admin/query endpoints
+- runtime health and metrics endpoints
+
+The API does not own:
+
+- repository sync
+- parsing
+- fact emission
+- queue draining
+- canonical write orchestration
+
+### MCP Server
+
+The MCP server owns:
+
+- MCP SSE and JSON-RPC transport
+- tool dispatch over the Go query/read surface
+- MCP-specific health endpoint shape
+
+The MCP server does not own:
+
+- repository sync
+- parsing
+- fact emission
+- queue draining
+- the shared runtime admin/status mux used by API, ingester, and reducer
+
+### Ingester
+
+The ingester owns:
+
+- repository selection and sync loops
+- workspace and snapshot lifecycle
+- parser execution
+- content shaping inputs
+- relationship evidence extraction
+- fact emission into Postgres
+- enqueueing source-local projection work
+
+The ingester is the only long-running runtime that should hold the shared
+workspace volume in deployed environments.
+
+### Resolution Engine
+
+The resolution engine owns:
+
+- projector queue draining
+- source-local graph and content projection
+- shared projection intent processing
+- canonical graph materialization
+- replay, retry, dead-letter, and recovery behavior
+- operator-facing repair and replay ownership
+
+This runtime is where cross-repo and cross-domain truth is finalized.
+
+### Bootstrap Index
+
+Bootstrap Index is a one-shot helper that uses the same facts-first write path
+to seed an empty or recovered environment. It is not a steady-state service and
+should not be treated as one.
+
+## Domain Ownership
+
+The repository layout mirrors the service boundaries:
+
+| Package area | Ownership |
+| --- | --- |
+| `go/internal/collector/` | Git discovery, snapshotting, parsing inputs, fact shaping |
+| `go/internal/parser/` | parser registry, language engines, SCIP support |
+| `go/internal/relationships/` | relationship evidence extraction and typed evidence families |
+| `go/internal/projector/` | source-local projection stages |
+| `go/internal/reducer/` | shared projection, canonical materialization, repair flows |
+| `go/internal/query/` | HTTP handlers, OpenAPI, query/read surfaces |
+| `go/internal/runtime/` | health, readiness, metrics, admin/status wiring |
+| `go/internal/status/` | lifecycle and coverage/status reporting |
+| `go/internal/telemetry/` | structured JSON logging, tracing, metrics |
+| `go/internal/terraformschema/` | packaged Terraform provider schema assets and loaders |
+
+For the full package map, use [Source Layout](reference/source-layout.md).
+
+## Data And Queue Contracts
+
+PCG separates durable state from in-process work:
+
+- **Postgres facts** hold extracted repository truth and queue state.
+- **Projector/reducer queues** provide durable claim, retry, and dead-letter
+  ownership.
+- **Neo4j** holds canonical graph entities and edges.
+- **Postgres content store** holds entity and file content used by query and
+  context APIs.
+
+This split is deliberate:
+
+- in-process worker pools handle bounded CPU and I/O concurrency
+- durable queues handle retries, recovery, and cross-service coordination
+- query surfaces stay read-only against canonical stores
+
+## Inter-Service Workflow
+
+### Write Path
+
+```mermaid
+sequenceDiagram
+  participant Ingester
+  participant Postgres as Postgres Facts/Queues
+  participant Reducer as Resolution Engine
+  participant Neo4j
+  participant Content as Postgres Content
+
+  Ingester->>Postgres: commit facts
+  Ingester->>Postgres: enqueue projector work
+  Reducer->>Postgres: claim projector work
+  Reducer->>Neo4j: write source-local graph state
+  Reducer->>Content: write content entities
+  Reducer->>Postgres: enqueue shared projection intents
+  Reducer->>Postgres: claim shared projection intents
+  Reducer->>Neo4j: write canonical shared edges
+  Reducer->>Postgres: ack or dead-letter work
+```
+
+### Read Path
 
 ```mermaid
 flowchart LR
-  A["Fact work queue"] --> B["Failure class and retry state"]
-  A --> C["Replay and dead-letter audit"]
-  D["Resolution Engine"] --> E["Projection decisions"]
-  E --> F["Confidence and bounded evidence"]
-  G["Admin API and CLI"] --> C
-  G --> E
+  A["CLI / HTTP request"] --> B["API / Query layer"]
+  F["MCP client"] --> G["MCP Server"]
+  B --> C["Neo4j canonical graph"]
+  B --> D["Postgres content store"]
+  B --> E["Status and admin readers"]
+  G --> C
+  G --> D
 ```
 
-## Component Responsibilities
+## Operator Contract
 
-| Component | Responsibility |
-| --- | --- |
-| CLI | Local indexing, analysis, setup, and runtime management |
-| MCP | AI-oriented query surface over the same shared model |
-| HTTP API | OpenAPI-backed automation surface plus admin endpoints |
-| Query layer | Shared read model used by CLI, MCP, and HTTP |
-| Collectors | Source-specific discovery and ingestion helpers |
-| Parsers | Language and IaC parsing, capability specs, and SCIP helpers |
-| Facts layer | Typed facts, Postgres fact storage, queue state, recovery state |
-| Resolution | Fact-to-graph projection, workload/platform materialization, decisions |
-| Graph layer | Canonical schema and persistence helpers for graph writes |
-| Content store | Postgres-backed file and entity content cache |
-| Observability | OTEL metrics, traces, and structured logs across runtimes |
+The shared Go runtime admin contract now applies to the API, MCP server,
+ingester, resolution engine, and local proof runtimes that mount
+`go/internal/runtime`.
 
-## Facts-First Flow
+- `GET /healthz`
+- `GET /readyz`
+- `GET /admin/status`
+- `/metrics`
 
-1. The ingester discovers repositories and parses a repository snapshot.
-2. Repository, file, and entity facts are written to Postgres.
-3. A fact work item is enqueued for that snapshot.
-4. The resolution-engine, or the ingester’s inline facts-first commit path,
-   claims the work item and loads the stored facts.
-5. Repo-local projection refreshes repository, file, entity, relationship,
-   workload, and repo-owned platform state in Neo4j.
-6. Authoritative shared platform and dependency writes are emitted as durable
-   follow-up domains and drained through partitioned workers keyed by stable
-   lock domains.
-7. The same projection flow dual-writes file and entity content into Postgres.
-8. Query surfaces continue reading the canonical graph and content store.
+The MCP server is a separate Go runtime and now mounts the shared admin mux
+alongside its transport-specific endpoints. It also exposes:
 
-For the current Git cutover, the indexing coordinator can still drive the same
-resolution path in-process so one indexing run completes deterministically even
-without a separate runtime hop.
+- `GET /health`
+- `GET /sse`
+- `POST /mcp/message`
+- `/api/*` passthrough routes for query handling
 
-Status surfaces can report `awaiting_shared_projection` while authoritative
-shared follow-up remains pending for an accepted repository generation.
+The point of the shared contract is consistency:
 
-The observability surface mirrors that split:
+- operators should not need a different mental model per service
+- the CLI and HTTP/admin surfaces should describe the same underlying runtime
+  state
+- live versus inferred state should be explicit
 
-- `pcg_fact_queue_depth` and `pcg_fact_queue_oldest_age_seconds` describe the
-  fact work queue
-- `pcg_shared_projection_pending_intents` and
-  `pcg_shared_projection_oldest_pending_age_seconds` describe authoritative
-  shared follow-up backlog by projection domain
+## Telemetry Contract
 
-The current deterministic tuning harness gives us a safe interpretation model
-for those gauges:
+Telemetry is first-class, not an afterthought.
 
-- move partition count first when shared backlog is accumulating, because
-  better lock-domain spread lowers drain rounds before increasing per-round
-  write volume
-- use batch-limit increases second, once partitioning has already reduced drain
-  rounds and the remaining backlog is tail work rather than lock contention
+- Core long-running Go runtimes, including MCP, use structured JSON logging
+  through the shared Go telemetry package.
+- Metrics expose runtime, queue, and data-plane behavior.
+- Traces connect request, ingestion, and reduction work across service
+  boundaries.
 
-That keeps the architecture moving forward with parallelism while preserving the
-phase-1 goal of reducing dense-node conflict on shared writes.
+MCP keeps its transport-specific `/health`, `/sse`, and `/mcp/message`
+endpoints, but its operator/admin surface now follows the same shared Go
+runtime contract as the API, ingester, and reducer.
 
-## Recovery And Explainability
-
-Phase 3 keeps more operational meaning in Postgres instead of only in logs:
-
-- work items store durable failure class, failure stage, and retry disposition
-- replay actions are recorded as replay-event rows
-- backfill requests are stored durably
-- projection decisions store confidence, reasoning, and bounded evidence
-
-That lets operators answer:
-
-- what failed
-- whether it was retryable or terminal
-- what was replayed or dead-lettered
-- why a relationship, workload, or platform inference was accepted
-
-## Runtime Ownership
-
-| Runtime | Owns |
-| --- | --- |
-| API | HTTP and MCP serving, graph reads, content reads, admin surface |
-| Ingester | repo sync, parsing, fact emission, workspace ownership |
-| Resolution Engine | queue draining, projection, retries, replay, recovery |
-| Bootstrap Index | one-shot initial indexing in local/full-stack workflows |
-
-The content store is owned by the projection path, not by the raw parser. The
-ingester emits facts; the resolution-engine turns those facts into canonical
-graph and content state.
-
-## Observability Model
-
-Each primary runtime has a distinct telemetry surface:
-
-- **API**: HTTP/MCP latency, error rate, graph query latency
-- **Ingester**: repo queue wait, parse timing, fact emission timing, workspace
-  pressure
-- **Resolution Engine**: queue depth and age, claim latency, projection stage
-  timing, retries, dead letters, decision volume, shared follow-up backlog
-- **Facts layer**: fact-store and queue SQL latency, row volume, pool
-  saturation, backlog
-
-Operationally, use metrics first to decide whether the bottleneck is still in
-the fact queue or has moved into shared follow-up. Then use traces to inspect
-the slow path and logs to recover the exact repository, run, or generation
-context.
-
-See:
+The canonical docs are:
 
 - [Telemetry Overview](reference/telemetry/index.md)
+- [Logs](reference/telemetry/logs.md)
+- [Metrics](reference/telemetry/metrics.md)
+- [Traces](reference/telemetry/traces.md)
+
+## Local And Deployed Shapes
+
+PCG supports two practical execution shapes:
+
+- **local** for CLI, MCP, and compose-backed proof flows
+- **deployed** for API, ingester, and resolution-engine service operation
+
+Those shapes reuse the same binaries and the same contracts. Deployment only
+changes runtime shape, command, and configuration.
+
+Use these docs together:
+
+- [Deployment Overview](deployment/overview.md)
+- [Docker Compose](deployment/docker-compose.md)
+- [Helm](deployment/helm.md)
+- [Service Runtimes](deployment/service-runtimes.md)
+
+## Terraform Provider Schemas
+
+Terraform provider schema assets are a runtime dependency of the current
+relationship path, not optional reference material.
+
+- assets live in `go/internal/terraformschema/schemas/*.json.gz`
+- loaders live in `go/internal/terraformschema/`
+- relationship extraction consumes them through
+  `go/internal/relationships/`
+
+That dependency must stay documented because it is part of how Terraform
+resource classification and relationship evidence work.
+
+## What This Page Does Not Try To Be
+
+This page is intentionally not:
+
+- a change diary
+- a public ADR index
+- a workstream backlog
+- an incident postmortem collection
+
+If documentation is about the platform as it runs today, it belongs in the
+published architecture, workflow, deployment, testing, telemetry, or service
+docs. Historical execution records should not be the primary way engineers or
+operators learn how PCG works.
+
+## Related Docs
+
+- [Service Workflows](reference/service-workflows.md)
 - [Service Runtimes](deployment/service-runtimes.md)
 - [Source Layout](reference/source-layout.md)
+- [Local Testing](reference/local-testing.md)
+- [Relationship Mapping](reference/relationship-mapping.md)
+- [HTTP API](reference/http-api.md)

@@ -41,13 +41,13 @@ pcg analyze callers process_payment
 Use a deployed service directly:
 
 ```bash
-pcg workspace status --service-url https://mcp-pcg.qa.ops.bgrp.io --api-key "$PCG_API_KEY"
+pcg workspace status --service-url https://pcg.qa.example.test --api-key "$PCG_API_KEY"
 ```
 
 Or store a profile once:
 
 ```bash
-pcg config set PCG_SERVICE_URL_QA https://mcp-pcg.qa.ops.bgrp.io
+pcg config set PCG_SERVICE_URL_QA https://pcg.qa.example.test
 pcg config set PCG_API_KEY_QA your-token-here
 ```
 
@@ -68,19 +68,26 @@ These commands support remote mode:
 - `pcg index-status`
 - `pcg workspace status`
 - `pcg admin reindex`
+- `pcg admin tuning-report`
 - `pcg admin facts replay`
 - `pcg admin facts dead-letter`
+- `pcg admin facts skip`
 - `pcg admin facts backfill`
 - `pcg admin facts list`
 - `pcg admin facts decisions`
 - `pcg admin facts replay-events`
-- `pcg bundle upload`
 - `pcg find name`
 - `pcg find pattern`
+- `pcg find type`
+- `pcg find variable`
+- `pcg find content`
+- `pcg find decorator`
+- `pcg find argument`
 - `pcg analyze calls`
 - `pcg analyze callers`
 - `pcg analyze chain`
 - `pcg analyze deps`
+- `pcg analyze tree`
 - `pcg analyze complexity`
 - `pcg analyze dead-code`
 - `pcg analyze overrides`
@@ -92,7 +99,6 @@ These are still local-only:
 
 - `pcg index`
 - `pcg watch`
-- `pcg visualize`
 - `pcg query`
 - `pcg workspace plan`
 - `pcg workspace sync`
@@ -101,6 +107,21 @@ These are still local-only:
 - `pcg api start`
 - `pcg serve start`
 - `pcg neo4j setup`
+
+## Commands that are intentionally removed
+
+These names still appear in older docs, scripts, or muscle memory, but they are
+not part of the supported Go CLI contract anymore:
+
+- `pcg clean`
+- `pcg delete`
+- `pcg add-package`
+- `pcg unwatch`
+- `pcg watching`
+- `pcg ecosystem index`
+- `pcg ecosystem status`
+
+Use the Go admin/status flows or the supported indexing commands instead.
 
 ## Use this when you are unsure
 

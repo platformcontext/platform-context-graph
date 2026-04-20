@@ -25,6 +25,6 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ include "pcg.fullname" . }}
+        - name: {{ include "pcg.exposureBackendServiceName" (dict "root" . "backend" .Values.exposure.gateway.backend) }}
           port: {{ .Values.service.port }}
 {{- end }}

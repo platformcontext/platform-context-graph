@@ -11,6 +11,21 @@ spec:
     matchLabels:
       {{- include "pcg.apiSelectorLabels" . | nindent 6 }}
 ---
+{{- if .Values.mcpServer.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pcg.mcpServerFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "pcg.mcpServerSelectorLabels" . | nindent 6 }}
+---
+{{- end }}
 {{- if .Values.resolutionEngine.enabled }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -24,6 +39,21 @@ spec:
   selector:
     matchLabels:
       {{- include "pcg.resolutionEngineSelectorLabels" . | nindent 6 }}
+---
+{{- end }}
+{{- if .Values.workflowCoordinator.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pcg.workflowCoordinatorFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workflow-coordinator
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "pcg.workflowCoordinatorSelectorLabels" . | nindent 6 }}
 ---
 {{- end }}
 {{- if .Values.repoSync.enabled }}

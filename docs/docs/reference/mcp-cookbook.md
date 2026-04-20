@@ -82,6 +82,9 @@ If you want shorter, role-based prompts before you drop into tool names and JSON
 { "query_type": "find_callers", "target": "helper" }
 ```
 
+This now maps to the Go `code/relationships` route using `name=helper`,
+`direction=incoming`, and `relationship_type=CALLS`.
+
 ### Find what a function calls
 
 > "What functions are called inside `foo`?"
@@ -91,6 +94,9 @@ If you want shorter, role-based prompts before you drop into tool names and JSON
 ```json
 { "query_type": "find_callees", "target": "foo" }
 ```
+
+This now maps to the Go `code/relationships` route using `name=foo`,
+`direction=outgoing`, and `relationship_type=CALLS`.
 
 ### Find indirect callers
 
@@ -116,11 +122,13 @@ If you want shorter, role-based prompts before you drop into tool names and JSON
 
 > "What is the call chain from `wrapper` to `helper`?"
 
-**Tool:** `analyze_code_relationships`
+**Tool:** `find_function_call_chain`
 
 ```json
-{ "query_type": "call_chain", "target": "wrapper->helper" }
+{ "start": "wrapper", "end": "helper", "max_depth": 5 }
 ```
+
+`analyze_code_relationships` also accepts `{"query_type":"call_chain","target":"wrapper->helper"}` for compatibility, but the dedicated tool is the canonical public contract.
 
 ### Find cross-module calls
 
@@ -189,7 +197,7 @@ If you want shorter, role-based prompts before you drop into tool names and JSON
 **Tool:** `find_dead_code`
 
 ```json
-{ "exclude_decorated_with": ["@app.route"] }
+{ "repo_id": "repository:r_ab12cd34", "exclude_decorated_with": ["@app.route"] }
 ```
 
 ### Find dead code (Cypher)

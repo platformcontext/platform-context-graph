@@ -20,7 +20,7 @@ Make changes, then `Cmd+R` / `Ctrl+R` in the host window to reload.
 
 - Node.js 20.x or higher
 - VS Code 1.85.0 or higher
-- pcg CLI installed (`uv tool install platform-context-graph`)
+- pcg CLI built from the Go module (`cd go && go build -o bin/ ./cmd/pcg`)
 
 ## Project Structure
 

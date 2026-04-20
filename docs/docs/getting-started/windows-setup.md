@@ -10,8 +10,8 @@ Typical flow:
 
 1. install WSL
 2. open an Ubuntu shell
-3. install Python and your preferred package manager
-4. install PCG
+3. install Go
+4. build the PCG CLI from source
 5. index from the WSL-visible project path
 
 This keeps PCG close to the Linux/macOS experience and avoids backend limitations on native Windows.
@@ -22,11 +22,20 @@ If you do not want WSL, use **Neo4j** as the backend and run PCG against that ex
 
 Recommended checklist:
 
-1. install Python
-2. install PCG
+1. install Go
+2. build the PCG CLI from source
 3. ensure Neo4j is reachable
 4. run `pcg neo4j setup`
 5. verify with `pcg doctor`
+
+Build example:
+
+```powershell
+cd go
+go build -o ..\\pcg.exe .\\cmd\\pcg
+cd ..
+.\pcg.exe --help
+```
 
 ## First commands
 
@@ -36,7 +45,8 @@ pcg index .
 pcg mcp setup
 ```
 
-If path or shell behavior differs in your environment, prefer a Python virtual environment or `uv tool install` so the `pcg` command resolves cleanly.
+If path or shell behavior differs in your environment, put the built binary on
+your PATH or invoke it directly with its full path.
 
 ---
 
@@ -44,9 +54,9 @@ If path or shell behavior differs in your environment, prefer a Python virtual e
 
 ### `'pcg' command not found`
 
-* Restart your terminal after installation
-* Ensure Python Scripts directory is in PATH
-* Try: `uv tool install platform-context-graph` or `pip install platform-context-graph`
+* Restart your terminal after building the CLI
+* Ensure the directory containing `pcg.exe` is in PATH
+* Or run the binary directly from the checkout path
 
 ### WSL path confusion
 

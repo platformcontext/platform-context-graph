@@ -2,32 +2,27 @@
 
 Install PCG in the way that matches how you plan to use it.
 
-## Option 1: Install the CLI tool
+## Option 1: Build from source
 
-Recommended for local use:
-
-```bash
-uv tool install platform-context-graph
-```
-
-Alternatives:
+Clone the repository and build the Go binaries:
 
 ```bash
-pipx install platform-context-graph
+cd go && go build -o bin/ ./cmd/pcg
+export PATH="$PWD/bin:$PATH"
+pcg --help
 ```
+
+## Option 2: Docker
+
+Run the full platform stack with Docker Compose:
 
 ```bash
-pip install platform-context-graph
+docker compose up --build
 ```
 
-## Option 2: Run from source
-
-Useful when you are developing the project itself or validating the full deployable-service path:
-
-```bash
-uv sync
-uv run pcg --help
-```
+This builds a single Go-only image and starts all platform services (API,
+ingester, reducer, bootstrap-index) along with Neo4j, Postgres, OTEL
+collector, and Jaeger.
 
 ## Database setup
 

@@ -1,33 +1,33 @@
 # C# Parser
 
-This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/parsers/capabilities/specs/csharp.yaml`
+This page tracks the checked-in Go parser contract in the current repository state.
+Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
 - Language: `csharp`
 - Family: `language`
-- Parser: `CSharpTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/parsers/languages/csharp.py`
+- Parser: `DefaultEngine (c_sharp)`
+- Entrypoint: `go/internal/parser/csharp_language.go`
 - Fixture repo: `tests/fixtures/ecosystems/csharp_comprehensive/`
-- Unit test suite: `tests/unit/parsers/test_csharp_parser.py`
-- Integration test suite: `tests/integration/test_language_graph.py::TestCSharpGraph`
+- Unit test suite: `go/internal/parser/engine_managed_oo_test.go`
+- Integration validation: compose-backed fixture verification (see `../reference/local-testing.md`)
 
 ## Capability Checklist
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Methods | `methods` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_csharp_parser.py::test_parse_methods` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Constructors | `constructors` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_csharp_parser.py::test_parse_class` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Local functions | `local-functions` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_csharp_parser.py::test_parse_local_functions` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Classes | `classes` | supported | `classes` | `name, line_number` | `node:Class` | `tests/unit/parsers/test_csharp_parser.py::test_parse_class` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Interfaces | `interfaces` | supported | `interfaces` | `name, line_number` | `node:Interface` | `tests/unit/parsers/test_csharp_parser.py::test_parse_interface` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Structs | `structs` | supported | `structs` | `name, line_number` | `node:Struct` | `tests/unit/parsers/test_csharp_parser.py::test_parse_struct` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Records | `records` | supported | `records` | `name, line_number` | `node:Record` | `tests/unit/parsers/test_csharp_parser.py::test_parse_record` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Enums | `enums` | supported | `enums` | `name, line_number` | `node:Enum` | `tests/unit/parsers/test_csharp_parser.py::test_parse_enum` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Properties | `properties` | supported | `properties` | `name, line_number` | `node:Property` | `tests/unit/parsers/test_csharp_parser.py::test_parse_properties_and_object_creation` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_property_nodes` | - |
-| Using directives | `using-directives` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `tests/unit/parsers/test_csharp_parser.py::test_parse_imports` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Method invocations | `method-invocations` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_csharp_parser.py::test_parse_properties_and_object_creation` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface` | - |
-| Object creation | `object-creation` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_csharp_parser.py::test_parse_properties_and_object_creation` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_object_creation_calls` | - |
-| Inheritance (`base_list`) | `inheritance-base-list` | supported | `classes` | `name, line_number, bases` | `relationship:INHERITS` | `tests/unit/parsers/test_csharp_parser.py::test_parse_inheritance` | `tests/integration/test_language_graph.py::TestCSharpGraph::test_inheritance_edges` | - |
+| Methods | `methods` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
+| Constructors | `constructors` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
+| Local functions | `local-functions` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharpLocalTypes` | Compose-backed fixture verification | - |
+| Classes | `classes` | supported | `classes` | `name, line_number` | `node:Class` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
+| Interfaces | `interfaces` | supported | `interfaces` | `name, line_number` | `node:Interface` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
+| Structs | `structs` | supported | `structs` | `name, line_number` | `node:Struct` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharpLocalTypes` | Compose-backed fixture verification | - |
+| Records | `records` | supported | `records` | `name, line_number` | `node:Record` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
+| Enums | `enums` | supported | `enums` | `name, line_number` | `node:Enum` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharpLocalTypes` | Compose-backed fixture verification | - |
+| Properties | `properties` | supported | `properties` | `name, line_number` | `node:Property` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
+| Using directives | `using-directives` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
+| Method invocations | `method-invocations` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
+| Object creation | `object-creation` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
+| Inheritance (`base_list`) | `inheritance-base-list` | supported | `classes` | `name, line_number, bases` | `relationship:INHERITS` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp` | Compose-backed fixture verification | - |
 
 ## Known Limitations
 - Extension methods are not tagged as extensions in the graph

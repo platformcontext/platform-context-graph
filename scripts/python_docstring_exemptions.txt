@@ -1,6 +1,0 @@
-# Legacy missing-docstring cases already present on main.
-# New handwritten code should include docstrings instead of extending this list.
-src/platform_context_graph/observability/http_middleware.py
-src/platform_context_graph/query/status.py
-src/platform_context_graph/relationships/state.py
-src/platform_context_graph/tools/graph_builder_call_relationships.py

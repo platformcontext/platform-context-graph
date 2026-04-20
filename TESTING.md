@@ -1,15 +1,16 @@
 # Testing
 
-PlatformContextGraph uses a layered test strategy:
+PlatformContextGraph now validates the Go-owned platform directly. The old
+Python service and pytest runtime suites are no longer part of the normal
+verification path on this branch.
 
-- **Unit tests** for parser extraction and query logic
-- **Integration tests** for CLI, MCP, and HTTP API contracts
-- **Deployment tests** for Helm, manifests, and Compose assets
-- **End-to-end tests** for realistic user journeys through the full stack
+For the exact verification matrix, use
+[docs/docs/reference/local-testing.md](docs/docs/reference/local-testing.md).
+This file is the shorter overview.
 
 ## Quick Start
 
-Fast local pass (unit + deployment):
+Fast local pass:
 
 ```bash
 ./tests/run_tests.sh fast
@@ -17,28 +18,33 @@ Fast local pass (unit + deployment):
 
 ## Layer Breakdown
 
-### Unit tests
+### Go unit and package tests
 
-Parser extraction, query logic, domain models. No external services needed.
+Parser extraction, query handlers, runtime wiring, storage contracts, and
+domain materialization. No external services needed.
 
 ```bash
-./tests/run_tests.sh unit
+cd go
+go test ./internal/parser ./internal/query ./internal/runtime ./internal/reducer ./internal/projector -count=1
 ```
 
-### Integration tests
+### CLI and service wiring
 
-Graph persistence, API contracts, MCP routing, CLI behavior. Requires Neo4j.
+The top-level CLI and runtime binaries should build and their focused tests
+should pass.
 
 ```bash
-PYTHONPATH=src uv run python -m pytest tests/unit/query tests/integration/api tests/integration/mcp/test_mcp_server.py -q
+cd go
+go test ./cmd/pcg ./cmd/api ./cmd/mcp-server ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1
 ```
 
 ### Deployment asset tests
 
-Helm templates, Kustomize manifests, Compose config. No external services needed.
+Docker, Helm, and compose-backed runtime shape.
 
 ```bash
-PYTHONPATH=src uv run python -m pytest tests/integration/deployment/test_public_deployment_assets.py -q
+cd go
+go test ./cmd/api ./cmd/mcp-server ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1
 helm template platform-context-graph ./deploy/helm/platform-context-graph
 kubectl kustomize deploy/manifests/minimal
 ```
@@ -46,7 +52,8 @@ kubectl kustomize deploy/manifests/minimal
 ### Docs smoke tests
 
 ```bash
-PYTHONPATH=src uv run python -m pytest tests/integration/docs/test_docs_smoke.py -q
+uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
+  mkdocs build --strict --clean --config-file docs/mkdocs.yml
 ```
 
 ## Local Service Stack
@@ -54,9 +61,10 @@ PYTHONPATH=src uv run python -m pytest tests/integration/docs/test_docs_smoke.py
 The Docker Compose stack mirrors the production lifecycle:
 
 1. Start Neo4j and Postgres
-2. Bootstrap-index fixture repos
-3. Start the combined HTTP API + MCP service
-4. Run ongoing repo sync
+2. Run bootstrap indexing
+3. Start the Go API service
+4. Start the Go ingester
+5. Start the Go reducer
 
 ```bash
 docker compose up --build
@@ -73,17 +81,32 @@ docker compose up --build
 
 The fixture ecosystems used by the stack live under `tests/fixtures/ecosystems/`.
 
+When you point Compose at host repositories, set `PCG_FILESYSTEM_HOST_ROOT` to
+an absolute real directory. Do not use symlinks, and do not use macOS `/tmp`
+because Docker resolves it through `/private/tmp`.
+
 ## What We Verify
 
-- Query contracts and graph reasoning
+- parser extraction and matrix parity
 - CLI behavior and flags
 - MCP routing and tool exposure
 - HTTP API and OpenAPI contract stability
-- Deployment artifacts for the public chart and minimal manifests
-- Shared-infra scenarios (one resource supporting multiple workloads)
+- deployment artifacts for the public chart and minimal manifests
+- compose-backed ingester and reducer flows
+- Terraform provider-schema loading and relationship extraction
+
+## Minimum Always-Run Gates
+
+```bash
+cd go
+go test ./cmd/pcg ./cmd/api ./cmd/mcp-server ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1
+go test ./internal/parser ./internal/collector ./internal/collector/discovery ./internal/content/shape -count=1
+go test ./internal/terraformschema ./internal/relationships ./internal/runtime ./internal/status ./internal/storage/postgres -count=1
+git diff --check
+```
 
 ## Current Gaps
 
-- No full Kubernetes cluster integration test yet
-- No automated EKS smoke test yet
-- The Compose-backed service flow should continue to grow with richer fixture ecosystems
+- Cloud validation still depends on the deployment environment being available
+- Compose-backed end-to-end proof remains slower than the focused package gates
+- Parser parity should continue to be hardened against the full fixture matrix
