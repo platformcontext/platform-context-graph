@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	"github.com/platformcontext/platform-context-graph/go/internal/workflow"
 )
@@ -41,8 +42,18 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUpdatesRunAndCompleteness(t *t
 			},
 			{
 				rows: [][]any{
-					{string(scope.CollectorGit), "canonical_nodes_committed", 1},
-					{string(scope.CollectorGit), "semantic_nodes_committed", 1},
+					{
+						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
+						string(reducer.GraphProjectionPhaseCanonicalNodesCommitted),
+						1,
+					},
+					{
+						string(scope.CollectorGit),
+						string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
+						string(reducer.GraphProjectionPhaseSemanticNodesCommitted),
+						1,
+					},
 				},
 			},
 		},
@@ -81,5 +92,85 @@ func TestWorkflowControlStoreReconcileWorkflowRunsReturnsZeroWhenNoRunsNeedWork(
 	}
 	if got, want := reconciled, 0; got != want {
 		t.Fatalf("reconciled = %d, want %d", got, want)
+	}
+}
+
+func TestWorkflowControlStoreReconcileWorkflowRunsUsesTransactionWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 20, 21, 10, 0, 0, time.UTC)
+	tx := &fakeTx{
+		queryResponses: []queueFakeRows{
+			{
+				rows: [][]any{{
+					string(scope.CollectorTerraformState),
+					1,
+					0,
+					0,
+					1,
+					0,
+				}},
+			},
+			{
+				rows: [][]any{
+					{
+						string(scope.CollectorTerraformState),
+						string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
+						string(reducer.GraphProjectionPhaseCanonicalNodesCommitted),
+						1,
+					},
+					{
+						string(scope.CollectorTerraformState),
+						string(reducer.GraphProjectionKeyspaceCodeEntitiesUID),
+						string(reducer.GraphProjectionPhaseSemanticNodesCommitted),
+						1,
+					},
+				},
+			},
+		},
+	}
+	db := &fakeTransactionalDB{
+		tx: tx,
+		queryResponses: []queueFakeRows{
+			{
+				rows: [][]any{{
+					"run-transactional",
+					string(workflow.TriggerKindBootstrap),
+					string(workflow.RunStatusReducerConverging),
+					"[]",
+					sql.NullString{},
+					now.Add(-time.Minute),
+					now.Add(-time.Minute),
+					sql.NullTime{},
+				}},
+			},
+		},
+	}
+	store := NewWorkflowControlStore(db)
+
+	reconciled, err := store.ReconcileWorkflowRuns(context.Background(), now)
+	if err != nil {
+		t.Fatalf("ReconcileWorkflowRuns() error = %v, want nil", err)
+	}
+	if got, want := reconciled, 1; got != want {
+		t.Fatalf("reconciled = %d, want %d", got, want)
+	}
+	if got, want := db.beginCalls, 1; got != want {
+		t.Fatalf("begin calls = %d, want %d", got, want)
+	}
+	if !tx.committed {
+		t.Fatal("transaction committed = false, want true")
+	}
+	if tx.rolledBack {
+		t.Fatal("transaction rolled back after successful commit, want false")
+	}
+	if got, want := len(tx.execs), 3; got != want {
+		t.Fatalf("transaction exec count = %d, want %d", got, want)
+	}
+	if !strings.Contains(tx.execs[0].query, "UPDATE workflow_runs") {
+		t.Fatalf("first tx exec missing workflow_runs update: %s", tx.execs[0].query)
+	}
+	if !strings.Contains(tx.execs[1].query, "INSERT INTO workflow_run_completeness") {
+		t.Fatalf("second tx exec missing workflow_run_completeness upsert: %s", tx.execs[1].query)
 	}
 }

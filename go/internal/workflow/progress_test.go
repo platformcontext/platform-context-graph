@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
@@ -23,7 +24,7 @@ func TestReconcileRunProgressPendingCollection(t *testing.T) {
 			CollectorKind:        scope.CollectorGit,
 			TotalWorkItems:       2,
 			PendingWorkItems:     2,
-			PublishedPhaseCounts: map[string]int{},
+			PublishedPhaseCounts: map[PhasePublicationKey]int{},
 		}},
 	}, now)
 	if err != nil {
@@ -60,7 +61,7 @@ func TestReconcileRunProgressCollectionActive(t *testing.T) {
 			PendingWorkItems:     1,
 			ClaimedWorkItems:     1,
 			CompletedWorkItems:   1,
-			PublishedPhaseCounts: map[string]int{},
+			PublishedPhaseCounts: map[PhasePublicationKey]int{},
 		}},
 	}, now)
 	if err != nil {
@@ -84,10 +85,15 @@ func TestReconcileRunProgressReducerConverging(t *testing.T) {
 			UpdatedAt:   now.Add(-time.Minute),
 		},
 		Collectors: []CollectorRunProgress{{
-			CollectorKind:        scope.CollectorGit,
-			TotalWorkItems:       2,
-			CompletedWorkItems:   2,
-			PublishedPhaseCounts: map[string]int{"canonical_nodes_committed": 2},
+			CollectorKind:      scope.CollectorGit,
+			TotalWorkItems:     2,
+			CompletedWorkItems: 2,
+			PublishedPhaseCounts: map[PhasePublicationKey]int{
+				{
+					Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+					PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+				}: 2,
+			},
 		}},
 	}, now)
 	if err != nil {
@@ -117,10 +123,19 @@ func TestReconcileRunProgressComplete(t *testing.T) {
 			UpdatedAt:   now.Add(-time.Minute),
 		},
 		Collectors: []CollectorRunProgress{{
-			CollectorKind:        scope.CollectorGit,
-			TotalWorkItems:       1,
-			CompletedWorkItems:   1,
-			PublishedPhaseCounts: map[string]int{"canonical_nodes_committed": 1, "semantic_nodes_committed": 1},
+			CollectorKind:      scope.CollectorGit,
+			TotalWorkItems:     1,
+			CompletedWorkItems: 1,
+			PublishedPhaseCounts: map[PhasePublicationKey]int{
+				{
+					Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+					PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+				}: 1,
+				{
+					Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+					PhaseName: reducer.GraphProjectionPhaseSemanticNodesCommitted,
+				}: 1,
+			},
 		}},
 	}, now)
 	if err != nil {
@@ -152,11 +167,16 @@ func TestReconcileRunProgressFailed(t *testing.T) {
 			UpdatedAt:   now.Add(-time.Minute),
 		},
 		Collectors: []CollectorRunProgress{{
-			CollectorKind:        scope.CollectorGit,
-			TotalWorkItems:       2,
-			CompletedWorkItems:   1,
-			FailedTerminalItems:  1,
-			PublishedPhaseCounts: map[string]int{"canonical_nodes_committed": 1},
+			CollectorKind:       scope.CollectorGit,
+			TotalWorkItems:      2,
+			CompletedWorkItems:  1,
+			FailedTerminalItems: 1,
+			PublishedPhaseCounts: map[PhasePublicationKey]int{
+				{
+					Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+					PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+				}: 1,
+			},
 		}},
 	}, now)
 	if err != nil {
@@ -168,6 +188,26 @@ func TestReconcileRunProgressFailed(t *testing.T) {
 	for _, state := range completeness {
 		if got, want := state.Status, CompletenessStatusBlocked; got != want {
 			t.Fatalf("phase %q status = %q, want %q", state.PhaseName, got, want)
+		}
+	}
+}
+
+func TestRequiredPhasesForCollectorIncludesMultiCollectorFamilies(t *testing.T) {
+	t.Parallel()
+
+	for _, collectorKind := range []scope.CollectorKind{
+		scope.CollectorGit,
+		scope.CollectorAWS,
+		scope.CollectorTerraformState,
+	} {
+		requirements := RequiredPhasesForCollector(collectorKind)
+		if got, want := len(requirements), 2; got != want {
+			t.Fatalf("collector %q requirements = %d, want %d", collectorKind, got, want)
+		}
+		for _, requirement := range requirements {
+			if got, want := requirement.Keyspace, reducer.GraphProjectionKeyspaceCodeEntitiesUID; got != want {
+				t.Fatalf("collector %q keyspace = %q, want %q", collectorKind, got, want)
+			}
 		}
 	}
 }

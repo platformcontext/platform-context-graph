@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	"github.com/platformcontext/platform-context-graph/go/internal/workflow"
 )
@@ -43,16 +44,16 @@ ORDER BY collector_kind ASC
 const listWorkflowCollectorPhaseCountsQuery = `
 SELECT
     item.collector_kind,
+    phase.keyspace,
     phase.phase,
     COUNT(DISTINCT item.work_item_id) AS published_work_items
 FROM workflow_work_items AS item
 JOIN graph_projection_phase_state AS phase
   ON phase.scope_id = item.scope_id
  AND phase.generation_id = item.generation_id
- AND phase.keyspace = 'code_entities_uid'
 WHERE item.run_id = $1
-GROUP BY item.collector_kind, phase.phase
-ORDER BY item.collector_kind ASC, phase.phase ASC
+GROUP BY item.collector_kind, phase.keyspace, phase.phase
+ORDER BY item.collector_kind ASC, phase.keyspace ASC, phase.phase ASC
 `
 
 const updateWorkflowRunStatusQuery = `
@@ -96,11 +97,27 @@ func (s *WorkflowControlStore) ReconcileWorkflowRuns(ctx context.Context, observ
 }
 
 func (s *WorkflowControlStore) reconcileWorkflowRun(ctx context.Context, run workflow.Run, observedAt time.Time) error {
-	progress, err := s.listWorkflowCollectorProgress(ctx, run.RunID)
+	queryTarget := s.db
+	execTarget := s.db
+	commit := func() error { return nil }
+	rollback := func() error { return nil }
+	if s.beginner != nil {
+		tx, err := s.beginner.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("reconcile workflow run %s: begin transaction: %w", run.RunID, err)
+		}
+		queryTarget = tx
+		execTarget = tx
+		commit = tx.Commit
+		rollback = tx.Rollback
+	}
+	defer func() { _ = rollback() }()
+
+	progress, err := s.listWorkflowCollectorProgress(ctx, queryTarget, run.RunID)
 	if err != nil {
 		return fmt.Errorf("reconcile workflow run %s: %w", run.RunID, err)
 	}
-	phaseCounts, err := s.listWorkflowCollectorPhaseCounts(ctx, run.RunID)
+	phaseCounts, err := s.listWorkflowCollectorPhaseCounts(ctx, queryTarget, run.RunID)
 	if err != nil {
 		return fmt.Errorf("reconcile workflow run %s: %w", run.RunID, err)
 	}
@@ -115,7 +132,7 @@ func (s *WorkflowControlStore) reconcileWorkflowRun(ctx context.Context, run wor
 	if err != nil {
 		return fmt.Errorf("reconcile workflow run %s: %w", run.RunID, err)
 	}
-	if _, err := s.db.ExecContext(
+	if _, err := execTarget.ExecContext(
 		ctx,
 		updateWorkflowRunStatusQuery,
 		nextRun.RunID,
@@ -125,14 +142,18 @@ func (s *WorkflowControlStore) reconcileWorkflowRun(ctx context.Context, run wor
 	); err != nil {
 		return fmt.Errorf("reconcile workflow run %s: update run status: %w", run.RunID, err)
 	}
-	if err := s.UpsertCompletenessStates(ctx, completeness); err != nil {
+	if err := s.upsertCompletenessStatesWithExecutor(ctx, execTarget, completeness); err != nil {
 		return fmt.Errorf("reconcile workflow run %s: upsert completeness: %w", run.RunID, err)
 	}
+	if err := commit(); err != nil {
+		return fmt.Errorf("reconcile workflow run %s: commit transaction: %w", run.RunID, err)
+	}
+	rollback = func() error { return nil }
 	return nil
 }
 
-func (s *WorkflowControlStore) listWorkflowCollectorProgress(ctx context.Context, runID string) ([]workflow.CollectorRunProgress, error) {
-	rows, err := s.db.QueryContext(ctx, listWorkflowCollectorProgressQuery, runID)
+func (s *WorkflowControlStore) listWorkflowCollectorProgress(ctx context.Context, queryer Queryer, runID string) ([]workflow.CollectorRunProgress, error) {
+	rows, err := queryer.QueryContext(ctx, listWorkflowCollectorProgressQuery, runID)
 	if err != nil {
 		return nil, fmt.Errorf("list workflow collector progress: %w", err)
 	}
@@ -153,7 +174,7 @@ func (s *WorkflowControlStore) listWorkflowCollectorProgress(ctx context.Context
 			return nil, fmt.Errorf("list workflow collector progress: %w", err)
 		}
 		row.CollectorKind = scope.CollectorKind(strings.TrimSpace(collectorKind))
-		row.PublishedPhaseCounts = make(map[string]int)
+		row.PublishedPhaseCounts = make(map[workflow.PhasePublicationKey]int)
 		progress = append(progress, row)
 	}
 	if err := rows.Err(); err != nil {
@@ -162,26 +183,34 @@ func (s *WorkflowControlStore) listWorkflowCollectorProgress(ctx context.Context
 	return progress, nil
 }
 
-func (s *WorkflowControlStore) listWorkflowCollectorPhaseCounts(ctx context.Context, runID string) (map[string]map[string]int, error) {
-	rows, err := s.db.QueryContext(ctx, listWorkflowCollectorPhaseCountsQuery, runID)
+func (s *WorkflowControlStore) listWorkflowCollectorPhaseCounts(
+	ctx context.Context,
+	queryer Queryer,
+	runID string,
+) (map[string]map[workflow.PhasePublicationKey]int, error) {
+	rows, err := queryer.QueryContext(ctx, listWorkflowCollectorPhaseCountsQuery, runID)
 	if err != nil {
 		return nil, fmt.Errorf("list workflow collector phase counts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	phaseCounts := make(map[string]map[string]int)
+	phaseCounts := make(map[string]map[workflow.PhasePublicationKey]int)
 	for rows.Next() {
 		var collectorKind string
+		var keyspace string
 		var phaseName string
 		var publishedCount int
-		if err := rows.Scan(&collectorKind, &phaseName, &publishedCount); err != nil {
+		if err := rows.Scan(&collectorKind, &keyspace, &phaseName, &publishedCount); err != nil {
 			return nil, fmt.Errorf("list workflow collector phase counts: %w", err)
 		}
 		collectorKind = strings.TrimSpace(collectorKind)
 		if _, ok := phaseCounts[collectorKind]; !ok {
-			phaseCounts[collectorKind] = make(map[string]int)
+			phaseCounts[collectorKind] = make(map[workflow.PhasePublicationKey]int)
 		}
-		phaseCounts[collectorKind][strings.TrimSpace(phaseName)] = publishedCount
+		phaseCounts[collectorKind][workflow.PhasePublicationKey{
+			Keyspace:  reducer.GraphProjectionKeyspace(strings.TrimSpace(keyspace)),
+			PhaseName: reducer.GraphProjectionPhase(strings.TrimSpace(phaseName)),
+		}] = publishedCount
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list workflow collector phase counts: %w", err)

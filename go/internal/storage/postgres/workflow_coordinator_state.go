@@ -224,6 +224,14 @@ func (s *WorkflowControlStore) UpsertCompletenessStates(ctx context.Context, sta
 	if s.db == nil {
 		return fmt.Errorf("workflow control store database is required")
 	}
+	return s.upsertCompletenessStatesWithExecutor(ctx, s.db, states)
+}
+
+func (s *WorkflowControlStore) upsertCompletenessStatesWithExecutor(
+	ctx context.Context,
+	execTarget Executor,
+	states []workflow.CompletenessState,
+) error {
 	if len(states) == 0 {
 		return nil
 	}
@@ -231,7 +239,7 @@ func (s *WorkflowControlStore) UpsertCompletenessStates(ctx context.Context, sta
 		if err := state.Validate(); err != nil {
 			return fmt.Errorf("upsert completeness states: %w", err)
 		}
-		if _, err := s.db.ExecContext(
+		if _, err := execTarget.ExecContext(
 			ctx,
 			upsertWorkflowRunCompletenessQuery,
 			state.RunID,

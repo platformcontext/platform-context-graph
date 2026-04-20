@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
@@ -18,13 +19,34 @@ const (
 // PhaseRequirement identifies one reducer-owned phase the coordinator must
 // observe before a bounded collector slice may be considered complete.
 type PhaseRequirement struct {
-	PhaseName string
+	Keyspace  reducer.GraphProjectionKeyspace
+	PhaseName reducer.GraphProjectionPhase
 	Required  bool
+}
+
+// PhasePublicationKey identifies one published reducer checkpoint.
+type PhasePublicationKey struct {
+	Keyspace  reducer.GraphProjectionKeyspace
+	PhaseName reducer.GraphProjectionPhase
 }
 
 // Validate checks that the phase requirement is well formed.
 func (r PhaseRequirement) Validate() error {
-	if err := validateIdentifier("phase_name", r.PhaseName); err != nil {
+	if err := validateIdentifier("keyspace", string(r.Keyspace)); err != nil {
+		return err
+	}
+	if err := validateIdentifier("phase_name", string(r.PhaseName)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Validate checks that the published checkpoint key is well formed.
+func (k PhasePublicationKey) Validate() error {
+	if err := validateIdentifier("keyspace", string(k.Keyspace)); err != nil {
+		return err
+	}
+	if err := validateIdentifier("phase_name", string(k.PhaseName)); err != nil {
 		return err
 	}
 	return nil
@@ -39,7 +61,7 @@ type CollectorRunProgress struct {
 	ClaimedWorkItems     int
 	CompletedWorkItems   int
 	FailedTerminalItems  int
-	PublishedPhaseCounts map[string]int
+	PublishedPhaseCounts map[PhasePublicationKey]int
 }
 
 // Validate checks that the collector progress row is internally consistent.
@@ -64,6 +86,14 @@ func (p CollectorRunProgress) Validate() error {
 	if p.PendingWorkItems+p.ClaimedWorkItems+p.CompletedWorkItems+p.FailedTerminalItems > p.TotalWorkItems {
 		return fmt.Errorf("collector progress counts exceed total work items")
 	}
+	for key, count := range p.PublishedPhaseCounts {
+		if err := key.Validate(); err != nil {
+			return err
+		}
+		if count < 0 {
+			return fmt.Errorf("published phase count must not be negative")
+		}
+	}
 	return nil
 }
 
@@ -78,10 +108,18 @@ type RunProgressSnapshot struct {
 // coordinator must observe for the supplied collector family.
 func RequiredPhasesForCollector(kind scope.CollectorKind) []PhaseRequirement {
 	switch kind {
-	case scope.CollectorGit:
+	case scope.CollectorGit, scope.CollectorAWS, scope.CollectorTerraformState:
 		return []PhaseRequirement{
-			{PhaseName: "canonical_nodes_committed", Required: true},
-			{PhaseName: "semantic_nodes_committed", Required: true},
+			{
+				Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+				PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+				Required:  true,
+			},
+			{
+				Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+				PhaseName: reducer.GraphProjectionPhaseSemanticNodesCommitted,
+				Required:  true,
+			},
 		}
 	default:
 		return nil
@@ -125,16 +163,20 @@ func ReconcileRunProgress(snapshot RunProgressSnapshot, observedAt time.Time) (R
 			if err := requirement.Validate(); err != nil {
 				return Run{}, nil, err
 			}
+			publicationKey := PhasePublicationKey{
+				Keyspace:  requirement.Keyspace,
+				PhaseName: requirement.PhaseName,
+			}
 			status := CompletenessStatusPending
 			detail := fmt.Sprintf(
 				"published for %d of %d work items",
-				collector.PublishedPhaseCounts[requirement.PhaseName],
+				collector.PublishedPhaseCounts[publicationKey],
 				collector.TotalWorkItems,
 			)
 			if collector.FailedTerminalItems > 0 {
 				status = CompletenessStatusBlocked
 				detail = "terminal collector failure prevents downstream completion"
-			} else if collector.TotalWorkItems > 0 && collector.PublishedPhaseCounts[requirement.PhaseName] >= collector.TotalWorkItems {
+			} else if collector.TotalWorkItems > 0 && collector.PublishedPhaseCounts[publicationKey] >= collector.TotalWorkItems {
 				status = CompletenessStatusReady
 				detail = fmt.Sprintf("published for all %d work items", collector.TotalWorkItems)
 			} else {
@@ -143,7 +185,7 @@ func ReconcileRunProgress(snapshot RunProgressSnapshot, observedAt time.Time) (R
 			completeness = append(completeness, CompletenessState{
 				RunID:         snapshot.Run.RunID,
 				CollectorKind: collector.CollectorKind,
-				PhaseName:     requirement.PhaseName,
+				PhaseName:     string(requirement.PhaseName),
 				Required:      requirement.Required,
 				Status:        status,
 				Detail:        detail,
