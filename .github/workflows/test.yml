@@ -45,4 +45,4 @@ jobs:
           mkdocs build --strict --clean --config-file docs/mkdocs.yml
 
       - name: Check whitespace hygiene
-        run: git diff --check HEAD~1
+        run: git show --check --format= HEAD
