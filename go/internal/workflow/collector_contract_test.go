@@ -1,0 +1,120 @@
+package workflow
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
+	"github.com/platformcontext/platform-context-graph/go/internal/scope"
+)
+
+func TestCollectorContractForGitIncludesAcceptedCanonicalKeyspaces(t *testing.T) {
+	t.Parallel()
+
+	contract, ok := CollectorContractFor(scope.CollectorGit)
+	if !ok {
+		t.Fatalf("CollectorContractFor(%q) found = false, want true", scope.CollectorGit)
+	}
+	want := []reducer.GraphProjectionKeyspace{
+		reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+		reducer.GraphProjectionKeyspaceDeployableUnitUID,
+		reducer.GraphProjectionKeyspaceServiceUID,
+	}
+	if !reflect.DeepEqual(contract.CanonicalKeyspaces, want) {
+		t.Fatalf("CanonicalKeyspaces = %#v, want %#v", contract.CanonicalKeyspaces, want)
+	}
+}
+
+func TestRequiredPhasesForCollectorIncludesTerraformStateAnchorGate(t *testing.T) {
+	t.Parallel()
+
+	requirements := RequiredPhasesForCollector(scope.CollectorTerraformState)
+	want := []PhaseRequirement{
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceTerraformResourceUID,
+			PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+			Required:  true,
+		},
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceTerraformModuleUID,
+			PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+			Required:  true,
+		},
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceTerraformResourceUID,
+			PhaseName: reducer.GraphProjectionPhaseCrossSourceAnchorReady,
+			Required:  true,
+		},
+	}
+	if !reflect.DeepEqual(requirements, want) {
+		t.Fatalf("RequiredPhasesForCollector(terraform_state) = %#v, want %#v", requirements, want)
+	}
+}
+
+func TestRequiredPhasesForCollectorIncludesAWSAnchorGate(t *testing.T) {
+	t.Parallel()
+
+	requirements := RequiredPhasesForCollector(scope.CollectorAWS)
+	want := []PhaseRequirement{
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceCloudResourceUID,
+			PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+			Required:  true,
+		},
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceCloudResourceUID,
+			PhaseName: reducer.GraphProjectionPhaseCrossSourceAnchorReady,
+			Required:  true,
+		},
+	}
+	if !reflect.DeepEqual(requirements, want) {
+		t.Fatalf("RequiredPhasesForCollector(aws) = %#v, want %#v", requirements, want)
+	}
+}
+
+func TestRequiredPhasesForCollectorIncludesWebhookAnchorGate(t *testing.T) {
+	t.Parallel()
+
+	requirements := RequiredPhasesForCollector(scope.CollectorWebhook)
+	want := []PhaseRequirement{
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceWebhookEventUID,
+			PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
+			Required:  true,
+		},
+		{
+			Keyspace:  reducer.GraphProjectionKeyspaceWebhookEventUID,
+			PhaseName: reducer.GraphProjectionPhaseCrossSourceAnchorReady,
+			Required:  true,
+		},
+	}
+	if !reflect.DeepEqual(requirements, want) {
+		t.Fatalf("RequiredPhasesForCollector(webhook) = %#v, want %#v", requirements, want)
+	}
+}
+
+func TestCollectorContractForReturnsClonedSlices(t *testing.T) {
+	t.Parallel()
+
+	contract, ok := CollectorContractFor(scope.CollectorAWS)
+	if !ok {
+		t.Fatalf("CollectorContractFor(%q) found = false, want true", scope.CollectorAWS)
+	}
+	contract.CanonicalKeyspaces[0] = reducer.GraphProjectionKeyspaceCodeEntitiesUID
+	contract.RequiredPhases[0] = PhaseRequirement{
+		Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
+		PhaseName: reducer.GraphProjectionPhaseSemanticNodesCommitted,
+		Required:  true,
+	}
+
+	fresh, ok := CollectorContractFor(scope.CollectorAWS)
+	if !ok {
+		t.Fatalf("CollectorContractFor(%q) fresh found = false, want true", scope.CollectorAWS)
+	}
+	if got, want := fresh.CanonicalKeyspaces[0], reducer.GraphProjectionKeyspaceCloudResourceUID; got != want {
+		t.Fatalf("fresh CanonicalKeyspaces[0] = %q, want %q", got, want)
+	}
+	if got, want := fresh.RequiredPhases[0].PhaseName, reducer.GraphProjectionPhaseCanonicalNodesCommitted; got != want {
+		t.Fatalf("fresh RequiredPhases[0].PhaseName = %q, want %q", got, want)
+	}
+}

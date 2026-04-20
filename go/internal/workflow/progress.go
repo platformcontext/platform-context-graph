@@ -104,43 +104,6 @@ type RunProgressSnapshot struct {
 	Collectors []CollectorRunProgress
 }
 
-// RequiredPhasesForCollector returns the current reducer-owned phases the
-// coordinator must observe for the supplied collector family.
-func RequiredPhasesForCollector(kind scope.CollectorKind) []PhaseRequirement {
-	switch kind {
-	case scope.CollectorGit:
-		return []PhaseRequirement{
-			{
-				Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
-				PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
-				Required:  true,
-			},
-			{
-				Keyspace:  reducer.GraphProjectionKeyspaceCodeEntitiesUID,
-				PhaseName: reducer.GraphProjectionPhaseSemanticNodesCommitted,
-				Required:  true,
-			},
-			{
-				Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
-				PhaseName: reducer.GraphProjectionPhaseCanonicalNodesCommitted,
-				Required:  true,
-			},
-			{
-				Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
-				PhaseName: reducer.GraphProjectionPhaseDeploymentMapping,
-				Required:  true,
-			},
-			{
-				Keyspace:  reducer.GraphProjectionKeyspaceServiceUID,
-				PhaseName: reducer.GraphProjectionPhaseWorkloadMaterialization,
-				Required:  true,
-			},
-		}
-	default:
-		return nil
-	}
-}
-
 // ReconcileRunProgress derives workflow run status and completeness rows from
 // bounded collector progress and reducer-owned phase publications.
 func ReconcileRunProgress(snapshot RunProgressSnapshot, observedAt time.Time) (Run, []CompletenessState, error) {
