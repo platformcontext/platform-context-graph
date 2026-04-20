@@ -1,0 +1,288 @@
+deploy/helm/platform-context-graph/templates/deployment-workflow-coordinator.yaml
+  d630fda454f61c51 1-96
+docs/docs/deployment/service-runtimes.md
+  d630fda454f61c51 47,58,64,130,141,149,164-166,342-382,532-533,542,550
+go/internal/storage/postgres/workflow_coordinator_state.go
+  073a74ac3999a938 1-62,66-295
+  d630fda454f61c51 63-65
+go/internal/workflow/completeness.go
+  d630fda454f61c51 1-32
+go/internal/storage/postgres/status_test.go
+  ff5d514893846ae2 190-243,292-303
+  d630fda454f61c51 133-135,137-138,252-254
+go/internal/app/status_server.go
+  073a74ac3999a938 4-5,18-27
+go/internal/status/json.go
+  649e3b78719b4b3c 15,29,74-102,149-199
+go/internal/workflow/collector_instance_test.go
+  d630fda454f61c51 1-79
+go/internal/runtime/status_server.go
+  073a74ac3999a938 5,47-82
+go/internal/workflow/defaults.go
+  073a74ac3999a938 1-31
+deploy/helm/platform-context-graph/templates/pdb.yaml
+  d630fda454f61c51 29-43
+go/internal/storage/postgres/workflow_coordinator_state_test.go
+  d630fda454f61c51 1-138
+go/internal/storage/postgres/workflow_control.go
+  073a74ac3999a938 6-108,158,258-319,328-703,780-979
+  54752b8ad6afd985 146-149
+  360b2d4e63347083 180-254,323,719-722
+go/internal/workflow/completeness_test.go
+  d630fda454f61c51 1-44
+go/internal/workflow/types.go
+  073a74ac3999a938 1-292
+go/internal/runtime/metrics.go
+  2eeb5d2608588a8f 178,183-334
+deploy/helm/platform-context-graph/templates/servicemonitor.yaml
+  d630fda454f61c51 68-90
+go/internal/app/app_test.go
+  073a74ac3999a938 6-8,10,195-252,289-301
+deploy/helm/platform-context-graph/values.schema.json
+  d630fda454f61c51 129-161
+go/internal/coordinator/service_test.go
+  d630fda454f61c51 1-3,5,8-15,27-31,33-34,78-80,90-101,105-114,118,128-138,315-316
+  2eeb5d2608588a8f 4,6-7,32,35-41,60,64-67,76-77,81-89,102-104,115-117,119-127,139-204,206-216
+  073a74ac3999a938 16-26,42-59,61-63,68-75,205,217-314
+deploy/helm/platform-context-graph/templates/service-workflow-coordinator.yaml
+  360b2d4e63347083 1-24
+docker-compose.yaml
+  d630fda454f61c51 347-376,379-386
+  073a74ac3999a938 377-378
+go/internal/storage/postgres/status.go
+  d630fda454f61c51 176-179,191
+go/internal/workflow/collector_instance.go
+  073a74ac3999a938 1-127
+go/internal/status/status.go
+  073a74ac3999a938 77,99-106,123,189,234
+go/internal/coordinator/config.go
+  073a74ac3999a938 1-244
+go/internal/storage/postgres/work_queue_test.go
+  d630fda454f61c51 440-442,455-462,532-535
+go/internal/workflow/types_test.go
+  0c025a03d80929a2 1-161,169,172-182
+  073a74ac3999a938 162-168,170-171
+go/internal/query/status.go
+  073a74ac3999a938 22,25,49-86,103-105,146,180,190,261-266,268,312-359
+go/internal/storage/postgres/workflow_control_integration_test.go
+  073a74ac3999a938 14,220,317-404,504-510,512-514,587-618
+  d630fda454f61c51 1-6,8-13,15-218,458-503,511,515-547,619-671
+  ff5d514893846ae2 7,219,221-316,405-457,548-586
+go/internal/runtime/status_server_test.go
+  073a74ac3999a938 124-181
+deploy/helm/platform-context-graph/templates/networkpolicy.yaml
+  d630fda454f61c51 80-106
+go/internal/storage/postgres/workflow_status.go
+  d630fda454f61c51 1-4,6-47,50,53-58,62-115,117-126,128-129,133-170
+  073a74ac3999a938 5,116,127,130-132
+go/internal/storage/postgres/schema_test.go
+  54752b8ad6afd985 16-17,34-35
+go/internal/query/status_handler_test.go
+  d630fda454f61c51 95-138
+go/internal/coordinator/metrics.go
+  073a74ac3999a938 1-251
+go/internal/coordinator/metrics_test.go
+  073a74ac3999a938 1-177
+go/internal/storage/postgres/workflow_run_reconciliation.go
+  073a74ac3999a938 1-219
+go/internal/workflow/store.go
+  073a74ac3999a938 57-63
+  96ad707f0223e6c5 37-56
+Dockerfile
+  073a74ac3999a938 22,44-46
+go/internal/workflow/progress_test.go
+  073a74ac3999a938 1-173
+go/internal/coordinator/service.go
+  2eeb5d2608588a8f 15,24,40,79,100-152
+  d630fda454f61c51 1-14,18-21,27-28,31-34,36-39,41-42,51,56,58-61,63-65,73-77,80,86,91-99,221
+  073a74ac3999a938 16-17,22-23,25-26,29-30,35,43-50,52-55,57,62,66-72,78,81-85,87-90,153-220
+schema/data-plane/postgres/015_workflow_coordinator_state.sql
+  d630fda454f61c51 1-30
+deploy/helm/platform-context-graph/templates/_helpers.tpl
+  d630fda454f61c51 43-46,59-62,78-80
+go/internal/coordinator/config_test.go
+  073a74ac3999a938 39-88,100-121
+  d630fda454f61c51 1-38,89-99,122-129
+go/internal/storage/postgres/workflow_control_test.go
+  54752b8ad6afd985 147-209
+  073a74ac3999a938 210-435
+go/internal/workflow/progress.go
+  073a74ac3999a938 1-198
+docs/docs/deployment/docker-compose.md
+  d630fda454f61c51 29-30,40-45,60-61,119,127-128,139,159-162,184-185,228-229,249
+  073a74ac3999a938 14-15,27-28,31-39
+go/cmd/workflow-coordinator/main.go
+  d630fda454f61c51 1-51,58-59,64-80
+  90b5745d58eab0f1 52-57,60-63
+go/internal/storage/postgres/proof_domain_harness_test.go
+  d630fda454f61c51 225-227
+go/internal/status/coordinator.go
+  073a74ac3999a938 1-95
+deploy/helm/platform-context-graph/values.yaml
+  d630fda454f61c51 100-127
+go/internal/storage/postgres/workflow_run_reconciliation_test.go
+  073a74ac3999a938 1-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "38bf0284600287f8560c77e1816ec1ef103ef394",
+  "prompts": {
+    "073a74ac3999a938": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019da075-11e0-7da1-b97b-fa47468a28ff",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 3683,
+      "total_deletions": 7102,
+      "accepted_lines": 3631,
+      "overriden_lines": 2
+    },
+    "0c025a03d80929a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dab51-0271-7bf1-a58e-50b8bfbd10f6",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 182,
+      "total_deletions": 0,
+      "accepted_lines": 173,
+      "overriden_lines": 0
+    },
+    "2eeb5d2608588a8f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019daba3-6b5b-7822-82ab-c78dae2392c1",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 338,
+      "total_deletions": 10,
+      "accepted_lines": 331,
+      "overriden_lines": 0
+    },
+    "360b2d4e63347083": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dab75-896c-72c1-b69c-35fe9f3bb7dd",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 33,
+      "total_deletions": 8,
+      "accepted_lines": 33,
+      "overriden_lines": 0
+    },
+    "4089dfbfbfef7580": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d9c81-c37a-7b62-b2e2-8aa763cf2b57",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 18,
+      "overriden_lines": 0
+    },
+    "54752b8ad6afd985": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dab71-763c-7de0-bea4-f21d95dd28f0",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 71,
+      "total_deletions": 2,
+      "accepted_lines": 70,
+      "overriden_lines": 0
+    },
+    "649e3b78719b4b3c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "be1df2f5-3ae2-4a80-bc9c-73eb10aa0aff",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 3047,
+      "total_deletions": 415,
+      "accepted_lines": 2634,
+      "overriden_lines": 0
+    },
+    "90b5745d58eab0f1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019daba8-6349-72f2-b49e-21c58f387ee3",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 3,
+      "accepted_lines": 10,
+      "overriden_lines": 0
+    },
+    "96ad707f0223e6c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dab6a-e1ad-7c01-baec-df9ca541d694",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 16,
+      "total_deletions": 0,
+      "accepted_lines": 16,
+      "overriden_lines": 0
+    },
+    "d630fda454f61c51": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c336f54-8019-4224-9be9-8719ee4cb92b",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1592,
+      "total_deletions": 14,
+      "accepted_lines": 1556,
+      "overriden_lines": 2
+    },
+    "fd73f686cb9c9a3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "84c49d72-a249-4917-a2bf-08ba4698fd03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 86,
+      "overriden_lines": 0
+    },
+    "ff5d514893846ae2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dab89-3ca0-7ce1-b7cb-5031f5a5d235",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 257,
+      "total_deletions": 0,
+      "accepted_lines": 256,
+      "overriden_lines": 0
+    }
+  }
+}
