@@ -756,6 +756,7 @@ implementation may begin.
 - [ ] Section 9 accuracy checkpoints have test fixtures committed
 - [ ] Section 10 security review signed off (this is not optional — credentials)
 - [x] Section 11 open questions resolved (proposal table)
+- [ ] **Consumer contract sign-off** — ADR `2026-04-20-multi-source-reducer-and-consumer-contract.md` accepted, and this plan's fact envelope updated with §7.2 required fields (`arn`, `account_id`, `region`, `resource_type`, `tags[]`, `correlation_anchors`, `name_from_tag`, `created_at`, `last_seen_at`)
 - [ ] Principal engineer sign-off
 - [ ] Principal SRE sign-off
 - [ ] Security sign-off

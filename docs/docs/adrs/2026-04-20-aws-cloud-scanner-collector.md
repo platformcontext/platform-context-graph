@@ -10,6 +10,7 @@
 - `2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md`
 - `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md`
 - `2026-04-20-terraform-state-collector.md`
+- `2026-04-20-multi-source-reducer-and-consumer-contract.md` — **fact-field back-propagation source. This ADR MUST be amended with the §7.2 required envelope fields (`arn` required enumeration, `resource_type` frozen enum, `tags_normalized` post-normalizer, `correlation_anchors`, fallback keys for resource types without ARNs) before aws implementation begins.**
 
 ---
 

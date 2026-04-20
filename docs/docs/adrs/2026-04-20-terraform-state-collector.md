@@ -10,6 +10,7 @@
 - `2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md`
 - `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md`
 - `2026-04-20-aws-cloud-scanner-collector.md`
+- `2026-04-20-multi-source-reducer-and-consumer-contract.md` — **fact-field back-propagation source. This ADR MUST be amended with the §7.1 required envelope fields (`provider_resolved_arn`, `module_source_path`, `module_source_kind`, `correlation_anchors`) before tfstate implementation begins.**
 
 ---
 

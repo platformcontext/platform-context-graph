@@ -4,7 +4,10 @@
 **Status:** Accepted
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
-**Related:** `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md`
+**Related:**
+
+- `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md`
+- `2026-04-20-multi-source-reducer-and-consumer-contract.md` — **consumer contract; gates the remaining coordinator work described in §Rollout "collector-specific convergence checkpoints" and "second-pass first-class gates"**
 
 ---
 
@@ -743,6 +746,30 @@ others:
 
 - there must be exactly one durable orchestration truth path at the end of the
   migration
+
+---
+
+## Downstream Gating — Remaining Coordinator Work
+
+As of 2026-04-20 the coordinator slice has generalized workflow completeness
+from a Git-only phase map to a typed `(collector_kind, keyspace, phase)`
+contract, removed the hardcoded `code_entities_uid` assumption, and made
+reconciliation transactional. Per-collector downstream convergence checkpoints
+and first-class gating of second-pass reducer domains
+(`deployment_mapping`, `workload_materialization`) are **deferred** pending
+the consumer contract ADR
+(`2026-04-20-multi-source-reducer-and-consumer-contract.md`).
+
+Rationale: extending the registry or publishing new phase rows before the
+consumer contract is frozen risks rework — the set of first-class gates is
+determined by the queries consumers must answer, not by intuition about
+which phases feel important. The consumer contract enumerates the queries,
+derives which phases must gate which answers, and back-propagates the
+registry shape and the reducer publication list.
+
+Codex should pause the remaining "extend registry" and "publish second-pass
+phases" work until the consumer contract ADR is accepted and the registry
+shape is specified in §8 of that ADR.
 
 ---
 
