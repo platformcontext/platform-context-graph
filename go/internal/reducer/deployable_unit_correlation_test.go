@@ -563,6 +563,65 @@ func TestDeployableUnitCorrelationHandleRejectsSecondaryDockerfileWithoutIndepen
 	}
 }
 
+func TestDeployableUnitKeyFromPathPreservesExplicitUnitKeys(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name         string
+		repoName     string
+		relativePath string
+		want         string
+	}{
+		{
+			name:         "repo root dockerfile uses repo name",
+			repoName:     "api-node-boats",
+			relativePath: "Dockerfile",
+			want:         "api-node-boats",
+		},
+		{
+			name:         "named dockerfile remains distinct",
+			repoName:     "multi-dockerfile-repo",
+			relativePath: "Dockerfile.test",
+			want:         "test",
+		},
+		{
+			name:         "dot suffix dockerfile remains distinct",
+			repoName:     "monolith",
+			relativePath: "docker/api.Dockerfile",
+			want:         "api",
+		},
+		{
+			name:         "nested service dockerfile remains distinct",
+			repoName:     "monolith",
+			relativePath: "services/api/Dockerfile",
+			want:         "api",
+		},
+		{
+			name:         "support folder remote dockerfile collapses to repo service",
+			repoName:     "api-node-boattrader",
+			relativePath: "docker/remote/Dockerfile",
+			want:         "api-node-boattrader",
+		},
+		{
+			name:         "support folder local dockerfile collapses to repo service",
+			repoName:     "api-node-boattrader",
+			relativePath: "docker/local/Dockerfile",
+			want:         "api-node-boattrader",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := deployableUnitKeyFromPath(tc.repoName, tc.relativePath); got != tc.want {
+				t.Fatalf("deployableUnitKeyFromPath(%q, %q) = %q, want %q", tc.repoName, tc.relativePath, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDeployableUnitCorrelationHandleFactLoaderError(t *testing.T) {
 	t.Parallel()
 

@@ -6,9 +6,59 @@ import (
 	"testing"
 	"time"
 
+	correlationmodel "github.com/platformcontext/platform-context-graph/go/internal/correlation/model"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
+
+func TestCorrelatedWorkloadName(t *testing.T) {
+	t.Parallel()
+
+	candidate := WorkloadCandidate{
+		RepoID:       "repo-boattrader",
+		RepoName:     "api-node-boattrader",
+		WorkloadName: "api-node-boattrader",
+	}
+
+	testCases := []struct {
+		name      string
+		evaluated correlationmodel.Candidate
+		want      string
+	}{
+		{
+			name: "uses admitted scoped unit key",
+			evaluated: correlationmodel.Candidate{
+				CorrelationKey: "repo-boattrader:api-node-boattrader",
+			},
+			want: "api-node-boattrader",
+		},
+		{
+			name: "falls back for foreign correlation key",
+			evaluated: correlationmodel.Candidate{
+				CorrelationKey: "repo-other:remote",
+			},
+			want: "api-node-boattrader",
+		},
+		{
+			name: "falls back for empty scoped suffix",
+			evaluated: correlationmodel.Candidate{
+				CorrelationKey: "repo-boattrader:",
+			},
+			want: "api-node-boattrader",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := correlatedWorkloadName(candidate, tc.evaluated); got != tc.want {
+				t.Fatalf("correlatedWorkloadName(...) = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestCorrelatedWorkloadProjectionInputLoaderRejectsDockerfileOnlyCandidate(t *testing.T) {
 	t.Parallel()
@@ -148,6 +198,97 @@ func TestCorrelatedWorkloadProjectionInputLoaderAdmitsResolvedDeploymentEvidence
 	}
 }
 
+func TestCorrelatedWorkloadProjectionInputLoaderCollapsesDockerSupportVariantsToRepoService(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	loader := CorrelatedWorkloadProjectionInputLoader{
+		FactLoader: &stubFactLoader{
+			envelopes: []facts.Envelope{
+				{
+					FactID:   "fact-repo-1",
+					ScopeID:  "scope-service",
+					FactKind: "repository",
+					Payload: map[string]any{
+						"graph_id": "repo-boattrader",
+						"name":     "api-node-boattrader",
+					},
+					ObservedAt: now,
+				},
+				{
+					FactID:   "fact-file-remote",
+					ScopeID:  "scope-service",
+					FactKind: "file",
+					Payload: map[string]any{
+						"repo_id":       "repo-boattrader",
+						"language":      "dockerfile",
+						"relative_path": "docker/remote/Dockerfile",
+						"parsed_file_data": map[string]any{
+							"dockerfile_stages": []any{map[string]any{"name": "runtime"}},
+						},
+					},
+					ObservedAt: now,
+				},
+				{
+					FactID:   "fact-file-local",
+					ScopeID:  "scope-service",
+					FactKind: "file",
+					Payload: map[string]any{
+						"repo_id":       "repo-boattrader",
+						"language":      "dockerfile",
+						"relative_path": "docker/local/Dockerfile",
+						"parsed_file_data": map[string]any{
+							"dockerfile_stages": []any{map[string]any{"name": "runtime"}},
+						},
+					},
+					ObservedAt: now,
+				},
+				{
+					FactID:   "fact-file-jenkins",
+					ScopeID:  "scope-service",
+					FactKind: "file",
+					Payload: map[string]any{
+						"repo_id":       "repo-boattrader",
+						"language":      "groovy",
+						"relative_path": "Jenkinsfile",
+						"parsed_file_data": map[string]any{
+							"jenkins_pipeline_calls": []any{"pipelinePM2"},
+						},
+					},
+					ObservedAt: now,
+				},
+			},
+		},
+	}
+
+	intent := Intent{
+		IntentID:        "intent-correlation-boattrader",
+		ScopeID:         "scope-service",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "test",
+		EntityKeys:      []string{"repo-boattrader"},
+		RelatedScopeIDs: []string{"scope-service"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	candidates, _, err := loader.LoadWorkloadProjectionInputs(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("LoadWorkloadProjectionInputs() error = %v", err)
+	}
+	if got, want := len(candidates), 1; got != want {
+		t.Fatalf("len(candidates) = %d, want %d", got, want)
+	}
+	if got, want := candidates[0].WorkloadName, "api-node-boattrader"; got != want {
+		t.Fatalf("WorkloadName = %q, want %q", got, want)
+	}
+}
+
 func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironments(t *testing.T) {
 	t.Parallel()
 
@@ -187,7 +328,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironmen
 			FactID: "fact-deploy-overlay-qa", ScopeID: "scope-deploy", FactKind: "file",
 			Payload: map[string]any{
 				"repo_id": "repo-deploy", "language": "yaml",
-				"relative_path":   "apps/my-service/overlays/bg-qa/kustomization.yaml",
+				"relative_path":    "apps/my-service/overlays/bg-qa/kustomization.yaml",
 				"parsed_file_data": map[string]any{},
 			},
 			ObservedAt: now,
@@ -196,7 +337,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironmen
 			FactID: "fact-deploy-overlay-prod", ScopeID: "scope-deploy", FactKind: "file",
 			Payload: map[string]any{
 				"repo_id": "repo-deploy", "language": "yaml",
-				"relative_path":   "apps/my-service/overlays/production/kustomization.yaml",
+				"relative_path":    "apps/my-service/overlays/production/kustomization.yaml",
 				"parsed_file_data": map[string]any{},
 			},
 			ObservedAt: now,
@@ -370,7 +511,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderSkipsSameRepoDeployment(t *testi
 			FactID: "fact-file-overlay", ScopeID: "scope-app", FactKind: "file",
 			Payload: map[string]any{
 				"repo_id": "repo-self-deploy", "language": "yaml",
-				"relative_path":   "overlays/staging/kustomization.yaml",
+				"relative_path":    "overlays/staging/kustomization.yaml",
 				"parsed_file_data": map[string]any{},
 			},
 			ObservedAt: now,

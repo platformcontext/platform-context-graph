@@ -450,11 +450,7 @@ func deployableUnitKeyFromPath(repoName, relativePath string) string {
 	lowerBase := strings.ToLower(base)
 	switch {
 	case strings.EqualFold(base, "Dockerfile"):
-		dir := filepath.Base(filepath.Dir(trimmedPath))
-		if dir == "." || dir == "/" || dir == "" {
-			return repoName
-		}
-		return dir
+		return dockerfileExactPathKey(repoName, trimmedPath)
 	case strings.HasSuffix(lowerBase, ".dockerfile"):
 		return strings.TrimSuffix(base, filepath.Ext(base))
 	case strings.HasPrefix(lowerBase, "dockerfile."):
