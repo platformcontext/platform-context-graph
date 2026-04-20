@@ -1,7 +1,7 @@
 # ADR: Multi-Source Reducer Scope and Consumer Contract
 
 **Date:** 2026-04-20
-**Status:** Proposed
+**Status:** Accepted (2026-04-20)
 **Related:**
 
 - `2026-04-19-multi-source-correlation-dsl-and-collector-readiness.md`
