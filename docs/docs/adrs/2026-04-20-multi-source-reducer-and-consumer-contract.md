@@ -515,9 +515,9 @@ Phased:
 
 ### Phase 3 — Reducer scaffolding
 
-- [ ] Create `go/internal/reducer/tfstate/` package skeleton
-- [ ] Create `go/internal/reducer/aws/` package skeleton
-- [ ] Create `go/internal/reducer/dsl/` package scaffolding (evaluator,
+- [x] Create `go/internal/reducer/tfstate/` package skeleton
+- [x] Create `go/internal/reducer/aws/` package skeleton
+- [x] Create `go/internal/reducer/dsl/` package scaffolding (evaluator,
       drift evaluator, publication of `cross_source_anchor_ready`)
 - [ ] Create `go/internal/reducer/tags/normalizer` (tag normalization pack)
 
