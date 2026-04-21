@@ -48,7 +48,7 @@ Core strengths:
 
 - one graph for code and infrastructure
 - the same query model over CLI, MCP, and HTTP API
-- deployable shared service with API, ingester, and resolution-engine runtimes
+- deployable shared service with API, MCP server, ingester, and resolution-engine runtimes
 - facts-first indexing for durability, recovery, and operator visibility
 - direct code-to-cloud tracing, blast radius, and environment comparison
 
@@ -65,28 +65,14 @@ PCG exposes the same graph through:
 
 Choose the path that matches what you want to do first.
 
-## Choose Your First Run
-
-### Try it locally with the CLI
-
-Build the CLI from source:
-
-```bash
-cd go && go build -o bin/ ./cmd/pcg
-export PATH="$PWD/bin:$PATH"
-pcg --help
-```
-
-Index a repository and ask a question:
-
-```bash
-pcg index .
-pcg analyze callers process_payment
-```
+PCG is not a self-contained CLI — it always reads and writes through Neo4j
+and Postgres, and `pcg index`, `pcg list`, and `pcg analyze …` all require a
+running API + data plane. Pick the path that stands those up for you.
 
 ### Run the full platform locally
 
-Bring up the full stack with Docker Compose:
+Bring up Neo4j, Postgres, the API, the ingester, the resolution engine, and
+the one-shot bootstrap indexer with one command:
 
 ```bash
 docker compose up --build
@@ -100,8 +86,39 @@ This starts:
 - Jaeger
 - a one-shot bootstrap indexer
 - the API runtime
+- the MCP server runtime
 - the ingester runtime
 - the resolution-engine runtime
+
+### Use the CLI against the running stack
+
+Build and put `pcg` on `PATH`:
+
+```bash
+cd go && go build -o bin/ ./cmd/pcg ./cmd/bootstrap-index
+export PATH="$PWD/bin:$PATH"
+pcg --help
+```
+
+The CLI talks to the API at `http://localhost:8080` by default. Point it at
+the Compose-started Neo4j and Postgres when indexing locally:
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+
+pcg index .                              # runs pcg-bootstrap-index against your DBs
+pcg list                                 # reads the API
+pcg analyze callers process_payment      # reads the API
+```
+
+`pcg index` invokes the `pcg-bootstrap-index` binary, so build that binary
+too (shown above). `pcg list` and `pcg analyze …` are HTTP clients — they
+require the `platform-context-graph` API service (started by Compose) to be
+reachable.
 
 ### Deploy to Kubernetes
 
@@ -154,9 +171,8 @@ The deployed platform has five long-running runtimes plus two one-shot helpers:
 | Resolution Engine | queue draining, fact loading, projection, retries, recovery | `/usr/local/bin/pcg-reducer` |
 | Bootstrap Index | initial one-shot indexing before steady-state sync | `/usr/local/bin/pcg-bootstrap-index` |
 
-The public runtime name is `ingester`. Compose and Helm now start the
-long-running write plane through dedicated Go binaries rather than Python CLI
-runtime entrypoints.
+The Workflow Coordinator is gated behind the `workflow-coordinator` Docker
+Compose profile and is off in the default local stack.
 
 See [Service Runtimes](docs/docs/deployment/service-runtimes.md) for the
 complete runtime contract.
@@ -176,6 +192,9 @@ In local Compose runs, you can inspect the runtime scrape endpoints directly:
 - API: `http://localhost:19464/metrics`
 - Ingester: `http://localhost:19465/metrics`
 - Resolution Engine: `http://localhost:19466/metrics`
+- Bootstrap Index: `http://localhost:19467/metrics`
+- MCP Server: `http://localhost:19468/metrics`
+- Workflow Coordinator: `http://localhost:19469/metrics` (enabled via compose profile)
 
 See:
 
@@ -225,23 +244,21 @@ Start with the path that matches what you are doing:
 - Local Compose:
   [Docker Compose](docs/docs/deployment/docker-compose.md)
 
-## Project Notes
+## Verification
 
-PlatformContextGraph started as a fork of
-[CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext), then
-evolved into a broader code-to-cloud graph with deployable service runtimes,
-facts-first ingestion, richer recovery controls, and service-oriented
-observability.
+Canonical Go test gates — run these before opening a pull request. The full
+matrix lives in [Local Testing Runbook](docs/docs/reference/local-testing.md).
+
+```bash
+cd go && go test ./cmd/pcg ./cmd/api ./cmd/mcp-server ./internal/query ./internal/mcp -count=1
+cd go && go test ./internal/parser ./internal/collector/discovery ./internal/content/shape ./internal/collector -count=1
+cd go && go test ./internal/terraformschema ./internal/relationships -count=1
+cd go && go test ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer ./internal/runtime ./internal/status ./internal/storage/postgres -count=1
+uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
+  mkdocs build --strict --clean --config-file docs/mkdocs.yml
+```
+
+## Project Notes
 
 PCG is self-hosted and does not require outbound vendor telemetry. When
 observability is enabled, it uses your configured OTLP and Prometheus targets.
-
-## Acknowledgment
-
-PlatformContextGraph builds on the original
-[CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext)
-project by
-[Shashank Shekhar Singh](https://github.com/Shashankss1205) and its
-contributors.
-
-See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for the attribution note.
