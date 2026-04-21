@@ -120,6 +120,36 @@ Soft goals:
   public C API.
 - **Decision: selected.**
 
+##### Cypher parity audit (2026-04-20)
+
+Ladybug's binder (`src/binder/bind/`) covers every clause PCG's 552 Cypher
+statements (62 files) use:
+
+- `bind_match` — MATCH, OPTIONAL MATCH
+- `bind_unwind` — UNWIND
+- `bind_projection_clause` — WITH, RETURN, DISTINCT, ORDER BY, LIMIT, SKIP
+- `bind_updating_clause` — SET, CREATE, MERGE, DELETE, DETACH DELETE
+- `bind_graph_pattern` — node/rel patterns, variable-length
+- `bind_subquery_expression` + `bind_in_query_call` — `CALL { … }` subqueries
+- `bind_standalone_call`, `bind_transaction`
+
+Functions present: aggregates (`avg`/`sum`/`count`/`collect`/`min`/`max`),
+list higher-order (`transform`/`filter`/`reduce`/`all`/`any`/`none`/
+`single`), arithmetic, string, date, timestamp, uuid, cast, comparison,
+null, hash. GDS module ships variable-length paths, SSSP/ASP/WSP shortest
+paths, BFS. FTS and vector indexes live in the `extension/` submodule.
+
+Genuine Neo4j-specific call sites in PCG (must be rewritten):
+
+| PCG site | Neo4j call | Ladybug replacement |
+| --- | --- | --- |
+| `go/internal/graph/schema.go` ×2 | `CALL db.index.fulltext.createNodeIndex` | FTS extension `CALL CREATE_FTS_INDEX(...)` |
+| `go/internal/query/impact.go` | `shortestPath((s)-[*1..8]-(t))` | GDS `SINGLE SHORTEST 8 PATHS` with rel variable |
+| `go/internal/query/code_call_chain.go` | `shortestPath` | same GDS rewrite |
+| test fixture | `CALL db.labels()` | `CALL SHOW_TABLES()` |
+
+Zero `apoc.*` usage in PCG. Total rewrite surface: ~6 files, ~30–50 LOC.
+
 #### Bighorn (`Kineviz/bighorn`)
 
 - Kuzu fork, MIT, announced at the same time as Ladybug.
@@ -297,6 +327,22 @@ that Postgres and does not boot embedded-postgres.
 External Neo4j is never started in `local` mode. The graph store is
 Ladybug, end of story.
 
+### Concurrency Model (Per Profile)
+
+The two profiles run with different concurrency contracts. Neither
+contract bleeds into the other:
+
+| Profile | Graph writers | Postgres writers |
+| --- | --- | --- |
+| `service` (Neo4j + external Postgres) | Multi-writer, server-side transactional — **unchanged** | Multi-writer, pgxpool — **unchanged** |
+| `local` (Ladybug + embedded Postgres) | Single-writer serialized inside the PCG process (in-proc mutex or queue across ingester, reducer, API write paths) | Multi-writer, pgxpool against the embedded Postgres binary |
+
+The single-writer serialization lives behind the storage interface. It is
+a local-profile-only concern. The Neo4j adapter and all service-profile
+concurrency behavior stay identical to the current implementation —
+Ingester, Reducer, and API continue to write to Neo4j concurrently in
+service deployments.
+
 ---
 
 ## Consequences
@@ -330,6 +376,47 @@ Ladybug, end of story.
 facts/queue/content store to a Postgres dump compatible with the service
 profile. This prevents the local profile from trapping users who later
 want to move to the shared Neo4j + Postgres deployment.
+
+---
+
+## Effort Estimate
+
+Sized against the current codebase on 2026-04-20: `go/internal/storage/neo4j`
+8,337 LOC, `go/internal/storage/postgres` 23,524 LOC, 552 Cypher statements
+across 62 files, zero `apoc.*` usage.
+
+| Phase | Estimate | Notes |
+| --- | --- | --- |
+| Embedded Postgres boot + profile wiring | ~1 wk | Real `postgres` binary via `fergusstrange/embedded-postgres`; existing `go/internal/storage/postgres` unchanged. |
+| `go-kuzu` → Ladybug cgo adapter | ~1 wk | Repoint headers; Ladybug preserves Kuzu's public C API. |
+| Cypher parity audit + rewrites | ~3–5 days | ~6 files, ~30–50 LOC per the audit above. |
+| `go/internal/storage/ladybug` adapter | ~2 wk | Mirrors `go/internal/storage/neo4j` shape. |
+| Single-writer serialization (local profile only) | ~3 days | In-process mutex or queue behind the storage interface. |
+| Test parity (Ladybug path) | ~1 wk | Duplicate or interface-abstract the neo4j test suite. |
+| Runtime topology + CLI profile flag | ~1 wk | Single seam in `go/internal/app`. |
+| Graduation path (`pcg export --graduate`) | ~1 wk | Streams local stores into the service profile. |
+| **Total** | **~7 wk** for one senior dev | |
+
+Code deviation:
+
+| Area | Change |
+| --- | --- |
+| `go/internal/storage/postgres/*.go` (23.5k LOC) | ~0%. Boot/config only. |
+| `go/internal/storage/neo4j/*.go` (8.3k LOC) | ~0%. Kept verbatim for service profile. |
+| New `go/internal/storage/ladybug/*.go` | ~6–10k net-new LOC (adapter + tests). |
+| Cypher strings in code | ~30–50 LOC edits across ~6 files. |
+| `go/internal/runtime` + `go/internal/app` | Small; storage-profile seam. |
+| `go/internal/graph` schema helpers | Small; FTS index call rewrite. |
+
+Top residual risks:
+
+1. FTS extension maturity in Ladybug.
+2. Single-writer throughput on 20-repo mono-folder under combined
+   ingester + reducer load (local profile only).
+3. cgo cross-build for Windows.
+
+Service profile is not on this risk list. The service deployment
+(Neo4j + external Postgres) has no code changes in this ADR.
 
 ---
 
