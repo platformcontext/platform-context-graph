@@ -1,0 +1,23 @@
+docs/docs/adrs/2026-04-20-embedded-local-backends-desktop-mode.md
+  fa7725add8aaf45b 123-152,330-345,382-422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "793df42bf10df61aed38b7b49fb9fa124577bd17",
+  "prompts": {
+    "fa7725add8aaf45b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "741f2b38-3054-4720-a4c5-c71a570ad547",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 87,
+      "total_deletions": 0,
+      "accepted_lines": 87,
+      "overriden_lines": 0
+    }
+  }
+}
