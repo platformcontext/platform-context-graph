@@ -13,30 +13,19 @@
 
 ## Context
 
-The current PCG platform runtime is a Go-owned, multi-runtime service that
-mandates **external Neo4j + external Postgres**. Every public CLI verb
-(`pcg index`, `pcg list`, `pcg stats`, `pcg analyze …`, `pcg query`) is
-either a direct writer into those stores (via `pcg-bootstrap-index`) or an
-HTTP client against `pcg-api`, which itself requires both. There is no
-embedded, zero-infra path today.
+PCG is a Go-owned, multi-runtime platform (API, MCP Server, Ingester,
+Reducer, Bootstrap Index) that stands on two canonical stores: **Neo4j**
+for the graph and **Postgres** for facts, queue, content, and status.
+Every public CLI verb (`pcg index`, `pcg list`, `pcg stats`,
+`pcg analyze …`, `pcg query`) is either a direct writer into those stores
+(via `pcg-bootstrap-index`) or an HTTP client against `pcg-api`, which
+itself requires both. The shipped default path is Docker Compose
+bringing up Neo4j + Postgres + the service runtimes.
 
-Up to and including the Python runtime that this codebase evolved past, PCG
-supported two lightweight local backends:
-
-1. **KuzuDB** — embedded, single-process, Cypher-compatible.
-2. **FalkorDB** — Redis-module graph DB, Cypher-compatible.
-
-Both are unavailable in their original form on 2026-04-20:
-
-| Historical option | Status |
-| --- | --- |
-| KuzuDB (`kuzudb/kuzu`) | Archived by upstream Oct 2025. Official `go-kuzu` binding archived alongside it. |
-| FalkorDB | Server under SSPLv1. `FalkorDBLite` embedded bundle ships for Python and TypeScript only — no Go bundle. |
-
-This ADR decides which embedded backend PCG adds for a **desktop / local-only
-mode** that does not require Docker Compose, external Neo4j, or external
-Postgres. The production contract (external Neo4j + external Postgres) does
-not change — this is purely additive.
+This ADR decides whether — and how — PCG exposes a **desktop / local-only
+mode** that runs the same code paths against embedded backends instead of
+external Neo4j + external Postgres. The service deployment contract stays
+untouched; the local mode is additive and opt-in.
 
 ### Why A Desktop Mode
 
@@ -93,8 +82,7 @@ Hard constraints:
 - MUST be permissively licensed (Apache-2.0, MIT, BSD). **No SSPL, no
   BSL, no AGPL** on core runtime dependencies.
 - MUST have working Go integration in 2026 (native, cgo, or first-party
-  Go SDK). Taking on fork-and-port work for a Python-only library is
-  disallowed.
+  Go SDK). Libraries without a Go-usable surface are disallowed.
 - MUST support PCG's real scope: a 20-repo mono-folder must not be a
   failure mode. Reference point: PCG production runs 878+ repos; one
   mono-folder is a small fraction of that but already produces millions
@@ -162,10 +150,9 @@ Soft goals:
 
 #### FalkorDB / FalkorDBLite
 
-- Core server under SSPLv1. Embedded `FalkorDBLite` bundle ships only
-  for Python and TypeScript; no Go path. SSPL is incompatible with
-  PCG's current positioning, and PCG will not build a Go embedded
-  bundle on top of a copyleft core.
+- Core server under SSPLv1. Embedded `FalkorDBLite` bundle has no Go
+  distribution. SSPL is incompatible with the permissive-licensing
+  constraint above.
 - **Decision: rejected.**
 
 #### SurrealDB
