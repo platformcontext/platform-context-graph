@@ -85,10 +85,17 @@ PCG**. This is a first-class use case, not a stretch goal:
    relationship query avoids dozens of Read/Grep tool calls.
 
 Success test for dogfooding: from a clean checkout of
-`platform-context-graph`, a developer can run
-`pcg watch .` once, then open Claude Code, ask "who calls `OpenPostgres`
-across this repo?", and get a correct answer in <500 ms from the local
-MCP endpoint without the developer ever starting Docker.
+`platform-context-graph`, a developer:
+
+1. runs `pcg watch .` (starts the local daemon: Ladybug + embedded PG
+   + incremental indexer + MCP server on
+   `~/.pcg/local/<hash>/mcp.sock`),
+2. configures Claude Code / Cursor with a stdio proxy entry
+   `command: pcg mcp stdio` (the proxy auto-discovers and connects to
+   the running daemon socket — see D3 + Phase 7.5),
+3. asks "who calls `OpenPostgres` across this repo?" and gets a
+   correct answer in < 500 ms,
+4. never starts Docker, Neo4j, or an external Postgres.
 
 ---
 
@@ -301,13 +308,60 @@ func OpenRelationalDB(ctx, getenv) (*sql.DB, PostgresConfig, error)
 Both dispatch on `PCG_STORAGE_PROFILE` (`service` default, `local` opt-in).
 No per-call-site `if profile == "local"` branches anywhere downstream.
 
-### D3. Single-writer serialization lives inside the Ladybug adapter
+### D3. Single-writer is **cross-process**, not just in-process
 
-Not leaked into projector/reducer/query. The adapter wraps a
-`sync.Mutex` (or a buffered command channel) around write-path calls.
-Readers proceed concurrently; writers serialize. Neo4j adapter
-continues to provide unsynchronized multi-writer behavior exactly as
-today.
+Codex-review correction (finding #1): a `sync.Mutex` inside the Ladybug
+adapter fences goroutines inside ONE process. The local profile has
+multiple entrypoints (`pcg index`, `pcg api start`, `pcg mcp start`,
+`pcg watch`) that can all open the same data dir. A process-local
+mutex is insufficient; without cross-process fencing, two concurrent
+`pcg` invocations can corrupt the store.
+
+The single-writer contract spans **three enforced layers**, from
+outermost to innermost:
+
+1. **Daemon-first topology.** `pcg watch` is the canonical local
+   daemon. When it is running, other `pcg` commands MUST route writes
+   through it — not open the store independently. CLI/API/MCP
+   detection:
+   - Check `~/.pcg/local/<data-dir-hash>/daemon.sock` exists and is
+     reachable.
+   - If yes: send writes over the unix socket (new `pcg localctl`
+     client, same surface as remote HTTP API).
+   - If no: proceed to layer 2.
+2. **OS file lock on the data dir.** A standalone `pcg` command
+   acquires `flock(~/.pcg/local/<hash>/write.lock, LOCK_EX | LOCK_NB)`
+   before opening Ladybug for writes. Second concurrent command sees
+   `EWOULDBLOCK` and either (a) retries on a bounded backoff or
+   (b) exits with an actionable error naming the PID holding the
+   lock. Ladybug/Kuzu's own data-dir lock is the ultimate backstop but
+   we do not rely on its error message being human-actionable.
+3. **In-process mutex.** Inside the holding process, the Ladybug
+   adapter still wraps writes in a `sync.Mutex` (or buffered command
+   channel) to serialize goroutines. Readers proceed concurrently.
+
+Neo4j adapter keeps multi-writer semantics unchanged.
+
+Acceptance tests for D3:
+- `T-D3-1`: `pcg watch` running, second `pcg index` invocation routes
+  through the daemon socket, produces identical graph as direct write.
+- `T-D3-2`: no daemon, two simultaneous `pcg index` invocations:
+  second exits with `error: local write lock held by PID=<n>
+  (acquired <duration> ago)` within 500 ms; no store corruption.
+- `T-D3-3`: daemon unreachable socket (stale sock file), CLI falls
+  back to file-lock path and logs `daemon.socket_stale`.
+- `T-D3-4`: fuzz-style contract test uses `testcontainers` to spin
+  two Go binaries against the same Ladybug data dir for 60 s; asserts
+  post-run integrity via Cypher read-back.
+
+Concurrency invariants restated as a table:
+
+| Writer source | Local profile enforcement | Service profile |
+| --- | --- | --- |
+| goroutines in one process | `sync.Mutex` in adapter | none needed |
+| two pcg CLI invocations | OS `flock` on data dir | N/A |
+| CLI + daemon | daemon socket routes external writers | N/A |
+| two service-profile API replicas | N/A | Neo4j server-side tx |
 
 ### D4. Embedded Postgres uses the **real Postgres protocol**
 
@@ -705,16 +759,32 @@ local DB.
 3. Data deps: None.
 4. Re-trigger: N/A.
 
-**Scope:**
-- `ladybug.Driver.WriteSession` acquires a `sync.Mutex` around every
-  `Execute` / `ExecuteGroup`. Release on session Close or context
-  cancel.
+**Scope (updated per D3 three-layer model):**
+- **Layer 3 (in-process):** `ladybug.Driver.WriteSession` acquires a
+  `sync.Mutex` around every `Execute` / `ExecuteGroup`. Release on
+  session Close or context cancel.
+- **Layer 2 (cross-process):** adapter opens `~/.pcg/local/<hash>/write.lock`
+  with `flock(LOCK_EX | LOCK_NB)` before first write; writes the
+  PID + acquisition timestamp into the lockfile for diagnostics.
+  Second opener gets `EWOULDBLOCK` → surfaces actionable error.
+- **Layer 1 (daemon-first):** introduced in Phase 7.5 watch runtime;
+  Phase 6 only builds the protocol scaffolding (unix socket path
+  convention + client detection logic in a new
+  `go/internal/runtime/localctl/` package). Integration lands
+  alongside watch.
 - Optional command-queue implementation behind a feature flag for
   perf comparison (defer if mutex is sufficient).
-- Stress test: run 3 goroutines issuing interleaved MERGE + MATCH
-  against a 100k-node local DB. Assert no driver errors and consistent
-  final state.
-- Document in the adapter README: "Writers serialize inside the process."
+- Stress test — writers:
+  - `T-mt-1` in-process: 3 goroutines interleaved MERGE + MATCH on
+    a 100k-node DB. Assert no errors, consistent final state.
+  - `T-mt-2` cross-process: two `pcg` subprocess writers against same
+    data dir; second must fail fast with lockfile error; no store
+    damage (verified by post-run integrity query).
+  - `T-mt-3` daemon-routing: `pcg watch` running + `pcg index` writes
+    → writes observed through daemon's adapter, lockfile is held by
+    daemon PID only.
+- Document in the adapter README: all three layers, with the failure
+  mode each catches.
 
 **Telemetry obligations:**
 - `pcg_dp_ladybug_write_serialization_wait_seconds` histogram
@@ -791,10 +861,26 @@ devs to dogfood PCG while writing PCG.
   subdir under `~/.pcg/local/<hash>/` (R14).
 - OS-resume handling: periodic PG health probe; on fail, attempt
   graceful restart before exiting watch (R15).
-- **MCP readiness**: `pcg watch` also starts the MCP server
-  in-process (stdio transport) so Claude Code / IDE plugins can
-  connect directly without a second command. Controlled by
-  `--mcp=stdio|off` flag.
+- **MCP readiness** (revised per codex-review finding #3): stdio
+  alone is not a reusable endpoint because the client must own the
+  child process. The daemon MUST expose a connectable transport so
+  any MCP client can attach after `pcg watch` is already running.
+  Contract:
+  - Default: `pcg watch` binds MCP over **HTTP/SSE on a unix socket**
+    at `~/.pcg/local/<hash>/mcp.sock` (Linux, macOS). This is the
+    endpoint dogfood users point IDE/agent config at. Socket is
+    mode 0600 to match CLI user ownership.
+  - Also: `pcg watch` serves the same MCP surface on
+    `http://127.0.0.1:<auto-port>` when `--mcp-http` is passed, for
+    tooling that cannot speak unix-socket MCP.
+  - Separately: `pcg mcp stdio` is a short-lived **client-spawned**
+    stdio MCP process that auto-discovers and proxies to the running
+    daemon socket. This is the entry Claude Code / Cursor / Windsurf
+    config files actually launch, because those clients speak stdio.
+  - If no daemon is running, `pcg mcp stdio` falls back to standalone
+    (acquires write-lock, opens Ladybug read-only session).
+  - Flag surface on `pcg watch`: `--mcp=unix|http|both|off` (default
+    `unix`); `--mcp-http-port` when applicable.
 
 **Telemetry obligations:**
 - `pcg_dp_watch_events_total{kind=created|modified|deleted|skipped}`
@@ -843,16 +929,39 @@ devs to dogfood PCG while writing PCG.
 **Goal:** A user on `local` can move their graph + content into a
 service deployment without re-indexing.
 
-**Scope:**
+**Scope (revised per codex-review finding #4):**
+
+`neo4j-admin database load` does NOT consume Cypher text — it only
+restores a binary dump produced by `neo4j-admin database dump`. Plan
+now ships **two Neo4j import paths** and the E2E test must prove
+both.
+
 - `pcg export --graduate --output dir/` writes:
-  - `graph.cypher` — node + rel + index DDL suitable for Neo4j import.
-  - `postgres.dump` — `pg_dump` against embedded DB in custom format.
-  - `manifest.json` — versions, scope identity, generation IDs.
+  - `graph.cypher` — node + rel + index DDL as plain Cypher
+    statements. Consumed by `cypher-shell -f graph.cypher` against a
+    running service-profile Neo4j. Compatible with Neo4j
+    Aura/clustered deployments where admin-load is not available.
+  - `graph.dump` (optional, on `--format=dump`) — produced by
+    streaming Cypher into a throwaway local Neo4j using
+    `neo4j-admin database dump`, then emitted as the offline bulk
+    format. Consumed by `neo4j-admin database load --from=graph.dump`.
+    Only useful when the target supports offline load.
+  - `postgres.dump` — `pg_dump -Fc` against embedded DB.
+  - `manifest.json` — versions, scope identity, generation IDs,
+    export format indicator.
 - Documented import procedure on the service side:
-  - `neo4j-admin database load` for the Cypher stream.
-  - `pg_restore` for the dump.
-- End-to-end integration test: `local index → graduate → service load → pcg
-  list` returns same repos.
+  - **Default (Cypher replay)**: `cypher-shell -u $NEO4J_USER -p
+    $NEO4J_PASSWORD -d neo4j -f graph.cypher`. Works against any live
+    Neo4j (standalone, cluster, Aura).
+  - **Offline bulk**: `neo4j-admin database load --from=graph.dump
+    --database=neo4j` against a stopped Neo4j. Only when target
+    ownership allows.
+  - `pg_restore -d <dsn> postgres.dump` in both paths.
+- End-to-end integration tests (both must pass):
+  - `T-grad-1`: `local index → graduate --format=cypher → cypher-shell
+    replay → pcg list` returns same repos.
+  - `T-grad-2`: `local index → graduate --format=dump → neo4j-admin
+    load → pcg list` returns same repos.
 
 **Telemetry obligations:**
 - Duration histogram + counter per graduation run.
@@ -910,27 +1019,74 @@ service deployment without re-indexing.
 
 ## Verification Gates (must pass before merging)
 
-At every phase boundary:
+Codex-review finding #5: the earlier gate list was too narrow for a
+runtime/storage change that claims "zero behavioral regressions" and
+"byte-identical" service output. The gates below are the minimum set;
+phase-specific scopes add more in each phase's Exit criteria.
+
+**1. Go correctness gates** (identical to CLAUDE.md canonical):
 
 ```bash
 cd go && go test ./cmd/pcg ./cmd/api ./cmd/mcp-server ./internal/query ./internal/mcp -count=1
 cd go && go test ./internal/parser ./internal/collector/discovery ./internal/content/shape ./internal/collector -count=1
 cd go && go test ./internal/terraformschema ./internal/relationships -count=1
 cd go && go test ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer ./internal/runtime ./internal/status ./internal/storage/postgres -count=1
+```
+
+**2. Go lint** (new — required by the repo's golangci-lint policy for
+any Go change):
+
+```bash
+cd go && golangci-lint run --timeout=5m ./...
+```
+
+**3. Production-untouched build gate** (new — enforces D10 + the
+production-untouched guarantee at CI time):
+
+```bash
+# Service-only build MUST succeed without pcg_local tag.
+cd go && go build -o /tmp/pcg-service ./cmd/pcg ./cmd/api ./cmd/mcp-server \
+  ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer
+cd go && go test ./... -count=1   # no -tags, default build
+```
+
+**4. Local-profile gate** (only when `-tags=pcg_local`):
+
+```bash
+cd go && go test ./internal/storage/graph ./internal/storage/ladybug \
+  ./internal/app/localpg ./internal/runtime/watcher \
+  ./internal/runtime/localctl -count=1 -tags=pcg_local
+cd go && go test ./test/local_profile_e2e -count=1 -tags=pcg_local,e2e_local
+```
+
+**5. Docs gate**:
+
+```bash
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
   mkdocs build --strict --clean --config-file docs/mkdocs.yml
+```
+
+**6. Deployment shape gate** (new — prevents runtime-shape regression):
+
+```bash
+helm lint ./deploy/helm/platform-context-graph
+helm template platform-context-graph ./deploy/helm/platform-context-graph \
+  | kubectl apply --dry-run=client --validate=true -f -
+docker compose --profile workflow-coordinator config -q
+docker compose config -q
+```
+
+**7. Whitespace gate**:
+
+```bash
 git diff --check
 ```
 
-Local-profile adds:
-
-```bash
-cd go && go test ./internal/storage/graph ./internal/storage/ladybug ./internal/app/localpg -count=1 -tags=localpg
-cd go && go test ./test/local_profile_e2e -count=1 -tags=e2e_local
-```
-
-Service-profile regression smoke (CLAUDE.md reminder): an E2E run on
-the remote 896-repo instance before flipping Phase 9 to GA.
+**8. Service-profile regression smoke** (CLAUDE.md reminder): a full
+E2E run on the remote 896-repo instance before flipping Phase 9 to
+GA. Must observe identical repository/entity counts, identical
+metric names, and identical Cypher query plans for a representative
+query set against the pre-merge baseline.
 
 ---
 
