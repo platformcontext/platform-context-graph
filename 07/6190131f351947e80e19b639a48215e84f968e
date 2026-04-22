@@ -1,0 +1,57 @@
+go/internal/query/language_queries.go
+  e27ce815bbe89792 14
+go/cmd/api/wiring.go
+  e27ce815bbe89792 22-26
+go/internal/query/impact_trace_deployment.go
+  e27ce815bbe89792 132,385
+docs/docs/adrs/2026-04-20-embedded-local-backends-desktop-mode.md
+  e27ce815bbe89792 220-228
+go/internal/query/repository_name_lookup.go
+  e27ce815bbe89792 10
+go/cmd/mcp-server/wiring.go
+  e27ce815bbe89792 21-25
+go/internal/query/repository.go
+  e27ce815bbe89792 15,169,192,196,217,243
+go/internal/query/repository_config_artifacts_loader.go
+  e27ce815bbe89792 19,98
+go/internal/query/entity.go
+  e27ce815bbe89792 12
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 154,156-159
+go/internal/query/service_deployment_evidence.go
+  e27ce815bbe89792 11
+go/internal/query/repository_infrastructure.go
+  e27ce815bbe89792 12,66
+go/internal/query/service_query_enrichment.go
+  e27ce815bbe89792 18,29,286
+go/internal/query/deployment_trace_support_helpers.go
+  e27ce815bbe89792 32,41,95,114,191,229
+go/internal/query/code.go
+  e27ce815bbe89792 13
+go/internal/query/infra.go
+  e27ce815bbe89792 11
+go/internal/query/repository_deployment_artifacts_loader.go
+  e27ce815bbe89792 10
+go/internal/query/entity_resolve_identity.go
+  e27ce815bbe89792 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "076190131f351947e80e19b639a48215e84f968e",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 54,
+      "total_deletions": 41,
+      "accepted_lines": 54,
+      "overriden_lines": 0
+    }
+  }
+}
