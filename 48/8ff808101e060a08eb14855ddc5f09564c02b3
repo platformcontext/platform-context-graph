@@ -1,0 +1,116 @@
+go/internal/query/contract_endpoint_test.go
+  ac007ba35eb0666d 1-104
+docs/docs/reference/truth-label-protocol.md
+  934d6d81157fce9a 191,195-196
+  e27ce815bbe89792 25-190,192,198-269
+docs/docs/reference/local-performance-envelope.md
+  e27ce815bbe89792 12-39
+go/internal/query/language_queries.go
+  ac007ba35eb0666d 16
+go/internal/mcp/server_test.go
+  ac007ba35eb0666d 190-199
+docs/docs/reference/fact-schema-versioning.md
+  e27ce815bbe89792 24-142
+docs/docs/reference/local-data-root-spec.md
+  934d6d81157fce9a 31-42,93,118-119,121-130,184-191
+  e27ce815bbe89792 20-30,43-92,94-116,120,131-183
+go/internal/query/entity.go
+  ac007ba35eb0666d 14,27-33,416-429,455
+go/internal/query/handler.go
+  ac007ba35eb0666d 28-67,105-106
+docs/docs/adrs/2026-04-20-embedded-local-backends-desktop-mode.md
+  e27ce815bbe89792 13-400
+go/internal/query/repository.go
+  ac007ba35eb0666d 17,29-35,75-88,166
+go/internal/query/impact.go
+  ac007ba35eb0666d 13,25-31,36-49,139,146-159,218,225-238,320,327-340,466
+go/internal/query/contract.go
+  e27ce815bbe89792 1-266
+go/internal/query/code_call_chain.go
+  ac007ba35eb0666d 19-32,73,80
+go/internal/mcp/server.go
+  ac007ba35eb0666d 76-84,381-391
+go/internal/query/compare.go
+  ac007ba35eb0666d 20,28-34,44-57,108,152
+go/internal/query/handler_test.go
+  ac007ba35eb0666d 48-108
+docs/docs/why-pcg.md
+  e27ce815bbe89792 7,17,24-59,73-96,127,141-142,144-147,152-159
+docs/docs/reference/capability-conformance-spec.md
+  e27ce815bbe89792 11-59,66-84,92-148,170-187,195-196,218-219,241,286-294
+  934d6d81157fce9a 60-63,85-91,150-166,188-189,197-215,220-240,242-263
+go/internal/query/code.go
+  ac007ba35eb0666d 21,38,42-48,52-57,73-78,81,89,96,101,107,114,119-122,124,134-138,191-194,258-260,264-266,275-288,352,355,434,478
+docs/docs/reference/local-host-lifecycle.md
+  e27ce815bbe89792 20-41,44-49,58-66
+  934d6d81157fce9a 11,42-43,50-57
+go/internal/query/impact_trace_deployment.go
+  ac007ba35eb0666d 59-72,127
+go/cmd/api/wiring.go
+  ac007ba35eb0666d 81-82,118-123,128,133,138,144-145,150,160
+go/internal/query/code_relationships.go
+  ac007ba35eb0666d 36,54,88-104
+specs/capability-matrix.v1.yaml
+  934d6d81157fce9a 104,109-132
+  e27ce815bbe89792 2-103,105-108,133-144
+go/cmd/api/wiring_test.go
+  ac007ba35eb0666d 26
+go/internal/query/infra.go
+  ac007ba35eb0666d 11-12,78-84,89-102,185,188,195-208,261,267,273-286,303,308,312,317
+docs/docs/reference/dead-code-reachability-spec.md
+  e27ce815bbe89792 23-128
+go/internal/mcp/dispatch.go
+  ac007ba35eb0666d 42
+go/cmd/mcp-server/wiring.go
+  ac007ba35eb0666d 79,85,90,95,101-102,107,117
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 8-460
+docs/docs/reference/plugin-trust-model.md
+  e27ce815bbe89792 38-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "488ff808101e060a08eb14855ddc5f09564c02b3",
+  "prompts": {
+    "934d6d81157fce9a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019db6cd-7a2b-73b2-b0cb-77776c8bf046",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 161,
+      "total_deletions": 46,
+      "accepted_lines": 161,
+      "overriden_lines": 0
+    },
+    "ac007ba35eb0666d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8e6337a4-94ed-462b-884f-543d9387b230",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 577,
+      "total_deletions": 1305,
+      "accepted_lines": 577,
+      "overriden_lines": 0
+    },
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1044,
+      "total_deletions": 246,
+      "accepted_lines": 998,
+      "overriden_lines": 0
+    }
+  }
+}
