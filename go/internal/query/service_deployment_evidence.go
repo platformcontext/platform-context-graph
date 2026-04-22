@@ -8,7 +8,7 @@ import (
 
 func loadServiceDeploymentEvidence(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	content ContentStore,
 	workloadContext map[string]any,
 ) (map[string]any, error) {

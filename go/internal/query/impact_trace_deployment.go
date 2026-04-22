@@ -129,7 +129,7 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 
 func fetchServiceTraceContext(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	content ContentStore,
 	serviceName string,
 	traceOptions traceEnrichmentConfig,
@@ -382,7 +382,7 @@ func (h *ImpactHandler) fetchDeploymentSources(
 
 func fetchDeploymentSourcesFromGraph(
 	ctx context.Context,
-	reader GraphReader,
+	reader GraphQuery,
 	workloadID string,
 	repoID string,
 ) ([]map[string]any, error) {

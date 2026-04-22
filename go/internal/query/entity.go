@@ -9,7 +9,7 @@ import (
 
 // EntityHandler exposes HTTP routes for entity queries.
 type EntityHandler struct {
-	Neo4j   GraphReader
+	Neo4j   GraphQuery
 	Content ContentStore
 	Profile QueryProfile
 }

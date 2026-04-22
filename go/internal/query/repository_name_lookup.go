@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func queryRepositoryNamesByID(ctx context.Context, graph GraphReader, repoIDs []string) (map[string]string, error) {
+func queryRepositoryNamesByID(ctx context.Context, graph GraphQuery, repoIDs []string) (map[string]string, error) {
 	if graph == nil || len(repoIDs) == 0 {
 		return nil, nil
 	}

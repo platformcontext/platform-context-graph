@@ -18,6 +18,11 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
+var (
+	_ query.GraphQuery   = (*query.Neo4jReader)(nil)
+	_ query.ContentStore = (*query.ContentReader)(nil)
+)
+
 func wireAPI(
 	ctx context.Context,
 	getenv func(string) string,

@@ -16,7 +16,7 @@ type repositoryArtifactSource struct {
 
 func loadSharedRepositoryConfigArtifacts(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	reader ContentStore,
 	repoID string,
 	repoName string,
@@ -95,7 +95,7 @@ func loadRepositoryControllerArtifacts(
 
 func queryRelatedRepositoryArtifactSources(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	repoID string,
 ) ([]repositoryArtifactSource, error) {
 	rows, err := graph.Run(ctx, `

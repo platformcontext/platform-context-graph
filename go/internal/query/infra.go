@@ -8,7 +8,7 @@ import (
 // InfraHandler serves HTTP endpoints for querying infrastructure resources
 // and relationships from the Neo4j canonical graph.
 type InfraHandler struct {
-	Neo4j   GraphReader
+	Neo4j   GraphQuery
 	Profile QueryProfile
 }
 

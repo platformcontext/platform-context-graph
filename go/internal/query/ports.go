@@ -11,10 +11,6 @@ type GraphQuery interface {
 	RunSingle(context.Context, string, map[string]any) (map[string]any, error)
 }
 
-// GraphReader remains as a compatibility alias while the query layer moves to
-// capability-port naming.
-type GraphReader = GraphQuery
-
 // ContentStore is the relational content-query surface used by read handlers.
 type ContentStore interface {
 	GetFileContent(ctx context.Context, repoID, relativePath string) (*FileContent, error)

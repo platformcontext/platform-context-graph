@@ -10,7 +10,7 @@ import (
 // CodeHandler provides HTTP routes for code-level queries: search, relationships,
 // dead code detection, and complexity metrics.
 type CodeHandler struct {
-	Neo4j   GraphReader
+	Neo4j   GraphQuery
 	Content ContentStore
 	Profile QueryProfile
 }
