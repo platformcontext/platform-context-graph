@@ -1,0 +1,43 @@
+go/cmd/mcp-server/wiring.go
+  e27ce815bbe89792 27-31,155-164
+go/cmd/api/wiring_test.go
+  e27ce815bbe89792 7,24-35
+go/internal/query/contract_matrix_test.go
+  e27ce815bbe89792 1-100
+go/internal/mcp/server.go
+  e27ce815bbe89792 16,377-399,404,416-431
+go/internal/query/handler_test.go
+  e27ce815bbe89792 100-104
+go/cmd/api/wiring.go
+  e27ce815bbe89792 28-32,122-131
+go/internal/mcp/dispatch.go
+  e27ce815bbe89792 15-16,20,60-67,74-102,104
+go/internal/mcp/server_test.go
+  e27ce815bbe89792 190-240,246-251
+go/internal/query/handler.go
+  e27ce815bbe89792 45
+go/cmd/mcp-server/wiring_test.go
+  e27ce815bbe89792 5,21-33
+go/internal/query/contract.go
+  e27ce815bbe89792 4,39-42,65-75,77,85,117-136,147-158,231-238,240-241,243,245,247,249,310-313,328-333
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "35a3a091840d3fbb75fd2c483f55b17999008d4e",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 388,
+      "total_deletions": 29,
+      "accepted_lines": 388,
+      "overriden_lines": 0
+    }
+  }
+}
