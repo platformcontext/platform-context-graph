@@ -63,11 +63,13 @@ func TestValidateOrReclaimOwner(t *testing.T) {
 		record := OwnerRecord{
 			PID:                42,
 			Version:            "v0",
+			WorkspaceID:        "workspace-id",
 			SocketPath:         "/tmp/pcg-owner.sock",
 			PostgresPID:        77,
 			PostgresSocketPath: "/tmp/.s.PGSQL.15433",
 			PostgresDataDir:    layout.PostgresDir,
 		}
+		layout.WorkspaceID = "workspace-id"
 		if err := WriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
 			t.Fatalf("WriteOwnerRecord() error = %v, want nil", err)
 		}
@@ -86,11 +88,13 @@ func TestValidateOrReclaimOwner(t *testing.T) {
 		record := OwnerRecord{
 			PID:                42,
 			Version:            "v1",
+			WorkspaceID:        "workspace-id",
 			SocketPath:         "/tmp/pcg-owner.sock",
 			PostgresPID:        77,
 			PostgresSocketPath: "/tmp/.s.PGSQL.15433",
 			PostgresDataDir:    layout.PostgresDir,
 		}
+		layout.WorkspaceID = "workspace-id"
 		if err := WriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
 			t.Fatalf("WriteOwnerRecord() error = %v, want nil", err)
 		}
@@ -121,9 +125,11 @@ func TestValidateOrReclaimOwner(t *testing.T) {
 		record := OwnerRecord{
 			PID:             42,
 			Version:         "v1",
+			WorkspaceID:     "workspace-id",
 			PostgresPID:     77,
 			PostgresDataDir: layout.PostgresDir,
 		}
+		layout.WorkspaceID = "workspace-id"
 		if err := WriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
 			t.Fatalf("WriteOwnerRecord() error = %v, want nil", err)
 		}
@@ -145,10 +151,12 @@ func TestValidateOrReclaimOwner(t *testing.T) {
 		record := OwnerRecord{
 			PID:                42,
 			Version:            "v1",
+			WorkspaceID:        "workspace-id",
 			PostgresPID:        77,
 			PostgresSocketPath: "/tmp/.s.PGSQL.15433",
 			PostgresDataDir:    layout.PostgresDir,
 		}
+		layout.WorkspaceID = "workspace-id"
 		if err := WriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
 			t.Fatalf("WriteOwnerRecord() error = %v, want nil", err)
 		}
@@ -167,6 +175,41 @@ func TestValidateOrReclaimOwner(t *testing.T) {
 		}
 		if stopCalls != 1 {
 			t.Fatalf("StopPostgres() call count = %d, want 1", stopCalls)
+		}
+	})
+
+	t.Run("workspace id mismatch fails closed", func(t *testing.T) {
+		layout := testLayout(t)
+		layout.WorkspaceID = "expected-workspace"
+		record := OwnerRecord{
+			WorkspaceID: "different-workspace",
+		}
+		if err := WriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
+			t.Fatalf("WriteOwnerRecord() error = %v, want nil", err)
+		}
+
+		err := ValidateOrReclaimOwner(layout, "v1", ReclaimDeps{})
+		if !errors.Is(err, ErrInvalidOwnerRecord) {
+			t.Fatalf("ValidateOrReclaimOwner() error = %v, want %v", err, ErrInvalidOwnerRecord)
+		}
+	})
+
+	t.Run("live postgres without data dir fails closed", func(t *testing.T) {
+		layout := testLayout(t)
+		layout.WorkspaceID = "workspace-id"
+		record := OwnerRecord{
+			WorkspaceID: "workspace-id",
+			PostgresPID: 77,
+		}
+		if err := WriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
+			t.Fatalf("WriteOwnerRecord() error = %v, want nil", err)
+		}
+
+		err := ValidateOrReclaimOwner(layout, "v1", ReclaimDeps{
+			PIDAlive: func(pid int) bool { return pid == 77 },
+		})
+		if !errors.Is(err, ErrInvalidOwnerRecord) {
+			t.Fatalf("ValidateOrReclaimOwner() error = %v, want %v", err, ErrInvalidOwnerRecord)
 		}
 	})
 }
