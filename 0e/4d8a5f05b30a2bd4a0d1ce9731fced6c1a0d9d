@@ -1,0 +1,78 @@
+docs/docs/reference/local-data-root-spec.md
+  e27ce815bbe89792 99,151-159,166
+  ac007ba35eb0666d 63,68-71,103-111,133-134
+docs/docs/reference/http-api.md
+  ac007ba35eb0666d 18-128
+AGENTS.md
+  ac007ba35eb0666d 88,91-142
+docs/docs/reference/fact-envelope-reference.md
+  ac007ba35eb0666d 1-177
+docs/docs/architecture.md
+  ac007ba35eb0666d 247-368
+specs/capability-matrix.v1.yaml
+  ac007ba35eb0666d 5-6,12,19,26,33,40,47,54,61,68,75,82,89,96,103,110,117,124,131,138,145,152,159,166
+go/internal/query/contract.go
+  ac007ba35eb0666d 14-17,20-42,80,115-119,129-132,135-138,141-144,147-150,153-156,159-162,165-168,171-174,177-180,183-187,190-194,197-200,203-206,209-212,215-219,222-226,229-233,236-240,243-247,250-254,257-261,264-268,271-275,293-294,320-328
+docs/docs/adrs/2026-04-20-embedded-local-backends-desktop-mode.md
+  ac007ba35eb0666d 236-253
+CLAUDE.md
+  ac007ba35eb0666d 63,286-316
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  ac007ba35eb0666d 6,21-40
+docs/docs/reference/cli-indexing.md
+  ac007ba35eb0666d 31-36
+go/internal/query/contract_matrix_test.go
+  ac007ba35eb0666d 52
+docs/docs/why-pcg.md
+  ac007ba35eb0666d 73-126,151-171
+docs/docs/reference/capability-conformance-spec.md
+  ac007ba35eb0666d 106,110-114,122,126-140
+docs/docs/reference/cli-reference.md
+  ac007ba35eb0666d 47,51-130
+docs/mkdocs.yml
+  ac007ba35eb0666d 68-86
+docs/docs/guides/mcp-guide.md
+  ac007ba35eb0666d 17-40
+docs/docs/reference/local-host-lifecycle.md
+  ac007ba35eb0666d 12-20,30,35,47-53
+  e27ce815bbe89792 26-29,31-34,36-40
+docs/docs/reference/local-performance-envelope.md
+  ac007ba35eb0666d 17-21,33-45
+docs/docs/reference/truth-label-protocol.md
+  ac007ba35eb0666d 79-84
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  ac007ba35eb0666d 1-276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "0e4d8a5f05b30a2bd4a0d1ce9731fced6c1a0d9d",
+  "prompts": {
+    "ac007ba35eb0666d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8e6337a4-94ed-462b-884f-543d9387b230",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1726,
+      "total_deletions": 128,
+      "accepted_lines": 1701,
+      "overriden_lines": 0
+    },
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 425,
+      "total_deletions": 74,
+      "accepted_lines": 390,
+      "overriden_lines": 2
+    }
+  }
+}
