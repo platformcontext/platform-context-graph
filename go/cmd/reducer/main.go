@@ -123,7 +123,7 @@ func buildReducerService(
 	cypherExec reducer.CypherExecutor,
 	intentStore *postgres.SharedIntentStore,
 	neo4jReader sourceneo4j.CypherReader,
-	graphReader query.GraphReader,
+	graphReader query.GraphQuery,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
