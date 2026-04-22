@@ -108,6 +108,13 @@ func TestAcquireOwnerLockRejectsCompetingProcess(t *testing.T) {
 	}
 }
 
+func TestNilOwnerLockCloseIsSafe(t *testing.T) {
+	var lock *OwnerLock
+	if err := lock.Close(); err != nil {
+		t.Fatalf("lock.Close() error = %v, want nil", err)
+	}
+}
+
 func runAcquireOwnerLockHelper() {
 	lockPath := os.Getenv(lockHelperPathEnv)
 	lock, err := AcquireOwnerLock(lockPath)

@@ -38,7 +38,8 @@ func TestRunWatchExecsIngesterWithResolvedWorkspaceRoot(t *testing.T) {
 		return wantExecErr
 	}
 
-	err := runWatch(&cobra.Command{}, []string{startPath})
+	cmd := newWatchTestCommand()
+	err := runWatch(cmd, []string{startPath})
 	if !errors.Is(err, wantExecErr) {
 		t.Fatalf("runWatch() error = %v, want %v", err, wantExecErr)
 	}
@@ -75,8 +76,7 @@ func TestRunWatchUsesExplicitWorkspaceRootFlag(t *testing.T) {
 		return wantExecErr
 	}
 
-	cmd := &cobra.Command{}
-	cmd.Flags().String("workspace-root", "", "")
+	cmd := newWatchTestCommand()
 	if err := cmd.Flags().Set("workspace-root", workspaceRoot); err != nil {
 		t.Fatalf("Set(workspace-root) error = %v, want nil", err)
 	}
@@ -107,8 +107,7 @@ func TestRunWorkspaceWatchUsesWorkspaceArgumentAsExplicitRoot(t *testing.T) {
 		return wantExecErr
 	}
 
-	cmd := &cobra.Command{}
-	cmd.Flags().String("workspace-root", "", "")
+	cmd := newWatchTestCommand()
 	err := runWorkspaceWatch(cmd, []string{workspaceRoot})
 	if !errors.Is(err, wantExecErr) {
 		t.Fatalf("runWorkspaceWatch() error = %v, want %v", err, wantExecErr)
@@ -132,12 +131,30 @@ func TestRunWatchReturnsFriendlyErrorWhenIngesterMissing(t *testing.T) {
 		return "", errors.New("missing")
 	}
 
-	err := runWatch(&cobra.Command{}, nil)
+	err := runWatch(newWatchTestCommand(), nil)
 	if err == nil {
 		t.Fatal("runWatch() error = nil, want non-nil")
 	}
 	if err.Error() != "pcg-ingester not found" {
 		t.Fatalf("runWatch() error = %q, want %q", err.Error(), "pcg-ingester not found")
+	}
+}
+
+func TestRunWatchReturnsErrorWhenWorkspaceRootFlagIsUnavailable(t *testing.T) {
+	restore, calls := stubWatchRuntime()
+	defer restore()
+
+	calls.lookPath = func(string) (string, error) {
+		t.Fatal("LookPath() should not be called when flag lookup fails")
+		return "", nil
+	}
+
+	err := runWatch(&cobra.Command{}, nil)
+	if err == nil {
+		t.Fatal("runWatch() error = nil, want non-nil")
+	}
+	if err.Error() != "flag accessed but not defined: workspace-root" {
+		t.Fatalf("runWatch() error = %q, want missing workspace-root flag error", err.Error())
 	}
 }
 
@@ -186,6 +203,12 @@ func stubWatchRuntime() (func(), *watchRuntimeCalls) {
 		watchSetenv = originalSetenv
 		watchEnviron = originalEnviron
 	}, calls
+}
+
+func newWatchTestCommand() *cobra.Command {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("workspace-root", "", "")
+	return cmd
 }
 
 func mustEvalSymlinks(t *testing.T, path string) string {

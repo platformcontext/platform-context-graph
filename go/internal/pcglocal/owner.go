@@ -64,6 +64,10 @@ func WriteOwnerRecord(path string, record OwnerRecord) error {
 		_ = tempFile.Close()
 		return fmt.Errorf("chmod owner record temp file: %w", err)
 	}
+	if err := tempFile.Sync(); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("sync owner record temp file: %w", err)
+	}
 	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("close owner record temp file: %w", err)
 	}

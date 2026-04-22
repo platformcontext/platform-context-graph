@@ -91,6 +91,30 @@ func TestResolveWorkspaceRoot(t *testing.T) {
 			t.Fatalf("ResolveWorkspaceRoot() = %q, want %q", got, want)
 		}
 	})
+
+	t.Run("file input resolves to parent directory", func(t *testing.T) {
+		repoRoot := filepath.Join(t.TempDir(), "repo")
+		filePath := filepath.Join(repoRoot, "pkg", "main.go")
+		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+			t.Fatalf("MkdirAll() error = %v, want nil", err)
+		}
+		if err := os.WriteFile(filePath, []byte("package main\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile() error = %v, want nil", err)
+		}
+		if err := os.Mkdir(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+			t.Fatalf("Mkdir(.git) error = %v, want nil", err)
+		}
+
+		got, err := ResolveWorkspaceRoot(filePath, "")
+		if err != nil {
+			t.Fatalf("ResolveWorkspaceRoot() error = %v, want nil", err)
+		}
+
+		want := mustEvalSymlinks(t, repoRoot)
+		if got != want {
+			t.Fatalf("ResolveWorkspaceRoot() = %q, want %q", got, want)
+		}
+	})
 }
 
 func TestResolveHomeDir(t *testing.T) {
