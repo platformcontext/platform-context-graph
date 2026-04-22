@@ -187,6 +187,16 @@ func TestHandleHTTPMessage_ToolCall(t *testing.T) {
 	if len(content) == 0 {
 		t.Fatal("expected at least one content entry")
 	}
+	if len(content) != 2 {
+		t.Fatalf("expected 2 content entries, got %d", len(content))
+	}
+	resource, ok := content[1].(map[string]any)
+	if !ok {
+		t.Fatalf("content[1] type = %T, want map[string]any", content[1])
+	}
+	if resource["type"] != "resource" {
+		t.Fatalf("content[1].type = %#v, want resource", resource["type"])
+	}
 }
 
 func TestHandleSSE_EndpointEvent(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 type LanguageQueryHandler struct {
 	Neo4j   GraphReader
 	Content *ContentReader
+	Profile QueryProfile
 }
 
 // Mount registers the language query endpoint on the given mux.

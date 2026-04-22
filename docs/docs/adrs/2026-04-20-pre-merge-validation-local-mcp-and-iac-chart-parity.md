@@ -10,7 +10,7 @@
 - `2026-04-20-multi-source-reducer-and-consumer-contract.md`
 - `docs/docs/deployment/service-runtimes.md`
 - `docs/docs/reference/local-testing.md`
-- `~/repos/mobius/iac-eks-pcg/chart/` (boats internal)
+- `~/repos/mobius/iac-eks-pcg/chart/` (work internal)
 
 ---
 
@@ -34,7 +34,7 @@ validated:
 1. **The local stack indexes this repo and serves MCP to Claude Code well
    enough to reduce code-finding token cost.** PCG inherits CGC
    (CodeGraphContext) positioning; self-indexing is the minimum demo.
-2. **The boats-internal IaC chart at `~/repos/mobius/iac-eks-pcg/` plus the
+2. **The work-internal IaC chart at `~/repos/mobius/iac-eks-pcg/` plus the
    `argocd/platformcontextgraph/overlays/ops-qa/` overlay deploys the new Go
    runtime correctly**, including the new workflow-coordinator workload and
    renamed env-var contract.
@@ -81,7 +81,7 @@ the `pcg_data` volume from a previous run, bootstrap skips discovery. Run
 
 ### D2 — IaC Chart Must Reach Parity With The Go Runtime Before ops-qa Deploy
 
-The boats-internal chart at `~/repos/mobius/iac-eks-pcg/chart/` (v0.1.40,
+The work-internal chart at `~/repos/mobius/iac-eks-pcg/chart/` (v0.1.40,
 appVersion `v0.0.58`) trails the upstream chart at
 `deploy/helm/platform-context-graph/`. The following parity gaps MUST close
 before this branch is merged and tagged for an ops-qa rollout.
@@ -216,7 +216,7 @@ it does not serve.
 
 - IaC `chart/Chart.yaml appVersion: "v0.0.58"` and `chart/values.yaml
   image.tag: "v0.0.58"` predate this branch HEAD. The CI image pipeline for
-  `boatsgroup.pe.jfrog.io/bg-docker/platformcontextgraph` must build and push
+  `workgroup.pe.jfrog.io/bg-docker/platformcontextgraph` must build and push
   a new tag from this branch before the ops-qa argocd sync will find the
   image.
 - Tag proposal: `v0.1.0-go` or a date-stamped tag like `v0.1.0-20260420`,
@@ -336,7 +336,7 @@ This ADR is accepted and the branch may merge to `main` only after:
 - If docker compose cannot index this repo (memory pressure, very large
   facts set), D1 becomes a task of its own. Start with `PCG_PARSE_WORKERS=2`
   and `PCG_LARGE_REPO_MAX_CONCURRENT=1` on macOS Docker Desktop.
-- If the boats image pipeline lives outside this repo, D2.6 requires
+- If the work image pipeline lives outside this repo, D2.6 requires
   coordination with whoever owns the pipeline; surface that dependency early.
 
 ---

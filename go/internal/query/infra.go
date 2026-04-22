@@ -8,7 +8,8 @@ import (
 // InfraHandler serves HTTP endpoints for querying infrastructure resources
 // and relationships from the Neo4j canonical graph.
 type InfraHandler struct {
-	Neo4j GraphReader
+	Neo4j   GraphReader
+	Profile QueryProfile
 }
 
 var infraCategoryLabels = map[string][]string{
@@ -74,10 +75,31 @@ func (h *InfraHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v0/ecosystem/overview", h.getEcosystemOverview)
 }
 
+func (h *InfraHandler) profile() QueryProfile {
+	if h == nil {
+		return ProfileProduction
+	}
+	return NormalizeQueryProfile(string(h.Profile))
+}
+
 // searchResources searches infrastructure resources by name or ID.
 // POST /api/v0/infra/resources/search
 // Body: {"query": "...", "kind": "...", "limit": 50}
 func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.deployment_chain") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"infrastructure search requires full platform truth",
+			"unsupported_capability",
+			"platform_impact.deployment_chain",
+			h.profile(),
+			requiredProfile("platform_impact.deployment_chain"),
+		)
+		return
+	}
+
 	var req struct {
 		Query    string `json:"query"`
 		Kind     string `json:"kind"`
@@ -160,16 +182,30 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]any{
+	WriteSuccess(w, r, http.StatusOK, map[string]any{
 		"results": results,
 		"count":   len(results),
-	})
+	}, BuildTruthEnvelope(h.profile(), "platform_impact.deployment_chain", TruthBasisHybrid, "resolved from infrastructure graph search"))
 }
 
 // getRelationships returns all relationships for a given entity.
 // POST /api/v0/infra/relationships
 // Body: {"entity_id": "..."}
 func (h *InfraHandler) getRelationships(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.deployment_chain") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"infrastructure relationship analysis requires full platform truth",
+			"unsupported_capability",
+			"platform_impact.deployment_chain",
+			h.profile(),
+			requiredProfile("platform_impact.deployment_chain"),
+		)
+		return
+	}
+
 	var req struct {
 		EntityID string `json:"entity_id"`
 	}
@@ -222,18 +258,32 @@ func (h *InfraHandler) getRelationships(w http.ResponseWriter, r *http.Request) 
 	outgoing := filterNullRelationships(row["outgoing"])
 	incoming := filterNullRelationships(row["incoming"])
 
-	WriteJSON(w, http.StatusOK, map[string]any{
+	WriteSuccess(w, r, http.StatusOK, map[string]any{
 		"id":       StringVal(row, "id"),
 		"name":     StringVal(row, "name"),
 		"labels":   StringSliceVal(row, "labels"),
 		"outgoing": outgoing,
 		"incoming": incoming,
-	})
+	}, BuildTruthEnvelope(h.profile(), "platform_impact.deployment_chain", TruthBasisHybrid, "resolved from infrastructure relationship graph"))
 }
 
 // getEcosystemOverview returns high-level counts of graph entities.
 // GET /api/v0/ecosystem/overview
 func (h *InfraHandler) getEcosystemOverview(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.context_overview") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"ecosystem overview requires full platform context truth",
+			"unsupported_capability",
+			"platform_impact.context_overview",
+			h.profile(),
+			requiredProfile("platform_impact.context_overview"),
+		)
+		return
+	}
+
 	cypher := `
 		MATCH (r:Repository) WITH count(r) as repo_count
 		MATCH (w:Workload) WITH repo_count, count(w) as workload_count
@@ -250,21 +300,21 @@ func (h *InfraHandler) getEcosystemOverview(w http.ResponseWriter, r *http.Reque
 	}
 	if row == nil {
 		// No data yet, return zeros
-		WriteJSON(w, http.StatusOK, map[string]any{
+		WriteSuccess(w, r, http.StatusOK, map[string]any{
 			"repo_count":     0,
 			"workload_count": 0,
 			"platform_count": 0,
 			"instance_count": 0,
-		})
+		}, BuildTruthEnvelope(h.profile(), "platform_impact.context_overview", TruthBasisHybrid, "resolved from ecosystem summary counters"))
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]any{
+	WriteSuccess(w, r, http.StatusOK, map[string]any{
 		"repo_count":     IntVal(row, "repo_count"),
 		"workload_count": IntVal(row, "workload_count"),
 		"platform_count": IntVal(row, "platform_count"),
 		"instance_count": IntVal(row, "instance_count"),
-	})
+	}, BuildTruthEnvelope(h.profile(), "platform_impact.context_overview", TruthBasisHybrid, "resolved from ecosystem summary counters"))
 }
 
 // filterNullRelationships removes entries where type is nil (from OPTIONAL MATCH with no matches).

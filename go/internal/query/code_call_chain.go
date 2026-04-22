@@ -16,6 +16,20 @@ type callChainRequest struct {
 }
 
 func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "call_graph.call_chain_path") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"call-chain analysis requires authoritative graph mode",
+			"unsupported_capability",
+			"call_graph.call_chain_path",
+			h.profile(),
+			requiredProfile("call_graph.call_chain_path"),
+		)
+		return
+	}
+
 	var req callChainRequest
 	if err := ReadJSON(r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
@@ -56,14 +70,14 @@ func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]any{
+	WriteSuccess(w, r, http.StatusOK, map[string]any{
 		"start":           req.Start,
 		"end":             req.End,
 		"start_entity_id": req.StartEntityID,
 		"end_entity_id":   req.EndEntityID,
 		"repo_id":         req.RepoID,
 		"chains":          chains,
-	})
+	}, BuildTruthEnvelope(h.profile(), "call_graph.call_chain_path", TruthBasisAuthoritativeGraph, "resolved from authoritative call graph traversal"))
 }
 
 func buildCallChainCypher(req callChainRequest) (string, map[string]any) {

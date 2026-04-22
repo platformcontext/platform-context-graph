@@ -33,6 +33,7 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 		return
 	}
 	relationshipType := strings.ToUpper(strings.TrimSpace(req.RelationshipType))
+	capability := relationshipCapability(direction, relationshipType)
 	ctx := r.Context()
 
 	row, err := h.relationshipsGraphRow(ctx, req.EntityID, req.Name, req.RepoID)
@@ -50,7 +51,7 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 			WriteError(w, http.StatusNotFound, "entity not found")
 			return
 		}
-		WriteJSON(w, http.StatusOK, filterRelationshipResponse(response, direction, relationshipType))
+		WriteSuccess(w, r, http.StatusOK, filterRelationshipResponse(response, direction, relationshipType), BuildTruthEnvelope(h.profile(), capability, TruthBasisContentIndex, "resolved from content-backed relationship fallback"))
 		return
 	}
 
@@ -84,7 +85,23 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, enriched[0])
+	WriteSuccess(w, r, http.StatusOK, enriched[0], BuildTruthEnvelope(h.profile(), capability, TruthBasisAuthoritativeGraph, "resolved from graph relationships"))
+}
+
+func relationshipCapability(direction, relationshipType string) string {
+	switch relationshipType {
+	case "CALLS":
+		if direction == "incoming" {
+			return "call_graph.direct_callers"
+		}
+		return "call_graph.direct_callees"
+	case "IMPORTS":
+		return "symbol_graph.imports"
+	case "INHERITS", "OVERRIDES":
+		return "symbol_graph.inheritance"
+	default:
+		return "call_graph.direct_callees"
+	}
 }
 
 func (h *CodeHandler) relationshipsGraphRow(

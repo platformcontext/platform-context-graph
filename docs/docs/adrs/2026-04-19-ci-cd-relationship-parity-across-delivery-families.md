@@ -130,7 +130,7 @@ delivery systems, especially Jenkins-backed services.
 
 ## Test Results By Delivery Family
 
-### 1. GitHub Actions (GHA) — `api-node-boats`
+### 1. GitHub Actions (GHA) — `sample-service`
 
 **Evidence:** 6 GITHUB_ACTIONS_REUSABLE_WORKFLOW facts pointing at
 `core-engineering-automation`, plus ArgoCD ApplicationSets in
@@ -147,10 +147,10 @@ delivery systems, especially Jenkins-backed services.
 | API surface | 19 endpoints, `/_specs` docs route | 21 endpoints | Near parity on extraction |
 
 **Assessment: E2E has strong raw extraction and trace enrichment for
-`api-node-boats`, but it is not yet service-story parity. The trace is rich,
+`sample-service`, but it is not yet service-story parity. The trace is rich,
 not clean.**
 
-### 2. Jenkins Pipeline — `api-node-boattrader`
+### 2. Jenkins Pipeline — `sample-service-trader`
 
 **Evidence:** Jenkinsfile with `@Library('pipelines') _ ; pipelinePM2(...)`,
 `JENKINS_GITHUB_REPOSITORY` evidence, ArgoCD ApplicationSets in `iac-eks-argocd`.
@@ -161,14 +161,14 @@ not clean.**
 | Service story | **HTTP 404** | Rich: 2 instances, 26 API endpoints, Jenkins delivery, dependencies | **E2E BROKEN** |
 | Service context | **HTTP 404** | Works | **E2E BROKEN** |
 | Deployment trace | **HTTP 404** | Rich: 2 ArgoCD ApplicationSets, 71 endpoints, Jenkinsfile, consumer repos | **E2E BROKEN** |
-| Repo summary | Works: 896 files, Jenkinsfile artifacts (`pipelinePM2`, entry `dist/api-node-boattrader.js`, `use_configd: true`), Dockerfile, docker-compose | Works: similar + delivery paths + topology story | E2E has good artifacts but no service path |
+| Repo summary | Works: 896 files, Jenkinsfile artifacts (`pipelinePM2`, entry `dist/sample-service-trader.js`, `use_configd: true`), Dockerfile, docker-compose | Works: similar + delivery paths + topology story | E2E has good artifacts but no service path |
 | Jenkins artifact extraction | Shared library `pipelines`, pipeline call `pipelinePM2`, entry point, configd flag | Same level of detail | Tie on extraction |
-| Relationships | None surfaced (no workload = no relationship path) | Dependencies: api-node-ai-provider, api-node-boats | **E2E BROKEN** |
+| Relationships | None surfaced (no workload = no relationship path) | Dependencies: api-node-ai-provider, sample-service | **E2E BROKEN** |
 
 **Root cause:** the reducer only creates workload candidates from repo-local
 file facts containing `k8s_resources`, `argocd_applications`, or
 `argocd_applicationsets`. Cross-repo deployment repo enrichment happens later,
-after resolved Argo deployment evidence is available. `api-node-boattrader`
+after resolved Argo deployment evidence is available. `sample-service-trader`
 has no repo-local K8s or Argo signal strong enough to become a workload
 candidate, even though related deployment evidence exists in `helm-charts` and
 `iac-eks-argocd`. QA compensates with broader query-time synthesis across
@@ -254,7 +254,7 @@ CloudFormation to a delivery path.**
 | Capability | E2E | QA | Verdict |
 |---|---|---|---|
 | Infrastructure entities | **198 entities**: 87 ArgoCDApplicationSet, 3 ArgoCDApplication, 37 K8sResource, 53 KustomizeOverlay, 5 HelmValues, 13 Terraform | Not surfaced at this granularity | **E2E massively ahead** |
-| Cross-repo relationship | DEPLOYS_FROM soldboats via kustomize_resource_reference | None | **E2E ahead** |
+| Cross-repo relationship | DEPLOYS_FROM soldwork via kustomize_resource_reference | None | **E2E ahead** |
 | Consumer evidence | 2 consumers (iac-terragrunt-core-infra) | 3 consumers (argocd-env-generator, iac-terragrunt-core-infra, mobius-tools) | QA ahead |
 | Families detected | argocd, github_actions, helm, kubernetes, kustomize, terraform | None | **E2E ahead** |
 | GHA workflow | argocd-docs workflow with reusable_workflow_repositories, concurrency, permissions | Not surfaced | **E2E ahead** |
@@ -329,7 +329,7 @@ infrastructure and provisioning relationship families. The problem is not “E2E
 cannot build relationships”; the problem is “E2E cannot yet safely turn mixed
 controller evidence into service workloads and service stories.”
 
-This affects a significant portion of the corpus. The `api-node-boattrader`
+This affects a significant portion of the corpus. The `sample-service-trader`
 test case proves the gap is real and operator-impacting.
 
 ---
@@ -361,9 +361,9 @@ This unblocks the service query path for legacy controller-driven services
 without turning utility repositories into false services.
 
 **Acceptance criteria:**
-- `api-node-boattrader` returns `workload_count: 1` in repo summary
-- `get_service_story("workload:api-node-boattrader")` returns 200
-- `trace_deployment_chain("api-node-boattrader")` returns structured result
+- `sample-service-trader` returns `workload_count: 1` in repo summary
+- `get_service_story("workload:sample-service-trader")` returns 200
+- `trace_deployment_chain("sample-service-trader")` returns structured result
 - `jenkins-pipeline-configd-parameter-store` does **not** materialize as a
   service workload
 - Newly materialized workloads include confidence and source attribution
@@ -381,9 +381,9 @@ Elevate extracted controller artifacts into structured delivery paths:
 
 **Acceptance criteria:**
 - `lambda-python-jenkins-job-management` shows 2 delivery paths
-- `api-node-boattrader` shows Jenkins delivery path in repo summary
+- `sample-service-trader` shows Jenkins delivery path in repo summary
 - Deployment facts generated with confidence bands
-- `api-node-boats` no longer reports code literals and test symbols as public
+- `sample-service` no longer reports code literals and test symbols as public
   hostnames in deployment trace output
 
 #### Phase 3: Consumer Discovery And Topology Narrative
@@ -436,12 +436,12 @@ Wire cross-repo content search into consumer discovery at the repo/service level
 
 | Repo | CI/CD Family | Evidence Kind | E2E Relationship | QA Relationship |
 |---|---|---|---|---|
-| `api-node-boats` | GHA | GITHUB_ACTIONS_REUSABLE_WORKFLOW | DEPLOYS_FROM core-engineering-automation | Same |
-| `api-node-boattrader` | Jenkins + ArgoCD | JENKINS (Jenkinsfile) | **No workload — 404** | 2 instances, 26 endpoints, Jenkins delivery |
+| `sample-service` | GHA | GITHUB_ACTIONS_REUSABLE_WORKFLOW | DEPLOYS_FROM core-engineering-automation | Same |
+| `sample-service-trader` | Jenkins + ArgoCD | JENKINS (Jenkinsfile) | **No workload — 404** | 2 instances, 26 endpoints, Jenkins delivery |
 | `jenkins-pipeline-configd-parameter-store` | Jenkins | JENKINS_GITHUB_REPOSITORY | DISCOVERS_CONFIG_IN configd | Jenkins delivery path only |
 | `ansible-mac-builder` | Ansible | ANSIBLE_ROLE_REFERENCE | DEPENDS_ON ansible-role-nvm | **Nothing** |
 | `automate-mws-import-tasks` | Ansible + Jenkins | Ansible artifacts | 46 ansible artifacts, no relationships | Jenkins delivery, 1 consumer |
 | `portal-dmmwebsites` | Docker Compose | DOCKER_COMPOSE_DEPENDS_ON | DEPENDS_ON wordpress | **Nothing** (7 consumers found separately) |
 | `lambda-python-jenkins-job-management` | Jenkins + CloudFormation | CloudFormation entity | 1 controller artifact | **2 delivery paths** (Jenkins + CloudFormation) |
-| `iac-eks-argocd` | ArgoCD + Kustomize + Terraform + GHA | 148 ARGOCD + 257 KUSTOMIZE | 198 infra entities, DEPLOYS_FROM soldboats | 3 consumers, topology story |
+| `iac-eks-argocd` | ArgoCD + Kustomize + Terraform + GHA | 148 ARGOCD + 257 KUSTOMIZE | 198 infra entities, DEPLOYS_FROM soldwork | 3 consumers, topology story |
 | `iac-terragrunt-core-infra` | Terragrunt + Terraform + GHA | TERRAFORM_MODULE_SOURCE, TERRAFORM_GITHUB_REPOSITORY | `PROVISIONS_DEPENDENCY_FOR` + `USES_MODULE` across 4 repos | Terragrunt config presence + 1 consumer |

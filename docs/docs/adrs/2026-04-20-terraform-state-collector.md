@@ -437,13 +437,13 @@ collectors:
         seeds:
           # Explicit overrides; removed once graph is warm
           - kind: s3
-            bucket: boats-tfstate-prod
+            bucket: work-tfstate-prod
             key: services/api-node-chat/terraform.tfstate
             region: us-east-1
-            dynamodb_lock_table: boats-tfstate-locks
+            dynamodb_lock_table: work-tfstate-locks
         local_repos:
           # Limit local discovery to these repo IDs
-          - boats/platform-infra
+          - work/platform-infra
 
       # Credentials for S3 backends
       aws:

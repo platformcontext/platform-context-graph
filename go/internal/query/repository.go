@@ -14,6 +14,7 @@ const repositorySelectorWhereClause = "r.id = $repo_selector OR r.name = $repo_s
 type RepositoryHandler struct {
 	Neo4j   GraphReader
 	Content *ContentReader
+	Profile QueryProfile
 }
 
 // Mount registers all repository routes on the given mux.
@@ -23,6 +24,13 @@ func (h *RepositoryHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v0/repositories/{repo_id}/story", h.getRepositoryStory)
 	mux.HandleFunc("GET /api/v0/repositories/{repo_id}/stats", h.getRepositoryStats)
 	mux.HandleFunc("GET /api/v0/repositories/{repo_id}/coverage", h.getRepositoryCoverage)
+}
+
+func (h *RepositoryHandler) profile() QueryProfile {
+	if h == nil {
+		return ProfileProduction
+	}
+	return NormalizeQueryProfile(string(h.Profile))
 }
 
 // listRepositories returns all indexed repositories.
@@ -64,6 +72,20 @@ func (h *RepositoryHandler) listRepositories(w http.ResponseWriter, r *http.Requ
 // enriched context including entry points, infrastructure entities, language
 // distribution, cross-repo relationships, and consumer repositories.
 func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.context_overview") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"repository context requires full platform context truth",
+			"unsupported_capability",
+			"platform_impact.context_overview",
+			h.profile(),
+			requiredProfile("platform_impact.context_overview"),
+		)
+		return
+	}
+
 	repoSelector := PathParam(r, "repo_id")
 	if repoSelector == "" {
 		WriteError(w, http.StatusBadRequest, "repo_id is required")
@@ -141,7 +163,7 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	}
 	result["languages"] = queryRepoLanguageDistribution(ctx, h.Neo4j, params)
 
-	WriteJSON(w, http.StatusOK, result)
+	WriteSuccess(w, r, http.StatusOK, result, BuildTruthEnvelope(h.profile(), "platform_impact.context_overview", TruthBasisHybrid, "resolved from repository context and platform evidence"))
 }
 
 func queryRepoEntryPoints(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {

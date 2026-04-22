@@ -277,7 +277,7 @@ func TestDefaultEngineParsePathJSXStatelessComponentSemantics(t *testing.T) {
 		t,
 		filePath,
 		`export function HeroBanner() {
-  return <section className="hero">Boats</section>;
+  return <section className="hero">Work</section>;
 }
 `,
 	)

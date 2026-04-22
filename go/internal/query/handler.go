@@ -25,6 +25,46 @@ func WriteError(w http.ResponseWriter, status int, message string) {
 	})
 }
 
+func WriteSuccess(w http.ResponseWriter, r *http.Request, status int, data any, truth *TruthEnvelope) {
+	if acceptsEnvelope(r) {
+		WriteJSON(w, status, ResponseEnvelope{
+			Data:  data,
+			Truth: truth,
+			Error: nil,
+		})
+		return
+	}
+	WriteJSON(w, status, data)
+}
+
+func WriteContractError(
+	w http.ResponseWriter,
+	r *http.Request,
+	status int,
+	message string,
+	errCode string,
+	capability string,
+	currentProfile QueryProfile,
+	requiredProfile QueryProfile,
+) {
+	if acceptsEnvelope(r) {
+		WriteJSON(w, status, ResponseEnvelope{
+			Data: nil,
+			Error: &ErrorEnvelope{
+				Code:       errCode,
+				Message:    message,
+				Capability: capability,
+				Profiles: &ErrorProfiles{
+					Current:  currentProfile,
+					Required: requiredProfile,
+				},
+			},
+		})
+		return
+	}
+	WriteError(w, status, message)
+}
+
 // ReadJSON decodes a JSON request body into v.
 func ReadJSON(r *http.Request, v any) error {
 	if r.Body == nil {
@@ -60,6 +100,10 @@ func QueryParamInt(r *http.Request, key string, defaultVal int) int {
 // For routes like "/api/v0/repositories/{repo_id}/context", use PathParam(r, "repo_id").
 func PathParam(r *http.Request, name string) string {
 	return strings.TrimSpace(r.PathValue(name))
+}
+
+func capabilityUnsupported(profile QueryProfile, capability string) bool {
+	return maxTruthLevel(capability, profile) == nil
 }
 
 // APIRouter builds the top-level /api/v0 mux for all query endpoints.
