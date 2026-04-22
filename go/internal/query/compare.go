@@ -8,14 +8,9 @@ import (
 	"sort"
 )
 
-type compareGraphReader interface {
-	Run(context.Context, string, map[string]any) ([]map[string]any, error)
-	RunSingle(context.Context, string, map[string]any) (map[string]any, error)
-}
-
 // CompareHandler provides environment comparison endpoints.
 type CompareHandler struct {
-	Neo4j   compareGraphReader
+	Neo4j   GraphQuery
 	Content serviceEvidenceReader
 	Profile QueryProfile
 }

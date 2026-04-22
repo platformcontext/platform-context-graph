@@ -151,7 +151,6 @@ type DecisionQueryFilter struct {
 // AdminHandler provides HTTP endpoints for administrative operations
 // including recovery, work-item inspection, and fact-queue management.
 type AdminHandler struct {
-	Neo4j     *Neo4jReader
 	Recovery  RecoveryService
 	Reindexer ReindexRequester
 	Store     AdminStore

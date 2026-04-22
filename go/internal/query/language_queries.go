@@ -12,7 +12,7 @@ import (
 // entity types use the Postgres content store.
 type LanguageQueryHandler struct {
 	Neo4j   GraphReader
-	Content *ContentReader
+	Content ContentStore
 	Profile QueryProfile
 }
 

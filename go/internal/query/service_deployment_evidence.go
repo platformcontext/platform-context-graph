@@ -9,7 +9,7 @@ import (
 func loadServiceDeploymentEvidence(
 	ctx context.Context,
 	graph GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	workloadContext map[string]any,
 ) (map[string]any, error) {
 	if content == nil || len(workloadContext) == 0 {

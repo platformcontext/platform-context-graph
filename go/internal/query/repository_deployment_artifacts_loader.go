@@ -8,7 +8,7 @@ import (
 func loadDeploymentArtifactOverview(
 	ctx context.Context,
 	graph GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	repoID string,
 	repoName string,
 	files []FileContent,
@@ -60,7 +60,7 @@ func loadDeploymentArtifactOverview(
 
 func hydrateRepositoryArtifactFiles(
 	ctx context.Context,
-	content *ContentReader,
+	content ContentStore,
 	repoID string,
 	files []FileContent,
 ) ([]FileContent, error) {

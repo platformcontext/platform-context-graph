@@ -7,7 +7,7 @@ import (
 
 func buildOutgoingRustImplBlockRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, bool, error) {
 	if entity.EntityType != "ImplBlock" || entity.EntityName == "" {
@@ -47,7 +47,7 @@ func buildOutgoingRustImplBlockRelationships(
 
 func buildIncomingRustImplBlockRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, bool, error) {
 	implContext, ok := metadataNonEmptyString(entity.Metadata, "impl_context")

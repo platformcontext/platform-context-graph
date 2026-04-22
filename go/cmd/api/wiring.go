@@ -133,8 +133,8 @@ func loadQueryProfile(getenv func(string) string) (query.QueryProfile, error) {
 
 func newRouter(
 	db *sql.DB,
-	neo4jReader *query.Neo4jReader,
-	contentReader *query.ContentReader,
+	neo4jReader query.GraphQuery,
+	contentReader query.ContentStore,
 	queryProfile query.QueryProfile,
 ) (*query.APIRouter, error) {
 	router := &query.APIRouter{

@@ -9,7 +9,7 @@ import (
 // ContentHandler serves HTTP endpoints for reading file and entity content
 // from the Postgres content store.
 type ContentHandler struct {
-	Content *ContentReader
+	Content ContentStore
 }
 
 // Mount registers content query routes on the given mux.

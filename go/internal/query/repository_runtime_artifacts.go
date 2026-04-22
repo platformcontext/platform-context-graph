@@ -72,7 +72,7 @@ func buildRepositoryRuntimeArtifacts(files []FileContent) map[string]any {
 
 func loadRepositoryRuntimeArtifacts(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	repoID string,
 	files []FileContent,
 ) (map[string]any, error) {

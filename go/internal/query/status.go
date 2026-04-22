@@ -12,7 +12,7 @@ import (
 
 // StatusHandler provides HTTP endpoints for pipeline status queries.
 type StatusHandler struct {
-	Neo4j        *Neo4jReader
+	Neo4j        GraphQuery
 	DB           *sql.DB
 	StatusReader status.Reader
 }

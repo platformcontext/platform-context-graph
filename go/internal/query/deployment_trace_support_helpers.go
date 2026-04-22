@@ -30,7 +30,7 @@ type traceEvidenceAccumulator struct {
 func loadProvisioningSourceChains(
 	ctx context.Context,
 	graph GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	serviceRepoID string,
 ) ([]map[string]any, error) {
 	return loadProvisioningSourceChainsWithLimit(ctx, graph, content, serviceRepoID, 0)
@@ -39,7 +39,7 @@ func loadProvisioningSourceChains(
 func loadProvisioningSourceChainsWithLimit(
 	ctx context.Context,
 	graph GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	serviceRepoID string,
 	limit int,
 ) ([]map[string]any, error) {
@@ -93,7 +93,7 @@ func loadProvisioningSourceChainsWithLimit(
 func loadConsumerRepositoryEnrichment(
 	ctx context.Context,
 	graph GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	serviceRepoID string,
 	serviceName string,
 	hostnames []string,
@@ -112,7 +112,7 @@ func loadConsumerRepositoryEnrichment(
 func loadConsumerRepositoryEnrichmentWithLimit(
 	ctx context.Context,
 	graph GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	serviceRepoID string,
 	serviceName string,
 	hostnames []string,
@@ -320,7 +320,7 @@ func collectProvisioningChainEvidence(entities []EntityContent) traceEvidenceAcc
 
 func searchConsumerEvidenceAnyRepo(
 	ctx context.Context,
-	content *ContentReader,
+	content ContentStore,
 	serviceRepoID string,
 	serviceName string,
 	hostnames []string,
