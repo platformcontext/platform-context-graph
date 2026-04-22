@@ -285,7 +285,10 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		path = args[0]
 	}
 
-	explicitRoot, _ := cmd.Flags().GetString("workspace-root")
+	explicitRoot, err := cmd.Flags().GetString("workspace-root")
+	if err != nil {
+		return err
+	}
 	workspaceRoot, err := pcglocal.ResolveWorkspaceRoot(path, explicitRoot)
 	if err != nil {
 		return err

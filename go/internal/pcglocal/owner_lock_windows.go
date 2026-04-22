@@ -17,5 +17,8 @@ func AcquireOwnerLock(path string) (*OwnerLock, error) {
 
 // Close releases the owner lock.
 func (l *OwnerLock) Close() error {
+	if l == nil {
+		return nil
+	}
 	return nil
 }
