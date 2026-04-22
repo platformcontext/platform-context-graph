@@ -25,6 +25,11 @@ func wireAPI(
 	logger *slog.Logger,
 	prometheusHandler http.Handler,
 ) (http.Handler, func(), error) {
+	queryProfile, err := loadQueryProfile(getenv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load query profile: %w", err)
+	}
+
 	apiKey, err := internalruntime.ResolveAPIKey(getenv)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve api key: %w", err)
@@ -78,7 +83,6 @@ func wireAPI(
 	neo4jReader := query.NewNeo4jReader(driver, neo4jDB)
 	contentReader := query.NewContentReader(db)
 	statusReader := pgstatus.NewStatusStore(pgstatus.SQLQueryer{DB: db})
-	queryProfile := query.NormalizeQueryProfile(envOrDefault(getenv, "PCG_QUERY_PROFILE", "production"))
 	router, err := newRouter(db, neo4jReader, contentReader, queryProfile)
 	if err != nil {
 		_ = db.Close()
@@ -113,6 +117,18 @@ func envOrDefault(getenv func(string) string, key, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+func loadQueryProfile(getenv func(string) string) (query.QueryProfile, error) {
+	raw := strings.TrimSpace(getenv("PCG_QUERY_PROFILE"))
+	if raw == "" {
+		return query.ProfileProduction, nil
+	}
+	profile, err := query.ParseQueryProfile(raw)
+	if err != nil {
+		return "", err
+	}
+	return profile, nil
 }
 
 func newRouter(

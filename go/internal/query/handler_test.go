@@ -97,6 +97,11 @@ func TestWriteContractErrorEnvelopeNegotiation(t *testing.T) {
 	if got["data"] != nil {
 		t.Fatalf("data = %#v, want nil", got["data"])
 	}
+	if truth, ok := got["truth"]; !ok {
+		t.Fatalf("truth missing from envelope: %#v", got)
+	} else if truth != nil {
+		t.Fatalf("truth = %#v, want nil", truth)
+	}
 	errBody, ok := got["error"].(map[string]any)
 	if !ok {
 		t.Fatalf("error = %#v, want map[string]any", got["error"])
