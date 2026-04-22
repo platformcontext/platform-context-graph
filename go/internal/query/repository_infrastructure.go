@@ -9,7 +9,7 @@ const repositoryInfrastructureEntityLimit = 5000
 
 func queryRepoInfrastructureRows(
 	ctx context.Context,
-	reader GraphReader,
+	reader GraphQuery,
 	content ContentStore,
 	params map[string]any,
 ) []map[string]any {
@@ -63,7 +63,7 @@ func queryRepoInfrastructureRows(
 	return result
 }
 
-func queryRepoInfrastructureFromGraph(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+func queryRepoInfrastructureFromGraph(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(infra)
 		WHERE infra:K8sResource OR infra:TerraformResource OR infra:TerraformModule

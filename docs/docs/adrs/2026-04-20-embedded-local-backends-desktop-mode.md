@@ -209,9 +209,6 @@ The key boundaries should be:
 
 - `FactStore`
 - `ContentStore`
-- `CodeSearch`
-- `SymbolGraph`
-- `CallGraph`
 - `GraphWrite`
 - `GraphQuery`
 
@@ -219,6 +216,16 @@ Graph backends become adapters behind these capabilities.
 
 These capability ports do not exist as named interfaces today. This ADR is
 choosing the target architecture; the extraction work is net-new.
+
+The initial read-path extraction is expected to land at the storage seam first:
+
+- `GraphQuery` for graph traversals and point lookups
+- `ContentStore` for relational content, entity, and coverage reads
+
+Higher-order capability groupings such as `CodeSearch`, `SymbolGraph`, and
+`CallGraph` remain valid product-level concepts, but they should only become
+separate internal interfaces if the storage-seam ports prove too coarse in
+tests or adapter implementations.
 
 This ADR explicitly rejects introducing an ORM as the central abstraction.
 An ORM is the wrong boundary for graph traversal, semantic code queries,

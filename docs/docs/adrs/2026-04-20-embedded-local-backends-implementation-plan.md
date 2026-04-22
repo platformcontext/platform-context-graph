@@ -151,12 +151,12 @@ interface extraction, not a move to an already-portable design.
 
 ### Work
 
-- extract or tighten capability interfaces for:
-  - `CodeSearch`
-  - `SymbolGraph`
-  - `CallGraph`
+- extract or tighten the read-side storage-seam interfaces first:
   - `GraphQuery`
-  - `GraphWrite`
+  - `ContentStore`
+- keep higher-order capability groupings such as `CodeSearch`,
+  `SymbolGraph`, and `CallGraph` as follow-on interfaces only if adapter
+  tests show that the storage-seam ports are too coarse
 - move API and MCP construction toward these ports rather than concrete backend
   readers
 - keep the existing service runtime behavior the same while making backend

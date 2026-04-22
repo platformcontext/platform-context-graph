@@ -12,7 +12,7 @@ const repositorySelectorWhereClause = "r.id = $repo_selector OR r.name = $repo_s
 
 // RepositoryHandler exposes HTTP routes for repository queries.
 type RepositoryHandler struct {
-	Neo4j   GraphReader
+	Neo4j   GraphQuery
 	Content ContentStore
 	Profile QueryProfile
 }
@@ -166,7 +166,7 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	WriteSuccess(w, r, http.StatusOK, result, BuildTruthEnvelope(h.profile(), "platform_impact.context_overview", TruthBasisHybrid, "resolved from repository context and platform evidence"))
 }
 
-func queryRepoEntryPoints(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+func queryRepoEntryPoints(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(fn:Function)
 		WHERE fn.name IN ['main', 'handler', 'app', 'create_app', 'lambda_handler',
@@ -189,11 +189,11 @@ func queryRepoEntryPoints(ctx context.Context, reader GraphReader, params map[st
 	return result
 }
 
-func queryRepoInfrastructure(ctx context.Context, reader GraphReader, content ContentStore, params map[string]any) []map[string]any {
+func queryRepoInfrastructure(ctx context.Context, reader GraphQuery, content ContentStore, params map[string]any) []map[string]any {
 	return queryRepoInfrastructureRows(ctx, reader, content, params)
 }
 
-func queryRepoLanguageDistribution(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+func queryRepoLanguageDistribution(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
 		WHERE f.language IS NOT NULL
@@ -214,7 +214,7 @@ func queryRepoLanguageDistribution(ctx context.Context, reader GraphReader, para
 	return result
 }
 
-func queryRepoDependencies(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+func queryRepoDependencies(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(target:Repository)
 		RETURN type(rel) AS type, target.name AS target_name,
@@ -240,7 +240,7 @@ func queryRepoDependencies(ctx context.Context, reader GraphReader, params map[s
 	return result
 }
 
-func queryRepoConsumers(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+func queryRepoConsumers(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (consumer:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(r:Repository {id: $repo_id})
 		RETURN consumer.name AS consumer_name, consumer.id AS consumer_id

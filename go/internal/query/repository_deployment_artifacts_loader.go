@@ -7,7 +7,7 @@ import (
 
 func loadDeploymentArtifactOverview(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	content ContentStore,
 	repoID string,
 	repoName string,

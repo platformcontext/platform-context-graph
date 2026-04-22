@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-func hydrateResolvedEntityRepoIdentity(ctx context.Context, graph GraphReader, entities []map[string]any) error {
+func hydrateResolvedEntityRepoIdentity(ctx context.Context, graph GraphQuery, entities []map[string]any) error {
 	if len(entities) == 0 {
 		return nil
 	}

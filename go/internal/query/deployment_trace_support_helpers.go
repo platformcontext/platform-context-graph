@@ -29,7 +29,7 @@ type traceEvidenceAccumulator struct {
 
 func loadProvisioningSourceChains(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	content ContentStore,
 	serviceRepoID string,
 ) ([]map[string]any, error) {
@@ -38,7 +38,7 @@ func loadProvisioningSourceChains(
 
 func loadProvisioningSourceChainsWithLimit(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	content ContentStore,
 	serviceRepoID string,
 	limit int,
@@ -92,7 +92,7 @@ func loadProvisioningSourceChainsWithLimit(
 
 func loadConsumerRepositoryEnrichment(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	content ContentStore,
 	serviceRepoID string,
 	serviceName string,
@@ -111,7 +111,7 @@ func loadConsumerRepositoryEnrichment(
 
 func loadConsumerRepositoryEnrichmentWithLimit(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	content ContentStore,
 	serviceRepoID string,
 	serviceName string,
@@ -188,7 +188,7 @@ func loadConsumerRepositoryEnrichmentWithLimit(
 
 func backfillConsumerRepositoryDisplayNames(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	consumersByRepo map[string]map[string]any,
 ) error {
 	if graph == nil || len(consumersByRepo) == 0 {
@@ -226,7 +226,7 @@ func backfillConsumerRepositoryDisplayNames(
 
 func queryProvisioningRepositoryCandidates(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	serviceRepoID string,
 	limit int,
 ) ([]provisioningRepositoryCandidate, error) {
