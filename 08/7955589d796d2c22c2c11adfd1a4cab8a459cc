@@ -1,0 +1,73 @@
+go/internal/query/deployment_trace_support_helpers.go
+  e27ce815bbe89792 33,42,96,115,323
+go/internal/query/content_reader_coverage.go
+  e27ce815bbe89792 1-66
+go/internal/query/impact_trace_deployment.go
+  e27ce815bbe89792 133
+go/internal/query/repository.go
+  e27ce815bbe89792 16,192,448,461,472,474,480-481,483-486,491,495,499-502,510-521
+go/internal/query/repository_config_artifacts_loader.go
+  e27ce815bbe89792 20,58,134
+go/internal/query/repository_narrative_enrichment.go
+  e27ce815bbe89792 20
+go/internal/query/repository_semantics.go
+  e27ce815bbe89792 89
+go/internal/query/repository_workflow_artifacts_loader.go
+  e27ce815bbe89792 34
+go/internal/query/repository_deployment_artifacts_loader.go
+  e27ce815bbe89792 11,63
+go/internal/query/repository_runtime_artifacts.go
+  e27ce815bbe89792 75
+go/internal/query/service_query_enrichment.go
+  e27ce815bbe89792 19,30
+go/internal/query/repository_infrastructure.go
+  e27ce815bbe89792 13
+go/internal/query/status.go
+  e27ce815bbe89792 15
+go/internal/query/content_relationships_rust.go
+  e27ce815bbe89792 10,50
+go/internal/query/compare.go
+  e27ce815bbe89792 13
+go/cmd/api/wiring.go
+  e27ce815bbe89792 136-137
+go/internal/query/ports.go
+  e27ce815bbe89792 1-51
+go/internal/query/service_deployment_evidence.go
+  e27ce815bbe89792 12
+go/internal/query/impact.go
+  e27ce815bbe89792 11-12
+go/internal/query/code.go
+  e27ce815bbe89792 14
+go/internal/query/content_handler.go
+  e27ce815bbe89792 12
+go/internal/query/content_relationships_cloudformation.go
+  e27ce815bbe89792 15,45
+go/internal/query/content_relationships.go
+  e27ce815bbe89792 18,36,108,239,280,346
+go/internal/query/language_queries.go
+  e27ce815bbe89792 15
+go/internal/query/entity.go
+  e27ce815bbe89792 13
+go/internal/query/ports_test.go
+  e27ce815bbe89792 1-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "087955589d796d2c22c2c11adfd1a4cab8a459cc",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 333,
+      "total_deletions": 119,
+      "accepted_lines": 333,
+      "overriden_lines": 0
+    }
+  }
+}
