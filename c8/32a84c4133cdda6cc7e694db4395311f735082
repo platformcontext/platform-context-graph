@@ -1,0 +1,35 @@
+go/internal/pcglocal/owner_test.go
+  e27ce815bbe89792 111-117
+go/cmd/pcg/workspace.go
+  e27ce815bbe89792 56
+go/internal/pcglocal/owner_lock_windows.go
+  e27ce815bbe89792 20-22
+go/cmd/pcg/watch_test.go
+  e27ce815bbe89792 41-42,79,110,134,143-160,208-211
+go/cmd/pcg/basic.go
+  e27ce815bbe89792 288-291
+go/internal/pcglocal/layout_test.go
+  e27ce815bbe89792 94-117
+go/internal/pcglocal/owner.go
+  e27ce815bbe89792 67-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "c832a84c4133cdda6cc7e694db4395311f735082",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 72,
+      "total_deletions": 7,
+      "accepted_lines": 72,
+      "overriden_lines": 0
+    }
+  }
+}
