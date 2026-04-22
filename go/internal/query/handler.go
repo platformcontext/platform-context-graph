@@ -42,7 +42,7 @@ func WriteContractError(
 	r *http.Request,
 	status int,
 	message string,
-	errCode string,
+	errCode ErrorCode,
 	capability string,
 	currentProfile QueryProfile,
 	requiredProfile QueryProfile,

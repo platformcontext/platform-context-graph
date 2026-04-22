@@ -1,6 +1,7 @@
 package query
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -35,7 +36,10 @@ const (
 type FreshnessState string
 
 const (
-	FreshnessFresh FreshnessState = "fresh"
+	FreshnessFresh       FreshnessState = "fresh"
+	FreshnessStale       FreshnessState = "stale"
+	FreshnessBuilding    FreshnessState = "building"
+	FreshnessUnavailable FreshnessState = "unavailable"
 )
 
 type TruthFreshness struct {
@@ -58,8 +62,19 @@ type ErrorProfiles struct {
 	Required QueryProfile `json:"required,omitempty"`
 }
 
+type ErrorCode string
+
+const (
+	ErrorCodeUnsupportedCapability ErrorCode = "unsupported_capability"
+	ErrorCodeBackendUnavailable    ErrorCode = "backend_unavailable"
+	ErrorCodeIndexBuilding         ErrorCode = "index_building"
+	ErrorCodeScopeNotFound         ErrorCode = "scope_not_found"
+	ErrorCodeCapabilityDegraded    ErrorCode = "capability_degraded"
+	ErrorCodeOverloaded            ErrorCode = "overloaded"
+)
+
 type ErrorEnvelope struct {
-	Code       string         `json:"code"`
+	Code       ErrorCode      `json:"code"`
 	Message    string         `json:"message"`
 	Capability string         `json:"capability,omitempty"`
 	Profiles   *ErrorProfiles `json:"profiles,omitempty"`
@@ -67,7 +82,7 @@ type ErrorEnvelope struct {
 
 type ResponseEnvelope struct {
 	Data  any            `json:"data"`
-	Truth *TruthEnvelope `json:"truth,omitempty"`
+	Truth *TruthEnvelope `json:"truth"`
 	Error *ErrorEnvelope `json:"error"`
 }
 
@@ -99,6 +114,26 @@ var capabilityMatrix = map[string]capabilitySupport{
 		LocalFullStackMax:   &truthExact,
 		ProductionMax:       &truthExact,
 	},
+	"code_search.content_search": {
+		LocalLightweightMax: &truthDerived,
+		LocalFullStackMax:   &truthDerived,
+		ProductionMax:       &truthDerived,
+	},
+	"symbol_graph.decorators": {
+		LocalLightweightMax: &truthDerived,
+		LocalFullStackMax:   &truthExact,
+		ProductionMax:       &truthExact,
+	},
+	"symbol_graph.argument_names": {
+		LocalLightweightMax: &truthDerived,
+		LocalFullStackMax:   &truthExact,
+		ProductionMax:       &truthExact,
+	},
+	"symbol_graph.class_methods": {
+		LocalLightweightMax: &truthDerived,
+		LocalFullStackMax:   &truthExact,
+		ProductionMax:       &truthExact,
+	},
 	"call_graph.direct_callers": {
 		LocalLightweightMax: &truthDerived,
 		LocalFullStackMax:   &truthExact,
@@ -108,6 +143,18 @@ var capabilityMatrix = map[string]capabilitySupport{
 		LocalLightweightMax: &truthDerived,
 		LocalFullStackMax:   &truthExact,
 		ProductionMax:       &truthExact,
+	},
+	"call_graph.transitive_callers": {
+		LocalLightweightMax: nil,
+		LocalFullStackMax:   &truthExact,
+		ProductionMax:       &truthExact,
+		RequiredProfile:     ProfileLocalFullStack,
+	},
+	"call_graph.transitive_callees": {
+		LocalLightweightMax: nil,
+		LocalFullStackMax:   &truthExact,
+		ProductionMax:       &truthExact,
+		RequiredProfile:     ProfileLocalFullStack,
 	},
 	"symbol_graph.imports": {
 		LocalLightweightMax: &truthDerived,
@@ -181,15 +228,25 @@ var capabilityMatrix = map[string]capabilitySupport{
 }
 
 func NormalizeQueryProfile(raw string) QueryProfile {
+	profile, err := ParseQueryProfile(raw)
+	if err != nil {
+		return ""
+	}
+	return profile
+}
+
+func ParseQueryProfile(raw string) (QueryProfile, error) {
 	switch QueryProfile(strings.TrimSpace(raw)) {
+	case "":
+		return "", nil
 	case ProfileLocalLightweight:
-		return ProfileLocalLightweight
+		return ProfileLocalLightweight, nil
 	case ProfileLocalFullStack:
-		return ProfileLocalFullStack
+		return ProfileLocalFullStack, nil
 	case ProfileProduction:
-		return ProfileProduction
+		return ProfileProduction, nil
 	default:
-		return ProfileProduction
+		return "", fmt.Errorf("invalid query profile %q", strings.TrimSpace(raw))
 	}
 }
 
@@ -250,6 +307,10 @@ func minTruthLevel(a, b TruthLevel) TruthLevel {
 }
 
 func BuildTruthEnvelope(profile QueryProfile, capability string, basis TruthBasis, reason string) *TruthEnvelope {
+	if _, ok := capabilityMatrix[capability]; !ok {
+		panic(fmt.Sprintf("query capability %q missing from capability matrix", capability))
+	}
+	basis = normalizeTruthBasis(profile, basis)
 	maxLevel := maxTruthLevel(capability, profile)
 	level := basisLevel(basis)
 	if maxLevel != nil {
@@ -263,4 +324,11 @@ func BuildTruthEnvelope(profile QueryProfile, capability string, basis TruthBasi
 		Freshness:  TruthFreshness{State: FreshnessFresh},
 		Reason:     reason,
 	}
+}
+
+func normalizeTruthBasis(profile QueryProfile, basis TruthBasis) TruthBasis {
+	if profile == ProfileLocalLightweight && basis == TruthBasisAuthoritativeGraph {
+		return TruthBasisHybrid
+	}
+	return basis
 }
