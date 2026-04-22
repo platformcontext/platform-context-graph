@@ -73,8 +73,15 @@ type mcpToolResult struct {
 }
 
 type mcpContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string       `json:"type"`
+	Text     string       `json:"text,omitempty"`
+	Resource *mcpResource `json:"resource,omitempty"`
+}
+
+type mcpResource struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType,omitempty"`
+	Text     string `json:"text,omitempty"`
 }
 
 // sseSession holds the response channel for one SSE client.
@@ -371,7 +378,17 @@ func (s *Server) handleMessage(ctx context.Context, req *jsonrpcRequest, authHea
 			JSONRPC: "2.0",
 			ID:      req.ID,
 			Result: mcpToolResult{
-				Content: []mcpContent{{Type: "text", Text: string(resultJSON)}},
+				Content: []mcpContent{
+					{Type: "text", Text: string(resultJSON)},
+					{
+						Type: "resource",
+						Resource: &mcpResource{
+							URI:      "pcg://tool-result/envelope",
+							MimeType: "application/pcg.envelope+json",
+							Text:     string(resultJSON),
+						},
+					},
+				},
 			},
 		}
 

@@ -23,7 +23,7 @@ func TestWireAPIReturnsResolveAPIKeyErrorBeforeConnectingDatastores(t *testing.T
 func TestNewRouter_MountsAdminRoutes(t *testing.T) {
 	t.Parallel()
 
-	router, err := newRouter(nil, nil, nil)
+	router, err := newRouter(nil, nil, nil, "production")
 	if err != nil {
 		t.Fatalf("newRouter() error = %v, want nil", err)
 	}

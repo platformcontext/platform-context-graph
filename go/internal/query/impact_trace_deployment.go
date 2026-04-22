@@ -56,6 +56,20 @@ func boundedIndirectEvidenceHostnames(hostnames []string) []string {
 // traceDeploymentChain returns a story-first deployment trace for a service.
 // POST /api/v0/impact/trace-deployment-chain
 func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.deployment_chain") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"deployment-chain tracing requires full platform truth",
+			"unsupported_capability",
+			"platform_impact.deployment_chain",
+			h.profile(),
+			requiredProfile("platform_impact.deployment_chain"),
+		)
+		return
+	}
+
 	var req traceDeploymentChainRequest
 	if err := ReadJSON(r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
@@ -110,7 +124,7 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 		ctx["controller_entities"] = controllerEntities
 	}
 
-	WriteJSON(w, http.StatusOK, buildDeploymentTraceResponse(req.ServiceName, ctx))
+	WriteSuccess(w, r, http.StatusOK, buildDeploymentTraceResponse(req.ServiceName, ctx), BuildTruthEnvelope(h.profile(), "platform_impact.deployment_chain", TruthBasisHybrid, "resolved from deployment topology and service evidence"))
 }
 
 func fetchServiceTraceContext(

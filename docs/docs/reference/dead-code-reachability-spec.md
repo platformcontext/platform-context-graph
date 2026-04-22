@@ -1,0 +1,135 @@
+# Dead Code Reachability Spec
+
+This document defines the reachability model required before PCG can claim an
+`exact` dead-code answer.
+
+## Why This Exists
+
+"No incoming calls" is not the same as "dead."
+
+Frameworks, workers, routers, reflection, and configuration-driven dispatch all
+create valid reachability roots that do not look like ordinary direct calls.
+
+PCG must not claim authoritative dead-code truth until those roots are modeled
+for the relevant language and framework.
+
+## Root Categories
+
+Every dead-code analysis must classify roots into one or more of these groups:
+
+- language entrypoints
+  - `main`
+  - `__main__`
+  - `init()` or equivalent initializer hooks
+  - equivalent executable roots
+- CLI command roots
+  - Cobra commands
+  - Click/Typer commands
+  - equivalent command registrations
+- HTTP and RPC roots
+  - route handlers
+  - FastAPI/Django/Flask registrations
+  - gRPC service handlers
+- background worker roots
+  - Celery tasks
+  - Sidekiq jobs
+  - cron and scheduler registrations
+- framework callback roots
+  - Kubernetes admission webhooks
+  - controller-runtime reconciler methods
+  - ArgoCD/Crossplane hook registrations
+- generated and tool-owned roots
+  - gRPC stubs
+  - sqlc output
+  - protobuf/OpenAPI generated clients where configured
+- SQL and stored-program roots
+  - SQL routines explicitly invoked from application code or runtime wiring
+- reflection and dynamic-dispatch roots
+  - explicit allowlisted reflection or registry patterns
+- library public API roots
+  - exported symbols in library-mode packages
+  - per-language public-surface rules
+- conditional roots
+  - build-tag, platform, or environment-specific reachability
+- user-declared roots
+  - repository-specific overrides in configuration
+
+## Exactness Rule
+
+Dead-code truth is `exact` only when:
+
+1. the language/framework root model is implemented for the target scope
+2. the authoritative call graph is present
+3. the runtime can explain which root categories were applied
+
+If those conditions are not met, PCG must either:
+
+- return `derived`, or
+- reject the request as unsupported for that profile
+
+It must not pretend a partial root model is authoritative.
+
+## Required Output Metadata
+
+Any dead-code result should be able to report:
+
+- root categories used
+- frameworks recognized
+- whether reflection/dynamic patterns were modeled
+- whether tests or generated code were excluded
+- applied user overrides
+
+That explanation must be returned in structured form, not just text prose.
+
+## Default Scope Policy
+
+- tests are excluded from dead-code roots by default
+- generated code is excluded by default unless the repo explicitly opts in
+- library-mode exported symbols are roots by default unless a stricter rule is
+  configured
+- Go `init()` reachability follows import side effects; symbols made reachable
+  only by side-effect imports are not dead if that import path is active
+
+## User Overrides
+
+Repos may declare additional roots or exclusions in `.pcg.yaml`.
+
+Initial keys:
+
+```yaml
+dead_code:
+  roots: []
+  exclude_paths: []
+  include_generated: false
+```
+
+Generated code detection should begin with:
+
+- standard generated-file headers
+- common generated path patterns such as `gen/`, `generated/`, and tool-owned
+  output directories
+
+## Deliverable For Chunk 4
+
+Chunk 4 must produce a framework-aware root registry or rules layer that is
+explicitly testable per language and framework family.
+
+Minimum initial coverage should include:
+
+- Go CLI/HTTP/controller patterns
+- Python web and worker patterns
+- JavaScript/TypeScript web route patterns
+
+Initial MVP is explicitly limited to those families. Other languages and
+frameworks should return non-exact or unsupported dead-code results until their
+root models exist.
+
+Chunk 4 should also add a diff-oriented dead-code mode for CI-style questions
+such as "did this change introduce dead code?"
+
+## Test Requirements
+
+- positive case: reachable symbol preserved by framework root
+- negative case: truly unreachable symbol flagged
+- ambiguous case: unresolved dynamic or framework registration forces a
+  non-exact answer

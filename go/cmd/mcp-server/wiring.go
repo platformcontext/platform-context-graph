@@ -76,29 +76,35 @@ func wireAPI(
 	// Build query layer
 	neo4jReader := query.NewNeo4jReader(driver, neo4jDB)
 	contentReader := query.NewContentReader(db)
+	queryProfile := query.NormalizeQueryProfile(envOrDefault(getenv, "PCG_QUERY_PROFILE", "production"))
 
 	router := &query.APIRouter{
 		Repositories: &query.RepositoryHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Entities: &query.EntityHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Code: &query.CodeHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Content: &query.ContentHandler{
 			Content: contentReader,
 		},
 		Infra: &query.InfraHandler{
-			Neo4j: neo4jReader,
+			Neo4j:   neo4jReader,
+			Profile: queryProfile,
 		},
 		Impact: &query.ImpactHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Status: &query.StatusHandler{
 			Neo4j:        neo4jReader,
@@ -108,6 +114,7 @@ func wireAPI(
 		Compare: &query.CompareHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 	}
 

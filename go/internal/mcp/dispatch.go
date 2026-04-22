@@ -39,6 +39,7 @@ func dispatchTool(ctx context.Context, handler http.Handler, toolName string, ar
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("Accept", "application/pcg.envelope+json")
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}

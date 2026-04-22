@@ -78,7 +78,8 @@ func wireAPI(
 	neo4jReader := query.NewNeo4jReader(driver, neo4jDB)
 	contentReader := query.NewContentReader(db)
 	statusReader := pgstatus.NewStatusStore(pgstatus.SQLQueryer{DB: db})
-	router, err := newRouter(db, neo4jReader, contentReader)
+	queryProfile := query.NormalizeQueryProfile(envOrDefault(getenv, "PCG_QUERY_PROFILE", "production"))
+	router, err := newRouter(db, neo4jReader, contentReader, queryProfile)
 	if err != nil {
 		_ = db.Close()
 		_ = driver.Close(ctx)
@@ -114,29 +115,39 @@ func envOrDefault(getenv func(string) string, key, fallback string) string {
 	return v
 }
 
-func newRouter(db *sql.DB, neo4jReader *query.Neo4jReader, contentReader *query.ContentReader) (*query.APIRouter, error) {
+func newRouter(
+	db *sql.DB,
+	neo4jReader *query.Neo4jReader,
+	contentReader *query.ContentReader,
+	queryProfile query.QueryProfile,
+) (*query.APIRouter, error) {
 	router := &query.APIRouter{
 		Repositories: &query.RepositoryHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Entities: &query.EntityHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Code: &query.CodeHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Content: &query.ContentHandler{
 			Content: contentReader,
 		},
 		Infra: &query.InfraHandler{
-			Neo4j: neo4jReader,
+			Neo4j:   neo4jReader,
+			Profile: queryProfile,
 		},
 		Impact: &query.ImpactHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Status: &query.StatusHandler{
 			Neo4j:        neo4jReader,
@@ -146,6 +157,7 @@ func newRouter(db *sql.DB, neo4jReader *query.Neo4jReader, contentReader *query.
 		Compare: &query.CompareHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Admin: &query.AdminHandler{
 			Store: query.NewPostgresAdminStore(db),

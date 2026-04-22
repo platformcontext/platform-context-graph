@@ -65,6 +65,14 @@ nav:
     - CLI K.I.S.S.: reference/cli-kiss.md
     - Configuration: reference/configuration.md
     - Runtime Admin API: reference/runtime-admin-api.md
+    - Capability Conformance Spec: reference/capability-conformance-spec.md
+    - Truth Label Protocol: reference/truth-label-protocol.md
+    - Local Data Root Spec: reference/local-data-root-spec.md
+    - Local Performance Envelope: reference/local-performance-envelope.md
+    - Local Host Lifecycle: reference/local-host-lifecycle.md
+    - Dead Code Reachability Spec: reference/dead-code-reachability-spec.md
+    - Fact Schema Versioning: reference/fact-schema-versioning.md
+    - Plugin Trust Model: reference/plugin-trust-model.md
     - How It Works: concepts/how-it-works.md
     - Graph Model: concepts/graph-model.md
     - Modes: concepts/modes.md

@@ -11,6 +11,7 @@ import (
 type EntityHandler struct {
 	Neo4j   GraphReader
 	Content *ContentReader
+	Profile QueryProfile
 }
 
 // Mount registers all entity routes on the given mux.
@@ -21,6 +22,13 @@ func (h *EntityHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v0/workloads/{workload_id}/story", h.getWorkloadStory)
 	mux.HandleFunc("GET /api/v0/services/{service_name}/context", h.getServiceContext)
 	mux.HandleFunc("GET /api/v0/services/{service_name}/story", h.getServiceStory)
+}
+
+func (h *EntityHandler) profile() QueryProfile {
+	if h == nil {
+		return ProfileProduction
+	}
+	return NormalizeQueryProfile(string(h.Profile))
 }
 
 // resolveEntityRequest is the request body for entity resolution.
@@ -405,6 +413,20 @@ func (h *EntityHandler) getWorkloadStory(w http.ResponseWriter, r *http.Request)
 
 // getServiceContext retrieves the context for a service by name.
 func (h *EntityHandler) getServiceContext(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.context_overview") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"service context requires full platform context truth",
+			"unsupported_capability",
+			"platform_impact.context_overview",
+			h.profile(),
+			requiredProfile("platform_impact.context_overview"),
+		)
+		return
+	}
+
 	serviceName := PathParam(r, "service_name")
 	if serviceName == "" {
 		WriteError(w, http.StatusBadRequest, "service_name is required")
@@ -430,7 +452,7 @@ func (h *EntityHandler) getServiceContext(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, ctx)
+	WriteSuccess(w, r, http.StatusOK, ctx, BuildTruthEnvelope(h.profile(), "platform_impact.context_overview", TruthBasisHybrid, "resolved from service context and platform evidence"))
 }
 
 // getServiceStory retrieves a narrative summary for a service.
