@@ -103,8 +103,14 @@ matrix explicitly.
 Supported profile IDs:
 
 - `local_lightweight`
+- `local_authoritative`
 - `local_full_stack`
 - `production`
+
+`local_authoritative` runs the lightweight local host plus a local graph
+backend sidecar (see `graph-backend-installation.md`). It unlocks the
+high-authority capabilities that `local_lightweight` refuses, without
+requiring Docker Compose.
 
 ## Runtime Execution Modes
 
@@ -113,8 +119,25 @@ Supported profile IDs:
 Allowed values:
 
 - `local_host`
+- `local_host_plus_graph`
 - `full_stack`
 - `deployed_services`
+
+## Graph Backends
+
+`graph_backend` is a separate axis from both `profile` and `required_runtime`.
+It records which graph-adapter implementation served a response. This axis is
+surfaced in telemetry and, optionally, in `truth.backend` on responses.
+
+Allowed values:
+
+- `neo4j`
+- `nornicdb`
+
+Default today is `neo4j`. Evaluation and adoption criteria for `nornicdb`
+live in `docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`.
+`local_lightweight` does not bind a graph backend because it refuses
+graph-backed capabilities.
 
 ## Allowed Status Values
 

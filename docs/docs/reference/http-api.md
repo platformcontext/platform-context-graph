@@ -15,6 +15,117 @@ in `docs/openapi/runtime-admin-v1.yaml`. That contract is separate from the
 public `/api/v0` schema because it belongs to the long-running runtime admin
 endpoints, not the public query API.
 
+## Response Envelope Contract
+
+Responses use a canonical envelope when the client opts in by sending:
+
+```http
+Accept: application/pcg.envelope+json
+```
+
+Without that header, handlers keep emitting the legacy payload shape for
+backwards compatibility. The envelope is the canonical contract for programmatic
+clients, MCP, and CLI `--json` mode.
+
+### Envelope shape
+
+```json
+{
+  "data": { ... },
+  "truth": {
+    "level": "derived",
+    "capability": "code_search.exact_symbol",
+    "profile": "local_lightweight",
+    "basis": "content_index",
+    "freshness": { "state": "fresh" },
+    "reason": "resolved from indexed entity and content tables"
+  },
+  "error": null
+}
+```
+
+- `data` carries the response payload. `null` on error responses.
+- `truth` carries the truth label for the response. `null` on error responses.
+- `error` is `null` on success. On failure it carries a structured error
+  envelope (see below).
+
+### Truth levels
+
+| Level | Meaning |
+| --- | --- |
+| `exact` | Authoritative graph or durable semantic truth. |
+| `derived` | Deterministic result computed from indexed entities, content, or other structured relational state. |
+| `fallback` | Exploratory result — useful but not strong enough to claim full authority for the requested capability. |
+
+High-authority capabilities (transitive callers/callees, call-chain paths,
+dead-code, cross-repo impact) do not silently downgrade to `fallback` in a
+profile that cannot answer them correctly. They return a structured
+`unsupported_capability` error instead.
+
+### Freshness states
+
+| State | Meaning |
+| --- | --- |
+| `fresh` | Answer reflects current indexed truth for the requested scope. |
+| `stale` | Previously indexed truth exists but backlog or lag means the answer may be behind source. |
+| `building` | Initial or replacement indexing is still in progress; authoritative data is not ready. |
+| `unavailable` | Required backend or authoritative source is currently unavailable. |
+
+Clients that cache responses MUST invalidate on changes to `truth.level` or
+`truth.freshness.state`. ETags or cache keys should vary on both fields.
+
+### Runtime profiles
+
+`truth.profile` is one of:
+
+- `local_lightweight` — single-binary `pcg` host with embedded Postgres, no
+  authoritative Neo4j graph.
+- `local_full_stack` — full Docker Compose stack, authoritative graph available.
+- `production` — deployed multi-runtime platform.
+
+Set the runtime profile via the `PCG_QUERY_PROFILE` environment variable at
+process start. Invalid values are rejected at startup; there is no silent
+default.
+
+### Capability IDs
+
+`truth.capability` references the capability matrix at
+`specs/capability-matrix.v1.yaml`. Full semantics live in
+`reference/capability-conformance-spec.md` and
+`reference/truth-label-protocol.md`.
+
+### Structured error codes
+
+On failure, `error` carries a structured envelope:
+
+```json
+{
+  "error": {
+    "code": "unsupported_capability",
+    "message": "transitive callers require authoritative graph mode",
+    "capability": "call_graph.transitive_callers",
+    "profiles": {
+      "current": "local_lightweight",
+      "required": "local_full_stack"
+    }
+  }
+}
+```
+
+Initial error code set:
+
+| Code | When |
+| --- | --- |
+| `unsupported_capability` | Capability not supported in the current runtime profile. Returned as HTTP 501. |
+| `backend_unavailable` | Authoritative backend (Neo4j / Postgres) is unreachable. |
+| `index_building` | Initial indexing is in progress; authoritative data not ready. |
+| `scope_not_found` | Requested entity, repo, or workspace scope does not exist. |
+| `capability_degraded` | Capability supported but running under reduced fidelity (e.g. reducer lag). |
+| `overloaded` | Runtime is saturated; request rejected rather than queued unboundedly. |
+
+Details, freshness semantics, and MCP embedding live in
+`reference/truth-label-protocol.md`.
+
 ## Scope
 
 The public HTTP API exposes three operator-relevant surfaces:

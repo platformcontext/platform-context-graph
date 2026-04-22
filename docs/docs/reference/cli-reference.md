@@ -44,8 +44,90 @@ These options apply at the root command level.
 | :--- | :--- |
 | `--database`, `-db` | Temporarily switch the database backend for one command. |
 | `--visual`, `--viz`, `-V` | Ask supported local `find` and `analyze` commands to open graph-style visualization output. |
+| `--workspace-root` | Pin the workspace-root directory explicitly. Overrides the resolution order described in [Workspace root and profiles](#workspace-root-and-profiles). Applies to `pcg watch` and `pcg workspace watch`. |
 | `--version`, `-v` | Show the installed PCG version and exit. |
 | `--help`, `-h` | Show help and exit. |
+
+### Runtime profile
+
+The CLI, MCP server, and HTTP API all accept the same runtime-profile axis via
+the `PCG_QUERY_PROFILE` environment variable. Allowed values:
+`local_lightweight`, `local_authoritative`, `local_full_stack`, `production`.
+Invalid values are rejected at startup; there is no silent default.
+Truth-level behavior per profile is defined by
+[Capability Conformance Spec](capability-conformance-spec.md) and
+[Truth Label Protocol](truth-label-protocol.md).
+
+### Graph backend
+
+Separately from profile, PCG selects a graph adapter via
+`PCG_GRAPH_BACKEND`. Allowed values: `neo4j` (default), `nornicdb`.
+Invalid values are rejected at startup. See
+[Graph Backend Installation](graph-backend-installation.md) and
+[ADR 2026-04-22](../adrs/2026-04-22-nornicdb-graph-backend-candidate.md)
+for the evaluation path.
+
+### Graph backend commands
+
+The `local_authoritative` profile runs a graph-backend sidecar alongside the
+lightweight host. PCG exposes:
+
+| Command | Purpose |
+| :--- | :--- |
+| `pcg install nornicdb` | Install the pinned NornicDB binary into `${PCG_HOME}/bin/` with checksum + signature verification. |
+| `pcg graph start` | Start the graph backend sidecar for the current workspace. |
+| `pcg graph stop` | Graceful stop; `--force` after graceful window. |
+| `pcg graph status` | Report installed version, PID, socket, data directory. |
+| `pcg graph logs` | Tail the graph backend log file. |
+| `pcg graph upgrade` | Install a new version and restart the sidecar. |
+
+Full operator contract: [Graph Backend Operations](graph-backend-operations.md).
+
+## Workspace root and profiles
+
+The lightweight local host treats each workspace as a single-owner filesystem.
+A workspace has one data root at `${PCG_HOME}/local/workspaces/<workspace_id>/`.
+
+### Resolution order
+
+When you run `pcg watch .`, `pcg mcp stdio`, or any command that needs a
+workspace, PCG picks the workspace root in this order:
+
+1. `--workspace-root <path>` explicit flag
+2. Nearest ancestor directory containing `.pcg.yaml`
+3. Nearest ancestor directory containing `.git`
+4. The current working directory
+
+The resolved path is passed through `realpath`, normalized, and hashed
+(SHA-256, first 20 bytes hex) to derive a stable `workspace_id`. Two symlinked
+paths that resolve to the same real path converge to the same `workspace_id`.
+
+### PCG_HOME defaults
+
+`PCG_HOME` controls where local host state lives. Override with the
+`PCG_HOME` environment variable. Defaults:
+
+| OS | Default |
+| --- | --- |
+| macOS | `~/Library/Application Support/pcg` |
+| Linux | `${XDG_DATA_HOME:-~/.local/share}/pcg` |
+| Windows | `%LOCALAPPDATA%\pcg` (ownership + transport deferred) |
+
+### Data-root layout
+
+Each workspace owns one directory tree under `${PCG_HOME}/local/workspaces/<workspace_id>/`:
+
+```text
+VERSION            # layout schema version
+owner.lock         # flock sentinel for single-owner invariant
+owner.json         # current owner metadata (PID, socket path, postgres PID)
+postgres/          # embedded Postgres data directory
+logs/              # local-host lifecycle and recovery logs
+cache/             # derived local caches (rebuildable)
+```
+
+See [Local Data Root Spec](local-data-root-spec.md) and
+[Local Host Lifecycle](local-host-lifecycle.md) for the full contract.
 
 ## Public command map
 

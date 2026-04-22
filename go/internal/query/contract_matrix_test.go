@@ -49,6 +49,7 @@ func TestCapabilityMatrixMatchesYAMLContract(t *testing.T) {
 		}
 
 		assertProfileTruthMatch(t, capability.Capability, "local_lightweight", support.LocalLightweightMax, capability.Profiles["local_lightweight"].MaxTruthLevel)
+		assertProfileTruthMatch(t, capability.Capability, "local_authoritative", support.LocalAuthoritativeMax, capability.Profiles["local_authoritative"].MaxTruthLevel)
 		assertProfileTruthMatch(t, capability.Capability, "local_full_stack", support.LocalFullStackMax, capability.Profiles["local_full_stack"].MaxTruthLevel)
 		assertProfileTruthMatch(t, capability.Capability, "production", support.ProductionMax, capability.Profiles["production"].MaxTruthLevel)
 	}

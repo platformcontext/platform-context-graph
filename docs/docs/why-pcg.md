@@ -70,6 +70,60 @@ Key capabilities no other open source tool combines:
 - **`find_change_surface`** — see what is impacted before you merge
 - **`explain_dependency_path`** — understand why two entities are connected, with evidence for each hop
 
+## A Framework For Extensibility
+
+PCG is not a monolith. The query model, the storage layer, the collection
+pipeline, and the runtime profiles are all defined by explicit contracts so
+they can evolve independently.
+
+### Backend-agnostic capability ports
+
+Every HTTP handler, MCP tool, and CLI command reads data through narrow
+interfaces such as `GraphQuery` and `ContentStore` — not through concrete
+database drivers. Neo4j is the default graph adapter today. NornicDB is a
+pure-Go candidate under evaluation with the goal of unifying the graph
+backend across laptop, Compose, and production — details in
+[ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
+Capability ports are why swapping a backend is a wiring concern plus a
+conformance-matrix run, not a handler rewrite. We explicitly rejected an
+ORM as the central abstraction because graph traversal and transitive
+semantics are not well represented by row-level ORMs. Details:
+[Architecture — Capability Ports](architecture.md) and
+[Capability Conformance Spec](reference/capability-conformance-spec.md).
+
+### Conformance before "supported"
+
+No backend is advertised as supported because it "speaks Cypher." A backend is
+supported only after it passes the machine-readable capability matrix at
+`specs/capability-matrix.v1.yaml` for the intended runtime profile. That matrix
+lists every capability (exact symbol lookup, transitive callers, dead-code,
+blast-radius, etc.) with per-profile status, max truth level, p95 latency
+budget, and verification gates. See
+[Capability Conformance Spec](reference/capability-conformance-spec.md).
+
+### OCI-packaged collector plugins
+
+Collectors observe source truth (git repos, Terraform state, Kubernetes
+manifests, Helm, ArgoCD, Crossplane) and emit versioned facts. They do not
+write graph truth directly — that stays owned by the reducer and canonical
+graph writers. Adding a new collector family does not require patching the
+core runtime. Plugins distribute as OCI artifacts with signed provenance
+(Sigstore/Cosign), allowlist-based activation, and hard failure on incompatible
+fact-schema versions. See
+[Fact Envelope Reference](reference/fact-envelope-reference.md),
+[Fact Schema Versioning](reference/fact-schema-versioning.md), and
+[Plugin Trust Model](reference/plugin-trust-model.md).
+
+### Language Query DSL
+
+For structured semantic queries over indexed code — "list all decorators on
+this class," "which files import this module," "show method signatures with
+argument names" — PCG exposes the `execute_language_query` MCP tool and the
+matching `/api/v0/code/language-query` HTTP route. The query payload is a
+small structured DSL that maps onto capability IDs such as
+`symbol_graph.class_methods` and `symbol_graph.decorators`. See
+[Language Query DSL Reference](reference/language-query-dsl.md).
+
 ## One Query Model, Multiple Truth Levels
 
 PCG exposes one query model through CLI, MCP, and HTTP API, but not every
@@ -93,6 +147,27 @@ The architecture contract is that PCG surfaces a structured truth label across
 CLI, MCP, and HTTP responses as this work lands. See
 `2026-04-20-embedded-local-backends-desktop-mode.md`. See
 `truth-label-protocol.md` for the wire contract and freshness semantics.
+
+### Example: what the same question returns per profile
+
+Example query: "who are the transitive callers of `process_payment`?"
+
+| Profile | Capability: `call_graph.transitive_callers` | Response |
+| --- | --- | --- |
+| `local_lightweight` | `unsupported` | Structured `unsupported_capability` error — run against full stack or production. |
+| `local_full_stack` | `exact` | Full transitive call graph from the reduced authoritative graph. |
+| `production` | `exact` | Full transitive call graph across all indexed repos. |
+
+Example query: "find `process_payment` in this repo."
+
+| Profile | Capability: `code_search.exact_symbol` | Response |
+| --- | --- | --- |
+| `local_lightweight` | `exact` | Indexed-entity lookup from embedded Postgres. |
+| `local_full_stack` | `exact` | Indexed-entity lookup from full-stack Postgres. |
+| `production` | `exact` | Indexed-entity lookup from production Postgres. |
+
+The full per-capability matrix lives in `specs/capability-matrix.v1.yaml` and
+is mirrored in [Capability Conformance Spec](reference/capability-conformance-spec.md).
 
 ## Who It's For
 

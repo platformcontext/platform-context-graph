@@ -3,7 +3,7 @@
 **Date:** 2026-04-20
 **Owner:** Allen Sanabria
 **Tracks ADR:** `2026-04-20-embedded-local-backends-desktop-mode.md`
-**Status:** Draft
+**Status:** In Progress (Chunks 1-2 shipped, Chunk 3 started)
 
 **Companion Specs:**
 
@@ -15,6 +15,26 @@
 - `docs/docs/reference/plugin-trust-model.md`
 - `docs/docs/reference/local-performance-envelope.md`
 - `docs/docs/reference/local-host-lifecycle.md`
+
+---
+
+## Chunk Status
+
+This table reflects the current shipped state. It MUST be updated in the same
+PR that changes chunk-visible code. Drift between this table and `git log` =
+reviewer rejects PR.
+
+| Chunk | Title | Status | Commits | Remaining |
+| --- | --- | --- | --- | --- |
+| 1 | Capability contract + truth labels | Shipped | `488ff808`, `35a3a091` | — |
+| 2 | Capability ports (`GraphQuery`, `ContentStore`) | Shipped | `08795558`, `07619013`, `085c91a3` | — |
+| 3 | Lightweight local host | In progress | `a3e05ecf` (workspace-root foundations) | VERSION I/O, stale-lock reclaim, zombie-PG kill, embedded PG lifecycle, socket-path guard, MCP stdio attach, perf-envelope smoke |
+| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | Not started | — | `pcg install nornicdb`, NornicDB adapter behind `GraphQuery`/`GraphWrite`, data-root + lifecycle wiring for graph sidecar, 3 syntax-verification tests (composite unique, fulltext, collect-distinct-map), perf-envelope smoke |
+| 4 | Authoritative graph analysis hardening | Not started | — | all |
+| 5 | Backend conformance suite | Not started | — | all |
+| 5b | NornicDB conformance across profiles | Not started | — | matrix run vs `local_authoritative`, `local_full_stack`, `production`; PCG-workload perf comparison vs Neo4j baseline |
+| 6 | OCI collector plugin contract | Not started | — | all |
+| 7 | Neo4j deprecation path (contingent on 5b pass) | Not started | — | dual-backend operation docs, migration tooling Neo4j → NornicDB, deprecation window + default flip |
 
 ---
 

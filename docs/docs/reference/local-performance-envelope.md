@@ -14,6 +14,11 @@ Reference hardware:
 - Apple Silicon laptop with 16 GB RAM
 - or mid-range x86 laptop with 4+ cores and 16 GB RAM
 
+Targets are split by profile because the `local_authoritative` profile runs a
+graph backend sidecar and therefore carries more cold-start cost.
+
+### `local_lightweight` profile (PCG + embedded Postgres only)
+
 - cold start: under 5 seconds
 - warm restart: under 2 seconds
 - exact symbol lookup p95: under 500 ms
@@ -24,6 +29,20 @@ Reference hardware:
   matrix scope sizes
 - idle memory budget: document and measure
 - active indexing memory budget: document and measure
+
+### `local_authoritative` profile (PCG + embedded Postgres + graph backend sidecar)
+
+- cold start: under 15 seconds (Postgres warmup plus graph-backend warmup)
+- warm restart: under 5 seconds (same workspace data root, graph backend
+  data directory reused)
+- transitive caller p95: under 2 seconds on an active repo
+- call-chain path p95: under 2 seconds on an active repo
+- dead-code scan for an active repo: under 10 seconds
+- reducer bulk write batch: under 10 seconds for 50K facts
+- idle memory budget: document and measure (PCG host + graph backend idle)
+- active indexing memory budget: document and measure (PCG host + graph
+  backend under load)
+- single-file reindex to visible transitive-caller update: under 5 seconds
 
 ## Workload Shapes
 

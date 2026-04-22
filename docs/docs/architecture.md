@@ -244,6 +244,128 @@ The canonical docs are:
 - [Metrics](reference/telemetry/metrics.md)
 - [Traces](reference/telemetry/traces.md)
 
+## Capability Ports: The Backend-Agnostic Seam
+
+Query handlers depend on **capability ports**, not on concrete database
+drivers. A capability port is a narrow Go interface that defines what a layer
+can read or write without naming the backend that serves the data.
+
+Two read ports exist today:
+
+- `GraphQuery` — read-only graph traversal (`Run`, `RunSingle`). Implemented by
+  the Neo4j adapter.
+- `ContentStore` — relational content-query surface (file, entity, framework
+  route, repository coverage). Implemented by the Postgres content adapter.
+
+Handlers such as `CodeHandler`, `ImpactHandler`, `RepositoryHandler`,
+`InfraHandler`, and `CompareHandler` reference these interfaces — never
+`*Neo4jReader` or `*ContentReader` concrete types. Wiring is the only place
+that binds concrete adapters to ports, which means a future graph backend only
+needs a new adapter and a conformance-matrix pass to plug in.
+
+The target set defined by the ADR also includes `FactStore`, `CodeSearch`,
+`SymbolGraph`, `CallGraph`, and `GraphWrite`. Those are introduced as the
+surface grows; the pattern is unchanged. See
+[ADR 2026-04-20 — Desktop Mode](adrs/2026-04-20-embedded-local-backends-desktop-mode.md)
+§5 for the target port list and the explicit rejection of an ORM-centric
+abstraction.
+
+Current graph adapters: Neo4j (default), NornicDB (under evaluation). Both
+satisfy the same `GraphQuery` + `GraphWrite` ports. The active adapter is
+chosen via `PCG_GRAPH_BACKEND={neo4j,nornicdb}` and surfaced in telemetry
+as `graph_backend`. If NornicDB passes the full conformance matrix at
+laptop, Compose, and production scale, PCG will deprecate Neo4j on a
+documented timeline. See
+[ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
+
+### Rule
+
+- Handlers depend on ports, not brands.
+- Backends are adapters behind ports.
+- Swapping a backend is a wiring change plus a conformance pass.
+
+## Conformance Gate For New Backends
+
+No backend is described as supported because it "speaks Cypher." A backend is
+supported only after it passes the machine-readable **capability matrix** at
+`specs/capability-matrix.v1.yaml` for the intended runtime profile.
+
+The matrix lists every capability — exact symbol lookup, transitive callers,
+dead-code, blast-radius, etc. — with, per profile:
+
+- `status` (`supported`, `unsupported`, `experimental`)
+- `max_truth_level` (`exact`, `derived`, `fallback`, `unsupported`)
+- `required_runtime` (`local_host`, `full_stack`, `deployed_services`)
+- `p95_latency_ms` budget
+- `max_scope_size`
+- `verification` gate (Go test, integration test, compose E2E, or remote
+  validation)
+
+A Go contract test at `go/internal/query/contract_matrix_test.go` ensures the
+matrix in Go code never drifts from the YAML.
+
+See [Capability Conformance Spec](reference/capability-conformance-spec.md).
+
+## Collector Extensibility And OCI Plugins
+
+Collectors observe source truth and emit **versioned facts**. They do not
+write canonical graph truth directly — that stays owned by the reducer and
+graph-write layer.
+
+The target distribution is OCI-packaged plugins so contributors can add new
+collector families without patching the core runtime. The plugin seam has
+three contracts:
+
+- **Fact schema versioning** — every fact carries `fact_kind` + semver
+  `schema_version`. Core fact kinds are owned by PCG; plugin fact kinds must
+  use a namespaced form (reverse-DNS or equivalent). Incompatible schema
+  versions fail closed. See
+  [Fact Schema Versioning](reference/fact-schema-versioning.md).
+- **Plugin trust model** — signature/provenance (Sigstore/Cosign), operator
+  allowlist, explicit activation modes (`disabled`, `allowlist`, `strict`),
+  revocation without disabling plugin support globally. See
+  [Plugin Trust Model](reference/plugin-trust-model.md).
+- **Plugin consumer contract** — a new fact kind is not useful until a
+  reducer or query consumer understands it. Plugins declare the consumer
+  contract they expect.
+
+One consolidated user-facing reference lives at
+[Fact Envelope Reference](reference/fact-envelope-reference.md).
+
+Note: a separate workflow coordinator contract governs multi-collector
+claiming, fencing, and convergence (tfstate + future collector kinds). Details
+will land with ADRs `2026-04-20-workflow-coordinator-*` and
+`2026-04-20-terraform-state-collector.md`.
+
+## Runtime Profiles: Lightweight Local / Authoritative Local / Full Stack / Production
+
+The same query model runs across four profiles. Each profile advertises the
+same capability surface but with different truth levels.
+
+| Profile | Shape | Authoritative graph | Purpose |
+| --- | --- | --- | --- |
+| `local_lightweight` | Single `pcg` binary with embedded Postgres | No | Developer-laptop code intelligence |
+| `local_authoritative` | `pcg` binary + embedded Postgres + local graph backend sidecar installed via `pcg install nornicdb` | Yes | Laptop-scale transitive / call-chain / dead-code without Compose |
+| `local_full_stack` | Docker Compose: Postgres, Neo4j (or NornicDB), ingester, reducer, API/MCP | Yes | Pre-merge validation, reducer convergence testing |
+| `production` | Kubernetes / Helm split runtimes, shared Postgres and graph backend | Yes | Incident, refactor, blast-radius analysis at scale |
+
+The graph backend is a separate axis from profile. Current adapters are
+Neo4j (default) and NornicDB (evaluation candidate). See
+[Graph Backend Installation](reference/graph-backend-installation.md),
+[Graph Backend Operations](reference/graph-backend-operations.md), and
+[ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
+
+Lightweight local mode **refuses** high-authority queries (transitive callers,
+call-chain paths, dead code, blast radius, change surface) with a structured
+`unsupported_capability` error. It does not silently downgrade them to
+`fallback`. Users get a loud, actionable signal that the question belongs on
+the full-stack or production profile.
+
+Each profile's exact truth level per capability is defined by the capability
+matrix. See [Capability Conformance Spec](reference/capability-conformance-spec.md),
+[Truth Label Protocol](reference/truth-label-protocol.md), and
+[Local Host Lifecycle](reference/local-host-lifecycle.md).
+
 ## Local And Deployed Shapes
 
 PCG supports two practical execution shapes:

@@ -14,6 +14,30 @@ pcg mcp setup
 
 The wizard writes or updates configuration for supported clients (Claude, Cursor, VS Code) and gives you a config snippet for manual wiring.
 
+## Structured Results With Truth Labels
+
+MCP tool results now include two content blocks:
+
+1. A human-readable `text` block with a short summary.
+2. An `embedded_resource` block whose `mimeType` is
+   `application/pcg.envelope+json` and whose `text` is the canonical PCG
+   response envelope — `{data, truth, error}`.
+
+The envelope is the canonical client contract. Programmatic clients should
+prefer the structured `resource` block over the summary `text`. The envelope
+exposes:
+
+- `truth.level` — `exact`, `derived`, or `fallback`.
+- `truth.capability` — the capability ID from
+  [capability-matrix.v1.yaml](../reference/capability-conformance-spec.md).
+- `truth.profile` — `local_lightweight`, `local_full_stack`, or `production`.
+- `truth.freshness.state` — `fresh`, `stale`, `building`, or `unavailable`.
+
+On unsupported capabilities (for example `call_graph.transitive_callers` in
+`local_lightweight`), the tool call returns a structured
+`unsupported_capability` error rather than a degraded fallback. See
+[Truth Label Protocol — MCP Contract](../reference/truth-label-protocol.md).
+
 ## Use The Local Compose MCP With Codex Or Claude
 
 For local graph-backed testing, the easiest path is the Compose stack plus the
