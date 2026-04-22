@@ -8,6 +8,15 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
+)
+
+var (
+	watchLookPath = exec.LookPath
+	watchExec     = func(binary string, args []string, env []string) error { return syscall.Exec(binary, args, env) }
+	watchSetenv   = os.Setenv
+	watchEnviron  = os.Environ
 )
 
 func init() {
@@ -83,6 +92,7 @@ func init() {
 		RunE:  runWatch,
 	}
 	watchCmd.Flags().String("scope", "auto", "Watch scope: auto, repo, or workspace")
+	watchCmd.Flags().String("workspace-root", "", "Explicit workspace root for local host ownership")
 	rootCmd.AddCommand(watchCmd)
 
 	// unwatch
@@ -274,19 +284,24 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		path = args[0]
 	}
-	absPath, _ := filepath.Abs(path)
 
-	binary, err := exec.LookPath("pcg-ingester")
+	explicitRoot, _ := cmd.Flags().GetString("workspace-root")
+	workspaceRoot, err := pcglocal.ResolveWorkspaceRoot(path, explicitRoot)
+	if err != nil {
+		return err
+	}
+
+	binary, err := watchLookPath("pcg-ingester")
 	if err != nil {
 		printError("pcg-ingester binary not found in PATH.")
 		return fmt.Errorf("pcg-ingester not found")
 	}
 
-	fmt.Printf("Watching %s for changes...\n", absPath)
-	if err := os.Setenv("PCG_WATCH_PATH", absPath); err != nil {
+	fmt.Printf("Watching %s for changes...\n", workspaceRoot)
+	if err := watchSetenv("PCG_WATCH_PATH", workspaceRoot); err != nil {
 		return err
 	}
-	return syscall.Exec(binary, []string{"pcg-ingester", "--watch", absPath}, os.Environ())
+	return watchExec(binary, []string{"pcg-ingester", "--watch", workspaceRoot}, watchEnviron())
 }
 
 func runUnwatch(cmd *cobra.Command, args []string) error {

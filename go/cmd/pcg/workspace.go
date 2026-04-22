@@ -112,6 +112,8 @@ func runWorkspaceStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runWorkspaceWatch(cmd *cobra.Command, args []string) error {
-	fmt.Printf("Watching workspace: %s\n", args[0])
+	if err := cmd.Flags().Set("workspace-root", args[0]); err != nil {
+		return err
+	}
 	return runWatch(cmd, args)
 }
