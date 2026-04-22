@@ -56,6 +56,44 @@ func TestEnsureLayoutVersion(t *testing.T) {
 			t.Fatalf("EnsureLayoutVersion() error = %v, want %v", err, ErrIncompatibleLayoutVersion)
 		}
 	})
+
+	t.Run("normalizes trailing newline and whitespace", func(t *testing.T) {
+		layout := testLayout(t)
+		if err := os.MkdirAll(layout.RootDir, 0o700); err != nil {
+			t.Fatalf("MkdirAll() error = %v, want nil", err)
+		}
+		if err := os.WriteFile(layout.VersionPath, []byte("v1 \n"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v, want nil", err)
+		}
+
+		if err := EnsureLayoutVersion(layout, "v1"); err != nil {
+			t.Fatalf("EnsureLayoutVersion() error = %v, want nil", err)
+		}
+	})
+
+	t.Run("rejects empty current version", func(t *testing.T) {
+		layout := testLayout(t)
+
+		err := EnsureLayoutVersion(layout, "")
+		if err == nil {
+			t.Fatal("EnsureLayoutVersion() error = nil, want non-nil")
+		}
+	})
+
+	t.Run("missing version on non-empty root fails closed", func(t *testing.T) {
+		layout := testLayout(t)
+		if err := os.MkdirAll(layout.RootDir, 0o700); err != nil {
+			t.Fatalf("MkdirAll() error = %v, want nil", err)
+		}
+		if err := os.WriteFile(filepath.Join(layout.RootDir, "existing.txt"), []byte("present"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v, want nil", err)
+		}
+
+		err := EnsureLayoutVersion(layout, "v1")
+		if !errors.Is(err, ErrIncompatibleLayoutVersion) {
+			t.Fatalf("EnsureLayoutVersion() error = %v, want %v", err, ErrIncompatibleLayoutVersion)
+		}
+	})
 }
 
 func testLayout(t *testing.T) Layout {

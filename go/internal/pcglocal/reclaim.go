@@ -11,6 +11,8 @@ var (
 	ErrWorkspaceOwnerActive = errors.New("workspace owner still active")
 	// ErrEmbeddedPostgresActive indicates the embedded Postgres process still appears to be alive.
 	ErrEmbeddedPostgresActive = errors.New("embedded postgres still active")
+	// ErrInvalidOwnerRecord indicates owner metadata is corrupt or inconsistent with the workspace.
+	ErrInvalidOwnerRecord = errors.New("invalid owner record")
 )
 
 // ReclaimDeps injects process and socket health checks for reclaim decisions.
@@ -32,6 +34,9 @@ func ValidateOrReclaimOwner(layout Layout, currentVersion string, deps ReclaimDe
 		}
 		return err
 	}
+	if layout.WorkspaceID != "" && record.WorkspaceID != "" && record.WorkspaceID != layout.WorkspaceID {
+		return fmt.Errorf("%w: record_workspace_id=%q layout_workspace_id=%q", ErrInvalidOwnerRecord, record.WorkspaceID, layout.WorkspaceID)
+	}
 
 	if deps.pidAlive(record.PID) || deps.socketHealthy(record.SocketPath) {
 		return fmt.Errorf(
@@ -45,6 +50,9 @@ func ValidateOrReclaimOwner(layout Layout, currentVersion string, deps ReclaimDe
 	}
 
 	if deps.pidAlive(record.PostgresPID) || deps.socketHealthy(record.PostgresSocketPath) {
+		if record.PostgresDataDir == "" {
+			return fmt.Errorf("%w: postgres_data_dir is required when postgres appears active", ErrInvalidOwnerRecord)
+		}
 		if deps.StopPostgres == nil {
 			return fmt.Errorf("%w: no stop function configured for data_dir=%q", ErrEmbeddedPostgresActive, record.PostgresDataDir)
 		}

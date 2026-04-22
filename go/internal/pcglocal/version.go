@@ -3,6 +3,7 @@ package pcglocal
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,11 @@ func EnsureLayoutVersion(layout Layout, currentVersion string) error {
 		return fmt.Errorf("current layout version is required")
 	}
 
+	nonEmptyRoot, err := dirHasEntries(layout.RootDir)
+	if err != nil {
+		return err
+	}
+
 	for _, dir := range []string{layout.RootDir, layout.PostgresDir, layout.LogsDir, layout.CacheDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fmt.Errorf("create local layout directory %q: %w", dir, err)
@@ -26,6 +32,9 @@ func EnsureLayoutVersion(layout Layout, currentVersion string) error {
 	version, err := ReadLayoutVersion(layout.VersionPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if nonEmptyRoot {
+				return fmt.Errorf("%w: missing VERSION file in non-empty data root %q", ErrIncompatibleLayoutVersion, layout.RootDir)
+			}
 			return WriteLayoutVersion(layout.VersionPath, currentVersion)
 		}
 		return err
@@ -83,4 +92,26 @@ func WriteLayoutVersion(path, version string) error {
 		return fmt.Errorf("replace version file: %w", err)
 	}
 	return nil
+}
+
+func dirHasEntries(path string) (bool, error) {
+	dir, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("open directory %q: %w", path, err)
+	}
+	defer func() {
+		_ = dir.Close()
+	}()
+
+	_, err = dir.Readdirnames(1)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, io.EOF) {
+		return false, nil
+	}
+	return false, fmt.Errorf("read directory %q: %w", path, err)
 }
