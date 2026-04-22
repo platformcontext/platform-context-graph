@@ -130,7 +130,7 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 func fetchServiceTraceContext(
 	ctx context.Context,
 	graph GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	serviceName string,
 	traceOptions traceEnrichmentConfig,
 ) (map[string]any, error) {

@@ -1,0 +1,145 @@
+package query
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+type fakePortGraphQuery struct{}
+
+func (fakePortGraphQuery) Run(context.Context, string, map[string]any) ([]map[string]any, error) {
+	return nil, nil
+}
+
+func (fakePortGraphQuery) RunSingle(context.Context, string, map[string]any) (map[string]any, error) {
+	return nil, nil
+}
+
+type fakePortContentStore struct {
+	coverage RepositoryContentCoverage
+}
+
+func (f fakePortContentStore) GetFileContent(context.Context, string, string) (*FileContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) GetFileLines(context.Context, string, string, int, int) (*FileContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) GetEntityContent(context.Context, string) (*EntityContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) SearchFileContent(context.Context, string, string, int) ([]FileContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) SearchFileContentAnyRepo(context.Context, string, int) ([]FileContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) SearchEntityContent(context.Context, string, string, int) ([]EntityContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) SearchEntityContentAnyRepo(context.Context, string, int) ([]EntityContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) SearchEntitiesByName(context.Context, string, string, string, int) ([]EntityContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) SearchEntitiesByNameAnyRepo(context.Context, string, string, int) ([]EntityContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) SearchEntitiesReferencingComponent(context.Context, string, string, int) ([]EntityContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) ListRepoFiles(context.Context, string, int) ([]FileContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) ListRepoEntities(context.Context, string, int) ([]EntityContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) SearchEntitiesByLanguageAndType(context.Context, string, string, string, string, int) ([]EntityContent, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) ListFrameworkRoutes(context.Context, string) ([]FrameworkRouteEvidence, error) {
+	return nil, nil
+}
+
+func (f fakePortContentStore) RepositoryCoverage(context.Context, string) (RepositoryContentCoverage, error) {
+	return f.coverage, nil
+}
+
+var _ GraphQuery = (*fakePortGraphQuery)(nil)
+var _ ContentStore = (*fakePortContentStore)(nil)
+
+func TestQueryHandlersAcceptCapabilityPorts(t *testing.T) {
+	t.Parallel()
+
+	graph := fakePortGraphQuery{}
+	content := fakePortContentStore{}
+
+	_ = &CodeHandler{Neo4j: graph, Content: content}
+	_ = &EntityHandler{Neo4j: graph, Content: content}
+	_ = &RepositoryHandler{Neo4j: graph, Content: content}
+	_ = &ImpactHandler{Neo4j: graph, Content: content}
+	_ = &LanguageQueryHandler{Neo4j: graph, Content: content}
+	_ = &CompareHandler{Neo4j: graph, Content: content}
+	_ = &ContentHandler{Content: content}
+	_ = &StatusHandler{Neo4j: graph}
+}
+
+func TestQueryContentStoreCoverageUsesContentStorePort(t *testing.T) {
+	t.Parallel()
+
+	contentIndexedAt := time.Date(2026, 4, 19, 10, 0, 0, 0, time.UTC)
+	entityIndexedAt := time.Date(2026, 4, 19, 10, 5, 0, 0, time.UTC)
+
+	handler := &RepositoryHandler{
+		Neo4j: fakeRepoGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"count(DISTINCT e) as entity_count": {
+					"file_count":   int64(12),
+					"entity_count": int64(9),
+				},
+			},
+		},
+		Content: fakePortContentStore{
+			coverage: RepositoryContentCoverage{
+				Available:       true,
+				FileCount:       10,
+				EntityCount:     7,
+				FileIndexedAt:   contentIndexedAt,
+				EntityIndexedAt: entityIndexedAt,
+				Languages: []RepositoryLanguageCount{
+					{Language: "go", FileCount: 8},
+					{Language: "yaml", FileCount: 2},
+				},
+			},
+		},
+	}
+
+	got, err := handler.queryContentStoreCoverage(t.Context(), "repo-coverage")
+	if err != nil {
+		t.Fatalf("queryContentStoreCoverage() error = %v, want nil", err)
+	}
+	if got, want := got["file_count"], 10; got != want {
+		t.Fatalf("file_count = %#v, want %#v", got, want)
+	}
+	if got, want := got["entity_count"], 7; got != want {
+		t.Fatalf("entity_count = %#v, want %#v", got, want)
+	}
+	if got, want := got["content_last_indexed_at"], entityIndexedAt.Format(time.RFC3339Nano); got != want {
+		t.Fatalf("content_last_indexed_at = %#v, want %#v", got, want)
+	}
+}

@@ -13,7 +13,7 @@ const repositorySelectorWhereClause = "r.id = $repo_selector OR r.name = $repo_s
 // RepositoryHandler exposes HTTP routes for repository queries.
 type RepositoryHandler struct {
 	Neo4j   GraphReader
-	Content *ContentReader
+	Content ContentStore
 	Profile QueryProfile
 }
 
@@ -189,7 +189,7 @@ func queryRepoEntryPoints(ctx context.Context, reader GraphReader, params map[st
 	return result
 }
 
-func queryRepoInfrastructure(ctx context.Context, reader GraphReader, content *ContentReader, params map[string]any) []map[string]any {
+func queryRepoInfrastructure(ctx context.Context, reader GraphReader, content ContentStore, params map[string]any) []map[string]any {
 	return queryRepoInfrastructureRows(ctx, reader, content, params)
 }
 
@@ -445,7 +445,7 @@ func (h *RepositoryHandler) queryContentStoreCoverage(ctx context.Context, repoI
 		"entity_count":             0,
 		"languages":                []map[string]any{},
 		"graph_available":          graphStats.Available,
-		"server_content_available": h.Content != nil && h.Content.db != nil,
+		"server_content_available": h.Content != nil,
 		"graph_gap_count":          0,
 		"content_gap_count":        0,
 		"completeness_state":       "unknown",
@@ -458,7 +458,7 @@ func (h *RepositoryHandler) queryContentStoreCoverage(ctx context.Context, repoI
 			"content_entity_count": 0,
 		},
 	}
-	if h.Content == nil || h.Content.db == nil {
+	if h.Content == nil {
 		coverage["completeness_state"] = completenessStateForCoverage(
 			graphStats.Available,
 			false,
@@ -469,92 +469,56 @@ func (h *RepositoryHandler) queryContentStoreCoverage(ctx context.Context, repoI
 		return coverage, nil
 	}
 
-	// Query file count
-	var fileCount int
-	err = h.Content.db.QueryRowContext(ctx, `
-		SELECT count(*) FROM content_files WHERE repo_id = $1
-	`, repoID).Scan(&fileCount)
+	contentCoverage, err := h.Content.RepositoryCoverage(ctx, repoID)
 	if err != nil {
-		return nil, fmt.Errorf("query file count: %w", err)
-	}
-
-	// Query entity count
-	var entityCount int
-	err = h.Content.db.QueryRowContext(ctx, `
-		SELECT count(*) FROM content_entities WHERE repo_id = $1
-	`, repoID).Scan(&entityCount)
-	if err != nil {
-		return nil, fmt.Errorf("query entity count: %w", err)
-	}
-
-	fileIndexedAt, err := queryMaxIndexedAt(ctx, h.Content.db, "content_files", repoID)
-	if err != nil {
-		return nil, fmt.Errorf("query content file indexed_at: %w", err)
-	}
-	entityIndexedAt, err := queryMaxIndexedAt(ctx, h.Content.db, "content_entities", repoID)
-	if err != nil {
-		return nil, fmt.Errorf("query content entity indexed_at: %w", err)
-	}
-
-	// Query languages distribution
-	rows, err := h.Content.db.QueryContext(ctx, `
-		SELECT coalesce(language, 'unknown') as language, count(*) as file_count
-		FROM content_files
-		WHERE repo_id = $1
-		GROUP BY language
-		ORDER BY file_count DESC
-	`, repoID)
-	if err != nil {
-		return nil, fmt.Errorf("query language distribution: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	languages := make([]map[string]any, 0)
-	for rows.Next() {
-		var lang string
-		var count int
-		if err := rows.Scan(&lang, &count); err != nil {
-			return nil, fmt.Errorf("scan language row: %w", err)
-		}
-		languages = append(languages, map[string]any{
-			"language":   lang,
-			"file_count": count,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate language rows: %w", err)
+		return nil, fmt.Errorf("query content coverage: %w", err)
 	}
 
 	graphGapCount, contentGapCount := computeCoverageGapCounts(
 		graphStats.FileCount,
 		graphStats.EntityCount,
-		fileCount,
-		entityCount,
+		contentCoverage.FileCount,
+		contentCoverage.EntityCount,
 	)
-	coverage["file_count"] = fileCount
-	coverage["entity_count"] = entityCount
-	coverage["languages"] = languages
+	coverage["server_content_available"] = contentCoverage.Available
+	coverage["file_count"] = contentCoverage.FileCount
+	coverage["entity_count"] = contentCoverage.EntityCount
+	coverage["languages"] = coverageLanguageMaps(contentCoverage.Languages)
 	coverage["graph_gap_count"] = graphGapCount
 	coverage["content_gap_count"] = contentGapCount
 	coverage["completeness_state"] = completenessStateForCoverage(
 		graphStats.Available,
-		true,
+		contentCoverage.Available,
 		graphGapCount,
 		contentGapCount,
 	)
-	if latest := latestCoverageTimestamp(fileIndexedAt, entityIndexedAt); !latest.IsZero() {
+	if latest := latestCoverageTimestamp(contentCoverage.FileIndexedAt, contentCoverage.EntityIndexedAt); !latest.IsZero() {
 		coverage["content_last_indexed_at"] = latest.Format(time.RFC3339Nano)
 	}
 	summary := mapValue(coverage, "summary")
-	summary["content_file_count"] = fileCount
-	summary["content_entity_count"] = entityCount
-	summary["content_files_last_indexed_at"] = formatCoverageTimestamp(fileIndexedAt)
-	summary["content_entities_last_indexed_at"] = formatCoverageTimestamp(entityIndexedAt)
+	summary["content_file_count"] = contentCoverage.FileCount
+	summary["content_entity_count"] = contentCoverage.EntityCount
+	summary["content_files_last_indexed_at"] = formatCoverageTimestamp(contentCoverage.FileIndexedAt)
+	summary["content_entities_last_indexed_at"] = formatCoverageTimestamp(contentCoverage.EntityIndexedAt)
 	summary["graph_gap_count"] = graphGapCount
 	summary["content_gap_count"] = contentGapCount
 	summary["completeness_state"] = coverage["completeness_state"]
 	coverage["summary"] = summary
 	return coverage, nil
+}
+
+func coverageLanguageMaps(languages []RepositoryLanguageCount) []map[string]any {
+	if len(languages) == 0 {
+		return []map[string]any{}
+	}
+	result := make([]map[string]any, 0, len(languages))
+	for _, language := range languages {
+		result = append(result, map[string]any{
+			"language":   language.Language,
+			"file_count": language.FileCount,
+		})
+	}
+	return result
 }
 
 type repositoryGraphCoverageStats struct {

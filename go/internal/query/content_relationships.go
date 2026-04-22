@@ -15,7 +15,7 @@ type contentRelationshipSet struct {
 
 func buildContentRelationshipSet(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) (contentRelationshipSet, error) {
 	outgoing, err := buildOutgoingContentRelationships(ctx, reader, entity)
@@ -33,7 +33,7 @@ func buildContentRelationshipSet(
 
 func buildOutgoingContentRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, error) {
 	if relationships, ok, err := buildOutgoingArgoCDRelationships(entity); ok || err != nil {
@@ -105,7 +105,7 @@ func buildOutgoingContentRelationships(
 
 func buildIncomingContentRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, error) {
 	if relationships, ok, err := buildIncomingK8sSelectRelationships(ctx, reader, entity); ok || err != nil {
@@ -236,7 +236,7 @@ func buildOutgoingArgoCDApplicationSetRelationships(entity EntityContent) []map[
 
 func buildOutgoingK8sSelectRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, bool, error) {
 	if !isK8sResourceKind(entity, "Service") || entity.EntityName == "" {
@@ -277,7 +277,7 @@ func buildOutgoingK8sSelectRelationships(
 
 func buildOutgoingKustomizeRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, bool, error) {
 	if entity.EntityType != "KustomizeOverlay" {
@@ -343,7 +343,7 @@ func buildOutgoingKustomizeRelationships(
 
 func buildIncomingK8sSelectRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, bool, error) {
 	if !isK8sResourceKind(entity, "Deployment") || entity.EntityName == "" {

@@ -12,7 +12,7 @@ const cloudFormationRepoFileLimit = 5000
 
 func buildOutgoingCloudFormationRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, bool, error) {
 	if entity.EntityType != "CloudFormationResource" {
@@ -42,7 +42,7 @@ func buildOutgoingCloudFormationRelationships(
 
 func resolveCloudFormationLocalTemplatePath(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 	templateURL string,
 ) (string, error) {

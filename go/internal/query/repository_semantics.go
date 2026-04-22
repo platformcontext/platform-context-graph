@@ -86,7 +86,7 @@ func buildRepositorySemanticOverviewWithFiles(
 
 func loadRepositorySemanticOverview(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	repoID string,
 ) (map[string]any, error) {
 	if reader == nil || repoID == "" {

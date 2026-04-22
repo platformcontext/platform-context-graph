@@ -17,7 +17,7 @@ type repositoryFrameworkAggregate struct {
 
 func hydrateRepositoryNarrativeFiles(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	repoID string,
 	files []FileContent,
 ) ([]FileContent, error) {

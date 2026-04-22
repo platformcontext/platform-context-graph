@@ -17,7 +17,7 @@ type repositoryArtifactSource struct {
 func loadSharedRepositoryConfigArtifacts(
 	ctx context.Context,
 	graph GraphReader,
-	reader *ContentReader,
+	reader ContentStore,
 	repoID string,
 	repoName string,
 	files []FileContent,
@@ -55,7 +55,7 @@ func loadSharedRepositoryConfigArtifacts(
 
 func loadRepositoryControllerArtifacts(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	repoID string,
 	repoName string,
 	files []FileContent,
@@ -131,7 +131,7 @@ func queryRelatedRepositoryArtifactSources(
 
 func loadRepositoryConfigArtifactsForSources(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	sources []repositoryArtifactSource,
 ) (map[string]any, error) {
 	if reader == nil || len(sources) == 0 {

@@ -10,7 +10,7 @@ const repositoryInfrastructureEntityLimit = 5000
 func queryRepoInfrastructureRows(
 	ctx context.Context,
 	reader GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	params map[string]any,
 ) []map[string]any {
 	result := queryRepoInfrastructureFromGraph(ctx, reader, params)

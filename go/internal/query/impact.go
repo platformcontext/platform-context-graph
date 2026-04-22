@@ -8,8 +8,8 @@ import (
 // ImpactHandler serves HTTP endpoints for impact analysis queries including
 // blast radius, change surface, resource-to-code tracing, and dependency paths.
 type ImpactHandler struct {
-	Neo4j   *Neo4jReader
-	Content *ContentReader
+	Neo4j   GraphQuery
+	Content ContentStore
 	Profile QueryProfile
 }
 

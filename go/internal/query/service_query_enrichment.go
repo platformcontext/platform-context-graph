@@ -16,7 +16,7 @@ type serviceQueryEnrichmentOptions struct {
 func enrichServiceQueryContext(
 	ctx context.Context,
 	graph GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	workloadContext map[string]any,
 ) error {
 	return enrichServiceQueryContextWithOptions(ctx, graph, content, workloadContext, serviceQueryEnrichmentOptions{
@@ -27,7 +27,7 @@ func enrichServiceQueryContext(
 func enrichServiceQueryContextWithOptions(
 	ctx context.Context,
 	graph GraphReader,
-	content *ContentReader,
+	content ContentStore,
 	workloadContext map[string]any,
 	opts serviceQueryEnrichmentOptions,
 ) error {
