@@ -158,7 +158,7 @@ func (r neo4jSessionRunner) QueryCypherExists(ctx context.Context, cypher string
 }
 
 // Run executes a read-only Cypher query and returns row maps. This implements
-// query.GraphReader for reducer-local graph lookups.
+// query.GraphQuery for reducer-local graph lookups.
 func (r neo4jSessionRunner) Run(ctx context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
 	if r.Driver == nil {
 		return nil, fmt.Errorf("neo4j driver is required")
@@ -223,7 +223,7 @@ func (c reducerNeo4jDriverCloser) Close() error {
 func openReducerNeo4jAdapters(
 	parent context.Context,
 	getenv func(string) string,
-) (sourceneo4j.Executor, reducer.CypherExecutor, sourceneo4j.CypherReader, query.GraphReader, io.Closer, error) {
+) (sourceneo4j.Executor, reducer.CypherExecutor, sourceneo4j.CypherReader, query.GraphQuery, io.Closer, error) {
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err

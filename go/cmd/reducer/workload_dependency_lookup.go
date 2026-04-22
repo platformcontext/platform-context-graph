@@ -8,7 +8,7 @@ import (
 )
 
 type neo4jWorkloadDependencyLookup struct {
-	reader query.GraphReader
+	reader query.GraphQuery
 }
 
 func (l neo4jWorkloadDependencyLookup) ListRepoDependencyEdges(
