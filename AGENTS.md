@@ -85,5 +85,58 @@ query truth in `go/internal/reducer`, `go/internal/query`, `go/internal/graph`,
 - `resolution/` owns projection
 - `graph/` owns canonical graph writes
 - `query/` owns read surfaces
+- `pcglocal/` owns workspace ownership, data-root layout, flock protocol
 
 Do not move runtime behavior back into one giant combined service by accident.
+
+## Documentation Discipline (MANDATORY)
+
+Every code PR that touches user-visible wire contract, CLI flags, environment
+variables, runtime profiles, capability ports, collector plugin contracts,
+graph-backend selection, or chunk boundaries MUST include:
+
+1. Update the `## Chunk Status` table (or equivalent progress tracker) in the
+   **active ADR or ADRs** governing the work in flight. ADRs live under
+   `docs/docs/adrs/`. Each ADR that is in progress should have a
+   per-chunk/per-phase status section with commit refs and remaining items.
+   If you are not sure which ADR is active, ASK THE USER — do not guess.
+   When multiple ADRs are active at once, update every active ADR's progress
+   tracker.
+2. Update affected user-facing docs when the contract changes:
+   - `docs/docs/reference/http-api.md` for HTTP surface changes
+   - `docs/docs/reference/cli-reference.md` for CLI flag / profile changes
+   - `docs/docs/guides/mcp-guide.md` for MCP tool response shape changes
+   - `docs/docs/why-pcg.md` for framework / value-proposition changes
+   - `docs/docs/architecture.md` for new capability ports, conformance gates,
+     collector seams, runtime profiles, or graph backends
+   - `docs/docs/getting-started/*` when the quickstart/install path changes
+3. Any new Go package MUST ship a `doc.go` with a package-level comment that
+   names the spec it implements.
+4. New extensibility seams (capability ports, collector plugin contracts, DSL
+   surfaces, graph backends) MUST be reflected in `docs/docs/architecture.md`
+   and `docs/docs/why-pcg.md` before merge, and in a dedicated reference
+   page under `docs/docs/reference/`.
+
+Reviewer rejects PR on doc drift. The `uv run ... mkdocs build --strict`
+gate must pass; any reference path added to `docs/mkdocs.yml` must resolve.
+
+Two agents work on this codebase concurrently: Claude Code and Codex. Both
+are subject to the same discipline rule. Whichever agent lands a contract
+change owns the doc-sync work in that same PR; reviewers reject on drift
+regardless of authorship.
+
+## Graph Backend Axis
+
+PCG supports multiple graph-backend adapters behind the `GraphQuery` and
+`GraphWrite` ports. Current adapters:
+
+- `neo4j` — default today, used in Compose and production
+- `nornicdb` — pure-Go evaluation candidate; see
+  `docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`
+
+Selection is explicit via `PCG_GRAPH_BACKEND={neo4j,nornicdb}`. Invalid
+values are rejected at startup. The axis is surfaced in telemetry as
+`graph_backend` and optionally in `truth.backend` on responses.
+
+When touching graph-backed code, preserve port boundaries: handlers depend
+on `GraphQuery` / `GraphWrite`, never on a concrete adapter type.

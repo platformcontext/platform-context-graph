@@ -60,9 +60,15 @@ workspace ID.
   owner.lock
   owner.json
   postgres/
+  graph/
   logs/
   cache/
 ```
+
+`graph/` is the persistent data directory for the optional graph backend
+sidecar on the `local_authoritative` profile. On `local_lightweight`, this
+directory is absent. When present, its internal layout is owned by the
+installed graph backend (for example `graph/nornicdb/`).
 
 ### Files
 
@@ -90,9 +96,19 @@ workspace ID.
 - `version`
 - `socket_path`
 - `postgres_pid`
+- `postgres_port`
 - `postgres_data_dir`
 - `postgres_socket_dir`
 - `postgres_socket_path`
+- `profile` — active PCG query profile
+- `graph_backend` — optional, populated only on `local_authoritative`;
+  allowed values enumerated by `capability-conformance-spec.md`
+- `graph_pid` — optional, graph backend PID when the sidecar is running
+- `graph_data_dir` — optional, absolute path to the graph backend data
+  directory (typically `${workspace_root}/graph/<backend>/`)
+- `graph_socket_path` — optional, local socket path the graph backend
+  listens on
+- `graph_version` — optional, installed graph backend binary version
 
 ## Ownership Rules
 
@@ -114,6 +130,8 @@ The reclaim flow should check, in order:
 2. whether the owner socket responds
 3. whether the owner version matches the current binary
 4. whether the recorded Postgres PID is still alive and serving its socket
+5. if `graph_pid` is recorded, whether the graph backend process is still
+   alive and serving `graph_socket_path`
 
 If the owner PID is dead but the recorded Postgres PID is still alive, the new
 process must not silently adopt that Postgres instance. It should:
@@ -130,14 +148,22 @@ ownership and rewrite `owner.json`.
 
 ## Local Sockets
 
-The local host and embedded Postgres should default to Unix sockets, not TCP
-ports.
+The local host should use a workspace-local Unix socket contract for ownership
+and health checks. Embedded Postgres also keeps a workspace-local Unix socket
+for reclaim and operator diagnostics.
+
+The current runtime additionally reserves one loopback-only TCP port per
+workspace process because the embedded Postgres library performs readiness
+checks over `localhost:<port>` and the local attach flows reuse that same
+loopback endpoint. This port is not a public network surface and must bind
+only to loopback addresses.
 
 To avoid `sun_path` length limits:
 
 - socket paths should live under a short runtime directory such as
   `${TMPDIR}/pcg/<workspace_id>/`
 - `owner.json` should record the resolved socket path
+- `owner.json` should record the resolved loopback Postgres port
 - long home-directory paths must not be used directly as socket paths
 - if `${TMPDIR}` itself is too long on a given host, the runtime should fall
   back to a shorter operator-visible runtime directory

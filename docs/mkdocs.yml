@@ -65,18 +65,25 @@ nav:
     - CLI K.I.S.S.: reference/cli-kiss.md
     - Configuration: reference/configuration.md
     - Runtime Admin API: reference/runtime-admin-api.md
-    - Capability Conformance Spec: reference/capability-conformance-spec.md
-    - Truth Label Protocol: reference/truth-label-protocol.md
-    - Local Data Root Spec: reference/local-data-root-spec.md
-    - Local Performance Envelope: reference/local-performance-envelope.md
-    - Local Host Lifecycle: reference/local-host-lifecycle.md
-    - Dead Code Reachability Spec: reference/dead-code-reachability-spec.md
-    - Fact Schema Versioning: reference/fact-schema-versioning.md
-    - Plugin Trust Model: reference/plugin-trust-model.md
-    - How It Works: concepts/how-it-works.md
-    - Graph Model: concepts/graph-model.md
-    - Modes: concepts/modes.md
-    - Architecture: architecture.md
+    - Architecture & Extensibility:
+      - Architecture: architecture.md
+      - How It Works: concepts/how-it-works.md
+      - Graph Model: concepts/graph-model.md
+      - Modes: concepts/modes.md
+    - Local Host & Capabilities:
+      - Capability Conformance Spec: reference/capability-conformance-spec.md
+      - Truth Label Protocol: reference/truth-label-protocol.md
+      - Local Data Root Spec: reference/local-data-root-spec.md
+      - Local Host Lifecycle: reference/local-host-lifecycle.md
+      - Local Performance Envelope: reference/local-performance-envelope.md
+      - Dead Code Reachability Spec: reference/dead-code-reachability-spec.md
+      - Graph Backend Installation: reference/graph-backend-installation.md
+      - Graph Backend Operations: reference/graph-backend-operations.md
+    - Extensibility Contracts:
+      - Language Query DSL: reference/language-query-dsl.md
+      - Fact Envelope And Plugins: reference/fact-envelope-reference.md
+      - Fact Schema Versioning: reference/fact-schema-versioning.md
+      - Plugin Trust Model: reference/plugin-trust-model.md
     - Parity Closure Matrix: reference/parity-closure-matrix.md
     - Service Workflows: reference/service-workflows.md
     - Relationship Mapping: reference/relationship-mapping.md

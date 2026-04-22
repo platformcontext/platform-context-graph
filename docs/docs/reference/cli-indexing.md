@@ -28,6 +28,12 @@ pcg index [path] [options]
 **Runtime Notes:**
 
 *   Local index state for the Go launcher is stored under `PCG_HOME/state/go-bootstrap-index/`.
+*   When using the lightweight local host (`pcg watch`, `pcg mcp stdio`),
+    per-workspace state lives under
+    `${PCG_HOME}/local/workspaces/<workspace_id>/`. Workspace-root resolution
+    order and data-root layout are documented in
+    [CLI Reference — Workspace root and profiles](cli-reference.md#workspace-root-and-profiles)
+    and [Local Data Root Spec](local-data-root-spec.md).
 *   The command still honors `.gitignore`, `.pcgignore`, and the configured parse-worker settings.
 
 **Example:**

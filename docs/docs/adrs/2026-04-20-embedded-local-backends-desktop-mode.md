@@ -233,6 +233,24 @@ projection flows, and transitive dependency analysis.
 This does not prohibit normal SQL helper libraries for relational query
 implementation details.
 
+### 5.a Optional Graph Backend Sidecar For `local_authoritative`
+
+The "embedded graph as co-equal local truth path" rejection earlier in
+this ADR stands. A **sidecar** graph backend — installed as a separate
+binary, owned by the PCG lightweight host lifecycle, addressable through
+a local socket, tracked in `owner.json` — is a distinct design that this
+ADR endorses.
+
+PCG introduces a new profile, `local_authoritative`, that runs the
+lightweight local host plus a user-installed graph-backend sidecar. The
+sidecar unlocks transitive callers, call-chain paths, dead-code
+detection, and the hybrid platform-impact capabilities at laptop scale
+without requiring Docker Compose.
+
+NornicDB is the evaluation candidate. Full criteria, promotion gates,
+and deprecation path live in
+`docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`.
+
 ### 6. Treat Collector Extensibility As A Fact-Emission Plugin Seam
 
 Future collector extensibility should happen at the fact-emission boundary.

@@ -76,7 +76,12 @@ Successful responses should use the canonical envelope:
 - `capability`
   - capability ID from the conformance matrix
 - `profile`
-  - `local_lightweight`, `local_full_stack`, or `production`
+  - `local_lightweight`, `local_authoritative`, `local_full_stack`, or
+    `production`
+- `backend`
+  - optional graph-backend identity when the response was served through a
+    graph adapter. Current values: `neo4j`, `nornicdb`. Absent when no
+    graph adapter was exercised (for example on `local_lightweight`).
 - `freshness`
   - object with:
     - `state`

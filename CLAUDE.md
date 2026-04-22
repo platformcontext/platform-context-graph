@@ -60,6 +60,7 @@ go/
     graph/            # canonical graph schema and write helpers
     mcp/              # MCP transport and tool wiring
     parser/           # native parser registry, adapters, and SCIP support
+    pcglocal/         # workspace ownership, data-root layout, flock protocol
     projector/        # fact-stage projection and failure classification
     query/            # HTTP API handlers and OpenAPI surfaces
     recovery/         # replay and repair operations
@@ -282,3 +283,34 @@ The same image is rendered into:
 
 The operator contract for those runtimes lives in
 `docs/docs/deployment/service-runtimes.md`.
+
+## Documentation Discipline (MANDATORY)
+
+Every code PR that touches user-visible wire contract, CLI flags, environment
+variables, runtime profiles, capability ports, collector plugin contracts, or
+chunk boundaries MUST include:
+
+1. Update the `## Chunk Status` table (or equivalent progress tracker) in the
+   **active ADR or ADRs** governing the work in flight. ADRs live under
+   `docs/docs/adrs/`. Each ADR that is in progress should have a
+   per-chunk/per-phase status section with commit refs and remaining items.
+   If you are not sure which ADR is active, ASK THE USER — do not guess. When
+   multiple ADRs are active at once (e.g. a capability-contract ADR and a
+   collector ADR), update every active ADR's progress tracker.
+2. Update affected user-facing docs when the contract changes:
+   - `docs/docs/reference/http-api.md` for HTTP surface changes
+   - `docs/docs/reference/cli-reference.md` for CLI flag / profile changes
+   - `docs/docs/guides/mcp-guide.md` for MCP tool response shape changes
+   - `docs/docs/why-pcg.md` for framework / value-proposition changes
+   - `docs/docs/architecture.md` for new capability ports, conformance gates,
+     collector seams, or runtime profiles
+   - `docs/docs/getting-started/*` when the quickstart/install path changes
+3. Any new Go package MUST ship a `doc.go` with a package-level comment that
+   names the spec it implements.
+4. New extensibility seams (capability ports, collector plugin contracts, DSL
+   surfaces) MUST be reflected in `docs/docs/architecture.md` and
+   `docs/docs/why-pcg.md` before merge, and in a dedicated reference page
+   under `docs/docs/reference/`.
+
+Reviewer rejects PR on doc drift. The `uv run ... mkdocs build --strict` gate
+must pass; any reference path added to `docs/mkdocs.yml` must resolve.

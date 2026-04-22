@@ -11,10 +11,34 @@ const EnvelopeMIMEType = "application/pcg.envelope+json"
 type QueryProfile string
 
 const (
-	ProfileLocalLightweight QueryProfile = "local_lightweight"
-	ProfileLocalFullStack   QueryProfile = "local_full_stack"
-	ProfileProduction       QueryProfile = "production"
+	ProfileLocalLightweight   QueryProfile = "local_lightweight"
+	ProfileLocalAuthoritative QueryProfile = "local_authoritative"
+	ProfileLocalFullStack     QueryProfile = "local_full_stack"
+	ProfileProduction         QueryProfile = "production"
 )
+
+type GraphBackend string
+
+const (
+	GraphBackendNeo4j    GraphBackend = "neo4j"
+	GraphBackendNornicDB GraphBackend = "nornicdb"
+)
+
+// ParseGraphBackend validates the raw value against the supported adapter
+// set. Empty is treated as the Neo4j default for backwards compatibility
+// during the evaluation window. Invalid non-empty values are rejected.
+func ParseGraphBackend(raw string) (GraphBackend, error) {
+	switch GraphBackend(strings.TrimSpace(raw)) {
+	case "":
+		return GraphBackendNeo4j, nil
+	case GraphBackendNeo4j:
+		return GraphBackendNeo4j, nil
+	case GraphBackendNornicDB:
+		return GraphBackendNornicDB, nil
+	default:
+		return "", fmt.Errorf("invalid graph backend %q", strings.TrimSpace(raw))
+	}
+}
 
 type TruthLevel string
 
@@ -53,6 +77,7 @@ type TruthEnvelope struct {
 	Capability string         `json:"capability,omitempty"`
 	Profile    QueryProfile   `json:"profile,omitempty"`
 	Basis      TruthBasis     `json:"basis,omitempty"`
+	Backend    GraphBackend   `json:"backend,omitempty"`
 	Freshness  TruthFreshness `json:"freshness"`
 	Reason     string         `json:"reason,omitempty"`
 }
@@ -87,10 +112,11 @@ type ResponseEnvelope struct {
 }
 
 type capabilitySupport struct {
-	LocalLightweightMax *TruthLevel
-	LocalFullStackMax   *TruthLevel
-	ProductionMax       *TruthLevel
-	RequiredProfile     QueryProfile
+	LocalLightweightMax   *TruthLevel
+	LocalAuthoritativeMax *TruthLevel
+	LocalFullStackMax     *TruthLevel
+	ProductionMax         *TruthLevel
+	RequiredProfile       QueryProfile
 }
 
 var (
@@ -100,130 +126,153 @@ var (
 
 var capabilityMatrix = map[string]capabilitySupport{
 	"code_search.exact_symbol": {
-		LocalLightweightMax: &truthExact,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
+		LocalLightweightMax:   &truthExact,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
 	},
 	"code_search.fuzzy_symbol": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthDerived,
-		ProductionMax:       &truthDerived,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthDerived,
+		LocalFullStackMax:     &truthDerived,
+		ProductionMax:         &truthDerived,
 	},
 	"code_search.variable_lookup": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
 	},
 	"code_search.content_search": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthDerived,
-		ProductionMax:       &truthDerived,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthDerived,
+		LocalFullStackMax:     &truthDerived,
+		ProductionMax:         &truthDerived,
 	},
 	"symbol_graph.decorators": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
 	},
 	"symbol_graph.argument_names": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
 	},
 	"symbol_graph.class_methods": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
 	},
 	"call_graph.direct_callers": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
 	},
 	"call_graph.direct_callees": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
 	},
 	"call_graph.transitive_callers": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalAuthoritative,
 	},
 	"call_graph.transitive_callees": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalAuthoritative,
 	},
 	"symbol_graph.imports": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
 	},
 	"symbol_graph.inheritance": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
 	},
 	"code_quality.complexity": {
-		LocalLightweightMax: &truthDerived,
-		LocalFullStackMax:   &truthDerived,
-		ProductionMax:       &truthDerived,
+		LocalLightweightMax:   &truthDerived,
+		LocalAuthoritativeMax: &truthDerived,
+		LocalFullStackMax:     &truthDerived,
+		ProductionMax:         &truthDerived,
 	},
 	"call_graph.call_chain_path": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalAuthoritative,
 	},
 	"code_quality.dead_code": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalAuthoritative,
 	},
 	"platform_impact.deployment_chain": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: nil,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalFullStack,
 	},
 	"platform_impact.context_overview": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: nil,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalFullStack,
 	},
 	"platform_impact.blast_radius": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: &truthDerived,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalAuthoritative,
 	},
 	"platform_impact.change_surface": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: nil,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalFullStack,
 	},
 	"platform_impact.resource_to_code": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: nil,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalFullStack,
 	},
 	"platform_impact.dependency_path": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: &truthExact,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalAuthoritative,
 	},
 	"platform_impact.environment_compare": {
-		LocalLightweightMax: nil,
-		LocalFullStackMax:   &truthExact,
-		ProductionMax:       &truthExact,
-		RequiredProfile:     ProfileLocalFullStack,
+		LocalLightweightMax:   nil,
+		LocalAuthoritativeMax: nil,
+		LocalFullStackMax:     &truthExact,
+		ProductionMax:         &truthExact,
+		RequiredProfile:       ProfileLocalFullStack,
 	},
 }
 
@@ -241,6 +290,8 @@ func ParseQueryProfile(raw string) (QueryProfile, error) {
 		return "", nil
 	case ProfileLocalLightweight:
 		return ProfileLocalLightweight, nil
+	case ProfileLocalAuthoritative:
+		return ProfileLocalAuthoritative, nil
 	case ProfileLocalFullStack:
 		return ProfileLocalFullStack, nil
 	case ProfileProduction:
@@ -265,6 +316,15 @@ func maxTruthLevel(capability string, profile QueryProfile) *TruthLevel {
 	}
 	switch profile {
 	case ProfileLocalLightweight:
+		return support.LocalLightweightMax
+	case ProfileLocalAuthoritative:
+		if support.LocalAuthoritativeMax != nil {
+			return support.LocalAuthoritativeMax
+		}
+		// Fallback: treat authoritative-local as at least as capable as
+		// lightweight when a row has not been explicitly bumped yet. This
+		// keeps the Go matrix tolerant during migration; the YAML remains
+		// authoritative and the matrix test catches drift.
 		return support.LocalLightweightMax
 	case ProfileLocalFullStack:
 		return support.LocalFullStackMax
