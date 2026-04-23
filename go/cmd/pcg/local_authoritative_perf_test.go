@@ -48,6 +48,7 @@ func TestLocalAuthoritativeStartupEnvelope(t *testing.T) {
 	if coldStart > 15*time.Second {
 		t.Fatalf("local_authoritative cold start = %s, want <= %s", coldStart, 15*time.Second)
 	}
+	assertLocalAuthoritativeOwnerLockReleased(t, layout)
 
 	warmRestart, err := measureLocalAuthoritativeStartup(layout)
 	if err != nil {
@@ -56,6 +57,18 @@ func TestLocalAuthoritativeStartupEnvelope(t *testing.T) {
 	t.Logf("local_authoritative warm restart = %s", warmRestart)
 	if warmRestart > 5*time.Second {
 		t.Fatalf("local_authoritative warm restart = %s, want <= %s", warmRestart, 5*time.Second)
+	}
+}
+
+func assertLocalAuthoritativeOwnerLockReleased(t *testing.T, layout pcglocal.Layout) {
+	t.Helper()
+
+	lock, err := pcglocal.AcquireOwnerLock(layout.OwnerLockPath)
+	if err != nil {
+		t.Fatalf("AcquireOwnerLock(%q) error = %v, want nil after host shutdown", layout.OwnerLockPath, err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatalf("OwnerLock.Close() error = %v, want nil", err)
 	}
 }
 

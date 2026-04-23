@@ -4,9 +4,11 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -368,6 +370,24 @@ func TestInstallNornicDBDownloadsArchiveFromURL(t *testing.T) {
 	}
 	if result.SourceKind != string(nornicDBInstallSourceDownloadedArchive) {
 		t.Fatalf("SourceKind = %q, want %q", result.SourceKind, nornicDBInstallSourceDownloadedArchive)
+	}
+}
+
+func TestPrepareNornicDBInstallSourceDownloadHonorsContextCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := prepareNornicDBInstallSource(ctx, server.URL+"/nornicdb-headless-darwin-arm64.tar.gz")
+	if err == nil {
+		t.Fatal("prepareNornicDBInstallSource() error = nil, want context cancellation")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("prepareNornicDBInstallSource() error = %v, want context.Canceled", err)
 	}
 }
 

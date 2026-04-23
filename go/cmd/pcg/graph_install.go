@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -30,9 +31,10 @@ var (
 )
 
 type installNornicDBOptions struct {
-	From   string
-	SHA256 string
-	Force  bool
+	Context context.Context
+	From    string
+	SHA256  string
+	Force   bool
 }
 
 type installNornicDBResult struct {
@@ -81,9 +83,10 @@ func runInstallNornicDB(cmd *cobra.Command, args []string) error {
 	}
 
 	result, err := installNornicDB(installNornicDBOptions{
-		From:   from,
-		SHA256: expectedSHA,
-		Force:  force,
+		Context: cmd.Context(),
+		From:    from,
+		SHA256:  expectedSHA,
+		Force:   force,
 	})
 	if err != nil {
 		return err
@@ -93,6 +96,9 @@ func runInstallNornicDB(cmd *cobra.Command, args []string) error {
 }
 
 func installNornicDB(opts installNornicDBOptions) (installNornicDBResult, error) {
+	if opts.Context == nil {
+		opts.Context = context.Background()
+	}
 	sourceRef := strings.TrimSpace(opts.From)
 	if sourceRef == "" {
 		resolvedSource, resolvedSHA, err := resolvePinnedNornicDBReleaseSource()
@@ -105,7 +111,7 @@ func installNornicDB(opts installNornicDBOptions) (installNornicDBResult, error)
 		}
 	}
 
-	source, err := prepareNornicDBInstallSource(sourceRef)
+	source, err := prepareNornicDBInstallSource(opts.Context, sourceRef)
 	if err != nil {
 		return installNornicDBResult{}, err
 	}

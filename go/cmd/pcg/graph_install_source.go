@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -54,9 +55,9 @@ func (s preparedNornicDBInstallSource) Close() error {
 	return s.cleanup()
 }
 
-func prepareNornicDBInstallSource(sourceRef string) (preparedNornicDBInstallSource, error) {
+func prepareNornicDBInstallSource(ctx context.Context, sourceRef string) (preparedNornicDBInstallSource, error) {
 	sourceRef = strings.TrimSpace(sourceRef)
-	localPath, kind, cleanup, err := materializeNornicDBInstallSource(sourceRef)
+	localPath, kind, cleanup, err := materializeNornicDBInstallSource(ctx, sourceRef)
 	if err != nil {
 		return preparedNornicDBInstallSource{}, err
 	}
@@ -77,10 +78,10 @@ func prepareNornicDBInstallSource(sourceRef string) (preparedNornicDBInstallSour
 	return prepared, nil
 }
 
-func materializeNornicDBInstallSource(sourceRef string) (string, nornicDBInstallSourceKind, func() error, error) {
+func materializeNornicDBInstallSource(ctx context.Context, sourceRef string) (string, nornicDBInstallSourceKind, func() error, error) {
 	parsed, err := url.Parse(sourceRef)
 	if err == nil && parsed.Scheme != "" && parsed.Scheme != "file" {
-		path, err := downloadNornicDBInstallSource(sourceRef)
+		path, err := downloadNornicDBInstallSource(ctx, sourceRef)
 		if err != nil {
 			return "", "", nil, err
 		}
@@ -187,8 +188,11 @@ func inspectNornicDBInstallSource(sourceRef, localPath string, kind nornicDBInst
 	}
 }
 
-func downloadNornicDBInstallSource(sourceURL string) (string, error) {
-	request, err := http.NewRequest(http.MethodGet, sourceURL, nil)
+func downloadNornicDBInstallSource(ctx context.Context, sourceURL string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("build nornicdb download request: %w", err)
 	}
