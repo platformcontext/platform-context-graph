@@ -142,6 +142,17 @@ That script:
 The runtime verification wrappers under `scripts/verify_*_compose.sh` are
 shell-native Go-runtime checks.
 
+For authoritative graph-backed code analysis specifically, use:
+
+```bash
+./scripts/verify_graph_analysis_compose.sh
+```
+
+That wrapper starts the stack against the dedicated
+`tests/fixtures/graph_analysis_compose` corpus and proves direct callers,
+transitive callers, shortest call-chain path, dead-code results, and the
+expected canonical `CALLS` edges in Neo4j after a fresh bootstrap run.
+
 Run one wrapper at a time. They share the same Compose project name, so
 parallel wrapper runs can collide even when each script chooses different host
 ports.
@@ -166,6 +177,16 @@ Local auth stays at the Go API boundary too:
   `PCG_HOME/.env` contract before issuing authenticated requests.
 - If neither source contains a token, the local stack runs without bearer auth.
 - There is no separate auth service, login flow, or OAuth dependency in this stack.
+
+Neo4j is also bounded intentionally in local Compose so laptop-shaped runs do
+not inherit whatever heap/page-cache sizing the JVM would otherwise choose:
+
+- `PCG_NEO4J_HEAP_INITIAL_SIZE` defaults to `512m`
+- `PCG_NEO4J_HEAP_MAX_SIZE` defaults to `512m`
+- `PCG_NEO4J_PAGECACHE_SIZE` defaults to `512m`
+
+Raise those explicitly when you run larger real-repository sets and have enough
+Docker memory available.
 
 For direct runtime scraping, Compose also enables per-runtime Prometheus endpoints:
 

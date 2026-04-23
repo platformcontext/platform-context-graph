@@ -116,6 +116,7 @@ func (e *Engine) parseGo(
 				"line_number": nodeLine(node),
 				"lang":        "go",
 			}
+			goAnnotateCallMetadata(item, node, functionNode, source, importAliases)
 			appendBucket(payload, "function_calls", item)
 		case "var_spec", "const_spec":
 			if scope == "module" && goInsideFunction(node) {
@@ -167,6 +168,118 @@ func goCallName(node *tree_sitter.Node, source []byte) string {
 	default:
 		return ""
 	}
+}
+
+func goAnnotateCallMetadata(
+	item map[string]any,
+	callNode *tree_sitter.Node,
+	functionNode *tree_sitter.Node,
+	source []byte,
+	importAliases map[string][]string,
+) {
+	receiverIdentifier, receiverIsImportAlias := goCallReceiverIdentifier(functionNode, source, importAliases)
+	if receiverIdentifier == "" {
+		return
+	}
+
+	item["receiver_identifier"] = receiverIdentifier
+	item["receiver_is_import_alias"] = receiverIsImportAlias
+
+	enclosingReceiverName, enclosingClassContext := goEnclosingMethodReceiver(callNode, source)
+	if receiverIsImportAlias || enclosingReceiverName == "" || enclosingClassContext == "" {
+		return
+	}
+	if receiverIdentifier == enclosingReceiverName {
+		item["class_context"] = enclosingClassContext
+	}
+}
+
+func goCallReceiverIdentifier(
+	functionNode *tree_sitter.Node,
+	source []byte,
+	importAliases map[string][]string,
+) (string, bool) {
+	if functionNode == nil || functionNode.Kind() != "selector_expression" {
+		return "", false
+	}
+
+	baseNode := functionNode.ChildByFieldName("operand")
+	if baseNode == nil {
+		cursor := functionNode.Walk()
+		defer cursor.Close()
+		children := functionNode.NamedChildren(cursor)
+		if len(children) == 0 {
+			return "", false
+		}
+		baseNode = &children[0]
+	}
+	if baseNode.Kind() != "identifier" {
+		return "", false
+	}
+
+	receiverIdentifier := strings.TrimSpace(nodeText(baseNode, source))
+	if receiverIdentifier == "" {
+		return "", false
+	}
+	return receiverIdentifier, goIdentifierMatchesImportAlias(receiverIdentifier, importAliases)
+}
+
+func goIdentifierMatchesImportAlias(identifier string, importAliases map[string][]string) bool {
+	trimmed := strings.TrimSpace(identifier)
+	if trimmed == "" {
+		return false
+	}
+	for _, aliases := range importAliases {
+		for _, alias := range aliases {
+			if alias == trimmed {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func goEnclosingMethodReceiver(callNode *tree_sitter.Node, source []byte) (string, string) {
+	for current := callNode; current != nil; current = current.Parent() {
+		if current.Kind() != "method_declaration" {
+			continue
+		}
+		return goMethodReceiverBinding(current, source)
+	}
+	return "", ""
+}
+
+func goMethodReceiverBinding(node *tree_sitter.Node, source []byte) (string, string) {
+	if node == nil {
+		return "", ""
+	}
+
+	receiver := node.ChildByFieldName("receiver")
+	if receiver == nil {
+		return "", ""
+	}
+
+	cursor := receiver.Walk()
+	defer cursor.Close()
+	for _, child := range receiver.NamedChildren(cursor) {
+		child := child
+		if child.Kind() != "parameter_declaration" {
+			continue
+		}
+		nameNode := child.ChildByFieldName("name")
+		receiverName := strings.TrimSpace(nodeText(nameNode, source))
+		receiverType := goReceiverContext(node, source)
+		if receiverName != "" || receiverType != "" {
+			return receiverName, receiverType
+		}
+	}
+
+	receiverType := goReceiverContext(node, source)
+	if receiverType == "" {
+		return "", ""
+	}
+	nameNode := firstNamedDescendant(receiver, "identifier")
+	return strings.TrimSpace(nodeText(nameNode, source)), receiverType
 }
 
 func goInsideFunction(node *tree_sitter.Node) bool {
