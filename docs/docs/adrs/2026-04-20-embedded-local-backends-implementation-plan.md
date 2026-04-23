@@ -3,7 +3,7 @@
 **Date:** 2026-04-20
 **Owner:** Allen Sanabria
 **Tracks ADR:** `2026-04-20-embedded-local-backends-desktop-mode.md`
-**Status:** In Progress (Chunks 1-2 shipped, Chunk 3 started)
+**Status:** In Progress (Chunks 1-3 shipped, Chunk 3.5 in progress)
 
 **Companion Specs:**
 
@@ -20,16 +20,17 @@
 
 ## Chunk Status
 
-This table reflects the current shipped state. It MUST be updated in the same
-PR that changes chunk-visible code. Drift between this table and `git log` =
-reviewer rejects PR.
+This table reflects the current branch state, including active working-tree
+slices in the current PR. It MUST be updated in the same PR that changes
+chunk-visible code. Drift between this table, the working tree, and
+verification evidence = reviewer rejects PR.
 
-| Chunk | Title | Status | Commits | Remaining |
+| Chunk | Title | Status | Evidence | Remaining |
 | --- | --- | --- | --- | --- |
 | 1 | Capability contract + truth labels | Shipped | `488ff808`, `35a3a091` | — |
 | 2 | Capability ports (`GraphQuery`, `ContentStore`) | Shipped | `08795558`, `07619013`, `085c91a3` | — |
-| 3 | Lightweight local host | In progress | `a3e05ecf` (workspace-root foundations) | VERSION I/O, stale-lock reclaim, zombie-PG kill, embedded PG lifecycle, socket-path guard, MCP stdio attach, perf-envelope smoke |
-| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | Not started | — | `pcg install nornicdb`, NornicDB adapter behind `GraphQuery`/`GraphWrite`, data-root + lifecycle wiring for graph sidecar, 3 syntax-verification tests (composite unique, fulltext, collect-distinct-map), perf-envelope smoke |
+| 3 | Lightweight local host | Shipped | `a3e05ecf`, `c832a84c`, current branch local-host supervisor + embedded Postgres lifecycle | perf-envelope smoke evidence still needs to be attached to the PR |
+| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | In progress | `0e4d8a5f`, current branch profile/backend and runtime-gating slices | `pcg install nornicdb`, NornicDB adapter behind `GraphQuery`/`GraphWrite`, data-root + lifecycle wiring for graph sidecar, authoritative attach/runtime behavior, 3 syntax-verification tests (composite unique, fulltext, collect-distinct-map), perf-envelope smoke |
 | 4 | Authoritative graph analysis hardening | Not started | — | all |
 | 5 | Backend conformance suite | Not started | — | all |
 | 5b | NornicDB conformance across profiles | Not started | — | matrix run vs `local_authoritative`, `local_full_stack`, `production`; PCG-workload perf comparison vs Neo4j baseline |
@@ -283,6 +284,55 @@ CLI story without requiring Docker.
 - local lifecycle tests for clean shutdown
 - perf-envelope smoke tests against the documented local targets
 - manual smoke test for `pcg watch .` + `pcg mcp stdio`
+
+---
+
+## Chunk 3.5: NornicDB Laptop Sidecar And `local_authoritative`
+
+### Goal
+
+Add an explicit authoritative-local runtime contract without silently turning
+it into lightweight mode.
+
+### Work
+
+- add `local_authoritative` runtime selection to the local host
+- persist profile and graph-backend metadata in `owner.json`
+- reserve graph-sidecar paths inside the local workspace data root
+- fail loudly when `local_authoritative` is requested before the graph sidecar
+  lifecycle is wired
+- add the graph-sidecar startup, health, and shutdown lifecycle behind the
+  local host once the NornicDB adapter is ready
+
+### First implementation slice
+
+- add `graph/` to the local workspace layout
+- add `profile`, `graph_backend`, and graph-sidecar metadata fields to
+  `owner.json`
+- make the local host resolve `PCG_QUERY_PROFILE` and `PCG_GRAPH_BACKEND`
+  explicitly instead of hardcoding lightweight mode
+- reject unsupported `local_authoritative` startup before workspace ownership
+  or embedded Postgres boot so the failure is immediate and unambiguous
+
+### Likely touch points
+
+- `go/cmd/pcg/local_host.go`
+- `go/internal/pcglocal/layout.go`
+- `go/internal/pcglocal/owner.go`
+- `go/cmd/api/wiring.go`
+- `go/cmd/mcp-server/wiring.go`
+- `go/cmd/ingester/local_lightweight.go`
+- `docs/docs/reference/local-data-root-spec.md`
+- `docs/docs/reference/local-host-lifecycle.md`
+- `docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`
+
+### Verification
+
+- focused local-host tests for profile/backend resolution
+- owner-record round-trip tests including graph metadata
+- layout tests proving a stable `graph/` path per workspace
+- manual proof that `local_authoritative` fails loudly until sidecar wiring is
+  implemented
 
 ---
 

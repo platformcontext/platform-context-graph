@@ -129,6 +129,49 @@ func TestLoadNeo4jConfigUsesDefaultsAndOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadGraphBackendDefaultsToNeo4j(t *testing.T) {
+	t.Parallel()
+
+	got, err := LoadGraphBackend(func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("LoadGraphBackend() error = %v, want nil", err)
+	}
+	if got != GraphBackendNeo4j {
+		t.Fatalf("LoadGraphBackend() = %q, want %q", got, GraphBackendNeo4j)
+	}
+}
+
+func TestLoadGraphBackendAcceptsExplicitNornicDB(t *testing.T) {
+	t.Parallel()
+
+	got, err := LoadGraphBackend(func(key string) string {
+		if key == "PCG_GRAPH_BACKEND" {
+			return "nornicdb"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("LoadGraphBackend() error = %v, want nil", err)
+	}
+	if got != GraphBackendNornicDB {
+		t.Fatalf("LoadGraphBackend() = %q, want %q", got, GraphBackendNornicDB)
+	}
+}
+
+func TestLoadGraphBackendRejectsInvalidValue(t *testing.T) {
+	t.Parallel()
+
+	_, err := LoadGraphBackend(func(key string) string {
+		if key == "PCG_GRAPH_BACKEND" {
+			return "not-a-backend"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("LoadGraphBackend() error = nil, want non-nil")
+	}
+}
+
 func TestLoadNeo4jConfigRejectsInvalidPoolTuning(t *testing.T) {
 	t.Parallel()
 

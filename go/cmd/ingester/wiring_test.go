@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -166,5 +167,27 @@ func TestCompositeRunnerExitsOnContextCancel(t *testing.T) {
 	err := runner.Run(ctx)
 	if err != nil {
 		t.Fatalf("compositeRunner.Run() error = %v, want nil", err)
+	}
+}
+
+func TestOpenIngesterCanonicalWriterRejectsUnsupportedGraphBackend(t *testing.T) {
+	t.Parallel()
+
+	_, closer, err := openIngesterCanonicalWriter(context.Background(), func(key string) string {
+		switch key {
+		case "PCG_GRAPH_BACKEND":
+			return "nornicdb"
+		default:
+			return ""
+		}
+	}, nil, nil)
+	if closer != nil {
+		_ = closer.Close()
+	}
+	if err == nil {
+		t.Fatal("openIngesterCanonicalWriter() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "graph backend") {
+		t.Fatalf("openIngesterCanonicalWriter() error = %q, want graph backend context", err)
 	}
 }

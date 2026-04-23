@@ -24,8 +24,8 @@ configured and installed independently of the PCG binary; see
 1. stop accepting new work
 2. drain or cancel watcher intake
 3. request child runtimes to stop and wait for them to exit cleanly
-4. allow durable queues to retain any canceled in-flight projector work so the
-   next local start can retry safely
+4. allow durable queues to retain any canceled in-flight projector work so a
+   later local start can reclaim and retry it once the queue lease expires
 5. if profile is `local_authoritative`, signal the graph backend to stop
    accepting new writes and wait for quiesce
 6. flush and stop the graph backend sidecar (if present)
@@ -37,7 +37,7 @@ Ordering note: Postgres outlives the child runtimes that write to it. The
 current local-lightweight host requests a clean child shutdown first and then
 stops Postgres only after those children have exited. If a projector batch is
 canceled during shutdown, the durable Postgres queue remains the recovery point
-for the next local start.
+for a subsequent local start after lease-based reclaim.
 
 ## Crash Recovery
 

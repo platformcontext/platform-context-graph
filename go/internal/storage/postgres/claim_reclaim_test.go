@@ -49,7 +49,7 @@ func TestProjectorQueueClaimIncludesExpiredLeaseReclaimPredicates(t *testing.T) 
 
 	query := db.queries[0].query
 	for _, want := range []string{
-		"status IN ('pending', 'retrying')",
+		"status IN ('pending', 'retrying', 'claimed', 'running')",
 		"claim_until IS NULL OR claim_until <= $1",
 		"visible_at IS NULL OR visible_at <= $1",
 		"FOR UPDATE SKIP LOCKED",
@@ -96,7 +96,7 @@ func TestReducerQueueClaimIncludesExpiredLeaseReclaimPredicates(t *testing.T) {
 
 	query := db.queries[0].query
 	for _, want := range []string{
-		"status IN ('pending', 'retrying')",
+		"status IN ('pending', 'retrying', 'claimed', 'running')",
 		"claim_until IS NULL OR claim_until <= $1",
 		"visible_at IS NULL OR visible_at <= $1",
 		"FOR UPDATE SKIP LOCKED",

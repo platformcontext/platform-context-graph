@@ -1,12 +1,15 @@
 package collector
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -243,8 +246,10 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 func TestGitSourceNextReturnsEmptyWhenSelectionBatchIsEmpty(t *testing.T) {
 	t.Parallel()
 
+	var logs bytes.Buffer
 	source := &GitSource{
 		Component: "collector-git",
+		Logger:    slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		Selector: &stubRepositorySelector{
 			batches: []SelectionBatch{{
 				ObservedAt:   time.Date(2026, time.April, 12, 15, 30, 0, 0, time.UTC),
@@ -260,6 +265,14 @@ func TestGitSourceNextReturnsEmptyWhenSelectionBatchIsEmpty(t *testing.T) {
 	}
 	if ok {
 		t.Fatal("Next() ok = true, want false")
+	}
+
+	logOutput := logs.String()
+	if strings.Contains(logOutput, `"level":"INFO"`) {
+		t.Fatalf("empty-selection logs contain INFO entries: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, `"msg":"collector stream: no repositories discovered"`) {
+		t.Fatalf("empty-selection logs = %q, want no-repositories entry", logOutput)
 	}
 }
 

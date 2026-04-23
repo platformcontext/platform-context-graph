@@ -16,9 +16,16 @@ type OwnerRecord struct {
 	Version            string `json:"version"`
 	SocketPath         string `json:"socket_path"`
 	PostgresPID        int    `json:"postgres_pid"`
+	PostgresPort       int    `json:"postgres_port"`
 	PostgresDataDir    string `json:"postgres_data_dir"`
 	PostgresSocketDir  string `json:"postgres_socket_dir"`
 	PostgresSocketPath string `json:"postgres_socket_path"`
+	Profile            string `json:"profile,omitempty"`
+	GraphBackend       string `json:"graph_backend,omitempty"`
+	GraphPID           int    `json:"graph_pid,omitempty"`
+	GraphDataDir       string `json:"graph_data_dir,omitempty"`
+	GraphSocketPath    string `json:"graph_socket_path,omitempty"`
+	GraphVersion       string `json:"graph_version,omitempty"`
 }
 
 // ReadOwnerRecord loads owner metadata from disk.

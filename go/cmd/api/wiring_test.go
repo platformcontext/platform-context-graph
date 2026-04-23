@@ -36,6 +36,27 @@ func TestWireAPIReturnsInvalidQueryProfileErrorBeforeConnectingDatastores(t *tes
 	}
 }
 
+func TestOpenQueryGraphRejectsUnsupportedGraphBackend(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := openQueryGraph(context.Background(), func(key string) string {
+		switch key {
+		case "PCG_GRAPH_BACKEND":
+			return "nornicdb"
+		case "PCG_QUERY_PROFILE":
+			return "production"
+		default:
+			return ""
+		}
+	}, "production", nil)
+	if err == nil {
+		t.Fatal("openQueryGraph() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "graph backend") {
+		t.Fatalf("openQueryGraph() error = %q, want graph backend context", err)
+	}
+}
+
 func TestNewRouter_MountsAdminRoutes(t *testing.T) {
 	t.Parallel()
 

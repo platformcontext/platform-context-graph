@@ -1,0 +1,300 @@
+package main
+
+import (
+	"context"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
+	"github.com/platformcontext/platform-context-graph/go/internal/query"
+)
+
+func TestRunAttachedLocalMCPStdioUsesRecordedPostgresPort(t *testing.T) {
+	layout := pcglocal.Layout{
+		WorkspaceID:     "workspace-id",
+		OwnerRecordPath: "/tmp/owner.json",
+	}
+	record := pcglocal.OwnerRecord{
+		PID:                42,
+		WorkspaceID:        layout.WorkspaceID,
+		PostgresPort:       15439,
+		PostgresSocketPath: "/tmp/.s.PGSQL.15439",
+	}
+
+	originalReadOwnerRecord := localHostReadOwnerRecord
+	originalProcessAlive := localHostProcessAlive
+	originalSocketHealthy := localHostSocketHealthy
+	originalStartChild := localHostStartChildProcess
+	originalWaitChild := localHostWaitChildProcess
+	t.Cleanup(func() {
+		localHostReadOwnerRecord = originalReadOwnerRecord
+		localHostProcessAlive = originalProcessAlive
+		localHostSocketHealthy = originalSocketHealthy
+		localHostStartChildProcess = originalStartChild
+		localHostWaitChildProcess = originalWaitChild
+	})
+
+	localHostReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
+		return record, nil
+	}
+	localHostProcessAlive = func(pid int) bool {
+		return pid == record.PID
+	}
+	localHostSocketHealthy = func(path string) bool {
+		return path == record.PostgresSocketPath
+	}
+
+	var gotEnv []string
+	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {
+		gotEnv = append([]string(nil), env...)
+		return &exec.Cmd{}, nil
+	}
+	localHostWaitChildProcess = func(ctx context.Context, cmd *exec.Cmd) error {
+		return nil
+	}
+
+	attached, err := runAttachedLocalMCPStdio(context.Background(), layout)
+	if err != nil {
+		t.Fatalf("runAttachedLocalMCPStdio() error = %v, want nil", err)
+	}
+	if !attached {
+		t.Fatal("runAttachedLocalMCPStdio() attached = false, want true")
+	}
+
+	dsn := envValue(gotEnv, "PCG_POSTGRES_DSN")
+	if !strings.Contains(dsn, "host=127.0.0.1") || !strings.Contains(dsn, "port=15439") {
+		t.Fatalf("PCG_POSTGRES_DSN = %q, want loopback DSN with recorded port", dsn)
+	}
+}
+
+func TestRunAttachedLocalMCPStdioRejectsRequestedProfileMismatch(t *testing.T) {
+	t.Setenv("PCG_QUERY_PROFILE", string(query.ProfileLocalAuthoritative))
+
+	layout := pcglocal.Layout{
+		WorkspaceID:     "workspace-id",
+		OwnerRecordPath: "/tmp/owner.json",
+	}
+	record := pcglocal.OwnerRecord{
+		PID:                42,
+		WorkspaceID:        layout.WorkspaceID,
+		PostgresPort:       15439,
+		PostgresSocketPath: "/tmp/.s.PGSQL.15439",
+		Profile:            string(query.ProfileLocalLightweight),
+	}
+
+	originalReadOwnerRecord := localHostReadOwnerRecord
+	originalProcessAlive := localHostProcessAlive
+	originalSocketHealthy := localHostSocketHealthy
+	originalStartChild := localHostStartChildProcess
+	t.Cleanup(func() {
+		localHostReadOwnerRecord = originalReadOwnerRecord
+		localHostProcessAlive = originalProcessAlive
+		localHostSocketHealthy = originalSocketHealthy
+		localHostStartChildProcess = originalStartChild
+	})
+
+	localHostReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
+		return record, nil
+	}
+	localHostProcessAlive = func(pid int) bool {
+		return pid == record.PID
+	}
+	localHostSocketHealthy = func(path string) bool {
+		return path == record.PostgresSocketPath
+	}
+
+	startCalled := false
+	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {
+		startCalled = true
+		return &exec.Cmd{}, nil
+	}
+
+	attached, err := runAttachedLocalMCPStdio(context.Background(), layout)
+	if err == nil || !strings.Contains(err.Error(), "requested profile") {
+		t.Fatalf("runAttachedLocalMCPStdio() error = %v, want profile mismatch error", err)
+	}
+	if !attached {
+		t.Fatal("runAttachedLocalMCPStdio() attached = false, want true on owner mismatch failure")
+	}
+	if startCalled {
+		t.Fatal("runAttachedLocalMCPStdio() started child process despite owner/profile mismatch")
+	}
+}
+
+func TestLocalHostIngesterOverridesUseFilesystemDirectMode(t *testing.T) {
+	layout := pcglocal.Layout{
+		WorkspaceRoot: "/workspace/repo",
+		CacheDir:      "/pcg/cache",
+	}
+
+	got := localHostIngesterOverrides(layout, localHostModeWatch, localHostRuntimeConfig{Profile: query.ProfileLocalLightweight})
+	if got["PCG_REPO_SOURCE_MODE"] != "filesystem" {
+		t.Fatalf("PCG_REPO_SOURCE_MODE = %q, want %q", got["PCG_REPO_SOURCE_MODE"], "filesystem")
+	}
+	if got["PCG_FILESYSTEM_ROOT"] != layout.WorkspaceRoot {
+		t.Fatalf("PCG_FILESYSTEM_ROOT = %q, want %q", got["PCG_FILESYSTEM_ROOT"], layout.WorkspaceRoot)
+	}
+	if got["PCG_FILESYSTEM_DIRECT"] != "true" {
+		t.Fatalf("PCG_FILESYSTEM_DIRECT = %q, want %q", got["PCG_FILESYSTEM_DIRECT"], "true")
+	}
+	wantReposDir := filepath.Join(layout.CacheDir, "repos")
+	if got["PCG_REPOS_DIR"] != wantReposDir {
+		t.Fatalf("PCG_REPOS_DIR = %q, want %q", got["PCG_REPOS_DIR"], wantReposDir)
+	}
+}
+
+func TestResolveLocalHostRuntimeConfig(t *testing.T) {
+	t.Run("defaults to lightweight profile", func(t *testing.T) {
+		got, err := resolveLocalHostRuntimeConfig(func(string) string { return "" })
+		if err != nil {
+			t.Fatalf("resolveLocalHostRuntimeConfig() error = %v, want nil", err)
+		}
+		if got.Profile != query.ProfileLocalLightweight {
+			t.Fatalf("Profile = %q, want %q", got.Profile, query.ProfileLocalLightweight)
+		}
+		if got.GraphBackend != "" {
+			t.Fatalf("GraphBackend = %q, want empty", got.GraphBackend)
+		}
+	})
+
+	t.Run("authoritative defaults to nornicdb", func(t *testing.T) {
+		got, err := resolveLocalHostRuntimeConfig(func(key string) string {
+			if key == "PCG_QUERY_PROFILE" {
+				return string(query.ProfileLocalAuthoritative)
+			}
+			return ""
+		})
+		if err != nil {
+			t.Fatalf("resolveLocalHostRuntimeConfig() error = %v, want nil", err)
+		}
+		if got.Profile != query.ProfileLocalAuthoritative {
+			t.Fatalf("Profile = %q, want %q", got.Profile, query.ProfileLocalAuthoritative)
+		}
+		if got.GraphBackend != query.GraphBackendNornicDB {
+			t.Fatalf("GraphBackend = %q, want %q", got.GraphBackend, query.GraphBackendNornicDB)
+		}
+	})
+
+	t.Run("rejects unsupported profiles", func(t *testing.T) {
+		_, err := resolveLocalHostRuntimeConfig(func(key string) string {
+			if key == "PCG_QUERY_PROFILE" {
+				return string(query.ProfileProduction)
+			}
+			return ""
+		})
+		if err == nil || !strings.Contains(err.Error(), "local host supports only") {
+			t.Fatalf("resolveLocalHostRuntimeConfig() error = %v, want unsupported profile error", err)
+		}
+	})
+
+	t.Run("rejects graph backend override in lightweight mode", func(t *testing.T) {
+		_, err := resolveLocalHostRuntimeConfig(func(key string) string {
+			if key == "PCG_GRAPH_BACKEND" {
+				return string(query.GraphBackendNornicDB)
+			}
+			return ""
+		})
+		if err == nil || !strings.Contains(err.Error(), "PCG_GRAPH_BACKEND") {
+			t.Fatalf("resolveLocalHostRuntimeConfig() error = %v, want graph-backend override error", err)
+		}
+	})
+}
+
+func TestLocalHostEnvHonorsRuntimeConfig(t *testing.T) {
+	t.Run("lightweight disables neo4j", func(t *testing.T) {
+		got := localHostEnv("dsn", localHostRuntimeConfig{Profile: query.ProfileLocalLightweight}, nil)
+		if envValue(got, "PCG_QUERY_PROFILE") != string(query.ProfileLocalLightweight) {
+			t.Fatalf("PCG_QUERY_PROFILE = %q, want %q", envValue(got, "PCG_QUERY_PROFILE"), query.ProfileLocalLightweight)
+		}
+		if envValue(got, "PCG_DISABLE_NEO4J") != "true" {
+			t.Fatalf("PCG_DISABLE_NEO4J = %q, want %q", envValue(got, "PCG_DISABLE_NEO4J"), "true")
+		}
+		if envValue(got, "PCG_GRAPH_BACKEND") != "" {
+			t.Fatalf("PCG_GRAPH_BACKEND = %q, want empty", envValue(got, "PCG_GRAPH_BACKEND"))
+		}
+	})
+
+	t.Run("authoritative sets graph backend", func(t *testing.T) {
+		originalEnviron := pcgEnviron
+		pcgEnviron = func() []string {
+			return []string{"PCG_DISABLE_NEO4J=true"}
+		}
+		t.Cleanup(func() {
+			pcgEnviron = originalEnviron
+		})
+
+		got := localHostEnv("dsn", localHostRuntimeConfig{
+			Profile:      query.ProfileLocalAuthoritative,
+			GraphBackend: query.GraphBackendNornicDB,
+		}, nil)
+		if envValue(got, "PCG_QUERY_PROFILE") != string(query.ProfileLocalAuthoritative) {
+			t.Fatalf("PCG_QUERY_PROFILE = %q, want %q", envValue(got, "PCG_QUERY_PROFILE"), query.ProfileLocalAuthoritative)
+		}
+		if envValue(got, "PCG_GRAPH_BACKEND") != string(query.GraphBackendNornicDB) {
+			t.Fatalf("PCG_GRAPH_BACKEND = %q, want %q", envValue(got, "PCG_GRAPH_BACKEND"), query.GraphBackendNornicDB)
+		}
+		if envValue(got, "PCG_DISABLE_NEO4J") != "" {
+			t.Fatalf("PCG_DISABLE_NEO4J = %q, want empty override", envValue(got, "PCG_DISABLE_NEO4J"))
+		}
+	})
+}
+
+func TestRunOwnedLocalHostWithLayoutRejectsUnsupportedAuthoritativeMode(t *testing.T) {
+	t.Setenv("PCG_QUERY_PROFILE", string(query.ProfileLocalAuthoritative))
+
+	originalPrepareWorkspace := localHostPrepareWorkspace
+	originalStartEmbeddedPostgres := localHostStartEmbeddedPostgres
+	t.Cleanup(func() {
+		localHostPrepareWorkspace = originalPrepareWorkspace
+		localHostStartEmbeddedPostgres = originalStartEmbeddedPostgres
+	})
+
+	prepareCalled := false
+	postgresCalled := false
+	localHostPrepareWorkspace = func(layout pcglocal.Layout) (*pcglocal.OwnerLock, error) {
+		prepareCalled = true
+		return nil, nil
+	}
+	localHostStartEmbeddedPostgres = func(ctx context.Context, layout pcglocal.Layout) (*pcglocal.ManagedPostgres, error) {
+		postgresCalled = true
+		return nil, nil
+	}
+
+	err := runOwnedLocalHostWithLayout(context.Background(), pcglocal.Layout{WorkspaceID: "workspace-id"}, localHostModeWatch)
+	if err == nil || !strings.Contains(err.Error(), "local_authoritative") {
+		t.Fatalf("runOwnedLocalHostWithLayout() error = %v, want local_authoritative error", err)
+	}
+	if prepareCalled {
+		t.Fatal("runOwnedLocalHostWithLayout() prepared workspace before rejecting unsupported authoritative mode")
+	}
+	if postgresCalled {
+		t.Fatal("runOwnedLocalHostWithLayout() started postgres before rejecting unsupported authoritative mode")
+	}
+}
+
+func TestRuntimeConfigFromOwnerRecordDefaultsAuthoritativeBackendToNornicDB(t *testing.T) {
+	got, err := runtimeConfigFromOwnerRecord(pcglocal.OwnerRecord{
+		Profile: string(query.ProfileLocalAuthoritative),
+	})
+	if err != nil {
+		t.Fatalf("runtimeConfigFromOwnerRecord() error = %v, want nil", err)
+	}
+	if got.Profile != query.ProfileLocalAuthoritative {
+		t.Fatalf("Profile = %q, want %q", got.Profile, query.ProfileLocalAuthoritative)
+	}
+	if got.GraphBackend != query.GraphBackendNornicDB {
+		t.Fatalf("GraphBackend = %q, want %q", got.GraphBackend, query.GraphBackendNornicDB)
+	}
+}
+
+func envValue(env []string, key string) string {
+	prefix := key + "="
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			return strings.TrimPrefix(entry, prefix)
+		}
+	}
+	return ""
+}

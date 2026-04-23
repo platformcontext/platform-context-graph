@@ -94,6 +94,28 @@ func TestEnsureLayoutVersion(t *testing.T) {
 			t.Fatalf("EnsureLayoutVersion() error = %v, want %v", err, ErrIncompatibleLayoutVersion)
 		}
 	})
+
+	t.Run("owner lock alone does not make first boot incompatible", func(t *testing.T) {
+		layout := testLayout(t)
+		if err := os.MkdirAll(layout.RootDir, 0o700); err != nil {
+			t.Fatalf("MkdirAll() error = %v, want nil", err)
+		}
+		if err := os.WriteFile(layout.OwnerLockPath, []byte(""), 0o600); err != nil {
+			t.Fatalf("WriteFile(owner.lock) error = %v, want nil", err)
+		}
+
+		if err := EnsureLayoutVersion(layout, "v3"); err != nil {
+			t.Fatalf("EnsureLayoutVersion() error = %v, want nil", err)
+		}
+
+		got, err := ReadLayoutVersion(layout.VersionPath)
+		if err != nil {
+			t.Fatalf("ReadLayoutVersion() error = %v, want nil", err)
+		}
+		if got != "v3" {
+			t.Fatalf("VERSION = %q, want %q", got, "v3")
+		}
+	})
 }
 
 func testLayout(t *testing.T) Layout {

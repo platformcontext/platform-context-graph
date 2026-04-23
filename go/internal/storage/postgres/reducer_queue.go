@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	reducerEnqueueBatchSize = 500
+	reducerEnqueueBatchSize  = 500
 	columnsPerReducerEnqueue = 6
 )
 
@@ -32,7 +32,7 @@ WITH candidate AS (
     SELECT work_item_id
     FROM fact_work_items
     WHERE stage = 'reducer'
-      AND status IN ('pending', 'retrying')
+      AND status IN ('pending', 'retrying', 'claimed', 'running')
       AND (visible_at IS NULL OR visible_at <= $1)
       AND (claim_until IS NULL OR claim_until <= $1)
       AND ($2 = '' OR domain = $2)
