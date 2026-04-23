@@ -22,7 +22,7 @@
 
 | Phase | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
-| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown | syntax verification |
+| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `TestNornicDBSyntaxVerification` opt-in gate added | syntax gaps must be resolved before support |
 | Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; `pcg graph start|stop|logs|upgrade` and `pcg install nornicdb` still intentionally stubbed | real installer and public lifecycle commands |
 | Adapter conformance | Not started | — | `GraphQuery`/`GraphWrite` adapter, syntax verification, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
@@ -65,7 +65,7 @@ Go library.
 
 Feature evidence (audited 2026-04-22 against the PCG Cypher query surface):
 
-- 100% coverage of the Cypher features PCG uses today, including:
+- Partial coverage of the Cypher features PCG uses today, including:
   - `MATCH` / `OPTIONAL MATCH`
   - `MERGE` with implicit and explicit `ON CREATE SET` / `ON MATCH SET`
   - Variable-length paths `*1..N`, `*0..N`, unbounded `*`
@@ -77,10 +77,31 @@ Feature evidence (audited 2026-04-22 against the PCG Cypher query surface):
   - `WHERE EXISTS { MATCH ... }` pattern predicates
   - `any(...)`, `all(...)` predicates
   - `CASE WHEN ... THEN ... ELSE`, list comprehensions, `coalesce()`
-  - `CREATE CONSTRAINT ... REQUIRE (a,b,c) IS UNIQUE` composite keys
+  - Single-property `CREATE CONSTRAINT ... IS UNIQUE`
+  - Composite `CREATE CONSTRAINT ... IS NODE KEY`
   - `CREATE INDEX ... IF NOT EXISTS`
-  - Fulltext index creation (docs indicate supported; syntax verification
-    required)
+  - Fulltext procedure creation via
+    `CALL db.index.fulltext.createNodeIndex(...)`
+- Failed PCG-hot-path syntax probes against `/tmp/nornicdb-headless`
+  on 2026-04-22:
+  - PCG schema uses composite node `IS UNIQUE`, for example
+    `REQUIRE (f.name, f.path, f.line_number) IS UNIQUE`; NornicDB
+    returned `invalid CREATE CONSTRAINT syntax`.
+  - PCG's Neo4j fulltext fallback uses multi-label
+    `CREATE FULLTEXT INDEX ... FOR (n:A|B|C) ...`; NornicDB returned
+    `invalid CREATE FULLTEXT INDEX syntax`.
+  - The same run passed the procedure fallback
+    `db.index.fulltext.createNodeIndex(...)` and
+    `COLLECT(DISTINCT {map literal})`.
+- Workaround probes against the same binary passed:
+  - Composite node identity can be expressed as
+    `REQUIRE (f.name, f.path, f.line_number) IS NODE KEY`.
+  - Multi-label fulltext can be expressed with the procedure form
+    `db.index.fulltext.createNodeIndex(...)`.
+  - This is an adapter-compatibility option, not a production schema flip:
+    Neo4j's key constraints are an Enterprise-only class, while PCG's
+    current composite `IS UNIQUE` constraints are the shared production
+    schema contract.
 - Bolt 4.x fully implemented, Bolt 5.x backward compatible with negotiation.
 - PCG uses `github.com/neo4j/neo4j-go-driver/v5`; wire compatibility expected.
 
@@ -281,6 +302,30 @@ Before promotion to `production`:
 
 7. 896-repo remote instance parity on query and write paths.
 8. Backup / recovery / upgrade story documented.
+
+### Current Syntax Gate Result
+
+`go test ./cmd/pcg -run TestNornicDBSyntaxVerification -count=1 -v`
+skips by default unless `PCG_NORNICDB_BINARY` is set. The explicit run below
+is intentionally part of the promotion gate, not the default unit-test suite:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
+  go test ./cmd/pcg -run TestNornicDBSyntaxVerification -count=1 -v
+```
+
+Result on 2026-04-22: **failed**. Composite node `IS UNIQUE` and
+multi-label `CREATE FULLTEXT INDEX` did not parse. The
+`db.index.fulltext.createNodeIndex(...)` fallback and
+`COLLECT(DISTINCT {map literal})` probes passed. Therefore NornicDB remains
+an evaluation candidate only; `local_authoritative` must not be documented
+as supported until those syntax gaps are resolved or the PCG schema layer
+has a reviewed backend-specific compatibility plan.
+
+`TestNornicDBCompatibilityWorkarounds` passed against the same binary with
+composite `IS NODE KEY` and the multi-label fulltext procedure form. That
+workaround is viable only behind a graph-backend schema adapter or an upstream
+NornicDB parser fix; it must not replace the default Neo4j schema globally.
 
 ## Status Summary
 
