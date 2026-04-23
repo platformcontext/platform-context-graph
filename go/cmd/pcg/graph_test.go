@@ -227,6 +227,71 @@ func TestRunGraphLogsReturnsMissingLogGuidance(t *testing.T) {
 	}
 }
 
+func TestRunGraphStartExecsAuthoritativeLocalHost(t *testing.T) {
+	originalGetwd := graphGetwd
+	originalBuildLayout := graphBuildLayout
+	originalExecutable := pcgExecutable
+	originalExec := pcgExec
+	originalEnviron := pcgEnviron
+	t.Cleanup(func() {
+		graphGetwd = originalGetwd
+		graphBuildLayout = originalBuildLayout
+		pcgExecutable = originalExecutable
+		pcgExec = originalExec
+		pcgEnviron = originalEnviron
+	})
+
+	workspaceRoot := t.TempDir()
+	graphGetwd = func() (string, error) {
+		return workspaceRoot, nil
+	}
+	var resolvedWorkspaceRoot string
+	graphBuildLayout = func(workspaceRoot string) (pcglocal.Layout, error) {
+		resolvedWorkspaceRoot = workspaceRoot
+		return pcglocal.Layout{
+			WorkspaceRoot: workspaceRoot,
+			WorkspaceID:   "workspace-id",
+		}, nil
+	}
+	pcgExecutable = func() (string, error) {
+		return "/usr/local/bin/pcg", nil
+	}
+	pcgEnviron = func() []string {
+		return []string{"PCG_QUERY_PROFILE=local_lightweight"}
+	}
+	wantErr := errors.New("exec sentinel")
+	var gotBinary string
+	var gotArgs []string
+	var gotEnv []string
+	pcgExec = func(binary string, args []string, env []string) error {
+		gotBinary = binary
+		gotArgs = append([]string(nil), args...)
+		gotEnv = append([]string(nil), env...)
+		return wantErr
+	}
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("workspace-root", "", "")
+
+	err := runGraphStart(cmd, nil)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("runGraphStart() error = %v, want %v", err, wantErr)
+	}
+	if gotBinary != "/usr/local/bin/pcg" {
+		t.Fatalf("exec binary = %q, want pcg path", gotBinary)
+	}
+	wantArgs := []string{"pcg", "local-host", "watch", resolvedWorkspaceRoot}
+	if strings.Join(gotArgs, "\x00") != strings.Join(wantArgs, "\x00") {
+		t.Fatalf("exec args = %#v, want %#v", gotArgs, wantArgs)
+	}
+	if envValue(gotEnv, "PCG_QUERY_PROFILE") != string(query.ProfileLocalAuthoritative) {
+		t.Fatalf("PCG_QUERY_PROFILE = %q, want local_authoritative", envValue(gotEnv, "PCG_QUERY_PROFILE"))
+	}
+	if envValue(gotEnv, "PCG_GRAPH_BACKEND") != string(query.GraphBackendNornicDB) {
+		t.Fatalf("PCG_GRAPH_BACKEND = %q, want nornicdb", envValue(gotEnv, "PCG_GRAPH_BACKEND"))
+	}
+}
+
 func TestGraphStopSignalsLiveOwnerInsteadOfGraphProcess(t *testing.T) {
 	originalReadOwnerRecord := graphReadOwnerRecord
 	originalProcessAlive := graphProcessAlive

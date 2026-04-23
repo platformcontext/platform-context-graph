@@ -94,13 +94,24 @@ Release download and signature verification are planned but not wired yet.
 	statusCmd.Flags().String("workspace-root", "", "Explicit workspace root for local graph status")
 	graphCmd.AddCommand(statusCmd)
 
-	graphCmd.AddCommand(&cobra.Command{
+	graphStartCmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start the local graph backend sidecar",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return graphLifecycleNotWired("pcg graph start")
-		},
-	})
+		Long: strings.TrimSpace(`
+Start the local_authoritative workspace owner in the foreground.
+
+The graph backend sidecar is owned by the local host, so this command execs
+the same supervisor used by:
+
+  PCG_QUERY_PROFILE=local_authoritative pcg watch .
+
+Use Ctrl-C to stop it from the same terminal, or run "pcg graph stop" from
+another terminal for the same workspace.
+`),
+		RunE: runGraphStart,
+	}
+	graphStartCmd.Flags().String("workspace-root", "", "Explicit workspace root for local graph start")
+	graphCmd.AddCommand(graphStartCmd)
 	graphStopCmd := &cobra.Command{
 		Use:   "stop",
 		Short: "Stop the local graph backend sidecar",
@@ -147,6 +158,26 @@ func runGraphLogs(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	return graphLogsForLayout(layout)
+}
+
+func runGraphStart(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("pcg graph start accepts flags only, got %d argument(s)", len(args))
+	}
+	layout, err := graphLayoutFromCommand(cmd)
+	if err != nil {
+		return err
+	}
+	binary, err := pcgExecutable()
+	if err != nil {
+		return fmt.Errorf("resolve pcg executable: %w", err)
+	}
+	env := mergeEnvironment(pcgEnviron(), map[string]string{
+		"PCG_QUERY_PROFILE": string(query.ProfileLocalAuthoritative),
+		"PCG_GRAPH_BACKEND": string(query.GraphBackendNornicDB),
+	})
+	fmt.Fprintf(os.Stderr, "Starting local_authoritative workspace owner for %s...\n", layout.WorkspaceRoot)
+	return pcgExec(binary, []string{cleanExecutableArg0(binary), "local-host", "watch", layout.WorkspaceRoot}, env)
 }
 
 func runGraphStop(cmd *cobra.Command, args []string) error {
