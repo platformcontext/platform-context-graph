@@ -31,6 +31,7 @@ var (
 	graphSignalProcess     = signalProcess
 	graphStopPollInterval  = 200 * time.Millisecond
 	graphStopTimeout       = localGraphShutdownTimeout
+	graphInstallNornicDB   = installNornicDB
 )
 
 type graphStatusOutput struct {
@@ -126,13 +127,22 @@ another terminal for the same workspace.
 	}
 	graphLogsCmd.Flags().String("workspace-root", "", "Explicit workspace root for local graph logs")
 	graphCmd.AddCommand(graphLogsCmd)
-	graphCmd.AddCommand(&cobra.Command{
+	graphUpgradeCmd := &cobra.Command{
 		Use:   "upgrade",
 		Short: "Upgrade the local graph backend sidecar",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return graphLifecycleNotWired("pcg graph upgrade")
-		},
-	})
+		Long: strings.TrimSpace(`
+Replace the managed local NornicDB binary from a verified local executable.
+
+The graph backend must be stopped first. This command is local-file only today:
+
+  pcg graph upgrade --from /absolute/path/to/nornicdb-headless
+`),
+		RunE: runGraphUpgrade,
+	}
+	graphUpgradeCmd.Flags().String("workspace-root", "", "Explicit workspace root for local graph upgrade")
+	graphUpgradeCmd.Flags().String("from", "", "Upgrade from an existing local NornicDB binary")
+	graphUpgradeCmd.Flags().String("sha256", "", "Expected SHA-256 checksum for --from")
+	graphCmd.AddCommand(graphUpgradeCmd)
 }
 
 func runGraphStatus(cmd *cobra.Command, args []string) error {
@@ -189,6 +199,34 @@ func runGraphStop(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	return graphStopForLayout(layout)
+}
+
+func runGraphUpgrade(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("pcg graph upgrade accepts flags only, got %d argument(s)", len(args))
+	}
+	layout, err := graphLayoutFromCommand(cmd)
+	if err != nil {
+		return err
+	}
+	from, err := cmd.Flags().GetString("from")
+	if err != nil {
+		return err
+	}
+	checksum, err := cmd.Flags().GetString("sha256")
+	if err != nil {
+		return err
+	}
+	result, err := graphUpgradeForLayout(layout, installNornicDBOptions{
+		From:   from,
+		SHA256: checksum,
+		Force:  true,
+	})
+	if err != nil {
+		return err
+	}
+	printJSON(result)
+	return nil
 }
 
 func graphLayoutFromCommand(cmd *cobra.Command) (pcglocal.Layout, error) {
@@ -308,6 +346,18 @@ func graphStopForLayout(layout pcglocal.Layout) error {
 		return err
 	}
 	return waitForGraphStop(record, graphStopTimeout)
+}
+
+func graphUpgradeForLayout(layout pcglocal.Layout, opts installNornicDBOptions) (installNornicDBResult, error) {
+	record, err := graphReadOwnerRecord(layout.OwnerRecordPath)
+	if err == nil && (graphProcessAlive(record.PID) || graphStopGraphHealthy(record)) {
+		return installNornicDBResult{}, fmt.Errorf("workspace graph backend is running; run pcg graph stop before upgrade")
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return installNornicDBResult{}, err
+	}
+	opts.Force = true
+	return graphInstallNornicDB(opts)
 }
 
 func waitForGraphStop(record pcglocal.OwnerRecord, timeout time.Duration) error {

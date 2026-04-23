@@ -417,6 +417,120 @@ func TestGraphStopRejectsLightweightOwner(t *testing.T) {
 	}
 }
 
+func TestRunGraphUpgradeRequiresStoppedOwner(t *testing.T) {
+	originalGetwd := graphGetwd
+	originalBuildLayout := graphBuildLayout
+	originalReadOwnerRecord := graphReadOwnerRecord
+	originalProcessAlive := graphProcessAlive
+	originalInstall := graphInstallNornicDB
+	t.Cleanup(func() {
+		graphGetwd = originalGetwd
+		graphBuildLayout = originalBuildLayout
+		graphReadOwnerRecord = originalReadOwnerRecord
+		graphProcessAlive = originalProcessAlive
+		graphInstallNornicDB = originalInstall
+	})
+
+	workspaceRoot := t.TempDir()
+	graphGetwd = func() (string, error) {
+		return workspaceRoot, nil
+	}
+	graphBuildLayout = func(workspaceRoot string) (pcglocal.Layout, error) {
+		return pcglocal.Layout{
+			WorkspaceRoot:   workspaceRoot,
+			WorkspaceID:     "workspace-id",
+			OwnerRecordPath: "/workspace/owner.json",
+		}, nil
+	}
+	graphReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
+		return pcglocal.OwnerRecord{
+			PID:           42,
+			Profile:       string(query.ProfileLocalAuthoritative),
+			GraphBackend:  string(query.GraphBackendNornicDB),
+			GraphPID:      88,
+			GraphBoltPort: 17687,
+			GraphHTTPPort: 17474,
+		}, nil
+	}
+	graphProcessAlive = func(pid int) bool {
+		return pid == 42
+	}
+	graphInstallNornicDB = func(opts installNornicDBOptions) (installNornicDBResult, error) {
+		t.Fatal("graphInstallNornicDB called while owner was live")
+		return installNornicDBResult{}, nil
+	}
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("workspace-root", "", "")
+	cmd.Flags().String("from", "/tmp/nornicdb-headless", "")
+	cmd.Flags().String("sha256", "", "")
+
+	err := runGraphUpgrade(cmd, nil)
+	if err == nil {
+		t.Fatal("runGraphUpgrade() error = nil, want live-owner error")
+	}
+	if !strings.Contains(err.Error(), "pcg graph stop") {
+		t.Fatalf("runGraphUpgrade() error = %q, want stop guidance", err.Error())
+	}
+}
+
+func TestRunGraphUpgradeInstallsWithForceWhenStopped(t *testing.T) {
+	originalGetwd := graphGetwd
+	originalBuildLayout := graphBuildLayout
+	originalReadOwnerRecord := graphReadOwnerRecord
+	originalInstall := graphInstallNornicDB
+	t.Cleanup(func() {
+		graphGetwd = originalGetwd
+		graphBuildLayout = originalBuildLayout
+		graphReadOwnerRecord = originalReadOwnerRecord
+		graphInstallNornicDB = originalInstall
+	})
+
+	workspaceRoot := t.TempDir()
+	graphGetwd = func() (string, error) {
+		return workspaceRoot, nil
+	}
+	graphBuildLayout = func(workspaceRoot string) (pcglocal.Layout, error) {
+		return pcglocal.Layout{
+			WorkspaceRoot:   workspaceRoot,
+			WorkspaceID:     "workspace-id",
+			OwnerRecordPath: "/workspace/owner.json",
+		}, nil
+	}
+	graphReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
+		return pcglocal.OwnerRecord{}, os.ErrNotExist
+	}
+	var gotOptions installNornicDBOptions
+	graphInstallNornicDB = func(opts installNornicDBOptions) (installNornicDBResult, error) {
+		gotOptions = opts
+		return installNornicDBResult{
+			Installed:  true,
+			BinaryPath: "/pcg/bin/nornicdb-headless",
+			Version:    "v1.0.43",
+		}, nil
+	}
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("workspace-root", "", "")
+	cmd.Flags().String("from", "/tmp/nornicdb-headless", "")
+	cmd.Flags().String("sha256", "abc123", "")
+
+	output := captureStdout(t, func() {
+		if err := runGraphUpgrade(cmd, nil); err != nil {
+			t.Fatalf("runGraphUpgrade() error = %v, want nil", err)
+		}
+	})
+	if !gotOptions.Force {
+		t.Fatal("Force = false, want true for upgrade")
+	}
+	if gotOptions.From != "/tmp/nornicdb-headless" || gotOptions.SHA256 != "abc123" {
+		t.Fatalf("upgrade options = %+v, want source/checksum flags", gotOptions)
+	}
+	if !strings.Contains(output, `"version": "v1.0.43"`) {
+		t.Fatalf("runGraphUpgrade() output = %q, want JSON result", output)
+	}
+}
+
 func TestGraphLifecycleNotWiredReturnsActionableError(t *testing.T) {
 	err := graphLifecycleNotWired("pcg graph start")
 	if err == nil {

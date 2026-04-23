@@ -153,12 +153,12 @@ The command performs, in order:
 ### Upgrade
 
 ```bash
-pcg install nornicdb --version <semver>
+pcg graph upgrade --from /absolute/path/to/nornicdb-headless
 ```
 
-Replaces the installed binary with the requested version. The previous
-binary is retained at `${PCG_HOME}/bin/nornicdb-headless.previous` for
-rollback.
+Replaces the installed binary from a verified local executable after the
+workspace graph has been stopped. Release-backed semver upgrades remain future
+work.
 
 ### Rollback
 
