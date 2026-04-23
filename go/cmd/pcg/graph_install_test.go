@@ -1,9 +1,14 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -170,6 +175,118 @@ func TestInstallNornicDBRequiresLocalSourcePath(t *testing.T) {
 	}
 }
 
+func TestInstallNornicDBExtractsHeadlessBinaryFromTarGz(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a Unix executable script")
+	}
+
+	homeDir := t.TempDir()
+	t.Setenv("PCG_HOME", homeDir)
+
+	sourceBinary := filepath.Join(t.TempDir(), "nornicdb-headless")
+	writeFakeNornicDBBinaryAt(t, sourceBinary, "NornicDB v1.0.42\n")
+	archivePath := filepath.Join(t.TempDir(), "nornicdb-headless-darwin-arm64.tar.gz")
+	archiveContent := writeTarGzWithBinary(t, archivePath, "release/bin/nornicdb-headless", sourceBinary)
+	wantSourceSHA := sha256BytesHex(archiveContent)
+
+	result, err := installNornicDB(installNornicDBOptions{
+		From:   archivePath,
+		SHA256: wantSourceSHA,
+	})
+	if err != nil {
+		t.Fatalf("installNornicDB() error = %v, want nil", err)
+	}
+	if result.Version != "v1.0.42" {
+		t.Fatalf("Version = %q, want %q", result.Version, "v1.0.42")
+	}
+	if result.SourceSHA256 != wantSourceSHA {
+		t.Fatalf("SourceSHA256 = %q, want %q", result.SourceSHA256, wantSourceSHA)
+	}
+	if result.SourceKind != string(nornicDBInstallSourceLocalArchive) {
+		t.Fatalf("SourceKind = %q, want %q", result.SourceKind, nornicDBInstallSourceLocalArchive)
+	}
+	if !result.Headless {
+		t.Fatal("Headless = false, want true")
+	}
+}
+
+func TestInstallNornicDBDownloadsArchiveFromURL(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a Unix executable script")
+	}
+
+	homeDir := t.TempDir()
+	t.Setenv("PCG_HOME", homeDir)
+
+	sourceBinary := filepath.Join(t.TempDir(), "nornicdb-headless")
+	writeFakeNornicDBBinaryAt(t, sourceBinary, "NornicDB v1.0.42\n")
+	archivePath := filepath.Join(t.TempDir(), "nornicdb-headless-darwin-arm64.tar.gz")
+	archiveContent := writeTarGzWithBinary(t, archivePath, "release/bin/nornicdb-headless", sourceBinary)
+	wantSourceSHA := sha256BytesHex(archiveContent)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(archiveContent)
+	}))
+	defer server.Close()
+
+	result, err := installNornicDB(installNornicDBOptions{
+		From:   server.URL + "/nornicdb-headless-darwin-arm64.tar.gz",
+		SHA256: wantSourceSHA,
+	})
+	if err != nil {
+		t.Fatalf("installNornicDB() error = %v, want nil", err)
+	}
+	if result.Version != "v1.0.42" {
+		t.Fatalf("Version = %q, want %q", result.Version, "v1.0.42")
+	}
+	if result.SourceSHA256 != wantSourceSHA {
+		t.Fatalf("SourceSHA256 = %q, want %q", result.SourceSHA256, wantSourceSHA)
+	}
+	if result.SourceKind != string(nornicDBInstallSourceDownloadedArchive) {
+		t.Fatalf("SourceKind = %q, want %q", result.SourceKind, nornicDBInstallSourceDownloadedArchive)
+	}
+}
+
+func TestInstallNornicDBRejectsArchiveWithoutNornicDBBinary(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("PCG_HOME", homeDir)
+
+	archivePath := filepath.Join(t.TempDir(), "nornicdb-headless-darwin-arm64.tar.gz")
+	var archive bytes.Buffer
+	gzipWriter := gzip.NewWriter(&archive)
+	tarWriter := tar.NewWriter(gzipWriter)
+	content := []byte("hello\n")
+	header := &tar.Header{
+		Name: "release/README.txt",
+		Mode: 0o644,
+		Size: int64(len(content)),
+	}
+	if err := tarWriter.WriteHeader(header); err != nil {
+		t.Fatalf("tarWriter.WriteHeader() error = %v, want nil", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("tarWriter.Write() error = %v, want nil", err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("tarWriter.Close() error = %v, want nil", err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatalf("gzipWriter.Close() error = %v, want nil", err)
+	}
+	if err := os.WriteFile(archivePath, archive.Bytes(), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v, want nil", archivePath, err)
+	}
+
+	_, err := installNornicDB(installNornicDBOptions{From: archivePath})
+	if err == nil {
+		t.Fatal("installNornicDB() error = nil, want archive extraction error")
+	}
+	if !strings.Contains(err.Error(), "did not contain a usable NornicDB binary") {
+		t.Fatalf("installNornicDB() error = %q, want missing binary guidance", err.Error())
+	}
+}
+
 func TestResolveNornicDBBinaryPrefersManagedInstall(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a Unix executable script")
@@ -255,4 +372,42 @@ func fileSHA256Hex(t *testing.T, path string) string {
 	}
 	sum := sha256.Sum256(content)
 	return hex.EncodeToString(sum[:])
+}
+
+func sha256BytesHex(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
+}
+
+func writeTarGzWithBinary(t *testing.T, archivePath, entryName, sourceBinary string) []byte {
+	t.Helper()
+	content, err := os.ReadFile(sourceBinary)
+	if err != nil {
+		t.Fatalf("os.ReadFile(%q) error = %v, want nil", sourceBinary, err)
+	}
+
+	var archive bytes.Buffer
+	gzipWriter := gzip.NewWriter(&archive)
+	tarWriter := tar.NewWriter(gzipWriter)
+	header := &tar.Header{
+		Name: entryName,
+		Mode: 0o755,
+		Size: int64(len(content)),
+	}
+	if err := tarWriter.WriteHeader(header); err != nil {
+		t.Fatalf("tarWriter.WriteHeader() error = %v, want nil", err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatalf("tarWriter.Write() error = %v, want nil", err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("tarWriter.Close() error = %v, want nil", err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatalf("gzipWriter.Close() error = %v, want nil", err)
+	}
+	if err := os.WriteFile(archivePath, archive.Bytes(), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v, want nil", archivePath, err)
+	}
+	return archive.Bytes()
 }
