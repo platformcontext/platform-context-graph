@@ -155,27 +155,28 @@ PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
   go test ./cmd/pcg -run TestNornicDBGroupedWriteSafetyProbe -count=1 -v
 ```
 
-As of the 2026-04-23 evaluation, the probe proves three facts against a real
-NornicDB sidecar:
+As of the 2026-04-23 evaluation, the probe proves these facts against the
+rebuilt linuxdynasty-fork headless binary
+`/tmp/nornicdb-headless-pcg-rollback` (`v1.0.42-hotfix`):
 
 - PCG canonical grouped writes can commit the basic repository/file/function
   node shape.
 - Client-side grouped write timeout prevents the timeout probe from partially
   committing.
-- The `/tmp/nornicdb-headless` build under test (`v1.0.42-hotfix`) reported
-  rollback marker count `1` for grouped rollback, clean explicit rollback, and
-  failed-statement explicit rollback probes. PCG therefore treats rollback as
-  not proven on the Neo4j-driver path and grouped canonical writes MUST remain
-  disabled for normal laptop runs.
+- Grouped rollback, clean explicit rollback, and failed-statement explicit
+  rollback all report marker count `0` on the PCG Neo4j-driver path.
 
-The promotion gate is intentionally stricter and currently expected to fail
-until the PCG Neo4j-driver path observes rollback-safe grouped transactions:
+The promotion gate is intentionally stricter than the observable safety probe:
 
 ```bash
-PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless-pcg-rollback \
 PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true \
   go test ./cmd/pcg -run TestNornicDBGroupedWriteRollbackConformance -count=1 -v
 ```
+
+Normal laptop runs still leave `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` unset
+until a fixed NornicDB binary is release-backed and the broader adapter matrix
+passes.
 
 ## Terraform Provider-Schema Gate
 

@@ -57,8 +57,8 @@ RETURN count(*) AS count`, map[string]any{
 			if err != nil {
 				t.Fatalf("count rollback marker error = %v, want nil", err)
 			}
-			if count < 0 || count > 1 {
-				t.Fatalf("rollback marker count = %d, want 0 or 1", count)
+			if count != 0 {
+				t.Fatalf("rollback marker count = %d, want 0", count)
 			}
 			t.Logf("failed grouped transaction rollback marker count = %d", count)
 		})
@@ -73,8 +73,8 @@ RETURN count(*) AS count`, map[string]any{
 			if err != nil {
 				t.Fatalf("count clean rollback marker error = %v, want nil", err)
 			}
-			if count < 0 || count > 1 {
-				t.Fatalf("clean rollback marker count = %d, want 0 or 1", count)
+			if count != 0 {
+				t.Fatalf("clean rollback marker count = %d, want 0", count)
 			}
 			t.Logf("clean explicit rollback marker count = %d", count)
 		})
@@ -90,8 +90,8 @@ RETURN count(*) AS count`, map[string]any{
 			if err != nil {
 				t.Fatalf("count explicit rollback marker error = %v, want nil", err)
 			}
-			if count < 0 || count > 1 {
-				t.Fatalf("explicit rollback marker count = %d, want 0 or 1", count)
+			if count != 0 {
+				t.Fatalf("explicit rollback marker count = %d, want 0", count)
 			}
 			t.Logf("explicit rollback after failed statement marker count = %d", count)
 		})
@@ -150,6 +150,31 @@ func TestNornicDBGroupedWriteRollbackConformance(t *testing.T) {
 		}
 		if count != 0 {
 			t.Fatalf("rollback marker count = %d, want 0", count)
+		}
+
+		cleanNodeID := "pcg-nornicdb-clean-explicit-rollback-conformance"
+		if err := executeCleanExplicitRollbackProbe(ctx, driver, cleanNodeID); err != nil {
+			t.Fatalf("executeCleanExplicitRollbackProbe() error = %v, want nil", err)
+		}
+		count, err = countRollbackProbeNodes(ctx, driver, cleanNodeID)
+		if err != nil {
+			t.Fatalf("count clean rollback marker error = %v, want nil", err)
+		}
+		if count != 0 {
+			t.Fatalf("clean rollback marker count = %d, want 0", count)
+		}
+
+		failedNodeID := "pcg-nornicdb-failed-explicit-rollback-conformance"
+		err = executeExplicitRollbackProbe(ctx, driver, failedNodeID)
+		if err == nil {
+			t.Fatal("executeExplicitRollbackProbe() error = nil, want syntax error")
+		}
+		count, err = countRollbackProbeNodes(ctx, driver, failedNodeID)
+		if err != nil {
+			t.Fatalf("count explicit rollback marker error = %v, want nil", err)
+		}
+		if count != 0 {
+			t.Fatalf("explicit rollback marker count = %d, want 0", count)
 		}
 	})
 }

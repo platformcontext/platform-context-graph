@@ -24,7 +24,7 @@
 | --- | --- | --- | --- |
 | Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB; 2026-04-23 MCP smoke proved content-index-backed `search_file_content` and `find_code` continue to work while canonical graph projection degrades on a bounded NornicDB write timeout | release-backed installer, perf smoke |
 | Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` verifies and copies a local binary; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; current branch stopped-owner `pcg graph upgrade --from <path>`; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped | release download/signature installer and perf smoke |
-| Adapter conformance | In progress | current branch routes NornicDB canonical writes through sequential execute-only writes by default, applies Bolt `tx_timeout` metadata plus client context deadlines, preserves production Neo4j grouped writes, and adds the explicit `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` conformance switch for proving NornicDB grouped writes; 2026-04-23 `TestNornicDBGroupedWriteSafetyProbe` against `/tmp/nornicdb-headless` (`v1.0.42-hotfix`) showed grouped writes can commit a PCG repository/file/function shape and timeout is bounded, but grouped rollback, clean explicit rollback, and failed-statement explicit rollback probes all left marker count `1` on the Neo4j-driver path | rollback-safe grouped-write conformance, full `GraphQuery`/`GraphWrite` adapter, matrix runs |
+| Adapter conformance | In progress | current branch routes NornicDB canonical writes through sequential execute-only writes by default, applies Bolt `tx_timeout` metadata plus client context deadlines, preserves production Neo4j grouped writes, and adds the explicit `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` conformance switch for proving NornicDB grouped writes; 2026-04-23 rebuilt linuxdynasty-fork headless binary `/tmp/nornicdb-headless-pcg-rollback` (`v1.0.42-hotfix`) passed `TestNornicDBGroupedWriteSafetyProbe` and strict `TestNornicDBGroupedWriteRollbackConformance`: PCG repository/file/function grouped commit succeeded, grouped rollback marker count `0`, clean explicit rollback marker count `0`, failed-statement explicit rollback marker count `0`, and timeout probe left no partial write | release-backed fixed NornicDB binary, full `GraphQuery`/`GraphWrite` adapter, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
 
 ## Context
@@ -120,13 +120,16 @@ Feature evidence (audited 2026-04-22 against the PCG Cypher query surface):
   against it. PCG keeps those grouped writes behind
   `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` until conformance proves
   rollback, timeout, and no-partial-write behavior on the PCG workload.
-- The 2026-04-23 grouped-write safety probe showed that the
-  `/tmp/nornicdb-headless` sidecar (`v1.0.42-hotfix`) can commit a PCG
-  canonical repository/file/function shape and respects PCG's client-side
-  timeout wrapper, but grouped rollback, clean explicit rollback, and
-  failed-statement explicit rollback probes all left marker count `1` on the
-  Neo4j-driver path. That is not rollback-safe enough for PCG canonical
-  writes. The promotion gate is
+- The 2026-04-23 grouped-write safety probe against a rebuilt
+  linuxdynasty-fork headless binary at `/tmp/nornicdb-headless-pcg-rollback`
+  (`v1.0.42-hotfix`) passed the PCG Neo4j-driver path: the PCG canonical
+  repository/file/function grouped commit succeeded, grouped rollback marker
+  count was `0`, clean explicit rollback marker count was `0`,
+  failed-statement explicit rollback marker count was `0`, and the timeout
+  probe left no partial write. That makes grouped writes a valid conformance
+  surface for the fixed binary; promotion still requires a release-backed
+  fixed NornicDB binary plus the broader matrix and perf gates. The promotion
+  gate is
   `PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true go test ./cmd/pcg -run TestNornicDBGroupedWriteRollbackConformance`.
 
 Non-standard extras NornicDB provides (not required by PCG today, but
@@ -382,10 +385,12 @@ Bolt path wires `DBQueryExecutor` with `BeginTransaction`,
 NornicDB transaction tests passed with
 `go test -tags 'noui nolocalllm' ./pkg/bolt ./pkg/txsession ...`. PCG therefore
 added a backend capability router instead of permanently hiding grouped writes.
-The follow-up PCG sidecar probe is stricter because it uses the exact
-Neo4j-driver path PCG uses. That probe still observed rollback marker count
-`1` for grouped and explicit rollback cases against `/tmp/nornicdb-headless`
-`v1.0.42-hotfix`. Normal NornicDB runs therefore stay sequential, while
+The stricter PCG sidecar probe uses the exact Neo4j-driver path PCG uses. The
+rebuilt linuxdynasty-fork binary at `/tmp/nornicdb-headless-pcg-rollback`
+passed that probe after fixing transaction-wrapper reuse for recursive
+`UNWIND ... MATCH ... MERGE` execution and database-scoped Bolt rollback.
+Normal NornicDB runs stay sequential until that fixed binary is release-backed
+and the broader adapter matrix passes, while
 `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` exposes grouped writes for adapter
 conformance only.
 
