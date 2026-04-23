@@ -315,6 +315,8 @@ func TestLocalHostEnvHonorsRuntimeConfig(t *testing.T) {
 				Backend:  query.GraphBackendNornicDB,
 				Address:  "127.0.0.1",
 				BoltPort: 17687,
+				Username: "admin",
+				Password: "workspace-secret",
 			},
 			nil,
 		)
@@ -324,8 +326,8 @@ func TestLocalHostEnvHonorsRuntimeConfig(t *testing.T) {
 		if envValue(got, "PCG_NEO4J_USERNAME") != localNornicDBAdminUsername {
 			t.Fatalf("PCG_NEO4J_USERNAME = %q, want %q", envValue(got, "PCG_NEO4J_USERNAME"), localNornicDBAdminUsername)
 		}
-		if envValue(got, "PCG_NEO4J_PASSWORD") != localNornicDBAdminPassword {
-			t.Fatalf("PCG_NEO4J_PASSWORD = %q, want %q", envValue(got, "PCG_NEO4J_PASSWORD"), localNornicDBAdminPassword)
+		if envValue(got, "PCG_NEO4J_PASSWORD") != "workspace-secret" {
+			t.Fatalf("PCG_NEO4J_PASSWORD = %q, want %q", envValue(got, "PCG_NEO4J_PASSWORD"), "workspace-secret")
 		}
 		if envValue(got, "DEFAULT_DATABASE") != localNornicDBDefaultDatabase {
 			t.Fatalf("DEFAULT_DATABASE = %q, want %q", envValue(got, "DEFAULT_DATABASE"), localNornicDBDefaultDatabase)
@@ -381,6 +383,8 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 			HTTPPort:   17474,
 			DataDir:    "/workspace/graph/nornicdb",
 			LogPath:    "/workspace/logs/graph-nornicdb.log",
+			Username:   "admin",
+			Password:   "workspace-secret",
 			PID:        88,
 			Cmd:        &exec.Cmd{},
 		}, nil
@@ -431,6 +435,12 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 	}
 	if written.GraphVersion != "1.0.42" {
 		t.Fatalf("written.GraphVersion = %q, want %q", written.GraphVersion, "1.0.42")
+	}
+	if written.GraphUsername != "admin" {
+		t.Fatalf("written.GraphUsername = %q, want %q", written.GraphUsername, "admin")
+	}
+	if written.GraphPassword != "workspace-secret" {
+		t.Fatalf("written.GraphPassword = %q, want %q", written.GraphPassword, "workspace-secret")
 	}
 }
 

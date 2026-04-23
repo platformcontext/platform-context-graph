@@ -190,6 +190,8 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 		GraphHTTPPort:      graphHTTPPort(managedGraph),
 		GraphDataDir:       graphDataDir(managedGraph),
 		GraphVersion:       graphVersion(managedGraph),
+		GraphUsername:      graphUsername(managedGraph),
+		GraphPassword:      graphPassword(managedGraph),
 	}
 	if err := localHostWriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
 		return err
@@ -258,7 +260,7 @@ func runAttachedLocalMCPStdio(ctx context.Context, layout pcglocal.Layout) (bool
 	}
 	if runtimeConfig.Profile == query.ProfileLocalAuthoritative && !localHostGraphHealthy(record) {
 		return true, fmt.Errorf(
-			"workspace owner is running profile %q with graph backend %q, but the graph backend is unhealthy",
+			"workspace owner is running profile %q with graph backend %q, but the graph backend is unhealthy; run pcg graph status or restart the workspace owner",
 			runtimeConfig.Profile,
 			runtimeConfig.GraphBackend,
 		)

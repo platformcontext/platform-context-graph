@@ -53,6 +53,13 @@ not make the full binary smaller. Hosted evaluation and future production
 packaging may use the full deployment artifact when that profile is
 promoted.
 
+PCG verifies candidate binaries by running `<binary> version` and requiring a
+`NornicDB ...` version string. A random admin password is generated once per
+workspace graph data root and stored in
+`graph/nornicdb/pcg-credentials.json` with `0600` permissions. The live owner
+copies it to `owner.json` so attach processes can connect without a hardcoded
+shared secret.
+
 ## Current manual install options
 
 Until `pcg install nornicdb` ships, a developer can provide the binary in
