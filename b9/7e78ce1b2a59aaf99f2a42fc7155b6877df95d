@@ -1,0 +1,59 @@
+go/internal/reducer/graph_projection_phase_test.go
+  e27ce815bbe89792 128-159
+go/internal/query/content_reader_repository_catalog.go
+  e27ce815bbe89792 10-11,19,88,98
+tests/fixtures/graph_analysis_compose/README.md
+  e27ce815bbe89792 1-20
+go/internal/query/content_reader_test.go
+  e27ce815bbe89792 10,83-113
+go/internal/reducer/code_call_materialization_go_receiver_test.go
+  e27ce815bbe89792 1-90
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 81,263-282,557-567,578-581
+tests/fixtures/graph_analysis_compose/graph-analysis-go/flow.go
+  e27ce815bbe89792 1-21
+go/internal/query/infra.go
+  e27ce815bbe89792 322-329,331-343,345-347
+tests/fixtures/graph_analysis_compose/graph-analysis-go/go.mod
+  e27ce815bbe89792 1-3
+go/internal/reducer/code_call_projection_runner_test.go
+  e27ce815bbe89792 503,534,581-582
+docs/docs/deployment/docker-compose.md
+  e27ce815bbe89792 145-155,181-189
+scripts/verify_graph_analysis_compose.sh
+  e27ce815bbe89792 1-346
+go/internal/parser/go_call_metadata_test.go
+  e27ce815bbe89792 1-63
+tests/fixtures/graph_analysis_compose/graph-analysis-go/main.go
+  e27ce815bbe89792 1-5
+docker-compose.yaml
+  e27ce815bbe89792 10-12
+go/internal/query/relationship_slices_test.go
+  e27ce815bbe89792 1-96
+go/internal/reducer/shared_projection.go
+  e27ce815bbe89792 91,93-96
+go/internal/parser/go_language.go
+  e27ce815bbe89792 119,173-282
+scripts/verify_graph_analysis_dogfood_compose.sh
+  e27ce815bbe89792 1-368
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "b97e78ce1b2a59aaf99f2a42fc7155b6877df95d",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 944,
+      "total_deletions": 31,
+      "accepted_lines": 1290,
+      "overriden_lines": 0
+    }
+  }
+}
