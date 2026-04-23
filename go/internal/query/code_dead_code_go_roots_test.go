@@ -109,6 +109,16 @@ func TestHandleDeadCodeExcludesGoFrameworkRootsBySignature(t *testing.T) {
 	if got, want := result["entity_id"], "go-helper"; got != want {
 		t.Fatalf("result[entity_id] = %#v, want %#v", got, want)
 	}
+	analysis, ok := resp["analysis"].(map[string]any)
+	if !ok {
+		t.Fatalf("analysis type = %T, want map[string]any", resp["analysis"])
+	}
+	if got, want := analysis["framework_roots_from_parser_metadata"], float64(0); got != want {
+		t.Fatalf("analysis[framework_roots_from_parser_metadata] = %#v, want %#v", got, want)
+	}
+	if got, want := analysis["framework_roots_from_source_fallback"], float64(3); got != want {
+		t.Fatalf("analysis[framework_roots_from_source_fallback] = %#v, want %#v", got, want)
+	}
 }
 
 func TestHandleDeadCodeReportsModeledGoFrameworkRootsInAnalysis(t *testing.T) {
@@ -212,6 +222,12 @@ func TestHandleDeadCodeReportsModeledGoFrameworkRootsInAnalysis(t *testing.T) {
 	}
 	if got, want := modeledFrameworkRoots[2], "go.controller_runtime_reconcile_signature"; got != want {
 		t.Fatalf("analysis[modeled_framework_roots][2] = %#v, want %#v", got, want)
+	}
+	if got, want := analysis["framework_roots_from_parser_metadata"], float64(0); got != want {
+		t.Fatalf("analysis[framework_roots_from_parser_metadata] = %#v, want %#v", got, want)
+	}
+	if got, want := analysis["framework_roots_from_source_fallback"], float64(0); got != want {
+		t.Fatalf("analysis[framework_roots_from_source_fallback] = %#v, want %#v", got, want)
 	}
 	if got, want := analysis["roots_skipped_missing_source"], float64(0); got != want {
 		t.Fatalf("analysis[roots_skipped_missing_source] = %#v, want %#v", got, want)
@@ -342,6 +358,12 @@ func TestHandleDeadCodeReportsMissingSourceForGoFrameworkRootChecks(t *testing.T
 	if !ok {
 		t.Fatalf("analysis type = %T, want map[string]any", data["analysis"])
 	}
+	if got, want := analysis["framework_roots_from_parser_metadata"], float64(0); got != want {
+		t.Fatalf("analysis[framework_roots_from_parser_metadata] = %#v, want %#v", got, want)
+	}
+	if got, want := analysis["framework_roots_from_source_fallback"], float64(0); got != want {
+		t.Fatalf("analysis[framework_roots_from_source_fallback] = %#v, want %#v", got, want)
+	}
 	if got, want := analysis["roots_skipped_missing_source"], float64(1); got != want {
 		t.Fatalf("analysis[roots_skipped_missing_source] = %#v, want %#v", got, want)
 	}
@@ -433,6 +455,12 @@ func TestHandleDeadCodeUsesParserRootMetadataWithoutSourceCache(t *testing.T) {
 	analysis, ok := data["analysis"].(map[string]any)
 	if !ok {
 		t.Fatalf("analysis type = %T, want map[string]any", data["analysis"])
+	}
+	if got, want := analysis["framework_roots_from_parser_metadata"], float64(1); got != want {
+		t.Fatalf("analysis[framework_roots_from_parser_metadata] = %#v, want %#v", got, want)
+	}
+	if got, want := analysis["framework_roots_from_source_fallback"], float64(0); got != want {
+		t.Fatalf("analysis[framework_roots_from_source_fallback] = %#v, want %#v", got, want)
 	}
 	if got, want := analysis["roots_skipped_missing_source"], float64(1); got != want {
 		t.Fatalf("analysis[roots_skipped_missing_source] = %#v, want %#v", got, want)

@@ -94,6 +94,8 @@ Any dead-code result should be able to report:
 - applied user overrides
 - how many candidate entities skipped framework-root evaluation because source
   text was unavailable
+- how many framework roots came from parser metadata versus legacy query-time
+  source fallback
 
 That explanation must be returned in structured form, not just text prose.
 
