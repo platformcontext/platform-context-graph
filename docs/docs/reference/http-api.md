@@ -522,9 +522,11 @@ public-API, reflection, and user-configured root registry from the
 reachability spec is implemented. The response body now also includes an
 `analysis` object that reports the root categories currently modeled, the
 specific Go framework-root signatures currently recognized, and whether
-tests/generated code were excluded. `limit` defaults to `100` and is capped at
-`500`. The response also includes `truncated=true` when the bounded dead-code
-scan found more candidates than were returned.
+tests/generated code were excluded. `analysis.roots_skipped_missing_source`
+counts Go candidates where the framework-root checks could not run because the
+content store did not have source cached. `limit` defaults to `100` and is
+capped at `500`. The response also includes `truncated=true` when the bounded
+dead-code scan found more candidates than were returned.
 
 ## Content API
 

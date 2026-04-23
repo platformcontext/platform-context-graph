@@ -2,34 +2,48 @@ package query
 
 import "strings"
 
-func deadCodeIsGoHTTPHandlerRoot(result map[string]any, entity *EntityContent) bool {
-	if strings.ToLower(deadCodeEntityLanguage(result, entity)) != "go" {
+type deadCodePolicyStats struct {
+	RootsSkippedMissingSource int
+}
+
+type deadCodeGoPolicyContext struct {
+	language         string
+	normalizedSource string
+}
+
+func newDeadCodeGoPolicyContext(result map[string]any, entity *EntityContent) deadCodeGoPolicyContext {
+	return deadCodeGoPolicyContext{
+		language:         strings.ToLower(deadCodeEntityLanguage(result, entity)),
+		normalizedSource: deadCodeNormalizedSource(entity),
+	}
+}
+
+func deadCodeIsGoHTTPHandlerRoot(result map[string]any, policy deadCodeGoPolicyContext) bool {
+	if policy.language != "go" {
 		return false
 	}
 	if primaryEntityLabel(result) != "Function" {
 		return false
 	}
 
-	source := deadCodeNormalizedSource(entity)
-	return strings.Contains(source, "http.responsewriter") &&
-		strings.Contains(source, "*http.request")
+	return strings.Contains(policy.normalizedSource, "http.responsewriter") &&
+		strings.Contains(policy.normalizedSource, "*http.request")
 }
 
-func deadCodeIsGoCLICommandRoot(result map[string]any, entity *EntityContent) bool {
-	if strings.ToLower(deadCodeEntityLanguage(result, entity)) != "go" {
+func deadCodeIsGoCLICommandRoot(result map[string]any, policy deadCodeGoPolicyContext) bool {
+	if policy.language != "go" {
 		return false
 	}
 	if primaryEntityLabel(result) != "Function" {
 		return false
 	}
 
-	source := deadCodeNormalizedSource(entity)
-	return strings.Contains(source, "*cobra.command") &&
-		strings.Contains(source, "[]string")
+	return strings.Contains(policy.normalizedSource, "*cobra.command") &&
+		strings.Contains(policy.normalizedSource, "[]string")
 }
 
-func deadCodeIsGoFrameworkCallbackRoot(result map[string]any, entity *EntityContent) bool {
-	if strings.ToLower(deadCodeEntityLanguage(result, entity)) != "go" {
+func deadCodeIsGoFrameworkCallbackRoot(result map[string]any, policy deadCodeGoPolicyContext) bool {
+	if policy.language != "go" {
 		return false
 	}
 	if primaryEntityLabel(result) != "Function" {
@@ -39,25 +53,56 @@ func deadCodeIsGoFrameworkCallbackRoot(result map[string]any, entity *EntityCont
 		return false
 	}
 
-	source := deadCodeNormalizedSource(entity)
-	if !strings.Contains(source, "context.context") {
+	if !strings.Contains(policy.normalizedSource, "context.context") {
 		return false
 	}
-	if !strings.Contains(source, "request") {
+	if !strings.Contains(policy.normalizedSource, "request") {
 		return false
 	}
 
-	return (strings.Contains(source, "ctrl.request") || strings.Contains(source, "reconcile.request")) &&
-		(strings.Contains(source, "ctrl.result") || strings.Contains(source, "reconcile.result"))
+	return (strings.Contains(policy.normalizedSource, "ctrl.request") || strings.Contains(policy.normalizedSource, "reconcile.request")) &&
+		(strings.Contains(policy.normalizedSource, "ctrl.result") || strings.Contains(policy.normalizedSource, "reconcile.result"))
 }
 
 func deadCodeNormalizedSource(entity *EntityContent) string {
 	if entity == nil {
 		return ""
 	}
-	normalized := strings.ToLower(entity.SourceCache)
+	normalized := strings.ToLower(stripGoComments(entity.SourceCache))
 	if normalized == "" {
 		return ""
 	}
 	return strings.Join(strings.Fields(normalized), " ")
+}
+
+func stripGoComments(source string) string {
+	if source == "" {
+		return ""
+	}
+
+	var out strings.Builder
+	out.Grow(len(source))
+	for i := 0; i < len(source); {
+		switch {
+		case i+1 < len(source) && source[i] == '/' && source[i+1] == '/':
+			i += 2
+			for i < len(source) && source[i] != '\n' {
+				i++
+			}
+		case i+1 < len(source) && source[i] == '/' && source[i+1] == '*':
+			i += 2
+			for i+1 < len(source) && !(source[i] == '*' && source[i+1] == '/') {
+				i++
+			}
+			if i+1 < len(source) {
+				i += 2
+			} else {
+				i = len(source)
+			}
+		default:
+			out.WriteByte(source[i])
+			i++
+		}
+	}
+	return out.String()
 }

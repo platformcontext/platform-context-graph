@@ -111,6 +111,9 @@ func TestHandleDeadCodeReturnsDerivedTruthAndAnalysisMetadata(t *testing.T) {
 	if got, want := analysis["reflection_modeled"], false; got != want {
 		t.Fatalf("analysis[reflection_modeled] = %#v, want %#v", got, want)
 	}
+	if got, want := analysis["roots_skipped_missing_source"], float64(0); got != want {
+		t.Fatalf("analysis[roots_skipped_missing_source] = %#v, want %#v", got, want)
+	}
 	if got, want := analysis["user_overrides_applied"], false; got != want {
 		t.Fatalf("analysis[user_overrides_applied] = %#v, want %#v", got, want)
 	}

@@ -63,7 +63,7 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	results = filterDeadCodeResultsByDefaultPolicy(results, contentByID)
+	results, policyStats := filterDeadCodeResultsByDefaultPolicy(results, contentByID)
 	results = filterResultsByDecoratorExclusions(results, req.ExcludeDecoratedWith)
 	truncated := len(rows) > req.Limit
 	if len(results) > req.Limit {
@@ -75,7 +75,7 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		"limit":     req.Limit,
 		"truncated": truncated,
 		"results":   results,
-		"analysis":  buildDeadCodeAnalysis(results, req.ExcludeDecoratedWith),
+		"analysis":  buildDeadCodeAnalysis(results, req.ExcludeDecoratedWith, policyStats),
 	}, BuildTruthEnvelope(h.profile(), "code_quality.dead_code", TruthBasisHybrid, "resolved from graph-backed dead-code candidates with partial root modeling"))
 }
 
@@ -179,27 +179,33 @@ func (h *CodeHandler) enrichDeadCodeResultsWithContent(
 func filterDeadCodeResultsByDefaultPolicy(
 	results []map[string]any,
 	contentByID map[string]*EntityContent,
-) []map[string]any {
+) ([]map[string]any, deadCodePolicyStats) {
 	if len(results) == 0 {
-		return results
+		return results, deadCodePolicyStats{}
 	}
 
+	stats := deadCodePolicyStats{}
 	filtered := make([]map[string]any, 0, len(results))
 	for _, result := range results {
 		entityID := StringVal(result, "entity_id")
-		if deadCodeResultExcludedByDefault(result, contentByID[entityID]) {
+		if deadCodeResultExcludedByDefault(result, contentByID[entityID], &stats) {
 			continue
 		}
 		filtered = append(filtered, result)
 	}
-	return filtered
+	return filtered, stats
 }
 
-func deadCodeResultExcludedByDefault(result map[string]any, entity *EntityContent) bool {
+func deadCodeResultExcludedByDefault(result map[string]any, entity *EntityContent, stats *deadCodePolicyStats) bool {
+	goPolicy := newDeadCodeGoPolicyContext(result, entity)
+	if goPolicy.language == "go" && goPolicy.normalizedSource == "" && entity != nil {
+		stats.RootsSkippedMissingSource++
+	}
+
 	return deadCodeIsLanguageEntrypoint(result, entity) ||
-		deadCodeIsGoCLICommandRoot(result, entity) ||
-		deadCodeIsGoHTTPHandlerRoot(result, entity) ||
-		deadCodeIsGoFrameworkCallbackRoot(result, entity) ||
+		deadCodeIsGoCLICommandRoot(result, goPolicy) ||
+		deadCodeIsGoHTTPHandlerRoot(result, goPolicy) ||
+		deadCodeIsGoFrameworkCallbackRoot(result, goPolicy) ||
 		deadCodeIsLibraryPublicAPIRoot(result, entity) ||
 		deadCodeIsTestFile(result, entity) ||
 		deadCodeIsGeneratedCode(result, entity)
@@ -330,7 +336,7 @@ func deadCodeEntityLanguage(result map[string]any, entity *EntityContent) string
 	return StringVal(result, "language")
 }
 
-func buildDeadCodeAnalysis(results []map[string]any, excluded []string) map[string]any {
+func buildDeadCodeAnalysis(results []map[string]any, excluded []string, stats deadCodePolicyStats) map[string]any {
 	frameworks := make([]string, 0)
 	seenFrameworks := make(map[string]struct{})
 	for _, result := range results {
@@ -360,6 +366,7 @@ func buildDeadCodeAnalysis(results []map[string]any, excluded []string) map[stri
 		"reflection_modeled":      false,
 		"tests_excluded":          true,
 		"generated_code_excluded": true,
+		"roots_skipped_missing_source": stats.RootsSkippedMissingSource,
 		"user_overrides_applied":  len(excluded) > 0,
 		"modeled_entrypoints":     []string{"go.main", "go.init", "python.__main__"},
 		"modeled_framework_roots": []string{
@@ -371,6 +378,7 @@ func buildDeadCodeAnalysis(results []map[string]any, excluded []string) map[stri
 		"notes": []string{
 			"dead-code remains derived until broader framework, public-API, and reflection root models land",
 			"go CLI, stdlib HTTP, and controller-runtime reconcile signatures are modeled as derived framework roots",
+			"go framework-root signature checks require entity source; missing source leaves those roots unevaluated",
 			"go exported symbols outside cmd/, internal/, and vendor/ are treated as public API roots by default",
 		},
 	}

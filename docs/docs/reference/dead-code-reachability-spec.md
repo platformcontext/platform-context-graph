@@ -92,6 +92,8 @@ Any dead-code result should be able to report:
 - whether reflection/dynamic patterns were modeled
 - whether tests or generated code were excluded
 - applied user overrides
+- how many candidate entities skipped framework-root evaluation because source
+  text was unavailable
 
 That explanation must be returned in structured form, not just text prose.
 
