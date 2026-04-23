@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -215,18 +216,17 @@ func runList(cmd *cobra.Command, args []string) error {
 
 func runStats(cmd *cobra.Command, args []string) error {
 	client := NewAPIClient("", "", "")
-	path := ""
+	repoSelector := ""
 	if len(args) > 0 {
 		var err error
-		path, err = filepath.Abs(args[0])
+		repoSelector, err = normalizeRepositoryStatsSelector(args[0])
 		if err != nil {
 			return err
 		}
 	}
-	if path != "" {
+	if repoSelector != "" {
 		var result any
-		// Use repository stats endpoint with encoded path
-		if err := client.Get(fmt.Sprintf("/api/v0/repositories/%s/stats", path), &result); err != nil {
+		if err := client.Get(fmt.Sprintf("/api/v0/repositories/%s/stats", url.PathEscape(repoSelector)), &result); err != nil {
 			return err
 		}
 		printJSON(result)
@@ -239,6 +239,18 @@ func runStats(cmd *cobra.Command, args []string) error {
 		printJSON(result)
 	}
 	return nil
+}
+
+func normalizeRepositoryStatsSelector(arg string) (string, error) {
+	if arg == "" {
+		return "", nil
+	}
+	if _, err := os.Stat(arg); err == nil {
+		return filepath.Abs(arg)
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	return arg, nil
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {

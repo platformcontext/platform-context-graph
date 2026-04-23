@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -38,6 +40,47 @@ func TestRunQueryPostsLanguageQueryRequest(t *testing.T) {
 	}
 	if got, want := gotBody["query"], "Service"; got != want {
 		t.Fatalf("body[query] = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunStatsPreservesRepositorySelector(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		_, _ = w.Write([]byte(`{"repository":{}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("PCG_SERVICE_URL", server.URL)
+
+	if err := runStats(&cobra.Command{}, []string{"acme/payments"}); err != nil {
+		t.Fatalf("runStats() error = %v, want nil", err)
+	}
+	if got, want := gotPath, "/api/v0/repositories/"+url.PathEscape("acme/payments")+"/stats"; got != want {
+		t.Fatalf("request path = %q, want %q", got, want)
+	}
+}
+
+func TestRunStatsCanonicalizesExistingPathSelector(t *testing.T) {
+	absolutePath, err := filepath.Abs(t.TempDir())
+	if err != nil {
+		t.Fatalf("filepath.Abs() error = %v, want nil", err)
+	}
+
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		_, _ = w.Write([]byte(`{"repository":{}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("PCG_SERVICE_URL", server.URL)
+
+	if err := runStats(&cobra.Command{}, []string{absolutePath}); err != nil {
+		t.Fatalf("runStats() error = %v, want nil", err)
+	}
+	if got, want := gotPath, "/api/v0/repositories/"+url.PathEscape(absolutePath)+"/stats"; got != want {
+		t.Fatalf("request path = %q, want %q", got, want)
 	}
 }
 

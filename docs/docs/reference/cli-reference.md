@@ -172,7 +172,7 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 | `pcg index-status` | Show the latest checkpointed index status. This is the completeness signal, not process health. | Yes |
 | `pcg finalize` | Compatibility stub. Prints the current ingester recovery endpoints and exits non-zero. | No |
 | `pcg clean` | Compatibility stub. Prints cleanup guidance and exits non-zero. | No |
-| `pcg stats [path]` | Show indexing statistics. | No |
+| `pcg stats [repo-or-path]` | Show indexing statistics. Existing local paths are normalized to absolute indexed paths; other arguments are treated as repository selectors such as name or repo slug. | No |
 | `pcg delete <path>` | Compatibility stub. Prints deletion guidance and exits non-zero. | No |
 | `pcg delete --all` | Compatibility stub. Prints deletion guidance and exits non-zero. | No |
 | `pcg list` | List indexed repositories. | No |
