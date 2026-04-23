@@ -1,0 +1,51 @@
+docs/docs/reference/http-api.md
+  e27ce815bbe89792 510-516
+go/internal/query/code_dead_code_contract_test.go
+  e27ce815bbe89792 1-213
+go/internal/query/code_dead_code.go
+  e27ce815bbe89792 1-346
+docs/docs/reference/mcp-reference.md
+  e27ce815bbe89792 54
+go/internal/query/contract.go
+  e27ce815bbe89792 223-225
+specs/capability-matrix.v1.yaml
+  e27ce815bbe89792 117-119
+docs/docs/reference/mcp-cookbook.md
+  e27ce815bbe89792 210-214
+docs/docs/reference/cli-analysis.md
+  e27ce815bbe89792 78-83
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 27
+docs/docs/reference/cli-reference.md
+  e27ce815bbe89792 224
+go/internal/query/openapi_test.go
+  e27ce815bbe89792 259-265
+docs/docs/guides/ci-cd.md
+  e27ce815bbe89792 34
+docs/docs/why-pcg.md
+  e27ce815bbe89792 182
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 34
+go/internal/query/openapi_paths_code.go
+  e27ce815bbe89792 247,276-289
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "8fe36c77b48afc97a5f953273a45053d8dbafb4d",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 611,
+      "total_deletions": 163,
+      "accepted_lines": 611,
+      "overriden_lines": 0
+    }
+  }
+}
