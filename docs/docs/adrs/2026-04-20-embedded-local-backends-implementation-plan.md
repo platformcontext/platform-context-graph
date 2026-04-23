@@ -30,7 +30,7 @@ verification evidence = reviewer rejects PR.
 | 1 | Capability contract + truth labels | Shipped | `488ff808`, `35a3a091` | — |
 | 2 | Capability ports (`GraphQuery`, `ContentStore`) | Shipped | `08795558`, `07619013`, `085c91a3` | — |
 | 3 | Lightweight local host | Shipped | `a3e05ecf`, `c832a84c`, current branch local-host supervisor + embedded Postgres lifecycle | perf-envelope smoke evidence still needs to be attached to the PR |
-| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | In progress | `0e4d8a5f`, current branch profile/backend and runtime-gating slices, `da35d729`, current branch authoritative sidecar lifecycle + shared Bolt-driver path + graph-aware reclaim, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown, current branch binary verification + random workspace credentials, `575ca864` opt-in syntax/workaround gates, `5f5a781e` schema-dialect router + `TestNornicDBSchemaAdapterVerification` pass, current branch `pcg install nornicdb --from <path>` local-file installer with managed `${PCG_HOME}/bin/nornicdb-headless` discovery | release-backed download/signature installer, `pcg graph start|stop|logs|upgrade`, perf-envelope smoke |
+| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | In progress | `0e4d8a5f`, current branch profile/backend and runtime-gating slices, `da35d729`, current branch authoritative sidecar lifecycle + shared Bolt-driver path + graph-aware reclaim, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown, current branch binary verification + random workspace credentials, `575ca864` opt-in syntax/workaround gates, `5f5a781e` schema-dialect router + `TestNornicDBSchemaAdapterVerification` pass, current branch `pcg install nornicdb --from <path>` local-file installer with managed `${PCG_HOME}/bin/nornicdb-headless` discovery, current branch `pcg graph logs` workspace log reader | release-backed download/signature installer, `pcg graph start|stop|upgrade`, perf-envelope smoke |
 | 4 | Authoritative graph analysis hardening | Not started | — | all |
 | 5 | Backend conformance suite | Not started | — | all |
 | 5b | NornicDB conformance across profiles | Not started | — | matrix run vs `local_authoritative`, `local_full_stack`, `production`; PCG-workload perf comparison vs Neo4j baseline |
@@ -361,6 +361,10 @@ it into lightweight mode.
   `go test ./cmd/pcg -run TestInstallNornicDB -count=1`.
   The current branch run passes local-file copy, checksum mismatch rejection,
   JSON output, and managed-binary discovery preference.
+- graph log CLI gate:
+  `go test ./cmd/pcg -run TestRunGraphLogs -count=1`.
+  The current branch run passes workspace-root resolution, log streaming, and
+  missing-log guidance without taking ownership of the workspace.
 
 ---
 

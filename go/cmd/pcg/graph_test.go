@@ -175,6 +175,58 @@ func TestRunGraphStatusPrintsJSON(t *testing.T) {
 	}
 }
 
+func TestRunGraphLogsPrintsWorkspaceGraphLog(t *testing.T) {
+	originalGetwd := graphGetwd
+	originalBuildLayout := graphBuildLayout
+	t.Cleanup(func() {
+		graphGetwd = originalGetwd
+		graphBuildLayout = originalBuildLayout
+	})
+
+	workspaceRoot := t.TempDir()
+	logsDir := filepath.Join(t.TempDir(), "logs")
+	if err := os.MkdirAll(logsDir, 0o700); err != nil {
+		t.Fatalf("os.MkdirAll(logsDir) error = %v, want nil", err)
+	}
+	if err := os.WriteFile(filepath.Join(logsDir, "graph-nornicdb.log"), []byte("graph ready\n"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile(graph log) error = %v, want nil", err)
+	}
+	graphGetwd = func() (string, error) {
+		return workspaceRoot, nil
+	}
+	graphBuildLayout = func(workspaceRoot string) (pcglocal.Layout, error) {
+		return pcglocal.Layout{
+			WorkspaceRoot: workspaceRoot,
+			WorkspaceID:   "workspace-id",
+			LogsDir:       logsDir,
+		}, nil
+	}
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("workspace-root", "", "")
+
+	output := captureStdout(t, func() {
+		if err := runGraphLogs(cmd, nil); err != nil {
+			t.Fatalf("runGraphLogs() error = %v, want nil", err)
+		}
+	})
+	if output != "graph ready\n" {
+		t.Fatalf("runGraphLogs() output = %q, want graph log content", output)
+	}
+}
+
+func TestRunGraphLogsReturnsMissingLogGuidance(t *testing.T) {
+	layout := pcglocal.Layout{LogsDir: t.TempDir()}
+
+	err := graphLogsForLayout(layout)
+	if err == nil {
+		t.Fatal("graphLogsForLayout() error = nil, want missing log error")
+	}
+	if !strings.Contains(err.Error(), "graph log does not exist") {
+		t.Fatalf("graphLogsForLayout() error = %q, want missing log guidance", err.Error())
+	}
+}
+
 func TestGraphLifecycleNotWiredReturnsActionableError(t *testing.T) {
 	err := graphLifecycleNotWired("pcg graph start")
 	if err == nil {

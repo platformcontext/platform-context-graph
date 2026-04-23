@@ -10,11 +10,13 @@ lifecycle contract that governs startup / shutdown ordering, see
 
 ```text
 pcg graph status
+pcg graph logs
 ```
 
-`pcg graph status` is wired today. The remaining lifecycle commands
-(`pcg graph start|stop|logs|upgrade`) are still planned and currently return
-actionable guidance instead of performing real lifecycle control.
+`pcg graph status` and `pcg graph logs` are wired today. The remaining
+lifecycle commands (`pcg graph start|stop|upgrade`) are still planned and
+currently return actionable guidance instead of performing real lifecycle
+control.
 
 The local-authoritative runtime still manages the sidecar automatically when
 you run a PCG local host entrypoint such as:
@@ -52,6 +54,8 @@ For the current NornicDB-backed `local_authoritative` path, health means:
 - the recorded loopback Bolt port accepts TCP connections
 
 The sidecar writes logs under `${PCG_HOME}/local/workspaces/<workspace_id>/logs/graph-nornicdb.log`.
+Use `pcg graph logs [--workspace-root <path>]` to print that file without
+manually deriving the workspace ID.
 
 PCG generates a random graph admin password per workspace data root and
 persists it under `graph/nornicdb/pcg-credentials.json` with `0600`
