@@ -61,10 +61,10 @@ deadline. The timeout defaults to `15s` and can be tuned for diagnostics with
 `PCG_CANONICAL_WRITE_TIMEOUT=2s`. Neo4j production writes keep the grouped
 canonical path and are not affected by this local-authoritative guardrail.
 
-NornicDB does implement explicit Bolt transactions, but PCG does not enable
-grouped canonical writes for normal laptop runs until the PCG conformance
-matrix proves rollback, timeout, and no-partial-write behavior on the PCG
-canonical workload. For adapter conformance only, set:
+NornicDB exposes explicit Bolt transaction hooks, but PCG does not enable
+grouped canonical writes for normal laptop runs until the PCG Neo4j-driver
+conformance matrix proves rollback, timeout, and no-partial-write behavior on
+the PCG canonical workload. For adapter conformance only, set:
 
 ```bash
 PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true
@@ -72,7 +72,30 @@ PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true
 
 That switch exposes the same grouped-write surface used by Neo4j while still
 bounding the call with `PCG_CANONICAL_WRITE_TIMEOUT`. Leave it unset for
-day-to-day `local_authoritative` coding.
+day-to-day `local_authoritative` coding. If you must use it for manual
+conformance, use a disposable `PCG_HOME` / workspace data root.
+
+The current safety probe is deliberately conservative:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
+  go test ./cmd/pcg -run TestNornicDBGroupedWriteSafetyProbe -count=1 -v
+```
+
+The 2026-04-23 run against `/tmp/nornicdb-headless` (`v1.0.42-hotfix`) proved
+that grouped writes can commit a PCG repository/file/function shape, but the
+rollback probes all reported marker count `1` on the Neo4j-driver path:
+grouped rollback, clean explicit rollback, and failed-statement explicit
+rollback. The stricter rollback promotion gate is:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
+PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true \
+  go test ./cmd/pcg -run TestNornicDBGroupedWriteRollbackConformance -count=1 -v
+```
+
+Do not promote NornicDB grouped canonical writes until that rollback gate
+passes. Neo4j production grouped writes are unaffected.
 
 ### `pcg graph status`
 

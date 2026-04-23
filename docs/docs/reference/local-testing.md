@@ -145,6 +145,38 @@ smoke. That switch is reserved for adapter conformance runs that intentionally
 exercise NornicDB's Bolt explicit transaction path and verify rollback,
 timeout, and no-partial-write behavior.
 
+### NornicDB Grouped-Write Safety Probe
+
+Use this opt-in gate when touching NornicDB grouped canonical writes or the
+`PCG_NORNICDB_CANONICAL_GROUPED_WRITES` conformance switch:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
+  go test ./cmd/pcg -run TestNornicDBGroupedWriteSafetyProbe -count=1 -v
+```
+
+As of the 2026-04-23 evaluation, the probe proves three facts against a real
+NornicDB sidecar:
+
+- PCG canonical grouped writes can commit the basic repository/file/function
+  node shape.
+- Client-side grouped write timeout prevents the timeout probe from partially
+  committing.
+- The `/tmp/nornicdb-headless` build under test (`v1.0.42-hotfix`) reported
+  rollback marker count `1` for grouped rollback, clean explicit rollback, and
+  failed-statement explicit rollback probes. PCG therefore treats rollback as
+  not proven on the Neo4j-driver path and grouped canonical writes MUST remain
+  disabled for normal laptop runs.
+
+The promotion gate is intentionally stricter and currently expected to fail
+until the PCG Neo4j-driver path observes rollback-safe grouped transactions:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
+PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true \
+  go test ./cmd/pcg -run TestNornicDBGroupedWriteRollbackConformance -count=1 -v
+```
+
 ## Terraform Provider-Schema Gate
 
 Use this gate when touching the Terraform provider-schema runtime path or the
