@@ -40,6 +40,43 @@ func TestSchemaStatementsContainsExpectedConstraints(t *testing.T) {
 	}
 }
 
+func TestSchemaStatementsForBackendPreservesNeo4jCompositeUniqueness(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNeo4j)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNeo4j, err)
+	}
+
+	assertContainsStatement(t, stmts, "CREATE CONSTRAINT function_unique IF NOT EXISTS FOR (f:Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+	assertNoStatementContains(t, stmts, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
+}
+
+func TestSchemaStatementsForBackendAdaptsNornicDBCompositeConstraints(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNornicDB, err)
+	}
+
+	assertContainsStatement(t, stmts, "CREATE CONSTRAINT function_unique IF NOT EXISTS FOR (f:Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
+	assertContainsStatement(t, stmts, "CREATE CONSTRAINT source_local_record_unique IF NOT EXISTS FOR (n:SourceLocalRecord) REQUIRE (n.scope_id, n.generation_id, n.record_id) IS NODE KEY")
+	assertNoStatementContains(t, stmts, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+}
+
+func TestSchemaStatementsForBackendRejectsUnknownBackend(t *testing.T) {
+	t.Parallel()
+
+	_, err := SchemaStatementsForBackend(SchemaBackend("falkordb"))
+	if err == nil {
+		t.Fatal("SchemaStatementsForBackend() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported schema backend") {
+		t.Fatalf("error = %q, want unsupported schema backend", err.Error())
+	}
+}
+
 func TestSchemaStatementsContainsPerformanceIndexes(t *testing.T) {
 	t.Parallel()
 
@@ -137,6 +174,19 @@ func TestEnsureSchemaExecutesAllStatements(t *testing.T) {
 	}
 }
 
+func TestEnsureSchemaWithBackendExecutesNornicDBStatements(t *testing.T) {
+	t.Parallel()
+
+	executor := &schemaRecordingExecutor{}
+	err := EnsureSchemaWithBackend(context.Background(), executor, nil, SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("EnsureSchemaWithBackend() error = %v, want nil", err)
+	}
+
+	assertContainsExecutedStatement(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
+	assertNoExecutedStatementContains(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+}
+
 func TestEnsureSchemaRequiresExecutor(t *testing.T) {
 	t.Parallel()
 
@@ -228,4 +278,46 @@ func (r *schemaRecordingExecutor) ExecuteCypher(_ context.Context, stmt CypherSt
 		return errors.New("simulated schema error")
 	}
 	return nil
+}
+
+func assertContainsStatement(t *testing.T, stmts []string, want string) {
+	t.Helper()
+
+	for _, stmt := range stmts {
+		if stmt == want {
+			return
+		}
+	}
+	t.Fatalf("statements missing %q", want)
+}
+
+func assertNoStatementContains(t *testing.T, stmts []string, disallowed string) {
+	t.Helper()
+
+	for _, stmt := range stmts {
+		if strings.Contains(stmt, disallowed) {
+			t.Fatalf("statement %q contains disallowed fragment %q", stmt, disallowed)
+		}
+	}
+}
+
+func assertContainsExecutedStatement(t *testing.T, calls []CypherStatement, wantFragment string) {
+	t.Helper()
+
+	for _, call := range calls {
+		if strings.Contains(call.Cypher, wantFragment) {
+			return
+		}
+	}
+	t.Fatalf("executed statements missing fragment %q", wantFragment)
+}
+
+func assertNoExecutedStatementContains(t *testing.T, calls []CypherStatement, disallowed string) {
+	t.Helper()
+
+	for _, call := range calls {
+		if strings.Contains(call.Cypher, disallowed) {
+			t.Fatalf("executed statement %q contains disallowed fragment %q", call.Cypher, disallowed)
+		}
+	}
 }

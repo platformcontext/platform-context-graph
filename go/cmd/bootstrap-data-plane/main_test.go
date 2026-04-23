@@ -23,7 +23,7 @@ func noopNeo4j(_ context.Context, _ func(string) string) (neo4jDeps, error) {
 	}, nil
 }
 
-func noopApplyNeo4j(_ context.Context, _ graph.CypherExecutor, _ *slog.Logger) error {
+func noopApplyNeo4j(_ context.Context, _ graph.CypherExecutor, _ *slog.Logger, _ graph.SchemaBackend) error {
 	return nil
 }
 
@@ -78,10 +78,13 @@ func TestRunAppliesPostgresAndNeo4jSchemas(t *testing.T) {
 			return nil
 		},
 		noopNeo4j,
-		func(_ context.Context, exec graph.CypherExecutor, _ *slog.Logger) error {
+		func(_ context.Context, exec graph.CypherExecutor, _ *slog.Logger, backend graph.SchemaBackend) error {
 			neo4jApplied = true
 			if exec == nil {
 				t.Fatal("neo4j executor is nil")
+			}
+			if backend != graph.SchemaBackendNeo4j {
+				t.Fatalf("schema backend = %q, want %q", backend, graph.SchemaBackendNeo4j)
 			}
 			return nil
 		},
@@ -97,6 +100,41 @@ func TestRunAppliesPostgresAndNeo4jSchemas(t *testing.T) {
 	}
 	if !db.closed {
 		t.Fatal("run() did not close postgres database")
+	}
+}
+
+func TestRunPassesNornicDBBackendToSchemaApplicator(t *testing.T) {
+	t.Parallel()
+
+	logger := testLogger(t)
+	var gotBackend graph.SchemaBackend
+
+	err := run(
+		context.Background(),
+		func(key string) string {
+			if key == "PCG_GRAPH_BACKEND" {
+				return "nornicdb"
+			}
+			return ""
+		},
+		logger,
+		func(context.Context, func(string) string) (bootstrapDB, error) {
+			return &fakeBootstrapDB{}, nil
+		},
+		func(context.Context, bootstrapExecutor) error {
+			return nil
+		},
+		noopNeo4j,
+		func(_ context.Context, _ graph.CypherExecutor, _ *slog.Logger, backend graph.SchemaBackend) error {
+			gotBackend = backend
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("run() error = %v, want nil", err)
+	}
+	if gotBackend != graph.SchemaBackendNornicDB {
+		t.Fatalf("schema backend = %q, want %q", gotBackend, graph.SchemaBackendNornicDB)
 	}
 }
 
@@ -207,7 +245,7 @@ func TestRunReturnsNeo4jSchemaError(t *testing.T) {
 			return nil
 		},
 		noopNeo4j,
-		func(_ context.Context, _ graph.CypherExecutor, _ *slog.Logger) error {
+		func(_ context.Context, _ graph.CypherExecutor, _ *slog.Logger, _ graph.SchemaBackend) error {
 			return schemaErr
 		},
 	)

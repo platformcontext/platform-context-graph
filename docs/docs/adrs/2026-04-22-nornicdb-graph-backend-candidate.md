@@ -22,7 +22,7 @@
 
 | Phase | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
-| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `TestNornicDBSyntaxVerification` opt-in gate added | syntax gaps must be resolved before support |
+| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `TestNornicDBSyntaxVerification`, `TestNornicDBCompatibilityWorkarounds`, and `TestNornicDBSchemaAdapterVerification` opt-in gates added | installer, lifecycle commands, perf smoke |
 | Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; `pcg graph start|stop|logs|upgrade` and `pcg install nornicdb` still intentionally stubbed | real installer and public lifecycle commands |
 | Adapter conformance | Not started | — | `GraphQuery`/`GraphWrite` adapter, syntax verification, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
@@ -102,6 +102,14 @@ Feature evidence (audited 2026-04-22 against the PCG Cypher query surface):
     Neo4j's key constraints are an Enterprise-only class, while PCG's
     current composite `IS UNIQUE` constraints are the shared production
     schema contract.
+- PCG therefore routes graph schema bootstrap through a backend schema
+  dialect:
+  - `neo4j` receives the shared schema unchanged.
+  - `nornicdb` receives composite node identity as `IS NODE KEY` while
+    preserving the procedure-based fulltext form.
+  - This routing is intentionally restricted to schema DDL; graph writes,
+    query handlers, and MCP tools remain behind shared ports and conformance
+    gates.
 - Bolt 4.x fully implemented, Bolt 5.x backward compatible with negotiation.
 - PCG uses `github.com/neo4j/neo4j-go-driver/v5`; wire compatibility expected.
 
@@ -284,10 +292,11 @@ matrix.
 Before the sidecar is called "supported" on `local_authoritative`:
 
 1. `GraphQuery` + `GraphWrite` adapters pass PCG's existing handler tests.
-2. Three syntax-verification tests pass on a real NornicDB instance:
-   composite unique constraints, `CREATE FULLTEXT INDEX` (and the
-   `CALL db.index.fulltext.createNodeIndex()` fallback), and
-   `COLLECT(DISTINCT {map literal})`.
+2. Schema dialect verification passes on a real NornicDB instance:
+   `TestNornicDBSchemaAdapterVerification` must execute the complete rendered
+   NornicDB schema. The exact-Neo4j syntax probe remains useful evidence for
+   upstream parser parity, but local support is gated on the rendered adapter
+   schema.
 3. Compose smoke test indexes a repo end-to-end with NornicDB in place of
    Neo4j.
 4. Performance envelope at laptop scale meets the `local_authoritative`
@@ -326,6 +335,11 @@ has a reviewed backend-specific compatibility plan.
 composite `IS NODE KEY` and the multi-label fulltext procedure form. That
 workaround is viable only behind a graph-backend schema adapter or an upstream
 NornicDB parser fix; it must not replace the default Neo4j schema globally.
+
+`TestNornicDBSchemaAdapterVerification` passed against the same binary after
+the schema-dialect router rendered NornicDB-compatible DDL. This validates the
+adapter approach for bootstrap schema only; broader graph-read and graph-write
+conformance still must pass before promotion.
 
 ## Status Summary
 
