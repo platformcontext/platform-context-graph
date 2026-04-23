@@ -30,7 +30,7 @@ verification evidence = reviewer rejects PR.
 | 1 | Capability contract + truth labels | Shipped | `488ff808`, `35a3a091` | — |
 | 2 | Capability ports (`GraphQuery`, `ContentStore`) | Shipped | `08795558`, `07619013`, `085c91a3` | — |
 | 3 | Lightweight local host | Shipped | `a3e05ecf`, `c832a84c`, current branch local-host supervisor + embedded Postgres lifecycle | perf-envelope smoke evidence still needs to be attached to the PR |
-| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | In progress | `0e4d8a5f`, current branch profile/backend and runtime-gating slices, `da35d729`, current branch authoritative sidecar lifecycle + shared Bolt-driver path + graph-aware reclaim, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown, current branch binary verification + random workspace credentials | `pcg install nornicdb` headless artifact flow, `pcg graph start|stop|logs|upgrade`, 3 syntax-verification tests (composite unique, fulltext, collect-distinct-map), perf-envelope smoke |
+| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | In progress | `0e4d8a5f`, current branch profile/backend and runtime-gating slices, `da35d729`, current branch authoritative sidecar lifecycle + shared Bolt-driver path + graph-aware reclaim, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown, current branch binary verification + random workspace credentials, current branch opt-in `TestNornicDBSyntaxVerification` showing procedure fulltext + collect-distinct-map pass, current branch `TestNornicDBCompatibilityWorkarounds` showing composite `IS NODE KEY` + procedure fulltext pass | `pcg install nornicdb` headless artifact flow, `pcg graph start|stop|logs|upgrade`, resolve failed composite `IS UNIQUE` and multi-label `CREATE FULLTEXT INDEX` compatibility gates via upstream parser fixes or a reviewed backend schema adapter, perf-envelope smoke |
 | 4 | Authoritative graph analysis hardening | Not started | — | all |
 | 5 | Backend conformance suite | Not started | — | all |
 | 5b | NornicDB conformance across profiles | Not started | — | matrix run vs `local_authoritative`, `local_full_stack`, `production`; PCG-workload perf comparison vs Neo4j baseline |
@@ -336,6 +336,17 @@ it into lightweight mode.
 - layout tests proving a stable `graph/` path per workspace
 - manual proof that `local_authoritative` fails loudly until sidecar wiring is
   implemented
+- opt-in syntax gate against a real NornicDB binary:
+  `PCG_NORNICDB_BINARY=/tmp/nornicdb-headless go test ./cmd/pcg -run TestNornicDBSyntaxVerification -count=1 -v`.
+  The 2026-04-22 run failed on PCG's composite node `IS UNIQUE` schema
+  syntax and multi-label `CREATE FULLTEXT INDEX` fallback, while passing
+  `db.index.fulltext.createNodeIndex(...)` and
+  `COLLECT(DISTINCT {map literal})`.
+- opt-in workaround gate against the same binary:
+  `PCG_NORNICDB_BINARY=/tmp/nornicdb-headless go test ./cmd/pcg -run TestNornicDBCompatibilityWorkarounds -count=1 -v`.
+  The 2026-04-22 run passed composite `IS NODE KEY` and the multi-label
+  fulltext procedure form. This supports a future backend-specific schema
+  adapter if we choose not to wait for upstream NornicDB parser parity.
 
 ---
 
