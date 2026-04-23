@@ -215,7 +215,8 @@ categories in the response envelope's `data.analysis` field. The `repo_id`
 argument may be a canonical repository ID, repository name, repo slug, or
 indexed path; the server resolves it before querying. The response also
 includes `data.truncated` when the bounded dead-code result window cut off
-additional candidates.
+additional candidates and `data.analysis.roots_skipped_missing_source` when Go
+framework-root checks could not run because entity source text was unavailable.
 
 ### Find dead code (Cypher)
 

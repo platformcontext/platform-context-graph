@@ -213,4 +213,136 @@ func TestHandleDeadCodeReportsModeledGoFrameworkRootsInAnalysis(t *testing.T) {
 	if got, want := modeledFrameworkRoots[2], "go.controller_runtime_reconcile_signature"; got != want {
 		t.Fatalf("analysis[modeled_framework_roots][2] = %#v, want %#v", got, want)
 	}
+	if got, want := analysis["roots_skipped_missing_source"], float64(0); got != want {
+		t.Fatalf("analysis[roots_skipped_missing_source] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleDeadCodeDoesNotTreatGoCommentSubstringsAsFrameworkRoots(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Profile: ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, _ string, params map[string]any) ([]map[string]any, error) {
+				if got, want := params["repo_id"], "repo-1"; got != want {
+					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{
+					{
+						"entity_id": "go-comment-only", "name": "helper", "labels": []any{"Function"},
+						"file_path": "internal/http/comments.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+					},
+				}, nil
+			},
+		},
+		Content: fakeDeadCodeContentStore{
+			entities: map[string]EntityContent{
+				"go-comment-only": {
+					EntityID:     "go-comment-only",
+					RelativePath: "internal/http/comments.go",
+					EntityType:   "Function",
+					EntityName:   "helper",
+					Language:     "go",
+					SourceCache:  "func helper() {}\n// func fake(w http.ResponseWriter, r *http.Request) {}\n/* func run(cmd *cobra.Command, args []string) error { return nil } */",
+				},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/dead-code",
+		bytes.NewBufferString(`{"repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	results, ok := resp["results"].([]any)
+	if !ok {
+		t.Fatalf("results type = %T, want []any", resp["results"])
+	}
+	if got, want := len(results), 1; got != want {
+		t.Fatalf("len(results) = %d, want %d", got, want)
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["entity_id"], "go-comment-only"; got != want {
+		t.Fatalf("result[entity_id] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleDeadCodeReportsMissingSourceForGoFrameworkRootChecks(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Profile: ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, _ string, params map[string]any) ([]map[string]any, error) {
+				if got, want := params["repo_id"], "repo-1"; got != want {
+					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{
+					{
+						"entity_id": "go-missing-source", "name": "ServePayments", "labels": []any{"Function"},
+						"file_path": "internal/http/payments.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+					},
+				}, nil
+			},
+		},
+		Content: fakeDeadCodeContentStore{
+			entities: map[string]EntityContent{
+				"go-missing-source": {
+					EntityID:     "go-missing-source",
+					RelativePath: "internal/http/payments.go",
+					EntityType:   "Function",
+					EntityName:   "ServePayments",
+					Language:     "go",
+				},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/dead-code",
+		bytes.NewBufferString(`{"repo_id":"repo-1"}`),
+	)
+	req.Header.Set("Accept", EnvelopeMIMEType)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	data, ok := resp["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data type = %T, want map[string]any", resp["data"])
+	}
+	analysis, ok := data["analysis"].(map[string]any)
+	if !ok {
+		t.Fatalf("analysis type = %T, want map[string]any", data["analysis"])
+	}
+	if got, want := analysis["roots_skipped_missing_source"], float64(1); got != want {
+		t.Fatalf("analysis[roots_skipped_missing_source] = %#v, want %#v", got, want)
+	}
 }
