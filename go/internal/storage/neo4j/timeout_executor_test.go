@@ -67,6 +67,20 @@ func TestTimeoutExecutorExecuteGroupCancelsLongRunningGroup(t *testing.T) {
 	}
 }
 
+func TestTimeoutExecutorExecuteGroupErrorsWithoutGroupExecutor(t *testing.T) {
+	t.Parallel()
+
+	executor := TimeoutExecutor{Inner: &recordingExecutor{}}
+
+	err := executor.ExecuteGroup(context.Background(), []Statement{{Cypher: "RETURN 1"}})
+	if err == nil {
+		t.Fatal("ExecuteGroup() error = nil, want non-nil")
+	}
+	if got, want := err.Error(), "inner executor does not support ExecuteGroup"; got != want {
+		t.Fatalf("ExecuteGroup() error = %q, want %q", got, want)
+	}
+}
+
 type contextBlockingExecutor struct{}
 
 func (contextBlockingExecutor) Execute(ctx context.Context, _ Statement) error {

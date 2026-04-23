@@ -26,6 +26,7 @@ const (
 	ingesterCollectorPollInterval        = time.Second
 	ingesterConnectionTimeout            = 10 * time.Second
 	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
+	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
 	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
 )
 
@@ -241,6 +242,12 @@ func openIngesterCanonicalWriter(
 		if err != nil {
 			return nil, nil, err
 		}
+		if nornicDBGroupedWrites {
+			slog.Warn("NornicDB canonical grouped writes enabled for conformance",
+				"graph_backend", string(graphBackend),
+				"grouped_writes", true,
+				"env_var", nornicDBCanonicalGroupedWritesEnv)
+		}
 	}
 
 	writer := sourceneo4j.NewCanonicalNodeWriter(
@@ -294,7 +301,7 @@ func ingesterContentBeforeCanonical(getenv func(string) string) bool {
 }
 
 func nornicDBCanonicalWriteTimeout(getenv func(string) string) time.Duration {
-	raw := strings.TrimSpace(getenv("PCG_CANONICAL_WRITE_TIMEOUT"))
+	raw := strings.TrimSpace(getenv(canonicalWriteTimeoutEnv))
 	if raw == "" {
 		return defaultNornicDBCanonicalWriteTimeout
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
+	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
@@ -242,6 +243,28 @@ func TestCanonicalExecutorForGraphBackendAllowsNornicDBGroupedWhenConformanceEna
 	}
 }
 
+func TestCanonicalExecutorForGraphBackendNornicDBGroupedFullStackReachesRawExecutor(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableIngesterExecutor{}
+	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, true, nil, nil)
+	if _, ok := executor.(sourceneo4j.GroupExecutor); !ok {
+		t.Fatal("NornicDB grouped executor stack does not implement GroupExecutor")
+	}
+
+	writer := sourceneo4j.NewCanonicalNodeWriter(executor, 0, nil)
+	err := writer.Write(context.Background(), minimalCanonicalMaterialization())
+	if err != nil {
+		t.Fatalf("CanonicalNodeWriter.Write() error = %v, want nil", err)
+	}
+	if inner.groupCalls != 1 {
+		t.Fatalf("raw ExecuteGroup calls = %d, want 1", inner.groupCalls)
+	}
+	if inner.executeCalls != 0 {
+		t.Fatalf("raw Execute calls = %d, want 0 for grouped path", inner.executeCalls)
+	}
+}
+
 func TestCanonicalExecutorForGraphBackendWrapsNornicDBWithTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -312,7 +335,7 @@ func TestNornicDBCanonicalWriteTimeoutFromEnv(t *testing.T) {
 	t.Parallel()
 
 	got := nornicDBCanonicalWriteTimeout(func(key string) string {
-		if key == "PCG_CANONICAL_WRITE_TIMEOUT" {
+		if key == canonicalWriteTimeoutEnv {
 			return "2s"
 		}
 		return ""
@@ -395,4 +418,28 @@ type contextBlockingIngesterExecutor struct{}
 func (contextBlockingIngesterExecutor) Execute(ctx context.Context, _ sourceneo4j.Statement) error {
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+func minimalCanonicalMaterialization() projector.CanonicalMaterialization {
+	return projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID:    "repo-1",
+			Name:      "my-repo",
+			Path:      "/repos/my-repo",
+			LocalPath: "/repos/my-repo",
+		},
+		Directories: []projector.DirectoryRow{
+			{Path: "/repos/my-repo/src", Name: "src", ParentPath: "/repos/my-repo", RepoID: "repo-1", Depth: 0},
+		},
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", Name: "main.go", Language: "go", RepoID: "repo-1", DirPath: "/repos/my-repo/src"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "e1", Label: "Function", EntityName: "main", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 1, EndLine: 5, Language: "go", RepoID: "repo-1"},
+		},
+	}
 }
