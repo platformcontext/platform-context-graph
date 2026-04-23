@@ -2,8 +2,53 @@ package parser
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+func TestJavaScriptExpressServerSymbols(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		express map[string]any
+		want    []string
+	}{
+		{
+			name: "typed server symbols",
+			express: map[string]any{
+				"server_symbols": []string{"app", "router"},
+			},
+			want: []string{"app", "router"},
+		},
+		{
+			name: "missing server symbols",
+			express: map[string]any{
+				"route_methods": []string{"GET"},
+			},
+			want: nil,
+		},
+		{
+			name: "wrong server symbols shape",
+			express: map[string]any{
+				"server_symbols": []any{"app"},
+			},
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := javaScriptExpressServerSymbols(tt.express)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("javaScriptExpressServerSymbols(%#v) = %#v, want %#v", tt.express, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestDefaultEngineParsePathJavaScriptEmitsDeadCodeRootKinds(t *testing.T) {
 	t.Parallel()
