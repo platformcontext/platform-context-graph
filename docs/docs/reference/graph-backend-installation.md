@@ -33,16 +33,18 @@ and in telemetry span / metric labels as `graph_backend`.
 
 ## Current local-authoritative requirement
 
-Today, `local_authoritative` requires a pre-existing NornicDB binary. PCG
+Today, `local_authoritative` requires a verified NornicDB binary. PCG
 defaults to the laptop-friendly headless artifact and discovers binaries in
 this order:
 
 1. `PCG_NORNICDB_BINARY`
-2. `nornicdb-headless` on `PATH`
-3. `nornicdb` on `PATH`
+2. `${PCG_HOME}/bin/nornicdb-headless` installed by
+   `pcg install nornicdb --from <path>`
+3. `nornicdb-headless` on `PATH`
+4. `nornicdb` on `PATH`
 
-This keeps the local-authoritative runtime usable while the built-in
-installer remains under development.
+The environment variable stays first so advanced users can temporarily test a
+different binary without mutating the managed install.
 
 The full `nornicdb` binary is supported when users opt in with
 `PCG_NORNICDB_BINARY` or place it on `PATH`, but it is not the local-laptop
@@ -60,21 +62,54 @@ workspace graph data root and stored in
 copies it to `owner.json` so attach processes can connect without a hardcoded
 shared secret.
 
-## Current manual install options
+## Managed local-file install
 
-Until `pcg install nornicdb` ships, a developer can provide the binary in
-one of these ways:
+The current installer slice is intentionally local-file only. It does not
+download from the internet or make supply-chain claims before the release
+manifest and signature policy are real.
+
+```bash
+pcg install nornicdb --from /absolute/path/to/nornicdb-headless
+
+# Optional checksum guard for copied artifacts.
+pcg install nornicdb \
+  --from /absolute/path/to/nornicdb-headless \
+  --sha256 <expected-sha256>
+
+# Replace an existing managed binary.
+pcg install nornicdb --from /absolute/path/to/nornicdb-headless --force
+```
+
+The command performs, in order:
+
+1. Verifies the source path is an executable NornicDB binary by running
+   `<binary> version` and requiring a `NornicDB ...` version string.
+2. Computes the source SHA-256 checksum and compares it with `--sha256` when
+   provided.
+3. Copies the source binary to `${PCG_HOME}/bin/nornicdb-headless` with
+   executable permissions.
+4. Writes
+   `${PCG_HOME}/graph-backends/nornicdb/manifest.json` with backend,
+   version, checksum, source path, install mode, and install timestamp.
+
+After installation, `pcg graph status` should report `graph_installed: true`
+and the managed binary path.
+
+## Manual source build options
+
+A developer can build or provide the binary in one of these ways before
+calling `pcg install nornicdb --from ...`:
 
 ```bash
 # Preferred laptop path from a NornicDB checkout when plugin prerequisites
 # are installed.
 make build-headless
-PCG_NORNICDB_BINARY=/absolute/path/to/NornicDB/bin/nornicdb-headless pcg graph status
+pcg install nornicdb --from /absolute/path/to/NornicDB/bin/nornicdb-headless
 
 # Reliable local fallback when optional local-LLM/plugin prerequisites are
 # absent on the laptop.
 go build -tags 'noui nolocalllm' -o /tmp/nornicdb-headless ./cmd/nornicdb
-PCG_NORNICDB_BINARY=/tmp/nornicdb-headless pcg graph status
+pcg install nornicdb --from /tmp/nornicdb-headless
 
 # Explicit opt-in to the larger full binary.
 PCG_NORNICDB_BINARY=/absolute/path/to/nornicdb pcg graph status
@@ -92,11 +127,11 @@ current laptop sidecar launches a local binary:
 docker build --build-arg HEADLESS=true -f docker/Dockerfile.arm64-metal .
 ```
 
-## Planned NornicDB install flow
+## Planned release-backed install flow
 
-PCG is still planning `pcg install nornicdb` to pin, download, and register
-the headless NornicDB laptop artifact under `${PCG_HOME}/bin/` with a
-version pinned by the installed PCG release.
+PCG is still planning a release-backed installer mode that pins, downloads,
+and registers the headless NornicDB laptop artifact under `${PCG_HOME}/bin/`
+with a version pinned by the installed PCG release.
 
 ```bash
 pcg install nornicdb
@@ -133,14 +168,15 @@ pcg install nornicdb --rollback
 
 Restores the `.previous` binary if present.
 
-### Offline install
+### Offline artifact install
 
 ```bash
 pcg install nornicdb --from <path-to-tarball>
 ```
 
-Skips the download step. Still verifies checksum against the tarball and,
-if present, the accompanying signature file.
+This future mode installs from a release tarball instead of a local executable
+binary. It still verifies checksum against the tarball and, if present, the
+accompanying signature file.
 
 ### Uninstall
 
@@ -178,10 +214,10 @@ pcg graph status
 Both should report the graph backend as present, the binary path, and the
 installed version.
 
-Until the installer ships, verify your existing binary with:
+After managed install, verify with:
 
 ```bash
-PCG_NORNICDB_BINARY=/absolute/path/to/nornicdb-headless pcg graph status
+pcg graph status
 ```
 
 When building directly from a local NornicDB checkout for laptop testing,
@@ -191,10 +227,12 @@ installed, use the direct no-UI/no-local-LLM fallback:
 
 ```bash
 make build-headless
-PCG_NORNICDB_BINARY=/absolute/path/to/NornicDB/bin/nornicdb-headless pcg graph status
+pcg install nornicdb --from /absolute/path/to/NornicDB/bin/nornicdb-headless
+pcg graph status
 
 go build -tags 'noui nolocalllm' -o /tmp/nornicdb-headless ./cmd/nornicdb
-PCG_NORNICDB_BINARY=/tmp/nornicdb-headless pcg graph status
+pcg install nornicdb --from /tmp/nornicdb-headless
+pcg graph status
 ```
 
 ## Non-goals

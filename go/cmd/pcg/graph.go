@@ -56,13 +56,15 @@ func init() {
 	}
 	rootCmd.AddCommand(installCmd)
 
-	installCmd.AddCommand(&cobra.Command{
+	installNornicDBCmd := &cobra.Command{
 		Use:   "nornicdb",
 		Short: "Install the local NornicDB binary",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return graphLifecycleNotWired("pcg install nornicdb")
-		},
-	})
+		RunE:  runInstallNornicDB,
+	}
+	installNornicDBCmd.Flags().String("from", "", "Install from an existing local NornicDB binary")
+	installNornicDBCmd.Flags().String("sha256", "", "Expected SHA-256 checksum for --from")
+	installNornicDBCmd.Flags().Bool("force", false, "Replace an existing managed NornicDB binary")
+	installCmd.AddCommand(installNornicDBCmd)
 
 	statusCmd := &cobra.Command{
 		Use:   "status",

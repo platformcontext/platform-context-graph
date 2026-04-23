@@ -158,6 +158,11 @@ func resolveNornicDBBinary() (string, error) {
 		}
 		return raw, nil
 	}
+	if binaryPath, err := managedNornicDBBinaryIfPresent(); err == nil {
+		return binaryPath, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
 	var verifyErrs []error
 	for _, name := range []string{"nornicdb-headless", "nornicdb"} {
 		binaryPath, err := localGraphLookPath(name)

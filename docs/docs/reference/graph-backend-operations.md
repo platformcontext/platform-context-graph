@@ -23,9 +23,10 @@ you run a PCG local host entrypoint such as:
 PCG_QUERY_PROFILE=local_authoritative pcg watch .
 ```
 
-That path requires a discoverable NornicDB binary. Laptop installs prefer
-`nornicdb-headless`; the full `nornicdb` binary is supported only when users
-opt in because it is larger. See
+That path requires a discoverable NornicDB binary. Laptop installs prefer the
+managed `${PCG_HOME}/bin/nornicdb-headless` binary created by
+`pcg install nornicdb --from <path>`; the full `nornicdb` binary is supported
+only when users opt in because it is larger. See
 [Graph Backend Installation](graph-backend-installation.md).
 
 ### `pcg graph status`
@@ -70,9 +71,11 @@ mismatch, data directory not writable) and returns a non-zero exit code.
 
 Check, in order:
 
-1. `pcg graph status` — did PCG discover the expected NornicDB binary?
+1. `pcg graph status` — did PCG discover the expected NornicDB binary from
+   `PCG_NORNICDB_BINARY`, `${PCG_HOME}/bin/nornicdb-headless`, or `PATH`?
    If discovery reports not installed, verify the candidate binary prints a
-   `NornicDB ...` version string.
+   `NornicDB ...` version string or install it with
+   `pcg install nornicdb --from <path>`.
 2. open `${PCG_HOME}/local/workspaces/<workspace_id>/logs/graph-nornicdb.log`
    — did the backend emit an error?
 3. `ls -la ${workspace_root}/graph/` — is the data directory writable by

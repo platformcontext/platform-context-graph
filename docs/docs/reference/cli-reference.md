@@ -69,13 +69,15 @@ Invalid values are rejected at startup. See
 [ADR 2026-04-22](../adrs/2026-04-22-nornicdb-graph-backend-candidate.md)
 for the evaluation path.
 
-Today, `local_authoritative` auto-manages NornicDB only when a NornicDB
-binary is already available. The laptop default is the headless artifact;
-the full binary remains an explicit opt-in. PCG resolves it in this order:
+Today, `local_authoritative` auto-manages NornicDB when a verified NornicDB
+binary is available. The laptop default is the headless artifact; the full
+binary remains an explicit opt-in. PCG resolves it in this order:
 
 1. `PCG_NORNICDB_BINARY`
-2. `nornicdb-headless` in `PATH`
-3. `nornicdb` in `PATH`
+2. `${PCG_HOME}/bin/nornicdb-headless` installed by
+   `pcg install nornicdb --from <path>`
+3. `nornicdb-headless` in `PATH`
+4. `nornicdb` in `PATH`
 
 ### Graph backend commands
 
@@ -85,7 +87,7 @@ lightweight host. PCG exposes:
 | Command | Purpose |
 | :--- | :--- |
 | `pcg graph status` | Available now. Report workspace graph-owner metadata, backend, PID, binary path, ports, log path, and current running state when present. |
-| `pcg install nornicdb` | Stubbed today with actionable guidance. Full installer ships with the sidecar lifecycle slice. |
+| `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` | Available now. Verify and copy a local NornicDB binary to `${PCG_HOME}/bin/nornicdb-headless`; release download/signature install remains future work. |
 | `pcg graph start` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
 | `pcg graph stop` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
 | `pcg graph logs` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
@@ -229,7 +231,7 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 | `pcg graph stop` | Stub today. Prints actionable guidance until the local graph sidecar lifecycle ships. |
 | `pcg graph logs` | Stub today. Prints actionable guidance until the local graph sidecar lifecycle ships. |
 | `pcg graph upgrade` | Stub today. Prints actionable guidance until the local graph sidecar lifecycle ships. |
-| `pcg install nornicdb` | Stub today. Prints actionable guidance until the local graph installer ships. |
+| `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` | Install a verified local NornicDB binary into the managed PCG home. |
 | `pcg mcp setup` | Configure IDE and CLI MCP integrations. |
 | `pcg mcp start` | Start the MCP server. |
 | `pcg mcp tools` | List MCP tools. |
