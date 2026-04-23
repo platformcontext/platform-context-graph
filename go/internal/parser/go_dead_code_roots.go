@@ -53,20 +53,26 @@ func goDeadCodeRootKinds(
 	node *tree_sitter.Node,
 	source []byte,
 	importAliases map[string][]string,
+	registeredRootKinds map[string][]string,
 ) []string {
 	params := goCompactSignature(node.ChildByFieldName("parameters"), source)
 	results := goCompactSignature(node.ChildByFieldName("result"), source)
 	name := strings.TrimSpace(nodeText(node.ChildByFieldName("name"), source))
 
-	rootKinds := make([]string, 0, 3)
+	rootKinds := make([]string, 0, 5)
+	if node.Kind() == "function_declaration" {
+		for _, kind := range registeredRootKinds[strings.ToLower(name)] {
+			rootKinds = appendUniqueImportAlias(rootKinds, kind)
+		}
+	}
 	if goSignatureMatchesHTTPHandler(params, importAliases) {
-		rootKinds = append(rootKinds, "go.net_http_handler_signature")
+		rootKinds = appendUniqueImportAlias(rootKinds, "go.net_http_handler_signature")
 	}
 	if goSignatureMatchesCobraRun(params, importAliases) {
-		rootKinds = append(rootKinds, "go.cobra_run_signature")
+		rootKinds = appendUniqueImportAlias(rootKinds, "go.cobra_run_signature")
 	}
 	if name == "Reconcile" && goSignatureMatchesControllerRuntimeReconcile(params, results, importAliases) {
-		rootKinds = append(rootKinds, "go.controller_runtime_reconcile_signature")
+		rootKinds = appendUniqueImportAlias(rootKinds, "go.controller_runtime_reconcile_signature")
 	}
 	return rootKinds
 }

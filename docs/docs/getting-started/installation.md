@@ -57,7 +57,6 @@ install a NornicDB artefact for the `local_authoritative` profile:
 # Pinned bare install when your host platform is covered by PCG's embedded
 # release manifest.
 pcg install nornicdb
-pcg install nornicdb --full
 
 # Local binary build.
 pcg install nornicdb --from /absolute/path/to/nornicdb-headless
@@ -71,11 +70,12 @@ pcg install nornicdb --from /absolute/path/to/NornicDB-1.0.42-hotfix-arm64-lite.
 ```
 
 The laptop default is still the headless artefact. Bare
-`pcg install nornicdb --full` is the explicit opt-in path when the embedded
-manifest publishes the larger full binary for your host. If the current host
-is not covered, the bare install commands fail loudly and you should use
-`--from`. The fork-backed fixed grouped-write binary still remains a manual
-`--from` path until the fix is release-backed.
+`pcg install nornicdb` now pins the rollback-fixed linuxdynasty fork headless
+release when your host is covered by the embedded manifest. Bare
+`pcg install nornicdb --full` only works when that manifest publishes a
+matching fixed full binary for your host; until then, use `--from` for the
+larger full binary. If the current host is not covered, the bare install
+commands fail loudly and you should use `--from`.
 
 ## Next step
 

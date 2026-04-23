@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -224,6 +225,55 @@ func TestHandleDeadCodeExcludesDefaultEntrypointsTestsAndGeneratedCode(t *testin
 	}
 	if got, want := result["entity_id"], "go-helper"; got != want {
 		t.Fatalf("result[entity_id] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleDeadCodeUsesNornicDBCompatibleCandidateQuery(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Profile:      ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "WHERE NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)") {
+					t.Fatalf("cypher = %q, want NornicDB dead-code query to avoid inline NOT pattern", cypher)
+				}
+				if !strings.Contains(cypher, "WHERE NOT EXISTS { MATCH (e)<-[:CALLS|IMPORTS|REFERENCES]-() }") {
+					t.Fatalf("cypher = %q, want NornicDB dead-code query to use NOT EXISTS pattern form", cypher)
+				}
+				if got, want := params["limit"], deadCodeDefaultLimit+1; got != want {
+					t.Fatalf("params[limit] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{
+					{
+						"entity_id":  "function-1",
+						"name":       "helper",
+						"labels":     []any{"Function"},
+						"file_path":  "internal/payments/helper.go",
+						"repo_id":    "repo-1",
+						"repo_name":  "payments",
+						"language":   "go",
+						"start_line": int64(10),
+						"end_line":   int64(20),
+					},
+				}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/dead-code",
+		bytes.NewBufferString(`{}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
 	}
 }
 

@@ -211,17 +211,23 @@ func TestHandleDeadCodeReportsModeledGoFrameworkRootsInAnalysis(t *testing.T) {
 	if !ok {
 		t.Fatalf("analysis[modeled_framework_roots] type = %T, want []any", analysis["modeled_framework_roots"])
 	}
-	if got, want := len(modeledFrameworkRoots), 3; got != want {
+	if got, want := len(modeledFrameworkRoots), 5; got != want {
 		t.Fatalf("len(analysis[modeled_framework_roots]) = %d, want %d", got, want)
 	}
-	if got, want := modeledFrameworkRoots[0], "go.cobra_run_signature"; got != want {
+	if got, want := modeledFrameworkRoots[0], "go.cobra_run_registration"; got != want {
 		t.Fatalf("analysis[modeled_framework_roots][0] = %#v, want %#v", got, want)
 	}
-	if got, want := modeledFrameworkRoots[1], "go.net_http_handler_signature"; got != want {
+	if got, want := modeledFrameworkRoots[1], "go.cobra_run_signature"; got != want {
 		t.Fatalf("analysis[modeled_framework_roots][1] = %#v, want %#v", got, want)
 	}
-	if got, want := modeledFrameworkRoots[2], "go.controller_runtime_reconcile_signature"; got != want {
+	if got, want := modeledFrameworkRoots[2], "go.net_http_handler_registration"; got != want {
 		t.Fatalf("analysis[modeled_framework_roots][2] = %#v, want %#v", got, want)
+	}
+	if got, want := modeledFrameworkRoots[3], "go.net_http_handler_signature"; got != want {
+		t.Fatalf("analysis[modeled_framework_roots][3] = %#v, want %#v", got, want)
+	}
+	if got, want := modeledFrameworkRoots[4], "go.controller_runtime_reconcile_signature"; got != want {
+		t.Fatalf("analysis[modeled_framework_roots][4] = %#v, want %#v", got, want)
 	}
 	if got, want := analysis["framework_roots_from_parser_metadata"], float64(0); got != want {
 		t.Fatalf("analysis[framework_roots_from_parser_metadata] = %#v, want %#v", got, want)

@@ -32,7 +32,8 @@ func deadCodeIsGoHTTPHandlerRoot(result map[string]any, policy deadCodeGoPolicyC
 	if primaryEntityLabel(result) != "Function" {
 		return false
 	}
-	if slices.Contains(policy.rootKinds, "go.net_http_handler_signature") {
+	if slices.Contains(policy.rootKinds, "go.net_http_handler_signature") ||
+		slices.Contains(policy.rootKinds, "go.net_http_handler_registration") {
 		return true
 	}
 
@@ -47,7 +48,8 @@ func deadCodeIsGoCLICommandRoot(result map[string]any, policy deadCodeGoPolicyCo
 	if primaryEntityLabel(result) != "Function" {
 		return false
 	}
-	if slices.Contains(policy.rootKinds, "go.cobra_run_signature") {
+	if slices.Contains(policy.rootKinds, "go.cobra_run_signature") ||
+		slices.Contains(policy.rootKinds, "go.cobra_run_registration") {
 		return true
 	}
 

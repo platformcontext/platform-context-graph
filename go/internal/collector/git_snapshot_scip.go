@@ -410,7 +410,7 @@ func mergeSCIPSupplement(parsed map[string]any, supplement map[string]any) {
 	parsed["functions"] = mergeNamedEntities(
 		parsed["functions"],
 		supplement["functions"],
-		[]string{"source", "cyclomatic_complexity", "decorators", "context", "class_context", "start_byte", "end_byte", "end_line"},
+		[]string{"source", "cyclomatic_complexity", "decorators", "context", "class_context", "dead_code_root_kinds", "start_byte", "end_byte", "end_line"},
 	)
 	parsed["classes"] = mergeNamedEntities(
 		parsed["classes"],
