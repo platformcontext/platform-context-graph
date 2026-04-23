@@ -118,8 +118,11 @@ func TestHandleDeadCodeReturnsDerivedTruthAndAnalysisMetadata(t *testing.T) {
 	if !ok {
 		t.Fatalf("analysis[root_categories_used] type = %T, want []any", analysis["root_categories_used"])
 	}
-	if len(rootCategories) != 2 {
-		t.Fatalf("len(analysis[root_categories_used]) = %d, want 2", len(rootCategories))
+	if got, want := len(rootCategories), 3; got != want {
+		t.Fatalf("len(analysis[root_categories_used]) = %d, want %d", got, want)
+	}
+	if got, want := rootCategories[2], "library_public_api"; got != want {
+		t.Fatalf("analysis[root_categories_used][2] = %#v, want %#v", got, want)
 	}
 }
 
@@ -210,4 +213,96 @@ func TestHandleDeadCodeExcludesDefaultEntrypointsTestsAndGeneratedCode(t *testin
 	if got, want := result["entity_id"], "go-helper"; got != want {
 		t.Fatalf("result[entity_id] = %#v, want %#v", got, want)
 	}
+}
+
+func TestHandleDeadCodeExcludesGoPublicAPIRootsOutsideInternalPackages(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Profile: ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, _ string, params map[string]any) ([]map[string]any, error) {
+				if got, want := params["repo_id"], "repo-1"; got != want {
+					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{
+					{
+						"entity_id": "go-public-api", "name": "ProcessPayment", "labels": []any{"Function"},
+						"file_path": "pkg/payments/api.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+					},
+					{
+						"entity_id": "go-internal-exported", "name": "ProcessInternalPayment", "labels": []any{"Function"},
+						"file_path": "internal/payments/api.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+					},
+					{
+						"entity_id": "go-private-helper", "name": "processPrivatePayment", "labels": []any{"Function"},
+						"file_path": "pkg/payments/private.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+					},
+				}, nil
+			},
+		},
+		Content: fakeDeadCodeContentStore{
+			entities: map[string]EntityContent{
+				"go-public-api": {
+					EntityID: "go-public-api", RelativePath: "pkg/payments/api.go", EntityType: "Function", EntityName: "ProcessPayment", Language: "go", SourceCache: "func ProcessPayment() {}",
+				},
+				"go-internal-exported": {
+					EntityID: "go-internal-exported", RelativePath: "internal/payments/api.go", EntityType: "Function", EntityName: "ProcessInternalPayment", Language: "go", SourceCache: "func ProcessInternalPayment() {}",
+				},
+				"go-private-helper": {
+					EntityID: "go-private-helper", RelativePath: "pkg/payments/private.go", EntityType: "Function", EntityName: "processPrivatePayment", Language: "go", SourceCache: "func processPrivatePayment() {}",
+				},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/dead-code",
+		bytes.NewBufferString(`{"repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	results, ok := resp["results"].([]any)
+	if !ok {
+		t.Fatalf("results type = %T, want []any", resp["results"])
+	}
+	if got, want := len(results), 2; got != want {
+		t.Fatalf("len(results) = %d, want %d", got, want)
+	}
+
+	gotIDs := make([]string, 0, len(results))
+	for _, raw := range results {
+		result, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("result type = %T, want map[string]any", raw)
+		}
+		gotIDs = append(gotIDs, result["entity_id"].(string))
+	}
+	if got, want := gotIDs, []string{"go-internal-exported", "go-private-helper"}; !equalStringSlices(got, want) {
+		t.Fatalf("result entity ids = %#v, want %#v", got, want)
+	}
+}
+
+func equalStringSlices(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }

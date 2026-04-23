@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 type deadCodeRequest struct {
@@ -174,6 +175,7 @@ func filterDeadCodeResultsByDefaultPolicy(
 
 func deadCodeResultExcludedByDefault(result map[string]any, entity *EntityContent) bool {
 	return deadCodeIsLanguageEntrypoint(result, entity) ||
+		deadCodeIsLibraryPublicAPIRoot(result, entity) ||
 		deadCodeIsTestFile(result, entity) ||
 		deadCodeIsGeneratedCode(result, entity)
 }
@@ -190,6 +192,52 @@ func deadCodeIsLanguageEntrypoint(result map[string]any, entity *EntityContent) 
 		return name == "main" || name == "init"
 	case "python":
 		return name == "__main__"
+	default:
+		return false
+	}
+}
+
+func deadCodeIsLibraryPublicAPIRoot(result map[string]any, entity *EntityContent) bool {
+	if strings.ToLower(deadCodeEntityLanguage(result, entity)) != "go" {
+		return false
+	}
+	if !deadCodeIsSupportedGoPublicAPIEntity(result, entity) {
+		return false
+	}
+
+	path := strings.ToLower(deadCodeEntityPath(result, entity))
+	switch {
+	case path == "",
+		strings.HasPrefix(path, "cmd/"),
+		strings.Contains(path, "/cmd/"),
+		strings.HasPrefix(path, "internal/"),
+		strings.Contains(path, "/internal/"),
+		strings.HasPrefix(path, "vendor/"),
+		strings.Contains(path, "/vendor/"):
+		return false
+	}
+
+	name := strings.TrimSpace(StringVal(result, "name"))
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		return unicode.IsUpper(r)
+	}
+	return false
+}
+
+func deadCodeIsSupportedGoPublicAPIEntity(result map[string]any, entity *EntityContent) bool {
+	switch primaryEntityLabel(result) {
+	case "Function", "Struct", "Interface", "Class":
+		return true
+	}
+	if entity == nil {
+		return false
+	}
+	switch strings.TrimSpace(entity.EntityType) {
+	case "Function", "Struct", "Interface", "Class":
+		return true
 	default:
 		return false
 	}
@@ -275,15 +323,17 @@ func buildDeadCodeAnalysis(results []map[string]any, excluded []string) map[stri
 	slices.Sort(frameworks)
 
 	return map[string]any{
-		"root_categories_used":    []string{"language_entrypoints", "generated_and_tool_owned"},
+		"root_categories_used":    []string{"language_entrypoints", "generated_and_tool_owned", "library_public_api"},
 		"frameworks_recognized":   frameworks,
 		"reflection_modeled":      false,
 		"tests_excluded":          true,
 		"generated_code_excluded": true,
 		"user_overrides_applied":  len(excluded) > 0,
 		"modeled_entrypoints":     []string{"go.main", "go.init", "python.__main__"},
+		"modeled_public_api":      []string{"go.exported_non_internal_package_symbol"},
 		"notes": []string{
 			"dead-code remains derived until broader framework, public-API, and reflection root models land",
+			"go exported symbols outside cmd/, internal/, and vendor/ are treated as public API roots by default",
 		},
 	}
 }

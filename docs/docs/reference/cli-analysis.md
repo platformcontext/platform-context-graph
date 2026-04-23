@@ -76,14 +76,18 @@ pcg analyze complexity
 ### `analyze dead-code`
 
 Find graph-backed dead-code candidates after the current default exclusions for
-Go entrypoints, test files, and obvious generated code are applied. The result
-is intentionally `derived` today until broader framework, public-API, and
-reflection root models land. Use `--repo-id` to scope the scan to one canonical
-repository, `--exclude` to skip decorator-owned entry points such as route
-handlers, and `--fail-on-found` to turn the command into a CI gate.
+Go entrypoints, Go exported public-package symbols, test files, and obvious
+generated code are applied. Exported Go symbols remain candidates under
+`internal/`, `cmd/`, and `vendor/`; only public-package exports are treated as
+default roots. The result is intentionally `derived` today until broader
+framework, public-API, and reflection root models land. Use `--repo` to
+scope the scan to one repository by ID, name, slug, or path. `--repo-id`
+remains as a compatibility alias for canonical IDs. Use `--exclude` to skip
+decorator-owned entry points such as route handlers, and `--fail-on-found` to
+turn the command into a CI gate.
 
 ```bash
-pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude "@route" --fail-on-found
+pcg analyze dead-code --repo payments --exclude "@route" --fail-on-found
 ```
 
 ### `analyze overrides`
