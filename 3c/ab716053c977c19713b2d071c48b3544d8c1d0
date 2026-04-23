@@ -1,0 +1,37 @@
+docs/docs/reference/http-api.md
+  e27ce815bbe89792 525-529
+docs/docs/reference/dead-code-reachability-spec.md
+  e27ce815bbe89792 95-96
+go/internal/query/code_dead_code_go_roots_test.go
+  e27ce815bbe89792 216-347
+docs/docs/reference/mcp-cookbook.md
+  e27ce815bbe89792 218-219
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 34
+go/internal/query/code_dead_code_contract_test.go
+  e27ce815bbe89792 114-116
+go/internal/query/code_dead_code_go_roots.go
+  e27ce815bbe89792 5-22,29-30,33-34,41-42,45-46,56,59,63-64,71,77-107
+go/internal/query/code_dead_code.go
+  e27ce815bbe89792 66,78,182,184,187,191,196,199-204,206-208,339,369,381
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "3cab716053c977c19713b2d071c48b3544d8c1d0",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 227,
+      "total_deletions": 34,
+      "accepted_lines": 227,
+      "overriden_lines": 0
+    }
+  }
+}
