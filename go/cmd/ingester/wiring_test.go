@@ -199,17 +199,17 @@ func TestOpenIngesterCanonicalWriterAcceptsNornicDBOnSharedBoltPath(t *testing.T
 func TestCanonicalExecutorForGraphBackendKeepsNeo4jGrouped(t *testing.T) {
 	t.Parallel()
 
-	executor := canonicalExecutorForGraphBackend(&groupCapableIngesterExecutor{}, runtimecfg.GraphBackendNeo4j, 0, nil, nil)
+	executor := canonicalExecutorForGraphBackend(&groupCapableIngesterExecutor{}, runtimecfg.GraphBackendNeo4j, 0, false, nil, nil)
 	if _, ok := executor.(sourceneo4j.GroupExecutor); !ok {
 		t.Fatal("Neo4j canonical executor does not implement GroupExecutor")
 	}
 }
 
-func TestCanonicalExecutorForGraphBackendForcesNornicDBSequential(t *testing.T) {
+func TestCanonicalExecutorForGraphBackendForcesNornicDBSequentialByDefault(t *testing.T) {
 	t.Parallel()
 
 	inner := &groupCapableIngesterExecutor{}
-	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, nil, nil)
+	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, false, nil, nil)
 	if _, ok := executor.(sourceneo4j.GroupExecutor); ok {
 		t.Fatal("NornicDB canonical executor implements GroupExecutor, want sequential execute-only surface")
 	}
@@ -223,14 +223,79 @@ func TestCanonicalExecutorForGraphBackendForcesNornicDBSequential(t *testing.T) 
 	}
 }
 
+func TestCanonicalExecutorForGraphBackendAllowsNornicDBGroupedWhenConformanceEnabled(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableIngesterExecutor{}
+	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, true, nil, nil)
+	ge, ok := executor.(sourceneo4j.GroupExecutor)
+	if !ok {
+		t.Fatal("NornicDB canonical executor does not implement GroupExecutor when conformance grouped writes are enabled")
+	}
+
+	err := ge.ExecuteGroup(context.Background(), []sourceneo4j.Statement{{Cypher: "RETURN 1"}})
+	if err != nil {
+		t.Fatalf("ExecuteGroup() error = %v, want nil", err)
+	}
+	if inner.groupCalls != 1 {
+		t.Fatalf("inner ExecuteGroup calls = %d, want 1", inner.groupCalls)
+	}
+}
+
 func TestCanonicalExecutorForGraphBackendWrapsNornicDBWithTimeout(t *testing.T) {
 	t.Parallel()
 
-	executor := canonicalExecutorForGraphBackend(contextBlockingIngesterExecutor{}, runtimecfg.GraphBackendNornicDB, 10*time.Millisecond, nil, nil)
+	executor := canonicalExecutorForGraphBackend(contextBlockingIngesterExecutor{}, runtimecfg.GraphBackendNornicDB, 10*time.Millisecond, false, nil, nil)
 
 	err := executor.Execute(context.Background(), sourceneo4j.Statement{Cypher: "RETURN 1"})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Execute() error = %v, want deadline exceeded", err)
+	}
+}
+
+func TestNornicDBCanonicalGroupedWritesDefaultDisabled(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBCanonicalGroupedWrites(func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("nornicDBCanonicalGroupedWrites() error = %v, want nil", err)
+	}
+	if got {
+		t.Fatal("nornicDBCanonicalGroupedWrites() = true, want false by default")
+	}
+}
+
+func TestNornicDBCanonicalGroupedWritesFromEnv(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBCanonicalGroupedWrites(func(key string) string {
+		if key == "PCG_NORNICDB_CANONICAL_GROUPED_WRITES" {
+			return "true"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("nornicDBCanonicalGroupedWrites() error = %v, want nil", err)
+	}
+	if !got {
+		t.Fatal("nornicDBCanonicalGroupedWrites() = false, want true")
+	}
+}
+
+func TestNornicDBCanonicalGroupedWritesRejectsInvalidEnv(t *testing.T) {
+	t.Parallel()
+
+	_, err := nornicDBCanonicalGroupedWrites(func(key string) string {
+		if key == "PCG_NORNICDB_CANONICAL_GROUPED_WRITES" {
+			return "maybe"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("nornicDBCanonicalGroupedWrites() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "PCG_NORNICDB_CANONICAL_GROUPED_WRITES") {
+		t.Fatalf("nornicDBCanonicalGroupedWrites() error = %q, want env name", err)
 	}
 }
 
@@ -312,6 +377,7 @@ func TestIngesterNeo4jExecutorTransactionConfigurersSetTimeout(t *testing.T) {
 
 type groupCapableIngesterExecutor struct {
 	executeCalls int
+	groupCalls   int
 }
 
 func (g *groupCapableIngesterExecutor) Execute(context.Context, sourceneo4j.Statement) error {
@@ -320,6 +386,7 @@ func (g *groupCapableIngesterExecutor) Execute(context.Context, sourceneo4j.Stat
 }
 
 func (g *groupCapableIngesterExecutor) ExecuteGroup(context.Context, []sourceneo4j.Statement) error {
+	g.groupCalls++
 	return nil
 }
 

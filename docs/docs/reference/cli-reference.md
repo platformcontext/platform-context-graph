@@ -85,6 +85,11 @@ This protects local MCP/CLI coding workflows from an indefinitely stuck graph
 write. Content-index-backed code search remains available even when graph
 projection is degraded.
 
+`PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` is reserved for NornicDB adapter
+conformance runs. It enables the same grouped canonical write surface used by
+Neo4j so PCG can prove NornicDB rollback, timeout, and no-partial-write
+behavior before promotion. Do not set it for normal laptop coding.
+
 ### Graph backend commands
 
 The `local_authoritative` profile runs a graph-backend sidecar alongside the
