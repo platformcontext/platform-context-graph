@@ -69,6 +69,14 @@ Invalid values are rejected at startup. See
 [ADR 2026-04-22](../adrs/2026-04-22-nornicdb-graph-backend-candidate.md)
 for the evaluation path.
 
+Today, `local_authoritative` auto-manages NornicDB only when a NornicDB
+binary is already available. The laptop default is the headless artifact;
+the full binary remains an explicit opt-in. PCG resolves it in this order:
+
+1. `PCG_NORNICDB_BINARY`
+2. `nornicdb-headless` in `PATH`
+3. `nornicdb` in `PATH`
+
 ### Graph backend commands
 
 The `local_authoritative` profile runs a graph-backend sidecar alongside the
@@ -76,7 +84,7 @@ lightweight host. PCG exposes:
 
 | Command | Purpose |
 | :--- | :--- |
-| `pcg graph status` | Available now. Report workspace graph-owner metadata, backend, PID, socket, and current running state when present. |
+| `pcg graph status` | Available now. Report workspace graph-owner metadata, backend, PID, binary path, ports, log path, and current running state when present. |
 | `pcg install nornicdb` | Stubbed today with actionable guidance. Full installer ships with the sidecar lifecycle slice. |
 | `pcg graph start` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
 | `pcg graph stop` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
@@ -122,7 +130,8 @@ Each workspace owns one directory tree under `${PCG_HOME}/local/workspaces/<work
 ```text
 VERSION            # layout schema version
 owner.lock         # flock sentinel for single-owner invariant
-owner.json         # current owner metadata (PID, socket path, postgres PID)
+owner.json         # current owner metadata (PID, postgres state, optional graph state)
+graph/             # optional authoritative graph backend data root
 postgres/          # embedded Postgres data directory
 logs/              # local-host lifecycle and recovery logs
 cache/             # derived local caches (rebuildable)

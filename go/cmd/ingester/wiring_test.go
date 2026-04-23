@@ -170,7 +170,7 @@ func TestCompositeRunnerExitsOnContextCancel(t *testing.T) {
 	}
 }
 
-func TestOpenIngesterCanonicalWriterRejectsUnsupportedGraphBackend(t *testing.T) {
+func TestOpenIngesterCanonicalWriterAcceptsNornicDBOnSharedBoltPath(t *testing.T) {
 	t.Parallel()
 
 	_, closer, err := openIngesterCanonicalWriter(context.Background(), func(key string) string {
@@ -187,7 +187,7 @@ func TestOpenIngesterCanonicalWriterRejectsUnsupportedGraphBackend(t *testing.T)
 	if err == nil {
 		t.Fatal("openIngesterCanonicalWriter() error = nil, want non-nil")
 	}
-	if !strings.Contains(err.Error(), "graph backend") {
-		t.Fatalf("openIngesterCanonicalWriter() error = %q, want graph backend context", err)
+	if !strings.Contains(err.Error(), "PCG_NEO4J_URI") && !strings.Contains(err.Error(), "NEO4J_URI") {
+		t.Fatalf("openIngesterCanonicalWriter() error = %q, want shared bolt config context", err)
 	}
 }

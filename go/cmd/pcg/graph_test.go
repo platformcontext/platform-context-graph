@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -16,12 +17,17 @@ import (
 
 func TestGraphStatusForLayoutWithoutOwnerRecord(t *testing.T) {
 	originalReadOwnerRecord := graphReadOwnerRecord
+	originalResolveBinary := graphResolveBinary
 	t.Cleanup(func() {
 		graphReadOwnerRecord = originalReadOwnerRecord
+		graphResolveBinary = originalResolveBinary
 	})
 
 	graphReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
 		return pcglocal.OwnerRecord{}, os.ErrNotExist
+	}
+	graphResolveBinary = func() (string, error) {
+		return "", errors.New("not installed")
 	}
 
 	got, err := graphStatusForLayout(pcglocal.Layout{
@@ -45,32 +51,49 @@ func TestGraphStatusForLayoutWithoutOwnerRecord(t *testing.T) {
 
 func TestGraphStatusForLayoutReportsRunningAuthoritativeBackend(t *testing.T) {
 	originalReadOwnerRecord := graphReadOwnerRecord
-	originalProcessAlive := graphProcessAlive
-	originalSocketHealthy := graphSocketHealthy
+	originalResolveBinary := graphResolveBinary
+	originalReadVersion := graphReadVersion
+	originalProcessAlive := localHostProcessAlive
+	originalGraphHTTPHealthy := localGraphHTTPHealthy
+	originalGraphBoltHealthy := localGraphBoltHealthy
 	t.Cleanup(func() {
 		graphReadOwnerRecord = originalReadOwnerRecord
-		graphProcessAlive = originalProcessAlive
-		graphSocketHealthy = originalSocketHealthy
+		graphResolveBinary = originalResolveBinary
+		graphReadVersion = originalReadVersion
+		localHostProcessAlive = originalProcessAlive
+		localGraphHTTPHealthy = originalGraphHTTPHealthy
+		localGraphBoltHealthy = originalGraphBoltHealthy
 	})
 
 	record := pcglocal.OwnerRecord{
-		PID:             100,
-		StartedAt:       "2026-04-22T20:00:00Z",
-		Profile:         string(query.ProfileLocalAuthoritative),
-		GraphBackend:    string(query.GraphBackendNornicDB),
-		GraphPID:        200,
-		GraphDataDir:    "/workspace/graph/nornicdb",
-		GraphSocketPath: "/tmp/graph.sock",
-		GraphVersion:    "v0.1.0",
+		PID:           100,
+		StartedAt:     "2026-04-22T20:00:00Z",
+		Profile:       string(query.ProfileLocalAuthoritative),
+		GraphBackend:  string(query.GraphBackendNornicDB),
+		GraphAddress:  "127.0.0.1",
+		GraphPID:      200,
+		GraphBoltPort: 17687,
+		GraphHTTPPort: 17474,
+		GraphDataDir:  "/workspace/graph/nornicdb",
+		GraphVersion:  "1.0.42",
 	}
 	graphReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
 		return record, nil
 	}
-	graphProcessAlive = func(pid int) bool {
+	graphResolveBinary = func() (string, error) {
+		return "/tmp/nornicdb", nil
+	}
+	graphReadVersion = func(binaryPath string) (string, error) {
+		return "1.0.42", nil
+	}
+	localHostProcessAlive = func(pid int) bool {
 		return pid == record.GraphPID
 	}
-	graphSocketHealthy = func(path string) bool {
-		return path == record.GraphSocketPath
+	localGraphHTTPHealthy = func(address string, port int, timeout time.Duration) bool {
+		return address == record.GraphAddress && port == record.GraphHTTPPort
+	}
+	localGraphBoltHealthy = func(address string, port int, timeout time.Duration) bool {
+		return address == record.GraphAddress && port == record.GraphBoltPort
 	}
 
 	got, err := graphStatusForLayout(pcglocal.Layout{
@@ -90,8 +113,20 @@ func TestGraphStatusForLayoutReportsRunningAuthoritativeBackend(t *testing.T) {
 	if got.GraphBackend != string(query.GraphBackendNornicDB) {
 		t.Fatalf("GraphBackend = %q, want %q", got.GraphBackend, query.GraphBackendNornicDB)
 	}
+	if !got.GraphInstalled {
+		t.Fatal("GraphInstalled = false, want true")
+	}
+	if got.GraphBinaryPath != "/tmp/nornicdb" {
+		t.Fatalf("GraphBinaryPath = %q, want %q", got.GraphBinaryPath, "/tmp/nornicdb")
+	}
 	if !got.GraphRunning {
 		t.Fatal("GraphRunning = false, want true")
+	}
+	if got.GraphBoltPort != 17687 {
+		t.Fatalf("GraphBoltPort = %d, want %d", got.GraphBoltPort, 17687)
+	}
+	if got.GraphHTTPPort != 17474 {
+		t.Fatalf("GraphHTTPPort = %d, want %d", got.GraphHTTPPort, 17474)
 	}
 }
 
@@ -155,6 +190,45 @@ func TestRunInstallNornicDBReturnsNotWiredError(t *testing.T) {
 	}
 	if err.Error() != "pcg install nornicdb not wired yet" {
 		t.Fatalf("graphLifecycleNotWired() error = %q, want %q", err.Error(), "pcg install nornicdb not wired yet")
+	}
+}
+
+func TestResolveNornicDBBinaryPrefersHeadlessBinary(t *testing.T) {
+	originalLookPath := localGraphLookPath
+	t.Cleanup(func() {
+		localGraphLookPath = originalLookPath
+	})
+	t.Setenv("PCG_NORNICDB_BINARY", "")
+
+	localGraphLookPath = func(file string) (string, error) {
+		switch file {
+		case "nornicdb-headless":
+			return "/pcg/bin/nornicdb-headless", nil
+		case "nornicdb":
+			return "/pcg/bin/nornicdb", nil
+		default:
+			return "", errors.New("unexpected binary lookup")
+		}
+	}
+
+	got, err := resolveNornicDBBinary()
+	if err != nil {
+		t.Fatalf("resolveNornicDBBinary() error = %v, want nil", err)
+	}
+	if got != "/pcg/bin/nornicdb-headless" {
+		t.Fatalf("resolveNornicDBBinary() = %q, want headless path", got)
+	}
+}
+
+func TestResolveNornicDBBinaryAllowsExplicitFullBinary(t *testing.T) {
+	t.Setenv("PCG_NORNICDB_BINARY", "/opt/nornicdb")
+
+	got, err := resolveNornicDBBinary()
+	if err != nil {
+		t.Fatalf("resolveNornicDBBinary() error = %v, want nil", err)
+	}
+	if got != "/opt/nornicdb" {
+		t.Fatalf("resolveNornicDBBinary() = %q, want explicit path", got)
 	}
 }
 

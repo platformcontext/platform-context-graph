@@ -104,10 +104,16 @@ installed graph backend (for example `graph/nornicdb/`).
 - `graph_backend` — optional, populated only on `local_authoritative`;
   allowed values enumerated by `capability-conformance-spec.md`
 - `graph_pid` — optional, graph backend PID when the sidecar is running
+- `graph_address` — optional, loopback bind address for graph backends that
+  use TCP listener ports
+- `graph_bolt_port` — optional, loopback Bolt port for graph backends that
+  speak Neo4j-compatible Bolt
+- `graph_http_port` — optional, loopback HTTP health/admin port for graph
+  backends that expose one
 - `graph_data_dir` — optional, absolute path to the graph backend data
   directory (typically `${workspace_root}/graph/<backend>/`)
-- `graph_socket_path` — optional, local socket path the graph backend
-  listens on
+- `graph_socket_path` — optional, local socket path for graph backends that
+  use Unix sockets; NornicDB does not populate this today
 - `graph_version` — optional, installed graph backend binary version
 
 ## Ownership Rules
@@ -131,7 +137,9 @@ The reclaim flow should check, in order:
 3. whether the owner version matches the current binary
 4. whether the recorded Postgres PID is still alive and serving its socket
 5. if `graph_pid` is recorded, whether the graph backend process is still
-   alive and serving `graph_socket_path`
+   alive and serving its recorded local endpoint (`graph_socket_path` when a
+   socket backend is in use, otherwise `graph_address` + `graph_bolt_port` /
+   `graph_http_port`)
 
 If the owner PID is dead but the recorded Postgres PID is still alive, the new
 process must not silently adopt that Postgres instance. It should:
@@ -146,7 +154,7 @@ attempt, startup must fail with an actionable operator error.
 If all checks fail and Postgres is confirmed stopped, the new process may take
 ownership and rewrite `owner.json`.
 
-## Local Sockets
+## Local Endpoints
 
 The local host should use a workspace-local Unix socket contract for ownership
 and health checks. Embedded Postgres also keeps a workspace-local Unix socket
@@ -158,12 +166,18 @@ checks over `localhost:<port>` and the local attach flows reuse that same
 loopback endpoint. This port is not a public network surface and must bind
 only to loopback addresses.
 
+The current `local_authoritative` NornicDB path uses loopback-only TCP ports
+for both Bolt and HTTP health instead of a Unix socket. Those ports must also
+bind only to loopback addresses and must be recorded in `owner.json`.
+
 To avoid `sun_path` length limits:
 
 - socket paths should live under a short runtime directory such as
   `${TMPDIR}/pcg/<workspace_id>/`
 - `owner.json` should record the resolved socket path
 - `owner.json` should record the resolved loopback Postgres port
+- `owner.json` should record the resolved graph loopback address and ports
+  for backends that do not support Unix sockets
 - long home-directory paths must not be used directly as socket paths
 - if `${TMPDIR}` itself is too long on a given host, the runtime should fall
   back to a shorter operator-visible runtime directory

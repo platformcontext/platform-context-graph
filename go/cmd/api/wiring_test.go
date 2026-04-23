@@ -36,7 +36,7 @@ func TestWireAPIReturnsInvalidQueryProfileErrorBeforeConnectingDatastores(t *tes
 	}
 }
 
-func TestOpenQueryGraphRejectsUnsupportedGraphBackend(t *testing.T) {
+func TestOpenQueryGraphAcceptsNornicDBOnSharedBoltPath(t *testing.T) {
 	t.Parallel()
 
 	_, _, err := openQueryGraph(context.Background(), func(key string) string {
@@ -52,8 +52,8 @@ func TestOpenQueryGraphRejectsUnsupportedGraphBackend(t *testing.T) {
 	if err == nil {
 		t.Fatal("openQueryGraph() error = nil, want non-nil")
 	}
-	if !strings.Contains(err.Error(), "graph backend") {
-		t.Fatalf("openQueryGraph() error = %q, want graph backend context", err)
+	if !strings.Contains(err.Error(), "PCG_NEO4J_URI") && !strings.Contains(err.Error(), "NEO4J_URI") {
+		t.Fatalf("openQueryGraph() error = %q, want shared bolt config context", err)
 	}
 }
 

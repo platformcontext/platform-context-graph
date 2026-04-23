@@ -4,11 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/spf13/cobra"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
+	"github.com/platformcontext/platform-context-graph/go/internal/query"
 )
 
 var (
@@ -17,23 +19,28 @@ var (
 		return pcglocal.BuildLayout(os.Getenv, os.UserHomeDir, runtime.GOOS, workspaceRoot)
 	}
 	graphReadOwnerRecord = pcglocal.ReadOwnerRecord
-	graphProcessAlive    = pcglocal.ProcessAlive
-	graphSocketHealthy   = pcglocal.SocketHealthy
+	graphResolveBinary   = resolveNornicDBBinary
+	graphReadVersion     = readLocalGraphVersion
 )
 
 type graphStatusOutput struct {
-	WorkspaceRoot string `json:"workspace_root"`
-	WorkspaceID   string `json:"workspace_id"`
-	OwnerPresent  bool   `json:"owner_present"`
-	OwnerPID      int    `json:"owner_pid,omitempty"`
-	OwnerStarted  string `json:"owner_started_at,omitempty"`
-	Profile       string `json:"profile,omitempty"`
-	GraphBackend  string `json:"graph_backend,omitempty"`
-	GraphRunning  bool   `json:"graph_running"`
-	GraphPID      int    `json:"graph_pid,omitempty"`
-	GraphDataDir  string `json:"graph_data_dir,omitempty"`
-	GraphSocket   string `json:"graph_socket_path,omitempty"`
-	GraphVersion  string `json:"graph_version,omitempty"`
+	WorkspaceRoot   string `json:"workspace_root"`
+	WorkspaceID     string `json:"workspace_id"`
+	OwnerPresent    bool   `json:"owner_present"`
+	OwnerPID        int    `json:"owner_pid,omitempty"`
+	OwnerStarted    string `json:"owner_started_at,omitempty"`
+	Profile         string `json:"profile,omitempty"`
+	GraphBackend    string `json:"graph_backend,omitempty"`
+	GraphInstalled  bool   `json:"graph_installed"`
+	GraphBinaryPath string `json:"graph_binary_path,omitempty"`
+	GraphRunning    bool   `json:"graph_running"`
+	GraphPID        int    `json:"graph_pid,omitempty"`
+	GraphAddress    string `json:"graph_address,omitempty"`
+	GraphBoltPort   int    `json:"graph_bolt_port,omitempty"`
+	GraphHTTPPort   int    `json:"graph_http_port,omitempty"`
+	GraphDataDir    string `json:"graph_data_dir,omitempty"`
+	GraphLogPath    string `json:"graph_log_path,omitempty"`
+	GraphVersion    string `json:"graph_version,omitempty"`
 }
 
 func init() {
@@ -125,6 +132,14 @@ func graphStatusForLayout(layout pcglocal.Layout) (graphStatusOutput, error) {
 	status := graphStatusOutput{
 		WorkspaceRoot: layout.WorkspaceRoot,
 		WorkspaceID:   layout.WorkspaceID,
+		GraphLogPath:  filepath.Join(layout.LogsDir, "graph-nornicdb.log"),
+	}
+	if binaryPath, err := graphResolveBinary(); err == nil {
+		status.GraphInstalled = true
+		status.GraphBinaryPath = binaryPath
+		if version, versionErr := graphReadVersion(binaryPath); versionErr == nil {
+			status.GraphVersion = version
+		}
 	}
 
 	record, err := graphReadOwnerRecord(layout.OwnerRecordPath)
@@ -139,9 +154,13 @@ func graphStatusForLayout(layout pcglocal.Layout) (graphStatusOutput, error) {
 	status.OwnerPID = record.PID
 	status.OwnerStarted = record.StartedAt
 	status.GraphPID = record.GraphPID
+	status.GraphAddress = record.GraphAddress
+	status.GraphBoltPort = record.GraphBoltPort
+	status.GraphHTTPPort = record.GraphHTTPPort
 	status.GraphDataDir = record.GraphDataDir
-	status.GraphSocket = record.GraphSocketPath
-	status.GraphVersion = record.GraphVersion
+	if record.GraphVersion != "" {
+		status.GraphVersion = record.GraphVersion
+	}
 
 	runtimeConfig, err := runtimeConfigFromOwnerRecord(record)
 	if err != nil {
@@ -150,8 +169,8 @@ func graphStatusForLayout(layout pcglocal.Layout) (graphStatusOutput, error) {
 	status.Profile = string(runtimeConfig.Profile)
 	status.GraphBackend = string(runtimeConfig.GraphBackend)
 
-	if record.GraphPID > 0 && record.GraphSocketPath != "" {
-		status.GraphRunning = graphProcessAlive(record.GraphPID) && graphSocketHealthy(record.GraphSocketPath)
+	if runtimeConfig.Profile == query.ProfileLocalAuthoritative {
+		status.GraphRunning = graphHealthyFromOwnerRecord(record)
 	}
 
 	return status, nil

@@ -6,71 +6,57 @@ the `local_authoritative` profile. For install, see
 lifecycle contract that governs startup / shutdown ordering, see
 [Local Host Lifecycle](local-host-lifecycle.md).
 
-## Command group
+## Current command group
 
 ```text
-pcg graph start
-pcg graph stop
 pcg graph status
-pcg graph logs
-pcg graph upgrade
 ```
 
-All commands operate on the graph backend tied to the current workspace.
+`pcg graph status` is wired today. The remaining lifecycle commands
+(`pcg graph start|stop|logs|upgrade`) are still planned and currently return
+actionable guidance instead of performing real lifecycle control.
 
-### `pcg graph start`
+The local-authoritative runtime still manages the sidecar automatically when
+you run a PCG local host entrypoint such as:
 
-Starts the graph backend sidecar under the current workspace data root.
-Used internally by the lightweight host startup sequence; safe to invoke
-manually for debugging.
+```bash
+PCG_QUERY_PROFILE=local_authoritative pcg watch .
+```
 
-- Binds to a Unix socket under `${TMPDIR}/pcg/<workspace_id>/graph.sock`
-  (or a shorter runtime directory if `${TMPDIR}` itself is too long for
-  `sun_path`).
-- Writes the PID, socket path, and data directory into `owner.json`.
-- Waits until the backend accepts Bolt connections before returning.
-
-### `pcg graph stop`
-
-Requests graceful shutdown of the graph backend. Equivalent to the step
-that runs during lightweight host clean shutdown. Use `--force` to send an
-immediate stop after the graceful window expires.
+That path requires a discoverable NornicDB binary. Laptop installs prefer
+`nornicdb-headless`; the full `nornicdb` binary is supported only when users
+opt in because it is larger. See
+[Graph Backend Installation](graph-backend-installation.md).
 
 ### `pcg graph status`
 
 Reports, for the current workspace:
 
-- whether the graph backend is installed
-- whether the graph backend is running
-- backend version
+- whether a local NornicDB binary was discovered
+- binary path
+- discovered version
+- whether a workspace owner is present
+- backend PID
+- loopback bind address
+- Bolt port
+- HTTP health port
 - data directory path
-- socket path
-- last startup time
-- last Bolt ping result
+- graph log path
+- whether the backend currently looks healthy
 
-Exit code is non-zero when the backend should be running but is not.
+For the current NornicDB-backed `local_authoritative` path, health means:
 
-### `pcg graph logs`
+- the recorded graph PID is alive
+- `GET /health` on the recorded loopback HTTP port succeeds
+- the recorded loopback Bolt port accepts TCP connections
 
-Tails the graph backend log file under `${workspace_root}/logs/graph.log`.
-Respects `--follow`, `--lines`, `--since`.
-
-### `pcg graph upgrade`
-
-Shorthand for:
-
-1. `pcg install nornicdb --version <next>`
-2. `pcg graph stop`
-3. `pcg graph start`
-
-Fails closed if step 1 does not complete cleanly or if the new backend does
-not accept connections after restart.
+The sidecar writes logs under `${PCG_HOME}/local/workspaces/<workspace_id>/logs/graph-nornicdb.log`.
 
 ## Health probe
 
 `pcg doctor` probes the graph backend as part of the local-host check
 suite when the active profile is `local_authoritative`. A failing probe
-prints the backend-specific failure (bolt timeout, socket missing, version
+prints the backend-specific failure (bolt timeout, health failure, version
 mismatch, data directory not writable) and returns a non-zero exit code.
 
 ## Troubleshooting
@@ -79,13 +65,13 @@ mismatch, data directory not writable) and returns a non-zero exit code.
 
 Check, in order:
 
-1. `pcg graph status` — is the binary where `owner.json` expects it?
-2. `pcg graph logs --lines 200` — did the backend emit an error?
+1. `pcg graph status` — did PCG discover the expected NornicDB binary?
+2. open `${PCG_HOME}/local/workspaces/<workspace_id>/logs/graph-nornicdb.log`
+   — did the backend emit an error?
 3. `ls -la ${workspace_root}/graph/` — is the data directory writable by
    the current user?
-4. Socket path length — on macOS, `sun_path` is 104 chars; a deeply
-   nested `${TMPDIR}` can exceed that. The runtime should log a fallback
-   runtime dir; verify which path it chose.
+4. Loopback ports — verify that the recorded Bolt and HTTP ports are still
+   free before startup and still bound to the graph PID after startup.
 
 ### Backend running but queries return `backend_unavailable`
 
@@ -94,7 +80,7 @@ Check, in order:
   restart the lightweight host: `pcg watch` will re-read owner state.
 - Graph backend may be in recovery. On restart after an unclean
   shutdown, NornicDB runs Badger + MVCC recovery. Wait; tail
-  `pcg graph logs`.
+  `logs/graph-nornicdb.log`.
 
 ### Backend stuck after crash
 
@@ -102,8 +88,8 @@ Check, in order:
   directory locks remain, the graph backend may require manual cleanup.
   Remove stale lock files in the data directory only after confirming no
   live process holds them.
-- The lightweight host reclaim flow includes a best-effort stop
-  (`pcg graph stop --force` before reclaim); see
+- The lightweight host reclaim flow includes a best-effort internal stop
+  before reclaim; see
   [Local Host Lifecycle](local-host-lifecycle.md).
 
 ## Telemetry

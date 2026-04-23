@@ -22,8 +22,8 @@
 
 | Phase | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
-| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating | install path, sidecar lifecycle, authoritative attach validation |
-| Operator CLI surface | In progress | current branch `pcg graph status` and stubbed `pcg graph start|stop|logs|upgrade`, `pcg install nornicdb` | real installer and sidecar lifecycle wiring |
+| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown | syntax verification |
+| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; `pcg graph start|stop|logs|upgrade` and `pcg install nornicdb` still intentionally stubbed | real installer and public lifecycle commands |
 | Adapter conformance | Not started | — | `GraphQuery`/`GraphWrite` adapter, syntax verification, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
 
@@ -121,16 +121,18 @@ PCG introduces a new runtime profile, `local_authoritative`, that runs the
 lightweight local host plus a user-level NornicDB sidecar. This profile
 unlocks the high-authority graph queries that `local_lightweight` refuses.
 
-NornicDB runs as a separate process. It is installed via `pcg install
-nornicdb`, managed by `pcg graph start|stop|status`, and its lifecycle is
-tracked in the workspace data root (`owner.json` records the graph PID and
-socket).
+NornicDB runs as a separate process. Laptop installs default to the
+headless `nornicdb-headless` artifact; the full `nornicdb` binary remains
+an explicit opt-in for users who accept the larger UI / local-LLM payload.
+It is installed via `pcg install nornicdb`, managed by
+`pcg graph start|stop|status`, and its lifecycle is tracked in the
+workspace data root (`owner.json` records the graph PID and loopback ports).
 
 It does not run embedded in the `pcg` binary. The "lightweight" goal is
 preserved by:
 
 - one-command install
-- per-workspace local sockets (no TCP port binding by default)
+- loopback-only ports owned by the workspace lock
 - process ownership tied to the workspace lock
 - clean install / uninstall / upgrade
 
@@ -179,9 +181,10 @@ Until then, Neo4j remains the default. NornicDB is opt-in.
 NornicDB does not ship as an in-process Go library. This ADR does not
 attempt to embed it. The "lightweight" outcome is delivered by:
 
-- one-command install through `pcg install nornicdb`
+- one-command laptop install of the headless artifact through
+  `pcg install nornicdb`
 - sidecar process lifecycle owned by the local host
-- fixed local socket per workspace
+- loopback-only health and Bolt endpoints recorded in `owner.json`
 - deterministic shutdown sequencing documented in
   `local-host-lifecycle.md`
 
