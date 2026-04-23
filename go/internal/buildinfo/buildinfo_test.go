@@ -3,8 +3,6 @@ package buildinfo
 import "testing"
 
 func TestAppVersionDefaultsToDevWhenEmpty(t *testing.T) {
-	t.Parallel()
-
 	original := Version
 	Version = "   "
 	t.Cleanup(func() { Version = original })
@@ -15,8 +13,6 @@ func TestAppVersionDefaultsToDevWhenEmpty(t *testing.T) {
 }
 
 func TestAppVersionPreservesInjectedValue(t *testing.T) {
-	t.Parallel()
-
 	original := Version
 	Version = "v0.1.0"
 	t.Cleanup(func() { Version = original })
