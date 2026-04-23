@@ -1,0 +1,135 @@
+go/internal/reducer/service.go
+  e27ce815bbe89792 36-40,54-60,348-353,358-360,373-377,437-502
+go/internal/projector/service_test.go
+  e27ce815bbe89792 250-303,384,391,395
+go/cmd/pcg/repository_selector.go
+  e27ce815bbe89792 24,31-33,37,39,44,47,53,55,57
+go/internal/reducer/semantic_entity_materialization_helpers.go
+  e27ce815bbe89792 25-27,252,290-291
+go/cmd/pcg/local_host_supervision_test.go
+  e27ce815bbe89792 1-244
+go/cmd/pcg/analyze.go
+  e27ce815bbe89792 25,38,51,63,74,108,124-127,135,141,151-154,162,168,178-181,184,187,199-202,204,208,219-222,224,228,278-281,283,287,310-313
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 39-40
+go/cmd/pcg/local_authoritative_dead_code_perf_test.go
+  e27ce815bbe89792 60,63,71-73,88
+go/internal/storage/neo4j/edge_writer_test.go
+  e27ce815bbe89792 157,159-160,177-209,237,1003-1004,1006-1007,1021-1068,1160
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 33
+go/cmd/pcg/local_host_children.go
+  e27ce815bbe89792 1-149
+go/cmd/reducer/neo4j_wiring_test.go
+  e27ce815bbe89792 7,9,137-209
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 127,148-151
+go/internal/query/code_dead_code.go
+  e27ce815bbe89792 98
+go/internal/reducer/graph_projection_phase_test.go
+  e27ce815bbe89792 129,136
+go/cmd/pcg/local_host.go
+  e27ce815bbe89792 55,201-219,229,232,241-247
+go/internal/reducer/semantic_entity_materialization_test.go
+  e27ce815bbe89792 265-308
+go/internal/storage/neo4j/canonical.go
+  e27ce815bbe89792 162-184,191-213,220-239
+go/internal/reducer/code_call_projection_runner_lease.go
+  e27ce815bbe89792 1-92
+go/internal/storage/neo4j/canonical_node_writer_test.go
+  e27ce815bbe89792 57-75,146-150,163,270,307-308,311,314-319,321,324-326,328-331,333,335-336,338-339,428,432-433,437,440-444,448-449,451,453,456,458,460,463,918-956
+go/internal/storage/neo4j/canonical_node_cypher.go
+  e27ce815bbe89792 94-102
+go/internal/query/entity_resolution_test.go
+  e27ce815bbe89792 1-228
+go/internal/storage/neo4j/semantic_entity_nornicdb_test.go
+  e27ce815bbe89792 1-69
+go/internal/reducer/code_call_projection_runner_test.go
+  e27ce815bbe89792 242-332,594,625,672-673,760,848-850,858-863,912-922
+go/internal/storage/neo4j/semantic_entity_test.go
+  e27ce815bbe89792 288-335
+go/internal/storage/postgres/reducer_queue_heartbeat_test.go
+  e27ce815bbe89792 1-82
+go/internal/query/language_query_entities.go
+  e27ce815bbe89792 105-107,262
+go/cmd/pcg/nornicdb_grouped_write_test.go
+  e27ce815bbe89792 47-79,331-358
+go/cmd/pcg/local_authoritative_query_perf_test.go
+  e27ce815bbe89792 96,99,107-109,124,139,142,150-152,167
+go/cmd/ingester/wiring_test.go
+  e27ce815bbe89792 76-96,224,230,234,236-240,250-269,276,295,313-334,338,414-457
+go/internal/reducer/service_batch_test.go
+  e27ce815bbe89792 182-245
+go/internal/storage/neo4j/canonical_node_writer_entities.go
+  e27ce815bbe89792 1-136
+go/internal/storage/neo4j/edge_writer.go
+  e27ce815bbe89792 303,324-326,335,340-350,358,363-373
+go/cmd/reducer/neo4j_wiring.go
+  e27ce815bbe89792 19-24,250-290
+go/cmd/pcg/local_authoritative_perf_test.go
+  e27ce815bbe89792 77,80,89-91,114
+go/internal/storage/neo4j/semantic_entity.go
+  e27ce815bbe89792 13,15-17,25-34,68-72,74-128,132,163-240,331-332
+go/cmd/reducer/main.go
+  e27ce815bbe89792 138-154,169-178,211,242-243
+docs/docs/reference/cli-reference.md
+  e27ce815bbe89792 82-90
+go/internal/storage/neo4j/canonical_node_writer_entities_test.go
+  e27ce815bbe89792 1-107
+go/internal/query/code_call_graph_contract_test.go
+  e27ce815bbe89792 496-497,499-500,552-553,555-556,613-620,622,687-688,785-789,791,858-859,861-862
+go/internal/storage/neo4j/semantic_entity_statements.go
+  e27ce815bbe89792 1-248
+go/internal/query/code_relationships.go
+  e27ce815bbe89792 35-45,221,281,288-289,306-309,313,318-321,325,331-333,339,348,353-354
+go/cmd/pcg/analyze_test.go
+  e27ce815bbe89792 28,36-38,55-57,76,88-90,110-149,198
+go/internal/storage/postgres/reducer_queue.go
+  e27ce815bbe89792 91-100,144-147,288-313
+go/internal/projector/service.go
+  e27ce815bbe89792 204,208,212,218,223,228-229,235,240-241,250-251,255
+go/internal/query/code_call_chain.go
+  e27ce815bbe89792 4,59-62,94-96,98-100,102-107,116-117,132,170,182-221
+go/internal/query/entity_resolution.go
+  e27ce815bbe89792 1-97
+go/cmd/ingester/wiring.go
+  e27ce815bbe89792 29,32,226-227,260,266-269,284,300,321-324,329-368,397-406
+go/internal/reducer/code_call_projection_runner.go
+  e27ce815bbe89792 136,163,165-171,174,204,375
+go/internal/reducer/service_batch.go
+  e27ce815bbe89792 213-218,223-225,234-236
+go/internal/storage/neo4j/canonical_node_writer.go
+  e27ce815bbe89792 78-108,146
+go/internal/storage/neo4j/writer.go
+  e27ce815bbe89792 80-86
+go/internal/reducer/shared_projection.go
+  e27ce815bbe89792 94
+go/internal/reducer/service_heartbeat_test.go
+  e27ce815bbe89792 1-103
+go/cmd/pcg/nornicdb_syntax_test.go
+  e27ce815bbe89792 64-112,190-196
+go/cmd/pcg/local_host_test.go
+  e27ce815bbe89792 9,348,357,404,406,412,448-449
+docs/docs/reference/graph-backend-operations.md
+  e27ce815bbe89792 62-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "571b66eab4529cba81686319f9de8ca264414143",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 3393,
+      "total_deletions": 761,
+      "accepted_lines": 3396,
+      "overriden_lines": 0
+    }
+  }
+}
