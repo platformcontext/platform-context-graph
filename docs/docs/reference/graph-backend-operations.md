@@ -135,6 +135,9 @@ surface through a backend schema dialect:
 - `nornicdb` receives the NornicDB-compatible schema rendering, including
   composite node identity as `IS NODE KEY` and the procedure-based fulltext
   form.
+- NornicDB intentionally skips Neo4j's multi-label
+  `CREATE FULLTEXT INDEX` fallback because NornicDB only verified the
+  procedure-based multi-label fulltext path.
 
 The opt-in verification gate is:
 

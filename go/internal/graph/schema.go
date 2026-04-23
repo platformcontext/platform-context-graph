@@ -223,6 +223,7 @@ type fulltextIndex struct {
 // SchemaStatements returns the complete ordered list of Cypher statements
 // that EnsureSchema would execute. Useful for inspection and testing.
 func SchemaStatements() []string {
+	// The Neo4j backend is the default branch and cannot fail normalization.
 	stmts, _ := SchemaStatementsForBackend(SchemaBackendNeo4j)
 	return stmts
 }
@@ -314,6 +315,14 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 	// Full-text indexes with fallback
 	for _, ft := range schemaFulltextIndexes {
 		if err := executeSchemaStatement(ctx, executor, ft.primary); err != nil {
+			if dialect.skipFulltextFallback {
+				failed++
+				logger.Warn("fulltext index warning",
+					"primary_error", err,
+					"primary", ft.primary,
+					"graph_backend", dialect.backend)
+				continue
+			}
 			if err2 := executeSchemaStatement(ctx, executor, ft.fallback); err2 != nil {
 				failed++
 				logger.Warn("fulltext index warning",
@@ -333,17 +342,34 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 }
 
 type schemaDialect struct {
-	constraint func(string) string
+	backend              SchemaBackend
+	constraint           func(string) string
+	skipFulltextFallback bool
 }
 
 func schemaDialectForBackend(backend SchemaBackend) (schemaDialect, error) {
-	switch backend {
-	case "", SchemaBackendNeo4j:
-		return schemaDialect{constraint: neo4jSchemaConstraint}, nil
+	normalized, err := normalizeSchemaBackend(backend)
+	if err != nil {
+		return schemaDialect{}, err
+	}
+	switch normalized {
+	case SchemaBackendNeo4j:
+		return schemaDialect{backend: normalized, constraint: neo4jSchemaConstraint}, nil
 	case SchemaBackendNornicDB:
-		return schemaDialect{constraint: nornicDBSchemaConstraint}, nil
+		return schemaDialect{backend: normalized, constraint: nornicDBSchemaConstraint, skipFulltextFallback: true}, nil
 	default:
 		return schemaDialect{}, fmt.Errorf("unsupported schema backend %q", backend)
+	}
+}
+
+func normalizeSchemaBackend(backend SchemaBackend) (SchemaBackend, error) {
+	switch backend {
+	case "", SchemaBackendNeo4j:
+		return SchemaBackendNeo4j, nil
+	case SchemaBackendNornicDB:
+		return SchemaBackendNornicDB, nil
+	default:
+		return "", fmt.Errorf("unsupported schema backend %q", backend)
 	}
 }
 
@@ -352,10 +378,14 @@ func neo4jSchemaConstraint(cypher string) string {
 }
 
 func nornicDBSchemaConstraint(cypher string) string {
-	if !strings.Contains(cypher, " REQUIRE (") || !strings.Contains(cypher, ") IS UNIQUE") {
+	if !isCompositeUniqueConstraint(cypher) {
 		return cypher
 	}
 	return strings.Replace(cypher, ") IS UNIQUE", ") IS NODE KEY", 1)
+}
+
+func isCompositeUniqueConstraint(cypher string) bool {
+	return strings.Contains(cypher, " REQUIRE (") && strings.Contains(cypher, ") IS UNIQUE")
 }
 
 // executeSchemaStatement runs one DDL statement through the executor.
@@ -367,7 +397,7 @@ func executeSchemaStatement(ctx context.Context, executor CypherExecutor, cypher
 }
 
 // labelToSnake converts a PascalCase label to lower_snake_case for use in
-// constraint names (e.g., "CrossplaneXRD" -> "crossplanexrd").
+// constraint names (e.g., "CrossplaneXRD" -> "crossplane_x_r_d").
 func labelToSnake(label string) string {
 	result := make([]byte, 0, len(label)+4)
 	for i, b := range []byte(label) {
