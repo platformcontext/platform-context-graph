@@ -256,6 +256,13 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if _, ok := deadCodeSchema["exclude_decorated_with"]; !ok {
 		t.Fatal("code/dead-code request schema missing exclude_decorated_with")
 	}
+	deadCodeResponses := mustMapField(t, deadCodePost, "responses")
+	deadCodeOK := mustMapField(t, deadCodeResponses, "200")
+	deadCodeContent := mustMapField(t, mustMapField(t, deadCodeOK, "content"), "application/json")
+	deadCodeResponse := mustMapField(t, mustMapField(t, deadCodeContent, "schema"), "properties")
+	if _, ok := deadCodeResponse["analysis"]; !ok {
+		t.Fatal("code/dead-code response schema missing analysis")
+	}
 
 	relationshipsPath := mustMapField(t, paths, "/api/v0/code/relationships")
 	relationshipsPost := mustMapField(t, relationshipsPath, "post")

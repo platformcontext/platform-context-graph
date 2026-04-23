@@ -507,8 +507,13 @@ Example dead-code workflow:
 ```
 
 `repo_id` is optional. When omitted, the Go API returns the first page of
-dead-code candidates across indexed repositories and uses content metadata to
-filter any decorator exclusions.
+dead-code candidates across indexed repositories, applies the current default
+Go entrypoint/test/generated exclusions, and uses content metadata to filter
+any decorator exclusions. The current dead-code response is intentionally
+`derived`, not `exact`, until the broader framework, public-API, reflection,
+and user-configured root registry from the reachability spec is implemented.
+The response body now also includes an `analysis` object that reports the root
+categories currently modeled and whether tests/generated code were excluded.
 
 ## Content API
 

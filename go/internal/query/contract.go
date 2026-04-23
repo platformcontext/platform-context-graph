@@ -220,9 +220,9 @@ var capabilityMatrix = map[string]capabilitySupport{
 	},
 	"code_quality.dead_code": {
 		LocalLightweightMax:   nil,
-		LocalAuthoritativeMax: &truthExact,
-		LocalFullStackMax:     &truthExact,
-		ProductionMax:         &truthExact,
+		LocalAuthoritativeMax: &truthDerived,
+		LocalFullStackMax:     &truthDerived,
+		ProductionMax:         &truthDerived,
 		RequiredProfile:       ProfileLocalAuthoritative,
 	},
 	"platform_impact.deployment_chain": {
