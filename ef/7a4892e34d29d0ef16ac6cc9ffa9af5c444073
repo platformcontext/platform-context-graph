@@ -1,0 +1,44 @@
+docs/docs/reference/dead-code-reachability-spec.md
+  ac007ba35eb0666d 52-58
+CLAUDE.md
+  ac007ba35eb0666d 317-418
+AGENTS.md
+  ac007ba35eb0666d 1,3-4,6-23,27-84,86,88,91-112,115-126,130-141,143,145,147-149,151-285,290-291,297-299,306,311-313,315-316,321-357,365,369,373-418
+docs/docs/reference/local-performance-envelope.md
+  ac007ba35eb0666d 138-156
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  ac007ba35eb0666d 4,7-18,431-483,486-491
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "ef7a4892e34d29d0ef16ac6cc9ffa9af5c444073",
+  "prompts": {
+    "ac007ba35eb0666d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8e6337a4-94ed-462b-884f-543d9387b230",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 968,
+      "total_deletions": 91,
+      "accepted_lines": 981,
+      "overriden_lines": 0
+    },
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    }
+  }
+}
