@@ -1,6 +1,9 @@
 package query
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 type deadCodePolicyStats struct {
 	RootsSkippedMissingSource int
@@ -9,12 +12,14 @@ type deadCodePolicyStats struct {
 type deadCodeGoPolicyContext struct {
 	language         string
 	normalizedSource string
+	rootKinds        []string
 }
 
 func newDeadCodeGoPolicyContext(result map[string]any, entity *EntityContent) deadCodeGoPolicyContext {
 	return deadCodeGoPolicyContext{
 		language:         strings.ToLower(deadCodeEntityLanguage(result, entity)),
 		normalizedSource: deadCodeNormalizedSource(entity),
+		rootKinds:        deadCodeRootKinds(result, entity),
 	}
 }
 
@@ -24,6 +29,9 @@ func deadCodeIsGoHTTPHandlerRoot(result map[string]any, policy deadCodeGoPolicyC
 	}
 	if primaryEntityLabel(result) != "Function" {
 		return false
+	}
+	if slices.Contains(policy.rootKinds, "go.net_http_handler_signature") {
+		return true
 	}
 
 	return strings.Contains(policy.normalizedSource, "http.responsewriter") &&
@@ -37,6 +45,9 @@ func deadCodeIsGoCLICommandRoot(result map[string]any, policy deadCodeGoPolicyCo
 	if primaryEntityLabel(result) != "Function" {
 		return false
 	}
+	if slices.Contains(policy.rootKinds, "go.cobra_run_signature") {
+		return true
+	}
 
 	return strings.Contains(policy.normalizedSource, "*cobra.command") &&
 		strings.Contains(policy.normalizedSource, "[]string")
@@ -48,6 +59,9 @@ func deadCodeIsGoFrameworkCallbackRoot(result map[string]any, policy deadCodeGoP
 	}
 	if primaryEntityLabel(result) != "Function" {
 		return false
+	}
+	if slices.Contains(policy.rootKinds, "go.controller_runtime_reconcile_signature") {
+		return true
 	}
 	if strings.TrimSpace(StringVal(result, "name")) != "Reconcile" {
 		return false
@@ -73,6 +87,42 @@ func deadCodeNormalizedSource(entity *EntityContent) string {
 		return ""
 	}
 	return strings.Join(strings.Fields(normalized), " ")
+}
+
+func deadCodeRootKinds(result map[string]any, entity *EntityContent) []string {
+	if metadata, ok := result["metadata"].(map[string]any); ok {
+		if kinds := deadCodeRootKindsFromMetadata(metadata); len(kinds) > 0 {
+			return kinds
+		}
+	}
+	if entity == nil {
+		return nil
+	}
+	return deadCodeRootKindsFromMetadata(entity.Metadata)
+}
+
+func deadCodeRootKindsFromMetadata(metadata map[string]any) []string {
+	if metadata == nil {
+		return nil
+	}
+	raw, ok := metadata["dead_code_root_kinds"]
+	if !ok {
+		return nil
+	}
+	switch typed := raw.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, value := range typed {
+			if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+				values = append(values, text)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
 }
 
 func stripGoComments(source string) string {
