@@ -198,7 +198,7 @@ func filterDeadCodeResultsByDefaultPolicy(
 
 func deadCodeResultExcludedByDefault(result map[string]any, entity *EntityContent, stats *deadCodePolicyStats) bool {
 	goPolicy := newDeadCodeGoPolicyContext(result, entity)
-	if goPolicy.language == "go" && goPolicy.normalizedSource == "" && entity != nil {
+	if goPolicy.language == "go" && goPolicy.normalizedSource == "" && entity != nil && len(goPolicy.rootKinds) == 0 {
 		stats.RootsSkippedMissingSource++
 	}
 

@@ -34,8 +34,9 @@ func (e *Engine) parseGo(
 	payload["interfaces"] = []map[string]any{}
 	payload["structs"] = []map[string]any{}
 	payload["embedded_sql_queries"] = extractGoEmbeddedSQLQueries(string(source))
-	scope := options.normalizedVariableScope()
 	root := tree.RootNode()
+	importAliases := goImportAliasIndex(root, source)
+	scope := options.normalizedVariableScope()
 
 	walkNamed(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
@@ -58,6 +59,9 @@ func (e *Engine) parseGo(
 			}
 			if classContext := goReceiverContext(node, source); classContext != "" {
 				item["class_context"] = classContext
+			}
+			if rootKinds := goDeadCodeRootKinds(node, source, importAliases); len(rootKinds) > 0 {
+				item["dead_code_root_kinds"] = rootKinds
 			}
 			if options.IndexSource {
 				item["source"] = nodeText(node, source)

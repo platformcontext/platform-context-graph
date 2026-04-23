@@ -141,6 +141,9 @@ Current branch status:
 - Go direct Cobra run signatures are modeled
 - Go stdlib HTTP handler signatures are modeled
 - Go controller-runtime `Reconcile` signatures are modeled
+- those Go signature roots are now emitted by the Go parser into entity
+  metadata when imports and signatures match directly; query-time source
+  heuristics remain as a fallback while broader registry coverage lands
 - broader Go router, webhook, worker, reflection, and build-tag roots remain
   open, so dead-code truth stays `derived`
 
