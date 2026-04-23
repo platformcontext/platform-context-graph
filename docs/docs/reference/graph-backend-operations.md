@@ -53,6 +53,14 @@ managed `${PCG_HOME}/bin/nornicdb-headless` binary created by
 only when users opt in because it is larger. See
 [Graph Backend Installation](graph-backend-installation.md).
 
+While NornicDB is under evaluation, PCG keeps local content search isolated
+from graph projection stalls. The local-authoritative ingester writes the
+embedded-Postgres content index before attempting canonical graph writes, and
+NornicDB canonical writes run sequentially with a bounded per-statement
+deadline. The timeout defaults to `15s` and can be tuned for diagnostics with
+`PCG_CANONICAL_WRITE_TIMEOUT=2s`. Neo4j production writes keep the grouped
+canonical path and are not affected by this local-authoritative guardrail.
+
 ### `pcg graph status`
 
 Reports, for the current workspace:
@@ -117,6 +125,15 @@ Check, in order:
 - Graph backend may be in recovery. On restart after an unclean
   shutdown, NornicDB runs Badger + MVCC recovery. Wait; tail
   `logs/graph-nornicdb.log`.
+
+### Content search works but graph-backed answers are degraded
+
+This is expected during NornicDB evaluation if a canonical graph write times
+out. MCP/CLI code-search tools that can answer from the content index should
+still return results with a truth envelope such as
+`basis=content_index` and `profile=local_authoritative`. Graph-backed
+capabilities remain degraded until the graph projection succeeds or the
+workspace is re-indexed after the backend issue is fixed.
 
 ### Backend stuck after crash
 

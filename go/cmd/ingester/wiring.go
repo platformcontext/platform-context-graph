@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	ingesterCollectorPollInterval = time.Second
-	ingesterConnectionTimeout     = 10 * time.Second
+	ingesterCollectorPollInterval        = time.Second
+	ingesterConnectionTimeout            = 10 * time.Second
+	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -141,7 +142,7 @@ func buildIngesterProjectorService(
 		PollInterval:          time.Second,
 		WorkSource:            projectorQueue,
 		FactStore:             postgres.NewFactStore(database),
-		Runner:                buildIngesterProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, tracer, instruments),
+		Runner:                buildIngesterProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, getenv, tracer, instruments),
 		WorkSink:              projectorQueue,
 		Tracer:                tracer,
 		Instruments:           instruments,
@@ -194,16 +195,18 @@ func buildIngesterProjectorRuntime(
 	canonicalWriter projector.CanonicalWriter,
 	intentWriter projector.ReducerIntentWriter,
 	retryInjector projector.RetryInjector,
+	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) projector.Runtime {
 	return projector.Runtime{
-		CanonicalWriter: canonicalWriter,
-		ContentWriter:   postgres.NewContentWriter(database),
-		IntentWriter:    intentWriter,
-		RetryInjector:   retryInjector,
-		Tracer:          tracer,
-		Instruments:     instruments,
+		CanonicalWriter:        canonicalWriter,
+		ContentWriter:          postgres.NewContentWriter(database),
+		IntentWriter:           intentWriter,
+		RetryInjector:          retryInjector,
+		ContentBeforeCanonical: ingesterContentBeforeCanonical(getenv),
+		Tracer:                 tracer,
+		Instruments:            instruments,
 	}
 }
 
@@ -216,6 +219,10 @@ func openIngesterCanonicalWriter(
 	if writer, closer, ok := maybeLocalLightweightCanonicalWriter(getenv); ok {
 		return writer, closer, nil
 	}
+	graphBackend, err := runtimecfg.LoadGraphBackend(getenv)
+	if err != nil {
+		return nil, nil, err
+	}
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err
@@ -224,23 +231,57 @@ func openIngesterCanonicalWriter(
 	rawExecutor := ingesterNeo4jExecutor{
 		Driver:       driver,
 		DatabaseName: cfg.DatabaseName,
+		TxTimeout:    canonicalTransactionTimeout(graphBackend, getenv),
 	}
 
 	writer := sourceneo4j.NewCanonicalNodeWriter(
-		&sourceneo4j.InstrumentedExecutor{
-			Inner: &sourceneo4j.RetryingExecutor{
-				Inner:       rawExecutor,
-				MaxRetries:  3,
-				Instruments: instruments,
-			},
-			Tracer:      tracer,
-			Instruments: instruments,
-		},
+		canonicalExecutorForGraphBackend(rawExecutor, graphBackend, nornicDBCanonicalWriteTimeout(getenv), tracer, instruments),
 		neo4jBatchSize(getenv),
 		instruments,
 	)
 
 	return writer, ingesterNeo4jDriverCloser{Driver: driver}, nil
+}
+
+func canonicalExecutorForGraphBackend(
+	rawExecutor sourceneo4j.Executor,
+	graphBackend runtimecfg.GraphBackend,
+	nornicDBTimeout time.Duration,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
+) sourceneo4j.Executor {
+	instrumented := &sourceneo4j.InstrumentedExecutor{
+		Inner: &sourceneo4j.RetryingExecutor{
+			Inner:       rawExecutor,
+			MaxRetries:  3,
+			Instruments: instruments,
+		},
+		Tracer:      tracer,
+		Instruments: instruments,
+	}
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		return sourceneo4j.ExecuteOnlyExecutor{Inner: sourceneo4j.TimeoutExecutor{
+			Inner:   instrumented,
+			Timeout: nornicDBTimeout,
+		}}
+	}
+	return instrumented
+}
+
+func ingesterContentBeforeCanonical(getenv func(string) string) bool {
+	return strings.TrimSpace(getenv("PCG_QUERY_PROFILE")) == "local_authoritative"
+}
+
+func nornicDBCanonicalWriteTimeout(getenv func(string) string) time.Duration {
+	raw := strings.TrimSpace(getenv("PCG_CANONICAL_WRITE_TIMEOUT"))
+	if raw == "" {
+		return defaultNornicDBCanonicalWriteTimeout
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		return defaultNornicDBCanonicalWriteTimeout
+	}
+	return parsed
 }
 
 func neo4jBatchSize(getenv func(string) string) int {
@@ -258,6 +299,7 @@ func neo4jBatchSize(getenv func(string) string) int {
 type ingesterNeo4jExecutor struct {
 	Driver       neo4jdriver.DriverWithContext
 	DatabaseName string
+	TxTimeout    time.Duration
 }
 
 func (e ingesterNeo4jExecutor) Execute(ctx context.Context, statement sourceneo4j.Statement) error {
@@ -273,7 +315,7 @@ func (e ingesterNeo4jExecutor) Execute(ctx context.Context, statement sourceneo4
 		_ = session.Close(ctx)
 	}()
 
-	result, err := session.Run(ctx, statement.Cypher, statement.Parameters)
+	result, err := session.Run(ctx, statement.Cypher, statement.Parameters, e.transactionConfigurers()...)
 	if err != nil {
 		return err
 	}
@@ -308,8 +350,22 @@ func (e ingesterNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourcen
 			}
 		}
 		return nil, nil
-	})
+	}, e.transactionConfigurers()...)
 	return err
+}
+
+func (e ingesterNeo4jExecutor) transactionConfigurers() []func(*neo4jdriver.TransactionConfig) {
+	if e.TxTimeout <= 0 {
+		return nil
+	}
+	return []func(*neo4jdriver.TransactionConfig){neo4jdriver.WithTxTimeout(e.TxTimeout)}
+}
+
+func canonicalTransactionTimeout(graphBackend runtimecfg.GraphBackend, getenv func(string) string) time.Duration {
+	if graphBackend != runtimecfg.GraphBackendNornicDB {
+		return 0
+	}
+	return nornicDBCanonicalWriteTimeout(getenv)
 }
 
 type ingesterNeo4jDriverCloser struct {

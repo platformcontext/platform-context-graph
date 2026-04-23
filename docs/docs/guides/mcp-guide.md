@@ -121,6 +121,13 @@ Use the canonical query and status surfaces first:
 - `index-status` when you need checkpointed completeness
 - runtime health or `/admin/status` when you need live service state
 
+For the `local_authoritative` NornicDB evaluation profile, code-search tools
+may answer from the embedded-Postgres content index while canonical graph
+projection is degraded. Programmatic clients should read the PCG envelope:
+`truth.profile=local_authoritative` and `truth.basis=content_index` mean the
+answer is intentionally content-index-backed, not silently pretending to be a
+fully converged graph answer.
+
 Treat repair surfaces as repair surfaces:
 
 - `pcg finalize` has been removed

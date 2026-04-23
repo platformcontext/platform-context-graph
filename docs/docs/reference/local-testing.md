@@ -79,6 +79,7 @@ absolute path to a real directory.
 | Compose, Helm, or deployable runtime shape | `cd go && go test ./cmd/api ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1` and `helm lint deploy/helm/platform-context-graph` |
 | Correlation DSL fixture corpus or compose verification lane | `./scripts/verify_correlation_dsl_compose.sh` |
 | Facts-first indexing, queue, or resolution flow | `cd go && go test ./internal/projector ./internal/reducer ./internal/storage/postgres -count=1` |
+| Local-authoritative graph backend or MCP local coding flow | `cd go && go test ./cmd/ingester ./internal/projector ./internal/storage/neo4j -count=1`; then run the manual NornicDB MCP smoke below if a local NornicDB binary is available |
 | Queue ack visibility or lease diagnosis | `cd go && go test ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry -count=1` and `cd go && go vet ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry` |
 | Recovery, replay, or repair controls | `cd go && go test ./internal/recovery ./internal/runtime ./internal/status -count=1` |
 | Facts-first telemetry or queue scaling | `cd go && go test ./internal/telemetry ./internal/runtime ./internal/projector ./internal/reducer -count=1` |
@@ -112,6 +113,32 @@ go test ./internal/parser ./internal/collector/discovery ./internal/content/shap
   ./internal/storage/neo4j ./internal/storage/postgres \
   ./internal/projector ./internal/reducer ./cmd/reducer -count=1
 ```
+
+## Local-Authoritative MCP Smoke
+
+Use this smoke when touching the NornicDB sidecar, graph-backend selection,
+projector stage ordering, or local MCP code-search behavior. It requires a
+local NornicDB binary such as `/tmp/nornicdb-headless`.
+
+```bash
+export PCG_HOME=/tmp/pcg-local-authoritative-smoke
+export PCG_CANONICAL_WRITE_TIMEOUT=2s
+./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
+./go/bin/pcg graph start --workspace-root "$PWD"
+./go/bin/pcg mcp start --workspace-root "$PWD"
+```
+
+From an MCP client, call:
+
+- `search_file_content` with a symbol or unique string from the repo
+- `find_code` with the same symbol
+- `get_index_status`
+
+The smoke passes when content-index-backed tools return real repo results with
+`truth.profile=local_authoritative` and `truth.basis=content_index`, even if
+`get_index_status` reports degraded graph projection while NornicDB remains
+under evaluation. Always finish with `pcg graph stop --workspace-root "$PWD"`
+and verify `pcg graph status` reports `owner_present=false`.
 
 ## Terraform Provider-Schema Gate
 
