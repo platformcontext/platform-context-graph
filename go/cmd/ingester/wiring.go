@@ -26,6 +26,7 @@ const (
 	ingesterCollectorPollInterval        = time.Second
 	ingesterConnectionTimeout            = 10 * time.Second
 	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
+	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -234,8 +235,23 @@ func openIngesterCanonicalWriter(
 		TxTimeout:    canonicalTransactionTimeout(graphBackend, getenv),
 	}
 
+	nornicDBGroupedWrites := false
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		nornicDBGroupedWrites, err = nornicDBCanonicalGroupedWrites(getenv)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	writer := sourceneo4j.NewCanonicalNodeWriter(
-		canonicalExecutorForGraphBackend(rawExecutor, graphBackend, nornicDBCanonicalWriteTimeout(getenv), tracer, instruments),
+		canonicalExecutorForGraphBackend(
+			rawExecutor,
+			graphBackend,
+			nornicDBCanonicalWriteTimeout(getenv),
+			nornicDBGroupedWrites,
+			tracer,
+			instruments,
+		),
 		neo4jBatchSize(getenv),
 		instruments,
 	)
@@ -247,6 +263,7 @@ func canonicalExecutorForGraphBackend(
 	rawExecutor sourceneo4j.Executor,
 	graphBackend runtimecfg.GraphBackend,
 	nornicDBTimeout time.Duration,
+	nornicDBGroupedWrites bool,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) sourceneo4j.Executor {
@@ -260,10 +277,14 @@ func canonicalExecutorForGraphBackend(
 		Instruments: instruments,
 	}
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		return sourceneo4j.ExecuteOnlyExecutor{Inner: sourceneo4j.TimeoutExecutor{
+		bounded := sourceneo4j.TimeoutExecutor{
 			Inner:   instrumented,
 			Timeout: nornicDBTimeout,
-		}}
+		}
+		if nornicDBGroupedWrites {
+			return bounded
+		}
+		return sourceneo4j.ExecuteOnlyExecutor{Inner: bounded}
 	}
 	return instrumented
 }
@@ -282,6 +303,18 @@ func nornicDBCanonicalWriteTimeout(getenv func(string) string) time.Duration {
 		return defaultNornicDBCanonicalWriteTimeout
 	}
 	return parsed
+}
+
+func nornicDBCanonicalGroupedWrites(getenv func(string) string) (bool, error) {
+	raw := strings.TrimSpace(getenv(nornicDBCanonicalGroupedWritesEnv))
+	if raw == "" {
+		return false, nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("parse %s=%q: %w", nornicDBCanonicalGroupedWritesEnv, raw, err)
+	}
+	return enabled, nil
 }
 
 func neo4jBatchSize(getenv func(string) string) int {

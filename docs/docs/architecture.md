@@ -362,7 +362,10 @@ The local-authoritative NornicDB path is intentionally guarded while under
 evaluation: canonical graph writes are sequential and timeout-bounded, and
 the local content index is written before graph projection. That preserves
 developer MCP code-search usefulness without changing the production Neo4j
-grouped-write path.
+grouped-write path. NornicDB grouped writes are available only through the
+explicit conformance switch `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true`;
+promotion requires proving the same rollback, timeout, and no-partial-write
+invariants that Neo4j currently provides.
 
 Lightweight local mode **refuses** high-authority queries (transitive callers,
 call-chain paths, dead code, blast radius, change surface) with a structured

@@ -24,7 +24,7 @@
 | --- | --- | --- | --- |
 | Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB; 2026-04-23 MCP smoke proved content-index-backed `search_file_content` and `find_code` continue to work while canonical graph projection degrades on a bounded NornicDB write timeout | release-backed installer, perf smoke |
 | Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` verifies and copies a local binary; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; current branch stopped-owner `pcg graph upgrade --from <path>`; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped | release download/signature installer and perf smoke |
-| Adapter conformance | In progress | current branch routes NornicDB canonical writes through sequential execute-only writes, applies Bolt `tx_timeout` metadata plus client context deadlines, and preserves production Neo4j grouped writes | full `GraphQuery`/`GraphWrite` adapter, matrix runs |
+| Adapter conformance | In progress | current branch routes NornicDB canonical writes through sequential execute-only writes by default, applies Bolt `tx_timeout` metadata plus client context deadlines, preserves production Neo4j grouped writes, and adds the explicit `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` conformance switch for proving NornicDB grouped writes | full `GraphQuery`/`GraphWrite` adapter, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
 
 ## Context
@@ -115,6 +115,11 @@ Feature evidence (audited 2026-04-22 against the PCG Cypher query surface):
     gates.
 - Bolt 4.x fully implemented, Bolt 5.x backward compatible with negotiation.
 - PCG uses `github.com/neo4j/neo4j-go-driver/v5`; wire compatibility expected.
+- NornicDB exposes explicit Bolt transaction hooks in the runtime
+  `nornicdb serve` path, so PCG can test Neo4j-style grouped canonical writes
+  against it. PCG keeps those grouped writes behind
+  `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` until conformance proves
+  rollback, timeout, and no-partial-write behavior on the PCG workload.
 
 Non-standard extras NornicDB provides (not required by PCG today, but
 potentially useful later): vector search, hybrid retrieval, tritemporal
@@ -362,6 +367,16 @@ The same run intentionally showed canonical graph projection degrading with
 local content-search path is isolated from NornicDB graph-write stalls. This
 does not promote NornicDB; it only proves the laptop coding workflow remains
 usable while the backend remains an evaluation candidate.
+
+Source audit on 2026-04-23 confirmed that NornicDB's actual `nornicdb serve`
+Bolt path wires `DBQueryExecutor` with `BeginTransaction`,
+`CommitTransaction`, and `RollbackTransaction`; targeted headless/no-local-LLM
+NornicDB transaction tests passed with
+`go test -tags 'noui nolocalllm' ./pkg/bolt ./pkg/txsession ...`. PCG therefore
+added a backend capability router instead of permanently hiding grouped writes:
+normal NornicDB runs stay sequential, while
+`PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` exposes grouped writes for adapter
+conformance only.
 
 ## Status Summary
 

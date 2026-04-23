@@ -61,6 +61,19 @@ deadline. The timeout defaults to `15s` and can be tuned for diagnostics with
 `PCG_CANONICAL_WRITE_TIMEOUT=2s`. Neo4j production writes keep the grouped
 canonical path and are not affected by this local-authoritative guardrail.
 
+NornicDB does implement explicit Bolt transactions, but PCG does not enable
+grouped canonical writes for normal laptop runs until the PCG conformance
+matrix proves rollback, timeout, and no-partial-write behavior on the PCG
+canonical workload. For adapter conformance only, set:
+
+```bash
+PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true
+```
+
+That switch exposes the same grouped-write surface used by Neo4j while still
+bounding the call with `PCG_CANONICAL_WRITE_TIMEOUT`. Leave it unset for
+day-to-day `local_authoritative` coding.
+
 ### `pcg graph status`
 
 Reports, for the current workspace:
