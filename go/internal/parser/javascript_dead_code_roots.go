@@ -39,10 +39,8 @@ func javaScriptRegisteredDeadCodeRootKinds(
 
 	allowedBases := make(map[string]struct{})
 	if express, ok := detectExpressSemantics(string(source)); ok {
-		if serverSymbols, ok := express["server_symbols"].([]string); ok {
-			for _, symbol := range serverSymbols {
-				allowedBases[strings.ToLower(strings.TrimSpace(symbol))] = struct{}{}
-			}
+		for _, symbol := range javaScriptExpressServerSymbols(express) {
+			allowedBases[strings.ToLower(strings.TrimSpace(symbol))] = struct{}{}
 		}
 	}
 	if len(allowedBases) == 0 {
@@ -83,6 +81,17 @@ func javaScriptRegisteredDeadCodeRootKinds(
 	})
 
 	return registered
+}
+
+func javaScriptExpressServerSymbols(express map[string]any) []string {
+	if len(express) == 0 {
+		return nil
+	}
+	serverSymbols, ok := express["server_symbols"].([]string)
+	if !ok {
+		return nil
+	}
+	return serverSymbols
 }
 
 func javaScriptDeadCodeRootKinds(
