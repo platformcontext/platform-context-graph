@@ -512,17 +512,19 @@ Example dead-code workflow:
 
 `repo_id` is optional. When omitted, the Go API returns the first page of
 dead-code candidates across indexed repositories, applies the current default
-Go entrypoint/test/generated exclusions plus Go exported public-package roots,
-and uses content metadata to filter any decorator exclusions. Exported Go
-symbols under `internal/`, `cmd/`, and `vendor/` remain candidates; only
+Go entrypoint/test/generated exclusions plus direct Go Cobra, stdlib HTTP, and
+controller-runtime framework-root signatures and Go exported public-package
+roots, and uses content metadata to filter any decorator exclusions. Exported
+Go symbols under `internal/`, `cmd/`, and `vendor/` remain candidates; only
 public-package exports are treated as default roots. The current dead-code
 response is intentionally `derived`, not `exact`, until the broader framework,
 public-API, reflection, and user-configured root registry from the
 reachability spec is implemented. The response body now also includes an
-`analysis` object that reports the root categories currently modeled and
-whether tests/generated code were excluded. `limit` defaults to `100` and is
-capped at `500`. The response also includes `truncated=true` when the bounded
-dead-code scan found more candidates than were returned.
+`analysis` object that reports the root categories currently modeled, the
+specific Go framework-root signatures currently recognized, and whether
+tests/generated code were excluded. `limit` defaults to `100` and is capped at
+`500`. The response also includes `truncated=true` when the bounded dead-code
+scan found more candidates than were returned.
 
 ## Content API
 

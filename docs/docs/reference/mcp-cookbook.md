@@ -209,7 +209,8 @@ This maps to the same route with `direction=outgoing`,
 
 This returns derived dead-code candidates today: the handler starts from the
 graph candidate set, applies the current default entrypoint/test/generated
-exclusions plus Go exported public-package roots, and reports its modeled root
+exclusions plus direct Go Cobra, stdlib HTTP, controller-runtime signature
+roots and Go exported public-package roots, and reports its modeled root
 categories in the response envelope's `data.analysis` field. The `repo_id`
 argument may be a canonical repository ID, repository name, repo slug, or
 indexed path; the server resolves it before querying. The response also

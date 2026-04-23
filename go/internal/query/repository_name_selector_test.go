@@ -216,6 +216,33 @@ func TestGetRepositoryContextAcceptsRepositorySlugSelector(t *testing.T) {
 	}
 }
 
+func TestGetRepositoryContextDecodesEscapedRepositorySlugPathValue(t *testing.T) {
+	t.Parallel()
+
+	handler := &RepositoryHandler{
+		Neo4j: canonicalSelectorRepoGraphReader{},
+		Content: fakePortContentStore{
+			repositories: []RepositoryCatalogEntry{{
+				ID:        "repo-1",
+				Name:      "order-service",
+				LocalPath: "/repos/order-service",
+				RepoSlug:  "org/order-service",
+			}},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/org%2Forder-service/context", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+}
+
 func TestGetRepositoryStoryAcceptsRepositoryPathSelector(t *testing.T) {
 	t.Parallel()
 
@@ -234,8 +261,7 @@ func TestGetRepositoryStoryAcceptsRepositoryPathSelector(t *testing.T) {
 	mux := http.NewServeMux()
 	handler.Mount(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/order-service/story", nil)
-	req.SetPathValue("repo_id", "/repos/order-service")
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/%2Frepos%2Forder-service/story", nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -275,7 +301,6 @@ func TestGetRepositoryStatsAcceptsRepositorySlugSelector(t *testing.T) {
 	handler.Mount(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/org%2Forder-service/stats", nil)
-	req.SetPathValue("repo_id", "org/order-service")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
