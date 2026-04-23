@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 )
 
 type callChainRequest struct {
@@ -51,7 +53,7 @@ func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
 		req.MaxDepth = 10
 	}
 
-	cypher, params := buildCallChainCypher(req)
+	cypher, params := buildCallChainCypher(req, h.graphBackend())
 	rows, err := h.Neo4j.Run(r.Context(), cypher, params)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
@@ -60,10 +62,7 @@ func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
 
 	chains := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		chain := row["chain"]
-		if nodes, ok := chain.([]any); ok {
-			chain = attachCallChainNodeSemantics(nodes)
-		}
+		chain := attachCallChainNodeSemantics(normalizeCallChainNodes(row["chain"]))
 		chains = append(chains, map[string]any{
 			"chain": chain,
 			"depth": IntVal(row, "depth"),
@@ -80,24 +79,44 @@ func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
 	}, BuildTruthEnvelope(h.profile(), "call_graph.call_chain_path", TruthBasisAuthoritativeGraph, "resolved from authoritative call graph traversal"))
 }
 
-func buildCallChainCypher(req callChainRequest) (string, map[string]any) {
+func buildCallChainCypher(req callChainRequest, backend GraphBackend) (string, map[string]any) {
 	params := map[string]any{}
-	predicates := make([]string, 0, 6)
+	startPattern := "(start)"
+	endPattern := "(end)"
+	predicates := make([]string, 0, 2)
 
-	if strings.TrimSpace(req.StartEntityID) != "" {
-		params["start_entity_id"] = strings.TrimSpace(req.StartEntityID)
-		predicates = append(predicates, "start.id = $start_entity_id")
-	} else {
-		params["start"] = strings.TrimSpace(req.Start)
-		predicates = append(predicates, "start.name = $start")
-	}
+	if backend == GraphBackendNornicDB {
+		if strings.TrimSpace(req.StartEntityID) != "" {
+			params["start_entity_id"] = strings.TrimSpace(req.StartEntityID)
+			startPattern = "(start {id: $start_entity_id})"
+		} else {
+			params["start"] = strings.TrimSpace(req.Start)
+			startPattern = "(start {name: $start})"
+		}
 
-	if strings.TrimSpace(req.EndEntityID) != "" {
-		params["end_entity_id"] = strings.TrimSpace(req.EndEntityID)
-		predicates = append(predicates, "end.id = $end_entity_id")
+		if strings.TrimSpace(req.EndEntityID) != "" {
+			params["end_entity_id"] = strings.TrimSpace(req.EndEntityID)
+			endPattern = "(end {id: $end_entity_id})"
+		} else {
+			params["end"] = strings.TrimSpace(req.End)
+			endPattern = "(end {name: $end})"
+		}
 	} else {
-		params["end"] = strings.TrimSpace(req.End)
-		predicates = append(predicates, "end.name = $end")
+		if strings.TrimSpace(req.StartEntityID) != "" {
+			params["start_entity_id"] = strings.TrimSpace(req.StartEntityID)
+			predicates = append(predicates, "start.id = $start_entity_id")
+		} else {
+			params["start"] = strings.TrimSpace(req.Start)
+			predicates = append(predicates, "start.name = $start")
+		}
+
+		if strings.TrimSpace(req.EndEntityID) != "" {
+			params["end_entity_id"] = strings.TrimSpace(req.EndEntityID)
+			predicates = append(predicates, "end.id = $end_entity_id")
+		} else {
+			params["end"] = strings.TrimSpace(req.End)
+			predicates = append(predicates, "end.name = $end")
+		}
 	}
 
 	if strings.TrimSpace(req.RepoID) != "" {
@@ -105,18 +124,78 @@ func buildCallChainCypher(req callChainRequest) (string, map[string]any) {
 		predicates = append(predicates, "start.repo_id = $repo_id", "end.repo_id = $repo_id")
 	}
 
-	cypher := `
-		MATCH (start)
-		MATCH (end)
-		WHERE ` + strings.Join(predicates, " AND ") + `
-		MATCH path = shortestPath(
-			(start)-[:CALLS*1..` + fmt.Sprintf("%d", req.MaxDepth) + `]->(end)
-		)
-		RETURN [node IN nodes(path) | {id: node.id, name: node.name, labels: labels(node), language: node.language, docstring: node.docstring, method_kind: node.method_kind}] as chain,
-		       length(path) as depth
-		LIMIT 5
-	`
-	return cypher, params
+	var cypher strings.Builder
+	cypher.WriteString("\n\t\tMATCH ")
+	cypher.WriteString(startPattern)
+	if backend == GraphBackendNornicDB {
+		cypher.WriteString(", ")
+		cypher.WriteString(endPattern)
+	} else {
+		cypher.WriteString("\n\t\tMATCH ")
+		cypher.WriteString(endPattern)
+	}
+	if len(predicates) > 0 {
+		cypher.WriteString("\n\t\tWHERE ")
+		cypher.WriteString(strings.Join(predicates, " AND "))
+	}
+	cypher.WriteString("\n\t\tMATCH path = shortestPath(\n")
+	cypher.WriteString("\t\t\t(start)-[:CALLS*1..")
+	cypher.WriteString(fmt.Sprintf("%d", req.MaxDepth))
+	cypher.WriteString("]->(end)\n")
+	cypher.WriteString("\t\t)\n")
+	if backend == GraphBackendNornicDB {
+		// NornicDB resolves this path correctly with raw nodes(path) results,
+		// while its inline list projection returns null today.
+		cypher.WriteString("\t\tRETURN nodes(path) as chain,\n")
+	} else {
+		cypher.WriteString("\t\tRETURN [node IN nodes(path) | {id: node.id, name: node.name, labels: labels(node), language: node.language, docstring: node.docstring, method_kind: node.method_kind}] as chain,\n")
+	}
+	cypher.WriteString("\t\t       length(path) as depth\n")
+	cypher.WriteString("\t\tLIMIT 5\n\t")
+	return cypher.String(), params
+}
+
+func normalizeCallChainNodes(raw any) []any {
+	switch nodes := raw.(type) {
+	case []any:
+		normalized := make([]any, 0, len(nodes))
+		for _, node := range nodes {
+			normalized = append(normalized, normalizeCallChainNode(node))
+		}
+		return normalized
+	case []dbtype.Node:
+		normalized := make([]any, 0, len(nodes))
+		for _, node := range nodes {
+			normalized = append(normalized, normalizeCallChainNode(node))
+		}
+		return normalized
+	default:
+		return nil
+	}
+}
+
+func normalizeCallChainNode(raw any) any {
+	switch node := raw.(type) {
+	case map[string]any:
+		return cloneQueryAnyMap(node)
+	case dbtype.Node:
+		// The shared Bolt driver returns typed nodes for raw nodes(path)
+		// results, so the handler normalizes them to the existing map shape.
+		labels := make([]any, 0, len(node.Labels))
+		for _, label := range node.Labels {
+			labels = append(labels, label)
+		}
+		return map[string]any{
+			"id":          fmt.Sprintf("%v", node.Props["id"]),
+			"name":        fmt.Sprintf("%v", node.Props["name"]),
+			"labels":      labels,
+			"language":    node.Props["language"],
+			"docstring":   node.Props["docstring"],
+			"method_kind": node.Props["method_kind"],
+		}
+	default:
+		return raw
+	}
 }
 
 func attachCallChainNodeSemantics(nodes []any) []any {

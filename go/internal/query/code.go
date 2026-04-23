@@ -10,9 +10,10 @@ import (
 // CodeHandler provides HTTP routes for code-level queries: search, relationships,
 // dead code detection, and complexity metrics.
 type CodeHandler struct {
-	Neo4j   GraphQuery
-	Content ContentStore
-	Profile QueryProfile
+	GraphBackend GraphBackend
+	Neo4j        GraphQuery
+	Content      ContentStore
+	Profile      QueryProfile
 }
 
 // Mount registers all /api/v0/code/* routes on the given mux.
@@ -38,6 +39,17 @@ func (h *CodeHandler) profile() QueryProfile {
 		return ProfileProduction
 	}
 	return NormalizeQueryProfile(string(h.Profile))
+}
+
+func (h *CodeHandler) graphBackend() GraphBackend {
+	if h == nil {
+		return GraphBackendNeo4j
+	}
+	backend, err := ParseGraphBackend(string(h.GraphBackend))
+	if err != nil {
+		return GraphBackendNeo4j
+	}
+	return backend
 }
 
 // handleSearch searches code entities by name pattern or content.
