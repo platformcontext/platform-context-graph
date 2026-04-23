@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
 )
 
 var mcpCmd = &cobra.Command{
@@ -38,6 +42,7 @@ func init() {
 	mcpStartCmd.Flags().StringP("transport", "t", "stdio", "Transport mode: stdio or sse")
 	mcpStartCmd.Flags().String("host", "0.0.0.0", "Host to bind SSE server")
 	mcpStartCmd.Flags().IntP("port", "p", 8080, "Port for SSE server")
+	mcpStartCmd.Flags().String("workspace-root", "", "Explicit workspace root for local lightweight ownership")
 	mcpCmd.AddCommand(mcpStartCmd)
 
 	// mcp setup
@@ -98,10 +103,35 @@ func init() {
 	rootCmd.AddCommand(startAlias)
 }
 
+var (
+	pcgExecutable = os.Executable
+	pcgGetwd      = os.Getwd
+	pcgExec       = func(binary string, args []string, env []string) error { return syscall.Exec(binary, args, env) }
+	pcgEnviron    = os.Environ
+)
+
 func runMCPStart(cmd *cobra.Command, args []string) error {
 	transport, _ := cmd.Flags().GetString("transport")
 	host, _ := cmd.Flags().GetString("host")
 	port, _ := cmd.Flags().GetInt("port")
+	workspaceRootFlag, _ := cmd.Flags().GetString("workspace-root")
+
+	if transport == "stdio" {
+		startPath, err := pcgGetwd()
+		if err != nil {
+			return fmt.Errorf("resolve current working directory: %w", err)
+		}
+		workspaceRoot, err := pcglocal.ResolveWorkspaceRoot(startPath, workspaceRootFlag)
+		if err != nil {
+			return err
+		}
+
+		binary, err := pcgExecutable()
+		if err != nil {
+			return fmt.Errorf("resolve pcg executable: %w", err)
+		}
+		return pcgExec(binary, []string{cleanExecutableArg0(binary), "local-host", "mcp-stdio", workspaceRoot}, pcgEnviron())
+	}
 
 	binary, err := exec.LookPath("pcg-mcp-server")
 	if err != nil {
@@ -174,4 +204,12 @@ func runServeStart(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("Starting PlatformContextGraph service (HTTP API + MCP) on %s:%d...\n", host, port)
 	return syscall.Exec(binary, []string{"pcg-api"}, os.Environ())
+}
+
+func cleanExecutableArg0(binary string) string {
+	name := strings.TrimSpace(filepath.Base(binary))
+	if name == "" {
+		return "pcg"
+	}
+	return name
 }

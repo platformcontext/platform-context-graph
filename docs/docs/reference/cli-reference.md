@@ -53,7 +53,9 @@ These options apply at the root command level.
 The CLI, MCP server, and HTTP API all accept the same runtime-profile axis via
 the `PCG_QUERY_PROFILE` environment variable. Allowed values:
 `local_lightweight`, `local_authoritative`, `local_full_stack`, `production`.
-Invalid values are rejected at startup; there is no silent default.
+Invalid values are rejected at startup. Local-host entrypoints choose their
+profile explicitly from command context, while hosted API and MCP runtimes
+default to `production` when `PCG_QUERY_PROFILE` is unset.
 Truth-level behavior per profile is defined by
 [Capability Conformance Spec](capability-conformance-spec.md) and
 [Truth Label Protocol](truth-label-protocol.md).

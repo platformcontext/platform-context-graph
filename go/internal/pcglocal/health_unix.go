@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -55,14 +57,25 @@ func StopEmbeddedPostgres(dataDir string) error {
 	if dataDir == "" {
 		return fmt.Errorf("postgres data directory is required")
 	}
-	pgCtlPath, err := pgCtlLookPath("pg_ctl")
-	if err != nil {
-		return fmt.Errorf("find pg_ctl: %w", err)
+
+	pgCtlPath := derivedPgCtlPath(dataDir)
+	if _, err := os.Stat(pgCtlPath); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("stat embedded pg_ctl: %w", err)
+		}
+		pgCtlPath, err = pgCtlLookPath("pg_ctl")
+		if err != nil {
+			return fmt.Errorf("find pg_ctl: %w", err)
+		}
 	}
 	if err := pgCtlRunner(pgCtlPath, "-D", dataDir, "stop", "-m", "fast"); err != nil {
 		return fmt.Errorf("run pg_ctl fast stop: %w", err)
 	}
 	return nil
+}
+
+func derivedPgCtlPath(dataDir string) string {
+	return filepath.Join(filepath.Dir(dataDir), "binaries", "bin", "pg_ctl")
 }
 
 func runPgCtlCommand(binary string, args ...string) error {

@@ -87,6 +87,46 @@ func TestStopEmbeddedPostgresUsesPgCtlFastStop(t *testing.T) {
 	}
 }
 
+func TestStopEmbeddedPostgresPrefersWorkspacePgCtl(t *testing.T) {
+	originalLookPath := pgCtlLookPath
+	originalRunner := pgCtlRunner
+	defer func() {
+		pgCtlLookPath = originalLookPath
+		pgCtlRunner = originalRunner
+	}()
+
+	pgCtlLookPath = func(file string) (string, error) {
+		t.Fatal("LookPath() should not be called when workspace pg_ctl exists")
+		return "", nil
+	}
+
+	var gotBinary string
+	pgCtlRunner = func(binary string, args ...string) error {
+		gotBinary = binary
+		return nil
+	}
+
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "postgres", "data")
+	if err := os.MkdirAll(filepath.Join(root, "postgres", "binaries", "bin"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v, want nil", err)
+	}
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(dataDir) error = %v, want nil", err)
+	}
+	workspacePgCtl := filepath.Join(root, "postgres", "binaries", "bin", "pg_ctl")
+	if err := os.WriteFile(workspacePgCtl, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(pg_ctl) error = %v, want nil", err)
+	}
+
+	if err := StopEmbeddedPostgres(dataDir); err != nil {
+		t.Fatalf("StopEmbeddedPostgres() error = %v, want nil", err)
+	}
+	if gotBinary != workspacePgCtl {
+		t.Fatalf("runner binary = %q, want %q", gotBinary, workspacePgCtl)
+	}
+}
+
 func TestDefaultReclaimDepsUseDefaultProbes(t *testing.T) {
 	deps := DefaultReclaimDeps()
 	if deps.PIDAlive == nil {

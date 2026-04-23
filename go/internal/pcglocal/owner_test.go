@@ -26,9 +26,16 @@ func TestOwnerRecordRoundTrip(t *testing.T) {
 		Version:            "v1",
 		SocketPath:         "/tmp/pcg/socket",
 		PostgresPID:        5678,
+		PostgresPort:       15433,
 		PostgresDataDir:    "/tmp/pcg/postgres",
 		PostgresSocketDir:  "/tmp/pcg/socketdir",
 		PostgresSocketPath: "/tmp/pcg/socketdir/.s.PGSQL.15433",
+		Profile:            "local_authoritative",
+		GraphBackend:       "nornicdb",
+		GraphPID:           91011,
+		GraphDataDir:       "/tmp/pcg/graph/nornicdb",
+		GraphSocketPath:    "/tmp/pcg/graph.sock",
+		GraphVersion:       "v0.1.0",
 	}
 
 	if err := WriteOwnerRecord(recordPath, want); err != nil {

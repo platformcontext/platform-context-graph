@@ -18,7 +18,7 @@ func EnsureLayoutVersion(layout Layout, currentVersion string) error {
 		return fmt.Errorf("current layout version is required")
 	}
 
-	nonEmptyRoot, err := dirHasEntries(layout.RootDir)
+	nonEmptyRoot, err := dirHasEntriesExcept(layout.RootDir, filepath.Base(layout.OwnerLockPath))
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func WriteLayoutVersion(path, version string) error {
 	return nil
 }
 
-func dirHasEntries(path string) (bool, error) {
+func dirHasEntriesExcept(path string, ignoredNames ...string) (bool, error) {
 	dir, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -106,12 +106,26 @@ func dirHasEntries(path string) (bool, error) {
 		_ = dir.Close()
 	}()
 
-	_, err = dir.Readdirnames(1)
-	if err == nil {
-		return true, nil
+	ignored := make(map[string]struct{}, len(ignoredNames))
+	for _, name := range ignoredNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		ignored[name] = struct{}{}
 	}
-	if errors.Is(err, io.EOF) {
-		return false, nil
+
+	for {
+		names, err := dir.Readdirnames(1)
+		if err == nil {
+			if _, skip := ignored[names[0]]; skip {
+				continue
+			}
+			return true, nil
+		}
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read directory %q: %w", path, err)
 	}
-	return false, fmt.Errorf("read directory %q: %w", path, err)
 }

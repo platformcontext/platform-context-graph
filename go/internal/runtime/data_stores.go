@@ -26,6 +26,13 @@ const (
 	defaultNeo4jVerifyTimeout                = 10 * time.Second
 )
 
+type GraphBackend string
+
+const (
+	GraphBackendNeo4j    GraphBackend = "neo4j"
+	GraphBackendNornicDB GraphBackend = "nornicdb"
+)
+
 var postgresDSNEnvKeys = []string{
 	"PCG_FACT_STORE_DSN",
 	"PCG_CONTENT_STORE_DSN",
@@ -63,6 +70,22 @@ type Neo4jConfig struct {
 	ConnectionAcquisitionTimeout time.Duration
 	SocketConnectTimeout         time.Duration
 	VerifyTimeout                time.Duration
+}
+
+// LoadGraphBackend validates the selected graph backend for the current
+// process. Empty preserves the current Neo4j default during the evaluation
+// window.
+func LoadGraphBackend(getenv func(string) string) (GraphBackend, error) {
+	switch GraphBackend(strings.TrimSpace(getenv("PCG_GRAPH_BACKEND"))) {
+	case "":
+		return GraphBackendNeo4j, nil
+	case GraphBackendNeo4j:
+		return GraphBackendNeo4j, nil
+	case GraphBackendNornicDB:
+		return GraphBackendNornicDB, nil
+	default:
+		return "", fmt.Errorf("invalid PCG_GRAPH_BACKEND %q", strings.TrimSpace(getenv("PCG_GRAPH_BACKEND")))
+	}
 }
 
 // LoadPostgresConfig reads the shared Postgres config from env.
@@ -249,6 +272,18 @@ func OpenNeo4jDriver(
 	ctx context.Context,
 	getenv func(string) string,
 ) (neo4jdriver.DriverWithContext, Neo4jConfig, error) {
+	graphBackend, err := LoadGraphBackend(getenv)
+	if err != nil {
+		return nil, Neo4jConfig{}, err
+	}
+	if graphBackend != GraphBackendNeo4j {
+		return nil, Neo4jConfig{}, fmt.Errorf(
+			"graph backend %q is not wired for the Neo4j driver path; set PCG_GRAPH_BACKEND=neo4j for hosted API/MCP/ingester services until a dedicated %q adapter path is implemented",
+			graphBackend,
+			graphBackend,
+		)
+	}
+
 	cfg, err := LoadNeo4jConfig(getenv)
 	if err != nil {
 		return nil, Neo4jConfig{}, err

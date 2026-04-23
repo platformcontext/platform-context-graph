@@ -294,17 +294,14 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	binary, err := watchLookPath("pcg-ingester")
+	binary, err := pcgExecutable()
 	if err != nil {
-		printError("pcg-ingester binary not found in PATH.")
-		return fmt.Errorf("pcg-ingester not found")
+		printError("pcg executable not found.")
+		return fmt.Errorf("pcg executable not found")
 	}
 
 	fmt.Printf("Watching %s for changes...\n", workspaceRoot)
-	if err := watchSetenv("PCG_WATCH_PATH", workspaceRoot); err != nil {
-		return err
-	}
-	return watchExec(binary, []string{"pcg-ingester", "--watch", workspaceRoot}, watchEnviron())
+	return pcgExec(binary, []string{cleanExecutableArg0(binary), "local-host", "watch", workspaceRoot}, pcgEnviron())
 }
 
 func runUnwatch(cmd *cobra.Command, args []string) error {

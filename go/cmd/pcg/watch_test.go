@@ -25,12 +25,7 @@ func TestRunWatchExecsIngesterWithResolvedWorkspaceRoot(t *testing.T) {
 	defer restore()
 
 	wantExecErr := errors.New("exec sentinel")
-	calls.lookPath = func(file string) (string, error) {
-		if file != "pcg-ingester" {
-			t.Fatalf("LookPath() file = %q, want %q", file, "pcg-ingester")
-		}
-		return "/tmp/pcg-ingester", nil
-	}
+	calls.executable = func() (string, error) { return "/tmp/pcg", nil }
 	calls.exec = func(binary string, args []string, env []string) error {
 		calls.binary = binary
 		calls.args = append([]string(nil), args...)
@@ -44,16 +39,13 @@ func TestRunWatchExecsIngesterWithResolvedWorkspaceRoot(t *testing.T) {
 		t.Fatalf("runWatch() error = %v, want %v", err, wantExecErr)
 	}
 
-	if calls.binary != "/tmp/pcg-ingester" {
-		t.Fatalf("exec binary = %q, want %q", calls.binary, "/tmp/pcg-ingester")
+	if calls.binary != "/tmp/pcg" {
+		t.Fatalf("exec binary = %q, want %q", calls.binary, "/tmp/pcg")
 	}
 	wantWorkspaceRoot := mustEvalSymlinks(t, repoRoot)
-	wantArgs := []string{"pcg-ingester", "--watch", wantWorkspaceRoot}
+	wantArgs := []string{"pcg", "local-host", "watch", wantWorkspaceRoot}
 	if !reflect.DeepEqual(calls.args, wantArgs) {
 		t.Fatalf("exec args = %#v, want %#v", calls.args, wantArgs)
-	}
-	if got := calls.setenv["PCG_WATCH_PATH"]; got != wantWorkspaceRoot {
-		t.Fatalf("PCG_WATCH_PATH = %q, want %q", got, wantWorkspaceRoot)
 	}
 }
 
@@ -69,7 +61,7 @@ func TestRunWatchUsesExplicitWorkspaceRootFlag(t *testing.T) {
 	defer restore()
 
 	wantExecErr := errors.New("exec sentinel")
-	calls.lookPath = func(string) (string, error) { return "/tmp/pcg-ingester", nil }
+	calls.executable = func() (string, error) { return "/tmp/pcg", nil }
 	calls.exec = func(binary string, args []string, env []string) error {
 		calls.binary = binary
 		calls.args = append([]string(nil), args...)
@@ -87,7 +79,7 @@ func TestRunWatchUsesExplicitWorkspaceRootFlag(t *testing.T) {
 	}
 
 	wantWorkspaceRoot := mustEvalSymlinks(t, workspaceRoot)
-	wantArgs := []string{"pcg-ingester", "--watch", wantWorkspaceRoot}
+	wantArgs := []string{"pcg", "local-host", "watch", wantWorkspaceRoot}
 	if !reflect.DeepEqual(calls.args, wantArgs) {
 		t.Fatalf("exec args = %#v, want %#v", calls.args, wantArgs)
 	}
@@ -100,7 +92,7 @@ func TestRunWorkspaceWatchUsesWorkspaceArgumentAsExplicitRoot(t *testing.T) {
 	defer restore()
 
 	wantExecErr := errors.New("exec sentinel")
-	calls.lookPath = func(string) (string, error) { return "/tmp/pcg-ingester", nil }
+	calls.executable = func() (string, error) { return "/tmp/pcg", nil }
 	calls.exec = func(binary string, args []string, env []string) error {
 		calls.binary = binary
 		calls.args = append([]string(nil), args...)
@@ -114,20 +106,17 @@ func TestRunWorkspaceWatchUsesWorkspaceArgumentAsExplicitRoot(t *testing.T) {
 	}
 
 	wantWorkspaceRoot := mustEvalSymlinks(t, workspaceRoot)
-	wantArgs := []string{"pcg-ingester", "--watch", wantWorkspaceRoot}
+	wantArgs := []string{"pcg", "local-host", "watch", wantWorkspaceRoot}
 	if !reflect.DeepEqual(calls.args, wantArgs) {
 		t.Fatalf("exec args = %#v, want %#v", calls.args, wantArgs)
 	}
-	if got := calls.setenv["PCG_WATCH_PATH"]; got != wantWorkspaceRoot {
-		t.Fatalf("PCG_WATCH_PATH = %q, want %q", got, wantWorkspaceRoot)
-	}
 }
 
-func TestRunWatchReturnsFriendlyErrorWhenIngesterMissing(t *testing.T) {
+func TestRunWatchReturnsFriendlyErrorWhenExecutableMissing(t *testing.T) {
 	restore, calls := stubWatchRuntime()
 	defer restore()
 
-	calls.lookPath = func(string) (string, error) {
+	calls.executable = func() (string, error) {
 		return "", errors.New("missing")
 	}
 
@@ -135,8 +124,8 @@ func TestRunWatchReturnsFriendlyErrorWhenIngesterMissing(t *testing.T) {
 	if err == nil {
 		t.Fatal("runWatch() error = nil, want non-nil")
 	}
-	if err.Error() != "pcg-ingester not found" {
-		t.Fatalf("runWatch() error = %q, want %q", err.Error(), "pcg-ingester not found")
+	if err.Error() != "pcg executable not found" {
+		t.Fatalf("runWatch() error = %q, want %q", err.Error(), "pcg executable not found")
 	}
 }
 
@@ -144,8 +133,8 @@ func TestRunWatchReturnsErrorWhenWorkspaceRootFlagIsUnavailable(t *testing.T) {
 	restore, calls := stubWatchRuntime()
 	defer restore()
 
-	calls.lookPath = func(string) (string, error) {
-		t.Fatal("LookPath() should not be called when flag lookup fails")
+	calls.executable = func() (string, error) {
+		t.Fatal("Executable() should not be called when flag lookup fails")
 		return "", nil
 	}
 
@@ -159,49 +148,40 @@ func TestRunWatchReturnsErrorWhenWorkspaceRootFlagIsUnavailable(t *testing.T) {
 }
 
 type watchRuntimeCalls struct {
-	lookPath func(string) (string, error)
-	exec     func(string, []string, []string) error
-	setenv   map[string]string
-	binary   string
-	args     []string
-	env      []string
+	executable func() (string, error)
+	exec       func(string, []string, []string) error
+	binary     string
+	args       []string
+	env        []string
 }
 
 func stubWatchRuntime() (func(), *watchRuntimeCalls) {
-	calls := &watchRuntimeCalls{
-		setenv: make(map[string]string),
-	}
+	calls := &watchRuntimeCalls{}
 
-	originalLookPath := watchLookPath
-	originalExec := watchExec
-	originalSetenv := watchSetenv
-	originalEnviron := watchEnviron
+	originalExecutable := pcgExecutable
+	originalExec := pcgExec
+	originalEnviron := pcgEnviron
 
-	watchLookPath = func(file string) (string, error) {
-		if calls.lookPath == nil {
-			return "", errors.New("watchLookPath not stubbed")
+	pcgExecutable = func() (string, error) {
+		if calls.executable == nil {
+			return "", errors.New("pcgExecutable not stubbed")
 		}
-		return calls.lookPath(file)
+		return calls.executable()
 	}
-	watchExec = func(binary string, args []string, env []string) error {
+	pcgExec = func(binary string, args []string, env []string) error {
 		if calls.exec == nil {
-			return errors.New("watchExec not stubbed")
+			return errors.New("pcgExec not stubbed")
 		}
 		return calls.exec(binary, args, env)
 	}
-	watchSetenv = func(key, value string) error {
-		calls.setenv[key] = value
-		return nil
-	}
-	watchEnviron = func() []string {
+	pcgEnviron = func() []string {
 		return []string{"PATH=/tmp"}
 	}
 
 	return func() {
-		watchLookPath = originalLookPath
-		watchExec = originalExec
-		watchSetenv = originalSetenv
-		watchEnviron = originalEnviron
+		pcgExecutable = originalExecutable
+		pcgExec = originalExec
+		pcgEnviron = originalEnviron
 	}, calls
 }
 

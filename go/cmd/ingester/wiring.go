@@ -125,7 +125,7 @@ func buildIngesterProjectorService(
 	logger *slog.Logger,
 ) (projector.Service, error) {
 	projectorQueue := postgres.NewProjectorQueue(database, "ingester", 5*time.Minute)
-	reducerQueue := postgres.NewReducerQueue(database, "ingester", time.Minute)
+	reducerQueue := reducerIntentWriterForProfile(getenv, postgres.NewReducerQueue(database, "ingester", time.Minute))
 	retryInjector, err := loadIngesterRetryInjector(getenv)
 	if err != nil {
 		return projector.Service{}, err
@@ -213,6 +213,9 @@ func openIngesterCanonicalWriter(
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) (projector.CanonicalWriter, io.Closer, error) {
+	if writer, closer, ok := maybeLocalLightweightCanonicalWriter(getenv); ok {
+		return writer, closer, nil
+	}
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err

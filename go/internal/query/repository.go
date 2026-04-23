@@ -35,6 +35,26 @@ func (h *RepositoryHandler) profile() QueryProfile {
 
 // listRepositories returns all indexed repositories.
 func (h *RepositoryHandler) listRepositories(w http.ResponseWriter, r *http.Request) {
+	if h == nil {
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"repositories": []map[string]any{},
+			"count":        0,
+		})
+		return
+	}
+	if h.Neo4j == nil {
+		repos, err := h.listRepositoriesFromContent(r.Context())
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"repositories": repos,
+			"count":        len(repos),
+		})
+		return
+	}
+
 	cypher := fmt.Sprintf(`
 		MATCH (r:Repository)
 		RETURN %s, coalesce(r.is_dependency, false) as is_dependency
@@ -66,6 +86,22 @@ func (h *RepositoryHandler) listRepositories(w http.ResponseWriter, r *http.Requ
 		"repositories": repos,
 		"count":        len(repos),
 	})
+}
+
+func (h *RepositoryHandler) listRepositoriesFromContent(ctx context.Context) ([]map[string]any, error) {
+	if h == nil || h.Content == nil {
+		return []map[string]any{}, nil
+	}
+
+	entries, err := h.Content.ListRepositories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	repos := make([]map[string]any, 0, len(entries))
+	for _, entry := range entries {
+		repos = append(repos, repositoryCatalogMap(entry))
+	}
+	return repos, nil
 }
 
 // getRepositoryContext returns repository metadata with graph statistics and
@@ -409,18 +445,16 @@ func (h *RepositoryHandler) getRepositoryCoverage(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Check if repository exists
-	cypher := fmt.Sprintf("MATCH (r:Repository) WHERE %s RETURN r.id as id", repositorySelectorWhereClause)
-	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_selector": repoID})
+	resolvedRepoID, err := h.resolveCoverageRepositoryID(r.Context(), repoID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
 	}
-	if row == nil {
+	if resolvedRepoID == "" {
 		WriteError(w, http.StatusNotFound, "repository not found")
 		return
 	}
-	repoID = StringVal(row, "id")
+	repoID = resolvedRepoID
 
 	// Get content store coverage
 	coverage, err := h.queryContentStoreCoverage(r.Context(), repoID)
@@ -430,6 +464,40 @@ func (h *RepositoryHandler) getRepositoryCoverage(w http.ResponseWriter, r *http
 	}
 
 	WriteJSON(w, http.StatusOK, coverage)
+}
+
+func (h *RepositoryHandler) resolveCoverageRepositoryID(ctx context.Context, selector string) (string, error) {
+	if h != nil && h.Neo4j != nil {
+		cypher := fmt.Sprintf("MATCH (r:Repository) WHERE %s RETURN r.id as id", repositorySelectorWhereClause)
+		row, err := h.Neo4j.RunSingle(ctx, cypher, map[string]any{"repo_selector": selector})
+		if err != nil {
+			return "", err
+		}
+		if row != nil {
+			return StringVal(row, "id"), nil
+		}
+	}
+	if h == nil || h.Content == nil {
+		return "", nil
+	}
+	repo, err := h.Content.ResolveRepository(ctx, selector)
+	if err != nil || repo == nil {
+		return "", err
+	}
+	return repo.ID, nil
+}
+
+func repositoryCatalogMap(entry RepositoryCatalogEntry) map[string]any {
+	return map[string]any{
+		"id":            entry.ID,
+		"name":          entry.Name,
+		"path":          entry.Path,
+		"local_path":    entry.LocalPath,
+		"remote_url":    entry.RemoteURL,
+		"repo_slug":     entry.RepoSlug,
+		"has_remote":    entry.HasRemote,
+		"is_dependency": false,
+	}
 }
 
 // queryContentStoreCoverage queries the Postgres content store for repository coverage.

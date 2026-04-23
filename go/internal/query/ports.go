@@ -28,6 +28,8 @@ type ContentStore interface {
 	SearchEntitiesByLanguageAndType(ctx context.Context, repoID, language, entityType, query string, limit int) ([]EntityContent, error)
 	ListFrameworkRoutes(ctx context.Context, repoID string) ([]FrameworkRouteEvidence, error)
 	RepositoryCoverage(ctx context.Context, repoID string) (RepositoryContentCoverage, error)
+	ListRepositories(ctx context.Context) ([]RepositoryCatalogEntry, error)
+	ResolveRepository(ctx context.Context, selector string) (*RepositoryCatalogEntry, error)
 }
 
 // RepositoryContentCoverage is the content-store coverage summary for one repo.
@@ -44,4 +46,16 @@ type RepositoryContentCoverage struct {
 type RepositoryLanguageCount struct {
 	Language  string
 	FileCount int
+}
+
+// RepositoryCatalogEntry is the relational repository catalog row used when the
+// graph is unavailable in local lightweight mode.
+type RepositoryCatalogEntry struct {
+	ID        string
+	Name      string
+	Path      string
+	LocalPath string
+	RemoteURL string
+	RepoSlug  string
+	HasRemote bool
 }

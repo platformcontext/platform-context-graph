@@ -41,7 +41,7 @@ WITH candidate AS (
     SELECT work_item_id
     FROM fact_work_items
     WHERE stage = 'projector'
-      AND status IN ('pending', 'retrying')
+      AND status IN ('pending', 'retrying', 'claimed', 'running')
       AND (visible_at IS NULL OR visible_at <= $1)
       AND (claim_until IS NULL OR claim_until <= $1)
     ORDER BY updated_at ASC, work_item_id ASC

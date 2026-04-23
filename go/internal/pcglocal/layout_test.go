@@ -180,6 +180,9 @@ func TestBuildLayoutUsesStableWorkspaceIDForSymlinks(t *testing.T) {
 	if len(layoutA.WorkspaceID) != 40 {
 		t.Fatalf("workspace ID length = %d, want 40 hex chars", len(layoutA.WorkspaceID))
 	}
+	if layoutA.GraphDir != filepath.Join(layoutA.RootDir, "graph") {
+		t.Fatalf("GraphDir = %q, want %q", layoutA.GraphDir, filepath.Join(layoutA.RootDir, "graph"))
+	}
 }
 
 func mustEvalSymlinks(t *testing.T, path string) string {

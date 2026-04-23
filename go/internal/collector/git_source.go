@@ -209,7 +209,7 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	}
 	if len(batch.Repositories) == 0 {
 		if s.Logger != nil {
-			s.Logger.InfoContext(ctx, "collector stream: no repositories discovered",
+			s.Logger.DebugContext(ctx, "collector stream: no repositories discovered",
 				slog.String("collector_kind", "git"),
 				slog.String("component", s.componentName()),
 				telemetry.PhaseAttr(telemetry.PhaseDiscovery),
@@ -568,7 +568,11 @@ func (s *GitSource) discoverRepositories(ctx context.Context) (SelectionBatch, e
 		}
 
 		if s.Logger != nil && err == nil {
-			s.Logger.InfoContext(ctx, "collector discovery completed",
+			logFn := s.Logger.InfoContext
+			if len(batch.Repositories) == 0 {
+				logFn = s.Logger.DebugContext
+			}
+			logFn(ctx, "collector discovery completed",
 				slog.String("collector_kind", "git"),
 				slog.Int("repository_count", len(batch.Repositories)),
 			)

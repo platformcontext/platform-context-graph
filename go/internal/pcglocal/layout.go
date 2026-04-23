@@ -21,6 +21,7 @@ type Layout struct {
 	VersionPath     string
 	OwnerLockPath   string
 	OwnerRecordPath string
+	GraphDir        string
 	PostgresDir     string
 	LogsDir         string
 	CacheDir        string
@@ -136,6 +137,7 @@ func BuildLayout(getenv func(string) string, userHomeDir func() (string, error),
 		VersionPath:     filepath.Join(layoutRoot, "VERSION"),
 		OwnerLockPath:   filepath.Join(layoutRoot, "owner.lock"),
 		OwnerRecordPath: filepath.Join(layoutRoot, "owner.json"),
+		GraphDir:        filepath.Join(layoutRoot, "graph"),
 		PostgresDir:     filepath.Join(layoutRoot, "postgres"),
 		LogsDir:         filepath.Join(layoutRoot, "logs"),
 		CacheDir:        filepath.Join(layoutRoot, "cache"),
