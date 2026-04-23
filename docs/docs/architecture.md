@@ -366,9 +366,11 @@ grouped-write path. NornicDB grouped writes are available only through the
 explicit conformance switch `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true`;
 promotion requires proving the same rollback, timeout, and no-partial-write
 invariants that Neo4j currently provides. The 2026-04-23 safety probe against
-`/tmp/nornicdb-headless` (`v1.0.42-hotfix`) still reported rollback marker
-count `1` on the Neo4j-driver path, so grouped NornicDB canonical writes remain
-unpromoted.
+the rebuilt linuxdynasty-fork headless binary
+`/tmp/nornicdb-headless-pcg-rollback` (`v1.0.42-hotfix`) passed with grouped,
+clean-explicit, and failed-explicit rollback marker count `0`, but grouped
+NornicDB canonical writes remain unpromoted until that fixed binary is
+release-backed and broader adapter conformance passes.
 
 Lightweight local mode **refuses** high-authority queries (transitive callers,
 call-chain paths, dead code, blast radius, change surface) with a structured

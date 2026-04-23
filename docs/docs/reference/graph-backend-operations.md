@@ -82,19 +82,21 @@ PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
   go test ./cmd/pcg -run TestNornicDBGroupedWriteSafetyProbe -count=1 -v
 ```
 
-The 2026-04-23 run against `/tmp/nornicdb-headless` (`v1.0.42-hotfix`) proved
-that grouped writes can commit a PCG repository/file/function shape, but the
-rollback probes all reported marker count `1` on the Neo4j-driver path:
-grouped rollback, clean explicit rollback, and failed-statement explicit
-rollback. The stricter rollback promotion gate is:
+The 2026-04-23 run against the rebuilt linuxdynasty-fork headless binary
+`/tmp/nornicdb-headless-pcg-rollback` (`v1.0.42-hotfix`) proved that grouped
+writes can commit a PCG repository/file/function shape, grouped rollback,
+clean explicit rollback, and failed-statement explicit rollback all report
+marker count `0` on the Neo4j-driver path, and the timeout probe leaves no
+partial write. The stricter rollback promotion gate is:
 
 ```bash
-PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless-pcg-rollback \
 PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true \
   go test ./cmd/pcg -run TestNornicDBGroupedWriteRollbackConformance -count=1 -v
 ```
 
-Do not promote NornicDB grouped canonical writes until that rollback gate
+Do not promote NornicDB grouped canonical writes for normal laptop runs until
+the fixed NornicDB binary is release-backed and broader adapter conformance
 passes. Neo4j production grouped writes are unaffected.
 
 ### `pcg graph status`
