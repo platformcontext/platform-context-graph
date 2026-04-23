@@ -91,7 +91,7 @@ lightweight host. PCG exposes:
 | `pcg graph logs [--workspace-root <path>]` | Available now. Print the current workspace `graph-nornicdb.log` file if present. |
 | `pcg graph stop [--workspace-root <path>]` | Available now. Request the workspace owner to shut down so the managed graph sidecar stops through the normal lifecycle; stale owner graph processes are stopped directly. |
 | `pcg graph start [--workspace-root <path>]` | Available now. Foreground shortcut for starting the `local_authoritative` workspace owner, equivalent to `PCG_QUERY_PROFILE=local_authoritative pcg watch .`. |
-| `pcg graph upgrade` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
+| `pcg graph upgrade --from <path> [--sha256 <hex>] [--workspace-root <path>]` | Available now. Replace the managed NornicDB binary from a verified local executable; requires the workspace graph to be stopped first. |
 
 Full operator contract: [Graph Backend Operations](graph-backend-operations.md).
 
@@ -230,7 +230,7 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 | `pcg graph logs [--workspace-root <path>]` | Print the current workspace graph-backend log file if present. |
 | `pcg graph stop [--workspace-root <path>]` | Request graph shutdown through the workspace owner, or stop a stale recorded graph process when the owner is already dead. |
 | `pcg graph start [--workspace-root <path>]` | Start the `local_authoritative` workspace owner in the foreground. |
-| `pcg graph upgrade` | Stub today. Prints actionable guidance until the local graph sidecar lifecycle ships. |
+| `pcg graph upgrade --from <path> [--sha256 <hex>] [--workspace-root <path>]` | Replace the managed local graph binary after the workspace graph is stopped. |
 | `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` | Install a verified local NornicDB binary into the managed PCG home. |
 | `pcg mcp setup` | Configure IDE and CLI MCP integrations. |
 | `pcg mcp start` | Start the MCP server. |

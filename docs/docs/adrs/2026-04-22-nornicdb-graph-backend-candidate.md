@@ -23,7 +23,7 @@
 | Phase | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
 | Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB | release-backed installer, perf smoke |
-| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` verifies and copies a local binary; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped; `pcg graph upgrade` still intentionally stubbed | release download/signature installer and public lifecycle upgrade command |
+| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` verifies and copies a local binary; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; current branch stopped-owner `pcg graph upgrade --from <path>`; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped | release download/signature installer and perf smoke |
 | Adapter conformance | Not started | — | `GraphQuery`/`GraphWrite` adapter, syntax verification, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
 
@@ -160,9 +160,9 @@ The current installer slice accepts a verified local executable with
 `pcg install nornicdb --from <path>` and copies it to
 `${PCG_HOME}/bin/nornicdb-headless`; release-backed download/signature
 installation remains a promotion prerequisite. The sidecar is inspectable by
-`pcg graph status`, `pcg graph logs`, owner-aware `pcg graph stop`, and
-foreground `pcg graph start` today, and by `pcg graph upgrade` in the remaining
-lifecycle slice. Its runtime
+`pcg graph status`, `pcg graph logs`, owner-aware `pcg graph stop`, foreground
+`pcg graph start`, and stopped-owner `pcg graph upgrade --from <path>` today.
+Release-backed download/signature upgrade remains future work. Its runtime
 lifecycle is tracked in the workspace
 data root (`owner.json` records the graph PID, loopback ports, and
 per-workspace credentials copied from the graph credential file with `0600`

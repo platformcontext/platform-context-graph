@@ -13,12 +13,13 @@ pcg graph status
 pcg graph logs
 pcg graph stop
 pcg graph start
+pcg graph upgrade
 ```
 
 `pcg graph status`, `pcg graph logs`, `pcg graph stop`, and
-`pcg graph start` are wired today. The remaining lifecycle command
-(`pcg graph upgrade`) is still planned and currently returns actionable
-guidance instead of performing real lifecycle control.
+`pcg graph start` are wired today. `pcg graph upgrade --from <path>` is also
+wired for local-file replacement of the managed binary. Release-backed
+download/signature upgrade remains planned.
 
 `pcg graph stop` is owner-aware. If a healthy local host owns the workspace,
 the command signals that owner process so shutdown follows the documented
@@ -30,6 +31,14 @@ already dead and the graph backend is stale.
 supervisor used by `PCG_QUERY_PROFILE=local_authoritative pcg watch .` and
 does not create a detached daemon. Use Ctrl-C to stop it from the same terminal
 or `pcg graph stop` from another terminal.
+
+`pcg graph upgrade` refuses to replace the managed binary while the workspace
+owner or graph sidecar is still healthy. Stop the workspace first:
+
+```bash
+pcg graph stop
+pcg graph upgrade --from /absolute/path/to/nornicdb-headless
+```
 
 The local-authoritative runtime still manages the sidecar automatically when
 you run a PCG local host entrypoint such as:
