@@ -125,6 +125,18 @@ WHERE stage = 'projector'
   AND status IN ('claimed', 'running')
 `
 
+const heartbeatProjectorWorkQuery = `
+UPDATE fact_work_items
+SET status = 'running',
+    claim_until = $1,
+    updated_at = $2
+WHERE stage = 'projector'
+  AND scope_id = $3
+  AND generation_id = $4
+  AND lease_owner = $5
+  AND status IN ('claimed', 'running')
+`
+
 const retryProjectorWorkQuery = `
 UPDATE fact_work_items
 SET status = 'retrying',
@@ -191,6 +203,10 @@ type ProjectorQueue struct {
 	MaxAttempts   int
 	Now           func() time.Time
 }
+
+// ErrProjectorClaimRejected means the claimed projector work item no longer
+// belongs to the current lease owner, so heartbeat/ack/fail must stop.
+var ErrProjectorClaimRejected = errors.New("projector work claim rejected")
 
 // NewProjectorQueue constructs a Postgres-backed projector work queue.
 func NewProjectorQueue(
@@ -332,6 +348,36 @@ func (q ProjectorQueue) Ack(
 	}
 	committed = true
 
+	return nil
+}
+
+// Heartbeat renews one claimed projector work item so long-running projection
+// work keeps exclusive ownership until Ack or Fail completes.
+func (q ProjectorQueue) Heartbeat(ctx context.Context, work projector.ScopeGenerationWork) error {
+	if err := q.validate(); err != nil {
+		return err
+	}
+
+	now := q.now()
+	result, err := q.db.ExecContext(
+		ctx,
+		heartbeatProjectorWorkQuery,
+		now.Add(q.LeaseDuration),
+		now,
+		work.Scope.ScopeID,
+		work.Generation.GenerationID,
+		q.LeaseOwner,
+	)
+	if err != nil {
+		return fmt.Errorf("heartbeat projector work: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("heartbeat projector work: rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrProjectorClaimRejected
+	}
 	return nil
 }
 

@@ -133,6 +133,120 @@ func TestServiceRunMarksFailureWhenProjectionFails(t *testing.T) {
 	}
 }
 
+func TestServiceRunHeartbeatsLongRunningProjection(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+
+	runner := &stubProjectionRunner{
+		result: Result{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+		},
+		blockFor: 35 * time.Millisecond,
+	}
+	heartbeater := &stubProjectorWorkHeartbeater{}
+	sink := &stubProjectorWorkSink{}
+
+	service := Service{
+		PollInterval:      10 * time.Millisecond,
+		WorkSource:        &stubProjectorWorkSource{workItems: []ScopeGenerationWork{work}},
+		FactStore:         &stubFactStore{},
+		Runner:            runner,
+		WorkSink:          sink,
+		Heartbeater:       heartbeater,
+		HeartbeatInterval: 5 * time.Millisecond,
+		Wait:              func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	if got := heartbeater.calls; got < 2 {
+		t.Fatalf("heartbeat calls = %d, want at least 2", got)
+	}
+	if got, want := sink.ackCalls, 1; got != want {
+		t.Fatalf("ack calls = %d, want %d", got, want)
+	}
+	if got, want := sink.failCalls, 0; got != want {
+		t.Fatalf("fail calls = %d, want %d", got, want)
+	}
+}
+
+func TestServiceRunStopsWhenHeartbeatLosesLease(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+
+	wantErr := errors.New("lease lost")
+	runner := &stubProjectionRunner{
+		waitForContextCancellation: true,
+	}
+	heartbeater := &stubProjectorWorkHeartbeater{
+		failAfter: 1,
+		err:       wantErr,
+	}
+	sink := &stubProjectorWorkSink{}
+
+	service := Service{
+		PollInterval:      10 * time.Millisecond,
+		WorkSource:        &stubProjectorWorkSource{workItems: []ScopeGenerationWork{work}},
+		FactStore:         &stubFactStore{},
+		Runner:            runner,
+		WorkSink:          sink,
+		Heartbeater:       heartbeater,
+		HeartbeatInterval: 5 * time.Millisecond,
+		Wait:              func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	err := service.Run(context.Background())
+	if err == nil {
+		t.Fatal("Run() error = nil, want non-nil")
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Run() error = %v, want error containing %v", err, wantErr)
+	}
+	if got, want := sink.ackCalls, 0; got != want {
+		t.Fatalf("ack calls = %d, want %d", got, want)
+	}
+	if got, want := sink.failCalls, 0; got != want {
+		t.Fatalf("fail calls = %d, want %d", got, want)
+	}
+}
+
 type stubProjectorWorkSource struct {
 	mu         sync.Mutex
 	claimCalls int
@@ -168,21 +282,46 @@ func (s *stubFactStore) LoadFacts(context.Context, ScopeGenerationWork) ([]facts
 }
 
 type stubProjectionRunner struct {
-	mu         sync.Mutex
-	runCalls   int
-	result     Result
-	runErr     error
-	failAfter int
+	mu                         sync.Mutex
+	runCalls                   int
+	result                     Result
+	runErr                     error
+	failAfter                  int
+	blockFor                   time.Duration
+	waitForContextCancellation bool
 }
 
 func (s *stubProjectionRunner) Project(ctx context.Context, scopeValue scope.IngestionScope, generation scope.ScopeGeneration, inputFacts []facts.Envelope) (Result, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.runCalls++
-	if s.failAfter > 0 && s.runCalls > s.failAfter {
+	runCalls := s.runCalls
+	blockFor := s.blockFor
+	waitForContextCancellation := s.waitForContextCancellation
+	result := s.result
+	runErr := s.runErr
+	failAfter := s.failAfter
+	s.mu.Unlock()
+
+	if failAfter > 0 && runCalls > failAfter {
 		return Result{}, errors.New("executor failed after threshold")
 	}
-	return s.result, s.runErr
+	if waitForContextCancellation {
+		<-ctx.Done()
+		return Result{}, ctx.Err()
+	}
+	if blockFor > 0 {
+		timer := time.NewTimer(blockFor)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return Result{}, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	if failAfter > 0 && runCalls > failAfter {
+		return Result{}, errors.New("executor failed after threshold")
+	}
+	return result, runErr
 }
 
 type stubProjectorWorkSink struct {
@@ -209,6 +348,23 @@ func (s *stubProjectorWorkSink) Fail(_ context.Context, _ ScopeGenerationWork, e
 	defer s.mu.Unlock()
 	s.failCalls++
 	s.failedWith = err
+	return nil
+}
+
+type stubProjectorWorkHeartbeater struct {
+	mu        sync.Mutex
+	calls     int
+	failAfter int
+	err       error
+}
+
+func (s *stubProjectorWorkHeartbeater) Heartbeat(context.Context, ScopeGenerationWork) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	if s.failAfter > 0 && s.calls >= s.failAfter {
+		return s.err
+	}
 	return nil
 }
 

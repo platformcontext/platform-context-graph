@@ -21,6 +21,11 @@ type CanonicalNodeWriter struct {
 	instruments *telemetry.Instruments
 }
 
+type canonicalWritePhase struct {
+	name       string
+	statements []Statement
+}
+
 // NewCanonicalNodeWriter constructs a writer backed by the given Executor.
 // batchSize defaults to DefaultBatchSize (500) if <= 0. instruments may be nil.
 func NewCanonicalNodeWriter(executor Executor, batchSize int, instruments *telemetry.Instruments) *CanonicalNodeWriter {
@@ -51,24 +56,8 @@ func (w *CanonicalNodeWriter) Write(ctx context.Context, mat projector.Canonical
 		return nil
 	}
 
-	builders := []struct {
-		name string
-		fn   func(projector.CanonicalMaterialization) []Statement
-	}{
-		{"retract", w.buildRetractStatements},
-		{"repository", w.buildRepositoryStatements},
-		{"directories", w.buildDirectoryStatements},
-		{"files", w.buildFileStatements},
-		{"entities", w.buildEntityStatements},
-		{"modules", w.buildModuleStatements},
-		{"structural_edges", w.buildStructuralEdgeStatements},
-	}
-
-	var allStatements []Statement
-	for _, b := range builders {
-		allStatements = append(allStatements, b.fn(mat)...)
-	}
-
+	phases := w.buildPhases(mat)
+	allStatements := flattenCanonicalWritePhases(phases)
 	if len(allStatements) == 0 {
 		return nil
 	}
@@ -89,16 +78,51 @@ func (w *CanonicalNodeWriter) Write(ctx context.Context, mat projector.Canonical
 	// Fallback: sequential execution (existing behavior).
 	w.recordAtomicFallback(ctx)
 	start := time.Now()
-	for _, stmt := range allStatements {
-		if err := w.executor.Execute(ctx, stmt); err != nil {
-			return fmt.Errorf("canonical sequential write: %w", err)
+	for _, phase := range phases {
+		if len(phase.statements) == 0 {
+			continue
 		}
+		phaseStart := time.Now()
+		for _, stmt := range phase.statements {
+			if err := w.executor.Execute(ctx, stmt); err != nil {
+				return fmt.Errorf("canonical sequential write (%s): %w", phase.name, err)
+			}
+		}
+		phaseSeconds := time.Since(phaseStart).Seconds()
+		slog.Info(
+			"canonical phase completed",
+			"scope_id", mat.ScopeID,
+			"phase", phase.name,
+			"statements", len(phase.statements),
+			"duration_s", phaseSeconds,
+		)
+		w.recordAtomicWrite(ctx, "phase_"+phase.name, phaseSeconds, mat)
 	}
 	dur := time.Since(start).Seconds()
 	slog.Info("canonical sequential write completed",
 		"scope_id", mat.ScopeID, "statements", len(allStatements), "duration_s", dur)
 	w.recordAtomicWrite(ctx, "sequential_group", dur, mat)
 	return nil
+}
+
+func (w *CanonicalNodeWriter) buildPhases(mat projector.CanonicalMaterialization) []canonicalWritePhase {
+	return []canonicalWritePhase{
+		{name: "retract", statements: w.buildRetractStatements(mat)},
+		{name: "repository", statements: w.buildRepositoryStatements(mat)},
+		{name: "directories", statements: w.buildDirectoryStatements(mat)},
+		{name: "files", statements: w.buildFileStatements(mat)},
+		{name: "entities", statements: w.buildEntityStatements(mat)},
+		{name: "modules", statements: w.buildModuleStatements(mat)},
+		{name: "structural_edges", statements: w.buildStructuralEdgeStatements(mat)},
+	}
+}
+
+func flattenCanonicalWritePhases(phases []canonicalWritePhase) []Statement {
+	var allStatements []Statement
+	for _, phase := range phases {
+		allStatements = append(allStatements, phase.statements...)
+	}
+	return allStatements
 }
 
 // --- Phase A: Retract stale nodes ---
@@ -334,11 +358,11 @@ func (w *CanonicalNodeWriter) buildStructuralEdgeStatements(mat projector.Canoni
 		rows := make([]map[string]any, len(mat.Parameters))
 		for i, p := range mat.Parameters {
 			rows[i] = map[string]any{
-				"func_name":      p.FunctionName,
-				"file_path":      p.FilePath,
-				"func_line":      p.FunctionLine,
-				"param_name":     p.ParamName,
-				"generation_id":  mat.GenerationID,
+				"func_name":     p.FunctionName,
+				"file_path":     p.FilePath,
+				"func_line":     p.FunctionLine,
+				"param_name":    p.ParamName,
+				"generation_id": mat.GenerationID,
 			}
 		}
 		stmts = append(stmts, buildBatchedStatements(canonicalNodeHasParameterEdgeCypher, rows, w.batchSize)...)
