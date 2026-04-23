@@ -19,8 +19,7 @@ import (
 )
 
 const (
-	managedNornicDBBinaryName    = "nornicdb-headless"
-	nornicDBInstallModeLocalFile = "local-file"
+	managedNornicDBBinaryName = "nornicdb-headless"
 )
 
 var (
@@ -45,18 +44,23 @@ type installNornicDBResult struct {
 	Version      string `json:"version"`
 	SHA256       string `json:"sha256"`
 	SourcePath   string `json:"source_path,omitempty"`
+	SourceSHA256 string `json:"source_sha256,omitempty"`
+	SourceKind   string `json:"source_kind,omitempty"`
+	Headless     bool   `json:"headless"`
 	InstalledAt  string `json:"installed_at"`
 }
 
 type nornicDBInstallManifest struct {
-	Backend     string `json:"backend"`
-	BinaryPath  string `json:"binary_path"`
-	Version     string `json:"version"`
-	SHA256      string `json:"sha256"`
-	SourcePath  string `json:"source_path,omitempty"`
-	InstalledAt string `json:"installed_at"`
-	InstallMode string `json:"install_mode"`
-	Headless    bool   `json:"headless"`
+	Backend      string `json:"backend"`
+	BinaryPath   string `json:"binary_path"`
+	Version      string `json:"version"`
+	SHA256       string `json:"sha256"`
+	SourcePath   string `json:"source_path,omitempty"`
+	SourceSHA256 string `json:"source_sha256,omitempty"`
+	SourceKind   string `json:"source_kind,omitempty"`
+	InstalledAt  string `json:"installed_at"`
+	InstallMode  string `json:"install_mode"`
+	Headless     bool   `json:"headless"`
 }
 
 func runInstallNornicDB(cmd *cobra.Command, args []string) error {
@@ -89,33 +93,19 @@ func runInstallNornicDB(cmd *cobra.Command, args []string) error {
 }
 
 func installNornicDB(opts installNornicDBOptions) (installNornicDBResult, error) {
-	sourcePath := strings.TrimSpace(opts.From)
-	if sourcePath == "" {
+	sourceRef := strings.TrimSpace(opts.From)
+	if sourceRef == "" {
 		return installNornicDBResult{}, fmt.Errorf("pcg install nornicdb requires --from <path> in this release; release download is not wired yet")
 	}
 
-	sourcePath, err := filepath.Abs(sourcePath)
-	if err != nil {
-		return installNornicDBResult{}, fmt.Errorf("resolve nornicdb source path: %w", err)
-	}
-	info, err := os.Stat(sourcePath)
-	if err != nil {
-		return installNornicDBResult{}, fmt.Errorf("stat nornicdb source binary %q: %w", sourcePath, err)
-	}
-	if info.IsDir() {
-		return installNornicDBResult{}, fmt.Errorf("nornicdb source path %q is a directory; pass the binary path", sourcePath)
-	}
-
-	version, err := localGraphReadVersion(sourcePath)
-	if err != nil {
-		return installNornicDBResult{}, fmt.Errorf("verify nornicdb source binary %q: %w", sourcePath, err)
-	}
-	actualSHA, err := sha256File(sourcePath)
+	source, err := prepareNornicDBInstallSource(sourceRef)
 	if err != nil {
 		return installNornicDBResult{}, err
 	}
-	if expected := strings.ToLower(strings.TrimSpace(opts.SHA256)); expected != "" && expected != actualSHA {
-		return installNornicDBResult{}, fmt.Errorf("sha256 mismatch for %q: got %s, want %s", sourcePath, actualSHA, expected)
+	defer source.Close()
+
+	if expected := strings.ToLower(strings.TrimSpace(opts.SHA256)); expected != "" && expected != source.SourceSHA256 {
+		return installNornicDBResult{}, fmt.Errorf("sha256 mismatch for %q: got %s, want %s", source.SourcePath, source.SourceSHA256, expected)
 	}
 
 	targetPath, err := managedNornicDBBinaryPath()
@@ -127,24 +117,24 @@ func installNornicDB(opts installNornicDBOptions) (installNornicDBResult, error)
 		return installNornicDBResult{}, err
 	}
 
-	if samePath(sourcePath, targetPath) {
-		return writeNornicDBInstallManifest(targetPath, manifestPath, sourcePath, version, actualSHA, true)
+	if source.SourceKind == nornicDBInstallSourceLocalBinary && samePath(source.LocalBinaryPath, targetPath) {
+		return writeNornicDBInstallManifest(targetPath, manifestPath, source, true)
 	}
 	if _, err := os.Stat(targetPath); err == nil && !opts.Force {
 		existingVersion, versionErr := localGraphReadVersion(targetPath)
 		existingSHA, checksumErr := sha256File(targetPath)
-		if versionErr == nil && checksumErr == nil && existingVersion == version && existingSHA == actualSHA {
-			return writeNornicDBInstallManifest(targetPath, manifestPath, sourcePath, version, existingSHA, true)
+		if versionErr == nil && checksumErr == nil && existingVersion == source.Version && existingSHA == source.BinarySHA256 {
+			return writeNornicDBInstallManifest(targetPath, manifestPath, source, true)
 		}
 		return installNornicDBResult{}, fmt.Errorf("managed nornicdb binary already exists at %q; pass --force to replace it", targetPath)
 	} else if err != nil && !os.IsNotExist(err) {
 		return installNornicDBResult{}, fmt.Errorf("stat managed nornicdb binary %q: %w", targetPath, err)
 	}
 
-	if err := copyExecutableFile(sourcePath, targetPath); err != nil {
+	if err := copyExecutableFile(source.LocalBinaryPath, targetPath); err != nil {
 		return installNornicDBResult{}, err
 	}
-	return writeNornicDBInstallManifest(targetPath, manifestPath, sourcePath, version, actualSHA, false)
+	return writeNornicDBInstallManifest(targetPath, manifestPath, source, false)
 }
 
 func managedNornicDBBinaryPath() (string, error) {
@@ -177,17 +167,19 @@ func managedNornicDBBinaryIfPresent() (string, error) {
 	return path, nil
 }
 
-func writeNornicDBInstallManifest(targetPath, manifestPath, sourcePath, version, checksum string, reused bool) (installNornicDBResult, error) {
+func writeNornicDBInstallManifest(targetPath, manifestPath string, source preparedNornicDBInstallSource, reused bool) (installNornicDBResult, error) {
 	installedAt := graphInstallNow().UTC().Format(time.RFC3339Nano)
 	manifest := nornicDBInstallManifest{
-		Backend:     string(query.GraphBackendNornicDB),
-		BinaryPath:  targetPath,
-		Version:     version,
-		SHA256:      checksum,
-		SourcePath:  sourcePath,
-		InstalledAt: installedAt,
-		InstallMode: nornicDBInstallModeLocalFile,
-		Headless:    filepath.Base(targetPath) == managedNornicDBBinaryName,
+		Backend:      string(query.GraphBackendNornicDB),
+		BinaryPath:   targetPath,
+		Version:      source.Version,
+		SHA256:       source.BinarySHA256,
+		SourcePath:   source.SourcePath,
+		SourceSHA256: source.SourceSHA256,
+		SourceKind:   string(source.SourceKind),
+		InstalledAt:  installedAt,
+		InstallMode:  string(source.SourceKind),
+		Headless:     source.Headless,
 	}
 	content, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -203,9 +195,12 @@ func writeNornicDBInstallManifest(targetPath, manifestPath, sourcePath, version,
 		Backend:      manifest.Backend,
 		BinaryPath:   targetPath,
 		ManifestPath: manifestPath,
-		Version:      version,
-		SHA256:       checksum,
-		SourcePath:   sourcePath,
+		Version:      source.Version,
+		SHA256:       source.BinarySHA256,
+		SourcePath:   source.SourcePath,
+		SourceSHA256: source.SourceSHA256,
+		SourceKind:   string(source.SourceKind),
+		Headless:     source.Headless,
 		InstalledAt:  installedAt,
 	}, nil
 }

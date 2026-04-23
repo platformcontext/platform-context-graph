@@ -73,17 +73,20 @@ func init() {
 		Long: strings.TrimSpace(`
 Install a verified local NornicDB executable into PCG's managed home.
 
-Current support is local-file only:
+Current support is explicit-source only:
 
   pcg install nornicdb --from /absolute/path/to/nornicdb-headless
+  pcg install nornicdb --from /absolute/path/to/nornicdb-headless-darwin-arm64.tar.gz
+  pcg install nornicdb --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz --sha256 <expected-sha256>
   pcg install nornicdb --from /absolute/path/to/nornicdb-headless --sha256 <expected-sha256>
 
-Release download and signature verification are planned but not wired yet.
+Bare release selection, pinned download metadata, and signature verification are
+planned but not wired yet.
 `),
 		RunE: runInstallNornicDB,
 	}
-	installNornicDBCmd.Flags().String("from", "", "Install from an existing local NornicDB binary")
-	installNornicDBCmd.Flags().String("sha256", "", "Expected SHA-256 checksum for --from")
+	installNornicDBCmd.Flags().String("from", "", "Install from a local NornicDB binary, local tarball, or release URL")
+	installNornicDBCmd.Flags().String("sha256", "", "Expected SHA-256 checksum for the --from artifact")
 	installNornicDBCmd.Flags().Bool("force", false, "Replace an existing managed NornicDB binary")
 	installCmd.AddCommand(installNornicDBCmd)
 
@@ -133,9 +136,11 @@ another terminal for the same workspace.
 		Long: strings.TrimSpace(`
 Replace the managed local NornicDB binary from a verified local executable.
 
-The graph backend must be stopped first. This command is local-file only today:
+The graph backend must be stopped first. This command accepts the same binary,
+tarball, and URL sources as pcg install nornicdb:
 
   pcg graph upgrade --from /absolute/path/to/nornicdb-headless
+  pcg graph upgrade --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz --sha256 <expected-sha256>
 `),
 		RunE: runGraphUpgrade,
 	}

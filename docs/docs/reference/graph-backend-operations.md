@@ -17,9 +17,10 @@ pcg graph upgrade
 ```
 
 `pcg graph status`, `pcg graph logs`, `pcg graph stop`, and
-`pcg graph start` are wired today. `pcg graph upgrade --from <path>` is also
-wired for local-file replacement of the managed binary. Release-backed
-download/signature upgrade remains planned.
+`pcg graph start` are wired today. `pcg graph upgrade --from <source>` is also
+wired for explicit-source replacement of the managed binary from a local
+binary path, local tar archive, or URL. Bare release selection and signature
+verification remain planned.
 
 `pcg graph stop` is owner-aware. If a healthy local host owns the workspace,
 the command signals that owner process so shutdown follows the documented
@@ -38,6 +39,7 @@ owner or graph sidecar is still healthy. Stop the workspace first:
 ```bash
 pcg graph stop
 pcg graph upgrade --from /absolute/path/to/nornicdb-headless
+pcg graph upgrade --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz --sha256 <expected-sha256>
 ```
 
 The local-authoritative runtime still manages the sidecar automatically when
@@ -49,7 +51,7 @@ PCG_QUERY_PROFILE=local_authoritative pcg watch .
 
 That path requires a discoverable NornicDB binary. Laptop installs prefer the
 managed `${PCG_HOME}/bin/nornicdb-headless` binary created by
-`pcg install nornicdb --from <path>`; the full `nornicdb` binary is supported
+`pcg install nornicdb --from <source>`; the full `nornicdb` binary is supported
 only when users opt in because it is larger. See
 [Graph Backend Installation](graph-backend-installation.md).
 
@@ -147,7 +149,7 @@ Check, in order:
    `PCG_NORNICDB_BINARY`, `${PCG_HOME}/bin/nornicdb-headless`, or `PATH`?
    If discovery reports not installed, verify the candidate binary prints a
    `NornicDB ...` version string or install it with
-   `pcg install nornicdb --from <path>`.
+   `pcg install nornicdb --from <source>`.
 2. open `${PCG_HOME}/local/workspaces/<workspace_id>/logs/graph-nornicdb.log`
    — did the backend emit an error?
 3. `ls -la ${workspace_root}/graph/` — is the data directory writable by

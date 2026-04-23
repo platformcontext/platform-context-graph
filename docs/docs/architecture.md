@@ -348,7 +348,7 @@ same capability surface but with different truth levels.
 | Profile | Shape | Authoritative graph | Purpose |
 | --- | --- | --- | --- |
 | `local_lightweight` | Single `pcg` binary with embedded Postgres | No | Developer-laptop code intelligence |
-| `local_authoritative` | `pcg` binary + embedded Postgres + local graph backend sidecar installed via `pcg install nornicdb --from <path>` today; release-backed install before promotion | Yes | Laptop-scale transitive / call-chain / dead-code without Compose |
+| `local_authoritative` | `pcg` binary + embedded Postgres + local graph backend sidecar installed via `pcg install nornicdb --from <source>` today; pinned no-arg release install before promotion | Yes | Laptop-scale transitive / call-chain / dead-code without Compose |
 | `local_full_stack` | Docker Compose: Postgres, Neo4j (or NornicDB), ingester, reducer, API/MCP | Yes | Pre-merge validation, reducer convergence testing |
 | `production` | Kubernetes / Helm split runtimes, shared Postgres and graph backend | Yes | Incident, refactor, blast-radius analysis at scale |
 

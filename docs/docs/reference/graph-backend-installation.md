@@ -39,7 +39,7 @@ this order:
 
 1. `PCG_NORNICDB_BINARY`
 2. `${PCG_HOME}/bin/nornicdb-headless` installed by
-   `pcg install nornicdb --from <path>`
+   `pcg install nornicdb --from <source>`
 3. `nornicdb-headless` on `PATH`
 4. `nornicdb` on `PATH`
 
@@ -62,19 +62,29 @@ workspace graph data root and stored in
 copies it to `owner.json` so attach processes can connect without a hardcoded
 shared secret.
 
-## Managed local-file install
+## Managed source-artefact install
 
-The current installer slice is intentionally local-file only. It does not
-download from the internet or make supply-chain claims before the release
-manifest and signature policy are real.
+The current installer slice is intentionally explicit-source only. It still
+does not implement bare release selection, pinned manifest lookup, or
+signature policy, but it can now consume any of these `--from` artefacts:
+
+- a local NornicDB binary
+- a local `.tar`, `.tar.gz`, or `.tgz` archive containing `nornicdb-headless`
+  or `nornicdb`
+- an `http://`, `https://`, or `file://` URL to one of those artefacts
 
 ```bash
 pcg install nornicdb --from /absolute/path/to/nornicdb-headless
 
-# Optional checksum guard for copied artifacts.
+# Local release archive.
 pcg install nornicdb \
-  --from /absolute/path/to/nornicdb-headless \
-  --sha256 <expected-sha256>
+  --from /absolute/path/to/nornicdb-headless-darwin-arm64.tar.gz \
+  --sha256 <expected-archive-sha256>
+
+# Remote release archive URL.
+pcg install nornicdb \
+  --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz \
+  --sha256 <expected-archive-sha256>
 
 # Replace an existing managed binary.
 pcg install nornicdb --from /absolute/path/to/nornicdb-headless --force
@@ -82,18 +92,31 @@ pcg install nornicdb --from /absolute/path/to/nornicdb-headless --force
 
 The command performs, in order:
 
-1. Verifies the source path is an executable NornicDB binary by running
-   `<binary> version` and requiring a `NornicDB ...` version string.
-2. Computes the source SHA-256 checksum and compares it with `--sha256` when
-   provided.
-3. Copies the source binary to `${PCG_HOME}/bin/nornicdb-headless` with
+1. Resolves `--from` to a local path or downloads the remote artefact to a
+   temporary file.
+2. If the source is an archive, extracts the first usable
+   `nornicdb-headless` entry, or falls back to `nornicdb` when the archive
+   only contains the full binary.
+3. Verifies the resulting binary by running `<binary> version` and requiring a
+   `NornicDB ...` version string.
+4. Computes the source artefact SHA-256 checksum and compares it with
+   `--sha256` when provided.
+5. Copies the verified binary to `${PCG_HOME}/bin/nornicdb-headless` with
    executable permissions.
-4. Writes
+6. Writes
    `${PCG_HOME}/graph-backends/nornicdb/manifest.json` with backend,
-   version, checksum, source path, install mode, and install timestamp.
+   version, installed-binary checksum, source checksum, source kind, source
+   locator, install mode, and install timestamp.
 
 After installation, `pcg graph status` should report `graph_installed: true`
 and the managed binary path.
+
+Today there is still no truthful no-arg installer because the linuxdynasty
+fork does not publish native release assets yet. In practice, the laptop flow
+is still either:
+
+- build `bin/nornicdb-headless` locally and install from that path, or
+- point `--from` at a manually produced archive / hosted artefact URL
 
 ## Manual source build options
 
@@ -127,11 +150,11 @@ current laptop sidecar launches a local binary:
 docker build --build-arg HEADLESS=true -f docker/Dockerfile.arm64-metal .
 ```
 
-## Planned release-backed install flow
+## Planned bare release-backed install flow
 
-PCG is still planning a release-backed installer mode that pins, downloads,
-and registers the headless NornicDB laptop artifact under `${PCG_HOME}/bin/`
-with a version pinned by the installed PCG release.
+PCG is still planning a no-argument release-backed installer mode that pins,
+downloads, and registers the headless NornicDB laptop artifact under
+`${PCG_HOME}/bin/` with a version pinned by the installed PCG release.
 
 ```bash
 pcg install nornicdb
@@ -168,15 +191,14 @@ pcg install nornicdb --rollback
 
 Restores the `.previous` binary if present.
 
-### Offline artifact install
+### Offline archive install
 
 ```bash
 pcg install nornicdb --from <path-to-tarball>
 ```
 
-This future mode installs from a release tarball instead of a local executable
-binary. It still verifies checksum against the tarball and, if present, the
-accompanying signature file.
+This is now supported for tar archives, but signature verification for offline
+artefacts remains future work.
 
 ### Uninstall
 
