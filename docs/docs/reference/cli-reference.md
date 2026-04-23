@@ -215,8 +215,8 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 
 | Command | Purpose | Remote-aware |
 | :--- | :--- | :--- |
-| `pcg analyze calls <function>` | Show what a function calls. | Yes |
-| `pcg analyze callers <function>` | Show what calls a function. | Yes |
+| `pcg analyze calls <function>` | Show what a function calls. Supports `--transitive` and `--depth`. | Yes |
+| `pcg analyze callers <function>` | Show what calls a function. Supports `--transitive` and `--depth`. | Yes |
 | `pcg analyze chain <from> <to>` | Show the call chain between two functions. Supports `--depth`. | Yes |
 | `pcg analyze deps <module>` | Show import and dependency relationships. | Yes |
 | `pcg analyze tree <class>` | Show inheritance hierarchy. | Yes |
@@ -433,6 +433,12 @@ Inspect callers before a refactor:
 
 ```bash
 pcg analyze callers process_payment
+```
+
+Inspect indirect callers with an explicit depth bound:
+
+```bash
+pcg analyze callers process_payment --transitive --depth 7
 ```
 
 Search by exact name:

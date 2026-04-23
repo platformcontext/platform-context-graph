@@ -50,6 +50,54 @@ func TestRunAnalyzeChainPostsCanonicalRequest(t *testing.T) {
 	}
 }
 
+func TestRunAnalyzeCallersPostsTransitiveRequest(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("json.Decode() error = %v, want nil", err)
+		}
+		_, _ = w.Write([]byte(`{"incoming":[]}`))
+	}))
+	defer server.Close()
+
+	cmd := &cobra.Command{}
+	addRemoteFlags(cmd)
+	cmd.Flags().Bool("transitive", false, "Include transitive callers")
+	cmd.Flags().Int("depth", 5, "Maximum traversal depth")
+	if err := cmd.Flags().Set("service-url", server.URL); err != nil {
+		t.Fatalf("Set(service-url) error = %v, want nil", err)
+	}
+	if err := cmd.Flags().Set("transitive", "true"); err != nil {
+		t.Fatalf("Set(transitive) error = %v, want nil", err)
+	}
+	if err := cmd.Flags().Set("depth", "8"); err != nil {
+		t.Fatalf("Set(depth) error = %v, want nil", err)
+	}
+
+	if err := runAnalyzeCallers(cmd, []string{"helper"}); err != nil {
+		t.Fatalf("runAnalyzeCallers() error = %v, want nil", err)
+	}
+	if got, want := gotPath, "/api/v0/code/relationships"; got != want {
+		t.Fatalf("request path = %q, want %q", got, want)
+	}
+	if got, want := gotBody["name"], "helper"; got != want {
+		t.Fatalf("body[name] = %#v, want %#v", got, want)
+	}
+	if got, want := gotBody["direction"], "incoming"; got != want {
+		t.Fatalf("body[direction] = %#v, want %#v", got, want)
+	}
+	if got, want := gotBody["transitive"], true; got != want {
+		t.Fatalf("body[transitive] = %#v, want %#v", got, want)
+	}
+	if got, want := gotBody["max_depth"], float64(8); got != want {
+		t.Fatalf("body[max_depth] = %#v, want %#v", got, want)
+	}
+}
+
 func TestRunAnalyzeDeadCodePostsExclusions(t *testing.T) {
 	t.Parallel()
 

@@ -255,6 +255,22 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 				"direction":         "outgoing",
 				"relationship_type": "CALLS",
 			}
+		case "find_all_callers":
+			body = map[string]any{
+				"name":              str(args, "target"),
+				"direction":         "incoming",
+				"relationship_type": "CALLS",
+				"transitive":        true,
+				"max_depth":         parseMaxDepth(args, 5),
+			}
+		case "find_all_callees":
+			body = map[string]any{
+				"name":              str(args, "target"),
+				"direction":         "outgoing",
+				"relationship_type": "CALLS",
+				"transitive":        true,
+				"max_depth":         parseMaxDepth(args, 5),
+			}
 		case "find_importers":
 			body = map[string]any{
 				"name":              str(args, "target"),

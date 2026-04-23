@@ -657,6 +657,183 @@ func TestHandleCallChainSupportsEntityIDAndRepoScopedLookupForNornicDB(t *testin
 	}
 }
 
+func TestHandleRelationshipsReturnsTransitiveCallers(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNeo4j,
+		Profile:      ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "OPTIONAL MATCH (e)-[outgoingRel]->(target)") {
+					return []map[string]any{{
+						"id":         "fn-helper",
+						"name":       "helper",
+						"labels":     []any{"Function"},
+						"file_path":  "src/helper.go",
+						"repo_id":    "repo-1",
+						"repo_name":  "payments",
+						"language":   "go",
+						"start_line": int64(20),
+						"end_line":   int64(42),
+					}}, nil
+				}
+				if !strings.Contains(cypher, "MATCH (e)") {
+					t.Fatalf("cypher = %q, want explicit entity match", cypher)
+				}
+				if !strings.Contains(cypher, "WHERE e.id = $entity_id") {
+					t.Fatalf("cypher = %q, want entity-id predicate", cypher)
+				}
+				if !strings.Contains(cypher, "MATCH path = (e)<-[:CALLS*1..7]-(source)") {
+					t.Fatalf("cypher = %q, want transitive incoming CALLS traversal", cypher)
+				}
+				if !strings.Contains(cypher, "source.name as source_name") {
+					t.Fatalf("cypher = %q, want source metadata projection", cypher)
+				}
+				if !strings.Contains(cypher, "length(path) as depth") {
+					t.Fatalf("cypher = %q, want explicit depth projection", cypher)
+				}
+				if got, want := params["entity_id"], "fn-helper"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{{
+					"id":          "fn-helper",
+					"name":        "helper",
+					"labels":      []any{"Function"},
+					"file_path":   "src/helper.go",
+					"repo_id":     "repo-1",
+					"repo_name":   "payments",
+					"language":    "go",
+					"start_line":  int64(20),
+					"end_line":    int64(42),
+					"source_name": "delegate",
+					"source_id":   "fn-delegate",
+					"depth":       int64(1),
+				}, {
+					"id":          "fn-helper",
+					"name":        "helper",
+					"labels":      []any{"Function"},
+					"file_path":   "src/helper.go",
+					"repo_id":     "repo-1",
+					"repo_name":   "payments",
+					"language":    "go",
+					"start_line":  int64(20),
+					"end_line":    int64(42),
+					"source_name": "wrapper",
+					"source_id":   "fn-wrapper",
+					"depth":       int64(2),
+				}}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"name":"helper","direction":"incoming","relationship_type":"CALLS","transitive":true,"max_depth":7}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	incoming, ok := resp["incoming"].([]any)
+	if !ok || len(incoming) != 2 {
+		t.Fatalf("resp[incoming] = %#v, want two transitive callers", resp["incoming"])
+	}
+	first, ok := incoming[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[incoming][0] type = %T, want map[string]any", incoming[0])
+	}
+	if got, want := first["depth"], float64(1); got != want {
+		t.Fatalf("resp[incoming][0][depth] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleRelationshipsReturnsTransitiveCallersForNornicDB(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Profile:      ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "OPTIONAL MATCH (e)-[outgoingRel]->(target)") {
+					return []map[string]any{{
+						"id":         "fn-helper",
+						"name":       "helper",
+						"labels":     []any{"Function"},
+						"file_path":  "src/helper.go",
+						"repo_id":    "repo-1",
+						"repo_name":  "payments",
+						"language":   "go",
+						"start_line": int64(20),
+						"end_line":   int64(42),
+					}}, nil
+				}
+				if strings.Contains(cypher, "MATCH (e)") || strings.Contains(cypher, "WHERE e.id = $entity_id") {
+					t.Fatalf("cypher = %q, want inline NornicDB anchor instead of pre-bound entity resolution", cypher)
+				}
+				if !strings.Contains(cypher, "MATCH path = (e {id: $entity_id})<-[:CALLS*1..5]-(source)") {
+					t.Fatalf("cypher = %q, want transitive incoming CALLS traversal", cypher)
+				}
+				if got, want := params["entity_id"], "fn-helper"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{{
+					"id":          "fn-helper",
+					"name":        "helper",
+					"labels":      []any{"Function"},
+					"file_path":   "src/helper.go",
+					"repo_id":     "repo-1",
+					"repo_name":   "payments",
+					"language":    "go",
+					"start_line":  int64(20),
+					"end_line":    int64(42),
+					"source_name": "delegate",
+					"source_id":   "fn-delegate",
+					"depth":       int64(1),
+				}, {
+					"id":          "fn-helper",
+					"name":        "helper",
+					"labels":      []any{"Function"},
+					"file_path":   "src/helper.go",
+					"repo_id":     "repo-1",
+					"repo_name":   "payments",
+					"language":    "go",
+					"start_line":  int64(20),
+					"end_line":    int64(42),
+					"source_name": "wrapper",
+					"source_id":   "fn-wrapper",
+					"depth":       int64(2),
+				}}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"name":"helper","direction":"incoming","relationship_type":"CALLS","transitive":true}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+}
+
 func TestHandleCallChainSupportsRustImplContextQualifiedLookup(t *testing.T) {
 	t.Parallel()
 

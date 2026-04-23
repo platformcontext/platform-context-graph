@@ -57,6 +57,40 @@ func TestLocalAuthoritativeCallChainSyntheticEnvelope(t *testing.T) {
 	}
 }
 
+func TestLocalAuthoritativeTransitiveCallersSyntheticEnvelope(t *testing.T) {
+	if testing.Short() {
+		t.Skip("local-authoritative perf smoke is skipped in short mode")
+	}
+	if !perfGateEnabled(localAuthoritativePerfGateEnv) {
+		t.Skipf("set %s=true to run the local-authoritative query perf smoke", localAuthoritativePerfGateEnv)
+	}
+	if strings.TrimSpace(os.Getenv("PCG_NORNICDB_BINARY")) == "" {
+		t.Skip("set PCG_NORNICDB_BINARY to run the local-authoritative query perf smoke")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("local-authoritative query perf smoke is Unix-only in this slice")
+	}
+
+	t.Setenv("PCG_QUERY_PROFILE", string(query.ProfileLocalAuthoritative))
+	t.Setenv("PCG_GRAPH_BACKEND", string(query.GraphBackendNornicDB))
+	t.Setenv("PCG_HOME", t.TempDir())
+
+	workspaceRoot := t.TempDir()
+	layout, err := pcglocal.BuildLayout(os.Getenv, os.UserHomeDir, runtime.GOOS, workspaceRoot)
+	if err != nil {
+		t.Fatalf("BuildLayout() error = %v, want nil", err)
+	}
+
+	p95, err := measureLocalAuthoritativeTransitiveCallersLatency(layout)
+	if err != nil {
+		t.Fatalf("measureLocalAuthoritativeTransitiveCallersLatency() error = %v, want nil", err)
+	}
+	t.Logf("local_authoritative synthetic transitive-callers p95 = %s", p95)
+	if p95 > 2*time.Second {
+		t.Fatalf("local_authoritative synthetic transitive-callers p95 = %s, want <= %s", p95, 2*time.Second)
+	}
+}
+
 func measureLocalAuthoritativeCallChainLatency(layout pcglocal.Layout) (time.Duration, error) {
 	originalStartChild := localHostStartChildProcess
 	originalWaitChild := localHostWaitChildProcess
@@ -93,6 +127,46 @@ func measureLocalAuthoritativeCallChainLatency(layout pcglocal.Layout) (time.Dur
 	}
 	if measured <= 0 {
 		return 0, fmt.Errorf("local-authoritative query perf smoke never measured call-chain latency")
+	}
+	return measured, nil
+}
+
+func measureLocalAuthoritativeTransitiveCallersLatency(layout pcglocal.Layout) (time.Duration, error) {
+	originalStartChild := localHostStartChildProcess
+	originalWaitChild := localHostWaitChildProcess
+	defer func() {
+		localHostStartChildProcess = originalStartChild
+		localHostWaitChildProcess = originalWaitChild
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	var measured time.Duration
+	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {
+		if name != "pcg-ingester" {
+			return nil, fmt.Errorf("unexpected child process %q", name)
+		}
+
+		record, err := pcglocal.ReadOwnerRecord(layout.OwnerRecordPath)
+		if err != nil {
+			return nil, fmt.Errorf("read owner record during query perf startup: %w", err)
+		}
+		measured, err = runLocalAuthoritativeTransitiveCallersProbe(ctx, record)
+		if err != nil {
+			return nil, err
+		}
+		return &exec.Cmd{}, nil
+	}
+	localHostWaitChildProcess = func(ctx context.Context, cmd *exec.Cmd) error {
+		return nil
+	}
+
+	if err := runOwnedLocalHostWithLayout(ctx, layout, localHostModeWatch); err != nil {
+		return 0, err
+	}
+	if measured <= 0 {
+		return 0, fmt.Errorf("local-authoritative query perf smoke never measured transitive-caller latency")
 	}
 	return measured, nil
 }
@@ -135,6 +209,51 @@ func runLocalAuthoritativeCallChainProbe(ctx context.Context, record pcglocal.Ow
 			return 0, fmt.Errorf("call-chain handler status = %d body=%s", rec.Code, rec.Body.String())
 		}
 		if err := assertSyntheticCallChainEnvelope(rec.Body.Bytes(), startName, endName); err != nil {
+			return 0, err
+		}
+	}
+
+	return percentileDuration(durations, 0.95), nil
+}
+
+func runLocalAuthoritativeTransitiveCallersProbe(ctx context.Context, record pcglocal.OwnerRecord) (time.Duration, error) {
+	driver, err := openLocalAuthoritativePerfDriver(ctx, record)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		_ = driver.Close(context.Background())
+	}()
+
+	startName, endName, err := seedSyntheticCallChain(ctx, driver)
+	if err != nil {
+		return 0, err
+	}
+
+	reader := query.NewNeo4jReader(driver, localNornicDBDefaultDatabase)
+	handler := &query.CodeHandler{
+		GraphBackend: query.GraphBackendNornicDB,
+		Neo4j:        reader,
+		Profile:      query.ProfileLocalAuthoritative,
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	durations := make([]time.Duration, 0, 7)
+	for i := 0; i < 7; i++ {
+		body := fmt.Sprintf(`{"name":"%s","direction":"incoming","relationship_type":"CALLS","transitive":true,"max_depth":8}`, endName)
+		req := httptest.NewRequest(http.MethodPost, "/api/v0/code/relationships", bytes.NewBufferString(body))
+		req.Header.Set("Accept", query.EnvelopeMIMEType)
+		rec := httptest.NewRecorder()
+
+		startedAt := time.Now()
+		mux.ServeHTTP(rec, req)
+		durations = append(durations, time.Since(startedAt))
+
+		if rec.Code != http.StatusOK {
+			return 0, fmt.Errorf("transitive-callers handler status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		if err := assertSyntheticTransitiveCallersEnvelope(rec.Body.Bytes(), endName, startName); err != nil {
 			return 0, err
 		}
 	}
@@ -277,13 +396,67 @@ func assertSyntheticCallChainEnvelope(body []byte, startName, endName string) er
 	if !ok || len(chains) == 0 {
 		return fmt.Errorf("synthetic call-chain data.chains = %#v, want non-empty", data["chains"])
 	}
-	chain, ok := chains[0].(map[string]any)
-	if !ok {
-		return fmt.Errorf("synthetic call-chain first chain = %T, want map[string]any", chains[0])
+	for _, chainAny := range chains {
+		chain, ok := chainAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		nodes, ok := chain["chain"].([]any)
+		if !ok || len(nodes) != 4 {
+			continue
+		}
+		first, firstOK := nodes[0].(map[string]any)
+		last, lastOK := nodes[len(nodes)-1].(map[string]any)
+		if firstOK && lastOK && first["name"] == startName && last["name"] == endName {
+			return nil
+		}
 	}
-	nodes, ok := chain["chain"].([]any)
-	if !ok || len(nodes) != 4 {
-		return fmt.Errorf("synthetic call-chain node count = %#v, want 4; first chain=%#v body=%s", chain["chain"], chain, string(body))
+	return fmt.Errorf("synthetic call-chain did not include expected 4-node path body=%s", string(body))
+}
+
+func assertSyntheticTransitiveCallersEnvelope(body []byte, entityName, farthestCaller string) error {
+	var resp map[string]any
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return fmt.Errorf("decode synthetic transitive-callers response: %w", err)
+	}
+
+	truth, ok := resp["truth"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("synthetic transitive-callers truth = %T, want map[string]any", resp["truth"])
+	}
+	if got, want := truth["profile"], string(query.ProfileLocalAuthoritative); got != want {
+		return fmt.Errorf("synthetic transitive-callers truth.profile = %#v, want %#v", got, want)
+	}
+	if got, want := truth["capability"], "call_graph.transitive_callers"; got != want {
+		return fmt.Errorf("synthetic transitive-callers truth.capability = %#v, want %#v", got, want)
+	}
+
+	data, ok := resp["data"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("synthetic transitive-callers data = %T, want map[string]any", resp["data"])
+	}
+	if got, want := data["name"], entityName; got != want {
+		return fmt.Errorf("synthetic transitive-callers data.name = %#v, want %#v", got, want)
+	}
+	incoming, ok := data["incoming"].([]any)
+	if !ok || len(incoming) != 3 {
+		return fmt.Errorf("synthetic transitive-callers data.incoming = %#v, want 3 callers body=%s", data["incoming"], string(body))
+	}
+	var sawFarthest bool
+	for _, item := range incoming {
+		relationship, ok := item.(map[string]any)
+		if !ok {
+			return fmt.Errorf("synthetic transitive-callers relationship type = %T, want map[string]any", item)
+		}
+		if relationship["source_name"] == farthestCaller {
+			sawFarthest = true
+			if got, want := relationship["depth"], float64(3); got != want {
+				return fmt.Errorf("synthetic transitive-callers farthest depth = %#v, want %#v", got, want)
+			}
+		}
+	}
+	if !sawFarthest {
+		return fmt.Errorf("synthetic transitive-callers missing farthest caller %q in body=%s", farthestCaller, string(body))
 	}
 	return nil
 }

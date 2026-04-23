@@ -15,6 +15,12 @@ understand who depends on it. Under the hood this routes to
 pcg analyze callers process_payment
 ```
 
+Add `--transitive` to walk indirect callers and `--depth` to cap the traversal:
+
+```bash
+pcg analyze callers process_payment --transitive --depth 7
+```
+
 ### `analyze calls`
 
 The reverse — show what a function calls (its callees). Under the hood this
@@ -23,6 +29,12 @@ routes to `POST /api/v0/code/relationships` with `direction=outgoing` and
 
 ```bash
 pcg analyze calls process_payment
+```
+
+Use the same flags for indirect callees:
+
+```bash
+pcg analyze calls process_payment --transitive --depth 7
 ```
 
 ### `analyze chain`

@@ -464,7 +464,23 @@ relative_path`, not absolute server-local paths.
 `POST /api/v0/code/relationships` prefers `entity_id` when the caller already
 has a canonical entity. It also accepts `name` for fallback lookup, plus
 optional `direction` (`incoming` or `outgoing`) and `relationship_type`
-filters when the caller only needs one edge class.
+filters when the caller only needs one edge class. Set `transitive=true` with
+`relationship_type=CALLS` to ask for indirect callers or callees, and use
+`max_depth` to cap the traversal. Lightweight mode refuses those transitive
+graph traversals with a structured `unsupported_capability` envelope instead
+of returning degraded call-graph guesses.
+
+Example transitive-caller workflow:
+
+```json
+{
+  "name": "process_payment",
+  "direction": "incoming",
+  "relationship_type": "CALLS",
+  "transitive": true,
+  "max_depth": 7
+}
+```
 
 Example code-only workflow:
 
