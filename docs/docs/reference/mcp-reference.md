@@ -63,7 +63,7 @@ Use these tools when the user is asking for a narrative answer such as
 | **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, optional `semantic_overview`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a repository selector: canonical ID, name, repo slug, or indexed path. | "Tell me the end-to-end story for payments-api." |
 | **`get_workload_story`** | Return a narrative workload story using canonical workload identity, optionally scoped to one environment. Use `trace_deployment_chain` when you need the richer deployment-mapping fields such as `story_sections`, `deployment_overview`, `controller_overview`, or `deployment_fact_summary`. | "Show me how payments-api is deployed in prod." |
 | **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts; pair it with `trace_deployment_chain` for deployment-mapping detail. | "What can you tell me about payments-api in QA?" |
-| **`resolve_entity`** | Resolve fuzzy input into canonical entities before story or context calls. | "What canonical entity matches `payments prod rds`?" |
+| **`resolve_entity`** | Resolve fuzzy input into canonical entities before story or context calls, with an optional repository selector filter. | "What canonical entity matches `payments prod rds`?" |
 | **`get_entity_context`** | Fetch full context for one canonical entity id. | "Show me the context for this resolved entity." |
 | **`get_repo_context`** | Durable drill-down for repository details after the story answer. Accepts a repository selector: canonical ID, name, repo slug, or indexed path. | "Show me the full repo context behind that story." |
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
@@ -139,11 +139,11 @@ Use these after story or context determines which files, snippets, or docs matte
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
-| **`get_file_content`** | Read a file using `repo_id + relative_path`. | "Show me `src/payments.py` from the payments repo." |
-| **`get_file_lines`** | Read a specific line range from one repo-relative file. | "Show me lines 20 to 40 from `src/server.py`." |
+| **`get_file_content`** | Read a file using `repo_id + relative_path`, where `repo_id` may be a canonical ID, repository name, repo slug, or indexed path. | "Show me `src/payments.py` from the payments repo." |
+| **`get_file_lines`** | Read a specific line range from one repo-relative file using the same repository selector contract as `get_file_content`. | "Show me lines 20 to 40 from `src/server.py`." |
 | **`get_entity_content`** | Read source for one content-bearing entity using its canonical `entity_id`. | "Show me the source for this resolved function." |
-| **`search_file_content`** | Search indexed file text through the content store. | "Find every file that mentions `shared-payments-prod`." |
-| **`search_entity_content`** | Search cached entity snippets through the content store. | "Find entities whose source mentions `process_payment`." |
+| **`search_file_content`** | Search indexed file text through the content store, optionally scoped by repository selectors. | "Find every file that mentions `shared-payments-prod`." |
+| **`search_entity_content`** | Search cached entity snippets through the content store, optionally scoped by repository selectors. | "Find entities whose source mentions `process_payment`." |
 
 ## Runtime & Repository Status
 

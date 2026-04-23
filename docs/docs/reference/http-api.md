@@ -196,7 +196,7 @@ whether the latest published Go checkpoint is finished.
 - file-bearing query results should be interpreted using `repo_id + relative_path`, not an absolute server path.
 - `repo_access` indicates whether the caller may need to ask the user for a local checkout path or clone decision.
 - documentation-oriented clients should resolve canonical graph identity first, then use `repo_id + relative_path` or `entity_id` for exact evidence reads.
-- repository-oriented context, summary, story, stats, and file routes use canonical `repo_id` at the public boundary.
+- repository-oriented context, summary, story, stats, and file routes accept a repository selector at the public boundary and normalize it to the canonical `repo_id` server-side.
 
 ## Context API
 
@@ -537,6 +537,7 @@ Use these routes when a caller needs source text or indexed content search witho
 Rules:
 
 - portable file lookup uses `repo_id + relative_path`
+- content routes accept repository selectors in `repo_id` and `repo_ids`: canonical IDs, repository names, repo slugs, or indexed paths
 - portable entity lookup uses `entity_id`
 - deployed API runtimes are PostgreSQL-first and PostgreSQL-only for direct content reads
 - if PostgreSQL is disabled or missing a cached row, deployed HTTP reads return `source_backend=unavailable` instead of reading from a server workspace checkout
@@ -550,7 +551,7 @@ Example file read:
 
 ```json
 {
-  "repo_id": "repository:r_ab12cd34",
+  "repo_id": "payments",
   "relative_path": "src/payments.py"
 }
 ```
@@ -568,7 +569,7 @@ Example file-content search:
 ```json
 {
   "pattern": "shared-payments-prod",
-  "repo_ids": ["repository:r_ab12cd34"]
+  "repo_ids": ["payments", "platformcontext/platform-context-graph"]
 }
 ```
 

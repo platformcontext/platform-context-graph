@@ -52,6 +52,14 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if req.RepoID != "" {
+		resolvedRepoID, err := resolveRepositorySelectorExact(r.Context(), h.Neo4j, h.Content, req.RepoID)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.RepoID = resolvedRepoID
+	}
 
 	cypher := `MATCH (e) WHERE e.name = $name`
 	params := map[string]any{"name": req.Name}
