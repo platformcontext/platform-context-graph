@@ -211,7 +211,7 @@ func TestHandleDeadCodeReportsModeledGoFrameworkRootsInAnalysis(t *testing.T) {
 	if !ok {
 		t.Fatalf("analysis[modeled_framework_roots] type = %T, want []any", analysis["modeled_framework_roots"])
 	}
-	if got, want := len(modeledFrameworkRoots), 5; got != want {
+	if got, want := len(modeledFrameworkRoots), 10; got != want {
 		t.Fatalf("len(analysis[modeled_framework_roots]) = %d, want %d", got, want)
 	}
 	if got, want := modeledFrameworkRoots[0], "go.cobra_run_registration"; got != want {
@@ -228,6 +228,21 @@ func TestHandleDeadCodeReportsModeledGoFrameworkRootsInAnalysis(t *testing.T) {
 	}
 	if got, want := modeledFrameworkRoots[4], "go.controller_runtime_reconcile_signature"; got != want {
 		t.Fatalf("analysis[modeled_framework_roots][4] = %#v, want %#v", got, want)
+	}
+	if got, want := modeledFrameworkRoots[5], "python.fastapi_route_decorator"; got != want {
+		t.Fatalf("analysis[modeled_framework_roots][5] = %#v, want %#v", got, want)
+	}
+	if got, want := modeledFrameworkRoots[6], "python.flask_route_decorator"; got != want {
+		t.Fatalf("analysis[modeled_framework_roots][6] = %#v, want %#v", got, want)
+	}
+	if got, want := modeledFrameworkRoots[7], "python.celery_task_decorator"; got != want {
+		t.Fatalf("analysis[modeled_framework_roots][7] = %#v, want %#v", got, want)
+	}
+	if got, want := modeledFrameworkRoots[8], "javascript.nextjs_route_export"; got != want {
+		t.Fatalf("analysis[modeled_framework_roots][8] = %#v, want %#v", got, want)
+	}
+	if got, want := modeledFrameworkRoots[9], "javascript.express_route_registration"; got != want {
+		t.Fatalf("analysis[modeled_framework_roots][9] = %#v, want %#v", got, want)
 	}
 	if got, want := analysis["framework_roots_from_parser_metadata"], float64(0); got != want {
 		t.Fatalf("analysis[framework_roots_from_parser_metadata] = %#v, want %#v", got, want)

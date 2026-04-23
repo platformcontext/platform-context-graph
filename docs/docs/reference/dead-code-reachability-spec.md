@@ -151,17 +151,26 @@ Current branch status:
 - Go stdlib HTTP handler signatures are modeled
 - Go stdlib HTTP direct and proven `ServeMux` registrations are modeled
 - Go controller-runtime `Reconcile` signatures are modeled
+- Python FastAPI route decorators are modeled
+- Python Flask route decorators are modeled
+- Python Celery task decorators are modeled
+- JavaScript/TypeScript Next.js route exports are modeled
+- JavaScript/TypeScript Express handler registrations are modeled
 - those Go signature roots are now emitted by the Go parser into entity
   metadata when imports, registrations, and signatures match directly; mixed
   native+SCIP indexing now preserves `dead_code_root_kinds` through the
-  supplement merge path; query-time source heuristics remain as a fallback
-  while broader registry coverage lands
-- broader Go router, webhook, worker, reflection, and build-tag roots remain
+  supplement merge path; Python route/task decorators and
+  JavaScript/TypeScript Next.js/Express route roots are also emitted as
+  parser-backed `dead_code_root_kinds`; Go query-time source heuristics remain
+  as a fallback while broader registry coverage lands
+- broader Go router, webhook, worker, reflection, and build-tag roots plus
+  broader Python worker/CLI/public-API roots and broader JavaScript/TypeScript
+  worker/public-API roots remain
   open, so dead-code truth stays `derived`
 
 Initial MVP is explicitly limited to those families. Other languages and
-frameworks should return non-exact or unsupported dead-code results until their
-root models exist.
+frameworks should return non-exact or unsupported dead-code results until
+their root models exist.
 
 Chunk 4 should also add a diff-oriented dead-code mode for CI-style questions
 such as "did this change introduce dead code?"

@@ -100,11 +100,15 @@ func (e *Engine) parsePython(
 				"name":                  name,
 				"line_number":           nodeLine(nameNode),
 				"end_line":              nodeEndLine(node),
-				"decorators":            pythonDecorators(node, source),
 				"args":                  pythonParameterNames(node.ChildByFieldName("parameters"), source),
 				"lang":                  "python",
 				"async":                 pythonFunctionIsAsync(functionSource),
 				"cyclomatic_complexity": cyclomaticComplexity(node),
+			}
+			decorators := pythonDecorators(node, source)
+			item["decorators"] = decorators
+			if rootKinds := pythonDeadCodeRootKinds(decorators); len(rootKinds) > 0 {
+				item["dead_code_root_kinds"] = rootKinds
 			}
 			if pythonFunctionIsGenerator(node) {
 				item["semantic_kind"] = "generator"
