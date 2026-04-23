@@ -1,0 +1,45 @@
+go/cmd/api/wiring.go
+  e27ce815bbe89792 37-40,84,159-162,168,182-185
+go/internal/query/code_call_graph_contract_test.go
+  e27ce815bbe89792 418,430-432,486-548,595-629
+go/cmd/mcp-server/wiring.go
+  e27ce815bbe89792 36-39,95-98,191-192
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 32,34
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 175-204
+go/cmd/pcg/local_authoritative_query_perf_test.go
+  e27ce815bbe89792 1-305
+go/internal/query/code.go
+  e27ce815bbe89792 13-16,44-52
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 27-28
+docs/docs/reference/local-performance-envelope.md
+  e27ce815bbe89792 87-112
+go/cmd/mcp-server/wiring_test.go
+  e27ce815bbe89792 37-51
+go/cmd/api/wiring_test.go
+  e27ce815bbe89792 39-53,78
+go/internal/query/code_call_chain.go
+  e27ce815bbe89792 7-8,56,65,82,84-95,97-103,105-111,113-119,127-198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "cd888a953e2a2f34bf8ab2d782918cf516e45464",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 669,
+      "total_deletions": 52,
+      "accepted_lines": 666,
+      "overriden_lines": 0
+    }
+  }
+}
