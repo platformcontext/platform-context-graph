@@ -42,6 +42,12 @@ func (h *ContentHandler) readFile(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "relative_path is required")
 		return
 	}
+	resolvedRepoID, err := h.resolveRepositorySelector(r.Context(), req.RepoID)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.RepoID = resolvedRepoID
 
 	fc, err := h.Content.GetFileContent(r.Context(), req.RepoID, req.RelativePath)
 	if err != nil {
@@ -79,6 +85,12 @@ func (h *ContentHandler) readFileLines(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "relative_path is required")
 		return
 	}
+	resolvedRepoID, err := h.resolveRepositorySelector(r.Context(), req.RepoID)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.RepoID = resolvedRepoID
 
 	fc, err := h.Content.GetFileLines(r.Context(), req.RepoID, req.RelativePath, req.StartLine, req.EndLine)
 	if err != nil {
@@ -136,6 +148,11 @@ func (h *ContentHandler) searchFiles(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	req, err = h.normalizeContentSearchRequest(r.Context(), req)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	results, err := h.searchFilesByScope(r.Context(), req)
 	if err != nil {
@@ -156,6 +173,11 @@ func (h *ContentHandler) searchEntities(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := req.validate(); err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req, err = h.normalizeContentSearchRequest(r.Context(), req)
+	if err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -234,6 +256,40 @@ func (req contentSearchRequest) explicitRepoIDs() []string {
 		repoIDs = append(repoIDs, repoID)
 	}
 	return repoIDs
+}
+
+func (h *ContentHandler) resolveRepositorySelector(ctx context.Context, selector string) (string, error) {
+	return resolveRepositorySelectorExact(ctx, nil, h.Content, selector)
+}
+
+func (h *ContentHandler) normalizeContentSearchRequest(ctx context.Context, req contentSearchRequest) (contentSearchRequest, error) {
+	if req.RepoID != "" {
+		repoID, err := h.resolveRepositorySelector(ctx, req.RepoID)
+		if err != nil {
+			return contentSearchRequest{}, err
+		}
+		req.RepoID = repoID
+		req.RepoIDs = nil
+		return req, nil
+	}
+	if len(req.RepoIDs) == 0 {
+		return req, nil
+	}
+	resolved := make([]string, 0, len(req.RepoIDs))
+	seen := make(map[string]struct{}, len(req.RepoIDs))
+	for _, selector := range req.RepoIDs {
+		repoID, err := h.resolveRepositorySelector(ctx, selector)
+		if err != nil {
+			return contentSearchRequest{}, err
+		}
+		if _, ok := seen[repoID]; ok {
+			continue
+		}
+		seen[repoID] = struct{}{}
+		resolved = append(resolved, repoID)
+	}
+	req.RepoIDs = resolved
+	return req, nil
 }
 
 func (h *ContentHandler) searchFilesByScope(ctx context.Context, req contentSearchRequest) ([]FileContent, error) {

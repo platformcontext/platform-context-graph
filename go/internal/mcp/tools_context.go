@@ -28,7 +28,7 @@ func contextTools() []ToolDefinition {
 					},
 					"repo_id": map[string]any{
 						"type":        "string",
-						"description": "Optional repository to scope the search",
+						"description": "Optional repository selector to scope the search: canonical ID, name, repo slug, or indexed path",
 					},
 					"exact": map[string]any{
 						"type":        "boolean",

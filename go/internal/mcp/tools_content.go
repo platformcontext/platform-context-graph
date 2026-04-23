@@ -4,13 +4,13 @@ func contentTools() []ToolDefinition {
 	return []ToolDefinition{
 		{
 			Name:        "get_file_content",
-			Description: "Return source for a repo-relative file.",
+			Description: "Return source for a repo-relative file using a repository selector plus relative path.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"repo_id": map[string]any{
 						"type":        "string",
-						"description": "Canonical repository identifier",
+						"description": "Repository selector: canonical ID, name, repo slug, or indexed path",
 					},
 					"relative_path": map[string]any{
 						"type":        "string",
@@ -22,13 +22,13 @@ func contentTools() []ToolDefinition {
 		},
 		{
 			Name:        "get_file_lines",
-			Description: "Return a line range for a repo-relative file.",
+			Description: "Return a line range for a repo-relative file using a repository selector plus relative path.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"repo_id": map[string]any{
 						"type":        "string",
-						"description": "Canonical repository identifier",
+						"description": "Repository selector: canonical ID, name, repo slug, or indexed path",
 					},
 					"relative_path": map[string]any{
 						"type":        "string",
@@ -73,7 +73,7 @@ func contentTools() []ToolDefinition {
 					"repo_ids": map[string]any{
 						"type":        "array",
 						"items":       map[string]any{"type": "string"},
-						"description": "Filter by repository identifiers",
+						"description": "Filter by repository selectors: canonical IDs, names, repo slugs, or indexed paths",
 					},
 					"languages": map[string]any{
 						"type":        "array",
@@ -116,7 +116,7 @@ func contentTools() []ToolDefinition {
 					"repo_ids": map[string]any{
 						"type":        "array",
 						"items":       map[string]any{"type": "string"},
-						"description": "Filter by repository identifiers",
+						"description": "Filter by repository selectors: canonical IDs, names, repo slugs, or indexed paths",
 					},
 					"languages": map[string]any{
 						"type":        "array",
