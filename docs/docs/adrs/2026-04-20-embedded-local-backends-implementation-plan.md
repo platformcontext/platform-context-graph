@@ -30,7 +30,7 @@ verification evidence = reviewer rejects PR.
 | 1 | Capability contract + truth labels | Shipped | `488ff808`, `35a3a091` | — |
 | 2 | Capability ports (`GraphQuery`, `ContentStore`) | Shipped | `08795558`, `07619013`, `085c91a3` | — |
 | 3 | Lightweight local host | Shipped | `a3e05ecf`, `c832a84c`, current branch local-host supervisor + embedded Postgres lifecycle | perf-envelope smoke evidence still needs to be attached to the PR |
-| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | In progress | `0e4d8a5f`, current branch profile/backend and runtime-gating slices | `pcg install nornicdb`, NornicDB adapter behind `GraphQuery`/`GraphWrite`, data-root + lifecycle wiring for graph sidecar, authoritative attach/runtime behavior, 3 syntax-verification tests (composite unique, fulltext, collect-distinct-map), perf-envelope smoke |
+| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | In progress | `0e4d8a5f`, current branch profile/backend and runtime-gating slices, current branch `pcg graph status` + CLI surface slice | `pcg install nornicdb`, `pcg graph start|stop|logs|upgrade`, NornicDB adapter behind `GraphQuery`/`GraphWrite`, data-root + lifecycle wiring for graph sidecar, authoritative attach/runtime behavior, 3 syntax-verification tests (composite unique, fulltext, collect-distinct-map), perf-envelope smoke |
 | 4 | Authoritative graph analysis hardening | Not started | — | all |
 | 5 | Backend conformance suite | Not started | — | all |
 | 5b | NornicDB conformance across profiles | Not started | — | matrix run vs `local_authoritative`, `local_full_stack`, `production`; PCG-workload perf comparison vs Neo4j baseline |

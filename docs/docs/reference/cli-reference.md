@@ -76,12 +76,12 @@ lightweight host. PCG exposes:
 
 | Command | Purpose |
 | :--- | :--- |
-| `pcg install nornicdb` | Install the pinned NornicDB binary into `${PCG_HOME}/bin/` with checksum + signature verification. |
-| `pcg graph start` | Start the graph backend sidecar for the current workspace. |
-| `pcg graph stop` | Graceful stop; `--force` after graceful window. |
-| `pcg graph status` | Report installed version, PID, socket, data directory. |
-| `pcg graph logs` | Tail the graph backend log file. |
-| `pcg graph upgrade` | Install a new version and restart the sidecar. |
+| `pcg graph status` | Available now. Report workspace graph-owner metadata, backend, PID, socket, and current running state when present. |
+| `pcg install nornicdb` | Stubbed today with actionable guidance. Full installer ships with the sidecar lifecycle slice. |
+| `pcg graph start` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
+| `pcg graph stop` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
+| `pcg graph logs` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
+| `pcg graph upgrade` | Stubbed today with actionable guidance. Full lifecycle command ships with the sidecar slice. |
 
 Full operator contract: [Graph Backend Operations](graph-backend-operations.md).
 
@@ -215,6 +215,12 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 
 | Command | Purpose |
 | :--- | :--- |
+| `pcg graph status` | Show the current workspace graph-backend owner metadata and runtime state. |
+| `pcg graph start` | Stub today. Prints actionable guidance until the local graph sidecar lifecycle ships. |
+| `pcg graph stop` | Stub today. Prints actionable guidance until the local graph sidecar lifecycle ships. |
+| `pcg graph logs` | Stub today. Prints actionable guidance until the local graph sidecar lifecycle ships. |
+| `pcg graph upgrade` | Stub today. Prints actionable guidance until the local graph sidecar lifecycle ships. |
+| `pcg install nornicdb` | Stub today. Prints actionable guidance until the local graph installer ships. |
 | `pcg mcp setup` | Configure IDE and CLI MCP integrations. |
 | `pcg mcp start` | Start the MCP server. |
 | `pcg mcp tools` | List MCP tools. |
