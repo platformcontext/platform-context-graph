@@ -134,6 +134,15 @@ const openAPIPathsCode = `
                   "relationship_type": {
                     "type": "string",
                     "description": "Optional relationship type filter such as CALLS, IMPORTS, or REFERENCES."
+                  },
+                  "transitive": {
+                    "type": "boolean",
+                    "description": "When true, traverse transitive CALLS relationships instead of only one hop."
+                  },
+                  "max_depth": {
+                    "type": "integer",
+                    "description": "Maximum traversal depth for transitive CALLS lookups (default 5, max 10).",
+                    "default": 5
                   }
                 }
               }

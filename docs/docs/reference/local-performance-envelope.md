@@ -111,6 +111,30 @@ functionally live and comfortably below the current `under 2 seconds` target
 for a synthetic path workload. It is not a substitute for active-repo
 transitive-caller, active-repo call-chain, dead-code, or memory-budget proof.
 
+The `local_authoritative` transitive-caller path now also has a dedicated
+manual smoke:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeTransitiveCallersSyntheticEnvelope -count=1 -v
+```
+
+That gate boots the real local host, embedded Postgres, and managed NornicDB
+sidecar, seeds the same synthetic four-function `CALLS` chain through the
+shared Bolt driver path, and exercises the real
+`/api/v0/code/relationships` transitive-callers handler in
+`local_authoritative`.
+
+Recorded sample on 2026-04-23:
+
+- synthetic transitive-caller p95: `1.917916ms`
+
+This smoke confirms that the backend-routed NornicDB transitive-callers path
+is functionally live and comfortably below the current `under 2 seconds`
+target for a synthetic traversal workload. It is still not a substitute for
+active-repo transitive-caller, dead-code, or memory-budget proof.
+
 ## Review Rule
 
 If the local host misses these targets, the docs and matrix should reflect the

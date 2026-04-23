@@ -199,6 +199,76 @@ func TestResolveRouteMapsAnalyzeCodeRelationshipsCallers(t *testing.T) {
 	}
 }
 
+func TestResolveRouteMapsAnalyzeCodeRelationshipsAllCallers(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("analyze_code_relationships", map[string]any{
+		"query_type": "find_all_callers",
+		"target":     "helper",
+		"context":    "7",
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if route.path != "/api/v0/code/relationships" {
+		t.Fatalf("route.path = %q, want /api/v0/code/relationships", route.path)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["name"], "helper"; got != want {
+		t.Fatalf("body[name] = %#v, want %#v", got, want)
+	}
+	if got, want := body["direction"], "incoming"; got != want {
+		t.Fatalf("body[direction] = %#v, want %#v", got, want)
+	}
+	if got, want := body["relationship_type"], "CALLS"; got != want {
+		t.Fatalf("body[relationship_type] = %#v, want %#v", got, want)
+	}
+	if got, want := body["transitive"], true; got != want {
+		t.Fatalf("body[transitive] = %#v, want %#v", got, want)
+	}
+	if got, want := body["max_depth"], 7; got != want {
+		t.Fatalf("body[max_depth] = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveRouteMapsAnalyzeCodeRelationshipsAllCallees(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("analyze_code_relationships", map[string]any{
+		"query_type": "find_all_callees",
+		"target":     "wrapper",
+		"context":    "6",
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if route.path != "/api/v0/code/relationships" {
+		t.Fatalf("route.path = %q, want /api/v0/code/relationships", route.path)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["name"], "wrapper"; got != want {
+		t.Fatalf("body[name] = %#v, want %#v", got, want)
+	}
+	if got, want := body["direction"], "outgoing"; got != want {
+		t.Fatalf("body[direction] = %#v, want %#v", got, want)
+	}
+	if got, want := body["relationship_type"], "CALLS"; got != want {
+		t.Fatalf("body[relationship_type] = %#v, want %#v", got, want)
+	}
+	if got, want := body["transitive"], true; got != want {
+		t.Fatalf("body[transitive] = %#v, want %#v", got, want)
+	}
+	if got, want := body["max_depth"], 6; got != want {
+		t.Fatalf("body[max_depth] = %#v, want %#v", got, want)
+	}
+}
+
 func TestResolveRouteMapsAnalyzeCodeRelationshipsImporters(t *testing.T) {
 	t.Parallel()
 

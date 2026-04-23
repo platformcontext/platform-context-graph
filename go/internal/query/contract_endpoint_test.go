@@ -23,6 +23,25 @@ func TestHandleCallChain_LocalLightweightReturnsStructuredUnsupportedCapability(
 	}
 }
 
+func TestHandleRelationshipsTransitiveCallers_LocalLightweightReturnsStructuredUnsupportedCapability(t *testing.T) {
+	handler := &CodeHandler{Profile: ProfileLocalLightweight}
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/code/relationships", strings.NewReader(`{"name":"helper","direction":"incoming","relationship_type":"CALLS","transitive":true}`))
+	req.Header.Set("Accept", EnvelopeMIMEType)
+	w := httptest.NewRecorder()
+
+	handler.handleRelationships(w, req)
+
+	if w.Code != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+	}
+	if body := w.Body.String(); !strings.Contains(body, `"unsupported_capability"`) {
+		t.Fatalf("body = %s, want unsupported_capability envelope", body)
+	}
+	if body := w.Body.String(); !strings.Contains(body, `"call_graph.transitive_callers"`) {
+		t.Fatalf("body = %s, want transitive callers capability", body)
+	}
+}
+
 func TestFindBlastRadius_LocalLightweightReturnsStructuredUnsupportedCapability(t *testing.T) {
 	handler := &ImpactHandler{Profile: ProfileLocalLightweight}
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/impact/blast-radius", strings.NewReader(`{"target":"repo","target_type":"repository"}`))

@@ -105,8 +105,12 @@ This now maps to the Go `code/relationships` route using `name=foo`,
 **Tool:** `analyze_code_relationships`
 
 ```json
-{ "query_type": "find_all_callers", "target": "helper" }
+{ "query_type": "find_all_callers", "target": "helper", "max_depth": 7 }
 ```
+
+This now maps to the Go `code/relationships` route using `name=helper`,
+`direction=incoming`, `relationship_type=CALLS`, `transitive=true`, and the
+provided `max_depth`.
 
 ### Find indirect callees
 
@@ -115,8 +119,11 @@ This now maps to the Go `code/relationships` route using `name=foo`,
 **Tool:** `analyze_code_relationships`
 
 ```json
-{ "query_type": "find_all_callees", "target": "foo" }
+{ "query_type": "find_all_callees", "target": "foo", "max_depth": 7 }
 ```
+
+This maps to the same route with `direction=outgoing`,
+`relationship_type=CALLS`, `transitive=true`, and the provided `max_depth`.
 
 ### Find the call chain between two functions
 

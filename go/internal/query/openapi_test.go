@@ -274,6 +274,12 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if _, ok := relationshipsSchema["relationship_type"]; !ok {
 		t.Fatal("code/relationships request schema missing relationship_type")
 	}
+	if _, ok := relationshipsSchema["transitive"]; !ok {
+		t.Fatal("code/relationships request schema missing transitive")
+	}
+	if _, ok := relationshipsSchema["max_depth"]; !ok {
+		t.Fatal("code/relationships request schema missing max_depth")
+	}
 
 	traceDeploymentPath := mustMapField(t, paths, "/api/v0/impact/trace-deployment-chain")
 	traceDeploymentPost := mustMapField(t, traceDeploymentPath, "post")

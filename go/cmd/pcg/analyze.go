@@ -22,6 +22,8 @@ func init() {
 		RunE:  runAnalyzeCalls,
 	}
 	addRemoteFlags(callsCmd)
+	callsCmd.Flags().Bool("transitive", false, "Include transitive callees")
+	callsCmd.Flags().Int("depth", 5, "Maximum traversal depth for transitive callees")
 	analyzeCmd.AddCommand(callsCmd)
 
 	// analyze callers
@@ -32,6 +34,8 @@ func init() {
 		RunE:  runAnalyzeCallers,
 	}
 	addRemoteFlags(callersCmd)
+	callersCmd.Flags().Bool("transitive", false, "Include transitive callers")
+	callersCmd.Flags().Int("depth", 5, "Maximum traversal depth for transitive callers")
 	analyzeCmd.AddCommand(callersCmd)
 
 	// analyze chain
@@ -109,12 +113,19 @@ func init() {
 
 func runAnalyzeCalls(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
+	transitive, _ := cmd.Flags().GetBool("transitive")
+	depth, _ := cmd.Flags().GetInt("depth")
 	var result any
-	err := client.Post("/api/v0/code/relationships", map[string]any{
+	body := map[string]any{
 		"name":              args[0],
 		"direction":         "outgoing",
 		"relationship_type": "CALLS",
-	}, &result)
+	}
+	if transitive {
+		body["transitive"] = true
+		body["max_depth"] = depth
+	}
+	err := client.Post("/api/v0/code/relationships", body, &result)
 	if err != nil {
 		return err
 	}
@@ -124,12 +135,19 @@ func runAnalyzeCalls(cmd *cobra.Command, args []string) error {
 
 func runAnalyzeCallers(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
+	transitive, _ := cmd.Flags().GetBool("transitive")
+	depth, _ := cmd.Flags().GetInt("depth")
 	var result any
-	err := client.Post("/api/v0/code/relationships", map[string]any{
+	body := map[string]any{
 		"name":              args[0],
 		"direction":         "incoming",
 		"relationship_type": "CALLS",
-	}, &result)
+	}
+	if transitive {
+		body["transitive"] = true
+		body["max_depth"] = depth
+	}
+	err := client.Post("/api/v0/code/relationships", body, &result)
 	if err != nil {
 		return err
 	}

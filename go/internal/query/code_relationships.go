@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -13,6 +14,8 @@ type relationshipsRequest struct {
 	RepoID           string `json:"repo_id"`
 	Direction        string `json:"direction"`
 	RelationshipType string `json:"relationship_type"`
+	Transitive       bool   `json:"transitive"`
+	MaxDepth         int    `json:"max_depth"`
 }
 
 // handleRelationships returns incoming and outgoing relationships for an entity.
@@ -33,8 +36,81 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 		return
 	}
 	relationshipType := strings.ToUpper(strings.TrimSpace(req.RelationshipType))
-	capability := relationshipCapability(direction, relationshipType)
 	ctx := r.Context()
+	if req.Transitive {
+		if relationshipType != "CALLS" {
+			WriteError(w, http.StatusBadRequest, "transitive relationships are only supported for CALLS")
+			return
+		}
+		if direction == "" {
+			WriteError(w, http.StatusBadRequest, "direction is required for transitive CALLS relationships")
+			return
+		}
+		if req.MaxDepth <= 0 {
+			req.MaxDepth = 5
+		}
+		if req.MaxDepth > 10 {
+			req.MaxDepth = 10
+		}
+		capability := transitiveRelationshipCapability(direction)
+		if capabilityUnsupported(h.profile(), capability) {
+			WriteContractError(
+				w,
+				r,
+				http.StatusNotImplemented,
+				transitiveRelationshipUnsupportedMessage(direction),
+				ErrorCodeUnsupportedCapability,
+				capability,
+				h.profile(),
+				requiredProfile(capability),
+			)
+			return
+		}
+
+		row, err := h.transitiveRelationshipsGraphRow(ctx, req)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if row == nil {
+			WriteError(w, http.StatusNotFound, "entity not found")
+			return
+		}
+
+		response := map[string]any{
+			"entity_id":  StringVal(row, "id"),
+			"name":       StringVal(row, "name"),
+			"labels":     StringSliceVal(row, "labels"),
+			"file_path":  StringVal(row, "file_path"),
+			"repo_id":    StringVal(row, "repo_id"),
+			"repo_name":  StringVal(row, "repo_name"),
+			"language":   StringVal(row, "language"),
+			"start_line": IntVal(row, "start_line"),
+			"end_line":   IntVal(row, "end_line"),
+			"outgoing":   mapRelationships(row["outgoing"]),
+			"incoming":   mapRelationships(row["incoming"]),
+		}
+		if metadata := graphResultMetadata(row); len(metadata) > 0 {
+			response["metadata"] = metadata
+		}
+		normalizeGraphRelationships(response)
+		response = filterRelationshipResponse(response, direction, relationshipType)
+		enriched, err := h.enrichGraphSearchResultsWithContentMetadata(
+			ctx,
+			[]map[string]any{response},
+			StringVal(row, "repo_id"),
+			StringVal(row, "name"),
+			1,
+		)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		WriteSuccess(w, r, http.StatusOK, enriched[0], BuildTruthEnvelope(h.profile(), capability, TruthBasisAuthoritativeGraph, "resolved from transitive graph relationships"))
+		return
+	}
+	capability := relationshipCapability(direction, relationshipType)
 
 	row, err := h.relationshipsGraphRow(ctx, req.EntityID, req.Name, req.RepoID)
 	if err != nil {
@@ -104,6 +180,20 @@ func relationshipCapability(direction, relationshipType string) string {
 	}
 }
 
+func transitiveRelationshipCapability(direction string) string {
+	if direction == "incoming" {
+		return "call_graph.transitive_callers"
+	}
+	return "call_graph.transitive_callees"
+}
+
+func transitiveRelationshipUnsupportedMessage(direction string) string {
+	if direction == "incoming" {
+		return "transitive callers require authoritative graph mode"
+	}
+	return "transitive callees require authoritative graph mode"
+}
+
 func (h *CodeHandler) relationshipsGraphRow(
 	ctx context.Context,
 	entityID string,
@@ -143,6 +233,32 @@ func (h *CodeHandler) relationshipsGraphRow(
 	return rows[0], nil
 }
 
+func (h *CodeHandler) transitiveRelationshipsGraphRow(
+	ctx context.Context,
+	req relationshipsRequest,
+) (map[string]any, error) {
+	if h == nil || h.Neo4j == nil {
+		return nil, nil
+	}
+
+	metadataRow, err := h.relationshipsGraphRow(ctx, req.EntityID, req.Name, req.RepoID)
+	if err != nil || metadataRow == nil {
+		return metadataRow, err
+	}
+
+	cypher, params := buildTransitiveRelationshipRowsCypher(
+		StringVal(metadataRow, "id"),
+		req.Direction,
+		req.MaxDepth,
+		h.graphBackend(),
+	)
+	rows, err := h.Neo4j.Run(ctx, cypher, params)
+	if err != nil {
+		return nil, err
+	}
+	return buildTransitiveRelationshipGraphResponse(metadataRow, rows, req.Direction), nil
+}
+
 func relationshipGraphRowCypher(predicate string) string {
 	return `
 		MATCH (e) WHERE ` + predicate + `
@@ -160,6 +276,106 @@ func relationshipGraphRowCypher(predicate string) string {
 		       collect(DISTINCT {direction: 'incoming', type: type(incomingRel), call_kind: incomingRel.call_kind, reason: incomingRel.reason, source_name: source.name, source_id: source.id}) as incoming
 		LIMIT 2
 	`
+}
+
+func buildTransitiveRelationshipRowsCypher(
+	entityID string,
+	direction string,
+	maxDepth int,
+	backend GraphBackend,
+) (string, map[string]any) {
+	params := map[string]any{
+		"entity_id": strings.TrimSpace(entityID),
+	}
+	var cypher strings.Builder
+	if backend == GraphBackendNornicDB {
+		if direction == "incoming" {
+			cypher.WriteString("\n\t\tMATCH path = (e {id: $entity_id})<-[:CALLS*1..")
+			cypher.WriteString(fmt.Sprintf("%d", maxDepth))
+			cypher.WriteString("]-(source)\n")
+			cypher.WriteString("\t\tRETURN source.name as source_name,\n")
+			cypher.WriteString("\t\t       source.id as source_id,\n")
+			cypher.WriteString("\t\t       length(path) as depth\n\t")
+			return cypher.String(), params
+		}
+
+		cypher.WriteString("\n\t\tMATCH path = (e {id: $entity_id})-[:CALLS*1..")
+		cypher.WriteString(fmt.Sprintf("%d", maxDepth))
+		cypher.WriteString("]->(target)\n")
+		cypher.WriteString("\t\tRETURN target.name as target_name,\n")
+		cypher.WriteString("\t\t       target.id as target_id,\n")
+		cypher.WriteString("\t\t       length(path) as depth\n\t")
+		return cypher.String(), params
+	}
+
+	cypher.WriteString("\n\t\tMATCH (e)\n")
+	cypher.WriteString("\t\tWHERE e.id = $entity_id\n")
+	if direction == "incoming" {
+		cypher.WriteString("\t\tMATCH path = (e)<-[:CALLS*1..")
+		cypher.WriteString(fmt.Sprintf("%d", maxDepth))
+		cypher.WriteString("]-(source)\n")
+		cypher.WriteString("\t\tRETURN source.name as source_name,\n")
+		cypher.WriteString("\t\t       source.id as source_id,\n")
+		cypher.WriteString("\t\t       length(path) as depth\n\t")
+		return cypher.String(), params
+	}
+
+	cypher.WriteString("\t\tMATCH path = (e)-[:CALLS*1..")
+	cypher.WriteString(fmt.Sprintf("%d", maxDepth))
+	cypher.WriteString("]->(target)\n")
+	cypher.WriteString("\t\tRETURN target.name as target_name,\n")
+	cypher.WriteString("\t\t       target.id as target_id,\n")
+	cypher.WriteString("\t\t       length(path) as depth\n\t")
+	return cypher.String(), params
+}
+
+func buildTransitiveRelationshipGraphResponse(metadataRow map[string]any, rows []map[string]any, direction string) map[string]any {
+	response := cloneQueryAnyMap(metadataRow)
+	response["outgoing"] = []map[string]any{}
+	response["incoming"] = []map[string]any{}
+
+	seen := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		depth := IntVal(row, "depth")
+		if depth <= 0 {
+			continue
+		}
+		if direction == "incoming" {
+			sourceID := StringVal(row, "source_id")
+			sourceName := StringVal(row, "source_name")
+			key := fmt.Sprintf("incoming:%s:%s:%d", sourceID, sourceName, depth)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			response["incoming"] = append(response["incoming"].([]map[string]any), map[string]any{
+				"direction":   "incoming",
+				"type":        "CALLS",
+				"source_name": sourceName,
+				"source_id":   sourceID,
+				"depth":       depth,
+				"reason":      "transitive_call_graph",
+			})
+			continue
+		}
+		targetID := StringVal(row, "target_id")
+		targetName := StringVal(row, "target_name")
+		key := fmt.Sprintf("outgoing:%s:%s:%d", targetID, targetName, depth)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		response["outgoing"] = append(response["outgoing"].([]map[string]any), map[string]any{
+			"direction":   "outgoing",
+			"type":        "CALLS",
+			"target_name": targetName,
+			"target_id":   targetID,
+			"depth":       depth,
+			"reason":      "transitive_call_graph",
+		})
+	}
+
+	return response
 }
 
 func normalizeGraphRelationships(response map[string]any) {
