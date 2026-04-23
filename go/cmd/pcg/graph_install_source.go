@@ -146,7 +146,7 @@ func inspectNornicDBInstallSource(sourceRef, localPath string, kind nornicDBInst
 			cleanup:         cleanup,
 		}, nil
 	case nornicDBInstallSourceLocalPackage, nornicDBInstallSourceDownloadedPackage:
-		extractedBinary, _, cleanup, err := extractNornicDBBinaryFromPackage(localPath)
+		extractedBinary, extractedName, cleanup, err := extractNornicDBBinaryFromPackage(localPath)
 		if err != nil {
 			return preparedNornicDBInstallSource{}, err
 		}
@@ -166,7 +166,7 @@ func inspectNornicDBInstallSource(sourceRef, localPath string, kind nornicDBInst
 			LocalBinaryPath: extractedBinary,
 			BinarySHA256:    binarySHA,
 			Version:         version,
-			Headless:        true,
+			Headless:        filepath.Base(extractedName) == managedNornicDBBinaryName,
 			cleanup:         cleanup,
 		}, nil
 	default:

@@ -77,6 +77,7 @@ Current support includes a pinned bare install where PCG already knows a
 host-specific artifact, plus explicit-source installs:
 
   pcg install nornicdb
+  pcg install nornicdb --full
 
   pcg install nornicdb --from /absolute/path/to/nornicdb-headless
   pcg install nornicdb --from /absolute/path/to/nornicdb-headless-darwin-arm64.tar.gz
@@ -85,13 +86,16 @@ host-specific artifact, plus explicit-source installs:
   pcg install nornicdb --from https://example.com/releases/NornicDB-1.0.42-hotfix-arm64-lite.pkg --sha256 <expected-sha256>
 
 Pinned bare install is only available for platforms recorded in PCG's embedded
-release manifest. Signature verification is still future work.
+release manifest. Headless remains the default laptop artifact; use --full to
+request the larger full binary when the manifest publishes it for your host.
+Signature verification is still future work.
 `),
 		RunE: runInstallNornicDB,
 	}
 	installNornicDBCmd.Flags().String("from", "", "Install from a local NornicDB binary, local archive/package, or release URL")
 	installNornicDBCmd.Flags().String("sha256", "", "Expected SHA-256 checksum for the --from artifact")
 	installNornicDBCmd.Flags().Bool("force", false, "Replace an existing managed NornicDB binary")
+	installNornicDBCmd.Flags().Bool("full", false, "For bare pinned installs only, request the full published NornicDB artifact instead of the default headless one")
 	installCmd.AddCommand(installNornicDBCmd)
 
 	statusCmd := &cobra.Command{

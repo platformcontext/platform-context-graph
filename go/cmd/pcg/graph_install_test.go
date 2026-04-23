@@ -186,7 +186,7 @@ func TestInstallNornicDBRequiresLocalSourcePath(t *testing.T) {
 	if err == nil {
 		t.Fatal("installNornicDB() error = nil, want missing source error")
 	}
-	if !strings.Contains(err.Error(), "no pinned NornicDB release asset") {
+	if !strings.Contains(err.Error(), "no pinned headless NornicDB release asset") {
 		t.Fatalf("installNornicDB() error = %q, want pinned-release guidance", err.Error())
 	}
 }
@@ -258,6 +258,81 @@ func TestInstallNornicDBUsesPinnedReleaseManifestWhenFromEmpty(t *testing.T) {
 	}
 }
 
+func TestInstallNornicDBUsesPinnedFullReleaseWhenRequested(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a Unix executable script")
+	}
+
+	originalManifest := graphPinnedNornicDBReleaseManifest
+	originalHostOS := graphInstallHostOS
+	originalHostArch := graphInstallHostArch
+	t.Cleanup(func() {
+		graphPinnedNornicDBReleaseManifest = originalManifest
+		graphInstallHostOS = originalHostOS
+		graphInstallHostArch = originalHostArch
+	})
+
+	homeDir := t.TempDir()
+	t.Setenv("PCG_HOME", homeDir)
+
+	sourceBinary := filepath.Join(t.TempDir(), "nornicdb")
+	writeFakeNornicDBBinaryAt(t, sourceBinary, "NornicDB v1.0.42\n")
+	archivePath := filepath.Join(t.TempDir(), "nornicdb-darwin-arm64.tar.gz")
+	archiveContent := writeTarGzWithBinary(t, archivePath, "release/bin/nornicdb", sourceBinary)
+	archiveSHA := sha256BytesHex(archiveContent)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(archiveContent)
+	}))
+	defer server.Close()
+
+	graphInstallHostOS = "darwin"
+	graphInstallHostArch = "arm64"
+	graphPinnedNornicDBReleaseManifest = []byte(fmt.Sprintf(`{
+  "version": 1,
+  "backend": "nornicdb",
+  "releases": [
+    {
+      "pcg_version": "dev",
+      "release_tag": "v1.0.42-hotfix",
+      "assets": [
+        {
+          "os": "darwin",
+          "arch": "arm64",
+          "format": "pkg",
+          "headless": true,
+          "url": "https://example.com/NornicDB-1.0.42-hotfix-arm64-lite.pkg",
+          "sha256": "deadbeef"
+        },
+        {
+          "os": "darwin",
+          "arch": "arm64",
+          "format": "tar.gz",
+          "headless": false,
+          "url": %q,
+          "sha256": %q
+        }
+      ]
+    }
+  ]
+}`, server.URL+"/nornicdb-darwin-arm64.tar.gz", archiveSHA))
+
+	result, err := installNornicDB(installNornicDBOptions{Full: true})
+	if err != nil {
+		t.Fatalf("installNornicDB() error = %v, want nil", err)
+	}
+	if result.Headless {
+		t.Fatal("Headless = true, want false for pinned full install")
+	}
+	if result.SourceKind != string(nornicDBInstallSourceDownloadedArchive) {
+		t.Fatalf("SourceKind = %q, want %q", result.SourceKind, nornicDBInstallSourceDownloadedArchive)
+	}
+	if result.SourceSHA256 != archiveSHA {
+		t.Fatalf("SourceSHA256 = %q, want %q", result.SourceSHA256, archiveSHA)
+	}
+}
+
 func TestInstallNornicDBWithoutSourceRejectsUnsupportedHost(t *testing.T) {
 	originalManifest := graphPinnedNornicDBReleaseManifest
 	originalHostOS := graphInstallHostOS
@@ -296,8 +371,24 @@ func TestInstallNornicDBWithoutSourceRejectsUnsupportedHost(t *testing.T) {
 	if err == nil {
 		t.Fatal("installNornicDB() error = nil, want unsupported host error")
 	}
-	if !strings.Contains(err.Error(), "no pinned NornicDB release asset") {
+	if !strings.Contains(err.Error(), "no pinned headless NornicDB release asset") {
 		t.Fatalf("installNornicDB() error = %q, want unsupported host guidance", err.Error())
+	}
+}
+
+func TestRunInstallNornicDBRejectsFullWithExplicitSource(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("from", "/tmp/nornicdb-headless", "")
+	cmd.Flags().String("sha256", "", "")
+	cmd.Flags().Bool("force", false, "")
+	cmd.Flags().Bool("full", true, "")
+
+	err := runInstallNornicDB(cmd, nil)
+	if err == nil {
+		t.Fatal("runInstallNornicDB() error = nil, want full/source conflict")
+	}
+	if !strings.Contains(err.Error(), "--full only applies to bare pinned installs") {
+		t.Fatalf("runInstallNornicDB() error = %q, want actionable conflict", err.Error())
 	}
 }
 
@@ -371,6 +462,48 @@ func TestInstallNornicDBDownloadsArchiveFromURL(t *testing.T) {
 	}
 	if result.SourceKind != string(nornicDBInstallSourceDownloadedArchive) {
 		t.Fatalf("SourceKind = %q, want %q", result.SourceKind, nornicDBInstallSourceDownloadedArchive)
+	}
+}
+
+func TestInstallNornicDBMarksFullPackageAsNonHeadless(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("package install path is only supported on darwin")
+	}
+
+	originalExpandPackage := graphInstallExpandPackage
+	t.Cleanup(func() {
+		graphInstallExpandPackage = originalExpandPackage
+	})
+
+	t.Setenv("PCG_HOME", t.TempDir())
+	packagePath := filepath.Join(t.TempDir(), "NornicDB-1.0.42-hotfix-arm64-full.pkg")
+	if err := os.WriteFile(packagePath, []byte("pkg"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v, want nil", packagePath, err)
+	}
+
+	sourceBinary := filepath.Join(t.TempDir(), "nornicdb")
+	writeFakeNornicDBBinaryAt(t, sourceBinary, "NornicDB v1.0.42\n")
+	graphInstallExpandPackage = func(pkgPath, targetDir string) error {
+		target := filepath.Join(targetDir, "full.pkg", "Payload", "usr", "local", "bin", "nornicdb")
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		content, err := os.ReadFile(sourceBinary)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, content, 0o755)
+	}
+
+	result, err := installNornicDB(installNornicDBOptions{From: packagePath})
+	if err != nil {
+		t.Fatalf("installNornicDB() error = %v, want nil", err)
+	}
+	if result.Headless {
+		t.Fatal("Headless = true, want false for full package install")
+	}
+	if result.SourceKind != string(nornicDBInstallSourceLocalPackage) {
+		t.Fatalf("SourceKind = %q, want %q", result.SourceKind, nornicDBInstallSourceLocalPackage)
 	}
 }
 
@@ -507,6 +640,7 @@ func TestRunInstallNornicDBPrintsJSON(t *testing.T) {
 	cmd.Flags().String("from", source, "")
 	cmd.Flags().String("sha256", "", "")
 	cmd.Flags().Bool("force", false, "")
+	cmd.Flags().Bool("full", false, "")
 
 	output := captureStdout(t, func() {
 		if err := runInstallNornicDB(cmd, nil); err != nil {

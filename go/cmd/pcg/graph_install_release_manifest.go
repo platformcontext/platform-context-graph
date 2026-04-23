@@ -41,7 +41,7 @@ type pinnedNornicDBReleaseAsset struct {
 	SHA256   string `json:"sha256"`
 }
 
-func resolvePinnedNornicDBReleaseSource() (string, string, error) {
+func resolvePinnedNornicDBReleaseSource(preferHeadless bool) (string, string, error) {
 	manifest, err := readPinnedNornicDBReleaseManifest()
 	if err != nil {
 		return "", "", err
@@ -57,16 +57,22 @@ func resolvePinnedNornicDBReleaseSource() (string, string, error) {
 			continue
 		}
 		for _, asset := range release.Assets {
-			if asset.OS == hostOS && asset.Arch == hostArch && asset.Headless {
+			if asset.OS == hostOS && asset.Arch == hostArch && asset.Headless == preferHeadless {
 				if strings.TrimSpace(asset.URL) == "" || strings.TrimSpace(asset.SHA256) == "" {
 					return "", "", fmt.Errorf("pinned NornicDB release asset for %s/%s is incomplete", hostOS, hostArch)
 				}
 				return asset.URL, strings.ToLower(strings.TrimSpace(asset.SHA256)), nil
 			}
 		}
-		return "", "", fmt.Errorf("no pinned NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
+		if preferHeadless {
+			return "", "", fmt.Errorf("no pinned headless NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
+		}
+		return "", "", fmt.Errorf("no pinned full NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
 	}
-	return "", "", fmt.Errorf("no pinned NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
+	if preferHeadless {
+		return "", "", fmt.Errorf("no pinned headless NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
+	}
+	return "", "", fmt.Errorf("no pinned full NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
 }
 
 func readPinnedNornicDBReleaseManifest() (pinnedNornicDBReleaseManifest, error) {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -35,6 +36,7 @@ type installNornicDBOptions struct {
 	From    string
 	SHA256  string
 	Force   bool
+	Full    bool
 }
 
 type installNornicDBResult struct {
@@ -81,12 +83,20 @@ func runInstallNornicDB(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	full, err := cmd.Flags().GetBool("full")
+	if err != nil {
+		return err
+	}
+	if full && strings.TrimSpace(from) != "" {
+		return errors.New("--full only applies to bare pinned installs without --from")
+	}
 
 	result, err := installNornicDB(installNornicDBOptions{
 		Context: cmd.Context(),
 		From:    from,
 		SHA256:  expectedSHA,
 		Force:   force,
+		Full:    full,
 	})
 	if err != nil {
 		return err
@@ -101,7 +111,7 @@ func installNornicDB(opts installNornicDBOptions) (installNornicDBResult, error)
 	}
 	sourceRef := strings.TrimSpace(opts.From)
 	if sourceRef == "" {
-		resolvedSource, resolvedSHA, err := resolvePinnedNornicDBReleaseSource()
+		resolvedSource, resolvedSHA, err := resolvePinnedNornicDBReleaseSource(!opts.Full)
 		if err != nil {
 			return installNornicDBResult{}, err
 		}
