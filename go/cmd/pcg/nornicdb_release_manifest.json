@@ -13,6 +13,14 @@
           "headless": true,
           "url": "https://github.com/orneryd/NornicDB/releases/download/v1.0.42-hotfix/NornicDB-1.0.42-hotfix-arm64-lite.pkg",
           "sha256": "69eab2b2a55c3e0fc29beafac9655727c626ca9d0a662a482ee62388ad6a944d"
+        },
+        {
+          "os": "darwin",
+          "arch": "arm64",
+          "format": "pkg",
+          "headless": false,
+          "url": "https://github.com/orneryd/NornicDB/releases/download/v1.0.42-hotfix/NornicDB-1.0.42-hotfix-arm64-full.pkg",
+          "sha256": "55092ce8a5e8fde06c50dcee9cc1cbde1d9523bcc38e217367a9cf82d5b7a97b"
         }
       ]
     }
