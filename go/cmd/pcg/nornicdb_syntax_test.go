@@ -11,6 +11,7 @@ import (
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
 )
 
@@ -57,6 +58,20 @@ func TestNornicDBCompatibilityWorkarounds(t *testing.T) {
 			},
 		}
 		runNornicDBSyntaxCases(t, ctx, driver, tests)
+	})
+}
+
+func TestNornicDBSchemaAdapterVerification(t *testing.T) {
+	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
+		stmts, err := graph.SchemaStatementsForBackend(graph.SchemaBackendNornicDB)
+		if err != nil {
+			t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", graph.SchemaBackendNornicDB, err)
+		}
+		for _, stmt := range stmts {
+			if err := runNornicDBSyntaxCypher(ctx, driver, stmt); err != nil {
+				t.Fatalf("run adapted schema statement %q error = %v", stmt, err)
+			}
+		}
 	})
 }
 

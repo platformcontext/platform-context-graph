@@ -10,6 +10,18 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
+)
+
+// SchemaBackend identifies the graph database dialect used for schema DDL.
+type SchemaBackend string
+
+const (
+	// SchemaBackendNeo4j preserves PCG's shared production schema contract.
+	SchemaBackendNeo4j SchemaBackend = "neo4j"
+	// SchemaBackendNornicDB applies the narrow compatibility translations
+	// proven by the opt-in NornicDB syntax gate.
+	SchemaBackendNornicDB SchemaBackend = "nornicdb"
 )
 
 // schemaConstraints lists uniqueness and node-key constraints that must exist
@@ -211,12 +223,26 @@ type fulltextIndex struct {
 // SchemaStatements returns the complete ordered list of Cypher statements
 // that EnsureSchema would execute. Useful for inspection and testing.
 func SchemaStatements() []string {
+	stmts, _ := SchemaStatementsForBackend(SchemaBackendNeo4j)
+	return stmts
+}
+
+// SchemaStatementsForBackend returns the ordered Cypher schema statements for
+// a specific graph backend without executing them.
+func SchemaStatementsForBackend(backend SchemaBackend) ([]string, error) {
+	dialect, err := schemaDialectForBackend(backend)
+	if err != nil {
+		return nil, err
+	}
+
 	stmts := make([]string, 0,
 		len(schemaConstraints)+
 			len(uidConstraintLabels)+
 			len(schemaPerformanceIndexes)+
 			len(schemaFulltextIndexes))
-	stmts = append(stmts, schemaConstraints...)
+	for _, cypher := range schemaConstraints {
+		stmts = append(stmts, dialect.constraint(cypher))
+	}
 	stmts = append(stmts, schemaPerformanceIndexes...)
 	for _, label := range uidConstraintLabels {
 		stmts = append(stmts, fmt.Sprintf(
@@ -227,7 +253,7 @@ func SchemaStatements() []string {
 	for _, ft := range schemaFulltextIndexes {
 		stmts = append(stmts, ft.primary)
 	}
-	return stmts
+	return stmts, nil
 }
 
 // EnsureSchema creates all constraints and indexes required by the platform
@@ -236,17 +262,29 @@ func SchemaStatements() []string {
 // creation automatically falls back to modern syntax when the procedure-based
 // API is unavailable.
 func EnsureSchema(ctx context.Context, executor CypherExecutor, logger *slog.Logger) error {
+	return EnsureSchemaWithBackend(ctx, executor, logger, SchemaBackendNeo4j)
+}
+
+// EnsureSchemaWithBackend creates all constraints and indexes required by the
+// selected graph backend. Neo4j remains the default production dialect;
+// NornicDB uses only syntax translations proven by compatibility tests.
+func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logger *slog.Logger, backend SchemaBackend) error {
 	if executor == nil {
 		return fmt.Errorf("schema executor is required")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
+	dialect, err := schemaDialectForBackend(backend)
+	if err != nil {
+		return err
+	}
 
 	var failed int
 
 	// Constraints
 	for _, cypher := range schemaConstraints {
+		cypher = dialect.constraint(cypher)
 		if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
 			failed++
 			logger.Warn("schema statement warning", "error", err, "cypher", cypher)
@@ -292,6 +330,32 @@ func EnsureSchema(ctx context.Context, executor CypherExecutor, logger *slog.Log
 	}
 
 	return nil
+}
+
+type schemaDialect struct {
+	constraint func(string) string
+}
+
+func schemaDialectForBackend(backend SchemaBackend) (schemaDialect, error) {
+	switch backend {
+	case "", SchemaBackendNeo4j:
+		return schemaDialect{constraint: neo4jSchemaConstraint}, nil
+	case SchemaBackendNornicDB:
+		return schemaDialect{constraint: nornicDBSchemaConstraint}, nil
+	default:
+		return schemaDialect{}, fmt.Errorf("unsupported schema backend %q", backend)
+	}
+}
+
+func neo4jSchemaConstraint(cypher string) string {
+	return cypher
+}
+
+func nornicDBSchemaConstraint(cypher string) string {
+	if !strings.Contains(cypher, " REQUIRE (") || !strings.Contains(cypher, ") IS UNIQUE") {
+		return cypher
+	}
+	return strings.Replace(cypher, ") IS UNIQUE", ") IS NODE KEY", 1)
 }
 
 // executeSchemaStatement runs one DDL statement through the executor.

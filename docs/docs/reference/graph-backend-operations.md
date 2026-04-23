@@ -125,6 +125,28 @@ Switching the active graph backend for a workspace requires:
 `owner.json` should record the active `graph_backend` so downstream
 diagnostics can see which backend owned the last successful run.
 
+## Schema dialect routing
+
+`PCG_GRAPH_BACKEND` also controls graph schema bootstrap. PCG does not fork
+the reducer, query handlers, or MCP tools per backend; it routes only the DDL
+surface through a backend schema dialect:
+
+- `neo4j` receives the shared production schema unchanged.
+- `nornicdb` receives the NornicDB-compatible schema rendering, including
+  composite node identity as `IS NODE KEY` and the procedure-based fulltext
+  form.
+
+The opt-in verification gate is:
+
+```bash
+PCG_NORNICDB_BINARY=/absolute/path/to/nornicdb-headless \
+  go test ./cmd/pcg -run TestNornicDBSchemaAdapterVerification -count=1 -v
+```
+
+That test executes the rendered NornicDB schema against a real sidecar. It is
+not part of the default unit-test suite because it requires an installed graph
+binary.
+
 ## Non-goals
 
 - Running multiple graph backends simultaneously on one workspace. The
