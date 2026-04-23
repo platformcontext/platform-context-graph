@@ -1,0 +1,33 @@
+go/internal/query/code_repository_selector.go
+  e27ce815bbe89792 34,36
+go/internal/query/content_reader_repository_catalog.go
+  e27ce815bbe89792 6-7,57-80,85,105-108,110-122,124-127,129-133
+go/internal/query/ports_test.go
+  e27ce815bbe89792 88-98
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 34
+go/internal/query/content_reader_test.go
+  e27ce815bbe89792 57-101
+go/internal/query/ports.go
+  e27ce815bbe89792 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "d5fe6f3413c047bdc88d390fd7963951fef83e2b",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 117,
+      "total_deletions": 21,
+      "accepted_lines": 116,
+      "overriden_lines": 0
+    }
+  }
+}
