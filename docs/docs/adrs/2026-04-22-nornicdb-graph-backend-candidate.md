@@ -22,9 +22,9 @@
 
 | Phase | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
-| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB | release-backed installer, perf smoke |
+| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB; 2026-04-23 MCP smoke proved content-index-backed `search_file_content` and `find_code` continue to work while canonical graph projection degrades on a bounded NornicDB write timeout | release-backed installer, perf smoke |
 | Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` verifies and copies a local binary; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; current branch stopped-owner `pcg graph upgrade --from <path>`; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped | release download/signature installer and perf smoke |
-| Adapter conformance | Not started | — | `GraphQuery`/`GraphWrite` adapter, syntax verification, matrix runs |
+| Adapter conformance | In progress | current branch routes NornicDB canonical writes through sequential execute-only writes, applies Bolt `tx_timeout` metadata plus client context deadlines, and preserves production Neo4j grouped writes | full `GraphQuery`/`GraphWrite` adapter, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
 
 ## Context
@@ -350,6 +350,18 @@ NornicDB parser fix; it must not replace the default Neo4j schema globally.
 the schema-dialect router rendered NornicDB-compatible DDL. This validates the
 adapter approach for bootstrap schema only; broader graph-read and graph-write
 conformance still must pass before promotion.
+
+Manual MCP smoke on 2026-04-23 used
+`PCG_HOME=/tmp/pcg-local-authoritative-e2e2` and
+`PCG_CANONICAL_WRITE_TIMEOUT=2s`. The local host indexed the PCG repo, MCP
+`search_file_content` returned matching Go files from `postgres_content_store`,
+and MCP `find_code` returned the `startManagedLocalGraph` function with
+`truth.profile=local_authoritative` and `truth.basis=content_index`.
+The same run intentionally showed canonical graph projection degrading with
+`neo4j execute timed out after 2s: context deadline exceeded`, which proves the
+local content-search path is isolated from NornicDB graph-write stalls. This
+does not promote NornicDB; it only proves the laptop coding workflow remains
+usable while the backend remains an evaluation candidate.
 
 ## Status Summary
 

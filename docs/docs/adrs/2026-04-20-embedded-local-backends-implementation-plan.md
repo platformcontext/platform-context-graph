@@ -30,7 +30,7 @@ verification evidence = reviewer rejects PR.
 | 1 | Capability contract + truth labels | Shipped | `488ff808`, `35a3a091` | — |
 | 2 | Capability ports (`GraphQuery`, `ContentStore`) | Shipped | `08795558`, `07619013`, `085c91a3` | — |
 | 3 | Lightweight local host | Shipped | `a3e05ecf`, `c832a84c`, current branch local-host supervisor + embedded Postgres lifecycle | perf-envelope smoke evidence still needs to be attached to the PR |
-| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | In progress | `0e4d8a5f`, current branch profile/backend and runtime-gating slices, `da35d729`, current branch authoritative sidecar lifecycle + shared Bolt-driver path + graph-aware reclaim, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown, current branch binary verification + random workspace credentials, `575ca864` opt-in syntax/workaround gates, `5f5a781e` schema-dialect router + `TestNornicDBSchemaAdapterVerification` pass, current branch `pcg install nornicdb --from <path>` local-file installer with managed `${PCG_HOME}/bin/nornicdb-headless` discovery, current branch `pcg graph logs` workspace log reader, current branch owner-aware `pcg graph stop`, current branch foreground `pcg graph start` local-host shortcut, current branch stopped-owner `pcg graph upgrade --from <path>`, 2026-04-22 smoke with temporary `PCG_HOME=/tmp/pcg-local-authoritative-smoke` proving install → start → status running → logs → stop → status stopped | release-backed download/signature installer, perf-envelope smoke |
+| 3.5 | NornicDB laptop sidecar + `local_authoritative` profile | In progress | `0e4d8a5f`, current branch profile/backend and runtime-gating slices, `da35d729`, current branch authoritative sidecar lifecycle + shared Bolt-driver path + graph-aware reclaim, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown, current branch binary verification + random workspace credentials, `575ca864` opt-in syntax/workaround gates, `5f5a781e` schema-dialect router + `TestNornicDBSchemaAdapterVerification` pass, current branch `pcg install nornicdb --from <path>` local-file installer with managed `${PCG_HOME}/bin/nornicdb-headless` discovery, current branch `pcg graph logs` workspace log reader, current branch owner-aware `pcg graph stop`, current branch foreground `pcg graph start` local-host shortcut, current branch stopped-owner `pcg graph upgrade --from <path>`, 2026-04-22 smoke with temporary `PCG_HOME=/tmp/pcg-local-authoritative-smoke` proving install → start → status running → logs → stop → status stopped, 2026-04-23 smoke with `PCG_HOME=/tmp/pcg-local-authoritative-e2e2` proving MCP `search_file_content` and `find_code` return real repo results from the content index while NornicDB canonical graph projection times out and reports degraded status | release-backed download/signature installer, perf-envelope smoke |
 | 4 | Authoritative graph analysis hardening | Not started | — | all |
 | 5 | Backend conformance suite | Not started | — | all |
 | 5b | NornicDB conformance across profiles | Not started | — | matrix run vs `local_authoritative`, `local_full_stack`, `production`; PCG-workload perf comparison vs Neo4j baseline |
@@ -386,6 +386,15 @@ it into lightweight mode.
   printed the NornicDB sidecar log; `./go/bin/pcg graph stop --workspace-root <repo>`
   cleanly stopped the owner; final status showed `owner_present=false` and
   `graph_running=false`.
+- manual local-authoritative MCP smoke:
+  `PCG_HOME=/tmp/pcg-local-authoritative-e2e2 PCG_CANONICAL_WRITE_TIMEOUT=2s ./go/bin/pcg graph start --workspace-root <repo>`;
+  `./go/bin/pcg mcp start --workspace-root <repo>`;
+  MCP `search_file_content` for `startManagedLocalGraph` returned two Go
+  files from `postgres_content_store`; MCP `find_code` returned the
+  `startManagedLocalGraph` function with `truth.profile=local_authoritative`
+  and `truth.basis=content_index`; `get_index_status` reported degraded graph
+  projection after a bounded NornicDB canonical write timeout; `pcg graph stop`
+  cleanly stopped the owner and final status showed `owner_present=false`.
 
 ---
 

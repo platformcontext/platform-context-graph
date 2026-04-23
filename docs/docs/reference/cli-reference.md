@@ -79,6 +79,12 @@ binary remains an explicit opt-in. PCG resolves it in this order:
 3. `nornicdb-headless` in `PATH`
 4. `nornicdb` in `PATH`
 
+During NornicDB evaluation, local-authoritative canonical graph writes are
+sequential and bounded by `PCG_CANONICAL_WRITE_TIMEOUT` (`15s` by default).
+This protects local MCP/CLI coding workflows from an indefinitely stuck graph
+write. Content-index-backed code search remains available even when graph
+projection is degraded.
+
 ### Graph backend commands
 
 The `local_authoritative` profile runs a graph-backend sidecar alongside the

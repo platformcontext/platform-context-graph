@@ -314,3 +314,21 @@ func TestInstrumentedExecutorExecuteGroupPropagatesErrors(t *testing.T) {
 		t.Fatalf("error = %v, want 'neo4j transaction failed'", err)
 	}
 }
+
+func TestExecuteOnlyExecutorHidesGroupExecutor(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableExecutor{}
+	executor := ExecuteOnlyExecutor{Inner: inner}
+	if _, ok := any(executor).(GroupExecutor); ok {
+		t.Fatal("ExecuteOnlyExecutor implements GroupExecutor, want execute-only surface")
+	}
+
+	err := executor.Execute(context.Background(), Statement{Cypher: "RETURN 1"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+	if got := int(inner.executeCalls.Load()); got != 1 {
+		t.Fatalf("inner Execute calls = %d, want 1", got)
+	}
+}

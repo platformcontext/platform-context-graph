@@ -7,8 +7,12 @@ import (
 	"testing"
 	"time"
 
+	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
+	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
+	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
@@ -190,4 +194,138 @@ func TestOpenIngesterCanonicalWriterAcceptsNornicDBOnSharedBoltPath(t *testing.T
 	if !strings.Contains(err.Error(), "PCG_NEO4J_URI") && !strings.Contains(err.Error(), "NEO4J_URI") {
 		t.Fatalf("openIngesterCanonicalWriter() error = %q, want shared bolt config context", err)
 	}
+}
+
+func TestCanonicalExecutorForGraphBackendKeepsNeo4jGrouped(t *testing.T) {
+	t.Parallel()
+
+	executor := canonicalExecutorForGraphBackend(&groupCapableIngesterExecutor{}, runtimecfg.GraphBackendNeo4j, 0, nil, nil)
+	if _, ok := executor.(sourceneo4j.GroupExecutor); !ok {
+		t.Fatal("Neo4j canonical executor does not implement GroupExecutor")
+	}
+}
+
+func TestCanonicalExecutorForGraphBackendForcesNornicDBSequential(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableIngesterExecutor{}
+	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, nil, nil)
+	if _, ok := executor.(sourceneo4j.GroupExecutor); ok {
+		t.Fatal("NornicDB canonical executor implements GroupExecutor, want sequential execute-only surface")
+	}
+
+	err := executor.Execute(context.Background(), sourceneo4j.Statement{Cypher: "RETURN 1"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+	if inner.executeCalls != 1 {
+		t.Fatalf("inner Execute calls = %d, want 1", inner.executeCalls)
+	}
+}
+
+func TestCanonicalExecutorForGraphBackendWrapsNornicDBWithTimeout(t *testing.T) {
+	t.Parallel()
+
+	executor := canonicalExecutorForGraphBackend(contextBlockingIngesterExecutor{}, runtimecfg.GraphBackendNornicDB, 10*time.Millisecond, nil, nil)
+
+	err := executor.Execute(context.Background(), sourceneo4j.Statement{Cypher: "RETURN 1"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute() error = %v, want deadline exceeded", err)
+	}
+}
+
+func TestNornicDBCanonicalWriteTimeoutDefault(t *testing.T) {
+	t.Parallel()
+
+	got := nornicDBCanonicalWriteTimeout(func(string) string { return "" })
+	if got != defaultNornicDBCanonicalWriteTimeout {
+		t.Fatalf("nornicDBCanonicalWriteTimeout() = %s, want %s", got, defaultNornicDBCanonicalWriteTimeout)
+	}
+}
+
+func TestNornicDBCanonicalWriteTimeoutFromEnv(t *testing.T) {
+	t.Parallel()
+
+	got := nornicDBCanonicalWriteTimeout(func(key string) string {
+		if key == "PCG_CANONICAL_WRITE_TIMEOUT" {
+			return "2s"
+		}
+		return ""
+	})
+	if got != 2*time.Second {
+		t.Fatalf("nornicDBCanonicalWriteTimeout() = %s, want 2s", got)
+	}
+}
+
+func TestIngesterContentBeforeCanonicalOnlyLocalAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	if !ingesterContentBeforeCanonical(func(key string) string {
+		if key == "PCG_QUERY_PROFILE" {
+			return "local_authoritative"
+		}
+		return ""
+	}) {
+		t.Fatal("ingesterContentBeforeCanonical(local_authoritative) = false, want true")
+	}
+	if ingesterContentBeforeCanonical(func(key string) string {
+		if key == "PCG_QUERY_PROFILE" {
+			return "production"
+		}
+		return ""
+	}) {
+		t.Fatal("ingesterContentBeforeCanonical(production) = true, want false")
+	}
+}
+
+func TestCanonicalTransactionTimeoutOnlyAppliesToNornicDB(t *testing.T) {
+	t.Parallel()
+
+	getenv := func(key string) string {
+		if key == "PCG_CANONICAL_WRITE_TIMEOUT" {
+			return "3s"
+		}
+		return ""
+	}
+	if got := canonicalTransactionTimeout(runtimecfg.GraphBackendNeo4j, getenv); got != 0 {
+		t.Fatalf("canonicalTransactionTimeout(neo4j) = %s, want 0", got)
+	}
+	if got := canonicalTransactionTimeout(runtimecfg.GraphBackendNornicDB, getenv); got != 3*time.Second {
+		t.Fatalf("canonicalTransactionTimeout(nornicdb) = %s, want 3s", got)
+	}
+}
+
+func TestIngesterNeo4jExecutorTransactionConfigurersSetTimeout(t *testing.T) {
+	t.Parallel()
+
+	executor := ingesterNeo4jExecutor{TxTimeout: 4 * time.Second}
+	configurers := executor.transactionConfigurers()
+	if len(configurers) != 1 {
+		t.Fatalf("transactionConfigurers count = %d, want 1", len(configurers))
+	}
+	var config neo4jdriver.TransactionConfig
+	configurers[0](&config)
+	if got := config.Timeout; got != 4*time.Second {
+		t.Fatalf("transaction timeout = %s, want 4s", got)
+	}
+}
+
+type groupCapableIngesterExecutor struct {
+	executeCalls int
+}
+
+func (g *groupCapableIngesterExecutor) Execute(context.Context, sourceneo4j.Statement) error {
+	g.executeCalls++
+	return nil
+}
+
+func (g *groupCapableIngesterExecutor) ExecuteGroup(context.Context, []sourceneo4j.Statement) error {
+	return nil
+}
+
+type contextBlockingIngesterExecutor struct{}
+
+func (contextBlockingIngesterExecutor) Execute(ctx context.Context, _ sourceneo4j.Statement) error {
+	<-ctx.Done()
+	return ctx.Err()
 }

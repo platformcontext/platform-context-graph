@@ -358,6 +358,12 @@ Neo4j (default) and NornicDB (evaluation candidate). See
 [Graph Backend Operations](reference/graph-backend-operations.md), and
 [ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
 
+The local-authoritative NornicDB path is intentionally guarded while under
+evaluation: canonical graph writes are sequential and timeout-bounded, and
+the local content index is written before graph projection. That preserves
+developer MCP code-search usefulness without changing the production Neo4j
+grouped-write path.
+
 Lightweight local mode **refuses** high-authority queries (transitive callers,
 call-chain paths, dead code, blast radius, change surface) with a structured
 `unsupported_capability` error. It does not silently downgrade them to
