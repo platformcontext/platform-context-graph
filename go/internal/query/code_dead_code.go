@@ -215,6 +215,12 @@ func deadCodeResultExcludedByDefault(result map[string]any, entity *EntityConten
 	if deadCodeIsGoFrameworkRoot(result, goPolicy, stats) {
 		return true
 	}
+	if deadCodeIsPythonFrameworkRoot(result, entity, stats) {
+		return true
+	}
+	if deadCodeIsJavaScriptFrameworkRoot(result, entity, stats) {
+		return true
+	}
 	if deadCodeIsLibraryPublicAPIRoot(result, entity) {
 		return true
 	}
@@ -390,12 +396,17 @@ func buildDeadCodeAnalysis(results []map[string]any, excluded []string, stats de
 			"go.net_http_handler_registration",
 			"go.net_http_handler_signature",
 			"go.controller_runtime_reconcile_signature",
+			"python.fastapi_route_decorator",
+			"python.flask_route_decorator",
+			"python.celery_task_decorator",
+			"javascript.nextjs_route_export",
+			"javascript.express_route_registration",
 		},
 		"modeled_public_api": []string{"go.exported_non_internal_package_symbol"},
 		"notes": []string{
 			"dead-code remains derived until broader framework, public-API, and reflection root models land",
-			"go CLI registrations/signatures, stdlib HTTP registrations/signatures, and controller-runtime reconcile signatures are modeled as derived framework roots",
-			"analysis reports whether a Go framework root came from parser metadata or the legacy source fallback path",
+			"go CLI registrations/signatures, stdlib HTTP registrations/signatures, controller-runtime reconcile signatures, Python FastAPI/Flask/Celery decorator roots, and JavaScript/TypeScript Next.js/Express route roots are modeled as derived framework roots",
+			"analysis reports whether a modeled framework root came from parser metadata or the legacy source fallback path",
 			"go framework-root signature checks require entity source; missing source leaves those roots unevaluated",
 			"go exported symbols outside cmd/, internal/, and vendor/ are treated as public API roots by default",
 		},
