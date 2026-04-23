@@ -65,6 +65,29 @@ func TestSchemaStatementsForBackendAdaptsNornicDBCompositeConstraints(t *testing
 	assertNoStatementContains(t, stmts, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
 }
 
+func TestNornicDBSchemaTranslatesEveryCompositeUniqueConstraint(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNornicDB, err)
+	}
+
+	for _, constraint := range schemaConstraints {
+		if !isCompositeUniqueConstraint(constraint) {
+			continue
+		}
+		translated := nornicDBSchemaConstraint(constraint)
+		if translated == constraint {
+			t.Fatalf("NornicDB constraint was not translated: %q", constraint)
+		}
+		if strings.Contains(translated, ") IS UNIQUE") {
+			t.Fatalf("NornicDB constraint still uses composite IS UNIQUE: %q", translated)
+		}
+		assertContainsStatement(t, stmts, translated)
+	}
+}
+
 func TestSchemaStatementsForBackendRejectsUnknownBackend(t *testing.T) {
 	t.Parallel()
 
@@ -224,6 +247,27 @@ func TestEnsureSchemaFulltextFallback(t *testing.T) {
 	}
 	if fallbackCount != len(schemaFulltextIndexes) {
 		t.Fatalf("fallback fulltext calls = %d, want %d", fallbackCount, len(schemaFulltextIndexes))
+	}
+}
+
+func TestEnsureSchemaWithBackendSkipsFulltextFallbackForNornicDB(t *testing.T) {
+	t.Parallel()
+
+	executor := &schemaRecordingExecutor{
+		failOn: func(cypher string) bool {
+			return strings.Contains(cypher, "db.index.fulltext.createNodeIndex")
+		},
+	}
+
+	err := EnsureSchemaWithBackend(context.Background(), executor, nil, SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("EnsureSchemaWithBackend() error = %v, want nil", err)
+	}
+
+	for _, call := range executor.calls {
+		if strings.Contains(call.Cypher, "CREATE FULLTEXT INDEX") {
+			t.Fatalf("NornicDB schema attempted unsupported fulltext fallback %q", call.Cypher)
+		}
 	}
 }
 

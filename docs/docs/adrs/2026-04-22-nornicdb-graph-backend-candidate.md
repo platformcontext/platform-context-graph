@@ -107,6 +107,9 @@ Feature evidence (audited 2026-04-22 against the PCG Cypher query surface):
   - `neo4j` receives the shared schema unchanged.
   - `nornicdb` receives composite node identity as `IS NODE KEY` while
     preserving the procedure-based fulltext form.
+  - `nornicdb` skips the Neo4j multi-label `CREATE FULLTEXT INDEX` fallback
+    because the verified multi-label path is
+    `db.index.fulltext.createNodeIndex(...)`.
   - This routing is intentionally restricted to schema DDL; graph writes,
     query handlers, and MCP tools remain behind shared ports and conformance
     gates.
