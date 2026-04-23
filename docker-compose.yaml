@@ -7,6 +7,9 @@ services:
     environment:
       NEO4J_AUTH: neo4j/${PCG_NEO4J_PASSWORD:-change-me}
       NEO4J_PLUGINS: '[]'
+      NEO4J_server_memory_heap_initial__size: ${PCG_NEO4J_HEAP_INITIAL_SIZE:-512m}
+      NEO4J_server_memory_heap_max__size: ${PCG_NEO4J_HEAP_MAX_SIZE:-512m}
+      NEO4J_server_memory_pagecache_size: ${PCG_NEO4J_PAGECACHE_SIZE:-512m}
     volumes:
       - neo4j_data:/data
     healthcheck:

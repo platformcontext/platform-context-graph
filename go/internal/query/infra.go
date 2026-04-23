@@ -319,22 +319,31 @@ func (h *InfraHandler) getEcosystemOverview(w http.ResponseWriter, r *http.Reque
 
 // filterNullRelationships removes entries where type is nil (from OPTIONAL MATCH with no matches).
 func filterNullRelationships(v any) []map[string]any {
-	slice, ok := v.([]any)
-	if !ok {
+	switch slice := v.(type) {
+	case []map[string]any:
+		result := make([]map[string]any, 0, len(slice))
+		for _, item := range slice {
+			if item["type"] == nil {
+				continue
+			}
+			result = append(result, item)
+		}
+		return result
+	case []any:
+		result := make([]map[string]any, 0, len(slice))
+		for _, item := range slice {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			// Skip entries where type is nil (no relationship matched)
+			if m["type"] == nil {
+				continue
+			}
+			result = append(result, m)
+		}
+		return result
+	default:
 		return nil
 	}
-
-	result := make([]map[string]any, 0, len(slice))
-	for _, item := range slice {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		// Skip entries where type is nil (no relationship matched)
-		if m["type"] == nil {
-			continue
-		}
-		result = append(result, m)
-	}
-	return result
 }

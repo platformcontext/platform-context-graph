@@ -78,6 +78,7 @@ absolute path to a real directory.
 | Terraform provider-schema evidence or relationship extraction | `cd go && go test ./internal/terraformschema ./internal/relationships ./internal/storage/postgres -count=1` |
 | Compose, Helm, or deployable runtime shape | `cd go && go test ./cmd/api ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1` and `helm lint deploy/helm/platform-context-graph` |
 | Correlation DSL fixture corpus or compose verification lane | `./scripts/verify_correlation_dsl_compose.sh` |
+| Graph-backed call-chain, caller/callee, or dead-code compose contract | `./scripts/verify_graph_analysis_compose.sh` |
 | Facts-first indexing, queue, or resolution flow | `cd go && go test ./internal/projector ./internal/reducer ./internal/storage/postgres -count=1` |
 | Local-authoritative graph backend or MCP local coding flow | `cd go && go test ./cmd/ingester ./internal/projector ./internal/storage/neo4j -count=1`; then run the manual NornicDB MCP smoke below if a local NornicDB binary is available |
 | Queue ack visibility or lease diagnosis | `cd go && go test ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry -count=1` and `cd go && go vet ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry` |
@@ -258,6 +259,26 @@ Recorded sample on 2026-04-23 against the pinned bare-install binary at
 This gate is intentionally narrower than the full active-repo performance
 envelope. It proves the backend-routed NornicDB dead-code candidate query and
 derived-policy filter path before broader repo-scale perf work continues.
+
+## Compose Graph-Analysis Verification
+
+Use this gate when touching authoritative graph-backed code analysis that must
+work end to end through the full Compose stack.
+
+```bash
+./scripts/verify_graph_analysis_compose.sh
+```
+
+The wrapper starts a clean Compose stack against the dedicated
+`tests/fixtures/graph_analysis_compose` corpus and proves:
+
+- direct callers resolve from canonical `CALLS` edges
+- transitive callers return the expected depth-aware chain
+- call-chain path search returns the expected shortest path
+- dead-code analysis returns only the intentionally unused functions with
+  derived truth metadata
+- the canonical Neo4j graph contains the expected `CALLS` edges after the
+  fresh bootstrap run
 
 ### NornicDB Grouped-Write Safety Probe
 
@@ -533,6 +554,17 @@ PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos \
   docker compose up --build
 ```
 
+Local full-stack runs now also cap the Neo4j Docker heap and page cache by
+default so single-repo dogfood runs do not depend on the container choosing an
+unbounded JVM profile. Override them when you need a larger local graph store:
+
+```bash
+PCG_NEO4J_HEAP_INITIAL_SIZE=768m \
+PCG_NEO4J_HEAP_MAX_SIZE=768m \
+PCG_NEO4J_PAGECACHE_SIZE=768m \
+docker compose up --build
+```
+
 **Important notes for real repo testing:**
 
 - The path must be a real directory (not a symlink). On macOS, `/tmp`
@@ -543,6 +575,10 @@ PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos \
   memory. The bootstrap-index process holds all parsed facts in memory
   during the commit phase. For large repo sets, use a machine with at
   least 16 GB of RAM allocated to Docker.
+- The Compose stack bounds Neo4j to `512m` heap and `512m` page cache by
+  default through `PCG_NEO4J_HEAP_INITIAL_SIZE`,
+  `PCG_NEO4J_HEAP_MAX_SIZE`, and `PCG_NEO4J_PAGECACHE_SIZE`. Increase them
+  explicitly if a larger real-repo graph run needs more headroom.
 - Symlinks inside repositories are skipped during the filesystem copy
   phase. This is intentional — symlinks cannot be reliably resolved
   inside the container.

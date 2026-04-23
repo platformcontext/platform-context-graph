@@ -88,20 +88,15 @@ type SharedProjectionAcceptanceKey struct {
 	SourceRunID      string
 }
 
-func domainRequiresSemanticNodeReadiness(domain string) bool {
-	switch domain {
-	case DomainCodeCalls, DomainSQLRelationships, DomainInheritanceEdges:
-		return true
-	default:
-		return false
-	}
-}
-
 func semanticNodeReadinessPhase(domain string) (GraphProjectionPhase, bool) {
-	if !domainRequiresSemanticNodeReadiness(domain) {
+	switch domain {
+	case DomainCodeCalls:
+		return GraphProjectionPhaseCanonicalNodesCommitted, true
+	case DomainSQLRelationships, DomainInheritanceEdges:
+		return GraphProjectionPhaseSemanticNodesCommitted, true
+	default:
 		return "", false
 	}
-	return GraphProjectionPhaseSemanticNodesCommitted, true
 }
 
 func graphProjectionPhaseKeyForAcceptance(

@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const repositoryCatalogIDExpr = "coalesce(payload->>'repo_id', payload->>'id', scope_id)"
+
 // ListRepositories returns repository catalog entries from the relational data plane.
 func (cr *ContentReader) ListRepositories(ctx context.Context) ([]RepositoryCatalogEntry, error) {
 	if cr == nil || cr.db == nil {
@@ -14,7 +16,7 @@ func (cr *ContentReader) ListRepositories(ctx context.Context) ([]RepositoryCata
 	}
 
 	rows, err := cr.db.QueryContext(ctx, `
-		SELECT scope_id AS id,
+		SELECT `+repositoryCatalogIDExpr+` AS id,
 		       coalesce(payload->>'name', payload->>'repo_name', payload->>'repo_slug', scope_id) AS name,
 		       coalesce(payload->>'path', '') AS path,
 		       coalesce(payload->>'local_path', payload->>'path', '') AS local_path,
@@ -83,7 +85,7 @@ func (cr *ContentReader) MatchRepositories(ctx context.Context, selector string)
 	}
 
 	rows, err := cr.db.QueryContext(ctx, `
-		SELECT scope_id AS id,
+		SELECT `+repositoryCatalogIDExpr+` AS id,
 		       coalesce(payload->>'name', payload->>'repo_name', payload->>'repo_slug', scope_id) AS name,
 		       coalesce(payload->>'path', '') AS path,
 		       coalesce(payload->>'local_path', payload->>'path', '') AS local_path,
@@ -93,6 +95,7 @@ func (cr *ContentReader) MatchRepositories(ctx context.Context, selector string)
 		FROM ingestion_scopes
 		WHERE scope_kind = 'repository'
 		  AND (
+			`+repositoryCatalogIDExpr+` = $1 OR
 			scope_id = $1 OR
 			payload->>'name' = $1 OR
 			payload->>'repo_name' = $1 OR

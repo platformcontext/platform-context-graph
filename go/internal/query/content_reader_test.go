@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -76,6 +77,40 @@ func TestContentReaderMatchRepositoriesReturnsExactMatches(t *testing.T) {
 	}
 	if got, want := matches[0].ID, "repository:r_payments"; got != want {
 		t.Fatalf("matches[0].ID = %q, want %q", got, want)
+	}
+}
+
+func TestContentReaderMatchRepositoriesPrefersCanonicalRepositoryIDExpression(t *testing.T) {
+	t.Parallel()
+
+	db, recorder := openRecordingContentReaderDB(t, []recordingContentReaderQueryResult{
+		{
+			columns: []string{"id", "name", "path", "local_path", "remote_url", "repo_slug", "has_remote"},
+			rows: [][]driver.Value{
+				{"repository:r_payments", "payments", "/src/payments", "/src/payments", "", "acme/payments", false},
+			},
+		},
+	})
+
+	reader := NewContentReader(db)
+	matches, err := reader.MatchRepositories(context.Background(), "payments")
+	if err != nil {
+		t.Fatalf("MatchRepositories() error = %v, want nil", err)
+	}
+	if got, want := len(matches), 1; got != want {
+		t.Fatalf("len(matches) = %d, want %d", got, want)
+	}
+	if got, want := matches[0].ID, "repository:r_payments"; got != want {
+		t.Fatalf("matches[0].ID = %q, want %q", got, want)
+	}
+	if got, want := len(recorder.queries), 1; got != want {
+		t.Fatalf("len(recorder.queries) = %d, want %d", got, want)
+	}
+	if !strings.Contains(recorder.queries[0], "payload->>'repo_id'") {
+		t.Fatalf("query = %q, want canonical payload repo_id selection", recorder.queries[0])
+	}
+	if !strings.Contains(recorder.queries[0], "scope_id = $1") {
+		t.Fatalf("query = %q, want scope_id backward-compat matching", recorder.queries[0])
 	}
 }
 
