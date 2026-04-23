@@ -222,13 +222,13 @@ func codebaseTools() []ToolDefinition {
 		},
 		{
 			Name:        "get_repository_stats",
-			Description: "Get graph-derived statistics about indexed repositories.",
+			Description: "Get graph-derived statistics about indexed repositories, optionally scoped by repository selector.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"repo_id": map[string]any{
 						"type":        "string",
-						"description": "Optional canonical repository identifier",
+						"description": "Optional repository selector: canonical ID, name, repo slug, or indexed path",
 					},
 				},
 				"required": []string{},

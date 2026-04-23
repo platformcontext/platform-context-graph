@@ -60,12 +60,12 @@ Use these tools when the user is asking for a narrative answer such as
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
-| **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, optional `semantic_overview`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
+| **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, optional `semantic_overview`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a repository selector: canonical ID, name, repo slug, or indexed path. | "Tell me the end-to-end story for payments-api." |
 | **`get_workload_story`** | Return a narrative workload story using canonical workload identity, optionally scoped to one environment. Use `trace_deployment_chain` when you need the richer deployment-mapping fields such as `story_sections`, `deployment_overview`, `controller_overview`, or `deployment_fact_summary`. | "Show me how payments-api is deployed in prod." |
 | **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts; pair it with `trace_deployment_chain` for deployment-mapping detail. | "What can you tell me about payments-api in QA?" |
 | **`resolve_entity`** | Resolve fuzzy input into canonical entities before story or context calls. | "What canonical entity matches `payments prod rds`?" |
 | **`get_entity_context`** | Fetch full context for one canonical entity id. | "Show me the context for this resolved entity." |
-| **`get_repo_context`** | Durable drill-down for repository details after the story answer. | "Show me the full repo context behind that story." |
+| **`get_repo_context`** | Durable drill-down for repository details after the story answer. Accepts a repository selector: canonical ID, name, repo slug, or indexed path. | "Show me the full repo context behind that story." |
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
 | **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
 
@@ -155,7 +155,7 @@ Tools for runtime health, completeness, and repository inventory.
 | **`list_ingesters`** | Show the latest persisted status for all configured ingesters. | "What ingesters are configured and what state are they in?" |
 | **`get_ingester_status`** | Show detailed status for one ingester runtime, including retry timing and repo progress counts. | "What is the repository ingester doing right now?" |
 | **`list_indexed_repositories`** | Show what projects are currently indexed. | "What repos are indexed?" |
-| **`get_repository_stats`** | Show counts of files, classes, LOC. | "Show stats for the backend repo." |
+| **`get_repository_stats`** | Show counts of files, classes, and other repository stats, optionally scoped by repository selector. | "Show stats for the backend repo." |
 
 ## Bundles & Registry
 

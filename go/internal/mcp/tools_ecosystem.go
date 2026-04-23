@@ -114,13 +114,13 @@ func ecosystemTools() []ToolDefinition {
 		},
 		{
 			Name:        "get_repo_context",
-			Description: "Get complete context for a repository in a single call.",
+			Description: "Get complete context for a repository in a single call. Accepts a repository selector such as canonical ID, name, repo slug, or indexed path.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"repo_id": map[string]any{
 						"type":        "string",
-						"description": "Canonical repository identifier",
+						"description": "Repository selector: canonical ID, name, repo slug, or indexed path",
 					},
 				},
 				"required": []string{"repo_id"},
@@ -128,13 +128,13 @@ func ecosystemTools() []ToolDefinition {
 		},
 		{
 			Name:        "get_repo_story",
-			Description: "Get a structured story for a repository.",
+			Description: "Get a structured story for a repository. Accepts a repository selector such as canonical ID, name, repo slug, or indexed path.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"repo_id": map[string]any{
 						"type":        "string",
-						"description": "Canonical repository identifier",
+						"description": "Repository selector: canonical ID, name, repo slug, or indexed path",
 					},
 				},
 				"required": []string{"repo_id"},
@@ -142,13 +142,13 @@ func ecosystemTools() []ToolDefinition {
 		},
 		{
 			Name:        "get_repository_coverage",
-			Description: "Get repository-scoped durable coverage and completeness data for one canonical repository identifier.",
+			Description: "Get repository-scoped durable coverage and completeness data for one repository selector.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"repo_id": map[string]any{
 						"type":        "string",
-						"description": "Canonical repository identifier",
+						"description": "Repository selector: canonical ID, name, repo slug, or indexed path",
 					},
 				},
 				"required": []string{"repo_id"},
