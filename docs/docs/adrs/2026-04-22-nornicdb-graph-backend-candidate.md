@@ -22,8 +22,8 @@
 
 | Phase | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
-| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification` | installer, lifecycle commands, perf smoke |
-| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; `pcg graph start|stop|logs|upgrade` and `pcg install nornicdb` still intentionally stubbed | real installer and public lifecycle commands |
+| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override | release-backed installer, lifecycle commands, perf smoke |
+| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` verifies and copies a local binary; `pcg graph start|stop|logs|upgrade` still intentionally stubbed | release download/signature installer and public lifecycle commands |
 | Adapter conformance | Not started | — | `GraphQuery`/`GraphWrite` adapter, syntax verification, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
 
@@ -156,16 +156,20 @@ unlocks the high-authority graph queries that `local_lightweight` refuses.
 NornicDB runs as a separate process. Laptop installs default to the
 headless `nornicdb-headless` artifact; the full `nornicdb` binary remains
 an explicit opt-in for users who accept the larger UI / local-LLM payload.
-It is installed via `pcg install nornicdb`, managed by
-`pcg graph start|stop|status`, and its lifecycle is tracked in the
-workspace data root (`owner.json` records the graph PID, loopback ports, and
+The current installer slice accepts a verified local executable with
+`pcg install nornicdb --from <path>` and copies it to
+`${PCG_HOME}/bin/nornicdb-headless`; release-backed download/signature
+installation remains a promotion prerequisite. The sidecar is managed by
+`pcg graph status` today and by `pcg graph start|stop|logs|upgrade` in the
+remaining lifecycle slice. Its runtime lifecycle is tracked in the workspace
+data root (`owner.json` records the graph PID, loopback ports, and
 per-workspace credentials copied from the graph credential file with `0600`
 file permissions).
 
 It does not run embedded in the `pcg` binary. The "lightweight" goal is
 preserved by:
 
-- one-command install
+- one-command local-file install today, release-backed install before promotion
 - loopback-only ports owned by the workspace lock
 - process ownership tied to the workspace lock
 - clean install / uninstall / upgrade
@@ -215,8 +219,9 @@ Until then, Neo4j remains the default. NornicDB is opt-in.
 NornicDB does not ship as an in-process Go library. This ADR does not
 attempt to embed it. The "lightweight" outcome is delivered by:
 
-- one-command laptop install of the headless artifact through
-  `pcg install nornicdb`
+- one-command laptop install of a verified local headless artifact through
+  `pcg install nornicdb --from <path>` today, with release-backed download
+  and signature verification required before promotion
 - sidecar process lifecycle owned by the local host
 - loopback-only health and Bolt endpoints recorded in `owner.json`
 - deterministic shutdown sequencing documented in

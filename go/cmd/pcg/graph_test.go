@@ -185,16 +185,6 @@ func TestGraphLifecycleNotWiredReturnsActionableError(t *testing.T) {
 	}
 }
 
-func TestRunInstallNornicDBReturnsNotWiredError(t *testing.T) {
-	err := graphLifecycleNotWired("pcg install nornicdb")
-	if err == nil {
-		t.Fatal("graphLifecycleNotWired() error = nil, want non-nil")
-	}
-	if err.Error() != "pcg install nornicdb not wired yet" {
-		t.Fatalf("graphLifecycleNotWired() error = %q, want %q", err.Error(), "pcg install nornicdb not wired yet")
-	}
-}
-
 func TestResolveNornicDBBinaryPrefersHeadlessBinary(t *testing.T) {
 	originalLookPath := localGraphLookPath
 	originalReadVersion := localGraphReadVersion
@@ -202,6 +192,7 @@ func TestResolveNornicDBBinaryPrefersHeadlessBinary(t *testing.T) {
 		localGraphLookPath = originalLookPath
 		localGraphReadVersion = originalReadVersion
 	})
+	t.Setenv("PCG_HOME", t.TempDir())
 	t.Setenv("PCG_NORNICDB_BINARY", "")
 
 	localGraphLookPath = func(file string) (string, error) {

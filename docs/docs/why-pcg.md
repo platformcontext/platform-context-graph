@@ -233,11 +233,12 @@ to refactor the payment service's API contract.
 PCG is Apache 2.0 licensed, self-hosted, and does not phone home. The
 authoritative graph path runs on Neo4j in full-stack local and production
 deployments. Lightweight local mode is being built around embedded Postgres and
-relational code-intelligence tables, with future graph backends gated behind a
-conformance suite rather than advertised by name ahead of support. Language
-parsing is owned by native Go packages backed by tree-sitter, HCL, YAML/JSON,
-SCIP, and schema-aware extractors. Add parser capability by extending the Go
-parser or relationship packages with fixtures and focused tests.
+relational code-intelligence tables. NornicDB is an opt-in evaluation backend
+for authoritative local mode, not a supported production replacement until it
+passes the conformance and performance gates. Language parsing is owned by
+native Go packages backed by tree-sitter, HCL, YAML/JSON, SCIP, and
+schema-aware extractors. Add parser capability by extending the Go parser or
+relationship packages with fixtures and focused tests.
 
 Contributions welcome: new language parsers, IaC formats, query capabilities, and deployment patterns.
 
