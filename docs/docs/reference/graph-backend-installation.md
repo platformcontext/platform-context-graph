@@ -84,6 +84,10 @@ Explicit `--from` installs can consume any of these artefacts:
 - a local `.pkg` containing `/usr/local/bin/nornicdb` or `nornicdb-headless`
 - an `http://`, `https://`, or `file://` URL to one of those artefacts
 
+Remote URL downloads default to a `30s` client timeout and honor `Ctrl-C`.
+Set `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` when slower links need a larger
+budget. The value uses Go duration syntax such as `45s`, `2m`, or `2m30s`.
+
 ```bash
 # Bare pinned install when the host platform is covered by the embedded
 # release manifest.
@@ -115,7 +119,8 @@ The command performs, in order:
 1. If `--from` is omitted, resolves the host OS / architecture against the
    embedded pinned release manifest and chooses the recorded URL + SHA-256.
 2. Resolves `--from` to a local path or downloads the remote artefact to a
-   temporary file.
+   temporary file. Remote downloads honor `cmd.Context()` cancellation and use
+   `PCG_NORNICDB_INSTALL_TIMEOUT` when set, otherwise `30s`.
 3. If the source is a tar archive, extracts the first usable
    `nornicdb-headless` entry, or falls back to `nornicdb` when the archive
    only contains the full binary.

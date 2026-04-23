@@ -104,7 +104,7 @@ lightweight host. PCG exposes:
 | Command | Purpose |
 | :--- | :--- |
 | `pcg graph status` | Available now. Report workspace graph-owner metadata, backend, PID, binary path, ports, log path, and current running state when present. |
-| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force]` | Available now. Without `--from`, install from the pinned embedded release manifest when the host platform is covered. With `--from`, verify and copy a NornicDB binary from a local path, tar archive, macOS package, or URL to `${PCG_HOME}/bin/nornicdb-headless`. Signature verification remains future work. |
+| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force]` | Available now. Without `--from`, install from the pinned embedded release manifest when the host platform is covered. With `--from`, verify and copy a NornicDB binary from a local path, tar archive, macOS package, or URL to `${PCG_HOME}/bin/nornicdb-headless`. Remote downloads honor `Ctrl-C` and default to `30s`; override with `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` when slower links need more time. Signature verification remains future work. |
 | `pcg graph logs [--workspace-root <path>]` | Available now. Print the current workspace `graph-nornicdb.log` file if present. |
 | `pcg graph stop [--workspace-root <path>]` | Available now. Request the workspace owner to shut down so the managed graph sidecar stops through the normal lifecycle; stale owner graph processes are stopped directly. |
 | `pcg graph start [--workspace-root <path>]` | Available now. Foreground shortcut for starting the `local_authoritative` workspace owner, equivalent to `PCG_QUERY_PROFILE=local_authoritative pcg watch .`. |

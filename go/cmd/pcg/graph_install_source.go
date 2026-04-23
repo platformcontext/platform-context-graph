@@ -26,6 +26,7 @@ const (
 	nornicDBInstallSourceDownloadedBinary  nornicDBInstallSourceKind = "downloaded-binary"
 	nornicDBInstallSourceDownloadedArchive nornicDBInstallSourceKind = "downloaded-archive"
 	nornicDBInstallSourceDownloadedPackage nornicDBInstallSourceKind = "downloaded-package"
+	nornicDBInstallTimeoutEnv                                        = "PCG_NORNICDB_INSTALL_TIMEOUT"
 )
 
 var graphInstallExpandPackage = func(pkgPath, targetDir string) error {
@@ -192,11 +193,15 @@ func downloadNornicDBInstallSource(ctx context.Context, sourceURL string) (strin
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	timeout, err := nornicDBInstallDownloadTimeout()
+	if err != nil {
+		return "", err
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("build nornicdb download request: %w", err)
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: timeout}
 	response, err := client.Do(request)
 	if err != nil {
 		return "", fmt.Errorf("download nornicdb source %q: %w", sourceURL, err)
@@ -232,6 +237,21 @@ func downloadNornicDBInstallSource(ctx context.Context, sourceURL string) (strin
 		return "", fmt.Errorf("close downloaded nornicdb source file: %w", err)
 	}
 	return targetPath, nil
+}
+
+func nornicDBInstallDownloadTimeout() (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv(nornicDBInstallTimeoutEnv))
+	if raw == "" {
+		return 30 * time.Second, nil
+	}
+	timeout, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s=%q: %w", nornicDBInstallTimeoutEnv, raw, err)
+	}
+	if timeout <= 0 {
+		return 0, fmt.Errorf("parse %s=%q: must be greater than zero", nornicDBInstallTimeoutEnv, raw)
+	}
+	return timeout, nil
 }
 
 func extractNornicDBBinaryFromArchive(archivePath string) (string, string, func() error, error) {

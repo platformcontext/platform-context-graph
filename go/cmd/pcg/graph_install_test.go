@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -389,6 +390,42 @@ func TestPrepareNornicDBInstallSourceDownloadHonorsContextCancellation(t *testin
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("prepareNornicDBInstallSource() error = %v, want context.Canceled", err)
 	}
+}
+
+func TestNornicDBInstallDownloadTimeout(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		got, err := nornicDBInstallDownloadTimeout()
+		if err != nil {
+			t.Fatalf("nornicDBInstallDownloadTimeout() error = %v, want nil", err)
+		}
+		if got != 30*time.Second {
+			t.Fatalf("nornicDBInstallDownloadTimeout() = %s, want %s", got, 30*time.Second)
+		}
+	})
+
+	t.Run("override", func(t *testing.T) {
+		t.Setenv(nornicDBInstallTimeoutEnv, "2m15s")
+
+		got, err := nornicDBInstallDownloadTimeout()
+		if err != nil {
+			t.Fatalf("nornicDBInstallDownloadTimeout() error = %v, want nil", err)
+		}
+		if got != 2*time.Minute+15*time.Second {
+			t.Fatalf("nornicDBInstallDownloadTimeout() = %s, want %s", got, 2*time.Minute+15*time.Second)
+		}
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		t.Setenv(nornicDBInstallTimeoutEnv, "not-a-duration")
+
+		_, err := nornicDBInstallDownloadTimeout()
+		if err == nil {
+			t.Fatal("nornicDBInstallDownloadTimeout() error = nil, want parse error")
+		}
+		if !strings.Contains(err.Error(), nornicDBInstallTimeoutEnv) {
+			t.Fatalf("nornicDBInstallDownloadTimeout() error = %q, want env guidance", err.Error())
+		}
+	})
 }
 
 func TestInstallNornicDBRejectsArchiveWithoutNornicDBBinary(t *testing.T) {
