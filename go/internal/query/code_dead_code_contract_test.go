@@ -111,6 +111,12 @@ func TestHandleDeadCodeReturnsDerivedTruthAndAnalysisMetadata(t *testing.T) {
 	if got, want := analysis["reflection_modeled"], false; got != want {
 		t.Fatalf("analysis[reflection_modeled] = %#v, want %#v", got, want)
 	}
+	if got, want := analysis["framework_roots_from_parser_metadata"], float64(0); got != want {
+		t.Fatalf("analysis[framework_roots_from_parser_metadata] = %#v, want %#v", got, want)
+	}
+	if got, want := analysis["framework_roots_from_source_fallback"], float64(0); got != want {
+		t.Fatalf("analysis[framework_roots_from_source_fallback] = %#v, want %#v", got, want)
+	}
 	if got, want := analysis["roots_skipped_missing_source"], float64(0); got != want {
 		t.Fatalf("analysis[roots_skipped_missing_source] = %#v, want %#v", got, want)
 	}

@@ -524,9 +524,12 @@ reachability spec is implemented. The response body now also includes an
 specific Go framework-root signatures currently recognized, and whether
 tests/generated code were excluded. `analysis.roots_skipped_missing_source`
 counts Go candidates where the framework-root checks could not run because the
-content store did not have source cached. `limit` defaults to `100` and is
-capped at `500`. The response also includes `truncated=true` when the bounded
-dead-code scan found more candidates than were returned.
+content store did not have source cached. `analysis.framework_roots_from_parser_metadata`
+and `analysis.framework_roots_from_source_fallback` show whether the excluded
+Go framework roots came from parser-emitted metadata or the legacy query-time
+source heuristic path. `limit` defaults to `100` and is capped at `500`. The
+response also includes `truncated=true` when the bounded dead-code scan found
+more candidates than were returned.
 
 ## Content API
 

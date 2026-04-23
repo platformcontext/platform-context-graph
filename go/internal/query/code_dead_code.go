@@ -202,13 +202,19 @@ func deadCodeResultExcludedByDefault(result map[string]any, entity *EntityConten
 		stats.RootsSkippedMissingSource++
 	}
 
-	return deadCodeIsLanguageEntrypoint(result, entity) ||
-		deadCodeIsGoCLICommandRoot(result, goPolicy) ||
-		deadCodeIsGoHTTPHandlerRoot(result, goPolicy) ||
-		deadCodeIsGoFrameworkCallbackRoot(result, goPolicy) ||
-		deadCodeIsLibraryPublicAPIRoot(result, entity) ||
-		deadCodeIsTestFile(result, entity) ||
-		deadCodeIsGeneratedCode(result, entity)
+	if deadCodeIsLanguageEntrypoint(result, entity) {
+		return true
+	}
+	if deadCodeIsGoFrameworkRoot(result, goPolicy, stats) {
+		return true
+	}
+	if deadCodeIsLibraryPublicAPIRoot(result, entity) {
+		return true
+	}
+	if deadCodeIsTestFile(result, entity) {
+		return true
+	}
+	return deadCodeIsGeneratedCode(result, entity)
 }
 
 func deadCodeIsLanguageEntrypoint(result map[string]any, entity *EntityContent) bool {
@@ -362,26 +368,52 @@ func buildDeadCodeAnalysis(results []map[string]any, excluded []string, stats de
 			"http_and_rpc_roots",
 			"framework_callback_roots",
 		},
-		"frameworks_recognized":   frameworks,
-		"reflection_modeled":      false,
-		"tests_excluded":          true,
-		"generated_code_excluded": true,
-		"roots_skipped_missing_source": stats.RootsSkippedMissingSource,
-		"user_overrides_applied":  len(excluded) > 0,
-		"modeled_entrypoints":     []string{"go.main", "go.init", "python.__main__"},
+		"frameworks_recognized":                frameworks,
+		"reflection_modeled":                   false,
+		"tests_excluded":                       true,
+		"generated_code_excluded":              true,
+		"framework_roots_from_parser_metadata": stats.ParserMetadataFrameworkRoots,
+		"framework_roots_from_source_fallback": stats.SourceFallbackFrameworkRoots,
+		"roots_skipped_missing_source":         stats.RootsSkippedMissingSource,
+		"user_overrides_applied":               len(excluded) > 0,
+		"modeled_entrypoints":                  []string{"go.main", "go.init", "python.__main__"},
 		"modeled_framework_roots": []string{
 			"go.cobra_run_signature",
 			"go.net_http_handler_signature",
 			"go.controller_runtime_reconcile_signature",
 		},
-		"modeled_public_api":      []string{"go.exported_non_internal_package_symbol"},
+		"modeled_public_api": []string{"go.exported_non_internal_package_symbol"},
 		"notes": []string{
 			"dead-code remains derived until broader framework, public-API, and reflection root models land",
 			"go CLI, stdlib HTTP, and controller-runtime reconcile signatures are modeled as derived framework roots",
+			"analysis reports whether a Go framework root came from parser metadata or the legacy source fallback path",
 			"go framework-root signature checks require entity source; missing source leaves those roots unevaluated",
 			"go exported symbols outside cmd/, internal/, and vendor/ are treated as public API roots by default",
 		},
 	}
+}
+
+func deadCodeIsGoFrameworkRoot(result map[string]any, policy deadCodeGoPolicyContext, stats *deadCodePolicyStats) bool {
+	if policy.language != "go" {
+		return false
+	}
+	if len(policy.rootKinds) > 0 {
+		if deadCodeIsGoCLICommandRoot(result, policy) ||
+			deadCodeIsGoHTTPHandlerRoot(result, policy) ||
+			deadCodeIsGoFrameworkCallbackRoot(result, policy) {
+			stats.ParserMetadataFrameworkRoots++
+			return true
+		}
+		return false
+	}
+
+	if deadCodeIsGoCLICommandRoot(result, policy) ||
+		deadCodeIsGoHTTPHandlerRoot(result, policy) ||
+		deadCodeIsGoFrameworkCallbackRoot(result, policy) {
+		stats.SourceFallbackFrameworkRoots++
+		return true
+	}
+	return false
 }
 
 func filterResultsByDecoratorExclusions(results []map[string]any, excluded []string) []map[string]any {

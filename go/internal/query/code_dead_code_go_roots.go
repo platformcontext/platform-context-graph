@@ -6,7 +6,9 @@ import (
 )
 
 type deadCodePolicyStats struct {
-	RootsSkippedMissingSource int
+	RootsSkippedMissingSource    int
+	ParserMetadataFrameworkRoots int
+	SourceFallbackFrameworkRoots int
 }
 
 type deadCodeGoPolicyContext struct {

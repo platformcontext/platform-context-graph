@@ -217,6 +217,11 @@ indexed path; the server resolves it before querying. The response also
 includes `data.truncated` when the bounded dead-code result window cut off
 additional candidates and `data.analysis.roots_skipped_missing_source` when Go
 framework-root checks could not run because entity source text was unavailable.
+The same `data.analysis` object now reports
+`framework_roots_from_parser_metadata` versus
+`framework_roots_from_source_fallback` so local validation can tell whether the
+reindex-backed metadata path is taking over from the legacy query-time
+heuristic path.
 
 ### Find dead code (Cypher)
 
