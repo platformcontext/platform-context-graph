@@ -88,7 +88,10 @@ projection is degraded.
 `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` is reserved for NornicDB adapter
 conformance runs. It enables the same grouped canonical write surface used by
 Neo4j so PCG can prove NornicDB rollback, timeout, and no-partial-write
-behavior before promotion. Do not set it for normal laptop coding.
+behavior before promotion. The current safety probe against
+`/tmp/nornicdb-headless` (`v1.0.42-hotfix`) still reports rollback marker
+count `1`, so do not set it for normal laptop coding. Manual conformance runs
+must use a disposable `PCG_HOME` / workspace data root.
 
 ### Graph backend commands
 

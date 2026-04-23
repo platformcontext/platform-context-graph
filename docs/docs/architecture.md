@@ -365,7 +365,10 @@ developer MCP code-search usefulness without changing the production Neo4j
 grouped-write path. NornicDB grouped writes are available only through the
 explicit conformance switch `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true`;
 promotion requires proving the same rollback, timeout, and no-partial-write
-invariants that Neo4j currently provides.
+invariants that Neo4j currently provides. The 2026-04-23 safety probe against
+`/tmp/nornicdb-headless` (`v1.0.42-hotfix`) still reported rollback marker
+count `1` on the Neo4j-driver path, so grouped NornicDB canonical writes remain
+unpromoted.
 
 Lightweight local mode **refuses** high-authority queries (transitive callers,
 call-chain paths, dead code, blast radius, change surface) with a structured
