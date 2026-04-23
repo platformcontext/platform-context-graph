@@ -34,6 +34,21 @@ func TestWireAPIReturnsInvalidQueryProfileErrorBeforeConnectingDatastores(t *tes
 	}
 }
 
+func TestWireAPIReturnsInvalidGraphBackendErrorBeforeConnectingDatastores(t *testing.T) {
+	_, _, _, err := wireAPI(context.Background(), func(key string) string {
+		if key == "PCG_GRAPH_BACKEND" {
+			return "not-a-real-backend"
+		}
+		return ""
+	}, nil, nil)
+	if err == nil {
+		t.Fatal("wireAPI() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "load graph backend") {
+		t.Fatalf("wireAPI() error = %q, want load graph backend context", err)
+	}
+}
+
 func TestOpenQueryGraphAcceptsNornicDBOnSharedBoltPath(t *testing.T) {
 	t.Parallel()
 

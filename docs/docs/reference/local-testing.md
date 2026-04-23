@@ -172,6 +172,36 @@ Recorded sample on 2026-04-23 against the pinned bare-install binary at
 - cold start: `9.045253708s`
 - warm restart: `490.996625ms`
 
+### Local-Authoritative Call-Chain Query Perf Smoke
+
+Use this gate when touching graph-backed call-chain analysis, NornicDB query
+compatibility routing, or the `local_authoritative` call-chain handler path.
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeCallChainSyntheticEnvelope -count=1 -v
+```
+
+The smoke passes when:
+
+- the real `local_authoritative` host boots successfully
+- the synthetic four-function `CALLS` chain is written through the shared Bolt
+  driver path
+- `/api/v0/code/call-chain` returns non-empty path nodes with
+  `truth.profile=local_authoritative` and
+  `truth.basis=authoritative_graph`
+- the synthetic call-chain p95 remains under 2 seconds
+
+Recorded sample on 2026-04-23 against the pinned bare-install binary at
+`/tmp/pcg-bare-install-smoke/bin/nornicdb-headless`:
+
+- synthetic call-chain p95: `736.25µs`
+
+This gate is intentionally narrower than the full active-repo performance
+envelope. It proves the backend-routed NornicDB call-chain query shape and
+live handler path before broader repo-scale perf work continues.
+
 ### NornicDB Grouped-Write Safety Probe
 
 Use this opt-in gate when touching NornicDB grouped canonical writes or the

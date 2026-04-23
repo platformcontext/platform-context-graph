@@ -34,6 +34,10 @@ func wireAPI(
 	if err != nil {
 		return nil, nil, fmt.Errorf("load query profile: %w", err)
 	}
+	graphBackend, err := loadGraphBackend(getenv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load graph backend: %w", err)
+	}
 
 	apiKey, err := internalruntime.ResolveAPIKey(getenv)
 	if err != nil {
@@ -77,7 +81,7 @@ func wireAPI(
 	neo4jReader := query.NewNeo4jReader(driver, neo4jDB)
 	contentReader := query.NewContentReader(db)
 	statusReader := pgstatus.NewStatusStore(pgstatus.SQLQueryer{DB: db})
-	router, err := newRouter(db, neo4jReader, contentReader, queryProfile)
+	router, err := newRouter(db, neo4jReader, contentReader, queryProfile, graphBackend)
 	if err != nil {
 		_ = db.Close()
 		if driver != nil {
@@ -152,11 +156,16 @@ func loadQueryProfile(getenv func(string) string) (query.QueryProfile, error) {
 	return profile, nil
 }
 
+func loadGraphBackend(getenv func(string) string) (query.GraphBackend, error) {
+	return query.ParseGraphBackend(strings.TrimSpace(getenv("PCG_GRAPH_BACKEND")))
+}
+
 func newRouter(
 	db *sql.DB,
 	neo4jReader query.GraphQuery,
 	contentReader query.ContentStore,
 	queryProfile query.QueryProfile,
+	graphBackend query.GraphBackend,
 ) (*query.APIRouter, error) {
 	router := &query.APIRouter{
 		Repositories: &query.RepositoryHandler{
@@ -170,9 +179,10 @@ func newRouter(
 			Profile: queryProfile,
 		},
 		Code: &query.CodeHandler{
-			Neo4j:   neo4jReader,
-			Content: contentReader,
-			Profile: queryProfile,
+			GraphBackend: graphBackend,
+			Neo4j:        neo4jReader,
+			Content:      contentReader,
+			Profile:      queryProfile,
 		},
 		Content: &query.ContentHandler{
 			Content: contentReader,

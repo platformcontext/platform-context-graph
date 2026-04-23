@@ -33,6 +33,10 @@ func wireAPI(
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("load query profile: %w", err)
 	}
+	graphBackend, err := loadGraphBackend(getenv)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("load graph backend: %w", err)
+	}
 
 	apiKey, err := internalruntime.ResolveAPIKey(getenv)
 	if err != nil {
@@ -88,9 +92,10 @@ func wireAPI(
 			Profile: queryProfile,
 		},
 		Code: &query.CodeHandler{
-			Neo4j:   neo4jReader,
-			Content: contentReader,
-			Profile: queryProfile,
+			GraphBackend: graphBackend,
+			Neo4j:        neo4jReader,
+			Content:      contentReader,
+			Profile:      queryProfile,
 		},
 		Content: &query.ContentHandler{
 			Content: contentReader,
@@ -181,6 +186,10 @@ func loadQueryProfile(getenv func(string) string) (query.QueryProfile, error) {
 		return "", err
 	}
 	return profile, nil
+}
+
+func loadGraphBackend(getenv func(string) string) (query.GraphBackend, error) {
+	return query.ParseGraphBackend(strings.TrimSpace(getenv("PCG_GRAPH_BACKEND")))
 }
 
 func mountRuntimeSurface(

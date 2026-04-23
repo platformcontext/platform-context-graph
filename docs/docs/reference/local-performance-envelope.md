@@ -84,8 +84,32 @@ Recorded sample on 2026-04-23:
 - warm restart: `490.996625ms`
 
 These measurements pass the current `local_authoritative` startup targets.
-Broader query-latency, dead-code, reducer-throughput, and memory-budget
-targets remain open until their own perf gates land.
+Broader dead-code, reducer-throughput, and memory-budget targets remain open
+until their own perf gates land.
+
+## Current Query-Latency Evidence
+
+The `local_authoritative` call-chain path now has a dedicated manual smoke:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeCallChainSyntheticEnvelope -count=1 -v
+```
+
+That gate boots the real local host, embedded Postgres, and managed NornicDB
+sidecar, seeds a synthetic four-function `CALLS` chain through the shared Bolt
+driver path, and exercises the real `/api/v0/code/call-chain` handler in
+`local_authoritative`.
+
+Recorded sample on 2026-04-23:
+
+- synthetic call-chain p95: `736.25µs`
+
+This smoke confirms that the backend-routed NornicDB call-chain path is
+functionally live and comfortably below the current `under 2 seconds` target
+for a synthetic path workload. It is not a substitute for active-repo
+transitive-caller, active-repo call-chain, dead-code, or memory-budget proof.
 
 ## Review Rule
 
