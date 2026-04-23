@@ -83,11 +83,13 @@ default roots. The result is intentionally `derived` today until broader
 framework, public-API, and reflection root models land. Use `--repo` to
 scope the scan to one repository by ID, name, slug, or path. `--repo-id`
 remains as a compatibility alias for canonical IDs. Use `--exclude` to skip
-decorator-owned entry points such as route handlers, and `--fail-on-found` to
-turn the command into a CI gate.
+decorator-owned entry points such as route handlers, `--limit` to raise or
+lower the bounded result window, and `--fail-on-found` to turn the command
+into a CI gate. The response includes `truncated=true` when more dead-code
+candidates existed than the bounded result set returned.
 
 ```bash
-pcg analyze dead-code --repo payments --exclude "@route" --fail-on-found
+pcg analyze dead-code --repo payments --limit 200 --exclude "@route" --fail-on-found
 ```
 
 ### `analyze overrides`

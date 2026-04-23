@@ -204,7 +204,7 @@ This maps to the same route with `direction=outgoing`,
 **Tool:** `find_dead_code`
 
 ```json
-{ "repo_id": "payments", "exclude_decorated_with": ["@app.route"] }
+{ "repo_id": "payments", "limit": 200, "exclude_decorated_with": ["@app.route"] }
 ```
 
 This returns derived dead-code candidates today: the handler starts from the
@@ -212,7 +212,9 @@ graph candidate set, applies the current default entrypoint/test/generated
 exclusions plus Go exported public-package roots, and reports its modeled root
 categories in the response envelope's `data.analysis` field. The `repo_id`
 argument may be a canonical repository ID, repository name, repo slug, or
-indexed path; the server resolves it before querying.
+indexed path; the server resolves it before querying. The response also
+includes `data.truncated` when the bounded dead-code result window cut off
+additional candidates.
 
 ### Find dead code (Cypher)
 

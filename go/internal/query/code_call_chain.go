@@ -52,12 +52,9 @@ func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
 	if req.MaxDepth > 10 {
 		req.MaxDepth = 10
 	}
-	resolvedRepoID, err := h.resolveRepositorySelector(r.Context(), req.RepoID)
-	if err != nil && strings.TrimSpace(req.RepoID) != "" {
-		WriteError(w, http.StatusBadRequest, err.Error())
+	if !h.applyRepositorySelector(w, r, &req.RepoID) {
 		return
 	}
-	req.RepoID = resolvedRepoID
 
 	cypher, params := buildCallChainCypher(req, h.graphBackend())
 	rows, err := h.Neo4j.Run(r.Context(), cypher, params)

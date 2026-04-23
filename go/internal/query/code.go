@@ -70,12 +70,9 @@ func (h *CodeHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "query is required")
 		return
 	}
-	resolvedRepoID, err := h.resolveRepositorySelector(r.Context(), req.RepoID)
-	if err != nil && strings.TrimSpace(req.RepoID) != "" {
-		WriteError(w, http.StatusBadRequest, err.Error())
+	if !h.applyRepositorySelector(w, r, &req.RepoID) {
 		return
 	}
-	req.RepoID = resolvedRepoID
 	if req.Limit <= 0 {
 		req.Limit = 50
 	}
@@ -294,12 +291,9 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	resolvedRepoID, err := h.resolveRepositorySelector(ctx, req.RepoID)
-	if err != nil && strings.TrimSpace(req.RepoID) != "" {
-		WriteError(w, http.StatusBadRequest, err.Error())
+	if !h.applyRepositorySelector(w, r, &req.RepoID) {
 		return
 	}
-	req.RepoID = resolvedRepoID
 	if req.EntityID == "" && req.FunctionName == "" {
 		results, err := h.listMostComplexFunctions(ctx, req.RepoID, req.Limit)
 		if err != nil {

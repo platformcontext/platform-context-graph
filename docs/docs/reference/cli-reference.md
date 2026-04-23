@@ -221,7 +221,7 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 | `pcg analyze deps <module>` | Show import and dependency relationships. | Yes |
 | `pcg analyze tree <class>` | Show inheritance hierarchy. | Yes |
 | `pcg analyze complexity` | Show relationship-based complexity metrics for one entity. | Yes |
-| `pcg analyze dead-code` | Find derived dead-code candidates after default entrypoint, Go public-API, test, and generated-code exclusions, with optional `--repo` (ID, name, slug, or path), `--repo-id`, `--exclude`, and `--fail-on-found`. | Yes |
+| `pcg analyze dead-code` | Find derived dead-code candidates after default entrypoint, Go public-API, test, and generated-code exclusions, with optional `--repo` (ID, name, slug, or path), `--repo-id`, `--limit`, `--exclude`, and `--fail-on-found`. | Yes |
 | `pcg analyze overrides <name>` | Find implementations across classes. | Yes |
 | `pcg analyze variable <name>` | Show variable definitions and usage. | Yes |
 

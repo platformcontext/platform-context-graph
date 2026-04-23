@@ -254,6 +254,7 @@ const openAPIPathsCode = `
                 "type": "object",
                 "properties": {
                   "repo_id": {"type": "string", "description": "Optional repository selector (canonical ID, name, slug, or path)"},
+                  "limit": {"type": "integer", "description": "Maximum dead-code candidates to return (default 100, max 500).", "default": 100},
                   "exclude_decorated_with": {
                     "type": "array",
                     "description": "Optional list of decorator names to exclude from the results.",
@@ -273,6 +274,8 @@ const openAPIPathsCode = `
                   "type": "object",
                   "properties": {
                     "repo_id": {"type": "string"},
+                    "limit": {"type": "integer"},
+                    "truncated": {"type": "boolean"},
                     "results": {"type": "array", "items": {"$ref": "#/components/schemas/EntityRef"}},
                     "analysis": {
                       "type": "object",

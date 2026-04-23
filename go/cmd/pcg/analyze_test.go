@@ -120,7 +120,9 @@ func TestRunAnalyzeDeadCodePostsExclusions(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	addRemoteFlags(cmd)
+	cmd.Flags().String("repo", "", "Optional repository selector")
 	cmd.Flags().String("repo-id", "", "Optional repository ID")
+	cmd.Flags().Int("limit", 100, "Maximum dead-code candidates to return")
 	cmd.Flags().StringSlice("exclude", nil, "Decorator exclusions")
 	cmd.Flags().Bool("fail-on-found", false, "Exit non-zero when results are found")
 	if err := cmd.Flags().Set("service-url", server.URL); err != nil {
@@ -131,6 +133,9 @@ func TestRunAnalyzeDeadCodePostsExclusions(t *testing.T) {
 	}
 	if err := cmd.Flags().Set("exclude", "@route,@app.route"); err != nil {
 		t.Fatalf("Set(exclude) error = %v, want nil", err)
+	}
+	if err := cmd.Flags().Set("limit", "25"); err != nil {
+		t.Fatalf("Set(limit) error = %v, want nil", err)
 	}
 
 	if err := runAnalyzeDeadCode(cmd, nil); err != nil {
@@ -144,6 +149,9 @@ func TestRunAnalyzeDeadCodePostsExclusions(t *testing.T) {
 	}
 	if got, want := gotBody["repo_id"], "repo-1"; got != want {
 		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
+	}
+	if got, want := gotBody["limit"], float64(25); got != want {
+		t.Fatalf("body[limit] = %#v, want %#v", got, want)
 	}
 	exclusions, ok := gotBody["exclude_decorated_with"].([]any)
 	if !ok {
