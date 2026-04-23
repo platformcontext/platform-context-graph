@@ -288,7 +288,10 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 		cypher = dialect.constraint(cypher)
 		if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
 			failed++
-			logger.Warn("schema statement warning", "error", err, "cypher", cypher)
+			logger.Warn("schema statement warning",
+				"error", err,
+				"cypher", cypher,
+				"graph_backend", dialect.backend)
 		}
 	}
 
@@ -296,7 +299,10 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 	for _, cypher := range schemaPerformanceIndexes {
 		if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
 			failed++
-			logger.Warn("schema statement warning", "error", err, "cypher", cypher)
+			logger.Warn("schema statement warning",
+				"error", err,
+				"cypher", cypher,
+				"graph_backend", dialect.backend)
 		}
 	}
 
@@ -308,7 +314,10 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 		)
 		if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
 			failed++
-			logger.Warn("schema statement warning", "error", err, "cypher", cypher)
+			logger.Warn("schema statement warning",
+				"error", err,
+				"cypher", cypher,
+				"graph_backend", dialect.backend)
 		}
 	}
 
@@ -327,15 +336,16 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 				failed++
 				logger.Warn("fulltext index warning",
 					"primary_error", err, "fallback_error", err2,
-					"primary", ft.primary, "fallback", ft.fallback)
+					"primary", ft.primary, "fallback", ft.fallback,
+					"graph_backend", dialect.backend)
 			}
 		}
 	}
 
 	if failed > 0 {
-		logger.Warn("schema creation completed with warnings", "failed", failed)
+		logger.Warn("schema creation completed with warnings", "failed", failed, "graph_backend", dialect.backend)
 	} else {
-		logger.Info("database schema verified/created successfully")
+		logger.Info("database schema verified/created successfully", "graph_backend", dialect.backend)
 	}
 
 	return nil
@@ -357,9 +367,8 @@ func schemaDialectForBackend(backend SchemaBackend) (schemaDialect, error) {
 		return schemaDialect{backend: normalized, constraint: neo4jSchemaConstraint}, nil
 	case SchemaBackendNornicDB:
 		return schemaDialect{backend: normalized, constraint: nornicDBSchemaConstraint, skipFulltextFallback: true}, nil
-	default:
-		return schemaDialect{}, fmt.Errorf("unsupported schema backend %q", backend)
 	}
+	return schemaDialect{}, fmt.Errorf("unsupported schema backend %q", backend)
 }
 
 func normalizeSchemaBackend(backend SchemaBackend) (SchemaBackend, error) {
