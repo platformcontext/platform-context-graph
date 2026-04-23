@@ -197,6 +197,9 @@ func filterDeadCodeResultsByDefaultPolicy(
 
 func deadCodeResultExcludedByDefault(result map[string]any, entity *EntityContent) bool {
 	return deadCodeIsLanguageEntrypoint(result, entity) ||
+		deadCodeIsGoCLICommandRoot(result, entity) ||
+		deadCodeIsGoHTTPHandlerRoot(result, entity) ||
+		deadCodeIsGoFrameworkCallbackRoot(result, entity) ||
 		deadCodeIsLibraryPublicAPIRoot(result, entity) ||
 		deadCodeIsTestFile(result, entity) ||
 		deadCodeIsGeneratedCode(result, entity)
@@ -345,16 +348,29 @@ func buildDeadCodeAnalysis(results []map[string]any, excluded []string) map[stri
 	slices.Sort(frameworks)
 
 	return map[string]any{
-		"root_categories_used":    []string{"language_entrypoints", "generated_and_tool_owned", "library_public_api"},
+		"root_categories_used": []string{
+			"language_entrypoints",
+			"generated_and_tool_owned",
+			"library_public_api",
+			"cli_command_roots",
+			"http_and_rpc_roots",
+			"framework_callback_roots",
+		},
 		"frameworks_recognized":   frameworks,
 		"reflection_modeled":      false,
 		"tests_excluded":          true,
 		"generated_code_excluded": true,
 		"user_overrides_applied":  len(excluded) > 0,
 		"modeled_entrypoints":     []string{"go.main", "go.init", "python.__main__"},
+		"modeled_framework_roots": []string{
+			"go.cobra_run_signature",
+			"go.net_http_handler_signature",
+			"go.controller_runtime_reconcile_signature",
+		},
 		"modeled_public_api":      []string{"go.exported_non_internal_package_symbol"},
 		"notes": []string{
 			"dead-code remains derived until broader framework, public-API, and reflection root models land",
+			"go CLI, stdlib HTTP, and controller-runtime reconcile signatures are modeled as derived framework roots",
 			"go exported symbols outside cmd/, internal/, and vendor/ are treated as public API roots by default",
 		},
 	}

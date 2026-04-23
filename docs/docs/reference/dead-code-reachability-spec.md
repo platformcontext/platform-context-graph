@@ -26,10 +26,14 @@ Every dead-code analysis must classify roots into one or more of these groups:
   - Cobra commands
   - Click/Typer commands
   - equivalent command registrations
+  - Go direct Cobra run-signature handlers are currently modeled as derived
+    roots via `*cobra.Command` + `[]string` function signatures
 - HTTP and RPC roots
   - route handlers
   - FastAPI/Django/Flask registrations
   - gRPC service handlers
+  - Go stdlib HTTP handlers are currently modeled as derived roots via
+    `http.ResponseWriter` + `*http.Request` function signatures
 - background worker roots
   - Celery tasks
   - Sidekiq jobs
@@ -38,6 +42,9 @@ Every dead-code analysis must classify roots into one or more of these groups:
   - Kubernetes admission webhooks
   - controller-runtime reconciler methods
   - ArgoCD/Crossplane hook registrations
+  - Go controller-runtime reconciler callbacks are currently modeled as
+    derived roots via `Reconcile(context.Context, ctrl|reconcile.Request)
+    (ctrl|reconcile.Result, error)` signatures
 - generated and tool-owned roots
   - gRPC stubs
   - sqlc output
@@ -126,6 +133,14 @@ Minimum initial coverage should include:
 - Go CLI/HTTP/controller patterns
 - Python web and worker patterns
 - JavaScript/TypeScript web route patterns
+
+Current branch status:
+
+- Go direct Cobra run signatures are modeled
+- Go stdlib HTTP handler signatures are modeled
+- Go controller-runtime `Reconcile` signatures are modeled
+- broader Go router, webhook, worker, reflection, and build-tag roots remain
+  open, so dead-code truth stays `derived`
 
 Initial MVP is explicitly limited to those families. Other languages and
 frameworks should return non-exact or unsupported dead-code results until their

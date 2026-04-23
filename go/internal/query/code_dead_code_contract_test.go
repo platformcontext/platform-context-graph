@@ -118,11 +118,14 @@ func TestHandleDeadCodeReturnsDerivedTruthAndAnalysisMetadata(t *testing.T) {
 	if !ok {
 		t.Fatalf("analysis[root_categories_used] type = %T, want []any", analysis["root_categories_used"])
 	}
-	if got, want := len(rootCategories), 3; got != want {
+	if got, want := len(rootCategories), 6; got != want {
 		t.Fatalf("len(analysis[root_categories_used]) = %d, want %d", got, want)
 	}
 	if got, want := rootCategories[2], "library_public_api"; got != want {
 		t.Fatalf("analysis[root_categories_used][2] = %#v, want %#v", got, want)
+	}
+	if got, want := rootCategories[5], "framework_callback_roots"; got != want {
+		t.Fatalf("analysis[root_categories_used][5] = %#v, want %#v", got, want)
 	}
 }
 
