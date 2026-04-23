@@ -1,0 +1,35 @@
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 33
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 27,123-132,388-393
+docs/docs/architecture.md
+  e27ce815bbe89792 369-373
+docs/docs/reference/cli-reference.md
+  e27ce815bbe89792 91-97
+docs/docs/reference/graph-backend-operations.md
+  e27ce815bbe89792 85-90,93,98-99
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 158-160,166-167,169,172,177-179
+go/cmd/pcg/nornicdb_grouped_write_test.go
+  e27ce815bbe89792 60-61,76-77,93-94,154-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "8eabc817b15b48d2780f114824fa0d624216428d",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 82,
+      "total_deletions": 44,
+      "accepted_lines": 82,
+      "overriden_lines": 0
+    }
+  }
+}
