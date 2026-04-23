@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -209,6 +210,66 @@ func TestProjectorQueueFailMarksRetryableErrorTerminalWhenAttemptBudgetExhausted
 	}
 }
 
+func TestProjectorQueueHeartbeatRenewsClaim(t *testing.T) {
+	t.Parallel()
+
+	db := &recordingExecQueryer{}
+	queue := NewProjectorQueue(db, "projector-1", 30*time.Second)
+	queue.Now = func() time.Time {
+		return time.Date(2026, time.April, 12, 14, 30, 0, 0, time.UTC)
+	}
+
+	work := projector.ScopeGenerationWork{
+		Scope: scope.IngestionScope{ScopeID: "scope-123"},
+		Generation: scope.ScopeGeneration{
+			GenerationID: "generation-456",
+		},
+	}
+
+	if err := queue.Heartbeat(context.Background(), work); err != nil {
+		t.Fatalf("Heartbeat() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+	query := db.execs[0].query
+	for _, want := range []string{
+		"UPDATE fact_work_items",
+		"status = 'running'",
+		"claim_until = $1",
+		"lease_owner = $5",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("Heartbeat() query missing %q:\n%s", want, query)
+		}
+	}
+	if got, want := db.execs[0].args[0], queue.Now().Add(queue.LeaseDuration); got != want {
+		t.Fatalf("claim_until arg = %v, want %v", got, want)
+	}
+}
+
+func TestProjectorQueueHeartbeatRejectsStaleClaim(t *testing.T) {
+	t.Parallel()
+
+	db := &recordingExecQueryer{result: projectorRowsAffectedResult{rowsAffected: 0}}
+	queue := NewProjectorQueue(db, "projector-1", 30*time.Second)
+	work := projector.ScopeGenerationWork{
+		Scope: scope.IngestionScope{ScopeID: "scope-123"},
+		Generation: scope.ScopeGeneration{
+			GenerationID: "generation-456",
+		},
+	}
+
+	err := queue.Heartbeat(context.Background(), work)
+	if err == nil {
+		t.Fatal("Heartbeat() error = nil, want non-nil")
+	}
+	if !errors.Is(err, ErrProjectorClaimRejected) {
+		t.Fatalf("Heartbeat() error = %v, want %v", err, ErrProjectorClaimRejected)
+	}
+}
+
 var errProjectionFailed = &testError{message: "projection failed"}
 
 type testError struct {
@@ -234,6 +295,7 @@ func (e *retryableTestError) Retryable() bool {
 type recordingExecQueryer struct {
 	beginCalls int
 	execs      []recordedExecCall
+	result     sql.Result
 }
 
 type recordedExecCall struct {
@@ -246,6 +308,9 @@ func (r *recordingExecQueryer) ExecContext(_ context.Context, query string, args
 		query: query,
 		args:  append([]any(nil), args...),
 	})
+	if r.result != nil {
+		return r.result, nil
+	}
 	return proofResult{}, nil
 }
 
@@ -257,6 +322,13 @@ func (r *recordingExecQueryer) Begin(context.Context) (Transaction, error) {
 	r.beginCalls++
 	return recordingTransaction{parent: r}, nil
 }
+
+type projectorRowsAffectedResult struct {
+	rowsAffected int64
+}
+
+func (r projectorRowsAffectedResult) LastInsertId() (int64, error) { return 0, nil }
+func (r projectorRowsAffectedResult) RowsAffected() (int64, error) { return r.rowsAffected, nil }
 
 type recordingTransaction struct {
 	parent *recordingExecQueryer

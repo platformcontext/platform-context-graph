@@ -146,6 +146,8 @@ func buildIngesterProjectorService(
 		FactStore:             postgres.NewFactStore(database),
 		Runner:                buildIngesterProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, getenv, tracer, instruments),
 		WorkSink:              projectorQueue,
+		Heartbeater:           projectorQueue,
+		HeartbeatInterval:     projectorHeartbeatInterval(projectorQueue.LeaseDuration),
 		Tracer:                tracer,
 		Instruments:           instruments,
 		Logger:                logger,
@@ -156,6 +158,20 @@ func buildIngesterProjectorService(
 	}
 	svc.InitLargeGenSemaphore()
 	return svc, nil
+}
+
+func projectorHeartbeatInterval(leaseDuration time.Duration) time.Duration {
+	if leaseDuration <= 0 {
+		return time.Minute
+	}
+	interval := leaseDuration / 3
+	if interval <= 0 {
+		return time.Second
+	}
+	if interval > time.Minute {
+		return time.Minute
+	}
+	return interval
 }
 
 func projectorWorkerCount(getenv func(string) string) int {

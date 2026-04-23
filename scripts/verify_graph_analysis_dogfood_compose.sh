@@ -16,6 +16,10 @@ INDEX_STATUS_FILE="$TMP_DIR/index-status.json"
 GRAPH_QUERY_FILE="$TMP_DIR/graph-query.txt"
 KEEP_STACK="${PCG_KEEP_COMPOSE_STACK:-false}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-pcg-graph-dogfood-$$}"
+# These *_BASE candidates are the preferred host ports for this wrapper. The
+# compose verification runtime remaps them to free ports when the preferred
+# values are already taken, then writes the final assignments back into the
+# exported PCG_* variables used below.
 API_PORT="${PCG_HTTP_PORT:-8080}"
 NEO4J_BOLT_PORT="${NEO4J_BOLT_PORT:-7687}"
 JAEGER_PORT="${JAEGER_UI_PORT:-16686}"

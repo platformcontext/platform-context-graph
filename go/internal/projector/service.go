@@ -49,6 +49,12 @@ type ProjectorWorkSink interface {
 	Fail(context.Context, ScopeGenerationWork, error) error
 }
 
+// ProjectorWorkHeartbeater renews a claimed projector work item while a worker
+// is still actively loading facts or projecting the generation.
+type ProjectorWorkHeartbeater interface {
+	Heartbeat(context.Context, ScopeGenerationWork) error
+}
+
 // FactCounter returns the fact count for a scope generation without loading data.
 // Used by the large-generation semaphore to classify repos before loading.
 type FactCounter interface {
@@ -62,11 +68,15 @@ type Service struct {
 	FactStore    FactStore
 	Runner       ProjectionRunner
 	WorkSink     ProjectorWorkSink
-	Wait         func(context.Context, time.Duration) error
-	Tracer       trace.Tracer           // optional
-	Instruments  *telemetry.Instruments // optional
-	Logger       *slog.Logger           // optional
-	Workers      int                    // concurrent worker count; 0 or 1 means sequential
+	Heartbeater  ProjectorWorkHeartbeater
+	// HeartbeatInterval controls how often a claimed projector work item renews
+	// its lease while projection is still running. Zero means no heartbeats.
+	HeartbeatInterval time.Duration
+	Wait              func(context.Context, time.Duration) error
+	Tracer            trace.Tracer           // optional
+	Instruments       *telemetry.Instruments // optional
+	Logger            *slog.Logger           // optional
+	Workers           int                    // concurrent worker count; 0 or 1 means sequential
 
 	// Large-generation semaphore: limits how many large repos can be
 	// projected concurrently while letting small/medium repos proceed
@@ -198,6 +208,11 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 		defer span.End()
 	}
 
+	ctx, stopHeartbeat := s.startHeartbeat(ctx, work, workerID)
+	defer func() {
+		_ = stopHeartbeat()
+	}()
+
 	// Large-generation semaphore: count facts first, acquire sem if large.
 	releaseSem := s.acquireLargeGenSem(ctx, work, workerID)
 	if releaseSem != nil {
@@ -206,6 +221,9 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 
 	factsForGeneration, err := s.FactStore.LoadFacts(ctx, work)
 	if err != nil {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+			return errors.Join(err, heartbeatErr)
+		}
 		s.recordProjectionResult(ctx, work, start, "failed", 0, err, workerID)
 		if failErr := s.WorkSink.Fail(ctx, work, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail projector work: %w", failErr))
@@ -215,11 +233,17 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 
 	result, err := s.Runner.Project(ctx, work.Scope, work.Generation, factsForGeneration)
 	if err != nil {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+			return errors.Join(err, heartbeatErr)
+		}
 		s.recordProjectionResult(ctx, work, start, "failed", len(factsForGeneration), err, workerID)
 		if failErr := s.WorkSink.Fail(ctx, work, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail projector work: %w", failErr))
 		}
 		return nil
+	}
+	if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+		return heartbeatErr
 	}
 
 	if err := s.WorkSink.Ack(ctx, work, result); err != nil {
@@ -270,6 +294,58 @@ func (s Service) recordProjectionResult(ctx context.Context, work ScopeGeneratio
 		} else {
 			s.Logger.InfoContext(ctx, "projection succeeded", logAttrs...)
 		}
+	}
+}
+
+type projectorHeartbeatStop func() error
+
+func (s Service) startHeartbeat(ctx context.Context, work ScopeGenerationWork, workerID int) (context.Context, projectorHeartbeatStop) {
+	if s.Heartbeater == nil || s.HeartbeatInterval <= 0 {
+		return ctx, func() error { return nil }
+	}
+
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		ticker := time.NewTicker(s.HeartbeatInterval)
+		defer ticker.Stop()
+
+		var heartbeatErr error
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				done <- heartbeatErr
+				return
+			case <-ticker.C:
+				if err := s.Heartbeater.Heartbeat(heartbeatCtx, work); err != nil {
+					heartbeatErr = fmt.Errorf("heartbeat projector work: %w", err)
+					if s.Logger != nil {
+						scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
+						logAttrs := make([]any, 0, len(scopeAttrs)+4)
+						for _, a := range scopeAttrs {
+							logAttrs = append(logAttrs, a)
+						}
+						logAttrs = append(logAttrs, slog.Int("worker_id", workerID))
+						logAttrs = append(logAttrs, slog.Duration("heartbeat_interval", s.HeartbeatInterval))
+						logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseProjection))
+						logAttrs = append(logAttrs, telemetry.FailureClassAttr("lease_heartbeat_failure"))
+						logAttrs = append(logAttrs, slog.String("error", heartbeatErr.Error()))
+						s.Logger.ErrorContext(heartbeatCtx, "projector lease heartbeat failed", logAttrs...)
+					}
+					cancel()
+				}
+			}
+		}
+	}()
+
+	var once sync.Once
+	return heartbeatCtx, func() error {
+		var heartbeatErr error
+		once.Do(func() {
+			cancel()
+			heartbeatErr = <-done
+		})
+		return heartbeatErr
 	}
 }
 

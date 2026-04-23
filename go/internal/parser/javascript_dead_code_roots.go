@@ -83,6 +83,10 @@ func javaScriptRegisteredDeadCodeRootKinds(
 	return registered
 }
 
+// javaScriptExpressServerSymbols extracts the typed server_symbols contract
+// emitted by detectExpressSemantics. The detector intentionally requires the
+// stable []string shape so registration-driven dead-code roots fail closed if
+// the upstream helper changes shape.
 func javaScriptExpressServerSymbols(express map[string]any) []string {
 	if len(express) == 0 {
 		return nil

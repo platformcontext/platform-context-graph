@@ -20,6 +20,20 @@ func (m *mockExecutor) Execute(_ context.Context, stmt Statement) error {
 	return m.err
 }
 
+type selectiveErrorExecutor struct {
+	calls []Statement
+	match func(Statement) bool
+	err   error
+}
+
+func (m *selectiveErrorExecutor) Execute(_ context.Context, stmt Statement) error {
+	m.calls = append(m.calls, stmt)
+	if m.match != nil && m.match(stmt) {
+		return m.err
+	}
+	return nil
+}
+
 // mockGroupExecutor implements both Executor and GroupExecutor for testing
 // the atomic canonical write path.
 type mockGroupExecutor struct {
@@ -130,6 +144,48 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 		if phaseOrder[i] != expected[i] {
 			t.Fatalf("phase[%d] = %q, want %q (full order: %v)", i, phaseOrder[i], expected[i], phaseOrder)
 		}
+	}
+}
+
+func TestCanonicalNodeWriterWriteReportsSequentialPhaseOnFailure(t *testing.T) {
+	t.Parallel()
+
+	exec := &selectiveErrorExecutor{
+		match: func(stmt Statement) bool {
+			return strings.Contains(stmt.Cypher, "IMPORTS")
+		},
+		err: errors.New("boom"),
+	}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID:    "repo-1",
+			Name:      "my-repo",
+			Path:      "/repos/my-repo",
+			LocalPath: "/repos/my-repo",
+			RemoteURL: "https://github.com/org/my-repo",
+			RepoSlug:  "org/my-repo",
+			HasRemote: true,
+		},
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", Name: "main.go", Language: "go", RepoID: "repo-1", DirPath: "/repos/my-repo/src"},
+		},
+		Imports: []projector.ImportRow{
+			{FilePath: "/repos/my-repo/src/main.go", ModuleName: "fmt", ImportedName: "fmt", LineNumber: 3},
+		},
+	}
+
+	err := writer.Write(context.Background(), mat)
+	if err == nil {
+		t.Fatal("Write() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "canonical sequential write (structural_edges)") {
+		t.Fatalf("Write() error = %q, want structural_edges phase context", err.Error())
 	}
 }
 

@@ -140,6 +140,30 @@ uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
 git diff --check
 ```
 
+### Runtime Repro Hygiene
+
+Before any dogfood, local-authoritative, Compose, or other runtime validation
+that executes `go/bin/pcg`, `go/bin/pcg-ingester`, `go/bin/pcg-api`, or
+similar local binaries, ALWAYS rebuild the binaries first so the run reflects
+the current source tree rather than a stale prior build.
+
+For this repo that usually means:
+
+```bash
+cd go && go build -o ./bin/pcg ./cmd/pcg && go build -o ./bin/pcg-ingester ./cmd/ingester
+```
+
+When building or testing NornicDB binaries from the local fork/reference repos
+on this machine, ALWAYS use the actual no-local-LLM build tags:
+
+```bash
+go test -tags 'noui nolocalllm' ./...
+go build -tags 'noui nolocalllm' ...
+```
+
+Do not use a plain NornicDB build/test command first and then rediscover the
+missing local-LLM dependency the hard way.
+
 ## Facts-First Flow
 
 The canonical Git path is:
