@@ -18,6 +18,15 @@
 
 ---
 
+## Evaluation Status
+
+| Phase | Status | Evidence | Remaining |
+| --- | --- | --- | --- |
+| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating | install path, sidecar lifecycle, authoritative attach validation |
+| Operator CLI surface | In progress | current branch `pcg graph status` and stubbed `pcg graph start|stop|logs|upgrade`, `pcg install nornicdb` | real installer and sidecar lifecycle wiring |
+| Adapter conformance | Not started | — | `GraphQuery`/`GraphWrite` adapter, syntax verification, matrix runs |
+| Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
+
 ## Context
 
 PCG's authoritative graph backend is Neo4j. That choice is load-bearing for
