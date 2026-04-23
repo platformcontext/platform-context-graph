@@ -36,6 +36,7 @@ func (e *Engine) parseGo(
 	payload["embedded_sql_queries"] = extractGoEmbeddedSQLQueries(string(source))
 	root := tree.RootNode()
 	importAliases := goImportAliasIndex(root, source)
+	registeredRootKinds := goRegisteredDeadCodeRootKinds(root, source, importAliases)
 	scope := options.normalizedVariableScope()
 
 	walkNamed(root, func(node *tree_sitter.Node) {
@@ -60,7 +61,7 @@ func (e *Engine) parseGo(
 			if classContext := goReceiverContext(node, source); classContext != "" {
 				item["class_context"] = classContext
 			}
-			if rootKinds := goDeadCodeRootKinds(node, source, importAliases); len(rootKinds) > 0 {
+			if rootKinds := goDeadCodeRootKinds(node, source, importAliases, registeredRootKinds); len(rootKinds) > 0 {
 				item["dead_code_root_kinds"] = rootKinds
 			}
 			if options.IndexSource {

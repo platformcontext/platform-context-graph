@@ -71,12 +71,11 @@ Today there are two truthful install paths:
 - explicit `--from` install for everything else
 
 The current pinned bare install is intentionally narrow: it resolves only
-real published assets. As of 2026-04-23 that means upstream
-`orneryd/NornicDB` macOS arm64 `lite.pkg` by default, plus
-`pcg install nornicdb --full` for the matching `full.pkg`, for `dev` builds
-of PCG. The
-linuxdynasty fork still does not publish native release assets, so grouped
-write conformance remains a manual `--from` path.
+real published assets. As of 2026-04-23 that means the rollback-fixed
+linuxdynasty fork release `v1.0.42-hotfix` macOS arm64 headless tarball for
+`dev` builds of PCG. Bare pinned `--full` is not currently available because
+the embedded manifest does not yet publish a matching fixed full-binary
+artifact. The full binary remains an explicit `--from` path.
 
 Explicit `--from` installs can consume any of these artefacts:
 
@@ -94,7 +93,6 @@ budget. The value uses Go duration syntax such as `45s`, `2m`, or `2m30s`.
 # Bare pinned install when the host platform is covered by the embedded
 # release manifest.
 pcg install nornicdb
-pcg install nornicdb --full
 
 pcg install nornicdb --from /absolute/path/to/nornicdb-headless
 
@@ -121,9 +119,8 @@ The command performs, in order:
 
 1. If `--from` is omitted, resolves the host OS / architecture against the
    embedded pinned release manifest and chooses the recorded URL + SHA-256.
-   Headless is the default; `--full` switches bare install to the matching
-   non-headless published artefact when the manifest includes one for the
-   current host.
+   Headless is the default; `--full` only works when the manifest includes a
+   matching non-headless published artefact for the current host.
 2. Resolves `--from` to a local path or downloads the remote artefact to a
    temporary file. Remote downloads honor `cmd.Context()` cancellation and use
    `PCG_NORNICDB_INSTALL_TIMEOUT` when set, otherwise `30s`.
@@ -200,11 +197,11 @@ Current caveats:
 - the manifest is embedded in PCG, not yet fetched remotely
 - only platforms with real pinned assets are supported
 - signature verification is not implemented yet
-- the current `dev` manifest entry targets upstream `orneryd/NornicDB`
-  `v1.0.42-hotfix` macOS arm64 `lite.pkg` by default and `full.pkg` when
-  `--full` is requested
-- the fork-backed fixed grouped-write binary is still a manual `--from`
-  install until native fork releases exist or the fix lands upstream
+- the current `dev` manifest entry targets the rollback-fixed
+  `linuxdynasty/NornicDB` `v1.0.42-hotfix` macOS arm64
+  `nornicdb-headless-darwin-arm64.tar.gz`
+- bare pinned `--full` is intentionally unavailable until a matching
+  release-backed fixed full artefact exists
 
 ## Planned manifest hardening
 

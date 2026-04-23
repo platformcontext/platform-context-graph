@@ -52,7 +52,7 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.Neo4j.Run(r.Context(), deadCodeGraphCypher(req.RepoID != ""), deadCodeGraphParams(req.RepoID, req.Limit+1))
+	rows, err := h.Neo4j.Run(r.Context(), buildDeadCodeGraphCypher(req.RepoID != "", h.graphBackend()), deadCodeGraphParams(req.RepoID, req.Limit+1))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -79,13 +79,20 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 	}, BuildTruthEnvelope(h.profile(), "code_quality.dead_code", TruthBasisHybrid, "resolved from graph-backed dead-code candidates with partial root modeling"))
 }
 
-func deadCodeGraphCypher(hasRepoID bool) string {
+func buildDeadCodeGraphCypher(hasRepoID bool, backend GraphBackend) string {
 	cypher := `
 		MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
-		WHERE NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)
 	`
-	if hasRepoID {
-		cypher += ` AND r.id = $repo_id`
+	if backend == GraphBackendNornicDB {
+		cypher += ` WHERE NOT EXISTS { MATCH (e)<-[:CALLS|IMPORTS|REFERENCES]-() }`
+		if hasRepoID {
+			cypher += ` AND r.id = $repo_id`
+		}
+	} else {
+		cypher += ` WHERE NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)`
+		if hasRepoID {
+			cypher += ` AND r.id = $repo_id`
+		}
 	}
 	cypher += `
 		RETURN e.id as entity_id, e.name as name, labels(e) as labels,
@@ -378,14 +385,16 @@ func buildDeadCodeAnalysis(results []map[string]any, excluded []string, stats de
 		"user_overrides_applied":               len(excluded) > 0,
 		"modeled_entrypoints":                  []string{"go.main", "go.init", "python.__main__"},
 		"modeled_framework_roots": []string{
+			"go.cobra_run_registration",
 			"go.cobra_run_signature",
+			"go.net_http_handler_registration",
 			"go.net_http_handler_signature",
 			"go.controller_runtime_reconcile_signature",
 		},
 		"modeled_public_api": []string{"go.exported_non_internal_package_symbol"},
 		"notes": []string{
 			"dead-code remains derived until broader framework, public-API, and reflection root models land",
-			"go CLI, stdlib HTTP, and controller-runtime reconcile signatures are modeled as derived framework roots",
+			"go CLI registrations/signatures, stdlib HTTP registrations/signatures, and controller-runtime reconcile signatures are modeled as derived framework roots",
 			"analysis reports whether a Go framework root came from parser metadata or the legacy source fallback path",
 			"go framework-root signature checks require entity source; missing source leaves those roots unevaluated",
 			"go exported symbols outside cmd/, internal/, and vendor/ are treated as public API roots by default",

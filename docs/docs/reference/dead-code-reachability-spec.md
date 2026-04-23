@@ -28,12 +28,18 @@ Every dead-code analysis must classify roots into one or more of these groups:
   - equivalent command registrations
   - Go direct Cobra run-signature handlers are currently modeled as derived
     roots via `*cobra.Command` + `[]string` function signatures
+  - Go direct Cobra `Run` / `RunE` registrations are also currently modeled as
+    derived roots when the Go parser sees `cobra.Command{Run|RunE: fn}` or a
+    proven `cmd.Run|RunE = fn` assignment in the same file
 - HTTP and RPC roots
   - route handlers
   - FastAPI/Django/Flask registrations
   - gRPC service handlers
   - Go stdlib HTTP handlers are currently modeled as derived roots via
     `http.ResponseWriter` + `*http.Request` function signatures
+  - Go stdlib HTTP registrations are also currently modeled as derived roots
+    when the Go parser sees direct `http.HandleFunc`, `http.Handle`, or a
+    proven `ServeMux` registration in the same file
 - background worker roots
   - Celery tasks
   - Sidekiq jobs
@@ -141,11 +147,15 @@ Minimum initial coverage should include:
 Current branch status:
 
 - Go direct Cobra run signatures are modeled
+- Go direct Cobra `Run` / `RunE` registrations are modeled
 - Go stdlib HTTP handler signatures are modeled
+- Go stdlib HTTP direct and proven `ServeMux` registrations are modeled
 - Go controller-runtime `Reconcile` signatures are modeled
 - those Go signature roots are now emitted by the Go parser into entity
-  metadata when imports and signatures match directly; query-time source
-  heuristics remain as a fallback while broader registry coverage lands
+  metadata when imports, registrations, and signatures match directly; mixed
+  native+SCIP indexing now preserves `dead_code_root_kinds` through the
+  supplement merge path; query-time source heuristics remain as a fallback
+  while broader registry coverage lands
 - broader Go router, webhook, worker, reflection, and build-tag roots remain
   open, so dead-code truth stays `derived`
 

@@ -135,17 +135,40 @@ is functionally live and comfortably below the current `under 2 seconds`
 target for a synthetic traversal workload. It is still not a substitute for
 active-repo transitive-caller, dead-code, or memory-budget proof.
 
+The `local_authoritative` dead-code path now also has a dedicated manual
+smoke:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeDeadCodeSyntheticEnvelope -count=1 -v
+```
+
+That gate boots the real local host, embedded Postgres, and managed NornicDB
+sidecar, seeds a synthetic repository/file/function containment graph plus one
+live `CALLS` edge through the shared Bolt driver path, and exercises the real
+`/api/v0/code/dead-code` handler in `local_authoritative`.
+
+Recorded sample on 2026-04-23:
+
+- synthetic dead-code p95: `3.174125ms`
+
+This smoke confirms that the backend-routed NornicDB dead-code candidate query
+and derived-policy filter path are functionally live and comfortably below the
+current `under 10 seconds` target for a synthetic workload. It is still not a
+substitute for active-repo dead-code, reducer-throughput, or memory-budget
+proof.
+
 ## Pending Perf Gates
 
 The following targets remain open until their own perf gates land:
 
 - **Active-repo dead-code scan** — target `under 10 seconds` (see
-  `local_authoritative` targets). A dedicated
-  `TestLocalAuthoritativeDeadCodeSyntheticEnvelope` gate behind
-  `PCG_LOCAL_AUTHORITATIVE_PERF=true` is the intended shape; not yet
-  implemented. Until the gate exists the `code_quality.dead_code` capability
-  matrix row stays `derived` with a bounded `limit` + `truncated` signal
-  rather than claiming a measured p95.
+  `local_authoritative` targets). The synthetic
+  `TestLocalAuthoritativeDeadCodeSyntheticEnvelope` gate now exists and proves
+  the handler path is live, but active-repo numbers are still required before
+  the `code_quality.dead_code` capability can claim anything stronger than the
+  current derived truth contract.
 - **Reducer bulk write throughput** — target `under 10 seconds` for 50K
   facts.
 - **Idle and active memory budgets** for the combined PCG host + graph

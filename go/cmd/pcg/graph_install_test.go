@@ -333,6 +333,49 @@ func TestInstallNornicDBUsesPinnedFullReleaseWhenRequested(t *testing.T) {
 	}
 }
 
+func TestInstallNornicDBWithoutSourceRejectsMissingPinnedFullAsset(t *testing.T) {
+	originalManifest := graphPinnedNornicDBReleaseManifest
+	originalHostOS := graphInstallHostOS
+	originalHostArch := graphInstallHostArch
+	t.Cleanup(func() {
+		graphPinnedNornicDBReleaseManifest = originalManifest
+		graphInstallHostOS = originalHostOS
+		graphInstallHostArch = originalHostArch
+	})
+
+	t.Setenv("PCG_HOME", t.TempDir())
+	graphInstallHostOS = "darwin"
+	graphInstallHostArch = "arm64"
+	graphPinnedNornicDBReleaseManifest = []byte(`{
+  "version": 1,
+  "backend": "nornicdb",
+  "releases": [
+    {
+      "pcg_version": "dev",
+      "release_tag": "v1.0.42-hotfix",
+      "assets": [
+        {
+          "os": "darwin",
+          "arch": "arm64",
+          "format": "tar.gz",
+          "headless": true,
+          "url": "https://example.com/nornicdb-headless-darwin-arm64.tar.gz",
+          "sha256": "deadbeef"
+        }
+      ]
+    }
+  ]
+}`)
+
+	_, err := installNornicDB(installNornicDBOptions{Full: true})
+	if err == nil {
+		t.Fatal("installNornicDB() error = nil, want missing full-asset error")
+	}
+	if !strings.Contains(err.Error(), "no pinned full NornicDB release asset") {
+		t.Fatalf("installNornicDB() error = %q, want missing full-asset guidance", err.Error())
+	}
+}
+
 func TestInstallNornicDBWithoutSourceRejectsUnsupportedHost(t *testing.T) {
 	originalManifest := graphPinnedNornicDBReleaseManifest
 	originalHostOS := graphInstallHostOS
