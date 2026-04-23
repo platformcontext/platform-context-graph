@@ -29,12 +29,9 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 		WriteError(w, http.StatusBadRequest, "entity_id or name is required")
 		return
 	}
-	resolvedRepoID, err := h.resolveRepositorySelector(r.Context(), req.RepoID)
-	if err != nil && strings.TrimSpace(req.RepoID) != "" {
-		WriteError(w, http.StatusBadRequest, err.Error())
+	if !h.applyRepositorySelector(w, r, &req.RepoID) {
 		return
 	}
-	req.RepoID = resolvedRepoID
 
 	direction, err := normalizeRelationshipDirection(req.Direction)
 	if err != nil {

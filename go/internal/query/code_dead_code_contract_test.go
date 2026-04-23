@@ -295,6 +295,74 @@ func TestHandleDeadCodeExcludesGoPublicAPIRootsOutsideInternalPackages(t *testin
 	}
 }
 
+func TestHandleDeadCodeRespectsLimitAndReportsTruncation(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Profile: ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, _ string, params map[string]any) ([]map[string]any, error) {
+				if got, want := params["repo_id"], "repo-1"; got != want {
+					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+				}
+				if got, want := params["limit"], 3; got != want {
+					t.Fatalf("params[limit] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{
+					{
+						"entity_id": "fn-1", "name": "alpha", "labels": []any{"Function"},
+						"file_path": "pkg/payments/a.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+					},
+					{
+						"entity_id": "fn-2", "name": "beta", "labels": []any{"Function"},
+						"file_path": "pkg/payments/b.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+					},
+					{
+						"entity_id": "fn-3", "name": "gamma", "labels": []any{"Function"},
+						"file_path": "pkg/payments/c.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+					},
+				}, nil
+			},
+		},
+		Content: fakeDeadCodeContentStore{
+			entities: map[string]EntityContent{
+				"fn-1": {EntityID: "fn-1", RelativePath: "pkg/payments/a.go", EntityType: "Function", EntityName: "alpha", Language: "go", SourceCache: "func alpha() {}"},
+				"fn-2": {EntityID: "fn-2", RelativePath: "pkg/payments/b.go", EntityType: "Function", EntityName: "beta", Language: "go", SourceCache: "func beta() {}"},
+				"fn-3": {EntityID: "fn-3", RelativePath: "pkg/payments/c.go", EntityType: "Function", EntityName: "gamma", Language: "go", SourceCache: "func gamma() {}"},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/dead-code",
+		bytes.NewBufferString(`{"repo_id":"repo-1","limit":2}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	results, ok := resp["results"].([]any)
+	if !ok {
+		t.Fatalf("results type = %T, want []any", resp["results"])
+	}
+	if got, want := len(results), 2; got != want {
+		t.Fatalf("len(results) = %d, want %d", got, want)
+	}
+	if got, want := resp["truncated"], true; got != want {
+		t.Fatalf("resp[truncated] = %#v, want %#v", got, want)
+	}
+}
+
 func equalStringSlices(got, want []string) bool {
 	if len(got) != len(want) {
 		return false

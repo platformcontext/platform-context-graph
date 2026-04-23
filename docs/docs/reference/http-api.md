@@ -505,6 +505,7 @@ Example dead-code workflow:
 ```json
 {
   "repo_id": "payments",
+  "limit": 200,
   "exclude_decorated_with": ["@route", "@app.route"]
 }
 ```
@@ -519,7 +520,9 @@ response is intentionally `derived`, not `exact`, until the broader framework,
 public-API, reflection, and user-configured root registry from the
 reachability spec is implemented. The response body now also includes an
 `analysis` object that reports the root categories currently modeled and
-whether tests/generated code were excluded.
+whether tests/generated code were excluded. `limit` defaults to `100` and is
+capped at `500`. The response also includes `truncated=true` when the bounded
+dead-code scan found more candidates than were returned.
 
 ## Content API
 

@@ -11,8 +11,14 @@ import (
 
 type deadCodeRequest struct {
 	RepoID               string   `json:"repo_id"`
+	Limit                int      `json:"limit"`
 	ExcludeDecoratedWith []string `json:"exclude_decorated_with"`
 }
+
+const (
+	deadCodeDefaultLimit = 100
+	deadCodeMaxLimit     = 500
+)
 
 // handleDeadCode finds graph-backed dead-code candidates and then applies the
 // current default reachability policy before returning a derived result.
@@ -36,14 +42,17 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	resolvedRepoID, err := h.resolveRepositorySelector(r.Context(), req.RepoID)
-	if err != nil && strings.TrimSpace(req.RepoID) != "" {
-		WriteError(w, http.StatusBadRequest, err.Error())
+	if req.Limit <= 0 {
+		req.Limit = deadCodeDefaultLimit
+	}
+	if req.Limit > deadCodeMaxLimit {
+		req.Limit = deadCodeMaxLimit
+	}
+	if !h.applyRepositorySelector(w, r, &req.RepoID) {
 		return
 	}
-	req.RepoID = resolvedRepoID
 
-	rows, err := h.Neo4j.Run(r.Context(), deadCodeGraphCypher(req.RepoID != ""), deadCodeGraphParams(req.RepoID))
+	rows, err := h.Neo4j.Run(r.Context(), deadCodeGraphCypher(req.RepoID != ""), deadCodeGraphParams(req.RepoID, req.Limit+1))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -56,11 +65,17 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 	}
 	results = filterDeadCodeResultsByDefaultPolicy(results, contentByID)
 	results = filterResultsByDecoratorExclusions(results, req.ExcludeDecoratedWith)
+	truncated := len(rows) > req.Limit
+	if len(results) > req.Limit {
+		results = results[:req.Limit]
+	}
 
 	WriteSuccess(w, r, http.StatusOK, map[string]any{
-		"repo_id":  req.RepoID,
-		"results":  results,
-		"analysis": buildDeadCodeAnalysis(results, req.ExcludeDecoratedWith),
+		"repo_id":   req.RepoID,
+		"limit":     req.Limit,
+		"truncated": truncated,
+		"results":   results,
+		"analysis":  buildDeadCodeAnalysis(results, req.ExcludeDecoratedWith),
 	}, BuildTruthEnvelope(h.profile(), "code_quality.dead_code", TruthBasisHybrid, "resolved from graph-backed dead-code candidates with partial root modeling"))
 }
 
@@ -81,16 +96,17 @@ func deadCodeGraphCypher(hasRepoID bool) string {
 		       e.end_line as end_line,
 ` + graphSemanticMetadataProjection() + `
 		ORDER BY f.relative_path, e.name
-		LIMIT 100
+		LIMIT $limit
 	`
 	return cypher
 }
 
-func deadCodeGraphParams(repoID string) map[string]any {
-	if strings.TrimSpace(repoID) == "" {
-		return map[string]any{}
+func deadCodeGraphParams(repoID string, limit int) map[string]any {
+	params := map[string]any{"limit": limit}
+	if strings.TrimSpace(repoID) != "" {
+		params["repo_id"] = strings.TrimSpace(repoID)
 	}
-	return map[string]any{"repo_id": strings.TrimSpace(repoID)}
+	return params
 }
 
 func (h *CodeHandler) buildDeadCodeResults(

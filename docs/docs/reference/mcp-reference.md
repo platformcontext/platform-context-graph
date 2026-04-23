@@ -51,7 +51,7 @@ These are the most commonly used tools for understanding code.
 | **`analyze_code_relationships`** | The swiss-army knife for call graphs and dependencies. | "Find all callers of `process_payment`." |
 | **`calculate_cyclomatic_complexity`** | Measure function complexity. | "What is the complexity of `main`?" |
 | **`find_most_complex_functions`** | List the hardest-to-maintain functions. | "Show me the 5 most complex functions." |
-| **`find_dead_code`** | Identify derived dead-code candidates, optionally scoped by `repo_id` as a canonical ID, repository name, repo slug, or indexed path, with default entrypoint, Go public-API, test, and generated-code exclusions plus optional decorator-owned entry-point exclusions. | "Find dead code in this repo, but ignore `@route`." |
+| **`find_dead_code`** | Identify derived dead-code candidates, optionally scoped by `repo_id` as a canonical ID, repository name, repo slug, or indexed path, with optional `limit`, default entrypoint, Go public-API, test, and generated-code exclusions, optional decorator-owned entry-point exclusions, and a `truncated` signal when the bounded result window is cut off. | "Find dead code in this repo, but ignore `@route`." |
 
 ## Story & Context
 

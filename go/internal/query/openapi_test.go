@@ -253,6 +253,9 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if _, ok := deadCodeSchema["repo_id"]; !ok {
 		t.Fatal("code/dead-code request schema missing repo_id")
 	}
+	if _, ok := deadCodeSchema["limit"]; !ok {
+		t.Fatal("code/dead-code request schema missing limit")
+	}
 	if _, ok := deadCodeSchema["exclude_decorated_with"]; !ok {
 		t.Fatal("code/dead-code request schema missing exclude_decorated_with")
 	}
@@ -262,6 +265,9 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	deadCodeResponse := mustMapField(t, mustMapField(t, deadCodeContent, "schema"), "properties")
 	if _, ok := deadCodeResponse["analysis"]; !ok {
 		t.Fatal("code/dead-code response schema missing analysis")
+	}
+	if _, ok := deadCodeResponse["truncated"]; !ok {
+		t.Fatal("code/dead-code response schema missing truncated")
 	}
 	deadCodeAnalysis := mustMapField(t, mustMapField(t, deadCodeResponse, "analysis"), "properties")
 	if _, ok := deadCodeAnalysis["modeled_public_api"]; !ok {
