@@ -1,0 +1,39 @@
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 25,105-112,295-299,339-342
+docs/docs/reference/graph-backend-operations.md
+  e27ce815bbe89792 128-149
+go/internal/graph/schema_test.go
+  e27ce815bbe89792 43-79,177-189,282-322
+go/cmd/bootstrap-data-plane/main_test.go
+  e27ce815bbe89792 26,81,86-88,106-140,248
+docs/docs/architecture.md
+  e27ce815bbe89792 276-281
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 33,350-354
+go/internal/graph/schema.go
+  e27ce815bbe89792 13-24,226-237,243-245,256,265-271,278-281,287,335-358
+go/cmd/pcg/nornicdb_syntax_test.go
+  e27ce815bbe89792 14,64-74
+go/cmd/bootstrap-data-plane/main.go
+  e27ce815bbe89792 37,56,105-109,112,117-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "5f5a781eb6c3fc349ceedb828324a4c0ab659157",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 290,
+      "total_deletions": 18,
+      "accepted_lines": 290,
+      "overriden_lines": 0
+    }
+  }
+}
