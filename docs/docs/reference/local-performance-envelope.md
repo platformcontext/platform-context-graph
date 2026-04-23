@@ -135,6 +135,25 @@ is functionally live and comfortably below the current `under 2 seconds`
 target for a synthetic traversal workload. It is still not a substitute for
 active-repo transitive-caller, dead-code, or memory-budget proof.
 
+## Pending Perf Gates
+
+The following targets remain open until their own perf gates land:
+
+- **Active-repo dead-code scan** — target `under 10 seconds` (see
+  `local_authoritative` targets). A dedicated
+  `TestLocalAuthoritativeDeadCodeSyntheticEnvelope` gate behind
+  `PCG_LOCAL_AUTHORITATIVE_PERF=true` is the intended shape; not yet
+  implemented. Until the gate exists the `code_quality.dead_code` capability
+  matrix row stays `derived` with a bounded `limit` + `truncated` signal
+  rather than claiming a measured p95.
+- **Reducer bulk write throughput** — target `under 10 seconds` for 50K
+  facts.
+- **Idle and active memory budgets** for the combined PCG host + graph
+  backend footprint.
+- **Active-repo transitive-caller and active-repo call-chain** — current
+  evidence is synthetic only; active-repo numbers are required before
+  promoting the matrix entries past `derived`.
+
 ## Review Rule
 
 If the local host misses these targets, the docs and matrix should reflect the
