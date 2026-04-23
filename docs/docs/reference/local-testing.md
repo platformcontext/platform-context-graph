@@ -145,6 +145,33 @@ smoke. That switch is reserved for adapter conformance runs that intentionally
 exercise NornicDB's Bolt explicit transaction path and verify rollback,
 timeout, and no-partial-write behavior.
 
+### Local-Authoritative Startup Envelope Smoke
+
+Use this gate when touching local-host startup ordering, embedded Postgres
+boot, NornicDB sidecar boot, or owner-record readiness for
+`local_authoritative`.
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeStartupEnvelope -count=1 -v
+```
+
+The smoke passes when:
+
+- the first startup reaches the owner-record plus ingester handoff in under
+  15 seconds
+- the second startup against the same workspace data root reaches the same
+  readiness point in under 5 seconds
+- the owner record proves `profile=local_authoritative` and
+  `graph_backend=nornicdb` before the ingester is launched
+
+Recorded sample on 2026-04-23 against the pinned bare-install binary at
+`/tmp/pcg-bare-install-smoke/bin/nornicdb-headless`:
+
+- cold start: `9.045253708s`
+- warm restart: `490.996625ms`
+
 ### NornicDB Grouped-Write Safety Probe
 
 Use this opt-in gate when touching NornicDB grouped canonical writes or the

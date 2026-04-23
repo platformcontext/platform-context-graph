@@ -63,6 +63,30 @@ processes already attached.
 - parse and projection pools must be bounded
 - the runtime must prefer bounded lag over unbounded CPU or memory growth
 
+## Current Startup Evidence
+
+The `local_authoritative` startup envelope now has a dedicated manual gate:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeStartupEnvelope -count=1 -v
+```
+
+That gate boots the real local host, embedded Postgres, schema bootstrap, and
+managed NornicDB sidecar, then measures readiness at the owner-record and
+ingester handoff. It runs twice against the same workspace data root so the
+first pass captures cold start and the second pass captures warm restart.
+
+Recorded sample on 2026-04-23:
+
+- cold start: `9.045253708s`
+- warm restart: `490.996625ms`
+
+These measurements pass the current `local_authoritative` startup targets.
+Broader query-latency, dead-code, reducer-throughput, and memory-budget
+targets remain open until their own perf gates land.
+
 ## Review Rule
 
 If the local host misses these targets, the docs and matrix should reflect the
