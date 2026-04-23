@@ -75,10 +75,12 @@ pcg analyze complexity
 
 ### `analyze dead-code`
 
-Find entities with zero incoming `CALLS`, `IMPORTS`, or `REFERENCES` edges.
-Use `--repo-id` to scope the scan to one canonical repository, `--exclude` to
-skip decorator-owned entry points such as route handlers, and `--fail-on-found`
-to turn the command into a CI gate.
+Find graph-backed dead-code candidates after the current default exclusions for
+Go entrypoints, test files, and obvious generated code are applied. The result
+is intentionally `derived` today until broader framework, public-API, and
+reflection root models land. Use `--repo-id` to scope the scan to one canonical
+repository, `--exclude` to skip decorator-owned entry points such as route
+handlers, and `--fail-on-found` to turn the command into a CI gate.
 
 ```bash
 pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude "@route" --fail-on-found

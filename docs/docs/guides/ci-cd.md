@@ -31,7 +31,7 @@ jobs:
 
 **Index the repo** — `pcg index .` parses source code, builds the call graph, and stores it locally. For a typical service repo this takes 10-30 seconds.
 
-**Check dead code** — `pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude @app.route --fail-on-found` finds entities that have no incoming `CALLS`, `IMPORTS`, or `REFERENCES` edges after decorator exclusions are applied. The command exits non-zero when candidates remain, failing the PR check.
+**Check dead code** — `pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude @app.route --fail-on-found` finds derived dead-code candidates from the graph-backed candidate set after the current default entrypoint/test/generated exclusions and any decorator exclusions are applied. The command exits non-zero when candidates remain, failing the PR check.
 
 Threshold-based complexity gating is available through the Go CLI today via
 `pcg analyze complexity`. If you want CI to enforce a threshold, treat that as

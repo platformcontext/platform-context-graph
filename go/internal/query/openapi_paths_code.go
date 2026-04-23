@@ -244,7 +244,7 @@ const openAPIPathsCode = `
       "post": {
         "tags": ["code"],
         "summary": "Find dead code",
-        "description": "Finds entities with no incoming references and can exclude known decorator-owned entrypoints.",
+        "description": "Finds graph-backed dead-code candidates, applies the current default entrypoint/test/generated exclusions, and can exclude known decorator-owned entrypoints.",
         "operationId": "findDeadCode",
         "requestBody": {
           "required": true,
@@ -273,7 +273,20 @@ const openAPIPathsCode = `
                   "type": "object",
                   "properties": {
                     "repo_id": {"type": "string"},
-                    "results": {"type": "array", "items": {"$ref": "#/components/schemas/EntityRef"}}
+                    "results": {"type": "array", "items": {"$ref": "#/components/schemas/EntityRef"}},
+                    "analysis": {
+                      "type": "object",
+                      "properties": {
+                        "root_categories_used": {"type": "array", "items": {"type": "string"}},
+                        "frameworks_recognized": {"type": "array", "items": {"type": "string"}},
+                        "reflection_modeled": {"type": "boolean"},
+                        "tests_excluded": {"type": "boolean"},
+                        "generated_code_excluded": {"type": "boolean"},
+                        "user_overrides_applied": {"type": "boolean"},
+                        "modeled_entrypoints": {"type": "array", "items": {"type": "string"}},
+                        "notes": {"type": "array", "items": {"type": "string"}}
+                      }
+                    }
                   }
                 }
               }

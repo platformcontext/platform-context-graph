@@ -114,9 +114,9 @@ capabilities:
     tools: [find_dead_code]
     profiles:
       local_lightweight: {status: unsupported, max_truth_level: unsupported, required_runtime: local_host, p95_latency_ms: null, max_scope_size: active_repo, verification: [{integration_test: local-lightweight-unsupported-dead-code}], notes: requires graph plus framework roots}
-      local_authoritative: {status: supported, max_truth_level: exact, required_runtime: local_host_plus_graph, p95_latency_ms: 10000, max_scope_size: active_repo, verification: [{integration_test: local-authoritative-dead-code}], notes: exact only with modeled roots running against local graph sidecar}
-      local_full_stack: {status: supported, max_truth_level: exact, required_runtime: full_stack, p95_latency_ms: 5000, max_scope_size: indexed_workspace, verification: [{compose_e2e: dead-code-reachability}], notes: exact only with modeled roots}
-      production: {status: supported, max_truth_level: exact, required_runtime: deployed_services, p95_latency_ms: 7000, max_scope_size: multi_repo_platform, verification: [{remote_validation: prod-dead-code}], notes: exact only with modeled roots}
+      local_authoritative: {status: supported, max_truth_level: derived, required_runtime: local_host_plus_graph, p95_latency_ms: 10000, max_scope_size: active_repo, verification: [{integration_test: local-authoritative-dead-code}], notes: graph-backed candidate scan with partial root modeling; broader framework and public-API roots still pending}
+      local_full_stack: {status: supported, max_truth_level: derived, required_runtime: full_stack, p95_latency_ms: 5000, max_scope_size: indexed_workspace, verification: [{compose_e2e: dead-code-reachability}], notes: graph-backed candidate scan with partial root modeling; exact promotion gated on broader roots}
+      production: {status: supported, max_truth_level: derived, required_runtime: deployed_services, p95_latency_ms: 7000, max_scope_size: multi_repo_platform, verification: [{remote_validation: prod-dead-code}], notes: graph-backed candidate scan with partial root modeling; exact promotion gated on broader roots}
   - capability: platform_impact.deployment_chain
     tools: [trace_deployment_chain, find_infra_resources, analyze_infra_relationships]
     profiles:
