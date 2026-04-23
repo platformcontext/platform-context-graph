@@ -36,6 +36,12 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	resolvedRepoID, err := h.resolveRepositorySelector(r.Context(), req.RepoID)
+	if err != nil && strings.TrimSpace(req.RepoID) != "" {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.RepoID = resolvedRepoID
 
 	rows, err := h.Neo4j.Run(r.Context(), deadCodeGraphCypher(req.RepoID != ""), deadCodeGraphParams(req.RepoID))
 	if err != nil {

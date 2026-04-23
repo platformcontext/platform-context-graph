@@ -16,7 +16,7 @@ const openAPIPathsCode = `
                 "required": ["query"],
                 "properties": {
                   "query": {"type": "string", "description": "Search pattern"},
-                  "repo_id": {"type": "string", "description": "Optional repository ID"},
+                  "repo_id": {"type": "string", "description": "Optional repository selector (canonical ID, name, slug, or path)"},
                   "language": {"type": "string", "description": "Optional language filter"},
                   "limit": {"type": "integer", "description": "Max results (default 50)", "default": 50}
                 }
@@ -83,7 +83,7 @@ const openAPIPathsCode = `
                     ]
                   },
                   "query": {"type": "string", "description": "Optional name filter"},
-                  "repo_id": {"type": "string", "description": "Optional repository ID filter"},
+                  "repo_id": {"type": "string", "description": "Optional repository selector (canonical ID, name, slug, or path)"},
                   "limit": {"type": "integer", "description": "Max results (default 50)", "default": 50}
                 }
               }
@@ -197,7 +197,7 @@ const openAPIPathsCode = `
                   "end": {"type": "string", "description": "Exact callee function name when end_entity_id is omitted"},
                   "start_entity_id": {"type": "string", "description": "Canonical caller entity id. Takes precedence over start when provided."},
                   "end_entity_id": {"type": "string", "description": "Canonical callee entity id. Takes precedence over end when provided."},
-                  "repo_id": {"type": "string", "description": "Optional repository id to scope both endpoints to one repository."},
+                  "repo_id": {"type": "string", "description": "Optional repository selector (canonical ID, name, slug, or path) to scope both endpoints to one repository."},
                   "max_depth": {"type": "integer", "description": "Maximum traversal depth (default 5, max 10)", "default": 5}
                 }
               }
@@ -253,7 +253,7 @@ const openAPIPathsCode = `
               "schema": {
                 "type": "object",
                 "properties": {
-                  "repo_id": {"type": "string", "description": "Optional repository ID filter"},
+                  "repo_id": {"type": "string", "description": "Optional repository selector (canonical ID, name, slug, or path)"},
                   "exclude_decorated_with": {
                     "type": "array",
                     "description": "Optional list of decorator names to exclude from the results.",

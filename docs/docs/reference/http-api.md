@@ -457,9 +457,12 @@ Use these routes when you only need code relationships and do not need the full 
 - `POST /api/v0/code/dead-code`
 - `POST /api/v0/code/complexity`
 
-Public code-query requests use canonical `repo_id` whenever a repository scope
-is part of the request. Results should be interpreted using `repo_id +
-relative_path`, not absolute server-local paths.
+Public code-query requests accept a repository selector in the `repo_id` field
+when a repository scope is part of the request. The selector may be the
+canonical repository ID, repository name, repo slug, or indexed path. The
+server resolves that selector to the canonical repository ID before querying.
+Results should still be interpreted using canonical `repo_id + relative_path`,
+not absolute server-local paths.
 
 `POST /api/v0/code/relationships` prefers `entity_id` when the caller already
 has a canonical entity. It also accepts `name` for fallback lookup, plus
@@ -489,7 +492,7 @@ Example code-only workflow:
 ```json
 {
   "query": "process_payment",
-  "repo_id": "repository:r_ab12cd34",
+  "repo_id": "payments",
   "exact": false,
   "limit": 10
 }
@@ -501,7 +504,7 @@ Example dead-code workflow:
 
 ```json
 {
-  "repo_id": "repository:r_ab12cd34",
+  "repo_id": "payments",
   "exclude_decorated_with": ["@route", "@app.route"]
 }
 ```
