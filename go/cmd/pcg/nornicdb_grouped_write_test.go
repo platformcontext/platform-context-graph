@@ -44,6 +44,39 @@ RETURN count(*) AS count`, map[string]any{
 			}
 		})
 
+		t.Run("canonical writer preserves distinct entity ids for multiple functions", func(t *testing.T) {
+			writer := sourceneo4j.NewCanonicalNodeWriter(executor, 500, nil)
+			if err := writer.Write(ctx, groupedWriteMaterializationWithTwoFunctions("pcg-nornicdb-multi-entity")); err != nil {
+				t.Fatalf("Write() error = %v, want nil", err)
+			}
+
+			count, err := nornicDBReadCount(ctx, driver, `
+MATCH (f:Function)
+WHERE f.repo_id = $repo_id
+RETURN count(f) AS count`, map[string]any{
+				"repo_id": "pcg-nornicdb-multi-entity",
+			})
+			if err != nil {
+				t.Fatalf("count distinct canonical function nodes error = %v, want nil", err)
+			}
+			if count != 2 {
+				t.Fatalf("distinct canonical function node count = %d, want 2", count)
+			}
+
+			count, err = nornicDBReadCount(ctx, driver, `
+MATCH (:Repository {id: $repo_id})-[:REPO_CONTAINS]->(:File {path: $file_path})-[:CONTAINS]->(f:Function)
+RETURN count(f) AS count`, map[string]any{
+				"repo_id":   "pcg-nornicdb-multi-entity",
+				"file_path": "/tmp/pcg-nornicdb-multi-entity/src/main.go",
+			})
+			if err != nil {
+				t.Fatalf("count canonical containment edges error = %v, want nil", err)
+			}
+			if count != 2 {
+				t.Fatalf("canonical containment count = %d, want 2", count)
+			}
+		})
+
 		t.Run("failed grouped transaction rollback status is observable", func(t *testing.T) {
 			// This guards PCG's default of keeping NornicDB canonical writes
 			// sequential until rollback semantics pass the promotion gate below.
@@ -293,6 +326,36 @@ func groupedWriteMaterialization(repoID string) projector.CanonicalMaterializati
 			},
 		},
 	}
+}
+
+func groupedWriteMaterializationWithTwoFunctions(repoID string) projector.CanonicalMaterialization {
+	mat := groupedWriteMaterialization(repoID)
+	filePath := "/tmp/" + repoID + "/src/main.go"
+	mat.Entities = []projector.EntityRow{
+		{
+			EntityID:     "entity:" + repoID + ":main",
+			Label:        "Function",
+			EntityName:   "main",
+			FilePath:     filePath,
+			RelativePath: "src/main.go",
+			StartLine:    1,
+			EndLine:      5,
+			Language:     "go",
+			RepoID:       repoID,
+		},
+		{
+			EntityID:     "entity:" + repoID + ":helper",
+			Label:        "Function",
+			EntityName:   "helper",
+			FilePath:     filePath,
+			RelativePath: "src/main.go",
+			StartLine:    7,
+			EndLine:      11,
+			Language:     "go",
+			RepoID:       repoID,
+		},
+	}
+	return mat
 }
 
 func executeRollbackProbe(ctx context.Context, executor nornicDBConformanceExecutor, nodeID string) error {

@@ -239,6 +239,97 @@ func TestCodeCallProjectionRunnerProcessesRepoAtomically(t *testing.T) {
 	}
 }
 
+func TestCodeCallProjectionRunnerProcessOnceHeartbeatsLeaseDuringLongWrite(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 23, 17, 0, 0, 0, time.UTC)
+	release := make(chan struct{})
+	reader := &fakeCodeCallIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			{
+				IntentID:         "edge-1",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "caller->callee",
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-a",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				Payload: map[string]any{
+					"repo_id":          "repo-a",
+					"caller_entity_id": "caller",
+					"callee_entity_id": "callee",
+					"evidence_source":  codeCallEvidenceSource,
+				},
+				CreatedAt: now,
+			},
+		},
+		pendingByAcceptance: map[string][]SharedProjectionIntentRow{
+			"scope-a|repo-a|run-1": {
+				{
+					IntentID:         "edge-1",
+					ProjectionDomain: DomainCodeCalls,
+					PartitionKey:     "caller->callee",
+					ScopeID:          "scope-a",
+					AcceptanceUnitID: "repo-a",
+					RepositoryID:     "repo-a",
+					SourceRunID:      "run-1",
+					GenerationID:     "gen-1",
+					Payload: map[string]any{
+						"repo_id":          "repo-a",
+						"caller_entity_id": "caller",
+						"callee_entity_id": "callee",
+						"evidence_source":  codeCallEvidenceSource,
+					},
+					CreatedAt: now,
+				},
+			},
+		},
+		leaseGranted: true,
+		afterClaim: func(count int) {
+			if count == 2 {
+				close(release)
+			}
+		},
+	}
+	writer := &blockingCodeCallProjectionEdgeWriter{
+		recordingCodeCallProjectionEdgeWriter: recordingCodeCallProjectionEdgeWriter{},
+		release:                               release,
+	}
+	runner := CodeCallProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: reader,
+		EdgeWriter:   writer,
+		AcceptedGen: func(key SharedProjectionAcceptanceKey) (string, bool) {
+			return "gen-1", key.ScopeID == "scope-a" && key.AcceptanceUnitID == "repo-a" && key.SourceRunID == "run-1"
+		},
+		ReadinessLookup: func(_ GraphProjectionPhaseKey, _ GraphProjectionPhase) (bool, bool) {
+			return true, true
+		},
+		Config: CodeCallProjectionRunnerConfig{
+			LeaseTTL:   10 * time.Millisecond,
+			BatchLimit: 10,
+		},
+	}
+
+	result, err := runner.processOnce(context.Background(), now)
+	if err != nil {
+		t.Fatalf("processOnce() error = %v", err)
+	}
+	if !result.LeaseAcquired {
+		t.Fatal("LeaseAcquired = false, want true")
+	}
+	if got, want := reader.claimsCount(), 2; got < want {
+		t.Fatalf("lease claims = %d, want at least %d", got, want)
+	}
+	if got, want := len(reader.marked), 1; got != want {
+		t.Fatalf("len(marked) = %d, want %d", got, want)
+	}
+	if got, want := len(writer.writeCalls), 1; got != want {
+		t.Fatalf("len(writeCalls) = %d, want %d", got, want)
+	}
+}
+
 func TestCodeCallProjectionRunnerRunContinuesAfterCycleError(t *testing.T) {
 	t.Parallel()
 
@@ -500,7 +591,7 @@ func TestCodeCallProjectionRunnerSelectsAcceptanceUnitBeyondInitialBatchWindow(t
 	}
 }
 
-func TestCodeCallProjectionRunnerSkipsAcceptanceUnitUntilCanonicalNodesCommitted(t *testing.T) {
+func TestCodeCallProjectionRunnerSkipsAcceptanceUnitUntilSemanticNodesCommitted(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.April, 17, 12, 0, 0, 0, time.UTC)
@@ -531,7 +622,7 @@ func TestCodeCallProjectionRunnerSkipsAcceptanceUnitUntilCanonicalNodesCommitted
 		t.Fatalf("selectAcceptanceUnitWork() error = %v", err)
 	}
 	if key != (SharedProjectionAcceptanceKey{}) {
-		t.Fatalf("key = %#v, want zero value while canonical node readiness is missing", key)
+		t.Fatalf("key = %#v, want zero value while semantic node readiness is missing", key)
 	}
 }
 
@@ -578,8 +669,8 @@ func TestCodeCallProjectionRunnerSelectsReadyAcceptanceUnitWhenEarlierUnitIsBloc
 			}
 		},
 		ReadinessLookup: func(key GraphProjectionPhaseKey, phase GraphProjectionPhase) (bool, bool) {
-			if phase != GraphProjectionPhaseCanonicalNodesCommitted {
-				t.Fatalf("phase = %q, want %q", phase, GraphProjectionPhaseCanonicalNodesCommitted)
+			if phase != GraphProjectionPhaseSemanticNodesCommitted {
+				t.Fatalf("phase = %q, want %q", phase, GraphProjectionPhaseSemanticNodesCommitted)
 			}
 			if key.AcceptanceUnitID == "repo-ready" {
 				return true, true
@@ -666,6 +757,7 @@ type fakeCodeCallIntentStore struct {
 	marked                  []string
 	leaseGranted            bool
 	claims                  int
+	afterClaim              func(int)
 	domainLimitRequests     []int
 	acceptanceLimitRequests []int
 	acceptanceResponder     func(key SharedProjectionAcceptanceKey, limit int) ([]SharedProjectionIntentRow, error)
@@ -753,11 +845,20 @@ func (f *fakeCodeCallIntentStore) ClaimPartitionLease(_ context.Context, _ strin
 	defer f.mu.Unlock()
 
 	f.claims++
+	if f.afterClaim != nil {
+		f.afterClaim(f.claims)
+	}
 	return f.leaseGranted, nil
 }
 
 func (f *fakeCodeCallIntentStore) ReleasePartitionLease(_ context.Context, _ string, _, _ int, _ string) error {
 	return nil
+}
+
+func (f *fakeCodeCallIntentStore) claimsCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.claims
 }
 
 type recordingCodeCallProjectionEdgeWriter struct {
@@ -805,6 +906,20 @@ func (r *flakyCodeCallProjectionEdgeWriter) WriteEdges(ctx context.Context, doma
 	if r.writeFailures > 0 {
 		r.writeFailures--
 		return r.err
+	}
+	return r.recordingCodeCallProjectionEdgeWriter.WriteEdges(ctx, domain, rows, evidenceSource)
+}
+
+type blockingCodeCallProjectionEdgeWriter struct {
+	recordingCodeCallProjectionEdgeWriter
+	release <-chan struct{}
+}
+
+func (r *blockingCodeCallProjectionEdgeWriter) WriteEdges(ctx context.Context, domain string, rows []SharedProjectionIntentRow, evidenceSource string) error {
+	select {
+	case <-r.release:
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 	return r.recordingCodeCallProjectionEdgeWriter.WriteEdges(ctx, domain, rows, evidenceSource)
 }

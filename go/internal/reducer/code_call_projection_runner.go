@@ -133,7 +133,7 @@ func (r *CodeCallProjectionRunner) runOneCycle(ctx context.Context) (bool, error
 	return result.ProcessedIntents > 0, nil
 }
 
-func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Time) (PartitionProcessResult, error) {
+func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Time) (result PartitionProcessResult, retErr error) {
 	cycleStart := time.Now()
 	acceptanceTelemetry := sharedAcceptanceTelemetry{
 		Instruments: r.Instruments,
@@ -160,9 +160,18 @@ func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Tim
 		return PartitionProcessResult{LeaseAcquired: false}, nil
 	}
 
+	leaseCtx, stopHeartbeat := r.startLeaseHeartbeat(ctx)
 	defer func() {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+			if retErr == nil {
+				retErr = fmt.Errorf("heartbeat code call lease: %w", heartbeatErr)
+			} else {
+				retErr = errors.Join(retErr, fmt.Errorf("heartbeat code call lease: %w", heartbeatErr))
+			}
+		}
 		_ = r.LeaseManager.ReleasePartitionLease(ctx, DomainCodeCalls, 0, 1, r.Config.leaseOwner())
 	}()
+	ctx = leaseCtx
 
 	key, err := r.selectAcceptanceUnitWork(ctx)
 	if err != nil {
@@ -192,7 +201,7 @@ func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Tim
 		return PartitionProcessResult{LeaseAcquired: true}, nil
 	}
 
-	result := PartitionProcessResult{LeaseAcquired: true}
+	result = PartitionProcessResult{LeaseAcquired: true}
 	if len(active) > 0 {
 		if err := r.retractRepo(ctx, active); err != nil {
 			return result, err
@@ -363,7 +372,7 @@ func (r *CodeCallProjectionRunner) selectAcceptanceUnitWork(ctx context.Context)
 		if blockedCount > 0 && r.Logger != nil {
 			r.Logger.InfoContext(
 				ctx,
-				"code call projection skipped acceptance units until semantic readiness is committed",
+				"code call projection skipped acceptance units until canonical node readiness is committed",
 				slog.Int("blocked_count", blockedCount),
 				slog.String("domain", DomainCodeCalls),
 				telemetry.PhaseAttr(telemetry.PhaseShared),

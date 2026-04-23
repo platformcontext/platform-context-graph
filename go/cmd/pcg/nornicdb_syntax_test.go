@@ -61,6 +61,55 @@ func TestNornicDBCompatibilityWorkarounds(t *testing.T) {
 	})
 }
 
+func TestNornicDBSharedEdgeWriteCompatibilityWorkarounds(t *testing.T) {
+	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
+		setup := []string{
+			"MERGE (:PCGSyntaxFunction {uid: 'caller'})",
+			"MERGE (:PCGSyntaxFunction {uid: 'callee'})",
+			"MERGE (:PCGSyntaxClass {uid: 'child'})",
+			"MERGE (:PCGSyntaxClass {uid: 'parent'})",
+			"MERGE (:PCGSyntaxSqlTable {uid: 'table'})",
+			"MERGE (:PCGSyntaxSqlColumn {uid: 'column'})",
+		}
+		runNornicDBSyntaxSequence(t, ctx, driver, setup)
+
+		tests := []struct {
+			name   string
+			cypher string
+		}{
+			{
+				name: `shared code-call write`,
+				cypher: `MATCH (source:PCGSyntaxFunction {uid: 'caller'})
+MATCH (target:PCGSyntaxFunction {uid: 'callee'})
+MERGE (source)-[rel:CALLS]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser and symbol analysis resolved a code call edge',
+    rel.evidence_source = 'parser/code-calls'`,
+			},
+			{
+				name: `shared inheritance write`,
+				cypher: `MATCH (child:PCGSyntaxClass {uid: 'child'})
+MATCH (parent:PCGSyntaxClass {uid: 'parent'})
+MERGE (child)-[rel:INHERITS]->(parent)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser entity bases metadata resolved an inheritance edge',
+    rel.evidence_source = 'reducer/inheritance',
+    rel.relationship_type = 'INHERITS'`,
+			},
+			{
+				name: `shared sql write`,
+				cypher: `MATCH (source:PCGSyntaxSqlTable {uid: 'table'})
+MATCH (target:PCGSyntaxSqlColumn {uid: 'column'})
+MERGE (source)-[rel:HAS_COLUMN]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'SQL entity metadata resolved a table-column containment edge',
+    rel.evidence_source = 'reducer/sql-relationships'`,
+			},
+		}
+		runNornicDBSyntaxCases(t, ctx, driver, tests)
+	})
+}
+
 func TestNornicDBSchemaAdapterVerification(t *testing.T) {
 	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
 		stmts, err := graph.SchemaStatementsForBackend(graph.SchemaBackendNornicDB)
@@ -135,6 +184,16 @@ func runNornicDBSyntaxCases(t *testing.T, ctx context.Context, driver neo4jdrive
 				t.Fatalf("run syntax probe %q error = %v", tt.name, err)
 			}
 		})
+	}
+}
+
+func runNornicDBSyntaxSequence(t *testing.T, ctx context.Context, driver neo4jdriver.DriverWithContext, statements []string) {
+	t.Helper()
+
+	for _, stmt := range statements {
+		if err := runNornicDBSyntaxCypher(ctx, driver, stmt); err != nil {
+			t.Fatalf("run setup statement %q error = %v", stmt, err)
+		}
 	}
 }
 

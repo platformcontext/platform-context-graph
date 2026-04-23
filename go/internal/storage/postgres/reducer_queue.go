@@ -88,6 +88,16 @@ WHERE work_item_id = $2
   AND status IN ('claimed', 'running')
 `
 
+const heartbeatReducerWorkQuery = `
+UPDATE fact_work_items
+SET claim_until = $1,
+    updated_at = $2
+WHERE work_item_id = $3
+  AND stage = 'reducer'
+  AND lease_owner = $4
+  AND status IN ('claimed', 'running')
+`
+
 const failReducerWorkQuery = `
 UPDATE fact_work_items
 SET status = 'dead_letter',
@@ -130,6 +140,10 @@ type ReducerQueue struct {
 	MaxAttempts   int
 	Now           func() time.Time
 }
+
+// ErrReducerClaimRejected means the claimed reducer work item no longer belongs
+// to the current lease owner, so heartbeat/ack/fail must stop.
+var ErrReducerClaimRejected = errors.New("reducer work claim rejected")
 
 // NewReducerQueue constructs a Postgres-backed reducer work queue.
 func NewReducerQueue(
@@ -269,6 +283,34 @@ func (q ReducerQueue) Claim(ctx context.Context) (reducer.Intent, bool, error) {
 	}
 
 	return intent, true, nil
+}
+
+// Heartbeat extends the claim on one reducer work item owned by this queue.
+func (q ReducerQueue) Heartbeat(ctx context.Context, intent reducer.Intent) error {
+	if err := q.validate(); err != nil {
+		return err
+	}
+
+	now := q.now()
+	result, err := q.db.ExecContext(
+		ctx,
+		heartbeatReducerWorkQuery,
+		now.Add(q.LeaseDuration),
+		now,
+		intent.IntentID,
+		q.LeaseOwner,
+	)
+	if err != nil {
+		return fmt.Errorf("heartbeat reducer work: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("heartbeat reducer work: rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrReducerClaimRejected
+	}
+	return nil
 }
 
 // Ack marks one claimed reducer work item as succeeded.

@@ -26,8 +26,10 @@ const (
 	ingesterCollectorPollInterval        = time.Second
 	ingesterConnectionTimeout            = 10 * time.Second
 	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
+	defaultNornicDBPhaseGroupStatements  = 500
 	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
 	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
+	nornicDBPhaseGroupStatementsEnv      = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -221,6 +223,8 @@ func buildIngesterProjectorRuntime(
 		CanonicalWriter:        canonicalWriter,
 		ContentWriter:          postgres.NewContentWriter(database),
 		IntentWriter:           intentWriter,
+		PhasePublisher:         postgres.NewGraphProjectionPhaseStateStore(database),
+		RepairQueue:            postgres.NewGraphProjectionPhaseRepairQueueStore(database),
 		RetryInjector:          retryInjector,
 		ContentBeforeCanonical: ingesterContentBeforeCanonical(getenv),
 		Tracer:                 tracer,
@@ -253,8 +257,13 @@ func openIngesterCanonicalWriter(
 	}
 
 	nornicDBGroupedWrites := false
+	phaseGroupStatements := defaultNornicDBPhaseGroupStatements
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		nornicDBGroupedWrites, err = nornicDBCanonicalGroupedWrites(getenv)
+		if err != nil {
+			return nil, nil, err
+		}
+		phaseGroupStatements, err = nornicDBPhaseGroupStatements(getenv)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -272,6 +281,7 @@ func openIngesterCanonicalWriter(
 			graphBackend,
 			nornicDBCanonicalWriteTimeout(getenv),
 			nornicDBGroupedWrites,
+			phaseGroupStatements,
 			tracer,
 			instruments,
 		),
@@ -287,6 +297,7 @@ func canonicalExecutorForGraphBackend(
 	graphBackend runtimecfg.GraphBackend,
 	nornicDBTimeout time.Duration,
 	nornicDBGroupedWrites bool,
+	nornicDBPhaseGroupStatements int,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) sourceneo4j.Executor {
@@ -307,9 +318,52 @@ func canonicalExecutorForGraphBackend(
 		if nornicDBGroupedWrites {
 			return bounded
 		}
-		return sourceneo4j.ExecuteOnlyExecutor{Inner: bounded}
+		return nornicDBPhaseGroupExecutor{
+			inner:         bounded,
+			maxStatements: nornicDBPhaseGroupStatements,
+		}
 	}
 	return instrumented
+}
+
+type nornicDBPhaseGroupExecutor struct {
+	inner         sourceneo4j.Executor
+	maxStatements int
+}
+
+func (e nornicDBPhaseGroupExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
+	if e.inner == nil {
+		return nil
+	}
+	return e.inner.Execute(ctx, stmt)
+}
+
+func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+	if len(stmts) == 0 || e.inner == nil {
+		return nil
+	}
+	if ge, ok := e.inner.(sourceneo4j.GroupExecutor); ok {
+		maxStatements := e.maxStatements
+		if maxStatements <= 0 {
+			maxStatements = defaultNornicDBPhaseGroupStatements
+		}
+		for start := 0; start < len(stmts); start += maxStatements {
+			end := start + maxStatements
+			if end > len(stmts) {
+				end = len(stmts)
+			}
+			if err := ge.ExecuteGroup(ctx, stmts[start:end]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, stmt := range stmts {
+		if err := e.inner.Execute(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ingesterContentBeforeCanonical(getenv func(string) string) bool {
@@ -338,6 +392,18 @@ func nornicDBCanonicalGroupedWrites(getenv func(string) string) (bool, error) {
 		return false, fmt.Errorf("parse %s=%q: %w", nornicDBCanonicalGroupedWritesEnv, raw, err)
 	}
 	return enabled, nil
+}
+
+func nornicDBPhaseGroupStatements(getenv func(string) string) (int, error) {
+	raw := strings.TrimSpace(getenv(nornicDBPhaseGroupStatementsEnv))
+	if raw == "" {
+		return defaultNornicDBPhaseGroupStatements, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("parse %s=%q: must be a positive integer", nornicDBPhaseGroupStatementsEnv, raw)
+	}
+	return n, nil
 }
 
 func neo4jBatchSize(getenv func(string) string) int {

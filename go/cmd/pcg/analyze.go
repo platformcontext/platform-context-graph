@@ -22,6 +22,7 @@ func init() {
 		RunE:  runAnalyzeCalls,
 	}
 	addRemoteFlags(callsCmd)
+	addAnalyzeRepoSelectorFlags(callsCmd)
 	callsCmd.Flags().Bool("transitive", false, "Include transitive callees")
 	callsCmd.Flags().Int("depth", 5, "Maximum traversal depth for transitive callees")
 	analyzeCmd.AddCommand(callsCmd)
@@ -34,6 +35,7 @@ func init() {
 		RunE:  runAnalyzeCallers,
 	}
 	addRemoteFlags(callersCmd)
+	addAnalyzeRepoSelectorFlags(callersCmd)
 	callersCmd.Flags().Bool("transitive", false, "Include transitive callers")
 	callersCmd.Flags().Int("depth", 5, "Maximum traversal depth for transitive callers")
 	analyzeCmd.AddCommand(callersCmd)
@@ -46,6 +48,7 @@ func init() {
 		RunE:  runAnalyzeChain,
 	}
 	addRemoteFlags(chainCmd)
+	addAnalyzeRepoSelectorFlags(chainCmd)
 	chainCmd.Flags().Int("depth", 5, "Maximum traversal depth")
 	analyzeCmd.AddCommand(chainCmd)
 
@@ -57,6 +60,7 @@ func init() {
 		RunE:  runAnalyzeDeps,
 	}
 	addRemoteFlags(depsCmd)
+	addAnalyzeRepoSelectorFlags(depsCmd)
 	analyzeCmd.AddCommand(depsCmd)
 
 	// analyze tree
@@ -67,6 +71,7 @@ func init() {
 		RunE:  runAnalyzeTree,
 	}
 	addRemoteFlags(treeCmd)
+	addAnalyzeRepoSelectorFlags(treeCmd)
 	analyzeCmd.AddCommand(treeCmd)
 
 	// analyze complexity
@@ -100,6 +105,7 @@ func init() {
 		RunE:  runAnalyzeOverrides,
 	}
 	addRemoteFlags(overridesCmd)
+	addAnalyzeRepoSelectorFlags(overridesCmd)
 	analyzeCmd.AddCommand(overridesCmd)
 
 	// analyze variable
@@ -115,6 +121,10 @@ func init() {
 
 func runAnalyzeCalls(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
+	repoID, err := resolveRepositorySelectorFromFlags(cmd, client)
+	if err != nil {
+		return err
+	}
 	transitive, _ := cmd.Flags().GetBool("transitive")
 	depth, _ := cmd.Flags().GetInt("depth")
 	var result any
@@ -122,12 +132,13 @@ func runAnalyzeCalls(cmd *cobra.Command, args []string) error {
 		"name":              args[0],
 		"direction":         "outgoing",
 		"relationship_type": "CALLS",
+		"repo_id":           repoID,
 	}
 	if transitive {
 		body["transitive"] = true
 		body["max_depth"] = depth
 	}
-	err := client.Post("/api/v0/code/relationships", body, &result)
+	err = client.Post("/api/v0/code/relationships", body, &result)
 	if err != nil {
 		return err
 	}
@@ -137,6 +148,10 @@ func runAnalyzeCalls(cmd *cobra.Command, args []string) error {
 
 func runAnalyzeCallers(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
+	repoID, err := resolveRepositorySelectorFromFlags(cmd, client)
+	if err != nil {
+		return err
+	}
 	transitive, _ := cmd.Flags().GetBool("transitive")
 	depth, _ := cmd.Flags().GetInt("depth")
 	var result any
@@ -144,12 +159,13 @@ func runAnalyzeCallers(cmd *cobra.Command, args []string) error {
 		"name":              args[0],
 		"direction":         "incoming",
 		"relationship_type": "CALLS",
+		"repo_id":           repoID,
 	}
 	if transitive {
 		body["transitive"] = true
 		body["max_depth"] = depth
 	}
-	err := client.Post("/api/v0/code/relationships", body, &result)
+	err = client.Post("/api/v0/code/relationships", body, &result)
 	if err != nil {
 		return err
 	}
@@ -159,11 +175,16 @@ func runAnalyzeCallers(cmd *cobra.Command, args []string) error {
 
 func runAnalyzeChain(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
+	repoID, err := resolveRepositorySelectorFromFlags(cmd, client)
+	if err != nil {
+		return err
+	}
 	depth, _ := cmd.Flags().GetInt("depth")
 	var result any
-	err := client.Post("/api/v0/code/call-chain", map[string]any{
+	err = client.Post("/api/v0/code/call-chain", map[string]any{
 		"start":     args[0],
 		"end":       args[1],
+		"repo_id":   repoID,
 		"max_depth": depth,
 	}, &result)
 	if err != nil {
@@ -175,11 +196,16 @@ func runAnalyzeChain(cmd *cobra.Command, args []string) error {
 
 func runAnalyzeDeps(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
+	repoID, err := resolveRepositorySelectorFromFlags(cmd, client)
+	if err != nil {
+		return err
+	}
 	var result any
-	err := client.Post("/api/v0/code/relationships", map[string]any{
+	err = client.Post("/api/v0/code/relationships", map[string]any{
 		"name":              args[0],
 		"direction":         "outgoing",
 		"relationship_type": "IMPORTS",
+		"repo_id":           repoID,
 	}, &result)
 	if err != nil {
 		return err
@@ -190,11 +216,16 @@ func runAnalyzeDeps(cmd *cobra.Command, args []string) error {
 
 func runAnalyzeTree(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
+	repoID, err := resolveRepositorySelectorFromFlags(cmd, client)
+	if err != nil {
+		return err
+	}
 	var result any
-	err := client.Post("/api/v0/code/relationships", map[string]any{
+	err = client.Post("/api/v0/code/relationships", map[string]any{
 		"name":              args[0],
 		"direction":         "both",
 		"relationship_type": "INHERITS",
+		"repo_id":           repoID,
 	}, &result)
 	if err != nil {
 		return err
@@ -244,11 +275,16 @@ func runAnalyzeDeadCode(cmd *cobra.Command, args []string) error {
 
 func runAnalyzeOverrides(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
+	repoID, err := resolveRepositorySelectorFromFlags(cmd, client)
+	if err != nil {
+		return err
+	}
 	var result any
-	err := client.Post("/api/v0/code/relationships", map[string]any{
+	err = client.Post("/api/v0/code/relationships", map[string]any{
 		"name":              args[0],
 		"direction":         "incoming",
 		"relationship_type": "OVERRIDES",
+		"repo_id":           repoID,
 	}, &result)
 	if err != nil {
 		return err
@@ -270,4 +306,9 @@ func runAnalyzeVariable(cmd *cobra.Command, args []string) error {
 	}
 	printJSON(result)
 	return nil
+}
+
+func addAnalyzeRepoSelectorFlags(cmd *cobra.Command) {
+	cmd.Flags().String("repo", "", "Optional repository selector (ID, name, slug, or path)")
+	cmd.Flags().String("repo-id", "", "Optional repository ID filter")
 }

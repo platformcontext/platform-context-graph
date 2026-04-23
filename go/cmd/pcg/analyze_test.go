@@ -25,12 +25,16 @@ func TestRunAnalyzeChainPostsCanonicalRequest(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	addRemoteFlags(cmd)
+	addAnalyzeRepoSelectorFlags(cmd)
 	cmd.Flags().Int("depth", 5, "Maximum traversal depth")
 	if err := cmd.Flags().Set("service-url", server.URL); err != nil {
 		t.Fatalf("Set(service-url) error = %v, want nil", err)
 	}
 	if err := cmd.Flags().Set("depth", "7"); err != nil {
 		t.Fatalf("Set(depth) error = %v, want nil", err)
+	}
+	if err := cmd.Flags().Set("repo-id", "repo-1"); err != nil {
+		t.Fatalf("Set(repo-id) error = %v, want nil", err)
 	}
 
 	if err := runAnalyzeChain(cmd, []string{"wrapper", "helper"}); err != nil {
@@ -47,6 +51,9 @@ func TestRunAnalyzeChainPostsCanonicalRequest(t *testing.T) {
 	}
 	if got, want := gotBody["max_depth"], float64(7); got != want {
 		t.Fatalf("body[max_depth] = %#v, want %#v", got, want)
+	}
+	if got, want := gotBody["repo_id"], "repo-1"; got != want {
+		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
 	}
 }
 
@@ -66,6 +73,7 @@ func TestRunAnalyzeCallersPostsTransitiveRequest(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	addRemoteFlags(cmd)
+	addAnalyzeRepoSelectorFlags(cmd)
 	cmd.Flags().Bool("transitive", false, "Include transitive callers")
 	cmd.Flags().Int("depth", 5, "Maximum traversal depth")
 	if err := cmd.Flags().Set("service-url", server.URL); err != nil {
@@ -76,6 +84,9 @@ func TestRunAnalyzeCallersPostsTransitiveRequest(t *testing.T) {
 	}
 	if err := cmd.Flags().Set("depth", "8"); err != nil {
 		t.Fatalf("Set(depth) error = %v, want nil", err)
+	}
+	if err := cmd.Flags().Set("repo-id", "repo-1"); err != nil {
+		t.Fatalf("Set(repo-id) error = %v, want nil", err)
 	}
 
 	if err := runAnalyzeCallers(cmd, []string{"helper"}); err != nil {
@@ -95,6 +106,46 @@ func TestRunAnalyzeCallersPostsTransitiveRequest(t *testing.T) {
 	}
 	if got, want := gotBody["max_depth"], float64(8); got != want {
 		t.Fatalf("body[max_depth] = %#v, want %#v", got, want)
+	}
+	if got, want := gotBody["repo_id"], "repo-1"; got != want {
+		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunAnalyzeCallsResolvesRepoSelectorAlias(t *testing.T) {
+	t.Parallel()
+
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v0/repositories":
+			_, _ = w.Write([]byte(`{"count":1,"repositories":[{"id":"repository:r_payments","name":"payments","path":"/src/payments","local_path":"/src/payments","remote_url":"","repo_slug":"acme/payments","has_remote":false}]}`))
+		case "/api/v0/code/relationships":
+			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+				t.Fatalf("json.Decode() error = %v, want nil", err)
+			}
+			_, _ = w.Write([]byte(`{"outgoing":[]}`))
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cmd := &cobra.Command{}
+	addRemoteFlags(cmd)
+	addAnalyzeRepoSelectorFlags(cmd)
+	if err := cmd.Flags().Set("service-url", server.URL); err != nil {
+		t.Fatalf("Set(service-url) error = %v, want nil", err)
+	}
+	if err := cmd.Flags().Set("repo", "payments"); err != nil {
+		t.Fatalf("Set(repo) error = %v, want nil", err)
+	}
+
+	if err := runAnalyzeCalls(cmd, []string{"helper"}); err != nil {
+		t.Fatalf("runAnalyzeCalls() error = %v, want nil", err)
+	}
+	if got, want := gotBody["repo_id"], "repository:r_payments"; got != want {
+		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
 	}
 }
 
@@ -144,7 +195,7 @@ func TestRunAnalyzeDeadCodePostsExclusions(t *testing.T) {
 	if got, want := gotPath, "/api/v0/code/dead-code"; got != want {
 		t.Fatalf("request path = %q, want %q", got, want)
 	}
-	if got, want := gotMethods, []string{"GET /api/v0/repositories", "POST /api/v0/code/dead-code"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	if got, want := gotMethods, []string{"POST /api/v0/code/dead-code"}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("request sequence = %#v, want %#v", got, want)
 	}
 	if got, want := gotBody["repo_id"], "repo-1"; got != want {

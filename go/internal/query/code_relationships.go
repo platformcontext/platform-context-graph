@@ -32,6 +32,17 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 	if !h.applyRepositorySelector(w, r, &req.RepoID) {
 		return
 	}
+	ctx := r.Context()
+	if strings.TrimSpace(req.EntityID) == "" && strings.TrimSpace(req.Name) != "" {
+		resolved, err := resolveExactGraphEntityCandidate(ctx, h.Content, req.RepoID, req.Name)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if resolved != nil {
+			req.EntityID = resolved.EntityID
+		}
+	}
 
 	direction, err := normalizeRelationshipDirection(req.Direction)
 	if err != nil {
@@ -39,7 +50,6 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 		return
 	}
 	relationshipType := strings.ToUpper(strings.TrimSpace(req.RelationshipType))
-	ctx := r.Context()
 	if req.Transitive {
 		if relationshipType != "CALLS" {
 			WriteError(w, http.StatusBadRequest, "transitive relationships are only supported for CALLS")
@@ -208,7 +218,7 @@ func (h *CodeHandler) relationshipsGraphRow(
 	}
 
 	if strings.TrimSpace(entityID) != "" {
-		return h.Neo4j.RunSingle(ctx, relationshipGraphRowCypher("e.id = $entity_id"), map[string]any{
+		return h.Neo4j.RunSingle(ctx, relationshipGraphRowCypher(graphEntityIDPredicate("e", "$entity_id")), map[string]any{
 			"entity_id": entityID,
 		})
 	}
@@ -268,15 +278,15 @@ func relationshipGraphRowCypher(predicate string) string {
 		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(repo:Repository)
 		OPTIONAL MATCH (e)-[outgoingRel]->(target)
 		OPTIONAL MATCH (source)-[incomingRel]->(e)
-		RETURN e.id as id, e.name as name, labels(e) as labels,
+		RETURN coalesce(e.id, e.uid) as id, e.name as name, labels(e) as labels,
 		       f.relative_path as file_path,
 		       repo.id as repo_id, repo.name as repo_name,
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line,
 		       e.end_line as end_line,
 ` + graphSemanticMetadataProjection() + `
-		       ,collect(DISTINCT {direction: 'outgoing', type: type(outgoingRel), call_kind: outgoingRel.call_kind, reason: outgoingRel.reason, target_name: target.name, target_id: target.id}) as outgoing,
-		       collect(DISTINCT {direction: 'incoming', type: type(incomingRel), call_kind: incomingRel.call_kind, reason: incomingRel.reason, source_name: source.name, source_id: source.id}) as incoming
+		       ,collect(DISTINCT {direction: 'outgoing', type: type(outgoingRel), call_kind: outgoingRel.call_kind, reason: outgoingRel.reason, target_name: target.name, target_id: coalesce(target.id, target.uid)}) as outgoing,
+		       collect(DISTINCT {direction: 'incoming', type: type(incomingRel), call_kind: incomingRel.call_kind, reason: incomingRel.reason, source_name: source.name, source_id: coalesce(source.id, source.uid)}) as incoming
 		LIMIT 2
 	`
 }
@@ -293,32 +303,40 @@ func buildTransitiveRelationshipRowsCypher(
 	var cypher strings.Builder
 	if backend == GraphBackendNornicDB {
 		if direction == "incoming" {
-			cypher.WriteString("\n\t\tMATCH path = (e {id: $entity_id})<-[:CALLS*1..")
+			cypher.WriteString("\n\t\tMATCH (e)\n")
+			cypher.WriteString("\t\tWHERE ")
+			cypher.WriteString(graphEntityIDPredicate("e", "$entity_id"))
+			cypher.WriteString("\n\t\tMATCH path = (e)<-[:CALLS*1..")
 			cypher.WriteString(fmt.Sprintf("%d", maxDepth))
 			cypher.WriteString("]-(source)\n")
 			cypher.WriteString("\t\tRETURN source.name as source_name,\n")
-			cypher.WriteString("\t\t       source.id as source_id,\n")
+			cypher.WriteString("\t\t       coalesce(source.id, source.uid) as source_id,\n")
 			cypher.WriteString("\t\t       length(path) as depth\n\t")
 			return cypher.String(), params
 		}
 
-		cypher.WriteString("\n\t\tMATCH path = (e {id: $entity_id})-[:CALLS*1..")
+		cypher.WriteString("\n\t\tMATCH (e)\n")
+		cypher.WriteString("\t\tWHERE ")
+		cypher.WriteString(graphEntityIDPredicate("e", "$entity_id"))
+		cypher.WriteString("\n\t\tMATCH path = (e)-[:CALLS*1..")
 		cypher.WriteString(fmt.Sprintf("%d", maxDepth))
 		cypher.WriteString("]->(target)\n")
 		cypher.WriteString("\t\tRETURN target.name as target_name,\n")
-		cypher.WriteString("\t\t       target.id as target_id,\n")
+		cypher.WriteString("\t\t       coalesce(target.id, target.uid) as target_id,\n")
 		cypher.WriteString("\t\t       length(path) as depth\n\t")
 		return cypher.String(), params
 	}
 
 	cypher.WriteString("\n\t\tMATCH (e)\n")
-	cypher.WriteString("\t\tWHERE e.id = $entity_id\n")
+	cypher.WriteString("\t\tWHERE ")
+	cypher.WriteString(graphEntityIDPredicate("e", "$entity_id"))
+	cypher.WriteString("\n")
 	if direction == "incoming" {
 		cypher.WriteString("\t\tMATCH path = (e)<-[:CALLS*1..")
 		cypher.WriteString(fmt.Sprintf("%d", maxDepth))
 		cypher.WriteString("]-(source)\n")
 		cypher.WriteString("\t\tRETURN source.name as source_name,\n")
-		cypher.WriteString("\t\t       source.id as source_id,\n")
+		cypher.WriteString("\t\t       coalesce(source.id, source.uid) as source_id,\n")
 		cypher.WriteString("\t\t       length(path) as depth\n\t")
 		return cypher.String(), params
 	}
@@ -327,9 +345,13 @@ func buildTransitiveRelationshipRowsCypher(
 	cypher.WriteString(fmt.Sprintf("%d", maxDepth))
 	cypher.WriteString("]->(target)\n")
 	cypher.WriteString("\t\tRETURN target.name as target_name,\n")
-	cypher.WriteString("\t\t       target.id as target_id,\n")
+	cypher.WriteString("\t\t       coalesce(target.id, target.uid) as target_id,\n")
 	cypher.WriteString("\t\t       length(path) as depth\n\t")
 	return cypher.String(), params
+}
+
+func graphEntityIDPredicate(alias string, param string) string {
+	return fmt.Sprintf("(%s.id = %s OR %s.uid = %s)", alias, param, alias, param)
 }
 
 func buildTransitiveRelationshipGraphResponse(metadataRow map[string]any, rows []map[string]any, direction string) map[string]any {

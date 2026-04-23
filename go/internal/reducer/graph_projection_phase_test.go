@@ -126,14 +126,14 @@ func TestGraphProjectionPhaseRepairValidateRejectsBlankPhase(t *testing.T) {
 	}
 }
 
-func TestSemanticNodeReadinessPhaseUsesCanonicalNodesForCodeCalls(t *testing.T) {
+func TestSemanticNodeReadinessPhaseUsesSemanticNodesForCodeCalls(t *testing.T) {
 	t.Parallel()
 
 	phase, gated := semanticNodeReadinessPhase(DomainCodeCalls)
 	if !gated {
 		t.Fatal("gated = false, want true")
 	}
-	if got, want := phase, GraphProjectionPhaseCanonicalNodesCommitted; got != want {
+	if got, want := phase, GraphProjectionPhaseSemanticNodesCommitted; got != want {
 		t.Fatalf("phase = %q, want %q", got, want)
 	}
 }

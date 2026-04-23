@@ -22,6 +22,9 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 			metadata[key] = value
 		}
 	}
+	if classContext := semanticPayloadMetadataString(payload, "class_context"); classContext != "" {
+		metadata["class_context"] = classContext
+	}
 	if jsxFragment := semanticPayloadMetadataBool(payload, "jsx_fragment_shorthand"); jsxFragment {
 		metadata["jsx_fragment_shorthand"] = true
 	}
@@ -246,6 +249,7 @@ func isSemanticEntityType(payload map[string]any, entityType string) bool {
 			isTypeScriptJSXComponentTypeAssertionSemanticEntity(payload)
 	case "Function":
 		return isJavaScriptCallableSemanticEntity(payload) ||
+			isGoSemanticFunction(payload) ||
 			isPythonSemanticFunction(payload) ||
 			isElixirSemanticFunction(payload) ||
 			isRustSemanticFunction(payload) ||
@@ -281,6 +285,10 @@ func isPythonSemanticFunction(payload map[string]any) bool {
 	}
 	count, kinds := semanticPayloadTypeAnnotationSummary(payload)
 	return count > 0 || len(kinds) > 0
+}
+
+func isGoSemanticFunction(payload map[string]any) bool {
+	return semanticPayloadString(payload, "language") == "go"
 }
 
 func isElixirSemanticFunction(payload map[string]any) bool {

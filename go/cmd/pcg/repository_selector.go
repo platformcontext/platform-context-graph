@@ -21,37 +21,40 @@ type repositorySelectorEntry struct {
 }
 
 func resolveRepositorySelectorFromFlags(cmd *cobra.Command, client *APIClient) (string, error) {
-	selector, err := readRepositorySelectorFlag(cmd)
+	selector, exact, err := readRepositorySelectorFlag(cmd)
 	if err != nil {
 		return "", err
 	}
 	if selector == "" {
 		return "", nil
 	}
+	if exact {
+		return selector, nil
+	}
 	return resolveRepositorySelector(cmd, client, selector)
 }
 
-func readRepositorySelectorFlag(cmd *cobra.Command) (string, error) {
+func readRepositorySelectorFlag(cmd *cobra.Command) (string, bool, error) {
 	if cmd == nil {
-		return "", nil
+		return "", false, nil
 	}
 	if cmd.Flags().Lookup("repo") != nil {
 		value, err := cmd.Flags().GetString("repo")
 		if err != nil {
-			return "", fmt.Errorf("read repo flag: %w", err)
+			return "", false, fmt.Errorf("read repo flag: %w", err)
 		}
 		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value), nil
+			return strings.TrimSpace(value), false, nil
 		}
 	}
 	if cmd.Flags().Lookup("repo-id") != nil {
 		value, err := cmd.Flags().GetString("repo-id")
 		if err != nil {
-			return "", fmt.Errorf("read repo-id flag: %w", err)
+			return "", false, fmt.Errorf("read repo-id flag: %w", err)
 		}
-		return strings.TrimSpace(value), nil
+		return strings.TrimSpace(value), true, nil
 	}
-	return "", nil
+	return "", false, nil
 }
 
 func resolveRepositorySelector(_ *cobra.Command, client *APIClient, selector string) (string, error) {

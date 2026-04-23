@@ -159,78 +159,84 @@ SET rel.confidence = 0.9,
 const batchCanonicalCodeCallUpsertCypher = `UNWIND $rows AS row
 MATCH (source:Function|Class|File {uid: coalesce(row.caller_entity_id, row.source_entity_id)})
 MATCH (target:Function|Class|File {uid: coalesce(row.callee_entity_id, row.target_entity_id)})
-FOREACH (_ IN CASE WHEN row.relationship_type = 'USES_METACLASS' THEN [1] ELSE [] END |
-    MERGE (source)-[rel:USES_METACLASS]->(target)
-    SET rel.confidence = 0.95,
-        rel.reason = 'Parser and symbol analysis resolved a Python metaclass edge',
-        rel.evidence_source = row.evidence_source,
-        rel.relationship_type = row.relationship_type
-)
-FOREACH (_ IN CASE WHEN row.relationship_type IS NULL AND row.call_kind = 'jsx_component' THEN [1] ELSE [] END |
-    MERGE (source)-[rel:REFERENCES]->(target)
-    SET rel.confidence = 0.95,
-        rel.reason = 'Parser and symbol analysis resolved a TSX component reference edge',
-        rel.evidence_source = row.evidence_source,
-        rel.call_kind = row.call_kind
-)
-FOREACH (_ IN CASE WHEN row.relationship_type IS NULL AND (row.call_kind IS NULL OR row.call_kind <> 'jsx_component') THEN [1] ELSE [] END |
-    MERGE (source)-[rel:CALLS]->(target)
-    SET rel.confidence = 0.95,
-        rel.reason = 'Parser and symbol analysis resolved a code call edge',
-        rel.evidence_source = row.evidence_source,
-        rel.call_kind = row.call_kind
-)`
+MERGE (source)-[rel:CALLS]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser and symbol analysis resolved a code call edge',
+    rel.evidence_source = row.evidence_source,
+    rel.call_kind = row.call_kind`
+
+const batchCanonicalJSXComponentReferenceUpsertCypher = `UNWIND $rows AS row
+MATCH (source:Function|Class|File {uid: row.caller_entity_id})
+MATCH (target:Function|Class|File {uid: row.callee_entity_id})
+MERGE (source)-[rel:REFERENCES]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser and symbol analysis resolved a TSX component reference edge',
+    rel.evidence_source = row.evidence_source,
+    rel.call_kind = row.call_kind`
+
+const batchCanonicalMetaclassUpsertCypher = `UNWIND $rows AS row
+MATCH (source:Function|Class|File {uid: row.source_entity_id})
+MATCH (target:Function|Class|File {uid: row.target_entity_id})
+MERGE (source)-[rel:USES_METACLASS]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser and symbol analysis resolved a Python metaclass edge',
+    rel.evidence_source = row.evidence_source,
+    rel.relationship_type = row.relationship_type`
 
 // --- Batched UNWIND Cypher (inheritance edges) ---
 
 const batchCanonicalInheritanceEdgeUpsertCypher = `UNWIND $rows AS row
 MATCH (child:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.child_entity_id})
 MATCH (parent:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.parent_entity_id})
-FOREACH (_ IN CASE WHEN row.relationship_type = 'OVERRIDES' THEN [1] ELSE [] END |
-    MERGE (child)-[rel:OVERRIDES]->(parent)
-    SET rel.confidence = 0.95,
-        rel.reason = 'Parser trait adaptation metadata resolved an override edge',
-        rel.evidence_source = row.evidence_source,
-        rel.relationship_type = row.relationship_type
-)
-FOREACH (_ IN CASE WHEN row.relationship_type = 'ALIASES' THEN [1] ELSE [] END |
-    MERGE (child)-[rel:ALIASES]->(parent)
-    SET rel.confidence = 0.95,
-        rel.reason = 'Parser trait adaptation metadata resolved an alias edge',
-        rel.evidence_source = row.evidence_source,
-        rel.relationship_type = row.relationship_type
-)
-FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type = 'INHERITS' THEN [1] ELSE [] END |
-    MERGE (child)-[rel:INHERITS]->(parent)
-    SET rel.confidence = 0.95,
-        rel.reason = 'Parser entity bases metadata resolved an inheritance edge',
-        rel.evidence_source = row.evidence_source,
-        rel.relationship_type = row.relationship_type
-)`
+MERGE (child)-[rel:INHERITS]->(parent)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser entity bases metadata resolved an inheritance edge',
+    rel.evidence_source = row.evidence_source,
+    rel.relationship_type = row.relationship_type`
+
+const batchCanonicalInheritanceOverrideUpsertCypher = `UNWIND $rows AS row
+MATCH (child:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.child_entity_id})
+MATCH (parent:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.parent_entity_id})
+MERGE (child)-[rel:OVERRIDES]->(parent)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser trait adaptation metadata resolved an override edge',
+    rel.evidence_source = row.evidence_source,
+    rel.relationship_type = row.relationship_type`
+
+const batchCanonicalInheritanceAliasUpsertCypher = `UNWIND $rows AS row
+MATCH (child:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.child_entity_id})
+MATCH (parent:Function|Class|Interface|Trait|Struct|Enum|Protocol {uid: row.parent_entity_id})
+MERGE (child)-[rel:ALIASES]->(parent)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser trait adaptation metadata resolved an alias edge',
+    rel.evidence_source = row.evidence_source,
+    rel.relationship_type = row.relationship_type`
 
 // --- Batched UNWIND Cypher (SQL relationship edges) ---
 
 const batchCanonicalSQLRelationshipUpsertCypher = `UNWIND $rows AS row
 MATCH (source:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.source_entity_id})
 MATCH (target:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.target_entity_id})
-FOREACH (_ IN CASE WHEN row.relationship_type = 'REFERENCES_TABLE' THEN [1] ELSE [] END |
-    MERGE (source)-[rel:REFERENCES_TABLE]->(target)
-    SET rel.confidence = 0.95,
-        rel.reason = 'SQL entity metadata resolved a table reference edge',
-        rel.evidence_source = row.evidence_source
-)
-FOREACH (_ IN CASE WHEN row.relationship_type = 'HAS_COLUMN' THEN [1] ELSE [] END |
-    MERGE (source)-[rel:HAS_COLUMN]->(target)
-    SET rel.confidence = 0.95,
-        rel.reason = 'SQL entity metadata resolved a table-column containment edge',
-        rel.evidence_source = row.evidence_source
-)
-FOREACH (_ IN CASE WHEN row.relationship_type = 'TRIGGERS' THEN [1] ELSE [] END |
-    MERGE (source)-[rel:TRIGGERS]->(target)
-    SET rel.confidence = 0.95,
-        rel.reason = 'SQL entity metadata resolved a trigger edge',
-        rel.evidence_source = row.evidence_source
-)`
+MERGE (source)-[rel:REFERENCES_TABLE]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'SQL entity metadata resolved a table reference edge',
+    rel.evidence_source = row.evidence_source`
+
+const batchCanonicalSQLHasColumnUpsertCypher = `UNWIND $rows AS row
+MATCH (source:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.source_entity_id})
+MATCH (target:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.target_entity_id})
+MERGE (source)-[rel:HAS_COLUMN]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'SQL entity metadata resolved a table-column containment edge',
+    rel.evidence_source = row.evidence_source`
+
+const batchCanonicalSQLTriggersUpsertCypher = `UNWIND $rows AS row
+MATCH (source:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.source_entity_id})
+MATCH (target:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.target_entity_id})
+MERGE (source)-[rel:TRIGGERS]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'SQL entity metadata resolved a trigger edge',
+    rel.evidence_source = row.evidence_source`
 
 // --- Retraction Cypher ---
 

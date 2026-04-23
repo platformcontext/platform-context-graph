@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 )
 
@@ -130,5 +132,80 @@ func TestReducerCypherExecutorRetriesTransientDeadlock(t *testing.T) {
 	}
 	if got, want := len(session.calls), 2; got != want {
 		t.Fatalf("session calls = %d, want %d", got, want)
+	}
+}
+
+type groupCapableReducerExecutor struct {
+	groupCalls int
+}
+
+func (e *groupCapableReducerExecutor) Execute(context.Context, sourceneo4j.Statement) error {
+	return nil
+}
+
+func (e *groupCapableReducerExecutor) ExecuteGroup(context.Context, []sourceneo4j.Statement) error {
+	e.groupCalls++
+	return nil
+}
+
+type contextBlockingReducerExecutor struct{}
+
+func (contextBlockingReducerExecutor) Execute(ctx context.Context, _ sourceneo4j.Statement) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (contextBlockingReducerExecutor) ExecuteGroup(ctx context.Context, _ []sourceneo4j.Statement) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestSemanticEntityExecutorForGraphBackendKeepsNeo4jGroupedExecutor(t *testing.T) {
+	t.Parallel()
+
+	executor := semanticEntityExecutorForGraphBackend(&groupCapableReducerExecutor{}, runtimecfg.GraphBackendNeo4j, 0, false)
+	if _, ok := executor.(sourceneo4j.GroupExecutor); !ok {
+		t.Fatal("Neo4j semantic entity executor does not implement GroupExecutor")
+	}
+}
+
+func TestSemanticEntityExecutorForGraphBackendHidesGroupExecutorForNornicDB(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableReducerExecutor{}
+	executor := semanticEntityExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, false)
+	if _, ok := executor.(sourceneo4j.GroupExecutor); ok {
+		t.Fatal("NornicDB semantic entity executor implements GroupExecutor, want execute-only surface")
+	}
+}
+
+func TestSemanticEntityExecutorForGraphBackendPreservesGroupedWritesForConformance(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableReducerExecutor{}
+	executor := semanticEntityExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, true)
+	ge, ok := executor.(sourceneo4j.GroupExecutor)
+	if !ok {
+		t.Fatal("NornicDB semantic entity executor does not implement GroupExecutor when conformance grouped writes are enabled")
+	}
+	if err := ge.ExecuteGroup(context.Background(), []sourceneo4j.Statement{{Cypher: "RETURN 1"}}); err != nil {
+		t.Fatalf("ExecuteGroup() error = %v, want nil", err)
+	}
+	if got, want := inner.groupCalls, 1; got != want {
+		t.Fatalf("inner groupCalls = %d, want %d", got, want)
+	}
+}
+
+func TestSemanticEntityExecutorForGraphBackendTimesOutGroupedWrites(t *testing.T) {
+	t.Parallel()
+
+	executor := semanticEntityExecutorForGraphBackend(contextBlockingReducerExecutor{}, runtimecfg.GraphBackendNornicDB, 10*time.Millisecond, true)
+	ge, ok := executor.(sourceneo4j.GroupExecutor)
+	if !ok {
+		t.Fatal("NornicDB grouped semantic entity executor does not implement GroupExecutor")
+	}
+	err := ge.ExecuteGroup(context.Background(), []sourceneo4j.Statement{{Cypher: "RETURN 1"}})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ExecuteGroup() error = %v, want deadline exceeded", err)
 	}
 }

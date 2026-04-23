@@ -16,7 +16,12 @@ import (
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 )
 
-const reducerNeo4jCloseTimeout = 10 * time.Second
+const (
+	reducerNeo4jCloseTimeout             = 10 * time.Second
+	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
+	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
+	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
+)
 
 // cypherRunner is the narrow interface shared by both executor adapters.
 type cypherRunner interface {
@@ -240,6 +245,49 @@ func openReducerNeo4jAdapters(
 		runner,
 		reducerNeo4jDriverCloser{Driver: driver},
 		nil
+}
+
+func semanticEntityExecutorForGraphBackend(
+	rawExecutor sourceneo4j.Executor,
+	graphBackend runtimecfg.GraphBackend,
+	nornicDBTimeout time.Duration,
+	nornicDBGroupedWrites bool,
+) sourceneo4j.Executor {
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		bounded := sourceneo4j.TimeoutExecutor{
+			Inner:   rawExecutor,
+			Timeout: nornicDBTimeout,
+		}
+		if nornicDBGroupedWrites {
+			return bounded
+		}
+		return sourceneo4j.ExecuteOnlyExecutor{Inner: bounded}
+	}
+	return rawExecutor
+}
+
+func nornicDBCanonicalWriteTimeout(getenv func(string) string) time.Duration {
+	raw := strings.TrimSpace(getenv(canonicalWriteTimeoutEnv))
+	if raw == "" {
+		return defaultNornicDBCanonicalWriteTimeout
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		return defaultNornicDBCanonicalWriteTimeout
+	}
+	return parsed
+}
+
+func nornicDBCanonicalGroupedWrites(getenv func(string) string) (bool, error) {
+	raw := strings.TrimSpace(getenv(nornicDBCanonicalGroupedWritesEnv))
+	if raw == "" {
+		return false, nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("parse %s=%q: %w", nornicDBCanonicalGroupedWritesEnv, raw, err)
+	}
+	return enabled, nil
 }
 
 func neo4jBatchSize(getenv func(string) string) int {

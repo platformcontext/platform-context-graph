@@ -300,7 +300,7 @@ func buildRowMap(
 			if sourceEntityID == "" || targetEntityID == "" {
 				return "", nil, false
 			}
-			return batchCanonicalCodeCallUpsertCypher, map[string]any{
+			return batchCanonicalMetaclassUpsertCypher, map[string]any{
 				"source_entity_id":  sourceEntityID,
 				"target_entity_id":  targetEntityID,
 				"relationship_type": relationshipType,
@@ -321,6 +321,9 @@ func buildRowMap(
 		if callKind := payloadString(row.Payload, "call_kind"); callKind != "" {
 			rowMap["call_kind"] = callKind
 		}
+		if rowMap["call_kind"] == "jsx_component" {
+			return batchCanonicalJSXComponentReferenceUpsertCypher, rowMap, true
+		}
 		return batchCanonicalCodeCallUpsertCypher, rowMap, true
 
 	case reducer.DomainInheritanceEdges:
@@ -329,12 +332,22 @@ func buildRowMap(
 		if childEntityID == "" || parentEntityID == "" {
 			return "", nil, false
 		}
-		return batchCanonicalInheritanceEdgeUpsertCypher, map[string]any{
+		rowMap := map[string]any{
 			"child_entity_id":   childEntityID,
 			"parent_entity_id":  parentEntityID,
 			"relationship_type": payloadString(row.Payload, "relationship_type"),
 			"evidence_source":   evidenceSource,
-		}, true
+		}
+		switch rowMap["relationship_type"] {
+		case "OVERRIDES":
+			return batchCanonicalInheritanceOverrideUpsertCypher, rowMap, true
+		case "ALIASES":
+			return batchCanonicalInheritanceAliasUpsertCypher, rowMap, true
+		case "", "INHERITS":
+			return batchCanonicalInheritanceEdgeUpsertCypher, rowMap, true
+		default:
+			return "", nil, false
+		}
 
 	case reducer.DomainSQLRelationships:
 		sourceEntityID := payloadString(row.Payload, "source_entity_id")
@@ -342,12 +355,22 @@ func buildRowMap(
 		if sourceEntityID == "" || targetEntityID == "" {
 			return "", nil, false
 		}
-		return batchCanonicalSQLRelationshipUpsertCypher, map[string]any{
+		rowMap := map[string]any{
 			"source_entity_id":  sourceEntityID,
 			"target_entity_id":  targetEntityID,
 			"relationship_type": payloadString(row.Payload, "relationship_type"),
 			"evidence_source":   evidenceSource,
-		}, true
+		}
+		switch rowMap["relationship_type"] {
+		case "REFERENCES_TABLE":
+			return batchCanonicalSQLRelationshipUpsertCypher, rowMap, true
+		case "HAS_COLUMN":
+			return batchCanonicalSQLHasColumnUpsertCypher, rowMap, true
+		case "TRIGGERS":
+			return batchCanonicalSQLTriggersUpsertCypher, rowMap, true
+		default:
+			return "", nil, false
+		}
 
 	default:
 		return "", nil, false

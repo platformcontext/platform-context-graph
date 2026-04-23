@@ -179,6 +179,70 @@ func TestServiceFallsBackToPerItemWhenNoBatchInterface(t *testing.T) {
 	}
 }
 
+func TestServiceRunBatchConcurrentHeartbeatsLongRunningReducerWork(t *testing.T) {
+	t.Parallel()
+
+	intent := Intent{
+		IntentID:        "intent-batch-heartbeat",
+		ScopeID:         "scope-123",
+		GenerationID:    "generation-456",
+		SourceSystem:    "git",
+		Domain:          DomainSemanticEntityMaterialization,
+		Cause:           "projector emitted semantic entity work",
+		EntityKeys:      []string{"repo:pcg"},
+		RelatedScopeIDs: []string{"scope-123"},
+		EnqueuedAt:      time.Date(2026, time.April, 23, 17, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 23, 17, 0, 0, 0, time.UTC),
+		Status:          IntentStatusPending,
+	}
+
+	release := make(chan struct{})
+	heartbeater := &stubReducerHeartbeater{
+		afterHeartbeat: func(count int) {
+			if count == 2 {
+				close(release)
+			}
+		},
+	}
+	executor := &blockingReducerExecutor{
+		release: release,
+		result: Result{
+			IntentID: intent.IntentID,
+			Domain:   intent.Domain,
+			Status:   ResultStatusSucceeded,
+		},
+	}
+	sink := &fakeBatchWorkSink{}
+
+	service := Service{
+		PollInterval:      10 * time.Millisecond,
+		WorkSource:        &fakeBatchWorkSource{intents: []Intent{intent}},
+		Executor:          executor,
+		WorkSink:          sink,
+		Heartbeater:       heartbeater,
+		HeartbeatInterval: 5 * time.Millisecond,
+		Workers:           2,
+		BatchClaimSize:    2,
+		Wait:              func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got, want := heartbeater.calls(), 2; got < want {
+		t.Fatalf("heartbeat calls = %d, want at least %d", got, want)
+	}
+	sink.mu.Lock()
+	acked, failed := sink.acked, sink.failed
+	sink.mu.Unlock()
+	if got, want := acked, 1; got != want {
+		t.Fatalf("sink acked = %d, want %d", got, want)
+	}
+	if got, want := failed, 0; got != want {
+		t.Fatalf("sink failed = %d, want %d", got, want)
+	}
+}
+
 // nonBatchWorkSource only implements WorkSource, not BatchWorkSource.
 type nonBatchWorkSource struct {
 	mu      sync.Mutex

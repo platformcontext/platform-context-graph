@@ -75,6 +75,37 @@ func (w *CanonicalNodeWriter) Write(ctx context.Context, mat projector.Canonical
 		return nil
 	}
 
+	// Phase-group path: preserve phase ordering, but use bounded grouped
+	// execution within each phase when the executor provides a narrower
+	// non-atomic grouping surface.
+	if pge, ok := w.executor.(PhaseGroupExecutor); ok {
+		w.recordAtomicFallback(ctx)
+		start := time.Now()
+		for _, phase := range phases {
+			if len(phase.statements) == 0 {
+				continue
+			}
+			phaseStart := time.Now()
+			if err := pge.ExecutePhaseGroup(ctx, phase.statements); err != nil {
+				return fmt.Errorf("canonical phase-group write (%s): %w", phase.name, err)
+			}
+			phaseSeconds := time.Since(phaseStart).Seconds()
+			slog.Info(
+				"canonical phase group completed",
+				"scope_id", mat.ScopeID,
+				"phase", phase.name,
+				"statements", len(phase.statements),
+				"duration_s", phaseSeconds,
+			)
+			w.recordAtomicWrite(ctx, "phase_group_"+phase.name, phaseSeconds, mat)
+		}
+		dur := time.Since(start).Seconds()
+		slog.Info("canonical phase-group write completed",
+			"scope_id", mat.ScopeID, "statements", len(allStatements), "duration_s", dur)
+		w.recordAtomicWrite(ctx, "phase_group", dur, mat)
+		return nil
+	}
+
 	// Fallback: sequential execution (existing behavior).
 	w.recordAtomicFallback(ctx)
 	start := time.Now()
@@ -112,6 +143,7 @@ func (w *CanonicalNodeWriter) buildPhases(mat projector.CanonicalMaterialization
 		{name: "directories", statements: w.buildDirectoryStatements(mat)},
 		{name: "files", statements: w.buildFileStatements(mat)},
 		{name: "entities", statements: w.buildEntityStatements(mat)},
+		{name: "entity_containment", statements: w.buildEntityContainmentStatements(mat)},
 		{name: "modules", statements: w.buildModuleStatements(mat)},
 		{name: "structural_edges", statements: w.buildStructuralEdgeStatements(mat)},
 	}
@@ -262,57 +294,6 @@ func (w *CanonicalNodeWriter) buildFileStatements(mat projector.CanonicalMateria
 	}
 
 	return buildBatchedStatements(canonicalNodeFileUpsertCypher, rows, w.batchSize)
-}
-
-// --- Phase E: Entities (per-label UNWIND) ---
-
-func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMaterialization) []Statement {
-	if len(mat.Entities) == 0 {
-		return nil
-	}
-
-	// Group by label for per-label UNWIND batches.
-	byLabel := map[string][]map[string]any{}
-	for _, e := range mat.Entities {
-		row := map[string]any{
-			"entity_id":       e.EntityID,
-			"entity_name":     e.EntityName,
-			"label":           e.Label,
-			"file_path":       e.FilePath,
-			"relative_path":   e.RelativePath,
-			"start_line":      e.StartLine,
-			"end_line":        e.EndLine,
-			"language":        e.Language,
-			"repo_id":         e.RepoID,
-			"entity_metadata": e.Metadata,
-			"scope_id":        mat.ScopeID,
-			"generation_id":   mat.GenerationID,
-		}
-		byLabel[e.Label] = append(byLabel[e.Label], row)
-	}
-
-	// Sort labels for deterministic ordering.
-	labels := make([]string, 0, len(byLabel))
-	for l := range byLabel {
-		labels = append(labels, l)
-	}
-	sort.Strings(labels)
-
-	var stmts []Statement
-	for _, label := range labels {
-		rows := byLabel[label]
-		for i := range rows {
-			if metadata := canonicalTypeScriptClassFamilyMetadata(rows[i]); len(metadata) > 0 {
-				for key, value := range metadata {
-					rows[i][key] = value
-				}
-			}
-			delete(rows[i], "entity_metadata")
-		}
-		cypher := fmt.Sprintf(canonicalNodeEntityUpsertTemplate, label)
-		stmts = append(stmts, buildBatchedStatements(cypher, rows, w.batchSize)...)
-	}
-	return stmts
 }
 
 // --- Phase F: Modules ---

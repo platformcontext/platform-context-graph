@@ -262,6 +262,50 @@ func TestExtractSemanticEntityRowsIncludesPythonDecoratedAsyncFunctionFacts(t *t
 	}
 }
 
+func TestExtractSemanticEntityRowsIncludesGoMethodFunctions(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "content_entity",
+			SourceRef: facts.Ref{
+				SourceURI: "/repo/go/internal/query/code_relationships.go",
+			},
+			Payload: map[string]any{
+				"repo_id":       "repo-1",
+				"entity_id":     "function-go-1",
+				"relative_path": "go/internal/query/code_relationships.go",
+				"entity_type":   "Function",
+				"entity_name":   "handleRelationships",
+				"language":      "go",
+				"start_line":    22,
+				"end_line":      178,
+				"docstring":     "handleRelationships returns incoming and outgoing relationships for an entity.",
+				"class_context": "CodeHandler",
+			},
+		},
+	}
+
+	repoIDs, rows := ExtractSemanticEntityRows(envelopes)
+	if got, want := repoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("ExtractSemanticEntityRows() repoIDs = %v, want %v", got, want)
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("ExtractSemanticEntityRows() rows = %d, want %d", got, want)
+	}
+
+	row := rows[0]
+	if got, want := row.EntityType, "Function"; got != want {
+		t.Fatalf("row.EntityType = %q, want %q", got, want)
+	}
+	if got, want := row.Metadata["docstring"], "handleRelationships returns incoming and outgoing relationships for an entity."; got != want {
+		t.Fatalf("row.Metadata[docstring] = %#v, want %#v", got, want)
+	}
+	if got, want := row.Metadata["class_context"], "CodeHandler"; got != want {
+		t.Fatalf("row.Metadata[class_context] = %#v, want %#v", got, want)
+	}
+}
+
 func TestExtractSemanticEntityRowsIncludesPythonFunctionTypeAnnotationFacts(t *testing.T) {
 	t.Parallel()
 

@@ -124,6 +124,7 @@ local NornicDB binary such as `/tmp/nornicdb-headless`.
 ```bash
 export PCG_HOME=/tmp/pcg-local-authoritative-smoke
 export PCG_CANONICAL_WRITE_TIMEOUT=2s
+export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
 ./go/bin/pcg graph start --workspace-root "$PWD"
 ./go/bin/pcg mcp start --workspace-root "$PWD"
@@ -144,7 +145,10 @@ and verify `pcg graph status` reports `owner_present=false`.
 Do not set `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` for this everyday MCP
 smoke. That switch is reserved for adapter conformance runs that intentionally
 exercise NornicDB's Bolt explicit transaction path and verify rollback,
-timeout, and no-partial-write behavior.
+timeout, and no-partial-write behavior. If repo-scale projection is the thing
+you are validating, tune `PCG_NORNICDB_PHASE_GROUP_STATEMENTS` before you reach
+for grouped conformance mode so the everyday local-authoritative path stays the
+thing under test.
 
 ### Local-Authoritative Startup Envelope Smoke
 
