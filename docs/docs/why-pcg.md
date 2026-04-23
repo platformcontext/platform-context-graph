@@ -91,6 +91,12 @@ semantics are not well represented by row-level ORMs. Details:
 [Architecture — Capability Ports](architecture.md) and
 [Capability Conformance Spec](reference/capability-conformance-spec.md).
 
+Schema bootstrap follows the same adapter rule. Neo4j receives the shared
+production DDL unchanged; NornicDB receives a narrow schema-dialect rendering
+for compatibility gaps such as composite node identity. That route is
+deliberately limited to DDL so reducers, handlers, CLI, HTTP, and MCP tools
+do not fork into separate backend-specific codepaths.
+
 ### Conformance before "supported"
 
 No backend is advertised as supported because it "speaks Cypher." A backend is
