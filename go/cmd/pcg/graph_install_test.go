@@ -82,6 +82,82 @@ func TestInstallNornicDBRejectsChecksumMismatch(t *testing.T) {
 	}
 }
 
+func TestInstallNornicDBRequiresForceToReplaceDifferentBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a Unix executable script")
+	}
+
+	homeDir := t.TempDir()
+	t.Setenv("PCG_HOME", homeDir)
+	first := writeFakeNornicDBBinary(t, "NornicDB v1.0.42\n")
+	second := writeFakeNornicDBBinary(t, "NornicDB v1.0.43\n")
+
+	if _, err := installNornicDB(installNornicDBOptions{From: first}); err != nil {
+		t.Fatalf("first installNornicDB() error = %v, want nil", err)
+	}
+	_, err := installNornicDB(installNornicDBOptions{From: second})
+	if err == nil {
+		t.Fatal("second installNornicDB() error = nil, want replace guidance")
+	}
+	if !strings.Contains(err.Error(), "pass --force to replace it") {
+		t.Fatalf("second installNornicDB() error = %q, want --force guidance", err.Error())
+	}
+}
+
+func TestInstallNornicDBForceReplacesDifferentBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a Unix executable script")
+	}
+
+	homeDir := t.TempDir()
+	t.Setenv("PCG_HOME", homeDir)
+	first := writeFakeNornicDBBinary(t, "NornicDB v1.0.42\n")
+	second := writeFakeNornicDBBinary(t, "NornicDB v1.0.43\n")
+
+	if _, err := installNornicDB(installNornicDBOptions{From: first}); err != nil {
+		t.Fatalf("first installNornicDB() error = %v, want nil", err)
+	}
+	result, err := installNornicDB(installNornicDBOptions{From: second, Force: true})
+	if err != nil {
+		t.Fatalf("forced installNornicDB() error = %v, want nil", err)
+	}
+	if result.Reused {
+		t.Fatal("Reused = true after forced replacement, want false")
+	}
+	gotVersion, err := readLocalGraphVersion(filepath.Join(homeDir, "bin", "nornicdb-headless"))
+	if err != nil {
+		t.Fatalf("readLocalGraphVersion(installed) error = %v, want nil", err)
+	}
+	if gotVersion != "v1.0.43" {
+		t.Fatalf("installed version = %q, want %q", gotVersion, "v1.0.43")
+	}
+}
+
+func TestInstallNornicDBReusesManagedSourcePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a Unix executable script")
+	}
+
+	homeDir := t.TempDir()
+	t.Setenv("PCG_HOME", homeDir)
+	source := writeFakeNornicDBBinary(t, "NornicDB v1.0.42\n")
+
+	first, err := installNornicDB(installNornicDBOptions{From: source})
+	if err != nil {
+		t.Fatalf("first installNornicDB() error = %v, want nil", err)
+	}
+	second, err := installNornicDB(installNornicDBOptions{From: first.BinaryPath})
+	if err != nil {
+		t.Fatalf("second installNornicDB() error = %v, want nil", err)
+	}
+	if !second.Reused {
+		t.Fatal("Reused = false for source-equals-target install, want true")
+	}
+	if second.BinaryPath != first.BinaryPath {
+		t.Fatalf("second BinaryPath = %q, want %q", second.BinaryPath, first.BinaryPath)
+	}
+}
+
 func TestInstallNornicDBRequiresLocalSourcePath(t *testing.T) {
 	t.Setenv("PCG_HOME", t.TempDir())
 

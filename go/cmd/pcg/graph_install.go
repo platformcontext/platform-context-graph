@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	managedNornicDBBinaryName = "nornicdb-headless"
+	managedNornicDBBinaryName    = "nornicdb-headless"
+	nornicDBInstallModeLocalFile = "local-file"
 )
 
 var (
@@ -185,7 +186,7 @@ func writeNornicDBInstallManifest(targetPath, manifestPath, sourcePath, version,
 		SHA256:      checksum,
 		SourcePath:  sourcePath,
 		InstalledAt: installedAt,
-		InstallMode: "local-file",
+		InstallMode: nornicDBInstallModeLocalFile,
 		Headless:    filepath.Base(targetPath) == managedNornicDBBinaryName,
 	}
 	content, err := json.MarshalIndent(manifest, "", "  ")

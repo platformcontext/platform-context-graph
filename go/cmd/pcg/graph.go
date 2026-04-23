@@ -3,9 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -59,7 +61,17 @@ func init() {
 	installNornicDBCmd := &cobra.Command{
 		Use:   "nornicdb",
 		Short: "Install the local NornicDB binary",
-		RunE:  runInstallNornicDB,
+		Long: strings.TrimSpace(`
+Install a verified local NornicDB executable into PCG's managed home.
+
+Current support is local-file only:
+
+  pcg install nornicdb --from /absolute/path/to/nornicdb-headless
+  pcg install nornicdb --from /absolute/path/to/nornicdb-headless --sha256 <expected-sha256>
+
+Release download and signature verification are planned but not wired yet.
+`),
+		RunE: runInstallNornicDB,
 	}
 	installNornicDBCmd.Flags().String("from", "", "Install from an existing local NornicDB binary")
 	installNornicDBCmd.Flags().String("sha256", "", "Expected SHA-256 checksum for --from")
@@ -88,13 +100,13 @@ func init() {
 			return graphLifecycleNotWired("pcg graph stop")
 		},
 	})
-	graphCmd.AddCommand(&cobra.Command{
+	graphLogsCmd := &cobra.Command{
 		Use:   "logs",
 		Short: "Show local graph backend logs",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return graphLifecycleNotWired("pcg graph logs")
-		},
-	})
+		RunE:  runGraphLogs,
+	}
+	graphLogsCmd.Flags().String("workspace-root", "", "Explicit workspace root for local graph logs")
+	graphCmd.AddCommand(graphLogsCmd)
 	graphCmd.AddCommand(&cobra.Command{
 		Use:   "upgrade",
 		Short: "Upgrade the local graph backend sidecar",
@@ -105,19 +117,7 @@ func init() {
 }
 
 func runGraphStatus(cmd *cobra.Command, args []string) error {
-	startPath, err := graphGetwd()
-	if err != nil {
-		return fmt.Errorf("resolve current working directory: %w", err)
-	}
-	explicitRoot, err := cmd.Flags().GetString("workspace-root")
-	if err != nil {
-		return err
-	}
-	workspaceRoot, err := pcglocal.ResolveWorkspaceRoot(startPath, explicitRoot)
-	if err != nil {
-		return err
-	}
-	layout, err := graphBuildLayout(workspaceRoot)
+	layout, err := graphLayoutFromCommand(cmd)
 	if err != nil {
 		return err
 	}
@@ -128,6 +128,37 @@ func runGraphStatus(cmd *cobra.Command, args []string) error {
 	}
 	printJSON(status)
 	return nil
+}
+
+func runGraphLogs(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("pcg graph logs accepts flags only, got %d argument(s)", len(args))
+	}
+	layout, err := graphLayoutFromCommand(cmd)
+	if err != nil {
+		return err
+	}
+	return graphLogsForLayout(layout)
+}
+
+func graphLayoutFromCommand(cmd *cobra.Command) (pcglocal.Layout, error) {
+	startPath, err := graphGetwd()
+	if err != nil {
+		return pcglocal.Layout{}, fmt.Errorf("resolve current working directory: %w", err)
+	}
+	explicitRoot, err := cmd.Flags().GetString("workspace-root")
+	if err != nil {
+		return pcglocal.Layout{}, err
+	}
+	workspaceRoot, err := pcglocal.ResolveWorkspaceRoot(startPath, explicitRoot)
+	if err != nil {
+		return pcglocal.Layout{}, err
+	}
+	layout, err := graphBuildLayout(workspaceRoot)
+	if err != nil {
+		return pcglocal.Layout{}, err
+	}
+	return layout, nil
 }
 
 func graphStatusForLayout(layout pcglocal.Layout) (graphStatusOutput, error) {
@@ -176,6 +207,24 @@ func graphStatusForLayout(layout pcglocal.Layout) (graphStatusOutput, error) {
 	}
 
 	return status, nil
+}
+
+func graphLogsForLayout(layout pcglocal.Layout) error {
+	logPath := filepath.Join(layout.LogsDir, "graph-nornicdb.log")
+	file, err := os.Open(logPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("graph log does not exist at %q; start local_authoritative with pcg watch first", logPath)
+		}
+		return fmt.Errorf("open graph log %q: %w", logPath, err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+	if _, err := io.Copy(os.Stdout, file); err != nil {
+		return fmt.Errorf("print graph log %q: %w", logPath, err)
+	}
+	return nil
 }
 
 func graphLifecycleNotWired(command string) error {
