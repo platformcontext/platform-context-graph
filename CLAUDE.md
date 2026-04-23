@@ -314,3 +314,105 @@ chunk boundaries MUST include:
 
 Reviewer rejects PR on doc drift. The `uv run ... mkdocs build --strict` gate
 must pass; any reference path added to `docs/mkdocs.yml` must resolve.
+
+Two agents work on this codebase concurrently: Claude Code and Codex. Both
+are subject to the same discipline rule. Whichever agent lands a contract
+change owns the doc-sync work in that same PR; reviewers reject on drift
+regardless of authorship. `CLAUDE.md` and `AGENTS.md` are kept in lockstep —
+`AGENTS.md` mirrors `CLAUDE.md` and any edit to one must be mirrored in the
+other in the same PR.
+
+## Correlation Truth Gates
+
+Use the `pcg-correlation-truth` skill whenever a change touches workload
+admission, deployable-unit correlation, materialization, deployment tracing,
+or query truth in `go/internal/reducer`, `go/internal/query`,
+`go/internal/graph`, `go/internal/relationships`, or correlation verification
+fixtures.
+
+- Do not change correlation logic until you can explain the full path from
+  raw evidence → candidate → admission → projection row → graph write →
+  query surface.
+- Every correlation or materialization change MUST include one positive
+  case, one negative case, and one ambiguous case. If any of those classes
+  is missing, stop and add it before claiming the design is understood.
+- Prove both sides of the contract: what SHOULD materialize and what MUST
+  remain provenance-only. Utility repos, controller repos, deployment repos,
+  and ambiguous multi-unit repos are mandatory edge-case categories.
+- Namespace, folder, or repo-name heuristics MUST NOT invent environment or
+  platform truth unless the value matches an explicit environment alias or
+  is backed by stronger deployment evidence.
+- Reducer completion timing is not valid proof. After the final logic
+  patch, run a fresh rebuild/restart path and re-check the graph before
+  concluding a miss is timing-related.
+- Validation MUST compare fixture intent, reducer graph truth, and
+  API/query truth. If any of the three disagree, do not wave it through as
+  "close enough"; explain the mismatch or keep digging.
+- Required proof for correlation-changing work: focused Go tests for the
+  touched packages, a fresh compose correlation run, a direct graph
+  inspection of the canonical nodes/edges, and the affected query/API
+  surfaces.
+- Deployment-story or service-story changes MUST validate repo context,
+  service context, and deployment trace together because one surface can
+  look healthy while another still lies.
+
+## Graph Backend Axis
+
+PCG supports multiple graph-backend adapters behind the `GraphQuery` and
+`GraphWrite` ports. Current adapters:
+
+- `neo4j` — default today, used in Compose and production
+- `nornicdb` — pure-Go evaluation candidate; Accepted with conditions per
+  `docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`
+
+Selection is explicit via `PCG_GRAPH_BACKEND={neo4j,nornicdb}`. Invalid
+values are rejected at startup. The axis surfaces in telemetry as
+`graph_backend` and optionally in `truth.backend` on responses.
+
+When touching graph-backed code, preserve port boundaries: handlers depend
+on `GraphQuery` / `GraphWrite`, never on a concrete adapter type. Backend
+dialect translation belongs only in already-documented narrow seams (schema
+DDL, canonical-write executor, call-chain/transitive Cypher builders). New
+seams require an ADR update before merging.
+
+## Docker Compose macOS Note
+
+If a change affects Docker Compose, read
+`docs/docs/deployment/docker-compose.md`. Compose host mounts must use
+absolute real directories, not symlinks. On macOS, `/tmp` resolves through a
+symlink and is **not** a safe default bind root — use
+`/private/tmp/<workspace-id>/` or a repo-local path instead.
+
+## NornicDB Compatibility Workflow (MANDATORY)
+
+When any PCG work hits a NornicDB incompatibility (Cypher parse rejection,
+rollback misbehavior, driver shape mismatch, missing procedure, etc.), follow
+the workflow documented in
+`docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`
+§ NornicDB Compatibility Workflow before writing a PCG-side workaround.
+
+Short form:
+
+1. **Check upstream source before guessing.** Local checkouts:
+   - `/Users/allen/os-repos/NornicDB/` — upstream reference
+   - `/Users/allen/os-repos/NornicDB-pcg-bolt-rollback/` — PCG-maintained
+     fork for the grouped-write rollback conformance work
+
+   Use the Grep tool (`rg`) against those paths to confirm what NornicDB
+   actually supports or rejects. Do not infer from test failures alone.
+
+2. **Pick the smallest correct fix.**
+   - NornicDB supports it → fix the PCG side.
+   - NornicDB has a workaround → route PCG through a narrow backend-dialect
+     seam (`schemaDialect`, `canonicalExecutorForGraphBackend`,
+     `buildCallChainCypher`, etc.). Do not branch handlers on backend brand.
+   - NornicDB must be patched → land the fix in
+     `NornicDB-pcg-bolt-rollback`, rebuild, and pin the binary through the
+     installer manifest or explicit `--from` until upstream absorbs it.
+
+3. **Record the decision** in the NornicDB ADR's adapter evidence row and
+   the active Chunk 3.5 / Chunk 4 status row of
+   `docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md`.
+
+Reviewer rejects PR when an `if backend == nornicdb` branch appears outside
+an already documented narrow seam.

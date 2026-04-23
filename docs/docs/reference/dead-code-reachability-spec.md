@@ -49,6 +49,13 @@ Every dead-code analysis must classify roots into one or more of these groups:
 - library public API roots
   - exported symbols in library-mode packages
   - per-language public-surface rules
+  - Go (currently modeled, default-on): Functions, Structs, Interfaces, and
+    Classes whose first rune is uppercase are public-API roots when the file
+    path is outside `cmd/`, `internal/`, and `vendor/` subtrees. Binary
+    entrypoints (`cmd/`) and internal packages (`internal/`) remain subject
+    to reachability rules. Other languages (Python, Rust, Java, TypeScript)
+    are not yet modeled; their exported-symbol rules are a Chunk 4
+    follow-up
 - conditional roots
   - build-tag, platform, or environment-specific reachability
 - user-declared roots

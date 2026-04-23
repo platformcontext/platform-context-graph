@@ -1,9 +1,21 @@
 # ADR: NornicDB As Candidate Graph Backend
 
 **Date:** 2026-04-22
-**Status:** Proposed (provisional)
+**Status:** Accepted with conditions (2026-04-23)
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
+
+**Acceptance Conditions (must remain true for acceptance to hold):**
+
+- release-backed rollback-safe NornicDB binary published and pinned in
+  `go/cmd/pcg/nornicdb_release_manifest.json`
+- Chunk 5 backend conformance suite passes against NornicDB for
+  `GraphQuery` and `GraphWrite` adapters
+- Chunk 5b matrix runs pass against `local_authoritative`,
+  `local_full_stack`, and `production` profiles with recorded perf evidence
+- signature verification policy defined and enforced for installed binaries
+- Neo4j remains the default `PCG_GRAPH_BACKEND` until Chunk 7 deprecation
+  criteria are met
 **Related:**
 
 - `docs/docs/adrs/2026-04-20-embedded-local-backends-desktop-mode.md`
@@ -416,9 +428,64 @@ and the broader adapter matrix passes, while
 `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` exposes grouped writes for adapter
 conformance only.
 
+## NornicDB Compatibility Workflow (MANDATORY)
+
+When PCG hits a NornicDB incompatibility (Cypher parse rejection, rollback
+misbehavior, driver shape mismatch, missing procedure, etc.), the PCG contributor
+MUST follow this workflow before writing a PCG-side workaround:
+
+1. **Search the NornicDB source first.** The upstream NornicDB repository is
+   checked out locally at:
+
+   - `/Users/allen/os-repos/NornicDB/` — upstream reference
+   - `/Users/allen/os-repos/NornicDB-pcg-bolt-rollback/` — PCG-maintained fork
+     for the grouped-write rollback conformance work
+
+   Use `rg` or the Grep tool against those paths to confirm what the runtime
+   actually supports, parses, or rejects. Read the source of truth before
+   inferring behavior from test failures.
+
+2. **Decide the patch surface.** Every NornicDB incompatibility resolves to
+   exactly one of:
+
+   - **NornicDB supports it already** (parser difference, missing workaround
+     in PCG). Fix: adjust PCG's Cypher, driver call, or adapter to match
+     what NornicDB's source-of-truth code accepts.
+   - **NornicDB has a documented workaround** (procedure form, alternate
+     syntax, different rollback API). Fix: route PCG through the supported
+     form behind the backend-dialect seam (`schemaDialect`,
+     `canonicalExecutorForGraphBackend`, `buildCallChainCypher`, etc.). Do
+     not branch query handlers on backend brand.
+   - **NornicDB must be patched.** The PCG path is correct and NornicDB is
+     wrong. Open a branch in `NornicDB-pcg-bolt-rollback`, reproduce with a
+     minimal test that mirrors the PCG workload, land the fix, and pin the
+     rebuilt binary through the installer's pinned manifest or explicit
+     `--from` path until upstream absorbs the change.
+
+3. **Record the decision.** Add the incompatibility, workaround route, and
+   upstream patch status to:
+
+   - this ADR's Feature evidence section (for adapter conformance claims)
+   - the active Chunk 3.5 or Chunk 4 evidence row in
+     `docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md`
+   - the 2026-04-23 grouped-write rollback fork precedent is the template:
+     minimal repro in PCG → minimal fix in NornicDB fork → rebuilt binary
+     passes `TestNornicDBGroupedWriteRollbackConformance`.
+
+4. **Prefer narrow seams.** Backend-dialect translation belongs in already
+   narrow seams (schema DDL, canonical-write executor, call-chain/transitive
+   Cypher builders). Do not widen handler, reducer, or MCP tool code with
+   `if backend == nornicdb` branches. If a new seam is required, document
+   it here before merging.
+
+This workflow protects the capability-port boundary while giving contributors
+a clear path to either ship a dialect rendering or patch upstream.
+
 ## Status Summary
 
-This ADR commits PCG to **evaluating** NornicDB as the single graph backend
-across all profiles, with Neo4j as the fallback and deprecation target if
-evaluation succeeds. The ADR is explicitly provisional; promotion requires
-evidence, not advocacy.
+This ADR is **Accepted with conditions** (2026-04-23). PCG commits to treating
+NornicDB as the evaluation graph backend across all profiles, with Neo4j as
+the default and deprecation target once every acceptance condition at the top
+of this ADR holds. Acceptance is revocable: if any condition regresses
+(rollback gate fails, signature policy slips, Chunk 5/5b matrix fails),
+acceptance reverts to Proposed and PCG keeps the Neo4j default.
