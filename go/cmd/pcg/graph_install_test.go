@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -164,14 +165,136 @@ func TestInstallNornicDBReusesManagedSourcePath(t *testing.T) {
 }
 
 func TestInstallNornicDBRequiresLocalSourcePath(t *testing.T) {
+	originalManifest := graphPinnedNornicDBReleaseManifest
+	originalHostOS := graphInstallHostOS
+	originalHostArch := graphInstallHostArch
+	t.Cleanup(func() {
+		graphPinnedNornicDBReleaseManifest = originalManifest
+		graphInstallHostOS = originalHostOS
+		graphInstallHostArch = originalHostArch
+	})
+
 	t.Setenv("PCG_HOME", t.TempDir())
+	graphPinnedNornicDBReleaseManifest = []byte(`{"version":1,"backend":"nornicdb","releases":[]}`)
+	graphInstallHostOS = "linux"
+	graphInstallHostArch = "amd64"
 
 	_, err := installNornicDB(installNornicDBOptions{})
 	if err == nil {
 		t.Fatal("installNornicDB() error = nil, want missing source error")
 	}
-	if !strings.Contains(err.Error(), "requires --from <path>") {
-		t.Fatalf("installNornicDB() error = %q, want --from guidance", err.Error())
+	if !strings.Contains(err.Error(), "no pinned NornicDB release asset") {
+		t.Fatalf("installNornicDB() error = %q, want pinned-release guidance", err.Error())
+	}
+}
+
+func TestInstallNornicDBUsesPinnedReleaseManifestWhenFromEmpty(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a Unix executable script")
+	}
+
+	originalManifest := graphPinnedNornicDBReleaseManifest
+	originalHostOS := graphInstallHostOS
+	originalHostArch := graphInstallHostArch
+	t.Cleanup(func() {
+		graphPinnedNornicDBReleaseManifest = originalManifest
+		graphInstallHostOS = originalHostOS
+		graphInstallHostArch = originalHostArch
+	})
+
+	homeDir := t.TempDir()
+	t.Setenv("PCG_HOME", homeDir)
+
+	sourceBinary := filepath.Join(t.TempDir(), "nornicdb-headless")
+	writeFakeNornicDBBinaryAt(t, sourceBinary, "NornicDB v1.0.42\n")
+	archivePath := filepath.Join(t.TempDir(), "nornicdb-headless-darwin-arm64.tar.gz")
+	archiveContent := writeTarGzWithBinary(t, archivePath, "release/bin/nornicdb-headless", sourceBinary)
+	archiveSHA := sha256BytesHex(archiveContent)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(archiveContent)
+	}))
+	defer server.Close()
+
+	graphInstallHostOS = "darwin"
+	graphInstallHostArch = "arm64"
+	graphPinnedNornicDBReleaseManifest = []byte(fmt.Sprintf(`{
+  "version": 1,
+  "backend": "nornicdb",
+  "releases": [
+    {
+      "pcg_version": "dev",
+      "release_tag": "v1.0.42-hotfix",
+      "assets": [
+        {
+          "os": "darwin",
+          "arch": "arm64",
+          "format": "tar.gz",
+          "headless": true,
+          "url": %q,
+          "sha256": %q
+        }
+      ]
+    }
+  ]
+}`, server.URL+"/nornicdb-headless-darwin-arm64.tar.gz", archiveSHA))
+
+	result, err := installNornicDB(installNornicDBOptions{})
+	if err != nil {
+		t.Fatalf("installNornicDB() error = %v, want nil", err)
+	}
+	if result.SourceKind != string(nornicDBInstallSourceDownloadedArchive) {
+		t.Fatalf("SourceKind = %q, want %q", result.SourceKind, nornicDBInstallSourceDownloadedArchive)
+	}
+	if result.SourceSHA256 != archiveSHA {
+		t.Fatalf("SourceSHA256 = %q, want %q", result.SourceSHA256, archiveSHA)
+	}
+	if result.Version != "v1.0.42" {
+		t.Fatalf("Version = %q, want %q", result.Version, "v1.0.42")
+	}
+}
+
+func TestInstallNornicDBWithoutSourceRejectsUnsupportedHost(t *testing.T) {
+	originalManifest := graphPinnedNornicDBReleaseManifest
+	originalHostOS := graphInstallHostOS
+	originalHostArch := graphInstallHostArch
+	t.Cleanup(func() {
+		graphPinnedNornicDBReleaseManifest = originalManifest
+		graphInstallHostOS = originalHostOS
+		graphInstallHostArch = originalHostArch
+	})
+
+	t.Setenv("PCG_HOME", t.TempDir())
+	graphInstallHostOS = "linux"
+	graphInstallHostArch = "amd64"
+	graphPinnedNornicDBReleaseManifest = []byte(`{
+  "version": 1,
+  "backend": "nornicdb",
+  "releases": [
+    {
+      "pcg_version": "dev",
+      "release_tag": "v1.0.42-hotfix",
+      "assets": [
+        {
+          "os": "darwin",
+          "arch": "arm64",
+          "format": "pkg",
+          "headless": true,
+          "url": "https://example.com/NornicDB-1.0.42-hotfix-arm64-lite.pkg",
+          "sha256": "deadbeef"
+        }
+      ]
+    }
+  ]
+}`)
+
+	_, err := installNornicDB(installNornicDBOptions{})
+	if err == nil {
+		t.Fatal("installNornicDB() error = nil, want unsupported host error")
+	}
+	if !strings.Contains(err.Error(), "no pinned NornicDB release asset") {
+		t.Fatalf("installNornicDB() error = %q, want unsupported host guidance", err.Error())
 	}
 }
 

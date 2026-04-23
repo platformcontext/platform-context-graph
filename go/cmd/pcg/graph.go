@@ -73,19 +73,23 @@ func init() {
 		Long: strings.TrimSpace(`
 Install a verified local NornicDB executable into PCG's managed home.
 
-Current support is explicit-source only:
+Current support includes a pinned bare install where PCG already knows a
+host-specific artifact, plus explicit-source installs:
+
+  pcg install nornicdb
 
   pcg install nornicdb --from /absolute/path/to/nornicdb-headless
   pcg install nornicdb --from /absolute/path/to/nornicdb-headless-darwin-arm64.tar.gz
+  pcg install nornicdb --from /absolute/path/to/NornicDB-1.0.42-hotfix-arm64-lite.pkg
   pcg install nornicdb --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz --sha256 <expected-sha256>
-  pcg install nornicdb --from /absolute/path/to/nornicdb-headless --sha256 <expected-sha256>
+  pcg install nornicdb --from https://example.com/releases/NornicDB-1.0.42-hotfix-arm64-lite.pkg --sha256 <expected-sha256>
 
-Bare release selection, pinned download metadata, and signature verification are
-planned but not wired yet.
+Pinned bare install is only available for platforms recorded in PCG's embedded
+release manifest. Signature verification is still future work.
 `),
 		RunE: runInstallNornicDB,
 	}
-	installNornicDBCmd.Flags().String("from", "", "Install from a local NornicDB binary, local tarball, or release URL")
+	installNornicDBCmd.Flags().String("from", "", "Install from a local NornicDB binary, local archive/package, or release URL")
 	installNornicDBCmd.Flags().String("sha256", "", "Expected SHA-256 checksum for the --from artifact")
 	installNornicDBCmd.Flags().Bool("force", false, "Replace an existing managed NornicDB binary")
 	installCmd.AddCommand(installNornicDBCmd)
@@ -134,13 +138,14 @@ another terminal for the same workspace.
 		Use:   "upgrade",
 		Short: "Upgrade the local graph backend sidecar",
 		Long: strings.TrimSpace(`
-Replace the managed local NornicDB binary from a verified local executable.
+Replace the managed local NornicDB binary from a verified source artifact.
 
 The graph backend must be stopped first. This command accepts the same binary,
-tarball, and URL sources as pcg install nornicdb:
+archive/package, and URL sources as pcg install nornicdb:
 
   pcg graph upgrade --from /absolute/path/to/nornicdb-headless
   pcg graph upgrade --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz --sha256 <expected-sha256>
+  pcg graph upgrade --from https://example.com/releases/NornicDB-1.0.42-hotfix-arm64-lite.pkg --sha256 <expected-sha256>
 `),
 		RunE: runGraphUpgrade,
 	}

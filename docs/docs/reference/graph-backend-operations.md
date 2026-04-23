@@ -19,8 +19,9 @@ pcg graph upgrade
 `pcg graph status`, `pcg graph logs`, `pcg graph stop`, and
 `pcg graph start` are wired today. `pcg graph upgrade --from <source>` is also
 wired for explicit-source replacement of the managed binary from a local
-binary path, local tar archive, or URL. Bare release selection and signature
-verification remain planned.
+binary path, local tar archive, macOS package, or URL. Bare install now uses
+the pinned embedded release manifest when the host platform is covered.
+Signature verification remains planned.
 
 `pcg graph stop` is owner-aware. If a healthy local host owns the workspace,
 the command signals that owner process so shutdown follows the documented

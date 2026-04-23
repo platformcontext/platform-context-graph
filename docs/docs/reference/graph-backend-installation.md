@@ -62,18 +62,33 @@ workspace graph data root and stored in
 copies it to `owner.json` so attach processes can connect without a hardcoded
 shared secret.
 
-## Managed source-artefact install
+## Managed install
 
-The current installer slice is intentionally explicit-source only. It still
-does not implement bare release selection, pinned manifest lookup, or
-signature policy, but it can now consume any of these `--from` artefacts:
+Today there are two truthful install paths:
+
+- bare `pcg install nornicdb` for host platforms that PCG's embedded release
+  manifest knows how to resolve
+- explicit `--from` install for everything else
+
+The current pinned bare install is intentionally narrow: it resolves only
+real published assets. As of 2026-04-23 that means upstream
+`orneryd/NornicDB` macOS arm64 `lite.pkg` for `dev` builds of PCG. The
+linuxdynasty fork still does not publish native release assets, so grouped
+write conformance remains a manual `--from` path.
+
+Explicit `--from` installs can consume any of these artefacts:
 
 - a local NornicDB binary
 - a local `.tar`, `.tar.gz`, or `.tgz` archive containing `nornicdb-headless`
   or `nornicdb`
+- a local `.pkg` containing `/usr/local/bin/nornicdb` or `nornicdb-headless`
 - an `http://`, `https://`, or `file://` URL to one of those artefacts
 
 ```bash
+# Bare pinned install when the host platform is covered by the embedded
+# release manifest.
+pcg install nornicdb
+
 pcg install nornicdb --from /absolute/path/to/nornicdb-headless
 
 # Local release archive.
@@ -81,7 +96,12 @@ pcg install nornicdb \
   --from /absolute/path/to/nornicdb-headless-darwin-arm64.tar.gz \
   --sha256 <expected-archive-sha256>
 
-# Remote release archive URL.
+# Local or remote macOS package.
+pcg install nornicdb \
+  --from /absolute/path/to/NornicDB-1.0.42-hotfix-arm64-lite.pkg \
+  --sha256 <expected-package-sha256>
+
+# Remote release artefact URL.
 pcg install nornicdb \
   --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz \
   --sha256 <expected-archive-sha256>
@@ -92,18 +112,23 @@ pcg install nornicdb --from /absolute/path/to/nornicdb-headless --force
 
 The command performs, in order:
 
-1. Resolves `--from` to a local path or downloads the remote artefact to a
+1. If `--from` is omitted, resolves the host OS / architecture against the
+   embedded pinned release manifest and chooses the recorded URL + SHA-256.
+2. Resolves `--from` to a local path or downloads the remote artefact to a
    temporary file.
-2. If the source is an archive, extracts the first usable
+3. If the source is a tar archive, extracts the first usable
    `nornicdb-headless` entry, or falls back to `nornicdb` when the archive
    only contains the full binary.
-3. Verifies the resulting binary by running `<binary> version` and requiring a
+4. If the source is a macOS `.pkg`, expands the package and extracts the
+   packaged `usr/local/bin/nornicdb` payload without installing the package
+   system-wide.
+5. Verifies the resulting binary by running `<binary> version` and requiring a
    `NornicDB ...` version string.
-4. Computes the source artefact SHA-256 checksum and compares it with
+6. Computes the source artefact SHA-256 checksum and compares it with
    `--sha256` when provided.
-5. Copies the verified binary to `${PCG_HOME}/bin/nornicdb-headless` with
+7. Copies the verified binary to `${PCG_HOME}/bin/nornicdb-headless` with
    executable permissions.
-6. Writes
+8. Writes
    `${PCG_HOME}/graph-backends/nornicdb/manifest.json` with backend,
    version, installed-binary checksum, source checksum, source kind, source
    locator, install mode, and install timestamp.
@@ -111,9 +136,8 @@ The command performs, in order:
 After installation, `pcg graph status` should report `graph_installed: true`
 and the managed binary path.
 
-Today there is still no truthful no-arg installer because the linuxdynasty
-fork does not publish native release assets yet. In practice, the laptop flow
-is still either:
+When the pinned manifest does not cover the current host platform, bare install
+fails loudly with a structured error and the laptop flow is still either:
 
 - build `bin/nornicdb-headless` locally and install from that path, or
 - point `--from` at a manually produced archive / hosted artefact URL
@@ -150,28 +174,35 @@ current laptop sidecar launches a local binary:
 docker build --build-arg HEADLESS=true -f docker/Dockerfile.arm64-metal .
 ```
 
-## Planned bare release-backed install flow
+## Current pinned bare install flow
 
-PCG is still planning a no-argument release-backed installer mode that pins,
-downloads, and registers the headless NornicDB laptop artifact under
-`${PCG_HOME}/bin/` with a version pinned by the installed PCG release.
+The no-argument installer now reads an embedded release manifest keyed by the
+installed PCG version and host OS / architecture, then downloads and installs
+that pinned artefact under `${PCG_HOME}/bin/`.
 
 ```bash
 pcg install nornicdb
 ```
 
-The command performs, in order:
+Current caveats:
 
-1. Reads the pinned NornicDB version from the PCG release manifest.
-2. Chooses the correct artifact for the host OS / architecture.
-3. Downloads the release tarball from the upstream release URL.
-4. Verifies SHA-256 checksum against the manifest.
-5. If the release manifest records a Sigstore / Cosign signature, verifies
-   it. Unsigned artifacts refuse to install unless
-   `--allow-unsigned` is passed explicitly.
-6. Extracts to `${PCG_HOME}/bin/nornicdb-headless`.
-7. Writes `${PCG_HOME}/graph-backends/nornicdb/manifest.json` recording the
-   installed version, checksum, signature status, and install timestamp.
+- the manifest is embedded in PCG, not yet fetched remotely
+- only platforms with real pinned assets are supported
+- signature verification is not implemented yet
+- the current `dev` manifest entry targets upstream `orneryd/NornicDB`
+  `v1.0.42-hotfix` macOS arm64 `lite.pkg`
+- the fork-backed fixed grouped-write binary is still a manual `--from`
+  install until native fork releases exist or the fix lands upstream
+
+## Planned manifest hardening
+
+Still planned:
+
+- remote or release-synchronized manifest updates
+- Sigstore / Cosign signature verification
+- explicit unsigned-artifact policy
+- broader Linux / macOS amd64 coverage once those assets are genuinely
+  published
 
 ### Upgrade
 
@@ -191,13 +222,13 @@ pcg install nornicdb --rollback
 
 Restores the `.previous` binary if present.
 
-### Offline archive install
+### Offline archive or package install
 
 ```bash
-pcg install nornicdb --from <path-to-tarball>
+pcg install nornicdb --from <path-to-tarball-or-pkg>
 ```
 
-This is now supported for tar archives, but signature verification for offline
+This is now supported for tar archives and macOS packages, but signature verification for offline
 artefacts remains future work.
 
 ### Uninstall
@@ -212,17 +243,19 @@ all local workspaces.
 
 ## Supply chain
 
-The PCG release manifest is the source of truth for:
+The embedded PCG release manifest is the source of truth for:
 
 - pinned graph-backend version per PCG release
 - artifact SHA-256 checksum
+- upstream release URL
+
+Still planned before promotion:
+
 - signing policy (`required`, `preferred`, `disabled`)
-- upstream release URL template
+- Sigstore / Cosign verification metadata
+- externalized manifest publication / refresh strategy
 
-Operators who want a stricter policy can override via:
-
-- `PCG_GRAPH_BACKEND_ARTIFACT_URL` — custom mirror
-- `PCG_GRAPH_BACKEND_ALLOWED_VERSIONS` — allowlisted semver ranges
+The stricter operator override layer is not wired yet.
 
 ## Verification
 
