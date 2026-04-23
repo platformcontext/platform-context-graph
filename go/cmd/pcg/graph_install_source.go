@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -19,9 +21,20 @@ type nornicDBInstallSourceKind string
 const (
 	nornicDBInstallSourceLocalBinary       nornicDBInstallSourceKind = "local-binary"
 	nornicDBInstallSourceLocalArchive      nornicDBInstallSourceKind = "local-archive"
+	nornicDBInstallSourceLocalPackage      nornicDBInstallSourceKind = "local-package"
 	nornicDBInstallSourceDownloadedBinary  nornicDBInstallSourceKind = "downloaded-binary"
 	nornicDBInstallSourceDownloadedArchive nornicDBInstallSourceKind = "downloaded-archive"
+	nornicDBInstallSourceDownloadedPackage nornicDBInstallSourceKind = "downloaded-package"
 )
+
+var graphInstallExpandPackage = func(pkgPath, targetDir string) error {
+	cmd := exec.Command("pkgutil", "--expand-full", pkgPath, targetDir)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("expand package %q: %w: %s", pkgPath, err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
 
 type preparedNornicDBInstallSource struct {
 	SourcePath      string
@@ -74,6 +87,8 @@ func materializeNornicDBInstallSource(sourceRef string) (string, nornicDBInstall
 		kind := nornicDBInstallSourceDownloadedBinary
 		if looksLikeNornicDBArchive(sourceRef) {
 			kind = nornicDBInstallSourceDownloadedArchive
+		} else if looksLikeNornicDBPackage(sourceRef) {
+			kind = nornicDBInstallSourceDownloadedPackage
 		}
 		return path, kind, func() error { return os.RemoveAll(filepath.Dir(path)) }, nil
 	}
@@ -96,6 +111,8 @@ func materializeNornicDBInstallSource(sourceRef string) (string, nornicDBInstall
 	kind := nornicDBInstallSourceLocalBinary
 	if looksLikeNornicDBArchive(path) {
 		kind = nornicDBInstallSourceLocalArchive
+	} else if looksLikeNornicDBPackage(path) {
+		kind = nornicDBInstallSourceLocalPackage
 	}
 	return path, kind, func() error { return nil }, nil
 }
@@ -124,6 +141,30 @@ func inspectNornicDBInstallSource(sourceRef, localPath string, kind nornicDBInst
 			BinarySHA256:    binarySHA,
 			Version:         version,
 			Headless:        filepath.Base(extractedName) == managedNornicDBBinaryName,
+			cleanup:         cleanup,
+		}, nil
+	case nornicDBInstallSourceLocalPackage, nornicDBInstallSourceDownloadedPackage:
+		extractedBinary, _, cleanup, err := extractNornicDBBinaryFromPackage(localPath)
+		if err != nil {
+			return preparedNornicDBInstallSource{}, err
+		}
+		version, err := localGraphReadVersion(extractedBinary)
+		if err != nil {
+			_ = cleanup()
+			return preparedNornicDBInstallSource{}, fmt.Errorf("verify nornicdb source binary %q: %w", sourceRef, err)
+		}
+		binarySHA, err := sha256File(extractedBinary)
+		if err != nil {
+			_ = cleanup()
+			return preparedNornicDBInstallSource{}, err
+		}
+		return preparedNornicDBInstallSource{
+			SourcePath:      sourceRef,
+			SourceKind:      kind,
+			LocalBinaryPath: extractedBinary,
+			BinarySHA256:    binarySHA,
+			Version:         version,
+			Headless:        true,
 			cleanup:         cleanup,
 		}, nil
 	default:
@@ -266,7 +307,49 @@ func extractNornicDBBinaryFromArchive(archivePath string) (string, string, func(
 	return extractedPath, extractedName, func() error { return os.RemoveAll(tempDir) }, nil
 }
 
+func extractNornicDBBinaryFromPackage(packagePath string) (string, string, func() error, error) {
+	if runtime.GOOS != "darwin" {
+		return "", "", nil, fmt.Errorf("nornicdb package sources are only supported on darwin today")
+	}
+	tempDir, err := os.MkdirTemp("", "pcg-nornicdb-package-*")
+	if err != nil {
+		return "", "", nil, fmt.Errorf("create package extraction directory: %w", err)
+	}
+	expandedDir := filepath.Join(tempDir, "expanded")
+	if err := graphInstallExpandPackage(packagePath, expandedDir); err != nil {
+		_ = os.RemoveAll(tempDir)
+		return "", "", nil, err
+	}
+
+	candidates, err := filepath.Glob(filepath.Join(expandedDir, "*", "Payload", "usr", "local", "bin", "*"))
+	if err != nil {
+		_ = os.RemoveAll(tempDir)
+		return "", "", nil, fmt.Errorf("scan expanded nornicdb package %q: %w", packagePath, err)
+	}
+
+	var chosen string
+	for _, candidate := range candidates {
+		name := filepath.Base(candidate)
+		if name == managedNornicDBBinaryName {
+			chosen = candidate
+			break
+		}
+		if name == "nornicdb" && chosen == "" {
+			chosen = candidate
+		}
+	}
+	if chosen == "" {
+		_ = os.RemoveAll(tempDir)
+		return "", "", nil, fmt.Errorf("nornicdb package %q did not contain a usable NornicDB binary", packagePath)
+	}
+	return chosen, filepath.Base(chosen), func() error { return os.RemoveAll(tempDir) }, nil
+}
+
 func looksLikeNornicDBArchive(path string) bool {
 	lower := strings.ToLower(path)
 	return strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz") || strings.HasSuffix(lower, ".tar")
+}
+
+func looksLikeNornicDBPackage(path string) bool {
+	return strings.HasSuffix(strings.ToLower(path), ".pkg")
 }

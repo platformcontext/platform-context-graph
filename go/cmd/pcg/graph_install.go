@@ -95,7 +95,14 @@ func runInstallNornicDB(cmd *cobra.Command, args []string) error {
 func installNornicDB(opts installNornicDBOptions) (installNornicDBResult, error) {
 	sourceRef := strings.TrimSpace(opts.From)
 	if sourceRef == "" {
-		return installNornicDBResult{}, fmt.Errorf("pcg install nornicdb requires --from <path> in this release; release download is not wired yet")
+		resolvedSource, resolvedSHA, err := resolvePinnedNornicDBReleaseSource()
+		if err != nil {
+			return installNornicDBResult{}, err
+		}
+		sourceRef = resolvedSource
+		if strings.TrimSpace(opts.SHA256) == "" {
+			opts.SHA256 = resolvedSHA
+		}
 	}
 
 	source, err := prepareNornicDBInstallSource(sourceRef)

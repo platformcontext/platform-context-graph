@@ -22,8 +22,8 @@
 
 | Phase | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
-| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB; 2026-04-23 MCP smoke proved content-index-backed `search_file_content` and `find_code` continue to work while canonical graph projection degrades on a bounded NornicDB write timeout; current branch lets `pcg install nornicdb --from <source>` consume local binaries, local tar archives, and URLs without yet inventing a no-arg release selector | pinned no-arg installer, signature policy, perf smoke |
-| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <source> [--sha256 <hex>] [--force]` verifies and installs a local binary, local archive, or URL-backed archive; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; current branch stopped-owner `pcg graph upgrade --from <source>`; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped | pinned release download/signature installer and perf smoke |
+| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB; 2026-04-23 MCP smoke proved content-index-backed `search_file_content` and `find_code` continue to work while canonical graph projection degrades on a bounded NornicDB write timeout; current branch lets `pcg install nornicdb --from <source>` consume local binaries, local tar archives, macOS packages, and URLs; current branch bare `pcg install nornicdb` resolves through an embedded pinned release manifest and currently covers only real upstream macOS arm64 `lite.pkg` assets | signature policy, broader host coverage, perf smoke |
+| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force]` installs from the pinned manifest or from a local binary/archive/package/URL; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; current branch stopped-owner `pcg graph upgrade --from <source>`; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped | signature verification, broader release coverage, perf smoke |
 | Adapter conformance | In progress | current branch routes NornicDB canonical writes through sequential execute-only writes by default, applies Bolt `tx_timeout` metadata plus client context deadlines, preserves production Neo4j grouped writes, and adds the explicit `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` conformance switch for proving NornicDB grouped writes; 2026-04-23 rebuilt linuxdynasty-fork headless binary `/tmp/nornicdb-headless-pcg-rollback` (`v1.0.42-hotfix`) passed `TestNornicDBGroupedWriteSafetyProbe` and strict `TestNornicDBGroupedWriteRollbackConformance`: PCG repository/file/function grouped commit succeeded, grouped rollback marker count `0`, clean explicit rollback marker count `0`, failed-statement explicit rollback marker count `0`, and timeout probe left no partial write | release-backed fixed NornicDB binary, full `GraphQuery`/`GraphWrite` adapter, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
 
@@ -172,15 +172,17 @@ unlocks the high-authority graph queries that `local_lightweight` refuses.
 NornicDB runs as a separate process. Laptop installs default to the
 headless `nornicdb-headless` artifact; the full `nornicdb` binary remains
 an explicit opt-in for users who accept the larger UI / local-LLM payload.
-The current installer slice accepts an explicit source artefact with
-`pcg install nornicdb --from <source>` and copies the verified binary to
-`${PCG_HOME}/bin/nornicdb-headless`. Supported sources are local binaries,
-local tar archives, and URL-backed tar archives; pinned no-arg
-download/signature installation remains a promotion prerequisite. The sidecar is inspectable by
+The current installer slice accepts either a pinned bare install or an explicit
+source artefact with `pcg install nornicdb [--from <source>]` and copies the
+verified binary to `${PCG_HOME}/bin/nornicdb-headless`. Supported explicit
+sources are local binaries, local tar archives, macOS packages, and matching
+URLs. The pinned bare install only resolves host platforms that have real
+published assets in the embedded release manifest; today that means upstream
+`orneryd/NornicDB` macOS arm64 `lite.pkg`. Signature verification and broader
+coverage remain promotion prerequisites. The sidecar is inspectable by
 `pcg graph status`, `pcg graph logs`, owner-aware `pcg graph stop`, foreground
 `pcg graph start`, and stopped-owner `pcg graph upgrade --from <source>` today.
-Pinned release selection and signature verification remain future work. Its runtime
-lifecycle is tracked in the workspace
+Its runtime lifecycle is tracked in the workspace
 data root (`owner.json` records the graph PID, loopback ports, and
 per-workspace credentials copied from the graph credential file with `0600`
 file permissions).
