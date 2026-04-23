@@ -36,6 +36,8 @@ func TestOwnerRecordRoundTrip(t *testing.T) {
 		GraphDataDir:       "/tmp/pcg/graph/nornicdb",
 		GraphSocketPath:    "/tmp/pcg/graph.sock",
 		GraphVersion:       "v0.1.0",
+		GraphUsername:      "admin",
+		GraphPassword:      "workspace-secret",
 	}
 
 	if err := WriteOwnerRecord(recordPath, want); err != nil {

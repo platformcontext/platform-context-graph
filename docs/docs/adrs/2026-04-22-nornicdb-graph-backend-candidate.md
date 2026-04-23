@@ -126,7 +126,9 @@ headless `nornicdb-headless` artifact; the full `nornicdb` binary remains
 an explicit opt-in for users who accept the larger UI / local-LLM payload.
 It is installed via `pcg install nornicdb`, managed by
 `pcg graph start|stop|status`, and its lifecycle is tracked in the
-workspace data root (`owner.json` records the graph PID and loopback ports).
+workspace data root (`owner.json` records the graph PID, loopback ports, and
+per-workspace credentials copied from the graph credential file with `0600`
+file permissions).
 
 It does not run embedded in the `pcg` binary. The "lightweight" goal is
 preserved by:

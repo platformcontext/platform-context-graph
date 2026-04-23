@@ -52,6 +52,11 @@ For the current NornicDB-backed `local_authoritative` path, health means:
 
 The sidecar writes logs under `${PCG_HOME}/local/workspaces/<workspace_id>/logs/graph-nornicdb.log`.
 
+PCG generates a random graph admin password per workspace data root and
+persists it under `graph/nornicdb/pcg-credentials.json` with `0600`
+permissions. The live owner also copies it to `owner.json` so attach
+processes can connect; `pcg graph status` does not print the secret.
+
 ## Health probe
 
 `pcg doctor` probes the graph backend as part of the local-host check
@@ -66,6 +71,8 @@ mismatch, data directory not writable) and returns a non-zero exit code.
 Check, in order:
 
 1. `pcg graph status` — did PCG discover the expected NornicDB binary?
+   If discovery reports not installed, verify the candidate binary prints a
+   `NornicDB ...` version string.
 2. open `${PCG_HOME}/local/workspaces/<workspace_id>/logs/graph-nornicdb.log`
    — did the backend emit an error?
 3. `ls -la ${workspace_root}/graph/` — is the data directory writable by

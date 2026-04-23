@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,14 +28,15 @@ const (
 
 	localNornicDBBindAddress     = "127.0.0.1"
 	localNornicDBAdminUsername   = "admin"
-	localNornicDBAdminPassword   = "pcg-local-graph"
 	localNornicDBDefaultDatabase = "nornic"
 )
 
 var (
-	localGraphLookPath    = exec.LookPath
-	localGraphHTTPHealthy = graphHTTPHealthy
-	localGraphBoltHealthy = graphBoltHealthy
+	localGraphLookPath         = exec.LookPath
+	localGraphReadVersion      = readLocalGraphVersion
+	localGraphGeneratePassword = generateLocalGraphPassword
+	localGraphHTTPHealthy      = graphHTTPHealthy
+	localGraphBoltHealthy      = graphBoltHealthy
 )
 
 type managedLocalGraph struct {
@@ -44,6 +48,8 @@ type managedLocalGraph struct {
 	HTTPPort   int
 	DataDir    string
 	LogPath    string
+	Username   string
+	Password   string
 	PID        int
 	Cmd        *exec.Cmd
 	logFile    io.Closer
@@ -85,6 +91,10 @@ func startManagedLocalNornicDB(ctx context.Context, layout pcglocal.Layout) (*ma
 	if err := os.MkdirAll(layout.LogsDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create graph logs directory: %w", err)
 	}
+	credentials, err := loadOrCreateLocalGraphCredentials(filepath.Join(dataDir, "pcg-credentials.json"))
+	if err != nil {
+		return nil, err
+	}
 
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
@@ -99,7 +109,6 @@ func startManagedLocalNornicDB(ctx context.Context, layout pcglocal.Layout) (*ma
 		fmt.Sprintf("--bolt-port=%d", boltPort),
 		fmt.Sprintf("--http-port=%d", httpPort),
 		"--data-dir=" + dataDir,
-		"--admin-password=" + localNornicDBAdminPassword,
 	}
 	cmd := exec.Command(binaryPath, args...)
 	cmd.Args = append([]string{binaryPath}, args...)
@@ -110,6 +119,7 @@ func startManagedLocalNornicDB(ctx context.Context, layout pcglocal.Layout) (*ma
 		"NORNICDB_DATA_DIR":         dataDir,
 		"NORNICDB_MCP_ENABLED":      "false",
 		"NORNICDB_HEADLESS":         "true",
+		"NORNICDB_AUTH":             credentials.Username + "/" + credentials.Password,
 		"NORNICDB_DEFAULT_DATABASE": localNornicDBDefaultDatabase,
 	})
 	cmd.Stdout = logFile
@@ -128,6 +138,8 @@ func startManagedLocalNornicDB(ctx context.Context, layout pcglocal.Layout) (*ma
 		HTTPPort:   httpPort,
 		DataDir:    dataDir,
 		LogPath:    logPath,
+		Username:   credentials.Username,
+		Password:   credentials.Password,
 		PID:        cmd.Process.Pid,
 		Cmd:        cmd,
 		logFile:    logFile,
@@ -141,13 +153,24 @@ func startManagedLocalNornicDB(ctx context.Context, layout pcglocal.Layout) (*ma
 
 func resolveNornicDBBinary() (string, error) {
 	if raw := strings.TrimSpace(os.Getenv("PCG_NORNICDB_BINARY")); raw != "" {
+		if _, err := localGraphReadVersion(raw); err != nil {
+			return "", fmt.Errorf("verify nornicdb binary %q: %w", raw, err)
+		}
 		return raw, nil
 	}
+	var verifyErrs []error
 	for _, name := range []string{"nornicdb-headless", "nornicdb"} {
 		binaryPath, err := localGraphLookPath(name)
 		if err == nil {
+			if _, err := localGraphReadVersion(binaryPath); err != nil {
+				verifyErrs = append(verifyErrs, fmt.Errorf("%s at %q: %w", name, binaryPath, err))
+				continue
+			}
 			return binaryPath, nil
 		}
+	}
+	if len(verifyErrs) > 0 {
+		return "", fmt.Errorf("resolve nornicdb binary: discovered candidate binaries but none passed version verification: %v", verifyErrs)
 	}
 	return "", fmt.Errorf("resolve nornicdb binary: set PCG_NORNICDB_BINARY or place nornicdb-headless in PATH")
 }
@@ -157,12 +180,106 @@ func readLocalGraphVersion(binaryPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read nornicdb version: %w", err)
 	}
-	version := strings.TrimSpace(string(output))
-	version = strings.TrimPrefix(version, "NornicDB ")
+	return parseNornicDBVersionOutput(string(output))
+}
+
+func parseNornicDBVersionOutput(output string) (string, error) {
+	version := strings.TrimSpace(output)
 	if version == "" {
-		return "", fmt.Errorf("read nornicdb version: empty output")
+		return "", fmt.Errorf("empty output")
+	}
+	const prefix = "NornicDB "
+	if !strings.HasPrefix(version, prefix) {
+		return "", fmt.Errorf("unexpected output %q", version)
+	}
+	version = strings.TrimSpace(strings.TrimPrefix(version, prefix))
+	if version == "" {
+		return "", fmt.Errorf("missing version in output %q", output)
 	}
 	return version, nil
+}
+
+func generateLocalGraphPassword() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("generate local graph password: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
+}
+
+type localGraphCredentials struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func loadOrCreateLocalGraphCredentials(path string) (localGraphCredentials, error) {
+	content, err := os.ReadFile(path)
+	if err == nil {
+		var credentials localGraphCredentials
+		if err := json.Unmarshal(content, &credentials); err != nil {
+			return localGraphCredentials{}, fmt.Errorf("decode local graph credentials: %w", err)
+		}
+		if strings.TrimSpace(credentials.Username) == "" || strings.TrimSpace(credentials.Password) == "" {
+			return localGraphCredentials{}, fmt.Errorf("decode local graph credentials: username and password are required")
+		}
+		return credentials, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return localGraphCredentials{}, fmt.Errorf("read local graph credentials: %w", err)
+	}
+
+	password, err := localGraphGeneratePassword()
+	if err != nil {
+		return localGraphCredentials{}, err
+	}
+	credentials := localGraphCredentials{
+		Username: localNornicDBAdminUsername,
+		Password: password,
+	}
+	if err := writeLocalGraphCredentials(path, credentials); err != nil {
+		return localGraphCredentials{}, err
+	}
+	return credentials, nil
+}
+
+func writeLocalGraphCredentials(path string, credentials localGraphCredentials) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create local graph credentials directory: %w", err)
+	}
+	content, err := json.MarshalIndent(credentials, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode local graph credentials: %w", err)
+	}
+	content = append(content, '\n')
+
+	tempFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create local graph credentials temp file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	defer func() {
+		_ = os.Remove(tempPath)
+	}()
+
+	if _, err := tempFile.Write(content); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("write local graph credentials temp file: %w", err)
+	}
+	if err := tempFile.Chmod(0o600); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("chmod local graph credentials temp file: %w", err)
+	}
+	if err := tempFile.Sync(); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("sync local graph credentials temp file: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("close local graph credentials temp file: %w", err)
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return fmt.Errorf("replace local graph credentials: %w", err)
+	}
+	return nil
 }
 
 func reserveLocalGraphPort() (int, error) {
@@ -184,6 +301,9 @@ func reserveLocalGraphPort() (int, error) {
 func waitForManagedLocalGraph(ctx context.Context, graph *managedLocalGraph, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if graphHealthyFromOwnerRecord(pcglocal.OwnerRecord{
 			GraphPID:      graph.PID,
 			GraphAddress:  graph.Address,
@@ -191,9 +311,6 @@ func waitForManagedLocalGraph(ctx context.Context, graph *managedLocalGraph, tim
 			GraphHTTPPort: graph.HTTPPort,
 		}) {
 			return nil
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("wait for graph backend readiness timed out after %s; see %s", timeout, graph.LogPath)
@@ -287,6 +404,8 @@ func managedGraphFromRecord(record pcglocal.OwnerRecord) *managedLocalGraph {
 		HTTPPort:   record.GraphHTTPPort,
 		DataDir:    record.GraphDataDir,
 		PID:        record.GraphPID,
+		Username:   record.GraphUsername,
+		Password:   record.GraphPassword,
 		BinaryPath: "",
 	}
 }
@@ -296,14 +415,20 @@ func graphEnvOverrides(graph *managedLocalGraph) map[string]string {
 		return nil
 	}
 	boltURI := fmt.Sprintf("bolt://%s:%d", graph.Address, graph.BoltPort)
+	username := graph.Username
+	if username == "" {
+		username = localNornicDBAdminUsername
+	}
+	// Keep the PCG-prefixed variables as canonical and NEO4J_* as legacy
+	// compatibility for code paths that have not yet moved to PCG_* names.
 	return map[string]string{
 		"PCG_NEO4J_URI":      boltURI,
-		"PCG_NEO4J_USERNAME": localNornicDBAdminUsername,
-		"PCG_NEO4J_PASSWORD": localNornicDBAdminPassword,
+		"PCG_NEO4J_USERNAME": username,
+		"PCG_NEO4J_PASSWORD": graph.Password,
 		"PCG_NEO4J_DATABASE": localNornicDBDefaultDatabase,
 		"NEO4J_URI":          boltURI,
-		"NEO4J_USERNAME":     localNornicDBAdminUsername,
-		"NEO4J_PASSWORD":     localNornicDBAdminPassword,
+		"NEO4J_USERNAME":     username,
+		"NEO4J_PASSWORD":     graph.Password,
 		"NEO4J_DATABASE":     localNornicDBDefaultDatabase,
 		"DEFAULT_DATABASE":   localNornicDBDefaultDatabase,
 	}
@@ -349,6 +474,20 @@ func graphVersion(graph *managedLocalGraph) string {
 		return ""
 	}
 	return graph.Version
+}
+
+func graphUsername(graph *managedLocalGraph) string {
+	if graph == nil {
+		return ""
+	}
+	return graph.Username
+}
+
+func graphPassword(graph *managedLocalGraph) string {
+	if graph == nil {
+		return ""
+	}
+	return graph.Password
 }
 
 func graphHealthyFromOwnerRecord(record pcglocal.OwnerRecord) bool {

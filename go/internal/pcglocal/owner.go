@@ -29,6 +29,8 @@ type OwnerRecord struct {
 	GraphDataDir       string `json:"graph_data_dir,omitempty"`
 	GraphSocketPath    string `json:"graph_socket_path,omitempty"`
 	GraphVersion       string `json:"graph_version,omitempty"`
+	GraphUsername      string `json:"graph_username,omitempty"`
+	GraphPassword      string `json:"graph_password,omitempty"`
 }
 
 // ReadOwnerRecord loads owner metadata from disk.

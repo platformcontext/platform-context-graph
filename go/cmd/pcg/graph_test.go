@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,8 +197,10 @@ func TestRunInstallNornicDBReturnsNotWiredError(t *testing.T) {
 
 func TestResolveNornicDBBinaryPrefersHeadlessBinary(t *testing.T) {
 	originalLookPath := localGraphLookPath
+	originalReadVersion := localGraphReadVersion
 	t.Cleanup(func() {
 		localGraphLookPath = originalLookPath
+		localGraphReadVersion = originalReadVersion
 	})
 	t.Setenv("PCG_NORNICDB_BINARY", "")
 
@@ -210,6 +214,9 @@ func TestResolveNornicDBBinaryPrefersHeadlessBinary(t *testing.T) {
 			return "", errors.New("unexpected binary lookup")
 		}
 	}
+	localGraphReadVersion = func(binaryPath string) (string, error) {
+		return "v1.0.42", nil
+	}
 
 	got, err := resolveNornicDBBinary()
 	if err != nil {
@@ -221,7 +228,14 @@ func TestResolveNornicDBBinaryPrefersHeadlessBinary(t *testing.T) {
 }
 
 func TestResolveNornicDBBinaryAllowsExplicitFullBinary(t *testing.T) {
+	originalReadVersion := localGraphReadVersion
+	t.Cleanup(func() {
+		localGraphReadVersion = originalReadVersion
+	})
 	t.Setenv("PCG_NORNICDB_BINARY", "/opt/nornicdb")
+	localGraphReadVersion = func(binaryPath string) (string, error) {
+		return "v1.0.42", nil
+	}
 
 	got, err := resolveNornicDBBinary()
 	if err != nil {
@@ -229,6 +243,84 @@ func TestResolveNornicDBBinaryAllowsExplicitFullBinary(t *testing.T) {
 	}
 	if got != "/opt/nornicdb" {
 		t.Fatalf("resolveNornicDBBinary() = %q, want explicit path", got)
+	}
+}
+
+func TestResolveNornicDBBinaryRejectsInvalidExplicitBinary(t *testing.T) {
+	originalReadVersion := localGraphReadVersion
+	t.Cleanup(func() {
+		localGraphReadVersion = originalReadVersion
+	})
+	t.Setenv("PCG_NORNICDB_BINARY", "/tmp/not-nornicdb")
+	localGraphReadVersion = func(binaryPath string) (string, error) {
+		return "", errors.New("unexpected output")
+	}
+
+	_, err := resolveNornicDBBinary()
+	if err == nil {
+		t.Fatal("resolveNornicDBBinary() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "verify nornicdb binary") {
+		t.Fatalf("resolveNornicDBBinary() error = %q, want verification failure", err.Error())
+	}
+}
+
+func TestParseNornicDBVersionOutputRequiresNornicDBPrefix(t *testing.T) {
+	got, err := parseNornicDBVersionOutput("NornicDB v1.0.42\n")
+	if err != nil {
+		t.Fatalf("parseNornicDBVersionOutput() error = %v, want nil", err)
+	}
+	if got != "v1.0.42" {
+		t.Fatalf("parseNornicDBVersionOutput() = %q, want %q", got, "v1.0.42")
+	}
+
+	_, err = parseNornicDBVersionOutput("not nornicdb\n")
+	if err == nil {
+		t.Fatal("parseNornicDBVersionOutput() error = nil, want non-nil")
+	}
+}
+
+func TestLoadOrCreateLocalGraphCredentialsReusesWorkspaceSecret(t *testing.T) {
+	originalGeneratePassword := localGraphGeneratePassword
+	t.Cleanup(func() {
+		localGraphGeneratePassword = originalGeneratePassword
+	})
+
+	credentialPath := filepath.Join(t.TempDir(), "graph", "nornicdb", "pcg-credentials.json")
+	generated := 0
+	localGraphGeneratePassword = func() (string, error) {
+		generated++
+		return "workspace-secret", nil
+	}
+
+	first, err := loadOrCreateLocalGraphCredentials(credentialPath)
+	if err != nil {
+		t.Fatalf("loadOrCreateLocalGraphCredentials() error = %v, want nil", err)
+	}
+	if first.Username != localNornicDBAdminUsername || first.Password != "workspace-secret" {
+		t.Fatalf("credentials = %+v, want generated admin secret", first)
+	}
+	info, err := os.Stat(credentialPath)
+	if err != nil {
+		t.Fatalf("os.Stat(credentials) error = %v, want nil", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("credentials mode = %v, want 0600", info.Mode().Perm())
+	}
+
+	localGraphGeneratePassword = func() (string, error) {
+		generated++
+		return "rotated-secret", nil
+	}
+	second, err := loadOrCreateLocalGraphCredentials(credentialPath)
+	if err != nil {
+		t.Fatalf("second loadOrCreateLocalGraphCredentials() error = %v, want nil", err)
+	}
+	if second.Password != "workspace-secret" {
+		t.Fatalf("second password = %q, want persisted workspace secret", second.Password)
+	}
+	if generated != 1 {
+		t.Fatalf("password generated %d times, want 1", generated)
 	}
 }
 

@@ -115,6 +115,12 @@ installed graph backend (for example `graph/nornicdb/`).
 - `graph_socket_path` — optional, local socket path for graph backends that
   use Unix sockets; NornicDB does not populate this today
 - `graph_version` — optional, installed graph backend binary version
+- `graph_username` — optional, local graph admin username used by attach
+  processes
+- `graph_password` — optional, per-workspace local graph password copied
+  from the persistent graph credential file while the owner is live; this
+  is sensitive and relies on `owner.json` being written with `0600`
+  permissions
 
 ## Ownership Rules
 
