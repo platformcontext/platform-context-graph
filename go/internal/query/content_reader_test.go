@@ -54,6 +54,54 @@ func TestContentReaderGetEntityContentIncludesMetadata(t *testing.T) {
 	}
 }
 
+func TestContentReaderMatchRepositoriesReturnsExactMatches(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{"id", "name", "path", "local_path", "remote_url", "repo_slug", "has_remote"},
+			rows: [][]driver.Value{
+				{"repository:r_payments", "payments", "/src/payments", "/src/payments", "", "acme/payments", false},
+			},
+		},
+	})
+
+	reader := NewContentReader(db)
+	matches, err := reader.MatchRepositories(context.Background(), "payments")
+	if err != nil {
+		t.Fatalf("MatchRepositories() error = %v, want nil", err)
+	}
+	if got, want := len(matches), 1; got != want {
+		t.Fatalf("len(matches) = %d, want %d", got, want)
+	}
+	if got, want := matches[0].ID, "repository:r_payments"; got != want {
+		t.Fatalf("matches[0].ID = %q, want %q", got, want)
+	}
+}
+
+func TestContentReaderResolveRepositoryRejectsAmbiguousMatches(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{"id", "name", "path", "local_path", "remote_url", "repo_slug", "has_remote"},
+			rows: [][]driver.Value{
+				{"repository:r_one", "payments", "/src/payments-one", "/src/payments-one", "", "acme/payments-one", false},
+				{"repository:r_two", "payments", "/src/payments-two", "/src/payments-two", "", "acme/payments-two", false},
+			},
+		},
+	})
+
+	reader := NewContentReader(db)
+	_, err := reader.ResolveRepository(context.Background(), "payments")
+	if err == nil {
+		t.Fatal("ResolveRepository() error = nil, want non-nil")
+	}
+	if got, want := err.Error(), `repository selector "payments" matched multiple repositories: repository:r_one, repository:r_two`; got != want {
+		t.Fatalf("ResolveRepository() error = %q, want %q", got, want)
+	}
+}
+
 func TestContentReaderSearchEntityContentIncludesMetadata(t *testing.T) {
 	t.Parallel()
 

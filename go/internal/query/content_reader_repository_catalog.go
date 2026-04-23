@@ -2,8 +2,9 @@ package query
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"slices"
+	"strings"
 )
 
 // ListRepositories returns repository catalog entries from the relational data plane.
@@ -53,11 +54,35 @@ func (cr *ContentReader) ListRepositories(ctx context.Context) ([]RepositoryCata
 
 // ResolveRepository resolves one repository selector from the relational catalog.
 func (cr *ContentReader) ResolveRepository(ctx context.Context, selector string) (*RepositoryCatalogEntry, error) {
+	matches, err := cr.MatchRepositories(ctx, selector)
+	if err != nil {
+		return nil, err
+	}
+	switch len(matches) {
+	case 0:
+		return nil, nil
+	case 1:
+		repo := matches[0]
+		return &repo, nil
+	default:
+		ids := make([]string, 0, len(matches))
+		for _, repo := range matches {
+			if repo.ID != "" {
+				ids = append(ids, repo.ID)
+			}
+		}
+		slices.Sort(ids)
+		return nil, fmt.Errorf("repository selector %q matched multiple repositories: %s", selector, joinRepositoryIDs(ids))
+	}
+}
+
+// MatchRepositories returns exact repository catalog matches for one selector.
+func (cr *ContentReader) MatchRepositories(ctx context.Context, selector string) ([]RepositoryCatalogEntry, error) {
 	if cr == nil || cr.db == nil {
 		return nil, nil
 	}
 
-	row := cr.db.QueryRowContext(ctx, `
+	rows, err := cr.db.QueryContext(ctx, `
 		SELECT scope_id AS id,
 		       coalesce(payload->>'name', payload->>'repo_name', payload->>'repo_slug', scope_id) AS name,
 		       coalesce(payload->>'path', '') AS path,
@@ -76,23 +101,34 @@ func (cr *ContentReader) ResolveRepository(ctx context.Context, selector string)
 			payload->>'local_path' = $1
 		  )
 		ORDER BY scope_id
-		LIMIT 1
 	`, selector)
-
-	var repo RepositoryCatalogEntry
-	if err := row.Scan(
-		&repo.ID,
-		&repo.Name,
-		&repo.Path,
-		&repo.LocalPath,
-		&repo.RemoteURL,
-		&repo.RepoSlug,
-		&repo.HasRemote,
-	); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("resolve repository catalog row: %w", err)
+	if err != nil {
+		return nil, fmt.Errorf("match repository catalog rows: %w", err)
 	}
-	return &repo, nil
+	defer func() { _ = rows.Close() }()
+
+	repositories := make([]RepositoryCatalogEntry, 0, 1)
+	for rows.Next() {
+		var repo RepositoryCatalogEntry
+		if err := rows.Scan(
+			&repo.ID,
+			&repo.Name,
+			&repo.Path,
+			&repo.LocalPath,
+			&repo.RemoteURL,
+			&repo.RepoSlug,
+			&repo.HasRemote,
+		); err != nil {
+			return nil, fmt.Errorf("scan repository catalog match: %w", err)
+		}
+		repositories = append(repositories, repo)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate repository catalog matches: %w", err)
+	}
+	return repositories, nil
+}
+
+func joinRepositoryIDs(ids []string) string {
+	return strings.Join(ids, ", ")
 }
