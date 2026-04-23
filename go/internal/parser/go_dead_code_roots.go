@@ -115,9 +115,10 @@ func goSignatureMatchesControllerRuntimeReconcile(
 		return false
 	}
 
-	controllerAliases := append(
-		goAliasesForImportPath(importAliases, "sigs.k8s.io/controller-runtime"),
-		goAliasesForImportPath(importAliases, "sigs.k8s.io/controller-runtime/pkg/reconcile")...,
+	controllerAliases := goMergedAliasesForImportPaths(
+		importAliases,
+		"sigs.k8s.io/controller-runtime",
+		"sigs.k8s.io/controller-runtime/pkg/reconcile",
 	)
 	if len(controllerAliases) == 0 {
 		return false
@@ -131,6 +132,17 @@ func goAliasesForImportPath(index map[string][]string, importPath string) []stri
 	aliases := append([]string(nil), index[importPath]...)
 	slices.Sort(aliases)
 	return aliases
+}
+
+func goMergedAliasesForImportPaths(index map[string][]string, importPaths ...string) []string {
+	merged := make([]string, 0)
+	for _, importPath := range importPaths {
+		for _, alias := range index[importPath] {
+			merged = appendUniqueImportAlias(merged, alias)
+		}
+	}
+	slices.Sort(merged)
+	return merged
 }
 
 func goSignatureContainsAnyQualifiedType(signature string, aliases []string, typeName string) bool {
@@ -154,7 +166,7 @@ func goSignatureContainsAnyPointerType(signature string, aliases []string, typeN
 func goSignatureContainsAnyRequestPointer(signature string, aliases []string) bool {
 	for _, alias := range aliases {
 		lowerAlias := strings.ToLower(alias)
-		if strings.Contains(signature, "*"+lowerAlias+".request") || strings.Contains(signature, lowerAlias+".request") {
+		if strings.Contains(signature, "*"+lowerAlias+".request") {
 			return true
 		}
 	}

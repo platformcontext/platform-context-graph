@@ -52,6 +52,38 @@ func (r *PaymentReconciler) Reconcile(ctx ctxalias.Context, req ctrl.Request) (c
 	assertParserStringSliceFieldValue(t, assertFunctionByName(t, got, "Reconcile"), "dead_code_root_kinds", []string{"go.controller_runtime_reconcile_signature"})
 }
 
+func TestDefaultEngineParsePathGoDoesNotMarkValueRequestAsHTTPHandlerRoot(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "value_request.go")
+	writeTestFile(
+		t,
+		filePath,
+		`package roots
+
+import handler "net/http"
+
+func ServePayments(w handler.ResponseWriter, r handler.Request) {}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	functionItem := assertFunctionByName(t, got, "ServePayments")
+	if _, ok := functionItem["dead_code_root_kinds"]; ok {
+		t.Fatalf("dead_code_root_kinds = %#v, want absent for value request signature", functionItem["dead_code_root_kinds"])
+	}
+}
+
 func assertParserStringSliceFieldValue(t *testing.T, item map[string]any, field string, want []string) {
 	t.Helper()
 
