@@ -11,12 +11,19 @@ lifecycle contract that governs startup / shutdown ordering, see
 ```text
 pcg graph status
 pcg graph logs
+pcg graph stop
 ```
 
-`pcg graph status` and `pcg graph logs` are wired today. The remaining
-lifecycle commands (`pcg graph start|stop|upgrade`) are still planned and
+`pcg graph status`, `pcg graph logs`, and `pcg graph stop` are wired today.
+The remaining lifecycle commands (`pcg graph start|upgrade`) are still planned and
 currently return actionable guidance instead of performing real lifecycle
 control.
+
+`pcg graph stop` is owner-aware. If a healthy local host owns the workspace,
+the command signals that owner process so shutdown follows the documented
+order: child runtimes stop first, then the graph sidecar, then embedded
+Postgres. It only stops the recorded graph process directly when the owner is
+already dead and the graph backend is stale.
 
 The local-authoritative runtime still manages the sidecar automatically when
 you run a PCG local host entrypoint such as:

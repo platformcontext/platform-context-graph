@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -20,9 +22,15 @@ var (
 	graphBuildLayout = func(workspaceRoot string) (pcglocal.Layout, error) {
 		return pcglocal.BuildLayout(os.Getenv, os.UserHomeDir, runtime.GOOS, workspaceRoot)
 	}
-	graphReadOwnerRecord = pcglocal.ReadOwnerRecord
-	graphResolveBinary   = resolveNornicDBBinary
-	graphReadVersion     = readLocalGraphVersion
+	graphReadOwnerRecord   = pcglocal.ReadOwnerRecord
+	graphResolveBinary     = resolveNornicDBBinary
+	graphReadVersion       = readLocalGraphVersion
+	graphProcessAlive      = pcglocal.ProcessAlive
+	graphStopGraphHealthy  = graphHealthyFromOwnerRecord
+	graphStopRecordedGraph = stopRecordedLocalGraph
+	graphSignalProcess     = signalProcess
+	graphStopPollInterval  = 200 * time.Millisecond
+	graphStopTimeout       = localGraphShutdownTimeout
 )
 
 type graphStatusOutput struct {
@@ -93,13 +101,13 @@ Release download and signature verification are planned but not wired yet.
 			return graphLifecycleNotWired("pcg graph start")
 		},
 	})
-	graphCmd.AddCommand(&cobra.Command{
+	graphStopCmd := &cobra.Command{
 		Use:   "stop",
 		Short: "Stop the local graph backend sidecar",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return graphLifecycleNotWired("pcg graph stop")
-		},
-	})
+		RunE:  runGraphStop,
+	}
+	graphStopCmd.Flags().String("workspace-root", "", "Explicit workspace root for local graph stop")
+	graphCmd.AddCommand(graphStopCmd)
 	graphLogsCmd := &cobra.Command{
 		Use:   "logs",
 		Short: "Show local graph backend logs",
@@ -139,6 +147,17 @@ func runGraphLogs(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	return graphLogsForLayout(layout)
+}
+
+func runGraphStop(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("pcg graph stop accepts flags only, got %d argument(s)", len(args))
+	}
+	layout, err := graphLayoutFromCommand(cmd)
+	if err != nil {
+		return err
+	}
+	return graphStopForLayout(layout)
 }
 
 func graphLayoutFromCommand(cmd *cobra.Command) (pcglocal.Layout, error) {
@@ -225,6 +244,58 @@ func graphLogsForLayout(layout pcglocal.Layout) error {
 		return fmt.Errorf("print graph log %q: %w", logPath, err)
 	}
 	return nil
+}
+
+func graphStopForLayout(layout pcglocal.Layout) error {
+	record, err := graphReadOwnerRecord(layout.OwnerRecordPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("no local graph owner record for workspace %q", layout.WorkspaceRoot)
+		}
+		return err
+	}
+
+	runtimeConfig, err := runtimeConfigFromOwnerRecord(record)
+	if err != nil {
+		return err
+	}
+	if runtimeConfig.Profile != query.ProfileLocalAuthoritative || record.GraphPID <= 0 {
+		return fmt.Errorf("workspace %q has no local_authoritative graph backend to stop", layout.WorkspaceRoot)
+	}
+
+	if graphProcessAlive(record.PID) {
+		if err := graphSignalProcess(record.PID, syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			return fmt.Errorf("signal workspace owner pid %d to stop graph backend: %w", record.PID, err)
+		}
+		return waitForGraphStop(record, graphStopTimeout)
+	}
+
+	if !graphStopGraphHealthy(record) {
+		return nil
+	}
+	if err := graphStopRecordedGraph(record); err != nil {
+		return err
+	}
+	return waitForGraphStop(record, graphStopTimeout)
+}
+
+func waitForGraphStop(record pcglocal.OwnerRecord, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !graphStopGraphHealthy(record) {
+			return nil
+		}
+		time.Sleep(graphStopPollInterval)
+	}
+	return fmt.Errorf("graph backend pid %d did not stop within %s", record.GraphPID, timeout)
+}
+
+func signalProcess(pid int, signal os.Signal) error {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("find process %d: %w", pid, err)
+	}
+	return process.Signal(signal)
 }
 
 func graphLifecycleNotWired(command string) error {

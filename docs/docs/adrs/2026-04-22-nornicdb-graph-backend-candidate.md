@@ -23,7 +23,7 @@
 | Phase | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
 | Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override | release-backed installer, lifecycle commands, perf smoke |
-| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` verifies and copies a local binary; current branch `pcg graph logs`; `pcg graph start|stop|upgrade` still intentionally stubbed | release download/signature installer and public lifecycle start/stop/upgrade commands |
+| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <path> [--sha256 <hex>] [--force]` verifies and copies a local binary; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; `pcg graph start|upgrade` still intentionally stubbed | release download/signature installer and public lifecycle start/upgrade commands |
 | Adapter conformance | Not started | — | `GraphQuery`/`GraphWrite` adapter, syntax verification, matrix runs |
 | Performance + promotion gates | Not started | — | laptop perf smoke, Compose conformance, production-scale comparison |
 
@@ -160,8 +160,8 @@ The current installer slice accepts a verified local executable with
 `pcg install nornicdb --from <path>` and copies it to
 `${PCG_HOME}/bin/nornicdb-headless`; release-backed download/signature
 installation remains a promotion prerequisite. The sidecar is inspectable by
-`pcg graph status` and `pcg graph logs` today, and by
-`pcg graph start|stop|upgrade` in the remaining lifecycle slice. Its runtime
+`pcg graph status`, `pcg graph logs`, and owner-aware `pcg graph stop` today,
+and by `pcg graph start|upgrade` in the remaining lifecycle slice. Its runtime
 lifecycle is tracked in the workspace
 data root (`owner.json` records the graph PID, loopback ports, and
 per-workspace credentials copied from the graph credential file with `0600`

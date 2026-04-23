@@ -227,6 +227,131 @@ func TestRunGraphLogsReturnsMissingLogGuidance(t *testing.T) {
 	}
 }
 
+func TestGraphStopSignalsLiveOwnerInsteadOfGraphProcess(t *testing.T) {
+	originalReadOwnerRecord := graphReadOwnerRecord
+	originalProcessAlive := graphProcessAlive
+	originalGraphHealthy := graphStopGraphHealthy
+	originalSignalProcess := graphSignalProcess
+	originalStopRecordedGraph := graphStopRecordedGraph
+	originalStopPollInterval := graphStopPollInterval
+	t.Cleanup(func() {
+		graphReadOwnerRecord = originalReadOwnerRecord
+		graphProcessAlive = originalProcessAlive
+		graphStopGraphHealthy = originalGraphHealthy
+		graphSignalProcess = originalSignalProcess
+		graphStopRecordedGraph = originalStopRecordedGraph
+		graphStopPollInterval = originalStopPollInterval
+	})
+
+	record := pcglocal.OwnerRecord{
+		PID:           42,
+		WorkspaceID:   "workspace-id",
+		Profile:       string(query.ProfileLocalAuthoritative),
+		GraphBackend:  string(query.GraphBackendNornicDB),
+		GraphPID:      88,
+		GraphBoltPort: 17687,
+		GraphHTTPPort: 17474,
+	}
+	graphReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
+		return record, nil
+	}
+	graphProcessAlive = func(pid int) bool {
+		return pid == record.PID
+	}
+	healthChecks := 0
+	graphStopGraphHealthy = func(record pcglocal.OwnerRecord) bool {
+		healthChecks++
+		return healthChecks == 1
+	}
+	var signaledPID int
+	graphSignalProcess = func(pid int, signal os.Signal) error {
+		signaledPID = pid
+		return nil
+	}
+	stopRecordedCalled := false
+	graphStopRecordedGraph = func(record pcglocal.OwnerRecord) error {
+		stopRecordedCalled = true
+		return nil
+	}
+	graphStopPollInterval = time.Millisecond
+
+	err := graphStopForLayout(pcglocal.Layout{OwnerRecordPath: "/workspace/owner.json"})
+	if err != nil {
+		t.Fatalf("graphStopForLayout() error = %v, want nil", err)
+	}
+	if signaledPID != record.PID {
+		t.Fatalf("signaledPID = %d, want owner pid %d", signaledPID, record.PID)
+	}
+	if stopRecordedCalled {
+		t.Fatal("graphStopForLayout() stopped recorded graph directly while owner was live")
+	}
+}
+
+func TestGraphStopStopsRecordedGraphWhenOwnerIsDead(t *testing.T) {
+	originalReadOwnerRecord := graphReadOwnerRecord
+	originalProcessAlive := graphProcessAlive
+	originalGraphHealthy := graphStopGraphHealthy
+	originalStopRecordedGraph := graphStopRecordedGraph
+	t.Cleanup(func() {
+		graphReadOwnerRecord = originalReadOwnerRecord
+		graphProcessAlive = originalProcessAlive
+		graphStopGraphHealthy = originalGraphHealthy
+		graphStopRecordedGraph = originalStopRecordedGraph
+	})
+
+	record := pcglocal.OwnerRecord{
+		PID:           42,
+		WorkspaceID:   "workspace-id",
+		Profile:       string(query.ProfileLocalAuthoritative),
+		GraphBackend:  string(query.GraphBackendNornicDB),
+		GraphPID:      88,
+		GraphBoltPort: 17687,
+		GraphHTTPPort: 17474,
+	}
+	graphReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
+		return record, nil
+	}
+	graphProcessAlive = func(pid int) bool {
+		return false
+	}
+	var stoppedPID int
+	graphStopGraphHealthy = func(record pcglocal.OwnerRecord) bool {
+		return stoppedPID == 0
+	}
+	graphStopRecordedGraph = func(record pcglocal.OwnerRecord) error {
+		stoppedPID = record.GraphPID
+		return nil
+	}
+
+	err := graphStopForLayout(pcglocal.Layout{OwnerRecordPath: "/workspace/owner.json"})
+	if err != nil {
+		t.Fatalf("graphStopForLayout() error = %v, want nil", err)
+	}
+	if stoppedPID != record.GraphPID {
+		t.Fatalf("stoppedPID = %d, want graph pid %d", stoppedPID, record.GraphPID)
+	}
+}
+
+func TestGraphStopRejectsLightweightOwner(t *testing.T) {
+	originalReadOwnerRecord := graphReadOwnerRecord
+	t.Cleanup(func() {
+		graphReadOwnerRecord = originalReadOwnerRecord
+	})
+	graphReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
+		return pcglocal.OwnerRecord{
+			Profile: string(query.ProfileLocalLightweight),
+		}, nil
+	}
+
+	err := graphStopForLayout(pcglocal.Layout{OwnerRecordPath: "/workspace/owner.json"})
+	if err == nil {
+		t.Fatal("graphStopForLayout() error = nil, want lightweight guidance")
+	}
+	if !strings.Contains(err.Error(), "no local_authoritative graph backend") {
+		t.Fatalf("graphStopForLayout() error = %q, want no graph guidance", err.Error())
+	}
+}
+
 func TestGraphLifecycleNotWiredReturnsActionableError(t *testing.T) {
 	err := graphLifecycleNotWired("pcg graph start")
 	if err == nil {
