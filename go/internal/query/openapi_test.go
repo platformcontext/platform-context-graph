@@ -263,6 +263,10 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if _, ok := deadCodeResponse["analysis"]; !ok {
 		t.Fatal("code/dead-code response schema missing analysis")
 	}
+	deadCodeAnalysis := mustMapField(t, mustMapField(t, deadCodeResponse, "analysis"), "properties")
+	if _, ok := deadCodeAnalysis["modeled_public_api"]; !ok {
+		t.Fatal("code/dead-code analysis schema missing modeled_public_api")
+	}
 
 	relationshipsPath := mustMapField(t, paths, "/api/v0/code/relationships")
 	relationshipsPost := mustMapField(t, relationshipsPath, "post")

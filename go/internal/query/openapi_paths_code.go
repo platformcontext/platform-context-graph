@@ -244,7 +244,7 @@ const openAPIPathsCode = `
       "post": {
         "tags": ["code"],
         "summary": "Find dead code",
-        "description": "Finds graph-backed dead-code candidates, applies the current default entrypoint/test/generated exclusions, and can exclude known decorator-owned entrypoints.",
+        "description": "Finds graph-backed dead-code candidates, applies the current default entrypoint/test/generated exclusions plus Go public-package exported-symbol roots, and can exclude known decorator-owned entrypoints.",
         "operationId": "findDeadCode",
         "requestBody": {
           "required": true,
@@ -284,6 +284,7 @@ const openAPIPathsCode = `
                         "generated_code_excluded": {"type": "boolean"},
                         "user_overrides_applied": {"type": "boolean"},
                         "modeled_entrypoints": {"type": "array", "items": {"type": "string"}},
+                        "modeled_public_api": {"type": "array", "items": {"type": "string"}},
                         "notes": {"type": "array", "items": {"type": "string"}}
                       }
                     }

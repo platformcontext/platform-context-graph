@@ -85,6 +85,7 @@ func init() {
 		RunE:  runAnalyzeDeadCode,
 	}
 	addRemoteFlags(deadCodeCmd)
+	deadCodeCmd.Flags().String("repo", "", "Optional repository selector (ID, name, slug, or path)")
 	deadCodeCmd.Flags().String("repo-id", "", "Optional repository ID filter")
 	deadCodeCmd.Flags().StringSlice("exclude", nil, "Decorator names to exclude from dead-code results")
 	deadCodeCmd.Flags().Bool("fail-on-found", false, "Exit non-zero when any dead-code candidates are found")
@@ -214,12 +215,15 @@ func runAnalyzeComplexity(cmd *cobra.Command, args []string) error {
 
 func runAnalyzeDeadCode(cmd *cobra.Command, args []string) error {
 	client := apiClientFromCmd(cmd)
-	repoID, _ := cmd.Flags().GetString("repo-id")
+	repoID, err := resolveRepositorySelectorFromFlags(cmd, client)
+	if err != nil {
+		return err
+	}
 	exclusions, _ := cmd.Flags().GetStringSlice("exclude")
 	failOnFound, _ := cmd.Flags().GetBool("fail-on-found")
 
 	var result map[string]any
-	err := client.Post("/api/v0/code/dead-code", map[string]any{
+	err = client.Post("/api/v0/code/dead-code", map[string]any{
 		"repo_id":                repoID,
 		"exclude_decorated_with": exclusions,
 	}, &result)
