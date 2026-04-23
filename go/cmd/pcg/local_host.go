@@ -31,7 +31,13 @@ var (
 	}
 	localHostPrepareWorkspace = func(layout pcglocal.Layout) (*pcglocal.OwnerLock, error) {
 		return pcglocal.PrepareWorkspace(layout, buildinfo.AppVersion(), pcglocal.StartupDeps{
-			ReclaimDeps: pcglocal.DefaultReclaimDeps(),
+			ReclaimDeps: pcglocal.ReclaimDeps{
+				PIDAlive:      pcglocal.ProcessAlive,
+				SocketHealthy: pcglocal.SocketHealthy,
+				StopPostgres:  pcglocal.StopEmbeddedPostgres,
+				GraphHealthy:  graphHealthyFromOwnerRecord,
+				StopGraph:     stopRecordedLocalGraph,
+			},
 		})
 	}
 	localHostStartEmbeddedPostgres = pcglocal.StartEmbeddedPostgres
@@ -42,8 +48,11 @@ var (
 	localHostLookPath              = exec.LookPath
 	localHostProcessAlive          = pcglocal.ProcessAlive
 	localHostSocketHealthy         = pcglocal.SocketHealthy
+	localHostGraphHealthy          = graphHealthyFromOwnerRecord
 	localHostStartChildProcess     = startLocalChildProcess
+	localHostStartManagedGraph     = startManagedLocalGraph
 	localHostWaitChildProcess      = waitLocalChildProcess
+	localHostApplyBootstrap        = applyLocalBootstrap
 )
 
 func init() {
@@ -115,15 +124,15 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 	if err != nil {
 		return err
 	}
-	if err := validateLocalHostRuntimeConfig(runtimeConfig); err != nil {
-		return err
-	}
 
 	lock, err := localHostPrepareWorkspace(layout)
 	if err != nil {
 		return err
 	}
 	defer func() {
+		if err := os.Remove(layout.OwnerRecordPath); err != nil && !errors.Is(err, os.ErrNotExist) && retErr == nil {
+			retErr = fmt.Errorf("remove owner record: %w", err)
+		}
 		if closeErr := lock.Close(); closeErr != nil && retErr == nil {
 			retErr = closeErr
 		}
@@ -140,10 +149,23 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 	}()
 
 	fmt.Fprintln(os.Stderr, "bootstrapping local postgres schema...")
-	if err := applyLocalBootstrap(ctx, managedPostgres.DSN); err != nil {
+	if err := localHostApplyBootstrap(ctx, managedPostgres.DSN); err != nil {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "local postgres schema ready")
+
+	var managedGraph *managedLocalGraph
+	if runtimeConfig.Profile == query.ProfileLocalAuthoritative {
+		managedGraph, err = localHostStartManagedGraph(ctx, layout, runtimeConfig)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := stopManagedLocalGraph(managedGraph, localGraphShutdownTimeout); err != nil && retErr == nil {
+				retErr = err
+			}
+		}()
+	}
 
 	hostname, err := localHostHostname()
 	if err != nil {
@@ -162,17 +184,18 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 		PostgresSocketPath: managedPostgres.SocketPath,
 		Profile:            string(runtimeConfig.Profile),
 		GraphBackend:       string(runtimeConfig.GraphBackend),
+		GraphAddress:       graphAddress(managedGraph),
+		GraphPID:           graphPID(managedGraph),
+		GraphBoltPort:      graphBoltPort(managedGraph),
+		GraphHTTPPort:      graphHTTPPort(managedGraph),
+		GraphDataDir:       graphDataDir(managedGraph),
+		GraphVersion:       graphVersion(managedGraph),
 	}
 	if err := localHostWriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
 		return err
 	}
-	defer func() {
-		if err := os.Remove(layout.OwnerRecordPath); err != nil && !errors.Is(err, os.ErrNotExist) && retErr == nil {
-			retErr = fmt.Errorf("remove owner record: %w", err)
-		}
-	}()
 
-	ingester, err := localHostStartChildProcess("pcg-ingester", []string{"pcg-ingester", "--watch", layout.WorkspaceRoot}, localHostEnv(managedPostgres.DSN, runtimeConfig, localHostIngesterOverrides(layout, mode, runtimeConfig)))
+	ingester, err := localHostStartChildProcess("pcg-ingester", []string{"pcg-ingester", "--watch", layout.WorkspaceRoot}, localHostEnv(managedPostgres.DSN, runtimeConfig, managedGraph, localHostIngesterOverrides(layout, mode, runtimeConfig)))
 	if err != nil {
 		return err
 	}
@@ -186,7 +209,7 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 		return localHostWaitChildProcess(ctx, ingester)
 	}
 
-	mcpServer, err := localHostStartChildProcess("pcg-mcp-server", []string{"pcg-mcp-server"}, localHostEnv(managedPostgres.DSN, runtimeConfig, map[string]string{
+	mcpServer, err := localHostStartChildProcess("pcg-mcp-server", []string{"pcg-mcp-server"}, localHostEnv(managedPostgres.DSN, runtimeConfig, managedGraph, map[string]string{
 		"PCG_MCP_TRANSPORT": "stdio",
 	}))
 	if err != nil {
@@ -233,8 +256,15 @@ func runAttachedLocalMCPStdio(ctx context.Context, layout pcglocal.Layout) (bool
 			requestedRuntimeConfig.GraphBackend,
 		)
 	}
+	if runtimeConfig.Profile == query.ProfileLocalAuthoritative && !localHostGraphHealthy(record) {
+		return true, fmt.Errorf(
+			"workspace owner is running profile %q with graph backend %q, but the graph backend is unhealthy",
+			runtimeConfig.Profile,
+			runtimeConfig.GraphBackend,
+		)
+	}
 
-	mcpServer, err := localHostStartChildProcess("pcg-mcp-server", []string{"pcg-mcp-server"}, localHostEnv(dsn, runtimeConfig, map[string]string{
+	mcpServer, err := localHostStartChildProcess("pcg-mcp-server", []string{"pcg-mcp-server"}, localHostEnv(dsn, runtimeConfig, managedGraphFromRecord(record), map[string]string{
 		"PCG_MCP_TRANSPORT": "stdio",
 	}))
 	if err != nil {
@@ -243,7 +273,7 @@ func runAttachedLocalMCPStdio(ctx context.Context, layout pcglocal.Layout) (bool
 	return true, localHostWaitChildProcess(ctx, mcpServer)
 }
 
-func localHostEnv(dsn string, runtimeConfig localHostRuntimeConfig, overrides map[string]string) []string {
+func localHostEnv(dsn string, runtimeConfig localHostRuntimeConfig, graph *managedLocalGraph, overrides map[string]string) []string {
 	values := map[string]string{
 		"PCG_POSTGRES_DSN":      dsn,
 		"PCG_FACT_STORE_DSN":    dsn,
@@ -258,6 +288,9 @@ func localHostEnv(dsn string, runtimeConfig localHostRuntimeConfig, overrides ma
 	}
 	if runtimeConfig.GraphBackend != "" {
 		values["PCG_GRAPH_BACKEND"] = string(runtimeConfig.GraphBackend)
+	}
+	for key, value := range graphEnvOverrides(graph) {
+		values[key] = value
 	}
 	for key, value := range overrides {
 		values[key] = value
@@ -323,17 +356,6 @@ func resolveLocalHostRuntimeConfig(getenv func(string) string) (localHostRuntime
 		Profile:      profile,
 		GraphBackend: graphBackend,
 	}, nil
-}
-
-func validateLocalHostRuntimeConfig(runtimeConfig localHostRuntimeConfig) error {
-	if runtimeConfig.Profile == query.ProfileLocalAuthoritative {
-		return fmt.Errorf(
-			"%q local host startup is not wired yet for graph backend %q",
-			query.ProfileLocalAuthoritative,
-			runtimeConfig.GraphBackend,
-		)
-	}
-	return nil
 }
 
 func requestedAttachRuntimeConfig(getenv func(string) string) (localHostRuntimeConfig, bool, error) {
@@ -423,12 +445,12 @@ func waitLocalChildProcess(ctx context.Context, cmd *exec.Cmd) error {
 
 	select {
 	case err := <-errc:
-		return err
+		return normalizeLocalChildExit(err)
 	case <-ctx.Done():
-		if err := stopLocalChildProcess(cmd, localHostShutdownTimeout); err != nil {
+		if err := interruptLocalChildProcess(cmd); err != nil {
 			return err
 		}
-		return nil
+		return waitForLocalChildExit(cmd, errc, localHostShutdownTimeout)
 	}
 }
 
@@ -439,26 +461,32 @@ func stopLocalChildProcess(cmd *exec.Cmd, timeout time.Duration) error {
 	if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
 		return nil
 	}
-	if err := cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		_ = cmd.Process.Kill()
-		return fmt.Errorf("interrupt child process: %w", err)
+	if err := interruptLocalChildProcess(cmd); err != nil {
+		return err
 	}
 
 	done := make(chan error, 1)
 	go func() {
 		done <- cmd.Wait()
 	}()
+	return waitForLocalChildExit(cmd, done, timeout)
+}
 
+func interruptLocalChildProcess(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil {
+		return nil
+	}
+	if err := cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		_ = cmd.Process.Kill()
+		return fmt.Errorf("interrupt child process: %w", err)
+	}
+	return nil
+}
+
+func waitForLocalChildExit(cmd *exec.Cmd, done <-chan error, timeout time.Duration) error {
 	select {
 	case err := <-done:
-		if err == nil || errors.Is(err, os.ErrProcessDone) {
-			return nil
-		}
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return nil
-		}
-		return err
+		return normalizeLocalChildExit(err)
 	case <-time.After(timeout):
 		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 			return fmt.Errorf("kill child process: %w", err)
@@ -466,6 +494,20 @@ func stopLocalChildProcess(cmd *exec.Cmd, timeout time.Duration) error {
 		<-done
 		return nil
 	}
+}
+
+func normalizeLocalChildExit(err error) error {
+	if err == nil || errors.Is(err, os.ErrProcessDone) || errors.Is(err, syscall.ECHILD) {
+		return nil
+	}
+	if strings.Contains(err.Error(), "Wait was already called") {
+		return nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return nil
+	}
+	return err
 }
 
 func applyLocalBootstrap(ctx context.Context, dsn string) error {

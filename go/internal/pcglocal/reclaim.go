@@ -11,6 +11,8 @@ var (
 	ErrWorkspaceOwnerActive = errors.New("workspace owner still active")
 	// ErrEmbeddedPostgresActive indicates the embedded Postgres process still appears to be alive.
 	ErrEmbeddedPostgresActive = errors.New("embedded postgres still active")
+	// ErrGraphBackendActive indicates the graph backend sidecar still appears to be alive.
+	ErrGraphBackendActive = errors.New("graph backend still active")
 	// ErrInvalidOwnerRecord indicates owner metadata is corrupt or inconsistent with the workspace.
 	ErrInvalidOwnerRecord = errors.New("invalid owner record")
 )
@@ -20,6 +22,8 @@ type ReclaimDeps struct {
 	PIDAlive      func(pid int) bool
 	SocketHealthy func(path string) bool
 	StopPostgres  func(dataDir string) error
+	GraphHealthy  func(record OwnerRecord) bool
+	StopGraph     func(record OwnerRecord) error
 }
 
 // ValidateOrReclaimOwner decides whether an existing owner record can be reclaimed.
@@ -64,6 +68,18 @@ func ValidateOrReclaimOwner(layout Layout, currentVersion string, deps ReclaimDe
 		}
 	}
 
+	if deps.graphHealthy(record) {
+		if deps.StopGraph == nil {
+			return fmt.Errorf("%w: no stop function configured for pid=%d", ErrGraphBackendActive, record.GraphPID)
+		}
+		if err := deps.StopGraph(record); err != nil {
+			return fmt.Errorf("stop stale graph backend: %w", err)
+		}
+		if deps.graphHealthy(record) {
+			return fmt.Errorf("%w: pid=%d address=%q bolt_port=%d http_port=%d", ErrGraphBackendActive, record.GraphPID, record.GraphAddress, record.GraphBoltPort, record.GraphHTTPPort)
+		}
+	}
+
 	if err := os.Remove(layout.OwnerRecordPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove stale owner record: %w", err)
 	}
@@ -82,4 +98,11 @@ func (d ReclaimDeps) socketHealthy(path string) bool {
 		return false
 	}
 	return d.SocketHealthy(path)
+}
+
+func (d ReclaimDeps) graphHealthy(record OwnerRecord) bool {
+	if d.GraphHealthy == nil {
+		return false
+	}
+	return d.GraphHealthy(record)
 }

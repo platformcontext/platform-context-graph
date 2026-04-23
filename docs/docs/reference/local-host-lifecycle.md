@@ -10,7 +10,8 @@ lightweight local host.
 3. validate or reclaim stale owner record
 4. start embedded Postgres and wait until it accepts local connections
 5. if profile is `local_authoritative`, start the local graph backend
-   sidecar and wait until its Bolt socket accepts connections
+   sidecar and wait until its recorded loopback health and Bolt endpoints
+   accept connections
 6. start local host socket
 7. start watcher / index pipeline
 8. begin serving CLI and MCP attach traffic
@@ -45,12 +46,18 @@ On restart:
 
 1. recover Postgres via normal WAL replay
 2. if a graph backend PID is recorded in `owner.json`, probe its health;
-   if still alive but the PCG owner is dead, attempt a clean stop through
-   `pcg graph stop --force` before reclaiming
+   if still alive but the PCG owner is dead, attempt a clean internal stop
+   through the recorded PID before reclaiming
 3. detect stale owner
 4. reclaim ownership only after lock acquisition, liveness checks, and
    any graph-backend stop step above has succeeded
 5. rebuild any derived local caches if necessary
+
+For the current NornicDB-backed path, graph health is loopback-TCP based:
+
+- `graph_pid` must still be alive
+- `graph_http_port` must answer `GET /health`
+- `graph_bolt_port` must still accept loopback TCP connections
 
 ## Concurrency Note
 

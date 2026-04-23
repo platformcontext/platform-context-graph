@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
@@ -123,6 +126,67 @@ func TestRunAttachedLocalMCPStdioRejectsRequestedProfileMismatch(t *testing.T) {
 	}
 }
 
+func TestRunAttachedLocalMCPStdioRejectsUnhealthyAuthoritativeGraph(t *testing.T) {
+	layout := pcglocal.Layout{
+		WorkspaceID:     "workspace-id",
+		OwnerRecordPath: "/tmp/owner.json",
+	}
+	record := pcglocal.OwnerRecord{
+		PID:                42,
+		WorkspaceID:        layout.WorkspaceID,
+		PostgresPort:       15439,
+		PostgresSocketPath: "/tmp/.s.PGSQL.15439",
+		Profile:            string(query.ProfileLocalAuthoritative),
+		GraphBackend:       string(query.GraphBackendNornicDB),
+		GraphPID:           77,
+		GraphBoltPort:      17687,
+		GraphHTTPPort:      17474,
+	}
+
+	originalReadOwnerRecord := localHostReadOwnerRecord
+	originalProcessAlive := localHostProcessAlive
+	originalSocketHealthy := localHostSocketHealthy
+	originalGraphHealthy := localHostGraphHealthy
+	originalStartChild := localHostStartChildProcess
+	t.Cleanup(func() {
+		localHostReadOwnerRecord = originalReadOwnerRecord
+		localHostProcessAlive = originalProcessAlive
+		localHostSocketHealthy = originalSocketHealthy
+		localHostGraphHealthy = originalGraphHealthy
+		localHostStartChildProcess = originalStartChild
+	})
+
+	localHostReadOwnerRecord = func(path string) (pcglocal.OwnerRecord, error) {
+		return record, nil
+	}
+	localHostProcessAlive = func(pid int) bool {
+		return pid == record.PID
+	}
+	localHostSocketHealthy = func(path string) bool {
+		return path == record.PostgresSocketPath
+	}
+	localHostGraphHealthy = func(record pcglocal.OwnerRecord) bool {
+		return false
+	}
+
+	startCalled := false
+	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {
+		startCalled = true
+		return &exec.Cmd{}, nil
+	}
+
+	attached, err := runAttachedLocalMCPStdio(context.Background(), layout)
+	if err == nil || !strings.Contains(err.Error(), "graph backend") {
+		t.Fatalf("runAttachedLocalMCPStdio() error = %v, want graph backend health error", err)
+	}
+	if !attached {
+		t.Fatal("runAttachedLocalMCPStdio() attached = false, want true when owner exists but graph is unhealthy")
+	}
+	if startCalled {
+		t.Fatal("runAttachedLocalMCPStdio() started MCP child despite unhealthy authoritative graph")
+	}
+}
+
 func TestLocalHostIngesterOverridesUseFilesystemDirectMode(t *testing.T) {
 	layout := pcglocal.Layout{
 		WorkspaceRoot: "/workspace/repo",
@@ -204,7 +268,7 @@ func TestResolveLocalHostRuntimeConfig(t *testing.T) {
 
 func TestLocalHostEnvHonorsRuntimeConfig(t *testing.T) {
 	t.Run("lightweight disables neo4j", func(t *testing.T) {
-		got := localHostEnv("dsn", localHostRuntimeConfig{Profile: query.ProfileLocalLightweight}, nil)
+		got := localHostEnv("dsn", localHostRuntimeConfig{Profile: query.ProfileLocalLightweight}, nil, nil)
 		if envValue(got, "PCG_QUERY_PROFILE") != string(query.ProfileLocalLightweight) {
 			t.Fatalf("PCG_QUERY_PROFILE = %q, want %q", envValue(got, "PCG_QUERY_PROFILE"), query.ProfileLocalLightweight)
 		}
@@ -228,7 +292,7 @@ func TestLocalHostEnvHonorsRuntimeConfig(t *testing.T) {
 		got := localHostEnv("dsn", localHostRuntimeConfig{
 			Profile:      query.ProfileLocalAuthoritative,
 			GraphBackend: query.GraphBackendNornicDB,
-		}, nil)
+		}, nil, nil)
 		if envValue(got, "PCG_QUERY_PROFILE") != string(query.ProfileLocalAuthoritative) {
 			t.Fatalf("PCG_QUERY_PROFILE = %q, want %q", envValue(got, "PCG_QUERY_PROFILE"), query.ProfileLocalAuthoritative)
 		}
@@ -239,38 +303,134 @@ func TestLocalHostEnvHonorsRuntimeConfig(t *testing.T) {
 			t.Fatalf("PCG_DISABLE_NEO4J = %q, want empty override", envValue(got, "PCG_DISABLE_NEO4J"))
 		}
 	})
+
+	t.Run("authoritative injects graph bolt connection", func(t *testing.T) {
+		got := localHostEnv(
+			"dsn",
+			localHostRuntimeConfig{
+				Profile:      query.ProfileLocalAuthoritative,
+				GraphBackend: query.GraphBackendNornicDB,
+			},
+			&managedLocalGraph{
+				Backend:  query.GraphBackendNornicDB,
+				Address:  "127.0.0.1",
+				BoltPort: 17687,
+			},
+			nil,
+		)
+		if envValue(got, "PCG_NEO4J_URI") != "bolt://127.0.0.1:17687" {
+			t.Fatalf("PCG_NEO4J_URI = %q, want %q", envValue(got, "PCG_NEO4J_URI"), "bolt://127.0.0.1:17687")
+		}
+		if envValue(got, "PCG_NEO4J_USERNAME") != localNornicDBAdminUsername {
+			t.Fatalf("PCG_NEO4J_USERNAME = %q, want %q", envValue(got, "PCG_NEO4J_USERNAME"), localNornicDBAdminUsername)
+		}
+		if envValue(got, "PCG_NEO4J_PASSWORD") != localNornicDBAdminPassword {
+			t.Fatalf("PCG_NEO4J_PASSWORD = %q, want %q", envValue(got, "PCG_NEO4J_PASSWORD"), localNornicDBAdminPassword)
+		}
+		if envValue(got, "DEFAULT_DATABASE") != localNornicDBDefaultDatabase {
+			t.Fatalf("DEFAULT_DATABASE = %q, want %q", envValue(got, "DEFAULT_DATABASE"), localNornicDBDefaultDatabase)
+		}
+	})
 }
 
-func TestRunOwnedLocalHostWithLayoutRejectsUnsupportedAuthoritativeMode(t *testing.T) {
+func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T) {
 	t.Setenv("PCG_QUERY_PROFILE", string(query.ProfileLocalAuthoritative))
 
 	originalPrepareWorkspace := localHostPrepareWorkspace
 	originalStartEmbeddedPostgres := localHostStartEmbeddedPostgres
+	originalStartManagedGraph := localHostStartManagedGraph
+	originalWriteOwnerRecord := localHostWriteOwnerRecord
+	originalHostname := localHostHostname
+	originalStartChild := localHostStartChildProcess
+	originalWaitChild := localHostWaitChildProcess
+	originalApplyBootstrap := localHostApplyBootstrap
 	t.Cleanup(func() {
 		localHostPrepareWorkspace = originalPrepareWorkspace
 		localHostStartEmbeddedPostgres = originalStartEmbeddedPostgres
+		localHostStartManagedGraph = originalStartManagedGraph
+		localHostWriteOwnerRecord = originalWriteOwnerRecord
+		localHostHostname = originalHostname
+		localHostStartChildProcess = originalStartChild
+		localHostWaitChildProcess = originalWaitChild
+		localHostApplyBootstrap = originalApplyBootstrap
 	})
 
-	prepareCalled := false
-	postgresCalled := false
 	localHostPrepareWorkspace = func(layout pcglocal.Layout) (*pcglocal.OwnerLock, error) {
-		prepareCalled = true
-		return nil, nil
+		return &pcglocal.OwnerLock{}, nil
 	}
 	localHostStartEmbeddedPostgres = func(ctx context.Context, layout pcglocal.Layout) (*pcglocal.ManagedPostgres, error) {
-		postgresCalled = true
-		return nil, nil
+		return &pcglocal.ManagedPostgres{
+			DSN:        "host=127.0.0.1 port=15439 user=pcg password=change-me dbname=postgres sslmode=disable",
+			Port:       15439,
+			DataDir:    "/workspace/postgres/data",
+			SocketDir:  "/tmp/pcg",
+			SocketPath: "/tmp/pcg/.s.PGSQL.15439",
+			PID:        21,
+		}, nil
+	}
+	localHostStartManagedGraph = func(ctx context.Context, layout pcglocal.Layout, runtimeConfig localHostRuntimeConfig) (*managedLocalGraph, error) {
+		if runtimeConfig.GraphBackend != query.GraphBackendNornicDB {
+			t.Fatalf("runtimeConfig.GraphBackend = %q, want %q", runtimeConfig.GraphBackend, query.GraphBackendNornicDB)
+		}
+		return &managedLocalGraph{
+			Backend:    query.GraphBackendNornicDB,
+			Version:    "1.0.42",
+			BinaryPath: "/tmp/nornicdb",
+			Address:    "127.0.0.1",
+			BoltPort:   17687,
+			HTTPPort:   17474,
+			DataDir:    "/workspace/graph/nornicdb",
+			LogPath:    "/workspace/logs/graph-nornicdb.log",
+			PID:        88,
+			Cmd:        &exec.Cmd{},
+		}, nil
+	}
+	localHostHostname = func() (string, error) {
+		return "local-test", nil
+	}
+	localHostApplyBootstrap = func(ctx context.Context, dsn string) error {
+		return nil
+	}
+	var written pcglocal.OwnerRecord
+	localHostWriteOwnerRecord = func(path string, record pcglocal.OwnerRecord) error {
+		written = record
+		return nil
+	}
+	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {
+		if envValue(env, "PCG_NEO4J_URI") != "bolt://127.0.0.1:17687" {
+			t.Fatalf("PCG_NEO4J_URI = %q, want %q", envValue(env, "PCG_NEO4J_URI"), "bolt://127.0.0.1:17687")
+		}
+		return &exec.Cmd{}, nil
+	}
+	localHostWaitChildProcess = func(ctx context.Context, cmd *exec.Cmd) error {
+		return nil
 	}
 
-	err := runOwnedLocalHostWithLayout(context.Background(), pcglocal.Layout{WorkspaceID: "workspace-id"}, localHostModeWatch)
-	if err == nil || !strings.Contains(err.Error(), "local_authoritative") {
-		t.Fatalf("runOwnedLocalHostWithLayout() error = %v, want local_authoritative error", err)
+	err := runOwnedLocalHostWithLayout(context.Background(), pcglocal.Layout{
+		WorkspaceID:     "workspace-id",
+		WorkspaceRoot:   "/workspace/repo",
+		OwnerRecordPath: "/workspace/owner.json",
+		CacheDir:        "/workspace/cache",
+		LogsDir:         "/workspace/logs",
+		GraphDir:        "/workspace/graph",
+	}, localHostModeWatch)
+	if err != nil {
+		t.Fatalf("runOwnedLocalHostWithLayout() error = %v, want nil", err)
 	}
-	if prepareCalled {
-		t.Fatal("runOwnedLocalHostWithLayout() prepared workspace before rejecting unsupported authoritative mode")
+	if written.GraphPID != 88 {
+		t.Fatalf("written.GraphPID = %d, want %d", written.GraphPID, 88)
 	}
-	if postgresCalled {
-		t.Fatal("runOwnedLocalHostWithLayout() started postgres before rejecting unsupported authoritative mode")
+	if written.GraphBackend != string(query.GraphBackendNornicDB) {
+		t.Fatalf("written.GraphBackend = %q, want %q", written.GraphBackend, query.GraphBackendNornicDB)
+	}
+	if written.GraphBoltPort != 17687 {
+		t.Fatalf("written.GraphBoltPort = %d, want %d", written.GraphBoltPort, 17687)
+	}
+	if written.GraphHTTPPort != 17474 {
+		t.Fatalf("written.GraphHTTPPort = %d, want %d", written.GraphHTTPPort, 17474)
+	}
+	if written.GraphVersion != "1.0.42" {
+		t.Fatalf("written.GraphVersion = %q, want %q", written.GraphVersion, "1.0.42")
 	}
 }
 
@@ -286,6 +446,80 @@ func TestRuntimeConfigFromOwnerRecordDefaultsAuthoritativeBackendToNornicDB(t *t
 	}
 	if got.GraphBackend != query.GraphBackendNornicDB {
 		t.Fatalf("GraphBackend = %q, want %q", got.GraphBackend, query.GraphBackendNornicDB)
+	}
+}
+
+func TestGraphHealthyFromOwnerRecord(t *testing.T) {
+	originalProcessAlive := localHostProcessAlive
+	originalGraphHTTPHealthy := localGraphHTTPHealthy
+	originalGraphBoltHealthy := localGraphBoltHealthy
+	t.Cleanup(func() {
+		localHostProcessAlive = originalProcessAlive
+		localGraphHTTPHealthy = originalGraphHTTPHealthy
+		localGraphBoltHealthy = originalGraphBoltHealthy
+	})
+
+	record := pcglocal.OwnerRecord{
+		GraphPID:      88,
+		GraphAddress:  "127.0.0.1",
+		GraphBoltPort: 17687,
+		GraphHTTPPort: 17474,
+	}
+	localHostProcessAlive = func(pid int) bool {
+		return pid == 88
+	}
+	localGraphHTTPHealthy = func(address string, port int, timeout time.Duration) bool {
+		return address == "127.0.0.1" && port == 17474
+	}
+	localGraphBoltHealthy = func(address string, port int, timeout time.Duration) bool {
+		return address == "127.0.0.1" && port == 17687
+	}
+
+	if !graphHealthyFromOwnerRecord(record) {
+		t.Fatal("graphHealthyFromOwnerRecord() = false, want true")
+	}
+}
+
+func TestWaitLocalChildProcessCancelUsesSingleWaiter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local child signal semantics are Unix-only in this slice")
+	}
+
+	cmd := exec.Command("/bin/sh", "-c", "trap 'exit 0' INT TERM; while :; do sleep 1; done")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- waitLocalChildProcess(ctx, cmd)
+	}()
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("waitLocalChildProcess() error = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("waitLocalChildProcess() timed out after cancel")
+	}
+}
+
+func TestNormalizeLocalChildExitTreatsAlreadyWaitedAsClean(t *testing.T) {
+	err := normalizeLocalChildExit(exec.ErrWaitDelay)
+	if err == nil {
+		t.Fatal("normalizeLocalChildExit(exec.ErrWaitDelay) = nil, want non-nil")
+	}
+
+	err = normalizeLocalChildExit(&exec.Error{Name: "child", Err: errors.New("Wait was already called")})
+	if err != nil {
+		t.Fatalf("normalizeLocalChildExit(already waited) error = %v, want nil", err)
 	}
 }
 

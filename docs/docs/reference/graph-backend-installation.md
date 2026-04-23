@@ -31,11 +31,65 @@ and in telemetry span / metric labels as `graph_backend`.
 | `local_full_stack` | Provided by Compose |
 | `production` | Provided by Helm / Kubernetes |
 
-## NornicDB install flow
+## Current local-authoritative requirement
 
-PCG provides `pcg install nornicdb` to pin, download, and register a
-NornicDB binary under `${PCG_HOME}/bin/` with a version pinned by the
-installed PCG release.
+Today, `local_authoritative` requires a pre-existing NornicDB binary. PCG
+defaults to the laptop-friendly headless artifact and discovers binaries in
+this order:
+
+1. `PCG_NORNICDB_BINARY`
+2. `nornicdb-headless` on `PATH`
+3. `nornicdb` on `PATH`
+
+This keeps the local-authoritative runtime usable while the built-in
+installer remains under development.
+
+The full `nornicdb` binary is supported when users opt in with
+`PCG_NORNICDB_BINARY` or place it on `PATH`, but it is not the local-laptop
+default because it can carry UI / local-LLM payloads and is materially
+larger. PCG still starts the process with `nornicdb serve --headless` and
+`NORNICDB_HEADLESS=true`; those runtime flags disable UI endpoints but do
+not make the full binary smaller. Hosted evaluation and future production
+packaging may use the full deployment artifact when that profile is
+promoted.
+
+## Current manual install options
+
+Until `pcg install nornicdb` ships, a developer can provide the binary in
+one of these ways:
+
+```bash
+# Preferred laptop path from a NornicDB checkout when plugin prerequisites
+# are installed.
+make build-headless
+PCG_NORNICDB_BINARY=/absolute/path/to/NornicDB/bin/nornicdb-headless pcg graph status
+
+# Reliable local fallback when optional local-LLM/plugin prerequisites are
+# absent on the laptop.
+go build -tags 'noui nolocalllm' -o /tmp/nornicdb-headless ./cmd/nornicdb
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless pcg graph status
+
+# Explicit opt-in to the larger full binary.
+PCG_NORNICDB_BINARY=/absolute/path/to/nornicdb pcg graph status
+
+# Runtime-only headless mode for a full binary. This disables UI endpoints
+# but does not reduce binary size.
+NORNICDB_HEADLESS=true nornicdb serve
+nornicdb serve --headless
+```
+
+Container builds are useful for hosted or Compose-style experiments, but the
+current laptop sidecar launches a local binary:
+
+```bash
+docker build --build-arg HEADLESS=true -f docker/Dockerfile.arm64-metal .
+```
+
+## Planned NornicDB install flow
+
+PCG is still planning `pcg install nornicdb` to pin, download, and register
+the headless NornicDB laptop artifact under `${PCG_HOME}/bin/` with a
+version pinned by the installed PCG release.
 
 ```bash
 pcg install nornicdb
@@ -50,7 +104,7 @@ The command performs, in order:
 5. If the release manifest records a Sigstore / Cosign signature, verifies
    it. Unsigned artifacts refuse to install unless
    `--allow-unsigned` is passed explicitly.
-6. Extracts to `${PCG_HOME}/bin/nornicdb`.
+6. Extracts to `${PCG_HOME}/bin/nornicdb-headless`.
 7. Writes `${PCG_HOME}/graph-backends/nornicdb/manifest.json` recording the
    installed version, checksum, signature status, and install timestamp.
 
@@ -61,7 +115,8 @@ pcg install nornicdb --version <semver>
 ```
 
 Replaces the installed binary with the requested version. The previous
-binary is retained at `${PCG_HOME}/bin/nornicdb.previous` for rollback.
+binary is retained at `${PCG_HOME}/bin/nornicdb-headless.previous` for
+rollback.
 
 ### Rollback
 
@@ -115,6 +170,25 @@ pcg graph status
 
 Both should report the graph backend as present, the binary path, and the
 installed version.
+
+Until the installer ships, verify your existing binary with:
+
+```bash
+PCG_NORNICDB_BINARY=/absolute/path/to/nornicdb-headless pcg graph status
+```
+
+When building directly from a local NornicDB checkout for laptop testing,
+prefer the repository target when its optional plugin prerequisites are
+available. If that target fails because local-LLM/plugin libraries are not
+installed, use the direct no-UI/no-local-LLM fallback:
+
+```bash
+make build-headless
+PCG_NORNICDB_BINARY=/absolute/path/to/NornicDB/bin/nornicdb-headless pcg graph status
+
+go build -tags 'noui nolocalllm' -o /tmp/nornicdb-headless ./cmd/nornicdb
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless pcg graph status
+```
 
 ## Non-goals
 

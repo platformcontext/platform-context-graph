@@ -178,6 +178,75 @@ func TestValidateOrReclaimOwner(t *testing.T) {
 		}
 	})
 
+	t.Run("stale graph stops before reclaim", func(t *testing.T) {
+		layout := testLayout(t)
+		record := OwnerRecord{
+			PID:           42,
+			Version:       "v1",
+			WorkspaceID:   "workspace-id",
+			GraphPID:      88,
+			GraphHTTPPort: 17474,
+		}
+		layout.WorkspaceID = "workspace-id"
+		if err := WriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
+			t.Fatalf("WriteOwnerRecord() error = %v, want nil", err)
+		}
+
+		graphAlive := true
+		stopCalls := 0
+		err := ValidateOrReclaimOwner(layout, "v1", ReclaimDeps{
+			GraphHealthy: func(record OwnerRecord) bool {
+				return graphAlive && record.GraphPID == 88
+			},
+			StopGraph: func(record OwnerRecord) error {
+				stopCalls++
+				if record.GraphPID != 88 {
+					t.Fatalf("StopGraph() record.GraphPID = %d, want %d", record.GraphPID, 88)
+				}
+				graphAlive = false
+				return nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("ValidateOrReclaimOwner() error = %v, want nil", err)
+		}
+		if stopCalls != 1 {
+			t.Fatalf("StopGraph() call count = %d, want 1", stopCalls)
+		}
+	})
+
+	t.Run("graph still healthy after stop blocks reclaim", func(t *testing.T) {
+		layout := testLayout(t)
+		record := OwnerRecord{
+			PID:           42,
+			Version:       "v1",
+			WorkspaceID:   "workspace-id",
+			GraphPID:      88,
+			GraphHTTPPort: 17474,
+		}
+		layout.WorkspaceID = "workspace-id"
+		if err := WriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
+			t.Fatalf("WriteOwnerRecord() error = %v, want nil", err)
+		}
+
+		stopCalls := 0
+		err := ValidateOrReclaimOwner(layout, "v1", ReclaimDeps{
+			GraphHealthy: func(record OwnerRecord) bool {
+				return record.GraphPID == 88
+			},
+			StopGraph: func(record OwnerRecord) error {
+				stopCalls++
+				return nil
+			},
+		})
+		if !errors.Is(err, ErrGraphBackendActive) {
+			t.Fatalf("ValidateOrReclaimOwner() error = %v, want %v", err, ErrGraphBackendActive)
+		}
+		if stopCalls != 1 {
+			t.Fatalf("StopGraph() call count = %d, want 1", stopCalls)
+		}
+	})
+
 	t.Run("workspace id mismatch fails closed", func(t *testing.T) {
 		layout := testLayout(t)
 		layout.WorkspaceID = "expected-workspace"

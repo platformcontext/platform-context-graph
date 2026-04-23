@@ -276,10 +276,9 @@ func OpenNeo4jDriver(
 	if err != nil {
 		return nil, Neo4jConfig{}, err
 	}
-	if graphBackend != GraphBackendNeo4j {
+	if graphBackend != GraphBackendNeo4j && graphBackend != GraphBackendNornicDB {
 		return nil, Neo4jConfig{}, fmt.Errorf(
-			"graph backend %q is not wired for the Neo4j driver path; set PCG_GRAPH_BACKEND=neo4j for hosted API/MCP/ingester services until a dedicated %q adapter path is implemented",
-			graphBackend,
+			"graph backend %q is not wired for the shared Bolt driver path",
 			graphBackend,
 		)
 	}

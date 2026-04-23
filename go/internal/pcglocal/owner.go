@@ -22,7 +22,10 @@ type OwnerRecord struct {
 	PostgresSocketPath string `json:"postgres_socket_path"`
 	Profile            string `json:"profile,omitempty"`
 	GraphBackend       string `json:"graph_backend,omitempty"`
+	GraphAddress       string `json:"graph_address,omitempty"`
 	GraphPID           int    `json:"graph_pid,omitempty"`
+	GraphBoltPort      int    `json:"graph_bolt_port,omitempty"`
+	GraphHTTPPort      int    `json:"graph_http_port,omitempty"`
 	GraphDataDir       string `json:"graph_data_dir,omitempty"`
 	GraphSocketPath    string `json:"graph_socket_path,omitempty"`
 	GraphVersion       string `json:"graph_version,omitempty"`
