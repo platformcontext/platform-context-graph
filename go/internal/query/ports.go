@@ -29,6 +29,7 @@ type ContentStore interface {
 	ListFrameworkRoutes(ctx context.Context, repoID string) ([]FrameworkRouteEvidence, error)
 	RepositoryCoverage(ctx context.Context, repoID string) (RepositoryContentCoverage, error)
 	ListRepositories(ctx context.Context) ([]RepositoryCatalogEntry, error)
+	MatchRepositories(ctx context.Context, selector string) ([]RepositoryCatalogEntry, error)
 	ResolveRepository(ctx context.Context, selector string) (*RepositoryCatalogEntry, error)
 }
 

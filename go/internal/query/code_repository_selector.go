@@ -31,9 +31,9 @@ func (h *CodeHandler) resolveRepositorySelector(ctx context.Context, selector st
 	}
 
 	if h != nil && h.Content != nil {
-		entries, err := h.Content.ListRepositories(ctx)
+		entries, err := h.Content.MatchRepositories(ctx, selector)
 		if err != nil {
-			return "", fmt.Errorf("list repositories: %w", err)
+			return "", fmt.Errorf("match repositories: %w", err)
 		}
 		matches := resolveRepositoryCatalogMatches(entries, selector)
 		switch len(matches) {

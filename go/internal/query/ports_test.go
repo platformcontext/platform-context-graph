@@ -85,6 +85,17 @@ func (f fakePortContentStore) ListRepositories(context.Context) ([]RepositoryCat
 	return append([]RepositoryCatalogEntry(nil), f.repositories...), nil
 }
 
+func (f fakePortContentStore) MatchRepositories(_ context.Context, selector string) ([]RepositoryCatalogEntry, error) {
+	matches := make([]RepositoryCatalogEntry, 0, 1)
+	for _, repo := range f.repositories {
+		switch selector {
+		case repo.ID, repo.Name, repo.Path, repo.LocalPath, repo.RemoteURL, repo.RepoSlug:
+			matches = append(matches, repo)
+		}
+	}
+	return matches, nil
+}
+
 func (f fakePortContentStore) ResolveRepository(context.Context, string) (*RepositoryCatalogEntry, error) {
 	if len(f.repositories) == 0 {
 		return nil, nil
