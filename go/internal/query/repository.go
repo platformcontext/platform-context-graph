@@ -122,13 +122,12 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		return
 	}
 
-	repoSelector := PathParam(r, "repo_id")
-	if repoSelector == "" {
-		WriteError(w, http.StatusBadRequest, "repo_id is required")
+	ctx := r.Context()
+	repoID, ok := h.resolveRepositoryPathSelector(w, r)
+	if !ok {
 		return
 	}
-	ctx := r.Context()
-	params := map[string]any{"repo_selector": repoSelector}
+	params := map[string]any{"repo_selector": repoID}
 
 	baseCypher := fmt.Sprintf(`
 		MATCH (r:Repository) WHERE %s
@@ -152,7 +151,6 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		WriteError(w, http.StatusNotFound, "repository not found")
 		return
 	}
-	repoID := StringVal(baseRow, "id")
 	params = map[string]any{"repo_id": repoID}
 
 	result := map[string]any{
@@ -297,9 +295,8 @@ func queryRepoConsumers(ctx context.Context, reader GraphQuery, params map[strin
 }
 
 func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Request) {
-	repoID := PathParam(r, "repo_id")
-	if repoID == "" {
-		WriteError(w, http.StatusBadRequest, "repo_id is required")
+	repoID, ok := h.resolveRepositoryPathSelector(w, r)
+	if !ok {
 		return
 	}
 
@@ -398,9 +395,8 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 
 // getRepositoryStats returns repository statistics including entity counts.
 func (h *RepositoryHandler) getRepositoryStats(w http.ResponseWriter, r *http.Request) {
-	repoID := PathParam(r, "repo_id")
-	if repoID == "" {
-		WriteError(w, http.StatusBadRequest, "repo_id is required")
+	repoID, ok := h.resolveRepositoryPathSelector(w, r)
+	if !ok {
 		return
 	}
 
@@ -439,9 +435,8 @@ func (h *RepositoryHandler) getRepositoryStats(w http.ResponseWriter, r *http.Re
 
 // getRepositoryCoverage returns content store coverage for the repository.
 func (h *RepositoryHandler) getRepositoryCoverage(w http.ResponseWriter, r *http.Request) {
-	repoID := PathParam(r, "repo_id")
-	if repoID == "" {
-		WriteError(w, http.StatusBadRequest, "repo_id is required")
+	repoID, ok := h.resolveRepositoryPathSelector(w, r)
+	if !ok {
 		return
 	}
 
@@ -467,24 +462,29 @@ func (h *RepositoryHandler) getRepositoryCoverage(w http.ResponseWriter, r *http
 }
 
 func (h *RepositoryHandler) resolveCoverageRepositoryID(ctx context.Context, selector string) (string, error) {
-	if h != nil && h.Neo4j != nil {
-		cypher := fmt.Sprintf("MATCH (r:Repository) WHERE %s RETURN r.id as id", repositorySelectorWhereClause)
-		row, err := h.Neo4j.RunSingle(ctx, cypher, map[string]any{"repo_selector": selector})
-		if err != nil {
-			return "", err
+	return h.resolveRepositorySelector(ctx, selector)
+}
+
+func (h *RepositoryHandler) resolveRepositorySelector(ctx context.Context, selector string) (string, error) {
+	return resolveRepositorySelectorExact(ctx, h.Neo4j, h.Content, selector)
+}
+
+func (h *RepositoryHandler) resolveRepositoryPathSelector(w http.ResponseWriter, r *http.Request) (string, bool) {
+	repoSelector := PathParam(r, "repo_id")
+	if repoSelector == "" {
+		WriteError(w, http.StatusBadRequest, "repo_id is required")
+		return "", false
+	}
+	repoID, err := h.resolveRepositorySelector(r.Context(), repoSelector)
+	if err != nil {
+		status := http.StatusBadRequest
+		if isRepositorySelectorNotFound(err) {
+			status = http.StatusNotFound
 		}
-		if row != nil {
-			return StringVal(row, "id"), nil
-		}
+		WriteError(w, status, err.Error())
+		return "", false
 	}
-	if h == nil || h.Content == nil {
-		return "", nil
-	}
-	repo, err := h.Content.ResolveRepository(ctx, selector)
-	if err != nil || repo == nil {
-		return "", err
-	}
-	return repo.ID, nil
+	return repoID, true
 }
 
 func repositoryCatalogMap(entry RepositoryCatalogEntry) map[string]any {

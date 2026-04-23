@@ -67,6 +67,7 @@ func TestGetRepositoryCoverageFallsBackToContentCatalogWithoutGraph(t *testing.T
 					ID:        "repository:r_local",
 					Name:      "platform-context-graph",
 					LocalPath: "/repos/platform-context-graph",
+					RepoSlug:  "platformcontext/platform-context-graph",
 				},
 			},
 			coverage: RepositoryContentCoverage{
@@ -81,8 +82,8 @@ func TestGetRepositoryCoverageFallsBackToContentCatalogWithoutGraph(t *testing.T
 		Profile: ProfileLocalLightweight,
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/platform-context-graph/coverage", nil)
-	req.SetPathValue("repo_id", "platform-context-graph")
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/platformcontext%2Fplatform-context-graph/coverage", nil)
+	req.SetPathValue("repo_id", "platformcontext/platform-context-graph")
 	rec := httptest.NewRecorder()
 
 	handler.getRepositoryCoverage(rec, req)

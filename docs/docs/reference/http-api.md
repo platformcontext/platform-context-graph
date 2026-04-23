@@ -591,7 +591,10 @@ These routes are for tracing shared infrastructure, blast radius, dependency exp
 - `GET /api/v0/repositories/{id}/story`
 - `GET /api/v0/repositories/{id}/stats`
 
-Repository routes also require canonical repository IDs.
+Repository routes accept a repository selector in the `{id}` path segment. The
+selector may be the canonical repository ID, repository name, repo slug, or
+indexed path. The server resolves that selector to the canonical repository ID
+before querying.
 
 Repository responses should be treated as:
 
