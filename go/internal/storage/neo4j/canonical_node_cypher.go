@@ -91,23 +91,15 @@ MERGE (d)-[:CONTAINS]->(f)`
 
 // --- Phase E: Entity Cypher (template — label inserted via fmt.Sprintf) ---
 
-// canonicalNodeEntityUpsertTemplate is formatted with the Neo4j label at write time.
-// Use fmt.Sprintf(canonicalNodeEntityUpsertTemplate, label).
-const canonicalNodeEntityUpsertTemplate = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:%s {uid: row.entity_id})
-SET n.id = row.entity_id, n.name = row.entity_name,
-    n.path = row.file_path, n.relative_path = row.relative_path,
-    n.line_number = row.start_line, n.start_line = row.start_line,
-    n.end_line = row.end_line, n.repo_id = row.repo_id,
-    n.language = row.language, n.lang = row.language,
-    n.decorators = row.decorators,
-    n.type_parameters = row.type_parameters,
-    n.declaration_merge_group = row.declaration_merge_group,
-    n.declaration_merge_count = row.declaration_merge_count,
-    n.declaration_merge_kinds = row.declaration_merge_kinds,
-    n.scope_id = row.scope_id, n.generation_id = row.generation_id,
-    n.evidence_source = 'projector/canonical'
+// canonicalNodeEntityUpsertTemplate is formatted with the Neo4j label at write
+// time. Entity upserts intentionally use per-row parameters instead of an
+// UNWIND row map because NornicDB does not reliably bind row.entity_id inside
+// MERGE map patterns for canonical code entities.
+const canonicalNodeEntityUpsertTemplate = `MERGE (n:%s {uid: $entity_id})
+SET n += $properties`
+
+const canonicalNodeEntityContainmentEdgeTemplate = `MATCH (f:File {path: $file_path})
+MATCH (n:%s {uid: $entity_id})
 MERGE (f)-[:CONTAINS]->(n)`
 
 // --- Phase F: Module Cypher ---

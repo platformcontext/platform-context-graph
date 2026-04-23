@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -344,7 +345,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 	originalWriteOwnerRecord := localHostWriteOwnerRecord
 	originalHostname := localHostHostname
 	originalStartChild := localHostStartChildProcess
-	originalWaitChild := localHostWaitChildProcess
+	originalWaitManagedChildren := localHostWaitManagedChildren
 	originalApplyBootstrap := localHostApplyBootstrap
 	t.Cleanup(func() {
 		localHostPrepareWorkspace = originalPrepareWorkspace
@@ -353,7 +354,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 		localHostWriteOwnerRecord = originalWriteOwnerRecord
 		localHostHostname = originalHostname
 		localHostStartChildProcess = originalStartChild
-		localHostWaitChildProcess = originalWaitChild
+		localHostWaitManagedChildren = originalWaitManagedChildren
 		localHostApplyBootstrap = originalApplyBootstrap
 	})
 
@@ -400,13 +401,15 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 		written = record
 		return nil
 	}
+	var started []string
 	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {
+		started = append(started, name)
 		if envValue(env, "PCG_NEO4J_URI") != "bolt://127.0.0.1:17687" {
 			t.Fatalf("PCG_NEO4J_URI = %q, want %q", envValue(env, "PCG_NEO4J_URI"), "bolt://127.0.0.1:17687")
 		}
 		return &exec.Cmd{}, nil
 	}
-	localHostWaitChildProcess = func(ctx context.Context, cmd *exec.Cmd) error {
+	localHostWaitManagedChildren = func(ctx context.Context, children []localHostChild, allowCleanExit string) error {
 		return nil
 	}
 
@@ -441,6 +444,9 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 	}
 	if written.GraphPassword != "workspace-secret" {
 		t.Fatalf("written.GraphPassword = %q, want %q", written.GraphPassword, "workspace-secret")
+	}
+	if got, want := started, []string{"pcg-reducer", "pcg-ingester"}; !slices.Equal(got, want) {
+		t.Fatalf("started children = %#v, want %#v", got, want)
 	}
 }
 

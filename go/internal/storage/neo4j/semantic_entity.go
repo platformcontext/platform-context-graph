@@ -8,255 +8,28 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 )
 
-const (
-	semanticEntityEvidenceSource = "parser/semantic-entities"
-
-	semanticAnnotationUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:Annotation {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.kind = row.kind,
-    n.target_kind = row.target_kind,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticTypedefUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:Typedef {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.type = row.type,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticTypeAliasUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:TypeAlias {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.type_alias_kind = row.type_alias_kind,
-    n.type_parameters = row.type_parameters,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticTypeAnnotationUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:TypeAnnotation {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.annotation_kind = row.annotation_kind,
-    n.context = row.context,
-    n.type = row.type,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticComponentUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:Component {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-	n.language = row.language,
-	n.lang = row.language,
-	n.framework = row.framework,
-	n.jsx_fragment_shorthand = row.jsx_fragment_shorthand,
-	n.component_type_assertion = row.component_type_assertion,
-	n.component_wrapper_kind = row.component_wrapper_kind,
-	n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-	n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticImplBlockUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:ImplBlock {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.kind = row.kind,
-    n.trait = row.trait,
-    n.target = row.target,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticProtocolUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:Protocol {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.module_kind = row.module_kind,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticProtocolImplementationUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:ProtocolImplementation {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.module_kind = row.module_kind,
-    n.protocol = row.protocol,
-    n.implemented_for = row.implemented_for,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticVariableUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:Variable {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-	    n.repo_id = row.repo_id,
-	    n.language = row.language,
-	    n.lang = row.language,
-	    n.attribute_kind = row.attribute_kind,
-	    n.value = row.value,
-	    n.component_type_assertion = row.component_type_assertion,
-	    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-	    n.evidence_source = row.evidence_source
-	MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticModuleUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:Module {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.module_kind = row.module_kind,
-    n.declaration_merge_group = row.declaration_merge_group,
-    n.declaration_merge_count = row.declaration_merge_count,
-    n.declaration_merge_kinds = row.declaration_merge_kinds,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-
-	semanticFunctionUpsertCypher = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
-MERGE (n:Function {uid: row.entity_id})
-SET n.id = row.entity_id,
-    n.name = row.entity_name,
-    n.path = row.file_path,
-    n.relative_path = row.relative_path,
-    n.line_number = row.start_line,
-    n.start_line = row.start_line,
-    n.end_line = row.end_line,
-    n.repo_id = row.repo_id,
-    n.language = row.language,
-    n.lang = row.language,
-    n.impl_context = row.impl_context,
-    n.docstring = row.docstring,
-    n.method_kind = row.method_kind,
-    n.constructor_kind = row.constructor_kind,
-    n.annotation_kind = row.annotation_kind,
-    n.context = row.context,
-    n.type_annotation_count = row.type_annotation_count,
-    n.type_annotation_kinds = row.type_annotation_kinds,
-    n.type_parameters = row.type_parameters,
-    n.jsx_fragment_shorthand = row.jsx_fragment_shorthand,
-    n.decorators = row.decorators,
-    n.async = row.async,
-    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
-    n.evidence_source = row.evidence_source
-MERGE (f)-[:CONTAINS]->(n)`
-	semanticRustImplBlockOwnershipCypher = `UNWIND $rows AS row
-MATCH (impl:ImplBlock {uid: row.impl_block_id})
-MATCH (fn:Function {uid: row.function_id})
-MERGE (impl)-[:CONTAINS]->(fn)`
-
-	semanticEntityRetractCypher = `MATCH (n:Annotation|Typedef|TypeAlias|TypeAnnotation|Component|Module|ImplBlock|Protocol|ProtocolImplementation|Variable|Function)
-WHERE n.repo_id IN $repo_ids
-  AND n.evidence_source = $evidence_source
-DETACH DELETE n`
-)
-
 // SemanticEntityWriter writes Annotation, Typedef, TypeAlias, TypeAnnotation,
 // Component, Module, ImplBlock, Protocol, ProtocolImplementation, Variable,
-// and JavaScript callable Function semantic nodes into Neo4j.
+// and semantic Function nodes into Neo4j.
 type SemanticEntityWriter struct {
-	executor  Executor
-	BatchSize int
+	executor               Executor
+	BatchSize              int
+	parameterizedRowWrites bool
 }
 
 // NewSemanticEntityWriter returns a semantic-entity writer backed by the given Executor.
 func NewSemanticEntityWriter(executor Executor, batchSize int) *SemanticEntityWriter {
 	return &SemanticEntityWriter{executor: executor, BatchSize: batchSize}
+}
+
+// NewSemanticEntityWriterWithParameterizedRows returns a semantic-entity writer
+// that avoids inlining row metadata into the query text.
+func NewSemanticEntityWriterWithParameterizedRows(executor Executor, batchSize int) *SemanticEntityWriter {
+	return &SemanticEntityWriter{
+		executor:               executor,
+		BatchSize:              batchSize,
+		parameterizedRowWrites: true,
+	}
 }
 
 func (w *SemanticEntityWriter) batchSize() int {
@@ -283,27 +56,6 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 
 	repoIDs := uniqueSemanticRepoIDs(write.RepoIDs)
 
-	rowsByLabel := map[string][]map[string]any{
-		"Annotation":             nil,
-		"Typedef":                nil,
-		"TypeAlias":              nil,
-		"TypeAnnotation":         nil,
-		"Component":              nil,
-		"Module":                 nil,
-		"ImplBlock":              nil,
-		"Protocol":               nil,
-		"ProtocolImplementation": nil,
-		"Variable":               nil,
-		"Function":               nil,
-	}
-	for _, row := range write.Rows {
-		rowMap, ok := buildSemanticEntityRowMap(row)
-		if !ok {
-			continue
-		}
-		rowsByLabel[row.EntityType] = append(rowsByLabel[row.EntityType], rowMap)
-	}
-
 	// Build the full statement list: retract first, then all upserts.
 	var stmts []Statement
 	stmts = append(stmts, Statement{
@@ -313,38 +65,71 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 	})
 
 	writes := 0
-	batchSize := w.batchSize()
-	for _, plan := range []struct {
-		label  string
-		cypher string
-	}{
-		{label: "Annotation", cypher: semanticAnnotationUpsertCypher},
-		{label: "Typedef", cypher: semanticTypedefUpsertCypher},
-		{label: "TypeAlias", cypher: semanticTypeAliasUpsertCypher},
-		{label: "TypeAnnotation", cypher: semanticTypeAnnotationUpsertCypher},
-		{label: "Component", cypher: semanticComponentUpsertCypher},
-		{label: "Module", cypher: semanticModuleUpsertCypher},
-		{label: "ImplBlock", cypher: semanticImplBlockUpsertCypher},
-		{label: "Protocol", cypher: semanticProtocolUpsertCypher},
-		{label: "ProtocolImplementation", cypher: semanticProtocolImplementationUpsertCypher},
-		{label: "Variable", cypher: semanticVariableUpsertCypher},
-		{label: "Function", cypher: semanticFunctionUpsertCypher},
-	} {
-		rows := rowsByLabel[plan.label]
-		for start := 0; start < len(rows); start += batchSize {
-			end := start + batchSize
-			if end > len(rows) {
-				end = len(rows)
+	if w.parameterizedRowWrites {
+		for _, row := range write.Rows {
+			stmt, ok := buildParameterizedSemanticEntityStatement(row)
+			if !ok {
+				continue
 			}
-			stmts = append(stmts, Statement{
-				Operation:  OperationCanonicalUpsert,
-				Cypher:     plan.cypher,
-				Parameters: map[string]any{"rows": rows[start:end]},
-			})
+			stmts = append(stmts, stmt)
+			writes++
 		}
-		writes += len(rows)
+	} else {
+		rowsByLabel := map[string][]map[string]any{
+			"Annotation":             nil,
+			"Typedef":                nil,
+			"TypeAlias":              nil,
+			"TypeAnnotation":         nil,
+			"Component":              nil,
+			"Module":                 nil,
+			"ImplBlock":              nil,
+			"Protocol":               nil,
+			"ProtocolImplementation": nil,
+			"Variable":               nil,
+			"Function":               nil,
+		}
+		for _, row := range write.Rows {
+			rowMap, ok := buildSemanticEntityRowMap(row)
+			if !ok {
+				continue
+			}
+			rowsByLabel[row.EntityType] = append(rowsByLabel[row.EntityType], rowMap)
+		}
+
+		batchSize := w.batchSize()
+		for _, plan := range []struct {
+			label  string
+			cypher string
+		}{
+			{label: "Annotation", cypher: semanticAnnotationUpsertCypher},
+			{label: "Typedef", cypher: semanticTypedefUpsertCypher},
+			{label: "TypeAlias", cypher: semanticTypeAliasUpsertCypher},
+			{label: "TypeAnnotation", cypher: semanticTypeAnnotationUpsertCypher},
+			{label: "Component", cypher: semanticComponentUpsertCypher},
+			{label: "Module", cypher: semanticModuleUpsertCypher},
+			{label: "ImplBlock", cypher: semanticImplBlockUpsertCypher},
+			{label: "Protocol", cypher: semanticProtocolUpsertCypher},
+			{label: "ProtocolImplementation", cypher: semanticProtocolImplementationUpsertCypher},
+			{label: "Variable", cypher: semanticVariableUpsertCypher},
+			{label: "Function", cypher: semanticFunctionUpsertCypher},
+		} {
+			rows := rowsByLabel[plan.label]
+			for start := 0; start < len(rows); start += batchSize {
+				end := start + batchSize
+				if end > len(rows) {
+					end = len(rows)
+				}
+				stmts = append(stmts, Statement{
+					Operation:  OperationCanonicalUpsert,
+					Cypher:     plan.cypher,
+					Parameters: map[string]any{"rows": rows[start:end]},
+				})
+			}
+			writes += len(rows)
+		}
 	}
 
+	batchSize := w.batchSize()
 	ownershipRows := buildRustImplBlockOwnershipRows(write.Rows)
 	for start := 0; start < len(ownershipRows); start += batchSize {
 		end := start + batchSize
@@ -373,6 +158,84 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 	}
 
 	return reducer.SemanticEntityWriteResult{CanonicalWrites: writes}, nil
+}
+
+func buildParameterizedSemanticEntityStatement(row reducer.SemanticEntityRow) (Statement, bool) {
+	rowMap, ok := buildSemanticEntityRowMap(row)
+	if !ok {
+		return Statement{}, false
+	}
+
+	return Statement{
+		Operation: OperationCanonicalUpsert,
+		Cypher:    semanticEntitySingleRowUpsertCypher(row.EntityType),
+		Parameters: map[string]any{
+			"file_path":  rowMap["file_path"],
+			"entity_id":  rowMap["entity_id"],
+			"properties": semanticEntityProperties(rowMap),
+		},
+	}, true
+}
+
+func semanticEntityProperties(rowMap map[string]any) map[string]any {
+	properties := map[string]any{
+		"id":              rowMap["entity_id"],
+		"name":            rowMap["entity_name"],
+		"path":            rowMap["file_path"],
+		"relative_path":   rowMap["relative_path"],
+		"line_number":     rowMap["start_line"],
+		"start_line":      rowMap["start_line"],
+		"end_line":        rowMap["end_line"],
+		"repo_id":         rowMap["repo_id"],
+		"language":        rowMap["language"],
+		"lang":            rowMap["language"],
+		"evidence_source": rowMap["evidence_source"],
+	}
+
+	if semanticKind, ok := rowMap["semantic_kind"]; ok {
+		properties["semantic_kind"] = semanticKind
+	} else {
+		properties["semantic_kind"] = rowMap["entity_type"]
+	}
+
+	for _, key := range []string{
+		"kind",
+		"target_kind",
+		"type",
+		"type_alias_kind",
+		"type_parameters",
+		"framework",
+		"module_kind",
+		"declaration_merge_group",
+		"declaration_merge_count",
+		"declaration_merge_kinds",
+		"jsx_fragment_shorthand",
+		"component_type_assertion",
+		"component_wrapper_kind",
+		"impl_context",
+		"trait",
+		"target",
+		"protocol",
+		"implemented_for",
+		"attribute_kind",
+		"value",
+		"docstring",
+		"class_context",
+		"method_kind",
+		"constructor_kind",
+		"annotation_kind",
+		"context",
+		"type_annotation_count",
+		"type_annotation_kinds",
+		"decorators",
+		"async",
+	} {
+		if value, ok := rowMap[key]; ok {
+			properties[key] = value
+		}
+	}
+
+	return properties
 }
 
 func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, bool) {
@@ -464,6 +327,9 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 		if docstring := semanticMetadataString(row.Metadata, "docstring"); docstring != "" {
 			rowMap["docstring"] = docstring
+		}
+		if classContext := semanticMetadataString(row.Metadata, "class_context"); classContext != "" {
+			rowMap["class_context"] = classContext
 		}
 		if methodKind := semanticMetadataString(row.Metadata, "method_kind"); methodKind != "" {
 			rowMap["method_kind"] = methodKind

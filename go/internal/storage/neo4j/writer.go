@@ -77,6 +77,13 @@ type GroupExecutor interface {
 	ExecuteGroup(ctx context.Context, stmts []Statement) error
 }
 
+// PhaseGroupExecutor executes a bounded batch of statements for one canonical
+// write phase. Unlike GroupExecutor, callers should not assume the entire
+// materialization is atomic across phases.
+type PhaseGroupExecutor interface {
+	ExecutePhaseGroup(ctx context.Context, stmts []Statement) error
+}
+
 // Adapter writes source-local graph records through an Executor.
 type Adapter struct {
 	Executor  Executor

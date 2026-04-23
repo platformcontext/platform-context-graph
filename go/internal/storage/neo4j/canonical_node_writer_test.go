@@ -54,6 +54,25 @@ func (m *mockGroupExecutor) ExecuteGroup(_ context.Context, stmts []Statement) e
 	return m.groupErr
 }
 
+type mockPhaseGroupExecutor struct {
+	executeCalls    []Statement
+	phaseGroupCalls int
+	phaseGroups     [][]Statement
+	phaseGroupErr   error
+}
+
+func (m *mockPhaseGroupExecutor) Execute(_ context.Context, stmt Statement) error {
+	m.executeCalls = append(m.executeCalls, stmt)
+	return nil
+}
+
+func (m *mockPhaseGroupExecutor) ExecutePhaseGroup(_ context.Context, stmts []Statement) error {
+	m.phaseGroupCalls++
+	cloned := append([]Statement(nil), stmts...)
+	m.phaseGroups = append(m.phaseGroups, cloned)
+	return m.phaseGroupErr
+}
+
 func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 	t.Parallel()
 
@@ -124,6 +143,11 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 				if len(phaseOrder) == 0 || phaseOrder[len(phaseOrder)-1] != "entities" {
 					phaseOrder = append(phaseOrder, "entities")
 				}
+			} else if strings.Contains(call.Cypher, "MATCH (f:File {path: $file_path})") &&
+				(strings.Contains(call.Cypher, "MATCH (n:Function {uid: $entity_id})") || strings.Contains(call.Cypher, "MATCH (n:Class {uid: $entity_id})")) {
+				if len(phaseOrder) == 0 || phaseOrder[len(phaseOrder)-1] != "entity_containment" {
+					phaseOrder = append(phaseOrder, "entity_containment")
+				}
 			} else if strings.Contains(call.Cypher, "MERGE (m:Module") {
 				if len(phaseOrder) == 0 || phaseOrder[len(phaseOrder)-1] != "modules" {
 					phaseOrder = append(phaseOrder, "modules")
@@ -136,7 +160,7 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 		}
 	}
 
-	expected := []string{"retract", "repository", "directories", "files", "entities", "modules", "structural_edges"}
+	expected := []string{"retract", "repository", "directories", "files", "entities", "entity_containment", "modules", "structural_edges"}
 	if len(phaseOrder) != len(expected) {
 		t.Fatalf("phase order = %v, want %v", phaseOrder, expected)
 	}
@@ -243,7 +267,7 @@ func TestCanonicalNodeWriterDirectoryDepthOrder(t *testing.T) {
 	}
 }
 
-func TestCanonicalNodeWriterEntityGroupsByLabel(t *testing.T) {
+func TestCanonicalNodeWriterEntityUpsertsRemainLabelScoped(t *testing.T) {
 	t.Parallel()
 
 	exec := &mockExecutor{}
@@ -280,39 +304,39 @@ func TestCanonicalNodeWriterEntityGroupsByLabel(t *testing.T) {
 		}
 	}
 
-	if len(entityCalls) != 2 {
-		t.Fatalf("expected 2 entity label groups (Function, Class), got %d", len(entityCalls))
+	if len(entityCalls) != 3 {
+		t.Fatalf("expected 3 entity upserts (2 Function, 1 Class), got %d", len(entityCalls))
 	}
 
-	// Verify one UNWIND per label
+	var functionCount, classCount int
 	for _, call := range entityCalls {
-		if !strings.HasPrefix(strings.TrimSpace(call.Cypher), "UNWIND") {
-			t.Fatalf("entity call should use UNWIND: %s", call.Cypher)
-		}
-	}
-
-	// Function group should have 2 rows, Class group should have 1
-	funcFound, classFound := false, false
-	for _, call := range entityCalls {
-		rows := call.Parameters["rows"].([]map[string]any)
 		if strings.Contains(call.Cypher, "MERGE (n:Function") {
-			funcFound = true
-			if len(rows) != 2 {
-				t.Fatalf("Function group rows = %d, want 2", len(rows))
+			functionCount++
+			if got := call.Parameters["entity_id"]; got != "f1" && got != "f2" {
+				t.Fatalf("function entity_id = %#v, want f1 or f2", got)
 			}
+			if _, ok := call.Parameters["properties"].(map[string]any); !ok {
+				t.Fatalf("function properties type = %T, want map[string]any", call.Parameters["properties"])
+			}
+			continue
 		}
 		if strings.Contains(call.Cypher, "MERGE (n:Class") {
-			classFound = true
-			if len(rows) != 1 {
-				t.Fatalf("Class group rows = %d, want 1", len(rows))
+			classCount++
+			if got, want := call.Parameters["entity_id"], "c1"; got != want {
+				t.Fatalf("class entity_id = %#v, want %#v", got, want)
 			}
+			if _, ok := call.Parameters["properties"].(map[string]any); !ok {
+				t.Fatalf("class properties type = %T, want map[string]any", call.Parameters["properties"])
+			}
+			continue
 		}
+		t.Fatalf("unexpected entity cypher: %s", call.Cypher)
 	}
-	if !funcFound {
-		t.Fatal("missing Function entity group")
+	if got, want := functionCount, 2; got != want {
+		t.Fatalf("function upsert count = %d, want %d", got, want)
 	}
-	if !classFound {
-		t.Fatal("missing Class entity group")
+	if got, want := classCount, 1; got != want {
+		t.Fatalf("class upsert count = %d, want %d", got, want)
 	}
 }
 
@@ -401,42 +425,42 @@ func TestCanonicalNodeWriterProjectsTypeScriptClassFamilyMetadata(t *testing.T) 
 		}
 	}
 	if len(entityCalls) != 3 {
-		t.Fatalf("expected 3 TS class-family entity groups, got %d", len(entityCalls))
+		t.Fatalf("expected 3 TS class-family entity upserts, got %d", len(entityCalls))
 	}
 
 	for _, call := range entityCalls {
-		if !strings.Contains(call.Cypher, "n.decorators = row.decorators") ||
-			!strings.Contains(call.Cypher, "n.type_parameters = row.type_parameters") ||
-			!strings.Contains(call.Cypher, "n.declaration_merge_group = row.declaration_merge_group") ||
-			!strings.Contains(call.Cypher, "n.declaration_merge_count = row.declaration_merge_count") ||
-			!strings.Contains(call.Cypher, "n.declaration_merge_kinds = row.declaration_merge_kinds") {
-			t.Fatalf("TS class-family cypher missing metadata assignments: %s", call.Cypher)
+		if !strings.Contains(call.Cypher, "SET n += $properties") {
+			t.Fatalf("TS class-family cypher missing map property merge: %s", call.Cypher)
 		}
 	}
 
-	var classRows []map[string]any
+	var classProperties map[string]any
 	for _, call := range entityCalls {
 		if strings.Contains(call.Cypher, "MERGE (n:Class") {
-			classRows = call.Parameters["rows"].([]map[string]any)
+			props, ok := call.Parameters["properties"].(map[string]any)
+			if !ok {
+				t.Fatalf("class properties type = %T, want map[string]any", call.Parameters["properties"])
+			}
+			classProperties = props
 			break
 		}
 	}
-	if len(classRows) == 0 {
-		t.Fatal("missing Class rows in TS class-family entity calls")
+	if len(classProperties) == 0 {
+		t.Fatal("missing Class properties in TS class-family entity calls")
 	}
-	decorators, ok := classRows[0]["decorators"].([]string)
+	decorators, ok := classProperties["decorators"].([]string)
 	if !ok {
-		t.Fatalf("class rows[0][decorators] type = %T, want []string", classRows[0]["decorators"])
+		t.Fatalf("class properties[decorators] type = %T, want []string", classProperties["decorators"])
 	}
 	if got, want := len(decorators), 1; got != want || decorators[0] != "@sealed" {
-		t.Fatalf("class rows[0][decorators] = %#v, want [@sealed]", decorators)
+		t.Fatalf("class properties[decorators] = %#v, want [@sealed]", decorators)
 	}
-	typeParameters, ok := classRows[0]["type_parameters"].([]string)
+	typeParameters, ok := classProperties["type_parameters"].([]string)
 	if !ok {
-		t.Fatalf("class rows[0][type_parameters] type = %T, want []string", classRows[0]["type_parameters"])
+		t.Fatalf("class properties[type_parameters] type = %T, want []string", classProperties["type_parameters"])
 	}
 	if got, want := len(typeParameters), 1; got != want || typeParameters[0] != "T" {
-		t.Fatalf("class rows[0][type_parameters] = %#v, want [T]", typeParameters)
+		t.Fatalf("class properties[type_parameters] = %#v, want [T]", typeParameters)
 	}
 }
 
@@ -888,6 +912,48 @@ func TestCanonicalNodeWriterFallsBackToSequential(t *testing.T) {
 	// Sequential path: all calls go through Execute()
 	if len(exec.calls) == 0 {
 		t.Fatal("expected Execute() calls for sequential fallback, got 0")
+	}
+}
+
+func TestCanonicalNodeWriterUsesPhaseGroupExecutor(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockPhaseGroupExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "my-repo",
+			Path:   "/repos/my-repo",
+		},
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", Name: "main.go", Language: "go", RepoID: "repo-1", DirPath: "/repos/my-repo/src"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "e1", Label: "Function", EntityName: "main", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 5, EndLine: 10, Language: "go", RepoID: "repo-1"},
+		},
+	}
+
+	if err := writer.Write(context.Background(), mat); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	if got := len(exec.executeCalls); got != 0 {
+		t.Fatalf("Execute calls = %d, want 0 for phase-group path", got)
+	}
+	if got := exec.phaseGroupCalls; got == 0 {
+		t.Fatal("phaseGroupCalls = 0, want at least one phase group")
+	}
+	if got := len(exec.phaseGroups); got < 4 {
+		t.Fatalf("phase group count = %d, want multiple ordered phases", got)
+	}
+	if got, want := exec.phaseGroups[0][0].Operation, OperationCanonicalRetract; got != want {
+		t.Fatalf("first phase first operation = %q, want %q", got, want)
 	}
 }
 

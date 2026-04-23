@@ -95,7 +95,7 @@ func buildDeadCodeGraphCypher(hasRepoID bool, backend GraphBackend) string {
 		}
 	}
 	cypher += `
-		RETURN e.id as entity_id, e.name as name, labels(e) as labels,
+		RETURN coalesce(e.id, e.uid) as entity_id, e.name as name, labels(e) as labels,
 		       f.relative_path as file_path,
 		       r.id as repo_id, r.name as repo_name,
 		       coalesce(e.language, f.language) as language,

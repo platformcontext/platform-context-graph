@@ -210,17 +210,30 @@ func (s Service) executeAndReport(ctx context.Context, intent Intent, workerID i
 		defer span.End()
 	}
 
-	result, err := s.Executor.Execute(ctx, intent)
+	execCtx, stopHeartbeat := s.startHeartbeat(ctx, intent, workerID)
+	defer func() {
+		_ = stopHeartbeat()
+	}()
+
+	result, err := s.Executor.Execute(execCtx, intent)
 	duration := time.Since(start).Seconds()
 	status := "succeeded"
 
 	if err != nil {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil && execErrAllowedToWrap(err) {
+			err = errors.Join(err, heartbeatErr)
+		}
 		status = "failed"
 		s.recordReducerResult(ctx, intent, duration, status, workerID, err)
 		if failErr := s.WorkSink.Fail(ctx, intent, err); failErr != nil {
 			return Result{}, errors.Join(err, fmt.Errorf("fail reducer work: %w", failErr))
 		}
 		return Result{Status: ResultStatusFailed}, nil
+	}
+
+	if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+		s.recordReducerResult(ctx, intent, duration, "ack_failed", workerID, heartbeatErr)
+		return Result{}, fmt.Errorf("heartbeat reducer work: %w", heartbeatErr)
 	}
 
 	s.recordReducerResult(ctx, intent, duration, status, workerID, nil)

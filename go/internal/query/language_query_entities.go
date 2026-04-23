@@ -102,6 +102,9 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	if v := StringVal(row, "docstring"); v != "" {
 		metadata["docstring"] = v
 	}
+	if v := StringVal(row, "class_context"); v != "" {
+		metadata["class_context"] = v
+	}
 	if v := StringVal(row, "method_kind"); v != "" {
 		metadata["method_kind"] = v
 	}
@@ -256,6 +259,7 @@ func graphResultMetadata(row map[string]any) map[string]any {
 func graphSemanticMetadataProjection() string {
 	return `
 		       e.docstring as docstring,
+		       e.class_context as class_context,
 		       e.method_kind as method_kind,
 		       e.constructor_kind as constructor_kind,
 		       e.annotation_kind as annotation_kind,

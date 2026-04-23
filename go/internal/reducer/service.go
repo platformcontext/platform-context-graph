@@ -33,6 +33,11 @@ type WorkSink interface {
 	Fail(context.Context, Intent, error) error
 }
 
+// WorkHeartbeater extends the claim on one long-running reducer intent.
+type WorkHeartbeater interface {
+	Heartbeat(context.Context, Intent) error
+}
+
 // BatchWorkSource claims up to N reducer intents in a single Postgres
 // round-trip. Implementations MUST use FOR UPDATE SKIP LOCKED semantics.
 type BatchWorkSource interface {
@@ -46,11 +51,13 @@ type BatchWorkSink interface {
 
 // Service coordinates reducer polling and one-intent-at-a-time execution.
 type Service struct {
-	PollInterval time.Duration
-	WorkSource   WorkSource
-	Executor     Executor
-	WorkSink     WorkSink
-	Wait         func(context.Context, time.Duration) error
+	PollInterval      time.Duration
+	WorkSource        WorkSource
+	Executor          Executor
+	WorkSink          WorkSink
+	Heartbeater       WorkHeartbeater
+	HeartbeatInterval time.Duration
+	Wait              func(context.Context, time.Duration) error
 
 	// SharedProjectionEdgeWriter is the Neo4j edge writer used by the shared
 	// projection worker loop (ProcessPartitionOnce). Nil until Neo4j is wired.
@@ -338,11 +345,19 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 		defer span.End()
 	}
 
-	result, err := s.Executor.Execute(ctx, intent)
+	execCtx, stopHeartbeat := s.startHeartbeat(ctx, intent, workerID)
+	defer func() {
+		_ = stopHeartbeat()
+	}()
+
+	result, err := s.Executor.Execute(execCtx, intent)
 	duration := time.Since(start).Seconds()
 	status := "succeeded"
 
 	if err != nil {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil && execErrAllowedToWrap(err) {
+			err = errors.Join(err, heartbeatErr)
+		}
 		status = "failed"
 		s.recordReducerResult(ctx, intent, duration, status, workerID, err)
 		if failErr := s.WorkSink.Fail(ctx, intent, err); failErr != nil {
@@ -353,6 +368,11 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 
 	if result.Status == ResultStatusSuperseded {
 		status = "superseded"
+	}
+
+	if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+		s.recordReducerResult(ctx, intent, duration, "ack_failed", workerID, heartbeatErr)
+		return fmt.Errorf("heartbeat reducer work: %w", heartbeatErr)
 	}
 
 	if err := s.WorkSink.Ack(ctx, intent, result); err != nil {
@@ -413,4 +433,71 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 			s.Logger.InfoContext(ctx, "reducer execution succeeded", logAttrs...)
 		}
 	}
+}
+
+type reducerHeartbeatStop func() error
+
+func (s Service) startHeartbeat(ctx context.Context, intent Intent, workerID int) (context.Context, reducerHeartbeatStop) {
+	if s.Heartbeater == nil || s.HeartbeatInterval <= 0 {
+		return ctx, func() error { return nil }
+	}
+
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		ticker := time.NewTicker(s.HeartbeatInterval)
+		defer ticker.Stop()
+
+		var heartbeatErr error
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				done <- heartbeatErr
+				return
+			case <-ticker.C:
+				if err := s.Heartbeater.Heartbeat(heartbeatCtx, intent); err != nil {
+					heartbeatErr = fmt.Errorf("heartbeat reducer work: %w", err)
+					if s.Logger != nil {
+						domainAttrs := telemetry.DomainAttrs(string(intent.Domain), firstReducerPartitionKey(intent))
+						logAttrs := make([]any, 0, len(domainAttrs)+5)
+						for _, a := range domainAttrs {
+							logAttrs = append(logAttrs, a)
+						}
+						logAttrs = append(logAttrs,
+							slog.String("queue", "reducer"),
+							slog.String("intent_id", intent.IntentID),
+							slog.Int("worker_id", workerID),
+							slog.Duration("heartbeat_interval", s.HeartbeatInterval),
+							telemetry.PhaseAttr(telemetry.PhaseReduction),
+							telemetry.FailureClassAttr("lease_heartbeat_failure"),
+							slog.String("error", heartbeatErr.Error()),
+						)
+						s.Logger.ErrorContext(heartbeatCtx, "reducer lease heartbeat failed", logAttrs...)
+					}
+					cancel()
+				}
+			}
+		}
+	}()
+
+	var once sync.Once
+	return heartbeatCtx, func() error {
+		var heartbeatErr error
+		once.Do(func() {
+			cancel()
+			heartbeatErr = <-done
+		})
+		return heartbeatErr
+	}
+}
+
+func firstReducerPartitionKey(intent Intent) string {
+	if len(intent.EntityKeys) == 0 {
+		return ""
+	}
+	return intent.EntityKeys[0]
+}
+
+func execErrAllowedToWrap(err error) bool {
+	return err != nil
 }

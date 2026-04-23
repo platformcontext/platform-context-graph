@@ -73,6 +73,27 @@ func TestBuildIngesterCollectorServiceUsesNativeSnapshotter(t *testing.T) {
 	}
 }
 
+func TestBuildIngesterProjectorRuntimeWiresPhasePublisherAndRepairQueue(t *testing.T) {
+	t.Parallel()
+
+	runtime := buildIngesterProjectorRuntime(
+		postgres.SQLDB{},
+		&noopCanonicalWriter{},
+		nil,
+		nil,
+		func(string) string { return "" },
+		nil,
+		nil,
+	)
+
+	if runtime.PhasePublisher == nil {
+		t.Fatal("buildIngesterProjectorRuntime() PhasePublisher = nil, want non-nil")
+	}
+	if runtime.RepairQueue == nil {
+		t.Fatal("buildIngesterProjectorRuntime() RepairQueue = nil, want non-nil")
+	}
+}
+
 func TestCompositeRunnerCancelsOnFirstError(t *testing.T) {
 	t.Parallel()
 
@@ -200,19 +221,23 @@ func TestOpenIngesterCanonicalWriterAcceptsNornicDBOnSharedBoltPath(t *testing.T
 func TestCanonicalExecutorForGraphBackendKeepsNeo4jGrouped(t *testing.T) {
 	t.Parallel()
 
-	executor := canonicalExecutorForGraphBackend(&groupCapableIngesterExecutor{}, runtimecfg.GraphBackendNeo4j, 0, false, nil, nil)
+	executor := canonicalExecutorForGraphBackend(&groupCapableIngesterExecutor{}, runtimecfg.GraphBackendNeo4j, 0, false, defaultNornicDBPhaseGroupStatements, nil, nil)
 	if _, ok := executor.(sourceneo4j.GroupExecutor); !ok {
 		t.Fatal("Neo4j canonical executor does not implement GroupExecutor")
 	}
 }
 
-func TestCanonicalExecutorForGraphBackendForcesNornicDBSequentialByDefault(t *testing.T) {
+func TestCanonicalExecutorForGraphBackendUsesNornicDBPhaseGroupsByDefault(t *testing.T) {
 	t.Parallel()
 
 	inner := &groupCapableIngesterExecutor{}
-	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, false, nil, nil)
+	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, false, defaultNornicDBPhaseGroupStatements, nil, nil)
 	if _, ok := executor.(sourceneo4j.GroupExecutor); ok {
-		t.Fatal("NornicDB canonical executor implements GroupExecutor, want sequential execute-only surface")
+		t.Fatal("NornicDB canonical executor implements GroupExecutor, want non-atomic phase-group surface")
+	}
+	pge, ok := executor.(sourceneo4j.PhaseGroupExecutor)
+	if !ok {
+		t.Fatal("NornicDB canonical executor does not implement PhaseGroupExecutor by default")
 	}
 
 	err := executor.Execute(context.Background(), sourceneo4j.Statement{Cypher: "RETURN 1"})
@@ -222,13 +247,33 @@ func TestCanonicalExecutorForGraphBackendForcesNornicDBSequentialByDefault(t *te
 	if inner.executeCalls != 1 {
 		t.Fatalf("inner Execute calls = %d, want 1", inner.executeCalls)
 	}
+	if err := pge.ExecutePhaseGroup(context.Background(), []sourceneo4j.Statement{{Cypher: "RETURN 2"}}); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+	if inner.groupCalls != 1 {
+		t.Fatalf("inner ExecuteGroup calls = %d, want 1", inner.groupCalls)
+	}
+}
+
+func TestCanonicalExecutorForGraphBackendUsesConfiguredNornicDBPhaseGroupStatements(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableIngesterExecutor{}
+	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, false, 777, nil, nil)
+	pge, ok := executor.(nornicDBPhaseGroupExecutor)
+	if !ok {
+		t.Fatalf("executor type = %T, want nornicDBPhaseGroupExecutor", executor)
+	}
+	if got, want := pge.maxStatements, 777; got != want {
+		t.Fatalf("phase-group max statements = %d, want %d", got, want)
+	}
 }
 
 func TestCanonicalExecutorForGraphBackendAllowsNornicDBGroupedWhenConformanceEnabled(t *testing.T) {
 	t.Parallel()
 
 	inner := &groupCapableIngesterExecutor{}
-	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, true, nil, nil)
+	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, true, defaultNornicDBPhaseGroupStatements, nil, nil)
 	ge, ok := executor.(sourceneo4j.GroupExecutor)
 	if !ok {
 		t.Fatal("NornicDB canonical executor does not implement GroupExecutor when conformance grouped writes are enabled")
@@ -247,7 +292,7 @@ func TestCanonicalExecutorForGraphBackendNornicDBGroupedFullStackReachesRawExecu
 	t.Parallel()
 
 	inner := &groupCapableIngesterExecutor{}
-	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, true, nil, nil)
+	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, true, defaultNornicDBPhaseGroupStatements, nil, nil)
 	if _, ok := executor.(sourceneo4j.GroupExecutor); !ok {
 		t.Fatal("NornicDB grouped executor stack does not implement GroupExecutor")
 	}
@@ -265,10 +310,32 @@ func TestCanonicalExecutorForGraphBackendNornicDBGroupedFullStackReachesRawExecu
 	}
 }
 
+func TestCanonicalExecutorForGraphBackendNornicDBDefaultFullStackUsesPhaseGroups(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableIngesterExecutor{}
+	executor := canonicalExecutorForGraphBackend(inner, runtimecfg.GraphBackendNornicDB, 0, false, defaultNornicDBPhaseGroupStatements, nil, nil)
+	if _, ok := executor.(sourceneo4j.PhaseGroupExecutor); !ok {
+		t.Fatal("NornicDB default executor stack does not implement PhaseGroupExecutor")
+	}
+
+	writer := sourceneo4j.NewCanonicalNodeWriter(executor, 0, nil)
+	err := writer.Write(context.Background(), minimalCanonicalMaterialization())
+	if err != nil {
+		t.Fatalf("CanonicalNodeWriter.Write() error = %v, want nil", err)
+	}
+	if inner.groupCalls == 0 {
+		t.Fatal("raw ExecuteGroup calls = 0, want phase-group usage")
+	}
+	if inner.executeCalls != 0 {
+		t.Fatalf("raw Execute calls = %d, want 0 for phase-group path", inner.executeCalls)
+	}
+}
+
 func TestCanonicalExecutorForGraphBackendWrapsNornicDBWithTimeout(t *testing.T) {
 	t.Parallel()
 
-	executor := canonicalExecutorForGraphBackend(contextBlockingIngesterExecutor{}, runtimecfg.GraphBackendNornicDB, 10*time.Millisecond, false, nil, nil)
+	executor := canonicalExecutorForGraphBackend(contextBlockingIngesterExecutor{}, runtimecfg.GraphBackendNornicDB, 10*time.Millisecond, false, defaultNornicDBPhaseGroupStatements, nil, nil)
 
 	err := executor.Execute(context.Background(), sourceneo4j.Statement{Cypher: "RETURN 1"})
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -342,6 +409,52 @@ func TestNornicDBCanonicalWriteTimeoutFromEnv(t *testing.T) {
 	})
 	if got != 2*time.Second {
 		t.Fatalf("nornicDBCanonicalWriteTimeout() = %s, want 2s", got)
+	}
+}
+
+func TestNornicDBPhaseGroupStatementsDefault(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBPhaseGroupStatements(func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("nornicDBPhaseGroupStatements() error = %v, want nil", err)
+	}
+	if got != defaultNornicDBPhaseGroupStatements {
+		t.Fatalf("nornicDBPhaseGroupStatements() = %d, want %d", got, defaultNornicDBPhaseGroupStatements)
+	}
+}
+
+func TestNornicDBPhaseGroupStatementsFromEnv(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBPhaseGroupStatements(func(key string) string {
+		if key == nornicDBPhaseGroupStatementsEnv {
+			return "750"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("nornicDBPhaseGroupStatements() error = %v, want nil", err)
+	}
+	if got != 750 {
+		t.Fatalf("nornicDBPhaseGroupStatements() = %d, want 750", got)
+	}
+}
+
+func TestNornicDBPhaseGroupStatementsRejectsInvalidEnv(t *testing.T) {
+	t.Parallel()
+
+	_, err := nornicDBPhaseGroupStatements(func(key string) string {
+		if key == nornicDBPhaseGroupStatementsEnv {
+			return "nope"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("nornicDBPhaseGroupStatements() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), nornicDBPhaseGroupStatementsEnv) {
+		t.Fatalf("nornicDBPhaseGroupStatements() error = %q, want env name", err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -55,6 +56,10 @@ func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
 	if !h.applyRepositorySelector(w, r, &req.RepoID) {
 		return
 	}
+	if err := h.resolveCallChainEntityIDs(r.Context(), &req); err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	cypher, params := buildCallChainCypher(req, h.graphBackend())
 	rows, err := h.Neo4j.Run(r.Context(), cypher, params)
@@ -84,42 +89,22 @@ func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
 
 func buildCallChainCypher(req callChainRequest, backend GraphBackend) (string, map[string]any) {
 	params := map[string]any{}
-	startPattern := "(start)"
-	endPattern := "(end)"
 	predicates := make([]string, 0, 2)
 
-	if backend == GraphBackendNornicDB {
-		if strings.TrimSpace(req.StartEntityID) != "" {
-			params["start_entity_id"] = strings.TrimSpace(req.StartEntityID)
-			startPattern = "(start {id: $start_entity_id})"
-		} else {
-			params["start"] = strings.TrimSpace(req.Start)
-			startPattern = "(start {name: $start})"
-		}
-
-		if strings.TrimSpace(req.EndEntityID) != "" {
-			params["end_entity_id"] = strings.TrimSpace(req.EndEntityID)
-			endPattern = "(end {id: $end_entity_id})"
-		} else {
-			params["end"] = strings.TrimSpace(req.End)
-			endPattern = "(end {name: $end})"
-		}
+	if strings.TrimSpace(req.StartEntityID) != "" {
+		params["start_entity_id"] = strings.TrimSpace(req.StartEntityID)
+		predicates = append(predicates, graphEntityIDPredicate("start", "$start_entity_id"))
 	} else {
-		if strings.TrimSpace(req.StartEntityID) != "" {
-			params["start_entity_id"] = strings.TrimSpace(req.StartEntityID)
-			predicates = append(predicates, "start.id = $start_entity_id")
-		} else {
-			params["start"] = strings.TrimSpace(req.Start)
-			predicates = append(predicates, "start.name = $start")
-		}
+		params["start"] = strings.TrimSpace(req.Start)
+		predicates = append(predicates, "start.name = $start")
+	}
 
-		if strings.TrimSpace(req.EndEntityID) != "" {
-			params["end_entity_id"] = strings.TrimSpace(req.EndEntityID)
-			predicates = append(predicates, "end.id = $end_entity_id")
-		} else {
-			params["end"] = strings.TrimSpace(req.End)
-			predicates = append(predicates, "end.name = $end")
-		}
+	if strings.TrimSpace(req.EndEntityID) != "" {
+		params["end_entity_id"] = strings.TrimSpace(req.EndEntityID)
+		predicates = append(predicates, graphEntityIDPredicate("end", "$end_entity_id"))
+	} else {
+		params["end"] = strings.TrimSpace(req.End)
+		predicates = append(predicates, "end.name = $end")
 	}
 
 	if strings.TrimSpace(req.RepoID) != "" {
@@ -128,15 +113,8 @@ func buildCallChainCypher(req callChainRequest, backend GraphBackend) (string, m
 	}
 
 	var cypher strings.Builder
-	cypher.WriteString("\n\t\tMATCH ")
-	cypher.WriteString(startPattern)
-	if backend == GraphBackendNornicDB {
-		cypher.WriteString(", ")
-		cypher.WriteString(endPattern)
-	} else {
-		cypher.WriteString("\n\t\tMATCH ")
-		cypher.WriteString(endPattern)
-	}
+	cypher.WriteString("\n\t\tMATCH (start)\n")
+	cypher.WriteString("\t\tMATCH (end)")
 	if len(predicates) > 0 {
 		cypher.WriteString("\n\t\tWHERE ")
 		cypher.WriteString(strings.Join(predicates, " AND "))
@@ -151,7 +129,7 @@ func buildCallChainCypher(req callChainRequest, backend GraphBackend) (string, m
 		// while its inline list projection returns null today.
 		cypher.WriteString("\t\tRETURN nodes(path) as chain,\n")
 	} else {
-		cypher.WriteString("\t\tRETURN [node IN nodes(path) | {id: node.id, name: node.name, labels: labels(node), language: node.language, docstring: node.docstring, method_kind: node.method_kind}] as chain,\n")
+		cypher.WriteString("\t\tRETURN [node IN nodes(path) | {id: coalesce(node.id, node.uid), name: node.name, labels: labels(node), language: node.language, docstring: node.docstring, method_kind: node.method_kind}] as chain,\n")
 	}
 	cypher.WriteString("\t\t       length(path) as depth\n")
 	cypher.WriteString("\t\tLIMIT 5\n\t")
@@ -189,7 +167,7 @@ func normalizeCallChainNode(raw any) any {
 			labels = append(labels, label)
 		}
 		return map[string]any{
-			"id":          fmt.Sprintf("%v", node.Props["id"]),
+			"id":          graphNodeSemanticID(node.Props),
 			"name":        fmt.Sprintf("%v", node.Props["name"]),
 			"labels":      labels,
 			"language":    node.Props["language"],
@@ -199,6 +177,48 @@ func normalizeCallChainNode(raw any) any {
 	default:
 		return raw
 	}
+}
+
+func (h *CodeHandler) resolveCallChainEntityIDs(ctx context.Context, req *callChainRequest) error {
+	if h == nil || req == nil {
+		return nil
+	}
+	if strings.TrimSpace(req.StartEntityID) == "" && strings.TrimSpace(req.Start) != "" {
+		resolved, err := resolveExactGraphEntityCandidate(ctx, h.Content, req.RepoID, req.Start)
+		if err != nil {
+			return err
+		}
+		if resolved != nil {
+			req.StartEntityID = resolved.EntityID
+		}
+	}
+	if strings.TrimSpace(req.EndEntityID) == "" && strings.TrimSpace(req.End) != "" {
+		resolved, err := resolveExactGraphEntityCandidate(ctx, h.Content, req.RepoID, req.End)
+		if err != nil {
+			return err
+		}
+		if resolved != nil {
+			req.EndEntityID = resolved.EntityID
+		}
+	}
+	return nil
+}
+
+func graphNodeSemanticID(props map[string]any) string {
+	if props == nil {
+		return ""
+	}
+	if id, ok := props["id"]; ok {
+		if normalized := strings.TrimSpace(fmt.Sprintf("%v", id)); normalized != "" {
+			return normalized
+		}
+	}
+	if uid, ok := props["uid"]; ok {
+		if normalized := strings.TrimSpace(fmt.Sprintf("%v", uid)); normalized != "" {
+			return normalized
+		}
+	}
+	return ""
 }
 
 func attachCallChainNodeSemantics(nodes []any) []any {

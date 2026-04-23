@@ -135,6 +135,23 @@ func buildReducerService(
 	repairCfg := loadGraphProjectionPhaseRepairConfig(getenv)
 	codeCallEdgeBatchSize, codeCallEdgeGroupBatchSize := loadCodeCallEdgeWriterTuning(getenv)
 	inheritanceEdgeGroupBatchSize, sqlRelationshipEdgeGroupBatchSize := loadSharedEdgeWriterGroupTuning(getenv)
+	graphBackend, err := runtimecfg.LoadGraphBackend(getenv)
+	if err != nil {
+		return reducer.Service{}, err
+	}
+	nornicDBGroupedWrites := false
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		nornicDBGroupedWrites, err = nornicDBCanonicalGroupedWrites(getenv)
+		if err != nil {
+			return reducer.Service{}, err
+		}
+		if nornicDBGroupedWrites {
+			logger.Warn("NornicDB semantic grouped writes enabled for conformance",
+				"graph_backend", string(graphBackend),
+				"grouped_writes", true,
+				"env_var", nornicDBCanonicalGroupedWritesEnv)
+		}
+	}
 
 	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	edgeWriterForHandlers.Instruments = instruments
@@ -149,6 +166,16 @@ func buildReducerService(
 	graphProjectionRepairQueue := postgres.NewGraphProjectionPhaseRepairQueueStore(database)
 	graphProjectionReadinessLookup := postgres.NewGraphProjectionReadinessLookup(database)
 	graphProjectionReadinessPrefetch := postgres.NewGraphProjectionReadinessPrefetch(database)
+	semanticEntityExecutor := semanticEntityExecutorForGraphBackend(
+		neo4jExec,
+		graphBackend,
+		nornicDBCanonicalWriteTimeout(getenv),
+		nornicDBGroupedWrites,
+	)
+	semanticEntityWriter := sourceneo4j.NewSemanticEntityWriter(semanticEntityExecutor, neo4jBatchSize(getenv))
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		semanticEntityWriter = sourceneo4j.NewSemanticEntityWriterWithParameterizedRows(semanticEntityExecutor, neo4jBatchSize(getenv))
+	}
 	retryCfg, err := loadReducerQueueConfig(getenv)
 	if err != nil {
 		return reducer.Service{}, err
@@ -181,7 +208,7 @@ func buildReducerService(
 		GraphProjectionRepairQueue:         graphProjectionRepairQueue,
 		ReadinessLookup:                    graphProjectionReadinessLookup,
 		ReadinessPrefetch:                  graphProjectionReadinessPrefetch,
-		SemanticEntityWriter:               sourceneo4j.NewSemanticEntityWriter(neo4jExec, neo4jBatchSize(getenv)),
+		SemanticEntityWriter:               semanticEntityWriter,
 		SQLRelationshipEdgeWriter:          edgeWriterForHandlers,
 		InheritanceEdgeWriter:              edgeWriterForHandlers,
 		EvidenceFactLoader:                 relationshipStore,
@@ -212,6 +239,8 @@ func buildReducerService(
 		WorkSource:                 workQueue,
 		Executor:                   executor,
 		WorkSink:                   workQueue,
+		Heartbeater:                workQueue,
+		HeartbeatInterval:          workQueue.LeaseDuration / 2,
 		SharedProjectionEdgeWriter: edgeWriter,
 		SharedProjectionRunner: &reducer.SharedProjectionRunner{
 			IntentReader:        intentStore,

@@ -59,10 +59,13 @@ only when users opt in because it is larger. See
 While NornicDB is under evaluation, PCG keeps local content search isolated
 from graph projection stalls. The local-authoritative ingester writes the
 embedded-Postgres content index before attempting canonical graph writes, and
-NornicDB canonical writes run sequentially with a bounded per-statement
-deadline. The timeout defaults to `15s` and can be tuned for diagnostics with
-`PCG_CANONICAL_WRITE_TIMEOUT=2s`. Neo4j production writes keep the grouped
-canonical path and are not affected by this local-authoritative guardrail.
+NornicDB canonical writes now run in bounded phase-group transactions instead
+of one global grouped write. The timeout defaults to `15s` and can be tuned
+for diagnostics with `PCG_CANONICAL_WRITE_TIMEOUT=2s`. The default
+phase-group window is `500` statements and can be tuned with
+`PCG_NORNICDB_PHASE_GROUP_STATEMENTS=<positive integer>` during repo-scale
+dogfood runs. Neo4j production writes keep the grouped canonical path and are
+not affected by this local-authoritative guardrail.
 
 NornicDB exposes explicit Bolt transaction hooks, but PCG does not enable
 grouped canonical writes for normal laptop runs until the PCG Neo4j-driver

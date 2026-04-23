@@ -201,43 +201,44 @@ func (s Service) runConcurrent(ctx context.Context) error {
 
 func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, workerID int) error {
 	start := time.Now()
+	workCtx := ctx
 
 	if s.Tracer != nil {
 		var span trace.Span
-		ctx, span = s.Tracer.Start(ctx, telemetry.SpanProjectorRun)
+		workCtx, span = s.Tracer.Start(workCtx, telemetry.SpanProjectorRun)
 		defer span.End()
 	}
 
-	ctx, stopHeartbeat := s.startHeartbeat(ctx, work, workerID)
+	projectCtx, stopHeartbeat := s.startHeartbeat(workCtx, work, workerID)
 	defer func() {
 		_ = stopHeartbeat()
 	}()
 
 	// Large-generation semaphore: count facts first, acquire sem if large.
-	releaseSem := s.acquireLargeGenSem(ctx, work, workerID)
+	releaseSem := s.acquireLargeGenSem(projectCtx, work, workerID)
 	if releaseSem != nil {
 		defer releaseSem()
 	}
 
-	factsForGeneration, err := s.FactStore.LoadFacts(ctx, work)
+	factsForGeneration, err := s.FactStore.LoadFacts(projectCtx, work)
 	if err != nil {
 		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
 			return errors.Join(err, heartbeatErr)
 		}
-		s.recordProjectionResult(ctx, work, start, "failed", 0, err, workerID)
-		if failErr := s.WorkSink.Fail(ctx, work, err); failErr != nil {
+		s.recordProjectionResult(workCtx, work, start, "failed", 0, err, workerID)
+		if failErr := s.WorkSink.Fail(workCtx, work, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail projector work: %w", failErr))
 		}
 		return nil
 	}
 
-	result, err := s.Runner.Project(ctx, work.Scope, work.Generation, factsForGeneration)
+	result, err := s.Runner.Project(projectCtx, work.Scope, work.Generation, factsForGeneration)
 	if err != nil {
 		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
 			return errors.Join(err, heartbeatErr)
 		}
-		s.recordProjectionResult(ctx, work, start, "failed", len(factsForGeneration), err, workerID)
-		if failErr := s.WorkSink.Fail(ctx, work, err); failErr != nil {
+		s.recordProjectionResult(workCtx, work, start, "failed", len(factsForGeneration), err, workerID)
+		if failErr := s.WorkSink.Fail(workCtx, work, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail projector work: %w", failErr))
 		}
 		return nil
@@ -246,12 +247,12 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 		return heartbeatErr
 	}
 
-	if err := s.WorkSink.Ack(ctx, work, result); err != nil {
-		s.recordProjectionResult(ctx, work, start, "ack_failed", len(factsForGeneration), err, workerID)
+	if err := s.WorkSink.Ack(workCtx, work, result); err != nil {
+		s.recordProjectionResult(workCtx, work, start, "ack_failed", len(factsForGeneration), err, workerID)
 		return fmt.Errorf("ack projector work: %w", err)
 	}
 
-	s.recordProjectionResult(ctx, work, start, "succeeded", len(factsForGeneration), nil, workerID)
+	s.recordProjectionResult(workCtx, work, start, "succeeded", len(factsForGeneration), nil, workerID)
 	return nil
 }
 

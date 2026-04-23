@@ -52,6 +52,7 @@ var (
 	localHostStartChildProcess     = startLocalChildProcess
 	localHostStartManagedGraph     = startManagedLocalGraph
 	localHostWaitChildProcess      = waitLocalChildProcess
+	localHostWaitManagedChildren   = waitLocalHostChildren
 	localHostApplyBootstrap        = applyLocalBootstrap
 )
 
@@ -197,6 +198,25 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 		return err
 	}
 
+	children := make([]localHostChild, 0, 3)
+
+	if runtimeConfig.Profile == query.ProfileLocalAuthoritative {
+		reducerCmd, err := localHostStartChildProcess(
+			"pcg-reducer",
+			[]string{"pcg-reducer"},
+			localHostEnv(managedPostgres.DSN, runtimeConfig, managedGraph, nil),
+		)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := stopLocalChildProcess(reducerCmd, localHostShutdownTimeout); err != nil && retErr == nil {
+				retErr = err
+			}
+		}()
+		children = append(children, localHostChild{name: "pcg-reducer", cmd: reducerCmd})
+	}
+
 	ingester, err := localHostStartChildProcess("pcg-ingester", []string{"pcg-ingester", "--watch", layout.WorkspaceRoot}, localHostEnv(managedPostgres.DSN, runtimeConfig, managedGraph, localHostIngesterOverrides(layout, mode, runtimeConfig)))
 	if err != nil {
 		return err
@@ -206,9 +226,10 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 			retErr = err
 		}
 	}()
+	children = append(children, localHostChild{name: "pcg-ingester", cmd: ingester})
 
 	if mode == localHostModeWatch {
-		return localHostWaitChildProcess(ctx, ingester)
+		return localHostWaitManagedChildren(ctx, children, "")
 	}
 
 	mcpServer, err := localHostStartChildProcess("pcg-mcp-server", []string{"pcg-mcp-server"}, localHostEnv(managedPostgres.DSN, runtimeConfig, managedGraph, map[string]string{
@@ -217,7 +238,13 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 	if err != nil {
 		return err
 	}
-	return localHostWaitChildProcess(ctx, mcpServer)
+	defer func() {
+		if err := stopLocalChildProcess(mcpServer, localHostShutdownTimeout); err != nil && retErr == nil {
+			retErr = err
+		}
+	}()
+	children = append(children, localHostChild{name: "pcg-mcp-server", cmd: mcpServer})
+	return localHostWaitManagedChildren(ctx, children, "pcg-mcp-server")
 }
 
 func runAttachedLocalMCPStdio(ctx context.Context, layout pcglocal.Layout) (bool, error) {
@@ -420,96 +447,6 @@ func mergeEnvironment(base []string, overrides map[string]string) []string {
 		env = append(env, key+"="+value)
 	}
 	return env
-}
-
-func startLocalChildProcess(name string, args []string, env []string) (*exec.Cmd, error) {
-	binary, err := localHostLookPath(name)
-	if err != nil {
-		return nil, fmt.Errorf("%s binary not found in PATH", name)
-	}
-	cmd := exec.Command(binary, args[1:]...)
-	cmd.Args = append([]string(nil), args...)
-	cmd.Env = env
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start %s: %w", name, err)
-	}
-	return cmd, nil
-}
-
-func waitLocalChildProcess(ctx context.Context, cmd *exec.Cmd) error {
-	errc := make(chan error, 1)
-	go func() {
-		errc <- cmd.Wait()
-	}()
-
-	select {
-	case err := <-errc:
-		return normalizeLocalChildExit(err)
-	case <-ctx.Done():
-		if err := interruptLocalChildProcess(cmd); err != nil {
-			return err
-		}
-		return waitForLocalChildExit(cmd, errc, localHostShutdownTimeout)
-	}
-}
-
-func stopLocalChildProcess(cmd *exec.Cmd, timeout time.Duration) error {
-	if cmd == nil || cmd.Process == nil {
-		return nil
-	}
-	if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
-		return nil
-	}
-	if err := interruptLocalChildProcess(cmd); err != nil {
-		return err
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-	return waitForLocalChildExit(cmd, done, timeout)
-}
-
-func interruptLocalChildProcess(cmd *exec.Cmd) error {
-	if cmd == nil || cmd.Process == nil {
-		return nil
-	}
-	if err := cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		_ = cmd.Process.Kill()
-		return fmt.Errorf("interrupt child process: %w", err)
-	}
-	return nil
-}
-
-func waitForLocalChildExit(cmd *exec.Cmd, done <-chan error, timeout time.Duration) error {
-	select {
-	case err := <-done:
-		return normalizeLocalChildExit(err)
-	case <-time.After(timeout):
-		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			return fmt.Errorf("kill child process: %w", err)
-		}
-		<-done
-		return nil
-	}
-}
-
-func normalizeLocalChildExit(err error) error {
-	if err == nil || errors.Is(err, os.ErrProcessDone) || errors.Is(err, syscall.ECHILD) {
-		return nil
-	}
-	if strings.Contains(err.Error(), "Wait was already called") {
-		return nil
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return nil
-	}
-	return err
 }
 
 func applyLocalBootstrap(ctx context.Context, dsn string) error {

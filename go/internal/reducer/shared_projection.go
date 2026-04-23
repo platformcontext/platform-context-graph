@@ -91,7 +91,7 @@ type SharedProjectionAcceptanceKey struct {
 func semanticNodeReadinessPhase(domain string) (GraphProjectionPhase, bool) {
 	switch domain {
 	case DomainCodeCalls:
-		return GraphProjectionPhaseCanonicalNodesCommitted, true
+		return GraphProjectionPhaseSemanticNodesCommitted, true
 	case DomainSQLRelationships, DomainInheritanceEdges:
 		return GraphProjectionPhaseSemanticNodesCommitted, true
 	default:

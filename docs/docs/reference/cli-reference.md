@@ -79,11 +79,15 @@ binary remains an explicit opt-in. PCG resolves it in this order:
 3. `nornicdb-headless` in `PATH`
 4. `nornicdb` in `PATH`
 
-During NornicDB evaluation, local-authoritative canonical graph writes are
-sequential and bounded by `PCG_CANONICAL_WRITE_TIMEOUT` (`15s` by default).
-This protects local MCP/CLI coding workflows from an indefinitely stuck graph
-write. Content-index-backed code search remains available even when graph
-projection is degraded.
+During NornicDB evaluation, local-authoritative canonical graph writes use
+bounded phase-group transactions and are still bounded by
+`PCG_CANONICAL_WRITE_TIMEOUT` (`15s` by default). The default phase-group size
+is `500` statements and can be tuned with
+`PCG_NORNICDB_PHASE_GROUP_STATEMENTS=<positive integer>` when repo-scale
+dogfood runs need a larger or smaller transaction window. This protects local
+MCP/CLI coding workflows from an indefinitely stuck graph write while keeping
+content-index-backed code search available even when graph projection is
+degraded.
 
 `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` is reserved for NornicDB adapter
 conformance runs. It enables the same grouped canonical write surface used by

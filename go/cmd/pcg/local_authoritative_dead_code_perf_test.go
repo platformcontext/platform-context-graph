@@ -57,10 +57,10 @@ func TestLocalAuthoritativeDeadCodeSyntheticEnvelope(t *testing.T) {
 
 func measureLocalAuthoritativeDeadCodeLatency(layout pcglocal.Layout) (time.Duration, error) {
 	originalStartChild := localHostStartChildProcess
-	originalWaitChild := localHostWaitChildProcess
+	originalWaitManagedChildren := localHostWaitManagedChildren
 	defer func() {
 		localHostStartChildProcess = originalStartChild
-		localHostWaitChildProcess = originalWaitChild
+		localHostWaitManagedChildren = originalWaitManagedChildren
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -68,6 +68,9 @@ func measureLocalAuthoritativeDeadCodeLatency(layout pcglocal.Layout) (time.Dura
 
 	var measured time.Duration
 	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {
+		if name == "pcg-reducer" {
+			return &exec.Cmd{}, nil
+		}
 		if name != "pcg-ingester" {
 			return nil, fmt.Errorf("unexpected child process %q", name)
 		}
@@ -82,7 +85,7 @@ func measureLocalAuthoritativeDeadCodeLatency(layout pcglocal.Layout) (time.Dura
 		}
 		return &exec.Cmd{}, nil
 	}
-	localHostWaitChildProcess = func(ctx context.Context, cmd *exec.Cmd) error {
+	localHostWaitManagedChildren = func(ctx context.Context, children []localHostChild, allowCleanExit string) error {
 		return nil
 	}
 

@@ -247,6 +247,60 @@ func TestServiceRunStopsWhenHeartbeatLosesLease(t *testing.T) {
 	}
 }
 
+func TestServiceRunAcksWithLiveContextAfterHeartbeatStops(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+
+	runner := &stubProjectionRunner{
+		result: Result{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+		},
+		blockFor: 15 * time.Millisecond,
+	}
+	heartbeater := &stubProjectorWorkHeartbeater{}
+	sink := &stubProjectorWorkSink{}
+
+	service := Service{
+		PollInterval:      10 * time.Millisecond,
+		WorkSource:        &stubProjectorWorkSource{workItems: []ScopeGenerationWork{work}},
+		FactStore:         &stubFactStore{},
+		Runner:            runner,
+		WorkSink:          sink,
+		Heartbeater:       heartbeater,
+		HeartbeatInterval: 5 * time.Millisecond,
+		Wait:              func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	if got, want := sink.ackCalls, 1; got != want {
+		t.Fatalf("ack calls = %d, want %d", got, want)
+	}
+	if sink.ackCtxErr != nil {
+		t.Fatalf("ack context error = %v, want nil", sink.ackCtxErr)
+	}
+}
+
 type stubProjectorWorkSource struct {
 	mu         sync.Mutex
 	claimCalls int
@@ -327,16 +381,18 @@ func (s *stubProjectionRunner) Project(ctx context.Context, scopeValue scope.Ing
 type stubProjectorWorkSink struct {
 	mu         sync.Mutex
 	ackCalls   int
+	ackCtxErr  error
 	failCalls  int
 	failedWith error
 	ackErr     error
 	failAfter  int
 }
 
-func (s *stubProjectorWorkSink) Ack(context.Context, ScopeGenerationWork, Result) error {
+func (s *stubProjectorWorkSink) Ack(ctx context.Context, _ ScopeGenerationWork, _ Result) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ackCalls++
+	s.ackCtxErr = ctx.Err()
 	if s.failAfter > 0 && s.ackCalls > s.failAfter {
 		return errors.New("ack failed after threshold")
 	}
