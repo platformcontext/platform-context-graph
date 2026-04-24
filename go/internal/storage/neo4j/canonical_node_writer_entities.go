@@ -212,6 +212,11 @@ func canonicalEntityProperties(
 		"language":        entity.Language,
 		"label":           entity.Label,
 	}
+	if metadata := canonicalEntityMetadataProperties(row); len(metadata) > 0 {
+		for key, value := range metadata {
+			properties[key] = value
+		}
+	}
 	if metadata := canonicalTypeScriptClassFamilyMetadata(row); len(metadata) > 0 {
 		for key, value := range metadata {
 			properties[key] = value
