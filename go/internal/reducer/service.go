@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -355,7 +356,7 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 	status := "succeeded"
 
 	if err != nil {
-		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil && execErrAllowedToWrap(err) {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
 			err = errors.Join(err, heartbeatErr)
 		}
 		status = "failed"
@@ -495,9 +496,7 @@ func firstReducerPartitionKey(intent Intent) string {
 	if len(intent.EntityKeys) == 0 {
 		return ""
 	}
-	return intent.EntityKeys[0]
-}
-
-func execErrAllowedToWrap(err error) bool {
-	return err != nil
+	keys := append([]string(nil), intent.EntityKeys...)
+	slices.Sort(keys)
+	return keys[0]
 }
