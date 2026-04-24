@@ -962,6 +962,104 @@ func TestCanonicalNodeWriterUsesPhaseGroupExecutor(t *testing.T) {
 	}
 }
 
+func TestCanonicalNodeWriterEntityStatementsIncludePhaseDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "e1",
+				Label:        "Function",
+				EntityName:   "main",
+				FilePath:     "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				StartLine:    5,
+				EndLine:      10,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if len(stmts) == 0 {
+		t.Fatal("buildEntityStatements() returned no statements")
+	}
+	for _, stmt := range stmts {
+		if got, want := stmt.Parameters["_pcg_phase"], "entities"; got != want {
+			t.Fatalf("entity statement _pcg_phase = %#v, want %#v", got, want)
+		}
+	}
+}
+
+func TestCanonicalNodeWriterSingletonFallbackMarksExecuteOnlyMode(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "e-shortest",
+				Label:        "Function",
+				EntityName:   "TestHandleCallChainReturnsShortestPath",
+				FilePath:     "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				StartLine:    5,
+				EndLine:      10,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if len(stmts) != 1 {
+		t.Fatalf("buildEntityStatements() count = %d, want 1", len(stmts))
+	}
+	if got, want := stmts[0].Parameters["_pcg_phase_group_mode"], "execute_only"; got != want {
+		t.Fatalf("singleton fallback _pcg_phase_group_mode = %#v, want %#v", got, want)
+	}
+}
+
+func TestCanonicalNodeWriterEntityBatchSizeOverride(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).WithEntityBatchSize(2)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{EntityID: "e1", Label: "Function", EntityName: "one", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 1, EndLine: 2, Language: "go", RepoID: "repo-1"},
+			{EntityID: "e2", Label: "Function", EntityName: "two", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 3, EndLine: 4, Language: "go", RepoID: "repo-1"},
+			{EntityID: "e3", Label: "Function", EntityName: "three", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 5, EndLine: 6, Language: "go", RepoID: "repo-1"},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 2; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+	firstRows, _ := stmts[0].Parameters["rows"].([]map[string]any)
+	secondRows, _ := stmts[1].Parameters["rows"].([]map[string]any)
+	if got, want := len(firstRows), 2; got != want {
+		t.Fatalf("first entity batch rows = %d, want %d", got, want)
+	}
+	if got, want := len(secondRows), 1; got != want {
+		t.Fatalf("second entity batch rows = %d, want %d", got, want)
+	}
+}
+
 func TestCanonicalNodeWriterAtomicGroupExecutorError(t *testing.T) {
 	t.Parallel()
 

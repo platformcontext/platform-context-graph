@@ -27,9 +27,13 @@ const (
 	ingesterConnectionTimeout            = 10 * time.Second
 	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
 	defaultNornicDBPhaseGroupStatements  = 500
+	defaultNornicDBEntityPhaseStatements = 25
+	defaultNornicDBEntityBatchSize       = 100
 	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
 	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
 	nornicDBPhaseGroupStatementsEnv      = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityPhaseStatementsEnv     = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityBatchSizeEnv           = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -258,12 +262,22 @@ func openIngesterCanonicalWriter(
 
 	nornicDBGroupedWrites := false
 	phaseGroupStatements := defaultNornicDBPhaseGroupStatements
+	entityPhaseStatements := defaultNornicDBEntityPhaseStatements
+	entityBatchSize := 0
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		nornicDBGroupedWrites, err = nornicDBCanonicalGroupedWrites(getenv)
 		if err != nil {
 			return nil, nil, err
 		}
 		phaseGroupStatements, err = nornicDBPhaseGroupStatements(getenv)
+		if err != nil {
+			return nil, nil, err
+		}
+		entityPhaseStatements, err = nornicDBEntityPhaseGroupStatements(getenv)
+		if err != nil {
+			return nil, nil, err
+		}
+		entityBatchSize, err = nornicDBEntityBatchSize(getenv)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -282,12 +296,16 @@ func openIngesterCanonicalWriter(
 			nornicDBCanonicalWriteTimeout(getenv),
 			nornicDBGroupedWrites,
 			phaseGroupStatements,
+			entityPhaseStatements,
 			tracer,
 			instruments,
 		),
 		neo4jBatchSize(getenv),
 		instruments,
 	)
+	if entityBatchSize > 0 {
+		writer = writer.WithEntityBatchSize(entityBatchSize)
+	}
 
 	return writer, ingesterNeo4jDriverCloser{Driver: driver}, nil
 }
@@ -298,6 +316,7 @@ func canonicalExecutorForGraphBackend(
 	nornicDBTimeout time.Duration,
 	nornicDBGroupedWrites bool,
 	nornicDBPhaseGroupStatements int,
+	nornicDBEntityPhaseStatements int,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) sourceneo4j.Executor {
@@ -319,23 +338,25 @@ func canonicalExecutorForGraphBackend(
 			return bounded
 		}
 		return nornicDBPhaseGroupExecutor{
-			inner:         bounded,
-			maxStatements: nornicDBPhaseGroupStatements,
+			inner:               bounded,
+			maxStatements:       nornicDBPhaseGroupStatements,
+			entityMaxStatements: nornicDBEntityPhaseStatements,
 		}
 	}
 	return instrumented
 }
 
 type nornicDBPhaseGroupExecutor struct {
-	inner         sourceneo4j.Executor
-	maxStatements int
+	inner               sourceneo4j.Executor
+	maxStatements       int
+	entityMaxStatements int
 }
 
 func (e nornicDBPhaseGroupExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
 	if e.inner == nil {
 		return nil
 	}
-	return e.inner.Execute(ctx, stmt)
+	return e.inner.Execute(ctx, sanitizedStatement(stmt))
 }
 
 func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
@@ -343,54 +364,136 @@ func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts
 		return nil
 	}
 	if ge, ok := e.inner.(sourceneo4j.GroupExecutor); ok {
-		maxStatements := e.maxStatements
-		if maxStatements <= 0 {
-			maxStatements = defaultNornicDBPhaseGroupStatements
+		if statementPhase(stmts) == "entities" {
+			return e.executeEntityPhaseGroup(ctx, ge, stmts)
 		}
-		totalChunks := (len(stmts) + maxStatements - 1) / maxStatements
-		for start := 0; start < len(stmts); start += maxStatements {
-			end := start + maxStatements
-			if end > len(stmts) {
-				end = len(stmts)
+		return e.executeGroupedChunks(ctx, ge, stmts, e.phaseGroupStatementLimit(stmts))
+	}
+	for _, stmt := range stmts {
+		if err := e.inner.Execute(ctx, sanitizedStatement(stmt)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
+	ctx context.Context,
+	ge sourceneo4j.GroupExecutor,
+	stmts []sourceneo4j.Statement,
+) error {
+	grouped := make([]sourceneo4j.Statement, 0, len(stmts))
+	flushGrouped := func() error {
+		if len(grouped) == 0 {
+			return nil
+		}
+		err := e.executeGroupedChunks(ctx, ge, grouped, e.phaseGroupStatementLimit(grouped))
+		grouped = grouped[:0]
+		return err
+	}
+
+	for i, stmt := range stmts {
+		if statementPhaseGroupMode(stmt) == "execute_only" {
+			if err := flushGrouped(); err != nil {
+				return err
 			}
-			chunkIndex := (start / maxStatements) + 1
-			chunkStart := time.Now()
-			chunk := stmts[start:end]
-			statementSummary := summarizePhaseGroupChunk(chunk)
-			err := ge.ExecuteGroup(ctx, sanitizedPhaseGroupChunk(chunk))
-			chunkDuration := time.Since(chunkStart)
-			if err != nil {
+			statementStart := time.Now()
+			statementSummary := summarizePhaseGroupChunk([]sourceneo4j.Statement{stmt})
+			if err := e.inner.Execute(ctx, sanitizedStatement(stmt)); err != nil {
 				return fmt.Errorf(
-					"phase-group chunk %d/%d (statements %d-%d of %d, size=%d, duration=%s, first_statement=%q): %w",
-					chunkIndex,
-					totalChunks,
-					start+1,
-					end,
+					"phase-group singleton statement %d/%d (phase=%s, duration=%s, first_statement=%q): %w",
+					i+1,
 					len(stmts),
-					end-start,
-					chunkDuration,
+					statementPhase(stmts),
+					time.Since(statementStart),
 					statementSummary,
 					err,
 				)
 			}
 			slog.Info(
-				"nornicdb phase-group chunk completed",
-				"chunk_index", chunkIndex,
-				"chunk_count", totalChunks,
-				"statement_start", start+1,
-				"statement_end", end,
-				"statement_count", end-start,
-				"duration_s", chunkDuration.Seconds(),
+				"nornicdb phase-group singleton completed",
+				"statement_index", i+1,
+				"statement_count", len(stmts),
+				"phase", statementPhase(stmts),
+				"duration_s", time.Since(statementStart).Seconds(),
+			)
+			continue
+		}
+		grouped = append(grouped, stmt)
+	}
+
+	return flushGrouped()
+}
+
+func (e nornicDBPhaseGroupExecutor) executeGroupedChunks(
+	ctx context.Context,
+	ge sourceneo4j.GroupExecutor,
+	stmts []sourceneo4j.Statement,
+	maxStatements int,
+) error {
+	totalChunks := (len(stmts) + maxStatements - 1) / maxStatements
+	for start := 0; start < len(stmts); start += maxStatements {
+		end := start + maxStatements
+		if end > len(stmts) {
+			end = len(stmts)
+		}
+		chunkIndex := (start / maxStatements) + 1
+		chunkStart := time.Now()
+		chunk := stmts[start:end]
+		statementSummary := summarizePhaseGroupChunk(chunk)
+		err := ge.ExecuteGroup(ctx, sanitizedPhaseGroupChunk(chunk))
+		chunkDuration := time.Since(chunkStart)
+		if err != nil {
+			return fmt.Errorf(
+				"phase-group chunk %d/%d (statements %d-%d of %d, size=%d, duration=%s, first_statement=%q): %w",
+				chunkIndex,
+				totalChunks,
+				start+1,
+				end,
+				len(stmts),
+				end-start,
+				chunkDuration,
+				statementSummary,
+				err,
 			)
 		}
-		return nil
-	}
-	for _, stmt := range stmts {
-		if err := e.inner.Execute(ctx, stmt); err != nil {
-			return err
-		}
+		slog.Info(
+			"nornicdb phase-group chunk completed",
+			"chunk_index", chunkIndex,
+			"chunk_count", totalChunks,
+			"statement_start", start+1,
+			"statement_end", end,
+			"statement_count", end-start,
+			"duration_s", chunkDuration.Seconds(),
+		)
 	}
 	return nil
+}
+
+func (e nornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourceneo4j.Statement) int {
+	if statementPhase(stmts) == "entities" {
+		if e.entityMaxStatements > 0 {
+			return e.entityMaxStatements
+		}
+		return defaultNornicDBEntityPhaseStatements
+	}
+	if e.maxStatements > 0 {
+		return e.maxStatements
+	}
+	return defaultNornicDBPhaseGroupStatements
+}
+
+func statementPhase(stmts []sourceneo4j.Statement) string {
+	if len(stmts) == 0 {
+		return ""
+	}
+	phase, _ := stmts[0].Parameters["_pcg_phase"].(string)
+	return strings.TrimSpace(phase)
+}
+
+func statementPhaseGroupMode(stmt sourceneo4j.Statement) string {
+	mode, _ := stmt.Parameters["_pcg_phase_group_mode"].(string)
+	return strings.TrimSpace(mode)
 }
 
 func summarizePhaseGroupChunk(stmts []sourceneo4j.Statement) string {
@@ -406,10 +509,14 @@ func summarizePhaseGroupChunk(stmts []sourceneo4j.Statement) string {
 func sanitizedPhaseGroupChunk(stmts []sourceneo4j.Statement) []sourceneo4j.Statement {
 	sanitized := make([]sourceneo4j.Statement, len(stmts))
 	for i, stmt := range stmts {
-		sanitized[i] = stmt
-		sanitized[i].Parameters = sanitizedStatementParameters(stmt.Parameters)
+		sanitized[i] = sanitizedStatement(stmt)
 	}
 	return sanitized
+}
+
+func sanitizedStatement(stmt sourceneo4j.Statement) sourceneo4j.Statement {
+	stmt.Parameters = sanitizedStatementParameters(stmt.Parameters)
+	return stmt
 }
 
 func sanitizedStatementParameters(params map[string]any) map[string]any {
@@ -417,26 +524,23 @@ func sanitizedStatementParameters(params map[string]any) map[string]any {
 		return params
 	}
 
-	var sanitized map[string]any
-	for key, value := range params {
+	hasDiagnostics := false
+	for key := range params {
 		if strings.HasPrefix(key, "_") {
-			if sanitized == nil {
-				sanitized = make(map[string]any, len(params)-1)
-				for existingKey, existingValue := range params {
-					if existingKey == key {
-						continue
-					}
-					sanitized[existingKey] = existingValue
-				}
-			}
-			continue
-		}
-		if sanitized != nil {
-			sanitized[key] = value
+			hasDiagnostics = true
+			break
 		}
 	}
-	if sanitized == nil {
+	if !hasDiagnostics {
 		return params
+	}
+
+	sanitized := make(map[string]any, len(params))
+	for key, value := range params {
+		if strings.HasPrefix(key, "_") {
+			continue
+		}
+		sanitized[key] = value
 	}
 	return sanitized
 }
@@ -493,6 +597,30 @@ func nornicDBPhaseGroupStatements(getenv func(string) string) (int, error) {
 	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 {
 		return 0, fmt.Errorf("parse %s=%q: must be a positive integer", nornicDBPhaseGroupStatementsEnv, raw)
+	}
+	return n, nil
+}
+
+func nornicDBEntityPhaseGroupStatements(getenv func(string) string) (int, error) {
+	raw := strings.TrimSpace(getenv(nornicDBEntityPhaseStatementsEnv))
+	if raw == "" {
+		return defaultNornicDBEntityPhaseStatements, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("parse %s=%q: must be a positive integer", nornicDBEntityPhaseStatementsEnv, raw)
+	}
+	return n, nil
+}
+
+func nornicDBEntityBatchSize(getenv func(string) string) (int, error) {
+	raw := strings.TrimSpace(getenv(nornicDBEntityBatchSizeEnv))
+	if raw == "" {
+		return defaultNornicDBEntityBatchSize, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("parse %s=%q: must be a positive integer", nornicDBEntityBatchSizeEnv, raw)
 	}
 	return n, nil
 }

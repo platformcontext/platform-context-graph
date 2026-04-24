@@ -50,7 +50,10 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 	var stmts []Statement
 	for _, label := range sortedCanonicalEntityLabels(byLabel) {
 		rows := byLabel[label]
-		batchSize := w.batchSize
+		batchSize := w.entityBatchSize
+		if batchSize <= 0 {
+			batchSize = w.batchSize
+		}
 		if batchSize <= 0 {
 			batchSize = DefaultBatchSize
 		}
@@ -71,6 +74,7 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 				Cypher:    fmt.Sprintf(canonicalNodeEntityUpsertTemplate, label),
 				Parameters: map[string]any{
 					"rows":                   append([]map[string]any(nil), batchRows...),
+					"_pcg_phase":             "entities",
 					"_pcg_statement_summary": statementSummary,
 				},
 			})
@@ -83,9 +87,11 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 					Operation: OperationCanonicalUpsert,
 					Cypher:    fmt.Sprintf(canonicalNodeEntitySingletonUpsertTemplate, label),
 					Parameters: map[string]any{
-						"file_path": row["file_path"],
-						"entity_id": row["entity_id"],
-						"props":     row["props"],
+						"file_path":             row["file_path"],
+						"entity_id":             row["entity_id"],
+						"props":                 row["props"],
+						"_pcg_phase":            "entities",
+						"_pcg_phase_group_mode": "execute_only",
 						"_pcg_statement_summary": fmt.Sprintf(
 							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized",
 							label,
