@@ -1,0 +1,760 @@
+# ADR: IaC Usage, Reachability, And Refactor Impact Graph
+
+**Date:** 2026-04-24
+**Status:** Proposed
+**Authors:** Allen Sanabria
+**Deciders:** Platform Engineering
+**Related:**
+
+- `2026-04-19-ci-cd-relationship-parity-across-delivery-families.md`
+- `2026-04-19-deployable-unit-correlation-and-materialization-framework.md`
+- `2026-04-19-multi-source-correlation-dsl-and-collector-readiness.md`
+- `2026-04-20-multi-source-reducer-and-consumer-contract.md`
+- `2026-04-20-terraform-state-collector.md`
+- `../reference/dead-code-reachability-spec.md`
+
+---
+
+## Context
+
+PlatformContextGraph already extracts a large IaC surface from Git sources:
+
+- Terraform and Terragrunt blocks, module sources, dependencies, inputs,
+  locals, variables, resources, data sources, outputs, and providers.
+- Kubernetes resources, Kustomize overlays, Helm charts and values files,
+  ArgoCD Applications and ApplicationSets, Crossplane resources, and
+  CloudFormation resources, parameters, outputs, conditions, imports, and
+  exports.
+- CI/CD delivery evidence from GitHub Actions, Jenkins, Ansible, Docker
+  Compose, Dockerfiles, Helm, Kustomize, ArgoCD, Terraform, and Terragrunt.
+
+Those facts support relationship mapping and deployment trace workflows, but
+they do not yet provide a durable, domain-aware graph of IaC definitions,
+filesystem artifacts, references, and deployment roots. As a result, PCG cannot
+yet answer the cleanup and refactor questions operators ask before changing
+infrastructure code:
+
+- Which Terraform modules, variables, locals, data sources, outputs, and local
+  module sources are unused?
+- Which Helm charts, values files, templates, and chart dependencies are unused
+  or unreachable?
+- Which Kustomize bases, overlays, components, resources, patches, images, and
+  Helm chart references are missing or unreachable?
+- Which ArgoCD sources point at missing repositories or paths?
+- Which local `source`, `valuesFile`, `resources`, `patches`, `templatefile`,
+  `file`, `config_path`, or nested-stack paths are invalid on disk?
+- If a module, chart, values file, overlay, manifest, or config asset is moved,
+  renamed, or deleted, which workflows, applications, overlays, modules, and
+  services break?
+- How does code flow through CI/CD and IaC into runtime resources and
+  environments?
+
+The existing dead-code capability is code-call oriented. It finds code entities
+that have no inbound `CALLS`, `IMPORTS`, or `REFERENCES` edges after applying a
+root model for language entrypoints and framework callbacks. IaC needs an
+equivalent product experience, but it cannot reuse the same semantics directly.
+For example, an unreferenced Terraform resource in an active root module is not
+necessarily dead, and an unreferenced Kubernetes Deployment may still be a live
+workload. IaC deadness is primarily about reachability from deployment roots,
+definition usage, path validity, and renderer/controller semantics.
+
+---
+
+## Decision
+
+PCG will add a first-class **IaC usage and reachability graph**. This graph will
+model IaC definitions, filesystem artifacts, references, and deployment roots so
+that PCG can expose three user-facing workflows from one authoritative data
+model:
+
+1. **Find dead IaC**: unused definitions, unreachable artifacts, suspicious
+   orphans, disabled definitions, and ambiguous dynamic cases.
+2. **IaC refactor impact**: all known consumers of a module, chart, values file,
+   overlay, manifest, source path, config file, or rendered/provisioned
+   resource before a rename, move, or delete.
+3. **IaC integrity**: missing local paths, unresolved references, invalid source
+   paths, and broken renderer/controller links.
+
+The graph also becomes the missing middle layer for end-to-end PCG relationships:
+
+```text
+code repo
+  -> CI/CD workflow or controller
+  -> IaC module/chart/overlay/manifest/config source
+  -> rendered or provisioned resources
+  -> service, environment, namespace, cluster, and cloud/runtime inventory
+```
+
+The implementation must be semantic first. Tree-sitter may be used as an
+optional syntax/span evidence provider, but it is not the primary architecture
+for IaC reachability. Domain parsers and renderers provide the source of truth:
+
+- HashiCorp HCL for Terraform and Terragrunt syntax and expression traversal.
+- YAML decoding plus Kubernetes, Kustomize, ArgoCD, Crossplane, and
+  CloudFormation semantics for YAML-family artifacts.
+- Helm and Go-template aware parsing for Helm templates and values references.
+- Renderer-backed validation where available, such as `helm template` and
+  `kustomize build`, when the runtime profile permits external tooling.
+
+---
+
+## Definitions
+
+### IaC Root
+
+An entrypoint that makes an IaC artifact live or deployment-relevant.
+
+Examples:
+
+- ArgoCD `Application` or `ApplicationSet`.
+- GitHub Actions or Jenkins deploy command.
+- Terraform or Terragrunt root module.
+- Helm chart or release path.
+- Kustomize overlay selected by a controller or workflow.
+- CloudFormation stack template.
+- Ansible playbook invoked by CI/CD.
+- Docker Compose file invoked by CI/CD or local profile.
+
+### IaC Definition
+
+A named logical definition inside an IaC artifact.
+
+Examples:
+
+- Terraform `variable`, `local`, `data`, `resource`, `module`, `output`, and
+  `provider`.
+- Terragrunt `dependency`, `input`, `local`, and config block.
+- Helm value key, chart dependency, named template, and rendered resource.
+- Kubernetes resource, selector, owner reference, service account, role,
+  binding, ConfigMap, Secret, volume, env reference, and workload.
+- Kustomize overlay, patch target, image reference, Helm chart reference,
+  resource reference, base, and component.
+- ArgoCD source, destination, generator source, and template source.
+- CloudFormation parameter, condition, resource, output, import, export, and
+  nested stack.
+- Crossplane XRD, Composition, claim, composition resource, patch, transform,
+  and function step.
+
+### IaC Artifact
+
+A filesystem or remote artifact that can be referenced, rendered, or deployed.
+
+Examples:
+
+- `modules/vpc/`, `charts/api/`, `values-prod.yaml`,
+  `overlays/prod/kustomization.yaml`, `deployment.yaml`,
+  `templates/deployment.yaml`, `stack.yaml`, `playbook.yml`, and
+  `docker-compose.yaml`.
+
+### IaC Reference
+
+A typed edge from a root, artifact, or definition to another artifact or
+definition.
+
+Examples:
+
+- `TerraformModule CALLS_MODULE TerraformModule`.
+- `TerraformOutput REFERENCES TerraformResource`.
+- `TerraformResource REFERENCES TerraformDataSource`.
+- `TerraformLocal REFERENCES TerraformVariable`.
+- `TerragruntDependency REFERENCES_CONFIG TerragruntConfig`.
+- `ArgoCDApplication SYNC_SOURCE KustomizeOverlay`.
+- `KustomizeOverlay INCLUDES ManifestFile`.
+- `KustomizeOverlay PATCHES K8sResource`.
+- `HelmTemplate REFERENCES_VALUE HelmValue`.
+- `HelmChart DEPENDS_ON HelmChart`.
+- `HelmChart RENDERS K8sResource`.
+- `Service SELECTS Workload`.
+- `Deployment USES ConfigMap`.
+- `RoleBinding BINDS Role`.
+- `CloudFormationResource REFERENCES CloudFormationParameter`.
+- `CloudFormationResource DEPENDS_ON CloudFormationResource`.
+
+### IaC Finding
+
+A queryable quality result derived from the usage graph.
+
+Initial finding classes:
+
+- `unused_definition`: a definition has no semantic consumers within its
+  relevant root/module/chart/template scope.
+- `unreachable_artifact`: a file, directory, chart, overlay, module, or manifest
+  is not reachable from any known root.
+- `missing_path`: a local path reference points to a file or directory that does
+  not exist in the indexed repository snapshot.
+- `unresolved_reference`: a reference could not be resolved to a known
+  definition or artifact.
+- `suspicious_orphan`: a resource is disconnected in a way that may indicate
+  dead IaC, but the system cannot safely call it unused.
+- `disabled_definition`: a definition is guarded by a known false condition,
+  disabled chart condition, profile, or count expression.
+- `ambiguous_dynamic`: dynamic HCL, templating, generators, plugins, or
+  unresolved values prevent exact proof.
+
+---
+
+## Product Surfaces
+
+### Find Dead IaC
+
+The user-facing workflow should answer:
+
+```text
+Find unused IaC in this repo, path, service, environment, or graph scope.
+```
+
+The response must include:
+
+- finding class
+- confidence: `exact`, `high`, `derived`, or `ambiguous`
+- entity or artifact identity
+- source path and line/range when available
+- root scope considered
+- evidence edges used
+- blockers that prevent exactness
+- suggested next action when safe
+
+The result must not collapse all findings into a boolean `dead=true`. Some IaC
+findings are cleanup-safe; others are warnings that need operator review.
+
+### IaC Refactor Impact
+
+The user-facing workflow should answer:
+
+```text
+If I rename, move, or delete this module/chart/overlay/values file/manifest,
+what consumes it?
+```
+
+The response must include reverse references across:
+
+- local filesystem references
+- cross-repository references
+- CI/CD workflow references
+- ArgoCD source references
+- Terraform/Terragrunt module and config references
+- Helm chart, dependency, template, and values references
+- Kustomize resource, base, component, patch, and Helm chart references
+- rendered or provisioned resource relationships when available
+
+### IaC Integrity
+
+The user-facing workflow should answer:
+
+```text
+Which IaC references are broken or unresolved?
+```
+
+Initial examples:
+
+- Terraform `source = "../modules/foo"` points to a missing directory.
+- Terragrunt `config_path = "../vpc"` points to a missing config.
+- Kustomize `resources:` or `patches:` entry points to a missing file.
+- ArgoCD `spec.source.path` points to a missing path in the target repo.
+- Helm `valueFiles` points to a missing values file.
+- CloudFormation nested stack `TemplateURL` points to a missing local template.
+- Ansible role or playbook import points to a missing role/playbook.
+
+---
+
+## Parser And Evidence Strategy
+
+### Terraform And Terragrunt
+
+Use HashiCorp HCL as the canonical parser. The first implementation should use
+`hclsyntax.Expression.Variables()` or equivalent traversal APIs to extract
+references from attributes and nested blocks.
+
+Initial references:
+
+- `var.name`
+- `local.name`
+- `data.type.name`
+- `resource_type.resource_name`
+- `module.name`
+- `module.name.output`
+- provider aliases
+- `depends_on`
+- `count` and `for_each` expressions
+- local filesystem paths in `source`, `file`, `templatefile`, backend config,
+  and Terragrunt helper/config expressions
+
+Important rule:
+
+- A Terraform `resource` with no inbound references is not automatically dead
+  when its containing root module is live. It may still be managed by Terraform.
+  PCG should flag unreferenced resources as `suspicious_orphan` unless stronger
+  evidence proves they are unreachable or disabled.
+
+High-confidence cleanup candidates:
+
+- Unreferenced variables in a module.
+- Unreferenced locals.
+- Unreferenced data sources.
+- Outputs not consumed by parent modules or external roots when the consuming
+  scope is known.
+- Local module sources not referenced by any root or child module.
+- Missing local module/config paths.
+
+### Helm
+
+Helm requires Go-template awareness. Plain YAML parsing is insufficient for
+templates under `templates/`.
+
+Initial references:
+
+- `Chart.yaml` dependencies.
+- values files.
+- `.Values.*` references in templates and helper templates.
+- `.Chart.*`, `.Release.*`, `include`, `template`, `tpl`, `required`, and
+  named template references.
+- conditional resource gates such as `.Values.enabled`,
+  `.Values.ingress.enabled`, and chart dependency conditions.
+- rendered Kubernetes resources when `helm template` is available.
+
+Finding examples:
+
+- values keys defined but never referenced by templates.
+- `.Values.*` references with no default or supplied value.
+- chart dependencies not used by any selected root.
+- missing values files referenced by ArgoCD, Helm, or Kustomize.
+- templates that never render for any known environment profile.
+
+### Kustomize
+
+Kustomize references should be promoted from parser properties and
+content-backed relationships into durable usage edges.
+
+Initial references:
+
+- `resources`
+- `bases`
+- `components`
+- `patches`
+- `patchesStrategicMerge`
+- `patchesJson6902`
+- patch targets
+- `helmCharts`
+- `images`
+- generators where practical
+
+Finding examples:
+
+- missing resource, base, component, patch, or chart path.
+- overlay not reachable from any ArgoCD app, workflow, or root selector.
+- patch target that matches no known resource.
+- base or component no longer consumed by any overlay.
+
+### ArgoCD
+
+ArgoCD Applications and ApplicationSets are roots and cross-repository
+connectors.
+
+Initial references:
+
+- `spec.source.repoURL`
+- `spec.source.path`
+- `spec.sources[]`
+- Helm `valueFiles`, `parameters`, and chart source fields.
+- ApplicationSet generator sources and template sources.
+- destination server, namespace, and project.
+
+Finding examples:
+
+- source path does not exist in the target repo.
+- source repo cannot be matched to an indexed repository.
+- selected path renders no recognized manifest, chart, or overlay.
+- ApplicationSet generator/template source split is ambiguous.
+
+### Kubernetes YAML
+
+Kubernetes resource deadness must be conservative. Many live resources do not
+have textual consumers.
+
+Initial references:
+
+- Service selectors to workloads and pod templates.
+- workload references to ConfigMaps, Secrets, volumes, ServiceAccounts,
+  PVCs, image pull secrets, and env refs.
+- RBAC RoleBinding and ClusterRoleBinding subjects and role refs.
+- owner references.
+- HPA, PDB, Ingress, NetworkPolicy, ServiceMonitor, and Gateway API refs where
+  extractable.
+
+Finding examples:
+
+- Service selector matches no workload.
+- ConfigMap or Secret has no known workload consumers.
+- RoleBinding points to a missing role or subject.
+- ServiceAccount is not used by any known workload.
+- resource is disconnected but only classified as `suspicious_orphan` unless
+  root reachability proves it is unused.
+
+### CloudFormation
+
+Initial references:
+
+- `Ref`
+- `Fn::GetAtt`
+- `Fn::Sub`
+- `DependsOn`
+- `Condition`
+- nested stack `TemplateURL`
+- parameters, mappings, outputs, imports, and exports
+
+Finding examples:
+
+- parameter unused by resources, conditions, outputs, or nested stacks.
+- condition defined but unused.
+- output not exported or consumed where the scope is known.
+- nested template path missing.
+- resource disabled by a resolvable false condition.
+
+### Crossplane
+
+Initial references:
+
+- claim kind to XRD.
+- Composition `compositeTypeRef` to XRD.
+- Composition resources to managed resource kinds.
+- patch and transform field paths.
+- pipeline/function steps where practical.
+
+Finding examples:
+
+- claim type has no matching XRD.
+- XRD has no claims or compositions.
+- Composition references a missing composite type.
+- patch source or target field path cannot be resolved against known schema
+  when schema is available.
+
+### CI/CD Delivery Roots
+
+CI/CD workflows are roots into IaC. Existing relationship extraction should be
+connected to the usage graph rather than remaining only evidence prose.
+
+Initial roots and references:
+
+- GitHub Actions deploy commands: Terraform, Terragrunt, Helm, Kustomize,
+  kubectl, Docker Compose, Ansible.
+- Jenkins/Groovy deploy commands and shared-library parameters.
+- Ansible playbook and role references.
+- Docker Compose files and service dependencies.
+- Docker build contexts and image references when linked to deploy workflows.
+
+---
+
+## Graph Model
+
+The graph should introduce a durable, backend-neutral usage edge model instead
+of hard-coding each query around ad hoc properties.
+
+Conceptual nodes:
+
+- `IaCRoot`
+- `IaCArtifact`
+- `IaCDefinition`
+- `IaCReference`
+- existing concrete labels such as `TerraformModule`, `HelmChart`,
+  `KustomizeOverlay`, `ArgoCDApplication`, `K8sResource`,
+  `CloudFormationResource`, and `TerragruntConfig`
+
+Conceptual edges:
+
+- `USES`
+- `REFERENCES`
+- `CALLS_MODULE`
+- `SYNC_SOURCE`
+- `INCLUDES`
+- `PATCHES`
+- `RENDERS`
+- `SELECTS`
+- `BINDS`
+- `MOUNTS`
+- `CONFIGURES`
+- `DEPENDS_ON`
+- `DEFINES`
+- `BROKEN_REFERENCE`
+
+Each edge must preserve:
+
+- source entity or artifact id
+- target entity, artifact id, or unresolved target key
+- repo id and generation id
+- source path
+- line/range when available
+- evidence kind
+- parser or renderer source
+- confidence
+- resolution status
+- failure or ambiguity reason
+
+The exact graph labels and edge names can be refined during implementation, but
+the ADR requires a single durable reference model that query surfaces share.
+
+---
+
+## Query And API Surfaces
+
+The public surfaces should be separate from the existing code-only dead-code
+endpoint.
+
+Initial HTTP and MCP capability names:
+
+- `iac_quality.dead_iac`
+- `iac_quality.refactor_impact`
+- `iac_quality.integrity`
+- `iac_relationships.usage_graph`
+
+Candidate HTTP routes:
+
+- `POST /api/v0/iac/dead`
+- `POST /api/v0/iac/impact`
+- `POST /api/v0/iac/integrity`
+- `POST /api/v0/iac/relationships`
+
+Candidate MCP tools:
+
+- `find_dead_iac`
+- `trace_iac_impact`
+- `find_broken_iac_references`
+- `get_iac_relationships`
+
+The final route and MCP names must be documented in the HTTP and MCP reference
+pages when implemented. This ADR only decides the capability boundary.
+
+---
+
+## Exactness And Truth Labels
+
+IaC query responses must report truth basis and exactness explicitly.
+
+An answer may be `exact` only when:
+
+1. the relevant root model is present,
+2. all local filesystem references were checked against the indexed snapshot,
+3. the required renderer or semantic parser was available, and
+4. dynamic expressions, templates, plugins, or external repos did not block
+   resolution.
+
+Otherwise the result must be `derived` or `ambiguous`.
+
+Examples:
+
+- Terraform unreferenced local within one parsed module can be exact.
+- Terraform remote module consumer impact across unindexed repos is derived.
+- Helm value usage without rendering every selected values file is derived.
+- Helm template branches gated by unresolved values are ambiguous.
+- Kustomize missing local resource path is exact.
+- ArgoCD source path into an indexed repo is exact; source path into an
+  unindexed repo is unresolved or derived.
+- Kubernetes orphaned resource without controller/root proof is suspicious, not
+  exact deadness.
+
+---
+
+## Implementation Ownership
+
+The implementation must preserve PCG's existing boundaries:
+
+- `go/internal/parser/` extracts semantic definitions, references, and spans
+  from individual files.
+- `go/internal/relationships/` maps first-party and cross-repository evidence.
+- `go/internal/facts/` and `go/internal/storage/postgres/` define durable fact
+  and queue contracts.
+- `go/internal/projector/` projects source-local entities and references.
+- `go/internal/reducer/` resolves cross-domain and cross-repository usage
+  relationships.
+- `go/internal/query/` owns HTTP/MCP query surfaces and truth labels.
+- `go/internal/graph/` and graph adapters own backend-neutral graph writes.
+
+Handlers must depend on graph/query ports, not concrete graph adapter types.
+
+---
+
+## Telemetry Requirements
+
+IaC usage analysis touches runtime behavior and must include operator-visible
+telemetry.
+
+Required telemetry:
+
+- span around each parser family reference-extraction pass
+- duration histogram per parser family and renderer
+- counter for extracted references by family and reference kind
+- counter for unresolved references by family and reason
+- histogram for rendered resource counts
+- counter for missing-path findings by family and path kind
+- reducer processing duration for IaC usage materialization
+- query duration and result-count histograms for dead IaC, impact, integrity,
+  and relationship queries
+
+Metric labels must avoid high-cardinality path values. File paths, unresolved
+targets, and specific identifiers belong in spans, structured logs, or finding
+payloads, not metric labels.
+
+---
+
+## Non-Goals
+
+This ADR does not require launch support for:
+
+- perfect Terraform plan semantics
+- Terraform Cloud or Terraform Enterprise workspace graph extraction
+- exhaustive Helm chart rendering for every possible values combination
+- Helm plugin execution
+- ApplicationSet plugin-specific generator semantics
+- complete Kubernetes CRD schema validation
+- live Kubernetes cluster discovery
+- cloud provider live-state comparison
+- destructive cleanup automation
+
+Those capabilities can be added later as collectors or renderer profiles. The
+first contract is static usage, reachability, integrity, and refactor impact
+from indexed sources.
+
+---
+
+## Rollout
+
+### Phase 1: Terraform, Terragrunt, And Filesystem References
+
+Deliver:
+
+- HCL traversal extraction for `var`, `local`, `data`, `resource`, `module`,
+  provider alias, `depends_on`, `count`, and `for_each`.
+- local filesystem path validation for module `source`, Terragrunt
+  `config_path`, `file`, `templatefile`, and helper-built config paths.
+- unused variable/local/data/output findings within module scope.
+- reverse-impact query for local module and config paths.
+
+### Phase 2: Kustomize And ArgoCD Roots
+
+Deliver:
+
+- durable Kustomize usage edges for resources, bases, components, patches,
+  patch targets, `helmCharts`, and images.
+- ArgoCD Application/ApplicationSet roots into indexed repositories and paths.
+- missing-path findings for ArgoCD and Kustomize references.
+- reverse-impact query for overlays, bases, components, resources, and patches.
+
+### Phase 3: Helm And Go-Template Usage
+
+Deliver:
+
+- Helm chart dependency and values-file usage edges.
+- `.Values.*` references from templates and helper templates.
+- missing-value and unused-value findings.
+- optional `helm template` rendering when tooling is available.
+- reverse-impact query for charts, templates, values files, and value keys.
+
+### Phase 4: Kubernetes Resource Usage
+
+Deliver:
+
+- typed edges for selectors, ConfigMap/Secret usage, ServiceAccounts, RBAC,
+  volumes, env refs, owner refs, HPA/PDB/Ingress/NetworkPolicy/Gateway refs
+  where extractable.
+- conservative `suspicious_orphan` findings.
+- rendered-resource linkage from Helm and Kustomize when available.
+
+### Phase 5: CloudFormation, Crossplane, Compose, And Ansible
+
+Deliver:
+
+- CloudFormation intrinsic/reference graph and nested-template path validation.
+- Crossplane XRD, Composition, claim, patch, and function-step references.
+- Docker Compose service/build/dependency/profile usage.
+- Ansible playbook, role, vars, and inventory usage.
+
+---
+
+## Test Requirements
+
+Each family must include:
+
+- positive case: a live root reaches a definition or artifact and suppresses a
+  dead finding.
+- negative case: an unused or unreachable definition/artifact is reported.
+- ambiguous case: dynamic expression, template, generator, plugin, or external
+  repo prevents exactness.
+- missing-path case: local path reference points to a missing file or directory.
+- refactor-impact case: a target path or definition returns all known consumers.
+
+Required validation layers:
+
+- parser unit tests for extracted references
+- projector tests for durable reference facts
+- reducer tests for resolved usage edges
+- query tests for dead-IaC, impact, integrity, and relationship responses
+- docs updates for public routes, MCP tools, CLI commands, and truth labels when
+  those surfaces are implemented
+- compose or local-authoritative proof before claiming graph-backed exactness
+
+---
+
+## Consequences
+
+Positive consequences:
+
+- PCG can answer cleanup, broken-reference, and safe-refactor questions for IaC.
+- Deployment trace gains a richer code-to-CI/CD-to-IaC-to-runtime middle layer.
+- Existing parser work becomes more valuable because extracted entities gain
+  durable usage edges.
+- Query truth improves because missing paths and ambiguous dynamic cases are
+  explicit instead of hidden inside prose.
+
+Costs:
+
+- The graph model and reducer materialization path grow.
+- Some renderers require optional external tooling and profile-aware fallback.
+- Exactness varies by family and must be exposed honestly.
+- Terraform, Helm, Kubernetes, and ArgoCD all need domain-specific semantics;
+  a syntax-only parser cannot provide sufficient truth.
+
+Risks:
+
+- Overclaiming deadness can cause unsafe cleanup recommendations.
+- Renderer execution can be expensive or non-hermetic if not sandboxed.
+- High-cardinality path and target labels can damage telemetry if modeled as
+  metric dimensions.
+- Dynamic HCL, Helm templates, ApplicationSet plugins, and CRD-specific
+  semantics can produce ambiguous results that operators may mistake for exact
+  answers unless the API is explicit.
+
+Mitigations:
+
+- Use conservative finding classes and confidence labels.
+- Default unresolved dynamic cases to `ambiguous_dynamic`.
+- Treat parser semantics as authoritative only within their modeled scope.
+- Keep renderers optional and profile-gated.
+- Return evidence and blockers for every finding.
+
+---
+
+## Chunk Status
+
+| Chunk | Status | Evidence | Remaining Work |
+|---|---|---|---|
+| ADR | Proposed | This document | Review and accept/revise decision |
+| Phase 1: Terraform/Terragrunt | Not started | Existing HCL entity extraction and relationship evidence | Add traversal references, path validation, usage edges, queries |
+| Phase 2: Kustomize/ArgoCD | Not started | Existing parser buckets and content-backed relationships | Promote to durable usage graph and impact/integrity queries |
+| Phase 3: Helm | Not started | Existing chart and values extraction | Add Go-template value references, values-file usage, optional rendering |
+| Phase 4: Kubernetes | Not started | Existing K8s resource extraction and basic Service heuristic | Add typed resource usage edges and conservative orphan findings |
+| Phase 5: CloudFormation/Crossplane/Compose/Ansible | Not started | Existing parser and evidence surfaces | Add reference graph and findings per family |
+
+---
+
+## Open Questions
+
+1. Should the public cleanup route be named `/api/v0/iac/dead`,
+   `/api/v0/iac/unused`, or `/api/v0/iac/reachability`?
+2. Should refactor-impact support path selectors only at first, or also
+   semantic selectors such as `module.vpc`, `.Values.image.tag`, and
+   `apps/v1 Deployment payments/api`?
+3. Which renderer profile should be authoritative for local runs:
+   parser-only, renderer-available, or full compose/local-authoritative?
+4. Should Helm rendering run during ingestion, during reducer materialization,
+   or lazily during query?
+5. Should exact dead-IaC answers require every referenced repository to be
+   indexed in the same generation set?
