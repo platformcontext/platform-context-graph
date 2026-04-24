@@ -70,10 +70,15 @@ not affected by this local-authoritative guardrail.
 The current local-authoritative canonical entity path uses the narrowest shape
 that the active backend has proven correct. Backends with correct node-only
 batched `MERGE` support can separate entity node upserts from
-`phase=entity_containment`. NornicDB currently uses a file-scoped combined
-entity write instead: each statement matches the `File` anchor with
-`$file_path`, unwinds entity rows for that file, upserts nodes, and attaches
-`CONTAINS` in the same statement. The `nornicdb entity label summary` log
+`phase=entity_containment`. The pinned NornicDB release still uses a
+file-scoped combined entity write: each statement matches the `File` anchor
+with `$file_path`, unwinds entity rows for that file, upserts nodes, and
+attaches `CONTAINS` in the same statement. A patched NornicDB binary that
+supports row-safe `SET += row.props` in the generalized `UNWIND/MERGE` hot
+path can opt into `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true`, which batches
+entity rows across files with `MERGE (n {uid: row.entity_id}) ... MATCH
+(f {path: row.file_path}) ... MERGE (f)-[:CONTAINS]->(n)`. Do not enable that
+switch with the current pinned binary. The `nornicdb entity label summary` log
 includes `phase` so operators can tell which entity-write lane is active and
 where repo-scale time is going.
 

@@ -74,6 +74,7 @@ const (
 	nornicDBEntityBatchSizeEnv                   = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
 	nornicDBEntityLabelBatchSizesEnv             = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
 	nornicDBEntityLabelPhaseGroupStatementsEnv   = "PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS"
+	nornicDBBatchedEntityContainmentEnv          = "PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -305,6 +306,7 @@ func openIngesterCanonicalWriter(
 	entityPhaseStatements := defaultNornicDBEntityPhaseStatements
 	entityBatchSize := 0
 	entityLabelPhaseStatements := map[string]int(nil)
+	nornicDBBatchedEntityContainment := false
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		nornicDBGroupedWrites, err = nornicDBCanonicalGroupedWrites(getenv)
 		if err != nil {
@@ -323,6 +325,10 @@ func openIngesterCanonicalWriter(
 			return nil, nil, err
 		}
 		entityLabelPhaseStatements, err = nornicDBEntityLabelPhaseGroupStatements(getenv, entityPhaseStatements)
+		if err != nil {
+			return nil, nil, err
+		}
+		nornicDBBatchedEntityContainment, err = nornicDBBatchedEntityContainmentEnabled(getenv)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -353,7 +359,14 @@ func openIngesterCanonicalWriter(
 		writer = writer.WithEntityBatchSize(entityBatchSize)
 	}
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		writer = writer.WithEntityContainmentInEntityUpsert()
+		if nornicDBBatchedEntityContainment {
+			writer = writer.WithBatchedEntityContainmentInEntityUpsert()
+			slog.Warn("NornicDB batched entity containment enabled for patched-binary evaluation",
+				"graph_backend", string(graphBackend),
+				"env_var", nornicDBBatchedEntityContainmentEnv)
+		} else {
+			writer = writer.WithEntityContainmentInEntityUpsert()
+		}
 		labelBatchSizes, err := nornicDBEntityLabelBatchSizes(getenv, entityBatchSize)
 		if err != nil {
 			return nil, nil, err
@@ -1011,6 +1024,18 @@ func nornicDBCanonicalGroupedWrites(getenv func(string) string) (bool, error) {
 	enabled, err := strconv.ParseBool(raw)
 	if err != nil {
 		return false, fmt.Errorf("parse %s=%q: %w", nornicDBCanonicalGroupedWritesEnv, raw, err)
+	}
+	return enabled, nil
+}
+
+func nornicDBBatchedEntityContainmentEnabled(getenv func(string) string) (bool, error) {
+	raw := strings.TrimSpace(getenv(nornicDBBatchedEntityContainmentEnv))
+	if raw == "" {
+		return false, nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("parse %s=%q: %w", nornicDBBatchedEntityContainmentEnv, raw, err)
 	}
 	return enabled, nil
 }
