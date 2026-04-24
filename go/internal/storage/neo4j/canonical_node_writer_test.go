@@ -119,7 +119,7 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 		t.Fatal("expected executor calls, got 0")
 	}
 
-	// Verify strict phase order: retract phases first, then repository, directories, files, entities, modules, structural edges.
+	// Verify strict phase order: retract phases first, then repository, directories, files, entities, entity containment, modules, structural edges.
 	// Find the phase boundaries by inspecting operation types and cypher content.
 	phaseOrder := []string{}
 	for _, call := range exec.calls {
@@ -143,8 +143,7 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 				if len(phaseOrder) == 0 || phaseOrder[len(phaseOrder)-1] != "entities" {
 					phaseOrder = append(phaseOrder, "entities")
 				}
-			} else if strings.Contains(call.Cypher, "MATCH (f:File {path: $file_path})") &&
-				(strings.Contains(call.Cypher, "MATCH (n:Function {uid: $entity_id})") || strings.Contains(call.Cypher, "MATCH (n:Class {uid: $entity_id})")) {
+			} else if call.Parameters[StatementMetadataPhaseKey] == CanonicalPhaseEntityContainment {
 				if len(phaseOrder) == 0 || phaseOrder[len(phaseOrder)-1] != "entity_containment" {
 					phaseOrder = append(phaseOrder, "entity_containment")
 				}
@@ -160,7 +159,7 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 		}
 	}
 
-	expected := []string{"retract", "repository", "directories", "files", "entities", "modules", "structural_edges"}
+	expected := []string{"retract", "repository", "directories", "files", "entities", "entity_containment", "modules", "structural_edges"}
 	if len(phaseOrder) != len(expected) {
 		t.Fatalf("phase order = %v, want %v", phaseOrder, expected)
 	}
@@ -1229,7 +1228,7 @@ func TestCanonicalNodeWriterEntityLabelBatchSizeOverride(t *testing.T) {
 	}
 }
 
-func TestCanonicalNodeWriterEntityBatchesDoNotCrossFileBoundaries(t *testing.T) {
+func TestCanonicalNodeWriterEntityBatchesCrossFileBoundaries(t *testing.T) {
 	t.Parallel()
 
 	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).WithEntityBatchSize(10)
@@ -1246,23 +1245,21 @@ func TestCanonicalNodeWriterEntityBatchesDoNotCrossFileBoundaries(t *testing.T) 
 	}
 
 	stmts := writer.buildEntityStatements(mat)
-	if got, want := len(stmts), 2; got != want {
+	if got, want := len(stmts), 1; got != want {
 		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
 	}
 
-	firstRows, _ := stmts[0].Parameters["rows"].([]map[string]any)
-	secondRows, _ := stmts[1].Parameters["rows"].([]map[string]any)
-	if got, want := stmts[0].Parameters["file_path"], "/repos/my-repo/src/a.go"; got != want {
-		t.Fatalf("first batch file_path = %#v, want %#v", got, want)
+	rows, _ := stmts[0].Parameters["rows"].([]map[string]any)
+	if _, ok := stmts[0].Parameters["file_path"]; ok {
+		t.Fatalf("entity batch unexpectedly has statement-level file_path: %#v", stmts[0].Parameters)
 	}
-	if got, want := len(firstRows), 2; got != want {
-		t.Fatalf("first batch rows = %d, want %d", got, want)
+	if got, want := len(rows), 3; got != want {
+		t.Fatalf("entity batch rows = %d, want %d", got, want)
 	}
-	if got, want := stmts[1].Parameters["file_path"], "/repos/my-repo/src/b.go"; got != want {
-		t.Fatalf("second batch file_path = %#v, want %#v", got, want)
-	}
-	if got, want := len(secondRows), 1; got != want {
-		t.Fatalf("second batch rows = %d, want %d", got, want)
+	for _, row := range rows {
+		if _, ok := row["file_path"]; ok {
+			t.Fatalf("entity row unexpectedly contains file_path: %#v", row)
+		}
 	}
 }
 

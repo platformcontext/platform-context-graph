@@ -43,17 +43,17 @@ Latest 2026-04-24 NornicDB dogfood evidence:
 - the next repo-scale blocker is now the `retract` phase, not `entities`, so the branch runs NornicDB retract statements sequentially instead of bundling all stale deletes into one grouped transaction
 - projector dead-letter persistence now sanitizes backend error text before writing to Postgres so NUL bytes from NornicDB cannot break failure updates
 - the latest rerun proved `Variable rows=25` is still too wide after the earlier fixes, spending roughly `20s-27s` per 5-statement chunk, so the built-in Variable row cap now narrows to `10` while leaving the grouped-statement cap at `5`
-- grouping canonical entity batches by `label + file_path` and matching the file anchor once per statement is a real win: the fresh rebuilt-binary rerun now keeps deep `Function rows=15` chunks in roughly the `0.3s-1.9s` band instead of the earlier multi-second drift
+- the current branch now supersedes the earlier `label + file_path` grouping with a cleaner split: canonical entity node upserts batch across files with the simple NornicDB-friendly `UNWIND ... MERGE (n:<Label> {uid: row.entity_id}) SET n += row.props` shape, while `phase=entity_containment` attaches those nodes back to files in a separately measured batch phase
 - projector same-scope claim fencing is now proven too: a deliberate second-generation trigger during the first generation's `Function` phase held queue state at `pending=1, in_flight=1` instead of the old overlapping `in_flight=2` failure mode
 - the follow-up `Variable rows=15` / `5`-statement experiment improved individual Variable chunks into roughly the `11.6s-17.4s` band, but it still took about `23m` to reach Variable and ran about `35m` total before manual stop, so it is not the next default candidate
 - after re-reading NornicDB's performance and Neo4j migration docs, the branch identified a more fundamental local-only gap: `pcg graph start` applied Postgres schema but did not apply the NornicDB graph schema before starting reducer/ingester, which meant schema-backed `MERGE` hot paths could fall back to label scans even though PCG's checked-in schema defines the right `uid` constraints
 - current branch now applies the backend-routed graph schema immediately after NornicDB sidecar readiness and before owner-record publication or child startup, preserving the same NornicDB schema dialect used by `bootstrap-data-plane`
-- the branch now emits rolling and final `nornicdb entity label summary` logs with per-label rows, statements, executions, grouped chunks, total duration, max execution duration, and row-width totals so the next tuning slice can optimize cumulative label cost instead of reacting to isolated chunk logs
+- the branch now emits rolling and final `nornicdb entity label summary` logs with `phase`, per-label rows, statements, executions, grouped chunks, total duration, max execution duration, and row-width totals so the next tuning slice can optimize cumulative node-upsert and containment-edge cost instead of reacting to isolated chunk logs
 
 Current tuning plan:
 - keep the safer `Function=15,Struct=50,Variable=10` row-cap baseline in code while we gather better evidence
-- rerun self-repo dogfood with graph schema bootstrap enabled and use the new rolling `nornicdb entity label summary` totals, not individual chunk anecdotes, to identify the dominant cumulative-cost label
-- only change the next default after the summary shows which label actually dominates total `entities` wall-clock and whether the trade-off is row width, grouped transaction size, or label ordering
+- rerun self-repo dogfood with graph schema bootstrap enabled and use the new rolling `nornicdb entity label summary` totals, not individual chunk anecdotes, to identify whether `phase=entities` or `phase=entity_containment` dominates cumulative cost
+- only change the next default after the summary shows which phase and label actually dominate wall-clock and whether the trade-off is node row width, containment-edge cost, grouped transaction size, or label ordering
 
 ---
 

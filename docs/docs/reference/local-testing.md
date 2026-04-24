@@ -179,14 +179,17 @@ too large, use
 `PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5` to
 shrink only the grouped transaction size for those heavier families without
 forcing the same statement cap onto every other entity label.
-When you are tuning repo-scale `entities` performance, do not decide from one
-scary chunk log alone. Use the emitted `nornicdb entity label summary` lines
+When you are tuning repo-scale entity projection, do not decide from one scary
+chunk log alone. Canonical entity projection is split into node upsert
+(`phase=entities`) and file containment edge (`phase=entity_containment`)
+statements so the node path can use NornicDB's simple `UNWIND ... MERGE ...
+SET` shape across files. Use the emitted `nornicdb entity label summary` lines
 to compare cumulative rows, statements, executions, grouped chunks, and
-total/max duration per label before changing another default. Long-running
-labels emit rolling summaries every 10 executions and a final summary at label
-completion, so you do not need to wait for an hour-scale phase to finish before
-you can see whether the cumulative cost is row width, grouped transaction
-size, or label ordering.
+total/max duration per `phase` and label before changing another default.
+Long-running labels emit rolling summaries every 10 executions and a final
+summary at label completion, so you do not need to wait for an hour-scale phase
+to finish before you can see whether the cumulative cost is node row width,
+containment edges, grouped transaction size, or label ordering.
 
 ### Local-Authoritative Startup Envelope Smoke
 
