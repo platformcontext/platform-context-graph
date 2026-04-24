@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
@@ -168,6 +169,40 @@ func TestProjectorQueueFailRetriesRetryableErrorWithinAttemptBudget(t *testing.T
 	}
 	if got, want := db.execs[0].args[4], queue.Now().Add(queue.RetryDelay); got != want {
 		t.Fatalf("next attempt = %v, want %v", got, want)
+	}
+}
+
+func TestProjectorQueueFailSanitizesFailureTextForPostgres(t *testing.T) {
+	t.Parallel()
+
+	db := &recordingExecQueryer{}
+	queue := NewProjectorQueue(db, "projector-1", 30*time.Second)
+	work := projector.ScopeGenerationWork{
+		Scope: scope.IngestionScope{ScopeID: "scope-123"},
+		Generation: scope.ScopeGeneration{
+			GenerationID: "generation-456",
+		},
+	}
+
+	raw := "bad\x00" + string([]byte{0xff}) + "message"
+	if err := queue.Fail(context.Background(), work, errors.New(raw)); err != nil {
+		t.Fatalf("Fail() error = %v, want nil", err)
+	}
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+
+	for _, idx := range []int{2, 3} {
+		got, _ := db.execs[0].args[idx].(string)
+		if strings.Contains(got, "\x00") {
+			t.Fatalf("failure arg[%d] contains NUL: %q", idx, got)
+		}
+		if !utf8.ValidString(got) {
+			t.Fatalf("failure arg[%d] is not valid UTF-8: %q", idx, got)
+		}
+		if got != "badmessage" {
+			t.Fatalf("failure arg[%d] = %q, want %q", idx, got, "badmessage")
+		}
 	}
 }
 

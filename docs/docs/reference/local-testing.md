@@ -165,7 +165,7 @@ statements in a grouped transaction.
 The current NornicDB writer also keeps `Function` entity upserts on a narrower
 internal row batch than the broader entity default because repo-scale dogfood
 showed `Function` rows remain the heaviest entity shape on this repository.
-Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=10,Struct=50,Variable=25` when you need
+Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=25` when you need
 to tune specific heavy entity families without recompiling or lowering the row
 cap for the entire entity phase.
 If those row caps are already narrow but the grouped entity chunks are still

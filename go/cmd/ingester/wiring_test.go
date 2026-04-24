@@ -444,6 +444,43 @@ func TestNornicDBPhaseGroupExecutorUsesEntityLabelSpecificStatementLimit(t *test
 	}
 }
 
+func TestNornicDBPhaseGroupExecutorExecutesRetractStatementsSequentially(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:         inner,
+		maxStatements: 5,
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{
+			Operation: sourceneo4j.OperationCanonicalRetract,
+			Cypher:    "MATCH (n) DELETE n",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataSummaryKey: "label=File retract",
+			},
+		},
+		{
+			Operation: sourceneo4j.OperationCanonicalRetract,
+			Cypher:    "MATCH (m) DELETE m",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataSummaryKey: "label=Entity retract",
+			},
+		},
+	}
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+	if got := len(inner.groupSizes); got != 0 {
+		t.Fatalf("group call count = %d, want 0", got)
+	}
+	if got, want := len(inner.executeParams), 2; got != want {
+		t.Fatalf("execute params count = %d, want %d", got, want)
+	}
+}
+
 func TestNornicDBPhaseGroupExecutorExecutesEntitySingletonFallbackOutsideGroup(t *testing.T) {
 	t.Parallel()
 
@@ -659,8 +696,8 @@ func TestCanonicalExecutorForGraphBackendNornicDBDefaultFullStackUsesPhaseGroups
 	if inner.groupCalls == 0 {
 		t.Fatal("raw ExecuteGroup calls = 0, want phase-group usage")
 	}
-	if inner.executeCalls != 0 {
-		t.Fatalf("raw Execute calls = %d, want 0 for phase-group path", inner.executeCalls)
+	if inner.executeCalls == 0 {
+		t.Fatal("raw Execute calls = 0, want sequential retract execution on the phase-group path")
 	}
 }
 
