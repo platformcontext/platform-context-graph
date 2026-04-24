@@ -130,6 +130,11 @@ export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
 ./go/bin/pcg mcp start --workspace-root "$PWD"
 ```
 
+`pcg graph start` now renders a live terminal progress panel while the local
+host indexes and projects: owner/profile/backend header, collector/projector/
+reducer flow lanes, and queue pressure from the shared status store. Treat
+that panel as truthful runtime status, not as a percentage-complete contract.
+
 From an MCP client, call:
 
 - `search_file_content` with a symbol or unique string from the repo
