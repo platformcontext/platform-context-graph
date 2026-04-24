@@ -387,10 +387,11 @@ func neo4jSchemaConstraint(cypher string) string {
 }
 
 func nornicDBSchemaConstraint(cypher string) string {
-	if !isCompositeUniqueConstraint(cypher) {
-		return cypher
-	}
-	return strings.Replace(cypher, ") IS UNIQUE", ") IS NODE KEY", 1)
+	// NornicDB supports composite IS UNIQUE directly. Do not translate to
+	// NODE KEY: node keys require every participating property to be present,
+	// while several PCG semantic labels can be sparse and rely on uid for the
+	// canonical write identity.
+	return cypher
 }
 
 func isCompositeUniqueConstraint(cypher string) bool {

@@ -52,7 +52,7 @@ func TestSchemaStatementsForBackendPreservesNeo4jCompositeUniqueness(t *testing.
 	assertNoStatementContains(t, stmts, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
 }
 
-func TestSchemaStatementsForBackendAdaptsNornicDBCompositeConstraints(t *testing.T) {
+func TestSchemaStatementsForBackendPreservesNornicDBCompositeUniqueness(t *testing.T) {
 	t.Parallel()
 
 	stmts, err := SchemaStatementsForBackend(SchemaBackendNornicDB)
@@ -60,12 +60,12 @@ func TestSchemaStatementsForBackendAdaptsNornicDBCompositeConstraints(t *testing
 		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNornicDB, err)
 	}
 
-	assertContainsStatement(t, stmts, "CREATE CONSTRAINT function_unique IF NOT EXISTS FOR (f:Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
-	assertContainsStatement(t, stmts, "CREATE CONSTRAINT source_local_record_unique IF NOT EXISTS FOR (n:SourceLocalRecord) REQUIRE (n.scope_id, n.generation_id, n.record_id) IS NODE KEY")
-	assertNoStatementContains(t, stmts, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+	assertContainsStatement(t, stmts, "CREATE CONSTRAINT function_unique IF NOT EXISTS FOR (f:Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+	assertContainsStatement(t, stmts, "CREATE CONSTRAINT source_local_record_unique IF NOT EXISTS FOR (n:SourceLocalRecord) REQUIRE (n.scope_id, n.generation_id, n.record_id) IS UNIQUE")
+	assertNoStatementContains(t, stmts, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
 }
 
-func TestNornicDBSchemaTranslatesEveryCompositeUniqueConstraint(t *testing.T) {
+func TestNornicDBSchemaPreservesEveryCompositeUniqueConstraint(t *testing.T) {
 	t.Parallel()
 
 	stmts, err := SchemaStatementsForBackend(SchemaBackendNornicDB)
@@ -78,11 +78,8 @@ func TestNornicDBSchemaTranslatesEveryCompositeUniqueConstraint(t *testing.T) {
 			continue
 		}
 		translated := nornicDBSchemaConstraint(constraint)
-		if translated == constraint {
-			t.Fatalf("NornicDB constraint was not translated: %q", constraint)
-		}
-		if strings.Contains(translated, ") IS UNIQUE") {
-			t.Fatalf("NornicDB constraint still uses composite IS UNIQUE: %q", translated)
+		if translated != constraint {
+			t.Fatalf("NornicDB constraint = %q, want preserved %q", translated, constraint)
 		}
 		assertContainsStatement(t, stmts, translated)
 	}
@@ -206,8 +203,8 @@ func TestEnsureSchemaWithBackendExecutesNornicDBStatements(t *testing.T) {
 		t.Fatalf("EnsureSchemaWithBackend() error = %v, want nil", err)
 	}
 
-	assertContainsExecutedStatement(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
-	assertNoExecutedStatementContains(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+	assertNoExecutedStatementContains(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
 }
 
 func TestEnsureSchemaRequiresExecutor(t *testing.T) {
