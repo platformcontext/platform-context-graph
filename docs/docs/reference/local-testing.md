@@ -125,6 +125,8 @@ local NornicDB binary such as `/tmp/nornicdb-headless`.
 export PCG_HOME=/tmp/pcg-local-authoritative-smoke
 export PCG_CANONICAL_WRITE_TIMEOUT=2s
 export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
+export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
+export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
 ./go/bin/pcg graph start --workspace-root "$PWD"
 ./go/bin/pcg mcp start --workspace-root "$PWD"
@@ -153,7 +155,12 @@ exercise NornicDB's Bolt explicit transaction path and verify rollback,
 timeout, and no-partial-write behavior. If repo-scale projection is the thing
 you are validating, tune `PCG_NORNICDB_PHASE_GROUP_STATEMENTS` before you reach
 for grouped conformance mode so the everyday local-authoritative path stays the
-thing under test.
+thing under test. Use `PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS` when the
+repo-scale hotspot is specifically the canonical `entities` phase and you need
+smaller entity-only grouped transactions without shrinking every other phase.
+Use `PCG_NORNICDB_ENTITY_BATCH_SIZE` when the problem is the number of rows
+inside each normal batched entity upsert statement rather than the number of
+statements in a grouped transaction.
 
 ### Local-Authoritative Startup Envelope Smoke
 
