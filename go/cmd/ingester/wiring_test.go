@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
@@ -601,6 +603,147 @@ func TestNornicDBPhaseGroupExecutorWrapsChunkFailureDetails(t *testing.T) {
 	}
 }
 
+func TestNornicDBPhaseGroupExecutorLogsEntityLabelSummaries(t *testing.T) {
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:               inner,
+		maxStatements:       5,
+		entityMaxStatements: 2,
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{
+			Cypher: "RETURN function1",
+			Parameters: map[string]any{
+				"_pcg_phase":        "entities",
+				"_pcg_entity_label": "Function",
+				"rows": []map[string]any{
+					{"entity_id": "f1"},
+					{"entity_id": "f2"},
+				},
+			},
+		},
+		{
+			Cypher: "RETURN function2",
+			Parameters: map[string]any{
+				"_pcg_phase":        "entities",
+				"_pcg_entity_label": "Function",
+				"rows": []map[string]any{
+					{"entity_id": "f3"},
+				},
+			},
+		},
+		{
+			Cypher: "RETURN variable-singleton",
+			Parameters: map[string]any{
+				"_pcg_phase":             "entities",
+				"_pcg_entity_label":      "Variable",
+				"_pcg_phase_group_mode":  "execute_only",
+				"_pcg_statement_summary": "label=Variable rows=1 entity_id=v1 fallback=singleton_parameterized",
+				"entity_id":              "v1",
+				"props":                  map[string]any{"name": "v1"},
+			},
+		},
+		{
+			Cypher: "RETURN variable-grouped",
+			Parameters: map[string]any{
+				"_pcg_phase":        "entities",
+				"_pcg_entity_label": "Variable",
+				"rows": []map[string]any{
+					{"entity_id": "v2"},
+					{"entity_id": "v3"},
+					{"entity_id": "v4"},
+				},
+			},
+		},
+	}
+
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	defer slog.SetDefault(previous)
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+
+	functionLine := findEntityLabelSummaryLine(t, logs.String(), "Function")
+	if !strings.Contains(functionLine, `"rows":3`) {
+		t.Fatalf("Function summary line = %q, want rows=3", functionLine)
+	}
+	if !strings.Contains(functionLine, `"statements":2`) {
+		t.Fatalf("Function summary line = %q, want statements=2", functionLine)
+	}
+	if !strings.Contains(functionLine, `"grouped_chunks":1`) {
+		t.Fatalf("Function summary line = %q, want grouped_chunks=1", functionLine)
+	}
+	if !strings.Contains(functionLine, `"singleton_statements":0`) {
+		t.Fatalf("Function summary line = %q, want singleton_statements=0", functionLine)
+	}
+
+	variableLine := findEntityLabelSummaryLine(t, logs.String(), "Variable")
+	if !strings.Contains(variableLine, `"rows":4`) {
+		t.Fatalf("Variable summary line = %q, want rows=4", variableLine)
+	}
+	if !strings.Contains(variableLine, `"statements":2`) {
+		t.Fatalf("Variable summary line = %q, want statements=2", variableLine)
+	}
+	if !strings.Contains(variableLine, `"grouped_chunks":1`) {
+		t.Fatalf("Variable summary line = %q, want grouped_chunks=1", variableLine)
+	}
+	if !strings.Contains(variableLine, `"singleton_statements":1`) {
+		t.Fatalf("Variable summary line = %q, want singleton_statements=1", variableLine)
+	}
+}
+
+func TestNornicDBPhaseGroupExecutorLogsRollingEntityLabelSummaries(t *testing.T) {
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:               inner,
+		maxStatements:       5,
+		entityMaxStatements: 1,
+	}
+
+	stmts := make([]sourceneo4j.Statement, 0, defaultNornicDBEntityLabelSummaryExecutions+1)
+	for i := 0; i < defaultNornicDBEntityLabelSummaryExecutions+1; i++ {
+		stmts = append(stmts, sourceneo4j.Statement{
+			Cypher: "RETURN variable",
+			Parameters: map[string]any{
+				"_pcg_phase":        "entities",
+				"_pcg_entity_label": "Variable",
+				"rows": []map[string]any{
+					{"entity_id": "v"},
+				},
+			},
+		})
+	}
+
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	defer slog.SetDefault(previous)
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+
+	progressLine := findEntityLabelSummaryLineWithCompletion(t, logs.String(), "Variable", false)
+	if !strings.Contains(progressLine, `"executions":10`) {
+		t.Fatalf("Variable progress line = %q, want executions=10", progressLine)
+	}
+	if !strings.Contains(progressLine, `"rows":10`) {
+		t.Fatalf("Variable progress line = %q, want rows=10", progressLine)
+	}
+
+	finalLine := findEntityLabelSummaryLineWithCompletion(t, logs.String(), "Variable", true)
+	if !strings.Contains(finalLine, `"executions":11`) {
+		t.Fatalf("Variable final line = %q, want executions=11", finalLine)
+	}
+	if !strings.Contains(finalLine, `"rows":11`) {
+		t.Fatalf("Variable final line = %q, want rows=11", finalLine)
+	}
+}
+
 func TestNornicDBPhaseGroupExecutorStripsDiagnosticStatementParamsBeforeDriver(t *testing.T) {
 	t.Parallel()
 
@@ -636,6 +779,29 @@ func TestNornicDBPhaseGroupExecutorStripsDiagnosticStatementParamsBeforeDriver(t
 	if got, want := inner.groupParams[0]["rows"], stmts[0].Parameters["rows"]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("group rows param = %#v, want %#v", got, want)
 	}
+}
+
+func findEntityLabelSummaryLine(t *testing.T, logs string, label string) string {
+	t.Helper()
+	return findEntityLabelSummaryLineWithCompletion(t, logs, label, true)
+}
+
+func findEntityLabelSummaryLineWithCompletion(t *testing.T, logs string, label string, complete bool) string {
+	t.Helper()
+
+	completeToken := `"complete":false`
+	if complete {
+		completeToken = `"complete":true`
+	}
+	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+		if strings.Contains(line, `"msg":"nornicdb entity label summary"`) &&
+			strings.Contains(line, `"label":"`+label+`"`) &&
+			strings.Contains(line, completeToken) {
+			return line
+		}
+	}
+	t.Fatalf("entity label summary for %q complete=%t not found in logs:\n%s", label, complete, logs)
+	return ""
 }
 
 func TestCanonicalExecutorForGraphBackendAllowsNornicDBGroupedWhenConformanceEnabled(t *testing.T) {

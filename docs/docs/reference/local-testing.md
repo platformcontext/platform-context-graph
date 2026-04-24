@@ -127,11 +127,17 @@ export PCG_CANONICAL_WRITE_TIMEOUT=2s
 export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
 export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
-export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15
+export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10
+export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
 ./go/bin/pcg graph start --workspace-root "$PWD"
 ./go/bin/pcg mcp start --workspace-root "$PWD"
 ```
+
+`pcg graph start` applies both local Postgres schema and the NornicDB graph
+schema before it publishes the owner record or starts reducer/ingester
+children. This ordering is required for NornicDB's schema-backed `MERGE` hot
+paths; if the graph schema bootstrap fails, do not continue into projection.
 
 `pcg graph start` now renders a live terminal progress panel while the local
 host indexes and projects: owner/profile/backend header, collector/projector/
@@ -165,7 +171,7 @@ statements in a grouped transaction.
 The current NornicDB writer also keeps `Function` entity upserts on a narrower
 internal row batch than the broader entity default because repo-scale dogfood
 showed `Function` rows remain the heaviest entity shape on this repository.
-Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=25` when you need
+Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10` when you need
 to tune specific heavy entity families without recompiling or lowering the row
 cap for the entire entity phase.
 If those row caps are already narrow but the grouped entity chunks are still
@@ -173,6 +179,14 @@ too large, use
 `PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5` to
 shrink only the grouped transaction size for those heavier families without
 forcing the same statement cap onto every other entity label.
+When you are tuning repo-scale `entities` performance, do not decide from one
+scary chunk log alone. Use the emitted `nornicdb entity label summary` lines
+to compare cumulative rows, statements, executions, grouped chunks, and
+total/max duration per label before changing another default. Long-running
+labels emit rolling summaries every 10 executions and a final summary at label
+completion, so you do not need to wait for an hour-scale phase to finish before
+you can see whether the cumulative cost is row width, grouped transaction
+size, or label ordering.
 
 ### Local-Authoritative Startup Envelope Smoke
 

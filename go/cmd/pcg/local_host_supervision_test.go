@@ -23,6 +23,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 	originalStartChild := localHostStartChildProcess
 	originalWaitManagedChildren := localHostWaitManagedChildren
 	originalApplyBootstrap := localHostApplyBootstrap
+	originalApplyGraphBootstrap := localHostApplyGraphBootstrap
 	t.Cleanup(func() {
 		localHostPrepareWorkspace = originalPrepareWorkspace
 		localHostStartEmbeddedPostgres = originalStartEmbeddedPostgres
@@ -32,6 +33,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 		localHostStartChildProcess = originalStartChild
 		localHostWaitManagedChildren = originalWaitManagedChildren
 		localHostApplyBootstrap = originalApplyBootstrap
+		localHostApplyGraphBootstrap = originalApplyGraphBootstrap
 	})
 
 	localHostPrepareWorkspace = func(layout pcglocal.Layout) (*pcglocal.OwnerLock, error) {
@@ -66,6 +68,9 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 		return "local-test", nil
 	}
 	localHostApplyBootstrap = func(ctx context.Context, dsn string) error {
+		return nil
+	}
+	localHostApplyGraphBootstrap = func(ctx context.Context, runtimeConfig localHostRuntimeConfig, graph *managedLocalGraph) error {
 		return nil
 	}
 
