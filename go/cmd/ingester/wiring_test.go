@@ -818,6 +818,30 @@ func TestNornicDBEntityBatchSizeRejectsInvalidEnv(t *testing.T) {
 	}
 }
 
+func TestNornicDBEntityLabelBatchSizes(t *testing.T) {
+	t.Parallel()
+
+	got := nornicDBEntityLabelBatchSizes(100)
+	if got["Function"] != defaultNornicDBFunctionEntityBatchSize {
+		t.Fatalf("Function batch size = %d, want %d", got["Function"], defaultNornicDBFunctionEntityBatchSize)
+	}
+	if got["Struct"] != defaultNornicDBStructEntityBatchSize {
+		t.Fatalf("Struct batch size = %d, want %d", got["Struct"], defaultNornicDBStructEntityBatchSize)
+	}
+}
+
+func TestNornicDBEntityLabelBatchSizesClampToEntityBatchSize(t *testing.T) {
+	t.Parallel()
+
+	got := nornicDBEntityLabelBatchSizes(40)
+	if got["Function"] != defaultNornicDBFunctionEntityBatchSize {
+		t.Fatalf("Function batch size = %d, want %d", got["Function"], defaultNornicDBFunctionEntityBatchSize)
+	}
+	if got["Struct"] != 40 {
+		t.Fatalf("Struct batch size = %d, want 40", got["Struct"])
+	}
+}
+
 func TestIngesterContentBeforeCanonicalOnlyLocalAuthoritative(t *testing.T) {
 	t.Parallel()
 

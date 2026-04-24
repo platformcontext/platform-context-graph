@@ -37,11 +37,14 @@ const (
 	// Function entities remain the heaviest row shape inside the broader entity
 	// phase, so they get a narrower row cap than other entity labels.
 	defaultNornicDBFunctionEntityBatchSize = 25
-	canonicalWriteTimeoutEnv               = "PCG_CANONICAL_WRITE_TIMEOUT"
-	nornicDBCanonicalGroupedWritesEnv      = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
-	nornicDBPhaseGroupStatementsEnv        = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityPhaseStatementsEnv       = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityBatchSizeEnv             = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
+	// Struct entities were the next heavy family on the self-repo dogfood lane
+	// once Function rows were narrowed, so they get the next smaller row cap.
+	defaultNornicDBStructEntityBatchSize = 50
+	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
+	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
+	nornicDBPhaseGroupStatementsEnv      = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityPhaseStatementsEnv     = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityBatchSizeEnv           = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -315,7 +318,9 @@ func openIngesterCanonicalWriter(
 		writer = writer.WithEntityBatchSize(entityBatchSize)
 	}
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		writer = writer.WithEntityLabelBatchSize("Function", minInt(entityBatchSize, defaultNornicDBFunctionEntityBatchSize))
+		for label, batchSize := range nornicDBEntityLabelBatchSizes(entityBatchSize) {
+			writer = writer.WithEntityLabelBatchSize(label, batchSize)
+		}
 	}
 
 	return writer, ingesterNeo4jDriverCloser{Driver: driver}, nil
@@ -329,6 +334,13 @@ func minInt(left int, right int) int {
 		return left
 	}
 	return right
+}
+
+func nornicDBEntityLabelBatchSizes(entityBatchSize int) map[string]int {
+	return map[string]int{
+		"Function": minInt(entityBatchSize, defaultNornicDBFunctionEntityBatchSize),
+		"Struct":   minInt(entityBatchSize, defaultNornicDBStructEntityBatchSize),
+	}
 }
 
 func canonicalExecutorForGraphBackend(
