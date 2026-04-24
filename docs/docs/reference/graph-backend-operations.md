@@ -229,9 +229,11 @@ the reducer, query handlers, or MCP tools per backend; it routes only the DDL
 surface through a backend schema dialect:
 
 - `neo4j` receives the shared production schema unchanged.
-- `nornicdb` receives the NornicDB-compatible schema rendering, including
-  composite node identity as `IS NODE KEY` and the procedure-based fulltext
-  form.
+- `nornicdb` receives the NornicDB-compatible schema rendering. Composite
+  uniqueness stays as `IS UNIQUE`; PCG does not translate those constraints to
+  `IS NODE KEY` because node keys require every participating property and some
+  semantic labels are intentionally sparse. Canonical writes use separate
+  `uid` uniqueness constraints for merge identity.
 - NornicDB intentionally skips Neo4j's multi-label
   `CREATE FULLTEXT INDEX` fallback because NornicDB only verified the
   procedure-based multi-label fulltext path.
