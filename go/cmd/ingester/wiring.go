@@ -37,24 +37,36 @@ const (
 	defaultNornicDBEntityBatchSize = 100
 	// Function entities remain the heaviest row shape inside the broader entity
 	// phase, so they get a narrower row cap than other entity labels.
-	defaultNornicDBFunctionEntityBatchSize = 25
+	// Function rows are the highest-cost entity family on the self-repo dogfood
+	// lane. Reducing them to 10 rows materially lowers per-statement cost,
+	// instead of only smoothing grouped latency.
+	defaultNornicDBFunctionEntityBatchSize = 10
 	// Struct entities were the next heavy family on the self-repo dogfood lane
 	// once Function rows were narrowed, so they get the next smaller row cap.
 	defaultNornicDBStructEntityBatchSize = 50
+	// Variable entities timed out at repo scale with the broad 100-row default,
+	// so they get the same narrower row cap as Struct until the writer is
+	// faster on that family.
+	defaultNornicDBVariableEntityBatchSize = 25
 	// Function entity statements remain the slowest grouped transaction shape
-	// on the self-repo dogfood lane, so NornicDB gets a smaller per-label
-	// statement cap there than on the broader entity phase.
-	defaultNornicDBFunctionEntityPhaseStatements = 10
+	// on the self-repo dogfood lane. Ten-statement groups still drifted into
+	// the high-30s seconds, so NornicDB now keeps that family on the same
+	// conservative grouped cap as Variable for the built-in default lane.
+	defaultNornicDBFunctionEntityPhaseStatements = 5
 	// Struct entity statements were the next slowest family after Function, but
 	// still lighter than Function rows, so they keep a slightly looser cap.
 	defaultNornicDBStructEntityPhaseStatements = 15
-	canonicalWriteTimeoutEnv                   = "PCG_CANONICAL_WRITE_TIMEOUT"
-	nornicDBCanonicalGroupedWritesEnv          = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
-	nornicDBPhaseGroupStatementsEnv            = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityPhaseStatementsEnv           = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityBatchSizeEnv                 = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
-	nornicDBEntityLabelBatchSizesEnv           = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
-	nornicDBEntityLabelPhaseGroupStatementsEnv = "PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS"
+	// Variable entities hit the first post-Function repo-scale timeout at the
+	// broader entity phase limit, so they need the same conservative grouped
+	// statement cap as Function for the current dogfood lane.
+	defaultNornicDBVariableEntityPhaseStatements = 5
+	canonicalWriteTimeoutEnv                     = "PCG_CANONICAL_WRITE_TIMEOUT"
+	nornicDBCanonicalGroupedWritesEnv            = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
+	nornicDBPhaseGroupStatementsEnv              = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityPhaseStatementsEnv             = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityBatchSizeEnv                   = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
+	nornicDBEntityLabelBatchSizesEnv             = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
+	nornicDBEntityLabelPhaseGroupStatementsEnv   = "PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -373,6 +385,9 @@ func defaultNornicDBEntityLabelBatchSizes(entityBatchSize int) map[string]int {
 		// still materially lighter than Function rows on the self-repo dogfood
 		// lane, so they keep a looser cap than Function.
 		"Struct": capOptionalBatchSize(entityBatchSize, defaultNornicDBStructEntityBatchSize),
+		// Variable rows timed out at repo scale with the broader default, so
+		// they follow the same narrowed row cap as Struct for now.
+		"Variable": capOptionalBatchSize(entityBatchSize, defaultNornicDBVariableEntityBatchSize),
 	}
 }
 
@@ -380,6 +395,7 @@ func defaultNornicDBEntityLabelPhaseGroupStatements(entityPhaseStatements int) m
 	return map[string]int{
 		"Function": capOptionalBatchSize(entityPhaseStatements, defaultNornicDBFunctionEntityPhaseStatements),
 		"Struct":   capOptionalBatchSize(entityPhaseStatements, defaultNornicDBStructEntityPhaseStatements),
+		"Variable": capOptionalBatchSize(entityPhaseStatements, defaultNornicDBVariableEntityPhaseStatements),
 	}
 }
 

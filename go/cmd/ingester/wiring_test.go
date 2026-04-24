@@ -905,6 +905,9 @@ func TestNornicDBEntityLabelBatchSizes(t *testing.T) {
 	if got["Struct"] != defaultNornicDBStructEntityBatchSize {
 		t.Fatalf("Struct batch size = %d, want %d", got["Struct"], defaultNornicDBStructEntityBatchSize)
 	}
+	if got["Variable"] != defaultNornicDBVariableEntityBatchSize {
+		t.Fatalf("Variable batch size = %d, want %d", got["Variable"], defaultNornicDBVariableEntityBatchSize)
+	}
 }
 
 func TestNornicDBEntityLabelBatchSizesClampToEntityBatchSize(t *testing.T) {
@@ -919,6 +922,9 @@ func TestNornicDBEntityLabelBatchSizesClampToEntityBatchSize(t *testing.T) {
 	}
 	if got["Struct"] != 40 {
 		t.Fatalf("Struct batch size = %d, want 40", got["Struct"])
+	}
+	if got["Variable"] != defaultNornicDBVariableEntityBatchSize {
+		t.Fatalf("Variable batch size = %d, want %d", got["Variable"], defaultNornicDBVariableEntityBatchSize)
 	}
 }
 
@@ -935,6 +941,9 @@ func TestNornicDBEntityLabelBatchSizesDefault(t *testing.T) {
 	if got["Struct"] != defaultNornicDBStructEntityBatchSize {
 		t.Fatalf("Struct batch size = %d, want %d", got["Struct"], defaultNornicDBStructEntityBatchSize)
 	}
+	if got["Variable"] != defaultNornicDBVariableEntityBatchSize {
+		t.Fatalf("Variable batch size = %d, want %d", got["Variable"], defaultNornicDBVariableEntityBatchSize)
+	}
 }
 
 func TestNornicDBEntityLabelBatchSizesFromEnv(t *testing.T) {
@@ -942,7 +951,7 @@ func TestNornicDBEntityLabelBatchSizesFromEnv(t *testing.T) {
 
 	got, err := nornicDBEntityLabelBatchSizes(func(key string) string {
 		if key == nornicDBEntityLabelBatchSizesEnv {
-			return "Function=30,Struct=40,Class=75"
+			return "Function=30,Struct=40,Variable=35,Class=75"
 		}
 		return ""
 	}, 100)
@@ -955,6 +964,9 @@ func TestNornicDBEntityLabelBatchSizesFromEnv(t *testing.T) {
 	if got["Struct"] != 40 {
 		t.Fatalf("Struct batch size = %d, want 40", got["Struct"])
 	}
+	if got["Variable"] != 35 {
+		t.Fatalf("Variable batch size = %d, want 35", got["Variable"])
+	}
 	if got["Class"] != 75 {
 		t.Fatalf("Class batch size = %d, want 75", got["Class"])
 	}
@@ -965,7 +977,7 @@ func TestNornicDBEntityLabelBatchSizesCapsEnvByEntityBatchSize(t *testing.T) {
 
 	got, err := nornicDBEntityLabelBatchSizes(func(key string) string {
 		if key == nornicDBEntityLabelBatchSizesEnv {
-			return "Function=30,Struct=80"
+			return "Function=30,Struct=80,Variable=80"
 		}
 		return ""
 	}, 50)
@@ -977,6 +989,9 @@ func TestNornicDBEntityLabelBatchSizesCapsEnvByEntityBatchSize(t *testing.T) {
 	}
 	if got["Struct"] != 50 {
 		t.Fatalf("Struct batch size = %d, want 50", got["Struct"])
+	}
+	if got["Variable"] != 50 {
+		t.Fatalf("Variable batch size = %d, want 50", got["Variable"])
 	}
 }
 
@@ -1010,6 +1025,9 @@ func TestNornicDBEntityLabelPhaseGroupStatementsDefault(t *testing.T) {
 	if got["Struct"] != defaultNornicDBStructEntityPhaseStatements {
 		t.Fatalf("Struct phase statements = %d, want %d", got["Struct"], defaultNornicDBStructEntityPhaseStatements)
 	}
+	if got["Variable"] != defaultNornicDBVariableEntityPhaseStatements {
+		t.Fatalf("Variable phase statements = %d, want %d", got["Variable"], defaultNornicDBVariableEntityPhaseStatements)
+	}
 }
 
 func TestNornicDBEntityLabelPhaseGroupStatementsFromEnv(t *testing.T) {
@@ -1017,7 +1035,7 @@ func TestNornicDBEntityLabelPhaseGroupStatementsFromEnv(t *testing.T) {
 
 	got, err := nornicDBEntityLabelPhaseGroupStatements(func(key string) string {
 		if key == nornicDBEntityLabelPhaseGroupStatementsEnv {
-			return "Function=8,Struct=12,Class=20"
+			return "Function=8,Struct=12,Variable=4,Class=20"
 		}
 		return ""
 	}, defaultNornicDBEntityPhaseStatements)
@@ -1030,6 +1048,9 @@ func TestNornicDBEntityLabelPhaseGroupStatementsFromEnv(t *testing.T) {
 	if got["Struct"] != 12 {
 		t.Fatalf("Struct phase statements = %d, want 12", got["Struct"])
 	}
+	if got["Variable"] != 4 {
+		t.Fatalf("Variable phase statements = %d, want 4", got["Variable"])
+	}
 	if got["Class"] != 20 {
 		t.Fatalf("Class phase statements = %d, want 20", got["Class"])
 	}
@@ -1040,7 +1061,7 @@ func TestNornicDBEntityLabelPhaseGroupStatementsCapsEnvByEntityPhaseStatements(t
 
 	got, err := nornicDBEntityLabelPhaseGroupStatements(func(key string) string {
 		if key == nornicDBEntityLabelPhaseGroupStatementsEnv {
-			return "Function=30,Struct=20"
+			return "Function=30,Struct=20,Variable=18"
 		}
 		return ""
 	}, 15)
@@ -1052,6 +1073,9 @@ func TestNornicDBEntityLabelPhaseGroupStatementsCapsEnvByEntityPhaseStatements(t
 	}
 	if got["Struct"] != 15 {
 		t.Fatalf("Struct phase statements = %d, want 15", got["Struct"])
+	}
+	if got["Variable"] != 15 {
+		t.Fatalf("Variable phase statements = %d, want 15", got["Variable"])
 	}
 }
 
