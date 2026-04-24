@@ -39,13 +39,22 @@ ON CONFLICT (work_item_id) DO NOTHING
 
 const claimProjectorWorkQuery = `
 WITH candidate AS (
-    SELECT work_item_id
-    FROM fact_work_items
+    SELECT work.work_item_id
+    FROM fact_work_items AS work
     WHERE stage = 'projector'
-      AND status IN ('pending', 'retrying', 'claimed', 'running')
-      AND (visible_at IS NULL OR visible_at <= $1)
-      AND (claim_until IS NULL OR claim_until <= $1)
-    ORDER BY updated_at ASC, work_item_id ASC
+      AND work.status IN ('pending', 'retrying', 'claimed', 'running')
+      AND (work.visible_at IS NULL OR work.visible_at <= $1)
+      AND (work.claim_until IS NULL OR work.claim_until <= $1)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM fact_work_items AS inflight
+          WHERE inflight.stage = 'projector'
+            AND inflight.scope_id = work.scope_id
+            AND inflight.work_item_id <> work.work_item_id
+            AND inflight.status IN ('claimed', 'running')
+            AND inflight.claim_until > $1
+      )
+    ORDER BY work.updated_at ASC, work.work_item_id ASC
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 ),
