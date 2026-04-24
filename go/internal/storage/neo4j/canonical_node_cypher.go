@@ -97,7 +97,7 @@ MERGE (d)-[:CONTAINS]->(f)`
 // entity. The row shape is aligned with the NornicDB hot-path cookbook and the
 // semantic-entity adapter verification lane.
 const canonicalNodeEntityUpsertTemplate = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
+MATCH (f:File {path: $file_path})
 MERGE (n:%s {uid: row.entity_id})
 SET n += row.props
 MERGE (f)-[:CONTAINS]->(n)`

@@ -8,29 +8,36 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 )
 
-func canonicalEntityRowsByLabel(mat projector.CanonicalMaterialization) map[string][]map[string]any {
+type canonicalEntityFileRows struct {
+	filePath string
+	rows     []map[string]any
+}
+
+func canonicalEntityRowsByLabelAndFile(mat projector.CanonicalMaterialization) map[string]map[string][]map[string]any {
 	if len(mat.Entities) == 0 {
 		return nil
 	}
 
-	byLabel := make(map[string][]map[string]any, len(mat.Entities))
+	byLabel := make(map[string]map[string][]map[string]any, len(mat.Entities))
 	for _, entity := range mat.Entities {
 		row := map[string]any{
 			"entity_id": entity.EntityID,
-			"file_path": entity.FilePath,
 			"props": canonicalEntityProperties(
 				entity,
 				mat.ScopeID,
 				mat.GenerationID,
 			),
 		}
-		byLabel[entity.Label] = append(byLabel[entity.Label], row)
+		if byLabel[entity.Label] == nil {
+			byLabel[entity.Label] = make(map[string][]map[string]any)
+		}
+		byLabel[entity.Label][entity.FilePath] = append(byLabel[entity.Label][entity.FilePath], row)
 	}
 
 	return byLabel
 }
 
-func sortedCanonicalEntityLabels(byLabel map[string][]map[string]any) []string {
+func sortedCanonicalEntityLabels(byLabel map[string]map[string][]map[string]any) []string {
 	labels := make([]string, 0, len(byLabel))
 	for label := range byLabel {
 		labels = append(labels, label)
@@ -39,17 +46,34 @@ func sortedCanonicalEntityLabels(byLabel map[string][]map[string]any) []string {
 	return labels
 }
 
+func sortedCanonicalEntityFileRows(byFile map[string][]map[string]any) []canonicalEntityFileRows {
+	filePaths := make([]string, 0, len(byFile))
+	for filePath := range byFile {
+		filePaths = append(filePaths, filePath)
+	}
+	sort.Strings(filePaths)
+
+	grouped := make([]canonicalEntityFileRows, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		grouped = append(grouped, canonicalEntityFileRows{
+			filePath: filePath,
+			rows:     byFile[filePath],
+		})
+	}
+	return grouped
+}
+
 // buildEntityStatements writes entity nodes first so backend-specific edge
 // creation can happen in a later, separately timed phase.
 func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMaterialization) []Statement {
-	byLabel := canonicalEntityRowsByLabel(mat)
+	byLabel := canonicalEntityRowsByLabelAndFile(mat)
 	if len(byLabel) == 0 {
 		return nil
 	}
 
 	var stmts []Statement
 	for _, label := range sortedCanonicalEntityLabels(byLabel) {
-		rows := byLabel[label]
+		fileRows := sortedCanonicalEntityFileRows(byLabel[label])
 		batchSize := 0
 		if w.entityLabelBatchSizes != nil {
 			batchSize = w.entityLabelBatchSizes[label]
@@ -64,6 +88,7 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 			batchSize = DefaultBatchSize
 		}
 		batchRows := make([]map[string]any, 0, batchSize)
+		batchFilePath := ""
 		flushBatch := func() {
 			if len(batchRows) == 0 {
 				return
@@ -79,6 +104,7 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 				Operation: OperationCanonicalUpsert,
 				Cypher:    fmt.Sprintf(canonicalNodeEntityUpsertTemplate, label),
 				Parameters: map[string]any{
+					"file_path":                     batchFilePath,
 					"rows":                          append([]map[string]any(nil), batchRows...),
 					StatementMetadataPhaseKey:       CanonicalPhaseEntities,
 					StatementMetadataEntityLabelKey: label,
@@ -86,32 +112,41 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 				},
 			})
 			batchRows = batchRows[:0]
+			batchFilePath = ""
 		}
-		for _, row := range rows {
-			if canonicalEntityRowNeedsSingletonFallback(row) {
-				flushBatch()
-				stmts = append(stmts, Statement{
-					Operation: OperationCanonicalUpsert,
-					Cypher:    fmt.Sprintf(canonicalNodeEntitySingletonUpsertTemplate, label),
-					Parameters: map[string]any{
-						"file_path":                        row["file_path"],
-						"entity_id":                        row["entity_id"],
-						"props":                            row["props"],
-						StatementMetadataPhaseKey:          CanonicalPhaseEntities,
-						StatementMetadataEntityLabelKey:    label,
-						StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
-						StatementMetadataSummaryKey: fmt.Sprintf(
-							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized",
-							label,
-							row["entity_id"],
-						),
-					},
-				})
-				continue
-			}
-			batchRows = append(batchRows, row)
-			if len(batchRows) >= batchSize {
-				flushBatch()
+		for _, fileGroup := range fileRows {
+			for _, row := range fileGroup.rows {
+				if canonicalEntityRowNeedsSingletonFallback(row) {
+					flushBatch()
+					stmts = append(stmts, Statement{
+						Operation: OperationCanonicalUpsert,
+						Cypher:    fmt.Sprintf(canonicalNodeEntitySingletonUpsertTemplate, label),
+						Parameters: map[string]any{
+							"file_path":                        fileGroup.filePath,
+							"entity_id":                        row["entity_id"],
+							"props":                            row["props"],
+							StatementMetadataPhaseKey:          CanonicalPhaseEntities,
+							StatementMetadataEntityLabelKey:    label,
+							StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
+							StatementMetadataSummaryKey: fmt.Sprintf(
+								"label=%s rows=1 entity_id=%v fallback=singleton_parameterized",
+								label,
+								row["entity_id"],
+							),
+						},
+					})
+					continue
+				}
+				if batchFilePath != "" && batchFilePath != fileGroup.filePath {
+					flushBatch()
+				}
+				if batchFilePath == "" {
+					batchFilePath = fileGroup.filePath
+				}
+				batchRows = append(batchRows, row)
+				if len(batchRows) >= batchSize {
+					flushBatch()
+				}
 			}
 		}
 		flushBatch()

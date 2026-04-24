@@ -1121,6 +1121,43 @@ func TestCanonicalNodeWriterEntityLabelBatchSizeOverride(t *testing.T) {
 	}
 }
 
+func TestCanonicalNodeWriterEntityBatchesDoNotCrossFileBoundaries(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).WithEntityBatchSize(10)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{EntityID: "f1", Label: "Function", EntityName: "one", FilePath: "/repos/my-repo/src/a.go", RelativePath: "src/a.go", StartLine: 1, EndLine: 2, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f2", Label: "Function", EntityName: "two", FilePath: "/repos/my-repo/src/b.go", RelativePath: "src/b.go", StartLine: 3, EndLine: 4, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f3", Label: "Function", EntityName: "three", FilePath: "/repos/my-repo/src/a.go", RelativePath: "src/a.go", StartLine: 5, EndLine: 6, Language: "go", RepoID: "repo-1"},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 2; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+
+	firstRows, _ := stmts[0].Parameters["rows"].([]map[string]any)
+	secondRows, _ := stmts[1].Parameters["rows"].([]map[string]any)
+	if got, want := stmts[0].Parameters["file_path"], "/repos/my-repo/src/a.go"; got != want {
+		t.Fatalf("first batch file_path = %#v, want %#v", got, want)
+	}
+	if got, want := len(firstRows), 2; got != want {
+		t.Fatalf("first batch rows = %d, want %d", got, want)
+	}
+	if got, want := stmts[1].Parameters["file_path"], "/repos/my-repo/src/b.go"; got != want {
+		t.Fatalf("second batch file_path = %#v, want %#v", got, want)
+	}
+	if got, want := len(secondRows), 1; got != want {
+		t.Fatalf("second batch rows = %d, want %d", got, want)
+	}
+}
+
 func TestCanonicalNodeWriterAtomicGroupExecutorError(t *testing.T) {
 	t.Parallel()
 

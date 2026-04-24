@@ -80,7 +80,7 @@ func TestCanonicalNodeWriterBatchesEntityUpsertsWithContainmentEdges(t *testing.
 	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
 		t.Fatalf("entity upsert cypher = %q, want batched UNWIND shape", stmt.Cypher)
 	}
-	if !strings.Contains(stmt.Cypher, "MATCH (f:File {path: row.file_path})") {
+	if !strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") {
 		t.Fatalf("entity upsert cypher = %q, want file anchor", stmt.Cypher)
 	}
 	if !strings.Contains(stmt.Cypher, "SET n += row.props") {
@@ -97,9 +97,12 @@ func TestCanonicalNodeWriterBatchesEntityUpsertsWithContainmentEdges(t *testing.
 	if got, want := len(rows), 2; got != want {
 		t.Fatalf("rows count = %d, want %d", got, want)
 	}
+	if got := stmt.Parameters["file_path"]; got != "/repos/my-repo/src/main.go" {
+		t.Fatalf("statement file_path = %#v, want /repos/my-repo/src/main.go", got)
+	}
 	for _, row := range rows {
-		if got := row["file_path"]; got != "/repos/my-repo/src/main.go" {
-			t.Fatalf("row[file_path] = %#v, want /repos/my-repo/src/main.go", got)
+		if _, ok := row["file_path"]; ok {
+			t.Fatalf("row unexpectedly contains file_path: %#v", row)
 		}
 		props, ok := row["props"].(map[string]any)
 		if !ok {
