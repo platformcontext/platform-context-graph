@@ -220,7 +220,7 @@ func (s Service) executeAndReport(ctx context.Context, intent Intent, workerID i
 	status := "succeeded"
 
 	if err != nil {
-		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil && execErrAllowedToWrap(err) {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
 			err = errors.Join(err, heartbeatErr)
 		}
 		status = "failed"

@@ -355,10 +355,11 @@ func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts
 			}
 			chunkIndex := (start / maxStatements) + 1
 			chunkStart := time.Now()
-			err := ge.ExecuteGroup(ctx, stmts[start:end])
+			chunk := stmts[start:end]
+			statementSummary := summarizePhaseGroupChunk(chunk)
+			err := ge.ExecuteGroup(ctx, sanitizedPhaseGroupChunk(chunk))
 			chunkDuration := time.Since(chunkStart)
 			if err != nil {
-				statementSummary := summarizePhaseGroupChunk(stmts[start:end])
 				return fmt.Errorf(
 					"phase-group chunk %d/%d (statements %d-%d of %d, size=%d, duration=%s, first_statement=%q): %w",
 					chunkIndex,
@@ -400,6 +401,44 @@ func summarizePhaseGroupChunk(stmts []sourceneo4j.Statement) string {
 		return summary
 	}
 	return summarizePhaseGroupStatement(stmts[0].Cypher)
+}
+
+func sanitizedPhaseGroupChunk(stmts []sourceneo4j.Statement) []sourceneo4j.Statement {
+	sanitized := make([]sourceneo4j.Statement, len(stmts))
+	for i, stmt := range stmts {
+		sanitized[i] = stmt
+		sanitized[i].Parameters = sanitizedStatementParameters(stmt.Parameters)
+	}
+	return sanitized
+}
+
+func sanitizedStatementParameters(params map[string]any) map[string]any {
+	if len(params) == 0 {
+		return params
+	}
+
+	var sanitized map[string]any
+	for key, value := range params {
+		if strings.HasPrefix(key, "_") {
+			if sanitized == nil {
+				sanitized = make(map[string]any, len(params)-1)
+				for existingKey, existingValue := range params {
+					if existingKey == key {
+						continue
+					}
+					sanitized[existingKey] = existingValue
+				}
+			}
+			continue
+		}
+		if sanitized != nil {
+			sanitized[key] = value
+		}
+	}
+	if sanitized == nil {
+		return params
+	}
+	return sanitized
 }
 
 func summarizePhaseGroupStatement(cypher string) string {

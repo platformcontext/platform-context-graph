@@ -7,6 +7,18 @@ import (
 	"time"
 )
 
+func TestFirstReducerPartitionKeyUsesStableSortedKey(t *testing.T) {
+	t.Parallel()
+
+	intent := Intent{
+		EntityKeys: []string{"repo:zeta", "repo:alpha", "repo:beta"},
+	}
+
+	if got, want := firstReducerPartitionKey(intent), "repo:alpha"; got != want {
+		t.Fatalf("firstReducerPartitionKey() = %q, want %q", got, want)
+	}
+}
+
 func TestServiceRunHeartbeatsLongRunningReducerWork(t *testing.T) {
 	t.Parallel()
 

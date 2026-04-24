@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -333,6 +334,39 @@ func TestNornicDBPhaseGroupExecutorWrapsChunkFailureDetails(t *testing.T) {
 	}
 }
 
+func TestNornicDBPhaseGroupExecutorStripsDiagnosticStatementParamsBeforeDriver(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:         inner,
+		maxStatements: 2,
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{
+			Cypher: "RETURN 1",
+			Parameters: map[string]any{
+				"rows":                   []map[string]any{{"entity_id": "one"}},
+				"_pcg_statement_summary": "label=Function rows=1 entity_id=one",
+			},
+		},
+	}
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+	if got, want := len(inner.groupParams), 1; got != want {
+		t.Fatalf("group params count = %d, want %d", got, want)
+	}
+	if _, ok := inner.groupParams[0]["_pcg_statement_summary"]; ok {
+		t.Fatalf("group params include diagnostic summary: %#v", inner.groupParams[0])
+	}
+	if got, want := inner.groupParams[0]["rows"], stmts[0].Parameters["rows"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("group rows param = %#v, want %#v", got, want)
+	}
+}
+
 func TestCanonicalExecutorForGraphBackendAllowsNornicDBGroupedWhenConformanceEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -598,10 +632,11 @@ func (contextBlockingIngesterExecutor) Execute(ctx context.Context, _ sourceneo4
 }
 
 type recordingGroupChunkExecutor struct {
-	groupSizes []int
-	callCount  int
-	failAtCall int
-	err        error
+	groupSizes  []int
+	groupParams []map[string]any
+	callCount   int
+	failAtCall  int
+	err         error
 }
 
 func (r *recordingGroupChunkExecutor) Execute(context.Context, sourceneo4j.Statement) error {
@@ -611,6 +646,9 @@ func (r *recordingGroupChunkExecutor) Execute(context.Context, sourceneo4j.State
 func (r *recordingGroupChunkExecutor) ExecuteGroup(_ context.Context, stmts []sourceneo4j.Statement) error {
 	r.callCount++
 	r.groupSizes = append(r.groupSizes, len(stmts))
+	if len(stmts) > 0 {
+		r.groupParams = append(r.groupParams, stmts[0].Parameters)
+	}
 	if r.failAtCall > 0 && r.callCount == r.failAtCall {
 		return r.err
 	}
