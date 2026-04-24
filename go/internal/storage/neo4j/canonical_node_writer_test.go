@@ -1104,6 +1104,12 @@ func TestCanonicalNodeWriterEntityLabelBatchSizeOverride(t *testing.T) {
 	if got, want := classRows[0], 2; got != want {
 		t.Fatalf("class batch rows = %d, want %d", got, want)
 	}
+	if got, want := stmts[0].Parameters[StatementMetadataEntityLabelKey], "Class"; got != want {
+		t.Fatalf("class statement entity label = %#v, want %#v", got, want)
+	}
+	if got, want := stmts[1].Parameters[StatementMetadataEntityLabelKey], "Function"; got != want {
+		t.Fatalf("function statement entity label = %#v, want %#v", got, want)
+	}
 	if got, want := len(functionRows), 2; got != want {
 		t.Fatalf("function batch count = %d, want %d", got, want)
 	}

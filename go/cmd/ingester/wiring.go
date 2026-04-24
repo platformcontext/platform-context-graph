@@ -41,12 +41,20 @@ const (
 	// Struct entities were the next heavy family on the self-repo dogfood lane
 	// once Function rows were narrowed, so they get the next smaller row cap.
 	defaultNornicDBStructEntityBatchSize = 50
-	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
-	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
-	nornicDBPhaseGroupStatementsEnv      = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityPhaseStatementsEnv     = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityBatchSizeEnv           = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
-	nornicDBEntityLabelBatchSizesEnv     = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
+	// Function entity statements remain the slowest grouped transaction shape
+	// on the self-repo dogfood lane, so NornicDB gets a smaller per-label
+	// statement cap there than on the broader entity phase.
+	defaultNornicDBFunctionEntityPhaseStatements = 10
+	// Struct entity statements were the next slowest family after Function, but
+	// still lighter than Function rows, so they keep a slightly looser cap.
+	defaultNornicDBStructEntityPhaseStatements = 15
+	canonicalWriteTimeoutEnv                   = "PCG_CANONICAL_WRITE_TIMEOUT"
+	nornicDBCanonicalGroupedWritesEnv          = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
+	nornicDBPhaseGroupStatementsEnv            = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityPhaseStatementsEnv           = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityBatchSizeEnv                 = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
+	nornicDBEntityLabelBatchSizesEnv           = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
+	nornicDBEntityLabelPhaseGroupStatementsEnv = "PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -277,6 +285,7 @@ func openIngesterCanonicalWriter(
 	phaseGroupStatements := defaultNornicDBPhaseGroupStatements
 	entityPhaseStatements := defaultNornicDBEntityPhaseStatements
 	entityBatchSize := 0
+	entityLabelPhaseStatements := map[string]int(nil)
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		nornicDBGroupedWrites, err = nornicDBCanonicalGroupedWrites(getenv)
 		if err != nil {
@@ -291,6 +300,10 @@ func openIngesterCanonicalWriter(
 			return nil, nil, err
 		}
 		entityBatchSize, err = nornicDBEntityBatchSize(getenv)
+		if err != nil {
+			return nil, nil, err
+		}
+		entityLabelPhaseStatements, err = nornicDBEntityLabelPhaseGroupStatements(getenv, entityPhaseStatements)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -310,6 +323,7 @@ func openIngesterCanonicalWriter(
 			nornicDBGroupedWrites,
 			phaseGroupStatements,
 			entityPhaseStatements,
+			entityLabelPhaseStatements,
 			tracer,
 			instruments,
 		),
@@ -362,6 +376,13 @@ func defaultNornicDBEntityLabelBatchSizes(entityBatchSize int) map[string]int {
 	}
 }
 
+func defaultNornicDBEntityLabelPhaseGroupStatements(entityPhaseStatements int) map[string]int {
+	return map[string]int{
+		"Function": capOptionalBatchSize(entityPhaseStatements, defaultNornicDBFunctionEntityPhaseStatements),
+		"Struct":   capOptionalBatchSize(entityPhaseStatements, defaultNornicDBStructEntityPhaseStatements),
+	}
+}
+
 func nornicDBEntityLabelBatchSizes(getenv func(string) string, entityBatchSize int) (map[string]int, error) {
 	labelBatchSizes := defaultNornicDBEntityLabelBatchSizes(entityBatchSize)
 	raw := strings.TrimSpace(getenv(nornicDBEntityLabelBatchSizesEnv))
@@ -392,6 +413,36 @@ func nornicDBEntityLabelBatchSizes(getenv func(string) string, entityBatchSize i
 	return labelBatchSizes, nil
 }
 
+func nornicDBEntityLabelPhaseGroupStatements(getenv func(string) string, entityPhaseStatements int) (map[string]int, error) {
+	labelStatementLimits := defaultNornicDBEntityLabelPhaseGroupStatements(entityPhaseStatements)
+	raw := strings.TrimSpace(getenv(nornicDBEntityLabelPhaseGroupStatementsEnv))
+	if raw == "" {
+		return labelStatementLimits, nil
+	}
+
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		label, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			return nil, fmt.Errorf("parse %s=%q: entries must be Label=size", nornicDBEntityLabelPhaseGroupStatementsEnv, raw)
+		}
+		label = strings.TrimSpace(label)
+		value = strings.TrimSpace(value)
+		if label == "" {
+			return nil, fmt.Errorf("parse %s=%q: label must be non-empty", nornicDBEntityLabelPhaseGroupStatementsEnv, raw)
+		}
+		statementCount, err := strconv.Atoi(value)
+		if err != nil || statementCount <= 0 {
+			return nil, fmt.Errorf("parse %s=%q: label %q must have a positive integer size", nornicDBEntityLabelPhaseGroupStatementsEnv, raw, label)
+		}
+		labelStatementLimits[label] = capOptionalBatchSize(entityPhaseStatements, statementCount)
+	}
+	return labelStatementLimits, nil
+}
+
 func canonicalExecutorForGraphBackend(
 	rawExecutor sourceneo4j.Executor,
 	graphBackend runtimecfg.GraphBackend,
@@ -399,6 +450,7 @@ func canonicalExecutorForGraphBackend(
 	nornicDBGroupedWrites bool,
 	nornicDBPhaseGroupStatements int,
 	nornicDBEntityPhaseStatements int,
+	nornicDBEntityLabelPhaseStatements map[string]int,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) sourceneo4j.Executor {
@@ -420,18 +472,20 @@ func canonicalExecutorForGraphBackend(
 			return bounded
 		}
 		return nornicDBPhaseGroupExecutor{
-			inner:               bounded,
-			maxStatements:       nornicDBPhaseGroupStatements,
-			entityMaxStatements: nornicDBEntityPhaseStatements,
+			inner:                    bounded,
+			maxStatements:            nornicDBPhaseGroupStatements,
+			entityMaxStatements:      nornicDBEntityPhaseStatements,
+			entityLabelMaxStatements: nornicDBEntityLabelPhaseStatements,
 		}
 	}
 	return instrumented
 }
 
 type nornicDBPhaseGroupExecutor struct {
-	inner               sourceneo4j.Executor
-	maxStatements       int
-	entityMaxStatements int
+	inner                    sourceneo4j.Executor
+	maxStatements            int
+	entityMaxStatements      int
+	entityLabelMaxStatements map[string]int
 }
 
 func (e nornicDBPhaseGroupExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
@@ -465,12 +519,14 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 	stmts []sourceneo4j.Statement,
 ) error {
 	grouped := make([]sourceneo4j.Statement, 0, len(stmts))
+	groupedLabel := ""
 	flushGrouped := func() error {
 		if len(grouped) == 0 {
 			return nil
 		}
 		err := e.executeGroupedChunks(ctx, ge, grouped, e.phaseGroupStatementLimit(grouped))
 		grouped = grouped[:0]
+		groupedLabel = ""
 		return err
 	}
 
@@ -502,7 +558,21 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 			)
 			continue
 		}
+		stmtLabel := entityStatementLabel(stmt)
+		if len(grouped) > 0 && stmtLabel != groupedLabel {
+			if err := flushGrouped(); err != nil {
+				return err
+			}
+		}
 		grouped = append(grouped, stmt)
+		if groupedLabel == "" {
+			groupedLabel = stmtLabel
+		}
+		if len(grouped) >= e.phaseGroupStatementLimit(grouped) {
+			if err := flushGrouped(); err != nil {
+				return err
+			}
+		}
 	}
 
 	return flushGrouped()
@@ -556,6 +626,11 @@ func (e nornicDBPhaseGroupExecutor) executeGroupedChunks(
 
 func (e nornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourceneo4j.Statement) int {
 	if statementPhase(stmts) == sourceneo4j.CanonicalPhaseEntities {
+		if label := entityStatementLabel(stmts[0]); label != "" && e.entityLabelMaxStatements != nil {
+			if limit := e.entityLabelMaxStatements[label]; limit > 0 {
+				return limit
+			}
+		}
 		if e.entityMaxStatements > 0 {
 			return e.entityMaxStatements
 		}
@@ -578,6 +653,11 @@ func statementPhase(stmts []sourceneo4j.Statement) string {
 func statementPhaseGroupMode(stmt sourceneo4j.Statement) string {
 	mode, _ := stmt.Parameters[sourceneo4j.StatementMetadataPhaseGroupModeKey].(string)
 	return strings.TrimSpace(mode)
+}
+
+func entityStatementLabel(stmt sourceneo4j.Statement) string {
+	label, _ := stmt.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+	return strings.TrimSpace(label)
 }
 
 func summarizePhaseGroupChunk(stmts []sourceneo4j.Statement) string {

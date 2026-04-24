@@ -79,9 +79,10 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 				Operation: OperationCanonicalUpsert,
 				Cypher:    fmt.Sprintf(canonicalNodeEntityUpsertTemplate, label),
 				Parameters: map[string]any{
-					"rows":                      append([]map[string]any(nil), batchRows...),
-					StatementMetadataPhaseKey:   CanonicalPhaseEntities,
-					StatementMetadataSummaryKey: statementSummary,
+					"rows":                          append([]map[string]any(nil), batchRows...),
+					StatementMetadataPhaseKey:       CanonicalPhaseEntities,
+					StatementMetadataEntityLabelKey: label,
+					StatementMetadataSummaryKey:     statementSummary,
 				},
 			})
 			batchRows = batchRows[:0]
@@ -97,6 +98,7 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 						"entity_id":                        row["entity_id"],
 						"props":                            row["props"],
 						StatementMetadataPhaseKey:          CanonicalPhaseEntities,
+						StatementMetadataEntityLabelKey:    label,
 						StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
 						StatementMetadataSummaryKey: fmt.Sprintf(
 							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized",

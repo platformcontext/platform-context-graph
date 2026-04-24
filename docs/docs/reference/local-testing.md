@@ -127,6 +127,7 @@ export PCG_CANONICAL_WRITE_TIMEOUT=2s
 export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
 export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
+export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=10,Struct=15
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
 ./go/bin/pcg graph start --workspace-root "$PWD"
 ./go/bin/pcg mcp start --workspace-root "$PWD"
@@ -167,6 +168,11 @@ showed `Function` rows remain the heaviest entity shape on this repository.
 Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=25,Struct=50` when you need
 to tune specific heavy entity families without recompiling or lowering the row
 cap for the entire entity phase.
+If those row caps are already narrow but the grouped entity chunks are still
+too large, use
+`PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=10,Struct=15` to
+shrink only the grouped transaction size for those heavier families without
+forcing the same statement cap onto every other entity label.
 
 ### Local-Authoritative Startup Envelope Smoke
 
