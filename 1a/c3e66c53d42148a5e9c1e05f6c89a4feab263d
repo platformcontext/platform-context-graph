@@ -1,0 +1,31 @@
+go/internal/reducer/service.go
+  e27ce815bbe89792 8,359,499-501
+go/internal/reducer/service_batch.go
+  e27ce815bbe89792 223
+go/internal/reducer/service_heartbeat_test.go
+  e27ce815bbe89792 10-21
+go/cmd/ingester/wiring_test.go
+  e27ce815bbe89792 6,337-369,635-639,649-651
+go/cmd/ingester/wiring.go
+  e27ce815bbe89792 358-360,406-441
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1ac3e66c53d42148a5e9c1e05f6c89a4feab263d",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 102,
+      "total_deletions": 14,
+      "accepted_lines": 125,
+      "overriden_lines": 0
+    }
+  }
+}
