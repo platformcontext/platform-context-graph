@@ -57,6 +57,64 @@ func TestRenderLocalHostProgressSnapshotIncludesOwnerFlowAndQueue(t *testing.T) 
 	}
 }
 
+func TestLocalHostProgressFingerprintIgnoresAsOfAndBucketsAge(t *testing.T) {
+	t.Parallel()
+
+	runtimeConfig := localHostRuntimeConfig{
+		Profile:      query.ProfileLocalAuthoritative,
+		GraphBackend: query.GraphBackendNornicDB,
+	}
+	base := statuspkg.Report{
+		AsOf: time.Date(2026, time.April, 23, 21, 15, 0, 0, time.UTC),
+		Health: statuspkg.HealthSummary{
+			State: "progressing",
+		},
+		ScopeTotals: map[string]int{
+			"pending": 1,
+		},
+		GenerationTotals: map[string]int{
+			"pending": 1,
+		},
+		StageSummaries: []statuspkg.StageSummary{
+			{Stage: "projector", Claimed: 1},
+		},
+		DomainBacklogs: []statuspkg.DomainBacklog{
+			{Domain: "source_local", Outstanding: 1, OldestAge: 35 * time.Second},
+		},
+		FlowSummaries: []statuspkg.FlowSummary{
+			{Lane: "projector", Progress: "stage claimed=1", Backlog: "queue outstanding=1 oldest=35s"},
+		},
+		Queue: statuspkg.QueueSnapshot{
+			Pending:              0,
+			InFlight:             1,
+			Retrying:             0,
+			DeadLetter:           0,
+			Failed:               0,
+			OldestOutstandingAge: 35 * time.Second,
+		},
+	}
+
+	sameBucket := base
+	sameBucket.AsOf = sameBucket.AsOf.Add(3 * time.Second)
+	sameBucket.FlowSummaries = []statuspkg.FlowSummary{
+		{Lane: "projector", Progress: "stage claimed=1", Backlog: "queue outstanding=1 oldest=55s"},
+	}
+	sameBucket.DomainBacklogs = []statuspkg.DomainBacklog{
+		{Domain: "source_local", Outstanding: 1, OldestAge: 55 * time.Second},
+	}
+	sameBucket.Queue.OldestOutstandingAge = 55 * time.Second
+
+	if got, want := localHostProgressFingerprint("/workspace/repo", runtimeConfig, sameBucket), localHostProgressFingerprint("/workspace/repo", runtimeConfig, base); got != want {
+		t.Fatalf("progress fingerprint changed within the same age bucket: got %q want %q", got, want)
+	}
+
+	nextBucket := base
+	nextBucket.Queue.OldestOutstandingAge = 61 * time.Second
+	if got, want := localHostProgressFingerprint("/workspace/repo", runtimeConfig, nextBucket), localHostProgressFingerprint("/workspace/repo", runtimeConfig, base); got == want {
+		t.Fatal("progress fingerprint stayed the same across a new age bucket")
+	}
+}
+
 func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testing.T) {
 	t.Setenv("PCG_QUERY_PROFILE", string(query.ProfileLocalAuthoritative))
 
