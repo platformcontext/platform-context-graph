@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -54,14 +55,15 @@ func startLocalHostProgressReporter(
 		ticker := time.NewTicker(localHostProgressPollInterval)
 		defer ticker.Stop()
 
-		lastRendered := ""
+		lastFingerprint := ""
 		for {
 			report, err := localHostLoadProgressReport(reporterCtx, reader, localHostProgressNow())
 			if err == nil {
+				fingerprint := localHostProgressFingerprint(workspaceRoot, runtimeConfig, report)
 				rendered := renderLocalHostProgressSnapshot(workspaceRoot, runtimeConfig, report)
-				if rendered != lastRendered {
+				if fingerprint != lastFingerprint {
 					_, _ = io.WriteString(localHostProgressWriter, rendered)
-					lastRendered = rendered
+					lastFingerprint = fingerprint
 				}
 			}
 
@@ -144,4 +146,82 @@ func localHostProgressLaneLabel(lane string) string {
 		return "Lane"
 	}
 	return strings.ToUpper(lane[:1]) + lane[1:]
+}
+
+func localHostProgressFingerprint(
+	workspaceRoot string,
+	runtimeConfig localHostRuntimeConfig,
+	report statuspkg.Report,
+) string {
+	var builder strings.Builder
+	fmt.Fprintf(
+		&builder,
+		"%s|%s|%s|%s|",
+		workspaceRoot,
+		runtimeConfig.Profile,
+		localHostProgressBackendLabel(runtimeConfig),
+		report.Health.State,
+	)
+	appendNamedCountMap(&builder, report.ScopeTotals)
+	appendNamedCountMap(&builder, report.GenerationTotals)
+	for _, row := range report.StageSummaries {
+		fmt.Fprintf(
+			&builder,
+			"%s|%d|%d|%d|%d|%d|%d|%d|",
+			row.Stage,
+			row.Pending,
+			row.Claimed,
+			row.Running,
+			row.Retrying,
+			row.Succeeded,
+			row.DeadLetter,
+			row.Failed,
+		)
+	}
+	for _, row := range report.DomainBacklogs {
+		fmt.Fprintf(
+			&builder,
+			"%s|%d|%d|%d|%d|%d|",
+			row.Domain,
+			row.Outstanding,
+			row.Retrying,
+			row.DeadLetter,
+			row.Failed,
+			localHostProgressAgeBucket(row.OldestAge),
+		)
+	}
+	fmt.Fprintf(
+		&builder,
+		"%d|%d|%d|%d|%d|%d",
+		report.Queue.Pending,
+		report.Queue.InFlight,
+		report.Queue.Retrying,
+		report.Queue.DeadLetter,
+		report.Queue.Failed,
+		localHostProgressAgeBucket(report.Queue.OldestOutstandingAge),
+	)
+	return builder.String()
+}
+
+func localHostProgressAgeBucket(age time.Duration) int64 {
+	if age <= 0 {
+		return 0
+	}
+	return int64(age / (30 * time.Second))
+}
+
+func appendNamedCountMap(builder *strings.Builder, counts map[string]int) {
+	if len(counts) == 0 {
+		builder.WriteString("none|")
+		return
+	}
+
+	keys := make([]string, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fmt.Fprintf(builder, "%s=%d|", key, counts[key])
+	}
 }
