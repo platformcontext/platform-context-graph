@@ -180,16 +180,17 @@ too large, use
 shrink only the grouped transaction size for those heavier families without
 forcing the same statement cap onto every other entity label.
 When you are tuning repo-scale entity projection, do not decide from one scary
-chunk log alone. Canonical entity projection is split into node upsert
-(`phase=entities`) and file containment edge (`phase=entity_containment`)
-statements so the node path can use NornicDB's simple `UNWIND ... MERGE ...
-SET` shape across files. Use the emitted `nornicdb entity label summary` lines
-to compare cumulative rows, statements, executions, grouped chunks, and
-total/max duration per `phase` and label before changing another default.
-Long-running labels emit rolling summaries every 10 executions and a final
-summary at label completion, so you do not need to wait for an hour-scale phase
-to finish before you can see whether the cumulative cost is node row width,
-containment edges, grouped transaction size, or label ordering.
+chunk log alone. NornicDB currently uses a file-scoped combined entity write
+because its current binary does not correctly preserve row-bound identity in
+the standalone node-only batch shape. Backends that support that node-only
+shape can still split entity node upsert from `phase=entity_containment`.
+Use the emitted `nornicdb entity label summary` lines to compare cumulative
+rows, statements, executions, grouped chunks, and total/max duration per
+`phase` and label before changing another default. Long-running labels emit
+rolling summaries every 10 executions and a final summary at label completion,
+so you do not need to wait for an hour-scale phase to finish before you can
+see whether the cumulative cost is node row width, containment edges, grouped
+transaction size, or label ordering.
 
 ### Local-Authoritative Startup Envelope Smoke
 

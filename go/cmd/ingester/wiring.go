@@ -353,6 +353,7 @@ func openIngesterCanonicalWriter(
 		writer = writer.WithEntityBatchSize(entityBatchSize)
 	}
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		writer = writer.WithEntityContainmentInEntityUpsert()
 		labelBatchSizes, err := nornicDBEntityLabelBatchSizes(getenv, entityBatchSize)
 		if err != nil {
 			return nil, nil, err
