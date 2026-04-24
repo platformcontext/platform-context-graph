@@ -347,6 +347,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 	originalStartChild := localHostStartChildProcess
 	originalWaitManagedChildren := localHostWaitManagedChildren
 	originalApplyBootstrap := localHostApplyBootstrap
+	originalApplyGraphBootstrap := localHostApplyGraphBootstrap
 	t.Cleanup(func() {
 		localHostPrepareWorkspace = originalPrepareWorkspace
 		localHostStartEmbeddedPostgres = originalStartEmbeddedPostgres
@@ -356,6 +357,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 		localHostStartChildProcess = originalStartChild
 		localHostWaitManagedChildren = originalWaitManagedChildren
 		localHostApplyBootstrap = originalApplyBootstrap
+		localHostApplyGraphBootstrap = originalApplyGraphBootstrap
 	})
 
 	localHostPrepareWorkspace = func(layout pcglocal.Layout) (*pcglocal.OwnerLock, error) {
@@ -396,13 +398,30 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 	localHostApplyBootstrap = func(ctx context.Context, dsn string) error {
 		return nil
 	}
+	graphBootstrapped := false
+	localHostApplyGraphBootstrap = func(ctx context.Context, runtimeConfig localHostRuntimeConfig, graph *managedLocalGraph) error {
+		if runtimeConfig.GraphBackend != query.GraphBackendNornicDB {
+			t.Fatalf("graph bootstrap backend = %q, want %q", runtimeConfig.GraphBackend, query.GraphBackendNornicDB)
+		}
+		if graph == nil || graph.BoltPort != 17687 {
+			t.Fatalf("graph bootstrap managed graph = %#v, want bolt port 17687", graph)
+		}
+		graphBootstrapped = true
+		return nil
+	}
 	var written pcglocal.OwnerRecord
 	localHostWriteOwnerRecord = func(path string, record pcglocal.OwnerRecord) error {
+		if !graphBootstrapped {
+			t.Fatal("owner record written before local graph schema bootstrap")
+		}
 		written = record
 		return nil
 	}
 	var started []string
 	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {
+		if !graphBootstrapped {
+			t.Fatalf("%s started before local graph schema bootstrap", name)
+		}
 		started = append(started, name)
 		if envValue(env, "PCG_NEO4J_URI") != "bolt://127.0.0.1:17687" {
 			t.Fatalf("PCG_NEO4J_URI = %q, want %q", envValue(env, "PCG_NEO4J_URI"), "bolt://127.0.0.1:17687")

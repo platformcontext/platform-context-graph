@@ -126,6 +126,7 @@ func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testi
 	originalStartChild := localHostStartChildProcess
 	originalWaitManagedChildren := localHostWaitManagedChildren
 	originalApplyBootstrap := localHostApplyBootstrap
+	originalApplyGraphBootstrap := localHostApplyGraphBootstrap
 	originalStartProgressReporter := localHostStartProgressReporter
 	t.Cleanup(func() {
 		localHostPrepareWorkspace = originalPrepareWorkspace
@@ -136,6 +137,7 @@ func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testi
 		localHostStartChildProcess = originalStartChild
 		localHostWaitManagedChildren = originalWaitManagedChildren
 		localHostApplyBootstrap = originalApplyBootstrap
+		localHostApplyGraphBootstrap = originalApplyGraphBootstrap
 		localHostStartProgressReporter = originalStartProgressReporter
 	})
 
@@ -171,6 +173,9 @@ func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testi
 		return "local-test", nil
 	}
 	localHostApplyBootstrap = func(ctx context.Context, dsn string) error {
+		return nil
+	}
+	localHostApplyGraphBootstrap = func(ctx context.Context, runtimeConfig localHostRuntimeConfig, graph *managedLocalGraph) error {
 		return nil
 	}
 	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {

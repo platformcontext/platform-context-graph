@@ -54,6 +54,7 @@ var (
 	localHostWaitChildProcess      = waitLocalChildProcess
 	localHostWaitManagedChildren   = waitLocalHostChildren
 	localHostApplyBootstrap        = applyLocalBootstrap
+	localHostApplyGraphBootstrap   = applyLocalGraphBootstrap
 	localHostStartProgressReporter = startLocalHostProgressReporter
 )
 
@@ -167,6 +168,11 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 				retErr = err
 			}
 		}()
+		fmt.Fprintln(os.Stderr, "bootstrapping local graph schema...")
+		if err := localHostApplyGraphBootstrap(ctx, runtimeConfig, managedGraph); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "local graph schema ready")
 	}
 
 	hostname, err := localHostHostname()

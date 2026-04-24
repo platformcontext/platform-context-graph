@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"runtime"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,10 @@ const (
 	// self-repo dogfood lane, so NornicDB needs a lower grouped-transaction cap
 	// here than on lighter canonical phases.
 	defaultNornicDBEntityPhaseStatements = 25
+	// Long-running labels such as Variable need cumulative visibility before
+	// the whole entities phase completes, otherwise tuning waits on hour-scale
+	// dogfood runs.
+	defaultNornicDBEntityLabelSummaryExecutions = 10
 	// Normal NornicDB entity upserts stay bounded to 100 rows so we do not send
 	// 500-row canonical entity statements through the slower Bolt path.
 	defaultNornicDBEntityBatchSize = 100
@@ -45,10 +50,11 @@ const (
 	// Struct entities were the next heavy family on the self-repo dogfood lane
 	// once Function rows were narrowed, so they get the next smaller row cap.
 	defaultNornicDBStructEntityBatchSize = 50
-	// Variable entities timed out at repo scale with the broad 100-row default,
-	// so they get the same narrower row cap as Struct until the writer is
-	// faster on that family.
-	defaultNornicDBVariableEntityBatchSize = 25
+	// Variable remains the next repo-scale hot family after Function. Fresh
+	// self-repo reruns still spent roughly 22s-31s per five-statement chunk at
+	// 25 rows, so the built-in default now narrows Variable rows further while
+	// keeping the grouped-statement cap unchanged for a clean next comparison.
+	defaultNornicDBVariableEntityBatchSize = 10
 	// Function entity statements remain the slowest grouped transaction shape
 	// on the self-repo dogfood lane. Ten-statement groups still drifted into
 	// the high-30s seconds, so NornicDB now keeps that family on the same
@@ -559,13 +565,25 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 	ge sourceneo4j.GroupExecutor,
 	stmts []sourceneo4j.Statement,
 ) error {
+	labelStats := make(map[string]*entityPhaseLabelStats)
 	grouped := make([]sourceneo4j.Statement, 0, len(stmts))
 	groupedLabel := ""
 	flushGrouped := func() error {
 		if len(grouped) == 0 {
 			return nil
 		}
-		err := e.executeGroupedChunks(ctx, ge, grouped, e.phaseGroupStatementLimit(grouped))
+		err := e.executeGroupedChunksObserved(
+			ctx,
+			ge,
+			grouped,
+			e.phaseGroupStatementLimit(grouped),
+			func(chunk []sourceneo4j.Statement, chunkDuration time.Duration) {
+				label := entityStatementLabel(chunk[0])
+				stats := ensureEntityPhaseLabelStats(labelStats, label)
+				stats.recordChunk(chunk, chunkDuration)
+				logEntityPhaseLabelSummaryIfDue(stats, false)
+			},
+		)
 		grouped = grouped[:0]
 		groupedLabel = ""
 		return err
@@ -597,13 +615,18 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 				"duration_s", time.Since(statementStart).Seconds(),
 				"first_statement", statementSummary,
 			)
+			stats := ensureEntityPhaseLabelStats(labelStats, entityStatementLabel(stmt))
+			stats.recordSingleton(stmt, time.Since(statementStart))
+			logEntityPhaseLabelSummaryIfDue(stats, false)
 			continue
 		}
 		stmtLabel := entityStatementLabel(stmt)
 		if len(grouped) > 0 && stmtLabel != groupedLabel {
+			completedLabel := groupedLabel
 			if err := flushGrouped(); err != nil {
 				return err
 			}
+			logEntityPhaseLabelSummaryIfDue(labelStats[completedLabel], true)
 		}
 		grouped = append(grouped, stmt)
 		if groupedLabel == "" {
@@ -616,7 +639,11 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 		}
 	}
 
-	return flushGrouped()
+	if err := flushGrouped(); err != nil {
+		return err
+	}
+	logEntityPhaseLabelSummaries(labelStats, true)
+	return nil
 }
 
 func (e nornicDBPhaseGroupExecutor) executeGroupedChunks(
@@ -624,6 +651,16 @@ func (e nornicDBPhaseGroupExecutor) executeGroupedChunks(
 	ge sourceneo4j.GroupExecutor,
 	stmts []sourceneo4j.Statement,
 	maxStatements int,
+) error {
+	return e.executeGroupedChunksObserved(ctx, ge, stmts, maxStatements, nil)
+}
+
+func (e nornicDBPhaseGroupExecutor) executeGroupedChunksObserved(
+	ctx context.Context,
+	ge sourceneo4j.GroupExecutor,
+	stmts []sourceneo4j.Statement,
+	maxStatements int,
+	observer func([]sourceneo4j.Statement, time.Duration),
 ) error {
 	totalChunks := (len(stmts) + maxStatements - 1) / maxStatements
 	for start := 0; start < len(stmts); start += maxStatements {
@@ -651,6 +688,9 @@ func (e nornicDBPhaseGroupExecutor) executeGroupedChunks(
 				err,
 			)
 		}
+		if observer != nil {
+			observer(chunk, chunkDuration)
+		}
 		slog.Info(
 			"nornicdb phase-group chunk completed",
 			"chunk_index", chunkIndex,
@@ -663,6 +703,158 @@ func (e nornicDBPhaseGroupExecutor) executeGroupedChunks(
 		)
 	}
 	return nil
+}
+
+type entityPhaseLabelStats struct {
+	label               string
+	rows                int
+	statements          int
+	executions          int
+	groupedChunks       int
+	singletonStatements int
+	totalDuration       time.Duration
+	maxDuration         time.Duration
+	maxStatementRows    int
+	maxExecutionRows    int
+	loggedExecutions    int
+	completeLogged      bool
+}
+
+func ensureEntityPhaseLabelStats(stats map[string]*entityPhaseLabelStats, label string) *entityPhaseLabelStats {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		label = "unknown"
+	}
+	if existing := stats[label]; existing != nil {
+		return existing
+	}
+	created := &entityPhaseLabelStats{label: label}
+	stats[label] = created
+	return created
+}
+
+func (s *entityPhaseLabelStats) recordChunk(chunk []sourceneo4j.Statement, duration time.Duration) {
+	if s == nil || len(chunk) == 0 {
+		return
+	}
+	s.executions++
+	s.groupedChunks++
+	s.totalDuration += duration
+	if duration > s.maxDuration {
+		s.maxDuration = duration
+	}
+	executionRows := 0
+	for _, stmt := range chunk {
+		rows := entityStatementRowCount(stmt)
+		s.rows += rows
+		s.statements++
+		executionRows += rows
+		if rows > s.maxStatementRows {
+			s.maxStatementRows = rows
+		}
+	}
+	if executionRows > s.maxExecutionRows {
+		s.maxExecutionRows = executionRows
+	}
+}
+
+func (s *entityPhaseLabelStats) recordSingleton(stmt sourceneo4j.Statement, duration time.Duration) {
+	if s == nil {
+		return
+	}
+	rows := entityStatementRowCount(stmt)
+	s.rows += rows
+	s.statements++
+	s.executions++
+	s.singletonStatements++
+	s.totalDuration += duration
+	if duration > s.maxDuration {
+		s.maxDuration = duration
+	}
+	if rows > s.maxStatementRows {
+		s.maxStatementRows = rows
+	}
+	if rows > s.maxExecutionRows {
+		s.maxExecutionRows = rows
+	}
+}
+
+func logEntityPhaseLabelSummaryIfDue(summary *entityPhaseLabelStats, complete bool) {
+	if summary == nil {
+		return
+	}
+	if !complete && summary.executions-summary.loggedExecutions < defaultNornicDBEntityLabelSummaryExecutions {
+		return
+	}
+	logEntityPhaseLabelSummary(summary, complete)
+}
+
+func logEntityPhaseLabelSummaries(stats map[string]*entityPhaseLabelStats, complete bool) {
+	if len(stats) == 0 {
+		return
+	}
+	labels := make([]string, 0, len(stats))
+	for label := range stats {
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	for _, label := range labels {
+		summary := stats[label]
+		if summary == nil {
+			continue
+		}
+		logEntityPhaseLabelSummary(summary, complete)
+	}
+}
+
+func logEntityPhaseLabelSummary(summary *entityPhaseLabelStats, complete bool) {
+	if summary == nil {
+		return
+	}
+	if complete && summary.completeLogged {
+		return
+	}
+	avgRowsPerStatement := 0.0
+	if summary.statements > 0 {
+		avgRowsPerStatement = float64(summary.rows) / float64(summary.statements)
+	}
+	avgExecutionDuration := 0.0
+	if summary.executions > 0 {
+		avgExecutionDuration = summary.totalDuration.Seconds() / float64(summary.executions)
+	}
+	slog.Info(
+		"nornicdb entity label summary",
+		"label", summary.label,
+		"complete", complete,
+		"rows", summary.rows,
+		"statements", summary.statements,
+		"executions", summary.executions,
+		"grouped_chunks", summary.groupedChunks,
+		"singleton_statements", summary.singletonStatements,
+		"total_duration_s", summary.totalDuration.Seconds(),
+		"avg_execution_duration_s", avgExecutionDuration,
+		"max_execution_duration_s", summary.maxDuration.Seconds(),
+		"avg_rows_per_statement", avgRowsPerStatement,
+		"max_statement_rows", summary.maxStatementRows,
+		"max_execution_rows", summary.maxExecutionRows,
+	)
+	summary.loggedExecutions = summary.executions
+	if complete {
+		summary.completeLogged = true
+	}
+}
+
+func entityStatementRowCount(stmt sourceneo4j.Statement) int {
+	if rows, ok := stmt.Parameters["rows"].([]map[string]any); ok {
+		return len(rows)
+	}
+	if rows, ok := stmt.Parameters["rows"].([]any); ok {
+		return len(rows)
+	}
+	if _, ok := stmt.Parameters["entity_id"]; ok {
+		return 1
+	}
+	return 0
 }
 
 func (e nornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourceneo4j.Statement) int {
