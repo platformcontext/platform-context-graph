@@ -19,8 +19,8 @@ type SchemaBackend string
 const (
 	// SchemaBackendNeo4j preserves PCG's shared production schema contract.
 	SchemaBackendNeo4j SchemaBackend = "neo4j"
-	// SchemaBackendNornicDB applies the narrow compatibility translations
-	// proven by the opt-in NornicDB syntax gate.
+	// SchemaBackendNornicDB applies the narrow compatibility dialect proven by
+	// the opt-in NornicDB syntax gate.
 	SchemaBackendNornicDB SchemaBackend = "nornicdb"
 )
 
@@ -242,7 +242,9 @@ func SchemaStatementsForBackend(backend SchemaBackend) ([]string, error) {
 			len(schemaPerformanceIndexes)+
 			len(schemaFulltextIndexes))
 	for _, cypher := range schemaConstraints {
-		stmts = append(stmts, dialect.constraint(cypher))
+		if cypher = dialect.constraint(cypher); cypher != "" {
+			stmts = append(stmts, cypher)
+		}
 	}
 	stmts = append(stmts, schemaPerformanceIndexes...)
 	for _, label := range uidConstraintLabels {
@@ -286,6 +288,9 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 	// Constraints
 	for _, cypher := range schemaConstraints {
 		cypher = dialect.constraint(cypher)
+		if cypher == "" {
+			continue
+		}
 		if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
 			failed++
 			logger.Warn("schema statement warning",
@@ -387,10 +392,14 @@ func neo4jSchemaConstraint(cypher string) string {
 }
 
 func nornicDBSchemaConstraint(cypher string) string {
-	// NornicDB supports composite IS UNIQUE directly. Do not translate to
-	// NODE KEY: node keys require every participating property to be present,
-	// while several PCG semantic labels can be sparse and rely on uid for the
-	// canonical write identity.
+	if isCompositeUniqueConstraint(cypher) {
+		// NornicDB's current parser accepts NODE KEY but rejects Neo4j's
+		// composite IS UNIQUE form. Do not translate these constraints to
+		// NODE KEY: node keys require every participating property to be
+		// present, while several PCG semantic labels are intentionally sparse.
+		// Canonical writes use separate uid uniqueness constraints instead.
+		return ""
+	}
 	return cypher
 }
 
