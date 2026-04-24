@@ -101,8 +101,19 @@ SET n += row.props`
 const canonicalNodeEntitySingletonUpsertTemplate = `MERGE (n:%s {uid: $entity_id})
 SET n += $props`
 
+const canonicalNodeEntityUpsertWithContainmentTemplate = `UNWIND $rows AS row
+MATCH (f:File {path: $file_path})
+MERGE (n:%s {uid: row.entity_id})
+SET n += row.props
+MERGE (f)-[:CONTAINS]->(n)`
+
+const canonicalNodeEntitySingletonUpsertWithContainmentTemplate = `MATCH (f:File {path: $file_path})
+MERGE (n:%s {uid: $entity_id})
+SET n += $props
+MERGE (f)-[:CONTAINS]->(n)`
+
 const canonicalNodeEntityContainmentEdgeTemplate = `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
+MATCH (f:File {path: $file_path})
 MATCH (n:%s {uid: row.entity_id})
 MERGE (f)-[:CONTAINS]->(n)`
 

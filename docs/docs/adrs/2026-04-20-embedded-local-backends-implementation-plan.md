@@ -51,11 +51,12 @@ Latest 2026-04-24 NornicDB dogfood evidence:
 - the branch now emits rolling and final `nornicdb entity label summary` logs with `phase`, per-label rows, statements, executions, grouped chunks, total duration, max execution duration, and row-width totals so the next tuning slice can optimize cumulative node-upsert and containment-edge cost instead of reacting to isolated chunk logs
 - the first remote self-repo rerun after the entity/containment split failed fast on `Annotation` because the old NornicDB schema dialect translated composite `IS UNIQUE` to `IS NODE KEY`, which incorrectly required sparse semantic labels to carry `name`; the follow-up run also proved the current NornicDB binary still rejects PCG composite `IS UNIQUE`, so current branch now skips unsupported composite uniqueness DDL for NornicDB and keeps `uid` uniqueness as the canonical merge identity
 - the same remote run proved the split changed the real bottleneck: `phase=entities` completed in `25.523448885s` total, including `Function` at `3.10382615s` and `Variable` at `20.695746985s`; the remaining slow lane is now `phase=entity_containment`, where `Function` containment alone took `248.58715967s`, so the next tuning slice must target containment-edge shape rather than node upsert row width
+- current branch now keeps the split node-upsert / containment-edge shape for backends that support node-only batched `MERGE`, but routes NornicDB entity writes through the proven file-scoped combined shape: each statement matches the `File` anchor with `$file_path`, unwinds entity rows for that file, upserts nodes, and attaches `CONTAINS` in the same statement. The opt-in syntax gate caught that the current NornicDB binary collapses the standalone node-only batch shape, while the combined shape preserves row-bound entity identity.
 
 Current tuning plan:
 - keep the safer `Function=15,Struct=50,Variable=10` row-cap baseline in code while we gather better evidence
-- rerun self-repo dogfood with graph schema bootstrap enabled and use the new rolling `nornicdb entity label summary` totals, not individual chunk anecdotes, to identify whether `phase=entities` or `phase=entity_containment` dominates cumulative cost
-- only change the next default after the summary shows which phase and label actually dominate wall-clock and whether the trade-off is node row width, containment-edge cost, grouped transaction size, or label ordering
+- rerun self-repo dogfood with graph schema bootstrap enabled and NornicDB's file-scoped combined entity write shape in place, then use the rolling `nornicdb entity label summary` totals to compare correctness and cumulative entity-write cost before/after
+- only change the next default after the summary shows whether containment is still dominated by file-anchor lookup, entity lookup by `uid`, relationship `MERGE`, grouped transaction size, or label ordering
 
 ---
 

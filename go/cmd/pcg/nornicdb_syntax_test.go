@@ -60,12 +60,14 @@ func TestNornicDBCompatibilityWorkarounds(t *testing.T) {
 func TestNornicDBCanonicalEntityBatchCompatibilityWorkaround(t *testing.T) {
 	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
 		setup := []string{
+			"CREATE CONSTRAINT pcg_syntax_function_uid IF NOT EXISTS FOR (n:Function) REQUIRE n.uid IS UNIQUE",
+			"CREATE CONSTRAINT pcg_syntax_file_path IF NOT EXISTS FOR (f:File) REQUIRE f.path IS UNIQUE",
 			"MERGE (:File {path: '/tmp/pcg-nornicdb-batch/main.go'})",
 		}
 		runNornicDBSyntaxSequence(t, ctx, driver, setup)
 
-		query := `UNWIND $rows AS row
-MATCH (f:File {path: row.file_path})
+		nodeQuery := `UNWIND $rows AS row
+MATCH (f:File {path: $file_path})
 MERGE (n:Function {uid: row.entity_id})
 SET n += row.props
 MERGE (f)-[:CONTAINS]->(n)
@@ -73,8 +75,10 @@ RETURN count(*) AS processed_rows`
 
 		rows := []map[string]any{
 			{
-				"file_path": "/tmp/pcg-nornicdb-batch/main.go",
-				"entity_id": "fn:one",
+				"file_path":  "/tmp/pcg-nornicdb-batch/main.go",
+				"entity_id":  "fn:one",
+				"entityID":   "fn:one",
+				"primaryKey": "fn:one",
 				"props": map[string]any{
 					"id":            "fn:one",
 					"name":          "handleRelationships",
@@ -91,8 +95,10 @@ RETURN count(*) AS processed_rows`
 				},
 			},
 			{
-				"file_path": "/tmp/pcg-nornicdb-batch/main.go",
-				"entity_id": "fn:two",
+				"file_path":  "/tmp/pcg-nornicdb-batch/main.go",
+				"entity_id":  "fn:two",
+				"entityID":   "fn:two",
+				"primaryKey": "fn:two",
 				"props": map[string]any{
 					"id":            "fn:two",
 					"name":          "transitiveRelationshipsGraphResponse",
@@ -118,14 +124,37 @@ RETURN count(*) AS processed_rows`
 			_ = session.Close(ctx)
 		}()
 
-		result, err := session.Run(ctx, query, map[string]any{"rows": rows})
+		result, err := session.Run(ctx, nodeQuery, map[string]any{
+			"file_path": "/tmp/pcg-nornicdb-batch/main.go",
+			"rows":      rows,
+		})
 		if err != nil {
 			t.Fatalf("batched canonical entity query error = %v, want nil", err)
 		}
 		if _, err := result.Consume(ctx); err != nil {
 			t.Fatalf("batched canonical entity consume error = %v, want nil", err)
 		}
-
+		nodeCount, err := nornicDBReadCount(ctx, driver, `
+MATCH (f:Function)
+RETURN count(f) AS count`, nil)
+		if err != nil {
+			t.Fatalf("count batched canonical functions before containment error = %v, want nil", err)
+		}
+		if nodeCount != 2 {
+			t.Fatalf("batched canonical function node count = %d, want 2", nodeCount)
+		}
+		nodeCountWithRepo, err := nornicDBReadCount(ctx, driver, `
+MATCH (f:Function)
+WHERE f.repo_id = $repo_id
+RETURN count(f) AS count`, map[string]any{
+			"repo_id": "repo-batch",
+		})
+		if err != nil {
+			t.Fatalf("count batched canonical functions with repo before containment error = %v, want nil", err)
+		}
+		if nodeCountWithRepo != 2 {
+			t.Fatalf("batched canonical function node count with repo = %d, want 2", nodeCountWithRepo)
+		}
 		count, err := nornicDBReadCount(ctx, driver, `
 MATCH (:File {path: $file_path})-[:CONTAINS]->(f:Function)
 WHERE f.repo_id = $repo_id

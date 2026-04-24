@@ -125,11 +125,14 @@ func TestCanonicalNodeWriterSeparatesEntityUpsertsFromContainmentEdges(t *testin
 	if !strings.Contains(containment.Cypher, "UNWIND $rows AS row") {
 		t.Fatalf("entity containment cypher = %q, want batched UNWIND shape", containment.Cypher)
 	}
-	if !strings.Contains(containment.Cypher, "MATCH (f:File {path: row.file_path})") {
-		t.Fatalf("entity containment cypher = %q, want row-level file MATCH", containment.Cypher)
+	if !strings.Contains(containment.Cypher, "MATCH (f:File {path: $file_path})") {
+		t.Fatalf("entity containment cypher = %q, want file-scoped MATCH", containment.Cypher)
 	}
 	if !strings.Contains(containment.Cypher, "MATCH (n:Function {uid: row.entity_id})") {
 		t.Fatalf("entity containment cypher = %q, want entity MATCH by uid", containment.Cypher)
+	}
+	if got := containment.Parameters["file_path"]; got != "/repos/my-repo/src/main.go" {
+		t.Fatalf("containment file_path = %#v, want /repos/my-repo/src/main.go", got)
 	}
 	containmentRows, ok := containment.Parameters["rows"].([]map[string]any)
 	if !ok {
@@ -139,12 +142,143 @@ func TestCanonicalNodeWriterSeparatesEntityUpsertsFromContainmentEdges(t *testin
 		t.Fatalf("containment rows count = %d, want %d", got, want)
 	}
 	for _, row := range containmentRows {
-		if got := row["file_path"]; got != "/repos/my-repo/src/main.go" {
-			t.Fatalf("containment row file_path = %#v, want /repos/my-repo/src/main.go", got)
+		if _, ok := row["file_path"]; ok {
+			t.Fatalf("containment row unexpectedly contains file_path: %#v", row)
 		}
 		if got := row["entity_id"]; got == "" {
 			t.Fatalf("containment row missing entity_id: %#v", row)
 		}
+	}
+}
+
+func TestCanonicalNodeWriterSplitsEntityContainmentByFile(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:   "entity-1",
+				Label:      "Function",
+				FilePath:   "/repos/my-repo/src/a.go",
+				StartLine:  1,
+				EndLine:    2,
+				Language:   "go",
+				RepoID:     "repo-1",
+				EntityName: "a",
+			},
+			{
+				EntityID:   "entity-2",
+				Label:      "Function",
+				FilePath:   "/repos/my-repo/src/b.go",
+				StartLine:  3,
+				EndLine:    4,
+				Language:   "go",
+				RepoID:     "repo-1",
+				EntityName: "b",
+			},
+		},
+	}
+
+	if err := writer.Write(context.Background(), mat); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var containmentCalls []Statement
+	for _, call := range exec.calls {
+		if call.Operation == OperationCanonicalUpsert &&
+			call.Parameters[StatementMetadataPhaseKey] == CanonicalPhaseEntityContainment {
+			containmentCalls = append(containmentCalls, call)
+		}
+	}
+	if got, want := len(containmentCalls), 2; got != want {
+		t.Fatalf("containment statement count = %d, want %d", got, want)
+	}
+
+	gotFiles := []string{
+		containmentCalls[0].Parameters["file_path"].(string),
+		containmentCalls[1].Parameters["file_path"].(string),
+	}
+	wantFiles := []string{"/repos/my-repo/src/a.go", "/repos/my-repo/src/b.go"}
+	for i, want := range wantFiles {
+		if gotFiles[i] != want {
+			t.Fatalf("containment file order = %#v, want %#v", gotFiles, wantFiles)
+		}
+	}
+}
+
+func TestCanonicalNodeWriterCanInlineEntityContainmentForBackendCompatibility(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil).
+		WithEntityContainmentInEntityUpsert()
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:   "entity-1",
+				Label:      "Function",
+				FilePath:   "/repos/my-repo/src/main.go",
+				StartLine:  1,
+				EndLine:    2,
+				Language:   "go",
+				RepoID:     "repo-1",
+				EntityName: "a",
+			},
+			{
+				EntityID:   "entity-2",
+				Label:      "Function",
+				FilePath:   "/repos/my-repo/src/main.go",
+				StartLine:  3,
+				EndLine:    4,
+				Language:   "go",
+				RepoID:     "repo-1",
+				EntityName: "b",
+			},
+		},
+	}
+
+	if err := writer.Write(context.Background(), mat); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var entityCalls []Statement
+	var containmentCalls []Statement
+	for _, call := range exec.calls {
+		if call.Operation == OperationCanonicalUpsert &&
+			call.Parameters[StatementMetadataPhaseKey] == CanonicalPhaseEntities {
+			entityCalls = append(entityCalls, call)
+		}
+		if call.Operation == OperationCanonicalUpsert &&
+			call.Parameters[StatementMetadataPhaseKey] == CanonicalPhaseEntityContainment {
+			containmentCalls = append(containmentCalls, call)
+		}
+	}
+	if got, want := len(entityCalls), 1; got != want {
+		t.Fatalf("entity statement count = %d, want %d", got, want)
+	}
+	if got := len(containmentCalls); got != 0 {
+		t.Fatalf("separate containment statement count = %d, want 0", got)
+	}
+
+	stmt := entityCalls[0]
+	if !strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") {
+		t.Fatalf("entity cypher = %q, want file-scoped MATCH", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (f)-[:CONTAINS]->(n)") {
+		t.Fatalf("entity cypher = %q, want inline containment MERGE", stmt.Cypher)
+	}
+	if got := stmt.Parameters["file_path"]; got != "/repos/my-repo/src/main.go" {
+		t.Fatalf("file_path = %#v, want /repos/my-repo/src/main.go", got)
 	}
 }
 
