@@ -183,7 +183,12 @@ When you are tuning repo-scale entity projection, do not decide from one scary
 chunk log alone. NornicDB currently uses a file-scoped combined entity write
 because its current binary does not correctly preserve row-bound identity in
 the standalone node-only batch shape. Backends that support that node-only
-shape can still split entity node upsert from `phase=entity_containment`.
+shape can still split entity node upsert from `phase=entity_containment`. If
+you are testing a patched NornicDB binary with row-safe `SET += row.props`
+support in the generalized `UNWIND/MERGE` hot path, set
+`PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` to try the faster MERGE-first
+combined shape that batches entity rows across files. Leave that switch off
+for the pinned release-backed binary.
 Use the emitted `nornicdb entity label summary` lines to compare cumulative
 rows, statements, executions, grouped chunks, and total/max duration per
 `phase` and label before changing another default. Long-running labels emit

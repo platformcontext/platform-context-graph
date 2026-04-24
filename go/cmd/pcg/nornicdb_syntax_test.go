@@ -57,7 +57,7 @@ func TestNornicDBCompatibilityWorkarounds(t *testing.T) {
 	})
 }
 
-func TestNornicDBCanonicalEntityBatchCompatibilityWorkaround(t *testing.T) {
+func TestNornicDBBatchedEntityContainmentHotPathCompatibility(t *testing.T) {
 	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
 		setup := []string{
 			"CREATE CONSTRAINT pcg_syntax_function_uid IF NOT EXISTS FOR (n:Function) REQUIRE n.uid IS UNIQUE",
@@ -67,9 +67,9 @@ func TestNornicDBCanonicalEntityBatchCompatibilityWorkaround(t *testing.T) {
 		runNornicDBSyntaxSequence(t, ctx, driver, setup)
 
 		nodeQuery := `UNWIND $rows AS row
-MATCH (f:File {path: $file_path})
 MERGE (n:Function {uid: row.entity_id})
 SET n += row.props
+MATCH (f:File {path: row.file_path})
 MERGE (f)-[:CONTAINS]->(n)
 RETURN count(*) AS processed_rows`
 
@@ -125,8 +125,7 @@ RETURN count(*) AS processed_rows`
 		}()
 
 		result, err := session.Run(ctx, nodeQuery, map[string]any{
-			"file_path": "/tmp/pcg-nornicdb-batch/main.go",
-			"rows":      rows,
+			"rows": rows,
 		})
 		if err != nil {
 			t.Fatalf("batched canonical entity query error = %v, want nil", err)

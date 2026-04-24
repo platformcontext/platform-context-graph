@@ -29,6 +29,28 @@ func canonicalEntityRowsByLabel(mat projector.CanonicalMaterialization) map[stri
 	return byLabel
 }
 
+func canonicalEntityRowsByLabelWithFile(mat projector.CanonicalMaterialization) map[string][]map[string]any {
+	if len(mat.Entities) == 0 {
+		return nil
+	}
+
+	byLabel := make(map[string][]map[string]any, len(mat.Entities))
+	for _, entity := range mat.Entities {
+		row := map[string]any{
+			"entity_id": entity.EntityID,
+			"file_path": entity.FilePath,
+			"props": canonicalEntityProperties(
+				entity,
+				mat.ScopeID,
+				mat.GenerationID,
+			),
+		}
+		byLabel[entity.Label] = append(byLabel[entity.Label], row)
+	}
+
+	return byLabel
+}
+
 func canonicalEntityRowsByLabelAndFile(mat projector.CanonicalMaterialization) map[string]map[string][]map[string]any {
 	if len(mat.Entities) == 0 {
 		return nil
@@ -104,6 +126,9 @@ func sortedCanonicalEntityContainmentFiles(byFile map[string][]map[string]any) [
 // creation can happen in a later, separately timed phase.
 func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMaterialization) []Statement {
 	if w.entityContainmentInEntityUpsert {
+		if w.entityContainmentBatchAcrossFiles {
+			return w.buildEntityStatementsWithBatchedContainment(mat)
+		}
 		return w.buildEntityStatementsWithContainment(mat)
 	}
 
@@ -222,7 +247,7 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 				)
 				stmts = append(stmts, Statement{
 					Operation: OperationCanonicalUpsert,
-					Cypher:    fmt.Sprintf(canonicalNodeEntityUpsertWithContainmentTemplate, label),
+					Cypher:    fmt.Sprintf(canonicalNodeEntityFileScopedUpsertWithContainmentTemplate, label),
 					Parameters: map[string]any{
 						"file_path":                     filePath,
 						"rows":                          append([]map[string]any(nil), batchRows...),
@@ -262,6 +287,85 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 			}
 			flushBatch()
 		}
+	}
+
+	return stmts
+}
+
+func (w *CanonicalNodeWriter) buildEntityStatementsWithBatchedContainment(mat projector.CanonicalMaterialization) []Statement {
+	byLabel := canonicalEntityRowsByLabelWithFile(mat)
+	if len(byLabel) == 0 {
+		return nil
+	}
+
+	var stmts []Statement
+	for _, label := range sortedCanonicalEntityLabels(byLabel) {
+		batchSize := 0
+		if w.entityLabelBatchSizes != nil {
+			batchSize = w.entityLabelBatchSizes[label]
+		}
+		if batchSize <= 0 {
+			batchSize = w.entityBatchSize
+		}
+		if batchSize <= 0 {
+			batchSize = w.batchSize
+		}
+		if batchSize <= 0 {
+			batchSize = DefaultBatchSize
+		}
+
+		batchRows := make([]map[string]any, 0, batchSize)
+		flushBatch := func() {
+			if len(batchRows) == 0 {
+				return
+			}
+			statementSummary := fmt.Sprintf(
+				"label=%s rows=%d first_id=%v last_id=%v containment=inline batch_across_files=true",
+				label,
+				len(batchRows),
+				batchRows[0]["entity_id"],
+				batchRows[len(batchRows)-1]["entity_id"],
+			)
+			stmts = append(stmts, Statement{
+				Operation: OperationCanonicalUpsert,
+				Cypher:    fmt.Sprintf(canonicalNodeEntityUpsertWithContainmentTemplate, label),
+				Parameters: map[string]any{
+					"rows":                          append([]map[string]any(nil), batchRows...),
+					StatementMetadataPhaseKey:       CanonicalPhaseEntities,
+					StatementMetadataEntityLabelKey: label,
+					StatementMetadataSummaryKey:     statementSummary,
+				},
+			})
+			batchRows = batchRows[:0]
+		}
+		for _, row := range byLabel[label] {
+			if canonicalEntityRowNeedsSingletonFallback(row) {
+				flushBatch()
+				stmts = append(stmts, Statement{
+					Operation: OperationCanonicalUpsert,
+					Cypher:    fmt.Sprintf(canonicalNodeEntitySingletonUpsertWithContainmentTemplate, label),
+					Parameters: map[string]any{
+						"file_path":                        row["file_path"],
+						"entity_id":                        row["entity_id"],
+						"props":                            row["props"],
+						StatementMetadataPhaseKey:          CanonicalPhaseEntities,
+						StatementMetadataEntityLabelKey:    label,
+						StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
+						StatementMetadataSummaryKey: fmt.Sprintf(
+							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized containment=inline",
+							label,
+							row["entity_id"],
+						),
+					},
+				})
+				continue
+			}
+			batchRows = append(batchRows, row)
+			if len(batchRows) >= batchSize {
+				flushBatch()
+			}
+		}
+		flushBatch()
 	}
 
 	return stmts

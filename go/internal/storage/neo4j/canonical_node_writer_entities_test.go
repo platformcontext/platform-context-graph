@@ -271,6 +271,9 @@ func TestCanonicalNodeWriterCanInlineEntityContainmentForBackendCompatibility(t 
 	}
 
 	stmt := entityCalls[0]
+	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
+		t.Fatalf("entity cypher = %q, want batched UNWIND shape", stmt.Cypher)
+	}
 	if !strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") {
 		t.Fatalf("entity cypher = %q, want file-scoped MATCH", stmt.Cypher)
 	}
@@ -279,6 +282,78 @@ func TestCanonicalNodeWriterCanInlineEntityContainmentForBackendCompatibility(t 
 	}
 	if got := stmt.Parameters["file_path"]; got != "/repos/my-repo/src/main.go" {
 		t.Fatalf("file_path = %#v, want /repos/my-repo/src/main.go", got)
+	}
+}
+
+func TestCanonicalNodeWriterCanInlineEntityContainmentAcrossFilesForPatchedBackends(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil).
+		WithBatchedEntityContainmentInEntityUpsert()
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:   "entity-1",
+				Label:      "Function",
+				FilePath:   "/repos/my-repo/src/a.go",
+				StartLine:  1,
+				EndLine:    2,
+				Language:   "go",
+				RepoID:     "repo-1",
+				EntityName: "a",
+			},
+			{
+				EntityID:   "entity-2",
+				Label:      "Function",
+				FilePath:   "/repos/my-repo/src/b.go",
+				StartLine:  3,
+				EndLine:    4,
+				Language:   "go",
+				RepoID:     "repo-1",
+				EntityName: "b",
+			},
+		},
+	}
+
+	if err := writer.Write(context.Background(), mat); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var entityCalls []Statement
+	for _, call := range exec.calls {
+		if call.Operation == OperationCanonicalUpsert &&
+			call.Parameters[StatementMetadataPhaseKey] == CanonicalPhaseEntities {
+			entityCalls = append(entityCalls, call)
+		}
+	}
+	if got, want := len(entityCalls), 1; got != want {
+		t.Fatalf("entity statement count = %d, want %d", got, want)
+	}
+
+	stmt := entityCalls[0]
+	if !strings.Contains(stmt.Cypher, "MERGE (n:Function {uid: row.entity_id})\nSET n += row.props\nMATCH (f:File {path: row.file_path})") {
+		t.Fatalf("entity cypher = %q, want MERGE-first row-scoped file MATCH", stmt.Cypher)
+	}
+	if _, ok := stmt.Parameters["file_path"]; ok {
+		t.Fatalf("entity statement unexpectedly carries statement-level file_path: %#v", stmt.Parameters)
+	}
+	rows, ok := stmt.Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows type = %T, want []map[string]any", stmt.Parameters["rows"])
+	}
+	if got, want := len(rows), 2; got != want {
+		t.Fatalf("rows count = %d, want %d", got, want)
+	}
+	if got := rows[0]["file_path"]; got != "/repos/my-repo/src/a.go" {
+		t.Fatalf("rows[0] file_path = %#v, want /repos/my-repo/src/a.go", got)
+	}
+	if got := rows[1]["file_path"]; got != "/repos/my-repo/src/b.go" {
+		t.Fatalf("rows[1] file_path = %#v, want /repos/my-repo/src/b.go", got)
 	}
 }
 
