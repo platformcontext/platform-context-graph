@@ -1,0 +1,31 @@
+go/cmd/ingester/wiring_test.go
+  e27ce815bbe89792 926-928,944-946,954,967-969,980,993-995,1028-1030,1038,1051-1052
+go/cmd/ingester/wiring.go
+  e27ce815bbe89792 40-43,47-50,52-55,59-69,388-390,398
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 33
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 39-40
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 130,168,173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3517c0878beb120b519b48f6422eb5ea126ed01f",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 48,
+      "total_deletions": 32,
+      "accepted_lines": 62,
+      "overriden_lines": 0
+    }
+  }
+}
