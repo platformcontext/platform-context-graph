@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -45,6 +46,7 @@ const (
 	nornicDBPhaseGroupStatementsEnv      = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
 	nornicDBEntityPhaseStatementsEnv     = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
 	nornicDBEntityBatchSizeEnv           = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
+	nornicDBEntityLabelBatchSizesEnv     = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -318,7 +320,12 @@ func openIngesterCanonicalWriter(
 		writer = writer.WithEntityBatchSize(entityBatchSize)
 	}
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		for label, batchSize := range nornicDBEntityLabelBatchSizes(entityBatchSize) {
+		labelBatchSizes, err := nornicDBEntityLabelBatchSizes(getenv, entityBatchSize)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, label := range orderedEntityBatchLabels(labelBatchSizes) {
+			batchSize := labelBatchSizes[label]
 			writer = writer.WithEntityLabelBatchSize(label, batchSize)
 		}
 	}
@@ -326,21 +333,63 @@ func openIngesterCanonicalWriter(
 	return writer, ingesterNeo4jDriverCloser{Driver: driver}, nil
 }
 
-func minInt(left int, right int) int {
-	if left <= 0 {
-		return right
+func capOptionalBatchSize(configured int, limit int) int {
+	if configured <= 0 {
+		return limit
 	}
-	if right <= 0 || left <= right {
-		return left
+	if limit <= 0 || configured <= limit {
+		return configured
 	}
-	return right
+	return limit
 }
 
-func nornicDBEntityLabelBatchSizes(entityBatchSize int) map[string]int {
-	return map[string]int{
-		"Function": minInt(entityBatchSize, defaultNornicDBFunctionEntityBatchSize),
-		"Struct":   minInt(entityBatchSize, defaultNornicDBStructEntityBatchSize),
+func orderedEntityBatchLabels(labelBatchSizes map[string]int) []string {
+	labels := make([]string, 0, len(labelBatchSizes))
+	for label := range labelBatchSizes {
+		labels = append(labels, label)
 	}
+	slices.Sort(labels)
+	return labels
+}
+
+func defaultNornicDBEntityLabelBatchSizes(entityBatchSize int) map[string]int {
+	return map[string]int{
+		"Function": capOptionalBatchSize(entityBatchSize, defaultNornicDBFunctionEntityBatchSize),
+		// Struct payloads have been slower than the broad entity default, but
+		// still materially lighter than Function rows on the self-repo dogfood
+		// lane, so they keep a looser cap than Function.
+		"Struct": capOptionalBatchSize(entityBatchSize, defaultNornicDBStructEntityBatchSize),
+	}
+}
+
+func nornicDBEntityLabelBatchSizes(getenv func(string) string, entityBatchSize int) (map[string]int, error) {
+	labelBatchSizes := defaultNornicDBEntityLabelBatchSizes(entityBatchSize)
+	raw := strings.TrimSpace(getenv(nornicDBEntityLabelBatchSizesEnv))
+	if raw == "" {
+		return labelBatchSizes, nil
+	}
+
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		label, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			return nil, fmt.Errorf("parse %s=%q: entries must be Label=size", nornicDBEntityLabelBatchSizesEnv, raw)
+		}
+		label = strings.TrimSpace(label)
+		value = strings.TrimSpace(value)
+		if label == "" {
+			return nil, fmt.Errorf("parse %s=%q: label must be non-empty", nornicDBEntityLabelBatchSizesEnv, raw)
+		}
+		batchSize, err := strconv.Atoi(value)
+		if err != nil || batchSize <= 0 {
+			return nil, fmt.Errorf("parse %s=%q: label %q must have a positive integer size", nornicDBEntityLabelBatchSizesEnv, raw, label)
+		}
+		labelBatchSizes[label] = capOptionalBatchSize(entityBatchSize, batchSize)
+	}
+	return labelBatchSizes, nil
 }
 
 func canonicalExecutorForGraphBackend(

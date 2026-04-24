@@ -821,7 +821,10 @@ func TestNornicDBEntityBatchSizeRejectsInvalidEnv(t *testing.T) {
 func TestNornicDBEntityLabelBatchSizes(t *testing.T) {
 	t.Parallel()
 
-	got := nornicDBEntityLabelBatchSizes(100)
+	got, err := nornicDBEntityLabelBatchSizes(func(string) string { return "" }, 100)
+	if err != nil {
+		t.Fatalf("nornicDBEntityLabelBatchSizes() error = %v, want nil", err)
+	}
 	if got["Function"] != defaultNornicDBFunctionEntityBatchSize {
 		t.Fatalf("Function batch size = %d, want %d", got["Function"], defaultNornicDBFunctionEntityBatchSize)
 	}
@@ -833,12 +836,90 @@ func TestNornicDBEntityLabelBatchSizes(t *testing.T) {
 func TestNornicDBEntityLabelBatchSizesClampToEntityBatchSize(t *testing.T) {
 	t.Parallel()
 
-	got := nornicDBEntityLabelBatchSizes(40)
+	got, err := nornicDBEntityLabelBatchSizes(func(string) string { return "" }, 40)
+	if err != nil {
+		t.Fatalf("nornicDBEntityLabelBatchSizes() error = %v, want nil", err)
+	}
 	if got["Function"] != defaultNornicDBFunctionEntityBatchSize {
 		t.Fatalf("Function batch size = %d, want %d", got["Function"], defaultNornicDBFunctionEntityBatchSize)
 	}
 	if got["Struct"] != 40 {
 		t.Fatalf("Struct batch size = %d, want 40", got["Struct"])
+	}
+}
+
+func TestNornicDBEntityLabelBatchSizesDefault(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBEntityLabelBatchSizes(func(string) string { return "" }, 100)
+	if err != nil {
+		t.Fatalf("nornicDBEntityLabelBatchSizes() error = %v, want nil", err)
+	}
+	if got["Function"] != defaultNornicDBFunctionEntityBatchSize {
+		t.Fatalf("Function batch size = %d, want %d", got["Function"], defaultNornicDBFunctionEntityBatchSize)
+	}
+	if got["Struct"] != defaultNornicDBStructEntityBatchSize {
+		t.Fatalf("Struct batch size = %d, want %d", got["Struct"], defaultNornicDBStructEntityBatchSize)
+	}
+}
+
+func TestNornicDBEntityLabelBatchSizesFromEnv(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBEntityLabelBatchSizes(func(key string) string {
+		if key == nornicDBEntityLabelBatchSizesEnv {
+			return "Function=30,Struct=40,Class=75"
+		}
+		return ""
+	}, 100)
+	if err != nil {
+		t.Fatalf("nornicDBEntityLabelBatchSizes() error = %v, want nil", err)
+	}
+	if got["Function"] != 30 {
+		t.Fatalf("Function batch size = %d, want 30", got["Function"])
+	}
+	if got["Struct"] != 40 {
+		t.Fatalf("Struct batch size = %d, want 40", got["Struct"])
+	}
+	if got["Class"] != 75 {
+		t.Fatalf("Class batch size = %d, want 75", got["Class"])
+	}
+}
+
+func TestNornicDBEntityLabelBatchSizesCapsEnvByEntityBatchSize(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBEntityLabelBatchSizes(func(key string) string {
+		if key == nornicDBEntityLabelBatchSizesEnv {
+			return "Function=30,Struct=80"
+		}
+		return ""
+	}, 50)
+	if err != nil {
+		t.Fatalf("nornicDBEntityLabelBatchSizes() error = %v, want nil", err)
+	}
+	if got["Function"] != 30 {
+		t.Fatalf("Function batch size = %d, want 30", got["Function"])
+	}
+	if got["Struct"] != 50 {
+		t.Fatalf("Struct batch size = %d, want 50", got["Struct"])
+	}
+}
+
+func TestNornicDBEntityLabelBatchSizesRejectsInvalidEnv(t *testing.T) {
+	t.Parallel()
+
+	_, err := nornicDBEntityLabelBatchSizes(func(key string) string {
+		if key == nornicDBEntityLabelBatchSizesEnv {
+			return "Function=nope"
+		}
+		return ""
+	}, 100)
+	if err == nil {
+		t.Fatal("nornicDBEntityLabelBatchSizes() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), nornicDBEntityLabelBatchSizesEnv) {
+		t.Fatalf("nornicDBEntityLabelBatchSizes() error = %q, want env name", err)
 	}
 }
 
