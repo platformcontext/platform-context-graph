@@ -347,14 +347,40 @@ func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts
 		if maxStatements <= 0 {
 			maxStatements = defaultNornicDBPhaseGroupStatements
 		}
+		totalChunks := (len(stmts) + maxStatements - 1) / maxStatements
 		for start := 0; start < len(stmts); start += maxStatements {
 			end := start + maxStatements
 			if end > len(stmts) {
 				end = len(stmts)
 			}
-			if err := ge.ExecuteGroup(ctx, stmts[start:end]); err != nil {
-				return err
+			chunkIndex := (start / maxStatements) + 1
+			chunkStart := time.Now()
+			err := ge.ExecuteGroup(ctx, stmts[start:end])
+			chunkDuration := time.Since(chunkStart)
+			if err != nil {
+				statementSummary := summarizePhaseGroupChunk(stmts[start:end])
+				return fmt.Errorf(
+					"phase-group chunk %d/%d (statements %d-%d of %d, size=%d, duration=%s, first_statement=%q): %w",
+					chunkIndex,
+					totalChunks,
+					start+1,
+					end,
+					len(stmts),
+					end-start,
+					chunkDuration,
+					statementSummary,
+					err,
+				)
 			}
+			slog.Info(
+				"nornicdb phase-group chunk completed",
+				"chunk_index", chunkIndex,
+				"chunk_count", totalChunks,
+				"statement_start", start+1,
+				"statement_end", end,
+				"statement_count", end-start,
+				"duration_s", chunkDuration.Seconds(),
+			)
 		}
 		return nil
 	}
@@ -364,6 +390,32 @@ func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts
 		}
 	}
 	return nil
+}
+
+func summarizePhaseGroupChunk(stmts []sourceneo4j.Statement) string {
+	if len(stmts) == 0 {
+		return ""
+	}
+	if summary, ok := stmts[0].Parameters["_pcg_statement_summary"].(string); ok && strings.TrimSpace(summary) != "" {
+		return summary
+	}
+	return summarizePhaseGroupStatement(stmts[0].Cypher)
+}
+
+func summarizePhaseGroupStatement(cypher string) string {
+	trimmed := strings.TrimSpace(cypher)
+	if trimmed == "" {
+		return ""
+	}
+	lines := strings.Split(trimmed, "\n")
+	if len(lines) > 2 {
+		lines = lines[:2]
+	}
+	trimmed = strings.Join(lines, " | ")
+	if len(trimmed) > 120 {
+		return trimmed[:120]
+	}
+	return trimmed
 }
 
 func ingesterContentBeforeCanonical(getenv func(string) string) bool {

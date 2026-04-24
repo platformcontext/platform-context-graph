@@ -30,6 +30,9 @@ func (e TimeoutExecutor) Execute(ctx context.Context, statement Statement) error
 	if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
 		return fmt.Errorf("neo4j execute timed out after %s: %w", e.Timeout, context.DeadlineExceeded)
 	}
+	if errors.Is(execCtx.Err(), context.Canceled) {
+		return fmt.Errorf("neo4j execute canceled before completion: %w", context.Canceled)
+	}
 	return err
 }
 
@@ -53,6 +56,9 @@ func (e TimeoutExecutor) ExecuteGroup(ctx context.Context, statements []Statemen
 	err := ge.ExecuteGroup(execCtx, statements)
 	if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
 		return fmt.Errorf("neo4j execute group timed out after %s: %w", e.Timeout, context.DeadlineExceeded)
+	}
+	if errors.Is(execCtx.Err(), context.Canceled) {
+		return fmt.Errorf("neo4j execute group canceled before completion: %w", context.Canceled)
 	}
 	return err
 }

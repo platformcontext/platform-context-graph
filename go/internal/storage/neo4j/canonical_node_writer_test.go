@@ -160,7 +160,7 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 		}
 	}
 
-	expected := []string{"retract", "repository", "directories", "files", "entities", "entity_containment", "modules", "structural_edges"}
+	expected := []string{"retract", "repository", "directories", "files", "entities", "modules", "structural_edges"}
 	if len(phaseOrder) != len(expected) {
 		t.Fatalf("phase order = %v, want %v", phaseOrder, expected)
 	}
@@ -295,7 +295,7 @@ func TestCanonicalNodeWriterEntityUpsertsRemainLabelScoped(t *testing.T) {
 		t.Fatalf("Write() error = %v", err)
 	}
 
-	// Collect entity-phase calls
+	// Collect batched entity-phase calls
 	var entityCalls []Statement
 	for _, call := range exec.calls {
 		if call.Operation == OperationCanonicalUpsert &&
@@ -304,29 +304,27 @@ func TestCanonicalNodeWriterEntityUpsertsRemainLabelScoped(t *testing.T) {
 		}
 	}
 
-	if len(entityCalls) != 3 {
-		t.Fatalf("expected 3 entity upserts (2 Function, 1 Class), got %d", len(entityCalls))
+	if len(entityCalls) != 2 {
+		t.Fatalf("expected 2 entity batches (Function + Class), got %d", len(entityCalls))
 	}
 
 	var functionCount, classCount int
 	for _, call := range entityCalls {
+		rows, ok := call.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("rows type = %T, want []map[string]any", call.Parameters["rows"])
+		}
 		if strings.Contains(call.Cypher, "MERGE (n:Function") {
-			functionCount++
-			if got := call.Parameters["entity_id"]; got != "f1" && got != "f2" {
-				t.Fatalf("function entity_id = %#v, want f1 or f2", got)
-			}
-			if _, ok := call.Parameters["properties"].(map[string]any); !ok {
-				t.Fatalf("function properties type = %T, want map[string]any", call.Parameters["properties"])
+			functionCount += len(rows)
+			if got, want := len(rows), 2; got != want {
+				t.Fatalf("function batch size = %d, want %d", got, want)
 			}
 			continue
 		}
 		if strings.Contains(call.Cypher, "MERGE (n:Class") {
-			classCount++
-			if got, want := call.Parameters["entity_id"], "c1"; got != want {
-				t.Fatalf("class entity_id = %#v, want %#v", got, want)
-			}
-			if _, ok := call.Parameters["properties"].(map[string]any); !ok {
-				t.Fatalf("class properties type = %T, want map[string]any", call.Parameters["properties"])
+			classCount += len(rows)
+			if got, want := len(rows), 1; got != want {
+				t.Fatalf("class batch size = %d, want %d", got, want)
 			}
 			continue
 		}
@@ -429,17 +427,24 @@ func TestCanonicalNodeWriterProjectsTypeScriptClassFamilyMetadata(t *testing.T) 
 	}
 
 	for _, call := range entityCalls {
-		if !strings.Contains(call.Cypher, "SET n += $properties") {
-			t.Fatalf("TS class-family cypher missing map property merge: %s", call.Cypher)
+		if !strings.Contains(call.Cypher, "SET n += row.props") {
+			t.Fatalf("TS class-family cypher missing row.props merge: %s", call.Cypher)
 		}
 	}
 
 	var classProperties map[string]any
 	for _, call := range entityCalls {
 		if strings.Contains(call.Cypher, "MERGE (n:Class") {
-			props, ok := call.Parameters["properties"].(map[string]any)
+			rows, ok := call.Parameters["rows"].([]map[string]any)
 			if !ok {
-				t.Fatalf("class properties type = %T, want map[string]any", call.Parameters["properties"])
+				t.Fatalf("class rows type = %T, want []map[string]any", call.Parameters["rows"])
+			}
+			if got, want := len(rows), 1; got != want {
+				t.Fatalf("class row count = %d, want %d", got, want)
+			}
+			props, ok := rows[0]["props"].(map[string]any)
+			if !ok {
+				t.Fatalf("class props type = %T, want map[string]any", rows[0]["props"])
 			}
 			classProperties = props
 			break
