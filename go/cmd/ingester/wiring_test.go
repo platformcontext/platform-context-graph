@@ -481,6 +481,36 @@ func TestNornicDBPhaseGroupExecutorExecutesRetractStatementsSequentially(t *test
 	}
 }
 
+func TestNornicDBPhaseGroupExecutorRequiresAllStatementsToBeRetracts(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:         inner,
+		maxStatements: 5,
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{
+			Operation: sourceneo4j.OperationCanonicalRetract,
+			Cypher:    "MATCH (n) DELETE n",
+		},
+		{
+			Cypher: "RETURN grouped",
+		},
+	}
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+	if got, want := inner.groupSizes, []int{2}; !equalIntSlices(got, want) {
+		t.Fatalf("group sizes = %v, want %v", got, want)
+	}
+	if got := len(inner.executeParams); got != 0 {
+		t.Fatalf("execute params count = %d, want 0", got)
+	}
+}
+
 func TestNornicDBPhaseGroupExecutorExecutesEntitySingletonFallbackOutsideGroup(t *testing.T) {
 	t.Parallel()
 
