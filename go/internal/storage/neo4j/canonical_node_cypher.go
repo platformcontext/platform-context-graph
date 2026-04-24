@@ -92,11 +92,20 @@ MERGE (d)-[:CONTAINS]->(f)`
 // --- Phase E: Entity Cypher (template — label inserted via fmt.Sprintf) ---
 
 // canonicalNodeEntityUpsertTemplate is formatted with the Neo4j label at write
-// time. Entity upserts intentionally use per-row parameters instead of an
-// UNWIND row map because NornicDB does not reliably bind row.entity_id inside
-// MERGE map patterns for canonical code entities.
-const canonicalNodeEntityUpsertTemplate = `MERGE (n:%s {uid: $entity_id})
-SET n += $properties`
+// time. Canonical entity writes batch rows and merge containment in the same
+// statement so repo-scale projector runs do not degrade into one statement per
+// entity. The row shape is aligned with the NornicDB hot-path cookbook and the
+// semantic-entity adapter verification lane.
+const canonicalNodeEntityUpsertTemplate = `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
+MERGE (n:%s {uid: row.entity_id})
+SET n += row.props
+MERGE (f)-[:CONTAINS]->(n)`
+
+const canonicalNodeEntitySingletonUpsertTemplate = `MATCH (f:File {path: $file_path})
+MERGE (n:%s {uid: $entity_id})
+SET n += $props
+MERGE (f)-[:CONTAINS]->(n)`
 
 const canonicalNodeEntityContainmentEdgeTemplate = `MATCH (f:File {path: $file_path})
 MATCH (n:%s {uid: $entity_id})

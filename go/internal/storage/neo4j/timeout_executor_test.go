@@ -81,6 +81,48 @@ func TestTimeoutExecutorExecuteGroupErrorsWithoutGroupExecutor(t *testing.T) {
 	}
 }
 
+func TestTimeoutExecutorExecutePropagatesCancellationContext(t *testing.T) {
+	t.Parallel()
+
+	inner := &cancellationRecordingExecutor{}
+	executor := TimeoutExecutor{
+		Inner:   inner,
+		Timeout: time.Second,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := executor.Execute(ctx, Statement{Cypher: "RETURN 1"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context canceled", err)
+	}
+	if got, want := err.Error(), "neo4j execute canceled before completion: context canceled"; got != want {
+		t.Fatalf("Execute() error = %q, want %q", got, want)
+	}
+}
+
+func TestTimeoutExecutorExecuteGroupPropagatesCancellationContext(t *testing.T) {
+	t.Parallel()
+
+	inner := &cancellationRecordingGroupExecutor{}
+	executor := TimeoutExecutor{
+		Inner:   inner,
+		Timeout: time.Second,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := executor.ExecuteGroup(ctx, []Statement{{Cypher: "RETURN 1"}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ExecuteGroup() error = %v, want context canceled", err)
+	}
+	if got, want := err.Error(), "neo4j execute group canceled before completion: context canceled"; got != want {
+		t.Fatalf("ExecuteGroup() error = %q, want %q", got, want)
+	}
+}
+
 type contextBlockingExecutor struct{}
 
 func (contextBlockingExecutor) Execute(ctx context.Context, _ Statement) error {
@@ -111,4 +153,23 @@ func (e *timeoutGroupRecordingExecutor) Execute(context.Context, Statement) erro
 func (e *timeoutGroupRecordingExecutor) ExecuteGroup(context.Context, []Statement) error {
 	e.groupCalls++
 	return nil
+}
+
+type cancellationRecordingExecutor struct{}
+
+func (cancellationRecordingExecutor) Execute(ctx context.Context, _ Statement) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+type cancellationRecordingGroupExecutor struct{}
+
+func (cancellationRecordingGroupExecutor) Execute(ctx context.Context, _ Statement) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (cancellationRecordingGroupExecutor) ExecuteGroup(ctx context.Context, _ []Statement) error {
+	<-ctx.Done()
+	return ctx.Err()
 }

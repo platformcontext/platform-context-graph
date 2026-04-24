@@ -61,6 +61,189 @@ func TestNornicDBCompatibilityWorkarounds(t *testing.T) {
 	})
 }
 
+func TestNornicDBCanonicalEntityBatchCompatibilityWorkaround(t *testing.T) {
+	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
+		setup := []string{
+			"MERGE (:File {path: '/tmp/pcg-nornicdb-batch/main.go'})",
+		}
+		runNornicDBSyntaxSequence(t, ctx, driver, setup)
+
+		query := `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
+MERGE (n:Function {uid: row.entity_id})
+SET n += row.props
+MERGE (f)-[:CONTAINS]->(n)
+RETURN count(*) AS processed_rows`
+
+		rows := []map[string]any{
+			{
+				"file_path": "/tmp/pcg-nornicdb-batch/main.go",
+				"entity_id": "fn:one",
+				"props": map[string]any{
+					"id":            "fn:one",
+					"name":          "handleRelationships",
+					"path":          "/tmp/pcg-nornicdb-batch/main.go",
+					"relative_path": "main.go",
+					"line_number":   10,
+					"start_line":    10,
+					"end_line":      20,
+					"repo_id":       "repo-batch",
+					"language":      "go",
+					"lang":          "go",
+					"scope_id":      "scope-batch",
+					"generation_id": "gen-batch",
+				},
+			},
+			{
+				"file_path": "/tmp/pcg-nornicdb-batch/main.go",
+				"entity_id": "fn:two",
+				"props": map[string]any{
+					"id":            "fn:two",
+					"name":          "transitiveRelationshipsGraphResponse",
+					"path":          "/tmp/pcg-nornicdb-batch/main.go",
+					"relative_path": "main.go",
+					"line_number":   30,
+					"start_line":    30,
+					"end_line":      40,
+					"repo_id":       "repo-batch",
+					"language":      "go",
+					"lang":          "go",
+					"scope_id":      "scope-batch",
+					"generation_id": "gen-batch",
+				},
+			},
+		}
+
+		session := driver.NewSession(ctx, neo4jdriver.SessionConfig{
+			AccessMode:   neo4jdriver.AccessModeWrite,
+			DatabaseName: localNornicDBDefaultDatabase,
+		})
+		defer func() {
+			_ = session.Close(ctx)
+		}()
+
+		result, err := session.Run(ctx, query, map[string]any{"rows": rows})
+		if err != nil {
+			t.Fatalf("batched canonical entity query error = %v, want nil", err)
+		}
+		if _, err := result.Consume(ctx); err != nil {
+			t.Fatalf("batched canonical entity consume error = %v, want nil", err)
+		}
+
+		count, err := nornicDBReadCount(ctx, driver, `
+MATCH (:File {path: $file_path})-[:CONTAINS]->(f:Function)
+WHERE f.repo_id = $repo_id
+RETURN count(f) AS count`, map[string]any{
+			"file_path": "/tmp/pcg-nornicdb-batch/main.go",
+			"repo_id":   "repo-batch",
+		})
+		if err != nil {
+			t.Fatalf("count batched canonical functions error = %v, want nil", err)
+		}
+		if count != 2 {
+			t.Fatalf("batched canonical function count = %d, want 2", count)
+		}
+	})
+}
+
+func TestNornicDBCanonicalEntitySingletonFallbackForShortestPathValues(t *testing.T) {
+	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
+		setup := []string{
+			"MERGE (:File {path: '/tmp/pcg-nornicdb-batch/main.go'})",
+		}
+		runNornicDBSyntaxSequence(t, ctx, driver, setup)
+
+		batchedQuery := `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
+MERGE (n:Function {uid: row.entity_id})
+SET n += row.props
+MERGE (f)-[:CONTAINS]->(n)
+RETURN count(*) AS processed_rows`
+
+		normalRows := []map[string]any{
+			{
+				"file_path": "/tmp/pcg-nornicdb-batch/main.go",
+				"entity_id": "fn:one",
+				"props": map[string]any{
+					"id":            "fn:one",
+					"name":          "handleRelationships",
+					"path":          "/tmp/pcg-nornicdb-batch/main.go",
+					"relative_path": "main.go",
+					"line_number":   10,
+					"start_line":    10,
+					"end_line":      20,
+					"repo_id":       "repo-batch",
+					"language":      "go",
+					"lang":          "go",
+					"scope_id":      "scope-batch",
+					"generation_id": "gen-batch",
+				},
+			},
+		}
+		singletonQuery := `MATCH (f:File {path: $file_path})
+MERGE (n:Function {uid: $entity_id})
+SET n += $props
+MERGE (f)-[:CONTAINS]->(n)
+RETURN count(*) AS processed_rows`
+		shortestPathRow := map[string]any{
+			"file_path": "/tmp/pcg-nornicdb-batch/main.go",
+			"entity_id": "fn:two",
+			"props": map[string]any{
+				"id":            "fn:two",
+				"name":          "TestHandleCallChainReturnsShortestPath",
+				"path":          "/tmp/pcg-nornicdb-batch/main.go",
+				"relative_path": "main.go",
+				"line_number":   30,
+				"start_line":    30,
+				"end_line":      40,
+				"repo_id":       "repo-batch",
+				"language":      "go",
+				"lang":          "go",
+				"scope_id":      "scope-batch",
+				"generation_id": "gen-batch",
+			},
+		}
+
+		session := driver.NewSession(ctx, neo4jdriver.SessionConfig{
+			AccessMode:   neo4jdriver.AccessModeWrite,
+			DatabaseName: localNornicDBDefaultDatabase,
+		})
+		defer func() {
+			_ = session.Close(ctx)
+		}()
+
+		result, err := session.Run(ctx, batchedQuery, map[string]any{"rows": normalRows})
+		if err != nil {
+			t.Fatalf("batched canonical entity query error = %v, want nil", err)
+		}
+		if _, err := result.Consume(ctx); err != nil {
+			t.Fatalf("batched canonical entity consume error = %v, want nil", err)
+		}
+
+		result, err = session.Run(ctx, singletonQuery, shortestPathRow)
+		if err != nil {
+			t.Fatalf("singleton canonical entity query error = %v, want nil", err)
+		}
+		if _, err := result.Consume(ctx); err != nil {
+			t.Fatalf("singleton canonical entity consume error = %v, want nil", err)
+		}
+
+		count, err := nornicDBReadCount(ctx, driver, `
+MATCH (:File {path: $file_path})-[:CONTAINS]->(f:Function)
+WHERE f.repo_id = $repo_id
+RETURN count(f) AS count`, map[string]any{
+			"file_path": "/tmp/pcg-nornicdb-batch/main.go",
+			"repo_id":   "repo-batch",
+		})
+		if err != nil {
+			t.Fatalf("count fallback canonical functions error = %v, want nil", err)
+		}
+		if count != 2 {
+			t.Fatalf("fallback canonical function count = %d, want 2", count)
+		}
+	})
+}
+
 func TestNornicDBSharedEdgeWriteCompatibilityWorkarounds(t *testing.T) {
 	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
 		setup := []string{

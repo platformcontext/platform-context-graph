@@ -269,6 +269,70 @@ func TestCanonicalExecutorForGraphBackendUsesConfiguredNornicDBPhaseGroupStateme
 	}
 }
 
+func TestNornicDBPhaseGroupExecutorSplitsChunksByConfiguredStatementLimit(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:         inner,
+		maxStatements: 2,
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{Cypher: "RETURN 1"},
+		{Cypher: "RETURN 2"},
+		{Cypher: "RETURN 3"},
+		{Cypher: "RETURN 4"},
+		{Cypher: "RETURN 5"},
+	}
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+	if got, want := len(inner.groupSizes), 3; got != want {
+		t.Fatalf("group call count = %d, want %d", got, want)
+	}
+	if got, want := inner.groupSizes, []int{2, 2, 1}; !equalIntSlices(got, want) {
+		t.Fatalf("group sizes = %v, want %v", got, want)
+	}
+}
+
+func TestNornicDBPhaseGroupExecutorWrapsChunkFailureDetails(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{
+		failAtCall: 2,
+		err:        errors.New("context canceled"),
+	}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:         inner,
+		maxStatements: 2,
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{Cypher: "RETURN 1"},
+		{Cypher: "RETURN 2"},
+		{Cypher: "RETURN 3"},
+	}
+
+	err := executor.ExecutePhaseGroup(context.Background(), stmts)
+	if err == nil {
+		t.Fatal("ExecutePhaseGroup() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "phase-group chunk 2/2") {
+		t.Fatalf("ExecutePhaseGroup() error = %q, want chunk ordinal context", err.Error())
+	}
+	if !strings.Contains(err.Error(), "statements 3-3 of 3") {
+		t.Fatalf("ExecutePhaseGroup() error = %q, want statement range context", err.Error())
+	}
+	if !strings.Contains(err.Error(), `first_statement="RETURN 3"`) {
+		t.Fatalf("ExecutePhaseGroup() error = %q, want first statement summary", err.Error())
+	}
+	if !strings.Contains(err.Error(), "context canceled") {
+		t.Fatalf("ExecutePhaseGroup() error = %q, want inner error context", err.Error())
+	}
+}
+
 func TestCanonicalExecutorForGraphBackendAllowsNornicDBGroupedWhenConformanceEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -531,6 +595,38 @@ type contextBlockingIngesterExecutor struct{}
 func (contextBlockingIngesterExecutor) Execute(ctx context.Context, _ sourceneo4j.Statement) error {
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+type recordingGroupChunkExecutor struct {
+	groupSizes []int
+	callCount  int
+	failAtCall int
+	err        error
+}
+
+func (r *recordingGroupChunkExecutor) Execute(context.Context, sourceneo4j.Statement) error {
+	return nil
+}
+
+func (r *recordingGroupChunkExecutor) ExecuteGroup(_ context.Context, stmts []sourceneo4j.Statement) error {
+	r.callCount++
+	r.groupSizes = append(r.groupSizes, len(stmts))
+	if r.failAtCall > 0 && r.callCount == r.failAtCall {
+		return r.err
+	}
+	return nil
+}
+
+func equalIntSlices(got []int, want []int) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func minimalCanonicalMaterialization() projector.CanonicalMaterialization {
