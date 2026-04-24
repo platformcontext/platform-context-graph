@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
@@ -396,11 +397,12 @@ func (q ProjectorQueue) Fail(
 
 	query := failProjectorWorkQuery
 	failureClass := "projection_failed"
+	sanitizedCause := sanitizeFailureText(cause.Error())
 	args := []any{
 		q.now(),
 		failureClass,
-		cause.Error(),
-		cause.Error(),
+		sanitizedCause,
+		sanitizedCause,
 		work.Scope.ScopeID,
 		work.Generation.GenerationID,
 		q.LeaseOwner,
@@ -412,8 +414,8 @@ func (q ProjectorQueue) Fail(
 		args = []any{
 			q.now(),
 			failureClass,
-			cause.Error(),
-			cause.Error(),
+			sanitizedCause,
+			sanitizedCause,
 			q.now().Add(q.retryDelay()),
 			work.Scope.ScopeID,
 			work.Generation.GenerationID,
@@ -427,6 +429,14 @@ func (q ProjectorQueue) Fail(
 	}
 
 	return nil
+}
+
+func sanitizeFailureText(text string) string {
+	if text == "" {
+		return text
+	}
+	sanitized := strings.ToValidUTF8(text, "")
+	return strings.ReplaceAll(sanitized, "\x00", "")
 }
 
 func (q ProjectorQueue) validate() error {

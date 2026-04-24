@@ -38,9 +38,10 @@ const (
 	// Function entities remain the heaviest row shape inside the broader entity
 	// phase, so they get a narrower row cap than other entity labels.
 	// Function rows are the highest-cost entity family on the self-repo dogfood
-	// lane. Reducing them to 10 rows materially lowers per-statement cost,
-	// instead of only smoothing grouped latency.
-	defaultNornicDBFunctionEntityBatchSize = 10
+	// lane. The first narrowed 10-row default lowered per-statement cost, but it
+	// fragmented the lane too much; 15 rows keeps Function chunks bounded while
+	// still reaching Variable at the healthier ~20s band.
+	defaultNornicDBFunctionEntityBatchSize = 15
 	// Struct entities were the next heavy family on the self-repo dogfood lane
 	// once Function rows were narrowed, so they get the next smaller row cap.
 	defaultNornicDBStructEntityBatchSize = 50
@@ -516,6 +517,9 @@ func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts
 		return nil
 	}
 	if ge, ok := e.inner.(sourceneo4j.GroupExecutor); ok {
+		if len(stmts) > 0 && stmts[0].Operation == sourceneo4j.OperationCanonicalRetract {
+			return e.executeSequentialRetractPhase(ctx, stmts)
+		}
 		if statementPhase(stmts) == sourceneo4j.CanonicalPhaseEntities {
 			return e.executeEntityPhaseGroup(ctx, ge, stmts)
 		}
@@ -525,6 +529,35 @@ func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts
 		if err := e.inner.Execute(ctx, sanitizedStatement(stmt)); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (e nornicDBPhaseGroupExecutor) executeSequentialRetractPhase(
+	ctx context.Context,
+	stmts []sourceneo4j.Statement,
+) error {
+	for i, stmt := range stmts {
+		statementStart := time.Now()
+		statementSummary := summarizePhaseGroupChunk([]sourceneo4j.Statement{stmt})
+		if err := e.inner.Execute(ctx, sanitizedStatement(stmt)); err != nil {
+			return fmt.Errorf(
+				"phase-group retract statement %d/%d (duration=%s, first_statement=%q): %w",
+				i+1,
+				len(stmts),
+				time.Since(statementStart),
+				statementSummary,
+				err,
+			)
+		}
+		slog.Info(
+			"nornicdb retract statement completed",
+			"statement_index", i+1,
+			"statement_count", len(stmts),
+			"phase", "retract",
+			"duration_s", time.Since(statementStart).Seconds(),
+			"first_statement", statementSummary,
+		)
 	}
 	return nil
 }
