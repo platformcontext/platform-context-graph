@@ -1,0 +1,47 @@
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 39,48-52
+.gitignore
+  e27ce815bbe89792 19
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 130-131,137-141,174,182-189
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 45,48-56
+go/cmd/pcg/local_host_progress_test.go
+  e27ce815bbe89792 129,140,178
+go/cmd/pcg/local_host_supervision_test.go
+  e27ce815bbe89792 26,36,73
+go/cmd/ingester/wiring.go
+  e27ce815bbe89792 10,36-39,53-57,568,575-586,618-620,625,629,642-646,654-663,691-693,708-857
+go/cmd/pcg/local_graph_bootstrap.go
+  e27ce815bbe89792 1-114
+go/cmd/pcg/local_graph_bootstrap_test.go
+  e27ce815bbe89792 1-97
+.pcgignore
+  e27ce815bbe89792 155-157
+go/cmd/pcg/local_host.go
+  e27ce815bbe89792 57,171-175
+go/cmd/ingester/wiring_test.go
+  e27ce815bbe89792 4,7,606-746,784-804
+go/cmd/pcg/local_host_test.go
+  e27ce815bbe89792 350,360,401-411,414-416,422-424
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "9c33fcbd276dc11e8cc6d260dc0a38fc50c9a044",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 671,
+      "total_deletions": 34,
+      "accepted_lines": 670,
+      "overriden_lines": 0
+    }
+  }
+}
