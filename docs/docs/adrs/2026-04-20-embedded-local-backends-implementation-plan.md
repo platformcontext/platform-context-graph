@@ -49,7 +49,8 @@ Latest 2026-04-24 NornicDB dogfood evidence:
 - after re-reading NornicDB's performance and Neo4j migration docs, the branch identified a more fundamental local-only gap: `pcg graph start` applied Postgres schema but did not apply the NornicDB graph schema before starting reducer/ingester, which meant schema-backed `MERGE` hot paths could fall back to label scans even though PCG's checked-in schema defines the right `uid` constraints
 - current branch now applies the backend-routed graph schema immediately after NornicDB sidecar readiness and before owner-record publication or child startup, preserving the same NornicDB schema dialect used by `bootstrap-data-plane`
 - the branch now emits rolling and final `nornicdb entity label summary` logs with `phase`, per-label rows, statements, executions, grouped chunks, total duration, max execution duration, and row-width totals so the next tuning slice can optimize cumulative node-upsert and containment-edge cost instead of reacting to isolated chunk logs
-- the first remote self-repo rerun after the entity/containment split failed fast on `Annotation` because the old NornicDB schema dialect translated composite `IS UNIQUE` to `IS NODE KEY`, which incorrectly required sparse semantic labels to carry `name`; current branch now preserves composite `IS UNIQUE` for NornicDB and keeps `uid` uniqueness as the canonical merge identity
+- the first remote self-repo rerun after the entity/containment split failed fast on `Annotation` because the old NornicDB schema dialect translated composite `IS UNIQUE` to `IS NODE KEY`, which incorrectly required sparse semantic labels to carry `name`; the follow-up run also proved the current NornicDB binary still rejects PCG composite `IS UNIQUE`, so current branch now skips unsupported composite uniqueness DDL for NornicDB and keeps `uid` uniqueness as the canonical merge identity
+- the same remote run proved the split changed the real bottleneck: `phase=entities` completed in `25.523448885s` total, including `Function` at `3.10382615s` and `Variable` at `20.695746985s`; the remaining slow lane is now `phase=entity_containment`, where `Function` containment alone took `248.58715967s`, so the next tuning slice must target containment-edge shape rather than node upsert row width
 
 Current tuning plan:
 - keep the safer `Function=15,Struct=50,Variable=10` row-cap baseline in code while we gather better evidence
@@ -362,9 +363,9 @@ it into lightweight mode.
   implemented
 - opt-in syntax gate against a real NornicDB binary:
   `PCG_NORNICDB_BINARY=/tmp/nornicdb-headless go test ./cmd/pcg -run TestNornicDBSyntaxVerification -count=1 -v`.
-  The current release-backed NornicDB binary accepts PCG's composite
-  `IS UNIQUE` schema syntax, the multi-label fulltext procedure form, and
-  `COLLECT(DISTINCT {map literal})`.
+  The current release-backed NornicDB binary accepts the multi-label fulltext
+  procedure form and `COLLECT(DISTINCT {map literal})`, but still rejects PCG's
+  composite `IS UNIQUE` schema syntax.
 - opt-in workaround gate against the same binary:
   `PCG_NORNICDB_BINARY=/tmp/nornicdb-headless go test ./cmd/pcg -run TestNornicDBCompatibilityWorkarounds -count=1 -v`.
   The 2026-04-22 run also passed composite `IS NODE KEY` and the multi-label
@@ -374,9 +375,10 @@ it into lightweight mode.
 - graph schema dialect gate:
   `PCG_NORNICDB_BINARY=/tmp/nornicdb-headless go test ./cmd/pcg -run TestNornicDBSchemaAdapterVerification -count=1 -v`.
   The current branch passes after routing schema bootstrap through the
-  backend-specific renderer: Neo4j and NornicDB both keep composite
-  `IS UNIQUE`, while NornicDB still skips Neo4j's multi-label fulltext
-  fallback.
+  backend-specific renderer: Neo4j keeps composite `IS UNIQUE`, while
+  NornicDB skips unsupported composite uniqueness DDL, keeps single-property
+  `uid` uniqueness constraints for canonical merge identity, and still skips
+  Neo4j's multi-label fulltext fallback.
 - installer gate:
   `go test ./cmd/pcg -run TestInstallNornicDB -count=1`.
   The current branch run passes local-file copy, checksum mismatch rejection,

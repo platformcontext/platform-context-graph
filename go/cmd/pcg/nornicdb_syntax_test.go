@@ -22,10 +22,6 @@ func TestNornicDBSyntaxVerification(t *testing.T) {
 			cypher string
 		}{
 			{
-				name:   "composite unique constraint",
-				cypher: "CREATE CONSTRAINT pcg_syntax_function_unique IF NOT EXISTS FOR (f:PCGSyntaxFunction) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE",
-			},
-			{
 				name:   "fulltext index",
 				cypher: "CREATE FULLTEXT INDEX pcg_syntax_fulltext IF NOT EXISTS FOR (n:PCGSyntaxFunction|PCGSyntaxClass|PCGSyntaxVariable) ON EACH [n.name, n.source, n.docstring]",
 			},

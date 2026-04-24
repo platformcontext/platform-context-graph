@@ -50,7 +50,8 @@ Latest 2026-04-24 NornicDB dogfood evidence:
 - after re-reading NornicDB's performance and migration docs, the branch identified a local-host startup gap: `pcg graph start` applied Postgres schema but skipped graph schema bootstrap, leaving NornicDB without the schema-backed `MERGE` lookup preconditions its hot-path cookbook documents
 - current branch now applies the backend-routed graph schema immediately after NornicDB sidecar readiness and before owner-record publication or reducer/ingester startup, using the same NornicDB schema dialect as `bootstrap-data-plane`
 - the branch now emits rolling and final `nornicdb entity label summary` logs with `phase`, per-label rows, statements, executions, grouped chunks, total duration, max execution duration, and row-width totals so the next tuning slice can compare node-upsert cost against containment-edge cost before changing more defaults
-- the first remote self-repo rerun after the entity/containment split exposed a schema-dialect correctness issue rather than a timeout: translating composite `IS UNIQUE` to `IS NODE KEY` made sparse `Annotation` rows fail on required `name`; current branch now preserves composite `IS UNIQUE` for NornicDB and relies on the separate `uid` uniqueness constraints for canonical merge identity
+- the first remote self-repo rerun after the entity/containment split exposed a schema-dialect correctness issue rather than a timeout: translating composite `IS UNIQUE` to `IS NODE KEY` made sparse `Annotation` rows fail on required `name`; the follow-up run also proved the current NornicDB binary still rejects PCG composite `IS UNIQUE`, so current branch skips unsupported composite uniqueness DDL for NornicDB and relies on separate `uid` uniqueness constraints for canonical merge identity
+- the same remote run proved canonical entity node upsert is no longer the main bottleneck: `phase=entities` completed in `25.523448885s` total, including `Function` at `3.10382615s` and `Variable` at `20.695746985s`; `phase=entity_containment` is now dominant, with `Function` containment alone taking `248.58715967s`
 
 ## Context
 
@@ -103,13 +104,15 @@ Feature evidence (audited 2026-04-22 against the PCG Cypher query surface):
   - `any(...)`, `all(...)` predicates
   - `CASE WHEN ... THEN ... ELSE`, list comprehensions, `coalesce()`
   - Single-property `CREATE CONSTRAINT ... IS UNIQUE`
-  - Composite `CREATE CONSTRAINT ... IS UNIQUE`
   - Composite `CREATE CONSTRAINT ... IS NODE KEY`
   - `CREATE INDEX ... IF NOT EXISTS`
   - Fulltext procedure creation via
     `CALL db.index.fulltext.createNodeIndex(...)`
 - Failed PCG-hot-path syntax probes against `/tmp/nornicdb-headless`
   on 2026-04-22:
+  - PCG's Neo4j-compatible composite
+    `CREATE CONSTRAINT ... REQUIRE (...) IS UNIQUE` form returned
+    `invalid CREATE CONSTRAINT syntax`.
   - PCG's Neo4j fulltext fallback uses multi-label
     `CREATE FULLTEXT INDEX ... FOR (n:A|B|C) ...`; NornicDB returned
     `invalid CREATE FULLTEXT INDEX syntax`.
@@ -130,8 +133,13 @@ Feature evidence (audited 2026-04-22 against the PCG Cypher query surface):
 - PCG therefore routes graph schema bootstrap through a backend schema
   dialect:
   - `neo4j` receives the shared schema unchanged.
-  - `nornicdb` preserves composite `IS UNIQUE` while preserving the
-    procedure-based fulltext form.
+  - `nornicdb` skips unsupported composite `IS UNIQUE` DDL. PCG does not
+    translate those constraints to `IS NODE KEY` because node keys require
+    every participating property while sparse semantic labels such as
+    `Annotation` may not have all properties present.
+  - `nornicdb` keeps the single-property `uid` uniqueness constraints that
+    canonical writes use as merge identity and preserves the procedure-based
+    fulltext form.
   - `nornicdb` skips the Neo4j multi-label `CREATE FULLTEXT INDEX` fallback
     because the verified multi-label path is
     `db.index.fulltext.createNodeIndex(...)`.
