@@ -16,10 +16,11 @@ import (
 // CanonicalNodeWriter writes canonical graph nodes from a CanonicalMaterialization
 // in strict phase order. Each phase creates nodes that subsequent phases MATCH.
 type CanonicalNodeWriter struct {
-	executor        Executor
-	batchSize       int
-	entityBatchSize int
-	instruments     *telemetry.Instruments
+	executor              Executor
+	batchSize             int
+	entityBatchSize       int
+	entityLabelBatchSizes map[string]int
+	instruments           *telemetry.Instruments
 }
 
 type canonicalWritePhase struct {
@@ -50,6 +51,23 @@ func (w *CanonicalNodeWriter) WithEntityBatchSize(batchSize int) *CanonicalNodeW
 	if batchSize > 0 {
 		w.entityBatchSize = batchSize
 	}
+	return w
+}
+
+// WithEntityLabelBatchSize overrides the per-statement row batch size for one
+// canonical entity label while leaving other entity labels on the default
+// entity batch size.
+func (w *CanonicalNodeWriter) WithEntityLabelBatchSize(label string, batchSize int) *CanonicalNodeWriter {
+	if w == nil {
+		return nil
+	}
+	if label == "" || batchSize <= 0 {
+		return w
+	}
+	if w.entityLabelBatchSizes == nil {
+		w.entityLabelBatchSizes = make(map[string]int)
+	}
+	w.entityLabelBatchSizes[label] = batchSize
 	return w
 }
 

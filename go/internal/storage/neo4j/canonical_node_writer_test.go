@@ -1060,6 +1060,61 @@ func TestCanonicalNodeWriterEntityBatchSizeOverride(t *testing.T) {
 	}
 }
 
+func TestCanonicalNodeWriterEntityLabelBatchSizeOverride(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
+		WithEntityBatchSize(100).
+		WithEntityLabelBatchSize("Function", 2)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{EntityID: "c1", Label: "Class", EntityName: "One", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 1, EndLine: 2, Language: "go", RepoID: "repo-1"},
+			{EntityID: "c2", Label: "Class", EntityName: "Two", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 3, EndLine: 4, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f1", Label: "Function", EntityName: "one", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 5, EndLine: 6, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f2", Label: "Function", EntityName: "two", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 7, EndLine: 8, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f3", Label: "Function", EntityName: "three", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 9, EndLine: 10, Language: "go", RepoID: "repo-1"},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 3; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+
+	var classRows []int
+	var functionRows []int
+	for _, stmt := range stmts {
+		rows, _ := stmt.Parameters["rows"].([]map[string]any)
+		summary, _ := stmt.Parameters["_pcg_statement_summary"].(string)
+		switch {
+		case strings.Contains(summary, "label=Class"):
+			classRows = append(classRows, len(rows))
+		case strings.Contains(summary, "label=Function"):
+			functionRows = append(functionRows, len(rows))
+		}
+	}
+
+	if got, want := len(classRows), 1; got != want {
+		t.Fatalf("class batch count = %d, want %d", got, want)
+	}
+	if got, want := classRows[0], 2; got != want {
+		t.Fatalf("class batch rows = %d, want %d", got, want)
+	}
+	if got, want := len(functionRows), 2; got != want {
+		t.Fatalf("function batch count = %d, want %d", got, want)
+	}
+	if got, want := functionRows[0], 2; got != want {
+		t.Fatalf("first function batch rows = %d, want %d", got, want)
+	}
+	if got, want := functionRows[1], 1; got != want {
+		t.Fatalf("second function batch rows = %d, want %d", got, want)
+	}
+}
+
 func TestCanonicalNodeWriterAtomicGroupExecutorError(t *testing.T) {
 	t.Parallel()
 

@@ -27,13 +27,21 @@ const (
 	ingesterConnectionTimeout            = 10 * time.Second
 	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
 	defaultNornicDBPhaseGroupStatements  = 500
+	// Entity statements carry the heaviest canonical payloads on the current
+	// self-repo dogfood lane, so NornicDB needs a lower grouped-transaction cap
+	// here than on lighter canonical phases.
 	defaultNornicDBEntityPhaseStatements = 25
-	defaultNornicDBEntityBatchSize       = 100
-	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
-	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
-	nornicDBPhaseGroupStatementsEnv      = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityPhaseStatementsEnv     = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityBatchSizeEnv           = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
+	// Normal NornicDB entity upserts stay bounded to 100 rows so we do not send
+	// 500-row canonical entity statements through the slower Bolt path.
+	defaultNornicDBEntityBatchSize = 100
+	// Function entities remain the heaviest row shape inside the broader entity
+	// phase, so they get a narrower row cap than other entity labels.
+	defaultNornicDBFunctionEntityBatchSize = 25
+	canonicalWriteTimeoutEnv               = "PCG_CANONICAL_WRITE_TIMEOUT"
+	nornicDBCanonicalGroupedWritesEnv      = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
+	nornicDBPhaseGroupStatementsEnv        = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityPhaseStatementsEnv       = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityBatchSizeEnv             = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -306,8 +314,21 @@ func openIngesterCanonicalWriter(
 	if entityBatchSize > 0 {
 		writer = writer.WithEntityBatchSize(entityBatchSize)
 	}
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		writer = writer.WithEntityLabelBatchSize("Function", minInt(entityBatchSize, defaultNornicDBFunctionEntityBatchSize))
+	}
 
 	return writer, ingesterNeo4jDriverCloser{Driver: driver}, nil
+}
+
+func minInt(left int, right int) int {
+	if left <= 0 {
+		return right
+	}
+	if right <= 0 || left <= right {
+		return left
+	}
+	return right
 }
 
 func canonicalExecutorForGraphBackend(
@@ -364,7 +385,7 @@ func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts
 		return nil
 	}
 	if ge, ok := e.inner.(sourceneo4j.GroupExecutor); ok {
-		if statementPhase(stmts) == "entities" {
+		if statementPhase(stmts) == sourceneo4j.CanonicalPhaseEntities {
 			return e.executeEntityPhaseGroup(ctx, ge, stmts)
 		}
 		return e.executeGroupedChunks(ctx, ge, stmts, e.phaseGroupStatementLimit(stmts))
@@ -393,7 +414,7 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 	}
 
 	for i, stmt := range stmts {
-		if statementPhaseGroupMode(stmt) == "execute_only" {
+		if statementPhaseGroupMode(stmt) == sourceneo4j.PhaseGroupModeExecuteOnly {
 			if err := flushGrouped(); err != nil {
 				return err
 			}
@@ -416,6 +437,7 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 				"statement_count", len(stmts),
 				"phase", statementPhase(stmts),
 				"duration_s", time.Since(statementStart).Seconds(),
+				"first_statement", statementSummary,
 			)
 			continue
 		}
@@ -465,13 +487,14 @@ func (e nornicDBPhaseGroupExecutor) executeGroupedChunks(
 			"statement_end", end,
 			"statement_count", end-start,
 			"duration_s", chunkDuration.Seconds(),
+			"first_statement", statementSummary,
 		)
 	}
 	return nil
 }
 
 func (e nornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourceneo4j.Statement) int {
-	if statementPhase(stmts) == "entities" {
+	if statementPhase(stmts) == sourceneo4j.CanonicalPhaseEntities {
 		if e.entityMaxStatements > 0 {
 			return e.entityMaxStatements
 		}
@@ -487,12 +510,12 @@ func statementPhase(stmts []sourceneo4j.Statement) string {
 	if len(stmts) == 0 {
 		return ""
 	}
-	phase, _ := stmts[0].Parameters["_pcg_phase"].(string)
+	phase, _ := stmts[0].Parameters[sourceneo4j.StatementMetadataPhaseKey].(string)
 	return strings.TrimSpace(phase)
 }
 
 func statementPhaseGroupMode(stmt sourceneo4j.Statement) string {
-	mode, _ := stmt.Parameters["_pcg_phase_group_mode"].(string)
+	mode, _ := stmt.Parameters[sourceneo4j.StatementMetadataPhaseGroupModeKey].(string)
 	return strings.TrimSpace(mode)
 }
 
@@ -500,7 +523,7 @@ func summarizePhaseGroupChunk(stmts []sourceneo4j.Statement) string {
 	if len(stmts) == 0 {
 		return ""
 	}
-	if summary, ok := stmts[0].Parameters["_pcg_statement_summary"].(string); ok && strings.TrimSpace(summary) != "" {
+	if summary, ok := stmts[0].Parameters[sourceneo4j.StatementMetadataSummaryKey].(string); ok && strings.TrimSpace(summary) != "" {
 		return summary
 	}
 	return summarizePhaseGroupStatement(stmts[0].Cypher)
