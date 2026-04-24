@@ -2,6 +2,83 @@ package neo4j
 
 import "strings"
 
+var canonicalEntityMetadataReservedProperties = map[string]struct{}{
+	"end_line":        {},
+	"evidence_source": {},
+	"generation_id":   {},
+	"id":              {},
+	"lang":            {},
+	"language":        {},
+	"line_number":     {},
+	"name":            {},
+	"path":            {},
+	"relative_path":   {},
+	"repo_id":         {},
+	"scope_id":        {},
+	"start_line":      {},
+	"uid":             {},
+}
+
+func canonicalEntityMetadataProperties(row map[string]any) map[string]any {
+	metadata, ok := row["entity_metadata"].(map[string]any)
+	if !ok || len(metadata) == 0 {
+		return nil
+	}
+
+	result := map[string]any{}
+	for key, value := range metadata {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, reserved := canonicalEntityMetadataReservedProperties[key]; reserved {
+			continue
+		}
+		if normalized, ok := canonicalGraphPropertyValue(value); ok {
+			result[key] = normalized
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func canonicalGraphPropertyValue(value any) (any, bool) {
+	switch typed := value.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return nil, false
+		}
+		return trimmed, true
+	case bool:
+		return typed, true
+	case int:
+		return typed, true
+	case int8:
+		return int(typed), true
+	case int16:
+		return int(typed), true
+	case int32:
+		return int(typed), true
+	case int64:
+		return typed, true
+	case float32:
+		return typed, true
+	case float64:
+		return typed, true
+	case []string:
+		out := canonicalStringList(typed)
+		return out, len(out) > 0
+	case []any:
+		out := canonicalAnyStringList(typed)
+		return out, len(out) > 0
+	default:
+		return nil, false
+	}
+}
+
 func canonicalTypeScriptClassFamilyMetadata(row map[string]any) map[string]any {
 	metadata, ok := row["entity_metadata"].(map[string]any)
 	if !ok || len(metadata) == 0 {
@@ -42,6 +119,36 @@ func canonicalTypeScriptClassFamilyMetadata(row map[string]any) map[string]any {
 	return result
 }
 
+func canonicalStringList(input []string) []string {
+	out := make([]string, 0, len(input))
+	for _, item := range input {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func canonicalAnyStringList(input []any) []string {
+	out := make([]string, 0, len(input))
+	for _, item := range input {
+		text, ok := item.(string)
+		if !ok {
+			continue
+		}
+		if trimmed := strings.TrimSpace(text); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func canonicalMetadataString(row map[string]any, key string) string {
 	value, ok := row[key]
 	if !ok || value == nil {
@@ -62,31 +169,9 @@ func canonicalMetadataStringSlice(metadata map[string]any, key string) []string 
 
 	switch typed := value.(type) {
 	case []string:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			if trimmed := strings.TrimSpace(item); trimmed != "" {
-				out = append(out, trimmed)
-			}
-		}
-		if len(out) == 0 {
-			return nil
-		}
-		return out
+		return canonicalStringList(typed)
 	case []any:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			text, ok := item.(string)
-			if !ok {
-				continue
-			}
-			if trimmed := strings.TrimSpace(text); trimmed != "" {
-				out = append(out, trimmed)
-			}
-		}
-		if len(out) == 0 {
-			return nil
-		}
-		return out
+		return canonicalAnyStringList(typed)
 	default:
 		return nil
 	}

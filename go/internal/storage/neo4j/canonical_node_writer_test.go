@@ -469,6 +469,114 @@ func TestCanonicalNodeWriterProjectsTypeScriptClassFamilyMetadata(t *testing.T) 
 	}
 }
 
+func TestCanonicalNodeWriterProjectsInfrastructureIdentityMetadata(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-infra-1",
+		GenerationID: "gen-infra-1",
+		RepoID:       "repo-infra-1",
+		RepoPath:     "/repos/infra",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-infra-1",
+			Name:   "infra-repo",
+			Path:   "/repos/infra",
+		},
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "claim-1",
+				Label:        "CrossplaneClaim",
+				EntityName:   "database",
+				FilePath:     "/repos/infra/control-plane/claim.yaml",
+				RelativePath: "control-plane/claim.yaml",
+				StartLine:    7,
+				EndLine:      20,
+				Language:     "yaml",
+				RepoID:       "repo-infra-1",
+				Metadata: map[string]any{
+					"kind":        "SQLInstance",
+					"api_version": "database.example.org/v1alpha1",
+					"namespace":   "platform",
+				},
+			},
+			{
+				EntityID:     "deployment-1",
+				Label:        "K8sResource",
+				EntityName:   "api",
+				FilePath:     "/repos/infra/deploy/deployment.yaml",
+				RelativePath: "deploy/deployment.yaml",
+				StartLine:    3,
+				EndLine:      40,
+				Language:     "yaml",
+				RepoID:       "repo-infra-1",
+				Metadata: map[string]any{
+					"kind":           "Deployment",
+					"api_version":    "apps/v1",
+					"namespace":      "prod",
+					"qualified_name": "prod/Deployment/api",
+				},
+			},
+		},
+	}
+
+	err := writer.Write(context.Background(), mat)
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	propsByLabel := map[string]map[string]any{}
+	for _, call := range exec.calls {
+		if call.Operation != OperationCanonicalUpsert {
+			continue
+		}
+		for _, label := range []string{"CrossplaneClaim", "K8sResource"} {
+			if !strings.Contains(call.Cypher, "MERGE (n:"+label) {
+				continue
+			}
+			rows, ok := call.Parameters["rows"].([]map[string]any)
+			if !ok {
+				t.Fatalf("%s rows type = %T, want []map[string]any", label, call.Parameters["rows"])
+			}
+			if got, want := len(rows), 1; got != want {
+				t.Fatalf("%s row count = %d, want %d", label, got, want)
+			}
+			props, ok := rows[0]["props"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s props type = %T, want map[string]any", label, rows[0]["props"])
+			}
+			propsByLabel[label] = props
+		}
+	}
+
+	claimProps := propsByLabel["CrossplaneClaim"]
+	if len(claimProps) == 0 {
+		t.Fatal("missing CrossplaneClaim properties")
+	}
+	if got, want := claimProps["kind"], "SQLInstance"; got != want {
+		t.Fatalf("CrossplaneClaim kind = %#v, want %#v", got, want)
+	}
+	if got, want := claimProps["api_version"], "database.example.org/v1alpha1"; got != want {
+		t.Fatalf("CrossplaneClaim api_version = %#v, want %#v", got, want)
+	}
+	if got, want := claimProps["namespace"], "platform"; got != want {
+		t.Fatalf("CrossplaneClaim namespace = %#v, want %#v", got, want)
+	}
+
+	resourceProps := propsByLabel["K8sResource"]
+	if len(resourceProps) == 0 {
+		t.Fatal("missing K8sResource properties")
+	}
+	if got, want := resourceProps["kind"], "Deployment"; got != want {
+		t.Fatalf("K8sResource kind = %#v, want %#v", got, want)
+	}
+	if got, want := resourceProps["qualified_name"], "prod/Deployment/api"; got != want {
+		t.Fatalf("K8sResource qualified_name = %#v, want %#v", got, want)
+	}
+}
+
 func TestCanonicalNodeWriterBatching(t *testing.T) {
 	t.Parallel()
 
