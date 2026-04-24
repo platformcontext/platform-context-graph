@@ -16,6 +16,7 @@ const (
 	// summary used only for logging and error wrapping.
 	StatementMetadataSummaryKey = "_pcg_statement_summary"
 
-	CanonicalPhaseEntities    = "entities"
-	PhaseGroupModeExecuteOnly = "execute_only"
+	CanonicalPhaseEntities          = "entities"
+	CanonicalPhaseEntityContainment = "entity_containment"
+	PhaseGroupModeExecuteOnly       = "execute_only"
 )

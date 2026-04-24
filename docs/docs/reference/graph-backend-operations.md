@@ -67,6 +67,13 @@ phase-group window is `500` statements and can be tuned with
 dogfood runs. Neo4j production writes keep the grouped canonical path and are
 not affected by this local-authoritative guardrail.
 
+The current local-authoritative canonical entity path also separates entity
+node upserts from file containment edges. Node upserts use a cross-file
+`UNWIND ... MERGE (n:<Label> {uid: row.entity_id}) SET n += row.props` shape,
+then `phase=entity_containment` batches attach those nodes back to files. The
+`nornicdb entity label summary` log includes `phase` so operators can tell
+whether repo-scale time is going into node properties or containment edges.
+
 NornicDB exposes explicit Bolt transaction hooks, but PCG does not enable
 grouped canonical writes for normal laptop runs until the PCG Neo4j-driver
 conformance matrix proves rollback, timeout, and no-partial-write behavior on

@@ -526,7 +526,7 @@ func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts
 		if allStatementsUseOperation(stmts, sourceneo4j.OperationCanonicalRetract) {
 			return e.executeSequentialRetractPhase(ctx, stmts)
 		}
-		if statementPhase(stmts) == sourceneo4j.CanonicalPhaseEntities {
+		if statementPhaseUsesEntityLabelStats(statementPhase(stmts)) {
 			return e.executeEntityPhaseGroup(ctx, ge, stmts)
 		}
 		return e.executeGroupedChunks(ctx, ge, stmts, e.phaseGroupStatementLimit(stmts))
@@ -566,6 +566,7 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 	stmts []sourceneo4j.Statement,
 ) error {
 	labelStats := make(map[string]*entityPhaseLabelStats)
+	phase := statementPhase(stmts)
 	grouped := make([]sourceneo4j.Statement, 0, len(stmts))
 	groupedLabel := ""
 	flushGrouped := func() error {
@@ -579,7 +580,7 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 			e.phaseGroupStatementLimit(grouped),
 			func(chunk []sourceneo4j.Statement, chunkDuration time.Duration) {
 				label := entityStatementLabel(chunk[0])
-				stats := ensureEntityPhaseLabelStats(labelStats, label)
+				stats := ensureEntityPhaseLabelStats(labelStats, phase, label)
 				stats.recordChunk(chunk, chunkDuration)
 				logEntityPhaseLabelSummaryIfDue(stats, false)
 			},
@@ -601,7 +602,7 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 					"phase-group singleton statement %d/%d (phase=%s, duration=%s, first_statement=%q): %w",
 					i+1,
 					len(stmts),
-					statementPhase(stmts),
+					phase,
 					time.Since(statementStart),
 					statementSummary,
 					err,
@@ -611,11 +612,11 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 				"nornicdb phase-group singleton completed",
 				"statement_index", i+1,
 				"statement_count", len(stmts),
-				"phase", statementPhase(stmts),
+				"phase", phase,
 				"duration_s", time.Since(statementStart).Seconds(),
 				"first_statement", statementSummary,
 			)
-			stats := ensureEntityPhaseLabelStats(labelStats, entityStatementLabel(stmt))
+			stats := ensureEntityPhaseLabelStats(labelStats, phase, entityStatementLabel(stmt))
 			stats.recordSingleton(stmt, time.Since(statementStart))
 			logEntityPhaseLabelSummaryIfDue(stats, false)
 			continue
@@ -706,6 +707,7 @@ func (e nornicDBPhaseGroupExecutor) executeGroupedChunksObserved(
 }
 
 type entityPhaseLabelStats struct {
+	phase               string
 	label               string
 	rows                int
 	statements          int
@@ -720,7 +722,11 @@ type entityPhaseLabelStats struct {
 	completeLogged      bool
 }
 
-func ensureEntityPhaseLabelStats(stats map[string]*entityPhaseLabelStats, label string) *entityPhaseLabelStats {
+func ensureEntityPhaseLabelStats(stats map[string]*entityPhaseLabelStats, phase string, label string) *entityPhaseLabelStats {
+	phase = strings.TrimSpace(phase)
+	if phase == "" {
+		phase = "unknown"
+	}
 	label = strings.TrimSpace(label)
 	if label == "" {
 		label = "unknown"
@@ -728,7 +734,7 @@ func ensureEntityPhaseLabelStats(stats map[string]*entityPhaseLabelStats, label 
 	if existing := stats[label]; existing != nil {
 		return existing
 	}
-	created := &entityPhaseLabelStats{label: label}
+	created := &entityPhaseLabelStats{phase: phase, label: label}
 	stats[label] = created
 	return created
 }
@@ -824,6 +830,7 @@ func logEntityPhaseLabelSummary(summary *entityPhaseLabelStats, complete bool) {
 	}
 	slog.Info(
 		"nornicdb entity label summary",
+		"phase", summary.phase,
 		"label", summary.label,
 		"complete", complete,
 		"rows", summary.rows,
@@ -858,7 +865,7 @@ func entityStatementRowCount(stmt sourceneo4j.Statement) int {
 }
 
 func (e nornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourceneo4j.Statement) int {
-	if statementPhase(stmts) == sourceneo4j.CanonicalPhaseEntities {
+	if statementPhaseUsesEntityLabelStats(statementPhase(stmts)) {
 		if label := entityStatementLabel(stmts[0]); label != "" && e.entityLabelMaxStatements != nil {
 			if limit := e.entityLabelMaxStatements[label]; limit > 0 {
 				return limit
@@ -873,6 +880,15 @@ func (e nornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourceneo4j
 		return e.maxStatements
 	}
 	return defaultNornicDBPhaseGroupStatements
+}
+
+func statementPhaseUsesEntityLabelStats(phase string) bool {
+	switch strings.TrimSpace(phase) {
+	case sourceneo4j.CanonicalPhaseEntities, sourceneo4j.CanonicalPhaseEntityContainment:
+		return true
+	default:
+		return false
+	}
 }
 
 func statementPhase(stmts []sourceneo4j.Statement) string {

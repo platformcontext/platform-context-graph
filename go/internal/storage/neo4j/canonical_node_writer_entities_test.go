@@ -8,7 +8,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 )
 
-func TestCanonicalNodeWriterBatchesEntityUpsertsWithContainmentEdges(t *testing.T) {
+func TestCanonicalNodeWriterSeparatesEntityUpsertsFromContainmentEdges(t *testing.T) {
 	t.Parallel()
 
 	exec := &mockExecutor{}
@@ -65,29 +65,37 @@ func TestCanonicalNodeWriterBatchesEntityUpsertsWithContainmentEdges(t *testing.
 	}
 
 	var entityCalls []Statement
+	var containmentCalls []Statement
 	for _, call := range exec.calls {
 		if call.Operation == OperationCanonicalUpsert &&
 			strings.Contains(call.Cypher, "MERGE (n:Function {uid: row.entity_id})") {
 			entityCalls = append(entityCalls, call)
+		}
+		if call.Operation == OperationCanonicalUpsert &&
+			call.Parameters[StatementMetadataPhaseKey] == "entity_containment" {
+			containmentCalls = append(containmentCalls, call)
 		}
 	}
 
 	if got, want := len(entityCalls), 1; got != want {
 		t.Fatalf("entity batch count = %d, want %d", got, want)
 	}
+	if got, want := len(containmentCalls), 1; got != want {
+		t.Fatalf("entity containment batch count = %d, want %d", got, want)
+	}
 
 	stmt := entityCalls[0]
 	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
 		t.Fatalf("entity upsert cypher = %q, want batched UNWIND shape", stmt.Cypher)
 	}
-	if !strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") {
-		t.Fatalf("entity upsert cypher = %q, want file anchor", stmt.Cypher)
+	if strings.Contains(stmt.Cypher, "MATCH (f:File") {
+		t.Fatalf("entity upsert cypher = %q, want node-only upsert without file MATCH", stmt.Cypher)
 	}
 	if !strings.Contains(stmt.Cypher, "SET n += row.props") {
 		t.Fatalf("entity upsert cypher = %q, want row.props merge", stmt.Cypher)
 	}
-	if !strings.Contains(stmt.Cypher, "MERGE (f)-[:CONTAINS]->(n)") {
-		t.Fatalf("entity upsert cypher = %q, want containment merge", stmt.Cypher)
+	if strings.Contains(stmt.Cypher, "MERGE (f)-[:CONTAINS]->(n)") {
+		t.Fatalf("entity upsert cypher = %q, want containment in separate phase", stmt.Cypher)
 	}
 
 	rows, ok := stmt.Parameters["rows"].([]map[string]any)
@@ -97,12 +105,12 @@ func TestCanonicalNodeWriterBatchesEntityUpsertsWithContainmentEdges(t *testing.
 	if got, want := len(rows), 2; got != want {
 		t.Fatalf("rows count = %d, want %d", got, want)
 	}
-	if got := stmt.Parameters["file_path"]; got != "/repos/my-repo/src/main.go" {
-		t.Fatalf("statement file_path = %#v, want /repos/my-repo/src/main.go", got)
+	if _, ok := stmt.Parameters["file_path"]; ok {
+		t.Fatalf("entity statement unexpectedly carries statement-level file_path: %#v", stmt.Parameters)
 	}
 	for _, row := range rows {
 		if _, ok := row["file_path"]; ok {
-			t.Fatalf("row unexpectedly contains file_path: %#v", row)
+			t.Fatalf("entity row unexpectedly contains file_path: %#v", row)
 		}
 		props, ok := row["props"].(map[string]any)
 		if !ok {
@@ -110,6 +118,32 @@ func TestCanonicalNodeWriterBatchesEntityUpsertsWithContainmentEdges(t *testing.
 		}
 		if _, ok := props["name"]; !ok {
 			t.Fatalf("row props = %#v, want projected entity properties", props)
+		}
+	}
+
+	containment := containmentCalls[0]
+	if !strings.Contains(containment.Cypher, "UNWIND $rows AS row") {
+		t.Fatalf("entity containment cypher = %q, want batched UNWIND shape", containment.Cypher)
+	}
+	if !strings.Contains(containment.Cypher, "MATCH (f:File {path: row.file_path})") {
+		t.Fatalf("entity containment cypher = %q, want row-level file MATCH", containment.Cypher)
+	}
+	if !strings.Contains(containment.Cypher, "MATCH (n:Function {uid: row.entity_id})") {
+		t.Fatalf("entity containment cypher = %q, want entity MATCH by uid", containment.Cypher)
+	}
+	containmentRows, ok := containment.Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("containment rows type = %T, want []map[string]any", containment.Parameters["rows"])
+	}
+	if got, want := len(containmentRows), 2; got != want {
+		t.Fatalf("containment rows count = %d, want %d", got, want)
+	}
+	for _, row := range containmentRows {
+		if got := row["file_path"]; got != "/repos/my-repo/src/main.go" {
+			t.Fatalf("containment row file_path = %#v, want /repos/my-repo/src/main.go", got)
+		}
+		if got := row["entity_id"]; got == "" {
+			t.Fatalf("containment row missing entity_id: %#v", row)
 		}
 	}
 }

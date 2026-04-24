@@ -446,6 +446,51 @@ func TestNornicDBPhaseGroupExecutorUsesEntityLabelSpecificStatementLimit(t *test
 	}
 }
 
+func TestNornicDBPhaseGroupExecutorUsesEntityLimitsForContainmentPhase(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:               inner,
+		maxStatements:       5,
+		entityMaxStatements: 4,
+		entityLabelMaxStatements: map[string]int{
+			"Function": 2,
+		},
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{
+			Cypher: "RETURN function-containment-1",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataPhaseKey:       sourceneo4j.CanonicalPhaseEntityContainment,
+				sourceneo4j.StatementMetadataEntityLabelKey: "Function",
+			},
+		},
+		{
+			Cypher: "RETURN function-containment-2",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataPhaseKey:       sourceneo4j.CanonicalPhaseEntityContainment,
+				sourceneo4j.StatementMetadataEntityLabelKey: "Function",
+			},
+		},
+		{
+			Cypher: "RETURN function-containment-3",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataPhaseKey:       sourceneo4j.CanonicalPhaseEntityContainment,
+				sourceneo4j.StatementMetadataEntityLabelKey: "Function",
+			},
+		},
+	}
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+	if got, want := inner.groupSizes, []int{2, 1}; !equalIntSlices(got, want) {
+		t.Fatalf("entity containment group sizes = %v, want %v", got, want)
+	}
+}
+
 func TestNornicDBPhaseGroupExecutorExecutesRetractStatementsSequentially(t *testing.T) {
 	t.Parallel()
 
@@ -696,6 +741,56 @@ func TestNornicDBPhaseGroupExecutorLogsEntityLabelSummaries(t *testing.T) {
 	}
 }
 
+func TestNornicDBPhaseGroupExecutorLogsEntityContainmentLabelSummaries(t *testing.T) {
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:               inner,
+		maxStatements:       5,
+		entityMaxStatements: 2,
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{
+			Cypher: "RETURN containment1",
+			Parameters: map[string]any{
+				"_pcg_phase":        sourceneo4j.CanonicalPhaseEntityContainment,
+				"_pcg_entity_label": "Function",
+				"rows": []map[string]any{
+					{"entity_id": "f1", "file_path": "/repo/a.go"},
+					{"entity_id": "f2", "file_path": "/repo/b.go"},
+				},
+			},
+		},
+		{
+			Cypher: "RETURN containment2",
+			Parameters: map[string]any{
+				"_pcg_phase":        sourceneo4j.CanonicalPhaseEntityContainment,
+				"_pcg_entity_label": "Function",
+				"rows": []map[string]any{
+					{"entity_id": "f3", "file_path": "/repo/c.go"},
+				},
+			},
+		},
+	}
+
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	defer slog.SetDefault(previous)
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+
+	line := findEntityLabelSummaryLineWithPhase(t, logs.String(), "Function", sourceneo4j.CanonicalPhaseEntityContainment, true)
+	if !strings.Contains(line, `"rows":3`) {
+		t.Fatalf("Function containment summary line = %q, want rows=3", line)
+	}
+	if !strings.Contains(line, `"statements":2`) {
+		t.Fatalf("Function containment summary line = %q, want statements=2", line)
+	}
+}
+
 func TestNornicDBPhaseGroupExecutorLogsRollingEntityLabelSummaries(t *testing.T) {
 	inner := &recordingGroupChunkExecutor{}
 	executor := nornicDBPhaseGroupExecutor{
@@ -788,6 +883,11 @@ func findEntityLabelSummaryLine(t *testing.T, logs string, label string) string 
 
 func findEntityLabelSummaryLineWithCompletion(t *testing.T, logs string, label string, complete bool) string {
 	t.Helper()
+	return findEntityLabelSummaryLineWithPhase(t, logs, label, "", complete)
+}
+
+func findEntityLabelSummaryLineWithPhase(t *testing.T, logs string, label string, phase string, complete bool) string {
+	t.Helper()
 
 	completeToken := `"complete":false`
 	if complete {
@@ -796,11 +896,12 @@ func findEntityLabelSummaryLineWithCompletion(t *testing.T, logs string, label s
 	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
 		if strings.Contains(line, `"msg":"nornicdb entity label summary"`) &&
 			strings.Contains(line, `"label":"`+label+`"`) &&
+			(phase == "" || strings.Contains(line, `"phase":"`+phase+`"`)) &&
 			strings.Contains(line, completeToken) {
 			return line
 		}
 	}
-	t.Fatalf("entity label summary for %q complete=%t not found in logs:\n%s", label, complete, logs)
+	t.Fatalf("entity label summary for %q phase=%q complete=%t not found in logs:\n%s", label, phase, complete, logs)
 	return ""
 }
 
