@@ -111,7 +111,7 @@ lightweight host. PCG exposes:
 | `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force] [--full]` | Available now. Without `--from`, install from the pinned embedded release manifest when the host platform is covered. The current `dev` pin is the rollback-fixed linuxdynasty fork headless tarball for macOS arm64, so headless remains the laptop default. `--full` only succeeds when the manifest includes a matching fixed full published artifact for the current host. With `--from`, verify and copy a NornicDB binary from a local path, tar archive, macOS package, or URL to `${PCG_HOME}/bin/nornicdb-headless`. Remote downloads honor `Ctrl-C` and default to `30s`; override with `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` when slower links need more time. Signature verification remains future work. |
 | `pcg graph logs [--workspace-root <path>]` | Available now. Print the current workspace `graph-nornicdb.log` file if present. |
 | `pcg graph stop [--workspace-root <path>]` | Available now. Request the workspace owner to shut down so the managed graph sidecar stops through the normal lifecycle; stale owner graph processes are stopped directly. |
-| `pcg graph start [--workspace-root <path>]` | Available now. Foreground shortcut for starting the `local_authoritative` workspace owner, equivalent to `PCG_QUERY_PROFILE=local_authoritative pcg watch .`. |
+| `pcg graph start [--workspace-root <path>]` | Available now. Foreground shortcut for starting the `local_authoritative` workspace owner, equivalent to `PCG_QUERY_PROFILE=local_authoritative pcg watch .`. During startup and indexing it prints a live progress panel sourced from the shared status store: owner/profile/backend header, collector/projector/reducer flow lanes, and queue pressure. |
 | `pcg graph upgrade --from <source> [--sha256 <hex>] [--workspace-root <path>]` | Available now. Replace the managed NornicDB binary from a verified local binary, tar archive, macOS package, or URL; requires the workspace graph to be stopped first. |
 
 Full operator contract: [Graph Backend Operations](graph-backend-operations.md).
@@ -181,7 +181,7 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 | `pcg delete --all` | Compatibility stub. Prints deletion guidance and exits non-zero. | No |
 | `pcg list` | List indexed repositories. | No |
 | `pcg add-package` | Compatibility stub. Prints package-indexing guidance and exits non-zero. | No |
-| `pcg watch [path]` | Watch a local path and keep the graph updated. | No |
+| `pcg watch [path]` | Watch a local path and keep the graph updated. In local-host mode it now prints a live progress panel for indexing and projection instead of a fake percentage bar. | No |
 | `pcg unwatch <path>` | Compatibility stub. Prints watcher-lifecycle guidance and exits non-zero. | No |
 | `pcg watching` | Compatibility stub. Prints watcher-lifecycle guidance and exits non-zero. | No |
 | `pcg query "<query>"` | Run a language-query search against indexed code. | No |

@@ -54,6 +54,7 @@ var (
 	localHostWaitChildProcess      = waitLocalChildProcess
 	localHostWaitManagedChildren   = waitLocalHostChildren
 	localHostApplyBootstrap        = applyLocalBootstrap
+	localHostStartProgressReporter = startLocalHostProgressReporter
 )
 
 func init() {
@@ -227,6 +228,24 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 		}
 	}()
 	children = append(children, localHostChild{name: "pcg-ingester", cmd: ingester})
+
+	if mode == localHostModeWatch {
+		stopProgress, progressErr := localHostStartProgressReporter(
+			ctx,
+			layout.WorkspaceRoot,
+			managedPostgres.DSN,
+			runtimeConfig,
+		)
+		if progressErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: local progress reporter unavailable: %v\n", progressErr)
+		} else {
+			defer func() {
+				if err := stopProgress(); err != nil && retErr == nil {
+					retErr = fmt.Errorf("stop local progress reporter: %w", err)
+				}
+			}()
+		}
+	}
 
 	if mode == localHostModeWatch {
 		return localHostWaitManagedChildren(ctx, children, "")
