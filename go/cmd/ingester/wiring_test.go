@@ -231,6 +231,7 @@ func TestCanonicalExecutorForGraphBackendKeepsNeo4jGrouped(t *testing.T) {
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
+		nil,
 	)
 	if _, ok := executor.(sourceneo4j.GroupExecutor); !ok {
 		t.Fatal("Neo4j canonical executor does not implement GroupExecutor")
@@ -248,6 +249,7 @@ func TestCanonicalExecutorForGraphBackendUsesNornicDBPhaseGroupsByDefault(t *tes
 		false,
 		defaultNornicDBPhaseGroupStatements,
 		defaultNornicDBEntityPhaseStatements,
+		nil,
 		nil,
 		nil,
 	)
@@ -287,6 +289,7 @@ func TestCanonicalExecutorForGraphBackendUsesConfiguredNornicDBPhaseGroupStateme
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
+		nil,
 	)
 	pge, ok := executor.(nornicDBPhaseGroupExecutor)
 	if !ok {
@@ -308,6 +311,7 @@ func TestCanonicalExecutorForGraphBackendUsesConfiguredNornicDBEntityPhaseStatem
 		false,
 		defaultNornicDBPhaseGroupStatements,
 		17,
+		nil,
 		nil,
 		nil,
 	)
@@ -371,6 +375,72 @@ func TestNornicDBPhaseGroupExecutorUsesEntitySpecificStatementLimit(t *testing.T
 	}
 	if got, want := inner.groupSizes, []int{2, 2, 1}; !equalIntSlices(got, want) {
 		t.Fatalf("entity group sizes = %v, want %v", got, want)
+	}
+}
+
+func TestNornicDBPhaseGroupExecutorUsesEntityLabelSpecificStatementLimit(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:               inner,
+		maxStatements:       5,
+		entityMaxStatements: 4,
+		entityLabelMaxStatements: map[string]int{
+			"Function": 2,
+		},
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{
+			Cypher: "RETURN class1",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataPhaseKey:       sourceneo4j.CanonicalPhaseEntities,
+				sourceneo4j.StatementMetadataEntityLabelKey: "Class",
+			},
+		},
+		{
+			Cypher: "RETURN class2",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataPhaseKey:       sourceneo4j.CanonicalPhaseEntities,
+				sourceneo4j.StatementMetadataEntityLabelKey: "Class",
+			},
+		},
+		{
+			Cypher: "RETURN class3",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataPhaseKey:       sourceneo4j.CanonicalPhaseEntities,
+				sourceneo4j.StatementMetadataEntityLabelKey: "Class",
+			},
+		},
+		{
+			Cypher: "RETURN function1",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataPhaseKey:       sourceneo4j.CanonicalPhaseEntities,
+				sourceneo4j.StatementMetadataEntityLabelKey: "Function",
+			},
+		},
+		{
+			Cypher: "RETURN function2",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataPhaseKey:       sourceneo4j.CanonicalPhaseEntities,
+				sourceneo4j.StatementMetadataEntityLabelKey: "Function",
+			},
+		},
+		{
+			Cypher: "RETURN function3",
+			Parameters: map[string]any{
+				sourceneo4j.StatementMetadataPhaseKey:       sourceneo4j.CanonicalPhaseEntities,
+				sourceneo4j.StatementMetadataEntityLabelKey: "Function",
+			},
+		},
+	}
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+	if got, want := inner.groupSizes, []int{3, 2, 1}; !equalIntSlices(got, want) {
+		t.Fatalf("entity label group sizes = %v, want %v", got, want)
 	}
 }
 
@@ -514,6 +584,7 @@ func TestCanonicalExecutorForGraphBackendAllowsNornicDBGroupedWhenConformanceEna
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
+		nil,
 	)
 	ge, ok := executor.(sourceneo4j.GroupExecutor)
 	if !ok {
@@ -540,6 +611,7 @@ func TestCanonicalExecutorForGraphBackendNornicDBGroupedFullStackReachesRawExecu
 		true,
 		defaultNornicDBPhaseGroupStatements,
 		defaultNornicDBEntityPhaseStatements,
+		nil,
 		nil,
 		nil,
 	)
@@ -573,6 +645,7 @@ func TestCanonicalExecutorForGraphBackendNornicDBDefaultFullStackUsesPhaseGroups
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
+		nil,
 	)
 	if _, ok := executor.(sourceneo4j.PhaseGroupExecutor); !ok {
 		t.Fatal("NornicDB default executor stack does not implement PhaseGroupExecutor")
@@ -601,6 +674,7 @@ func TestCanonicalExecutorForGraphBackendWrapsNornicDBWithTimeout(t *testing.T) 
 		false,
 		defaultNornicDBPhaseGroupStatements,
 		defaultNornicDBEntityPhaseStatements,
+		nil,
 		nil,
 		nil,
 	)
@@ -920,6 +994,81 @@ func TestNornicDBEntityLabelBatchSizesRejectsInvalidEnv(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), nornicDBEntityLabelBatchSizesEnv) {
 		t.Fatalf("nornicDBEntityLabelBatchSizes() error = %q, want env name", err)
+	}
+}
+
+func TestNornicDBEntityLabelPhaseGroupStatementsDefault(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBEntityLabelPhaseGroupStatements(func(string) string { return "" }, defaultNornicDBEntityPhaseStatements)
+	if err != nil {
+		t.Fatalf("nornicDBEntityLabelPhaseGroupStatements() error = %v, want nil", err)
+	}
+	if got["Function"] != defaultNornicDBFunctionEntityPhaseStatements {
+		t.Fatalf("Function phase statements = %d, want %d", got["Function"], defaultNornicDBFunctionEntityPhaseStatements)
+	}
+	if got["Struct"] != defaultNornicDBStructEntityPhaseStatements {
+		t.Fatalf("Struct phase statements = %d, want %d", got["Struct"], defaultNornicDBStructEntityPhaseStatements)
+	}
+}
+
+func TestNornicDBEntityLabelPhaseGroupStatementsFromEnv(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBEntityLabelPhaseGroupStatements(func(key string) string {
+		if key == nornicDBEntityLabelPhaseGroupStatementsEnv {
+			return "Function=8,Struct=12,Class=20"
+		}
+		return ""
+	}, defaultNornicDBEntityPhaseStatements)
+	if err != nil {
+		t.Fatalf("nornicDBEntityLabelPhaseGroupStatements() error = %v, want nil", err)
+	}
+	if got["Function"] != 8 {
+		t.Fatalf("Function phase statements = %d, want 8", got["Function"])
+	}
+	if got["Struct"] != 12 {
+		t.Fatalf("Struct phase statements = %d, want 12", got["Struct"])
+	}
+	if got["Class"] != 20 {
+		t.Fatalf("Class phase statements = %d, want 20", got["Class"])
+	}
+}
+
+func TestNornicDBEntityLabelPhaseGroupStatementsCapsEnvByEntityPhaseStatements(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBEntityLabelPhaseGroupStatements(func(key string) string {
+		if key == nornicDBEntityLabelPhaseGroupStatementsEnv {
+			return "Function=30,Struct=20"
+		}
+		return ""
+	}, 15)
+	if err != nil {
+		t.Fatalf("nornicDBEntityLabelPhaseGroupStatements() error = %v, want nil", err)
+	}
+	if got["Function"] != 15 {
+		t.Fatalf("Function phase statements = %d, want 15", got["Function"])
+	}
+	if got["Struct"] != 15 {
+		t.Fatalf("Struct phase statements = %d, want 15", got["Struct"])
+	}
+}
+
+func TestNornicDBEntityLabelPhaseGroupStatementsRejectsInvalidEnv(t *testing.T) {
+	t.Parallel()
+
+	_, err := nornicDBEntityLabelPhaseGroupStatements(func(key string) string {
+		if key == nornicDBEntityLabelPhaseGroupStatementsEnv {
+			return "Function=nope"
+		}
+		return ""
+	}, defaultNornicDBEntityPhaseStatements)
+	if err == nil {
+		t.Fatal("nornicDBEntityLabelPhaseGroupStatements() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), nornicDBEntityLabelPhaseGroupStatementsEnv) {
+		t.Fatalf("nornicDBEntityLabelPhaseGroupStatements() error = %q, want env name", err)
 	}
 }
 
