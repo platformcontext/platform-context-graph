@@ -1,0 +1,25 @@
+go/cmd/pcg/local_host_progress_test.go
+  e27ce815bbe89792 60-117
+go/cmd/pcg/local_host_progress.go
+  e27ce815bbe89792 9,58,62,64,66,150-226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3afdbfea3b836ec4c9d1f4f623fcfd9ffdeeb37f",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 141,
+      "total_deletions": 3,
+      "accepted_lines": 165,
+      "overriden_lines": 0
+    }
+  }
+}
