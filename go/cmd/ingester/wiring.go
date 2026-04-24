@@ -517,7 +517,7 @@ func (e nornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts
 		return nil
 	}
 	if ge, ok := e.inner.(sourceneo4j.GroupExecutor); ok {
-		if len(stmts) > 0 && stmts[0].Operation == sourceneo4j.OperationCanonicalRetract {
+		if allStatementsUseOperation(stmts, sourceneo4j.OperationCanonicalRetract) {
 			return e.executeSequentialRetractPhase(ctx, stmts)
 		}
 		if statementPhase(stmts) == sourceneo4j.CanonicalPhaseEntities {
@@ -550,14 +550,6 @@ func (e nornicDBPhaseGroupExecutor) executeSequentialRetractPhase(
 				err,
 			)
 		}
-		slog.Info(
-			"nornicdb retract statement completed",
-			"statement_index", i+1,
-			"statement_count", len(stmts),
-			"phase", "retract",
-			"duration_s", time.Since(statementStart).Seconds(),
-			"first_statement", statementSummary,
-		)
 	}
 	return nil
 }
@@ -707,6 +699,18 @@ func statementPhaseGroupMode(stmt sourceneo4j.Statement) string {
 func entityStatementLabel(stmt sourceneo4j.Statement) string {
 	label, _ := stmt.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
 	return strings.TrimSpace(label)
+}
+
+func allStatementsUseOperation(stmts []sourceneo4j.Statement, operation sourceneo4j.Operation) bool {
+	if len(stmts) == 0 {
+		return false
+	}
+	for _, stmt := range stmts {
+		if stmt.Operation != operation {
+			return false
+		}
+	}
+	return true
 }
 
 func summarizePhaseGroupChunk(stmts []sourceneo4j.Statement) string {
