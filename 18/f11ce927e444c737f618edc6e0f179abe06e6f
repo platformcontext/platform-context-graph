@@ -1,0 +1,37 @@
+go/internal/storage/neo4j/canonical_node_writer_entities.go
+  e27ce815bbe89792 82-85,101
+go/cmd/ingester/wiring_test.go
+  e27ce815bbe89792 234,254,292,316,381-446,587,616,648,679,1000-1071
+go/cmd/ingester/wiring.go
+  e27ce815bbe89792 44-57,288,306-309,326,379-385,416-445,453,475-478,485-488,522,529,561-566,568-575,629-633,656-660
+go/internal/storage/neo4j/canonical_node_writer_test.go
+  e27ce815bbe89792 1107-1112
+go/internal/storage/neo4j/phase_group_metadata.go
+  e27ce815bbe89792 8-11
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 130,171-175
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 39-40
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "18f11ce927e444c737f618edc6e0f179abe06e6f",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 265,
+      "total_deletions": 18,
+      "accepted_lines": 289,
+      "overriden_lines": 0
+    }
+  }
+}
