@@ -161,6 +161,9 @@ smaller entity-only grouped transactions without shrinking every other phase.
 Use `PCG_NORNICDB_ENTITY_BATCH_SIZE` when the problem is the number of rows
 inside each normal batched entity upsert statement rather than the number of
 statements in a grouped transaction.
+The current NornicDB writer also keeps `Function` entity upserts on a narrower
+internal row batch than the broader entity default because repo-scale dogfood
+showed `Function` rows remain the heaviest entity shape on this repository.
 
 ### Local-Authoritative Startup Envelope Smoke
 

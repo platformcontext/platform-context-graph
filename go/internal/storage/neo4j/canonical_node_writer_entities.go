@@ -50,7 +50,13 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 	var stmts []Statement
 	for _, label := range sortedCanonicalEntityLabels(byLabel) {
 		rows := byLabel[label]
-		batchSize := w.entityBatchSize
+		batchSize := 0
+		if w.entityLabelBatchSizes != nil {
+			batchSize = w.entityLabelBatchSizes[label]
+		}
+		if batchSize <= 0 {
+			batchSize = w.entityBatchSize
+		}
 		if batchSize <= 0 {
 			batchSize = w.batchSize
 		}
@@ -73,9 +79,9 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 				Operation: OperationCanonicalUpsert,
 				Cypher:    fmt.Sprintf(canonicalNodeEntityUpsertTemplate, label),
 				Parameters: map[string]any{
-					"rows":                   append([]map[string]any(nil), batchRows...),
-					"_pcg_phase":             "entities",
-					"_pcg_statement_summary": statementSummary,
+					"rows":                      append([]map[string]any(nil), batchRows...),
+					StatementMetadataPhaseKey:   CanonicalPhaseEntities,
+					StatementMetadataSummaryKey: statementSummary,
 				},
 			})
 			batchRows = batchRows[:0]
@@ -87,12 +93,12 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 					Operation: OperationCanonicalUpsert,
 					Cypher:    fmt.Sprintf(canonicalNodeEntitySingletonUpsertTemplate, label),
 					Parameters: map[string]any{
-						"file_path":             row["file_path"],
-						"entity_id":             row["entity_id"],
-						"props":                 row["props"],
-						"_pcg_phase":            "entities",
-						"_pcg_phase_group_mode": "execute_only",
-						"_pcg_statement_summary": fmt.Sprintf(
+						"file_path":                        row["file_path"],
+						"entity_id":                        row["entity_id"],
+						"props":                            row["props"],
+						StatementMetadataPhaseKey:          CanonicalPhaseEntities,
+						StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
+						StatementMetadataSummaryKey: fmt.Sprintf(
 							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized",
 							label,
 							row["entity_id"],
