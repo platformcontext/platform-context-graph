@@ -493,11 +493,12 @@ func TestHandleCallChainRewritesShortestPathAnchorsForNornicDB(t *testing.T) {
 				if !strings.Contains(cypher, "shortestPath") {
 					t.Fatalf("cypher = %q, want shortestPath query", cypher)
 				}
-				if !strings.Contains(cypher, "MATCH (start)") || !strings.Contains(cypher, "MATCH (end)") {
-					t.Fatalf("cypher = %q, want explicit node matches for NornicDB", cypher)
+				if !strings.Contains(cypher, "MATCH (start {name: $start})") ||
+					!strings.Contains(cypher, "MATCH (end {name: $end})") {
+					t.Fatalf("cypher = %q, want property-pattern node anchors for NornicDB", cypher)
 				}
-				if !strings.Contains(cypher, "WHERE start.name = $start AND end.name = $end") {
-					t.Fatalf("cypher = %q, want name predicates in WHERE for NornicDB", cypher)
+				if strings.Contains(cypher, "WHERE start.name = $start AND end.name = $end") {
+					t.Fatalf("cypher = %q, must not use post-MATCH name WHERE anchors for NornicDB", cypher)
 				}
 				if !strings.Contains(cypher, "RETURN nodes(path) as chain") {
 					t.Fatalf("cypher = %q, want raw node-path projection for NornicDB", cypher)
@@ -610,14 +611,15 @@ func TestHandleCallChainSupportsEntityIDAndRepoScopedLookupForNornicDB(t *testin
 		GraphBackend: GraphBackendNornicDB,
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if !strings.Contains(cypher, "MATCH (start)") || !strings.Contains(cypher, "MATCH (end)") {
-					t.Fatalf("cypher = %q, want explicit node matches for NornicDB", cypher)
+				if !strings.Contains(cypher, "MATCH (start {uid: $start_entity_id})") {
+					t.Fatalf("cypher = %q, want property-pattern start anchor for NornicDB", cypher)
 				}
-				if !strings.Contains(cypher, graphEntityIDPredicate("start", "$start_entity_id")) {
-					t.Fatalf("cypher = %q, want bridged start entity-id predicate", cypher)
+				if !strings.Contains(cypher, "MATCH (end {uid: $end_entity_id})") {
+					t.Fatalf("cypher = %q, want property-pattern end anchor for NornicDB", cypher)
 				}
-				if !strings.Contains(cypher, graphEntityIDPredicate("end", "$end_entity_id")) {
-					t.Fatalf("cypher = %q, want bridged end entity-id predicate", cypher)
+				if strings.Contains(cypher, graphEntityIDPredicate("start", "$start_entity_id")) ||
+					strings.Contains(cypher, graphEntityIDPredicate("end", "$end_entity_id")) {
+					t.Fatalf("cypher = %q, must not use post-MATCH entity-id WHERE anchors for NornicDB shortestPath", cypher)
 				}
 				if !strings.Contains(cypher, "start.repo_id = $repo_id AND end.repo_id = $repo_id") {
 					t.Fatalf("cypher = %q, want repo scoping to remain in WHERE clause", cypher)
