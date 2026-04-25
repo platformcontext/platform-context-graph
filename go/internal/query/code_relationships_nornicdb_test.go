@@ -6,22 +6,52 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+type nornicDBRelationshipContentStore struct {
+	fakePortContentStore
+	entities map[string]EntityContent
+}
+
+func (s nornicDBRelationshipContentStore) GetEntityContent(_ context.Context, entityID string) (*EntityContent, error) {
+	entity, ok := s.entities[entityID]
+	if !ok {
+		return nil, nil
+	}
+	copied := entity
+	return &copied, nil
+}
 
 func TestHandleRelationshipsUsesNornicDBRowQueriesForDirectCalls(t *testing.T) {
 	t.Parallel()
 
 	handler := &CodeHandler{
 		GraphBackend: GraphBackendNornicDB,
+		Content: nornicDBRelationshipContentStore{
+			fakePortContentStore: fakePortContentStore{
+				repositories: []RepositoryCatalogEntry{{ID: "repo-1", Name: "payments"}},
+			},
+			entities: map[string]EntityContent{
+				"function-1": {
+					EntityID:     "function-1",
+					RepoID:       "repo-1",
+					RelativePath: "src/payments.go",
+					EntityType:   "Function",
+					EntityName:   "handlePayment",
+					StartLine:    10,
+				},
+			},
+		},
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
 				if strings.Contains(cypher, "collect(DISTINCT {") {
 					t.Fatalf("cypher = %q, must not use map-collect projection on NornicDB", cypher)
 				}
 				switch {
-				case strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)"):
+				case strings.Contains(cypher, "<-[:CONTAINS]-(f:File)"):
 					if got, want := params["name"], "handlePayment"; got != want {
 						t.Fatalf("params[name] = %#v, want %#v", got, want)
 					}
@@ -30,13 +60,16 @@ func TestHandleRelationshipsUsesNornicDBRowQueriesForDirectCalls(t *testing.T) {
 						"name":       "handlePayment",
 						"labels":     []any{"Function"},
 						"file_path":  "src/payments.go",
-						"repo_id":    "repo-1",
-						"repo_name":  "payments",
+						"repo_id":    "repo.id",
+						"repo_name":  "repo.name",
 						"language":   "go",
 						"start_line": int64(10),
 						"end_line":   int64(20),
 					}}, nil
-				case strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})-[rel:CALLS]->(target)"):
+				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
+					if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+						t.Fatalf("cypher = %q, want bridged entity-id predicate", cypher)
+					}
 					return []map[string]any{{
 						"direction":   "outgoing",
 						"type":        "CALLS",
@@ -92,6 +125,182 @@ func TestHandleRelationshipsUsesNornicDBRowQueriesForDirectCalls(t *testing.T) {
 	}
 	if got, want := resp["repo_id"], "repo-1"; got != want {
 		t.Fatalf("resp[repo_id] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["repo_name"], "payments"; got != want {
+		t.Fatalf("resp[repo_name] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleRelationshipsUsesBridgedEntityIDPredicateForNornicDBDirectCalls(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				switch {
+				case strings.Contains(cypher, "<-[:CONTAINS]-(f:File)"):
+					if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+						t.Fatalf("cypher = %q, want bridged metadata entity-id predicate", cypher)
+					}
+					if strings.Contains(cypher, "{uid: $entity_id}") {
+						t.Fatalf("cypher = %q, must not use uid-only metadata lookup", cypher)
+					}
+					return []map[string]any{{
+						"id":         "content-entity:handleRelationships",
+						"name":       "handleRelationships",
+						"labels":     []any{"Function"},
+						"file_path":  "go/internal/query/code_relationships.go",
+						"repo_id":    "repo-1",
+						"repo_name":  "platform-context-graph",
+						"language":   "go",
+						"start_line": int64(22),
+						"end_line":   int64(168),
+					}}, nil
+				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
+					if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+						t.Fatalf("cypher = %q, want bridged entity-id predicate", cypher)
+					}
+					if strings.Contains(cypher, "{uid: $entity_id}") {
+						t.Fatalf("cypher = %q, must not use uid-only entity lookup", cypher)
+					}
+					if got, want := params["entity_id"], "content-entity:handleRelationships"; got != want {
+						t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+					}
+					return []map[string]any{{
+						"direction":   "outgoing",
+						"type":        "CALLS",
+						"target_name": "filterRelationshipResponse",
+						"target_id":   "content-entity:filterRelationshipResponse",
+					}}, nil
+				default:
+					t.Fatalf("unexpected cypher: %q", cypher)
+				}
+				return nil, nil
+			},
+		},
+		Content: nornicDBRelationshipContentStore{
+			entities: map[string]EntityContent{
+				"content-entity:handleRelationships": {
+					EntityID:     "content-entity:handleRelationships",
+					RepoID:       "repo-1",
+					RelativePath: "go/internal/query/code_relationships.go",
+					EntityType:   "Function",
+					EntityName:   "handleRelationships",
+					StartLine:    22,
+				},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"entity_id":"content-entity:handleRelationships","direction":"outgoing","relationship_type":"CALLS"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	outgoing, ok := resp["outgoing"].([]any)
+	if !ok || len(outgoing) != 1 {
+		t.Fatalf("resp[outgoing] = %#v, want one relationship", resp["outgoing"])
+	}
+}
+
+func TestHandleRelationshipsHydratesNornicDBPlaceholderRepoIdentityFromContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				switch {
+				case strings.Contains(cypher, "<-[:CONTAINS]-(f:File)"):
+					if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+						t.Fatalf("cypher = %q, want bridged metadata entity-id predicate", cypher)
+					}
+					if strings.Contains(cypher, "{uid: $entity_id}") {
+						t.Fatalf("cypher = %q, must not use uid-only metadata lookup", cypher)
+					}
+					return []map[string]any{{
+						"id":         "content-entity:handleRelationships",
+						"name":       "handleRelationships",
+						"labels":     []any{"Function"},
+						"file_path":  "go/internal/query/code_relationships.go",
+						"repo_id":    "repo.id",
+						"repo_name":  "repo.name",
+						"language":   "go",
+						"start_line": int64(22),
+						"end_line":   int64(168),
+					}}, nil
+				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
+					if got, want := params["entity_id"], "content-entity:handleRelationships"; got != want {
+						t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+					}
+					return []map[string]any{{
+						"direction":   "outgoing",
+						"type":        "CALLS",
+						"target_name": "filterRelationshipResponse",
+						"target_id":   "content-entity:filterRelationshipResponse",
+					}}, nil
+				default:
+					t.Fatalf("unexpected cypher: %q", cypher)
+				}
+				return nil, nil
+			},
+		},
+		Content: nornicDBRelationshipContentStore{
+			fakePortContentStore: fakePortContentStore{
+				repositories: []RepositoryCatalogEntry{
+					{ID: "repo-1", Name: "platform-context-graph"},
+				},
+			},
+			entities: map[string]EntityContent{
+				"content-entity:handleRelationships": {
+					EntityID:     "content-entity:handleRelationships",
+					RepoID:       "repo-1",
+					RelativePath: "go/internal/query/code_relationships.go",
+					EntityType:   "Function",
+					EntityName:   "handleRelationships",
+					StartLine:    22,
+				},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"entity_id":"content-entity:handleRelationships","direction":"outgoing","relationship_type":"CALLS"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	if got, want := resp["repo_id"], "repo-1"; got != want {
+		t.Fatalf("resp[repo_id] = %#v, want %#v", got, want)
+	}
+	if got, want := resp["repo_name"], "platform-context-graph"; got != want {
+		t.Fatalf("resp[repo_name] = %#v, want %#v", got, want)
 	}
 }
 
@@ -194,16 +403,16 @@ func TestNornicDBRelationshipsGraphRowDoesNotMutateMetadataRow(t *testing.T) {
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
 				switch {
-				case strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)"):
+				case strings.Contains(cypher, "<-[:CONTAINS]-(f:File)"):
 					return []map[string]any{metadataRow}, nil
-				case strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})-[rel:CALLS]->(target)"):
+				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
 					return []map[string]any{{
 						"direction":   "outgoing",
 						"type":        "CALLS",
 						"target_name": "chargeCard",
 						"target_id":   "function-2",
 					}}, nil
-				case strings.Contains(cypher, "MATCH (source)-[rel:CALLS]->(e:Function {uid: $entity_id})"):
+				case strings.Contains(cypher, "MATCH (source)-[rel:CALLS]->(e)"):
 					return []map[string]any{{
 						"direction":   "incoming",
 						"type":        "CALLS",
@@ -274,5 +483,24 @@ func TestNornicDBGraphLabelForContentEntityTypeStaysAlignedWithGraphLabels(t *te
 	}
 	if got := nornicDBGraphLabelForContentEntityType(" Protocol "); got != "" {
 		t.Fatalf("nornicDBGraphLabelForContentEntityType(%q) = %q, want empty unsupported label", " Protocol ", got)
+	}
+}
+
+func TestNornicDBOneHopRelationshipsCypherUsesBridgedEntityIDPredicate(t *testing.T) {
+	t.Parallel()
+
+	cypher, params := nornicDBOneHopRelationshipsCypher("content-entity:handleRelationships", "outgoing", "CALLS", "Function")
+
+	if !strings.Contains(cypher, "MATCH (e:Function)") {
+		t.Fatalf("cypher = %q, want labeled entity match", cypher)
+	}
+	if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+		t.Fatalf("cypher = %q, want bridged entity-id predicate", cypher)
+	}
+	if strings.Contains(cypher, "{uid: $entity_id}") {
+		t.Fatalf("cypher = %q, must not use uid-only lookup", cypher)
+	}
+	if got, want := params, map[string]any{"entity_id": "content-entity:handleRelationships"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("params = %#v, want %#v", got, want)
 	}
 }
