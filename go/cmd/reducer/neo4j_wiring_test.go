@@ -337,6 +337,46 @@ func TestSemanticEntityWriterForGraphBackendAppliesNornicDBLabelBatchCaps(t *tes
 	}
 }
 
+func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBModuleCap(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingReducerStatementExecutor{}
+	writer, err := semanticEntityWriterForGraphBackend(executor, 100, runtimecfg.GraphBackendNornicDB, func(string) string {
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("semanticEntityWriterForGraphBackend() error = %v", err)
+	}
+
+	rows := make([]reducer.SemanticEntityRow, 0, 11)
+	for i := 0; i < 11; i++ {
+		rows = append(rows, semanticModuleRow(fmt.Sprintf("module-ts-%02d", i)))
+	}
+	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs: []string{"repo-1"},
+		Rows:    rows,
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+	if got, want := result.CanonicalWrites, 11; got != want {
+		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
+	}
+
+	var moduleBatches []int
+	for _, call := range executor.calls {
+		label, _ := call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+		if label != "Module" {
+			continue
+		}
+		rows, _ := call.Parameters["rows"].([]map[string]any)
+		moduleBatches = append(moduleBatches, len(rows))
+	}
+	if got, want := intsString(moduleBatches), "[10 1]"; got != want {
+		t.Fatalf("Module batch sizes = %s, want %s", got, want)
+	}
+}
+
 func TestSemanticEntityWriterForGraphBackendRejectsInvalidNornicDBLabelBatchCaps(t *testing.T) {
 	t.Parallel()
 
@@ -377,6 +417,20 @@ func semanticVariableRow(id string) reducer.SemanticEntityRow {
 		FilePath:     "/repo/main.go",
 		RelativePath: "main.go",
 		Language:     "go",
+		StartLine:    1,
+		EndLine:      1,
+	}
+}
+
+func semanticModuleRow(id string) reducer.SemanticEntityRow {
+	return reducer.SemanticEntityRow{
+		RepoID:       "repo-1",
+		EntityID:     id,
+		EntityType:   "Module",
+		EntityName:   id,
+		FilePath:     "/repo/main.ts",
+		RelativePath: "main.ts",
+		Language:     "typescript",
 		StartLine:    1,
 		EndLine:      1,
 	}

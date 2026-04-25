@@ -338,6 +338,10 @@ func defaultNornicDBSemanticEntityLabelBatchSizes(batchSize int) map[string]int 
 	return map[string]int{
 		"Function": minPositiveInt(batchSize, 15),
 		"Variable": minPositiveInt(batchSize, 10),
+		// Module rows can carry declaration-merge metadata, and the self-repo
+		// dogfood run showed the 45-row statement exceeds NornicDB's bounded
+		// semantic write timeout. Keep this family narrow by default.
+		"Module": minPositiveInt(batchSize, 10),
 	}
 }
 
