@@ -333,8 +333,9 @@ func semanticEntityExecutorForGraphBackend(
 ) sourceneo4j.Executor {
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		bounded := sourceneo4j.TimeoutExecutor{
-			Inner:   rawExecutor,
-			Timeout: nornicDBTimeout,
+			Inner:       rawExecutor,
+			Timeout:     nornicDBTimeout,
+			TimeoutHint: canonicalWriteTimeoutEnv,
 		}
 		if nornicDBGroupedWrites {
 			return bounded

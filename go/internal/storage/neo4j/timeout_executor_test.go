@@ -44,6 +44,24 @@ func TestTimeoutExecutorIncludesStatementSummaryOnTimeout(t *testing.T) {
 	}
 }
 
+func TestTimeoutExecutorIncludesTimeoutHintOnTimeout(t *testing.T) {
+	t.Parallel()
+
+	executor := TimeoutExecutor{
+		Inner:       contextBlockingExecutor{},
+		Timeout:     10 * time.Millisecond,
+		TimeoutHint: "PCG_CANONICAL_WRITE_TIMEOUT",
+	}
+
+	err := executor.Execute(context.Background(), Statement{Cypher: "RETURN 1"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute() error = %v, want deadline exceeded", err)
+	}
+	if !strings.Contains(err.Error(), "adjust PCG_CANONICAL_WRITE_TIMEOUT") {
+		t.Fatalf("Execute() error = %q, want timeout hint", err)
+	}
+}
+
 func TestTimeoutExecutorZeroTimeoutPassesThrough(t *testing.T) {
 	t.Parallel()
 

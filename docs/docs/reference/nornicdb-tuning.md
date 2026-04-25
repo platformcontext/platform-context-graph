@@ -28,7 +28,7 @@ defaults because one chunk looked scary.
 | `PCG_NORNICDB_FILE_BATCH_SIZE` | `100` | canonical `files` phase | Limits rows inside each `phase=files` statement. Use when file groups are narrow but one statement still carries too many rows. |
 | `PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS` | `25` | canonical `entities` and `entity_containment` phases | Limits grouped statement count for canonical entity phases. |
 | `PCG_NORNICDB_ENTITY_BATCH_SIZE` | `100` | canonical entity rows | Limits rows inside normal entity upsert statements before label-specific caps apply. |
-| `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES` | `Function=15,K8sResource=5,Struct=50,Variable=10` | canonical entity rows | Overrides row caps for specific canonical labels, for example `Function=15,Variable=10`. |
+| `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES` | `Function=15,K8sResource=1,Struct=50,Variable=10` | canonical entity rows | Overrides row caps for specific canonical labels, for example `Function=15,Variable=10`. |
 | `PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS` | `Function=5,K8sResource=1,Struct=15,Variable=5` | canonical entity grouping | Overrides grouped-statement caps for specific canonical labels. |
 
 Two knobs often look similar but are different:

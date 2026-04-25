@@ -65,8 +65,9 @@ const (
 	defaultNornicDBVariableEntityBatchSize = 10
 	// K8sResource rows can cluster heavily in one Helm/Kustomize YAML file.
 	// File-scoped inline containment preserves NornicDB row binding correctness,
-	// so the row cap must be narrow as well as the grouped statement cap.
-	defaultNornicDBK8sResourceEntityBatchSize = 5
+	// and full-corpus timing showed even five same-file rows can exceed the
+	// 15s write budget under concurrent K8s-heavy projection.
+	defaultNornicDBK8sResourceEntityBatchSize = 1
 	// Function entity statements remain the slowest grouped transaction shape
 	// on the self-repo dogfood lane. Ten-statement groups still drifted into
 	// the high-30s seconds, so NornicDB now keeps that family on the same
@@ -442,8 +443,8 @@ func defaultNornicDBEntityLabelBatchSizes(entityBatchSize int) map[string]int {
 		// they follow the same narrowed row cap as Struct for now.
 		"Variable": capOptionalBatchSize(entityBatchSize, defaultNornicDBVariableEntityBatchSize),
 		// K8sResource rows need a per-statement row cap because file-scoped
-		// inline containment can otherwise put dozens of resources from one YAML
-		// file into a single NornicDB statement.
+		// inline containment can otherwise put enough same-file resources into
+		// one NornicDB statement to exceed the bounded write budget.
 		"K8sResource": capOptionalBatchSize(entityBatchSize, defaultNornicDBK8sResourceEntityBatchSize),
 	}
 }
@@ -540,8 +541,9 @@ func canonicalExecutorForGraphBackend(
 	}
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		bounded := sourceneo4j.TimeoutExecutor{
-			Inner:   instrumented,
-			Timeout: nornicDBTimeout,
+			Inner:       instrumented,
+			Timeout:     nornicDBTimeout,
+			TimeoutHint: canonicalWriteTimeoutEnv,
 		}
 		if nornicDBGroupedWrites {
 			return bounded
