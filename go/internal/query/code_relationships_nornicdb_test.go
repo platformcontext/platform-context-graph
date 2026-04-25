@@ -66,7 +66,7 @@ func TestHandleRelationshipsUsesNornicDBRowQueriesForDirectCalls(t *testing.T) {
 						"start_line": int64(10),
 						"end_line":   int64(20),
 					}}, nil
-				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
+				case strings.Contains(cypher, "-[rel:CALLS]->(target)"):
 					if !strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})") {
 						t.Fatalf("cypher = %q, want indexed uid entity lookup", cypher)
 					}
@@ -81,7 +81,7 @@ func TestHandleRelationshipsUsesNornicDBRowQueriesForDirectCalls(t *testing.T) {
 						"target_name": "chargeCard",
 						"target_id":   "function-2",
 					}}, nil
-				case strings.Contains(cypher, "MATCH (source)-[rel]->(e)"):
+				case strings.Contains(cypher, "MATCH (source)-[rel]->"):
 					t.Fatalf("cypher = %q, must not fetch incoming relationships for outgoing-only request", cypher)
 				default:
 					t.Fatalf("unexpected cypher: %q", cypher)
@@ -168,7 +168,7 @@ func TestHandleRelationshipsUsesIndexedFallbackForNornicDBDirectCalls(t *testing
 						"start_line": int64(22),
 						"end_line":   int64(168),
 					}}, nil
-				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
+				case strings.Contains(cypher, "-[rel:CALLS]->(target)"):
 					switch {
 					case strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})"):
 						relationshipLookups = append(relationshipLookups, "uid")
@@ -263,7 +263,7 @@ func TestHandleRelationshipsHydratesNornicDBPlaceholderRepoIdentityFromContent(t
 						"start_line": int64(22),
 						"end_line":   int64(168),
 					}}, nil
-				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
+				case strings.Contains(cypher, "-[rel:CALLS]->(target)"):
 					if !strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})") {
 						t.Fatalf("cypher = %q, want indexed uid relationship lookup", cypher)
 					}
@@ -428,14 +428,14 @@ func TestNornicDBRelationshipsGraphRowDoesNotMutateMetadataRow(t *testing.T) {
 				switch {
 				case strings.Contains(cypher, "<-[:CONTAINS]-(f:File)"):
 					return []map[string]any{metadataRow}, nil
-				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
+				case strings.Contains(cypher, "-[rel:CALLS]->(target)"):
 					return []map[string]any{{
 						"direction":   "outgoing",
 						"type":        "CALLS",
 						"target_name": "chargeCard",
 						"target_id":   "function-2",
 					}}, nil
-				case strings.Contains(cypher, "MATCH (source)-[rel:CALLS]->(e)"):
+				case strings.Contains(cypher, "MATCH (source)-[rel:CALLS]->"):
 					return []map[string]any{{
 						"direction":   "incoming",
 						"type":        "CALLS",
@@ -514,8 +514,8 @@ func TestNornicDBOneHopRelationshipsCypherUsesIndexedEntityLookup(t *testing.T) 
 
 	cypher, params := nornicDBOneHopRelationshipsCypher("content-entity:handleRelationships", "outgoing", "CALLS", "Function", "uid")
 
-	if !strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})") {
-		t.Fatalf("cypher = %q, want indexed uid entity lookup", cypher)
+	if !strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})-[rel:CALLS]->(target)") {
+		t.Fatalf("cypher = %q, want single-match indexed outgoing relationship lookup", cypher)
 	}
 	if strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
 		t.Fatalf("cypher = %q, must not use broad entity-id OR predicate on NornicDB", cypher)
