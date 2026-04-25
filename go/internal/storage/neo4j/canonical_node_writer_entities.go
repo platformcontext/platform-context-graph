@@ -16,7 +16,8 @@ func canonicalEntityRowsByLabel(mat projector.CanonicalMaterialization) map[stri
 	byLabel := make(map[string][]map[string]any, len(mat.Entities))
 	for _, entity := range mat.Entities {
 		row := map[string]any{
-			"entity_id": entity.EntityID,
+			"entity_id":     entity.EntityID,
+			"generation_id": mat.GenerationID,
 			"props": canonicalEntityProperties(
 				entity,
 				mat.ScopeID,
@@ -37,8 +38,9 @@ func canonicalEntityRowsByLabelWithFile(mat projector.CanonicalMaterialization) 
 	byLabel := make(map[string][]map[string]any, len(mat.Entities))
 	for _, entity := range mat.Entities {
 		row := map[string]any{
-			"entity_id": entity.EntityID,
-			"file_path": entity.FilePath,
+			"entity_id":     entity.EntityID,
+			"file_path":     entity.FilePath,
+			"generation_id": mat.GenerationID,
 			"props": canonicalEntityProperties(
 				entity,
 				mat.ScopeID,
@@ -64,7 +66,8 @@ func canonicalEntityRowsByLabelAndFile(mat projector.CanonicalMaterialization) m
 			byLabel[entity.Label] = byFile
 		}
 		byFile[entity.FilePath] = append(byFile[entity.FilePath], map[string]any{
-			"entity_id": entity.EntityID,
+			"entity_id":     entity.EntityID,
+			"generation_id": mat.GenerationID,
 			"props": canonicalEntityProperties(
 				entity,
 				mat.ScopeID,
@@ -89,7 +92,8 @@ func canonicalEntityContainmentRowsByLabelAndFile(mat projector.CanonicalMateria
 			byLabel[entity.Label] = byFile
 		}
 		byFile[entity.FilePath] = append(byFile[entity.FilePath], map[string]any{
-			"entity_id": entity.EntityID,
+			"entity_id":     entity.EntityID,
+			"generation_id": mat.GenerationID,
 		})
 	}
 	return byLabel
@@ -185,6 +189,7 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 					Parameters: map[string]any{
 						"entity_id":                        row["entity_id"],
 						"props":                            row["props"],
+						"generation_id":                    row["generation_id"],
 						StatementMetadataPhaseKey:          CanonicalPhaseEntities,
 						StatementMetadataEntityLabelKey:    label,
 						StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
@@ -268,6 +273,7 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 							"file_path":                        filePath,
 							"entity_id":                        row["entity_id"],
 							"props":                            row["props"],
+							"generation_id":                    row["generation_id"],
 							StatementMetadataPhaseKey:          CanonicalPhaseEntities,
 							StatementMetadataEntityLabelKey:    label,
 							StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
@@ -348,6 +354,7 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithBatchedContainment(mat pr
 						"file_path":                        row["file_path"],
 						"entity_id":                        row["entity_id"],
 						"props":                            row["props"],
+						"generation_id":                    row["generation_id"],
 						StatementMetadataPhaseKey:          CanonicalPhaseEntities,
 						StatementMetadataEntityLabelKey:    label,
 						StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,

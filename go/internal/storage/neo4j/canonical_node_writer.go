@@ -218,6 +218,80 @@ func flattenCanonicalWritePhases(phases []canonicalWritePhase) []Statement {
 
 // --- Phase A: Retract stale nodes ---
 
+var canonicalNodeRetractCodeEntityLabels = map[string]struct{}{
+	"Function":               {},
+	"Class":                  {},
+	"Variable":               {},
+	"Interface":              {},
+	"Trait":                  {},
+	"Struct":                 {},
+	"Enum":                   {},
+	"Macro":                  {},
+	"Union":                  {},
+	"Record":                 {},
+	"Property":               {},
+	"Annotation":             {},
+	"Typedef":                {},
+	"TypeAlias":              {},
+	"TypeAnnotation":         {},
+	"Component":              {},
+	"ImplBlock":              {},
+	"Protocol":               {},
+	"ProtocolImplementation": {},
+}
+
+var canonicalNodeRetractInfraEntityLabels = map[string]struct{}{
+	"K8sResource":           {},
+	"ArgoCDApplication":     {},
+	"ArgoCDApplicationSet":  {},
+	"CrossplaneXRD":         {},
+	"CrossplaneComposition": {},
+	"CrossplaneClaim":       {},
+	"KustomizeOverlay":      {},
+	"HelmChart":             {},
+	"HelmValues":            {},
+}
+
+var canonicalNodeRetractTerraformEntityLabels = map[string]struct{}{
+	"TerraformResource":    {},
+	"TerraformModule":      {},
+	"TerraformVariable":    {},
+	"TerraformOutput":      {},
+	"TerraformDataSource":  {},
+	"TerraformProvider":    {},
+	"TerraformLocal":       {},
+	"TerragruntConfig":     {},
+	"TerragruntDependency": {},
+	"TerragruntInput":      {},
+	"TerragruntLocal":      {},
+}
+
+var canonicalNodeRetractCloudFormationEntityLabels = map[string]struct{}{
+	"CloudFormationResource":  {},
+	"CloudFormationParameter": {},
+	"CloudFormationOutput":    {},
+}
+
+var canonicalNodeRetractSQLEntityLabels = map[string]struct{}{
+	"SqlTable":    {},
+	"SqlView":     {},
+	"SqlFunction": {},
+	"SqlTrigger":  {},
+	"SqlIndex":    {},
+	"SqlColumn":   {},
+}
+
+var canonicalNodeRetractDataEntityLabels = map[string]struct{}{
+	"DataAsset":        {},
+	"DataColumn":       {},
+	"AnalyticsModel":   {},
+	"DashboardAsset":   {},
+	"DataQualityCheck": {},
+	"QueryExecution":   {},
+	"DataContract":     {},
+	"DataOwner":        {},
+}
+
 func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMaterialization) []Statement {
 	retractParams := map[string]any{
 		"repo_id":       mat.RepoID,
@@ -227,6 +301,18 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 	filePaths := make([]string, len(mat.Files))
 	for i, f := range mat.Files {
 		filePaths[i] = f.Path
+	}
+	entityIDsByFamily := map[string][]string{
+		canonicalNodeRetractCodeEntitiesCypher:           canonicalEntityIDsForLabels(mat.Entities, canonicalNodeRetractCodeEntityLabels),
+		canonicalNodeRetractInfraEntitiesCypher:          canonicalEntityIDsForLabels(mat.Entities, canonicalNodeRetractInfraEntityLabels),
+		canonicalNodeRetractTerraformEntitiesCypher:      canonicalEntityIDsForLabels(mat.Entities, canonicalNodeRetractTerraformEntityLabels),
+		canonicalNodeRetractCloudFormationEntitiesCypher: canonicalEntityIDsForLabels(mat.Entities, canonicalNodeRetractCloudFormationEntityLabels),
+		canonicalNodeRetractSQLEntitiesCypher:            canonicalEntityIDsForLabels(mat.Entities, canonicalNodeRetractSQLEntityLabels),
+		canonicalNodeRetractDataEntitiesCypher:           canonicalEntityIDsForLabels(mat.Entities, canonicalNodeRetractDataEntityLabels),
+	}
+	directoryPaths := make([]string, len(mat.Directories))
+	for i, directory := range mat.Directories {
+		directoryPaths[i] = directory.Path
 	}
 
 	retractions := []string{
@@ -257,10 +343,47 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 	})
 
 	for _, cypher := range retractions {
+		params := map[string]any{
+			"repo_id":       mat.RepoID,
+			"generation_id": mat.GenerationID,
+			"entity_ids":    entityIDsByFamily[cypher],
+		}
+		if cypher == canonicalNodeRetractDirectoriesCypher {
+			params = map[string]any{
+				"repo_id":         mat.RepoID,
+				"generation_id":   mat.GenerationID,
+				"directory_paths": directoryPaths,
+			}
+		}
 		stmts = append(stmts, Statement{
 			Operation:  OperationCanonicalRetract,
 			Cypher:     cypher,
-			Parameters: retractParams,
+			Parameters: params,
+		})
+	}
+
+	if len(filePaths) > 0 {
+		for _, cypher := range []string{
+			canonicalNodeRefreshCurrentFileImportEdgesCypher,
+			canonicalNodeRefreshCurrentDirectoryFileEdgesCypher,
+			canonicalNodeRefreshCurrentFileEntityEdgesCypher,
+		} {
+			stmts = append(stmts, Statement{
+				Operation: OperationCanonicalRetract,
+				Cypher:    cypher,
+				Parameters: map[string]any{
+					"file_paths": filePaths,
+				},
+			})
+		}
+	}
+	if len(entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher]) > 0 {
+		stmts = append(stmts, Statement{
+			Operation: OperationCanonicalRetract,
+			Cypher:    canonicalNodeRefreshCurrentEntityContainmentEdgesCypher,
+			Parameters: map[string]any{
+				"entity_ids": entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher],
+			},
 		})
 	}
 
@@ -277,6 +400,16 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 	}
 
 	return stmts
+}
+
+func canonicalEntityIDsForLabels(entities []projector.EntityRow, labels map[string]struct{}) []string {
+	entityIDs := make([]string, 0, len(entities))
+	for _, entity := range entities {
+		if _, ok := labels[entity.Label]; ok {
+			entityIDs = append(entityIDs, entity.EntityID)
+		}
+	}
+	return entityIDs
 }
 
 // --- Phase B: Repository ---
@@ -404,6 +537,7 @@ func (w *CanonicalNodeWriter) buildStructuralEdgeStatements(mat projector.Canoni
 				"imported_name": imp.ImportedName,
 				"alias":         imp.Alias,
 				"line_number":   imp.LineNumber,
+				"generation_id": mat.GenerationID,
 			}
 		}
 		stmts = append(stmts, buildBatchedStatements(canonicalNodeImportEdgeCypher, rows, w.batchSize)...)
@@ -429,10 +563,11 @@ func (w *CanonicalNodeWriter) buildStructuralEdgeStatements(mat projector.Canoni
 		rows := make([]map[string]any, len(mat.ClassMembers))
 		for i, cm := range mat.ClassMembers {
 			rows[i] = map[string]any{
-				"class_name": cm.ClassName,
-				"func_name":  cm.FunctionName,
-				"file_path":  cm.FilePath,
-				"func_line":  cm.FunctionLine,
+				"class_name":    cm.ClassName,
+				"func_name":     cm.FunctionName,
+				"file_path":     cm.FilePath,
+				"func_line":     cm.FunctionLine,
+				"generation_id": mat.GenerationID,
 			}
 		}
 		stmts = append(stmts, buildBatchedStatements(canonicalNodeClassContainsFuncEdgeCypher, rows, w.batchSize)...)
@@ -443,10 +578,11 @@ func (w *CanonicalNodeWriter) buildStructuralEdgeStatements(mat projector.Canoni
 		rows := make([]map[string]any, len(mat.NestedFuncs))
 		for i, nf := range mat.NestedFuncs {
 			rows[i] = map[string]any{
-				"outer_name": nf.OuterName,
-				"inner_name": nf.InnerName,
-				"file_path":  nf.FilePath,
-				"inner_line": nf.InnerLine,
+				"outer_name":    nf.OuterName,
+				"inner_name":    nf.InnerName,
+				"file_path":     nf.FilePath,
+				"inner_line":    nf.InnerLine,
+				"generation_id": mat.GenerationID,
 			}
 		}
 		stmts = append(stmts, buildBatchedStatements(canonicalNodeNestedFuncEdgeCypher, rows, w.batchSize)...)
