@@ -121,6 +121,26 @@ Use this smoke when touching the NornicDB sidecar, graph-backend selection,
 projector stage ordering, or local MCP code-search behavior. It requires a
 local NornicDB binary such as `/tmp/nornicdb-headless`.
 
+Until `https://github.com/orneryd/NornicDB/pull/119` is merged and published
+as a pinned release asset, use a headless binary built from the
+`pcg-sql-edge-hotpath` PR branch for repo-scale `local_authoritative` dogfood
+and graph-query validation. That branch contains the SQL relationship hot path
+and node-lookup cache fixes that the current PCG dogfood evidence depends on.
+On the remote 16-vCPU dogfood host, the current validated binary path is:
+
+```bash
+export PCG_NORNICDB_BINARY=/home/ubuntu/os-repos/NornicDB/bin/nornicdb-headless-pcg-sql-edge-hotpath
+```
+
+On a local workstation, rebuild from the PR branch with the no-local-LLM tags
+before setting `PCG_NORNICDB_BINARY`:
+
+```bash
+cd /Users/allen/os-repos/NornicDB-pcg-sql-edge-hotpath
+go build -tags 'noui nolocalllm' -o ./bin/nornicdb-headless-pcg-sql-edge-hotpath ./cmd/nornicdb
+export PCG_NORNICDB_BINARY=/Users/allen/os-repos/NornicDB-pcg-sql-edge-hotpath/bin/nornicdb-headless-pcg-sql-edge-hotpath
+```
+
 ```bash
 export PCG_HOME=/tmp/pcg-local-authoritative-smoke
 export PCG_CANONICAL_WRITE_TIMEOUT=2s
