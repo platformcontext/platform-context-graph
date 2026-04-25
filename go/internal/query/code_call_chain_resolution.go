@@ -18,6 +18,8 @@ type callChainCandidatePair struct {
 	depth   int
 }
 
+const maxCallChainReachabilityCandidatePairs = 100
+
 func (h *CodeHandler) resolveCallChainEntityIDsByReachability(
 	ctx context.Context,
 	req *callChainRequest,
@@ -32,6 +34,14 @@ func (h *CodeHandler) resolveCallChainEntityIDsByReachability(
 	if len(startCandidates) == 0 || len(endCandidates) == 0 {
 		return false, nil
 	}
+	if len(startCandidates)*len(endCandidates) > maxCallChainReachabilityCandidatePairs {
+		return false, fmt.Errorf(
+			"call-chain endpoints matched too many candidate pairs in repository %q to probe safely (%d > %d); pass start_entity_id and end_entity_id to disambiguate",
+			strings.TrimSpace(req.RepoID),
+			len(startCandidates)*len(endCandidates),
+			maxCallChainReachabilityCandidatePairs,
+		)
+	}
 
 	pairs, err := h.reachableCallChainCandidatePairs(ctx, req.MaxDepth, startCandidates, endCandidates)
 	if err != nil {
@@ -39,7 +49,13 @@ func (h *CodeHandler) resolveCallChainEntityIDsByReachability(
 	}
 	switch len(pairs) {
 	case 0:
-		return false, nil
+		return false, fmt.Errorf(
+			"call-chain endpoints matched multiple entities but no reachable call-chain route in repository %q within depth %d; pass start_entity_id and end_entity_id to disambiguate: start candidates %s; end candidates %s",
+			strings.TrimSpace(req.RepoID),
+			normalizedCallChainMaxDepth(req.MaxDepth),
+			formatCallChainCandidateIDs(startCandidates),
+			formatCallChainCandidateIDs(endCandidates),
+		)
 	case 1:
 		req.StartEntityID = pairs[0].startID
 		req.EndEntityID = pairs[0].endID
@@ -84,6 +100,8 @@ func (h *CodeHandler) reachableCallChainCandidatePairs(
 			label:   callChainCandidateLabel(candidate),
 		}}
 		seen := map[string]struct{}{startID: {}}
+		// Candidate disambiguation uses the same breadth-first order as the
+		// response path and is guarded by the endpoint-pair cap above.
 		for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
 			next := make([]callChainCandidatePath, 0)
 			for _, path := range frontier {
@@ -162,6 +180,23 @@ func formatReachableCallChainCandidatePairs(pairs []callChainCandidatePair) stri
 	items := make([]string, 0, len(pairs))
 	for _, pair := range pairs {
 		items = append(items, fmt.Sprintf("%s -> %s (depth %d)", pair.startID, pair.endID, pair.depth))
+	}
+	return strings.Join(items, ", ")
+}
+
+func normalizedCallChainMaxDepth(maxDepth int) int {
+	if maxDepth <= 0 {
+		return 5
+	}
+	return maxDepth
+}
+
+func formatCallChainCandidateIDs(candidates []EntityContent) string {
+	items := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if id := strings.TrimSpace(candidate.EntityID); id != "" {
+			items = append(items, id)
+		}
 	}
 	return strings.Join(items, ", ")
 }
