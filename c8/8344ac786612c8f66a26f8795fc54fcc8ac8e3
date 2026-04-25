@@ -1,0 +1,29 @@
+go/internal/storage/neo4j/canonical_node_writer.go
+  e27ce815bbe89792 223,362,442-479
+go/internal/storage/neo4j/canonical_node_cypher.go
+  e27ce815bbe89792 66-68
+go/internal/storage/neo4j/canonical_node_writer_test.go
+  e27ce815bbe89792 877,891,919-928,950,969,976-983,988,995-996,998,1000-1014
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "c88344ac786612c8f66a26f8795fc54fcc8ac8e3",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 92,
+      "total_deletions": 31,
+      "accepted_lines": 116,
+      "overriden_lines": 0
+    }
+  }
+}
