@@ -37,6 +37,13 @@ verification evidence = reviewer rejects PR.
 | 6 | OCI collector plugin contract | Not started | — | all |
 | 7 | Neo4j deprecation path (contingent on 5b pass) | Not started | — | dual-backend operation docs, migration tooling Neo4j → NornicDB, deprecation window + default flip |
 
+Chunk 4 query-truth addendum: the older table-row wording that graph-backed
+CLI queries were blocked by canonical projection is superseded by the
+2026-04-25 live NornicDB dogfood proof below. The current branch now proves
+direct `CALLS`, transitive caller, and entity-ID call-chain API queries for
+`handleRelationships -> transitiveRelationshipsGraphRow` through the live
+local-authoritative API.
+
 Latest 2026-04-25 NornicDB dogfood evidence:
 - the narrower `Function=10` lane lowered per-statement cost but over-fragmented the self-repo run, so the built-in row cap now moves to `Function=15`
 - that `Function=15` rerun advanced through `Variable` with stable early chunks around `19.9s-21.4s`
@@ -76,6 +83,7 @@ Latest 2026-04-25 NornicDB dogfood evidence:
 - PR `#119` follow-up commit `26b901f` resolves the last Copilot thread by making the unindexed `SqlFunction.uid` fallback coverage explicit. Until PR `#119` merges and a release asset is pinned, PCG dogfood and `local_authoritative` validation should use the `pcg-sql-edge-hotpath` branch binary explicitly through `PCG_NORNICDB_BINARY` / installer `--from`.
 - the remote self-repo rerun against that exact `#119` binary and PCG commit `5db74ae5` kept the ~one-minute dogfood envelope: owner start `2026-04-25T10:37:11Z`, code-call projection cycle completed `2026-04-25T10:38:20Z` (~`69s`), source-local projection `34.120669469s`, canonical phase-group write `27.299008161s`, `sql_relationship_materialization` `2.629018298s`, `semantic_entity_materialization` `4.870551017s`, and code-call projection `4.302299486s`. The collector skipped `.git` (`dirs_skipped..git=1`), and clean stop left `owner_present=false` / `graph_running=false`.
 - the follow-up warm API query proof found a Chunk 4 query-truth issue: `pcg list` and `pcg find name handleRelationships` succeeded against the same NornicDB-backed dogfood graph, but `pcg analyze dead-code --repo platform-context-graph --limit 5` returned IaC/provenance entities such as `ArgoCDApplication`, `KustomizeOverlay`, `HelmValues`, and `K8sResource`. Current branch now gates the graph-backed dead-code candidate query to code labels (`Function`, `Class`, `Struct`, `Interface`) before `LIMIT` and keeps a defensive output guard so stale/non-code backend rows cannot leak into the public result; rebuilding only `pcg-api` on the remote owner and rerunning `pcg analyze dead-code --repo platform-context-graph --limit 5` / `--limit 50` then returned no IaC/provenance results through the live NornicDB-backed API. The same path now fetches a bounded raw-candidate policy buffer (`max(501, 10x + 1)`, capped at `1000`) before applying entrypoint/test/generated/public-API filters so early excluded roots do not make the public result underfill when displayable candidates exist later in the ordered scan; a second remote API rebuild proved `--limit 5` now returns five code entities (`Function`, `Interface`, `Struct`) instead of the previous empty/truncated shape.
+- the same live graph then exposed a NornicDB read-dialect issue in code relationships and call-chain: the canonical `CALLS` edge `handleRelationships -> transitiveRelationshipsGraphRow` existed, but the Neo4j-shaped relationship query used `collect(DISTINCT {map})` projections that could leak placeholder property strings, and the Neo4j-shaped call-chain query used parameterized `shortestPath` endpoint anchors that returned no path or hung. Current branch keeps this inside the query adapter seam: NornicDB direct relationship reads now use anchored row queries, transitive callers/callees use bounded one-hop BFS, placeholder relationship properties are stripped, and NornicDB call-chain uses the same bounded BFS rows while Neo4j keeps `shortestPath`. Remote API proof against the same self-repo owner now returns `pcg analyze calls handleRelationships --repo platform-context-graph` with `transitiveRelationshipsGraphRow`, `/api/v0/code/relationships` returns `handleRelationships` as a depth-1 incoming transitive caller, and `/api/v0/code/call-chain` returns the two-node entity-ID chain at depth 1.
 
 Current tuning plan:
 - keep the safer `Function=15,Struct=50,Variable=10,Module=10,ImplBlock=10` row-cap baseline in code while we gather better evidence
@@ -84,6 +92,7 @@ Current tuning plan:
 - keep rebuilding dogfood NornicDB headless binaries directly from latest upstream `main`, because it now contains PRs `#115`, `#116`, and `#118`; point PCG at that binary explicitly via `PCG_NORNICDB_BINARY` or installer `--from` until an upstream release asset is published and pinned
 - only promote the patched lane after the NornicDB fixes are release-backed and pinned; until then, keep the pinned release on the safe file-scoped combined write and use `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` only for patched-binary evaluation
 - keep dead-code truth labeled `derived`; the bounded policy buffer makes small-limit CLI output useful again, but broader root modeling is still required before promoting dead-code from derived to exact
+- keep NornicDB call-chain and transitive relationship reads on bounded BFS until upstream proves parameterized `shortestPath` endpoint anchors and projected map collection behave like Neo4j on the PCG query corpus
 
 ---
 
