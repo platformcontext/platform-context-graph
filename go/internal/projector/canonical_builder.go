@@ -20,10 +20,11 @@ func buildCanonicalMaterialization(
 	inputFacts []facts.Envelope,
 ) CanonicalMaterialization {
 	mat := CanonicalMaterialization{
-		ScopeID:      scopeValue.ScopeID,
-		GenerationID: generation.GenerationID,
-		RepoID:       scopeValue.Metadata["repo_id"],
-		RepoPath:     scopeValue.Metadata["repo_path"],
+		ScopeID:         scopeValue.ScopeID,
+		GenerationID:    generation.GenerationID,
+		RepoID:          scopeValue.Metadata["repo_id"],
+		RepoPath:        scopeValue.Metadata["repo_path"],
+		FirstGeneration: strings.TrimSpace(scopeValue.ActiveGenerationID) == "",
 	}
 
 	if len(inputFacts) == 0 {

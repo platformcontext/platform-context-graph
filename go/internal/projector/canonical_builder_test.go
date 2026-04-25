@@ -98,6 +98,24 @@ func TestBuildCanonicalMaterializationExtractsRepository(t *testing.T) {
 	}
 }
 
+func TestBuildCanonicalMaterializationMarksFirstGenerationFromScope(t *testing.T) {
+	t.Parallel()
+
+	sc := testScope()
+	gen := testGeneration()
+
+	result := buildCanonicalMaterialization(sc, gen, nil)
+	if !result.FirstGeneration {
+		t.Fatal("FirstGeneration = false, want true when scope has no active generation")
+	}
+
+	sc.ActiveGenerationID = "gen-previous"
+	result = buildCanonicalMaterialization(sc, gen, nil)
+	if result.FirstGeneration {
+		t.Fatal("FirstGeneration = true, want false when scope has a prior active generation")
+	}
+}
+
 func TestBuildCanonicalMaterializationExtractsFiles(t *testing.T) {
 	t.Parallel()
 

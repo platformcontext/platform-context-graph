@@ -7,19 +7,20 @@ package projector
 // repository projection. Built from the same facts that produce content store
 // writes. Written to Neo4j in strict phase order by CanonicalNodeWriter.
 type CanonicalMaterialization struct {
-	ScopeID      string
-	GenerationID string
-	RepoID       string
-	RepoPath     string // repository path used as Directory chain root
-	Repository   *RepositoryRow
-	Directories  []DirectoryRow
-	Files        []FileRow
-	Entities     []EntityRow
-	Modules      []ModuleRow
-	Imports      []ImportRow
-	Parameters   []ParameterRow
-	ClassMembers []ClassMemberRow
-	NestedFuncs  []NestedFunctionRow
+	ScopeID         string
+	GenerationID    string
+	RepoID          string
+	RepoPath        string // repository path used as Directory chain root
+	FirstGeneration bool   // true when the scope has no prior active generation
+	Repository      *RepositoryRow
+	Directories     []DirectoryRow
+	Files           []FileRow
+	Entities        []EntityRow
+	Modules         []ModuleRow
+	Imports         []ImportRow
+	Parameters      []ParameterRow
+	ClassMembers    []ClassMemberRow
+	NestedFuncs     []NestedFunctionRow
 }
 
 // IsEmpty reports whether the materialization carries no projectable data.

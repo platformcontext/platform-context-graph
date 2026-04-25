@@ -116,6 +116,14 @@ func (w *CanonicalNodeWriter) Write(ctx context.Context, mat projector.Canonical
 	}
 
 	phases := w.buildPhases(mat)
+	if mat.FirstGeneration {
+		slog.Info(
+			"canonical retract skipped for first generation",
+			"scope_id", mat.ScopeID,
+			"repo_id", mat.RepoID,
+			"generation_id", mat.GenerationID,
+		)
+	}
 	allStatements := flattenCanonicalWritePhases(phases)
 	if len(allStatements) == 0 {
 		return nil
@@ -296,6 +304,10 @@ var canonicalNodeRetractDataEntityLabels = map[string]struct{}{
 }
 
 func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMaterialization) []Statement {
+	if mat.FirstGeneration {
+		return nil
+	}
+
 	retractParams := map[string]any{
 		"repo_id":       mat.RepoID,
 		"generation_id": mat.GenerationID,
