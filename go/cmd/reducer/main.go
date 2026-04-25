@@ -172,10 +172,7 @@ func buildReducerService(
 		nornicDBCanonicalWriteTimeout(getenv),
 		nornicDBGroupedWrites,
 	)
-	semanticEntityWriter := sourceneo4j.NewSemanticEntityWriter(semanticEntityExecutor, neo4jBatchSize(getenv))
-	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		semanticEntityWriter = sourceneo4j.NewSemanticEntityWriterWithParameterizedRows(semanticEntityExecutor, neo4jBatchSize(getenv))
-	}
+	semanticEntityWriter := semanticEntityWriterForGraphBackend(semanticEntityExecutor, neo4jBatchSize(getenv), graphBackend)
 	retryCfg, err := loadReducerQueueConfig(getenv)
 	if err != nil {
 		return reducer.Service{}, err

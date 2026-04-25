@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 )
@@ -207,5 +209,70 @@ func TestSemanticEntityExecutorForGraphBackendTimesOutGroupedWrites(t *testing.T
 	err := ge.ExecuteGroup(context.Background(), []sourceneo4j.Statement{{Cypher: "RETURN 1"}})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("ExecuteGroup() error = %v, want deadline exceeded", err)
+	}
+}
+
+type recordingReducerStatementExecutor struct {
+	calls []sourceneo4j.Statement
+}
+
+func (e *recordingReducerStatementExecutor) Execute(_ context.Context, stmt sourceneo4j.Statement) error {
+	e.calls = append(e.calls, stmt)
+	return nil
+}
+
+func TestSemanticEntityWriterForGraphBackendUsesBatchedRowsForNornicDB(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingReducerStatementExecutor{}
+	writer := semanticEntityWriterForGraphBackend(executor, 100, runtimecfg.GraphBackendNornicDB)
+
+	const docstring = "buildCallChainCypher uses shortestPath((start)-[*]->(end)) for graph traversal."
+	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs: []string{"repo-1"},
+		Rows: []reducer.SemanticEntityRow{
+			{
+				RepoID:       "repo-1",
+				EntityID:     "function-go-1",
+				EntityType:   "Function",
+				EntityName:   "buildCallChainCypher",
+				FilePath:     "/repo/go/internal/query/code_call_chain.go",
+				RelativePath: "go/internal/query/code_call_chain.go",
+				Language:     "go",
+				StartLine:    22,
+				EndLine:      178,
+				Metadata: map[string]any{
+					"docstring":     docstring,
+					"class_context": "CodeHandler",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+	if got, want := result.CanonicalWrites, 1; got != want {
+		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
+	}
+	if got, want := len(executor.calls), 2; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+
+	stmt := executor.calls[1]
+	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
+		t.Fatalf("upsert cypher = %q, want batched UNWIND rows", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "SET n += $properties") {
+		t.Fatalf("upsert cypher = %q, want row-field assignments instead of scalar properties merge", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "shortestPath") {
+		t.Fatalf("upsert cypher inlined docstring metadata: %s", stmt.Cypher)
+	}
+	rows, ok := stmt.Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows parameter type = %T, want []map[string]any", stmt.Parameters["rows"])
+	}
+	if got, want := rows[0]["docstring"], docstring; got != want {
+		t.Fatalf("rows[0][docstring] = %#v, want %#v", got, want)
 	}
 }
