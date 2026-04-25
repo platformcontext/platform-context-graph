@@ -218,10 +218,7 @@ func flattenCanonicalWritePhases(phases []canonicalWritePhase) []Statement {
 
 // --- Phase A: Retract stale nodes ---
 
-const (
-	canonicalNodeRefreshFilePathBatchSize = 100
-	canonicalNodeRefreshEntityIDBatchSize = 500
-)
+const canonicalNodeRefreshFilePathBatchSize = 100
 
 var canonicalNodeRetractCodeEntityLabels = map[string]struct{}{
 	"Function":               {},
@@ -361,14 +358,7 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 		}
 		stmts = append(stmts, buildFileEntityRefreshStatements(mat.Files, mat.Entities)...)
 	}
-	if len(entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher]) > 0 {
-		stmts = append(stmts, buildStringSliceRetractStatements(
-			canonicalNodeRefreshCurrentEntityContainmentEdgesCypher,
-			"entity_ids",
-			entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher],
-			canonicalNodeRefreshEntityIDBatchSize,
-		)...)
-	}
+	stmts = append(stmts, buildEntityContainmentRefreshStatements(mat.Entities, mat.ClassMembers, mat.NestedFuncs)...)
 
 	for _, cypher := range retractions {
 		params := map[string]any{
@@ -481,6 +471,100 @@ func buildFileEntityRefreshStatements(files []projector.FileRow, entities []proj
 		})
 	}
 	return stmts
+}
+
+func buildEntityContainmentRefreshStatements(
+	entities []projector.EntityRow,
+	classMembers []projector.ClassMemberRow,
+	nestedFuncs []projector.NestedFunctionRow,
+) []Statement {
+	parentChildIDs := make(map[string]map[string]struct{})
+	classIDsByFileName := make(map[string][]string)
+	functionIDsByFileName := make(map[string][]string)
+	functionIDsByFileNameLine := make(map[string][]string)
+
+	for _, entity := range entities {
+		if entity.EntityID == "" {
+			continue
+		}
+		switch entity.Label {
+		case "Class":
+			parentChildIDs[entity.EntityID] = make(map[string]struct{})
+			classIDsByFileName[fileNameKey(entity.FilePath, entity.EntityName)] = append(
+				classIDsByFileName[fileNameKey(entity.FilePath, entity.EntityName)],
+				entity.EntityID,
+			)
+		case "Function":
+			parentChildIDs[entity.EntityID] = make(map[string]struct{})
+			functionIDsByFileName[fileNameKey(entity.FilePath, entity.EntityName)] = append(
+				functionIDsByFileName[fileNameKey(entity.FilePath, entity.EntityName)],
+				entity.EntityID,
+			)
+			functionIDsByFileNameLine[fileNameLineKey(entity.FilePath, entity.EntityName, entity.StartLine)] = append(
+				functionIDsByFileNameLine[fileNameLineKey(entity.FilePath, entity.EntityName, entity.StartLine)],
+				entity.EntityID,
+			)
+		}
+	}
+
+	for _, classMember := range classMembers {
+		childIDs := functionIDsByFileNameLine[fileNameLineKey(classMember.FilePath, classMember.FunctionName, classMember.FunctionLine)]
+		if len(childIDs) == 0 {
+			continue
+		}
+		for _, parentID := range classIDsByFileName[fileNameKey(classMember.FilePath, classMember.ClassName)] {
+			for _, childID := range childIDs {
+				parentChildIDs[parentID][childID] = struct{}{}
+			}
+		}
+	}
+
+	for _, nestedFunc := range nestedFuncs {
+		childIDs := functionIDsByFileNameLine[fileNameLineKey(nestedFunc.FilePath, nestedFunc.InnerName, nestedFunc.InnerLine)]
+		if len(childIDs) == 0 {
+			continue
+		}
+		for _, parentID := range functionIDsByFileName[fileNameKey(nestedFunc.FilePath, nestedFunc.OuterName)] {
+			for _, childID := range childIDs {
+				parentChildIDs[parentID][childID] = struct{}{}
+			}
+		}
+	}
+
+	if len(parentChildIDs) == 0 {
+		return nil
+	}
+	parentIDs := make([]string, 0, len(parentChildIDs))
+	for parentID := range parentChildIDs {
+		parentIDs = append(parentIDs, parentID)
+	}
+	sort.Strings(parentIDs)
+
+	stmts := make([]Statement, 0, len(parentIDs))
+	for _, parentID := range parentIDs {
+		childIDs := make([]string, 0, len(parentChildIDs[parentID]))
+		for childID := range parentChildIDs[parentID] {
+			childIDs = append(childIDs, childID)
+		}
+		sort.Strings(childIDs)
+		stmts = append(stmts, Statement{
+			Operation: OperationCanonicalRetract,
+			Cypher:    canonicalNodeRefreshCurrentEntityContainmentEdgesCypher,
+			Parameters: map[string]any{
+				"parent_entity_id": parentID,
+				"child_entity_ids": childIDs,
+			},
+		})
+	}
+	return stmts
+}
+
+func fileNameKey(filePath, name string) string {
+	return filePath + "\x00" + name
+}
+
+func fileNameLineKey(filePath, name string, line int) string {
+	return fmt.Sprintf("%s\x00%s\x00%d", filePath, name, line)
 }
 
 // --- Phase B: Repository ---
