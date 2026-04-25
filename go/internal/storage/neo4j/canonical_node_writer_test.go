@@ -957,6 +957,41 @@ func TestCanonicalNodeWriterRefreshesStructuralEdgesBeforeEntityRetract(t *testi
 	}
 }
 
+func TestCanonicalNodeWriterBatchesCurrentFileStructuralEdgeRefresh(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	files := make([]projector.FileRow, canonicalNodeRefreshFilePathBatchSize+1)
+	for i := range files {
+		files[i] = projector.FileRow{Path: "/repos/my-repo/file-" + string(rune('a'+i%26))}
+	}
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-2",
+		RepoID:       "repo-1",
+		Files:        files,
+	}
+
+	var fileEntityRefreshes []Statement
+	for _, stmt := range writer.buildRetractStatements(mat) {
+		if strings.Contains(stmt.Cypher, "(f:File)-[r:CONTAINS]->(n)") {
+			fileEntityRefreshes = append(fileEntityRefreshes, stmt)
+		}
+	}
+	if got, want := len(fileEntityRefreshes), 2; got != want {
+		t.Fatalf("file/entity refresh statement count = %d, want %d", got, want)
+	}
+	for i, stmt := range fileEntityRefreshes {
+		paths, ok := stmt.Parameters["file_paths"].([]string)
+		if !ok {
+			t.Fatalf("refresh[%d] file_paths type = %T, want []string", i, stmt.Parameters["file_paths"])
+		}
+		if len(paths) > canonicalNodeRefreshFilePathBatchSize {
+			t.Fatalf("refresh[%d] file_paths len = %d, want <= %d",
+				i, len(paths), canonicalNodeRefreshFilePathBatchSize)
+		}
+	}
+}
+
 func TestCanonicalNodeWriterRetractCoversProjectableEntityLabels(t *testing.T) {
 	t.Parallel()
 

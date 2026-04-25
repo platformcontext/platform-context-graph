@@ -218,6 +218,11 @@ func flattenCanonicalWritePhases(phases []canonicalWritePhase) []Statement {
 
 // --- Phase A: Retract stale nodes ---
 
+const (
+	canonicalNodeRefreshFilePathBatchSize = 100
+	canonicalNodeRefreshEntityIDBatchSize = 500
+)
+
 var canonicalNodeRetractCodeEntityLabels = map[string]struct{}{
 	"Function":               {},
 	"Class":                  {},
@@ -348,23 +353,21 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 			canonicalNodeRefreshCurrentDirectoryFileEdgesCypher,
 			canonicalNodeRefreshCurrentFileEntityEdgesCypher,
 		} {
-			stmts = append(stmts, Statement{
-				Operation: OperationCanonicalRetract,
-				Cypher:    cypher,
-				Parameters: map[string]any{
-					"file_paths": filePaths,
-				},
-			})
+			stmts = append(stmts, buildStringSliceRetractStatements(
+				cypher,
+				"file_paths",
+				filePaths,
+				canonicalNodeRefreshFilePathBatchSize,
+			)...)
 		}
 	}
 	if len(entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher]) > 0 {
-		stmts = append(stmts, Statement{
-			Operation: OperationCanonicalRetract,
-			Cypher:    canonicalNodeRefreshCurrentEntityContainmentEdgesCypher,
-			Parameters: map[string]any{
-				"entity_ids": entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher],
-			},
-		})
+		stmts = append(stmts, buildStringSliceRetractStatements(
+			canonicalNodeRefreshCurrentEntityContainmentEdgesCypher,
+			"entity_ids",
+			entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher],
+			canonicalNodeRefreshEntityIDBatchSize,
+		)...)
 	}
 
 	for _, cypher := range retractions {
@@ -410,6 +413,30 @@ func canonicalEntityIDsForLabels(entities []projector.EntityRow, labels map[stri
 		}
 	}
 	return entityIDs
+}
+
+func buildStringSliceRetractStatements(cypher string, paramName string, values []string, batchSize int) []Statement {
+	if len(values) == 0 {
+		return nil
+	}
+	if batchSize <= 0 {
+		batchSize = len(values)
+	}
+	stmts := make([]Statement, 0, (len(values)+batchSize-1)/batchSize)
+	for start := 0; start < len(values); start += batchSize {
+		end := start + batchSize
+		if end > len(values) {
+			end = len(values)
+		}
+		stmts = append(stmts, Statement{
+			Operation: OperationCanonicalRetract,
+			Cypher:    cypher,
+			Parameters: map[string]any{
+				paramName: append([]string(nil), values[start:end]...),
+			},
+		})
+	}
+	return stmts
 }
 
 // --- Phase B: Repository ---
