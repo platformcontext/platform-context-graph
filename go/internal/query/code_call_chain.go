@@ -91,6 +91,10 @@ func buildCallChainCypher(req callChainRequest, backend GraphBackend) (string, m
 	params := map[string]any{}
 	predicates := make([]string, 0, 2)
 
+	if backend == GraphBackendNornicDB {
+		return buildNornicDBCallChainCypher(req)
+	}
+
 	if strings.TrimSpace(req.StartEntityID) != "" {
 		params["start_entity_id"] = strings.TrimSpace(req.StartEntityID)
 		predicates = append(predicates, graphEntityIDPredicate("start", "$start_entity_id"))
@@ -131,6 +135,57 @@ func buildCallChainCypher(req callChainRequest, backend GraphBackend) (string, m
 	} else {
 		cypher.WriteString("\t\tRETURN [node IN nodes(path) | {id: coalesce(node.id, node.uid), name: node.name, labels: labels(node), language: node.language, docstring: node.docstring, method_kind: node.method_kind}] as chain,\n")
 	}
+	cypher.WriteString("\t\t       length(path) as depth\n")
+	cypher.WriteString("\t\tLIMIT 5\n\t")
+	return cypher.String(), params
+}
+
+func buildNornicDBCallChainCypher(req callChainRequest) (string, map[string]any) {
+	params := map[string]any{}
+	predicates := make([]string, 0, 2)
+
+	startPattern := "(start"
+	if strings.TrimSpace(req.StartEntityID) != "" {
+		params["start_entity_id"] = strings.TrimSpace(req.StartEntityID)
+		startPattern += " {uid: $start_entity_id}"
+	} else {
+		params["start"] = strings.TrimSpace(req.Start)
+		startPattern += " {name: $start}"
+	}
+	startPattern += ")"
+
+	endPattern := "(end"
+	if strings.TrimSpace(req.EndEntityID) != "" {
+		params["end_entity_id"] = strings.TrimSpace(req.EndEntityID)
+		endPattern += " {uid: $end_entity_id}"
+	} else {
+		params["end"] = strings.TrimSpace(req.End)
+		endPattern += " {name: $end}"
+	}
+	endPattern += ")"
+
+	if strings.TrimSpace(req.RepoID) != "" {
+		params["repo_id"] = strings.TrimSpace(req.RepoID)
+		predicates = append(predicates, "start.repo_id = $repo_id", "end.repo_id = $repo_id")
+	}
+
+	var cypher strings.Builder
+	cypher.WriteString("\n\t\tMATCH ")
+	cypher.WriteString(startPattern)
+	cypher.WriteString("\n\t\tMATCH ")
+	cypher.WriteString(endPattern)
+	if len(predicates) > 0 {
+		cypher.WriteString("\n\t\tWHERE ")
+		cypher.WriteString(strings.Join(predicates, " AND "))
+	}
+	cypher.WriteString("\n\t\tMATCH path = shortestPath(\n")
+	cypher.WriteString("\t\t\t(start)-[:CALLS*1..")
+	cypher.WriteString(fmt.Sprintf("%d", req.MaxDepth))
+	cypher.WriteString("]->(end)\n")
+	cypher.WriteString("\t\t)\n")
+	// NornicDB returns typed Bolt nodes for raw nodes(path); the handler
+	// normalizes them to PCG's existing call-chain response shape.
+	cypher.WriteString("\t\tRETURN nodes(path) as chain,\n")
 	cypher.WriteString("\t\t       length(path) as depth\n")
 	cypher.WriteString("\t\tLIMIT 5\n\t")
 	return cypher.String(), params
