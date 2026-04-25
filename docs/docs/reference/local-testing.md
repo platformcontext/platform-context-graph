@@ -179,8 +179,9 @@ host indexes and projects: owner/profile/backend header, collector/projector/
 reducer flow lanes, and queue pressure from the shared status store. Treat
 that panel as truthful runtime status, not as a percentage-complete contract.
 For first-generation scopes, canonical graph projection skips stale-generation
-retraction because no active generation exists yet; refresh runs still perform
-scoped retraction before upserting the new generation.
+retraction because no prior generation exists yet; refresh runs and follow-up
+generations after a failed first attempt still perform scoped retraction before
+upserting the new generation.
 
 From an MCP client, call:
 

@@ -106,13 +106,27 @@ func TestBuildCanonicalMaterializationMarksFirstGenerationFromScope(t *testing.T
 
 	result := buildCanonicalMaterialization(sc, gen, nil)
 	if !result.FirstGeneration {
-		t.Fatal("FirstGeneration = false, want true when scope has no active generation")
+		t.Fatal("FirstGeneration = false, want true when scope has no previous generation")
 	}
 
 	sc.ActiveGenerationID = "gen-previous"
+	sc.PreviousGenerationExists = true
 	result = buildCanonicalMaterialization(sc, gen, nil)
 	if result.FirstGeneration {
-		t.Fatal("FirstGeneration = true, want false when scope has a prior active generation")
+		t.Fatal("FirstGeneration = true, want false when scope has a prior generation")
+	}
+}
+
+func TestBuildCanonicalMaterializationDoesNotTreatFailedPriorGenerationAsFirst(t *testing.T) {
+	t.Parallel()
+
+	sc := testScope()
+	sc.PreviousGenerationExists = true
+	gen := testGeneration()
+
+	result := buildCanonicalMaterialization(sc, gen, nil)
+	if result.FirstGeneration {
+		t.Fatal("FirstGeneration = true, want false when a failed prior generation exists without an active generation")
 	}
 }
 
