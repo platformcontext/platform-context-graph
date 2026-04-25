@@ -255,23 +255,50 @@ func (h *CodeHandler) resolveCallChainEntityIDs(ctx context.Context, req *callCh
 	if h == nil || req == nil {
 		return nil
 	}
+	var (
+		startCandidates []EntityContent
+		endCandidates   []EntityContent
+		startErr        error
+		endErr          error
+	)
 	if strings.TrimSpace(req.StartEntityID) == "" && strings.TrimSpace(req.Start) != "" {
-		resolved, err := resolveExactGraphEntityCandidate(ctx, h.Content, req.RepoID, req.Start)
+		var err error
+		startCandidates, err = resolveExactGraphEntityCandidates(ctx, h.Content, req.RepoID, req.Start)
 		if err != nil {
 			return err
 		}
+		resolved, err := selectExactGraphEntityCandidate(req.RepoID, req.Start, startCandidates)
+		startErr = err
 		if resolved != nil {
 			req.StartEntityID = resolved.EntityID
 		}
 	}
 	if strings.TrimSpace(req.EndEntityID) == "" && strings.TrimSpace(req.End) != "" {
-		resolved, err := resolveExactGraphEntityCandidate(ctx, h.Content, req.RepoID, req.End)
+		var err error
+		endCandidates, err = resolveExactGraphEntityCandidates(ctx, h.Content, req.RepoID, req.End)
 		if err != nil {
 			return err
 		}
+		resolved, err := selectExactGraphEntityCandidate(req.RepoID, req.End, endCandidates)
+		endErr = err
 		if resolved != nil {
 			req.EndEntityID = resolved.EntityID
 		}
+	}
+	if startErr != nil || endErr != nil {
+		resolved, err := h.resolveCallChainEntityIDsByReachability(ctx, req, startCandidates, endCandidates)
+		if err != nil {
+			return err
+		}
+		if resolved {
+			return nil
+		}
+	}
+	if startErr != nil {
+		return startErr
+	}
+	if endErr != nil {
+		return endErr
 	}
 	return nil
 }

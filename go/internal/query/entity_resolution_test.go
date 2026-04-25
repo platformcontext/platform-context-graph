@@ -25,6 +25,21 @@ func (s resolvingContentStore) SearchEntitiesByName(
 	return append([]EntityContent(nil), s.matches...), nil
 }
 
+type resolvingContentStoreByName struct {
+	fakePortContentStore
+	matches map[string][]EntityContent
+}
+
+func (s resolvingContentStoreByName) SearchEntitiesByName(
+	_ context.Context,
+	repoID string,
+	entityType string,
+	name string,
+	limit int,
+) ([]EntityContent, error) {
+	return append([]EntityContent(nil), s.matches[name]...), nil
+}
+
 func TestResolveExactGraphEntityCandidatePrefersUniqueNonTestMatch(t *testing.T) {
 	t.Parallel()
 
@@ -224,5 +239,130 @@ func TestHandleCallChainResolvesRepoScopedNamesToNonTestEntityIDs(t *testing.T) 
 
 	if got, want := w.Code, http.StatusOK; got != want {
 		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+}
+
+func TestHandleCallChainDisambiguatesRepoScopedNamesByReachability(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "MATCH (source:Function {uid: $source_id})-[:CALLS]->(target)") {
+					switch params["source_id"] {
+					case "content-entity:start":
+						return []map[string]any{{"id": "content-entity:end-impl", "name": "transitiveRelationshipsGraphRow", "labels": []any{"Function"}}}, nil
+					default:
+						return []map[string]any{}, nil
+					}
+				}
+				if strings.Contains(cypher, "MATCH (e") {
+					switch params["entity_id"] {
+					case "content-entity:start":
+						return []map[string]any{{"id": "content-entity:start", "name": "handleRelationships", "labels": []any{"Function"}}}, nil
+					case "content-entity:end-impl":
+						return []map[string]any{{"id": "content-entity:end-impl", "name": "transitiveRelationshipsGraphRow", "labels": []any{"Function"}}}, nil
+					default:
+						t.Fatalf("params[entity_id] = %#v, want selected start/end entity IDs", params["entity_id"])
+					}
+				}
+				t.Fatalf("unexpected cypher = %q", cypher)
+				return nil, nil
+			},
+		},
+		Content: resolvingContentStoreByName{
+			matches: map[string][]EntityContent{
+				"handleRelationships": {
+					{EntityID: "content-entity:start", RepoID: "repo-1", RelativePath: "go/internal/query/code_relationships.go", EntityType: "Function", EntityName: "handleRelationships", StartLine: 22},
+				},
+				"transitiveRelationshipsGraphRow": {
+					{EntityID: "content-entity:end-helper", RepoID: "repo-1", RelativePath: "go/internal/query/code_relationships_helper.go", EntityType: "Function", EntityName: "transitiveRelationshipsGraphRow", StartLine: 44},
+					{EntityID: "content-entity:end-impl", RepoID: "repo-1", RelativePath: "go/internal/query/code_relationships.go", EntityType: "Function", EntityName: "transitiveRelationshipsGraphRow", StartLine: 250},
+				},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/call-chain",
+		bytes.NewBufferString(`{"start":"handleRelationships","end":"transitiveRelationshipsGraphRow","repo_id":"repo-1","max_depth":3}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	data, ok := resp["data"].(map[string]any)
+	if !ok {
+		data = resp
+	}
+	if got, want := data["start_entity_id"], "content-entity:start"; got != want {
+		t.Fatalf("start_entity_id = %#v, want %#v", got, want)
+	}
+	if got, want := data["end_entity_id"], "content-entity:end-impl"; got != want {
+		t.Fatalf("end_entity_id = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleCallChainRejectsMultipleReachableRepoScopedNamePairs(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "MATCH (source:Function {uid: $source_id})-[:CALLS]->(target)") {
+					switch params["source_id"] {
+					case "content-entity:start-one":
+						return []map[string]any{{"id": "content-entity:end-one", "name": "target", "labels": []any{"Function"}}}, nil
+					case "content-entity:start-two":
+						return []map[string]any{{"id": "content-entity:end-two", "name": "target", "labels": []any{"Function"}}}, nil
+					default:
+						return []map[string]any{}, nil
+					}
+				}
+				t.Fatalf("unexpected cypher = %q", cypher)
+				return nil, nil
+			},
+		},
+		Content: resolvingContentStoreByName{
+			matches: map[string][]EntityContent{
+				"source": {
+					{EntityID: "content-entity:start-one", RepoID: "repo-1", RelativePath: "src/one.go", EntityType: "Function", EntityName: "source", StartLine: 10},
+					{EntityID: "content-entity:start-two", RepoID: "repo-1", RelativePath: "src/two.go", EntityType: "Function", EntityName: "source", StartLine: 20},
+				},
+				"target": {
+					{EntityID: "content-entity:end-one", RepoID: "repo-1", RelativePath: "src/one.go", EntityType: "Function", EntityName: "target", StartLine: 30},
+					{EntityID: "content-entity:end-two", RepoID: "repo-1", RelativePath: "src/two.go", EntityType: "Function", EntityName: "target", StartLine: 40},
+				},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/call-chain",
+		bytes.NewBufferString(`{"start":"source","end":"target","repo_id":"repo-1","max_depth":2}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusBadRequest; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "matched multiple reachable entity pairs") {
+		t.Fatalf("body = %s, want reachable-pair ambiguity", w.Body.String())
 	}
 }

@@ -16,6 +16,19 @@ func resolveExactGraphEntityCandidate(
 	repoID string,
 	name string,
 ) (*EntityContent, error) {
+	exact, err := resolveExactGraphEntityCandidates(ctx, reader, repoID, name)
+	if err != nil {
+		return nil, err
+	}
+	return selectExactGraphEntityCandidate(repoID, name, exact)
+}
+
+func resolveExactGraphEntityCandidates(
+	ctx context.Context,
+	reader ContentStore,
+	repoID string,
+	name string,
+) ([]EntityContent, error) {
 	if reader == nil {
 		return nil, nil
 	}
@@ -29,8 +42,10 @@ func resolveExactGraphEntityCandidate(
 	if err != nil {
 		return nil, fmt.Errorf("resolve graph entity %q in repo %q: %w", name, repoID, err)
 	}
+	return exactEntityNameMatches(matches, name), nil
+}
 
-	exact := exactEntityNameMatches(matches, name)
+func selectExactGraphEntityCandidate(repoID string, name string, exact []EntityContent) (*EntityContent, error) {
 	switch len(exact) {
 	case 0:
 		return nil, nil
