@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +67,82 @@ type cypherRunnerStatementExecutor struct {
 
 func (e cypherRunnerStatementExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
 	return e.runner.RunCypher(ctx, stmt.Cypher, stmt.Parameters)
+}
+
+type nornicDBSemanticObservedExecutor struct {
+	inner sourceneo4j.Executor
+}
+
+func (e nornicDBSemanticObservedExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
+	if e.inner == nil {
+		return nil
+	}
+	start := time.Now()
+	err := e.inner.Execute(ctx, stmt)
+	duration := time.Since(start)
+	attrs := []any{
+		"graph_backend", string(runtimecfg.GraphBackendNornicDB),
+		"label", semanticStatementLabel(stmt),
+		"rows", semanticStatementRows(stmt),
+		"duration_s", duration.Seconds(),
+		"operation", string(stmt.Operation),
+		"statement", semanticStatementSummary(stmt),
+	}
+	if err != nil {
+		attrs = append(attrs, "error", err.Error())
+		slog.Warn("nornicdb semantic statement failed", attrs...)
+		return err
+	}
+	slog.Info("nornicdb semantic statement completed", attrs...)
+	return nil
+}
+
+func semanticStatementLabel(stmt sourceneo4j.Statement) string {
+	label, _ := stmt.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+	label = strings.TrimSpace(label)
+	if label != "" {
+		return label
+	}
+	if stmt.Operation == sourceneo4j.OperationCanonicalRetract {
+		return "semantic_retract"
+	}
+	return "unknown"
+}
+
+func semanticStatementRows(stmt sourceneo4j.Statement) int {
+	if rows, ok := stmt.Parameters["rows"].([]map[string]any); ok {
+		return len(rows)
+	}
+	if rows, ok := stmt.Parameters["rows"].([]any); ok {
+		return len(rows)
+	}
+	if repoIDs, ok := stmt.Parameters["repo_ids"].([]string); ok {
+		return len(repoIDs)
+	}
+	if _, ok := stmt.Parameters["entity_id"]; ok {
+		return 1
+	}
+	return 0
+}
+
+func semanticStatementSummary(stmt sourceneo4j.Statement) string {
+	if summary, ok := stmt.Parameters[sourceneo4j.StatementMetadataSummaryKey].(string); ok {
+		if summary = strings.TrimSpace(summary); summary != "" {
+			return summary
+		}
+	}
+	return summarizeReducerCypher(stmt.Cypher)
+}
+
+func summarizeReducerCypher(cypher string) string {
+	fields := strings.Fields(cypher)
+	if len(fields) == 0 {
+		return ""
+	}
+	if len(fields) > 16 {
+		fields = fields[:16]
+	}
+	return strings.Join(fields, " ")
 }
 
 func executeReducerCypherWithRetry(
@@ -262,7 +339,7 @@ func semanticEntityExecutorForGraphBackend(
 		if nornicDBGroupedWrites {
 			return bounded
 		}
-		return sourceneo4j.ExecuteOnlyExecutor{Inner: bounded}
+		return sourceneo4j.ExecuteOnlyExecutor{Inner: nornicDBSemanticObservedExecutor{inner: bounded}}
 	}
 	return rawExecutor
 }
