@@ -161,7 +161,7 @@ export PCG_CANONICAL_WRITE_TIMEOUT=2s
 export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
 export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
-export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10
+export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10,K8sResource=5
 export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=5
 export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Function=15,Variable=10
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
@@ -210,17 +210,17 @@ statements in a grouped transaction.
 The current NornicDB writer also keeps `Function` entity upserts on a narrower
 internal row batch than the broader entity default because repo-scale dogfood
 showed `Function` rows remain the heaviest entity shape on this repository.
-Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10` when you need
-to tune specific heavy entity families without recompiling or lowering the row
-cap for the entire entity phase.
+Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10,K8sResource=5`
+when you need to tune specific heavy entity families without recompiling or
+lowering the row cap for the entire entity phase. `K8sResource` needs both a
+row cap and a grouped-statement cap: Helm/Kustomize manifests can contain many
+resources in one file, so a statement cap alone can still leave one large
+file-scoped statement.
 If those row caps are already narrow but the grouped entity chunks are still
 too large, use
 `PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=5`
 to shrink only the grouped transaction size for those heavier families without
-forcing the same statement cap onto every other entity label. `K8sResource`
-rows are often individually small, but Helm/Kustomize-heavy repos can emit many
-file-scoped one-row containment statements, so the label may still need a
-narrow grouped-transaction cap.
+forcing the same statement cap onto every other entity label.
 Reducer-owned semantic entity materialization has its own high-cardinality
 label caps because it runs after source-local canonical projection and writes
 parser-enriched semantic labels such as `Function` and `Variable`. Use

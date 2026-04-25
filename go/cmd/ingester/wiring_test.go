@@ -1288,6 +1288,9 @@ func TestNornicDBEntityLabelBatchSizes(t *testing.T) {
 	if got["Variable"] != defaultNornicDBVariableEntityBatchSize {
 		t.Fatalf("Variable batch size = %d, want %d", got["Variable"], defaultNornicDBVariableEntityBatchSize)
 	}
+	if got["K8sResource"] != defaultNornicDBK8sResourceEntityBatchSize {
+		t.Fatalf("K8sResource batch size = %d, want %d", got["K8sResource"], defaultNornicDBK8sResourceEntityBatchSize)
+	}
 }
 
 func TestNornicDBEntityLabelBatchSizesClampToEntityBatchSize(t *testing.T) {
@@ -1306,6 +1309,9 @@ func TestNornicDBEntityLabelBatchSizesClampToEntityBatchSize(t *testing.T) {
 	if got["Variable"] != defaultNornicDBVariableEntityBatchSize {
 		t.Fatalf("Variable batch size = %d, want %d", got["Variable"], defaultNornicDBVariableEntityBatchSize)
 	}
+	if got["K8sResource"] != defaultNornicDBK8sResourceEntityBatchSize {
+		t.Fatalf("K8sResource batch size = %d, want %d", got["K8sResource"], defaultNornicDBK8sResourceEntityBatchSize)
+	}
 }
 
 func TestNornicDBEntityLabelBatchSizesDefault(t *testing.T) {
@@ -1323,6 +1329,9 @@ func TestNornicDBEntityLabelBatchSizesDefault(t *testing.T) {
 	}
 	if got["Variable"] != defaultNornicDBVariableEntityBatchSize {
 		t.Fatalf("Variable batch size = %d, want %d", got["Variable"], defaultNornicDBVariableEntityBatchSize)
+	}
+	if got["K8sResource"] != defaultNornicDBK8sResourceEntityBatchSize {
+		t.Fatalf("K8sResource batch size = %d, want %d", got["K8sResource"], defaultNornicDBK8sResourceEntityBatchSize)
 	}
 }
 

@@ -55,6 +55,10 @@ const (
 	// 25 rows, so the built-in default now narrows Variable rows further while
 	// keeping the grouped-statement cap unchanged for a clean next comparison.
 	defaultNornicDBVariableEntityBatchSize = 10
+	// K8sResource rows can cluster heavily in one Helm/Kustomize YAML file.
+	// File-scoped inline containment preserves NornicDB row binding correctness,
+	// so the row cap must be narrow as well as the grouped statement cap.
+	defaultNornicDBK8sResourceEntityBatchSize = 5
 	// Function entity statements remain the slowest grouped transaction shape
 	// on the self-repo dogfood lane. Ten-statement groups still drifted into
 	// the high-30s seconds, so NornicDB now keeps that family on the same
@@ -67,9 +71,9 @@ const (
 	// broader entity phase limit, so they need the same conservative grouped
 	// statement cap as Function for the current dogfood lane.
 	defaultNornicDBVariableEntityPhaseStatements = 5
-	// K8sResource rows are usually small, but file-scoped inline containment
-	// emits many one-row statements. Keep their grouped transaction cap narrow
-	// so large Helm/Kustomize repos do not timeout inside one Bolt transaction.
+	// K8sResource rows are small individually, but one manifest can contain many
+	// resources. Keep their grouped transaction cap narrow so large
+	// Helm/Kustomize repos do not timeout inside one Bolt transaction.
 	defaultNornicDBK8sResourceEntityPhaseStatements = 5
 	canonicalWriteTimeoutEnv                        = "PCG_CANONICAL_WRITE_TIMEOUT"
 	nornicDBCanonicalGroupedWritesEnv               = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
@@ -413,6 +417,10 @@ func defaultNornicDBEntityLabelBatchSizes(entityBatchSize int) map[string]int {
 		// Variable rows timed out at repo scale with the broader default, so
 		// they follow the same narrowed row cap as Struct for now.
 		"Variable": capOptionalBatchSize(entityBatchSize, defaultNornicDBVariableEntityBatchSize),
+		// K8sResource rows need a per-statement row cap because file-scoped
+		// inline containment can otherwise put dozens of resources from one YAML
+		// file into a single NornicDB statement.
+		"K8sResource": capOptionalBatchSize(entityBatchSize, defaultNornicDBK8sResourceEntityBatchSize),
 	}
 }
 
