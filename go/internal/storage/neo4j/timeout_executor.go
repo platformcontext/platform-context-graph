@@ -10,8 +10,9 @@ import (
 // TimeoutExecutor bounds individual graph write statements with a child
 // context. A zero timeout preserves the caller's context unchanged.
 type TimeoutExecutor struct {
-	Inner   Executor
-	Timeout time.Duration
+	Inner       Executor
+	Timeout     time.Duration
+	TimeoutHint string
 }
 
 // Execute forwards the statement with an optional deadline.
@@ -28,10 +29,22 @@ func (e TimeoutExecutor) Execute(ctx context.Context, statement Statement) error
 
 	err := e.Inner.Execute(execCtx, statement)
 	if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
-		return timeoutError("neo4j execute timed out", e.Timeout, statementSummary(statement), context.DeadlineExceeded)
+		return timeoutError(
+			"neo4j execute timed out",
+			e.Timeout,
+			e.TimeoutHint,
+			statementSummary(statement),
+			context.DeadlineExceeded,
+		)
 	}
 	if errors.Is(execCtx.Err(), context.Canceled) {
-		return timeoutError("neo4j execute canceled before completion", 0, statementSummary(statement), context.Canceled)
+		return timeoutError(
+			"neo4j execute canceled before completion",
+			0,
+			"",
+			statementSummary(statement),
+			context.Canceled,
+		)
 	}
 	return err
 }
@@ -55,17 +68,32 @@ func (e TimeoutExecutor) ExecuteGroup(ctx context.Context, statements []Statemen
 
 	err := ge.ExecuteGroup(execCtx, statements)
 	if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
-		return timeoutError("neo4j execute group timed out", e.Timeout, statementGroupSummary(statements), context.DeadlineExceeded)
+		return timeoutError(
+			"neo4j execute group timed out",
+			e.Timeout,
+			e.TimeoutHint,
+			statementGroupSummary(statements),
+			context.DeadlineExceeded,
+		)
 	}
 	if errors.Is(execCtx.Err(), context.Canceled) {
-		return timeoutError("neo4j execute group canceled before completion", 0, statementGroupSummary(statements), context.Canceled)
+		return timeoutError(
+			"neo4j execute group canceled before completion",
+			0,
+			"",
+			statementGroupSummary(statements),
+			context.Canceled,
+		)
 	}
 	return err
 }
 
-func timeoutError(prefix string, timeout time.Duration, summary string, cause error) error {
+func timeoutError(prefix string, timeout time.Duration, timeoutHint string, summary string, cause error) error {
 	if timeout > 0 {
 		prefix = fmt.Sprintf("%s after %s", prefix, timeout)
+	}
+	if timeoutHint != "" {
+		prefix = fmt.Sprintf("%s; adjust %s to tune the graph write budget", prefix, timeoutHint)
 	}
 	if summary != "" {
 		return fmt.Errorf("%s (%s): %w", prefix, summary, cause)

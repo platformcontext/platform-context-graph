@@ -1524,8 +1524,8 @@ func TestNornicDBEntityLabelBatchSizes(t *testing.T) {
 	if got["Variable"] != defaultNornicDBVariableEntityBatchSize {
 		t.Fatalf("Variable batch size = %d, want %d", got["Variable"], defaultNornicDBVariableEntityBatchSize)
 	}
-	if got["K8sResource"] != defaultNornicDBK8sResourceEntityBatchSize {
-		t.Fatalf("K8sResource batch size = %d, want %d", got["K8sResource"], defaultNornicDBK8sResourceEntityBatchSize)
+	if got["K8sResource"] != 1 {
+		t.Fatalf("K8sResource batch size = %d, want 1", got["K8sResource"])
 	}
 }
 
