@@ -159,6 +159,7 @@ export PCG_NORNICDB_BINARY=/Users/allen/os-repos/NornicDB-pcg-sql-edge-hotpath/b
 export PCG_HOME=/tmp/pcg-local-authoritative-smoke
 export PCG_CANONICAL_WRITE_TIMEOUT=2s
 export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
+export PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS=5
 export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10,K8sResource=5
@@ -204,6 +205,10 @@ for grouped conformance mode so the everyday local-authoritative path stays the
 thing under test. Use `PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS` when the
 repo-scale hotspot is specifically the canonical `entities` phase and you need
 smaller entity-only grouped transactions without shrinking every other phase.
+Use `PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS` when the hotspot is the
+canonical `files` phase on repos with thousands of files; this narrows only
+file-upsert grouped transactions and leaves repository, directory, module, and
+structural-edge phases on the broader phase-group default.
 Use `PCG_NORNICDB_ENTITY_BATCH_SIZE` when the problem is the number of rows
 inside each normal batched entity upsert statement rather than the number of
 statements in a grouped transaction.

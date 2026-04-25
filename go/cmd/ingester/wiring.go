@@ -33,6 +33,10 @@ const (
 	// self-repo dogfood lane, so NornicDB needs a lower grouped-transaction cap
 	// here than on lighter canonical phases.
 	defaultNornicDBEntityPhaseStatements = 25
+	// File upserts are lighter than entity rows but huge repos can emit many
+	// 500-row file statements. Keep this phase narrow without lowering the
+	// global non-entity phase-group cap.
+	defaultNornicDBFilePhaseStatements = 5
 	// Long-running labels such as Variable need cumulative visibility before
 	// the whole entities phase completes, otherwise tuning waits on hour-scale
 	// dogfood runs.
@@ -78,6 +82,7 @@ const (
 	canonicalWriteTimeoutEnv                        = "PCG_CANONICAL_WRITE_TIMEOUT"
 	nornicDBCanonicalGroupedWritesEnv               = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
 	nornicDBPhaseGroupStatementsEnv                 = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
+	nornicDBFilePhaseGroupStatementsEnv             = "PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS"
 	nornicDBEntityPhaseStatementsEnv                = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
 	nornicDBEntityBatchSizeEnv                      = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
 	nornicDBEntityLabelBatchSizesEnv                = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
@@ -311,6 +316,7 @@ func openIngesterCanonicalWriter(
 
 	nornicDBGroupedWrites := false
 	phaseGroupStatements := defaultNornicDBPhaseGroupStatements
+	filePhaseStatements := defaultNornicDBFilePhaseStatements
 	entityPhaseStatements := defaultNornicDBEntityPhaseStatements
 	entityBatchSize := 0
 	entityLabelPhaseStatements := map[string]int(nil)
@@ -321,6 +327,10 @@ func openIngesterCanonicalWriter(
 			return nil, nil, err
 		}
 		phaseGroupStatements, err = nornicDBPhaseGroupStatements(getenv)
+		if err != nil {
+			return nil, nil, err
+		}
+		filePhaseStatements, err = nornicDBFilePhaseGroupStatements(getenv)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -355,6 +365,7 @@ func openIngesterCanonicalWriter(
 			nornicDBCanonicalWriteTimeout(getenv),
 			nornicDBGroupedWrites,
 			phaseGroupStatements,
+			filePhaseStatements,
 			entityPhaseStatements,
 			entityLabelPhaseStatements,
 			tracer,
@@ -499,6 +510,7 @@ func canonicalExecutorForGraphBackend(
 	nornicDBTimeout time.Duration,
 	nornicDBGroupedWrites bool,
 	nornicDBPhaseGroupStatements int,
+	nornicDBFilePhaseStatements int,
 	nornicDBEntityPhaseStatements int,
 	nornicDBEntityLabelPhaseStatements map[string]int,
 	tracer trace.Tracer,
@@ -524,6 +536,7 @@ func canonicalExecutorForGraphBackend(
 		return nornicDBPhaseGroupExecutor{
 			inner:                    bounded,
 			maxStatements:            nornicDBPhaseGroupStatements,
+			fileMaxStatements:        nornicDBFilePhaseStatements,
 			entityMaxStatements:      nornicDBEntityPhaseStatements,
 			entityLabelMaxStatements: nornicDBEntityLabelPhaseStatements,
 		}
@@ -534,6 +547,7 @@ func canonicalExecutorForGraphBackend(
 type nornicDBPhaseGroupExecutor struct {
 	inner                    sourceneo4j.Executor
 	maxStatements            int
+	fileMaxStatements        int
 	entityMaxStatements      int
 	entityLabelMaxStatements map[string]int
 }
@@ -892,7 +906,14 @@ func entityStatementRowCount(stmt sourceneo4j.Statement) int {
 }
 
 func (e nornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourceneo4j.Statement) int {
-	if statementPhaseUsesEntityLabelStats(statementPhase(stmts)) {
+	phase := statementPhase(stmts)
+	if phase == sourceneo4j.CanonicalPhaseFiles {
+		if e.fileMaxStatements > 0 {
+			return e.fileMaxStatements
+		}
+		return defaultNornicDBFilePhaseStatements
+	}
+	if statementPhaseUsesEntityLabelStats(phase) {
 		if label := entityStatementLabel(stmts[0]); label != "" && e.entityLabelMaxStatements != nil {
 			if limit := e.entityLabelMaxStatements[label]; limit > 0 {
 				return limit
@@ -1061,6 +1082,18 @@ func nornicDBPhaseGroupStatements(getenv func(string) string) (int, error) {
 	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 {
 		return 0, fmt.Errorf("parse %s=%q: must be a positive integer", nornicDBPhaseGroupStatementsEnv, raw)
+	}
+	return n, nil
+}
+
+func nornicDBFilePhaseGroupStatements(getenv func(string) string) (int, error) {
+	raw := strings.TrimSpace(getenv(nornicDBFilePhaseGroupStatementsEnv))
+	if raw == "" {
+		return defaultNornicDBFilePhaseStatements, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("parse %s=%q: must be a positive integer", nornicDBFilePhaseGroupStatementsEnv, raw)
 	}
 	return n, nil
 }

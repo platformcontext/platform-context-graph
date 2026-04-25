@@ -627,6 +627,12 @@ func TestCanonicalNodeWriterBatching(t *testing.T) {
 	if len(batch2Rows) != 1 {
 		t.Fatalf("batch 2 rows = %d, want 1", len(batch2Rows))
 	}
+	if got, want := fileCalls[0].Parameters[StatementMetadataPhaseKey], CanonicalPhaseFiles; got != want {
+		t.Fatalf("file statement phase = %#v, want %#v", got, want)
+	}
+	if summary, _ := fileCalls[0].Parameters[StatementMetadataSummaryKey].(string); !strings.Contains(summary, "phase=files rows=2") {
+		t.Fatalf("file statement summary = %q, want row count", summary)
+	}
 }
 
 func TestCanonicalNodeWriterRetraction(t *testing.T) {
