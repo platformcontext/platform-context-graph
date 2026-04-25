@@ -28,10 +28,10 @@ func (e TimeoutExecutor) Execute(ctx context.Context, statement Statement) error
 
 	err := e.Inner.Execute(execCtx, statement)
 	if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("neo4j execute timed out after %s: %w", e.Timeout, context.DeadlineExceeded)
+		return timeoutError("neo4j execute timed out", e.Timeout, statementSummary(statement), context.DeadlineExceeded)
 	}
 	if errors.Is(execCtx.Err(), context.Canceled) {
-		return fmt.Errorf("neo4j execute canceled before completion: %w", context.Canceled)
+		return timeoutError("neo4j execute canceled before completion", 0, statementSummary(statement), context.Canceled)
 	}
 	return err
 }
@@ -55,10 +55,35 @@ func (e TimeoutExecutor) ExecuteGroup(ctx context.Context, statements []Statemen
 
 	err := ge.ExecuteGroup(execCtx, statements)
 	if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("neo4j execute group timed out after %s: %w", e.Timeout, context.DeadlineExceeded)
+		return timeoutError("neo4j execute group timed out", e.Timeout, statementGroupSummary(statements), context.DeadlineExceeded)
 	}
 	if errors.Is(execCtx.Err(), context.Canceled) {
-		return fmt.Errorf("neo4j execute group canceled before completion: %w", context.Canceled)
+		return timeoutError("neo4j execute group canceled before completion", 0, statementGroupSummary(statements), context.Canceled)
 	}
 	return err
+}
+
+func timeoutError(prefix string, timeout time.Duration, summary string, cause error) error {
+	if timeout > 0 {
+		prefix = fmt.Sprintf("%s after %s", prefix, timeout)
+	}
+	if summary != "" {
+		return fmt.Errorf("%s (%s): %w", prefix, summary, cause)
+	}
+	return fmt.Errorf("%s: %w", prefix, cause)
+}
+
+func statementGroupSummary(statements []Statement) string {
+	if len(statements) == 0 {
+		return ""
+	}
+	return statementSummary(statements[0])
+}
+
+func statementSummary(statement Statement) string {
+	if statement.Parameters == nil {
+		return ""
+	}
+	summary, _ := statement.Parameters[StatementMetadataSummaryKey].(string)
+	return summary
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -225,7 +226,10 @@ func TestSemanticEntityWriterForGraphBackendUsesBatchedRowsForNornicDB(t *testin
 	t.Parallel()
 
 	executor := &recordingReducerStatementExecutor{}
-	writer := semanticEntityWriterForGraphBackend(executor, 100, runtimecfg.GraphBackendNornicDB)
+	writer, err := semanticEntityWriterForGraphBackend(executor, 100, runtimecfg.GraphBackendNornicDB, func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("semanticEntityWriterForGraphBackend() error = %v", err)
+	}
 
 	const docstring = "buildCallChainCypher uses shortestPath((start)-[*]->(end)) for graph traversal."
 	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
@@ -275,4 +279,105 @@ func TestSemanticEntityWriterForGraphBackendUsesBatchedRowsForNornicDB(t *testin
 	if got, want := rows[0]["docstring"], docstring; got != want {
 		t.Fatalf("rows[0][docstring] = %#v, want %#v", got, want)
 	}
+}
+
+func TestSemanticEntityWriterForGraphBackendAppliesNornicDBLabelBatchCaps(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingReducerStatementExecutor{}
+	writer, err := semanticEntityWriterForGraphBackend(executor, 100, runtimecfg.GraphBackendNornicDB, func(key string) string {
+		if key == nornicDBSemanticEntityLabelBatchEnv {
+			return "Function=2,Variable=3"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("semanticEntityWriterForGraphBackend() error = %v", err)
+	}
+
+	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs: []string{"repo-1"},
+		Rows: []reducer.SemanticEntityRow{
+			semanticFunctionRow("function-go-1"),
+			semanticFunctionRow("function-go-2"),
+			semanticFunctionRow("function-go-3"),
+			semanticVariableRow("variable-go-1"),
+			semanticVariableRow("variable-go-2"),
+			semanticVariableRow("variable-go-3"),
+			semanticVariableRow("variable-go-4"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+	if got, want := result.CanonicalWrites, 7; got != want {
+		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
+	}
+
+	var functionBatches, variableBatches []int
+	for _, call := range executor.calls {
+		label, _ := call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+		rows, _ := call.Parameters["rows"].([]map[string]any)
+		switch label {
+		case "Function":
+			functionBatches = append(functionBatches, len(rows))
+		case "Variable":
+			variableBatches = append(variableBatches, len(rows))
+		}
+	}
+	if got, want := intsString(functionBatches), "[2 1]"; got != want {
+		t.Fatalf("Function batch sizes = %s, want %s", got, want)
+	}
+	if got, want := intsString(variableBatches), "[3 1]"; got != want {
+		t.Fatalf("Variable batch sizes = %s, want %s", got, want)
+	}
+}
+
+func TestSemanticEntityWriterForGraphBackendRejectsInvalidNornicDBLabelBatchCaps(t *testing.T) {
+	t.Parallel()
+
+	_, err := semanticEntityWriterForGraphBackend(&recordingReducerStatementExecutor{}, 100, runtimecfg.GraphBackendNornicDB, func(key string) string {
+		if key == nornicDBSemanticEntityLabelBatchEnv {
+			return "Function=0"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("semanticEntityWriterForGraphBackend() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), nornicDBSemanticEntityLabelBatchEnv) {
+		t.Fatalf("semanticEntityWriterForGraphBackend() error = %q, want env name", err)
+	}
+}
+
+func semanticFunctionRow(id string) reducer.SemanticEntityRow {
+	return reducer.SemanticEntityRow{
+		RepoID:       "repo-1",
+		EntityID:     id,
+		EntityType:   "Function",
+		EntityName:   id,
+		FilePath:     "/repo/main.go",
+		RelativePath: "main.go",
+		Language:     "go",
+		StartLine:    1,
+		EndLine:      2,
+	}
+}
+
+func semanticVariableRow(id string) reducer.SemanticEntityRow {
+	return reducer.SemanticEntityRow{
+		RepoID:       "repo-1",
+		EntityID:     id,
+		EntityType:   "Variable",
+		EntityName:   id,
+		FilePath:     "/repo/main.go",
+		RelativePath: "main.go",
+		Language:     "go",
+		StartLine:    1,
+		EndLine:      1,
+	}
+}
+
+func intsString(values []int) string {
+	return fmt.Sprint(values)
 }
