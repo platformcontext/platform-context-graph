@@ -14,6 +14,15 @@ FROM ingestion_scopes
 WHERE scope_id = $1
 `
 
+const priorGenerationExistsSQL = `
+SELECT EXISTS (
+    SELECT 1
+    FROM scope_generations
+    WHERE scope_id = $1
+      AND generation_id <> $2
+)
+`
+
 // NewGenerationFreshnessCheck returns a GenerationFreshnessCheck backed by
 // the ingestion_scopes.active_generation_id denormalized column.
 func NewGenerationFreshnessCheck(db ExecQueryer) reducer.GenerationFreshnessCheck {
@@ -40,5 +49,27 @@ func NewGenerationFreshnessCheck(db ExecQueryer) reducer.GenerationFreshnessChec
 		}
 
 		return activeGenID.String == generationID, nil
+	}
+}
+
+// NewPriorGenerationCheck returns a check backed by scope_generations for
+// identifying first-generation writes.
+func NewPriorGenerationCheck(db ExecQueryer) reducer.PriorGenerationCheck {
+	return func(ctx context.Context, scopeID, generationID string) (bool, error) {
+		rows, err := db.QueryContext(ctx, priorGenerationExistsSQL, scopeID, generationID)
+		if err != nil {
+			return false, fmt.Errorf("query prior generation for scope %s: %w", scopeID, err)
+		}
+		defer func() { _ = rows.Close() }()
+
+		if !rows.Next() {
+			return false, nil
+		}
+
+		var exists bool
+		if err := rows.Scan(&exists); err != nil {
+			return false, fmt.Errorf("scan prior generation for scope %s: %w", scopeID, err)
+		}
+		return exists, nil
 	}
 }

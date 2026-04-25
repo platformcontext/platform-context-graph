@@ -26,8 +26,9 @@ type SemanticEntityRow struct {
 
 // SemanticEntityWrite captures one canonical semantic-entity write request.
 type SemanticEntityWrite struct {
-	RepoIDs []string
-	Rows    []SemanticEntityRow
+	RepoIDs     []string
+	Rows        []SemanticEntityRow
+	SkipRetract bool
 }
 
 // SemanticEntityWriteResult captures the canonical semantic-entity write outcome.
@@ -47,10 +48,11 @@ type SemanticEntityWriter interface {
 // into canonical graph writes. It loads parser facts, extracts canonical
 // semantic rows, and writes them through the Neo4j adapter.
 type SemanticEntityMaterializationHandler struct {
-	FactLoader     FactLoader
-	Writer         SemanticEntityWriter
-	PhasePublisher GraphProjectionPhasePublisher
-	RepairQueue    GraphProjectionPhaseRepairQueue
+	FactLoader           FactLoader
+	Writer               SemanticEntityWriter
+	PriorGenerationCheck PriorGenerationCheck
+	PhasePublisher       GraphProjectionPhasePublisher
+	RepairQueue          GraphProjectionPhaseRepairQueue
 }
 
 // Handle executes the semantic-entity materialization path.
@@ -87,9 +89,15 @@ func (h SemanticEntityMaterializationHandler) Handle(
 		}, nil
 	}
 
+	skipRetract, err := h.shouldSkipSemanticRetract(ctx, intent)
+	if err != nil {
+		return Result{}, err
+	}
+
 	writeResult, err := h.Writer.WriteSemanticEntities(ctx, SemanticEntityWrite{
-		RepoIDs: repoIDs,
-		Rows:    rows,
+		RepoIDs:     repoIDs,
+		Rows:        rows,
+		SkipRetract: skipRetract,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("write semantic entities: %w", err)
@@ -110,6 +118,17 @@ func (h SemanticEntityMaterializationHandler) Handle(
 		EvidenceSummary: summary,
 		CanonicalWrites: writeResult.CanonicalWrites,
 	}, nil
+}
+
+func (h SemanticEntityMaterializationHandler) shouldSkipSemanticRetract(ctx context.Context, intent Intent) (bool, error) {
+	if h.PriorGenerationCheck == nil || intent.AttemptCount > 1 {
+		return false, nil
+	}
+	hasPrior, err := h.PriorGenerationCheck(ctx, intent.ScopeID, intent.GenerationID)
+	if err != nil {
+		return false, fmt.Errorf("check prior generation for semantic retract: %w", err)
+	}
+	return !hasPrior, nil
 }
 
 func (h SemanticEntityMaterializationHandler) publishSemanticGraphPhases(

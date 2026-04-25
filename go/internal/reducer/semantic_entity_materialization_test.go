@@ -535,6 +535,133 @@ func TestSemanticEntityMaterializationHandlerWritesAndRetracts(t *testing.T) {
 	}
 }
 
+func TestSemanticEntityMaterializationHandlerSkipsRetractForFirstGeneration(t *testing.T) {
+	t.Parallel()
+
+	loader := &fakeSemanticEntityFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactKind: "repository",
+				Payload: map[string]any{
+					"repo_id": "repo-1",
+				},
+			},
+			{
+				FactKind:  "content_entity",
+				SourceRef: facts.Ref{SourceURI: "/repo/main.go"},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "function-1",
+					"relative_path": "main.go",
+					"entity_type":   "Function",
+					"entity_name":   "main",
+					"language":      "go",
+					"start_line":    1,
+					"end_line":      3,
+				},
+			},
+		},
+	}
+	writer := &recordingSemanticEntityWriter{}
+	handler := SemanticEntityMaterializationHandler{
+		FactLoader: loader,
+		Writer:     writer,
+		PriorGenerationCheck: func(_ context.Context, scopeID, generationID string) (bool, error) {
+			if scopeID != "scope-1" || generationID != "generation-1" {
+				t.Fatalf("PriorGenerationCheck(%q, %q), want scope-1/generation-1", scopeID, generationID)
+			}
+			return false, nil
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-1",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		SourceSystem: "git",
+		Domain:       DomainSemanticEntityMaterialization,
+		Status:       IntentStatusClaimed,
+		AttemptCount: 1,
+		EnqueuedAt:   time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(writer.writes), 1; got != want {
+		t.Fatalf("writer writes = %d, want %d", got, want)
+	}
+	if !writer.writes[0].SkipRetract {
+		t.Fatal("writer SkipRetract = false, want true for first generation")
+	}
+}
+
+func TestSemanticEntityMaterializationHandlerRetractsPriorOrRetriedGeneration(t *testing.T) {
+	t.Parallel()
+
+	loader := &fakeSemanticEntityFactLoader{
+		envelopes: []facts.Envelope{
+			{FactKind: "repository", Payload: map[string]any{"repo_id": "repo-1"}},
+			{
+				FactKind:  "content_entity",
+				SourceRef: facts.Ref{SourceURI: "/repo/main.go"},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "function-1",
+					"relative_path": "main.go",
+					"entity_type":   "Function",
+					"entity_name":   "main",
+					"language":      "go",
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		prior        bool
+		attemptCount int
+	}{
+		{name: "prior generation exists", prior: true, attemptCount: 1},
+		{name: "retry of first generation", prior: false, attemptCount: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			writer := &recordingSemanticEntityWriter{}
+			handler := SemanticEntityMaterializationHandler{
+				FactLoader: loader,
+				Writer:     writer,
+				PriorGenerationCheck: func(context.Context, string, string) (bool, error) {
+					return tt.prior, nil
+				},
+			}
+			_, err := handler.Handle(context.Background(), Intent{
+				IntentID:     "intent-1",
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				SourceSystem: "git",
+				Domain:       DomainSemanticEntityMaterialization,
+				Status:       IntentStatusClaimed,
+				AttemptCount: tt.attemptCount,
+				EnqueuedAt:   time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+				AvailableAt:  time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+			})
+			if err != nil {
+				t.Fatalf("Handle() error = %v, want nil", err)
+			}
+			if got, want := len(writer.writes), 1; got != want {
+				t.Fatalf("writer writes = %d, want %d", got, want)
+			}
+			if writer.writes[0].SkipRetract {
+				t.Fatal("writer SkipRetract = true, want false for prior or retried generation")
+			}
+		})
+	}
+}
+
 func TestSemanticEntityMaterializationHandlerRetractsWhenNoTargetRowsRemain(t *testing.T) {
 	t.Parallel()
 

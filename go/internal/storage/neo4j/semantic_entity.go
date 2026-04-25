@@ -122,7 +122,9 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 
 	// Build the full statement list: retract first, then all upserts.
 	var stmts []Statement
-	stmts = append(stmts, w.semanticRetractStatements(repoIDs)...)
+	if !write.SkipRetract {
+		stmts = append(stmts, w.semanticRetractStatements(repoIDs)...)
+	}
 
 	writes := 0
 	switch w.writeMode {
@@ -215,16 +217,18 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		})
 	}
 
-	// Prefer atomic grouped execution; fall back to sequential for
-	// executors that don't support transactions (e.g., test stubs).
-	if ge, ok := w.executor.(GroupExecutor); ok {
-		if err := ge.ExecuteGroup(ctx, stmts); err != nil {
-			return reducer.SemanticEntityWriteResult{}, fmt.Errorf("write semantic entities: %w", WrapRetryableNeo4jError(err))
-		}
-	} else {
-		for _, stmt := range stmts {
-			if err := w.executor.Execute(ctx, stmt); err != nil {
+	if len(stmts) > 0 {
+		// Prefer atomic grouped execution; fall back to sequential for
+		// executors that don't support transactions (e.g., test stubs).
+		if ge, ok := w.executor.(GroupExecutor); ok {
+			if err := ge.ExecuteGroup(ctx, stmts); err != nil {
 				return reducer.SemanticEntityWriteResult{}, fmt.Errorf("write semantic entities: %w", WrapRetryableNeo4jError(err))
+			}
+		} else {
+			for _, stmt := range stmts {
+				if err := w.executor.Execute(ctx, stmt); err != nil {
+					return reducer.SemanticEntityWriteResult{}, fmt.Errorf("write semantic entities: %w", WrapRetryableNeo4jError(err))
+				}
 			}
 		}
 	}

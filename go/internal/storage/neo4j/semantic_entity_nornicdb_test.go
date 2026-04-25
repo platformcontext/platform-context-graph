@@ -148,6 +148,33 @@ func TestSemanticEntityWriterWithLabelScopedRetractSplitsBroadRetractByLabel(t *
 	}
 }
 
+func TestSemanticEntityWriterSkipsRetractWhenRequested(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewSemanticEntityWriterWithBatchedProperties(executor, 100).WithLabelScopedRetract()
+
+	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs:     []string{"repo-1"},
+		SkipRetract: true,
+		Rows: []reducer.SemanticEntityRow{
+			semanticNornicDBFunctionRow("function-go-1"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+	if got, want := result.CanonicalWrites, 1; got != want {
+		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
+	}
+	if got, want := len(executor.calls), 1; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+	if got, want := executor.calls[0].Operation, OperationCanonicalUpsert; got != want {
+		t.Fatalf("call[0].Operation = %q, want %q", got, want)
+	}
+}
+
 func semanticNornicDBFunctionRow(id string) reducer.SemanticEntityRow {
 	return reducer.SemanticEntityRow{
 		RepoID:       "repo-1",
