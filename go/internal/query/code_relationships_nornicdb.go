@@ -72,8 +72,21 @@ func (h *CodeHandler) nornicDBRelationshipMetadataRow(
 	}
 	if entityID != "" {
 		params["entity_id"] = entityID
+		for _, property := range []string{"uid", "id"} {
+			rows, err := h.Neo4j.Run(ctx, nornicDBRelationshipMetadataCypher(predicate, entityLabel, property), params)
+			if err != nil {
+				return nil, err
+			}
+			if len(rows) == 1 {
+				return rows[0], nil
+			}
+			if len(rows) > 1 {
+				return nil, nil
+			}
+		}
+		return nil, nil
 	}
-	rows, err := h.Neo4j.Run(ctx, nornicDBRelationshipMetadataCypher(predicate, entityLabel, entityID != ""), params)
+	rows, err := h.Neo4j.Run(ctx, nornicDBRelationshipMetadataCypher(predicate, entityLabel, ""), params)
 	if err != nil {
 		return nil, err
 	}
@@ -119,11 +132,11 @@ func nornicDBRelationshipMetadataPredicate(
 	return strings.Join(predicates, " AND "), params
 }
 
-func nornicDBRelationshipMetadataCypher(predicate string, entityLabel string, entityIDLookup bool) string {
+func nornicDBRelationshipMetadataCypher(predicate string, entityLabel string, entityIDProperty string) string {
 	entityPattern := "(e" + nornicDBLabelPattern(entityLabel) + ")"
 	var predicates []string
-	if entityIDLookup {
-		predicates = append(predicates, graphEntityIDPredicate("e", "$entity_id"))
+	if entityIDProperty != "" {
+		predicates = append(predicates, "e."+entityIDProperty+" = $entity_id")
 	}
 	if trimmed := strings.TrimSpace(predicate); trimmed != "" {
 		predicates = append(predicates, trimmed)
@@ -159,23 +172,26 @@ func (h *CodeHandler) nornicDBOneHopRelationships(
 	if entityID == "" {
 		return []map[string]any{}, nil
 	}
-	cypher, params := nornicDBOneHopRelationshipsCypher(entityID, direction, relationshipType, entityLabel)
-	rows, err := h.Neo4j.Run(ctx, cypher, params)
-	if err != nil {
-		return nil, err
+	for _, property := range []string{"uid", "id"} {
+		cypher, params := nornicDBOneHopRelationshipsCypher(entityID, direction, relationshipType, entityLabel, property)
+		rows, err := h.Neo4j.Run(ctx, cypher, params)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) > 0 {
+			return normalizeNornicDBRelationshipRows(rows), nil
+		}
 	}
-	return normalizeNornicDBRelationshipRows(rows), nil
+	return []map[string]any{}, nil
 }
 
-func nornicDBOneHopRelationshipsCypher(entityID string, direction string, relationshipType string, entityLabel string) (string, map[string]any) {
+func nornicDBOneHopRelationshipsCypher(entityID string, direction string, relationshipType string, entityLabel string, entityIDProperty string) (string, map[string]any) {
 	params := map[string]any{"entity_id": entityID}
 	relPattern := nornicDBRelationshipPattern(relationshipType)
-	entityPattern := "(e" + nornicDBLabelPattern(entityLabel) + ")"
-	entityWhere := graphEntityIDPredicate("e", "$entity_id")
+	entityPattern := nornicDBNodePatternWithProperty("e", entityLabel, entityIDProperty, "$entity_id")
 	if direction == "incoming" {
 		return `
 		MATCH ` + entityPattern + `
-		WHERE ` + entityWhere + `
 		MATCH (source)-[rel` + relPattern + `]->(e)
 		RETURN 'incoming' as direction,
 		       type(rel) as type,
@@ -187,7 +203,6 @@ func nornicDBOneHopRelationshipsCypher(entityID string, direction string, relati
 	}
 	return `
 		MATCH ` + entityPattern + `
-		WHERE ` + entityWhere + `
 		MATCH (e)-[rel` + relPattern + `]->(target)
 		RETURN 'outgoing' as direction,
 		       type(rel) as type,
@@ -206,8 +221,16 @@ func nornicDBLabelPattern(label string) string {
 	return ":" + label
 }
 
-func nornicDBNodePattern(alias string, label string, uidParam string) string {
-	return "(" + alias + nornicDBLabelPattern(label) + " {uid: " + uidParam + "})"
+func nornicDBNodePattern(alias string, label string, param string) string {
+	return nornicDBNodePatternWithProperty(alias, label, "uid", param)
+}
+
+func nornicDBNodePatternWithProperty(alias string, label string, property string, param string) string {
+	property = strings.TrimSpace(property)
+	if property == "" {
+		property = "uid"
+	}
+	return "(" + alias + nornicDBLabelPattern(label) + " {" + property + ": " + param + "})"
 }
 
 func nornicDBRelationshipPattern(relationshipType string) string {
