@@ -1,0 +1,180 @@
+package query
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestHandleRelationshipsUsesNornicDBRowQueriesForDirectCalls(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "collect(DISTINCT {") {
+					t.Fatalf("cypher = %q, must not use map-collect projection on NornicDB", cypher)
+				}
+				switch {
+				case strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)"):
+					if got, want := params["name"], "handlePayment"; got != want {
+						t.Fatalf("params[name] = %#v, want %#v", got, want)
+					}
+					return []map[string]any{{
+						"id":         "function-1",
+						"name":       "handlePayment",
+						"labels":     []any{"Function"},
+						"file_path":  "src/payments.go",
+						"repo_id":    "repo-1",
+						"repo_name":  "payments",
+						"language":   "go",
+						"start_line": int64(10),
+						"end_line":   int64(20),
+					}}, nil
+				case strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})-[rel:CALLS]->(target)"):
+					return []map[string]any{{
+						"direction":   "outgoing",
+						"type":        "CALLS",
+						"call_kind":   "row.call_kind",
+						"reason":      "rel.reason",
+						"target_name": "chargeCard",
+						"target_id":   "function-2",
+					}}, nil
+				case strings.Contains(cypher, "MATCH (source)-[rel]->(e)"):
+					t.Fatalf("cypher = %q, must not fetch incoming relationships for outgoing-only request", cypher)
+				default:
+					t.Fatalf("unexpected cypher: %q", cypher)
+				}
+				return nil, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"name":"handlePayment","direction":"outgoing","relationship_type":"CALLS"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	outgoing, ok := resp["outgoing"].([]any)
+	if !ok || len(outgoing) != 1 {
+		t.Fatalf("resp[outgoing] = %#v, want one relationship", resp["outgoing"])
+	}
+	relationship, ok := outgoing[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[outgoing][0] type = %T, want map[string]any", outgoing[0])
+	}
+	if got, want := relationship["target_name"], "chargeCard"; got != want {
+		t.Fatalf("relationship[target_name] = %#v, want %#v", got, want)
+	}
+	if _, ok := relationship["call_kind"]; ok {
+		t.Fatalf("relationship[call_kind] = %#v, want absent placeholder property", relationship["call_kind"])
+	}
+	if _, ok := relationship["reason"]; ok {
+		t.Fatalf("relationship[reason] = %#v, want absent placeholder property", relationship["reason"])
+	}
+	if got, want := resp["repo_id"], "repo-1"; got != want {
+		t.Fatalf("resp[repo_id] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleRelationshipsUsesNornicDBBFSForTransitiveCalls(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "CALLS*") || strings.Contains(cypher, "length(path)") {
+					t.Fatalf("cypher = %q, must not depend on NornicDB variable-path length", cypher)
+				}
+				switch {
+				case strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)"):
+					return []map[string]any{{
+						"id":         "function-1",
+						"name":       "handlePayment",
+						"labels":     []any{"Function"},
+						"file_path":  "src/payments.go",
+						"repo_id":    "repo-1",
+						"repo_name":  "payments",
+						"language":   "go",
+						"start_line": int64(10),
+						"end_line":   int64(20),
+					}}, nil
+				case strings.Contains(cypher, "MATCH (source)-[:CALLS]->(target)"):
+					switch params["entity_id"] {
+					case "function-1":
+						return []map[string]any{{
+							"source_id":   "function-1",
+							"source_name": "handlePayment",
+							"target_id":   "function-2",
+							"target_name": "chargeCard",
+						}}, nil
+					case "function-2":
+						return []map[string]any{{
+							"source_id":   "function-2",
+							"source_name": "chargeCard",
+							"target_id":   "function-3",
+							"target_name": "postLedger",
+						}}, nil
+					default:
+						return []map[string]any{}, nil
+					}
+				default:
+					t.Fatalf("unexpected cypher: %q", cypher)
+				}
+				return nil, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"name":"handlePayment","direction":"outgoing","relationship_type":"CALLS","transitive":true,"max_depth":2}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	outgoing, ok := resp["outgoing"].([]any)
+	if !ok || len(outgoing) != 2 {
+		t.Fatalf("resp[outgoing] = %#v, want two transitive relationships", resp["outgoing"])
+	}
+	second, ok := outgoing[1].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[outgoing][1] type = %T, want map[string]any", outgoing[1])
+	}
+	if got, want := second["target_name"], "postLedger"; got != want {
+		t.Fatalf("second[target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := second["depth"], float64(2); got != want {
+		t.Fatalf("second[depth] = %#v, want %#v", got, want)
+	}
+}

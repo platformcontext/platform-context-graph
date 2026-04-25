@@ -125,7 +125,7 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 	}
 	capability := relationshipCapability(direction, relationshipType)
 
-	row, err := h.relationshipsGraphRow(ctx, req.EntityID, req.Name, req.RepoID)
+	row, err := h.relationshipsGraphRow(ctx, req.EntityID, req.Name, req.RepoID, direction, relationshipType)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -212,9 +212,14 @@ func (h *CodeHandler) relationshipsGraphRow(
 	entityID string,
 	name string,
 	repoID string,
+	direction string,
+	relationshipType string,
 ) (map[string]any, error) {
 	if h == nil || h.Neo4j == nil {
 		return nil, nil
+	}
+	if h.graphBackend() == GraphBackendNornicDB {
+		return h.nornicDBRelationshipsGraphRow(ctx, entityID, name, repoID, direction, relationshipType)
 	}
 
 	if strings.TrimSpace(entityID) != "" {
@@ -253,8 +258,24 @@ func (h *CodeHandler) transitiveRelationshipsGraphRow(
 	if h == nil || h.Neo4j == nil {
 		return nil, nil
 	}
+	if h.graphBackend() == GraphBackendNornicDB {
+		metadataRow, err := h.nornicDBRelationshipMetadataRow(ctx, req.EntityID, req.Name, req.RepoID)
+		if err != nil || metadataRow == nil {
+			return metadataRow, err
+		}
+		rows, err := h.nornicDBTransitiveRelationshipRows(
+			ctx,
+			StringVal(metadataRow, "id"),
+			req.Direction,
+			req.MaxDepth,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return buildTransitiveRelationshipGraphResponse(metadataRow, rows, req.Direction), nil
+	}
 
-	metadataRow, err := h.relationshipsGraphRow(ctx, req.EntityID, req.Name, req.RepoID)
+	metadataRow, err := h.relationshipsGraphRow(ctx, req.EntityID, req.Name, req.RepoID, "", "")
 	if err != nil || metadataRow == nil {
 		return metadataRow, err
 	}

@@ -668,7 +668,7 @@ func TestHandleRelationshipsReturnsTransitiveCallers(t *testing.T) {
 		Profile:      ProfileLocalAuthoritative,
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if strings.Contains(cypher, "OPTIONAL MATCH (e)-[outgoingRel]->(target)") {
+				if strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)") {
 					return []map[string]any{{
 						"id":         "fn-helper",
 						"name":       "helper",
@@ -769,7 +769,7 @@ func TestHandleRelationshipsReturnsTransitiveCallersForNornicDB(t *testing.T) {
 		Profile:      ProfileLocalAuthoritative,
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if strings.Contains(cypher, "OPTIONAL MATCH (e)-[outgoingRel]->(target)") {
+				if strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)") {
 					return []map[string]any{{
 						"id":         "fn-helper",
 						"name":       "helper",
@@ -782,45 +782,30 @@ func TestHandleRelationshipsReturnsTransitiveCallersForNornicDB(t *testing.T) {
 						"end_line":   int64(42),
 					}}, nil
 				}
-				if !strings.Contains(cypher, "MATCH (e)") {
-					t.Fatalf("cypher = %q, want explicit entity match for NornicDB", cypher)
+				if strings.Contains(cypher, "CALLS*") || strings.Contains(cypher, "length(path)") {
+					t.Fatalf("cypher = %q, must not depend on NornicDB variable-path length", cypher)
 				}
-				if !strings.Contains(cypher, "WHERE "+graphEntityIDPredicate("e", "$entity_id")) {
-					t.Fatalf("cypher = %q, want bridged entity predicate for NornicDB", cypher)
+				if !strings.Contains(cypher, "MATCH (source)-[:CALLS]->(target)") {
+					t.Fatalf("cypher = %q, want one-hop CALLS traversal for NornicDB", cypher)
 				}
-				if !strings.Contains(cypher, "MATCH path = (e)<-[:CALLS*1..5]-(source)") {
-					t.Fatalf("cypher = %q, want transitive incoming CALLS traversal", cypher)
+				switch params["entity_id"] {
+				case "fn-helper":
+					return []map[string]any{{
+						"source_name": "delegate",
+						"source_id":   "fn-delegate",
+						"target_name": "helper",
+						"target_id":   "fn-helper",
+					}}, nil
+				case "fn-delegate":
+					return []map[string]any{{
+						"source_name": "wrapper",
+						"source_id":   "fn-wrapper",
+						"target_name": "delegate",
+						"target_id":   "fn-delegate",
+					}}, nil
+				default:
+					return []map[string]any{}, nil
 				}
-				if got, want := params["entity_id"], "fn-helper"; got != want {
-					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
-				}
-				return []map[string]any{{
-					"id":          "fn-helper",
-					"name":        "helper",
-					"labels":      []any{"Function"},
-					"file_path":   "src/helper.go",
-					"repo_id":     "repo-1",
-					"repo_name":   "payments",
-					"language":    "go",
-					"start_line":  int64(20),
-					"end_line":    int64(42),
-					"source_name": "delegate",
-					"source_id":   "fn-delegate",
-					"depth":       int64(1),
-				}, {
-					"id":          "fn-helper",
-					"name":        "helper",
-					"labels":      []any{"Function"},
-					"file_path":   "src/helper.go",
-					"repo_id":     "repo-1",
-					"repo_name":   "payments",
-					"language":    "go",
-					"start_line":  int64(20),
-					"end_line":    int64(42),
-					"source_name": "wrapper",
-					"source_id":   "fn-wrapper",
-					"depth":       int64(2),
-				}}, nil
 			},
 		},
 	}
@@ -837,6 +822,15 @@ func TestHandleRelationshipsReturnsTransitiveCallersForNornicDB(t *testing.T) {
 
 	if got, want := w.Code, http.StatusOK; got != want {
 		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	incoming, ok := resp["incoming"].([]any)
+	if !ok || len(incoming) != 2 {
+		t.Fatalf("resp[incoming] = %#v, want two transitive callers", resp["incoming"])
 	}
 }
 
