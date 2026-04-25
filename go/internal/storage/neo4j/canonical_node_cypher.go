@@ -9,6 +9,11 @@ const canonicalNodeRetractFilesCypher = `MATCH (f:File)
 WHERE f.repo_id = $repo_id AND f.evidence_source = 'projector/canonical' AND f.generation_id <> $generation_id
 DETACH DELETE f`
 
+const canonicalNodeRetractRemovedFilesCypher = `MATCH (f:File)
+WHERE f.repo_id = $repo_id AND f.evidence_source = 'projector/canonical' AND f.generation_id <> $generation_id
+  AND NOT (f.path IN $file_paths)
+DETACH DELETE f`
+
 const canonicalNodeRetractCodeEntitiesCypher = `MATCH (n)
 WHERE n.repo_id = $repo_id AND n.evidence_source = 'projector/canonical' AND n.generation_id <> $generation_id
   AND (n:Function OR n:Class OR n:Variable OR n:Interface OR n:Trait OR n:Struct OR n:Enum OR n:Macro OR n:Union OR n:Record OR n:Property)
