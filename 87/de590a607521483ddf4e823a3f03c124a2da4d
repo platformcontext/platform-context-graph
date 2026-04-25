@@ -1,0 +1,25 @@
+go/internal/query/code_relationships_nornicdb.go
+  e27ce815bbe89792 194,204
+go/internal/query/code_relationships_nornicdb_test.go
+  e27ce815bbe89792 69,84,171,266,431,438,517-518
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "87de590a607521483ddf4e823a3f03c124a2da4d",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 12,
+      "accepted_lines": 34,
+      "overriden_lines": 0
+    }
+  }
+}
