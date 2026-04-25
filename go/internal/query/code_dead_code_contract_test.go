@@ -239,7 +239,7 @@ func TestHandleDeadCodeUsesNornicDBCompatibleCandidateQuery(t *testing.T) {
 				if strings.Contains(cypher, "WHERE NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)") {
 					t.Fatalf("cypher = %q, want NornicDB dead-code query to avoid inline NOT pattern", cypher)
 				}
-				if !strings.Contains(cypher, "WHERE NOT EXISTS { MATCH (e)<-[:CALLS|IMPORTS|REFERENCES]-() }") {
+				if !strings.Contains(cypher, "NOT EXISTS { MATCH (e)<-[:CALLS|IMPORTS|REFERENCES]-() }") {
 					t.Fatalf("cypher = %q, want NornicDB dead-code query to use NOT EXISTS pattern form", cypher)
 				}
 				if got, want := params["limit"], deadCodeDefaultLimit+1; got != want {
@@ -274,6 +274,98 @@ func TestHandleDeadCodeUsesNornicDBCompatibleCandidateQuery(t *testing.T) {
 
 	if got, want := w.Code, http.StatusOK; got != want {
 		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+}
+
+func TestHandleDeadCodeCandidateQueryRestrictsCodeEntityLabelsBeforeLimit(t *testing.T) {
+	t.Parallel()
+
+	for _, backend := range []GraphBackend{GraphBackendNeo4j, GraphBackendNornicDB} {
+		backend := backend
+		t.Run(string(backend), func(t *testing.T) {
+			t.Parallel()
+
+			cypher := buildDeadCodeGraphCypher(false, backend)
+			limitIndex := strings.Index(cypher, "LIMIT $limit")
+			if limitIndex < 0 {
+				t.Fatalf("cypher = %q, want LIMIT $limit", cypher)
+			}
+
+			labelGate := "(e:Function OR e:Class OR e:Struct OR e:Interface)"
+			labelGateIndex := strings.Index(cypher, labelGate)
+			if labelGateIndex < 0 {
+				t.Fatalf("cypher = %q, want code-entity label gate %q", cypher, labelGate)
+			}
+			if labelGateIndex > limitIndex {
+				t.Fatalf("cypher = %q, want code-entity label gate before LIMIT", cypher)
+			}
+		})
+	}
+}
+
+func TestHandleDeadCodeExcludesNonCodeEntitiesFromBackendRows(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		Profile: ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, _ string, _ map[string]any) ([]map[string]any, error) {
+				return []map[string]any{
+					{
+						"entity_id": "argo-app", "name": "platform-context-graph", "labels": []any{"ArgoCDApplication"},
+						"file_path": "deploy/argocd/app.yaml", "repo_id": "repo-1", "repo_name": "platform-context-graph", "language": "yaml",
+					},
+					{
+						"entity_id": "k8s-resource", "name": "api-deployment", "labels": []any{"K8sResource"},
+						"file_path": "deploy/k8s/api.yaml", "repo_id": "repo-1", "repo_name": "platform-context-graph", "language": "yaml",
+					},
+					{
+						"entity_id": "function-1", "name": "helper", "labels": []any{"Function"},
+						"file_path": "go/internal/query/helper.go", "repo_id": "repo-1", "repo_name": "platform-context-graph", "language": "go",
+					},
+				}, nil
+			},
+		},
+		Content: fakeDeadCodeContentStore{
+			entities: map[string]EntityContent{
+				"argo-app":     {EntityID: "argo-app", RelativePath: "deploy/argocd/app.yaml", EntityType: "ArgoCDApplication", EntityName: "platform-context-graph", Language: "yaml"},
+				"k8s-resource": {EntityID: "k8s-resource", RelativePath: "deploy/k8s/api.yaml", EntityType: "K8sResource", EntityName: "api-deployment", Language: "yaml"},
+				"function-1":   {EntityID: "function-1", RelativePath: "go/internal/query/helper.go", EntityType: "Function", EntityName: "helper", Language: "go", SourceCache: "func helper() {}"},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/dead-code",
+		bytes.NewBufferString(`{"repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	results, ok := resp["results"].([]any)
+	if !ok {
+		t.Fatalf("results type = %T, want []any", resp["results"])
+	}
+	if got, want := len(results), 1; got != want {
+		t.Fatalf("len(results) = %d, want %d", got, want)
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["entity_id"], "function-1"; got != want {
+		t.Fatalf("result[entity_id] = %#v, want %#v", got, want)
 	}
 }
 

@@ -18,6 +18,8 @@ type deadCodeRequest struct {
 const (
 	deadCodeDefaultLimit = 100
 	deadCodeMaxLimit     = 500
+
+	deadCodeCandidateLabelPredicate = "(e:Function OR e:Class OR e:Struct OR e:Interface)"
 )
 
 // handleDeadCode finds graph-backed dead-code candidates and then applies the
@@ -84,12 +86,12 @@ func buildDeadCodeGraphCypher(hasRepoID bool, backend GraphBackend) string {
 		MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
 	`
 	if backend == GraphBackendNornicDB {
-		cypher += ` WHERE NOT EXISTS { MATCH (e)<-[:CALLS|IMPORTS|REFERENCES]-() }`
+		cypher += ` WHERE ` + deadCodeCandidateLabelPredicate + ` AND NOT EXISTS { MATCH (e)<-[:CALLS|IMPORTS|REFERENCES]-() }`
 		if hasRepoID {
 			cypher += ` AND r.id = $repo_id`
 		}
 	} else {
-		cypher += ` WHERE NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)`
+		cypher += ` WHERE ` + deadCodeCandidateLabelPredicate + ` AND NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)`
 		if hasRepoID {
 			cypher += ` AND r.id = $repo_id`
 		}
@@ -204,6 +206,10 @@ func filterDeadCodeResultsByDefaultPolicy(
 }
 
 func deadCodeResultExcludedByDefault(result map[string]any, entity *EntityContent, stats *deadCodePolicyStats) bool {
+	if !deadCodeIsCandidateEntity(result, entity) {
+		return true
+	}
+
 	goPolicy := newDeadCodeGoPolicyContext(result, entity)
 	if goPolicy.language == "go" && goPolicy.normalizedSource == "" && entity != nil && len(goPolicy.rootKinds) == 0 {
 		stats.RootsSkippedMissingSource++
@@ -228,6 +234,27 @@ func deadCodeResultExcludedByDefault(result map[string]any, entity *EntityConten
 		return true
 	}
 	return deadCodeIsGeneratedCode(result, entity)
+}
+
+func deadCodeIsCandidateEntity(result map[string]any, entity *EntityContent) bool {
+	for _, label := range StringSliceVal(result, "labels") {
+		if deadCodeIsCandidateEntityType(label) {
+			return true
+		}
+	}
+	if entity == nil {
+		return false
+	}
+	return deadCodeIsCandidateEntityType(entity.EntityType)
+}
+
+func deadCodeIsCandidateEntityType(entityType string) bool {
+	switch strings.TrimSpace(entityType) {
+	case "Function", "Class", "Struct", "Interface":
+		return true
+	default:
+		return false
+	}
 }
 
 func deadCodeIsLanguageEntrypoint(result map[string]any, entity *EntityContent) bool {
@@ -278,19 +305,7 @@ func deadCodeIsLibraryPublicAPIRoot(result map[string]any, entity *EntityContent
 }
 
 func deadCodeIsSupportedGoPublicAPIEntity(result map[string]any, entity *EntityContent) bool {
-	switch primaryEntityLabel(result) {
-	case "Function", "Struct", "Interface", "Class":
-		return true
-	}
-	if entity == nil {
-		return false
-	}
-	switch strings.TrimSpace(entity.EntityType) {
-	case "Function", "Struct", "Interface", "Class":
-		return true
-	default:
-		return false
-	}
+	return deadCodeIsCandidateEntity(result, entity)
 }
 
 func deadCodeIsTestFile(result map[string]any, entity *EntityContent) bool {
