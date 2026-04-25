@@ -698,6 +698,31 @@ func TestCanonicalNodeWriterRetraction(t *testing.T) {
 	}
 }
 
+func TestCanonicalNodeWriterSkipsRetractionForFirstGeneration(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&recordingExecutor{}, 0, nil)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:         "scope-first",
+		GenerationID:    "gen-first",
+		RepoID:          "repo-first",
+		FirstGeneration: true,
+		Files: []projector.FileRow{{
+			Path:   "/repo/main.go",
+			RepoID: "repo-first",
+		}},
+		Entities: []projector.EntityRow{{
+			EntityID: "content-entity:first",
+			Label:    "Function",
+			RepoID:   "repo-first",
+		}},
+	}
+
+	if got := writer.buildRetractStatements(mat); len(got) != 0 {
+		t.Fatalf("buildRetractStatements() count = %d, want 0 for first generation", len(got))
+	}
+}
+
 func TestCanonicalNodeWriterFileRetractPreservesCurrentFilePaths(t *testing.T) {
 	t.Parallel()
 

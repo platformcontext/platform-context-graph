@@ -19,6 +19,7 @@ func TestProjectorQueueClaimIncludesExpiredLeaseReclaimPredicates(t *testing.T) 
 					"git",
 					"repository",
 					"",
+					"",
 					"git",
 					"repo-123",
 					"generation-456",

@@ -162,7 +162,7 @@ export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
 export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10
-export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5
+export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=5
 export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Function=15,Variable=10
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
 ./go/bin/pcg graph start --workspace-root "$PWD"
@@ -178,6 +178,9 @@ paths; if the graph schema bootstrap fails, do not continue into projection.
 host indexes and projects: owner/profile/backend header, collector/projector/
 reducer flow lanes, and queue pressure from the shared status store. Treat
 that panel as truthful runtime status, not as a percentage-complete contract.
+For first-generation scopes, canonical graph projection skips stale-generation
+retraction because no active generation exists yet; refresh runs still perform
+scoped retraction before upserting the new generation.
 
 From an MCP client, call:
 

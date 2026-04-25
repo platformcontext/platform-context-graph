@@ -258,6 +258,7 @@ func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, cl
 			scopeRow.SourceSystem,
 			string(scopeRow.ScopeKind),
 			scopeRow.ParentScopeID,
+			db.state.activeGenerations[scopeRow.ScopeID],
 			string(scopeRow.CollectorKind),
 			scopeRow.PartitionKey,
 			generationRow.GenerationID,

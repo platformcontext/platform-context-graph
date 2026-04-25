@@ -25,6 +25,7 @@ func TestProjectorQueueClaimReturnsScopeGenerationWork(t *testing.T) {
 					"git",
 					"repository",
 					"",
+					"generation-active",
 					"git",
 					"repo-123",
 					"generation-456",
@@ -63,6 +64,9 @@ func TestProjectorQueueClaimReturnsScopeGenerationWork(t *testing.T) {
 	if got, want := work.AttemptCount, 1; got != want {
 		t.Fatalf("Claim().AttemptCount = %d, want %d", got, want)
 	}
+	if got, want := work.Scope.ActiveGenerationID, "generation-active"; got != want {
+		t.Fatalf("Claim().Scope.ActiveGenerationID = %q, want %q", got, want)
+	}
 	if !strings.Contains(db.queries[0].query, "stage = 'projector'") {
 		t.Fatalf("claim query = %q, want projector stage filter", db.queries[0].query)
 	}
@@ -79,6 +83,7 @@ func TestProjectorQueueClaimPopulatesScopeMetadataFromPayload(t *testing.T) {
 					"scope-123",
 					"git",
 					"repository",
+					"",
 					"",
 					"git",
 					"repo-123",
