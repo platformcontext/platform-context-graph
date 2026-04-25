@@ -1,0 +1,27 @@
+CLAUDE.md
+  e27ce815bbe89792 146-150,155-160
+AGENTS.md
+  e27ce815bbe89792 146-150,155-160
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 135-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "de6629c872bdb67a08d46ad4dedd69794772a3cd",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 47,
+      "total_deletions": 12,
+      "accepted_lines": 67,
+      "overriden_lines": 0
+    }
+  }
+}
