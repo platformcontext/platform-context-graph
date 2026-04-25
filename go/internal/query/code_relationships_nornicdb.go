@@ -191,8 +191,7 @@ func nornicDBOneHopRelationshipsCypher(entityID string, direction string, relati
 	entityPattern := nornicDBNodePatternWithProperty("e", entityLabel, entityIDProperty, "$entity_id")
 	if direction == "incoming" {
 		return `
-		MATCH ` + entityPattern + `
-		MATCH (source)-[rel` + relPattern + `]->(e)
+		MATCH (source)-[rel` + relPattern + `]->` + entityPattern + `
 		RETURN 'incoming' as direction,
 		       type(rel) as type,
 		       rel.call_kind as call_kind,
@@ -202,8 +201,7 @@ func nornicDBOneHopRelationshipsCypher(entityID string, direction string, relati
 	`, params
 	}
 	return `
-		MATCH ` + entityPattern + `
-		MATCH (e)-[rel` + relPattern + `]->(target)
+		MATCH ` + entityPattern + `-[rel` + relPattern + `]->(target)
 		RETURN 'outgoing' as direction,
 		       type(rel) as type,
 		       rel.call_kind as call_kind,
