@@ -445,5 +445,9 @@ Short form:
    the active Chunk 3.5 / Chunk 4 status row of
    `docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md`.
 
+When adding or changing any `PCG_NORNICDB_*` tuning knob, also follow
+`docs/docs/reference/nornicdb-tuning.md` § Adding New Knobs and update the
+doc, active ADR, and local testing runbook in the same PR.
+
 Reviewer rejects PR when an `if backend == nornicdb` branch appears outside
 an already documented narrow seam.

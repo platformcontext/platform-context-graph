@@ -6,6 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +18,20 @@ import (
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 )
+
+func TestNornicDBTuningDocSemanticDefaultsMatchCode(t *testing.T) {
+	t.Parallel()
+
+	doc := readNornicDBTuningDoc(t)
+	gotDefault, ok := markdownTableDefault(doc, nornicDBSemanticEntityLabelBatchEnv)
+	if !ok {
+		t.Fatalf("nornicdb tuning doc missing %s", nornicDBSemanticEntityLabelBatchEnv)
+	}
+	wantDefault := formatSemanticLabelSizes(defaultNornicDBSemanticEntityLabelBatchSizes(0))
+	if gotDefault != wantDefault {
+		t.Fatalf("doc default for %s = %q, want %q", nornicDBSemanticEntityLabelBatchEnv, gotDefault, wantDefault)
+	}
+}
 
 // fakeNeo4jSession records cypher calls for assertion.
 type fakeNeo4jSession struct {
@@ -44,6 +62,59 @@ func (s *fakeNeo4jSession) RunCypherGroup(ctx context.Context, stmts []sourceneo
 		}
 	}
 	return nil
+}
+
+func readNornicDBTuningDoc(t *testing.T) string {
+	t.Helper()
+
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller() failed")
+	}
+	docPath := filepath.Join(filepath.Dir(filename), "..", "..", "..", "docs", "docs", "reference", "nornicdb-tuning.md")
+	contents, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("read nornicdb tuning doc: %v", err)
+	}
+	return string(contents)
+}
+
+func markdownTableDefault(markdown string, envName string) (string, bool) {
+	prefix := "| `" + envName + "` |"
+	for _, line := range strings.Split(markdown, "\n") {
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		cells := strings.Split(line, "|")
+		if len(cells) < 4 {
+			return "", false
+		}
+		return normalizeMarkdownDefault(cells[2]), true
+	}
+	return "", false
+}
+
+func normalizeMarkdownDefault(defaultCell string) string {
+	return strings.ReplaceAll(strings.TrimSpace(defaultCell), "`", "")
+}
+
+func formatSemanticLabelSizes(labelSizes map[string]int) string {
+	labels := make([]string, 0, len(labelSizes))
+	for label := range labelSizes {
+		labels = append(labels, label)
+	}
+	slices.Sort(labels)
+
+	var builder strings.Builder
+	for i, label := range labels {
+		if i > 0 {
+			builder.WriteByte(',')
+		}
+		builder.WriteString(label)
+		builder.WriteByte('=')
+		builder.WriteString(fmt.Sprint(labelSizes[label]))
+	}
+	return builder.String()
 }
 
 func TestReducerNeo4jExecutorExecutesStatement(t *testing.T) {
