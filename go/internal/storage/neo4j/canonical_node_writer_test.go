@@ -1019,6 +1019,12 @@ func TestCanonicalNodeWriterRefreshesOnlyStaleFileEntityEdges(t *testing.T) {
 		t.Fatalf("file/entity refresh statement count = %d, want %d", got, want)
 	}
 	for _, stmt := range fileEntityRefreshes {
+		if !strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})-[r:CONTAINS]->(n)") {
+			t.Fatalf("refresh Cypher = %q, want single file_path anchor", stmt.Cypher)
+		}
+		if strings.Contains(stmt.Cypher, "f.path IN $file_paths") {
+			t.Fatalf("refresh Cypher = %q, must not prune multiple files in one statement", stmt.Cypher)
+		}
 		filePath, ok := stmt.Parameters["file_path"].(string)
 		if !ok {
 			t.Fatalf("refresh file_path type = %T, want string", stmt.Parameters["file_path"])
