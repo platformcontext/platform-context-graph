@@ -211,9 +211,12 @@ to tune specific heavy entity families without recompiling or lowering the row
 cap for the entire entity phase.
 If those row caps are already narrow but the grouped entity chunks are still
 too large, use
-`PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5` to
-shrink only the grouped transaction size for those heavier families without
-forcing the same statement cap onto every other entity label.
+`PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=5`
+to shrink only the grouped transaction size for those heavier families without
+forcing the same statement cap onto every other entity label. `K8sResource`
+rows are often individually small, but Helm/Kustomize-heavy repos can emit many
+file-scoped one-row containment statements, so the label may still need a
+narrow grouped-transaction cap.
 Reducer-owned semantic entity materialization has its own high-cardinality
 label caps because it runs after source-local canonical projection and writes
 parser-enriched semantic labels such as `Function` and `Variable`. Use

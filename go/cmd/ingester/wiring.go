@@ -67,14 +67,18 @@ const (
 	// broader entity phase limit, so they need the same conservative grouped
 	// statement cap as Function for the current dogfood lane.
 	defaultNornicDBVariableEntityPhaseStatements = 5
-	canonicalWriteTimeoutEnv                     = "PCG_CANONICAL_WRITE_TIMEOUT"
-	nornicDBCanonicalGroupedWritesEnv            = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
-	nornicDBPhaseGroupStatementsEnv              = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityPhaseStatementsEnv             = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
-	nornicDBEntityBatchSizeEnv                   = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
-	nornicDBEntityLabelBatchSizesEnv             = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
-	nornicDBEntityLabelPhaseGroupStatementsEnv   = "PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS"
-	nornicDBBatchedEntityContainmentEnv          = "PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT"
+	// K8sResource rows are usually small, but file-scoped inline containment
+	// emits many one-row statements. Keep their grouped transaction cap narrow
+	// so large Helm/Kustomize repos do not timeout inside one Bolt transaction.
+	defaultNornicDBK8sResourceEntityPhaseStatements = 5
+	canonicalWriteTimeoutEnv                        = "PCG_CANONICAL_WRITE_TIMEOUT"
+	nornicDBCanonicalGroupedWritesEnv               = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
+	nornicDBPhaseGroupStatementsEnv                 = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityPhaseStatementsEnv                = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
+	nornicDBEntityBatchSizeEnv                      = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
+	nornicDBEntityLabelBatchSizesEnv                = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
+	nornicDBEntityLabelPhaseGroupStatementsEnv      = "PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS"
+	nornicDBBatchedEntityContainmentEnv             = "PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT"
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -414,9 +418,10 @@ func defaultNornicDBEntityLabelBatchSizes(entityBatchSize int) map[string]int {
 
 func defaultNornicDBEntityLabelPhaseGroupStatements(entityPhaseStatements int) map[string]int {
 	return map[string]int{
-		"Function": capOptionalBatchSize(entityPhaseStatements, defaultNornicDBFunctionEntityPhaseStatements),
-		"Struct":   capOptionalBatchSize(entityPhaseStatements, defaultNornicDBStructEntityPhaseStatements),
-		"Variable": capOptionalBatchSize(entityPhaseStatements, defaultNornicDBVariableEntityPhaseStatements),
+		"Function":    capOptionalBatchSize(entityPhaseStatements, defaultNornicDBFunctionEntityPhaseStatements),
+		"K8sResource": capOptionalBatchSize(entityPhaseStatements, defaultNornicDBK8sResourceEntityPhaseStatements),
+		"Struct":      capOptionalBatchSize(entityPhaseStatements, defaultNornicDBStructEntityPhaseStatements),
+		"Variable":    capOptionalBatchSize(entityPhaseStatements, defaultNornicDBVariableEntityPhaseStatements),
 	}
 }
 
