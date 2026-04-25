@@ -874,7 +874,7 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 			{Path: "/repos/my-repo/main.go"},
 		},
 		Entities: []projector.EntityRow{
-			{EntityID: "content-entity:function", Label: "Function"},
+			{EntityID: "content-entity:function", Label: "Function", FilePath: "/repos/my-repo/main.go"},
 		},
 	}
 
@@ -888,7 +888,7 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 			importRefresh = stmt
 		case strings.Contains(stmt.Cypher, "]->(f:File)"):
 			directoryFileRefresh = stmt
-		case strings.Contains(stmt.Cypher, "(f:File)-[r:CONTAINS]->(n)"):
+		case strings.Contains(stmt.Cypher, "[r:CONTAINS]->(n)"):
 			fileEntityRefresh = stmt
 		case strings.Contains(stmt.Cypher, "(n)-[r:CONTAINS]->(m)"):
 			entityContainmentRefresh = stmt
@@ -903,7 +903,6 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 	}{
 		{name: "imports", stmt: importRefresh, paramName: "file_paths", want: "/repos/my-repo/main.go"},
 		{name: "directory file contains", stmt: directoryFileRefresh, paramName: "file_paths", want: "/repos/my-repo/main.go"},
-		{name: "file entity contains", stmt: fileEntityRefresh, paramName: "file_paths", want: "/repos/my-repo/main.go"},
 		{name: "entity contains", stmt: entityContainmentRefresh, paramName: "entity_ids", want: "content-entity:function"},
 	} {
 		if tt.stmt.Cypher == "" {
@@ -916,6 +915,16 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 		if !stringSliceContains(values, tt.want) {
 			t.Fatalf("%s %s = %v, want %q", tt.name, tt.paramName, values, tt.want)
 		}
+	}
+	if got, want := fileEntityRefresh.Parameters["file_path"], "/repos/my-repo/main.go"; got != want {
+		t.Fatalf("file entity contains file_path = %#v, want %#v", got, want)
+	}
+	entityIDs, ok := fileEntityRefresh.Parameters["entity_ids"].([]string)
+	if !ok {
+		t.Fatalf("file entity contains entity_ids type = %T, want []string", fileEntityRefresh.Parameters["entity_ids"])
+	}
+	if !stringSliceContains(entityIDs, "content-entity:function") {
+		t.Fatalf("file entity contains entity_ids = %v, want current entity", entityIDs)
 	}
 }
 
@@ -938,7 +947,7 @@ func TestCanonicalNodeWriterRefreshesStructuralEdgesBeforeEntityRetract(t *testi
 	codeEntityRetractIdx := -1
 	for i, stmt := range writer.buildRetractStatements(mat) {
 		switch {
-		case strings.Contains(stmt.Cypher, "(f:File)-[r:CONTAINS]->(n)"):
+		case strings.Contains(stmt.Cypher, "[r:CONTAINS]->(n)"):
 			fileEntityRefreshIdx = i
 		case strings.Contains(stmt.Cypher, "n:Function OR n:Class"):
 			codeEntityRetractIdx = i
@@ -957,37 +966,52 @@ func TestCanonicalNodeWriterRefreshesStructuralEdgesBeforeEntityRetract(t *testi
 	}
 }
 
-func TestCanonicalNodeWriterBatchesCurrentFileStructuralEdgeRefresh(t *testing.T) {
+func TestCanonicalNodeWriterRefreshesOnlyStaleFileEntityEdges(t *testing.T) {
 	t.Parallel()
 
 	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
-	files := make([]projector.FileRow, canonicalNodeRefreshFileEntityPathBatchSize+1)
-	for i := range files {
-		files[i] = projector.FileRow{Path: "/repos/my-repo/file-" + string(rune('a'+i%26))}
-	}
 	mat := projector.CanonicalMaterialization{
 		GenerationID: "gen-2",
 		RepoID:       "repo-1",
-		Files:        files,
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/current.go"},
+			{Path: "/repos/my-repo/empty.go"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "function-current", Label: "Function", FilePath: "/repos/my-repo/current.go"},
+			{EntityID: "struct-current", Label: "Struct", FilePath: "/repos/my-repo/current.go"},
+		},
 	}
 
 	var fileEntityRefreshes []Statement
 	for _, stmt := range writer.buildRetractStatements(mat) {
-		if strings.Contains(stmt.Cypher, "(f:File)-[r:CONTAINS]->(n)") {
+		if strings.Contains(stmt.Cypher, "[r:CONTAINS]->(n)") {
 			fileEntityRefreshes = append(fileEntityRefreshes, stmt)
 		}
 	}
 	if got, want := len(fileEntityRefreshes), 2; got != want {
 		t.Fatalf("file/entity refresh statement count = %d, want %d", got, want)
 	}
-	for i, stmt := range fileEntityRefreshes {
-		paths, ok := stmt.Parameters["file_paths"].([]string)
+	for _, stmt := range fileEntityRefreshes {
+		filePath, ok := stmt.Parameters["file_path"].(string)
 		if !ok {
-			t.Fatalf("refresh[%d] file_paths type = %T, want []string", i, stmt.Parameters["file_paths"])
+			t.Fatalf("refresh file_path type = %T, want string", stmt.Parameters["file_path"])
 		}
-		if len(paths) > canonicalNodeRefreshFileEntityPathBatchSize {
-			t.Fatalf("refresh[%d] file_paths len = %d, want <= %d",
-				i, len(paths), canonicalNodeRefreshFileEntityPathBatchSize)
+		entityIDs, ok := stmt.Parameters["entity_ids"].([]string)
+		if !ok {
+			t.Fatalf("refresh[%s] entity_ids type = %T, want []string", filePath, stmt.Parameters["entity_ids"])
+		}
+		switch filePath {
+		case "/repos/my-repo/current.go":
+			if got, want := strings.Join(entityIDs, ","), "function-current,struct-current"; got != want {
+				t.Fatalf("refresh[%s] entity_ids = %q, want %q", filePath, got, want)
+			}
+		case "/repos/my-repo/empty.go":
+			if len(entityIDs) != 0 {
+				t.Fatalf("refresh[%s] entity_ids = %#v, want empty", filePath, entityIDs)
+			}
+		default:
+			t.Fatalf("unexpected refresh file_path %q", filePath)
 		}
 	}
 }

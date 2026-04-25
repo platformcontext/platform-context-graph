@@ -63,8 +63,9 @@ const canonicalNodeRefreshCurrentDirectoryFileEdgesCypher = `MATCH (:Directory)-
 WHERE f.path IN $file_paths
 DELETE r`
 
-const canonicalNodeRefreshCurrentFileEntityEdgesCypher = `MATCH (f:File)-[r:CONTAINS]->(n)
-WHERE f.path IN $file_paths AND n.evidence_source = 'projector/canonical'
+const canonicalNodeRefreshCurrentFileEntityEdgesCypher = `MATCH (f:File {path: $file_path})-[r:CONTAINS]->(n)
+WHERE n.evidence_source = 'projector/canonical'
+  AND (n.uid IS NULL OR NOT (n.uid IN $entity_ids))
 DELETE r`
 
 const canonicalNodeRefreshCurrentEntityContainmentEdgesCypher = `MATCH (n)-[r:CONTAINS]->(m)

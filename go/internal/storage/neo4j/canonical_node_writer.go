@@ -220,10 +220,7 @@ func flattenCanonicalWritePhases(phases []canonicalWritePhase) []Statement {
 
 const (
 	canonicalNodeRefreshFilePathBatchSize = 100
-	// File-to-entity refresh fanouts over every entity in each file, so it
-	// needs a much smaller path slice than file/import or directory/file edges.
-	canonicalNodeRefreshFileEntityPathBatchSize = 5
-	canonicalNodeRefreshEntityIDBatchSize       = 500
+	canonicalNodeRefreshEntityIDBatchSize = 500
 )
 
 var canonicalNodeRetractCodeEntityLabels = map[string]struct{}{
@@ -362,12 +359,7 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 				canonicalNodeRefreshFilePathBatchSize,
 			)...)
 		}
-		stmts = append(stmts, buildStringSliceRetractStatements(
-			canonicalNodeRefreshCurrentFileEntityEdgesCypher,
-			"file_paths",
-			filePaths,
-			canonicalNodeRefreshFileEntityPathBatchSize,
-		)...)
+		stmts = append(stmts, buildFileEntityRefreshStatements(mat.Files, mat.Entities)...)
 	}
 	if len(entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher]) > 0 {
 		stmts = append(stmts, buildStringSliceRetractStatements(
@@ -441,6 +433,50 @@ func buildStringSliceRetractStatements(cypher string, paramName string, values [
 			Cypher:    cypher,
 			Parameters: map[string]any{
 				paramName: append([]string(nil), values[start:end]...),
+			},
+		})
+	}
+	return stmts
+}
+
+func buildFileEntityRefreshStatements(files []projector.FileRow, entities []projector.EntityRow) []Statement {
+	if len(files) == 0 {
+		return nil
+	}
+	entityIDsByFile := make(map[string][]string, len(files))
+	seenByFile := make(map[string]map[string]struct{}, len(files))
+	for _, entity := range entities {
+		if entity.FilePath == "" || entity.EntityID == "" {
+			continue
+		}
+		seen := seenByFile[entity.FilePath]
+		if seen == nil {
+			seen = make(map[string]struct{})
+			seenByFile[entity.FilePath] = seen
+		}
+		if _, ok := seen[entity.EntityID]; ok {
+			continue
+		}
+		seen[entity.EntityID] = struct{}{}
+		entityIDsByFile[entity.FilePath] = append(entityIDsByFile[entity.FilePath], entity.EntityID)
+	}
+
+	stmts := make([]Statement, 0, len(files))
+	seenFiles := make(map[string]struct{}, len(files))
+	for _, file := range files {
+		if file.Path == "" {
+			continue
+		}
+		if _, ok := seenFiles[file.Path]; ok {
+			continue
+		}
+		seenFiles[file.Path] = struct{}{}
+		stmts = append(stmts, Statement{
+			Operation: OperationCanonicalRetract,
+			Cypher:    canonicalNodeRefreshCurrentFileEntityEdgesCypher,
+			Parameters: map[string]any{
+				"file_path":  file.Path,
+				"entity_ids": append([]string(nil), entityIDsByFile[file.Path]...),
 			},
 		})
 	}
