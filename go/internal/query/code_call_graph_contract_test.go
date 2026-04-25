@@ -543,6 +543,14 @@ func TestHandleCallChainUsesNornicDBBFSForNameAnchors(t *testing.T) {
 	if !ok || len(chains) != 1 {
 		t.Fatalf("resp[chains] = %#v, want one chain", resp["chains"])
 	}
+	chainResp, ok := chains[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[chains][0] type = %T, want map[string]any", chains[0])
+	}
+	chain, ok := chainResp["chain"].([]any)
+	if !ok || len(chain) != 3 {
+		t.Fatalf("resp[chains][0][chain] = %#v, want three nodes", chainResp["chain"])
+	}
 }
 
 func TestHandleCallChainSupportsEntityIDAndRepoScopedLookup(t *testing.T) {
