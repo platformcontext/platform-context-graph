@@ -24,7 +24,7 @@ func buildCanonicalMaterialization(
 		GenerationID:    generation.GenerationID,
 		RepoID:          scopeValue.Metadata["repo_id"],
 		RepoPath:        scopeValue.Metadata["repo_path"],
-		FirstGeneration: !scopeValue.PreviousGenerationExists,
+		FirstGeneration: !scopeValue.HasPriorGeneration(),
 	}
 
 	if len(inputFacts) == 0 {

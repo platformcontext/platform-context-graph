@@ -4,7 +4,9 @@ This page covers day-two operations for the local graph backend sidecar on
 the `local_authoritative` profile. For install, see
 [Graph Backend Installation](graph-backend-installation.md). For the
 lifecycle contract that governs startup / shutdown ordering, see
-[Local Host Lifecycle](local-host-lifecycle.md).
+[Local Host Lifecycle](local-host-lifecycle.md). For the consolidated
+NornicDB environment-variable map, see
+[NornicDB Tuning](nornicdb-tuning.md).
 
 ## Current command group
 
@@ -66,6 +68,8 @@ phase-group window is `500` statements and can be tuned with
 `PCG_NORNICDB_PHASE_GROUP_STATEMENTS=<positive integer>` during repo-scale
 dogfood runs. Neo4j production writes keep the grouped canonical path and are
 not affected by this local-authoritative guardrail.
+See [NornicDB Tuning](nornicdb-tuning.md) for the full row-batch versus
+grouped-statement matrix before adding another phase-specific override.
 
 The current local-authoritative canonical entity path uses the narrowest shape
 that the active backend has proven correct. Backends with correct node-only

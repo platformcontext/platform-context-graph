@@ -920,6 +920,9 @@ func entityStatementRowCount(stmt sourceneo4j.Statement) int {
 
 func (e nornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourceneo4j.Statement) int {
 	phase := statementPhase(stmts)
+	// Phase-specific limits are intentionally evidence-driven. Keep the broad
+	// phase-group default until a measured repo-scale hotspot proves a narrower
+	// phase budget is safer for NornicDB without penalizing unrelated phases.
 	if phase == sourceneo4j.CanonicalPhaseFiles {
 		if e.fileMaxStatements > 0 {
 			return e.fileMaxStatements

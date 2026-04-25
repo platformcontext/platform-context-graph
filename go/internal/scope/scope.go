@@ -86,13 +86,21 @@ type IngestionScope struct {
 	CollectorKind CollectorKind
 	PartitionKey  string
 	// ActiveGenerationID is the currently authoritative generation, if one
-	// exists.
+	// exists. This is not a reliable "prior generation exists" signal because
+	// a failed or superseded prior generation may leave no active generation.
 	ActiveGenerationID string
 	// PreviousGenerationExists is true when the claimed generation is not the
 	// first generation ever seen for this scope. Projection uses this to avoid
 	// skipping cleanup after a failed first-generation attempt.
 	PreviousGenerationExists bool
 	Metadata                 map[string]string
+}
+
+// HasPriorGeneration reports whether this scope has any generation before the
+// one currently being projected, including failed generations that were never
+// promoted to ActiveGenerationID.
+func (s IngestionScope) HasPriorGeneration() bool {
+	return s.PreviousGenerationExists
 }
 
 // Validate checks that the scope has the minimum durable identity fields.

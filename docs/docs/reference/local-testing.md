@@ -120,6 +120,8 @@ go test ./internal/parser ./internal/collector/discovery ./internal/content/shap
 Use this smoke when touching the NornicDB sidecar, graph-backend selection,
 projector stage ordering, or local MCP code-search behavior. It requires a
 local NornicDB binary such as `/tmp/nornicdb-headless`.
+For the consolidated list of NornicDB environment variables and when to use
+each one, see [NornicDB Tuning](nornicdb-tuning.md).
 
 Until `https://github.com/orneryd/NornicDB/pull/119` is merged and published
 as a pinned release asset, use a headless binary built from the
