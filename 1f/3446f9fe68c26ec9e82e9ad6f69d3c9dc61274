@@ -1,0 +1,47 @@
+go/internal/reducer/generation_check.go
+  e27ce815bbe89792 9-13
+docs/docs/reference/nornicdb-tuning.md
+  e27ce815bbe89792 53-57
+go/internal/reducer/semantic_entity_materialization_test.go
+  e27ce815bbe89792 538-664
+go/cmd/reducer/main.go
+  e27ce815bbe89792 222
+go/internal/reducer/defaults.go
+  e27ce815bbe89792 72-74,168-172
+go/internal/storage/neo4j/semantic_entity_nornicdb_test.go
+  e27ce815bbe89792 151-177
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 99
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 244-249
+go/internal/reducer/semantic_entity_materialization.go
+  e27ce815bbe89792 29-31,51-55,92-96,98-100,123-131
+go/internal/storage/neo4j/semantic_entity.go
+  e27ce815bbe89792 125-127,220-224,227-231
+go/internal/storage/postgres/generation_freshness.go
+  e27ce815bbe89792 17-25,54-73
+go/internal/storage/postgres/generation_freshness_test.go
+  e27ce815bbe89792 98-165,169-171,183-209,214,227-228,230-246,251
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1f3446f9fe68c26ec9e82e9ad6f69d3c9dc61274",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 372,
+      "total_deletions": 55,
+      "accepted_lines": 403,
+      "overriden_lines": 0
+    }
+  }
+}
