@@ -635,6 +635,61 @@ func TestCanonicalNodeWriterBatching(t *testing.T) {
 	}
 }
 
+func TestCanonicalNodeWriterFileBatchSizeOverride(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil).WithFileBatchSize(3)
+
+	files := make([]projector.FileRow, 0, 7)
+	for i := range 7 {
+		name := fmt.Sprintf("file-%d.go", i)
+		files = append(files, projector.FileRow{
+			Path:         "/repo/" + name,
+			RelativePath: name,
+			Name:         name,
+			Language:     "go",
+			RepoID:       "repo-1",
+			DirPath:      "/repo",
+		})
+	}
+
+	err := writer.Write(context.Background(), projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "repo",
+			Path:   "/repo",
+		},
+		Files: files,
+	})
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var fileCalls []Statement
+	for _, call := range exec.calls {
+		if call.Operation == OperationCanonicalUpsert && strings.Contains(call.Cypher, "MERGE (f:File") {
+			fileCalls = append(fileCalls, call)
+		}
+	}
+	if len(fileCalls) != 3 {
+		t.Fatalf("file batches = %d, want 3", len(fileCalls))
+	}
+	for i, wantRows := range []int{3, 3, 1} {
+		rows := fileCalls[i].Parameters["rows"].([]map[string]any)
+		if len(rows) != wantRows {
+			t.Fatalf("file batch %d rows = %d, want %d", i, len(rows), wantRows)
+		}
+		if got, want := fileCalls[i].Parameters[StatementMetadataPhaseKey], CanonicalPhaseFiles; got != want {
+			t.Fatalf("file batch %d phase = %#v, want %#v", i, got, want)
+		}
+	}
+}
+
 func TestCanonicalNodeWriterRetraction(t *testing.T) {
 	t.Parallel()
 

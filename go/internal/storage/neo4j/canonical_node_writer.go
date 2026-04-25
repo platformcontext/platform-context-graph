@@ -18,6 +18,7 @@ import (
 type CanonicalNodeWriter struct {
 	executor                          Executor
 	batchSize                         int
+	fileBatchSize                     int
 	entityBatchSize                   int
 	entityLabelBatchSizes             map[string]int
 	entityContainmentInEntityUpsert   bool
@@ -52,6 +53,19 @@ func (w *CanonicalNodeWriter) WithEntityBatchSize(batchSize int) *CanonicalNodeW
 	}
 	if batchSize > 0 {
 		w.entityBatchSize = batchSize
+	}
+	return w
+}
+
+// WithFileBatchSize overrides the per-statement row batch size used only for
+// canonical file upserts. Other canonical phases keep the writer's default
+// batch size.
+func (w *CanonicalNodeWriter) WithFileBatchSize(batchSize int) *CanonicalNodeWriter {
+	if w == nil {
+		return nil
+	}
+	if batchSize > 0 {
+		w.fileBatchSize = batchSize
 	}
 	return w
 }
@@ -666,8 +680,12 @@ func (w *CanonicalNodeWriter) buildFileStatements(mat projector.CanonicalMateria
 	}
 
 	var stmts []Statement
-	for start := 0; start < len(rows); start += w.batchSize {
-		end := start + w.batchSize
+	batchSize := w.batchSize
+	if w.fileBatchSize > 0 {
+		batchSize = w.fileBatchSize
+	}
+	for start := 0; start < len(rows); start += batchSize {
+		end := start + batchSize
 		if end > len(rows) {
 			end = len(rows)
 		}

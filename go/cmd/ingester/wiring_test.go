@@ -1287,6 +1287,52 @@ func TestNornicDBFilePhaseGroupStatementsRejectsInvalidEnv(t *testing.T) {
 	}
 }
 
+func TestNornicDBFileBatchSizeDefault(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBFileBatchSize(func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("nornicDBFileBatchSize() error = %v, want nil", err)
+	}
+	if got != defaultNornicDBFileBatchSize {
+		t.Fatalf("nornicDBFileBatchSize() = %d, want %d", got, defaultNornicDBFileBatchSize)
+	}
+}
+
+func TestNornicDBFileBatchSizeFromEnv(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBFileBatchSize(func(key string) string {
+		if key == nornicDBFileBatchSizeEnv {
+			return "75"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("nornicDBFileBatchSize() error = %v, want nil", err)
+	}
+	if got != 75 {
+		t.Fatalf("nornicDBFileBatchSize() = %d, want 75", got)
+	}
+}
+
+func TestNornicDBFileBatchSizeRejectsInvalidEnv(t *testing.T) {
+	t.Parallel()
+
+	_, err := nornicDBFileBatchSize(func(key string) string {
+		if key == nornicDBFileBatchSizeEnv {
+			return "nope"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("nornicDBFileBatchSize() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), nornicDBFileBatchSizeEnv) {
+		t.Fatalf("nornicDBFileBatchSize() error = %q, want env name", err)
+	}
+}
+
 func TestNornicDBEntityPhaseGroupStatementsDefault(t *testing.T) {
 	t.Parallel()
 
