@@ -665,7 +665,29 @@ func (w *CanonicalNodeWriter) buildFileStatements(mat projector.CanonicalMateria
 		}
 	}
 
-	return buildBatchedStatements(canonicalNodeFileUpsertCypher, rows, w.batchSize)
+	var stmts []Statement
+	for start := 0; start < len(rows); start += w.batchSize {
+		end := start + w.batchSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		batchRows := rows[start:end]
+		stmts = append(stmts, Statement{
+			Operation: OperationCanonicalUpsert,
+			Cypher:    canonicalNodeFileUpsertCypher,
+			Parameters: map[string]any{
+				"rows":                    batchRows,
+				StatementMetadataPhaseKey: CanonicalPhaseFiles,
+				StatementMetadataSummaryKey: fmt.Sprintf(
+					"phase=files rows=%d first_path=%v last_path=%v",
+					len(batchRows),
+					batchRows[0]["path"],
+					batchRows[len(batchRows)-1]["path"],
+				),
+			},
+		})
+	}
+	return stmts
 }
 
 // --- Phase F: Modules ---

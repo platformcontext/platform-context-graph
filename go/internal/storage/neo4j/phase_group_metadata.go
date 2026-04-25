@@ -18,5 +18,6 @@ const (
 
 	CanonicalPhaseEntities          = "entities"
 	CanonicalPhaseEntityContainment = "entity_containment"
+	CanonicalPhaseFiles             = "files"
 	PhaseGroupModeExecuteOnly       = "execute_only"
 )

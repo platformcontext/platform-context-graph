@@ -230,6 +230,7 @@ func TestCanonicalExecutorForGraphBackendKeepsNeo4jGrouped(t *testing.T) {
 		0,
 		false,
 		defaultNornicDBPhaseGroupStatements,
+		defaultNornicDBFilePhaseStatements,
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
@@ -250,6 +251,7 @@ func TestCanonicalExecutorForGraphBackendUsesNornicDBPhaseGroupsByDefault(t *tes
 		0,
 		false,
 		defaultNornicDBPhaseGroupStatements,
+		defaultNornicDBFilePhaseStatements,
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
@@ -288,6 +290,7 @@ func TestCanonicalExecutorForGraphBackendUsesConfiguredNornicDBPhaseGroupStateme
 		0,
 		false,
 		777,
+		defaultNornicDBFilePhaseStatements,
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
@@ -302,6 +305,31 @@ func TestCanonicalExecutorForGraphBackendUsesConfiguredNornicDBPhaseGroupStateme
 	}
 }
 
+func TestCanonicalExecutorForGraphBackendUsesConfiguredNornicDBFilePhaseStatements(t *testing.T) {
+	t.Parallel()
+
+	inner := &groupCapableIngesterExecutor{}
+	executor := canonicalExecutorForGraphBackend(
+		inner,
+		runtimecfg.GraphBackendNornicDB,
+		0,
+		false,
+		defaultNornicDBPhaseGroupStatements,
+		3,
+		defaultNornicDBEntityPhaseStatements,
+		nil,
+		nil,
+		nil,
+	)
+	pge, ok := executor.(nornicDBPhaseGroupExecutor)
+	if !ok {
+		t.Fatalf("executor type = %T, want nornicDBPhaseGroupExecutor", executor)
+	}
+	if got, want := pge.fileMaxStatements, 3; got != want {
+		t.Fatalf("file phase max statements = %d, want %d", got, want)
+	}
+}
+
 func TestCanonicalExecutorForGraphBackendUsesConfiguredNornicDBEntityPhaseStatements(t *testing.T) {
 	t.Parallel()
 
@@ -312,6 +340,7 @@ func TestCanonicalExecutorForGraphBackendUsesConfiguredNornicDBEntityPhaseStatem
 		0,
 		false,
 		defaultNornicDBPhaseGroupStatements,
+		defaultNornicDBFilePhaseStatements,
 		17,
 		nil,
 		nil,
@@ -377,6 +406,34 @@ func TestNornicDBPhaseGroupExecutorUsesEntitySpecificStatementLimit(t *testing.T
 	}
 	if got, want := inner.groupSizes, []int{2, 2, 1}; !equalIntSlices(got, want) {
 		t.Fatalf("entity group sizes = %v, want %v", got, want)
+	}
+}
+
+func TestNornicDBPhaseGroupExecutorUsesFileSpecificStatementLimit(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:             inner,
+		maxStatements:     10,
+		fileMaxStatements: 3,
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{Cypher: "RETURN 1", Parameters: map[string]any{"_pcg_phase": sourceneo4j.CanonicalPhaseFiles}},
+		{Cypher: "RETURN 2", Parameters: map[string]any{"_pcg_phase": sourceneo4j.CanonicalPhaseFiles}},
+		{Cypher: "RETURN 3", Parameters: map[string]any{"_pcg_phase": sourceneo4j.CanonicalPhaseFiles}},
+		{Cypher: "RETURN 4", Parameters: map[string]any{"_pcg_phase": sourceneo4j.CanonicalPhaseFiles}},
+		{Cypher: "RETURN 5", Parameters: map[string]any{"_pcg_phase": sourceneo4j.CanonicalPhaseFiles}},
+		{Cypher: "RETURN 6", Parameters: map[string]any{"_pcg_phase": sourceneo4j.CanonicalPhaseFiles}},
+		{Cypher: "RETURN 7", Parameters: map[string]any{"_pcg_phase": sourceneo4j.CanonicalPhaseFiles}},
+	}
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+	if got, want := inner.groupSizes, []int{3, 3, 1}; !equalIntSlices(got, want) {
+		t.Fatalf("group sizes = %v, want %v", got, want)
 	}
 }
 
@@ -915,6 +972,7 @@ func TestCanonicalExecutorForGraphBackendAllowsNornicDBGroupedWhenConformanceEna
 		0,
 		true,
 		defaultNornicDBPhaseGroupStatements,
+		defaultNornicDBFilePhaseStatements,
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
@@ -944,6 +1002,7 @@ func TestCanonicalExecutorForGraphBackendNornicDBGroupedFullStackReachesRawExecu
 		0,
 		true,
 		defaultNornicDBPhaseGroupStatements,
+		defaultNornicDBFilePhaseStatements,
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
@@ -976,6 +1035,7 @@ func TestCanonicalExecutorForGraphBackendNornicDBDefaultFullStackUsesPhaseGroups
 		0,
 		false,
 		defaultNornicDBPhaseGroupStatements,
+		defaultNornicDBFilePhaseStatements,
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
@@ -1007,6 +1067,7 @@ func TestCanonicalExecutorForGraphBackendWrapsNornicDBWithTimeout(t *testing.T) 
 		10*time.Millisecond,
 		false,
 		defaultNornicDBPhaseGroupStatements,
+		defaultNornicDBFilePhaseStatements,
 		defaultNornicDBEntityPhaseStatements,
 		nil,
 		nil,
@@ -1177,6 +1238,52 @@ func TestNornicDBPhaseGroupStatementsRejectsInvalidEnv(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), nornicDBPhaseGroupStatementsEnv) {
 		t.Fatalf("nornicDBPhaseGroupStatements() error = %q, want env name", err)
+	}
+}
+
+func TestNornicDBFilePhaseGroupStatementsDefault(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBFilePhaseGroupStatements(func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("nornicDBFilePhaseGroupStatements() error = %v, want nil", err)
+	}
+	if got != defaultNornicDBFilePhaseStatements {
+		t.Fatalf("nornicDBFilePhaseGroupStatements() = %d, want %d", got, defaultNornicDBFilePhaseStatements)
+	}
+}
+
+func TestNornicDBFilePhaseGroupStatementsFromEnv(t *testing.T) {
+	t.Parallel()
+
+	got, err := nornicDBFilePhaseGroupStatements(func(key string) string {
+		if key == nornicDBFilePhaseGroupStatementsEnv {
+			return "7"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("nornicDBFilePhaseGroupStatements() error = %v, want nil", err)
+	}
+	if got != 7 {
+		t.Fatalf("nornicDBFilePhaseGroupStatements() = %d, want 7", got)
+	}
+}
+
+func TestNornicDBFilePhaseGroupStatementsRejectsInvalidEnv(t *testing.T) {
+	t.Parallel()
+
+	_, err := nornicDBFilePhaseGroupStatements(func(key string) string {
+		if key == nornicDBFilePhaseGroupStatementsEnv {
+			return "nope"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("nornicDBFilePhaseGroupStatements() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), nornicDBFilePhaseGroupStatementsEnv) {
+		t.Fatalf("nornicDBFilePhaseGroupStatements() error = %q, want env name", err)
 	}
 }
 
