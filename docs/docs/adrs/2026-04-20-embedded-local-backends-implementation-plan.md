@@ -71,7 +71,7 @@ Latest 2026-04-25 NornicDB dogfood evidence:
 
 Current tuning plan:
 - keep the safer `Function=15,Struct=50,Variable=10,Module=10,ImplBlock=10` row-cap baseline in code while we gather better evidence
-- stop adding semantic label caps blindly: the latest run succeeded but only moved `semantic_entity_materialization` from `131.247187s` to `127.982626601s`. The next slice should add or extract semantic label-level timing/row attribution and capture NornicDB profiles during the semantic domain before changing PCG statement shape again.
+- stop adding semantic label caps blindly: the latest run succeeded but only moved `semantic_entity_materialization` from `131.247187s` to `127.982626601s`. The branch now adds NornicDB-only semantic statement attribution (`graph_backend`, label, row count, duration, statement summary) so the next dogfood run can identify the actual semantic label/query shape before another PCG-side tuning change.
 - after `#119` merges, rerun the SQL-edge lane from upstream `main` rather than the temporary fork branch
 - keep rebuilding dogfood NornicDB headless binaries directly from latest upstream `main`, because it now contains PRs `#115`, `#116`, and `#118`; point PCG at that binary explicitly via `PCG_NORNICDB_BINARY` or installer `--from` until an upstream release asset is published and pinned
 - only promote the patched lane after the NornicDB fixes are release-backed and pinned; until then, keep the pinned release on the safe file-scoped combined write and use `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` only for patched-binary evaluation

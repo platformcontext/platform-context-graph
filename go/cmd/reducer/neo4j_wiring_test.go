@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -210,6 +212,50 @@ func TestSemanticEntityExecutorForGraphBackendTimesOutGroupedWrites(t *testing.T
 	err := ge.ExecuteGroup(context.Background(), []sourceneo4j.Statement{{Cypher: "RETURN 1"}})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("ExecuteGroup() error = %v, want deadline exceeded", err)
+	}
+}
+
+func TestNornicDBSemanticObservedExecutorLogsStatementDuration(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	defer slog.SetDefault(previous)
+
+	inner := &recordingReducerStatementExecutor{}
+	executor := nornicDBSemanticObservedExecutor{inner: inner}
+
+	err := executor.Execute(context.Background(), sourceneo4j.Statement{
+		Operation: sourceneo4j.OperationCanonicalUpsert,
+		Cypher:    "MERGE (n:Module {uid: $id})",
+		Parameters: map[string]any{
+			"rows": []map[string]any{
+				{"entity_id": "module-1"},
+				{"entity_id": "module-2"},
+			},
+			sourceneo4j.StatementMetadataEntityLabelKey: "Module",
+			sourceneo4j.StatementMetadataSummaryKey:     "semantic label=Module rows=2",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got, want := len(inner.calls), 1; got != want {
+		t.Fatalf("inner calls = %d, want %d", got, want)
+	}
+	logText := logs.String()
+	for _, want := range []string{
+		"nornicdb semantic statement completed",
+		"graph_backend",
+		"nornicdb",
+		"label",
+		"Module",
+		"rows",
+		"2",
+		"semantic label=Module rows=2",
+	} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("semantic statement log missing %q:\n%s", want, logText)
+		}
 	}
 }
 
