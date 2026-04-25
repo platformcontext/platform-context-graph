@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +99,46 @@ func TestClaimBatchReturnsClaimedIntents(t *testing.T) {
 	}
 	if intents[1].IntentID != "item-2" {
 		t.Fatalf("intents[1].IntentID = %q, want %q", intents[1].IntentID, "item-2")
+	}
+}
+
+func TestClaimBatchFencesSameScopeCandidates(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	q := ReducerQueue{
+		db:            db,
+		LeaseOwner:    "test",
+		LeaseDuration: time.Minute,
+		Now:           func() time.Time { return now },
+	}
+
+	if _, err := q.ClaimBatch(context.Background(), 5); err != nil {
+		t.Fatalf("ClaimBatch() error = %v", err)
+	}
+
+	query := db.queries[0].query
+	for _, want := range []string{
+		"NOT EXISTS (",
+		"inflight.scope_id = fact_work_items.scope_id",
+		"inflight.work_item_id <> fact_work_items.work_item_id",
+		"inflight.status IN ('claimed', 'running')",
+		"inflight.claim_until > $1",
+		"work_item_id = (",
+		"same.scope_id = fact_work_items.scope_id",
+		"same.status IN ('pending', 'retrying')",
+		"ORDER BY same.updated_at ASC, same.work_item_id ASC",
+		"LIMIT 1",
+		"FOR UPDATE SKIP LOCKED",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("batch claim query missing %q:\n%s", want, query)
+		}
 	}
 }
 

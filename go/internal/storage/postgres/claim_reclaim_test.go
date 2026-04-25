@@ -106,6 +106,11 @@ func TestReducerQueueClaimIncludesExpiredLeaseReclaimPredicates(t *testing.T) {
 		"status IN ('pending', 'retrying', 'claimed', 'running')",
 		"claim_until IS NULL OR claim_until <= $1",
 		"visible_at IS NULL OR visible_at <= $1",
+		"NOT EXISTS (",
+		"inflight.scope_id = fact_work_items.scope_id",
+		"inflight.work_item_id <> fact_work_items.work_item_id",
+		"inflight.status IN ('claimed', 'running')",
+		"inflight.claim_until > $1",
 		"FOR UPDATE SKIP LOCKED",
 	} {
 		if !strings.Contains(query, want) {

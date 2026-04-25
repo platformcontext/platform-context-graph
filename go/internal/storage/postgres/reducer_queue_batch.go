@@ -17,6 +17,31 @@ WITH candidate AS (
       AND (visible_at IS NULL OR visible_at <= $1)
       AND (claim_until IS NULL OR claim_until <= $1)
       AND ($2 = '' OR domain = $2)
+      -- Reducer domains can touch the same graph nodes for a scope. Keep
+      -- cross-scope parallelism, but avoid overlapping writes for one repo.
+      AND NOT EXISTS (
+          SELECT 1
+          FROM fact_work_items AS inflight
+          WHERE inflight.stage = 'reducer'
+            AND inflight.scope_id = fact_work_items.scope_id
+            AND inflight.work_item_id <> fact_work_items.work_item_id
+            AND inflight.status IN ('claimed', 'running')
+            AND inflight.claim_until > $1
+      )
+      -- A batch claim must not claim two ready domains for the same scope in
+      -- one transaction, or the worker pool can race them immediately.
+      AND work_item_id = (
+          SELECT same.work_item_id
+          FROM fact_work_items AS same
+          WHERE same.stage = 'reducer'
+            AND same.scope_id = fact_work_items.scope_id
+            AND same.status IN ('pending', 'retrying')
+            AND (same.visible_at IS NULL OR same.visible_at <= $1)
+            AND (same.claim_until IS NULL OR same.claim_until <= $1)
+            AND ($2 = '' OR same.domain = $2)
+          ORDER BY same.updated_at ASC, same.work_item_id ASC
+          LIMIT 1
+      )
     ORDER BY updated_at ASC, work_item_id ASC
     LIMIT $5
     FOR UPDATE SKIP LOCKED
