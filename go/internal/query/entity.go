@@ -135,7 +135,7 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 	for i := range entities {
 		attachSemanticSummary(entities[i])
 	}
-	if err := hydrateResolvedEntityRepoIdentity(r.Context(), h.Neo4j, entities); err != nil {
+	if err := hydrateResolvedEntityRepoIdentity(r.Context(), h.Neo4j, h.Content, entities); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("hydrate entity repo identity: %v", err))
 		return
 	}
@@ -217,7 +217,11 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 	if metadata := graphResultMetadata(row); len(metadata) > 0 {
 		response["metadata"] = metadata
 	}
-	enriched, err := h.enrichEntityResultsWithContentMetadata(r.Context(), []map[string]any{response}, StringVal(row, "repo_id"), StringVal(row, "name"), 1)
+	if err := hydrateResolvedEntityRepoIdentity(r.Context(), h.Neo4j, h.Content, []map[string]any{response}); err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("hydrate entity repo identity: %v", err))
+		return
+	}
+	enriched, err := h.enrichEntityResultsWithContentMetadata(r.Context(), []map[string]any{response}, StringVal(response, "repo_id"), StringVal(row, "name"), 1)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich entity context: %v", err))
 		return
