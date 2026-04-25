@@ -1,0 +1,47 @@
+go/internal/query/entity_resolution_test.go
+  e27ce815bbe89792 369-476
+go/internal/query/code_relationships_nornicdb.go
+  e27ce815bbe89792 21-22,26-29,37,42-45,98-99,102
+go/internal/query/code_relationships_nornicdb_test.go
+  1c8f71531d235d02 199,206
+  e27ce815bbe89792 181-198,200-205,207-278
+go/internal/query/code_call_chain_nornicdb.go
+  e27ce815bbe89792 30-31
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 83-84
+go/internal/query/code_call_chain_resolution.go
+  e27ce815bbe89792 21-22,37-44,52-58,103-104,186-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "715f764c1e55d9ec6daa80ae7181c271eaccce98",
+  "prompts": {
+    "1c8f71531d235d02": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dc580-0640-76c0-8425-396008ee76d6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 160,
+      "total_deletions": 10,
+      "accepted_lines": 282,
+      "overriden_lines": 0
+    }
+  }
+}
