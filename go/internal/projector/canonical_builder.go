@@ -24,7 +24,7 @@ func buildCanonicalMaterialization(
 		GenerationID:    generation.GenerationID,
 		RepoID:          scopeValue.Metadata["repo_id"],
 		RepoPath:        scopeValue.Metadata["repo_path"],
-		FirstGeneration: strings.TrimSpace(scopeValue.ActiveGenerationID) == "",
+		FirstGeneration: !scopeValue.PreviousGenerationExists,
 	}
 
 	if len(inputFacts) == 0 {

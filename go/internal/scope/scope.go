@@ -86,10 +86,13 @@ type IngestionScope struct {
 	CollectorKind CollectorKind
 	PartitionKey  string
 	// ActiveGenerationID is the currently authoritative generation, if one
-	// exists. Projection uses this to skip stale-generation cleanup for the
-	// first generation of a scope.
+	// exists.
 	ActiveGenerationID string
-	Metadata           map[string]string
+	// PreviousGenerationExists is true when the claimed generation is not the
+	// first generation ever seen for this scope. Projection uses this to avoid
+	// skipping cleanup after a failed first-generation attempt.
+	PreviousGenerationExists bool
+	Metadata                 map[string]string
 }
 
 // Validate checks that the scope has the minimum durable identity fields.

@@ -20,6 +20,7 @@ func TestProjectorQueueClaimIncludesExpiredLeaseReclaimPredicates(t *testing.T) 
 					"repository",
 					"",
 					"",
+					false,
 					"git",
 					"repo-123",
 					"generation-456",
@@ -57,6 +58,7 @@ func TestProjectorQueueClaimIncludesExpiredLeaseReclaimPredicates(t *testing.T) 
 		"inflight.scope_id = work.scope_id",
 		"inflight.status IN ('claimed', 'running')",
 		"inflight.claim_until > $1",
+		"prior_generation.generation_id <> claimed.generation_id",
 		"FOR UPDATE SKIP LOCKED",
 	} {
 		if !strings.Contains(query, want) {

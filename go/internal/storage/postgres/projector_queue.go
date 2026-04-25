@@ -76,6 +76,12 @@ SELECT
     scope.scope_kind,
     COALESCE(scope.parent_scope_id, ''),
     COALESCE(scope.active_generation_id, ''),
+    EXISTS (
+        SELECT 1
+        FROM scope_generations AS prior_generation
+        WHERE prior_generation.scope_id = scope.scope_id
+          AND prior_generation.generation_id <> claimed.generation_id
+    ),
     scope.collector_kind,
     scope.partition_key,
     generation.generation_id,
@@ -501,6 +507,7 @@ func scanProjectorWork(rows Rows) (projector.ScopeGenerationWork, error) {
 		&scopeKind,
 		&work.Scope.ParentScopeID,
 		&work.Scope.ActiveGenerationID,
+		&work.Scope.PreviousGenerationExists,
 		&collectorKind,
 		&work.Scope.PartitionKey,
 		&work.Generation.GenerationID,

@@ -259,6 +259,7 @@ func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, cl
 			string(scopeRow.ScopeKind),
 			scopeRow.ParentScopeID,
 			db.state.activeGenerations[scopeRow.ScopeID],
+			proofPreviousGenerationExists(db.state.generations, scopeRow.ScopeID, generationRow.GenerationID),
 			string(scopeRow.CollectorKind),
 			scopeRow.PartitionKey,
 			generationRow.GenerationID,
@@ -273,6 +274,19 @@ func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, cl
 	}
 
 	return newProofRows(nil), nil
+}
+
+func proofPreviousGenerationExists(
+	generations map[string]scope.ScopeGeneration,
+	scopeID string,
+	currentGenerationID string,
+) bool {
+	for generationID, generation := range generations {
+		if generationID != currentGenerationID && generation.ScopeID == scopeID {
+			return true
+		}
+	}
+	return false
 }
 
 func (db *proofDomainDB) claimReducerWork(now time.Time, leaseOwner string, claimUntil time.Time) (Rows, error) {
