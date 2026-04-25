@@ -3,6 +3,7 @@ package neo4j
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,6 +19,28 @@ func TestTimeoutExecutorCancelsLongRunningExecute(t *testing.T) {
 	err := executor.Execute(context.Background(), Statement{Cypher: "RETURN 1"})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Execute() error = %v, want deadline exceeded", err)
+	}
+}
+
+func TestTimeoutExecutorIncludesStatementSummaryOnTimeout(t *testing.T) {
+	t.Parallel()
+
+	executor := TimeoutExecutor{
+		Inner:   contextBlockingExecutor{},
+		Timeout: 10 * time.Millisecond,
+	}
+
+	err := executor.Execute(context.Background(), Statement{
+		Cypher: "RETURN 1",
+		Parameters: map[string]any{
+			StatementMetadataSummaryKey: "semantic label=Variable rows=500",
+		},
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute() error = %v, want deadline exceeded", err)
+	}
+	if !strings.Contains(err.Error(), "semantic label=Variable rows=500") {
+		t.Fatalf("Execute() error = %q, want statement summary", err)
 	}
 }
 

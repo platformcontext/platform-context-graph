@@ -14,6 +14,7 @@ import (
 type SemanticEntityWriter struct {
 	executor               Executor
 	BatchSize              int
+	entityLabelBatchSizes  map[string]int
 	parameterizedRowWrites bool
 }
 
@@ -37,6 +38,28 @@ func (w *SemanticEntityWriter) batchSize() int {
 		return DefaultBatchSize
 	}
 	return w.BatchSize
+}
+
+// WithEntityLabelBatchSize overrides the per-statement row batch size for one
+// semantic entity label.
+func (w *SemanticEntityWriter) WithEntityLabelBatchSize(label string, batchSize int) *SemanticEntityWriter {
+	if w == nil || label == "" || batchSize <= 0 {
+		return w
+	}
+	if w.entityLabelBatchSizes == nil {
+		w.entityLabelBatchSizes = make(map[string]int)
+	}
+	w.entityLabelBatchSizes[label] = batchSize
+	return w
+}
+
+func (w *SemanticEntityWriter) batchSizeForLabel(label string) int {
+	if w.entityLabelBatchSizes != nil {
+		if batchSize := w.entityLabelBatchSizes[label]; batchSize > 0 {
+			return batchSize
+		}
+	}
+	return w.batchSize()
 }
 
 // WriteSemanticEntities retracts stale semantic nodes for the touched
@@ -96,7 +119,6 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 			rowsByLabel[row.EntityType] = append(rowsByLabel[row.EntityType], rowMap)
 		}
 
-		batchSize := w.batchSize()
 		for _, plan := range []struct {
 			label  string
 			cypher string
@@ -114,15 +136,21 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 			{label: "Function", cypher: semanticFunctionUpsertCypher},
 		} {
 			rows := rowsByLabel[plan.label]
+			batchSize := w.batchSizeForLabel(plan.label)
 			for start := 0; start < len(rows); start += batchSize {
 				end := start + batchSize
 				if end > len(rows) {
 					end = len(rows)
 				}
+				batchRows := rows[start:end]
 				stmts = append(stmts, Statement{
-					Operation:  OperationCanonicalUpsert,
-					Cypher:     plan.cypher,
-					Parameters: map[string]any{"rows": rows[start:end]},
+					Operation: OperationCanonicalUpsert,
+					Cypher:    plan.cypher,
+					Parameters: map[string]any{
+						"rows":                          batchRows,
+						StatementMetadataEntityLabelKey: plan.label,
+						StatementMetadataSummaryKey:     semanticEntityStatementSummary(plan.label, batchRows),
+					},
 				})
 			}
 			writes += len(rows)
@@ -170,11 +198,22 @@ func buildParameterizedSemanticEntityStatement(row reducer.SemanticEntityRow) (S
 		Operation: OperationCanonicalUpsert,
 		Cypher:    semanticEntitySingleRowUpsertCypher(row.EntityType),
 		Parameters: map[string]any{
-			"file_path":  rowMap["file_path"],
-			"entity_id":  rowMap["entity_id"],
-			"properties": semanticEntityProperties(rowMap),
+			"file_path":                     rowMap["file_path"],
+			"entity_id":                     rowMap["entity_id"],
+			"properties":                    semanticEntityProperties(rowMap),
+			StatementMetadataEntityLabelKey: row.EntityType,
+			StatementMetadataSummaryKey:     fmt.Sprintf("semantic label=%s rows=1 entity_id=%v fallback=singleton_parameterized", row.EntityType, rowMap["entity_id"]),
 		},
 	}, true
+}
+
+func semanticEntityStatementSummary(label string, rows []map[string]any) string {
+	if len(rows) == 0 {
+		return fmt.Sprintf("semantic label=%s rows=0", label)
+	}
+	firstID := rows[0]["entity_id"]
+	lastID := rows[len(rows)-1]["entity_id"]
+	return fmt.Sprintf("semantic label=%s rows=%d first_id=%v last_id=%v", label, len(rows), firstID, lastID)
 }
 
 func semanticEntityProperties(rowMap map[string]any) map[string]any {

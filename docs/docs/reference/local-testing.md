@@ -129,6 +129,7 @@ export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10
 export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5
+export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Function=15,Variable=10
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
 ./go/bin/pcg graph start --workspace-root "$PWD"
 ./go/bin/pcg mcp start --workspace-root "$PWD"
@@ -179,6 +180,12 @@ too large, use
 `PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5` to
 shrink only the grouped transaction size for those heavier families without
 forcing the same statement cap onto every other entity label.
+Reducer-owned semantic entity materialization has its own high-cardinality
+label caps because it runs after source-local canonical projection and writes
+parser-enriched semantic labels such as `Function` and `Variable`. Use
+`PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Function=15,Variable=10` when
+that reducer domain times out; timeout errors include the semantic label and
+row count that tripped the deadline.
 When you are tuning repo-scale entity projection, do not decide from one scary
 chunk log alone. NornicDB currently uses a file-scoped combined entity write
 because its current binary does not correctly preserve row-bound identity in

@@ -21,6 +21,7 @@ const (
 	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
 	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
 	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
+	nornicDBSemanticEntityLabelBatchEnv  = "PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES"
 )
 
 // cypherRunner is the narrow interface shared by both executor adapters.
@@ -270,14 +271,23 @@ func semanticEntityWriterForGraphBackend(
 	executor sourceneo4j.Executor,
 	batchSize int,
 	graphBackend runtimecfg.GraphBackend,
-) *sourceneo4j.SemanticEntityWriter {
+	getenv func(string) string,
+) (*sourceneo4j.SemanticEntityWriter, error) {
+	writer := sourceneo4j.NewSemanticEntityWriter(executor, batchSize)
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		// NornicDB now supports the same batched UNWIND/MERGE/SET row shape
 		// as Neo4j. Keep semantic writes on that hot path instead of the
-		// older scalar compatibility writer.
-		return sourceneo4j.NewSemanticEntityWriter(executor, batchSize)
+		// older scalar compatibility writer, while preserving smaller row
+		// caps for the two high-cardinality semantic labels.
+		labelBatchSizes, err := nornicDBSemanticEntityLabelBatchSizes(getenv, effectiveNeo4jBatchSize(batchSize))
+		if err != nil {
+			return nil, err
+		}
+		for label, size := range labelBatchSizes {
+			writer = writer.WithEntityLabelBatchSize(label, size)
+		}
 	}
-	return sourceneo4j.NewSemanticEntityWriter(executor, batchSize)
+	return writer, nil
 }
 
 func nornicDBCanonicalWriteTimeout(getenv func(string) string) time.Duration {
@@ -314,4 +324,55 @@ func neo4jBatchSize(getenv func(string) string) int {
 		return 0
 	}
 	return n
+}
+
+func effectiveNeo4jBatchSize(batchSize int) int {
+	if batchSize <= 0 {
+		return sourceneo4j.DefaultBatchSize
+	}
+	return batchSize
+}
+
+func defaultNornicDBSemanticEntityLabelBatchSizes(batchSize int) map[string]int {
+	return map[string]int{
+		"Function": minPositiveInt(batchSize, 15),
+		"Variable": minPositiveInt(batchSize, 10),
+	}
+}
+
+func nornicDBSemanticEntityLabelBatchSizes(getenv func(string) string, batchSize int) (map[string]int, error) {
+	labelBatchSizes := defaultNornicDBSemanticEntityLabelBatchSizes(batchSize)
+	raw := strings.TrimSpace(getenv(nornicDBSemanticEntityLabelBatchEnv))
+	if raw == "" {
+		return labelBatchSizes, nil
+	}
+	for _, entry := range strings.Split(raw, ",") {
+		parts := strings.Split(strings.TrimSpace(entry), "=")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("parse %s=%q: entries must be Label=size", nornicDBSemanticEntityLabelBatchEnv, raw)
+		}
+		label := strings.TrimSpace(parts[0])
+		if label == "" {
+			return nil, fmt.Errorf("parse %s=%q: label must be non-empty", nornicDBSemanticEntityLabelBatchEnv, raw)
+		}
+		size, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil || size <= 0 {
+			return nil, fmt.Errorf("parse %s=%q: label %q must have a positive integer size", nornicDBSemanticEntityLabelBatchEnv, raw, label)
+		}
+		labelBatchSizes[label] = minPositiveInt(batchSize, size)
+	}
+	return labelBatchSizes, nil
+}
+
+func minPositiveInt(left, right int) int {
+	if left <= 0 {
+		return right
+	}
+	if right <= 0 {
+		return left
+	}
+	if left < right {
+		return left
+	}
+	return right
 }
