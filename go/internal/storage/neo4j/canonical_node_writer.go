@@ -220,7 +220,10 @@ func flattenCanonicalWritePhases(phases []canonicalWritePhase) []Statement {
 
 const (
 	canonicalNodeRefreshFilePathBatchSize = 100
-	canonicalNodeRefreshEntityIDBatchSize = 500
+	// File-to-entity refresh fanouts over every entity in each file, so it
+	// needs a much smaller path slice than file/import or directory/file edges.
+	canonicalNodeRefreshFileEntityPathBatchSize = 5
+	canonicalNodeRefreshEntityIDBatchSize       = 500
 )
 
 var canonicalNodeRetractCodeEntityLabels = map[string]struct{}{
@@ -351,7 +354,6 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 		for _, cypher := range []string{
 			canonicalNodeRefreshCurrentFileImportEdgesCypher,
 			canonicalNodeRefreshCurrentDirectoryFileEdgesCypher,
-			canonicalNodeRefreshCurrentFileEntityEdgesCypher,
 		} {
 			stmts = append(stmts, buildStringSliceRetractStatements(
 				cypher,
@@ -360,6 +362,12 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 				canonicalNodeRefreshFilePathBatchSize,
 			)...)
 		}
+		stmts = append(stmts, buildStringSliceRetractStatements(
+			canonicalNodeRefreshCurrentFileEntityEdgesCypher,
+			"file_paths",
+			filePaths,
+			canonicalNodeRefreshFileEntityPathBatchSize,
+		)...)
 	}
 	if len(entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher]) > 0 {
 		stmts = append(stmts, buildStringSliceRetractStatements(
