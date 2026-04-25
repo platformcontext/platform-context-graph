@@ -95,11 +95,80 @@ func TestGenerationFreshnessCheck(t *testing.T) {
 	}
 }
 
+func TestPriorGenerationCheck(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		scopeID      string
+		generationID string
+		db           *generationFreshnessTestDB
+		wantPrior    bool
+		wantErr      bool
+	}{
+		{
+			name:         "false for first generation",
+			scopeID:      "scope-123",
+			generationID: "gen-abc",
+			db: &generationFreshnessTestDB{
+				generations: map[string][]string{"scope-123": []string{"gen-abc"}},
+			},
+		},
+		{
+			name:         "true when another generation exists",
+			scopeID:      "scope-123",
+			generationID: "gen-new",
+			db: &generationFreshnessTestDB{
+				generations: map[string][]string{"scope-123": []string{"gen-old", "gen-new"}},
+			},
+			wantPrior: true,
+		},
+		{
+			name:         "false when scope unknown",
+			scopeID:      "scope-unknown",
+			generationID: "gen-abc",
+			db:           &generationFreshnessTestDB{},
+		},
+		{
+			name:         "error propagated from database",
+			scopeID:      "scope-123",
+			generationID: "gen-abc",
+			db: &generationFreshnessTestDB{
+				queryErr: fmt.Errorf("connection refused"),
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			check := NewPriorGenerationCheck(tt.db)
+			gotPrior, err := check(context.Background(), tt.scopeID, tt.generationID)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if gotPrior != tt.wantPrior {
+				t.Fatalf("prior = %v, want %v", gotPrior, tt.wantPrior)
+			}
+		})
+	}
+}
+
 // -- test helpers --
 
 type generationFreshnessTestDB struct {
-	scopes   map[string]sql.NullString // scope_id -> active_generation_id
-	queryErr error
+	scopes      map[string]sql.NullString // scope_id -> active_generation_id
+	generations map[string][]string       // scope_id -> generation_ids
+	queryErr    error
 }
 
 func (db *generationFreshnessTestDB) ExecContext(_ context.Context, _ string, _ ...any) (sql.Result, error) {
@@ -111,24 +180,38 @@ func (db *generationFreshnessTestDB) QueryContext(_ context.Context, _ string, a
 		return nil, db.queryErr
 	}
 
-	if len(args) != 1 {
-		return nil, fmt.Errorf("expected 1 arg, got %d", len(args))
+	switch len(args) {
+	case 1:
+		scopeID := args[0].(string)
+		activeGen, found := db.scopes[scopeID]
+		if !found {
+			return &generationFreshnessTestRows{data: nil, idx: -1}, nil
+		}
+		return &generationFreshnessTestRows{
+			data: [][]any{{activeGen}},
+			idx:  -1,
+		}, nil
+	case 2:
+		scopeID := args[0].(string)
+		generationID := args[1].(string)
+		exists := false
+		for _, candidate := range db.generations[scopeID] {
+			if candidate != generationID {
+				exists = true
+				break
+			}
+		}
+		return &generationFreshnessTestRows{
+			data: [][]any{{exists}},
+			idx:  -1,
+		}, nil
+	default:
+		return nil, fmt.Errorf("expected 1 or 2 args, got %d", len(args))
 	}
-
-	scopeID := args[0].(string)
-	activeGen, found := db.scopes[scopeID]
-	if !found {
-		return &generationFreshnessTestRows{data: nil, idx: -1}, nil
-	}
-
-	return &generationFreshnessTestRows{
-		data: []sql.NullString{activeGen},
-		idx:  -1,
-	}, nil
 }
 
 type generationFreshnessTestRows struct {
-	data []sql.NullString
+	data [][]any
 	idx  int
 }
 
@@ -141,17 +224,29 @@ func (r *generationFreshnessTestRows) Scan(dest ...any) error {
 	if r.idx < 0 || r.idx >= len(r.data) {
 		return sql.ErrNoRows
 	}
-	if len(dest) != 1 {
-		return fmt.Errorf("scan: got %d dest, want 1", len(dest))
+	if len(dest) != len(r.data[r.idx]) {
+		return fmt.Errorf("scan: got %d dest, want %d", len(dest), len(r.data[r.idx]))
 	}
-	switch d := dest[0].(type) {
-	case *sql.NullString:
-		*d = r.data[r.idx]
-	default:
-		return fmt.Errorf("unsupported scan dest type %T", dest[0])
+	for i, value := range r.data[r.idx] {
+		switch d := dest[i].(type) {
+		case *sql.NullString:
+			v, ok := value.(sql.NullString)
+			if !ok {
+				return fmt.Errorf("scan value %d type = %T, want sql.NullString", i, value)
+			}
+			*d = v
+		case *bool:
+			v, ok := value.(bool)
+			if !ok {
+				return fmt.Errorf("scan value %d type = %T, want bool", i, value)
+			}
+			*d = v
+		default:
+			return fmt.Errorf("unsupported scan dest type %T", dest[i])
+		}
 	}
 	return nil
 }
 
-func (r *generationFreshnessTestRows) Err() error  { return nil }
+func (r *generationFreshnessTestRows) Err() error   { return nil }
 func (r *generationFreshnessTestRows) Close() error { return nil }

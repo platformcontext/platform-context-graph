@@ -50,9 +50,11 @@ Semantic materialization is a reducer-owned phase. Do not copy canonical caps
 blindly; semantic labels should be narrowed only after timeout summaries name
 the semantic label and row count.
 
-NornicDB semantic retracts intentionally run one semantic label per statement.
-The Neo4j adapter keeps its broad multi-label retract, but NornicDB's syntax
-and cost profile make the label-scoped shape the safer repo-scale default.
+First-generation semantic materialization skips stale retract because there is
+no prior semantic graph state to clean up. Refreshes and retries still retract;
+on NornicDB those retracts run one semantic label per statement. The Neo4j
+adapter keeps its broad multi-label retract, but NornicDB's syntax and cost
+profile make the label-scoped shape the safer repo-scale cleanup path.
 
 ## Compatibility And Conformance Switches
 

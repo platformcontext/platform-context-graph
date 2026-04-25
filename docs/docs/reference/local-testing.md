@@ -241,10 +241,12 @@ parser-enriched semantic labels such as `Function` and `Variable`. Use
 that reducer domain times out; NornicDB semantic writes use the same row-map
 merge shape as the canonical hot path, and timeout errors include the semantic
 label and row count that tripped the deadline.
-Semantic retract is a separate reducer-owned cleanup step. Neo4j keeps the
-single broad multi-label retract; NornicDB uses one label-scoped retract per
-semantic label because repo-scale timing showed the broad shape can scan and
-timeout even when the write rows are otherwise bounded.
+Semantic retract is a separate reducer-owned cleanup step. First-generation
+semantic materialization skips it entirely because there is no prior semantic
+graph state to clean up. Refreshes and retries still retract; Neo4j keeps the
+single broad multi-label retract, while NornicDB uses one label-scoped retract
+per semantic label because repo-scale timing showed the broad shape can scan
+and timeout even when the write rows are otherwise bounded.
 When you are tuning repo-scale entity projection, do not decide from one scary
 chunk log alone. NornicDB currently uses a file-scoped combined entity write
 because its current binary does not correctly preserve row-bound identity in

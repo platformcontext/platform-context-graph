@@ -69,6 +69,9 @@ type DefaultHandlers struct {
 	// GenerationCheck reports whether an intent's generation is still current.
 	// Nil disables the guard and lets all intents execute unconditionally.
 	GenerationCheck GenerationFreshnessCheck
+	// PriorGenerationCheck reports whether a scope has any prior generation.
+	// Nil keeps retract behavior conservative for handlers that need cleanup.
+	PriorGenerationCheck PriorGenerationCheck
 
 	// Tracer and Instruments for cross-repo resolution telemetry.
 	Tracer      trace.Tracer
@@ -162,10 +165,11 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			}
 		case DomainSemanticEntityMaterialization:
 			def.Handler = SemanticEntityMaterializationHandler{
-				FactLoader:     handlers.FactLoader,
-				Writer:         handlers.SemanticEntityWriter,
-				PhasePublisher: handlers.GraphProjectionPhasePublisher,
-				RepairQueue:    handlers.GraphProjectionRepairQueue,
+				FactLoader:           handlers.FactLoader,
+				Writer:               handlers.SemanticEntityWriter,
+				PriorGenerationCheck: handlers.PriorGenerationCheck,
+				PhasePublisher:       handlers.GraphProjectionPhasePublisher,
+				RepairQueue:          handlers.GraphProjectionRepairQueue,
 			}
 		case DomainSQLRelationshipMaterialization:
 			def.Handler = SQLRelationshipMaterializationHandler{
