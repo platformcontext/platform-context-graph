@@ -3,6 +3,7 @@ package neo4j
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -1714,6 +1715,51 @@ func TestCanonicalNodeWriterEntityLabelBatchSizeOverride(t *testing.T) {
 	}
 	if got, want := functionRows[1], 1; got != want {
 		t.Fatalf("second function batch rows = %d, want %d", got, want)
+	}
+}
+
+func TestCanonicalNodeWriterFileScopedContainmentHonorsLabelBatchSizeWithinFile(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
+		WithEntityContainmentInEntityUpsert().
+		WithEntityLabelBatchSize("K8sResource", 5)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+	}
+	for i := 0; i < 12; i++ {
+		mat.Entities = append(mat.Entities, projector.EntityRow{
+			EntityID:     fmt.Sprintf("k8s-%02d", i),
+			Label:        "K8sResource",
+			EntityName:   fmt.Sprintf("route-%02d", i),
+			FilePath:     "/repos/my-repo/charts/routes.yaml",
+			RelativePath: "charts/routes.yaml",
+			StartLine:    i + 1,
+			EndLine:      i + 1,
+			Language:     "yaml",
+			RepoID:       "repo-1",
+		})
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 3; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+	wantRows := []int{5, 5, 2}
+	for i, stmt := range stmts {
+		rows, ok := stmt.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("statement %d rows type = %T, want []map[string]any", i, stmt.Parameters["rows"])
+		}
+		if got := len(rows); got != wantRows[i] {
+			t.Fatalf("statement %d rows = %d, want %d", i, got, wantRows[i])
+		}
+		if got, want := stmt.Parameters["file_path"], "/repos/my-repo/charts/routes.yaml"; got != want {
+			t.Fatalf("statement %d file_path = %#v, want %#v", i, got, want)
+		}
 	}
 }
 
