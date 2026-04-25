@@ -8,6 +8,38 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 )
 
+func TestSemanticEntityWriterConstructorsSetExclusiveWriteModes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		got  *SemanticEntityWriter
+		want semanticEntityWriteMode
+	}{
+		{
+			name: "legacy row templates",
+			got:  NewSemanticEntityWriter(&recordingExecutor{}, 0),
+			want: semanticEntityWriteModeLegacyRows,
+		},
+		{
+			name: "single-row parameterized properties",
+			got:  NewSemanticEntityWriterWithParameterizedRows(&recordingExecutor{}, 0),
+			want: semanticEntityWriteModeParameterizedRows,
+		},
+		{
+			name: "batched property maps",
+			got:  NewSemanticEntityWriterWithBatchedProperties(&recordingExecutor{}, 0),
+			want: semanticEntityWriteModeBatchedProperties,
+		},
+	}
+
+	for _, tt := range tests {
+		if tt.got.writeMode != tt.want {
+			t.Fatalf("%s writeMode = %v, want %v", tt.name, tt.got.writeMode, tt.want)
+		}
+	}
+}
+
 func TestSemanticEntityWriterWithParameterizedRowsAvoidsInlineSemanticMetadata(t *testing.T) {
 	t.Parallel()
 

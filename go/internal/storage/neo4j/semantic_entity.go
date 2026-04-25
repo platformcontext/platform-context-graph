@@ -12,12 +12,21 @@ import (
 // Component, Module, ImplBlock, Protocol, ProtocolImplementation, Variable,
 // and semantic Function nodes into Neo4j.
 type SemanticEntityWriter struct {
-	executor               Executor
-	BatchSize              int
-	entityLabelBatchSizes  map[string]int
-	parameterizedRowWrites bool
-	batchedPropertyWrites  bool
+	executor              Executor
+	BatchSize             int
+	entityLabelBatchSizes map[string]int
+	writeMode             semanticEntityWriteMode
 }
+
+// semanticEntityWriteMode names the exact Cypher row shape used by the writer.
+// Keep new backend adaptations here instead of layering additional booleans.
+type semanticEntityWriteMode int
+
+const (
+	semanticEntityWriteModeLegacyRows semanticEntityWriteMode = iota
+	semanticEntityWriteModeParameterizedRows
+	semanticEntityWriteModeBatchedProperties
+)
 
 // NewSemanticEntityWriter returns a semantic-entity writer backed by the given Executor.
 func NewSemanticEntityWriter(executor Executor, batchSize int) *SemanticEntityWriter {
@@ -28,9 +37,9 @@ func NewSemanticEntityWriter(executor Executor, batchSize int) *SemanticEntityWr
 // that avoids inlining row metadata into the query text.
 func NewSemanticEntityWriterWithParameterizedRows(executor Executor, batchSize int) *SemanticEntityWriter {
 	return &SemanticEntityWriter{
-		executor:               executor,
-		BatchSize:              batchSize,
-		parameterizedRowWrites: true,
+		executor:  executor,
+		BatchSize: batchSize,
+		writeMode: semanticEntityWriteModeParameterizedRows,
 	}
 }
 
@@ -38,9 +47,9 @@ func NewSemanticEntityWriterWithParameterizedRows(executor Executor, batchSize i
 // writer that batches rows while keeping entity properties in a single map.
 func NewSemanticEntityWriterWithBatchedProperties(executor Executor, batchSize int) *SemanticEntityWriter {
 	return &SemanticEntityWriter{
-		executor:              executor,
-		BatchSize:             batchSize,
-		batchedPropertyWrites: true,
+		executor:  executor,
+		BatchSize: batchSize,
+		writeMode: semanticEntityWriteModeBatchedProperties,
 	}
 }
 
@@ -99,7 +108,8 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 	})
 
 	writes := 0
-	if w.parameterizedRowWrites {
+	switch w.writeMode {
+	case semanticEntityWriteModeParameterizedRows:
 		for _, row := range write.Rows {
 			stmt, ok := buildParameterizedSemanticEntityStatement(row)
 			if !ok {
@@ -108,7 +118,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 			stmts = append(stmts, stmt)
 			writes++
 		}
-	} else if w.batchedPropertyWrites {
+	case semanticEntityWriteModeBatchedProperties:
 		rowsByLabel := newSemanticRowsByLabel()
 		for _, row := range write.Rows {
 			rowMap, ok := buildSemanticEntityPropertyRowMap(row)
@@ -139,7 +149,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 			}
 			writes += len(rows)
 		}
-	} else {
+	case semanticEntityWriteModeLegacyRows:
 		rowsByLabel := newSemanticRowsByLabel()
 		for _, row := range write.Rows {
 			rowMap, ok := buildSemanticEntityRowMap(row)
@@ -170,6 +180,8 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 			}
 			writes += len(rows)
 		}
+	default:
+		return reducer.SemanticEntityWriteResult{}, fmt.Errorf("unsupported semantic entity write mode %d", w.writeMode)
 	}
 
 	batchSize := w.batchSize()
