@@ -242,7 +242,7 @@ func TestHandleDeadCodeUsesNornicDBCompatibleCandidateQuery(t *testing.T) {
 				if !strings.Contains(cypher, "NOT EXISTS { MATCH (e)<-[:CALLS|IMPORTS|REFERENCES]-() }") {
 					t.Fatalf("cypher = %q, want NornicDB dead-code query to use NOT EXISTS pattern form", cypher)
 				}
-				if got, want := params["limit"], deadCodeDefaultLimit+1; got != want {
+				if got, want := params["limit"], deadCodeCandidateQueryLimit(deadCodeDefaultLimit); got != want {
 					t.Fatalf("params[limit] = %#v, want %#v", got, want)
 				}
 				return []map[string]any{
@@ -459,7 +459,7 @@ func TestHandleDeadCodeRespectsLimitAndReportsTruncation(t *testing.T) {
 				if got, want := params["repo_id"], "repo-1"; got != want {
 					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
 				}
-				if got, want := params["limit"], 3; got != want {
+				if got, want := params["limit"], deadCodeCandidateQueryLimit(2); got != want {
 					t.Fatalf("params[limit] = %#v, want %#v", got, want)
 				}
 				return []map[string]any{
@@ -514,6 +514,106 @@ func TestHandleDeadCodeRespectsLimitAndReportsTruncation(t *testing.T) {
 	}
 	if got, want := resp["truncated"], true; got != want {
 		t.Fatalf("resp[truncated] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleDeadCodeFetchesPolicyBufferBeforeApplyingLimit(t *testing.T) {
+	t.Parallel()
+
+	rawCandidates := []map[string]any{
+		{
+			"entity_id": "public-api-1", "name": "PublicAlpha", "labels": []any{"Function"},
+			"file_path": "pkg/payments/a.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+		},
+		{
+			"entity_id": "public-api-2", "name": "PublicBeta", "labels": []any{"Function"},
+			"file_path": "pkg/payments/b.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+		},
+		{
+			"entity_id": "public-api-3", "name": "PublicGamma", "labels": []any{"Function"},
+			"file_path": "pkg/payments/c.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+		},
+		{
+			"entity_id": "internal-helper-1", "name": "privateAlpha", "labels": []any{"Function"},
+			"file_path": "internal/payments/a.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+		},
+		{
+			"entity_id": "internal-helper-2", "name": "privateBeta", "labels": []any{"Function"},
+			"file_path": "internal/payments/b.go", "repo_id": "repo-1", "repo_name": "payments", "language": "go",
+		},
+	}
+
+	handler := &CodeHandler{
+		Profile: ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, _ string, params map[string]any) ([]map[string]any, error) {
+				queryLimit, ok := params["limit"].(int)
+				if !ok {
+					t.Fatalf("params[limit] type = %T, want int", params["limit"])
+				}
+				if queryLimit <= 3 {
+					t.Fatalf("params[limit] = %d, want policy buffer beyond display limit", queryLimit)
+				}
+				if queryLimit > len(rawCandidates) {
+					queryLimit = len(rawCandidates)
+				}
+				return rawCandidates[:queryLimit], nil
+			},
+		},
+		Content: fakeDeadCodeContentStore{
+			entities: map[string]EntityContent{
+				"public-api-1":      {EntityID: "public-api-1", RelativePath: "pkg/payments/a.go", EntityType: "Function", EntityName: "PublicAlpha", Language: "go", SourceCache: "func PublicAlpha() {}"},
+				"public-api-2":      {EntityID: "public-api-2", RelativePath: "pkg/payments/b.go", EntityType: "Function", EntityName: "PublicBeta", Language: "go", SourceCache: "func PublicBeta() {}"},
+				"public-api-3":      {EntityID: "public-api-3", RelativePath: "pkg/payments/c.go", EntityType: "Function", EntityName: "PublicGamma", Language: "go", SourceCache: "func PublicGamma() {}"},
+				"internal-helper-1": {EntityID: "internal-helper-1", RelativePath: "internal/payments/a.go", EntityType: "Function", EntityName: "privateAlpha", Language: "go", SourceCache: "func privateAlpha() {}"},
+				"internal-helper-2": {EntityID: "internal-helper-2", RelativePath: "internal/payments/b.go", EntityType: "Function", EntityName: "privateBeta", Language: "go", SourceCache: "func privateBeta() {}"},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/dead-code",
+		bytes.NewBufferString(`{"repo_id":"repo-1","limit":2}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	results, ok := resp["results"].([]any)
+	if !ok {
+		t.Fatalf("results type = %T, want []any", resp["results"])
+	}
+	gotIDs := make([]string, 0, len(results))
+	for _, raw := range results {
+		result, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("result type = %T, want map[string]any", raw)
+		}
+		gotIDs = append(gotIDs, result["entity_id"].(string))
+	}
+	if got, want := gotIDs, []string{"internal-helper-1", "internal-helper-2"}; !equalStringSlices(got, want) {
+		t.Fatalf("result entity ids = %#v, want %#v", got, want)
+	}
+}
+
+func TestDeadCodeCandidateQueryLimitUsesMinimumPolicyWindowForSmallDisplayLimits(t *testing.T) {
+	t.Parallel()
+
+	if got, want := deadCodeCandidateQueryLimit(5), deadCodeCandidateQueryMin; got != want {
+		t.Fatalf("deadCodeCandidateQueryLimit(5) = %d, want %d", got, want)
+	}
+	if got, want := deadCodeCandidateQueryLimit(deadCodeMaxLimit), deadCodeCandidateQueryMax; got != want {
+		t.Fatalf("deadCodeCandidateQueryLimit(deadCodeMaxLimit) = %d, want %d", got, want)
 	}
 }
 

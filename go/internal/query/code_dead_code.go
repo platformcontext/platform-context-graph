@@ -20,6 +20,10 @@ const (
 	deadCodeMaxLimit     = 500
 
 	deadCodeCandidateLabelPredicate = "(e:Function OR e:Class OR e:Struct OR e:Interface)"
+
+	deadCodeCandidateQueryMultiplier = 10
+	deadCodeCandidateQueryMin        = 501
+	deadCodeCandidateQueryMax        = 1000
 )
 
 // handleDeadCode finds graph-backed dead-code candidates and then applies the
@@ -54,7 +58,8 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.Neo4j.Run(r.Context(), buildDeadCodeGraphCypher(req.RepoID != "", h.graphBackend()), deadCodeGraphParams(req.RepoID, req.Limit+1))
+	candidateLimit := deadCodeCandidateQueryLimit(req.Limit)
+	rows, err := h.Neo4j.Run(r.Context(), buildDeadCodeGraphCypher(req.RepoID != "", h.graphBackend()), deadCodeGraphParams(req.RepoID, candidateLimit))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -67,7 +72,7 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 	}
 	results, policyStats := filterDeadCodeResultsByDefaultPolicy(results, contentByID)
 	results = filterResultsByDecoratorExclusions(results, req.ExcludeDecoratedWith)
-	truncated := len(rows) > req.Limit
+	truncated := len(rows) >= candidateLimit || len(results) > req.Limit
 	if len(results) > req.Limit {
 		results = results[:req.Limit]
 	}
@@ -108,6 +113,23 @@ func buildDeadCodeGraphCypher(hasRepoID bool, backend GraphBackend) string {
 		LIMIT $limit
 	`
 	return cypher
+}
+
+func deadCodeCandidateQueryLimit(displayLimit int) int {
+	if displayLimit <= 0 {
+		displayLimit = deadCodeDefaultLimit
+	}
+	candidateLimit := displayLimit*deadCodeCandidateQueryMultiplier + 1
+	if candidateLimit < displayLimit+1 {
+		return displayLimit + 1
+	}
+	if candidateLimit < deadCodeCandidateQueryMin {
+		return deadCodeCandidateQueryMin
+	}
+	if candidateLimit > deadCodeCandidateQueryMax {
+		return deadCodeCandidateQueryMax
+	}
+	return candidateLimit
 }
 
 func deadCodeGraphParams(repoID string, limit int) map[string]any {
