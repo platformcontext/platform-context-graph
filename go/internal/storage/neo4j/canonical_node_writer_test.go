@@ -894,7 +894,7 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 			directoryFileRefresh = stmt
 		case strings.Contains(stmt.Cypher, "[r:CONTAINS]->(n)"):
 			fileEntityRefresh = stmt
-		case strings.Contains(stmt.Cypher, "(n {uid: $parent_entity_id})-[r:CONTAINS]->(m)"):
+		case strings.Contains(stmt.Cypher, "(n {uid: row.parent_entity_id})-[r:CONTAINS]->(m)"):
 			entityContainmentRefreshes = append(entityContainmentRefreshes, stmt)
 		}
 	}
@@ -931,16 +931,22 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 	}
 	var foundClassRefresh bool
 	for _, stmt := range entityContainmentRefreshes {
-		if stmt.Parameters["parent_entity_id"] != "content-entity:class" {
-			continue
-		}
-		foundClassRefresh = true
-		childIDs, ok := stmt.Parameters["child_entity_ids"].([]string)
+		rows, ok := stmt.Parameters["rows"].([]map[string]any)
 		if !ok {
-			t.Fatalf("entity contains child_entity_ids type = %T, want []string", stmt.Parameters["child_entity_ids"])
+			t.Fatalf("entity contains rows type = %T, want []map[string]any", stmt.Parameters["rows"])
 		}
-		if !stringSliceContains(childIDs, "content-entity:function") {
-			t.Fatalf("entity contains child_entity_ids = %v, want current child entity", childIDs)
+		for _, row := range rows {
+			if row["parent_entity_id"] != "content-entity:class" {
+				continue
+			}
+			foundClassRefresh = true
+			childIDs, ok := row["child_entity_ids"].([]string)
+			if !ok {
+				t.Fatalf("entity contains child_entity_ids type = %T, want []string", row["child_entity_ids"])
+			}
+			if !stringSliceContains(childIDs, "content-entity:function") {
+				t.Fatalf("entity contains child_entity_ids = %v, want current child entity", childIDs)
+			}
 		}
 	}
 	if !foundClassRefresh {
@@ -1055,21 +1061,28 @@ func TestCanonicalNodeWriterRefreshesOnlyStaleEntityContainmentEdges(t *testing.
 
 	var containmentRefreshes []Statement
 	for _, stmt := range writer.buildRetractStatements(mat) {
-		if strings.Contains(stmt.Cypher, "(n {uid: $parent_entity_id})-[r:CONTAINS]->(m)") {
+		if strings.Contains(stmt.Cypher, "(n {uid: row.parent_entity_id})-[r:CONTAINS]->(m)") {
 			containmentRefreshes = append(containmentRefreshes, stmt)
 		}
 	}
-	if got, want := len(containmentRefreshes), 3; got != want {
+	if got, want := len(containmentRefreshes), 1; got != want {
 		t.Fatalf("entity containment refresh statement count = %d, want %d", got, want)
 	}
-	for _, stmt := range containmentRefreshes {
-		parentID, ok := stmt.Parameters["parent_entity_id"].(string)
+	rows, ok := containmentRefreshes[0].Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows type = %T, want []map[string]any", containmentRefreshes[0].Parameters["rows"])
+	}
+	if got, want := len(rows), 3; got != want {
+		t.Fatalf("rows count = %d, want %d", got, want)
+	}
+	for _, row := range rows {
+		parentID, ok := row["parent_entity_id"].(string)
 		if !ok {
-			t.Fatalf("parent_entity_id type = %T, want string", stmt.Parameters["parent_entity_id"])
+			t.Fatalf("parent_entity_id type = %T, want string", row["parent_entity_id"])
 		}
-		childIDs, ok := stmt.Parameters["child_entity_ids"].([]string)
+		childIDs, ok := row["child_entity_ids"].([]string)
 		if !ok {
-			t.Fatalf("child_entity_ids type = %T, want []string", stmt.Parameters["child_entity_ids"])
+			t.Fatalf("child_entity_ids type = %T, want []string", row["child_entity_ids"])
 		}
 		switch parentID {
 		case "class-current":

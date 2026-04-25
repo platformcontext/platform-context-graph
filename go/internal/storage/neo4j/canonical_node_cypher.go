@@ -68,10 +68,11 @@ WHERE n.evidence_source = 'projector/canonical'
   AND (n.uid IS NULL OR NOT (n.uid IN $entity_ids))
 DELETE r`
 
-const canonicalNodeRefreshCurrentEntityContainmentEdgesCypher = `MATCH (n {uid: $parent_entity_id})-[r:CONTAINS]->(m)
+const canonicalNodeRefreshCurrentEntityContainmentEdgesCypher = `UNWIND $rows AS row
+MATCH (n {uid: row.parent_entity_id})-[r:CONTAINS]->(m)
 WHERE n.evidence_source = 'projector/canonical'
   AND m.evidence_source = 'projector/canonical'
-  AND (m.uid IS NULL OR NOT (m.uid IN $child_entity_ids))
+  AND (m.uid IS NULL OR NOT (m.uid IN row.child_entity_ids))
 DELETE r`
 
 const canonicalNodeRetractParametersCypher = `MATCH (p:Parameter)
