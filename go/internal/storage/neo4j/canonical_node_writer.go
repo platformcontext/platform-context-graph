@@ -219,6 +219,7 @@ func flattenCanonicalWritePhases(phases []canonicalWritePhase) []Statement {
 // --- Phase A: Retract stale nodes ---
 
 const canonicalNodeRefreshFilePathBatchSize = 100
+const canonicalNodeRefreshEntityContainmentBatchSize = 50
 
 var canonicalNodeRetractCodeEntityLabels = map[string]struct{}{
 	"Function":               {},
@@ -540,23 +541,19 @@ func buildEntityContainmentRefreshStatements(
 	}
 	sort.Strings(parentIDs)
 
-	stmts := make([]Statement, 0, len(parentIDs))
+	rows := make([]map[string]any, 0, len(parentIDs))
 	for _, parentID := range parentIDs {
 		childIDs := make([]string, 0, len(parentChildIDs[parentID]))
 		for childID := range parentChildIDs[parentID] {
 			childIDs = append(childIDs, childID)
 		}
 		sort.Strings(childIDs)
-		stmts = append(stmts, Statement{
-			Operation: OperationCanonicalRetract,
-			Cypher:    canonicalNodeRefreshCurrentEntityContainmentEdgesCypher,
-			Parameters: map[string]any{
-				"parent_entity_id": parentID,
-				"child_entity_ids": childIDs,
-			},
+		rows = append(rows, map[string]any{
+			"parent_entity_id": parentID,
+			"child_entity_ids": childIDs,
 		})
 	}
-	return stmts
+	return buildBatchedRetractStatements(canonicalNodeRefreshCurrentEntityContainmentEdgesCypher, rows, canonicalNodeRefreshEntityContainmentBatchSize)
 }
 
 func fileNameKey(filePath, name string) string {
@@ -761,6 +758,28 @@ func buildBatchedStatements(cypher string, rows []map[string]any, batchSize int)
 		}
 		stmts = append(stmts, Statement{
 			Operation:  OperationCanonicalUpsert,
+			Cypher:     cypher,
+			Parameters: map[string]any{"rows": rows[start:end]},
+		})
+	}
+	return stmts
+}
+
+func buildBatchedRetractStatements(cypher string, rows []map[string]any, batchSize int) []Statement {
+	if len(rows) == 0 {
+		return nil
+	}
+	if batchSize <= 0 {
+		batchSize = len(rows)
+	}
+	stmts := make([]Statement, 0, (len(rows)+batchSize-1)/batchSize)
+	for start := 0; start < len(rows); start += batchSize {
+		end := start + batchSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		stmts = append(stmts, Statement{
+			Operation:  OperationCanonicalRetract,
 			Cypher:     cypher,
 			Parameters: map[string]any{"rows": rows[start:end]},
 		})
