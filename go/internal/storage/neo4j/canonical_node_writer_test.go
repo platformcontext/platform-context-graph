@@ -874,14 +874,18 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 			{Path: "/repos/my-repo/main.go"},
 		},
 		Entities: []projector.EntityRow{
-			{EntityID: "content-entity:function", Label: "Function", FilePath: "/repos/my-repo/main.go"},
+			{EntityID: "content-entity:function", Label: "Function", EntityName: "ServeHTTP", FilePath: "/repos/my-repo/main.go", StartLine: 10},
+			{EntityID: "content-entity:class", Label: "Class", EntityName: "Handler", FilePath: "/repos/my-repo/main.go"},
+		},
+		ClassMembers: []projector.ClassMemberRow{
+			{ClassName: "Handler", FunctionName: "ServeHTTP", FilePath: "/repos/my-repo/main.go", FunctionLine: 10},
 		},
 	}
 
 	var importRefresh Statement
 	var directoryFileRefresh Statement
 	var fileEntityRefresh Statement
-	var entityContainmentRefresh Statement
+	var entityContainmentRefreshes []Statement
 	for _, stmt := range writer.buildRetractStatements(mat) {
 		switch {
 		case strings.Contains(stmt.Cypher, "-[r:IMPORTS]->"):
@@ -890,8 +894,8 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 			directoryFileRefresh = stmt
 		case strings.Contains(stmt.Cypher, "[r:CONTAINS]->(n)"):
 			fileEntityRefresh = stmt
-		case strings.Contains(stmt.Cypher, "(n)-[r:CONTAINS]->(m)"):
-			entityContainmentRefresh = stmt
+		case strings.Contains(stmt.Cypher, "(n {uid: $parent_entity_id})-[r:CONTAINS]->(m)"):
+			entityContainmentRefreshes = append(entityContainmentRefreshes, stmt)
 		}
 	}
 
@@ -903,7 +907,6 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 	}{
 		{name: "imports", stmt: importRefresh, paramName: "file_paths", want: "/repos/my-repo/main.go"},
 		{name: "directory file contains", stmt: directoryFileRefresh, paramName: "file_paths", want: "/repos/my-repo/main.go"},
-		{name: "entity contains", stmt: entityContainmentRefresh, paramName: "entity_ids", want: "content-entity:function"},
 	} {
 		if tt.stmt.Cypher == "" {
 			t.Fatalf("missing %s refresh statement", tt.name)
@@ -925,6 +928,23 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 	}
 	if !stringSliceContains(entityIDs, "content-entity:function") {
 		t.Fatalf("file entity contains entity_ids = %v, want current entity", entityIDs)
+	}
+	var foundClassRefresh bool
+	for _, stmt := range entityContainmentRefreshes {
+		if stmt.Parameters["parent_entity_id"] != "content-entity:class" {
+			continue
+		}
+		foundClassRefresh = true
+		childIDs, ok := stmt.Parameters["child_entity_ids"].([]string)
+		if !ok {
+			t.Fatalf("entity contains child_entity_ids type = %T, want []string", stmt.Parameters["child_entity_ids"])
+		}
+		if !stringSliceContains(childIDs, "content-entity:function") {
+			t.Fatalf("entity contains child_entity_ids = %v, want current child entity", childIDs)
+		}
+	}
+	if !foundClassRefresh {
+		t.Fatal("missing class containment refresh statement")
 	}
 }
 
@@ -1012,6 +1032,60 @@ func TestCanonicalNodeWriterRefreshesOnlyStaleFileEntityEdges(t *testing.T) {
 			}
 		default:
 			t.Fatalf("unexpected refresh file_path %q", filePath)
+		}
+	}
+}
+
+func TestCanonicalNodeWriterRefreshesOnlyStaleEntityContainmentEdges(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-2",
+		RepoID:       "repo-1",
+		Entities: []projector.EntityRow{
+			{EntityID: "class-current", Label: "Class", EntityName: "Handler", FilePath: "/repos/my-repo/current.go"},
+			{EntityID: "method-current", Label: "Function", EntityName: "ServeHTTP", FilePath: "/repos/my-repo/current.go", StartLine: 10},
+			{EntityID: "function-empty", Label: "Function", EntityName: "topLevel", FilePath: "/repos/my-repo/current.go", StartLine: 30},
+		},
+		ClassMembers: []projector.ClassMemberRow{
+			{ClassName: "Handler", FunctionName: "ServeHTTP", FilePath: "/repos/my-repo/current.go", FunctionLine: 10},
+		},
+	}
+
+	var containmentRefreshes []Statement
+	for _, stmt := range writer.buildRetractStatements(mat) {
+		if strings.Contains(stmt.Cypher, "(n {uid: $parent_entity_id})-[r:CONTAINS]->(m)") {
+			containmentRefreshes = append(containmentRefreshes, stmt)
+		}
+	}
+	if got, want := len(containmentRefreshes), 3; got != want {
+		t.Fatalf("entity containment refresh statement count = %d, want %d", got, want)
+	}
+	for _, stmt := range containmentRefreshes {
+		parentID, ok := stmt.Parameters["parent_entity_id"].(string)
+		if !ok {
+			t.Fatalf("parent_entity_id type = %T, want string", stmt.Parameters["parent_entity_id"])
+		}
+		childIDs, ok := stmt.Parameters["child_entity_ids"].([]string)
+		if !ok {
+			t.Fatalf("child_entity_ids type = %T, want []string", stmt.Parameters["child_entity_ids"])
+		}
+		switch parentID {
+		case "class-current":
+			if got, want := strings.Join(childIDs, ","), "method-current"; got != want {
+				t.Fatalf("refresh[%s] child_entity_ids = %q, want %q", parentID, got, want)
+			}
+		case "method-current":
+			if len(childIDs) != 0 {
+				t.Fatalf("refresh[%s] child_entity_ids = %#v, want empty", parentID, childIDs)
+			}
+		case "function-empty":
+			if len(childIDs) != 0 {
+				t.Fatalf("refresh[%s] child_entity_ids = %#v, want empty", parentID, childIDs)
+			}
+		default:
+			t.Fatalf("unexpected parent_entity_id %q", parentID)
 		}
 	}
 }
