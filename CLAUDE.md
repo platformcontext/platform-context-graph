@@ -143,14 +143,21 @@ git diff --check
 ### Runtime Repro Hygiene
 
 Before any dogfood, local-authoritative, Compose, or other runtime validation
-that executes `go/bin/pcg`, `go/bin/pcg-ingester`, `go/bin/pcg-api`, or
-similar local binaries, ALWAYS rebuild the binaries first so the run reflects
-the current source tree rather than a stale prior build.
+that executes `go/bin/pcg`, `go/bin/pcg-ingester`, `go/bin/pcg-reducer`,
+`go/bin/pcg-api`, or similar local binaries, ALWAYS rebuild the binaries first
+so the run reflects the current source tree rather than a stale prior build.
+`pcg graph start` discovers `pcg-reducer` and `pcg-ingester` through `PATH`,
+so a fresh owner run also needs `go/bin` on `PATH`.
 
 For this repo that usually means:
 
 ```bash
-cd go && go build -o ./bin/pcg ./cmd/pcg && go build -o ./bin/pcg-ingester ./cmd/ingester
+cd go
+go build -o ./bin/pcg ./cmd/pcg
+go build -o ./bin/pcg-api ./cmd/api
+go build -o ./bin/pcg-ingester ./cmd/ingester
+go build -o ./bin/pcg-reducer ./cmd/reducer
+export PATH="$PWD/bin:$PATH"
 ```
 
 When building or testing NornicDB binaries from the local fork/reference repos
