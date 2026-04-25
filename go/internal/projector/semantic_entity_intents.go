@@ -30,6 +30,7 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 	}
 	if _, ok := semanticEntityReducerTypes[entityType]; !ok {
 		if !isJavaScriptCallableSemanticEntity(fact.Payload, entityType) &&
+			!isGoCallableSemanticEntity(fact.Payload, entityType) &&
 			!isPythonCallableSemanticEntity(fact.Payload, entityType) &&
 			!isElixirCallableSemanticEntity(fact.Payload, entityType) &&
 			!isTypeScriptJSXComponentTypeAssertionSemanticEntity(fact.Payload, entityType) &&
@@ -91,6 +92,16 @@ func isJavaScriptCallableSemanticEntity(payload map[string]any, entityType strin
 	return payloadMetadataString(payload, "docstring") != "" || payloadMetadataString(payload, "method_kind") != ""
 }
 
+func isGoCallableSemanticEntity(payload map[string]any, entityType string) bool {
+	if entityType != "Function" {
+		return false
+	}
+	if payloadMetadataString(payload, "language") != "go" {
+		return false
+	}
+	return hasCallableSemanticMetadata(payload)
+}
+
 func isPythonCallableSemanticEntity(payload map[string]any, entityType string) bool {
 	if entityType != "Function" {
 		return false
@@ -145,6 +156,30 @@ func isTypeScriptJSXComponentTypeAssertionSemanticEntity(payload map[string]any,
 		return false
 	}
 	return payloadMetadataString(payload, "component_type_assertion") != ""
+}
+
+func hasCallableSemanticMetadata(payload map[string]any) bool {
+	for _, key := range []string{
+		"docstring",
+		"class_context",
+		"method_kind",
+		"constructor_kind",
+		"annotation_kind",
+		"context",
+		"impl_context",
+	} {
+		if payloadMetadataString(payload, key) != "" {
+			return true
+		}
+	}
+	if len(payloadMetadataStringSlice(payload, "decorators")) > 0 {
+		return true
+	}
+	if len(payloadMetadataStringSlice(payload, "type_parameters")) > 0 {
+		return true
+	}
+	return payloadMetadataBool(payload, "async") ||
+		payloadMetadataBool(payload, "jsx_fragment_shorthand")
 }
 
 func payloadMetadataString(payload map[string]any, key string) string {
