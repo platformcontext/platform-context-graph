@@ -342,6 +342,9 @@ func defaultNornicDBSemanticEntityLabelBatchSizes(batchSize int) map[string]int 
 		// dogfood run showed the 45-row statement exceeds NornicDB's bounded
 		// semantic write timeout. Keep this family narrow by default.
 		"Module": minPositiveInt(batchSize, 10),
+		// Rust impl blocks carry trait/receiver context; the self-repo run
+		// showed the 103-row family needs the same narrow default.
+		"ImplBlock": minPositiveInt(batchSize, 10),
 	}
 }
 
