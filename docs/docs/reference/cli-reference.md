@@ -221,7 +221,7 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 | :--- | :--- | :--- |
 | `pcg analyze calls <function>` | Show what a function calls. Supports `--transitive` and `--depth`. | Yes |
 | `pcg analyze callers <function>` | Show what calls a function. Supports `--transitive` and `--depth`. | Yes |
-| `pcg analyze chain <from> <to>` | Show the call chain between two functions. Supports `--depth`. | Yes |
+| `pcg analyze chain <from> <to>` | Show the call chain between two functions. Supports `--repo`, `--repo-id`, and `--depth`; repo-scoped names are resolved to entity IDs, and if a name is ambiguous the API uses graph reachability as the tie-breaker when exactly one candidate pair is reachable. | Yes |
 | `pcg analyze deps <module>` | Show import and dependency relationships. | Yes |
 | `pcg analyze tree <class>` | Show inheritance hierarchy. | Yes |
 | `pcg analyze complexity` | Show relationship-based complexity metrics for one entity. | Yes |
