@@ -75,12 +75,21 @@ file-scoped combined entity write: each statement matches the `File` anchor
 with `$file_path`, unwinds entity rows for that file, upserts nodes, and
 attaches `CONTAINS` in the same statement. A patched NornicDB binary that
 supports row-safe `SET += row.props` in the generalized `UNWIND/MERGE` hot
-path can opt into `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true`, which batches
-entity rows across files with `MERGE (n {uid: row.entity_id}) ... MATCH
-(f {path: row.file_path}) ... MERGE (f)-[:CONTAINS]->(n)`. Do not enable that
-switch with the current pinned binary. The `nornicdb entity label summary` log
-includes `phase` so operators can tell which entity-write lane is active and
-where repo-scale time is going.
+path and uses uniqueness constraints as `MERGE` lookup indexes can opt into
+`PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true`, which batches entity rows across
+files with `MERGE (n {uid: row.entity_id}) ... MATCH (f {path: row.file_path})
+... MERGE (f)-[:CONTAINS]->(n)`. Do not enable that switch with the current
+pinned binary. The `nornicdb entity label summary` log includes `phase` so
+operators can tell which entity-write lane is active and where repo-scale time
+is going.
+
+When patched-binary evaluation still shows steady per-label growth after
+schema-backed `MERGE` lookup is active, do not keep shrinking PCG batches from
+chunk logs alone. Rebuild NornicDB with explicit profiling enabled and rerun
+the same repo with `NORNICDB_ENABLE_PPROF=true`, then collect CPU and heap
+profiles during the hot label. That is the required next step for separating
+Badger write cost, uniqueness-index maintenance, Cypher execution, and
+Bolt/transaction overhead.
 
 NornicDB exposes explicit Bolt transaction hooks, but PCG does not enable
 grouped canonical writes for normal laptop runs until the PCG Neo4j-driver

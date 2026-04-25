@@ -185,10 +185,10 @@ because its current binary does not correctly preserve row-bound identity in
 the standalone node-only batch shape. Backends that support that node-only
 shape can still split entity node upsert from `phase=entity_containment`. If
 you are testing a patched NornicDB binary with row-safe `SET += row.props`
-support in the generalized `UNWIND/MERGE` hot path, set
-`PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` to try the faster MERGE-first
-combined shape that batches entity rows across files. Leave that switch off
-for the pinned release-backed binary.
+support in the generalized `UNWIND/MERGE` hot path and unique-constraint-backed
+`MERGE` lookup, set `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` to try the
+faster MERGE-first combined shape that batches entity rows across files. Leave
+that switch off for the pinned release-backed binary.
 Use the emitted `nornicdb entity label summary` lines to compare cumulative
 rows, statements, executions, grouped chunks, and total/max duration per
 `phase` and label before changing another default. Long-running labels emit
@@ -196,6 +196,10 @@ rolling summaries every 10 executions and a final summary at label completion,
 so you do not need to wait for an hour-scale phase to finish before you can
 see whether the cumulative cost is node row width, containment edges, grouped
 transaction size, or label ordering.
+If a run is still progressing linearly after schema-backed `MERGE` lookup is
+confirmed, stop treating batch size as the only control knob. Use a
+pprof-enabled NornicDB binary with `NORNICDB_ENABLE_PPROF=true` and capture CPU
+and heap profiles during the hot label before changing another default.
 
 ### Local-Authoritative Startup Envelope Smoke
 
