@@ -204,6 +204,12 @@ func buildNornicDBCallChainCypher(req callChainRequest) (string, map[string]any)
 
 func normalizeCallChainNodes(raw any) []any {
 	switch nodes := raw.(type) {
+	case []map[string]any:
+		normalized := make([]any, 0, len(nodes))
+		for _, node := range nodes {
+			normalized = append(normalized, normalizeCallChainNode(node))
+		}
+		return normalized
 	case []any:
 		normalized := make([]any, 0, len(nodes))
 		for _, node := range nodes {
