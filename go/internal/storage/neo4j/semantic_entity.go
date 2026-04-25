@@ -16,6 +16,7 @@ type SemanticEntityWriter struct {
 	BatchSize              int
 	entityLabelBatchSizes  map[string]int
 	parameterizedRowWrites bool
+	batchedPropertyWrites  bool
 }
 
 // NewSemanticEntityWriter returns a semantic-entity writer backed by the given Executor.
@@ -30,6 +31,16 @@ func NewSemanticEntityWriterWithParameterizedRows(executor Executor, batchSize i
 		executor:               executor,
 		BatchSize:              batchSize,
 		parameterizedRowWrites: true,
+	}
+}
+
+// NewSemanticEntityWriterWithBatchedProperties returns a semantic-entity
+// writer that batches rows while keeping entity properties in a single map.
+func NewSemanticEntityWriterWithBatchedProperties(executor Executor, batchSize int) *SemanticEntityWriter {
+	return &SemanticEntityWriter{
+		executor:              executor,
+		BatchSize:             batchSize,
+		batchedPropertyWrites: true,
 	}
 }
 
@@ -97,20 +108,39 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 			stmts = append(stmts, stmt)
 			writes++
 		}
-	} else {
-		rowsByLabel := map[string][]map[string]any{
-			"Annotation":             nil,
-			"Typedef":                nil,
-			"TypeAlias":              nil,
-			"TypeAnnotation":         nil,
-			"Component":              nil,
-			"Module":                 nil,
-			"ImplBlock":              nil,
-			"Protocol":               nil,
-			"ProtocolImplementation": nil,
-			"Variable":               nil,
-			"Function":               nil,
+	} else if w.batchedPropertyWrites {
+		rowsByLabel := newSemanticRowsByLabel()
+		for _, row := range write.Rows {
+			rowMap, ok := buildSemanticEntityPropertyRowMap(row)
+			if !ok {
+				continue
+			}
+			rowsByLabel[row.EntityType] = append(rowsByLabel[row.EntityType], rowMap)
 		}
+
+		for _, plan := range semanticEntityPlans() {
+			rows := rowsByLabel[plan.label]
+			batchSize := w.batchSizeForLabel(plan.label)
+			for start := 0; start < len(rows); start += batchSize {
+				end := start + batchSize
+				if end > len(rows) {
+					end = len(rows)
+				}
+				batchRows := rows[start:end]
+				stmts = append(stmts, Statement{
+					Operation: OperationCanonicalUpsert,
+					Cypher:    semanticEntityBatchedPropertiesUpsertCypher(plan.label),
+					Parameters: map[string]any{
+						"rows":                          batchRows,
+						StatementMetadataEntityLabelKey: plan.label,
+						StatementMetadataSummaryKey:     semanticEntityStatementSummary(plan.label, batchRows),
+					},
+				})
+			}
+			writes += len(rows)
+		}
+	} else {
+		rowsByLabel := newSemanticRowsByLabel()
 		for _, row := range write.Rows {
 			rowMap, ok := buildSemanticEntityRowMap(row)
 			if !ok {
@@ -119,22 +149,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 			rowsByLabel[row.EntityType] = append(rowsByLabel[row.EntityType], rowMap)
 		}
 
-		for _, plan := range []struct {
-			label  string
-			cypher string
-		}{
-			{label: "Annotation", cypher: semanticAnnotationUpsertCypher},
-			{label: "Typedef", cypher: semanticTypedefUpsertCypher},
-			{label: "TypeAlias", cypher: semanticTypeAliasUpsertCypher},
-			{label: "TypeAnnotation", cypher: semanticTypeAnnotationUpsertCypher},
-			{label: "Component", cypher: semanticComponentUpsertCypher},
-			{label: "Module", cypher: semanticModuleUpsertCypher},
-			{label: "ImplBlock", cypher: semanticImplBlockUpsertCypher},
-			{label: "Protocol", cypher: semanticProtocolUpsertCypher},
-			{label: "ProtocolImplementation", cypher: semanticProtocolImplementationUpsertCypher},
-			{label: "Variable", cypher: semanticVariableUpsertCypher},
-			{label: "Function", cypher: semanticFunctionUpsertCypher},
-		} {
+		for _, plan := range semanticEntityPlans() {
 			rows := rowsByLabel[plan.label]
 			batchSize := w.batchSizeForLabel(plan.label)
 			for start := 0; start < len(rows); start += batchSize {
@@ -188,6 +203,44 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 	return reducer.SemanticEntityWriteResult{CanonicalWrites: writes}, nil
 }
 
+func newSemanticRowsByLabel() map[string][]map[string]any {
+	return map[string][]map[string]any{
+		"Annotation":             nil,
+		"Typedef":                nil,
+		"TypeAlias":              nil,
+		"TypeAnnotation":         nil,
+		"Component":              nil,
+		"Module":                 nil,
+		"ImplBlock":              nil,
+		"Protocol":               nil,
+		"ProtocolImplementation": nil,
+		"Variable":               nil,
+		"Function":               nil,
+	}
+}
+
+func semanticEntityPlans() []struct {
+	label  string
+	cypher string
+} {
+	return []struct {
+		label  string
+		cypher string
+	}{
+		{label: "Annotation", cypher: semanticAnnotationUpsertCypher},
+		{label: "Typedef", cypher: semanticTypedefUpsertCypher},
+		{label: "TypeAlias", cypher: semanticTypeAliasUpsertCypher},
+		{label: "TypeAnnotation", cypher: semanticTypeAnnotationUpsertCypher},
+		{label: "Component", cypher: semanticComponentUpsertCypher},
+		{label: "Module", cypher: semanticModuleUpsertCypher},
+		{label: "ImplBlock", cypher: semanticImplBlockUpsertCypher},
+		{label: "Protocol", cypher: semanticProtocolUpsertCypher},
+		{label: "ProtocolImplementation", cypher: semanticProtocolImplementationUpsertCypher},
+		{label: "Variable", cypher: semanticVariableUpsertCypher},
+		{label: "Function", cypher: semanticFunctionUpsertCypher},
+	}
+}
+
 func buildParameterizedSemanticEntityStatement(row reducer.SemanticEntityRow) (Statement, bool) {
 	rowMap, ok := buildSemanticEntityRowMap(row)
 	if !ok {
@@ -204,6 +257,18 @@ func buildParameterizedSemanticEntityStatement(row reducer.SemanticEntityRow) (S
 			StatementMetadataEntityLabelKey: row.EntityType,
 			StatementMetadataSummaryKey:     fmt.Sprintf("semantic label=%s rows=1 entity_id=%v fallback=singleton_parameterized", row.EntityType, rowMap["entity_id"]),
 		},
+	}, true
+}
+
+func buildSemanticEntityPropertyRowMap(row reducer.SemanticEntityRow) (map[string]any, bool) {
+	rowMap, ok := buildSemanticEntityRowMap(row)
+	if !ok {
+		return nil, false
+	}
+	return map[string]any{
+		"file_path":  rowMap["file_path"],
+		"entity_id":  rowMap["entity_id"],
+		"properties": semanticEntityProperties(rowMap),
 	}, true
 }
 

@@ -246,3 +246,11 @@ func semanticEntitySingleRowUpsertCypher(label string) string {
 		"SET n += $properties\n" +
 		"MERGE (f)-[:CONTAINS]->(n)"
 }
+
+func semanticEntityBatchedPropertiesUpsertCypher(label string) string {
+	return "UNWIND $rows AS row\n" +
+		"MATCH (f:File {path: row.file_path})\n" +
+		"MERGE (n:" + label + " {uid: row.entity_id})\n" +
+		"SET n += row.properties\n" +
+		"MERGE (f)-[:CONTAINS]->(n)"
+}

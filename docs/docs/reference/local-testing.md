@@ -184,8 +184,9 @@ Reducer-owned semantic entity materialization has its own high-cardinality
 label caps because it runs after source-local canonical projection and writes
 parser-enriched semantic labels such as `Function` and `Variable`. Use
 `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Function=15,Variable=10` when
-that reducer domain times out; timeout errors include the semantic label and
-row count that tripped the deadline.
+that reducer domain times out; NornicDB semantic writes use the same row-map
+merge shape as the canonical hot path, and timeout errors include the semantic
+label and row count that tripped the deadline.
 When you are tuning repo-scale entity projection, do not decide from one scary
 chunk log alone. NornicDB currently uses a file-scoped combined entity write
 because its current binary does not correctly preserve row-bound identity in

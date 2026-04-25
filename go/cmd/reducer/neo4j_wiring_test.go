@@ -266,8 +266,8 @@ func TestSemanticEntityWriterForGraphBackendUsesBatchedRowsForNornicDB(t *testin
 	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
 		t.Fatalf("upsert cypher = %q, want batched UNWIND rows", stmt.Cypher)
 	}
-	if strings.Contains(stmt.Cypher, "SET n += $properties") {
-		t.Fatalf("upsert cypher = %q, want row-field assignments instead of scalar properties merge", stmt.Cypher)
+	if !strings.Contains(stmt.Cypher, "SET n += row.properties") {
+		t.Fatalf("upsert cypher = %q, want row property map merge", stmt.Cypher)
 	}
 	if strings.Contains(stmt.Cypher, "shortestPath") {
 		t.Fatalf("upsert cypher inlined docstring metadata: %s", stmt.Cypher)
@@ -276,8 +276,12 @@ func TestSemanticEntityWriterForGraphBackendUsesBatchedRowsForNornicDB(t *testin
 	if !ok {
 		t.Fatalf("rows parameter type = %T, want []map[string]any", stmt.Parameters["rows"])
 	}
-	if got, want := rows[0]["docstring"], docstring; got != want {
-		t.Fatalf("rows[0][docstring] = %#v, want %#v", got, want)
+	properties, ok := rows[0]["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("rows[0][properties] type = %T, want map[string]any", rows[0]["properties"])
+	}
+	if got, want := properties["docstring"], docstring; got != want {
+		t.Fatalf("properties[docstring] = %#v, want %#v", got, want)
 	}
 }
 
