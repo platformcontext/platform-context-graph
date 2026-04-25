@@ -1408,6 +1408,9 @@ func TestNornicDBEntityLabelPhaseGroupStatementsDefault(t *testing.T) {
 	if got["Variable"] != defaultNornicDBVariableEntityPhaseStatements {
 		t.Fatalf("Variable phase statements = %d, want %d", got["Variable"], defaultNornicDBVariableEntityPhaseStatements)
 	}
+	if got["K8sResource"] != defaultNornicDBK8sResourceEntityPhaseStatements {
+		t.Fatalf("K8sResource phase statements = %d, want %d", got["K8sResource"], defaultNornicDBK8sResourceEntityPhaseStatements)
+	}
 }
 
 func TestNornicDBEntityLabelPhaseGroupStatementsFromEnv(t *testing.T) {
