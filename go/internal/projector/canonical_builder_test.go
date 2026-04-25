@@ -117,6 +117,19 @@ func TestBuildCanonicalMaterializationMarksFirstGenerationFromScope(t *testing.T
 	}
 }
 
+func TestBuildCanonicalMaterializationDoesNotInferPriorGenerationFromActiveGenerationID(t *testing.T) {
+	t.Parallel()
+
+	sc := testScope()
+	sc.ActiveGenerationID = "gen-active-from-fixture"
+	gen := testGeneration()
+
+	result := buildCanonicalMaterialization(sc, gen, nil)
+	if !result.FirstGeneration {
+		t.Fatal("FirstGeneration = false, want true unless PreviousGenerationExists is explicit")
+	}
+}
+
 func TestBuildCanonicalMaterializationDoesNotTreatFailedPriorGenerationAsFirst(t *testing.T) {
 	t.Parallel()
 

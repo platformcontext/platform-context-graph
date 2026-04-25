@@ -105,6 +105,9 @@ Current tuning plan:
 - only promote the patched lane after the NornicDB fixes are release-backed and pinned; until then, keep the pinned release on the safe file-scoped combined write and use `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` only for patched-binary evaluation
 - keep dead-code truth labeled `derived`; the bounded policy buffer makes small-limit CLI output useful again, but broader root modeling is still required before promoting dead-code from derived to exact
 - keep NornicDB call-chain and transitive relationship reads on bounded BFS until upstream proves parameterized `shortestPath` endpoint anchors and projected map collection behave like Neo4j on the PCG query corpus
+- bundle future small heuristic changes with their safety gate when they are one logical fix, so rollback/bisect history tracks the behavioral unit rather than the order in which the concern was discovered
+- treat the growing `PCG_NORNICDB_*` surface as an operator contract: keep the consolidated [NornicDB Tuning](../reference/nornicdb-tuning.md) page current, and add new phase-specific knobs only after logs prove the existing phase/label controls do not describe the bottleneck
+- watch future heavy phases such as call edges, infra edges, and other shared reducer domains, but do not pre-create tuning knobs for them until repo-scale evidence names the phase, row count, grouped statement count, and timeout shape
 
 ---
 

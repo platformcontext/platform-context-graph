@@ -16,6 +16,10 @@ const (
 	// summary used only for logging and error wrapping.
 	StatementMetadataSummaryKey = "_pcg_statement_summary"
 
+	// Canonical phase names form the narrow protocol between graph statement
+	// builders and backend executors. Add a new phase only when repo-scale
+	// evidence proves it needs different grouping, batching, or diagnostics
+	// from the existing phases.
 	CanonicalPhaseEntities          = "entities"
 	CanonicalPhaseEntityContainment = "entity_containment"
 	CanonicalPhaseFiles             = "files"

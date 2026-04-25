@@ -88,6 +88,8 @@ dogfood runs need a larger or smaller transaction window. This protects local
 MCP/CLI coding workflows from an indefinitely stuck graph write while keeping
 content-index-backed code search available even when graph projection is
 degraded.
+For the full NornicDB tuning matrix, including file/entity row caps and
+conformance-only switches, see [NornicDB Tuning](nornicdb-tuning.md).
 
 `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` is reserved for NornicDB adapter
 conformance runs. It enables the same grouped canonical write surface used by

@@ -79,6 +79,7 @@ nav:
       - Dead Code Reachability Spec: reference/dead-code-reachability-spec.md
       - Graph Backend Installation: reference/graph-backend-installation.md
       - Graph Backend Operations: reference/graph-backend-operations.md
+      - NornicDB Tuning: reference/nornicdb-tuning.md
     - Extensibility Contracts:
       - Language Query DSL: reference/language-query-dsl.md
       - Fact Envelope And Plugins: reference/fact-envelope-reference.md
