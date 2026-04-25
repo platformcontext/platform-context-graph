@@ -277,7 +277,7 @@ func TestCanonicalNodeWriterCanInlineEntityContainmentForBackendCompatibility(t 
 	if !strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") {
 		t.Fatalf("entity cypher = %q, want file-scoped MATCH", stmt.Cypher)
 	}
-	if !strings.Contains(stmt.Cypher, "MERGE (f)-[:CONTAINS]->(n)") {
+	if !strings.Contains(stmt.Cypher, "MERGE (f)-[rel:CONTAINS]->(n)") {
 		t.Fatalf("entity cypher = %q, want inline containment MERGE", stmt.Cypher)
 	}
 	if got := stmt.Parameters["file_path"]; got != "/repos/my-repo/src/main.go" {
