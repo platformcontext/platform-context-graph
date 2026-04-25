@@ -18,10 +18,15 @@ func (h *CodeHandler) nornicDBRelationshipsGraphRow(
 		return row, err
 	}
 
+	rowEntityID := StringVal(row, "id")
+	entityLabel := nornicDBPrimaryEntityLabel(row)
 	outgoing := []map[string]any{}
 	if direction != "incoming" {
 		var err error
-		outgoing, err = h.nornicDBOneHopRelationships(ctx, StringVal(row, "id"), "outgoing", relationshipType, nornicDBPrimaryEntityLabel(row))
+		// NornicDB currently needs metadata and each requested direction as
+		// separate row queries; this avoids Neo4j-style map collection shapes
+		// that are not dialect-safe while preserving direct relationship truth.
+		outgoing, err = h.nornicDBOneHopRelationships(ctx, rowEntityID, "outgoing", relationshipType, entityLabel)
 		if err != nil {
 			return nil, err
 		}
@@ -29,14 +34,15 @@ func (h *CodeHandler) nornicDBRelationshipsGraphRow(
 	incoming := []map[string]any{}
 	if direction != "outgoing" {
 		var err error
-		incoming, err = h.nornicDBOneHopRelationships(ctx, StringVal(row, "id"), "incoming", relationshipType, nornicDBPrimaryEntityLabel(row))
+		incoming, err = h.nornicDBOneHopRelationships(ctx, rowEntityID, "incoming", relationshipType, entityLabel)
 		if err != nil {
 			return nil, err
 		}
 	}
-	row["outgoing"] = outgoing
-	row["incoming"] = incoming
-	return row, nil
+	response := cloneQueryAnyMap(row)
+	response["outgoing"] = outgoing
+	response["incoming"] = incoming
+	return response, nil
 }
 
 func nornicDBPrimaryEntityLabel(row map[string]any) string {
@@ -89,12 +95,11 @@ func (h *CodeHandler) nornicDBRelationshipEntityLabel(ctx context.Context, entit
 }
 
 func nornicDBGraphLabelForContentEntityType(entityType string) string {
-	switch strings.TrimSpace(entityType) {
-	case "Annotation", "Function", "Class", "Interface", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock", "Typedef", "TypeAlias", "TypeAnnotation", "Component", "TerraformModule", "TerragruntConfig", "TerragruntDependency":
-		return strings.TrimSpace(entityType)
-	default:
+	label := strings.TrimSpace(entityType)
+	if graphLabelToContentEntityType(label) == "" {
 		return ""
 	}
+	return label
 }
 
 func nornicDBRelationshipMetadataPredicate(

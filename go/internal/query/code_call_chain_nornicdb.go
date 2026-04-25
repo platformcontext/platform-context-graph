@@ -27,6 +27,8 @@ func (h *CodeHandler) nornicDBCallChainRows(ctx context.Context, req callChainRe
 	seen := map[string]struct{}{StringVal(start, "id"): {}}
 	rows := make([]map[string]any, 0, 1)
 
+	// Keep NornicDB traversal breadth-first so the first returned rows are the
+	// shortest paths, and stop once the response cap is satisfied.
 	for depth := 1; depth <= req.MaxDepth && len(frontier) > 0 && len(rows) < 5; depth++ {
 		next := make([]nornicDBCallChainPath, 0)
 		for _, path := range frontier {
