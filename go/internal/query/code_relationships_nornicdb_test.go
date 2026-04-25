@@ -67,8 +67,11 @@ func TestHandleRelationshipsUsesNornicDBRowQueriesForDirectCalls(t *testing.T) {
 						"end_line":   int64(20),
 					}}, nil
 				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
-					if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
-						t.Fatalf("cypher = %q, want bridged entity-id predicate", cypher)
+					if !strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})") {
+						t.Fatalf("cypher = %q, want indexed uid entity lookup", cypher)
+					}
+					if strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+						t.Fatalf("cypher = %q, must not use broad entity-id OR predicate on NornicDB", cypher)
 					}
 					return []map[string]any{{
 						"direction":   "outgoing",
@@ -131,20 +134,28 @@ func TestHandleRelationshipsUsesNornicDBRowQueriesForDirectCalls(t *testing.T) {
 	}
 }
 
-func TestHandleRelationshipsUsesBridgedEntityIDPredicateForNornicDBDirectCalls(t *testing.T) {
+func TestHandleRelationshipsUsesIndexedFallbackForNornicDBDirectCalls(t *testing.T) {
 	t.Parallel()
 
+	var metadataLookups []string
+	var relationshipLookups []string
 	handler := &CodeHandler{
 		GraphBackend: GraphBackendNornicDB,
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
 				switch {
 				case strings.Contains(cypher, "<-[:CONTAINS]-(f:File)"):
-					if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
-						t.Fatalf("cypher = %q, want bridged metadata entity-id predicate", cypher)
+					if strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+						t.Fatalf("cypher = %q, must not use broad metadata entity-id OR predicate on NornicDB", cypher)
 					}
-					if strings.Contains(cypher, "{uid: $entity_id}") {
-						t.Fatalf("cypher = %q, must not use uid-only metadata lookup", cypher)
+					switch {
+					case strings.Contains(cypher, "e.uid = $entity_id"):
+						metadataLookups = append(metadataLookups, "uid")
+						return []map[string]any{}, nil
+					case strings.Contains(cypher, "e.id = $entity_id"):
+						metadataLookups = append(metadataLookups, "id")
+					default:
+						t.Fatalf("cypher = %q, want uid/id metadata lookup", cypher)
 					}
 					return []map[string]any{{
 						"id":         "content-entity:handleRelationships",
@@ -158,11 +169,14 @@ func TestHandleRelationshipsUsesBridgedEntityIDPredicateForNornicDBDirectCalls(t
 						"end_line":   int64(168),
 					}}, nil
 				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
-					if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
-						t.Fatalf("cypher = %q, want bridged entity-id predicate", cypher)
-					}
-					if strings.Contains(cypher, "{uid: $entity_id}") {
-						t.Fatalf("cypher = %q, must not use uid-only entity lookup", cypher)
+					switch {
+					case strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})"):
+						relationshipLookups = append(relationshipLookups, "uid")
+						return []map[string]any{}, nil
+					case strings.Contains(cypher, "MATCH (e:Function {id: $entity_id})"):
+						relationshipLookups = append(relationshipLookups, "id")
+					default:
+						t.Fatalf("cypher = %q, want indexed uid/id relationship lookup", cypher)
 					}
 					if got, want := params["entity_id"], "content-entity:handleRelationships"; got != want {
 						t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
@@ -215,6 +229,12 @@ func TestHandleRelationshipsUsesBridgedEntityIDPredicateForNornicDBDirectCalls(t
 	if !ok || len(outgoing) != 1 {
 		t.Fatalf("resp[outgoing] = %#v, want one relationship", resp["outgoing"])
 	}
+	if want := []string{"uid", "id"}; !reflect.DeepEqual(metadataLookups, want) {
+		t.Fatalf("metadataLookups = %#v, want %#v", metadataLookups, want)
+	}
+	if want := []string{"uid", "id"}; !reflect.DeepEqual(relationshipLookups, want) {
+		t.Fatalf("relationshipLookups = %#v, want %#v", relationshipLookups, want)
+	}
 }
 
 func TestHandleRelationshipsHydratesNornicDBPlaceholderRepoIdentityFromContent(t *testing.T) {
@@ -226,11 +246,11 @@ func TestHandleRelationshipsHydratesNornicDBPlaceholderRepoIdentityFromContent(t
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
 				switch {
 				case strings.Contains(cypher, "<-[:CONTAINS]-(f:File)"):
-					if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
-						t.Fatalf("cypher = %q, want bridged metadata entity-id predicate", cypher)
+					if !strings.Contains(cypher, "e.uid = $entity_id") {
+						t.Fatalf("cypher = %q, want indexed uid metadata lookup", cypher)
 					}
-					if strings.Contains(cypher, "{uid: $entity_id}") {
-						t.Fatalf("cypher = %q, must not use uid-only metadata lookup", cypher)
+					if strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+						t.Fatalf("cypher = %q, must not use broad metadata entity-id OR predicate on NornicDB", cypher)
 					}
 					return []map[string]any{{
 						"id":         "content-entity:handleRelationships",
@@ -244,6 +264,9 @@ func TestHandleRelationshipsHydratesNornicDBPlaceholderRepoIdentityFromContent(t
 						"end_line":   int64(168),
 					}}, nil
 				case strings.Contains(cypher, "MATCH (e)-[rel:CALLS]->(target)"):
+					if !strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})") {
+						t.Fatalf("cypher = %q, want indexed uid relationship lookup", cypher)
+					}
 					if got, want := params["entity_id"], "content-entity:handleRelationships"; got != want {
 						t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
 					}
@@ -486,21 +509,66 @@ func TestNornicDBGraphLabelForContentEntityTypeStaysAlignedWithGraphLabels(t *te
 	}
 }
 
-func TestNornicDBOneHopRelationshipsCypherUsesBridgedEntityIDPredicate(t *testing.T) {
+func TestNornicDBOneHopRelationshipsCypherUsesIndexedEntityLookup(t *testing.T) {
 	t.Parallel()
 
-	cypher, params := nornicDBOneHopRelationshipsCypher("content-entity:handleRelationships", "outgoing", "CALLS", "Function")
+	cypher, params := nornicDBOneHopRelationshipsCypher("content-entity:handleRelationships", "outgoing", "CALLS", "Function", "uid")
 
-	if !strings.Contains(cypher, "MATCH (e:Function)") {
-		t.Fatalf("cypher = %q, want labeled entity match", cypher)
+	if !strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})") {
+		t.Fatalf("cypher = %q, want indexed uid entity lookup", cypher)
 	}
-	if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
-		t.Fatalf("cypher = %q, want bridged entity-id predicate", cypher)
-	}
-	if strings.Contains(cypher, "{uid: $entity_id}") {
-		t.Fatalf("cypher = %q, must not use uid-only lookup", cypher)
+	if strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+		t.Fatalf("cypher = %q, must not use broad entity-id OR predicate on NornicDB", cypher)
 	}
 	if got, want := params, map[string]any{"entity_id": "content-entity:handleRelationships"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("params = %#v, want %#v", got, want)
+	}
+}
+
+func TestNornicDBOneHopRelationshipsFallsBackFromUIDToID(t *testing.T) {
+	t.Parallel()
+
+	var lookups []string
+	handler := &CodeHandler{
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+				switch {
+				case strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})"):
+					lookups = append(lookups, "uid")
+					return []map[string]any{}, nil
+				case strings.Contains(cypher, "MATCH (e:Function {id: $entity_id})"):
+					lookups = append(lookups, "id")
+					return []map[string]any{{
+						"direction":   "outgoing",
+						"type":        "CALLS",
+						"target_name": "filterRelationshipResponse",
+						"target_id":   "content-entity:filterRelationshipResponse",
+					}}, nil
+				default:
+					t.Fatalf("unexpected cypher: %q", cypher)
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	got, err := handler.nornicDBOneHopRelationships(
+		context.Background(),
+		"content-entity:handleRelationships",
+		"outgoing",
+		"CALLS",
+		"Function",
+	)
+	if err != nil {
+		t.Fatalf("nornicDBOneHopRelationships() error = %v, want nil", err)
+	}
+	if want := []string{"uid", "id"}; !reflect.DeepEqual(lookups, want) {
+		t.Fatalf("lookups = %#v, want %#v", lookups, want)
+	}
+	if len(got) != 1 {
+		t.Fatalf("nornicDBOneHopRelationships() = %#v, want one relationship", got)
+	}
+	if gotName, want := got[0]["target_name"], "filterRelationshipResponse"; gotName != want {
+		t.Fatalf("relationship[target_name] = %#v, want %#v", gotName, want)
 	}
 }
