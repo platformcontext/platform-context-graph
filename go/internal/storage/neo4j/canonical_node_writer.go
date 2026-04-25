@@ -224,8 +224,12 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 		"generation_id": mat.GenerationID,
 	}
 
+	filePaths := make([]string, len(mat.Files))
+	for i, f := range mat.Files {
+		filePaths[i] = f.Path
+	}
+
 	retractions := []string{
-		canonicalNodeRetractFilesCypher,
 		canonicalNodeRetractCodeEntitiesCypher,
 		canonicalNodeRetractInfraEntitiesCypher,
 		canonicalNodeRetractTerraformEntitiesCypher,
@@ -235,7 +239,23 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 		canonicalNodeRetractDirectoriesCypher,
 	}
 
-	stmts := make([]Statement, 0, len(retractions)+1)
+	stmts := make([]Statement, 0, len(retractions)+2)
+	fileRetractCypher := canonicalNodeRetractFilesCypher
+	fileRetractParams := retractParams
+	if len(filePaths) > 0 {
+		fileRetractCypher = canonicalNodeRetractRemovedFilesCypher
+		fileRetractParams = map[string]any{
+			"repo_id":       mat.RepoID,
+			"generation_id": mat.GenerationID,
+			"file_paths":    filePaths,
+		}
+	}
+	stmts = append(stmts, Statement{
+		Operation:  OperationCanonicalRetract,
+		Cypher:     fileRetractCypher,
+		Parameters: fileRetractParams,
+	})
+
 	for _, cypher := range retractions {
 		stmts = append(stmts, Statement{
 			Operation:  OperationCanonicalRetract,
@@ -245,10 +265,6 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 	}
 
 	// Parameter retraction uses file_paths
-	filePaths := make([]string, len(mat.Files))
-	for i, f := range mat.Files {
-		filePaths[i] = f.Path
-	}
 	if len(filePaths) > 0 {
 		stmts = append(stmts, Statement{
 			Operation: OperationCanonicalRetract,

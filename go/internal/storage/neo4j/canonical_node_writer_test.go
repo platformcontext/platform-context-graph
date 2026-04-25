@@ -696,6 +696,43 @@ func TestCanonicalNodeWriterRetraction(t *testing.T) {
 	}
 }
 
+func TestCanonicalNodeWriterFileRetractPreservesCurrentFilePaths(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/main.go"},
+			{Path: "/repos/my-repo/internal/graph.go"},
+		},
+	}
+
+	var fileRetract Statement
+	for _, stmt := range writer.buildRetractStatements(mat) {
+		if stmt.Operation == OperationCanonicalRetract && strings.Contains(stmt.Cypher, "MATCH (f:File)") {
+			fileRetract = stmt
+			break
+		}
+	}
+	if fileRetract.Cypher == "" {
+		t.Fatal("missing File retract statement")
+	}
+	if !strings.Contains(fileRetract.Cypher, "NOT (f.path IN $file_paths)") {
+		t.Fatalf("File retract cypher = %q, want current path exclusion", fileRetract.Cypher)
+	}
+
+	gotPaths, ok := fileRetract.Parameters["file_paths"].([]string)
+	if !ok {
+		t.Fatalf("file_paths parameter type = %T, want []string", fileRetract.Parameters["file_paths"])
+	}
+	wantPaths := []string{"/repos/my-repo/main.go", "/repos/my-repo/internal/graph.go"}
+	if strings.Join(gotPaths, "\n") != strings.Join(wantPaths, "\n") {
+		t.Fatalf("file_paths = %v, want %v", gotPaths, wantPaths)
+	}
+}
+
 func TestCanonicalNodeWriterEmptyMaterialization(t *testing.T) {
 	t.Parallel()
 
