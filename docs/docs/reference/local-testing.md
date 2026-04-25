@@ -132,6 +132,20 @@ On the remote 16-vCPU dogfood host, the current validated binary path is:
 export PCG_NORNICDB_BINARY=/home/ubuntu/os-repos/NornicDB/bin/nornicdb-headless-pcg-sql-edge-hotpath
 ```
 
+Before every local-authoritative dogfood run, rebuild the owner and child
+binaries and put `go/bin` on `PATH`; otherwise `pcg graph start` can launch a
+fresh owner from current source but fail when it tries to discover
+`pcg-reducer` or `pcg-ingester`.
+
+```bash
+cd go
+go build -o ./bin/pcg ./cmd/pcg
+go build -o ./bin/pcg-api ./cmd/api
+go build -o ./bin/pcg-ingester ./cmd/ingester
+go build -o ./bin/pcg-reducer ./cmd/reducer
+export PATH="$PWD/bin:$PATH"
+```
+
 On a local workstation, rebuild from the PR branch with the no-local-LLM tags
 before setting `PCG_NORNICDB_BINARY`:
 
