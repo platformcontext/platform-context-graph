@@ -223,6 +223,9 @@ func nornicDBNodePattern(alias string, label string, param string) string {
 	return nornicDBNodePatternWithProperty(alias, label, "uid", param)
 }
 
+// nornicDBNodePatternWithProperty keeps NornicDB entity-id lookups anchored in
+// the node pattern. Live dogfood showed MATCH-plus-WHERE id/uid predicates can
+// scan or hang, while relationship-pattern MATCH keeps type(rel) populated.
 func nornicDBNodePatternWithProperty(alias string, label string, property string, param string) string {
 	property = strings.TrimSpace(property)
 	if property == "" {
