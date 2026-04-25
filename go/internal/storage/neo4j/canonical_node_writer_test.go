@@ -919,6 +919,44 @@ func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T)
 	}
 }
 
+func TestCanonicalNodeWriterRefreshesStructuralEdgesBeforeEntityRetract(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-2",
+		RepoID:       "repo-1",
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/main.go"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "content-entity:function", Label: "Function"},
+		},
+	}
+
+	fileEntityRefreshIdx := -1
+	codeEntityRetractIdx := -1
+	for i, stmt := range writer.buildRetractStatements(mat) {
+		switch {
+		case strings.Contains(stmt.Cypher, "(f:File)-[r:CONTAINS]->(n)"):
+			fileEntityRefreshIdx = i
+		case strings.Contains(stmt.Cypher, "n:Function OR n:Class"):
+			codeEntityRetractIdx = i
+		}
+	}
+
+	if fileEntityRefreshIdx < 0 {
+		t.Fatal("missing file/entity refresh statement")
+	}
+	if codeEntityRetractIdx < 0 {
+		t.Fatal("missing code entity retract statement")
+	}
+	if fileEntityRefreshIdx > codeEntityRetractIdx {
+		t.Fatalf("file/entity refresh index = %d, code entity retract index = %d; refresh must run first",
+			fileEntityRefreshIdx, codeEntityRetractIdx)
+	}
+}
+
 func TestCanonicalNodeWriterRetractCoversProjectableEntityLabels(t *testing.T) {
 	t.Parallel()
 

@@ -342,26 +342,6 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 		Parameters: fileRetractParams,
 	})
 
-	for _, cypher := range retractions {
-		params := map[string]any{
-			"repo_id":       mat.RepoID,
-			"generation_id": mat.GenerationID,
-			"entity_ids":    entityIDsByFamily[cypher],
-		}
-		if cypher == canonicalNodeRetractDirectoriesCypher {
-			params = map[string]any{
-				"repo_id":         mat.RepoID,
-				"generation_id":   mat.GenerationID,
-				"directory_paths": directoryPaths,
-			}
-		}
-		stmts = append(stmts, Statement{
-			Operation:  OperationCanonicalRetract,
-			Cypher:     cypher,
-			Parameters: params,
-		})
-	}
-
 	if len(filePaths) > 0 {
 		for _, cypher := range []string{
 			canonicalNodeRefreshCurrentFileImportEdgesCypher,
@@ -384,6 +364,26 @@ func (w *CanonicalNodeWriter) buildRetractStatements(mat projector.CanonicalMate
 			Parameters: map[string]any{
 				"entity_ids": entityIDsByFamily[canonicalNodeRetractCodeEntitiesCypher],
 			},
+		})
+	}
+
+	for _, cypher := range retractions {
+		params := map[string]any{
+			"repo_id":       mat.RepoID,
+			"generation_id": mat.GenerationID,
+			"entity_ids":    entityIDsByFamily[cypher],
+		}
+		if cypher == canonicalNodeRetractDirectoriesCypher {
+			params = map[string]any{
+				"repo_id":         mat.RepoID,
+				"generation_id":   mat.GenerationID,
+				"directory_paths": directoryPaths,
+			}
+		}
+		stmts = append(stmts, Statement{
+			Operation:  OperationCanonicalRetract,
+			Cypher:     cypher,
+			Parameters: params,
 		})
 	}
 
