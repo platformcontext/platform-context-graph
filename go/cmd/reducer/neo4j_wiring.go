@@ -266,6 +266,20 @@ func semanticEntityExecutorForGraphBackend(
 	return rawExecutor
 }
 
+func semanticEntityWriterForGraphBackend(
+	executor sourceneo4j.Executor,
+	batchSize int,
+	graphBackend runtimecfg.GraphBackend,
+) *sourceneo4j.SemanticEntityWriter {
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		// NornicDB now supports the same batched UNWIND/MERGE/SET row shape
+		// as Neo4j. Keep semantic writes on that hot path instead of the
+		// older scalar compatibility writer.
+		return sourceneo4j.NewSemanticEntityWriter(executor, batchSize)
+	}
+	return sourceneo4j.NewSemanticEntityWriter(executor, batchSize)
+}
+
 func nornicDBCanonicalWriteTimeout(getenv func(string) string) time.Duration {
 	raw := strings.TrimSpace(getenv(canonicalWriteTimeoutEnv))
 	if raw == "" {
