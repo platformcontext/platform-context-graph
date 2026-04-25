@@ -79,10 +79,10 @@ const (
 	// broader entity phase limit, so they need the same conservative grouped
 	// statement cap as Function for the current dogfood lane.
 	defaultNornicDBVariableEntityPhaseStatements = 5
-	// K8sResource rows are small individually, but one manifest can contain many
-	// resources. Keep their grouped transaction cap narrow so large
-	// Helm/Kustomize repos do not timeout inside one Bolt transaction.
-	defaultNornicDBK8sResourceEntityPhaseStatements = 5
+	// K8sResource rows are individually small, but Helm/Kustomize repos create
+	// dense same-label bursts. Keep grouped execution to one statement at a
+	// time so NornicDB proves correctness before we widen this hot family.
+	defaultNornicDBK8sResourceEntityPhaseStatements = 1
 	canonicalWriteTimeoutEnv                        = "PCG_CANONICAL_WRITE_TIMEOUT"
 	nornicDBCanonicalGroupedWritesEnv               = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
 	nornicDBPhaseGroupStatementsEnv                 = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"

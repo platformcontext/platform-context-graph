@@ -375,11 +375,7 @@ func TestSemanticEntityWriterForGraphBackendUsesBatchedRowsForNornicDB(t *testin
 	if got, want := result.CanonicalWrites, 1; got != want {
 		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
 	}
-	if got, want := len(executor.calls), 2; got != want {
-		t.Fatalf("executor calls = %d, want %d", got, want)
-	}
-
-	stmt := executor.calls[1]
+	stmt := firstReducerStatementWithOperation(t, executor.calls, sourceneo4j.OperationCanonicalUpsert)
 	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
 		t.Fatalf("upsert cypher = %q, want batched UNWIND rows", stmt.Cypher)
 	}
@@ -399,6 +395,81 @@ func TestSemanticEntityWriterForGraphBackendUsesBatchedRowsForNornicDB(t *testin
 	}
 	if got, want := properties["docstring"], docstring; got != want {
 		t.Fatalf("properties[docstring] = %#v, want %#v", got, want)
+	}
+}
+
+func TestSemanticEntityWriterForGraphBackendUsesLabelScopedRetractForNornicDB(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingReducerStatementExecutor{}
+	writer, err := semanticEntityWriterForGraphBackend(executor, 100, runtimecfg.GraphBackendNornicDB, func(string) string {
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("semanticEntityWriterForGraphBackend() error = %v", err)
+	}
+
+	_, err = writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs: []string{"repo-1"},
+		Rows: []reducer.SemanticEntityRow{
+			semanticFunctionRow("function-go-1"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+
+	var retracts int
+	for _, call := range executor.calls {
+		if call.Operation != sourceneo4j.OperationCanonicalRetract {
+			continue
+		}
+		retracts++
+		if strings.Contains(call.Cypher, "|") {
+			t.Fatalf("NornicDB retract cypher = %q, want one label per statement", call.Cypher)
+		}
+		if !strings.Contains(call.Cypher, "MATCH (n:") {
+			t.Fatalf("NornicDB retract cypher = %q, want label-scoped MATCH", call.Cypher)
+		}
+	}
+	if got, want := retracts, 11; got != want {
+		t.Fatalf("retract statement count = %d, want %d", got, want)
+	}
+}
+
+func TestSemanticEntityWriterForGraphBackendKeepsBroadRetractForNeo4j(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingReducerStatementExecutor{}
+	writer, err := semanticEntityWriterForGraphBackend(executor, 100, runtimecfg.GraphBackendNeo4j, func(string) string {
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("semanticEntityWriterForGraphBackend() error = %v", err)
+	}
+
+	_, err = writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs: []string{"repo-1"},
+		Rows: []reducer.SemanticEntityRow{
+			semanticFunctionRow("function-go-1"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+
+	var retracts int
+	for _, call := range executor.calls {
+		if call.Operation != sourceneo4j.OperationCanonicalRetract {
+			continue
+		}
+		retracts++
+		if !strings.Contains(call.Cypher, ":Annotation|Typedef|TypeAlias") {
+			t.Fatalf("Neo4j retract cypher = %q, want broad pipe-label retract", call.Cypher)
+		}
+	}
+	if got, want := retracts, 1; got != want {
+		t.Fatalf("retract statement count = %d, want %d", got, want)
 	}
 }
 
@@ -437,6 +508,9 @@ func TestSemanticEntityWriterForGraphBackendAppliesNornicDBLabelBatchCaps(t *tes
 
 	var functionBatches, variableBatches []int
 	for _, call := range executor.calls {
+		if call.Operation != sourceneo4j.OperationCanonicalUpsert {
+			continue
+		}
 		label, _ := call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
 		rows, _ := call.Parameters["rows"].([]map[string]any)
 		switch label {
@@ -483,6 +557,9 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBLabelCaps(t *t
 
 	var moduleBatches, implBlockBatches []int
 	for _, call := range executor.calls {
+		if call.Operation != sourceneo4j.OperationCanonicalUpsert {
+			continue
+		}
 		label, _ := call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
 		rows, _ := call.Parameters["rows"].([]map[string]any)
 		switch label {
@@ -515,6 +592,21 @@ func TestSemanticEntityWriterForGraphBackendRejectsInvalidNornicDBLabelBatchCaps
 	if !strings.Contains(err.Error(), nornicDBSemanticEntityLabelBatchEnv) {
 		t.Fatalf("semanticEntityWriterForGraphBackend() error = %q, want env name", err)
 	}
+}
+
+func firstReducerStatementWithOperation(
+	t *testing.T,
+	calls []sourceneo4j.Statement,
+	operation sourceneo4j.Operation,
+) sourceneo4j.Statement {
+	t.Helper()
+	for _, call := range calls {
+		if call.Operation == operation {
+			return call
+		}
+	}
+	t.Fatalf("missing statement with operation %q", operation)
+	return sourceneo4j.Statement{}
 }
 
 func semanticFunctionRow(id string) reducer.SemanticEntityRow {

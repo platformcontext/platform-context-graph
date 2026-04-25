@@ -240,6 +240,13 @@ WHERE n.repo_id IN $repo_ids
 DETACH DELETE n`
 )
 
+func semanticEntityLabelRetractCypher(label string) string {
+	return "MATCH (n:" + label + ")\n" +
+		"WHERE n.repo_id IN $repo_ids\n" +
+		"  AND n.evidence_source = $evidence_source\n" +
+		"DETACH DELETE n"
+}
+
 func semanticEntitySingleRowUpsertCypher(label string) string {
 	return "MATCH (f:File {path: $file_path})\n" +
 		"MERGE (n:" + label + " {uid: $entity_id})\n" +

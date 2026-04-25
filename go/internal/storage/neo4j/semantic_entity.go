@@ -16,6 +16,7 @@ type SemanticEntityWriter struct {
 	BatchSize             int
 	entityLabelBatchSizes map[string]int
 	writeMode             semanticEntityWriteMode
+	retractMode           semanticEntityRetractMode
 }
 
 // semanticEntityWriteMode names the exact Cypher row shape used by the writer.
@@ -26,6 +27,15 @@ const (
 	semanticEntityWriteModeLegacyRows semanticEntityWriteMode = iota
 	semanticEntityWriteModeParameterizedRows
 	semanticEntityWriteModeBatchedProperties
+)
+
+// semanticEntityRetractMode names how stale semantic nodes are removed before
+// upserting the current semantic rows.
+type semanticEntityRetractMode int
+
+const (
+	semanticEntityRetractModeBroadLabels semanticEntityRetractMode = iota
+	semanticEntityRetractModeLabelScoped
 )
 
 // NewSemanticEntityWriter returns a semantic-entity writer backed by the given Executor.
@@ -58,6 +68,17 @@ func (w *SemanticEntityWriter) batchSize() int {
 		return DefaultBatchSize
 	}
 	return w.BatchSize
+}
+
+// WithLabelScopedRetract deletes stale semantic nodes one label at a time.
+// This keeps Neo4j's broad multi-label retract available by default while
+// letting adapters with different label-pattern costs use the same writer seam.
+func (w *SemanticEntityWriter) WithLabelScopedRetract() *SemanticEntityWriter {
+	if w == nil {
+		return w
+	}
+	w.retractMode = semanticEntityRetractModeLabelScoped
+	return w
 }
 
 // WithEntityLabelBatchSize overrides the per-statement row batch size for one
@@ -101,11 +122,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 
 	// Build the full statement list: retract first, then all upserts.
 	var stmts []Statement
-	stmts = append(stmts, Statement{
-		Operation:  OperationCanonicalRetract,
-		Cypher:     semanticEntityRetractCypher,
-		Parameters: map[string]any{"repo_ids": repoIDs, "evidence_source": semanticEntityEvidenceSource},
-	})
+	stmts = append(stmts, w.semanticRetractStatements(repoIDs)...)
 
 	writes := 0
 	switch w.writeMode {
@@ -215,6 +232,36 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 	return reducer.SemanticEntityWriteResult{CanonicalWrites: writes}, nil
 }
 
+func (w *SemanticEntityWriter) semanticRetractStatements(repoIDs []string) []Statement {
+	if w.retractMode != semanticEntityRetractModeLabelScoped {
+		return []Statement{{
+			Operation: OperationCanonicalRetract,
+			Cypher:    semanticEntityRetractCypher,
+			Parameters: map[string]any{
+				"repo_ids":                  repoIDs,
+				"evidence_source":           semanticEntityEvidenceSource,
+				StatementMetadataSummaryKey: semanticEntityRetractStatementSummary("all", repoIDs),
+			},
+		}}
+	}
+
+	plans := semanticEntityPlans()
+	stmts := make([]Statement, 0, len(plans))
+	for _, plan := range plans {
+		stmts = append(stmts, Statement{
+			Operation: OperationCanonicalRetract,
+			Cypher:    semanticEntityLabelRetractCypher(plan.label),
+			Parameters: map[string]any{
+				"repo_ids":                      repoIDs,
+				"evidence_source":               semanticEntityEvidenceSource,
+				StatementMetadataEntityLabelKey: plan.label,
+				StatementMetadataSummaryKey:     semanticEntityRetractStatementSummary(plan.label, repoIDs),
+			},
+		})
+	}
+	return stmts
+}
+
 func newSemanticRowsByLabel() map[string][]map[string]any {
 	return map[string][]map[string]any{
 		"Annotation":             nil,
@@ -291,6 +338,10 @@ func semanticEntityStatementSummary(label string, rows []map[string]any) string 
 	firstID := rows[0]["entity_id"]
 	lastID := rows[len(rows)-1]["entity_id"]
 	return fmt.Sprintf("semantic label=%s rows=%d first_id=%v last_id=%v", label, len(rows), firstID, lastID)
+}
+
+func semanticEntityRetractStatementSummary(label string, repoIDs []string) string {
+	return fmt.Sprintf("semantic_retract label=%s repo_ids=%d", label, len(repoIDs))
 }
 
 func semanticEntityProperties(rowMap map[string]any) map[string]any {

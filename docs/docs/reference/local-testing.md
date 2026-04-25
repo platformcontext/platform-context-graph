@@ -166,7 +166,7 @@ export PCG_NORNICDB_FILE_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10,K8sResource=5
-export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=5
+export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=1
 export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Function=15,Variable=10
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
 ./go/bin/pcg graph start --workspace-root "$PWD"
@@ -231,7 +231,7 @@ resources in one file, so a statement cap alone can still leave one large
 file-scoped statement.
 If those row caps are already narrow but the grouped entity chunks are still
 too large, use
-`PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=5`
+`PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=1`
 to shrink only the grouped transaction size for those heavier families without
 forcing the same statement cap onto every other entity label.
 Reducer-owned semantic entity materialization has its own high-cardinality
@@ -241,6 +241,10 @@ parser-enriched semantic labels such as `Function` and `Variable`. Use
 that reducer domain times out; NornicDB semantic writes use the same row-map
 merge shape as the canonical hot path, and timeout errors include the semantic
 label and row count that tripped the deadline.
+Semantic retract is a separate reducer-owned cleanup step. Neo4j keeps the
+single broad multi-label retract; NornicDB uses one label-scoped retract per
+semantic label because repo-scale timing showed the broad shape can scan and
+timeout even when the write rows are otherwise bounded.
 When you are tuning repo-scale entity projection, do not decide from one scary
 chunk log alone. NornicDB currently uses a file-scoped combined entity write
 because its current binary does not correctly preserve row-bound identity in

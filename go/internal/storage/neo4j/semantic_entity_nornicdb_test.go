@@ -99,3 +99,65 @@ func TestSemanticEntityWriterWithParameterizedRowsAvoidsInlineSemanticMetadata(t
 		t.Fatalf("properties[class_context] = %#v, want %#v", got, want)
 	}
 }
+
+func TestSemanticEntityWriterWithLabelScopedRetractSplitsBroadRetractByLabel(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewSemanticEntityWriterWithBatchedProperties(executor, 100).WithLabelScopedRetract()
+
+	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs: []string{"repo-1"},
+		Rows: []reducer.SemanticEntityRow{
+			semanticNornicDBFunctionRow("function-go-1"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+	if got, want := result.CanonicalWrites, 1; got != want {
+		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
+	}
+
+	plans := semanticEntityPlans()
+	if got, want := len(executor.calls), len(plans)+1; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+	for i, plan := range plans {
+		stmt := executor.calls[i]
+		if stmt.Operation != OperationCanonicalRetract {
+			t.Fatalf("call[%d].Operation = %q, want %q", i, stmt.Operation, OperationCanonicalRetract)
+		}
+		if strings.Contains(stmt.Cypher, "|") {
+			t.Fatalf("call[%d].Cypher = %q, want label-scoped retract without pipe labels", i, stmt.Cypher)
+		}
+		if !strings.Contains(stmt.Cypher, "MATCH (n:"+plan.label+")") {
+			t.Fatalf("call[%d].Cypher = %q, want label %q", i, stmt.Cypher, plan.label)
+		}
+		if got, want := stmt.Parameters[StatementMetadataEntityLabelKey], plan.label; got != want {
+			t.Fatalf("call[%d] label metadata = %#v, want %#v", i, got, want)
+		}
+	}
+
+	upsert := executor.calls[len(plans)]
+	if upsert.Operation != OperationCanonicalUpsert {
+		t.Fatalf("last call Operation = %q, want %q", upsert.Operation, OperationCanonicalUpsert)
+	}
+	if got, want := upsert.Parameters[StatementMetadataEntityLabelKey], "Function"; got != want {
+		t.Fatalf("upsert label metadata = %#v, want %#v", got, want)
+	}
+}
+
+func semanticNornicDBFunctionRow(id string) reducer.SemanticEntityRow {
+	return reducer.SemanticEntityRow{
+		RepoID:       "repo-1",
+		EntityID:     id,
+		EntityType:   "Function",
+		EntityName:   id,
+		FilePath:     "/repo/main.go",
+		RelativePath: "main.go",
+		Language:     "go",
+		StartLine:    1,
+		EndLine:      2,
+	}
+}

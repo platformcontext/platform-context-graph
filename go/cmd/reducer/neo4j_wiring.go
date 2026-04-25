@@ -356,7 +356,7 @@ func semanticEntityWriterForGraphBackend(
 		// as Neo4j, but the per-field SET/coalesce form routes through a slow
 		// generic path. Keep semantic writes on the proven row-properties hot
 		// path while preserving smaller row caps for high-cardinality labels.
-		writer = sourceneo4j.NewSemanticEntityWriterWithBatchedProperties(executor, batchSize)
+		writer = sourceneo4j.NewSemanticEntityWriterWithBatchedProperties(executor, batchSize).WithLabelScopedRetract()
 		labelBatchSizes, err := nornicDBSemanticEntityLabelBatchSizes(getenv, effectiveNeo4jBatchSize(batchSize))
 		if err != nil {
 			return nil, err
