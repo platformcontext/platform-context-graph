@@ -961,7 +961,7 @@ func TestCanonicalNodeWriterBatchesCurrentFileStructuralEdgeRefresh(t *testing.T
 	t.Parallel()
 
 	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
-	files := make([]projector.FileRow, canonicalNodeRefreshFilePathBatchSize+1)
+	files := make([]projector.FileRow, canonicalNodeRefreshFileEntityPathBatchSize+1)
 	for i := range files {
 		files[i] = projector.FileRow{Path: "/repos/my-repo/file-" + string(rune('a'+i%26))}
 	}
@@ -985,9 +985,9 @@ func TestCanonicalNodeWriterBatchesCurrentFileStructuralEdgeRefresh(t *testing.T
 		if !ok {
 			t.Fatalf("refresh[%d] file_paths type = %T, want []string", i, stmt.Parameters["file_paths"])
 		}
-		if len(paths) > canonicalNodeRefreshFilePathBatchSize {
+		if len(paths) > canonicalNodeRefreshFileEntityPathBatchSize {
 			t.Fatalf("refresh[%d] file_paths len = %d, want <= %d",
-				i, len(paths), canonicalNodeRefreshFilePathBatchSize)
+				i, len(paths), canonicalNodeRefreshFileEntityPathBatchSize)
 		}
 	}
 }
