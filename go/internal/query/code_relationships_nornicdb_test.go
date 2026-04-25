@@ -149,10 +149,10 @@ func TestHandleRelationshipsUsesIndexedFallbackForNornicDBDirectCalls(t *testing
 						t.Fatalf("cypher = %q, must not use broad metadata entity-id OR predicate on NornicDB", cypher)
 					}
 					switch {
-					case strings.Contains(cypher, "e.uid = $entity_id"):
+					case strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})"):
 						metadataLookups = append(metadataLookups, "uid")
 						return []map[string]any{}, nil
-					case strings.Contains(cypher, "e.id = $entity_id"):
+					case strings.Contains(cypher, "MATCH (e:Function {id: $entity_id})"):
 						metadataLookups = append(metadataLookups, "id")
 					default:
 						t.Fatalf("cypher = %q, want uid/id metadata lookup", cypher)
@@ -246,7 +246,7 @@ func TestHandleRelationshipsHydratesNornicDBPlaceholderRepoIdentityFromContent(t
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
 				switch {
 				case strings.Contains(cypher, "<-[:CONTAINS]-(f:File)"):
-					if !strings.Contains(cypher, "e.uid = $entity_id") {
+					if !strings.Contains(cypher, "MATCH (e:Function {uid: $entity_id})") {
 						t.Fatalf("cypher = %q, want indexed uid metadata lookup", cypher)
 					}
 					if strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {

@@ -134,10 +134,10 @@ func nornicDBRelationshipMetadataPredicate(
 
 func nornicDBRelationshipMetadataCypher(predicate string, entityLabel string, entityIDProperty string) string {
 	entityPattern := "(e" + nornicDBLabelPattern(entityLabel) + ")"
-	var predicates []string
-	if entityIDProperty != "" {
-		predicates = append(predicates, "e."+entityIDProperty+" = $entity_id")
+	if strings.TrimSpace(entityIDProperty) != "" {
+		entityPattern = nornicDBNodePatternWithProperty("e", entityLabel, entityIDProperty, "$entity_id")
 	}
+	var predicates []string
 	if trimmed := strings.TrimSpace(predicate); trimmed != "" {
 		predicates = append(predicates, trimmed)
 	}
