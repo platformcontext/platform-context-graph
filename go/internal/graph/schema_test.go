@@ -129,25 +129,20 @@ func TestSchemaStatementsContainsUIDConstraints(t *testing.T) {
 	stmts := SchemaStatements()
 
 	expected := []string{
-		"function_uid_unique",
-		"class_uid_unique",
-		"variable_uid_unique",
-		"typedef_uid_unique",
-		"type_alias_uid_unique",
-		"component_uid_unique",
-		"terraform_resource_uid_unique",
+		"CREATE CONSTRAINT function_uid_unique IF NOT EXISTS FOR (n:Function) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT class_uid_unique IF NOT EXISTS FOR (n:Class) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT variable_uid_unique IF NOT EXISTS FOR (n:Variable) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT typedef_uid_unique IF NOT EXISTS FOR (n:Typedef) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT type_alias_uid_unique IF NOT EXISTS FOR (n:TypeAlias) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT component_uid_unique IF NOT EXISTS FOR (n:Component) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT module_uid_unique IF NOT EXISTS FOR (n:Module) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT impl_block_uid_unique IF NOT EXISTS FOR (n:ImplBlock) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT protocol_uid_unique IF NOT EXISTS FOR (n:Protocol) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT protocol_implementation_uid_unique IF NOT EXISTS FOR (n:ProtocolImplementation) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT terraform_resource_uid_unique IF NOT EXISTS FOR (n:TerraformResource) REQUIRE n.uid IS UNIQUE",
 	}
 	for _, want := range expected {
-		found := false
-		for _, stmt := range stmts {
-			if strings.Contains(stmt, want) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("SchemaStatements() missing UID constraint containing %q", want)
-		}
+		assertContainsStatement(t, stmts, want)
 	}
 }
 
@@ -204,6 +199,10 @@ func TestEnsureSchemaWithBackendExecutesNornicDBStatements(t *testing.T) {
 	}
 
 	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT function_uid_unique IF NOT EXISTS FOR (n:Function) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT module_uid_unique IF NOT EXISTS FOR (n:Module) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT impl_block_uid_unique IF NOT EXISTS FOR (n:ImplBlock) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT protocol_uid_unique IF NOT EXISTS FOR (n:Protocol) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT protocol_implementation_uid_unique IF NOT EXISTS FOR (n:ProtocolImplementation) REQUIRE n.uid IS UNIQUE")
 	assertNoExecutedStatementContains(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
 	assertNoExecutedStatementContains(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
 }
