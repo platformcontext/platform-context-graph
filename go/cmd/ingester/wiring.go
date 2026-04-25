@@ -37,6 +37,10 @@ const (
 	// 500-row file statements. Keep this phase narrow without lowering the
 	// global non-entity phase-group cap.
 	defaultNornicDBFilePhaseStatements = 5
+	// Some repos carry thousands of static/vendor files. Keep NornicDB file
+	// upsert row payloads bounded separately from the grouped-statement cap so
+	// one huge file statement cannot dominate a Bolt transaction.
+	defaultNornicDBFileBatchSize = 100
 	// Long-running labels such as Variable need cumulative visibility before
 	// the whole entities phase completes, otherwise tuning waits on hour-scale
 	// dogfood runs.
@@ -83,6 +87,7 @@ const (
 	nornicDBCanonicalGroupedWritesEnv               = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
 	nornicDBPhaseGroupStatementsEnv                 = "PCG_NORNICDB_PHASE_GROUP_STATEMENTS"
 	nornicDBFilePhaseGroupStatementsEnv             = "PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS"
+	nornicDBFileBatchSizeEnv                        = "PCG_NORNICDB_FILE_BATCH_SIZE"
 	nornicDBEntityPhaseStatementsEnv                = "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS"
 	nornicDBEntityBatchSizeEnv                      = "PCG_NORNICDB_ENTITY_BATCH_SIZE"
 	nornicDBEntityLabelBatchSizesEnv                = "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES"
@@ -317,6 +322,7 @@ func openIngesterCanonicalWriter(
 	nornicDBGroupedWrites := false
 	phaseGroupStatements := defaultNornicDBPhaseGroupStatements
 	filePhaseStatements := defaultNornicDBFilePhaseStatements
+	fileBatchSize := 0
 	entityPhaseStatements := defaultNornicDBEntityPhaseStatements
 	entityBatchSize := 0
 	entityLabelPhaseStatements := map[string]int(nil)
@@ -331,6 +337,10 @@ func openIngesterCanonicalWriter(
 			return nil, nil, err
 		}
 		filePhaseStatements, err = nornicDBFilePhaseGroupStatements(getenv)
+		if err != nil {
+			return nil, nil, err
+		}
+		fileBatchSize, err = nornicDBFileBatchSize(getenv)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -378,6 +388,9 @@ func openIngesterCanonicalWriter(
 		writer = writer.WithEntityBatchSize(entityBatchSize)
 	}
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		if fileBatchSize > 0 {
+			writer = writer.WithFileBatchSize(fileBatchSize)
+		}
 		if nornicDBBatchedEntityContainment {
 			writer = writer.WithBatchedEntityContainmentInEntityUpsert()
 			slog.Warn("NornicDB batched entity containment enabled for patched-binary evaluation",
@@ -1094,6 +1107,18 @@ func nornicDBFilePhaseGroupStatements(getenv func(string) string) (int, error) {
 	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 {
 		return 0, fmt.Errorf("parse %s=%q: must be a positive integer", nornicDBFilePhaseGroupStatementsEnv, raw)
+	}
+	return n, nil
+}
+
+func nornicDBFileBatchSize(getenv func(string) string) (int, error) {
+	raw := strings.TrimSpace(getenv(nornicDBFileBatchSizeEnv))
+	if raw == "" {
+		return defaultNornicDBFileBatchSize, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("parse %s=%q: must be a positive integer", nornicDBFileBatchSizeEnv, raw)
 	}
 	return n, nil
 }

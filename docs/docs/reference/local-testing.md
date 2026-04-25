@@ -160,6 +160,7 @@ export PCG_HOME=/tmp/pcg-local-authoritative-smoke
 export PCG_CANONICAL_WRITE_TIMEOUT=2s
 export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
 export PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS=5
+export PCG_NORNICDB_FILE_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10,K8sResource=5
@@ -209,6 +210,11 @@ Use `PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS` when the hotspot is the
 canonical `files` phase on repos with thousands of files; this narrows only
 file-upsert grouped transactions and leaves repository, directory, module, and
 structural-edge phases on the broader phase-group default.
+Use `PCG_NORNICDB_FILE_BATCH_SIZE` when a file-phase group is already narrow
+but one `File` upsert statement still carries too many rows. This controls the
+row count inside each `phase=files` statement, while
+`PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS` controls how many such statements
+share one grouped Bolt transaction.
 Use `PCG_NORNICDB_ENTITY_BATCH_SIZE` when the problem is the number of rows
 inside each normal batched entity upsert statement rather than the number of
 statements in a grouped transaction.
