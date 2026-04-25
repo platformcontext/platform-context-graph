@@ -1,0 +1,27 @@
+go/internal/query/code_call_chain.go
+  e27ce815bbe89792 64-79
+go/internal/query/code_call_graph_contract_test.go
+  e27ce815bbe89792 486,493-494,499-507,509-510,512-518,520,538-545,615-616,618-629,631-632,634-640,642
+go/internal/query/code_call_chain_nornicdb.go
+  e27ce815bbe89792 1-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "d4c6175afb9446f23b78a8f9472c831aac2e37fd",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 186,
+      "total_deletions": 69,
+      "accepted_lines": 210,
+      "overriden_lines": 0
+    }
+  }
+}
