@@ -61,11 +61,22 @@ func (h *CodeHandler) handleCallChain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cypher, params := buildCallChainCypher(req, h.graphBackend())
-	rows, err := h.Neo4j.Run(r.Context(), cypher, params)
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err.Error())
-		return
+	var rows []map[string]any
+	if h.graphBackend() == GraphBackendNornicDB {
+		nornicRows, err := h.nornicDBCallChainRows(r.Context(), req)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		rows = nornicRows
+	} else {
+		cypher, params := buildCallChainCypher(req, h.graphBackend())
+		neoRows, err := h.Neo4j.Run(r.Context(), cypher, params)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		rows = neoRows
 	}
 
 	chains := make([]map[string]any, 0, len(rows))

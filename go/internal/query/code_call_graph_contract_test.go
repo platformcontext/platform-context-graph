@@ -483,48 +483,41 @@ func TestHandleCallChainReturnsShortestPath(t *testing.T) {
 	}
 }
 
-func TestHandleCallChainRewritesShortestPathAnchorsForNornicDB(t *testing.T) {
+func TestHandleCallChainUsesNornicDBBFSForNameAnchors(t *testing.T) {
 	t.Parallel()
 
 	handler := &CodeHandler{
 		GraphBackend: GraphBackendNornicDB,
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if !strings.Contains(cypher, "shortestPath") {
-					t.Fatalf("cypher = %q, want shortestPath query", cypher)
-				}
-				if !strings.Contains(cypher, "MATCH (start {name: $start})") ||
-					!strings.Contains(cypher, "MATCH (end {name: $end})") {
-					t.Fatalf("cypher = %q, want property-pattern node anchors for NornicDB", cypher)
-				}
-				if strings.Contains(cypher, "WHERE start.name = $start AND end.name = $end") {
-					t.Fatalf("cypher = %q, must not use post-MATCH name WHERE anchors for NornicDB", cypher)
-				}
-				if !strings.Contains(cypher, "RETURN nodes(path) as chain") {
-					t.Fatalf("cypher = %q, want raw node-path projection for NornicDB", cypher)
+				if strings.Contains(cypher, "shortestPath") || strings.Contains(cypher, "CALLS*") {
+					t.Fatalf("cypher = %q, must not use NornicDB shortestPath for call-chain", cypher)
 				}
 				if strings.Contains(cypher, "CALLS_FUNCTION") {
 					t.Fatalf("cypher = %q, want canonical CALLS edges only", cypher)
 				}
-				if !strings.Contains(cypher, "[:CALLS*1..6]") {
-					t.Fatalf("cypher = %q, want bounded CALLS traversal", cypher)
+				if strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)") {
+					switch params["name"] {
+					case "wrapper":
+						return []map[string]any{{"id": "fn-1", "name": "wrapper", "labels": []any{"Function"}}}, nil
+					case "helper":
+						return []map[string]any{{"id": "fn-3", "name": "helper", "labels": []any{"Function"}}}, nil
+					default:
+						t.Fatalf("params[name] = %#v, want wrapper or helper", params["name"])
+					}
 				}
-				if got, want := params["start"], "wrapper"; got != want {
-					t.Fatalf("params[start] = %#v, want %#v", got, want)
+				if !strings.Contains(cypher, "MATCH (source:Function {uid: $source_id})-[:CALLS]->(target)") {
+					t.Fatalf("cypher = %q, want one-hop CALLS traversal", cypher)
 				}
-				if got, want := params["end"], "helper"; got != want {
-					t.Fatalf("params[end] = %#v, want %#v", got, want)
+				switch params["source_id"] {
+				case "fn-1":
+					return []map[string]any{{"id": "fn-2", "name": "delegate", "labels": []any{"Function"}}}, nil
+				case "fn-2":
+					return []map[string]any{{"id": "fn-3", "name": "helper", "labels": []any{"Function"}}}, nil
+				default:
+					return []map[string]any{}, nil
 				}
-				return []map[string]any{
-					{
-						"chain": []any{
-							map[string]any{"id": "fn-1", "name": "wrapper", "labels": []any{"Function"}},
-							map[string]any{"id": "fn-2", "name": "delegate", "labels": []any{"Function"}},
-							map[string]any{"id": "fn-3", "name": "helper", "labels": []any{"Function"}},
-						},
-						"depth": int64(2),
-					},
-				}, nil
+				return nil, nil
 			},
 		},
 	}
@@ -541,6 +534,14 @@ func TestHandleCallChainRewritesShortestPathAnchorsForNornicDB(t *testing.T) {
 
 	if got, want := w.Code, http.StatusOK; got != want {
 		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	chains, ok := resp["chains"].([]any)
+	if !ok || len(chains) != 1 {
+		t.Fatalf("resp[chains] = %#v, want one chain", resp["chains"])
 	}
 }
 
@@ -611,38 +612,34 @@ func TestHandleCallChainSupportsEntityIDAndRepoScopedLookupForNornicDB(t *testin
 		GraphBackend: GraphBackendNornicDB,
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if !strings.Contains(cypher, "MATCH (start {uid: $start_entity_id})") {
-					t.Fatalf("cypher = %q, want property-pattern start anchor for NornicDB", cypher)
+				if strings.Contains(cypher, "shortestPath") || strings.Contains(cypher, "CALLS*") {
+					t.Fatalf("cypher = %q, must not use NornicDB shortestPath for call-chain", cypher)
 				}
-				if !strings.Contains(cypher, "MATCH (end {uid: $end_entity_id})") {
-					t.Fatalf("cypher = %q, want property-pattern end anchor for NornicDB", cypher)
+				if strings.Contains(cypher, "MATCH (e") {
+					if got, want := params["repo_id"], "repo-1"; got != want {
+						t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+					}
+					switch params["entity_id"] {
+					case "fn-1":
+						return []map[string]any{{"id": "fn-1", "name": "wrapper", "labels": []any{"Function"}}}, nil
+					case "fn-3":
+						return []map[string]any{{"id": "fn-3", "name": "helper", "labels": []any{"Function"}}}, nil
+					default:
+						t.Fatalf("params[entity_id] = %#v, want fn-1 or fn-3", params["entity_id"])
+					}
 				}
-				if strings.Contains(cypher, graphEntityIDPredicate("start", "$start_entity_id")) ||
-					strings.Contains(cypher, graphEntityIDPredicate("end", "$end_entity_id")) {
-					t.Fatalf("cypher = %q, must not use post-MATCH entity-id WHERE anchors for NornicDB shortestPath", cypher)
+				if !strings.Contains(cypher, "MATCH (source:Function {uid: $source_id})-[:CALLS]->(target)") {
+					t.Fatalf("cypher = %q, want one-hop CALLS traversal", cypher)
 				}
-				if !strings.Contains(cypher, "start.repo_id = $repo_id AND end.repo_id = $repo_id") {
-					t.Fatalf("cypher = %q, want repo scoping to remain in WHERE clause", cypher)
+				switch params["source_id"] {
+				case "fn-1":
+					return []map[string]any{{"id": "fn-2", "name": "delegate", "labels": []any{"Function"}}}, nil
+				case "fn-2":
+					return []map[string]any{{"id": "fn-3", "name": "helper", "labels": []any{"Function"}}}, nil
+				default:
+					return []map[string]any{}, nil
 				}
-				if got, want := params["start_entity_id"], "fn-1"; got != want {
-					t.Fatalf("params[start_entity_id] = %#v, want %#v", got, want)
-				}
-				if got, want := params["end_entity_id"], "fn-3"; got != want {
-					t.Fatalf("params[end_entity_id] = %#v, want %#v", got, want)
-				}
-				if got, want := params["repo_id"], "repo-1"; got != want {
-					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
-				}
-				return []map[string]any{
-					{
-						"chain": []any{
-							map[string]any{"id": "fn-1", "name": "wrapper", "labels": []any{"Function"}},
-							map[string]any{"id": "fn-2", "name": "delegate", "labels": []any{"Function"}},
-							map[string]any{"id": "fn-3", "name": "helper", "labels": []any{"Function"}},
-						},
-						"depth": int64(2),
-					},
-				}, nil
+				return nil, nil
 			},
 		},
 	}
