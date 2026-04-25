@@ -121,13 +121,17 @@ func nornicDBRelationshipMetadataPredicate(
 
 func nornicDBRelationshipMetadataCypher(predicate string, entityLabel string, entityIDLookup bool) string {
 	entityPattern := "(e" + nornicDBLabelPattern(entityLabel) + ")"
+	var predicates []string
 	if entityIDLookup {
-		entityPattern = nornicDBNodePattern("e", entityLabel, "$entity_id")
+		predicates = append(predicates, graphEntityIDPredicate("e", "$entity_id"))
+	}
+	if trimmed := strings.TrimSpace(predicate); trimmed != "" {
+		predicates = append(predicates, trimmed)
 	}
 	whereClause := ""
-	if strings.TrimSpace(predicate) != "" {
+	if len(predicates) > 0 {
 		whereClause = `
-		WHERE ` + predicate
+		WHERE ` + strings.Join(predicates, " AND ")
 	}
 	return `
 		MATCH ` + entityPattern + `<-[:CONTAINS]-(f:File)
@@ -166,10 +170,13 @@ func (h *CodeHandler) nornicDBOneHopRelationships(
 func nornicDBOneHopRelationshipsCypher(entityID string, direction string, relationshipType string, entityLabel string) (string, map[string]any) {
 	params := map[string]any{"entity_id": entityID}
 	relPattern := nornicDBRelationshipPattern(relationshipType)
-	entityPattern := nornicDBNodePattern("e", entityLabel, "$entity_id")
+	entityPattern := "(e" + nornicDBLabelPattern(entityLabel) + ")"
+	entityWhere := graphEntityIDPredicate("e", "$entity_id")
 	if direction == "incoming" {
 		return `
-		MATCH (source)-[rel` + relPattern + `]->` + entityPattern + `
+		MATCH ` + entityPattern + `
+		WHERE ` + entityWhere + `
+		MATCH (source)-[rel` + relPattern + `]->(e)
 		RETURN 'incoming' as direction,
 		       type(rel) as type,
 		       rel.call_kind as call_kind,
@@ -179,7 +186,9 @@ func nornicDBOneHopRelationshipsCypher(entityID string, direction string, relati
 	`, params
 	}
 	return `
-		MATCH ` + entityPattern + `-[rel` + relPattern + `]->(target)
+		MATCH ` + entityPattern + `
+		WHERE ` + entityWhere + `
+		MATCH (e)-[rel` + relPattern + `]->(target)
 		RETURN 'outgoing' as direction,
 		       type(rel) as type,
 		       rel.call_kind as call_kind,

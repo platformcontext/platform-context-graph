@@ -106,6 +106,10 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 		if metadata := graphResultMetadata(row); len(metadata) > 0 {
 			response["metadata"] = metadata
 		}
+		if err := h.hydrateRelationshipResponseRepoIdentity(ctx, response); err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		normalizeGraphRelationships(response)
 		response = filterRelationshipResponse(response, direction, relationshipType)
 		enriched, err := h.enrichGraphSearchResultsWithContentMetadata(
@@ -160,6 +164,10 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 	if metadata := graphResultMetadata(row); len(metadata) > 0 {
 		response["metadata"] = metadata
 	}
+	if err := h.hydrateRelationshipResponseRepoIdentity(ctx, response); err != nil {
+		WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	normalizeGraphRelationships(response)
 	response = filterRelationshipResponse(response, direction, relationshipType)
 	enriched, err := h.enrichGraphSearchResultsWithContentMetadata(
@@ -175,6 +183,32 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 	}
 
 	WriteSuccess(w, r, http.StatusOK, enriched[0], BuildTruthEnvelope(h.profile(), capability, TruthBasisAuthoritativeGraph, "resolved from graph relationships"))
+}
+
+func (h *CodeHandler) hydrateRelationshipResponseRepoIdentity(ctx context.Context, response map[string]any) error {
+	if len(response) == 0 {
+		return nil
+	}
+	entityID := StringVal(response, "entity_id")
+	if entityID == "" {
+		entityID = StringVal(response, "id")
+	}
+	entity := map[string]any{
+		"id":        entityID,
+		"repo_id":   StringVal(response, "repo_id"),
+		"repo_name": StringVal(response, "repo_name"),
+		"labels":    response["labels"],
+	}
+	clearResolvedEntityRepoProjectionPlaceholders(entity)
+	if h == nil {
+		return nil
+	}
+	if err := hydrateResolvedEntityRepoIdentity(ctx, h.Neo4j, h.Content, []map[string]any{entity}); err != nil {
+		return fmt.Errorf("hydrate relationship repo identity: %w", err)
+	}
+	response["repo_id"] = StringVal(entity, "repo_id")
+	response["repo_name"] = StringVal(entity, "repo_name")
+	return nil
 }
 
 func relationshipCapability(direction, relationshipType string) string {
