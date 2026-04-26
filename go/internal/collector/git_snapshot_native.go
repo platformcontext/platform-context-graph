@@ -303,6 +303,9 @@ var defaultIgnoredExtensions = []string{
 	".min.map",
 	// Source maps
 	".map",
+	// Yarn Berry Plug'n'Play loader files are generated dependency metadata.
+	".pnp.cjs",
+	".pnp.loader.mjs",
 	// Compiled / binary artifacts commonly checked in
 	".pyc",
 	".pyo",
