@@ -52,6 +52,18 @@ func TestNornicDBCompatibilityWorkarounds(t *testing.T) {
 				name:   "multi label fulltext procedure",
 				cypher: "CALL db.index.fulltext.createNodeIndex('pcg_syntax_workaround_fulltext', ['PCGSyntaxFunction', 'PCGSyntaxClass', 'PCGSyntaxVariable'], ['name', 'source', 'docstring'])",
 			},
+			{
+				name:   "file path merge lookup index",
+				cypher: "CREATE INDEX pcg_syntax_file_path_lookup IF NOT EXISTS FOR (f:File) ON (f.path)",
+			},
+			{
+				name:   "directory path merge lookup index",
+				cypher: "CREATE INDEX pcg_syntax_directory_path_lookup IF NOT EXISTS FOR (d:Directory) ON (d.path)",
+			},
+			{
+				name:   "repository id merge lookup index",
+				cypher: "CREATE INDEX pcg_syntax_repository_id_lookup IF NOT EXISTS FOR (r:Repository) ON (r.id)",
+			},
 		}
 		runNornicDBSyntaxCases(t, ctx, driver, tests)
 	})

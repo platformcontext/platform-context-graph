@@ -126,6 +126,12 @@ If a correctly grouped `MERGE (n:<Label> {uid: row.entity_id})` statement is
 still slow at one row, check schema preconditions before tuning workers:
 NornicDB needs the matching `<Label>.uid` uniqueness constraint to use its
 schema-backed merge lookup instead of a generic label scan.
+File-phase writes have the same rule. PCG's NornicDB schema includes explicit
+property indexes for `Repository.id`, `Directory.path`, and `File.path` because
+NornicDB's `MERGE` lookup path checks property indexes before falling back to a
+label scan. If `phase=files` chunks grow steadily slower as the graph grows,
+verify these indexes were created before changing file batch sizes or write
+timeouts.
 
 Watch future heavy write families such as call edges, infra edges, and other
 shared reducer domains. If they need different treatment, add phase metadata
