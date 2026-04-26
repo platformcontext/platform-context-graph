@@ -53,6 +53,49 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBAnnotationCap(
 	}
 }
 
+func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBFunctionCap(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingReducerStatementExecutor{}
+	writer, err := semanticEntityWriterForGraphBackend(executor, 500, runtimecfg.GraphBackendNornicDB, func(string) string {
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("semanticEntityWriterForGraphBackend() error = %v", err)
+	}
+
+	rows := make([]reducer.SemanticEntityRow, 0, 11)
+	for i := 0; i < 11; i++ {
+		rows = append(rows, semanticFunctionRow(fmt.Sprintf("function-go-%03d", i)))
+	}
+	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
+		RepoIDs: []string{"repo-1"},
+		Rows:    rows,
+	})
+	if err != nil {
+		t.Fatalf("WriteSemanticEntities() error = %v", err)
+	}
+	if got, want := result.CanonicalWrites, 11; got != want {
+		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
+	}
+
+	var functionBatches []int
+	for _, call := range executor.calls {
+		if call.Operation != sourceneo4j.OperationCanonicalUpsert {
+			continue
+		}
+		label, _ := call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+		if label != "Function" {
+			continue
+		}
+		rows, _ := call.Parameters["rows"].([]map[string]any)
+		functionBatches = append(functionBatches, len(rows))
+	}
+	if got, want := intsString(functionBatches), "[10 1]"; got != want {
+		t.Fatalf("Function batch sizes = %s, want %s", got, want)
+	}
+}
+
 func semanticAnnotationRow(id string) reducer.SemanticEntityRow {
 	return reducer.SemanticEntityRow{
 		RepoID:       "repo-1",
