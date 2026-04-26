@@ -1,0 +1,29 @@
+go/internal/graph/schema.go
+  e27ce815bbe89792 137
+go/internal/graph/schema_test.go
+  e27ce815bbe89792 142,207
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 104-105,111-112
+docs/docs/reference/nornicdb-tuning.md
+  e27ce815bbe89792 104-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "4fb1341987ddfdbb2c0170ebd11b8d564fc6566f",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 11,
+      "total_deletions": 2,
+      "accepted_lines": 36,
+      "overriden_lines": 0
+    }
+  }
+}
