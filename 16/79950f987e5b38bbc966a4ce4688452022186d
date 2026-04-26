@@ -1,0 +1,77 @@
+go/internal/collector/discovery_advisory.go
+  e27ce815bbe89792 1-268
+go/cmd/bootstrap-index/main.go
+  176e1ca30a6de7be 6,11,64,160-176,195,210,387,390,452-463,493-518
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 122-128
+go/internal/collector/git_fact_builder.go
+  e27ce815bbe89792 62-66
+go/cmd/bootstrap-index/main_test.go
+  e27ce815bbe89792 8-10,612-675
+go/cmd/pcg/basic_test.go
+  e27ce815bbe89792 64-123
+go/internal/collector/git_source.go
+  176e1ca30a6de7be 61-63,722-728
+go/cmd/pcg/basic.go
+  e27ce815bbe89792 9,22-23,35,146,151-154,187,189,200-207,210
+go/internal/collector/git_snapshot_native_discovery_test.go
+  e27ce815bbe89792 397-454
+go/internal/collector/git_snapshot_native.go
+  176e1ca30a6de7be 139,141-149,192-200
+docs/docs/reference/cli-reference.md
+  e27ce815bbe89792 177,192-197
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 95-107
+go/internal/collector/service.go
+  e27ce815bbe89792 31-33
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 134-137
+docs/docs/reference/cli-indexing.md
+  e27ce815bbe89792 27-30,35-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1679950f987e5b38bbc966a4ce4688452022186d",
+  "prompts": {
+    "176e1ca30a6de7be": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dcbdc-d296-7b41-ac1c-94364162a333",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 136,
+      "total_deletions": 4,
+      "accepted_lines": 136,
+      "overriden_lines": 0
+    },
+    "861fa7aed3ff738b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dcbe8-6ffb-7632-a138-4a4a219b063e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 570,
+      "total_deletions": 9,
+      "accepted_lines": 593,
+      "overriden_lines": 0
+    }
+  }
+}
