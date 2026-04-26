@@ -44,6 +44,9 @@ type DiscoveryStats struct {
 	// FilesSkippedByExtension maps each ignored extension (e.g. ".min.js",
 	// ".pyc") to the number of files skipped.
 	FilesSkippedByExtension map[string]int
+	// FilesSkippedByContent maps content-based skip reasons (e.g.
+	// "generated-webpack") to the number of files skipped.
+	FilesSkippedByContent map[string]int
 	// FilesSkippedHidden counts files skipped because they are hidden (dot-prefixed).
 	FilesSkippedHidden int
 	// FilesSkippedGitignore counts files filtered by repo-local .gitignore rules.
@@ -64,6 +67,9 @@ func (s DiscoveryStats) TotalDirsSkipped() int {
 func (s DiscoveryStats) TotalFilesSkipped() int {
 	total := s.FilesSkippedHidden + s.FilesSkippedGitignore
 	for _, n := range s.FilesSkippedByExtension {
+		total += n
+	}
+	for _, n := range s.FilesSkippedByContent {
 		total += n
 	}
 	return total
@@ -171,6 +177,7 @@ func collectSupportedFiles(
 	stats := DiscoveryStats{
 		DirsSkippedByName:       make(map[string]int),
 		FilesSkippedByExtension: make(map[string]int),
+		FilesSkippedByContent:   make(map[string]int),
 	}
 	files := make([]string, 0)
 	if err := filepath.WalkDir(scanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
