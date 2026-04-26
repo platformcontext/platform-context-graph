@@ -102,6 +102,44 @@ func TestResolveNativeSnapshotFileSetSkipsLargeWebpackBundles(t *testing.T) {
 	}
 }
 
+func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "jquery_adapter.js"), "export function adaptJQuery() { return true; }\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "marinus", "library", "Zend", "Gdata", "GroupEntry.php"), "<?php\n/** Zend Framework */\nclass Zend_Gdata_GroupEntry {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "jquery.js"), "/* jQuery JavaScript Library v1.12.4 */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "shadowbox.js"), "/* Shadowbox.js */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "scripts", "fpdf.php"), "<?php\n/* FPDF */\n")
+
+	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		resolvedRepoRoot = repoRoot
+	}
+	registry := parser.DefaultRegistry()
+	fileSet, stats, err := resolveNativeSnapshotFileSet(resolvedRepoRoot, registry, NativeRepositorySnapshotter{}.discoveryOptions())
+	if err != nil {
+		t.Fatalf("resolveNativeSnapshotFileSet() error = %v", err)
+	}
+
+	if got, want := len(fileSet.Files), 1; got != want {
+		t.Fatalf("file count = %d, want %d; files=%v", got, want, fileSet.Files)
+	}
+	if got, want := filepath.ToSlash(fileSet.Files[0]), "src/jquery_adapter.js"; !strings.HasSuffix(got, want) {
+		t.Fatalf("indexed file = %q, want suffix %q", got, want)
+	}
+	if got := stats.FilesSkippedByContent["vendored-zend-framework"]; got != 1 {
+		t.Fatalf("FilesSkippedByContent[vendored-zend-framework] = %d, want 1", got)
+	}
+	if got := stats.FilesSkippedByContent["vendored-browser-library"]; got != 2 {
+		t.Fatalf("FilesSkippedByContent[vendored-browser-library] = %d, want 2", got)
+	}
+	if got := stats.FilesSkippedByContent["vendored-fpdf"]; got != 1 {
+		t.Fatalf("FilesSkippedByContent[vendored-fpdf] = %d, want 1", got)
+	}
+}
+
 func largeWebpackBootstrapFixture() string {
 	header := "/******/ (function(modules) { // webpackBootstrap\n" +
 		"/******/ \tvar installedModules = {};\n" +

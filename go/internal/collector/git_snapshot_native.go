@@ -452,6 +452,15 @@ func generatedNativeSnapshotSkipReason(path string) (string, bool) {
 	if isLargeWebpackBootstrapBundle(path) {
 		return "generated-webpack", true
 	}
+	if isVendoredZendFrameworkFile(path) {
+		return "vendored-zend-framework", true
+	}
+	if isVendoredBrowserLibraryFile(path) {
+		return "vendored-browser-library", true
+	}
+	if isVendoredFPDFFile(path) {
+		return "vendored-fpdf", true
+	}
 	return "", false
 }
 
@@ -479,6 +488,43 @@ func isLargeWebpackBootstrapBundle(path string) bool {
 	return strings.Contains(prefix, "webpackBootstrap") &&
 		strings.Contains(prefix, "/******/") &&
 		strings.Contains(prefix, "installedModules")
+}
+
+func isVendoredZendFrameworkFile(path string) bool {
+	normalized := filepath.ToSlash(path)
+	if !strings.Contains(normalized, "/library/Zend/") && !strings.Contains(normalized, "/Zend/") {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".php"
+}
+
+func isVendoredBrowserLibraryFile(path string) bool {
+	if ext := strings.ToLower(filepath.Ext(path)); ext != ".js" && ext != ".mjs" && ext != ".cjs" {
+		return false
+	}
+	name := strings.ToLower(filepath.Base(path))
+	switch {
+	case name == "jquery.js" || name == "jquery-ui.js":
+		return true
+	case strings.HasPrefix(name, "jquery.") || strings.HasPrefix(name, "jquery-"):
+		return true
+	case strings.HasPrefix(name, "galleria") && strings.HasSuffix(name, ".js"):
+		return true
+	case strings.HasPrefix(name, "shadowbox") && strings.HasSuffix(name, ".js"):
+		return true
+	case strings.HasPrefix(name, "sizzle") && strings.HasSuffix(name, ".js"):
+		return true
+	case strings.HasPrefix(name, "swfobject") && strings.HasSuffix(name, ".js"):
+		return true
+	default:
+		return false
+	}
+}
+
+func isVendoredFPDFFile(path string) bool {
+	name := strings.ToLower(filepath.Base(path))
+	return name == "fpdf.php"
 }
 
 func resolveNativeSnapshotFileSetForTargets(
