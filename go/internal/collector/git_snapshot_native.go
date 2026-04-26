@@ -574,7 +574,8 @@ func isVendoredPEARPhingFile(path string) bool {
 		return false
 	}
 	normalized := strings.ToLower(filepath.ToSlash(path))
-	return strings.Contains(normalized, "/pear/php/phing/")
+	return strings.Contains(normalized, "/pear/php/phing/") ||
+		strings.HasSuffix(normalized, "/pear/php/phing.php")
 }
 
 func resolveNativeSnapshotFileSetForTargets(
