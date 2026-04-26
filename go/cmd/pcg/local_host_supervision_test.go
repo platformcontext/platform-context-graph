@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os/exec"
 	"slices"
 	"strings"
@@ -253,9 +255,14 @@ func TestWaitLocalHostChildrenAllowsMCPCleanExit(t *testing.T) {
 
 func TestWaitLocalHostChildrenKeepingAllowedCleanExitsKeepsOwnerAlive(t *testing.T) {
 	originalWaitChild := localHostWaitChildProcess
+	originalLogger := slog.Default()
 	t.Cleanup(func() {
 		localHostWaitChildProcess = originalWaitChild
+		slog.SetDefault(originalLogger)
 	})
+
+	var logs bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{})))
 
 	reducerCmd := &exec.Cmd{}
 	ingesterCmd := &exec.Cmd{}
@@ -287,9 +294,73 @@ func TestWaitLocalHostChildrenKeepingAllowedCleanExitsKeepsOwnerAlive(t *testing
 		t.Fatalf("waitLocalHostChildrenKeepingAllowedCleanExits() returned early with %v, want owner to stay alive", err)
 	case <-time.After(50 * time.Millisecond):
 	}
+	if got := logs.String(); !strings.Contains(got, "local host child exited cleanly") || !strings.Contains(got, "child=pcg-ingester") {
+		t.Fatalf("allowed clean-exit log = %q, want child lifecycle message", got)
+	}
 
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("waitLocalHostChildrenKeepingAllowedCleanExits() after cancel error = %v, want nil", err)
+	}
+}
+
+func TestWaitLocalHostChildrenKeepingAllowedCleanExitsRejectsDisallowedCleanExit(t *testing.T) {
+	originalWaitChild := localHostWaitChildProcess
+	t.Cleanup(func() {
+		localHostWaitChildProcess = originalWaitChild
+	})
+
+	reducerCmd := &exec.Cmd{}
+	ingesterCmd := &exec.Cmd{}
+	localHostWaitChildProcess = func(ctx context.Context, cmd *exec.Cmd) error {
+		switch cmd {
+		case reducerCmd:
+			return nil
+		case ingesterCmd:
+			<-ctx.Done()
+			return nil
+		default:
+			t.Fatalf("unexpected child %p", cmd)
+			return nil
+		}
+	}
+
+	err := waitLocalHostChildrenKeepingAllowedCleanExits(context.Background(), []localHostChild{
+		{name: "pcg-reducer", cmd: reducerCmd},
+		{name: "pcg-ingester", cmd: ingesterCmd},
+	}, map[string]struct{}{"pcg-ingester": {}})
+	if err == nil || !strings.Contains(err.Error(), "pcg-reducer exited unexpectedly") {
+		t.Fatalf("waitLocalHostChildrenKeepingAllowedCleanExits() error = %v, want reducer unexpected-exit error", err)
+	}
+}
+
+func TestWaitLocalHostChildrenKeepingAllowedCleanExitsReturnsChildError(t *testing.T) {
+	originalWaitChild := localHostWaitChildProcess
+	t.Cleanup(func() {
+		localHostWaitChildProcess = originalWaitChild
+	})
+
+	reducerCmd := &exec.Cmd{}
+	ingesterCmd := &exec.Cmd{}
+	reducerErr := errors.New("reducer exited")
+	localHostWaitChildProcess = func(ctx context.Context, cmd *exec.Cmd) error {
+		switch cmd {
+		case reducerCmd:
+			return reducerErr
+		case ingesterCmd:
+			<-ctx.Done()
+			return nil
+		default:
+			t.Fatalf("unexpected child %p", cmd)
+			return nil
+		}
+	}
+
+	err := waitLocalHostChildrenKeepingAllowedCleanExits(context.Background(), []localHostChild{
+		{name: "pcg-reducer", cmd: reducerCmd},
+		{name: "pcg-ingester", cmd: ingesterCmd},
+	}, map[string]struct{}{"pcg-ingester": {}})
+	if err == nil || !strings.Contains(err.Error(), "pcg-reducer exited: reducer exited") {
+		t.Fatalf("waitLocalHostChildrenKeepingAllowedCleanExits() error = %v, want reducer exit error", err)
 	}
 }

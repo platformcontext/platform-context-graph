@@ -24,7 +24,8 @@ In `local_authoritative`, `pcg-ingester --watch` may exit cleanly after it has
 finished the current collection stream. That is not an owner shutdown signal:
 the local host keeps Postgres, the graph sidecar, and `pcg-reducer` alive so
 queued projection/reduction work can drain and attached CLI/MCP reads can keep
-using the workspace owner.
+using the workspace owner. The supervisor logs that allowed child exit so
+operators can distinguish intentional collection completion from owner teardown.
 
 ## Clean Shutdown
 

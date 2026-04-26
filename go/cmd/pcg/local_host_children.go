@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -104,6 +105,10 @@ func waitLocalHostChildrenKeepingAllowedCleanExits(ctx context.Context, children
 				return fmt.Errorf("%s exited: %w", exit.name, exit.err)
 			}
 			if _, ok := allowedCleanExits[exit.name]; ok {
+				slog.Info("local host child exited cleanly; keeping owner alive",
+					slog.String("child", exit.name),
+					slog.Int("remaining_children", active),
+				)
 				continue
 			}
 			cancel()
