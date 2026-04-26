@@ -11,6 +11,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
+	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 )
 
 func TestProjectorQueueClaimReturnsScopeGenerationWork(t *testing.T) {
@@ -356,6 +357,49 @@ func TestReducerQueueFailMarksRetryableErrorTerminalWhenAttemptBudgetExhausted(t
 	}
 	if got, want := db.execs[0].args[1], "reducer_failed"; got != want {
 		t.Fatalf("failure class = %v, want %v", got, want)
+	}
+}
+
+func TestReducerQueueFailClassifiesGraphWriteTimeout(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 11, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{}
+	queue := ReducerQueue{
+		db:            db,
+		LeaseOwner:    "reducer-1",
+		LeaseDuration: time.Minute,
+		RetryDelay:    2 * time.Minute,
+		MaxAttempts:   3,
+		Now:           func() time.Time { return now },
+	}
+	intent := reducer.Intent{
+		IntentID:     "intent-1",
+		AttemptCount: 1,
+	}
+	cause := fmt.Errorf("semantic materialization: %w", sourceneo4j.GraphWriteTimeoutError{
+		Operation:   "neo4j execute timed out",
+		Timeout:     30 * time.Second,
+		TimeoutHint: "PCG_CANONICAL_WRITE_TIMEOUT",
+		Summary:     "semantic label=Annotation rows=10",
+		Cause:       context.DeadlineExceeded,
+	})
+
+	if err := queue.Fail(context.Background(), intent, cause); err != nil {
+		t.Fatalf("Fail() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+	if !strings.Contains(db.execs[0].query, "status = 'dead_letter'") {
+		t.Fatalf("timeout should remain terminal, query:\n%s", db.execs[0].query)
+	}
+	if got, want := db.execs[0].args[1], "graph_write_timeout"; got != want {
+		t.Fatalf("failure class = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[3], "semantic label=Annotation rows=10"; got != want {
+		t.Fatalf("failure details = %v, want %v", got, want)
 	}
 }
 

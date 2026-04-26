@@ -412,13 +412,12 @@ func (q ProjectorQueue) Fail(
 	}
 
 	query := failProjectorWorkQuery
-	failureClass := "projection_failed"
-	sanitizedCause := sanitizeFailureText(cause.Error())
+	failureClass, failureMessage, failureDetails := queueFailureMetadata(cause, "projection_failed")
 	args := []any{
 		q.now(),
 		failureClass,
-		sanitizedCause,
-		sanitizedCause,
+		failureMessage,
+		failureDetails,
 		work.Scope.ScopeID,
 		work.Generation.GenerationID,
 		q.LeaseOwner,
@@ -430,8 +429,8 @@ func (q ProjectorQueue) Fail(
 		args = []any{
 			q.now(),
 			failureClass,
-			sanitizedCause,
-			sanitizedCause,
+			failureMessage,
+			failureDetails,
 			q.now().Add(q.retryDelay()),
 			work.Scope.ScopeID,
 			work.Generation.GenerationID,

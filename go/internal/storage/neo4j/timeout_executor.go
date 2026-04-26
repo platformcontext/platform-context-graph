@@ -15,6 +15,45 @@ type TimeoutExecutor struct {
 	TimeoutHint string
 }
 
+// GraphWriteTimeoutError marks a graph write deadline/cancellation with enough
+// context for queue failure classifiers and operator status surfaces.
+type GraphWriteTimeoutError struct {
+	Operation   string
+	Timeout     time.Duration
+	TimeoutHint string
+	Summary     string
+	Cause       error
+}
+
+func (e GraphWriteTimeoutError) Error() string {
+	prefix := e.Operation
+	if e.Timeout > 0 {
+		prefix = fmt.Sprintf("%s after %s", prefix, e.Timeout)
+	}
+	if e.TimeoutHint != "" {
+		prefix = fmt.Sprintf("%s; adjust %s to tune the graph write budget", prefix, e.TimeoutHint)
+	}
+	if e.Summary != "" {
+		return fmt.Sprintf("%s (%s): %v", prefix, e.Summary, e.Cause)
+	}
+	return fmt.Sprintf("%s: %v", prefix, e.Cause)
+}
+
+func (e GraphWriteTimeoutError) Unwrap() error {
+	return e.Cause
+}
+
+func (e GraphWriteTimeoutError) FailureClass() string {
+	return "graph_write_timeout"
+}
+
+func (e GraphWriteTimeoutError) FailureDetails() string {
+	if e.Summary == "" {
+		return e.Error()
+	}
+	return e.Summary
+}
+
 // Execute forwards the statement with an optional deadline.
 func (e TimeoutExecutor) Execute(ctx context.Context, statement Statement) error {
 	if e.Inner == nil {
@@ -89,6 +128,15 @@ func (e TimeoutExecutor) ExecuteGroup(ctx context.Context, statements []Statemen
 }
 
 func timeoutError(prefix string, timeout time.Duration, timeoutHint string, summary string, cause error) error {
+	if errors.Is(cause, context.DeadlineExceeded) {
+		return GraphWriteTimeoutError{
+			Operation:   prefix,
+			Timeout:     timeout,
+			TimeoutHint: timeoutHint,
+			Summary:     summary,
+			Cause:       cause,
+		}
+	}
 	if timeout > 0 {
 		prefix = fmt.Sprintf("%s after %s", prefix, timeout)
 	}

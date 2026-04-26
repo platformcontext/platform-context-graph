@@ -11,6 +11,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
+	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 )
 
 func TestProjectorQueueAckPromotesGenerationAndSupersedesPriorActive(t *testing.T) {
@@ -203,6 +204,38 @@ func TestProjectorQueueFailSanitizesFailureTextForPostgres(t *testing.T) {
 		if got != "badmessage" {
 			t.Fatalf("failure arg[%d] = %q, want %q", idx, got, "badmessage")
 		}
+	}
+}
+
+func TestProjectorQueueFailClassifiesGraphWriteTimeout(t *testing.T) {
+	t.Parallel()
+
+	db := &recordingExecQueryer{}
+	queue := NewProjectorQueue(db, "projector-1", 30*time.Second)
+	work := projector.ScopeGenerationWork{
+		Scope: scope.IngestionScope{ScopeID: "scope-123"},
+		Generation: scope.ScopeGeneration{
+			GenerationID: "generation-456",
+		},
+		AttemptCount: 1,
+	}
+	cause := sourceneo4j.GraphWriteTimeoutError{
+		Operation:   "neo4j execute group timed out",
+		Timeout:     30 * time.Second,
+		TimeoutHint: "PCG_CANONICAL_WRITE_TIMEOUT",
+		Summary:     "phase=files rows=100 chunk=21/24",
+		Cause:       context.DeadlineExceeded,
+	}
+
+	if err := queue.Fail(context.Background(), work, cause); err != nil {
+		t.Fatalf("Fail() error = %v, want nil", err)
+	}
+
+	if got, want := db.execs[0].args[1], "graph_write_timeout"; got != want {
+		t.Fatalf("failure class = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[3], "phase=files rows=100 chunk=21/24"; got != want {
+		t.Fatalf("failure details = %v, want %v", got, want)
 	}
 }
 

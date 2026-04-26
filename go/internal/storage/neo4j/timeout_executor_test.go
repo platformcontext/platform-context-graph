@@ -42,6 +42,47 @@ func TestTimeoutExecutorIncludesStatementSummaryOnTimeout(t *testing.T) {
 	if !strings.Contains(err.Error(), "semantic label=Variable rows=500") {
 		t.Fatalf("Execute() error = %q, want statement summary", err)
 	}
+	var timeoutErr GraphWriteTimeoutError
+	if !errors.As(err, &timeoutErr) {
+		t.Fatalf("Execute() error = %T, want GraphWriteTimeoutError", err)
+	}
+	if got, want := timeoutErr.FailureClass(), "graph_write_timeout"; got != want {
+		t.Fatalf("FailureClass() = %q, want %q", got, want)
+	}
+	if got, want := timeoutErr.FailureDetails(), "semantic label=Variable rows=500"; got != want {
+		t.Fatalf("FailureDetails() = %q, want %q", got, want)
+	}
+}
+
+func TestTimeoutExecutorGraphWriteTimeoutSurvivesWrapping(t *testing.T) {
+	t.Parallel()
+
+	executor := TimeoutExecutor{
+		Inner:   contextBlockingExecutor{},
+		Timeout: 10 * time.Millisecond,
+	}
+
+	err := executor.Execute(context.Background(), Statement{
+		Cypher: "RETURN 1",
+		Parameters: map[string]any{
+			StatementMetadataSummaryKey: "phase=files rows=100 chunk=21/24",
+		},
+	})
+	wrapped := errors.New("missing timeout")
+	if err != nil {
+		wrapped = errors.Join(errors.New("canonical phase-group write"), err)
+	}
+
+	var timeoutErr GraphWriteTimeoutError
+	if !errors.As(wrapped, &timeoutErr) {
+		t.Fatalf("wrapped error = %T %v, want GraphWriteTimeoutError", wrapped, wrapped)
+	}
+	if !errors.Is(wrapped, context.DeadlineExceeded) {
+		t.Fatalf("wrapped error = %v, want deadline exceeded", wrapped)
+	}
+	if got, want := timeoutErr.FailureDetails(), "phase=files rows=100 chunk=21/24"; got != want {
+		t.Fatalf("FailureDetails() = %q, want %q", got, want)
+	}
 }
 
 func TestTimeoutExecutorIncludesTimeoutHintOnTimeout(t *testing.T) {
