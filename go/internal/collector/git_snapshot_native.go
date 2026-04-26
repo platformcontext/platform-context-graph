@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -353,6 +354,9 @@ func (s NativeRepositorySnapshotter) logDiscoveryStats(ctx context.Context, repo
 	for ext, count := range stats.FilesSkippedByExtension {
 		attrs = append(attrs, slog.Int("files_skipped.ext"+ext, count))
 	}
+	for reason, count := range stats.FilesSkippedByContent {
+		attrs = append(attrs, slog.Int("files_skipped.content."+reason, count))
+	}
 	if stats.FilesSkippedHidden > 0 {
 		attrs = append(attrs, slog.Int("files_skipped.hidden", stats.FilesSkippedHidden))
 	}
@@ -376,6 +380,11 @@ func (s NativeRepositorySnapshotter) recordDiscoveryMetrics(ctx context.Context,
 	for ext, count := range stats.FilesSkippedByExtension {
 		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(count),
 			metric.WithAttributes(telemetry.AttrSkipReason("ext:"+ext)),
+		)
+	}
+	for reason, count := range stats.FilesSkippedByContent {
+		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(count),
+			metric.WithAttributes(telemetry.AttrSkipReason("content:"+reason)),
 		)
 	}
 	if stats.FilesSkippedHidden > 0 {
@@ -415,10 +424,61 @@ func resolveNativeSnapshotFileSet(
 	}
 	for _, fileSet := range fileSets {
 		if fileSet.RepoRoot == repoPath {
+			fileSet.Files = filterGeneratedNativeSnapshotFiles(fileSet.Files, &stats)
 			return fileSet, stats, nil
 		}
 	}
 	return discovery.RepoFileSet{RepoRoot: repoPath}, stats, nil
+}
+
+const generatedJavaScriptBundleMinBytes = 256 * 1024
+
+func filterGeneratedNativeSnapshotFiles(files []string, stats *discovery.DiscoveryStats) []string {
+	filtered := files[:0]
+	for _, path := range files {
+		if reason, ok := generatedNativeSnapshotSkipReason(path); ok {
+			if stats.FilesSkippedByContent == nil {
+				stats.FilesSkippedByContent = make(map[string]int)
+			}
+			stats.FilesSkippedByContent[reason]++
+			continue
+		}
+		filtered = append(filtered, path)
+	}
+	return filtered
+}
+
+func generatedNativeSnapshotSkipReason(path string) (string, bool) {
+	if isLargeWebpackBootstrapBundle(path) {
+		return "generated-webpack", true
+	}
+	return "", false
+}
+
+func isLargeWebpackBootstrapBundle(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext != ".js" && ext != ".cjs" && ext != ".mjs" {
+		return false
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Size() < generatedJavaScriptBundleMinBytes {
+		return false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = file.Close() }()
+
+	buf := make([]byte, 4096)
+	n, err := file.Read(buf)
+	if err != nil && n == 0 {
+		return false
+	}
+	prefix := string(buf[:n])
+	return strings.Contains(prefix, "webpackBootstrap") &&
+		strings.Contains(prefix, "/******/") &&
+		strings.Contains(prefix, "installedModules")
 }
 
 func resolveNativeSnapshotFileSetForTargets(

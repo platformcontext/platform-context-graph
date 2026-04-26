@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,4 +71,40 @@ func TestNativeRepositorySnapshotterDefaultDiscoverySkipsDependencyDirs(t *testi
 			t.Errorf("found entity %q from dependency dir; default ignored dirs not applied", entity.RelativePath)
 		}
 	}
+}
+
+func TestResolveNativeSnapshotFileSetSkipsLargeWebpackBundles(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "app.js"), "export function app() { return 'source'; }\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "app.js"), largeWebpackBootstrapFixture())
+
+	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		resolvedRepoRoot = repoRoot
+	}
+	registry := parser.DefaultRegistry()
+	fileSet, stats, err := resolveNativeSnapshotFileSet(resolvedRepoRoot, registry, NativeRepositorySnapshotter{}.discoveryOptions())
+	if err != nil {
+		t.Fatalf("resolveNativeSnapshotFileSet() error = %v", err)
+	}
+
+	if got, want := len(fileSet.Files), 1; got != want {
+		t.Fatalf("file count = %d, want %d; files=%v", got, want, fileSet.Files)
+	}
+	if got, want := filepath.ToSlash(fileSet.Files[0]), "src/app.js"; !strings.HasSuffix(got, want) {
+		t.Fatalf("indexed file = %q, want suffix %q", got, want)
+	}
+	if got := stats.FilesSkippedByContent["generated-webpack"]; got != 1 {
+		t.Fatalf("FilesSkippedByContent[generated-webpack] = %d, want 1", got)
+	}
+}
+
+func largeWebpackBootstrapFixture() string {
+	header := "/******/ (function(modules) { // webpackBootstrap\n" +
+		"/******/ \tvar installedModules = {};\n" +
+		"/******/ \tfunction __webpack_require__(moduleId) { return modules[moduleId]; }\n"
+	return header + strings.Repeat("var generatedBundleChunk = 1;\n", 12000)
 }
