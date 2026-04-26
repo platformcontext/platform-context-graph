@@ -27,7 +27,7 @@ import (
 const (
 	ingesterCollectorPollInterval        = time.Second
 	ingesterConnectionTimeout            = 10 * time.Second
-	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
+	defaultNornicDBCanonicalWriteTimeout = 30 * time.Second
 	defaultNornicDBPhaseGroupStatements  = 500
 	// Entity statements carry the heaviest canonical payloads on the current
 	// self-repo dogfood lane, so NornicDB needs a lower grouped-transaction cap

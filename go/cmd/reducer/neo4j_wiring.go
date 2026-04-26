@@ -19,7 +19,7 @@ import (
 
 const (
 	reducerNeo4jCloseTimeout             = 10 * time.Second
-	defaultNornicDBCanonicalWriteTimeout = 15 * time.Second
+	defaultNornicDBCanonicalWriteTimeout = 30 * time.Second
 	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
 	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
 	nornicDBSemanticEntityLabelBatchEnv  = "PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES"
