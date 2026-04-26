@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -121,6 +122,9 @@ func renderLocalHostProgressSnapshot(
 		report.Queue.Failed,
 		localHostProgressAge(report.Queue.OldestOutstandingAge),
 	)
+	if latestFailure := localHostProgressFailureText(report.LatestQueueFailure); latestFailure != "" {
+		fmt.Fprintf(&builder, "  Latest failure: %s\n", latestFailure)
+	}
 	return builder.String()
 }
 
@@ -190,6 +194,18 @@ func localHostProgressFingerprint(
 			localHostProgressAgeBucket(row.OldestAge),
 		)
 	}
+	if failure := report.LatestQueueFailure; failure != nil {
+		fmt.Fprintf(
+			&builder,
+			"%s|%s|%s|%s|%s|%s|",
+			failure.Stage,
+			failure.Domain,
+			failure.Status,
+			failure.FailureClass,
+			failure.FailureMessage,
+			failure.FailureDetails,
+		)
+	}
 	fmt.Fprintf(
 		&builder,
 		"%d|%d|%d|%d|%d|%d",
@@ -224,4 +240,32 @@ func appendNamedCountMap(builder *strings.Builder, counts map[string]int) {
 	for _, key := range keys {
 		fmt.Fprintf(builder, "%s=%d|", key, counts[key])
 	}
+}
+
+func localHostProgressFailureText(failure *statuspkg.QueueFailureSnapshot) string {
+	if failure == nil {
+		return ""
+	}
+	parts := []string{
+		fmt.Sprintf("stage=%s", failure.Stage),
+		fmt.Sprintf("domain=%s", failure.Domain),
+		fmt.Sprintf("status=%s", failure.Status),
+		fmt.Sprintf("class=%s", failure.FailureClass),
+	}
+	if message := localHostProgressBoundedText(failure.FailureMessage); message != "" {
+		parts = append(parts, fmt.Sprintf("message=%s", strconv.Quote(message)))
+	}
+	if details := localHostProgressBoundedText(failure.FailureDetails); details != "" {
+		parts = append(parts, fmt.Sprintf("details=%s", strconv.Quote(details)))
+	}
+	return strings.Join(parts, " ")
+}
+
+func localHostProgressBoundedText(value string) string {
+	const limit = 240
+	value = strings.TrimSpace(value)
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
 }

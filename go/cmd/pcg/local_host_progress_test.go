@@ -39,6 +39,14 @@ func TestRenderLocalHostProgressSnapshotIncludesOwnerFlowAndQueue(t *testing.T) 
 				Failed:               0,
 				OldestOutstandingAge: 5*time.Minute + 2*time.Second,
 			},
+			LatestQueueFailure: &statuspkg.QueueFailureSnapshot{
+				Stage:          "reducer",
+				Domain:         "code_call_materialization",
+				Status:         "retrying",
+				FailureClass:   "graph_write_timeout",
+				FailureMessage: "neo4j execute group timed out after 2s",
+				FailureDetails: "phase=semantic label=Variable rows=500",
+			},
 		},
 	)
 
@@ -50,6 +58,8 @@ func TestRenderLocalHostProgressSnapshotIncludesOwnerFlowAndQueue(t *testing.T) 
 		"Projector: progress=stage running=2 | backlog=queue outstanding=6",
 		"Reducer: progress=stage retrying=1 | backlog=top domain code_call_materialization outstanding=4",
 		"Queue: pending=3 in_flight=2 retrying=1 dead_letter=0 failed=0 oldest=5m2s",
+		"Latest failure: stage=reducer domain=code_call_materialization status=retrying class=graph_write_timeout",
+		"message=\"neo4j execute group timed out after 2s\" details=\"phase=semantic label=Variable rows=500\"",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered progress missing %q in %q", want, rendered)
@@ -112,6 +122,19 @@ func TestLocalHostProgressFingerprintIgnoresAsOfAndBucketsAge(t *testing.T) {
 	nextBucket.Queue.OldestOutstandingAge = 61 * time.Second
 	if got, want := localHostProgressFingerprint("/workspace/repo", runtimeConfig, nextBucket), localHostProgressFingerprint("/workspace/repo", runtimeConfig, base); got == want {
 		t.Fatal("progress fingerprint stayed the same across a new age bucket")
+	}
+
+	withFailure := base
+	withFailure.LatestQueueFailure = &statuspkg.QueueFailureSnapshot{
+		Stage:          "reducer",
+		Domain:         "code_call_materialization",
+		Status:         "retrying",
+		FailureClass:   "graph_write_timeout",
+		FailureMessage: "neo4j execute group timed out after 2s",
+		FailureDetails: "phase=semantic label=Variable rows=500",
+	}
+	if got, want := localHostProgressFingerprint("/workspace/repo", runtimeConfig, withFailure), localHostProgressFingerprint("/workspace/repo", runtimeConfig, base); got == want {
+		t.Fatal("progress fingerprint stayed the same after latest failure details changed")
 	}
 }
 

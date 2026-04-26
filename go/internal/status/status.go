@@ -54,6 +54,22 @@ type QueueSnapshot struct {
 	OverdueClaims        int
 }
 
+// QueueFailureSnapshot captures the newest queued work failure metadata shown
+// on operator status surfaces. Values are rendered only in status payloads and
+// must not be promoted to metric labels.
+type QueueFailureSnapshot struct {
+	Stage          string
+	Domain         string
+	Status         string
+	WorkItemID     string
+	ScopeID        string
+	GenerationID   string
+	FailureClass   string
+	FailureMessage string
+	FailureDetails string
+	UpdatedAt      time.Time
+}
+
 // DomainBacklog captures backlog depth for one reducer or projection domain.
 type DomainBacklog struct {
 	Domain      string
@@ -76,6 +92,7 @@ type RawSnapshot struct {
 	DomainBacklogs        []DomainBacklog
 	RetryPolicies         []RetryPolicySummary
 	Queue                 QueueSnapshot
+	LatestQueueFailure    *QueueFailureSnapshot
 	Coordinator           *CoordinatorSnapshot
 }
 
@@ -122,6 +139,7 @@ type Report struct {
 	GenerationTotals      map[string]int
 	StageSummaries        []StageSummary
 	DomainBacklogs        []DomainBacklog
+	LatestQueueFailure    *QueueFailureSnapshot
 	Coordinator           *CoordinatorSnapshot
 }
 
@@ -188,6 +206,7 @@ func BuildReport(raw RawSnapshot, opts Options) Report {
 		GenerationTotals:      generationTotals,
 		StageSummaries:        stageSummaries,
 		DomainBacklogs:        domainBacklogs,
+		LatestQueueFailure:    cloneQueueFailure(raw.LatestQueueFailure),
 		Coordinator:           cloneCoordinatorSnapshot(raw.Coordinator),
 	}
 }
@@ -233,6 +252,9 @@ func RenderText(report Report) string {
 
 	if len(report.Health.Reasons) > 0 {
 		lines = append(lines, fmt.Sprintf("Reasons: %s", strings.Join(report.Health.Reasons, "; ")))
+	}
+	if latestFailure := queueFailureText(report.LatestQueueFailure); latestFailure != "" {
+		lines = append(lines, fmt.Sprintf("Latest queue failure: %s", latestFailure))
 	}
 	lines = append(lines, renderCoordinatorLines(report.Coordinator)...)
 	lines = append(lines, renderFlowLines(report.FlowSummaries)...)

@@ -204,6 +204,8 @@ func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...a
 		return newProofRows([][]any{
 			proofQueueSnapshotRow(db.state.workItems, args[0].(time.Time)),
 		}), nil
+	case strings.Contains(query, "COALESCE(failure_details, '') AS failure_details"):
+		return newProofRows(nil), nil
 	case strings.Contains(query, "FROM fact_records"):
 		if len(args) != 2 {
 			return nil, fmt.Errorf("list facts args = %d, want 2", len(args))
