@@ -40,6 +40,11 @@ Two knobs often look similar but are different:
 Use the timeout summary and `nornicdb entity label summary` logs to decide
 which dimension failed.
 
+PCG applies `PCG_CANONICAL_WRITE_TIMEOUT` in two places on NornicDB: the
+client context deadline and the Neo4j-driver Bolt `tx_timeout` metadata. Keep
+both sides aligned so a timed-out reducer or ingester write does not merely
+stop waiting while the database keeps executing the same mutation.
+
 ## Semantic Write Budget
 
 | Variable | Default | Scope | Use |
