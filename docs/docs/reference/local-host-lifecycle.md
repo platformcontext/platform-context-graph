@@ -20,6 +20,12 @@ Step 5 is skipped entirely on `local_lightweight`. The graph sidecar is
 configured and installed independently of the PCG binary; see
 `graph-backend-installation.md` and `graph-backend-operations.md`.
 
+In `local_authoritative`, `pcg-ingester --watch` may exit cleanly after it has
+finished the current collection stream. That is not an owner shutdown signal:
+the local host keeps Postgres, the graph sidecar, and `pcg-reducer` alive so
+queued projection/reduction work can drain and attached CLI/MCP reads can keep
+using the workspace owner.
+
 ## Clean Shutdown
 
 1. stop accepting new work

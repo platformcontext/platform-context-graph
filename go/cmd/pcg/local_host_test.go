@@ -346,6 +346,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 	originalHostname := localHostHostname
 	originalStartChild := localHostStartChildProcess
 	originalWaitManagedChildren := localHostWaitManagedChildren
+	originalWaitOwnerChildren := localHostWaitOwnerChildren
 	originalApplyBootstrap := localHostApplyBootstrap
 	originalApplyGraphBootstrap := localHostApplyGraphBootstrap
 	t.Cleanup(func() {
@@ -356,6 +357,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 		localHostHostname = originalHostname
 		localHostStartChildProcess = originalStartChild
 		localHostWaitManagedChildren = originalWaitManagedChildren
+		localHostWaitOwnerChildren = originalWaitOwnerChildren
 		localHostApplyBootstrap = originalApplyBootstrap
 		localHostApplyGraphBootstrap = originalApplyGraphBootstrap
 	})
@@ -429,6 +431,9 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 		return &exec.Cmd{}, nil
 	}
 	localHostWaitManagedChildren = func(ctx context.Context, children []localHostChild, allowCleanExit string) error {
+		return nil
+	}
+	localHostWaitOwnerChildren = func(ctx context.Context, children []localHostChild, allowedCleanExits map[string]struct{}) error {
 		return nil
 	}
 

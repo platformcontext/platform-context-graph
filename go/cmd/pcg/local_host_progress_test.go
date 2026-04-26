@@ -125,6 +125,7 @@ func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testi
 	originalHostname := localHostHostname
 	originalStartChild := localHostStartChildProcess
 	originalWaitManagedChildren := localHostWaitManagedChildren
+	originalWaitOwnerChildren := localHostWaitOwnerChildren
 	originalApplyBootstrap := localHostApplyBootstrap
 	originalApplyGraphBootstrap := localHostApplyGraphBootstrap
 	originalStartProgressReporter := localHostStartProgressReporter
@@ -136,6 +137,7 @@ func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testi
 		localHostHostname = originalHostname
 		localHostStartChildProcess = originalStartChild
 		localHostWaitManagedChildren = originalWaitManagedChildren
+		localHostWaitOwnerChildren = originalWaitOwnerChildren
 		localHostApplyBootstrap = originalApplyBootstrap
 		localHostApplyGraphBootstrap = originalApplyGraphBootstrap
 		localHostStartProgressReporter = originalStartProgressReporter
@@ -204,6 +206,9 @@ func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testi
 	}
 
 	localHostWaitManagedChildren = func(ctx context.Context, children []localHostChild, allowCleanExit string) error {
+		return nil
+	}
+	localHostWaitOwnerChildren = func(ctx context.Context, children []localHostChild, allowedCleanExits map[string]struct{}) error {
 		return nil
 	}
 

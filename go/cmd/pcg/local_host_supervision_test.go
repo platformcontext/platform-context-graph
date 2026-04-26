@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
@@ -22,6 +23,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 	originalHostname := localHostHostname
 	originalStartChild := localHostStartChildProcess
 	originalWaitManagedChildren := localHostWaitManagedChildren
+	originalWaitOwnerChildren := localHostWaitOwnerChildren
 	originalApplyBootstrap := localHostApplyBootstrap
 	originalApplyGraphBootstrap := localHostApplyGraphBootstrap
 	t.Cleanup(func() {
@@ -32,6 +34,7 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 		localHostHostname = originalHostname
 		localHostStartChildProcess = originalStartChild
 		localHostWaitManagedChildren = originalWaitManagedChildren
+		localHostWaitOwnerChildren = originalWaitOwnerChildren
 		localHostApplyBootstrap = originalApplyBootstrap
 		localHostApplyGraphBootstrap = originalApplyGraphBootstrap
 	})
@@ -81,12 +84,12 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 	}
 
 	var waited []string
-	var expectedCleanExit string
-	localHostWaitManagedChildren = func(ctx context.Context, children []localHostChild, allowCleanExit string) error {
+	var allowedCleanExit bool
+	localHostWaitOwnerChildren = func(ctx context.Context, children []localHostChild, allowedCleanExits map[string]struct{}) error {
 		for _, child := range children {
 			waited = append(waited, child.name)
 		}
-		expectedCleanExit = allowCleanExit
+		_, allowedCleanExit = allowedCleanExits["pcg-ingester"]
 		return nil
 	}
 
@@ -109,8 +112,8 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 	if !slices.Equal(waited, wantChildren) {
 		t.Fatalf("waited children = %#v, want %#v", waited, wantChildren)
 	}
-	if expectedCleanExit != "" {
-		t.Fatalf("allowCleanExit = %q, want empty", expectedCleanExit)
+	if !allowedCleanExit {
+		t.Fatal("allowedCleanExits missing pcg-ingester")
 	}
 }
 
@@ -245,5 +248,48 @@ func TestWaitLocalHostChildrenAllowsMCPCleanExit(t *testing.T) {
 	}, "pcg-mcp-server")
 	if err != nil {
 		t.Fatalf("waitLocalHostChildren() error = %v, want nil", err)
+	}
+}
+
+func TestWaitLocalHostChildrenKeepingAllowedCleanExitsKeepsOwnerAlive(t *testing.T) {
+	originalWaitChild := localHostWaitChildProcess
+	t.Cleanup(func() {
+		localHostWaitChildProcess = originalWaitChild
+	})
+
+	reducerCmd := &exec.Cmd{}
+	ingesterCmd := &exec.Cmd{}
+	localHostWaitChildProcess = func(ctx context.Context, cmd *exec.Cmd) error {
+		switch cmd {
+		case ingesterCmd:
+			return nil
+		case reducerCmd:
+			<-ctx.Done()
+			return nil
+		default:
+			t.Fatalf("unexpected child %p", cmd)
+			return nil
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- waitLocalHostChildrenKeepingAllowedCleanExits(ctx, []localHostChild{
+			{name: "pcg-reducer", cmd: reducerCmd},
+			{name: "pcg-ingester", cmd: ingesterCmd},
+		}, map[string]struct{}{"pcg-ingester": {}})
+	}()
+
+	select {
+	case err := <-done:
+		t.Fatalf("waitLocalHostChildrenKeepingAllowedCleanExits() returned early with %v, want owner to stay alive", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("waitLocalHostChildrenKeepingAllowedCleanExits() after cancel error = %v, want nil", err)
 	}
 }
