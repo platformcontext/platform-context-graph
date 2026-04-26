@@ -19,6 +19,20 @@
 3. **Speed:** use batched reference extraction, batched fact writes, and bounded graph traversals.
 4. **Instrumentation:** every parser, reducer, and query phase emits operator-visible spans, counters, histograms, and structured limitations.
 
+## Rigor Addendum
+
+**Current flow:** parsers and content relationship builders emit IaC reference evidence; facts persist by repo and generation; reducer materializes usage edges after generation-scoped readiness; query, MCP, CLI, and future UI consumers read deadness, integrity, relationships, and refactor impact with truth labels.
+
+**Shared state:** IaC fact tables, reducer queues, graph projection readiness rows, source spans, generated renderer artifacts when enabled, graph edges, OpenAPI schemas, and telemetry instruments.
+
+**Transaction and retry boundaries:** parser extraction is deterministic and side-effect free; fact writes are idempotent per repo/generation/source selector; reducer claims are partitioned by repo/generation/family; graph writes occur after fact persistence. Retries must preserve stable IDs and must not mark a stale generation as current.
+
+**Deadlock, race, and ordering hazards:** avoid global reducer locks, mixed-generation reads, duplicate materialization from parser and content evidence, renderer output racing with parser-only results, and claim ordering that conflicts with other reducer domains. Preserve concurrency by processing unrelated repo/generation/family partitions independently.
+
+**Edge cases:** dynamic HCL expressions, remote modules, missing local paths, renderer unavailable, partial renderer failure, stale generations, duplicate references, ambiguous roots, generated files, deleted targets, optional resources, provider-specific semantics, and unsupported graph adapters.
+
+**Observability contract:** operators must see extraction counts, unresolved references, stale generation skips, reducer claim lag, queue depth, materialization latency, partial renderer coverage, high-fanout traversal, truncation, unsupported capability, and error class without file path or resource name labels.
+
 ## Assumptions
 
 1. Phase 0 neighborhood work can start with existing code and content relationships, but exact IaC deadness waits for durable usage facts.
@@ -86,22 +100,32 @@
 ## Task 4: Persist And Resolve IaC Usage Edges
 
 **Files:**
+- Create: `schema/data-plane/postgres/016_iac_usage_facts.sql`
+- Modify: `go/internal/storage/postgres/schema.go`
 - Create: `go/internal/storage/postgres/iac_usage_facts.go`
 - Create: `go/internal/storage/postgres/iac_usage_facts_test.go`
 - Create: `go/internal/reducer/iac_usage_materialization.go`
 - Create: `go/internal/reducer/iac_usage_materialization_test.go`
 - Modify: `go/internal/reducer/defaults.go`
 - Modify: `go/cmd/reducer/main.go`
+- Modify: `go/internal/telemetry/instruments.go`
+- Modify: `go/internal/telemetry/instruments_test.go`
+- Modify: `go/internal/telemetry/contract.go`
+- Modify: `go/internal/telemetry/contract_test.go`
 
 1. Write failing Postgres tests for idempotent upsert, generation scoping, and batched lookup.
    -> verify: `cd go && go test ./internal/storage/postgres -run 'TestIaCUsage' -count=1` fails.
 2. Write failing reducer tests for concurrent-safe materialization across distinct repo/generation partitions.
    -> verify: `cd go && go test ./internal/reducer -run 'TestIaCUsage' -count=1` fails.
-3. Implement batched fact persistence and reducer materialization without global locks.
+3. Add durable schema support for IaC usage facts, finding facts, source spans, generation scope, and idempotent stable IDs.
+   -> verify: storage tests cover migrations, duplicate writes, generation filtering, and lookup pagination.
+4. Implement batched fact persistence and reducer materialization without global locks.
    -> verify: focused storage and reducer tests pass.
-4. Add reducer spans, duration histograms, extracted/resolved/unresolved counters, and failure-class logs.
+5. Add claim ordering by repo, generation, and family; skip stale generations explicitly instead of overwriting newer graph state.
+   -> verify: reducer tests cover stale-generation skip, retry idempotency, and parallel unrelated partitions.
+6. Add reducer spans, duration histograms, extracted/resolved/unresolved counters, queue lag, claim lag, high-fanout counters, and failure-class logs.
    -> verify: observability tests assert metric names and low-cardinality labels.
-5. Commit.
+7. Commit.
    -> verify: `cd go && go test ./internal/storage/postgres ./internal/reducer -run 'IaCUsage|Observability' -count=1`.
 
 ## Task 5: Add Dead IaC, Integrity, And Refactor Impact Queries
@@ -118,9 +142,11 @@
    -> verify: `cd go && go test ./internal/query -run 'TestIaCUsage' -count=1` fails.
 2. Implement handlers behind graph/query ports, returning unsupported capability envelopes when graph support is unavailable.
    -> verify: focused query tests pass.
-3. Add OpenAPI and docs examples.
+3. Return structured partial responses for unsupported graph capabilities, renderer gaps, timeout/cancellation, stale generation, and missing local paths.
+   -> verify: query tests assert `partial`, `limitations`, `error_class`, and conservative deadness behavior.
+4. Add OpenAPI and docs examples.
    -> verify: `cd go && go test ./internal/query -run 'TestServeOpenAPI|TestIaCUsage' -count=1`.
-4. Commit.
+5. Commit.
    -> verify: docs and query tests pass after commit.
 
 ## Task 6: MCP, CLI, And Local-Authoritative Proof

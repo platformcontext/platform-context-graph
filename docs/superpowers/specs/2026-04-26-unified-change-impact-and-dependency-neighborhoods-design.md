@@ -133,6 +133,19 @@ changed files/ranges -> resolved subjects -> merged neighborhoods -> impact
 summary -> review findings
 ```
 
+Diff input must support staged, unstaged, all, and compare/base-ref scopes. When
+the input is a unified diff, the first implementation should parse zero-context
+hunks and resolve impacted entities by explicit line-range overlap:
+
+```text
+entity.start_line <= hunk.end && entity.end_line >= hunk.start
+```
+
+File-only fallback is allowed for deletes, renames, binary files, untracked
+files, or missing source spans, but the response must label those cases as
+partial or derived. Large diffs must be bounded, and skipped files must be
+reported rather than silently ignored.
+
 The diff workflow should classify changes into:
 
 1. source code entities
@@ -173,6 +186,12 @@ The same response should power:
 5. Refactor tooling: rename, move, delete, and extraction preflight checks.
 6. Cleanup workflows: dead-code and dead-IaC evidence review.
 
+Agent and automation consumers should treat the route as a guardrail: inspect
+neighborhood or impact before symbol, file, contract, or IaC edits, and run
+diff-aware impact before commit or PR. High, unknown, stale, or partial risk
+should be visible in the response so agents do not proceed from a false sense of
+safety.
+
 ### 5. Telemetry
 
 Add query telemetry that answers:
@@ -209,6 +228,9 @@ not metric labels.
 4. Truncated paths report truncation counts and depth limits.
 5. Source-content misses keep graph edges visible and mark content evidence as
    unavailable.
+6. Reader leg failures, timeouts, stale generations, unsupported diff inputs,
+   and skipped high-fanout expansions return structured partial results with an
+   error class and affected response section.
 
 ## Testing Strategy
 
@@ -223,6 +245,10 @@ not metric labels.
    panels.
 9. Compose or local-authoritative proof before documenting exact graph-backed
    impact.
+10. Concurrency tests for bounded fan-out, context cancellation, and no
+    cross-leg response mutation races.
+11. Telemetry tests that prove operators can see truncation, partial coverage,
+    stale generation, ambiguity, timeout, and unsupported capability rates.
 
 ## Rollout
 

@@ -277,6 +277,14 @@ exercise or a VS Code-only import list. The product requirement is a reusable
 query contract plus a PCG-owned interactive surface that works for code and IaC
 with the same semantics.
 
+The same contract should also become an agent and automation guardrail. Agents,
+PR automation, and refactor tools should inspect dependency neighborhoods before
+editing symbols, contracts, or IaC artifacts, and should run diff-aware impact
+before commit or PR. The diff workflow must preserve line/range evidence where
+available, label file-only fallbacks for deletes, renames, binary files, and
+missing spans, and report high, unknown, stale, partial, or unsupported coverage
+instead of presenting unsafe confidence.
+
 ### Find Dead IaC
 
 The user-facing workflow should answer:
