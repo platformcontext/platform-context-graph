@@ -159,6 +159,34 @@ func TestBuildIngesterCollectorServiceUsesNativeSnapshotter(t *testing.T) {
 	}
 }
 
+func TestBuildIngesterCollectorServiceDefersRelationshipBackfillToBatchDrain(t *testing.T) {
+	t.Parallel()
+
+	service, err := buildIngesterCollectorService(
+		postgres.SQLDB{},
+		func(string) string { return "" },
+		func() (string, error) { return t.TempDir(), nil },
+		func() []string { return []string{"PATH=/usr/bin"} },
+		nil, // tracer
+		nil, // instruments
+		nil, // logger
+	)
+	if err != nil {
+		t.Fatalf("buildIngesterCollectorService() error = %v, want nil", err)
+	}
+
+	committer, ok := service.Committer.(postgres.IngestionStore)
+	if !ok {
+		t.Fatalf("Committer type = %T, want postgres.IngestionStore", service.Committer)
+	}
+	if !committer.SkipRelationshipBackfill {
+		t.Fatal("Committer.SkipRelationshipBackfill = false, want true for deferred batch-drain backfill")
+	}
+	if service.AfterBatchDrained == nil {
+		t.Fatal("AfterBatchDrained = nil, want deferred relationship maintenance hook")
+	}
+}
+
 func TestBuildIngesterProjectorRuntimeWiresPhasePublisherAndRepairQueue(t *testing.T) {
 	t.Parallel()
 
@@ -1141,6 +1169,78 @@ func TestCanonicalExecutorForGraphBackendNornicDBDefaultFullStackUsesPhaseGroups
 	}
 }
 
+func TestNornicDBBatchedEntityContainmentFullStackUsesCrossFileBatchedEntityRows(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{}
+	executor := canonicalExecutorForGraphBackend(
+		inner,
+		runtimecfg.GraphBackendNornicDB,
+		0,
+		false,
+		defaultNornicDBPhaseGroupStatements,
+		defaultNornicDBFilePhaseStatements,
+		defaultNornicDBEntityPhaseStatements,
+		nil,
+		nil,
+		nil,
+	)
+	writer := sourceneo4j.NewCanonicalNodeWriter(executor, 0, nil).
+		WithBatchedEntityContainmentInEntityUpsert()
+
+	mat := minimalCanonicalMaterialization()
+	mat.FirstGeneration = true
+	mat.Files = []projector.FileRow{
+		{Path: "/repos/my-repo/src/a.go", RelativePath: "src/a.go", Name: "a.go", Language: "go", RepoID: "repo-1", DirPath: "/repos/my-repo/src"},
+		{Path: "/repos/my-repo/src/b.go", RelativePath: "src/b.go", Name: "b.go", Language: "go", RepoID: "repo-1", DirPath: "/repos/my-repo/src"},
+	}
+	mat.Entities = []projector.EntityRow{
+		{EntityID: "entity-1", Label: "Function", EntityName: "a", FilePath: "/repos/my-repo/src/a.go", RelativePath: "src/a.go", StartLine: 1, EndLine: 2, Language: "go", RepoID: "repo-1"},
+		{EntityID: "entity-2", Label: "Function", EntityName: "b", FilePath: "/repos/my-repo/src/b.go", RelativePath: "src/b.go", StartLine: 3, EndLine: 4, Language: "go", RepoID: "repo-1"},
+	}
+
+	if err := writer.Write(context.Background(), mat); err != nil {
+		t.Fatalf("CanonicalNodeWriter.Write() error = %v, want nil", err)
+	}
+
+	entityStatements := statementsContaining(inner.groupStatements, "MERGE (n:Function {uid: row.entity_id})")
+	if got, want := len(entityStatements), 1; got != want {
+		t.Fatalf("batched Function entity statements = %d, want %d", got, want)
+	}
+	stmt := entityStatements[0]
+	for _, want := range []string{
+		"MERGE (n:Function {uid: row.entity_id})",
+		"SET n += row.props",
+		"MATCH (f:File {path: row.file_path})",
+	} {
+		if !strings.Contains(stmt.Cypher, want) {
+			t.Fatalf("entity cypher = %q, want %q", stmt.Cypher, want)
+		}
+	}
+	if strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") {
+		t.Fatalf("entity cypher = %q, want row-scoped file_path instead of statement file_path", stmt.Cypher)
+	}
+	if _, ok := stmt.Parameters["file_path"]; ok {
+		t.Fatalf("entity statement unexpectedly carries statement-level file_path: %#v", stmt.Parameters)
+	}
+	rows, ok := stmt.Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows type = %T, want []map[string]any", stmt.Parameters["rows"])
+	}
+	if got, want := len(rows), 2; got != want {
+		t.Fatalf("rows count = %d, want %d", got, want)
+	}
+	if got := rows[0]["file_path"]; got != "/repos/my-repo/src/a.go" {
+		t.Fatalf("rows[0] file_path = %#v, want /repos/my-repo/src/a.go", got)
+	}
+	if got := rows[1]["file_path"]; got != "/repos/my-repo/src/b.go" {
+		t.Fatalf("rows[1] file_path = %#v, want /repos/my-repo/src/b.go", got)
+	}
+	if got := len(statementsContaining(inner.executeStatements, "MERGE (n:Function {uid: row.entity_id})")); got != 0 {
+		t.Fatalf("sequential Function entity statements = %d, want 0", got)
+	}
+}
+
 func TestCanonicalExecutorForGraphBackendWrapsNornicDBWithTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -1800,22 +1900,26 @@ func (contextBlockingIngesterExecutor) Execute(ctx context.Context, _ sourceneo4
 }
 
 type recordingGroupChunkExecutor struct {
-	groupSizes    []int
-	groupParams   []map[string]any
-	executeParams []map[string]any
-	callCount     int
-	failAtCall    int
-	err           error
+	groupSizes        []int
+	groupParams       []map[string]any
+	groupStatements   []sourceneo4j.Statement
+	executeParams     []map[string]any
+	executeStatements []sourceneo4j.Statement
+	callCount         int
+	failAtCall        int
+	err               error
 }
 
 func (r *recordingGroupChunkExecutor) Execute(_ context.Context, stmt sourceneo4j.Statement) error {
 	r.executeParams = append(r.executeParams, stmt.Parameters)
+	r.executeStatements = append(r.executeStatements, stmt)
 	return nil
 }
 
 func (r *recordingGroupChunkExecutor) ExecuteGroup(_ context.Context, stmts []sourceneo4j.Statement) error {
 	r.callCount++
 	r.groupSizes = append(r.groupSizes, len(stmts))
+	r.groupStatements = append(r.groupStatements, stmts...)
 	if len(stmts) > 0 {
 		r.groupParams = append(r.groupParams, stmts[0].Parameters)
 	}
@@ -1835,6 +1939,16 @@ func equalIntSlices(got []int, want []int) bool {
 		}
 	}
 	return true
+}
+
+func statementsContaining(stmts []sourceneo4j.Statement, needle string) []sourceneo4j.Statement {
+	matches := make([]sourceneo4j.Statement, 0)
+	for _, stmt := range stmts {
+		if strings.Contains(stmt.Cypher, needle) {
+			matches = append(matches, stmt)
+		}
+	}
+	return matches
 }
 
 func minimalCanonicalMaterialization() projector.CanonicalMaterialization {

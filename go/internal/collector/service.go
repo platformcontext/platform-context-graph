@@ -62,9 +62,12 @@ type Service struct {
 	Source       Source
 	Committer    Committer
 	PollInterval time.Duration
-	Tracer       trace.Tracer           // optional — nil means no tracing
-	Instruments  *telemetry.Instruments // optional — nil means no metrics
-	Logger       *slog.Logger           // optional — nil means no structured logging
+	// AfterBatchDrained runs once after at least one committed generation and
+	// the current source batch is exhausted.
+	AfterBatchDrained func(context.Context) error
+	Tracer            trace.Tracer           // optional — nil means no tracing
+	Instruments       *telemetry.Instruments // optional — nil means no metrics
+	Logger            *slog.Logger           // optional — nil means no structured logging
 }
 
 // Run polls the source and commits each collected generation atomically.
@@ -79,6 +82,7 @@ func (s Service) Run(ctx context.Context) error {
 		return errors.New("collector poll interval must be positive")
 	}
 
+	committedSinceDrain := false
 	for {
 		collected, ok, err := s.Source.Next(ctx)
 		if err != nil {
@@ -88,6 +92,12 @@ func (s Service) Run(ctx context.Context) error {
 			return fmt.Errorf("collect scope generation: %w", err)
 		}
 		if !ok {
+			if committedSinceDrain && s.AfterBatchDrained != nil {
+				if err := s.AfterBatchDrained(ctx); err != nil {
+					return fmt.Errorf("after collector batch drained: %w", err)
+				}
+				committedSinceDrain = false
+			}
 			if err := waitForNextPoll(ctx, s.PollInterval); err != nil {
 				return nil
 			}
@@ -97,6 +107,7 @@ func (s Service) Run(ctx context.Context) error {
 		if err := s.commitWithTelemetry(ctx, collected); err != nil {
 			return err
 		}
+		committedSinceDrain = true
 	}
 }
 

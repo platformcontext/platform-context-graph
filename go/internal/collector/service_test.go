@@ -116,6 +116,39 @@ func TestServiceRunPropagatesDurableCommitErrors(t *testing.T) {
 	}
 }
 
+func TestServiceRunCallsAfterBatchDrainedOnceAfterCommittedBatch(t *testing.T) {
+	t.Parallel()
+
+	scopeValue, generationValue, envelopes := testCollectedGeneration()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hookCalls := 0
+	service := Service{
+		Source: &stubSource{
+			collected: []CollectedGeneration{
+				FactsFromSlice(scopeValue, generationValue, envelopes),
+			},
+			empty: func() {
+				cancel()
+			},
+		},
+		Committer:    &stubCommitter{},
+		PollInterval: time.Millisecond,
+		AfterBatchDrained: func(context.Context) error {
+			hookCalls++
+			return nil
+		},
+	}
+
+	if err := service.Run(ctx); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got, want := hookCalls, 1; got != want {
+		t.Fatalf("AfterBatchDrained() calls = %d, want %d", got, want)
+	}
+}
+
 func testCollectedGeneration() (
 	scope.IngestionScope,
 	scope.ScopeGeneration,
@@ -158,10 +191,15 @@ func testCollectedGeneration() (
 type stubSource struct {
 	collected []CollectedGeneration
 	index     int
+	empty     func()
 }
 
 func (s *stubSource) Next(ctx context.Context) (CollectedGeneration, bool, error) {
 	if s.index >= len(s.collected) {
+		if s.empty != nil {
+			s.empty()
+			return CollectedGeneration{}, false, nil
+		}
 		<-ctx.Done()
 		return CollectedGeneration{}, false, ctx.Err()
 	}
