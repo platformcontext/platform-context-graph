@@ -21,8 +21,8 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBAnnotationCap(
 		t.Fatalf("semanticEntityWriterForGraphBackend() error = %v", err)
 	}
 
-	rows := make([]reducer.SemanticEntityRow, 0, 101)
-	for i := 0; i < 101; i++ {
+	rows := make([]reducer.SemanticEntityRow, 0, 31)
+	for i := 0; i < 31; i++ {
 		rows = append(rows, semanticAnnotationRow(fmt.Sprintf("annotation-ts-%03d", i)))
 	}
 	result, err := writer.WriteSemanticEntities(context.Background(), reducer.SemanticEntityWrite{
@@ -32,7 +32,7 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBAnnotationCap(
 	if err != nil {
 		t.Fatalf("WriteSemanticEntities() error = %v", err)
 	}
-	if got, want := result.CanonicalWrites, 101; got != want {
+	if got, want := result.CanonicalWrites, 31; got != want {
 		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
 	}
 
@@ -48,7 +48,7 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBAnnotationCap(
 		rows, _ := call.Parameters["rows"].([]map[string]any)
 		annotationBatches = append(annotationBatches, len(rows))
 	}
-	if got, want := intsString(annotationBatches), "[25 25 25 25 1]"; got != want {
+	if got, want := intsString(annotationBatches), "[10 10 10 1]"; got != want {
 		t.Fatalf("Annotation batch sizes = %s, want %s", got, want)
 	}
 }
