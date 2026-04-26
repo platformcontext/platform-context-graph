@@ -101,6 +101,10 @@ use the `UNWIND $rows AS row` hot path. The execute-only singleton fallback is
 reserved for rows containing the known `shortestPath` / `allShortestPaths`
 parser hazard; broad singleton logs for normal symbols usually mean a writer
 shape regression, not a reason to lower global concurrency.
+If a correctly grouped `MERGE (n:<Label> {uid: row.entity_id})` statement is
+still slow at one row, check schema preconditions before tuning workers:
+NornicDB needs the matching `<Label>.uid` uniqueness constraint to use its
+schema-backed merge lookup instead of a generic label scan.
 
 Watch future heavy write families such as call edges, infra edges, and other
 shared reducer domains. If they need different treatment, add phase metadata
