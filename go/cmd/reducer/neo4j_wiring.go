@@ -415,8 +415,8 @@ func effectiveNeo4jBatchSize(batchSize int) int {
 func defaultNornicDBSemanticEntityLabelBatchSizes(batchSize int) map[string]int {
 	return map[string]int{
 		// Multi-repo dogfood showed Annotation rows carry enough decorator
-		// metadata that even 50-row statements can exhaust the write budget.
-		"Annotation": minPositiveInt(batchSize, 25),
+		// metadata that even 25-row statements can exhaust the write budget.
+		"Annotation": minPositiveInt(batchSize, 10),
 		"Function":   minPositiveInt(batchSize, 10),
 		"Variable":   minPositiveInt(batchSize, 10),
 		// Module rows can carry declaration-merge metadata, and the self-repo
