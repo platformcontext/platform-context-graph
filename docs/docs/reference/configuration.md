@@ -118,6 +118,9 @@ Use `.pcg/discovery.json` for repo-specific, reasoned exclusions that should be
 visible in discovery logs and metrics. PCG still accepts the older
 `.pcg/vendor-roots.json` shape as a compatibility alias, but new repo-specific
 tuning should use `.pcg/discovery.json`.
+When deciding whether to add a rule, capture a discovery advisory report first
+and validate the after-run with the
+[Local Testing — Discovery Advisory Playbook](local-testing.md#discovery-advisory-playbook).
 
 Example:
 

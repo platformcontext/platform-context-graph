@@ -173,6 +173,9 @@ The following targets remain open until their own perf gates land:
   facts.
 - **Idle and active memory budgets** for the combined PCG host + graph
   backend footprint.
+- **Full-corpus `local_authoritative` drain gate** — latest remote run is
+  healthy/progressing with no dead letters or `graph_write_timeout`, but
+  projection/reducer queues have not drained to zero yet.
 - **Active-repo transitive-caller and active-repo call-chain** — current
   evidence is synthetic only; active-repo numbers are required before
   promoting the matrix entries past `derived`.

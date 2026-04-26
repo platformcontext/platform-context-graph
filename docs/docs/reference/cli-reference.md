@@ -81,7 +81,7 @@ binary remains an explicit opt-in. PCG resolves it in this order:
 
 During NornicDB evaluation, local-authoritative canonical graph writes use
 bounded phase-group transactions and are still bounded by
-`PCG_CANONICAL_WRITE_TIMEOUT` (`15s` by default). The default phase-group size
+`PCG_CANONICAL_WRITE_TIMEOUT` (`30s` by default). The default phase-group size
 is `500` statements and can be tuned with
 `PCG_NORNICDB_PHASE_GROUP_STATEMENTS=<positive integer>` when repo-scale
 dogfood runs need a larger or smaller transaction window. This protects local
@@ -261,7 +261,7 @@ fix.
 | `pcg graph stop [--workspace-root <path>]` | Request graph shutdown through the workspace owner, or stop a stale recorded graph process when the owner is already dead. |
 | `pcg graph start [--workspace-root <path>]` | Start the `local_authoritative` workspace owner in the foreground. |
 | `pcg graph upgrade --from <source> [--sha256 <hex>] [--workspace-root <path>]` | Replace the managed local graph binary from a binary path, tar archive, macOS package, or URL after the workspace graph is stopped. |
-| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force]` | Install a verified NornicDB binary into the managed PCG home from the pinned manifest or from a binary path, tar archive, macOS package, or URL. |
+| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force] [--full]` | Install a verified NornicDB binary into the managed PCG home from the pinned manifest or from a binary path, tar archive, macOS package, or URL. |
 | `pcg mcp setup` | Configure IDE and CLI MCP integrations. |
 | `pcg mcp start` | Start the MCP server. |
 | `pcg mcp tools` | List MCP tools. |
