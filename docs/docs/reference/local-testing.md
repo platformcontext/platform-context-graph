@@ -287,7 +287,7 @@ Legacy vendored-library filters also emit content skip counters such as
 `files_skipped.content.vendored-zend-framework`,
 `files_skipped.content.vendored-browser-library`,
 `files_skipped.content.vendored-fpdf`, and
-`files_skipped.content.vendored-pear-phing`.
+`files_skipped.content.vendored-pear`.
 If a run is still progressing linearly after schema-backed `MERGE` lookup is
 confirmed, stop treating batch size as the only control knob. Use a
 pprof-enabled NornicDB binary with `NORNICDB_ENABLE_PPROF=true` and capture CPU
@@ -692,7 +692,8 @@ artifacts can produce tens of thousands of generated JavaScript variables while
 contributing little repo-authored code truth. Legacy repos that check
 third-party packages outside a conventional `vendor/` directory are also pruned
 for known library families such as Zend Framework,
-jQuery/Galleria/Shadowbox/Sizzle/SWFObject, FPDF, and PEAR/Phing.
+jQuery/Galleria/Shadowbox/Sizzle/SWFObject, FPDF, and PEAR packages such as
+Phing.
 
 ```bash
 PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos docker compose up --build
