@@ -123,15 +123,17 @@ local NornicDB binary such as `/tmp/nornicdb-headless`.
 For the consolidated list of NornicDB environment variables and when to use
 each one, see [NornicDB Tuning](nornicdb-tuning.md).
 
-Until `https://github.com/orneryd/NornicDB/pull/119` is merged and published
+Until `https://github.com/orneryd/NornicDB/pull/120` is merged and published
 as a pinned release asset, use a headless binary built from the
-`pcg-sql-edge-hotpath` PR branch for repo-scale `local_authoritative` dogfood
-and graph-query validation. That branch contains the SQL relationship hot path
-and node-lookup cache fixes that the current PCG dogfood evidence depends on.
+`pcg-bolt-transient-conflicts` PR branch for repo-scale `local_authoritative`
+dogfood and graph-query validation. PR `#119` is already merged; PR `#120`
+adds Bolt transient conflict mapping, shares the transaction-clone node-lookup
+cache lock, and keeps PCG's named-relationship entity-containment shape on
+NornicDB's generalized `UNWIND/MATCH/MERGE` hot path.
 On the remote 16-vCPU dogfood host, the current validated binary path is:
 
 ```bash
-export PCG_NORNICDB_BINARY=/home/ubuntu/os-repos/NornicDB/bin/nornicdb-headless-pcg-sql-edge-hotpath
+export PCG_NORNICDB_BINARY=/home/ubuntu/os-repos/NornicDB/bin/nornicdb-headless-pcg-bolt-transient
 ```
 
 Before every local-authoritative dogfood run, rebuild the owner and child
@@ -152,9 +154,9 @@ On a local workstation, rebuild from the PR branch with the no-local-LLM tags
 before setting `PCG_NORNICDB_BINARY`:
 
 ```bash
-cd /Users/allen/os-repos/NornicDB-pcg-sql-edge-hotpath
-go build -tags 'noui nolocalllm' -o ./bin/nornicdb-headless-pcg-sql-edge-hotpath ./cmd/nornicdb
-export PCG_NORNICDB_BINARY=/Users/allen/os-repos/NornicDB-pcg-sql-edge-hotpath/bin/nornicdb-headless-pcg-sql-edge-hotpath
+cd /Users/allen/os-repos/NornicDB-pcg-bolt-transient-conflicts
+go build -tags 'noui nolocalllm' -o ./bin/nornicdb-headless-pcg-bolt-transient ./cmd/nornicdb
+export PCG_NORNICDB_BINARY=/Users/allen/os-repos/NornicDB-pcg-bolt-transient-conflicts/bin/nornicdb-headless-pcg-bolt-transient
 ```
 
 ```bash
