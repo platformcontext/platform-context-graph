@@ -106,6 +106,45 @@ noisy directories/files by content-entity count; entity counts by type/language;
 and skip breakdowns. Treat it as local diagnostic evidence for
 `.pcg/discovery.json` or `.pcgignore`, not as a stable API contract.
 
+### Discovery Advisory Playbook
+
+Use this loop when a repo is slow, timeout-heavy, or unexpectedly large.
+
+1. Capture evidence before changing defaults:
+
+    ```bash
+    pcg index /path/to/repo --discovery-report /tmp/pcg-discovery-before.json
+    ```
+
+2. Inspect the advisory for the same repo. Start with `summary.content_files`,
+   `summary.content_entities`, `top_noisy_directories`, `top_noisy_files`,
+   `entity_counts.by_type`, and `skip_breakdown`.
+
+3. Choose the narrowest config. Use `.pcg/discovery.json` for
+   vendored/generated/archive roots where the reason should be auditable through
+   `user:<reason>` skip telemetry. Use `preserved_path_globs` when a broad
+   ignored root may contain authored code. Use `.pcgignore` only when a plain
+   silent ignore is enough. Do not change graph-write timeouts or global
+   NornicDB batch sizes until the report proves the input shape is already
+   correct.
+
+4. Rerun with a second report:
+
+    ```bash
+    pcg index /path/to/repo --discovery-report /tmp/pcg-discovery-after.json
+    ```
+
+5. Accept the config only when the after-report shows the intended skip reason
+   and the repo became cheaper for the intended reason. Compare
+   `summary.content_files`, `summary.content_entities`,
+   `skip_breakdown.dirs_by_user`, `skip_breakdown.files_by_user`, and queue
+   health / latest failure from the runtime status panel when running
+   `local_authoritative`.
+
+Commit `.pcg/discovery.json` with the repo when the rule represents stable repo
+knowledge, such as archived site copies or checked-in third-party browser
+libraries.
+
 ## Quick Verification Matrix
 
 | If you touched | Minimum verification |

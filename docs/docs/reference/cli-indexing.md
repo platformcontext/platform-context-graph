@@ -27,7 +27,11 @@ pcg index [path] [options]
 *   `--discovery-report <file>`: Write a JSON discovery advisory report for
     noisy-repo tuning. The report lists discovered, parsed, skipped, and
     materialized file/entity counts plus top noisy directories/files and skip
-    breakdowns. It is an operator artifact, not a high-cardinality metric.
+    breakdowns. The JSON includes `schema_version=discovery_advisory.v1` so
+    local scripts can fail closed if the advisory shape changes. It is an
+    operator artifact, not a high-cardinality metric.
+    For the full evidence → config → rerun workflow, see
+    [Local Testing — Discovery Advisory Playbook](local-testing.md#discovery-advisory-playbook).
 
 **Runtime Notes:**
 

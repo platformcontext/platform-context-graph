@@ -43,6 +43,8 @@ dependency directories above, prefer the reasoned discovery map at
 `user:<reason>` skip metrics, which makes repo-scale performance tuning easier
 to audit than a silent broad ignore pattern. PCG still accepts the older
 `.pcg/vendor-roots.json` shape for compatibility.
+For the full evidence, config, and rerun loop, see
+[Local Testing — Discovery Advisory Playbook](local-testing.md#discovery-advisory-playbook).
 
 Example `.pcg/discovery.json`:
 
