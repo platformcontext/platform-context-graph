@@ -137,6 +137,18 @@ Resolution output should distinguish:
 The exact edge names can be refined during implementation, but the response
 must preserve whether the match is exact, derived, ambiguous, or unresolved.
 
+Resolution must also preserve bridge freshness. Each resolved or unresolved
+answer should know the indexed repo generation, indexed commit when available,
+missing repositories, stale repositories, and bridge version that produced the
+match. A contract edge from stale or incomplete coverage can still be useful,
+but it must be labeled so query consumers do not treat it as complete impact
+proof.
+
+Operator-declared manifest links and service boundary assignments should be
+modeled before derived matching. When both declared and derived links point to
+the same provider-consumer pair, the declared link wins and the derived evidence
+is retained as supporting evidence rather than producing a duplicate edge.
+
 ### 4. Service Dependency Graph
 
 Resolved contract matches enrich PCG's service graph:
@@ -178,6 +190,11 @@ The system should not claim a breaking change unless compatibility analysis has
 actually run. It should say "this contract has consumers" before it says "this
 change breaks consumers."
 
+Cross-repo impact fanout should be bounded. The first implementation should
+support a conservative cross depth of one, apply per-repo impact timeouts, honor
+request cancellation, and return structured partial results for timeout, stale
+bridge state, unsupported depth, missing repo coverage, and high fanout.
+
 ### 6. Telemetry
 
 Add telemetry for:
@@ -214,6 +231,9 @@ paths. Put those in spans, structured logs, and response evidence.
 4. Generated code must preserve the source schema or generator provenance when
    possible.
 5. Missing repo coverage is reported as partial coverage in impact responses.
+6. Stale repo snapshots, dangling manifest links, unsupported cross-depth
+   requests, and per-repo impact timeouts are reported as structured partial
+   states rather than generic failures.
 
 ## Testing Strategy
 
@@ -226,6 +246,11 @@ paths. Put those in spans, structured logs, and response evidence.
 6. Fixture ecosystems with at least two repos and one contract family per phase.
 7. Negative tests proving string-only or wildcard evidence does not become exact
    without supporting semantics.
+8. Concurrency tests for partitioned reducer claims, deterministic write order,
+   retry idempotency, stale-generation skip behavior, and no global resolver
+   lock.
+9. Telemetry tests for extraction coverage, missing repos, stale generations,
+   claim lag, fanout, ambiguity, timeout, and partial cross-impact.
 
 ## Rollout
 

@@ -20,6 +20,20 @@
 3. **Speed:** reuse existing graph/content readers, cap path expansion, and report truncation.
 4. **Instrumentation:** emit query duration, edge counts, path counts, truncation counts, and unsupported-capability counts.
 
+## Rigor Addendum
+
+**Current flow:** selectors enter through API, MCP, CLI, VS Code, or PR automation; query code resolves subjects against facts, graph, and content readers; graph/content/impact legs fan out; responses return truth labels, partial coverage, truncation, and limitations to all consumers.
+
+**Shared state:** canonical graph projections, content relationship indexes, source spans, repository generations, OpenAPI schemas, telemetry instruments, and later contract/IaC fact tables.
+
+**Transaction and retry boundaries:** neighborhood reads are read-only and request-scoped; change-impact diff parsing is local to the request; reducer-owned materialization remains outside this plan. Retries belong at the caller boundary and must not hide unsupported graph capabilities or stale generations.
+
+**Deadlock, race, and ordering hazards:** avoid query-time writes, unbounded goroutine fan-out, response mutation from multiple workers, stale graph/content generation mixing without labels, and opposite-order reads that make one leg wait on another. Preserve concurrency by partitioning fan-out by leg and depth while sharing only immutable request state.
+
+**Edge cases:** ambiguous selectors, deleted files, renamed files, binary diffs, untracked files, empty diffs, missing line spans, unsupported graph adapters, high-fanout nodes, timeout/cancellation, and partial reader failure.
+
+**Observability contract:** operators must see query latency, leg latency, fanout, truncation, partial coverage, stale generation, ambiguity, timeout, unsupported capability, and error class without path, symbol, route, or topic labels.
+
 ## Task 1: Define Neighborhood Request And Response Contracts
 
 **Files:**
@@ -71,7 +85,9 @@
    -> verify: tests assert depth cap and truncation counts.
 4. Add blast-radius fields only when evidence exists; unknown coverage must be explicit.
    -> verify: tests assert no fabricated service/workload impact.
-5. Commit.
+5. Return structured partial results when one leg fails or times out, including `partial`, `limitations`, `error_class`, and per-leg status.
+   -> verify: tests cover graph reader failure, content reader failure, timeout, and unsupported capability envelopes.
+6. Commit.
    -> verify: `cd go && go test ./internal/query -run 'TestGraphNeighborhood' -count=1`.
 
 ## Task 4: Add HTTP Route, OpenAPI, And Telemetry
@@ -81,7 +97,10 @@
 - Modify: `go/internal/query/openapi.go`
 - Create: `go/internal/query/openapi_paths_graph.go`
 - Modify: `go/internal/query/openapi_test.go`
-- Modify: `go/internal/telemetry` files if new instruments are required
+- Modify: `go/internal/telemetry/instruments.go`
+- Modify: `go/internal/telemetry/instruments_test.go`
+- Modify: `go/internal/telemetry/contract.go`
+- Modify: `go/internal/telemetry/contract_test.go`
 
 1. Write failing handler tests for `POST /api/v0/graph/neighborhood`.
    -> verify: route test returns 404 or missing route before implementation.
@@ -89,28 +108,36 @@
    -> verify: handler tests pass.
 3. Add OpenAPI path and schema coverage.
    -> verify: `cd go && go test ./internal/query -run 'TestServeOpenAPI|TestGraphNeighborhood' -count=1`.
-4. Add low-cardinality query telemetry.
-   -> verify: telemetry tests assert metric names and exclude path labels.
+4. Add low-cardinality query telemetry for latency, leg latency, fanout, truncation, partial coverage, stale generation, ambiguity, timeout, and unsupported capability.
+   -> verify: telemetry tests assert metric names and exclude path, symbol, route, and topic labels.
 5. Commit.
    -> verify: focused query tests pass after commit.
 
 ## Task 5: Add Change Impact From Subject And Diff Inputs
 
 **Files:**
+- Create: `go/internal/query/change_diff.go`
+- Create: `go/internal/query/change_diff_test.go`
 - Create: `go/internal/query/change_impact.go`
 - Create: `go/internal/query/change_impact_test.go`
 - Modify: `go/internal/query/openapi_paths_impact.go`
 - Modify: `docs/docs/reference/http-api.md`
 
-1. Write failing tests for explicit-subject impact and diff input classification.
+1. Write failing tests for explicit-subject impact, unified diff hunk parsing, and diff input classification.
    -> verify: `cd go && go test ./internal/query -run 'TestChangeImpact' -count=1` fails.
-2. Implement changed-file classification for source, IaC, deployment config, contract/schema, and unknown files.
+2. Parse unified diffs generated with zero context, supporting unstaged, staged, all, and compare/base-ref scopes from API or CLI callers.
+   -> verify: tests cover added, modified, deleted, renamed, binary, untracked, and empty diff inputs.
+3. Map changed hunks to subjects with explicit line-overlap semantics: `entity.start_line <= hunk.end && entity.end_line >= hunk.start`.
+   -> verify: tests prove boundary overlaps, deleted-line handling, file-only fallback, and missing-span limitations.
+4. Implement changed-file classification for source, IaC, deployment config, contract/schema, and unknown files.
    -> verify: classification tests pass.
-3. Merge multiple subject neighborhoods, deduplicate shared paths, and compute explainable risk.
+5. Enforce bounded diff size, skipped file reporting, and structured partial responses for unsupported inputs.
+   -> verify: tests assert `partial`, `skipped_files`, `limitations`, and `error_class` values.
+6. Merge multiple subject neighborhoods, deduplicate shared paths, and compute explainable risk.
    -> verify: tests assert stable risk reasons and no black-box score.
-4. Add OpenAPI and docs.
+7. Add OpenAPI and docs.
    -> verify: strict docs and focused OpenAPI tests pass.
-5. Commit.
+8. Commit.
    -> verify: focused tests pass after commit.
 
 ## Task 6: Add MCP And CLI Consumers
@@ -123,6 +150,8 @@
 - Modify: `go/cmd/pcg/analyze_test.go`
 - Modify: `docs/docs/reference/mcp-reference.md`
 - Modify: `docs/docs/reference/cli-reference.md`
+- Modify: `docs/docs/guides/mcp-guide.md`
+- Modify: `docs/docs/guides/starter-prompts.md`
 
 1. Write failing MCP dispatch tests for `get_dependency_neighborhood` and a diff-aware impact tool.
    -> verify: MCP tests fail on missing tools/routes.
@@ -130,7 +159,9 @@
    -> verify: CLI tests fail before command registration.
 3. Implement route mappings and CLI wrappers with JSON passthrough.
    -> verify: `cd go && go test ./internal/mcp ./cmd/pcg -run 'Neighborhood|Impact' -count=1`.
-4. Commit.
+4. Document agent guardrails: run neighborhood or impact before symbol/IaC edits, run diff-aware impact before commit or PR, warn on high or unknown risk, and avoid raw find/replace for rename workflows.
+   -> verify: docs explain the workflow without weakening existing truth-label requirements.
+5. Commit.
    -> verify: worktree clean after commit.
 
 ## Task 7: Move VS Code Dependency Panel To The Shared Route
