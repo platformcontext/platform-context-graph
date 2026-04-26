@@ -225,6 +225,9 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
 			return errors.Join(err, heartbeatErr)
 		}
+		if projectorShutdownCanceled(workCtx, err) {
+			return nil
+		}
 		s.recordProjectionResult(workCtx, work, start, "failed", 0, err, workerID)
 		if failErr := s.WorkSink.Fail(workCtx, work, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail projector work: %w", failErr))
@@ -236,6 +239,9 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 	if err != nil {
 		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
 			return errors.Join(err, heartbeatErr)
+		}
+		if projectorShutdownCanceled(workCtx, err) {
+			return nil
 		}
 		s.recordProjectionResult(workCtx, work, start, "failed", len(factsForGeneration), err, workerID)
 		if failErr := s.WorkSink.Fail(workCtx, work, err); failErr != nil {
@@ -296,6 +302,13 @@ func (s Service) recordProjectionResult(ctx context.Context, work ScopeGeneratio
 			s.Logger.InfoContext(ctx, "projection succeeded", logAttrs...)
 		}
 	}
+}
+
+func projectorShutdownCanceled(ctx context.Context, err error) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 type projectorHeartbeatStop func() error
