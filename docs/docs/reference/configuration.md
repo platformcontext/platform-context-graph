@@ -114,9 +114,32 @@ The current Go runtime does not expose public environment variables for file-siz
 limits, hidden-directory skipping, or dependency-root pruning. Those defaults
 are built into the discovery and parser pipeline.
 
-Use `.pcgignore` for repo-specific exclusions, and use the repository-source
-settings below when you need to switch between GitHub discovery, explicit repo
-lists, and direct filesystem mode.
+Use `.pcgignore` for repo-specific exclusions, and use
+`.pcg/vendor-roots.json` when a repository checks in third-party source under a
+non-standard path that PCG should prune before descent.
+
+Example:
+
+```json
+{
+  "vendor_roots": [
+    {"path": "src/wp-content/plugins/wordpress-seo/**", "reason": "wordpress-seo"}
+  ],
+  "keep_roots": [
+    {"path": "src/wp-content/plugins/custom-authored/**"}
+  ]
+}
+```
+
+`vendor_roots[].path` and `keep_roots[].path` are repository-relative globs.
+Patterns ending in `/**` prune a subtree. `reason` is emitted in discovery logs
+and metrics as `user:<reason>` so operators can verify that a noisy repo became
+cheaper for the intended reason. Prefer exact third-party roots over broad
+ecosystem parents such as `wp-content/plugins/**` unless a keep-rule preserves
+the authored subtrees you need.
+
+Use the repository-source settings below when you need to switch between GitHub
+discovery, explicit repo lists, and direct filesystem mode.
 
 ### Database Connection (Neo4j)
 

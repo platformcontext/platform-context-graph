@@ -36,6 +36,12 @@ instead of relying on routine repo indexing.
 
 Use `.pcgignore` for repo-local choices that are specific to your project, team, or indexing goals.
 
+For checked-in third-party source trees that live outside the conventional
+dependency directories above, prefer the reasoned vendor-root map at
+`.pcg/vendor-roots.json`. It prunes matching subtrees before descent and emits
+`user:<reason>` skip metrics, which makes repo-scale performance tuning easier
+to audit than a silent broad ignore pattern.
+
 ## `.gitignore` Interaction
 
 PCG also honors the target repository's own `.gitignore` files during repo and
