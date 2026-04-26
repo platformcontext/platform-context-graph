@@ -186,6 +186,16 @@ var schemaPerformanceIndexes = []string{
 	"CREATE INDEX class_name IF NOT EXISTS FOR (c:Class) ON (c.name)",
 }
 
+// nornicDBMergeLookupIndexes are explicit property indexes required for
+// NornicDB's schema-backed MERGE lookup path. Neo4j uniqueness constraints
+// already create backing indexes for these schemas; keep this NornicDB-only to
+// avoid duplicate-index warnings on Neo4j.
+var nornicDBMergeLookupIndexes = []string{
+	"CREATE INDEX nornicdb_repository_id_lookup IF NOT EXISTS FOR (r:Repository) ON (r.id)",
+	"CREATE INDEX nornicdb_directory_path_lookup IF NOT EXISTS FOR (d:Directory) ON (d.path)",
+	"CREATE INDEX nornicdb_file_path_lookup IF NOT EXISTS FOR (f:File) ON (f.path)",
+}
+
 // schemaFulltextIndexes lists Neo4j full-text index creation statements.
 // The primary form uses the procedure-based API; the fallback uses modern
 // CREATE FULLTEXT INDEX syntax for newer Neo4j versions.
@@ -252,6 +262,9 @@ func SchemaStatementsForBackend(backend SchemaBackend) ([]string, error) {
 		}
 	}
 	stmts = append(stmts, schemaPerformanceIndexes...)
+	if dialect.includeMergeLookupIndexes {
+		stmts = append(stmts, nornicDBMergeLookupIndexes...)
+	}
 	for _, label := range uidConstraintLabels {
 		stmts = append(stmts, fmt.Sprintf(
 			"CREATE CONSTRAINT %s_uid_unique IF NOT EXISTS FOR (n:%s) REQUIRE n.uid IS UNIQUE",
@@ -315,6 +328,17 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 				"graph_backend", dialect.backend)
 		}
 	}
+	if dialect.includeMergeLookupIndexes {
+		for _, cypher := range nornicDBMergeLookupIndexes {
+			if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
+				failed++
+				logger.Warn("schema statement warning",
+					"error", err,
+					"cypher", cypher,
+					"graph_backend", dialect.backend)
+			}
+		}
+	}
 
 	// UID uniqueness constraints for content entity labels
 	for _, label := range uidConstraintLabels {
@@ -362,9 +386,10 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 }
 
 type schemaDialect struct {
-	backend              SchemaBackend
-	constraint           func(string) string
-	skipFulltextFallback bool
+	backend                   SchemaBackend
+	constraint                func(string) string
+	skipFulltextFallback      bool
+	includeMergeLookupIndexes bool
 }
 
 func schemaDialectForBackend(backend SchemaBackend) (schemaDialect, error) {
@@ -376,7 +401,12 @@ func schemaDialectForBackend(backend SchemaBackend) (schemaDialect, error) {
 	case SchemaBackendNeo4j:
 		return schemaDialect{backend: normalized, constraint: neo4jSchemaConstraint}, nil
 	case SchemaBackendNornicDB:
-		return schemaDialect{backend: normalized, constraint: nornicDBSchemaConstraint, skipFulltextFallback: true}, nil
+		return schemaDialect{
+			backend:                   normalized,
+			constraint:                nornicDBSchemaConstraint,
+			skipFulltextFallback:      true,
+			includeMergeLookupIndexes: true,
+		}, nil
 	}
 	return schemaDialect{}, fmt.Errorf("unsupported schema backend %q", backend)
 }
