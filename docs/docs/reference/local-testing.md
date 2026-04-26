@@ -271,6 +271,13 @@ rolling summaries every 10 executions and a final summary at label completion,
 so you do not need to wait for an hour-scale phase to finish before you can
 see whether the cumulative cost is node row width, containment edges, grouped
 transaction size, or label ordering.
+Content-aware discovery skips generated JavaScript bundles before parsing.
+Large Webpack, Rollup, esbuild, and Parcel bundles are reported as
+`files_skipped.content.generated-webpack`, `files_skipped.content.generated-rollup`,
+`files_skipped.content.generated-esbuild`, or
+`files_skipped.content.generated-parcel`. Treat those counters as source-shape
+evidence before tuning NornicDB row caps: generated bundles can emit tens of
+thousands of low-value symbols while authored source files remain indexed.
 If a run is still progressing linearly after schema-backed `MERGE` lookup is
 confirmed, stop treating batch size as the only control knob. Use a
 pprof-enabled NornicDB binary with `NORNICDB_ENABLE_PPROF=true` and capture CPU

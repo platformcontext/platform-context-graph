@@ -102,6 +102,45 @@ func TestResolveNativeSnapshotFileSetSkipsLargeWebpackBundles(t *testing.T) {
 	}
 }
 
+func TestResolveNativeSnapshotFileSetSkipsLargeGeneratedJavaScriptBundles(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "app.js"), "export function app() { return 'source'; }\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "webpack5.js"), largeWebpack5BootstrapFixture())
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "rollup.js"), largeRollupBootstrapFixture())
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "esbuild.js"), largeESBuildBootstrapFixture())
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "parcel.js"), largeParcelBootstrapFixture())
+
+	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		resolvedRepoRoot = repoRoot
+	}
+	registry := parser.DefaultRegistry()
+	fileSet, stats, err := resolveNativeSnapshotFileSet(resolvedRepoRoot, registry, NativeRepositorySnapshotter{}.discoveryOptions())
+	if err != nil {
+		t.Fatalf("resolveNativeSnapshotFileSet() error = %v", err)
+	}
+
+	if got, want := len(fileSet.Files), 1; got != want {
+		t.Fatalf("file count = %d, want %d; files=%v", got, want, fileSet.Files)
+	}
+	if got, want := filepath.ToSlash(fileSet.Files[0]), "src/app.js"; !strings.HasSuffix(got, want) {
+		t.Fatalf("indexed file = %q, want suffix %q", got, want)
+	}
+	for reason, want := range map[string]int{
+		"generated-webpack": 1,
+		"generated-rollup":  1,
+		"generated-esbuild": 1,
+		"generated-parcel":  1,
+	} {
+		if got := stats.FilesSkippedByContent[reason]; got != want {
+			t.Fatalf("FilesSkippedByContent[%s] = %d, want %d", reason, got, want)
+		}
+	}
+}
+
 func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) {
 	t.Parallel()
 
@@ -144,5 +183,41 @@ func largeWebpackBootstrapFixture() string {
 	header := "/******/ (function(modules) { // webpackBootstrap\n" +
 		"/******/ \tvar installedModules = {};\n" +
 		"/******/ \tfunction __webpack_require__(moduleId) { return modules[moduleId]; }\n"
+	return header + strings.Repeat("var generatedBundleChunk = 1;\n", 12000)
+}
+
+func largeWebpack5BootstrapFixture() string {
+	header := "/******/ (() => { // webpackBootstrap\n" +
+		"/******/ \tvar __webpack_modules__ = ({})\n" +
+		"/******/ \tvar __webpack_module_cache__ = {};\n" +
+		"/******/ \tfunction __webpack_require__(moduleId) { return __webpack_modules__[moduleId]; }\n"
+	return header + strings.Repeat("var generatedBundleChunk = 1;\n", 12000)
+}
+
+func largeRollupBootstrapFixture() string {
+	header := "var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : global;\n" +
+		"function getDefaultExportFromCjs (x) { return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x; }\n" +
+		"function getAugmentedNamespace(n) { var a = Object.create(null); if (n) Object.keys(n).forEach(function (k) { a[k] = n[k]; }); Object.defineProperty(a, '__esModule', { value: true }); return a; }\n" +
+		"function commonjsRequire(path) { throw new Error('Could not dynamically require ' + path); }\n"
+	return header + strings.Repeat("var generatedBundleChunk = 1;\n", 12000)
+}
+
+func largeESBuildBootstrapFixture() string {
+	header := "var __defProp = Object.defineProperty;\n" +
+		"var __getOwnPropNames = Object.getOwnPropertyNames;\n" +
+		"var __commonJS = (cb, mod) => function __require() { return mod || cb((mod = { exports: {} }).exports, mod), mod.exports; };\n" +
+		"var __copyProps = (to, from, except, desc) => { if (from && typeof from === 'object') for (let key of __getOwnPropNames(from)) if (!Object.prototype.hasOwnProperty.call(to, key) && key !== except) __defProp(to, key, { get: () => from[key], enumerable: !(desc = Object.getOwnPropertyDescriptor(from, key)) || desc.enumerable }); return to; };\n" +
+		"var __toESM = (mod, isNodeMode, target) => (target = mod != null ? Object.create(Object.getPrototypeOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, 'default', { value: mod, enumerable: true }) : target, mod));\n"
+	return header + strings.Repeat("var generatedBundleChunk = 1;\n", 12000)
+}
+
+func largeParcelBootstrapFixture() string {
+	header := "var $parcel$global = typeof globalThis !== 'undefined' ? globalThis : typeof self !== 'undefined' ? self : window;\n" +
+		"parcelRequire = (function (modules, cache, entry, globalName) {\n" +
+		"function Module(moduleName) { this.id = moduleName; this.bundle = newRequire; this.exports = {}; }\n" +
+		"function newRequire(name, jumped) { if(!cache[name]) { var module = cache[name] = new newRequire.Module(name); modules[name][0].call(module.exports, function(x){ return newRequire(modules[name][1][x] || x); }, module, module.exports); } return cache[name].exports; }\n" +
+		"newRequire.isParcelRequire = true;\n" +
+		"newRequire.Module = Module;\n" +
+		"for (var i = 0; i < entry.length; i++) newRequire(entry[i]);\n"
 	return header + strings.Repeat("var generatedBundleChunk = 1;\n", 12000)
 }

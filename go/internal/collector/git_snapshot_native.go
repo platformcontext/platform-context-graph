@@ -449,9 +449,6 @@ func filterGeneratedNativeSnapshotFiles(files []string, stats *discovery.Discove
 }
 
 func generatedNativeSnapshotSkipReason(path string) (string, bool) {
-	if isLargeWebpackBootstrapBundle(path) {
-		return "generated-webpack", true
-	}
 	if isVendoredZendFrameworkFile(path) {
 		return "vendored-zend-framework", true
 	}
@@ -461,33 +458,75 @@ func generatedNativeSnapshotSkipReason(path string) (string, bool) {
 	if isVendoredFPDFFile(path) {
 		return "vendored-fpdf", true
 	}
+	prefix, ok := largeJavaScriptBundlePrefix(path)
+	if !ok {
+		return "", false
+	}
+	switch {
+	case isWebpackBootstrapPrefix(prefix):
+		return "generated-webpack", true
+	case isRollupBootstrapPrefix(prefix):
+		return "generated-rollup", true
+	case isESBuildBootstrapPrefix(prefix):
+		return "generated-esbuild", true
+	case isParcelBootstrapPrefix(prefix):
+		return "generated-parcel", true
+	}
 	return "", false
 }
 
-func isLargeWebpackBootstrapBundle(path string) bool {
+func largeJavaScriptBundlePrefix(path string) (string, bool) {
 	ext := strings.ToLower(filepath.Ext(path))
 	if ext != ".js" && ext != ".cjs" && ext != ".mjs" {
-		return false
+		return "", false
 	}
 	info, err := os.Stat(path)
 	if err != nil || info.Size() < generatedJavaScriptBundleMinBytes {
-		return false
+		return "", false
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return false
+		return "", false
 	}
 	defer func() { _ = file.Close() }()
 
-	buf := make([]byte, 4096)
+	buf := make([]byte, 8192)
 	n, err := file.Read(buf)
 	if err != nil && n == 0 {
-		return false
+		return "", false
 	}
-	prefix := string(buf[:n])
+	return string(buf[:n]), true
+}
+
+func isWebpackBootstrapPrefix(prefix string) bool {
 	return strings.Contains(prefix, "webpackBootstrap") &&
 		strings.Contains(prefix, "/******/") &&
-		strings.Contains(prefix, "installedModules")
+		(strings.Contains(prefix, "installedModules") ||
+			(strings.Contains(prefix, "__webpack_modules__") &&
+				strings.Contains(prefix, "__webpack_module_cache__") &&
+				strings.Contains(prefix, "function __webpack_require__")))
+}
+
+func isRollupBootstrapPrefix(prefix string) bool {
+	return strings.Contains(prefix, "var commonjsGlobal = typeof globalThis") &&
+		strings.Contains(prefix, "function getDefaultExportFromCjs") &&
+		strings.Contains(prefix, "function getAugmentedNamespace") &&
+		strings.Contains(prefix, "Object.defineProperty(a, '__esModule'")
+}
+
+func isESBuildBootstrapPrefix(prefix string) bool {
+	return strings.Contains(prefix, "var __defProp = Object.defineProperty") &&
+		strings.Contains(prefix, "var __getOwnPropNames = Object.getOwnPropertyNames") &&
+		strings.Contains(prefix, "var __commonJS =") &&
+		strings.Contains(prefix, "var __copyProps =") &&
+		(strings.Contains(prefix, "var __toESM =") || strings.Contains(prefix, "var __toCommonJS ="))
+}
+
+func isParcelBootstrapPrefix(prefix string) bool {
+	return strings.Contains(prefix, "$parcel$global") &&
+		strings.Contains(prefix, "parcelRequire") &&
+		strings.Contains(prefix, "newRequire.isParcelRequire = true") &&
+		strings.Contains(prefix, "newRequire.Module = Module")
 }
 
 func isVendoredZendFrameworkFile(path string) bool {
