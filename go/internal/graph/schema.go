@@ -134,6 +134,7 @@ var uidConstraintLabels = []string{
 	"HelmValues",
 	"ImplBlock",
 	"Interface",
+	"K8sResource",
 	"KustomizeOverlay",
 	"Macro",
 	"Module",

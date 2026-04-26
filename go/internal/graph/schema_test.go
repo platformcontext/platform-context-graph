@@ -139,6 +139,7 @@ func TestSchemaStatementsContainsUIDConstraints(t *testing.T) {
 		"CREATE CONSTRAINT impl_block_uid_unique IF NOT EXISTS FOR (n:ImplBlock) REQUIRE n.uid IS UNIQUE",
 		"CREATE CONSTRAINT protocol_uid_unique IF NOT EXISTS FOR (n:Protocol) REQUIRE n.uid IS UNIQUE",
 		"CREATE CONSTRAINT protocol_implementation_uid_unique IF NOT EXISTS FOR (n:ProtocolImplementation) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT k8s_resource_uid_unique IF NOT EXISTS FOR (n:K8sResource) REQUIRE n.uid IS UNIQUE",
 		"CREATE CONSTRAINT terraform_resource_uid_unique IF NOT EXISTS FOR (n:TerraformResource) REQUIRE n.uid IS UNIQUE",
 	}
 	for _, want := range expected {
@@ -203,6 +204,7 @@ func TestEnsureSchemaWithBackendExecutesNornicDBStatements(t *testing.T) {
 	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT impl_block_uid_unique IF NOT EXISTS FOR (n:ImplBlock) REQUIRE n.uid IS UNIQUE")
 	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT protocol_uid_unique IF NOT EXISTS FOR (n:Protocol) REQUIRE n.uid IS UNIQUE")
 	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT protocol_implementation_uid_unique IF NOT EXISTS FOR (n:ProtocolImplementation) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT k8s_resource_uid_unique IF NOT EXISTS FOR (n:K8sResource) REQUIRE n.uid IS UNIQUE")
 	assertNoExecutedStatementContains(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
 	assertNoExecutedStatementContains(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
 }
