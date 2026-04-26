@@ -3,7 +3,6 @@ package neo4j
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 )
@@ -242,6 +241,21 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 				if len(batchRows) == 0 {
 					return
 				}
+				if len(batchRows) == 1 {
+					stmts = append(stmts, canonicalNodeEntitySingletonWithContainmentStatement(
+						label,
+						filePath,
+						batchRows[0],
+						fmt.Sprintf(
+							"label=%s file=%s rows=1 entity_id=%v singleton_parameterized containment=inline",
+							label,
+							filePath,
+							batchRows[0]["entity_id"],
+						),
+					))
+					batchRows = batchRows[:0]
+					return
+				}
 				statementSummary := fmt.Sprintf(
 					"label=%s file=%s rows=%d first_id=%v last_id=%v containment=inline",
 					label,
@@ -266,24 +280,16 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 			for _, row := range byFile[filePath] {
 				if canonicalEntityRowNeedsSingletonFallback(row) {
 					flushBatch()
-					stmts = append(stmts, Statement{
-						Operation: OperationCanonicalUpsert,
-						Cypher:    fmt.Sprintf(canonicalNodeEntitySingletonUpsertWithContainmentTemplate, label),
-						Parameters: map[string]any{
-							"file_path":                        filePath,
-							"entity_id":                        row["entity_id"],
-							"props":                            row["props"],
-							"generation_id":                    row["generation_id"],
-							StatementMetadataPhaseKey:          CanonicalPhaseEntities,
-							StatementMetadataEntityLabelKey:    label,
-							StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
-							StatementMetadataSummaryKey: fmt.Sprintf(
-								"label=%s rows=1 entity_id=%v fallback=singleton_parameterized containment=inline",
-								label,
-								row["entity_id"],
-							),
-						},
-					})
+					stmts = append(stmts, canonicalNodeEntitySingletonWithContainmentStatement(
+						label,
+						filePath,
+						row,
+						fmt.Sprintf(
+							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized containment=inline",
+							label,
+							row["entity_id"],
+						),
+					))
 					continue
 				}
 				batchRows = append(batchRows, row)
@@ -347,24 +353,17 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithBatchedContainment(mat pr
 		for _, row := range byLabel[label] {
 			if canonicalEntityRowNeedsSingletonFallback(row) {
 				flushBatch()
-				stmts = append(stmts, Statement{
-					Operation: OperationCanonicalUpsert,
-					Cypher:    fmt.Sprintf(canonicalNodeEntitySingletonUpsertWithContainmentTemplate, label),
-					Parameters: map[string]any{
-						"file_path":                        row["file_path"],
-						"entity_id":                        row["entity_id"],
-						"props":                            row["props"],
-						"generation_id":                    row["generation_id"],
-						StatementMetadataPhaseKey:          CanonicalPhaseEntities,
-						StatementMetadataEntityLabelKey:    label,
-						StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
-						StatementMetadataSummaryKey: fmt.Sprintf(
-							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized containment=inline",
-							label,
-							row["entity_id"],
-						),
-					},
-				})
+				filePath, _ := row["file_path"].(string)
+				stmts = append(stmts, canonicalNodeEntitySingletonWithContainmentStatement(
+					label,
+					filePath,
+					row,
+					fmt.Sprintf(
+						"label=%s rows=1 entity_id=%v fallback=singleton_parameterized containment=inline",
+						label,
+						row["entity_id"],
+					),
+				))
 				continue
 			}
 			batchRows = append(batchRows, row)
@@ -376,37 +375,6 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithBatchedContainment(mat pr
 	}
 
 	return stmts
-}
-
-func canonicalEntityRowNeedsSingletonFallback(row map[string]any) bool {
-	return canonicalEntityValueContainsSubstring(row, "shortestpath") ||
-		canonicalEntityValueContainsSubstring(row, "allshortestpaths")
-}
-
-func canonicalEntityValueContainsSubstring(value any, needle string) bool {
-	switch typed := value.(type) {
-	case string:
-		return strings.Contains(strings.ToLower(typed), needle)
-	case []string:
-		for _, item := range typed {
-			if canonicalEntityValueContainsSubstring(item, needle) {
-				return true
-			}
-		}
-	case []any:
-		for _, item := range typed {
-			if canonicalEntityValueContainsSubstring(item, needle) {
-				return true
-			}
-		}
-	case map[string]any:
-		for key, item := range typed {
-			if canonicalEntityValueContainsSubstring(key, needle) || canonicalEntityValueContainsSubstring(item, needle) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func canonicalEntityProperties(
