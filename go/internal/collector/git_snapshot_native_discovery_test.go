@@ -394,6 +394,64 @@ func TestResolveNativeSnapshotFileSetMergesLegacyAndStructuredDiscoveryConfig(t 
 	}
 }
 
+func TestNativeRepositorySnapshotterBuildsDiscoveryAdvisory(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".pcg", "discovery.json"), `{
+  "ignored_path_globs": [
+    {"path": "old/**", "reason": "archived-site-copy"}
+  ]
+}
+`)
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "app.py"), "def handler():\n    return 1\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "models.py"), "class Widget:\n    pass\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "old", "copy.py"), "def old_handler():\n    return 1\n")
+
+	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		resolvedRepoRoot = repoRoot
+	}
+	now := time.Date(2026, time.April, 26, 10, 30, 0, 0, time.UTC)
+	snapshotter := NativeRepositorySnapshotter{
+		Now: func() time.Time { return now },
+	}
+
+	got, err := snapshotter.SnapshotRepository(context.Background(), SelectedRepository{RepoPath: resolvedRepoRoot})
+	if err != nil {
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
+	}
+	report := got.DiscoveryAdvisory
+	if report == nil {
+		t.Fatal("DiscoveryAdvisory = nil, want report")
+	}
+	if got, want := report.SchemaVersion, "discovery_advisory.v1"; got != want {
+		t.Fatalf("SchemaVersion = %q, want %q", got, want)
+	}
+	if got, want := report.GeneratedAt, now; !got.Equal(want) {
+		t.Fatalf("GeneratedAt = %v, want %v", got, want)
+	}
+	if got, want := report.Summary.DiscoveredFiles, 2; got != want {
+		t.Fatalf("Summary.DiscoveredFiles = %d, want %d", got, want)
+	}
+	if got, want := report.Summary.ContentEntities, 2; got != want {
+		t.Fatalf("Summary.ContentEntities = %d, want %d", got, want)
+	}
+	if got, want := report.SkipBreakdown.DirsByUser["archived-site-copy"], 1; got != want {
+		t.Fatalf("DirsByUser[archived-site-copy] = %d, want %d", got, want)
+	}
+	if got, want := report.EntityCounts.ByType["Function"], 1; got != want {
+		t.Fatalf("EntityCounts.ByType[Function] = %d, want %d", got, want)
+	}
+	if got, want := report.EntityCounts.ByLanguage["python"], 2; got != want {
+		t.Fatalf("EntityCounts.ByLanguage[python] = %d, want %d", got, want)
+	}
+	if len(report.TopNoisyFiles) == 0 || report.TopNoisyFiles[0].Path != "src/app.py" {
+		t.Fatalf("TopNoisyFiles = %#v, want src/app.py first", report.TopNoisyFiles)
+	}
+}
+
 func largeAuthoredJavaScriptFixture() string {
 	header := "export function authoredLargeModule() { return 'authored'; }\n"
 	return header + strings.Repeat("export const authoredSymbol = 1;\n", 12000)

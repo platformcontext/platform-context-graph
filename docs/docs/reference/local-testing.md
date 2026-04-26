@@ -92,6 +92,19 @@ Discovery reports these as `dirs_skipped.user.<reason>` in logs and
 subtrees. PCG still accepts `.pcg/vendor-roots.json` with `vendor_roots` and
 `keep_roots` for older repo configs.
 
+When a repo is noisy but the right exclusion is not obvious, run a focused
+index with a discovery advisory report before changing defaults:
+
+```bash
+pcg index /path/to/repo --discovery-report /tmp/pcg-discovery-advisory.json
+```
+
+The report is a JSON array with one advisory per collected repository. It
+captures discovered, parsed, skipped, and materialized counts; top noisy
+directories/files by content-entity count; entity counts by type/language; and
+skip breakdowns. Treat it as local diagnostic evidence for `.pcg/discovery.json`
+or `.pcgignore`, not as a stable API contract.
+
 ## Quick Verification Matrix
 
 | If you touched | Minimum verification |

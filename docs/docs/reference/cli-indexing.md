@@ -24,10 +24,17 @@ pcg index [path] [options]
 
 *   `path`: The folder to index (default: current directory).
 *   `--force`: Re-index from scratch, even if it looks unchanged.
+*   `--discovery-report <file>`: Write a JSON discovery advisory report for
+    noisy-repo tuning. The report lists discovered, parsed, skipped, and
+    materialized file/entity counts plus top noisy directories/files and skip
+    breakdowns. It is an operator artifact, not a high-cardinality metric.
 
 **Runtime Notes:**
 
 *   Local index state for the Go launcher is stored under `PCG_HOME/state/go-bootstrap-index/`.
+*   `--discovery-report` forwards `PCG_DISCOVERY_REPORT=<absolute path>` to
+    `bootstrap-index`, which writes one JSON array containing an advisory per
+    collected repository.
 *   When using the lightweight local host (`pcg watch`, `pcg mcp stdio`),
     per-workspace state lives under
     `${PCG_HOME}/local/workspaces/<workspace_id>/`. Workspace-root resolution

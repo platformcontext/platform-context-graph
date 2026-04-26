@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -18,6 +19,8 @@ var (
 	watchExec     = func(binary string, args []string, env []string) error { return syscall.Exec(binary, args, env) }
 	watchSetenv   = os.Setenv
 	watchEnviron  = os.Environ
+	indexLookPath = exec.LookPath
+	indexExec     = func(binary string, args []string, env []string) error { return syscall.Exec(binary, args, env) }
 )
 
 func init() {
@@ -29,6 +32,7 @@ func init() {
 		RunE:  runIndex,
 	}
 	indexCmd.Flags().BoolP("force", "f", false, "Force re-index")
+	indexCmd.Flags().String("discovery-report", "", "Write a discovery advisory JSON report to this path")
 	rootCmd.AddCommand(indexCmd)
 
 	// index-status
@@ -139,12 +143,15 @@ func init() {
 	rootCmd.AddCommand(finalizeCmd)
 
 	// Shortcuts
-	rootCmd.AddCommand(&cobra.Command{
+	indexShortcutCmd := &cobra.Command{
 		Use:   "i [path]",
 		Short: "Shortcut for 'pcg index'",
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runIndex,
-	})
+	}
+	indexShortcutCmd.Flags().BoolP("force", "f", false, "Force re-index")
+	indexShortcutCmd.Flags().String("discovery-report", "", "Write a discovery advisory JSON report to this path")
+	rootCmd.AddCommand(indexShortcutCmd)
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "ls",
 		Short: "Shortcut for 'pcg list'",
@@ -177,8 +184,9 @@ func runIndex(cmd *cobra.Command, args []string) error {
 	}
 
 	force, _ := cmd.Flags().GetBool("force")
+	discoveryReport, _ := cmd.Flags().GetString("discovery-report")
 
-	binary, err := exec.LookPath("pcg-bootstrap-index")
+	binary, err := indexLookPath("pcg-bootstrap-index")
 	if err != nil {
 		printError("pcg-bootstrap-index binary not found in PATH.")
 		fmt.Println("Build with: cd go && go build -o bin/ ./cmd/bootstrap-index/")
@@ -189,9 +197,17 @@ func runIndex(cmd *cobra.Command, args []string) error {
 	if force {
 		cmdArgs = append(cmdArgs, "--force")
 	}
+	env := os.Environ()
+	if strings.TrimSpace(discoveryReport) != "" {
+		reportPath, err := filepath.Abs(discoveryReport)
+		if err != nil {
+			return fmt.Errorf("resolve discovery report path %q: %w", discoveryReport, err)
+		}
+		env = append(env, "PCG_DISCOVERY_REPORT="+reportPath)
+	}
 
 	fmt.Printf("Indexing %s...\n", absPath)
-	return syscall.Exec(binary, cmdArgs, os.Environ())
+	return indexExec(binary, cmdArgs, env)
 }
 
 func runIndexStatus(cmd *cobra.Command, args []string) error {

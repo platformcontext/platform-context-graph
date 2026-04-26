@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -59,6 +61,7 @@ type applyBootstrapFn func(context.Context, bootstrapDB) error
 type openGraphFn func(context.Context, func(string) string, trace.Tracer, *telemetry.Instruments) (graphDeps, error)
 type buildCollectorFn func(context.Context, bootstrapDB, func(string) string, trace.Tracer, *telemetry.Instruments, *slog.Logger) (collectorDeps, error)
 type buildProjectorFn func(context.Context, bootstrapDB, projector.CanonicalWriter, func(string) string, trace.Tracer, *telemetry.Instruments) (projectorDeps, error)
+type discoveryAdvisorySink func(collector.DiscoveryAdvisoryReport) error
 
 func main() {
 	if err := run(
@@ -154,7 +157,23 @@ func run(
 		telemetry.PhaseAttr(telemetry.PhaseEmission),
 	)
 
-	return runPipelined(ctx, cd, pd, workers, tracer, instruments, logger)
+	reportPath := strings.TrimSpace(getenv("PCG_DISCOVERY_REPORT"))
+	reports := make([]collector.DiscoveryAdvisoryReport, 0)
+	var reportSink discoveryAdvisorySink
+	if reportPath != "" {
+		reportSink = func(report collector.DiscoveryAdvisoryReport) error {
+			reports = append(reports, report)
+			return nil
+		}
+	}
+
+	pipelineErr := runPipelined(ctx, cd, pd, workers, tracer, instruments, logger, reportSink)
+	if reportPath != "" {
+		if writeErr := writeDiscoveryAdvisoryReports(reportPath, reports); writeErr != nil {
+			return errors.Join(pipelineErr, writeErr)
+		}
+	}
+	return pipelineErr
 }
 
 // runPipelined runs collection and projection concurrently. The collector is
@@ -173,6 +192,7 @@ func runPipelined(
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 	logger *slog.Logger,
+	advisorySinks ...discoveryAdvisorySink,
 ) error {
 	pipelineStart := time.Now()
 	ctx, cancel := context.WithCancel(ctx)
@@ -187,7 +207,7 @@ func runPipelined(
 	// Start collector goroutine
 	go func() {
 		defer close(collectorDone)
-		err := drainCollector(ctx, cd.source, cd.committer, tracer, instruments, logger)
+		err := drainCollector(ctx, cd.source, cd.committer, tracer, instruments, logger, firstDiscoveryAdvisorySink(advisorySinks))
 		errc <- err
 	}()
 
@@ -364,8 +384,10 @@ func drainCollector(
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 	logger *slog.Logger,
+	advisorySinks ...discoveryAdvisorySink,
 ) error {
 	var total int
+	advisorySink := firstDiscoveryAdvisorySink(advisorySinks)
 	for {
 		cycleStart := time.Now()
 
@@ -427,6 +449,18 @@ func drainCollector(
 			}
 			return fmt.Errorf("bootstrap collector commit: %w", err)
 		}
+		if collected.DiscoveryAdvisory != nil && advisorySink != nil {
+			report := *collected.DiscoveryAdvisory
+			if report.Run.ScopeID == "" {
+				report.Run.ScopeID = collected.Scope.ScopeID
+			}
+			if report.Run.GenerationID == "" {
+				report.Run.GenerationID = collected.Generation.GenerationID
+			}
+			if err := advisorySink(report); err != nil {
+				return fmt.Errorf("record discovery advisory: %w", err)
+			}
+		}
 
 		duration := time.Since(cycleStart).Seconds()
 		if instruments != nil {
@@ -454,6 +488,34 @@ func drainCollector(
 		}
 		total++
 	}
+}
+
+func firstDiscoveryAdvisorySink(sinks []discoveryAdvisorySink) discoveryAdvisorySink {
+	for _, sink := range sinks {
+		if sink != nil {
+			return sink
+		}
+	}
+	return nil
+}
+
+func writeDiscoveryAdvisoryReports(path string, reports []collector.DiscoveryAdvisoryReport) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create discovery advisory report directory: %w", err)
+	}
+	contents, err := json.MarshalIndent(reports, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal discovery advisory report: %w", err)
+	}
+	contents = append(contents, '\n')
+	if err := os.WriteFile(path, contents, 0o644); err != nil {
+		return fmt.Errorf("write discovery advisory report %q: %w", path, err)
+	}
+	return nil
 }
 
 // drainProjector runs projection workers concurrently. Each worker claims

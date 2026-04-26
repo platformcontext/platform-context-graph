@@ -136,7 +136,17 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		ContentFiles:    []ContentFileSnapshot{},
 		ContentEntities: []ContentEntitySnapshot{},
 	}
+	commitSHA := gitCommitSHA(ctx, repoPath)
 	if len(fileSet.Files) == 0 {
+		snapshot.DiscoveryAdvisory = buildDiscoveryAdvisoryReport(
+			repoPath,
+			s.now(),
+			discoveryStats,
+			fileSet.Files,
+			nil,
+			nil,
+			commitSHA,
+		)
 		return snapshot, nil
 	}
 
@@ -154,7 +164,6 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("repository metadata for %q: %w", repoPath, err)
 	}
-	commitSHA := gitCommitSHA(ctx, repoPath)
 	shapeFiles, parsedFiles, err := s.buildParsedRepositoryFiles(
 		ctx,
 		repoPath,
@@ -180,6 +189,15 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	snapshot.FileData = parsedFiles
 	snapshot.ContentFileMetas = materializationRecordsToMetas(materialization.Records)
 	snapshot.ContentEntities = materializationEntitiesToSnapshots(materialization.Entities, s.now())
+	snapshot.DiscoveryAdvisory = buildDiscoveryAdvisoryReport(
+		repoPath,
+		s.now(),
+		discoveryStats,
+		fileSet.Files,
+		snapshot.ContentFileMetas,
+		snapshot.ContentEntities,
+		commitSHA,
+	)
 
 	// Release body references — bodies are no longer needed in the snapshot.
 	// streamFacts will re-read each file from disk when building content facts.
