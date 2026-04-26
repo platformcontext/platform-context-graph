@@ -77,8 +77,8 @@ model:
 
 The same work must also close the product gap for source-code dependency
 tracing. PCG must expose a shared **dependency neighborhood** contract for code
-and IaC entities so the UI can select a file, symbol, module, chart, overlay,
-manifest, or resource and immediately show:
+and IaC entities so any caller can select a file, symbol, module, chart,
+overlay, manifest, or resource and immediately answer:
 
 - what it depends on
 - what depends on it
@@ -87,9 +87,10 @@ manifest, or resource and immediately show:
 - truth labels, ambiguity reasons, and coverage limitations
 
 Tree-sitter and language parsers can provide code spans and symbol evidence, but
-the UI contract must not be a parser-specific feature. It must be backed by the
-same canonical graph, content store, usage edges, and truth-label protocol that
-serve HTTP, MCP, CLI, and future web/IDE surfaces.
+the neighborhood contract must not be a parser-specific or UI-specific feature.
+It must be backed by the same canonical graph, content store, usage edges, and
+truth-label protocol that serve HTTP, MCP, CLI, PR automation, refactor tooling,
+and future web/IDE surfaces.
 
 The graph also becomes the missing middle layer for end-to-end PCG relationships:
 
@@ -211,21 +212,27 @@ Initial finding classes:
 
 ## Product Surfaces
 
-### Dependency Explorer And Neighborhood Trace
+### Dependency Neighborhood And Explorer
 
 The user-facing workflow should answer:
 
 ```text
-When I click this file, symbol, module, chart, overlay, manifest, or resource,
-what does it depend on and what depends on it?
+For this file, symbol, module, chart, overlay, manifest, or resource, what does
+it depend on and what depends on it?
 ```
 
-This is a shared code and IaC product surface, not an IaC-only report. The first
-PCG-owned UI should keep one selected entity in sync across the graph, file tree,
-and source inspector. Selecting an entity must focus the graph neighborhood,
-expand the file tree to the owning artifact when applicable, and show source
-content or source spans without requiring the user to write Cypher or know which
-specialized endpoint owns the underlying edge family.
+This is a shared code and IaC capability, not an IaC-only report and not just a
+UI feature. The dependency-neighborhood response should become the common
+contract for:
+
+- interactive dependency explorer views
+- MCP and agent answers about impact, reachability, and dependency context
+- CLI dependency and impact summaries
+- PR review automation that explains the blast radius of changed files
+- dead-code and dead-IaC cleanup workflows that need evidence and confidence
+- refactor tooling for rename, move, delete, and extraction workflows
+- internal platform APIs that need a stable response shape across code, IaC,
+  deployment, and runtime domains
 
 The response model must include:
 
@@ -242,6 +249,13 @@ The response model must include:
 - source evidence and content-read handles for each edge when available
 - truth labels, exactness, partial-coverage flags, and unsupported-capability
   envelopes when the indexed mode cannot answer exactly
+
+The first PCG-owned UI should consume the same contract instead of having a
+separate graph query path. It should keep one selected entity in sync across the
+graph, file tree, and source inspector. Selecting an entity must focus the graph
+neighborhood, expand the file tree to the owning artifact when applicable, and
+show source content or source spans without requiring the user to write Cypher or
+know which specialized endpoint owns the underlying edge family.
 
 The UI should provide at least these tabs or equivalent panes:
 
