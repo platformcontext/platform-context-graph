@@ -61,6 +61,22 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 					{int64(9), int64(4), int64(1), int64(2), int64(1), int64(3), int64(1), int64(0), 90.0, int64(0)},
 				},
 			},
+			{
+				rows: [][]any{
+					{
+						"reducer",
+						"code_call_materialization",
+						"retrying",
+						"work-1",
+						"scope-1",
+						"generation-b",
+						"graph_write_timeout",
+						"neo4j execute group timed out after 2s",
+						"phase=semantic label=Variable rows=500",
+						time.Date(2026, 4, 12, 15, 59, 0, 0, time.UTC),
+					},
+				},
+			},
 		},
 	}
 
@@ -84,6 +100,15 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 	}
 	if got.Queue != wantQueue {
 		t.Fatalf("ReadRawSnapshot().Queue = %#v, want %#v", got.Queue, wantQueue)
+	}
+	if got.LatestQueueFailure == nil {
+		t.Fatal("ReadRawSnapshot().LatestQueueFailure = nil, want latest failure")
+	}
+	if got.LatestQueueFailure.FailureClass != "graph_write_timeout" {
+		t.Fatalf("ReadRawSnapshot().LatestQueueFailure.FailureClass = %q, want graph_write_timeout", got.LatestQueueFailure.FailureClass)
+	}
+	if got.LatestQueueFailure.FailureDetails != "phase=semantic label=Variable rows=500" {
+		t.Fatalf("ReadRawSnapshot().LatestQueueFailure.FailureDetails = %q, want graph write details", got.LatestQueueFailure.FailureDetails)
 	}
 	if len(got.ScopeCounts) != 6 {
 		t.Fatalf("ReadRawSnapshot().ScopeCounts len = %d, want 6", len(got.ScopeCounts))
@@ -134,8 +159,8 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 		t.Fatalf("ReadRawSnapshot().Coordinator = %#v, want nil", got.Coordinator)
 	}
 
-	if len(queryer.queries) != 11 {
-		t.Fatalf("QueryContext() call count = %d, want 11", len(queryer.queries))
+	if len(queryer.queries) != 12 {
+		t.Fatalf("QueryContext() call count = %d, want 12", len(queryer.queries))
 	}
 	for _, want := range []string{
 		"FROM ingestion_scopes",
@@ -144,6 +169,7 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 		"activated_at",
 		"superseded_at",
 		"FROM fact_work_items",
+		"failure_details",
 	} {
 		joined := strings.Join(queryer.queries, "\n")
 		if !strings.Contains(joined, want) {
@@ -184,6 +210,18 @@ func TestStatusQueriesUseAggregateFilterSyntax(t *testing.T) {
 		if strings.Contains(query, "EXTRACT(EPOCH FROM ($1 - MIN(created_at)))\n           FILTER") {
 			t.Fatalf("%s uses invalid FILTER placement:\n%s", name, query)
 		}
+	}
+}
+
+func TestLatestQueueFailureQueryIgnoresInFlightRows(t *testing.T) {
+	t.Parallel()
+
+	if strings.Contains(latestQueueFailureQuery, "'claimed'") ||
+		strings.Contains(latestQueueFailureQuery, "'running'") {
+		t.Fatalf("latestQueueFailureQuery should not treat in-flight heartbeats as latest failures:\n%s", latestQueueFailureQuery)
+	}
+	if !strings.Contains(latestQueueFailureQuery, "status IN ('retrying', 'failed', 'dead_letter')") {
+		t.Fatalf("latestQueueFailureQuery missing retry/terminal filter:\n%s", latestQueueFailureQuery)
 	}
 }
 

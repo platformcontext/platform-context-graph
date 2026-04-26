@@ -18,6 +18,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Coordinator           *coordinatorSnapshotJSON   `json:"coordinator,omitempty"`
 		Flow                  []flowSummaryJSON          `json:"flow"`
 		Queue                 queueJSON                  `json:"queue"`
+		LatestFailure         *queueFailureJSON          `json:"latest_failure,omitempty"`
 		RetryPolicies         []retryPolicyJSON          `json:"retry_policies"`
 		ScopeActivity         scopeActivityJSON          `json:"scope_activity"`
 		GenerationHistory     generationHistoryJSON      `json:"generation_history"`
@@ -33,6 +34,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Coordinator:           coordinatorJSON(report.Coordinator),
 		Flow:                  flowSummariesJSON(report.FlowSummaries),
 		Queue:                 queueJSONFromReport(report.Queue),
+		LatestFailure:         queueFailureJSONFromReport(report.LatestQueueFailure),
 		RetryPolicies:         retryPoliciesJSON(report.RetryPolicies),
 		ScopeActivity:         scopeActivityJSONFromReport(report.ScopeActivity),
 		GenerationHistory:     generationHistoryJSONFromReport(report.GenerationHistory),
@@ -58,6 +60,19 @@ type queueJSON struct {
 	OverdueClaims               int     `json:"overdue_claims"`
 	OldestOutstandingAge        string  `json:"oldest_outstanding_age"`
 	OldestOutstandingAgeSeconds float64 `json:"oldest_outstanding_age_seconds"`
+}
+
+type queueFailureJSON struct {
+	Stage          string `json:"stage"`
+	Domain         string `json:"domain"`
+	Status         string `json:"status"`
+	WorkItemID     string `json:"work_item_id,omitempty"`
+	ScopeID        string `json:"scope_id,omitempty"`
+	GenerationID   string `json:"generation_id,omitempty"`
+	FailureClass   string `json:"failure_class"`
+	FailureMessage string `json:"failure_message,omitempty"`
+	FailureDetails string `json:"failure_details,omitempty"`
+	UpdatedAt      string `json:"updated_at,omitempty"`
 }
 
 type scopeActivityJSON struct {
@@ -127,6 +142,25 @@ func queueJSONFromReport(queue QueueSnapshot) queueJSON {
 		OverdueClaims:               queue.OverdueClaims,
 		OldestOutstandingAge:        queue.OldestOutstandingAge.String(),
 		OldestOutstandingAgeSeconds: queue.OldestOutstandingAge.Seconds(),
+	}
+}
+
+func queueFailureJSONFromReport(snapshot *QueueFailureSnapshot) *queueFailureJSON {
+	if snapshot == nil {
+		return nil
+	}
+
+	return &queueFailureJSON{
+		Stage:          snapshot.Stage,
+		Domain:         snapshot.Domain,
+		Status:         snapshot.Status,
+		WorkItemID:     snapshot.WorkItemID,
+		ScopeID:        snapshot.ScopeID,
+		GenerationID:   snapshot.GenerationID,
+		FailureClass:   snapshot.FailureClass,
+		FailureMessage: snapshot.FailureMessage,
+		FailureDetails: snapshot.FailureDetails,
+		UpdatedAt:      nullableRFC3339Value(snapshot.UpdatedAt),
 	}
 }
 
@@ -201,4 +235,11 @@ func nullableRFC3339String(value time.Time) *string {
 	}
 	formatted := value.UTC().Format(time.RFC3339)
 	return &formatted
+}
+
+func nullableRFC3339Value(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }

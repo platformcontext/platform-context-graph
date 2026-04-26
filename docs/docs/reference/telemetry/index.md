@@ -67,6 +67,9 @@ flowchart LR
 - Use **logs** when you need exact repository, run, or work-item context.
 - Use the shared admin/status report when you want a quick read on stage,
   backlog, live-versus-inferred state, and failure classification.
+- Use `pcg index --discovery-report <file>` when you need path-level noisy-repo
+  evidence. Discovery advisory reports may include repository paths and top
+  files/directories, so they deliberately stay out of metric labels.
 
 ## Incremental Refresh And Reconciliation Signals
 
@@ -156,6 +159,10 @@ For shared-write debugging specifically:
 
 - The admin/status report answers stage, backlog, health, and live-versus-
   inferred questions in one place.
+- When queue failures exist, the report includes the latest persisted
+  `failure_class`, message, and details so operators can spot cases such as
+  `graph_write_timeout` without adding repository- or work-item-level metric
+  labels.
 - It should mirror the service runtime shape so operators do not need a
   different mental model for collector, projector, reducer, or future Go
   services.
