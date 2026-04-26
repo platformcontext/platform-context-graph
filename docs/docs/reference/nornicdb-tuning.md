@@ -45,6 +45,11 @@ client context deadline and the Neo4j-driver Bolt `tx_timeout` metadata. Keep
 both sides aligned so a timed-out reducer or ingester write does not merely
 stop waiting while the database keeps executing the same mutation.
 
+When that budget is exhausted, PCG stores the queue failure as
+`graph_write_timeout` and preserves the sanitized phase/label/row summary in
+`failure_details`. Timeout failures are intentionally not retried just because
+they are timeouts; only proven transient conflict errors opt into bounded retry.
+
 ## Semantic Write Budget
 
 | Variable | Default | Scope | Use |

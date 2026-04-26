@@ -488,13 +488,13 @@ func (q ReducerQueue) failIntent(
 	cause error,
 ) error {
 	now := q.now()
-	failureClass := "reducer_failed"
+	failureClass, failureMessage, failureDetails := queueFailureMetadata(cause, "reducer_failed")
 	query := failReducerWorkQuery
 	args := []any{
 		now,
 		failureClass,
-		cause.Error(),
-		cause.Error(),
+		failureMessage,
+		failureDetails,
 		intent.IntentID,
 		q.LeaseOwner,
 	}
@@ -505,8 +505,8 @@ func (q ReducerQueue) failIntent(
 		args = []any{
 			now,
 			failureClass,
-			cause.Error(),
-			cause.Error(),
+			failureMessage,
+			failureDetails,
 			now.Add(q.retryDelay()),
 			intent.IntentID,
 			q.LeaseOwner,
