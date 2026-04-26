@@ -241,21 +241,6 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 				if len(batchRows) == 0 {
 					return
 				}
-				if len(batchRows) == 1 {
-					stmts = append(stmts, canonicalNodeEntitySingletonWithContainmentStatement(
-						label,
-						filePath,
-						batchRows[0],
-						fmt.Sprintf(
-							"label=%s file=%s rows=1 entity_id=%v singleton_parameterized containment=inline",
-							label,
-							filePath,
-							batchRows[0]["entity_id"],
-						),
-					))
-					batchRows = batchRows[:0]
-					return
-				}
 				statementSummary := fmt.Sprintf(
 					"label=%s file=%s rows=%d first_id=%v last_id=%v containment=inline",
 					label,

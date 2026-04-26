@@ -96,6 +96,11 @@ global graph-write concurrency. First confirm whether NornicDB is taking the
 intended hot path or falling back to a generic executor. The compatibility
 workflow prefers adding performant NornicDB support for Neo4j-equivalent query
 shapes before PCG gives up useful cross-repo parallelism.
+For canonical entity writes, ordinary one-row file-scoped batches should still
+use the `UNWIND $rows AS row` hot path. The execute-only singleton fallback is
+reserved for rows containing the known `shortestPath` / `allShortestPaths`
+parser hazard; broad singleton logs for normal symbols usually mean a writer
+shape regression, not a reason to lower global concurrency.
 
 Watch future heavy write families such as call edges, infra edges, and other
 shared reducer domains. If they need different treatment, add phase metadata

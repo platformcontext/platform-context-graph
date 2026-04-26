@@ -7,7 +7,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 )
 
-func TestCanonicalNodeWriterFileScopedContainmentUsesSingletonForOneRow(t *testing.T) {
+func TestCanonicalNodeWriterFileScopedContainmentKeepsNormalOneRowBatchGrouped(t *testing.T) {
 	t.Parallel()
 
 	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
@@ -38,13 +38,102 @@ func TestCanonicalNodeWriterFileScopedContainmentUsesSingletonForOneRow(t *testi
 		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
 	}
 	stmt := stmts[0]
-	if strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
-		t.Fatalf("entity cypher = %q, want singleton shape without UNWIND", stmt.Cypher)
+	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
+		t.Fatalf("entity cypher = %q, want one-row batch to keep UNWIND hot-path shape", stmt.Cypher)
 	}
-	if got, want := stmt.Parameters[StatementMetadataPhaseGroupModeKey], PhaseGroupModeExecuteOnly; got != want {
-		t.Fatalf("phase group mode = %#v, want %#v", got, want)
+	if got := stmt.Parameters[StatementMetadataPhaseGroupModeKey]; got != nil {
+		t.Fatalf("phase group mode = %#v, want grouped one-row batch without execute-only mode", got)
 	}
-	if got, want := stmt.Parameters["entity_id"], "k8s-1"; got != want {
-		t.Fatalf("entity_id = %#v, want %#v", got, want)
+	rows, ok := stmt.Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows type = %T, want []map[string]any", stmt.Parameters["rows"])
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("rows = %d, want %d", got, want)
+	}
+	if got, want := rows[0]["entity_id"], "k8s-1"; got != want {
+		t.Fatalf("row entity_id = %#v, want %#v", got, want)
+	}
+}
+
+func TestCanonicalNodeWriterFileScopedContainmentOnlySingletonsFallbackRows(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
+		WithEntityContainmentInEntityUpsert().
+		WithEntityBatchSize(10)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "fn-1",
+				Label:        "Function",
+				EntityName:   "normalOne",
+				FilePath:     "/repos/my-repo/src/routes.go",
+				RelativePath: "src/routes.go",
+				StartLine:    1,
+				EndLine:      2,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+			{
+				EntityID:     "fn-shortest",
+				Label:        "Function",
+				EntityName:   "TestHandleCallChainReturnsShortestPath",
+				FilePath:     "/repos/my-repo/src/routes.go",
+				RelativePath: "src/routes.go",
+				StartLine:    3,
+				EndLine:      4,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+			{
+				EntityID:     "fn-2",
+				Label:        "Function",
+				EntityName:   "normalTwo",
+				FilePath:     "/repos/my-repo/src/routes.go",
+				RelativePath: "src/routes.go",
+				StartLine:    5,
+				EndLine:      6,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 3; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+
+	for _, idx := range []int{0, 2} {
+		stmt := stmts[idx]
+		if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
+			t.Fatalf("statement %d cypher = %q, want grouped one-row UNWIND shape", idx, stmt.Cypher)
+		}
+		if got := stmt.Parameters[StatementMetadataPhaseGroupModeKey]; got != nil {
+			t.Fatalf("statement %d phase group mode = %#v, want absent", idx, got)
+		}
+		rows, ok := stmt.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("statement %d rows type = %T, want []map[string]any", idx, stmt.Parameters["rows"])
+		}
+		if got, want := len(rows), 1; got != want {
+			t.Fatalf("statement %d rows = %d, want %d", idx, got, want)
+		}
+	}
+
+	fallback := stmts[1]
+	if strings.Contains(fallback.Cypher, "UNWIND $rows AS row") {
+		t.Fatalf("fallback cypher = %q, want singleton shape without UNWIND", fallback.Cypher)
+	}
+	if got, want := fallback.Parameters[StatementMetadataPhaseGroupModeKey], PhaseGroupModeExecuteOnly; got != want {
+		t.Fatalf("fallback phase group mode = %#v, want %#v", got, want)
+	}
+	if got, want := fallback.Parameters["entity_id"], "fn-shortest"; got != want {
+		t.Fatalf("fallback entity_id = %#v, want %#v", got, want)
 	}
 }
