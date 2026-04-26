@@ -48,7 +48,7 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBAnnotationCap(
 		rows, _ := call.Parameters["rows"].([]map[string]any)
 		annotationBatches = append(annotationBatches, len(rows))
 	}
-	if got, want := intsString(annotationBatches), "[100 1]"; got != want {
+	if got, want := intsString(annotationBatches), "[50 50 1]"; got != want {
 		t.Fatalf("Annotation batch sizes = %s, want %s", got, want)
 	}
 }

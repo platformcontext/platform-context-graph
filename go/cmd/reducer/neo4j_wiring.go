@@ -414,9 +414,9 @@ func effectiveNeo4jBatchSize(batchSize int) int {
 
 func defaultNornicDBSemanticEntityLabelBatchSizes(batchSize int) map[string]int {
 	return map[string]int{
-		// Large Python/TypeScript annotation batches showed up only in the
-		// multi-repo corpus; cap them without shrinking smaller semantic labels.
-		"Annotation": minPositiveInt(batchSize, 100),
+		// Multi-repo dogfood showed Annotation rows carry enough decorator
+		// metadata that even 100-row statements can exceed the write budget.
+		"Annotation": minPositiveInt(batchSize, 50),
 		"Function":   minPositiveInt(batchSize, 10),
 		"Variable":   minPositiveInt(batchSize, 10),
 		// Module rows can carry declaration-merge metadata, and the self-repo
