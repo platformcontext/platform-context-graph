@@ -34,6 +34,8 @@ func TestNativeRepositorySnapshotterDefaultDiscoverySkipsDependencyDirs(t *testi
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "style.min.css"), "minified\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "bundle.js.map"), "sourcemap\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "lib.pyc"), "compiled\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".pnp.cjs"), "module.exports = {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".pnp.loader.mjs"), "export default {}\n")
 
 	engine, err := parser.DefaultEngine()
 	if err != nil {

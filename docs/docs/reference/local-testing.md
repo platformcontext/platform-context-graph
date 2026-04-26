@@ -660,8 +660,10 @@ To test against real Git repositories from a local directory, set
 `PCG_FILESYSTEM_HOST_ROOT` to an absolute path containing one or more
 cloned repositories. Each subdirectory with a `.git` folder is
 discovered automatically. The collector prunes dependency and generated
-artifact directories such as `.git`, `node_modules`, `vendor`, and `.yarn`
-before parsing so checked-in package-manager bundles do not dominate the graph.
+artifact directories such as `.git`, `node_modules`, `vendor`, and `.yarn`,
+plus Yarn Berry Plug'n'Play loader files such as `.pnp.cjs` and
+`.pnp.loader.mjs`, before parsing so checked-in package-manager bundles do not
+dominate the graph.
 
 ```bash
 PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos docker compose up --build
