@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 	"time"
+
+	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 )
 
 func TestLoadReducerQueueConfigUsesDefaults(t *testing.T) {
@@ -49,33 +51,41 @@ func TestLoadReducerQueueConfigReadsEnvOverrides(t *testing.T) {
 func TestLoadReducerWorkerCount_EnvOverride(t *testing.T) {
 	t.Parallel()
 	got := loadReducerWorkerCount(func(k string) string {
-		if k == "PCG_REDUCER_WORKERS" {
+		if k == reducerWorkersEnv {
 			return "6"
 		}
 		return ""
-	})
+	}, runtimecfg.GraphBackendNornicDB)
 	if got != 6 {
 		t.Fatalf("got %d, want 6", got)
 	}
 }
 
-func TestLoadReducerWorkerCount_DefaultCap(t *testing.T) {
+func TestLoadReducerWorkerCount_Neo4jDefaultCap(t *testing.T) {
 	t.Parallel()
-	got := loadReducerWorkerCount(func(string) string { return "" })
+	got := loadReducerWorkerCount(func(string) string { return "" }, runtimecfg.GraphBackendNeo4j)
 	if got < 1 || got > 4 {
 		t.Fatalf("got %d, want 1-4", got)
+	}
+}
+
+func TestLoadReducerWorkerCount_NornicDBDefaultsSequential(t *testing.T) {
+	t.Parallel()
+	got := loadReducerWorkerCount(func(string) string { return "" }, runtimecfg.GraphBackendNornicDB)
+	if got != 1 {
+		t.Fatalf("got %d, want 1", got)
 	}
 }
 
 func TestLoadReducerWorkerCount_InvalidEnv(t *testing.T) {
 	t.Parallel()
 	got := loadReducerWorkerCount(func(k string) string {
-		if k == "PCG_REDUCER_WORKERS" {
+		if k == reducerWorkersEnv {
 			return "not-a-number"
 		}
 		return ""
-	})
-	if got < 1 || got > 4 {
-		t.Fatalf("got %d, want 1-4 (fallback)", got)
+	}, runtimecfg.GraphBackendNornicDB)
+	if got != 1 {
+		t.Fatalf("got %d, want 1 for NornicDB fallback", got)
 	}
 }
