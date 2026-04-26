@@ -1,0 +1,33 @@
+go/internal/collector/git_snapshot_native_discovery_test.go
+  e27ce815bbe89792 105-143,188-221
+go/internal/projector/service.go
+  e27ce815bbe89792 229,245,316-337
+go/internal/projector/service_shutdown_test.go
+  e27ce815bbe89792 4,6-7,68-98
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 274-280
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 111,113
+go/internal/collector/git_snapshot_native.go
+  e27ce815bbe89792 461-474,478,481,485,489,493,496,498-501,504-529
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "dacc44dbf336bda8a571b718cb833b9d7f7ebe04",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 197,
+      "total_deletions": 13,
+      "accepted_lines": 222,
+      "overriden_lines": 0
+    }
+  }
+}
