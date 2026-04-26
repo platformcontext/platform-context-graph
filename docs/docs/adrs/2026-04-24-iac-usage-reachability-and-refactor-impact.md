@@ -12,6 +12,8 @@
 - `2026-04-20-multi-source-reducer-and-consumer-contract.md`
 - `2026-04-20-terraform-state-collector.md`
 - `../reference/dead-code-reachability-spec.md`
+- `../../superpowers/specs/2026-04-26-unified-change-impact-and-dependency-neighborhoods-design.md`
+- `../../superpowers/specs/2026-04-26-cross-repo-contract-bridge-and-service-dependency-graph-design.md`
 
 ---
 
@@ -708,6 +710,18 @@ from indexed sources.
 ---
 
 ## Rollout
+
+### Follow-On Design Specs
+
+Two follow-on specs extend this ADR after the shared neighborhood contract is
+accepted:
+
+- `docs/superpowers/specs/2026-04-26-unified-change-impact-and-dependency-neighborhoods-design.md`
+  turns `graph.neighborhood` into a shared API, MCP, CLI, PR automation, refactor
+  tooling, cleanup, and UI capability.
+- `docs/superpowers/specs/2026-04-26-cross-repo-contract-bridge-and-service-dependency-graph-design.md`
+  adds HTTP, gRPC, event, schema, generated-client, and shared-library contract
+  edges that can feed dependency neighborhoods and change-impact summaries.
 
 ### Phase 0: Shared Dependency Neighborhood Contract
 
