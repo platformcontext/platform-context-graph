@@ -1,0 +1,47 @@
+go/cmd/reducer/main.go
+  e27ce815bbe89792 183-192,196
+go/cmd/reducer/main_test.go
+  e27ce815bbe89792 7,12,14,300-323
+go/internal/storage/postgres/reducer_queue_test.go
+  e27ce815bbe89792 102-141
+go/cmd/reducer/config.go
+  e27ce815bbe89792 9,19,83-95
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 117,124
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 191-195
+go/internal/storage/postgres/reducer_queue_batch_test.go
+  e27ce815bbe89792 145-183
+go/internal/storage/postgres/proof_domain_harness_test.go
+  e27ce815bbe89792 214-222,236-246
+go/internal/storage/postgres/reducer_queue.go
+  e27ce815bbe89792 39-46,161-166,289
+go/internal/storage/postgres/reducer_queue_batch.go
+  e27ce815bbe89792 20-27,54,107
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 116-117
+go/cmd/reducer/config_test.go
+  e27ce815bbe89792 7,139-200
+docs/docs/reference/nornicdb-tuning.md
+  e27ce815bbe89792 71-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ed7f25a976220ccfab9fe8e02524b2a16bbaa499",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 266,
+      "total_deletions": 8,
+      "accepted_lines": 291,
+      "overriden_lines": 0
+    }
+  }
+}
