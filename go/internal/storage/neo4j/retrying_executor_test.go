@@ -105,6 +105,10 @@ func TestRetryingExecutorExhaustsRetries(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error after exhausting retries")
 	}
+	var retryable interface{ Retryable() bool }
+	if !errors.As(err, &retryable) || !retryable.Retryable() {
+		t.Fatalf("error retryable = false, want true")
+	}
 	// 1 initial + 2 retries = 3 calls
 	if got := int(inner.calls.Load()); got != 3 {
 		t.Errorf("calls = %d, want 3 (initial + 2 retries)", got)
@@ -213,6 +217,8 @@ func TestIsTransientNeo4jError(t *testing.T) {
 		{"deadlock", errors.New("Neo.TransientError.Transaction.DeadlockDetected"), true},
 		{"transient generic", errors.New("something TransientError something"), true},
 		{"lock client", errors.New("LockClient timeout"), true},
+		{"nornicdb optimistic edge conflict", errors.New("failed to commit implicit transaction: conflict: edge nornic:abc changed after transaction start"), true},
+		{"nornicdb optimistic node conflict", errors.New("failed to commit implicit transaction: conflict: node nornic:abc changed after transaction start"), true},
 		{"constraint violation", errors.New("Neo.ClientError.Schema.ConstraintValidationFailed"), false},
 		{"generic error", errors.New("connection refused"), false},
 	}
