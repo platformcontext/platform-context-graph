@@ -53,6 +53,7 @@ var (
 	localHostStartManagedGraph     = startManagedLocalGraph
 	localHostWaitChildProcess      = waitLocalChildProcess
 	localHostWaitManagedChildren   = waitLocalHostChildren
+	localHostWaitOwnerChildren     = waitLocalHostChildrenKeepingAllowedCleanExits
 	localHostApplyBootstrap        = applyLocalBootstrap
 	localHostApplyGraphBootstrap   = applyLocalGraphBootstrap
 	localHostStartProgressReporter = startLocalHostProgressReporter
@@ -253,6 +254,11 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 		}
 	}
 
+	if mode == localHostModeWatch && runtimeConfig.Profile == query.ProfileLocalAuthoritative {
+		return localHostWaitOwnerChildren(ctx, children, map[string]struct{}{
+			"pcg-ingester": {},
+		})
+	}
 	if mode == localHostModeWatch {
 		return localHostWaitManagedChildren(ctx, children, "")
 	}

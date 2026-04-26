@@ -59,6 +59,63 @@ func waitLocalHostChildren(ctx context.Context, children []localHostChild, allow
 	return fmt.Errorf("%s exited unexpectedly", first.name)
 }
 
+func waitLocalHostChildrenKeepingAllowedCleanExits(ctx context.Context, children []localHostChild, allowedCleanExits map[string]struct{}) error {
+	if len(children) == 0 {
+		return nil
+	}
+
+	childCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	exitc := make(chan localHostChildExit, len(children))
+	for _, child := range children {
+		child := child
+		go func() {
+			exitc <- localHostChildExit{
+				name: child.name,
+				err:  localHostWaitChildProcess(childCtx, child.cmd),
+			}
+		}()
+	}
+
+	active := len(children)
+	for active > 0 {
+		select {
+		case <-ctx.Done():
+			cancel()
+			for ; active > 0; active-- {
+				<-exitc
+			}
+			return nil
+		case exit := <-exitc:
+			active--
+			if ctx.Err() != nil {
+				cancel()
+				for ; active > 0; active-- {
+					<-exitc
+				}
+				return nil
+			}
+			if exit.err != nil {
+				cancel()
+				for ; active > 0; active-- {
+					<-exitc
+				}
+				return fmt.Errorf("%s exited: %w", exit.name, exit.err)
+			}
+			if _, ok := allowedCleanExits[exit.name]; ok {
+				continue
+			}
+			cancel()
+			for ; active > 0; active-- {
+				<-exitc
+			}
+			return fmt.Errorf("%s exited unexpectedly", exit.name)
+		}
+	}
+	return nil
+}
+
 func startLocalChildProcess(name string, args []string, env []string) (*exec.Cmd, error) {
 	binary, err := localHostLookPath(name)
 	if err != nil {
