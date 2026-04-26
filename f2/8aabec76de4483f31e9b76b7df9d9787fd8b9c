@@ -1,0 +1,58 @@
+go/cmd/pcg/local_host_progress_test.go
+  e27ce815bbe89792 42-49,61-62,126-137
+go/internal/status/status_test.go
+  e27ce815bbe89792 320-327,352-353,487-494,512-516
+go/cmd/pcg/local_host_progress.go
+  e27ce815bbe89792 10,125-127,197-208,244-270
+go/internal/status/queue_failure.go
+  e27ce815bbe89792 1-46
+go/internal/storage/postgres/status.go
+  e27ce815bbe89792 176-179,195
+go/internal/status/status.go
+  176e1ca30a6de7be 70
+  e27ce815bbe89792 57-69,71-72,95,142,209,256-257
+go/internal/storage/postgres/status_test.go
+  e27ce815bbe89792 64-79,104-112,162-163,172,216-224
+go/internal/storage/postgres/status_failure.go
+  e27ce815bbe89792 1-85
+go/internal/status/json.go
+  176e1ca30a6de7be 21,37,65-77,148-166,239-244
+  e27ce815bbe89792 245
+docs/docs/reference/telemetry/index.md
+  e27ce815bbe89792 70-72,162-165
+go/internal/storage/postgres/proof_domain_harness_test.go
+  e27ce815bbe89792 207-208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "f28aabec76de4483f31e9b76b7df9d9787fd8b9c",
+  "prompts": {
+    "176e1ca30a6de7be": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dcbdc-d296-7b41-ac1c-94364162a333",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 42,
+      "overriden_lines": 0
+    },
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 252,
+      "total_deletions": 2,
+      "accepted_lines": 402,
+      "overriden_lines": 0
+    }
+  }
+}
