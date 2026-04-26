@@ -91,6 +91,12 @@ adding another `PCG_NORNICDB_*` variable:
 5. Update this page, the active NornicDB ADR, and the local testing runbook in
    the same PR.
 
+If a one-row or very-low-row statement is still slow, do not immediately lower
+global graph-write concurrency. First confirm whether NornicDB is taking the
+intended hot path or falling back to a generic executor. The compatibility
+workflow prefers adding performant NornicDB support for Neo4j-equivalent query
+shapes before PCG gives up useful cross-repo parallelism.
+
 Watch future heavy write families such as call edges, infra edges, and other
 shared reducer domains. If they need different treatment, add phase metadata
 and tuning only after repo-scale evidence proves the existing canonical or
