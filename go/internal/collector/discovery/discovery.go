@@ -31,6 +31,8 @@ type Options struct {
 	PreservedHiddenPrefixes []string
 	// HonorGitignore enables repo-local .gitignore filtering.
 	HonorGitignore bool
+	// HonorPCGIgnore enables repo-local .pcgignore filtering.
+	HonorPCGIgnore bool
 	// IgnoredPathGlobs lists repo-relative path globs that should be skipped
 	// before parser matching. Patterns may end in "/**" to prune a subtree.
 	IgnoredPathGlobs []PathGlobRule
@@ -69,6 +71,8 @@ type DiscoveryStats struct {
 	FilesSkippedHidden int
 	// FilesSkippedGitignore counts files filtered by repo-local .gitignore rules.
 	FilesSkippedGitignore int
+	// FilesSkippedPCGIgnore counts files filtered by repo-local .pcgignore rules.
+	FilesSkippedPCGIgnore int
 }
 
 // TotalDirsSkipped returns the aggregate count of pruned directories.
@@ -86,7 +90,7 @@ func (s DiscoveryStats) TotalDirsSkipped() int {
 // TotalFilesSkipped returns the aggregate count of skipped files across all
 // skip reasons.
 func (s DiscoveryStats) TotalFilesSkipped() int {
-	total := s.FilesSkippedHidden + s.FilesSkippedGitignore
+	total := s.FilesSkippedHidden + s.FilesSkippedGitignore + s.FilesSkippedPCGIgnore
 	for _, n := range s.FilesSkippedByExtension {
 		total += n
 	}
@@ -108,7 +112,8 @@ type RepoFileSet struct {
 }
 
 // ResolveRepositoryFileSets discovers supported files beneath root, groups them
-// by the nearest repo root, and applies repo-local .gitignore filtering.
+// by the nearest repo root, and applies repo-local .gitignore/.pcgignore
+// filtering.
 func ResolveRepositoryFileSets(
 	root string,
 	supported SupportedFileMatcher,
@@ -156,6 +161,11 @@ func ResolveRepositoryFileSetsWithStats(
 			before := len(files)
 			files = filterRepoFilesByGitignore(repoRoot, files)
 			stats.FilesSkippedGitignore += before - len(files)
+		}
+		if opts.HonorPCGIgnore {
+			before := len(files)
+			files = filterRepoFilesByPCGIgnore(repoRoot, files)
+			stats.FilesSkippedPCGIgnore += before - len(files)
 		}
 		result = append(result, RepoFileSet{
 			RepoRoot: repoRoot,

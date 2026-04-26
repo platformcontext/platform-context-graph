@@ -110,33 +110,38 @@ uses these unsupported controls.
 
 ### Indexing Scope
 
-The current Go runtime does not expose public environment variables for file-size
-limits, hidden-directory skipping, or dependency-root pruning. Those defaults
-are built into the discovery and parser pipeline.
+The current Go runtime does not expose public environment variables for
+file-size limits, hidden-directory skipping, or dependency-root pruning. Those
+defaults are built into the discovery and parser pipeline.
 
-Use `.pcgignore` for repo-specific exclusions, and use
-`.pcg/vendor-roots.json` when a repository checks in third-party source under a
-non-standard path that PCG should prune before descent.
+Use `.pcg/discovery.json` for repo-specific, reasoned exclusions that should be
+visible in discovery logs and metrics. PCG still accepts the older
+`.pcg/vendor-roots.json` shape as a compatibility alias, but new repo-specific
+tuning should use `.pcg/discovery.json`.
 
 Example:
 
 ```json
 {
-  "vendor_roots": [
+  "ignored_path_globs": [
     {"path": "src/wp-content/plugins/wordpress-seo/**", "reason": "wordpress-seo"}
   ],
-  "keep_roots": [
+  "preserved_path_globs": [
     {"path": "src/wp-content/plugins/custom-authored/**"}
   ]
 }
 ```
 
-`vendor_roots[].path` and `keep_roots[].path` are repository-relative globs.
-Patterns ending in `/**` prune a subtree. `reason` is emitted in discovery logs
-and metrics as `user:<reason>` so operators can verify that a noisy repo became
-cheaper for the intended reason. Prefer exact third-party roots over broad
-ecosystem parents such as `wp-content/plugins/**` unless a keep-rule preserves
-the authored subtrees you need.
+`ignored_path_globs[].path` and `preserved_path_globs[].path` are
+repository-relative globs. Patterns ending in `/**` prune a subtree. `reason`
+is emitted in discovery logs and metrics as `user:<reason>` so operators can
+verify that a noisy repo became cheaper for the intended reason. Prefer exact
+third-party roots over broad ecosystem parents such as `wp-content/plugins/**`
+unless a preserve rule keeps the authored subtrees you need.
+
+The legacy `.pcg/vendor-roots.json` file uses `vendor_roots` and `keep_roots`
+with the same path and reason semantics. If both files are present, PCG merges
+both configurations and de-duplicates identical rules.
 
 Use the repository-source settings below when you need to switch between GitHub
 discovery, explicit repo lists, and direct filesystem mode.
@@ -214,7 +219,8 @@ The repository ingester re-discovers repositories on each cycle, applies these r
 
 PlatformContextGraph uses the following hierarchy:
 
-1.  **Project Level:** `.pcgignore` in your project root (files to exclude).
+1.  **Project Level:** `.pcgignore` and `.pcg/discovery.json` in your project
+    root (repo-local indexing exclusions).
 2.  **User Level:** `~/.platform-context-graph/.env` (global settings).
 3.  **Defaults:** Built-in application defaults.
 
@@ -222,9 +228,10 @@ That user-level `.env` file is for CLI configuration. It is not the local API
 bearer-token store; the Go API and MCP runtimes read `PCG_API_KEY` from their
 own process environment when bearer auth is enabled.
 
-Use `.pcgignore` for project-specific exclusions. Use
-the built-in dependency-root pruning plus repository-source settings for
-global indexing behavior.
+Use `.pcgignore` for plain gitignore-style project exclusions. Use
+`.pcg/discovery.json` when you need reasoned pruning with `user:<reason>`
+telemetry. Use the built-in dependency-root pruning plus repository-source
+settings for global indexing behavior.
 
 For logging, the rule is simpler: the current Go runtimes always emit JSON to
 stderr, so deployment tuning should focus on OTLP export and log shipping

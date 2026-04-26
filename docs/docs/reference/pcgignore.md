@@ -1,8 +1,8 @@
 # .pcgignore Guide
 
-The `.pcgignore` file tells PlatformContextGraph which files or folders to skip
-during indexing. It uses `.gitignore`-style patterns and is the right tool for
-project-specific exclusions.
+The `.pcgignore` file is the simple, `.gitignore`-style exclusion contract for
+PlatformContextGraph indexing. For performance tuning that needs auditable
+reasons and skip telemetry, prefer `.pcg/discovery.json`.
 
 ## What PCG already ignores
 
@@ -34,13 +34,29 @@ These directories do not enter checkpoints, Neo4j, Postgres, or finalization.
 If you need dependency internals, load them explicitly with a `.pcg` bundle
 instead of relying on routine repo indexing.
 
-Use `.pcgignore` for repo-local choices that are specific to your project, team, or indexing goals.
+Use `.pcgignore` for repo-local choices that are specific to your project,
+team, or indexing goals when a plain ignore pattern is enough.
 
 For checked-in third-party source trees that live outside the conventional
-dependency directories above, prefer the reasoned vendor-root map at
-`.pcg/vendor-roots.json`. It prunes matching subtrees before descent and emits
+dependency directories above, prefer the reasoned discovery map at
+`.pcg/discovery.json`. It prunes matching subtrees before descent and emits
 `user:<reason>` skip metrics, which makes repo-scale performance tuning easier
-to audit than a silent broad ignore pattern.
+to audit than a silent broad ignore pattern. PCG still accepts the older
+`.pcg/vendor-roots.json` shape for compatibility.
+
+Example `.pcg/discovery.json`:
+
+```json
+{
+  "ignored_path_globs": [
+    {"path": "_old/**", "reason": "archived-site-copy"},
+    {"path": "public/js/fotorama.js", "reason": "static-browser-library"}
+  ],
+  "preserved_path_globs": [
+    {"path": "_old/custom-authored/**"}
+  ]
+}
+```
 
 ## `.gitignore` Interaction
 
