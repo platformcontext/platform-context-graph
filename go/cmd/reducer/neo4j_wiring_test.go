@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -283,6 +285,38 @@ func TestSemanticEntityExecutorForGraphBackendTimesOutGroupedWrites(t *testing.T
 	err := ge.ExecuteGroup(context.Background(), []sourceneo4j.Statement{{Cypher: "RETURN 1"}})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("ExecuteGroup() error = %v, want deadline exceeded", err)
+	}
+}
+
+func TestReducerTransactionTimeoutOnlyAppliesToNornicDB(t *testing.T) {
+	t.Parallel()
+
+	getenv := func(key string) string {
+		if key == "PCG_CANONICAL_WRITE_TIMEOUT" {
+			return "3s"
+		}
+		return ""
+	}
+	if got := reducerTransactionTimeout(runtimecfg.GraphBackendNeo4j, getenv); got != 0 {
+		t.Fatalf("reducerTransactionTimeout(neo4j) = %s, want 0", got)
+	}
+	if got := reducerTransactionTimeout(runtimecfg.GraphBackendNornicDB, getenv); got != 3*time.Second {
+		t.Fatalf("reducerTransactionTimeout(nornicdb) = %s, want 3s", got)
+	}
+}
+
+func TestReducerNeo4jSessionRunnerTransactionConfigurersSetTimeout(t *testing.T) {
+	t.Parallel()
+
+	runner := neo4jSessionRunner{TxTimeout: 4 * time.Second}
+	configurers := runner.transactionConfigurers()
+	if len(configurers) != 1 {
+		t.Fatalf("transactionConfigurers count = %d, want 1", len(configurers))
+	}
+	var config neo4jdriver.TransactionConfig
+	configurers[0](&config)
+	if got := config.Timeout; got != 4*time.Second {
+		t.Fatalf("transaction timeout = %s, want 4s", got)
 	}
 }
 

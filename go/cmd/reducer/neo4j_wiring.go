@@ -161,6 +161,7 @@ func executeReducerCypherWithRetry(
 type neo4jSessionRunner struct {
 	Driver       neo4jdriver.DriverWithContext
 	DatabaseName string
+	TxTimeout    time.Duration
 }
 
 func (r neo4jSessionRunner) RunCypher(ctx context.Context, cypher string, params map[string]any) error {
@@ -174,7 +175,7 @@ func (r neo4jSessionRunner) RunCypher(ctx context.Context, cypher string, params
 	})
 	defer func() { _ = session.Close(ctx) }()
 
-	result, err := session.Run(ctx, cypher, params)
+	result, err := session.Run(ctx, cypher, params, r.transactionConfigurers()...)
 	if err != nil {
 		return err
 	}
@@ -211,8 +212,15 @@ func (r neo4jSessionRunner) RunCypherGroup(ctx context.Context, stmts []sourcene
 			}
 		}
 		return nil, nil
-	})
+	}, r.transactionConfigurers()...)
 	return err
+}
+
+func (r neo4jSessionRunner) transactionConfigurers() []func(*neo4jdriver.TransactionConfig) {
+	if r.TxTimeout <= 0 {
+		return nil
+	}
+	return []func(*neo4jdriver.TransactionConfig){neo4jdriver.WithTxTimeout(r.TxTimeout)}
 }
 
 // QueryCypherExists runs a read-only Cypher query and returns true if at
@@ -307,6 +315,10 @@ func openReducerNeo4jAdapters(
 	parent context.Context,
 	getenv func(string) string,
 ) (sourceneo4j.Executor, reducer.CypherExecutor, sourceneo4j.CypherReader, query.GraphQuery, io.Closer, error) {
+	graphBackend, err := runtimecfg.LoadGraphBackend(getenv)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
@@ -315,6 +327,7 @@ func openReducerNeo4jAdapters(
 	runner := neo4jSessionRunner{
 		Driver:       driver,
 		DatabaseName: cfg.DatabaseName,
+		TxTimeout:    reducerTransactionTimeout(graphBackend, getenv),
 	}
 
 	return reducerNeo4jExecutor{session: runner},
@@ -323,6 +336,13 @@ func openReducerNeo4jAdapters(
 		runner,
 		reducerNeo4jDriverCloser{Driver: driver},
 		nil
+}
+
+func reducerTransactionTimeout(graphBackend runtimecfg.GraphBackend, getenv func(string) string) time.Duration {
+	if graphBackend != runtimecfg.GraphBackendNornicDB {
+		return 0
+	}
+	return nornicDBCanonicalWriteTimeout(getenv)
 }
 
 func semanticEntityExecutorForGraphBackend(
