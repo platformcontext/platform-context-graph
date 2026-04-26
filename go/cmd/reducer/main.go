@@ -234,7 +234,7 @@ func buildReducerService(
 	edgeWriter.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize
 	edgeWriter.SQLRelationshipGroupBatchSize = sqlRelationshipEdgeGroupBatchSize
 
-	workers := loadReducerWorkerCount(getenv)
+	workers := loadReducerWorkerCount(getenv, graphBackend)
 	return reducer.Service{
 		PollInterval:               time.Second,
 		WorkSource:                 workQueue,

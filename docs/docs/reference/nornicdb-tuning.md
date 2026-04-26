@@ -50,10 +50,17 @@ stop waiting while the database keeps executing the same mutation.
 | Variable | Default | Scope | Use |
 | --- | --- | --- | --- |
 | `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | `Annotation=10,Function=10,ImplBlock=10,Module=10,Variable=10` | reducer semantic entity materialization | Overrides NornicDB row caps for semantic labels after parser-enriched semantic metadata proves expensive. |
+| `PCG_REDUCER_WORKERS` | `1` on NornicDB | reducer graph writers | Overrides reducer work concurrency. Leave unset for normal NornicDB runs; raise only when intentionally testing graph-write contention. |
 
 Semantic materialization is a reducer-owned phase. Do not copy canonical caps
 blindly; semantic labels should be narrowed only after timeout summaries name
 the semantic label and row count.
+
+When `PCG_GRAPH_BACKEND=nornicdb`, PCG defaults reducer intent execution to one
+worker because reducer domains can independently mutate the same graph sidecar.
+This does not serialize source discovery, parsing, source-local projection, or
+unrelated local-host processes; it only removes unsafe overlap between reducer
+graph writes unless an operator explicitly sets `PCG_REDUCER_WORKERS`.
 
 First-generation semantic materialization skips stale retract because there is
 no prior semantic graph state to clean up. Refreshes and retries still retract;
