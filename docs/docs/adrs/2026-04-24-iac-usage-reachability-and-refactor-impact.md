@@ -75,6 +75,22 @@ model:
 3. **IaC integrity**: missing local paths, unresolved references, invalid source
    paths, and broken renderer/controller links.
 
+The same work must also close the product gap for source-code dependency
+tracing. PCG must expose a shared **dependency neighborhood** contract for code
+and IaC entities so the UI can select a file, symbol, module, chart, overlay,
+manifest, or resource and immediately show:
+
+- what it depends on
+- what depends on it
+- the shortest known paths to roots, workloads, services, and environments
+- source evidence with line/range spans when available
+- truth labels, ambiguity reasons, and coverage limitations
+
+Tree-sitter and language parsers can provide code spans and symbol evidence, but
+the UI contract must not be a parser-specific feature. It must be backed by the
+same canonical graph, content store, usage edges, and truth-label protocol that
+serve HTTP, MCP, CLI, and future web/IDE surfaces.
+
 The graph also becomes the missing middle layer for end-to-end PCG relationships:
 
 ```text
@@ -194,6 +210,53 @@ Initial finding classes:
 ---
 
 ## Product Surfaces
+
+### Dependency Explorer And Neighborhood Trace
+
+The user-facing workflow should answer:
+
+```text
+When I click this file, symbol, module, chart, overlay, manifest, or resource,
+what does it depend on and what depends on it?
+```
+
+This is a shared code and IaC product surface, not an IaC-only report. The first
+PCG-owned UI should keep one selected entity in sync across the graph, file tree,
+and source inspector. Selecting an entity must focus the graph neighborhood,
+expand the file tree to the owning artifact when applicable, and show source
+content or source spans without requiring the user to write Cypher or know which
+specialized endpoint owns the underlying edge family.
+
+The response model must include:
+
+- selected subject identity, kind, repo, path, and optional line/range
+- normalized incoming edges: direct dependents and reverse consumers
+- normalized outgoing edges: direct dependencies and referenced artifacts
+- optional transitive paths with depth, path kind, and truncation metadata
+- root reachability: entrypoints, workflows, controllers, deploy roots, and
+  runtime roots that make the subject live or deployment-relevant
+- blast-radius context: affected services, workloads, environments, repos, and
+  runtime resources when known
+- findings connected to the subject, including dead-code, dead-IaC, integrity,
+  and ambiguous-dynamic findings
+- source evidence and content-read handles for each edge when available
+- truth labels, exactness, partial-coverage flags, and unsupported-capability
+  envelopes when the indexed mode cannot answer exactly
+
+The UI should provide at least these tabs or equivalent panes:
+
+- `Source`: selected source file or symbol range with highlighted evidence
+- `Depends On`: outgoing code, IaC, config, deployment, and runtime references
+- `Depended On By`: incoming callers, importers, consumers, roots, and owners
+- `Paths`: transitive paths to roots, workloads, services, or environments
+- `Findings`: deadness, integrity, and ambiguous-resolution findings
+- `Blast Radius`: impacted services, workloads, repos, environments, and cloud
+  or runtime resources
+
+This ADR explicitly rejects leaving this workflow as an ad hoc Neo4j Browser
+exercise or a VS Code-only import list. The product requirement is a reusable
+query contract plus a PCG-owned interactive surface that works for code and IaC
+with the same semantics.
 
 ### Find Dead IaC
 
@@ -501,6 +564,7 @@ endpoint.
 
 Initial HTTP and MCP capability names:
 
+- `graph.neighborhood`
 - `iac_quality.dead_iac`
 - `iac_quality.refactor_impact`
 - `iac_quality.integrity`
@@ -508,6 +572,7 @@ Initial HTTP and MCP capability names:
 
 Candidate HTTP routes:
 
+- `POST /api/v0/graph/neighborhood`
 - `POST /api/v0/iac/dead`
 - `POST /api/v0/iac/impact`
 - `POST /api/v0/iac/integrity`
@@ -515,6 +580,7 @@ Candidate HTTP routes:
 
 Candidate MCP tools:
 
+- `get_dependency_neighborhood`
 - `find_dead_iac`
 - `trace_iac_impact`
 - `find_broken_iac_references`
@@ -522,6 +588,11 @@ Candidate MCP tools:
 
 The final route and MCP names must be documented in the HTTP and MCP reference
 pages when implemented. This ADR only decides the capability boundary.
+
+`/api/v0/graph/neighborhood` is the preferred backend for the Dependency
+Explorer. Specialized code and IaC routes may continue to expose deeper domain
+queries, but they should feed the neighborhood response shape rather than force
+UI clients to stitch together unrelated response models.
 
 ---
 
@@ -567,6 +638,9 @@ The implementation must preserve PCG's existing boundaries:
   relationships.
 - `go/internal/query/` owns HTTP/MCP query surfaces and truth labels.
 - `go/internal/graph/` and graph adapters own backend-neutral graph writes.
+- `vscode-extension/` and future web UI surfaces own interaction state and
+  presentation, but must call documented query surfaces instead of embedding raw
+  Cypher or storage-specific dependency logic.
 
 Handlers must depend on graph/query ports, not concrete graph adapter types.
 
@@ -588,6 +662,10 @@ Required telemetry:
 - reducer processing duration for IaC usage materialization
 - query duration and result-count histograms for dead IaC, impact, integrity,
   and relationship queries
+- query duration, edge-count, path-count, truncation-count, and
+  unsupported-capability counters for dependency-neighborhood requests
+- UI-facing structured logs that explain selected entity resolution failures,
+  partial coverage, and fallback from graph-backed to content-backed evidence
 
 Metric labels must avoid high-cardinality path values. File paths, unresolved
 targets, and specific identifiers belong in spans, structured logs, or finding
@@ -616,6 +694,22 @@ from indexed sources.
 ---
 
 ## Rollout
+
+### Phase 0: Shared Dependency Neighborhood Contract
+
+Deliver:
+
+- `POST /api/v0/graph/neighborhood` contract for selected code and IaC
+  entities.
+- request selectors for entity id, repo/path, path plus line/range, and semantic
+  name where supported.
+- normalized incoming/outgoing edge response with truth labels and coverage
+  limitations.
+- first UI integration that shows `Source`, `Depends On`, `Depended On By`,
+  `Paths`, `Findings`, and `Blast Radius` for code relationships already present
+  in the graph.
+- replacement of ad hoc VS Code import-only dependency logic with the documented
+  neighborhood route.
 
 ### Phase 1: Terraform, Terragrunt, And Filesystem References
 
@@ -687,6 +781,10 @@ Required validation layers:
 - projector tests for durable reference facts
 - reducer tests for resolved usage edges
 - query tests for dead-IaC, impact, integrity, and relationship responses
+- dependency-neighborhood query tests for code-only, IaC-only, and mixed
+  code-to-IaC subjects
+- UI contract tests that prove selecting an entity can populate source,
+  incoming, outgoing, paths, findings, and blast-radius panes without raw Cypher
 - docs updates for public routes, MCP tools, CLI commands, and truth labels when
   those surfaces are implemented
 - compose or local-authoritative proof before claiming graph-backed exactness
@@ -698,6 +796,8 @@ Required validation layers:
 Positive consequences:
 
 - PCG can answer cleanup, broken-reference, and safe-refactor questions for IaC.
+- PCG gets a first-class dependency explorer for code and IaC instead of a
+  graph-database demo or import-only sidebar.
 - Deployment trace gains a richer code-to-CI/CD-to-IaC-to-runtime middle layer.
 - Existing parser work becomes more valuable because extracted entities gain
   durable usage edges.
@@ -737,6 +837,7 @@ Mitigations:
 | Chunk | Status | Evidence | Remaining Work |
 |---|---|---|---|
 | ADR | Proposed | This document | Review and accept/revise decision |
+| Phase 0: Shared Dependency Neighborhood Contract | Not started | Existing code relationship API, content relationship builders, and VS Code dependency panel | Add shared route/MCP response and UI backed by documented query surfaces |
 | Phase 1: Terraform/Terragrunt | Not started | Existing HCL entity extraction and relationship evidence | Add traversal references, path validation, usage edges, queries |
 | Phase 2: Kustomize/ArgoCD | Not started | Existing parser buckets and content-backed relationships | Promote to durable usage graph and impact/integrity queries |
 | Phase 3: Helm | Not started | Existing chart and values extraction | Add Go-template value references, values-file usage, optional rendering |
@@ -758,3 +859,5 @@ Mitigations:
    or lazily during query?
 5. Should exact dead-IaC answers require every referenced repository to be
    indexed in the same generation set?
+6. Should Dependency Explorer ship first in the VS Code extension, the web UI,
+   or both behind the same `/api/v0/graph/neighborhood` contract?
