@@ -99,6 +99,46 @@ func TestReducerQueueBatchEnqueue(t *testing.T) {
 	}
 }
 
+func TestReducerQueueClaimCanWaitForProjectorDrain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	queue := ReducerQueue{
+		db:                               db,
+		LeaseOwner:                       "test-owner",
+		LeaseDuration:                    30 * time.Second,
+		Now:                              func() time.Time { return now },
+		RequireProjectorDrainBeforeClaim: true,
+	}
+
+	_, claimed, err := queue.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if claimed {
+		t.Fatal("Claim() claimed = true, want false from empty rows")
+	}
+
+	query := db.queries[0].query
+	for _, want := range []string{
+		"$5 = false OR NOT EXISTS",
+		"projector_work.stage = 'projector'",
+		"projector_work.status IN ('pending', 'retrying', 'claimed', 'running')",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("claim query missing projector drain predicate %q:\n%s", want, query)
+		}
+	}
+	if got, want := db.queries[0].args[4], true; got != want {
+		t.Fatalf("projector drain arg = %v, want %v", got, want)
+	}
+}
+
 func TestReducerQueueReopenSucceededResetsSucceededWorkItemToPending(t *testing.T) {
 	t.Parallel()
 

@@ -17,6 +17,14 @@ WITH candidate AS (
       AND (visible_at IS NULL OR visible_at <= $1)
       AND (claim_until IS NULL OR claim_until <= $1)
       AND ($2 = '' OR domain = $2)
+      -- NornicDB local_authoritative first-generation runs must not let
+      -- reducer graph writes contend with source-local canonical projection.
+      AND ($5 = false OR NOT EXISTS (
+          SELECT 1
+          FROM fact_work_items AS projector_work
+          WHERE projector_work.stage = 'projector'
+            AND projector_work.status IN ('pending', 'retrying', 'claimed', 'running')
+      ))
       -- Reducer domains can touch the same graph nodes for a scope. Keep
       -- cross-scope parallelism, but avoid overlapping writes for one repo.
       AND NOT EXISTS (
@@ -43,7 +51,7 @@ WITH candidate AS (
           LIMIT 1
       )
     ORDER BY updated_at ASC, work_item_id ASC
-    LIMIT $5
+    LIMIT $6
     FOR UPDATE SKIP LOCKED
 ),
 claimed AS (
@@ -96,6 +104,7 @@ func (q ReducerQueue) ClaimBatch(ctx context.Context, limit int) ([]reducer.Inte
 		"",
 		q.LeaseOwner,
 		now.Add(q.LeaseDuration),
+		q.RequireProjectorDrainBeforeClaim,
 		limit,
 	)
 	if err != nil {

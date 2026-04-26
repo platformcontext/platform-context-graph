@@ -211,22 +211,39 @@ func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...a
 		scopeID, _ := args[0].(string)
 		generationID, _ := args[1].(string)
 		return newProofRows(proofFactRows(db.state.facts, scopeID, generationID)), nil
+	case strings.Contains(query, "stage = 'reducer'"):
+		if len(args) != 5 {
+			return nil, fmt.Errorf("reducer claim args = %d, want 5", len(args))
+		}
+		waitForProjectorDrain, _ := args[4].(bool)
+		if waitForProjectorDrain && proofProjectorWorkOutstanding(db.state.workItems) {
+			return newProofRows(nil), nil
+		}
+		return db.claimReducerWork(args[0].(time.Time), args[2].(string), args[3].(time.Time))
 	case strings.Contains(query, "stage = 'projector'"):
 		if len(args) != 3 {
 			return nil, fmt.Errorf("projector claim args = %d, want 3", len(args))
 		}
 		return db.claimProjectorWork(args[0].(time.Time), args[1].(string), args[2].(time.Time))
-	case strings.Contains(query, "stage = 'reducer'"):
-		if len(args) != 4 {
-			return nil, fmt.Errorf("reducer claim args = %d, want 4", len(args))
-		}
-		return db.claimReducerWork(args[0].(time.Time), args[2].(string), args[3].(time.Time))
 	default:
 		if isWorkflowCoordinatorStatusQuery(query) {
 			return newProofRows(nil), nil
 		}
 		return nil, fmt.Errorf("unexpected query: %s", query)
 	}
+}
+
+func proofProjectorWorkOutstanding(items map[string]proofWorkItem) bool {
+	for _, item := range items {
+		if item.stage != "projector" {
+			continue
+		}
+		switch item.status {
+		case "pending", "retrying", "claimed", "running":
+			return true
+		}
+	}
+	return false
 }
 
 func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, claimUntil time.Time) (Rows, error) {

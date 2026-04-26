@@ -142,6 +142,45 @@ func TestClaimBatchFencesSameScopeCandidates(t *testing.T) {
 	}
 }
 
+func TestClaimBatchCanWaitForProjectorDrain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	q := ReducerQueue{
+		db:                               db,
+		LeaseOwner:                       "test",
+		LeaseDuration:                    time.Minute,
+		Now:                              func() time.Time { return now },
+		RequireProjectorDrainBeforeClaim: true,
+	}
+
+	if _, err := q.ClaimBatch(context.Background(), 5); err != nil {
+		t.Fatalf("ClaimBatch() error = %v", err)
+	}
+
+	query := db.queries[0].query
+	for _, want := range []string{
+		"$5 = false OR NOT EXISTS",
+		"projector_work.stage = 'projector'",
+		"projector_work.status IN ('pending', 'retrying', 'claimed', 'running')",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("batch claim query missing projector drain predicate %q:\n%s", want, query)
+		}
+	}
+	if got, want := db.queries[0].args[4], true; got != want {
+		t.Fatalf("projector drain arg = %v, want %v", got, want)
+	}
+	if got, want := db.queries[0].args[5], 5; got != want {
+		t.Fatalf("limit arg = %v, want %v", got, want)
+	}
+}
+
 func TestReducerQueueImplementsBatchInterfaces(t *testing.T) {
 	t.Parallel()
 
