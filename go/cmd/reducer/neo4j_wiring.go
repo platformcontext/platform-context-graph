@@ -414,8 +414,11 @@ func effectiveNeo4jBatchSize(batchSize int) int {
 
 func defaultNornicDBSemanticEntityLabelBatchSizes(batchSize int) map[string]int {
 	return map[string]int{
-		"Function": minPositiveInt(batchSize, 15),
-		"Variable": minPositiveInt(batchSize, 10),
+		// Large Python/TypeScript annotation batches showed up only in the
+		// multi-repo corpus; cap them without shrinking smaller semantic labels.
+		"Annotation": minPositiveInt(batchSize, 100),
+		"Function":   minPositiveInt(batchSize, 15),
+		"Variable":   minPositiveInt(batchSize, 10),
 		// Module rows can carry declaration-merge metadata, and the self-repo
 		// dogfood run showed the 45-row statement exceeds NornicDB's bounded
 		// semantic write timeout. Keep this family narrow by default.
