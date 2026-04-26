@@ -167,7 +167,7 @@ export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10,K8sResource=1
 export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=1
-export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Function=15,Variable=10
+export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Annotation=10,Function=10,Variable=10,Module=10,ImplBlock=10
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
 ./go/bin/pcg graph start --workspace-root "$PWD"
 ./go/bin/pcg mcp start --workspace-root "$PWD"
@@ -657,7 +657,9 @@ docker compose up --build
 To test against real Git repositories from a local directory, set
 `PCG_FILESYSTEM_HOST_ROOT` to an absolute path containing one or more
 cloned repositories. Each subdirectory with a `.git` folder is
-discovered automatically.
+discovered automatically. The collector prunes dependency and generated
+artifact directories such as `.git`, `node_modules`, `vendor`, and `.yarn`
+before parsing so checked-in package-manager bundles do not dominate the graph.
 
 ```bash
 PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos docker compose up --build

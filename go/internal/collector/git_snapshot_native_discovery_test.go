@@ -21,10 +21,11 @@ func TestNativeRepositorySnapshotterDefaultDiscoverySkipsDependencyDirs(t *testi
 	for _, dir := range []string{
 		"node_modules", "vendor", "__pycache__", "site-packages",
 		".terraform", ".terragrunt-cache", "dist", "build", "Pods",
-		"ansible_collections", ".jenkins",
+		"ansible_collections", ".jenkins", ".yarn",
 	} {
 		writeCollectorTestFile(t, filepath.Join(repoRoot, dir, "dep.py"), "def dep(): pass\n")
 	}
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".yarn", "releases", "yarn-4.13.0.cjs"), "module.exports = {}\n")
 
 	// Files with ignored extensions that should be skipped.
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "server.log"), "log line\n")
