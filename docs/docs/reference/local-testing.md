@@ -259,6 +259,11 @@ support in the generalized `UNWIND/MERGE` hot path and unique-constraint-backed
 `MERGE` lookup, set `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` to try the
 faster MERGE-first combined shape that batches entity rows across files. Leave
 that switch off for the pinned release-backed binary.
+Normal one-row file-scoped entity batches still use the `UNWIND $rows` shape;
+only rows containing the known NornicDB `shortestPath` / `allShortestPaths`
+parser hazard use the execute-only singleton fallback. If a run shows many
+`singleton_parameterized containment=inline` lines for ordinary symbols, treat
+that as a writer regression before changing batch-size or timeout knobs.
 Use the emitted `nornicdb entity label summary` lines to compare cumulative
 rows, statements, executions, grouped chunks, and total/max duration per
 `phase` and label before changing another default. Long-running labels emit
