@@ -675,13 +675,13 @@ discovered automatically. The collector prunes dependency and generated
 artifact directories such as `.git`, `node_modules`, `vendor`, and `.yarn`,
 plus Yarn Berry Plug'n'Play loader files such as `.pnp.cjs` and
 `.pnp.loader.mjs`, before parsing so checked-in package-manager bundles do not
-dominate the graph. It also prunes large webpack bootstrap bundles detected by
-content signature, because compiled `public/js/app.js`-style artifacts can
-produce tens of thousands of generated JavaScript variables while contributing
-little repo-authored code truth. Legacy repos that check third-party packages
-outside a conventional `vendor/` directory are also pruned for known library
-families such as Zend Framework, jQuery/Galleria/Shadowbox/Sizzle/SWFObject,
-and FPDF.
+dominate the graph. It also prunes large Webpack, Rollup, esbuild, and Parcel
+bundles detected by content signature, because compiled `public/js/app.js`-style
+artifacts can produce tens of thousands of generated JavaScript variables while
+contributing little repo-authored code truth. Legacy repos that check
+third-party packages outside a conventional `vendor/` directory are also pruned
+for known library families such as Zend Framework,
+jQuery/Galleria/Shadowbox/Sizzle/SWFObject, and FPDF.
 
 ```bash
 PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos docker compose up --build

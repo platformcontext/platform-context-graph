@@ -236,6 +236,12 @@ collector/projector/reducer path.
 - Meaning: Filesystem entries pruned during discovery.
 - Use them for: Verifying ignore policy behavior and explaining why a repo scan
   is cheaper than a raw file count might suggest.
+- Content-aware skip reasons use the `content:` prefix. Generated JavaScript
+  bundle filters currently emit `content:generated-webpack`,
+  `content:generated-rollup`, `content:generated-esbuild`, and
+  `content:generated-parcel`; legacy vendored-library filters emit
+  `content:vendored-zend-framework`, `content:vendored-browser-library`, and
+  `content:vendored-fpdf`.
 
 ### `pcg_dp_large_repo_classifications_total`
 ### `pcg_dp_large_repo_semaphore_wait_seconds`

@@ -141,6 +141,62 @@ func TestResolveNativeSnapshotFileSetSkipsLargeGeneratedJavaScriptBundles(t *tes
 	}
 }
 
+func TestResolveNativeSnapshotFileSetKeepsLargeAuthoredJavaScript(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "big_authored.js"), largeAuthoredJavaScriptFixture())
+
+	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		resolvedRepoRoot = repoRoot
+	}
+	registry := parser.DefaultRegistry()
+	fileSet, stats, err := resolveNativeSnapshotFileSet(resolvedRepoRoot, registry, NativeRepositorySnapshotter{}.discoveryOptions())
+	if err != nil {
+		t.Fatalf("resolveNativeSnapshotFileSet() error = %v", err)
+	}
+
+	if got, want := len(fileSet.Files), 1; got != want {
+		t.Fatalf("file count = %d, want %d; files=%v", got, want, fileSet.Files)
+	}
+	if got, want := filepath.ToSlash(fileSet.Files[0]), "src/big_authored.js"; !strings.HasSuffix(got, want) {
+		t.Fatalf("indexed file = %q, want suffix %q", got, want)
+	}
+	if got := len(stats.FilesSkippedByContent); got != 0 {
+		t.Fatalf("FilesSkippedByContent length = %d, want 0; stats=%v", got, stats.FilesSkippedByContent)
+	}
+}
+
+func TestResolveNativeSnapshotFileSetKeepsSmallBootstrapLikeJavaScript(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "tiny_runtime.js"), smallWebpackBootstrapLikeFixture())
+
+	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		resolvedRepoRoot = repoRoot
+	}
+	registry := parser.DefaultRegistry()
+	fileSet, stats, err := resolveNativeSnapshotFileSet(resolvedRepoRoot, registry, NativeRepositorySnapshotter{}.discoveryOptions())
+	if err != nil {
+		t.Fatalf("resolveNativeSnapshotFileSet() error = %v", err)
+	}
+
+	if got, want := len(fileSet.Files), 1; got != want {
+		t.Fatalf("file count = %d, want %d; files=%v", got, want, fileSet.Files)
+	}
+	if got, want := filepath.ToSlash(fileSet.Files[0]), "src/tiny_runtime.js"; !strings.HasSuffix(got, want) {
+		t.Fatalf("indexed file = %q, want suffix %q", got, want)
+	}
+	if got := len(stats.FilesSkippedByContent); got != 0 {
+		t.Fatalf("FilesSkippedByContent length = %d, want 0; stats=%v", got, stats.FilesSkippedByContent)
+	}
+}
+
 func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) {
 	t.Parallel()
 
@@ -177,6 +233,18 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 	if got := stats.FilesSkippedByContent["vendored-fpdf"]; got != 1 {
 		t.Fatalf("FilesSkippedByContent[vendored-fpdf] = %d, want 1", got)
 	}
+}
+
+func largeAuthoredJavaScriptFixture() string {
+	header := "export function authoredLargeModule() { return 'authored'; }\n"
+	return header + strings.Repeat("export const authoredSymbol = 1;\n", 12000)
+}
+
+func smallWebpackBootstrapLikeFixture() string {
+	return "/******/ (function(modules) { // webpackBootstrap\n" +
+		"/******/ \tvar installedModules = {};\n" +
+		"/******/ \tfunction __webpack_require__(moduleId) { return modules[moduleId]; }\n" +
+		"export function tinyRuntime() { return __webpack_require__; }\n"
 }
 
 func largeWebpackBootstrapFixture() string {
