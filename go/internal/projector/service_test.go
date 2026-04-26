@@ -321,15 +321,19 @@ func (s *stubProjectorWorkSource) Claim(context.Context) (ScopeGenerationWork, b
 }
 
 type stubFactStore struct {
-	mu        sync.Mutex
-	loadCalls int
-	facts     []facts.Envelope
+	mu               sync.Mutex
+	loadCalls        int
+	facts            []facts.Envelope
+	returnContextErr bool
 }
 
-func (s *stubFactStore) LoadFacts(context.Context, ScopeGenerationWork) ([]facts.Envelope, error) {
+func (s *stubFactStore) LoadFacts(ctx context.Context, _ ScopeGenerationWork) ([]facts.Envelope, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.loadCalls++
+	if s.returnContextErr {
+		return nil, fmt.Errorf("list facts: %w", ctx.Err())
+	}
 	cloned := make([]facts.Envelope, len(s.facts))
 	copy(cloned, s.facts)
 	return cloned, nil
