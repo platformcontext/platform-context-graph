@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/query"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 )
 
@@ -133,5 +134,69 @@ func TestLoadReducerBatchClaimSize_InvalidEnvFallsBackToBackendDefault(t *testin
 	}, 2, runtimecfg.GraphBackendNornicDB)
 	if got != 1 {
 		t.Fatalf("got %d, want 1 for NornicDB fallback", got)
+	}
+}
+
+func TestLoadReducerProjectorDrainGate_NornicDBLocalAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	got, err := loadReducerProjectorDrainGate(func(k string) string {
+		switch k {
+		case queryProfileEnv:
+			return string(query.ProfileLocalAuthoritative)
+		default:
+			return ""
+		}
+	}, runtimecfg.GraphBackendNornicDB)
+	if err != nil {
+		t.Fatalf("loadReducerProjectorDrainGate() error = %v, want nil", err)
+	}
+	if !got {
+		t.Fatal("loadReducerProjectorDrainGate() = false, want true")
+	}
+}
+
+func TestLoadReducerProjectorDrainGate_DisabledForNeo4j(t *testing.T) {
+	t.Parallel()
+
+	got, err := loadReducerProjectorDrainGate(func(k string) string {
+		switch k {
+		case queryProfileEnv:
+			return string(query.ProfileLocalAuthoritative)
+		default:
+			return ""
+		}
+	}, runtimecfg.GraphBackendNeo4j)
+	if err != nil {
+		t.Fatalf("loadReducerProjectorDrainGate() error = %v, want nil", err)
+	}
+	if got {
+		t.Fatal("loadReducerProjectorDrainGate() = true, want false")
+	}
+}
+
+func TestLoadReducerProjectorDrainGate_DisabledWithoutLocalAuthoritativeProfile(t *testing.T) {
+	t.Parallel()
+
+	got, err := loadReducerProjectorDrainGate(func(string) string { return "" }, runtimecfg.GraphBackendNornicDB)
+	if err != nil {
+		t.Fatalf("loadReducerProjectorDrainGate() error = %v, want nil", err)
+	}
+	if got {
+		t.Fatal("loadReducerProjectorDrainGate() = true, want false")
+	}
+}
+
+func TestLoadReducerProjectorDrainGate_InvalidProfile(t *testing.T) {
+	t.Parallel()
+
+	_, err := loadReducerProjectorDrainGate(func(k string) string {
+		if k == queryProfileEnv {
+			return "definitely-not-a-profile"
+		}
+		return ""
+	}, runtimecfg.GraphBackendNornicDB)
+	if err == nil {
+		t.Fatal("loadReducerProjectorDrainGate() error = nil, want non-nil")
 	}
 }

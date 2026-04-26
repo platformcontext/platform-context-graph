@@ -36,6 +36,14 @@ WITH candidate AS (
       AND (visible_at IS NULL OR visible_at <= $1)
       AND (claim_until IS NULL OR claim_until <= $1)
       AND ($2 = '' OR domain = $2)
+      -- NornicDB local_authoritative first-generation runs must not let
+      -- reducer graph writes contend with source-local canonical projection.
+      AND ($5 = false OR NOT EXISTS (
+          SELECT 1
+          FROM fact_work_items AS projector_work
+          WHERE projector_work.stage = 'projector'
+            AND projector_work.status IN ('pending', 'retrying', 'claimed', 'running')
+      ))
       -- Reducer domains can touch the same graph nodes for a scope. Keep
       -- cross-scope parallelism, but avoid overlapping writes for one repo.
       AND NOT EXISTS (
@@ -150,6 +158,12 @@ type ReducerQueue struct {
 	RetryDelay    time.Duration
 	MaxAttempts   int
 	Now           func() time.Time
+
+	// RequireProjectorDrainBeforeClaim keeps reducer graph writes from
+	// contending with source-local projection. It is intended for NornicDB
+	// local_authoritative evaluation, where canonical projector writes and
+	// reducer writes share one embedded graph backend.
+	RequireProjectorDrainBeforeClaim bool
 }
 
 // ErrReducerClaimRejected means the claimed reducer work item no longer belongs
@@ -272,6 +286,7 @@ func (q ReducerQueue) Claim(ctx context.Context) (reducer.Intent, bool, error) {
 		"",
 		q.LeaseOwner,
 		now.Add(q.LeaseDuration),
+		q.RequireProjectorDrainBeforeClaim,
 	)
 	if err != nil {
 		return reducer.Intent{}, false, fmt.Errorf("claim reducer work: %w", err)

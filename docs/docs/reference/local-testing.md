@@ -188,6 +188,11 @@ For first-generation scopes, canonical graph projection skips stale-generation
 retraction because no prior generation exists yet; refresh runs and follow-up
 generations after a failed first attempt still perform scoped retraction before
 upserting the new generation.
+On NornicDB `local_authoritative` runs, reducer claims intentionally wait while
+source-local projector work is still outstanding. The status panel can therefore
+show reducer backlog while projector lanes are active; that is expected and
+prevents first-generation canonical writes and reducer graph writes from
+contending on the embedded graph sidecar.
 
 From an MCP client, call:
 

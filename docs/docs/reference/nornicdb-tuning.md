@@ -68,6 +68,14 @@ without pre-leasing many slow graph-write items that can sit in the local worker
 channel until their `claim_until` expires and the status panel reports overdue
 claims.
 
+For `PCG_QUERY_PROFILE=local_authoritative` plus `PCG_GRAPH_BACKEND=nornicdb`,
+reducer claims also wait while source-local projector work is outstanding. This
+is not a row-size tuning knob: it removes the unsafe overlap where
+first-generation canonical projection and reducer graph writes contend for the same
+embedded NornicDB sidecar. Neo4j keeps the existing production concurrency path,
+and NornicDB operators can still raise reducer workers for controlled
+experiments after source-local projection has drained.
+
 First-generation semantic materialization skips stale retract because there is
 no prior semantic graph state to clean up. Refreshes and retries still retract;
 on NornicDB those retracts run one semantic label per statement. The Neo4j

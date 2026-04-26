@@ -180,9 +180,20 @@ func buildReducerService(
 	if err != nil {
 		return reducer.Service{}, err
 	}
+	projectorDrainGate, err := loadReducerProjectorDrainGate(getenv, graphBackend)
+	if err != nil {
+		return reducer.Service{}, fmt.Errorf("load reducer projector drain gate: %w", err)
+	}
+	if projectorDrainGate && logger != nil {
+		logger.Info("reducer claims will wait for source-local projection drain",
+			"graph_backend", string(graphBackend),
+			"query_profile", string(query.ProfileLocalAuthoritative),
+		)
+	}
 	workQueue := postgres.NewReducerQueue(database, "reducer", time.Minute)
 	workQueue.RetryDelay = retryCfg.RetryDelay
 	workQueue.MaxAttempts = retryCfg.MaxAttempts
+	workQueue.RequireProjectorDrainBeforeClaim = projectorDrainGate
 
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
 		DeployableUnitCorrelationHandler: reducer.DeployableUnitCorrelationHandler{

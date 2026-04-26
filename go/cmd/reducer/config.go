@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/query"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 )
@@ -15,6 +16,7 @@ const (
 	reducerMaxAttemptsEnv = "PCG_REDUCER_MAX_ATTEMPTS"
 	reducerWorkersEnv     = "PCG_REDUCER_WORKERS"
 	reducerBatchClaimEnv  = "PCG_REDUCER_BATCH_CLAIM_SIZE"
+	queryProfileEnv       = "PCG_QUERY_PROFILE"
 
 	codeCallProjectionPollIntervalEnv       = "PCG_CODE_CALL_PROJECTION_POLL_INTERVAL"
 	codeCallProjectionLeaseTTLEnv           = "PCG_CODE_CALL_PROJECTION_LEASE_TTL"
@@ -76,6 +78,21 @@ func loadReducerBatchClaimSize(getenv func(string) string, workers int, graphBac
 		n = 4
 	}
 	return n
+}
+
+func loadReducerProjectorDrainGate(
+	getenv func(string) string,
+	graphBackend runtimecfg.GraphBackend,
+) (bool, error) {
+	if getenv == nil {
+		getenv = func(string) string { return "" }
+	}
+	profile, err := query.ParseQueryProfile(getenv(queryProfileEnv))
+	if err != nil {
+		return false, err
+	}
+	return graphBackend == runtimecfg.GraphBackendNornicDB &&
+		profile == query.ProfileLocalAuthoritative, nil
 }
 
 func loadReducerWorkerCount(getenv func(string) string, graphBackend runtimecfg.GraphBackend) int {
