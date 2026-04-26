@@ -291,7 +291,7 @@ func buildReducerService(
 			Logger:      logger,
 		},
 		Workers:        workers,
-		BatchClaimSize: loadReducerBatchClaimSize(getenv, workers),
+		BatchClaimSize: loadReducerBatchClaimSize(getenv, workers, graphBackend),
 		Tracer:         tracer,
 		Instruments:    instruments,
 		Logger:         logger,

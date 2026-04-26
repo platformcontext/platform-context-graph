@@ -89,3 +89,49 @@ func TestLoadReducerWorkerCount_InvalidEnv(t *testing.T) {
 		t.Fatalf("got %d, want 1 for NornicDB fallback", got)
 	}
 }
+
+func TestLoadReducerBatchClaimSize_EnvOverride(t *testing.T) {
+	t.Parallel()
+
+	got := loadReducerBatchClaimSize(func(k string) string {
+		if k == reducerBatchClaimEnv {
+			return "6"
+		}
+		return ""
+	}, 2, runtimecfg.GraphBackendNornicDB)
+	if got != 6 {
+		t.Fatalf("got %d, want 6", got)
+	}
+}
+
+func TestLoadReducerBatchClaimSize_Neo4jDefault(t *testing.T) {
+	t.Parallel()
+
+	got := loadReducerBatchClaimSize(func(string) string { return "" }, 3, runtimecfg.GraphBackendNeo4j)
+	if got != 12 {
+		t.Fatalf("got %d, want 12", got)
+	}
+}
+
+func TestLoadReducerBatchClaimSize_NornicDBDefaultsSingleClaim(t *testing.T) {
+	t.Parallel()
+
+	got := loadReducerBatchClaimSize(func(string) string { return "" }, 2, runtimecfg.GraphBackendNornicDB)
+	if got != 1 {
+		t.Fatalf("got %d, want 1", got)
+	}
+}
+
+func TestLoadReducerBatchClaimSize_InvalidEnvFallsBackToBackendDefault(t *testing.T) {
+	t.Parallel()
+
+	got := loadReducerBatchClaimSize(func(k string) string {
+		if k == reducerBatchClaimEnv {
+			return "nope"
+		}
+		return ""
+	}, 2, runtimecfg.GraphBackendNornicDB)
+	if got != 1 {
+		t.Fatalf("got %d, want 1 for NornicDB fallback", got)
+	}
+}
