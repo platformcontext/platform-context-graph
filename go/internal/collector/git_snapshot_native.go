@@ -458,6 +458,9 @@ func generatedNativeSnapshotSkipReason(path string) (string, bool) {
 	if isVendoredFPDFFile(path) {
 		return "vendored-fpdf", true
 	}
+	if isVendoredPEARPhingFile(path) {
+		return "vendored-pear-phing", true
+	}
 	prefix, ok := largeJavaScriptBundlePrefix(path)
 	if !ok {
 		return "", false
@@ -564,6 +567,14 @@ func isVendoredBrowserLibraryFile(path string) bool {
 func isVendoredFPDFFile(path string) bool {
 	name := strings.ToLower(filepath.Base(path))
 	return name == "fpdf.php"
+}
+
+func isVendoredPEARPhingFile(path string) bool {
+	if ext := strings.ToLower(filepath.Ext(path)); ext != ".php" {
+		return false
+	}
+	normalized := strings.ToLower(filepath.ToSlash(path))
+	return strings.Contains(normalized, "/pear/php/phing/")
 }
 
 func resolveNativeSnapshotFileSetForTargets(

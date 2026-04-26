@@ -241,7 +241,8 @@ collector/projector/reducer path.
   `content:generated-rollup`, `content:generated-esbuild`, and
   `content:generated-parcel`; legacy vendored-library filters emit
   `content:vendored-zend-framework`, `content:vendored-browser-library`, and
-  `content:vendored-fpdf`.
+  `content:vendored-fpdf`; legacy PEAR/Phing build-tool libraries emit
+  `content:vendored-pear-phing`.
 
 ### `pcg_dp_large_repo_classifications_total`
 ### `pcg_dp_large_repo_semaphore_wait_seconds`

@@ -207,6 +207,7 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "jquery.js"), "/* jQuery JavaScript Library v1.12.4 */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "shadowbox.js"), "/* Shadowbox.js */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "scripts", "fpdf.php"), "<?php\n/* FPDF */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "framework", "library", "pear", "php", "phing", "types", "AbstractFileSet.php"), "<?php\n/* Phing build-tool library */\n")
 
 	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
 	if err != nil {
@@ -232,6 +233,9 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 	}
 	if got := stats.FilesSkippedByContent["vendored-fpdf"]; got != 1 {
 		t.Fatalf("FilesSkippedByContent[vendored-fpdf] = %d, want 1", got)
+	}
+	if got := stats.FilesSkippedByContent["vendored-pear-phing"]; got != 1 {
+		t.Fatalf("FilesSkippedByContent[vendored-pear-phing] = %d, want 1", got)
 	}
 }
 
