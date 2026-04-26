@@ -329,6 +329,7 @@ func (s NativeRepositorySnapshotter) discoveryOptions() discovery.Options {
 	opts.IgnoreHidden = s.DiscoveryOptions.IgnoreHidden
 	opts.PreservedHiddenPrefixes = append(opts.PreservedHiddenPrefixes, s.DiscoveryOptions.PreservedHiddenPrefixes...)
 	opts.HonorGitignore = true
+	opts.HonorPCGIgnore = true
 	opts.IgnoredPathGlobs = append(opts.IgnoredPathGlobs, s.DiscoveryOptions.IgnoredPathGlobs...)
 	opts.PreservedPathGlobs = append(opts.PreservedPathGlobs, s.DiscoveryOptions.PreservedPathGlobs...)
 	return opts
@@ -339,6 +340,7 @@ func defaultNativeDiscoveryOptions() discovery.Options {
 		IgnoredDirs:       defaultIgnoredDirs,
 		IgnoredExtensions: defaultIgnoredExtensions,
 		HonorGitignore:    true,
+		HonorPCGIgnore:    true,
 	}
 }
 
@@ -375,6 +377,9 @@ func (s NativeRepositorySnapshotter) logDiscoveryStats(ctx context.Context, repo
 	}
 	if stats.FilesSkippedGitignore > 0 {
 		attrs = append(attrs, slog.Int("files_skipped.gitignore", stats.FilesSkippedGitignore))
+	}
+	if stats.FilesSkippedPCGIgnore > 0 {
+		attrs = append(attrs, slog.Int("files_skipped.pcgignore", stats.FilesSkippedPCGIgnore))
 	}
 
 	logger.InfoContext(ctx, "discovery stats", attrs...)
@@ -420,6 +425,11 @@ func (s NativeRepositorySnapshotter) recordDiscoveryMetrics(ctx context.Context,
 			metric.WithAttributes(telemetry.AttrSkipReason("gitignore")),
 		)
 	}
+	if stats.FilesSkippedPCGIgnore > 0 {
+		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(stats.FilesSkippedPCGIgnore),
+			metric.WithAttributes(telemetry.AttrSkipReason("pcgignore")),
+		)
+	}
 }
 
 func (s NativeRepositorySnapshotter) now() time.Time {
@@ -434,7 +444,7 @@ func resolveNativeSnapshotFileSet(
 	registry parser.Registry,
 	opts discovery.Options,
 ) (discovery.RepoFileSet, discovery.DiscoveryStats, error) {
-	opts, err := discoveryOptionsWithVendorRootsConfig(repoPath, opts)
+	opts, err := discoveryOptionsWithRepoDiscoveryConfig(repoPath, opts)
 	if err != nil {
 		return discovery.RepoFileSet{}, discovery.DiscoveryStats{}, err
 	}

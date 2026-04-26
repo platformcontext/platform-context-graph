@@ -19,19 +19,28 @@ type gitignorePattern struct {
 }
 
 func filterRepoFilesByGitignore(repoRoot string, files []string) []string {
+	return filterRepoFilesByIgnoreFile(repoRoot, files, ".gitignore")
+}
+
+func filterRepoFilesByPCGIgnore(repoRoot string, files []string) []string {
+	return filterRepoFilesByIgnoreFile(repoRoot, files, ".pcgignore")
+}
+
+func filterRepoFilesByIgnoreFile(repoRoot string, files []string, ignoreFileName string) []string {
 	cache := make(map[string]*gitignoreSpec)
 	kept := make([]string, 0, len(files))
 	for _, file := range files {
-		if !isGitignoredInRepo(repoRoot, file, cache) {
+		if !isIgnoredByRepoIgnoreFile(repoRoot, file, ignoreFileName, cache) {
 			kept = append(kept, file)
 		}
 	}
 	return kept
 }
 
-func isGitignoredInRepo(
+func isIgnoredByRepoIgnoreFile(
 	repoRoot string,
 	filePath string,
+	ignoreFileName string,
 	cache map[string]*gitignoreSpec,
 ) bool {
 	if !pathWithinRoot(repoRoot, filePath) {
@@ -40,7 +49,7 @@ func isGitignoredInRepo(
 
 	ignored := false
 	for _, dir := range ancestorDirs(repoRoot, filePath) {
-		spec := loadGitignoreSpec(filepath.Join(dir, ".gitignore"), cache)
+		spec := loadGitignoreSpec(filepath.Join(dir, ignoreFileName), cache)
 		if spec == nil {
 			continue
 		}

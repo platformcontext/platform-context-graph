@@ -121,6 +121,59 @@ func TestResolveRepositoryFileSetsHonorsRepoLocalGitignoreScopingAndNestedNegati
 	}
 }
 
+func TestResolveRepositoryFileSetsHonorsRepoLocalPCGIgnoreScopingAndNestedNegation(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	nested := filepath.Join(repo, "generated")
+
+	mustMkdirGit(t, repo)
+
+	mustWriteFile(t, filepath.Join(root, ".pcgignore"), "*.py\n")
+	mustWriteFile(t, filepath.Join(repo, ".pcgignore"), "ignored.py\n")
+	mustWriteFile(t, filepath.Join(nested, ".pcgignore"), "*\n!keep.py\n")
+	mustWriteFile(t, filepath.Join(repo, "kept.py"), "print('kept')\n")
+	mustWriteFile(t, filepath.Join(repo, "ignored.py"), "print('ignored')\n")
+	mustWriteFile(t, filepath.Join(nested, "keep.py"), "print('keep')\n")
+	mustWriteFile(t, filepath.Join(nested, "drop.py"), "print('drop')\n")
+
+	stats, got, err := ResolveRepositoryFileSetsWithStats(
+		root,
+		func(path string) bool {
+			return filepath.Ext(path) == ".py"
+		},
+		Options{
+			IgnoredDirs:    []string{".git"},
+			IgnoreHidden:   false,
+			HonorPCGIgnore: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ResolveRepositoryFileSetsWithStats() error = %v, want nil", err)
+	}
+
+	want := []RepoFileSet{
+		{
+			RepoRoot: mustResolvePath(t, repo),
+			Files: []string{
+				mustResolvePath(t, filepath.Join(repo, "generated", "keep.py")),
+				mustResolvePath(t, filepath.Join(repo, "kept.py")),
+			},
+		},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ResolveRepositoryFileSetsWithStats() = %#v, want %#v", got, want)
+	}
+	if got, want := stats.FilesSkippedPCGIgnore, 2; got != want {
+		t.Fatalf("FilesSkippedPCGIgnore = %d, want %d", got, want)
+	}
+	if got, want := stats.TotalFilesSkipped(), 2; got != want {
+		t.Fatalf("TotalFilesSkipped() = %d, want %d", got, want)
+	}
+}
+
 func TestResolveRepositoryFileSetsSkipsSymlinkTargetsOutsideRepoRoot(t *testing.T) {
 	t.Parallel()
 

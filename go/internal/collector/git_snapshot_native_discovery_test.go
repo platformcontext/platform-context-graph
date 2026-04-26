@@ -285,6 +285,115 @@ func TestResolveNativeSnapshotFileSetSkipsConfiguredVendoredRoots(t *testing.T) 
 	}
 }
 
+func TestResolveNativeSnapshotFileSetSkipsStructuredDiscoveryConfig(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".pcg", "discovery.json"), `{
+  "ignored_path_globs": [
+    {"path": "public/archive/**", "reason": "archived-site-copy"}
+  ],
+  "preserved_path_globs": [
+    {"path": "public/archive/custom-authored/**"}
+  ],
+  "vendor_roots": [
+    {"path": "public/js/fotorama.js", "reason": "static-browser-library"}
+  ],
+  "keep_roots": [
+    {"path": "public/js/site.js"}
+  ]
+}
+`)
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "index.php"), "<?php\nfunction home_page() {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "archive", "old.php"), "<?php\nfunction old_archive() {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "archive", "custom-authored", "kept.php"), "<?php\nfunction kept_archive() {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "fotorama.js"), "function fotoramaVendor() {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "site.js"), "function authoredSite() {}\n")
+
+	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		resolvedRepoRoot = repoRoot
+	}
+	registry := parser.DefaultRegistry()
+	fileSet, stats, err := resolveNativeSnapshotFileSet(resolvedRepoRoot, registry, NativeRepositorySnapshotter{}.discoveryOptions())
+	if err != nil {
+		t.Fatalf("resolveNativeSnapshotFileSet() error = %v", err)
+	}
+
+	for _, wantSuffix := range []string{
+		"public/index.php",
+		"public/archive/custom-authored/kept.php",
+		"public/js/site.js",
+	} {
+		if !fileSetContainsSuffix(fileSet.Files, wantSuffix) {
+			t.Fatalf("fileSet missing %q; files=%v", wantSuffix, fileSet.Files)
+		}
+	}
+	for _, unwantedSuffix := range []string{
+		"public/archive/old.php",
+		"public/js/fotorama.js",
+	} {
+		if fileSetContainsSuffix(fileSet.Files, unwantedSuffix) {
+			t.Fatalf("fileSet unexpectedly contains %q; files=%v", unwantedSuffix, fileSet.Files)
+		}
+	}
+	if got := stats.DirsSkippedByUser["archived-site-copy"]; got != 0 {
+		t.Fatalf("DirsSkippedByUser[archived-site-copy] = %d, want 0", got)
+	}
+	if got := stats.FilesSkippedByUser["archived-site-copy"]; got != 1 {
+		t.Fatalf("FilesSkippedByUser[archived-site-copy] = %d, want 1", got)
+	}
+	if got := stats.FilesSkippedByUser["static-browser-library"]; got != 1 {
+		t.Fatalf("FilesSkippedByUser[static-browser-library] = %d, want 1", got)
+	}
+}
+
+func TestResolveNativeSnapshotFileSetMergesLegacyAndStructuredDiscoveryConfig(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".pcg", "vendor-roots.json"), `{
+  "vendor_roots": [
+    {"path": "legacy/third_party/**", "reason": "legacy-vendor"}
+  ]
+}
+`)
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".pcg", "discovery.json"), `{
+  "ignored_path_globs": [
+    {"path": "public/old_site/**", "reason": "archived-site-copy"}
+  ]
+}
+`)
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "app.php"), "<?php\nfunction app_authored() {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "legacy", "third_party", "lib.php"), "<?php\nfunction legacy_vendor() {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "old_site", "old.php"), "<?php\nfunction old_archive() {}\n")
+
+	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		resolvedRepoRoot = repoRoot
+	}
+	registry := parser.DefaultRegistry()
+	fileSet, stats, err := resolveNativeSnapshotFileSet(resolvedRepoRoot, registry, NativeRepositorySnapshotter{}.discoveryOptions())
+	if err != nil {
+		t.Fatalf("resolveNativeSnapshotFileSet() error = %v", err)
+	}
+
+	if got, want := len(fileSet.Files), 1; got != want {
+		t.Fatalf("file count = %d, want %d; files=%v", got, want, fileSet.Files)
+	}
+	if !fileSetContainsSuffix(fileSet.Files, "src/app.php") {
+		t.Fatalf("fileSet missing authored file; files=%v", fileSet.Files)
+	}
+	if got := stats.DirsSkippedByUser["legacy-vendor"]; got != 1 {
+		t.Fatalf("DirsSkippedByUser[legacy-vendor] = %d, want 1", got)
+	}
+	if got := stats.DirsSkippedByUser["archived-site-copy"]; got != 1 {
+		t.Fatalf("DirsSkippedByUser[archived-site-copy] = %d, want 1", got)
+	}
+}
+
 func largeAuthoredJavaScriptFixture() string {
 	header := "export function authoredLargeModule() { return 'authored'; }\n"
 	return header + strings.Repeat("export const authoredSymbol = 1;\n", 12000)
