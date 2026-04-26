@@ -22,7 +22,7 @@ defaults because one chunk looked scary.
 
 | Variable | Default | Scope | Use |
 | --- | --- | --- | --- |
-| `PCG_CANONICAL_WRITE_TIMEOUT` | `15s` on NornicDB | ingester, reducer graph writers | Bounds each NornicDB graph execution with a client deadline and Bolt transaction timeout. Shorten for diagnostics; lengthen only with evidence. |
+| `PCG_CANONICAL_WRITE_TIMEOUT` | `30s` on NornicDB | ingester, reducer graph writers | Bounds each NornicDB graph execution with a client deadline and Bolt transaction timeout. Shorten for diagnostics; lengthen only with evidence. |
 | `PCG_NORNICDB_PHASE_GROUP_STATEMENTS` | `500` | canonical writes | Broad grouped-statement cap for phases without a narrower phase-specific cap. |
 | `PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS` | `5` | canonical `files` phase | Limits how many file-upsert statements share one grouped Bolt transaction. |
 | `PCG_NORNICDB_FILE_BATCH_SIZE` | `100` | canonical `files` phase | Limits rows inside each `phase=files` statement. Use when file groups are narrow but one statement still carries too many rows. |
