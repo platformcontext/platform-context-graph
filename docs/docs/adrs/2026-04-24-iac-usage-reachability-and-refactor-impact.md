@@ -14,6 +14,9 @@
 - `../reference/dead-code-reachability-spec.md`
 - `../../superpowers/specs/2026-04-26-unified-change-impact-and-dependency-neighborhoods-design.md`
 - `../../superpowers/specs/2026-04-26-cross-repo-contract-bridge-and-service-dependency-graph-design.md`
+- `../../superpowers/plans/2026-04-26-iac-usage-reachability-and-refactor-impact-action-plan.md`
+- `../../superpowers/plans/2026-04-26-unified-change-impact-and-dependency-neighborhoods-implementation.md`
+- `../../superpowers/plans/2026-04-26-cross-repo-contract-bridge-and-service-dependency-graph-implementation.md`
 
 ---
 

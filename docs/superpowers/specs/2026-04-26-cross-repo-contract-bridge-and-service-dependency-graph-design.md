@@ -4,6 +4,7 @@
 **Status:** Draft for review  
 **Related ADR:** `docs/docs/adrs/2026-04-24-iac-usage-reachability-and-refactor-impact.md`  
 **Companion spec:** `docs/superpowers/specs/2026-04-26-unified-change-impact-and-dependency-neighborhoods-design.md`
+**Implementation plan:** `docs/superpowers/plans/2026-04-26-cross-repo-contract-bridge-and-service-dependency-graph-implementation.md`
 
 ## Summary
 
