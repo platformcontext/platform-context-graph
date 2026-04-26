@@ -14,6 +14,7 @@ const (
 	reducerRetryDelayEnv  = "PCG_REDUCER_RETRY_DELAY"
 	reducerMaxAttemptsEnv = "PCG_REDUCER_MAX_ATTEMPTS"
 	reducerWorkersEnv     = "PCG_REDUCER_WORKERS"
+	reducerBatchClaimEnv  = "PCG_REDUCER_BATCH_CLAIM_SIZE"
 
 	codeCallProjectionPollIntervalEnv       = "PCG_CODE_CALL_PROJECTION_POLL_INTERVAL"
 	codeCallProjectionLeaseTTLEnv           = "PCG_CODE_CALL_PROJECTION_LEASE_TTL"
@@ -58,11 +59,14 @@ func loadReducerQueueConfig(getenv func(string) string) (runtimecfg.RetryPolicyC
 	return runtimecfg.LoadRetryPolicyConfig(getenv, "REDUCER")
 }
 
-func loadReducerBatchClaimSize(getenv func(string) string, workers int) int {
-	if raw := strings.TrimSpace(getenv("PCG_REDUCER_BATCH_CLAIM_SIZE")); raw != "" {
+func loadReducerBatchClaimSize(getenv func(string) string, workers int, graphBackend runtimecfg.GraphBackend) int {
+	if raw := strings.TrimSpace(getenv(reducerBatchClaimEnv)); raw != "" {
 		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
 			return n
 		}
+	}
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		return 1
 	}
 	n := workers * 4
 	if n > 64 {

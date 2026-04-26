@@ -51,6 +51,7 @@ stop waiting while the database keeps executing the same mutation.
 | --- | --- | --- | --- |
 | `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | `Annotation=10,Function=10,ImplBlock=10,Module=10,Variable=10` | reducer semantic entity materialization | Overrides NornicDB row caps for semantic labels after parser-enriched semantic metadata proves expensive. |
 | `PCG_REDUCER_WORKERS` | `1` on NornicDB | reducer graph writers | Overrides reducer work concurrency. Leave unset for normal NornicDB runs; raise only when intentionally testing graph-write contention. |
+| `PCG_REDUCER_BATCH_CLAIM_SIZE` | `1` on NornicDB | reducer queue claim window | Limits how many reducer intents one claim cycle leases before workers start them. Keep this near worker count when raising reducer workers so queued-but-not-started items do not expire their leases. |
 
 Semantic materialization is a reducer-owned phase. Do not copy canonical caps
 blindly; semantic labels should be narrowed only after timeout summaries name
@@ -61,6 +62,11 @@ worker because reducer domains can independently mutate the same graph sidecar.
 This does not serialize source discovery, parsing, source-local projection, or
 unrelated local-host processes; it only removes unsafe overlap between reducer
 graph writes unless an operator explicitly sets `PCG_REDUCER_WORKERS`.
+NornicDB also narrows the reducer batch-claim window to one item by default.
+That preserves useful worker concurrency when `PCG_REDUCER_WORKERS` is raised
+without pre-leasing many slow graph-write items that can sit in the local worker
+channel until their `claim_until` expires and the status panel reports overdue
+claims.
 
 First-generation semantic materialization skips stale retract because there is
 no prior semantic graph state to clean up. Refreshes and retries still retract;
