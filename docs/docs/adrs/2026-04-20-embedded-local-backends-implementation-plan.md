@@ -131,6 +131,10 @@ Current tuning plan:
 - keep rebuilding dogfood NornicDB headless binaries directly from upstream `main` for release-backed fixes such as merged PRs `#115`, `#116`, and `#118`; use the combined `#119 + #120` branch binary explicitly via `PCG_NORNICDB_BINARY` / installer `--from` for the active full-corpus compatibility lane until both PRs merge and a release asset is pinned
 - only promote the patched lane after the NornicDB fixes are release-backed and pinned; until then, keep the pinned release on the safe file-scoped combined write and use `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` only for patched-binary evaluation
 - add a user-editable vendored-source map/config after the evidence-backed PEAR slice: built-in hard skips should stay limited to proven high-confidence families, while repo/workspace config should let users declare custom vendored roots and keep-roots without requiring a PCG release for every legacy layout. The first pass should report suspected vendored roots before skipping unproven families by default.
+- use `pcg index --discovery-report <file>` for focused noisy-repo analysis
+  before adding more global discovery filters. The advisory JSON captures
+  top noisy directories/files, entity cardinality, and skip breakdowns so
+  `.pcg/discovery.json` changes are evidence-backed rather than timeout-driven.
 - keep dead-code truth labeled `derived`; the bounded policy buffer makes small-limit CLI output useful again, but broader root modeling is still required before promoting dead-code from derived to exact
 - keep NornicDB call-chain and transitive relationship reads on bounded BFS until upstream proves parameterized `shortestPath` endpoint anchors and projected map collection behave like Neo4j on the PCG query corpus
 - bundle future small heuristic changes with their safety gate when they are one logical fix, so rollback/bisect history tracks the behavioral unit rather than the order in which the concern was discovered

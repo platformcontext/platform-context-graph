@@ -58,6 +58,9 @@ type RepositorySnapshot struct {
 	FileData        []map[string]any        `json:"file_data"`
 	ContentFiles    []ContentFileSnapshot   `json:"content_files"`
 	ContentEntities []ContentEntitySnapshot `json:"content_entities"`
+	// DiscoveryAdvisory summarizes noisy repo discovery and materialization
+	// shapes for focused operator tuning.
+	DiscoveryAdvisory *DiscoveryAdvisoryReport `json:"discovery_advisory,omitempty"`
 	// ContentFileMetas holds body-free file metadata for two-phase snapshots.
 	// When populated, streamFacts re-reads bodies from AbsolutePath at emit time
 	// instead of carrying all bodies in memory.
@@ -715,6 +718,14 @@ func (s *GitSource) snapshotOneRepository(
 		observedAt,
 		snapshot,
 		repository.IsDependency,
+	)
+	enrichDiscoveryAdvisoryRun(
+		generation.DiscoveryAdvisory,
+		s.componentName(),
+		metadata.ID,
+		sourceRunID,
+		generation.Scope.ScopeID,
+		generation.Generation.GenerationID,
 	)
 
 	duration := time.Since(start).Seconds()

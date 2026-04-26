@@ -28,6 +28,9 @@ type CollectedGeneration struct {
 	Generation scope.ScopeGeneration
 	Facts      <-chan facts.Envelope
 	FactCount  int // estimated total for telemetry (may be approximate)
+	// DiscoveryAdvisory is optional focused-run tuning evidence for the
+	// collected repository. It is not persisted with facts.
+	DiscoveryAdvisory *DiscoveryAdvisoryReport
 }
 
 // FactsFromSlice creates a CollectedGeneration with facts from a pre-built

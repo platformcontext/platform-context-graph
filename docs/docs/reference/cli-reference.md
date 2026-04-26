@@ -174,7 +174,7 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 | `pcg help` | Show the full root help screen. | No |
 | `pcg version` | Print the installed version. | No |
 | `pcg doctor` | Run local diagnostics. | No |
-| `pcg index [path]` | Index a local path by launching the Go `bootstrap-index` runtime. | No |
+| `pcg index [path] [--discovery-report <file>]` | Index a local path by launching the Go `bootstrap-index` runtime. The optional discovery report writes a JSON advisory artifact for noisy-repo tuning. | No |
 | `pcg index-status` | Show the latest checkpointed index status. This is the completeness signal, not process health. | Yes |
 | `pcg finalize` | Compatibility stub. Prints the current ingester recovery endpoints and exits non-zero. | No |
 | `pcg clean` | Compatibility stub. Prints cleanup guidance and exits non-zero. | No |
@@ -188,6 +188,13 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 | `pcg watching` | Compatibility stub. Prints watcher-lifecycle guidance and exits non-zero. | No |
 | `pcg query "<query>"` | Run a language-query search against indexed code. | No |
 | `pcg start` | Deprecated root alias for `pcg mcp start`. | No |
+
+`pcg index --discovery-report <file>` is intentionally file-based instead of
+metric-based: it can include repository paths, top noisy directories/files,
+entity counts, and skip breakdowns without putting those high-cardinality
+values into Prometheus labels. Use it after a timeout-heavy or unexpectedly
+large run to decide whether a repo-local `.pcg/discovery.json` map is the right
+fix.
 
 ### Workspace commands
 
