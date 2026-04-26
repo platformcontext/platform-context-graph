@@ -1,7 +1,10 @@
 package projector
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,6 +62,40 @@ func TestServiceRunDoesNotFailWorkWhenShutdownCancelsProjection(t *testing.T) {
 	}
 	if got, want := sink.ackCalls, 0; got != want {
 		t.Fatalf("ack calls = %d, want %d", got, want)
+	}
+}
+
+func TestServiceRunLogsShutdownCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var logs bytes.Buffer
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource:   &stubProjectorWorkSource{workItems: []ScopeGenerationWork{shutdownCanceledWork()}},
+		FactStore:    &stubFactStore{returnContextErr: true},
+		Runner:       &stubProjectionRunner{},
+		WorkSink:     &stubProjectorWorkSink{},
+		Wait:         func(context.Context, time.Duration) error { return context.Canceled },
+		Logger:       slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+
+	if err := service.Run(ctx); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	logOutput := logs.String()
+	for _, want := range []string{
+		`"msg":"projector work canceled during shutdown"`,
+		`"failure_class":"shutdown_canceled"`,
+		`"status":"shutdown_canceled"`,
+		`"queue":"projector"`,
+		`"scope_id":"scope-123"`,
+	} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("logs missing %s in %s", want, logOutput)
+		}
 	}
 }
 

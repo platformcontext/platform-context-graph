@@ -226,6 +226,7 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 			return errors.Join(err, heartbeatErr)
 		}
 		if projectorShutdownCanceled(workCtx, err) {
+			s.recordProjectionShutdownCanceled(workCtx, work, start, 0, err, workerID)
 			return nil
 		}
 		s.recordProjectionResult(workCtx, work, start, "failed", 0, err, workerID)
@@ -241,6 +242,7 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 			return errors.Join(err, heartbeatErr)
 		}
 		if projectorShutdownCanceled(workCtx, err) {
+			s.recordProjectionShutdownCanceled(workCtx, work, start, len(factsForGeneration), err, workerID)
 			return nil
 		}
 		s.recordProjectionResult(workCtx, work, start, "failed", len(factsForGeneration), err, workerID)
@@ -309,6 +311,30 @@ func projectorShutdownCanceled(ctx context.Context, err error) bool {
 		return false
 	}
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func (s Service) recordProjectionShutdownCanceled(ctx context.Context, work ScopeGenerationWork, start time.Time, factCount int, err error, workerID int) {
+	if s.Logger == nil {
+		return
+	}
+	scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
+	logAttrs := make([]any, 0, len(scopeAttrs)+8)
+	for _, a := range scopeAttrs {
+		logAttrs = append(logAttrs, a)
+	}
+	logAttrs = append(logAttrs,
+		slog.String("queue", "projector"),
+		slog.String("status", "shutdown_canceled"),
+		slog.Int("fact_count", factCount),
+		slog.Float64("duration_seconds", time.Since(start).Seconds()),
+		slog.Int("worker_id", workerID),
+		telemetry.PhaseAttr(telemetry.PhaseProjection),
+		telemetry.FailureClassAttr("shutdown_canceled"),
+	)
+	if err != nil {
+		logAttrs = append(logAttrs, slog.String("error", err.Error()))
+	}
+	s.Logger.InfoContext(ctx, "projector work canceled during shutdown", logAttrs...)
 }
 
 type projectorHeartbeatStop func() error
