@@ -1,0 +1,23 @@
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 102-107,165-167,175,192,196-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "d318c83022f7a8b5ab262fef2196d7aadb097349",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 15,
+      "total_deletions": 13,
+      "accepted_lines": 40,
+      "overriden_lines": 0
+    }
+  }
+}
