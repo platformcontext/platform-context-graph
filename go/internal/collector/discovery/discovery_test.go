@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -265,6 +266,52 @@ func TestResolveRepositoryFileSetsWithStatsReportsPerNameSkipCounts(t *testing.T
 	}
 }
 
+func TestResolveRepositoryFileSetsPrunesUserPathGlobsWithPreservedSubtree(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	mustMkdirGit(t, repo)
+	mustWriteFile(t, filepath.Join(repo, "src", "app.php"), "<?php\nfunction app_authored() {}\n")
+	mustWriteFile(t, filepath.Join(repo, "src", "wp-content", "plugins", "wordpress-seo", "src", "blocks.php"), "<?php\nfunction yoast_vendor() {}\n")
+	mustWriteFile(t, filepath.Join(repo, "src", "wp-content", "plugins", "custom-authored", "plugin.php"), "<?php\nfunction custom_authored() {}\n")
+
+	stats, fileSets, err := ResolveRepositoryFileSetsWithStats(
+		repo,
+		func(path string) bool { return filepath.Ext(path) == ".php" },
+		Options{
+			IgnoredDirs: []string{".git"},
+			IgnoredPathGlobs: []PathGlobRule{
+				{Pattern: "src/wp-content/plugins/**", Reason: "wordpress plugin"},
+			},
+			PreservedPathGlobs: []string{"src/wp-content/plugins/custom-authored/**"},
+			HonorGitignore:     false,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ResolveRepositoryFileSetsWithStats() error = %v", err)
+	}
+
+	if got := stats.DirsSkippedByUser["wordpress-plugin"]; got != 1 {
+		t.Fatalf("DirsSkippedByUser[wordpress-plugin] = %d, want 1", got)
+	}
+	if got := stats.TotalDirsSkipped(); got < 2 {
+		t.Fatalf("TotalDirsSkipped() = %d, want at least built-in .git plus user subtree", got)
+	}
+
+	if got, want := countFileSetFiles(fileSets), 2; got != want {
+		t.Fatalf("kept file count = %d, want %d; fileSets=%v", got, want, fileSets)
+	}
+	for _, wantSuffix := range []string{
+		"src/app.php",
+		"src/wp-content/plugins/custom-authored/plugin.php",
+	} {
+		if !repoFileSetsContainSuffix(fileSets, wantSuffix) {
+			t.Fatalf("fileSets missing %q; fileSets=%v", wantSuffix, fileSets)
+		}
+	}
+}
+
 func mustMkdirGit(t *testing.T, dir string) {
 	t.Helper()
 
@@ -292,6 +339,25 @@ func mustResolvePath(t *testing.T, path string) string {
 		t.Fatalf("resolve path %q: %v", path, err)
 	}
 	return resolved
+}
+
+func countFileSetFiles(fileSets []RepoFileSet) int {
+	total := 0
+	for _, fileSet := range fileSets {
+		total += len(fileSet.Files)
+	}
+	return total
+}
+
+func repoFileSetsContainSuffix(fileSets []RepoFileSet, suffix string) bool {
+	for _, fileSet := range fileSets {
+		for _, file := range fileSet.Files {
+			if strings.HasSuffix(filepath.ToSlash(file), suffix) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func supportedPathMatcher(path string) bool {

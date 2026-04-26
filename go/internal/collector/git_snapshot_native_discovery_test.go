@@ -241,9 +241,62 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 	}
 }
 
+func TestResolveNativeSnapshotFileSetSkipsConfiguredVendoredRoots(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".pcg", "vendor-roots.json"), `{
+  "vendor_roots": [
+    {"path": "src/wp-content/plugins/**", "reason": "wordpress-plugin"}
+  ],
+  "keep_roots": [
+    {"path": "src/wp-content/plugins/custom-authored/**"}
+  ]
+}
+`)
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "app.php"), "<?php\nfunction app_authored() {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "wp-content", "plugins", "wordpress-seo", "src", "blocks.php"), "<?php\nfunction yoast_vendor() {}\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "wp-content", "plugins", "custom-authored", "plugin.php"), "<?php\nfunction custom_authored() {}\n")
+
+	resolvedRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		resolvedRepoRoot = repoRoot
+	}
+	registry := parser.DefaultRegistry()
+	fileSet, stats, err := resolveNativeSnapshotFileSet(resolvedRepoRoot, registry, NativeRepositorySnapshotter{}.discoveryOptions())
+	if err != nil {
+		t.Fatalf("resolveNativeSnapshotFileSet() error = %v", err)
+	}
+
+	if got, want := len(fileSet.Files), 2; got != want {
+		t.Fatalf("file count = %d, want %d; files=%v", got, want, fileSet.Files)
+	}
+	for _, wantSuffix := range []string{
+		"src/app.php",
+		"src/wp-content/plugins/custom-authored/plugin.php",
+	} {
+		if !fileSetContainsSuffix(fileSet.Files, wantSuffix) {
+			t.Fatalf("fileSet missing %q; files=%v", wantSuffix, fileSet.Files)
+		}
+	}
+	if got := stats.DirsSkippedByUser["wordpress-plugin"]; got != 1 {
+		t.Fatalf("DirsSkippedByUser[wordpress-plugin] = %d, want 1", got)
+	}
+}
+
 func largeAuthoredJavaScriptFixture() string {
 	header := "export function authoredLargeModule() { return 'authored'; }\n"
 	return header + strings.Repeat("export const authoredSymbol = 1;\n", 12000)
+}
+
+func fileSetContainsSuffix(files []string, suffix string) bool {
+	for _, file := range files {
+		if strings.HasSuffix(filepath.ToSlash(file), suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func smallWebpackBootstrapLikeFixture() string {

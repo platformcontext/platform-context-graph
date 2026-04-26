@@ -214,6 +214,8 @@ var defaultIgnoredDirs = []string{
 	".git",
 	".svn",
 	".hg",
+	// PCG repo-local configuration is operator metadata, not source input.
+	".pcg",
 	// Infrastructure / IaC caches
 	".terraform",
 	".terragrunt-cache",
@@ -321,13 +323,18 @@ var defaultIgnoredExtensions = []string{
 }
 
 func (s NativeRepositorySnapshotter) discoveryOptions() discovery.Options {
-	if len(s.DiscoveryOptions.IgnoredDirs) > 0 ||
-		len(s.DiscoveryOptions.IgnoredExtensions) > 0 ||
-		s.DiscoveryOptions.IgnoreHidden ||
-		len(s.DiscoveryOptions.PreservedHiddenPrefixes) > 0 ||
-		s.DiscoveryOptions.HonorGitignore {
-		return s.DiscoveryOptions
-	}
+	opts := defaultNativeDiscoveryOptions()
+	opts.IgnoredDirs = append(opts.IgnoredDirs, s.DiscoveryOptions.IgnoredDirs...)
+	opts.IgnoredExtensions = append(opts.IgnoredExtensions, s.DiscoveryOptions.IgnoredExtensions...)
+	opts.IgnoreHidden = s.DiscoveryOptions.IgnoreHidden
+	opts.PreservedHiddenPrefixes = append(opts.PreservedHiddenPrefixes, s.DiscoveryOptions.PreservedHiddenPrefixes...)
+	opts.HonorGitignore = true
+	opts.IgnoredPathGlobs = append(opts.IgnoredPathGlobs, s.DiscoveryOptions.IgnoredPathGlobs...)
+	opts.PreservedPathGlobs = append(opts.PreservedPathGlobs, s.DiscoveryOptions.PreservedPathGlobs...)
+	return opts
+}
+
+func defaultNativeDiscoveryOptions() discovery.Options {
 	return discovery.Options{
 		IgnoredDirs:       defaultIgnoredDirs,
 		IgnoredExtensions: defaultIgnoredExtensions,
@@ -356,6 +363,12 @@ func (s NativeRepositorySnapshotter) logDiscoveryStats(ctx context.Context, repo
 	}
 	for reason, count := range stats.FilesSkippedByContent {
 		attrs = append(attrs, slog.Int("files_skipped.content."+reason, count))
+	}
+	for reason, count := range stats.DirsSkippedByUser {
+		attrs = append(attrs, slog.Int("dirs_skipped.user."+reason, count))
+	}
+	for reason, count := range stats.FilesSkippedByUser {
+		attrs = append(attrs, slog.Int("files_skipped.user."+reason, count))
 	}
 	if stats.FilesSkippedHidden > 0 {
 		attrs = append(attrs, slog.Int("files_skipped.hidden", stats.FilesSkippedHidden))
@@ -387,6 +400,16 @@ func (s NativeRepositorySnapshotter) recordDiscoveryMetrics(ctx context.Context,
 			metric.WithAttributes(telemetry.AttrSkipReason("content:"+reason)),
 		)
 	}
+	for reason, count := range stats.DirsSkippedByUser {
+		s.Instruments.DiscoveryDirsSkipped.Add(ctx, int64(count),
+			metric.WithAttributes(telemetry.AttrSkipReason("user:"+reason)),
+		)
+	}
+	for reason, count := range stats.FilesSkippedByUser {
+		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(count),
+			metric.WithAttributes(telemetry.AttrSkipReason("user:"+reason)),
+		)
+	}
 	if stats.FilesSkippedHidden > 0 {
 		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(stats.FilesSkippedHidden),
 			metric.WithAttributes(telemetry.AttrSkipReason("hidden")),
@@ -411,6 +434,10 @@ func resolveNativeSnapshotFileSet(
 	registry parser.Registry,
 	opts discovery.Options,
 ) (discovery.RepoFileSet, discovery.DiscoveryStats, error) {
+	opts, err := discoveryOptionsWithVendorRootsConfig(repoPath, opts)
+	if err != nil {
+		return discovery.RepoFileSet{}, discovery.DiscoveryStats{}, err
+	}
 	stats, fileSets, err := discovery.ResolveRepositoryFileSetsWithStats(
 		repoPath,
 		func(path string) bool {

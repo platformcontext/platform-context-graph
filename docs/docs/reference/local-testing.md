@@ -67,6 +67,30 @@ absolute path to a real directory.
 - If you copied repositories for Compose testing, copy them into a real
   directory under your home folder and point `PCG_FILESYSTEM_HOST_ROOT` there.
 
+## Repo-Local Vendor Roots
+
+Some legacy or CMS repositories check in third-party source under authored
+paths, for example WordPress plugins or framework libraries outside `vendor/`.
+Do not lower graph-write timeouts or global batch sizes just because one such
+repo is noisy. First add a narrow repo-local `.pcg/vendor-roots.json` map and
+rerun the focused lane:
+
+```json
+{
+  "vendor_roots": [
+    {"path": "src/wp-content/plugins/wordpress-seo/**", "reason": "wordpress-seo"}
+  ],
+  "keep_roots": [
+    {"path": "src/wp-content/plugins/custom-authored/**"}
+  ]
+}
+```
+
+Discovery reports these as `dirs_skipped.user.<reason>` in logs and
+`skip_reason=user:<reason>` in metrics. Broad roots such as
+`wp-content/plugins/**` are safe only when `keep_roots` preserves authored
+subtrees.
+
 ## Quick Verification Matrix
 
 | If you touched | Minimum verification |

@@ -243,6 +243,10 @@ collector/projector/reducer path.
   `content:vendored-zend-framework`, `content:vendored-browser-library`, and
   `content:vendored-fpdf`; legacy PEAR libraries, including Phing, emit
   `content:vendored-pear`.
+- Repo-local `.pcg/vendor-roots.json` rules use the `user:` prefix. Directory
+  pruning appears on `pcg_dp_discovery_dirs_skipped_total`; file-level user
+  skips, when a file glob matches directly, appear on
+  `pcg_dp_discovery_files_skipped_total`.
 
 ### `pcg_dp_large_repo_classifications_total`
 ### `pcg_dp_large_repo_semaphore_wait_seconds`
