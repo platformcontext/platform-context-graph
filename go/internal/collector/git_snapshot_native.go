@@ -226,6 +226,9 @@ var defaultIgnoredDirs = []string{
 	"node_modules",
 	"bower_components",
 	"jspm_packages",
+	// Yarn Berry stores package-manager bundles and caches under .yarn.
+	// These generated artifacts can dwarf real application source.
+	".yarn",
 	".next",
 	".nuxt",
 	// Python
