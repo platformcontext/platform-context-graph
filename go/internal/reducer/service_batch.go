@@ -15,9 +15,9 @@ import (
 )
 
 // runBatchConcurrent uses a single claimer goroutine to claim batches of work
-// and distribute them to N worker goroutines via a buffered channel. A
-// separate acker goroutine batches acknowledgments. This reduces Postgres
-// round-trips from O(items) to O(items/batchSize).
+// and hand them only to ready worker goroutines. A separate acker goroutine
+// batches acknowledgments. This reduces Postgres round-trips from O(items) to
+// O(items/batchSize) without preclaiming work that is not yet heartbeat-owned.
 func (s Service) runBatchConcurrent(
 	ctx context.Context,
 	batchSource BatchWorkSource,
@@ -36,8 +36,9 @@ func (s Service) runBatchConcurrent(
 		result Result
 	}
 
-	workCh := make(chan workItem, batchSize*2)
+	workCh := make(chan workItem)
 	ackCh := make(chan ackItem, batchSize*2)
+	workerReady := make(chan struct{}, s.Workers)
 
 	var (
 		mu   sync.Mutex
@@ -52,19 +53,46 @@ func (s Service) runBatchConcurrent(
 		cancel()
 	}
 
-	// Claimer goroutine: claims batches and distributes to workers.
+	// Claimer goroutine: claims only as many items as workers are ready to
+	// execute. Reducer leases are heartbeat-protected by the worker execution
+	// path; preclaiming into a buffered queue can let leases expire before a
+	// worker starts heartbeating them.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer close(workCh)
 
+		idleWorkers := 0
 		for {
 			if ctx.Err() != nil {
 				return
 			}
 
+			for idleWorkers == 0 {
+				select {
+				case <-workerReady:
+					idleWorkers++
+				case <-ctx.Done():
+					return
+				}
+			}
+			for idleWorkers < s.Workers {
+				select {
+				case <-workerReady:
+					idleWorkers++
+				default:
+					goto readyDrained
+				}
+			}
+
+		readyDrained:
+			claimLimit := batchSize
+			if claimLimit > idleWorkers {
+				claimLimit = idleWorkers
+			}
+
 			claimStart := time.Now()
-			intents, err := batchSource.ClaimBatch(ctx, batchSize)
+			intents, err := batchSource.ClaimBatch(ctx, claimLimit)
 			if s.Instruments != nil {
 				s.Instruments.QueueClaimDuration.Record(ctx, time.Since(claimStart).Seconds(), metric.WithAttributes(
 					attribute.String("queue", "reducer"),
@@ -96,6 +124,7 @@ func (s Service) runBatchConcurrent(
 			for _, intent := range intents {
 				select {
 				case workCh <- workItem{intent: intent}:
+					idleWorkers--
 				case <-ctx.Done():
 					return
 				}
@@ -109,7 +138,23 @@ func (s Service) runBatchConcurrent(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for wi := range workCh {
+			for {
+				select {
+				case workerReady <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
+
+				var wi workItem
+				select {
+				case next, ok := <-workCh:
+					if !ok {
+						return
+					}
+					wi = next
+				case <-ctx.Done():
+					return
+				}
 				if ctx.Err() != nil {
 					return
 				}

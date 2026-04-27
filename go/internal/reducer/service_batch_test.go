@@ -14,6 +14,7 @@ type fakeBatchWorkSource struct {
 	mu      sync.Mutex
 	intents []Intent
 	claimed int
+	limits  []int
 }
 
 func (f *fakeBatchWorkSource) Claim(ctx context.Context) (Intent, bool, error) {
@@ -31,6 +32,7 @@ func (f *fakeBatchWorkSource) Claim(ctx context.Context) (Intent, bool, error) {
 func (f *fakeBatchWorkSource) ClaimBatch(_ context.Context, limit int) ([]Intent, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.limits = append(f.limits, limit)
 	if len(f.intents) == 0 {
 		return nil, nil
 	}
@@ -43,6 +45,18 @@ func (f *fakeBatchWorkSource) ClaimBatch(_ context.Context, limit int) ([]Intent
 	f.intents = f.intents[end:]
 	f.claimed += end
 	return batch, nil
+}
+
+func (f *fakeBatchWorkSource) claimedCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.claimed
+}
+
+func (f *fakeBatchWorkSource) claimLimits() []int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int(nil), f.limits...)
 }
 
 // fakeBatchWorkSink implements both WorkSink and BatchWorkSink.
@@ -240,6 +254,85 @@ func TestServiceRunBatchConcurrentHeartbeatsLongRunningReducerWork(t *testing.T)
 	}
 	if got, want := failed, 0; got != want {
 		t.Fatalf("sink failed = %d, want %d", got, want)
+	}
+}
+
+func TestServiceRunBatchConcurrentDoesNotPreclaimBeyondReadyWorkers(t *testing.T) {
+	t.Parallel()
+
+	source := &fakeBatchWorkSource{intents: makeTestIntents(5)}
+	sink := &fakeBatchWorkSink{}
+	release := make(chan struct{})
+	executor := &blockingManyReducerExecutor{
+		release: release,
+		started: make(chan string, 5),
+	}
+
+	service := Service{
+		PollInterval:   10 * time.Millisecond,
+		WorkSource:     source,
+		Executor:       executor,
+		WorkSink:       sink,
+		Workers:        2,
+		BatchClaimSize: 8,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- service.runMainLoop(ctx)
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-executor.started:
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for worker %d to start", i)
+		}
+	}
+
+	if got, want := source.claimedCount(), 2; got != want {
+		t.Fatalf("claimed count while both workers are busy = %d, want %d", got, want)
+	}
+	for _, limit := range source.claimLimits() {
+		if limit > 2 {
+			t.Fatalf("ClaimBatch limit = %d, want at most ready worker count 2", limit)
+		}
+	}
+
+	close(release)
+	if err := <-errc; err != nil {
+		t.Fatalf("runMainLoop() error = %v, want nil", err)
+	}
+	if got := executor.count.Load(); got != 5 {
+		t.Fatalf("executor count = %d, want 5", got)
+	}
+}
+
+type blockingManyReducerExecutor struct {
+	count   atomic.Int64
+	release <-chan struct{}
+	started chan string
+}
+
+func (b *blockingManyReducerExecutor) Execute(ctx context.Context, intent Intent) (Result, error) {
+	b.count.Add(1)
+	select {
+	case b.started <- intent.IntentID:
+	case <-ctx.Done():
+		return Result{}, ctx.Err()
+	}
+	select {
+	case <-b.release:
+		return Result{
+			IntentID: intent.IntentID,
+			Domain:   intent.Domain,
+			Status:   ResultStatusSucceeded,
+		}, nil
+	case <-ctx.Done():
+		return Result{}, ctx.Err()
 	}
 }
 
