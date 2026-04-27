@@ -324,9 +324,12 @@ adding more workers.
 ### Concurrency tuning
 
 The reducer supports concurrent intent execution (`PCG_REDUCER_WORKERS`,
-default 1) and concurrent shared projection partition processing
-(`PCG_SHARED_PROJECTION_WORKERS`, default 1). Increase these when queue age
-rises and single-worker CPU is not saturated.
+default Neo4j `min(NumCPU, 4)`, NornicDB `1`) and concurrent shared projection
+partition processing (`PCG_SHARED_PROJECTION_WORKERS`, default 1). Increase
+these when queue age rises and single-worker CPU is not saturated. On
+NornicDB, raise reducer workers only with queue and graph-write telemetry in
+view because long graph writes can make lease ownership and backend contention
+the limiting factor before CPU.
 
 Additional shared projection config:
 
