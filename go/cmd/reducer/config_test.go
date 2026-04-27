@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"testing"
 	"time"
 
@@ -70,11 +71,11 @@ func TestLoadReducerWorkerCount_Neo4jDefaultCap(t *testing.T) {
 	}
 }
 
-func TestLoadReducerWorkerCount_NornicDBDefaultsSequential(t *testing.T) {
+func TestLoadReducerWorkerCount_NornicDBDefaultsToBoundedCPU(t *testing.T) {
 	t.Parallel()
 	got := loadReducerWorkerCount(func(string) string { return "" }, runtimecfg.GraphBackendNornicDB)
-	if got != 1 {
-		t.Fatalf("got %d, want 1", got)
+	if want := expectedNornicDBReducerWorkers(); got != want {
+		t.Fatalf("got %d, want %d", got, want)
 	}
 }
 
@@ -86,8 +87,8 @@ func TestLoadReducerWorkerCount_InvalidEnv(t *testing.T) {
 		}
 		return ""
 	}, runtimecfg.GraphBackendNornicDB)
-	if got != 1 {
-		t.Fatalf("got %d, want 1 for NornicDB fallback", got)
+	if want := expectedNornicDBReducerWorkers(); got != want {
+		t.Fatalf("got %d, want %d for NornicDB fallback", got, want)
 	}
 }
 
@@ -114,12 +115,12 @@ func TestLoadReducerBatchClaimSize_Neo4jDefault(t *testing.T) {
 	}
 }
 
-func TestLoadReducerBatchClaimSize_NornicDBDefaultsSingleClaim(t *testing.T) {
+func TestLoadReducerBatchClaimSize_NornicDBDefaultsToWorkerCount(t *testing.T) {
 	t.Parallel()
 
-	got := loadReducerBatchClaimSize(func(string) string { return "" }, 2, runtimecfg.GraphBackendNornicDB)
-	if got != 1 {
-		t.Fatalf("got %d, want 1", got)
+	got := loadReducerBatchClaimSize(func(string) string { return "" }, 8, runtimecfg.GraphBackendNornicDB)
+	if got != 8 {
+		t.Fatalf("got %d, want 8", got)
 	}
 }
 
@@ -132,9 +133,20 @@ func TestLoadReducerBatchClaimSize_InvalidEnvFallsBackToBackendDefault(t *testin
 		}
 		return ""
 	}, 2, runtimecfg.GraphBackendNornicDB)
-	if got != 1 {
-		t.Fatalf("got %d, want 1 for NornicDB fallback", got)
+	if got != 2 {
+		t.Fatalf("got %d, want 2 for NornicDB fallback", got)
 	}
+}
+
+func expectedNornicDBReducerWorkers() int {
+	n := runtime.NumCPU()
+	if n > 8 {
+		n = 8
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
 }
 
 func TestLoadReducerProjectorDrainGate_NornicDBLocalAuthoritative(t *testing.T) {

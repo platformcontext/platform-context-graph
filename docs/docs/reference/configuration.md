@@ -90,8 +90,8 @@ bootstrap, reducer, and watch flows.
 | **`PCG_LARGE_GEN_THRESHOLD`** | `10000` | Fact-count threshold above which a projector generation is treated as “large”. |
 | **`PCG_LARGE_GEN_MAX_CONCURRENT`** | `2` | Maximum number of large projector generations processed concurrently. |
 | **`PCG_PROJECTION_WORKERS`** | `min(NumCPU, 8)` | Concurrent bootstrap-index projection workers. |
-| **`PCG_REDUCER_WORKERS`** | Neo4j: `min(NumCPU, 4)`; NornicDB: `1` | Concurrent reducer intent workers in the resolution engine. |
-| **`PCG_REDUCER_BATCH_CLAIM_SIZE`** | Neo4j: `workers * 4` (min 4, max 64); NornicDB: `1` | Number of reducer intents claimed per polling cycle. |
+| **`PCG_REDUCER_WORKERS`** | Neo4j: `min(NumCPU, 4)`; NornicDB: `min(NumCPU, 8)` | Concurrent reducer intent workers in the resolution engine. |
+| **`PCG_REDUCER_BATCH_CLAIM_SIZE`** | Neo4j: `workers * 4` (min 4, max 64); NornicDB: `workers` | Number of reducer intents claimed per polling cycle. |
 | **`PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT`** | `250000` | Maximum pending code-call shared intents the reducer may scan or load for one accepted repo/run before failing safely instead of rewriting CALLS edges from a partial slice. |
 | **`PCG_SHARED_PROJECTION_WORKERS`** | `1` | Concurrent shared-projection partition workers. |
 | **`PCG_SHARED_PROJECTION_PARTITION_COUNT`** | `8` | Number of shared-projection partitions per domain. |

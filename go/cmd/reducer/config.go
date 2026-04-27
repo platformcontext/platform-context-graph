@@ -70,7 +70,7 @@ func loadReducerBatchClaimSize(getenv func(string) string, workers int, graphBac
 		}
 	}
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		return 1
+		return workers
 	}
 	n := workers * 4
 	if n > 64 {
@@ -104,7 +104,14 @@ func loadReducerWorkerCount(getenv func(string) string, graphBackend runtimecfg.
 		}
 	}
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		return 1
+		n := runtime.NumCPU()
+		if n > 8 {
+			n = 8
+		}
+		if n < 1 {
+			n = 1
+		}
+		return n
 	}
 	n := runtime.NumCPU()
 	if n > 4 {

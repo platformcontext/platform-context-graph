@@ -538,7 +538,16 @@ func TestBootstrapWorkItemSchemaIncludesPayloadAndLeaseOwner(t *testing.T) {
 	if workItemSQL == "" {
 		t.Fatal("fact_work_items definition missing")
 	}
-	for _, want := range []string{"lease_owner TEXT NULL", "payload JSONB NOT NULL DEFAULT '{}'::jsonb"} {
+	for _, want := range []string{
+		"lease_owner TEXT NULL",
+		"conflict_domain TEXT NOT NULL DEFAULT 'scope'",
+		"conflict_key TEXT NULL",
+		"payload JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"ADD COLUMN IF NOT EXISTS conflict_domain TEXT NOT NULL DEFAULT 'scope'",
+		"ADD COLUMN IF NOT EXISTS conflict_key TEXT NULL",
+		"fact_work_items_reducer_conflict_claim_idx",
+		"COALESCE(conflict_key, scope_id)",
+	} {
 		if !strings.Contains(workItemSQL, want) {
 			t.Fatalf("work item SQL missing %q", want)
 		}

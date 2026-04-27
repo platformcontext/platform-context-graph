@@ -132,8 +132,8 @@ not implement the retry contract.
 | Variable | Default | Scope | Use |
 | --- | --- | --- | --- |
 | `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | `Annotation=5,Function=10,ImplBlock=10,Module=10,TypeAlias=5,TypeAnnotation=50,Variable=10` | reducer semantic entity materialization | Overrides NornicDB row caps for semantic labels after parser-enriched semantic metadata proves expensive. |
-| `PCG_REDUCER_WORKERS` | `1` on NornicDB | reducer graph writers | Overrides reducer work concurrency. Leave unset for normal NornicDB runs; raise only when intentionally testing graph-write contention. |
-| `PCG_REDUCER_BATCH_CLAIM_SIZE` | `1` on NornicDB | reducer queue claim window | Limits how many reducer intents one claim cycle leases before workers start them. Keep this near worker count when raising reducer workers so queued-but-not-started items do not expire their leases. |
+| `PCG_REDUCER_WORKERS` | `min(NumCPU, 8)` on NornicDB | reducer graph writers | Overrides reducer work concurrency. Leave unset for normal NornicDB runs; lower only when conflict-domain fencing still shows graph write conflicts or backend saturation. |
+| `PCG_REDUCER_BATCH_CLAIM_SIZE` | `workers` on NornicDB | reducer queue claim window | Limits how many reducer intents one claim cycle leases before workers start them. Keep this near worker count so queued-but-not-started items do not expire their leases. |
 | `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | `250000` | reducer code-call projection | Bounds how many code-call shared intents one accepted repo/run may scan or load before failing safely. Raise only when a real repo has more CALLS intents than the default and memory headroom is known. |
 
 Semantic materialization is a reducer-owned phase. Do not copy canonical caps
@@ -179,24 +179,22 @@ needs more than the default repeatedly, record the advisory evidence and
 consider redesigning code-call projection to page a complete acceptance unit
 safely instead of growing the cap indefinitely.
 
-When `PCG_GRAPH_BACKEND=nornicdb`, PCG defaults reducer intent execution to one
-worker because reducer domains can independently mutate the same graph sidecar.
-This does not serialize source discovery, parsing, source-local projection, or
-unrelated local-host processes; it only removes unsafe overlap between reducer
-graph writes unless an operator explicitly sets `PCG_REDUCER_WORKERS`.
-NornicDB also narrows the reducer batch-claim window to one item by default.
-That preserves useful worker concurrency when `PCG_REDUCER_WORKERS` is raised
-without pre-leasing many slow graph-write items that can sit in the local worker
-channel until their `claim_until` expires and the status panel reports overdue
-claims.
+When `PCG_GRAPH_BACKEND=nornicdb`, PCG defaults reducer intent execution to a
+bounded CPU-sized worker pool and relies on durable conflict-domain keys for
+safety. Code-graph reducer domains for one repo serialize with one another,
+platform graph reducer domains for that repo serialize with one another, and
+unrelated families can still run concurrently. The claim window defaults to the
+worker count so each claimed item can enter heartbeat-protected execution
+promptly instead of sitting in the local worker channel until `claim_until`
+expires.
 
 For `PCG_QUERY_PROFILE=local_authoritative` plus `PCG_GRAPH_BACKEND=nornicdb`,
 reducer claims also wait while source-local projector work is outstanding. This
 is not a row-size tuning knob: it removes the unsafe overlap where
-first-generation canonical projection and reducer graph writes contend for the same
-embedded NornicDB sidecar. Neo4j keeps the existing production concurrency path,
-and NornicDB operators can still raise reducer workers for controlled
-experiments after source-local projection has drained.
+first-generation canonical projection and reducer graph writes contend for the
+same embedded NornicDB sidecar. Neo4j keeps the existing production concurrency
+path, and NornicDB operators should tune worker count only from post-drain
+queue tail, graph-write timeout, CPU, disk, and NornicDB profile evidence.
 
 First-generation semantic materialization skips stale retract because there is
 no prior semantic graph state to clean up. Refreshes and retries still retract;

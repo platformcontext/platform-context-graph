@@ -102,7 +102,7 @@ func TestClaimBatchReturnsClaimedIntents(t *testing.T) {
 	}
 }
 
-func TestClaimBatchFencesSameScopeCandidates(t *testing.T) {
+func TestClaimBatchFencesSameConflictCandidates(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
@@ -125,12 +125,14 @@ func TestClaimBatchFencesSameScopeCandidates(t *testing.T) {
 	query := db.queries[0].query
 	for _, want := range []string{
 		"NOT EXISTS (",
-		"inflight.scope_id = fact_work_items.scope_id",
+		"inflight.conflict_domain = fact_work_items.conflict_domain",
+		"COALESCE(inflight.conflict_key, inflight.scope_id) = COALESCE(fact_work_items.conflict_key, fact_work_items.scope_id)",
 		"inflight.work_item_id <> fact_work_items.work_item_id",
 		"inflight.status IN ('claimed', 'running')",
 		"inflight.claim_until > $1",
 		"work_item_id = (",
-		"same.scope_id = fact_work_items.scope_id",
+		"same.conflict_domain = fact_work_items.conflict_domain",
+		"COALESCE(same.conflict_key, same.scope_id) = COALESCE(fact_work_items.conflict_key, fact_work_items.scope_id)",
 		"same.status IN ('pending', 'retrying', 'claimed', 'running')",
 		"ORDER BY same.updated_at ASC, same.work_item_id ASC",
 		"LIMIT 1",
