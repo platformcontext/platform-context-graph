@@ -118,7 +118,7 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFilesSequential(
 			IndexSource:   true,
 			VariableScope: "all",
 		})
-		duration := time.Since(startTime).Milliseconds()
+		duration := fileParseDurationSeconds(startTime)
 
 		if err != nil {
 			// Skip files that cannot be parsed (e.g. malformed JSON,
@@ -158,7 +158,7 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFilesSequential(
 
 		if s.Instruments != nil {
 			language := snapshotPayloadString(parsed, "language", "lang")
-			s.Instruments.FileParseDuration.Record(ctx, float64(duration), metric.WithAttributes(
+			s.Instruments.FileParseDuration.Record(ctx, duration, metric.WithAttributes(
 				attribute.String("language", language),
 			))
 			s.Instruments.FilesParsed.Add(ctx, 1, metric.WithAttributes(
@@ -167,6 +167,10 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFilesSequential(
 		}
 	}
 	return shapeFiles, parsedFiles, nil
+}
+
+func fileParseDurationSeconds(startedAt time.Time) float64 {
+	return time.Since(startedAt).Seconds()
 }
 
 type parseResult struct {
@@ -219,7 +223,7 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFilesConcurrent(
 					IndexSource:   true,
 					VariableScope: "all",
 				})
-				duration := time.Since(startTime).Milliseconds()
+				duration := fileParseDurationSeconds(startTime)
 
 				if err != nil {
 					// Parse error: skip file but continue processing others
@@ -257,7 +261,7 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFilesConcurrent(
 
 				if s.Instruments != nil {
 					language := snapshotPayloadString(parsed, "language", "lang")
-					s.Instruments.FileParseDuration.Record(workerCtx, float64(duration), metric.WithAttributes(
+					s.Instruments.FileParseDuration.Record(workerCtx, duration, metric.WithAttributes(
 						attribute.String("language", language),
 					))
 					s.Instruments.FilesParsed.Add(workerCtx, 1, metric.WithAttributes(
