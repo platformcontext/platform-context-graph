@@ -1,9 +1,12 @@
 package collector
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -198,6 +201,49 @@ func TestNativeRepositorySnapshotterIncludesImportsMap(t *testing.T) {
 	}
 	if got, want := filepath.Base(handlerPaths[0]), "app.py"; got != want {
 		t.Fatalf("ImportsMap[handler][0] base = %q, want %q", got, want)
+	}
+}
+
+func TestNativeRepositorySnapshotterLogsSnapshotStageTimings(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(
+		t,
+		filepath.Join(repoRoot, "app.py"),
+		"def handler():\n    return 1\n",
+	)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	var logs bytes.Buffer
+	snapshotter := NativeRepositorySnapshotter{
+		Engine:       engine,
+		ParseWorkers: 2,
+		Logger:       slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+	if _, err := snapshotter.SnapshotRepository(
+		context.Background(),
+		SelectedRepository{RepoPath: repoRoot},
+	); err != nil {
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
+	}
+
+	logOutput := logs.String()
+	for _, want := range []string{
+		`"stage":"discovery"`,
+		`"stage":"pre_scan"`,
+		`"stage":"parse"`,
+		`"stage":"materialize"`,
+		`"duration_seconds":`,
+		`"parse_workers":2`,
+	} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("snapshot stage logs missing %s in %s", want, logOutput)
+		}
 	}
 }
 

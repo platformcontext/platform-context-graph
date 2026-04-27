@@ -117,6 +117,7 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		return RepositorySnapshot{}, err
 	}
 	registry := s.registry()
+	discoveryStartedAt := time.Now()
 	fileSet, discoveryStats, err := resolveNativeSnapshotFileSet(repoPath, registry, s.discoveryOptions())
 	if len(repository.FileTargets) > 0 {
 		fileSet, err = resolveNativeSnapshotFileSetForTargets(repoPath, repository.FileTargets, registry)
@@ -125,6 +126,10 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		return RepositorySnapshot{}, err
 	}
 	s.logDiscoveryStats(ctx, repoPath, discoveryStats)
+	s.logSnapshotStageTiming(ctx, repoPath, "discovery", discoveryStartedAt,
+		slog.Int("file_count", len(fileSet.Files)),
+		slog.Int("file_target_count", len(repository.FileTargets)),
+	)
 	s.recordDiscoveryMetrics(ctx, discoveryStats)
 
 	snapshot := RepositorySnapshot{
@@ -150,11 +155,16 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		return snapshot, nil
 	}
 
+	preScanStartedAt := time.Now()
 	importsMap, err := engine.PreScanRepositoryPaths(repoPath, fileSet.Files)
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("pre-scan repository imports for %q: %w", repoPath, err)
 	}
 	snapshot.ImportsMap = importsMap
+	s.logSnapshotStageTiming(ctx, repoPath, "pre_scan", preScanStartedAt,
+		slog.Int("file_count", len(fileSet.Files)),
+		slog.Int("import_symbol_count", len(importsMap)),
+	)
 
 	repoMetadata, err := repositoryidentity.MetadataFor(
 		filepath.Base(repoPath),
@@ -164,6 +174,7 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("repository metadata for %q: %w", repoPath, err)
 	}
+	parseStartedAt := time.Now()
 	shapeFiles, parsedFiles, err := s.buildParsedRepositoryFiles(
 		ctx,
 		repoPath,
@@ -175,7 +186,14 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("build parsed repository files for %q: %w", repoPath, err)
 	}
+	s.logSnapshotStageTiming(ctx, repoPath, "parse", parseStartedAt,
+		slog.Int("file_count", len(fileSet.Files)),
+		slog.Int("parsed_file_count", len(parsedFiles)),
+		slog.Int("skipped_file_count", len(fileSet.Files)-len(parsedFiles)),
+		slog.Int("parse_workers", effectiveSnapshotParseWorkers(s.ParseWorkers)),
+	)
 
+	materializeStartedAt := time.Now()
 	materialization, err := shape.Materialize(shape.Input{
 		RepoID:       repoMetadata.ID,
 		SourceSystem: "git",
@@ -184,6 +202,11 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("materialize repository content: %w", err)
 	}
+	s.logSnapshotStageTiming(ctx, repoPath, "materialize", materializeStartedAt,
+		slog.Int("parsed_file_count", len(parsedFiles)),
+		slog.Int("content_file_count", len(materialization.Records)),
+		slog.Int("content_entity_count", len(materialization.Entities)),
+	)
 
 	annotateParsedFilesWithEntityIDs(repoPath, parsedFiles, materialization.Entities)
 	snapshot.FileData = parsedFiles
@@ -208,6 +231,38 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	materialization = content.Materialization{}
 
 	return snapshot, nil
+}
+
+// logSnapshotStageTiming emits coarse repository snapshot phase timings so
+// operators can distinguish parser, materialization, and commit bottlenecks
+// before changing concurrency or graph-write tuning.
+func (s NativeRepositorySnapshotter) logSnapshotStageTiming(
+	ctx context.Context,
+	repoPath string,
+	stage string,
+	startedAt time.Time,
+	attrs ...any,
+) {
+	if s.Logger == nil {
+		return
+	}
+	logAttrs := []any{
+		slog.String("collector_kind", "git"),
+		slog.String("repo_path", repoPath),
+		slog.String("stage", stage),
+		slog.Float64("duration_seconds", time.Since(startedAt).Seconds()),
+	}
+	logAttrs = append(logAttrs, attrs...)
+	s.Logger.InfoContext(ctx, "collector snapshot stage completed", logAttrs...)
+}
+
+// effectiveSnapshotParseWorkers reports the actual parser worker cardinality
+// when the zero-value configuration falls back to the sequential parser path.
+func effectiveSnapshotParseWorkers(configured int) int {
+	if configured <= 1 {
+		return 1
+	}
+	return configured
 }
 
 func (s NativeRepositorySnapshotter) engine() (*parser.Engine, error) {

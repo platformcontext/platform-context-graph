@@ -20,7 +20,7 @@ the reported state is live or inferred.
 | API is slow or erroring | API metrics | API traces and logs |
 | backlog is growing | queue depth and queue age metrics | resolution-engine traces and queue logs |
 | shared follow-up looks stuck | shared-projection backlog metrics | resolution-engine traces and shared-projection logs |
-| one repository is slow | ingester metrics | ingester traces and resolution-engine stage timings |
+| one repository is slow | ingester metrics | `collector snapshot stage completed` logs, ingester traces, and resolution-engine stage timings |
 | graph writes are slow | resolution metrics | Neo4j traces and graph persistence logs |
 | content reads are missing or slow | API metrics and content metrics | content traces and logs |
 | replay or dead-letter behavior looks wrong | recovery metrics | recovery traces and admin recovery logs |
@@ -123,7 +123,10 @@ For shared-write debugging specifically:
 - Traces show parse, fact emission, inline projection timing, and parser
   selection.
 - Logs explain discovery choices, slow files, parser snapshot collection, and
-  per-repo progress.
+  per-repo progress. For a slow single repository, start with
+  `collector snapshot stage completed` records for `discovery`, `pre_scan`,
+  `parse`, and `materialize` before changing parser workers, NornicDB batch
+  sizes, or graph-write timeouts.
 
 ### Facts Layer
 
