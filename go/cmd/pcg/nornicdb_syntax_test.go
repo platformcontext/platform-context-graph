@@ -65,6 +65,10 @@ func TestNornicDBCompatibilityWorkarounds(t *testing.T) {
 				cypher: "CREATE INDEX pcg_syntax_repository_id_lookup IF NOT EXISTS FOR (r:Repository) ON (r.id)",
 			},
 			{
+				name:   "workload id merge lookup index",
+				cypher: "CREATE INDEX pcg_syntax_workload_id_lookup IF NOT EXISTS FOR (w:Workload) ON (w.id)",
+			},
+			{
 				name:   "uid merge lookup index",
 				cypher: "CREATE INDEX pcg_syntax_function_uid_lookup IF NOT EXISTS FOR (f:PCGSyntaxFunction) ON (f.uid)",
 			},
