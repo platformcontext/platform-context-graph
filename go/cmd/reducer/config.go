@@ -18,35 +18,37 @@ const (
 	reducerBatchClaimEnv  = "PCG_REDUCER_BATCH_CLAIM_SIZE"
 	queryProfileEnv       = "PCG_QUERY_PROFILE"
 
-	codeCallProjectionPollIntervalEnv       = "PCG_CODE_CALL_PROJECTION_POLL_INTERVAL"
-	codeCallProjectionLeaseTTLEnv           = "PCG_CODE_CALL_PROJECTION_LEASE_TTL"
-	codeCallProjectionBatchLimitEnv         = "PCG_CODE_CALL_PROJECTION_BATCH_LIMIT"
-	codeCallProjectionLeaseOwnerEnv         = "PCG_CODE_CALL_PROJECTION_LEASE_OWNER"
-	repoDependencyProjectionPollIntervalEnv = "PCG_REPO_DEPENDENCY_PROJECTION_POLL_INTERVAL"
-	repoDependencyProjectionLeaseTTLEnv     = "PCG_REPO_DEPENDENCY_PROJECTION_LEASE_TTL"
-	repoDependencyProjectionBatchLimitEnv   = "PCG_REPO_DEPENDENCY_PROJECTION_BATCH_LIMIT"
-	repoDependencyProjectionLeaseOwnerEnv   = "PCG_REPO_DEPENDENCY_PROJECTION_LEASE_OWNER"
-	codeCallEdgeBatchSizeEnv                = "PCG_CODE_CALL_EDGE_BATCH_SIZE"
-	codeCallEdgeGroupBatchSizeEnv           = "PCG_CODE_CALL_EDGE_GROUP_BATCH_SIZE"
-	inheritanceEdgeGroupBatchSizeEnv        = "PCG_INHERITANCE_EDGE_GROUP_BATCH_SIZE"
-	sqlRelationshipEdgeGroupBatchSizeEnv    = "PCG_SQL_RELATIONSHIP_EDGE_GROUP_BATCH_SIZE"
+	codeCallProjectionPollIntervalEnv        = "PCG_CODE_CALL_PROJECTION_POLL_INTERVAL"
+	codeCallProjectionLeaseTTLEnv            = "PCG_CODE_CALL_PROJECTION_LEASE_TTL"
+	codeCallProjectionBatchLimitEnv          = "PCG_CODE_CALL_PROJECTION_BATCH_LIMIT"
+	codeCallProjectionAcceptanceScanLimitEnv = "PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT"
+	codeCallProjectionLeaseOwnerEnv          = "PCG_CODE_CALL_PROJECTION_LEASE_OWNER"
+	repoDependencyProjectionPollIntervalEnv  = "PCG_REPO_DEPENDENCY_PROJECTION_POLL_INTERVAL"
+	repoDependencyProjectionLeaseTTLEnv      = "PCG_REPO_DEPENDENCY_PROJECTION_LEASE_TTL"
+	repoDependencyProjectionBatchLimitEnv    = "PCG_REPO_DEPENDENCY_PROJECTION_BATCH_LIMIT"
+	repoDependencyProjectionLeaseOwnerEnv    = "PCG_REPO_DEPENDENCY_PROJECTION_LEASE_OWNER"
+	codeCallEdgeBatchSizeEnv                 = "PCG_CODE_CALL_EDGE_BATCH_SIZE"
+	codeCallEdgeGroupBatchSizeEnv            = "PCG_CODE_CALL_EDGE_GROUP_BATCH_SIZE"
+	inheritanceEdgeGroupBatchSizeEnv         = "PCG_INHERITANCE_EDGE_GROUP_BATCH_SIZE"
+	sqlRelationshipEdgeGroupBatchSizeEnv     = "PCG_SQL_RELATIONSHIP_EDGE_GROUP_BATCH_SIZE"
 
 	graphProjectionRepairPollIntervalEnv = "PCG_GRAPH_PROJECTION_REPAIR_POLL_INTERVAL"
 	graphProjectionRepairBatchLimitEnv   = "PCG_GRAPH_PROJECTION_REPAIR_BATCH_LIMIT"
 	graphProjectionRepairRetryDelayEnv   = "PCG_GRAPH_PROJECTION_REPAIR_RETRY_DELAY"
 
-	defaultCodeCallProjectionPollInterval       = 500 * time.Millisecond
-	defaultCodeCallProjectionLeaseTTL           = 60 * time.Second
-	defaultCodeCallProjectionBatchLimit         = 100
-	defaultCodeCallProjectionLeaseOwner         = "code-call-projection-runner"
-	defaultRepoDependencyProjectionPollInterval = 500 * time.Millisecond
-	defaultRepoDependencyProjectionLeaseTTL     = 60 * time.Second
-	defaultRepoDependencyProjectionBatchLimit   = 100
-	defaultRepoDependencyProjectionLeaseOwner   = "repo-dependency-projection-runner"
-	defaultCodeCallEdgeBatchSize                = 50
-	defaultCodeCallEdgeGroupBatchSize           = 1
-	defaultInheritanceEdgeGroupBatchSize        = 1
-	defaultSQLRelationshipEdgeGroupBatchSize    = 1
+	defaultCodeCallProjectionPollInterval        = 500 * time.Millisecond
+	defaultCodeCallProjectionLeaseTTL            = 60 * time.Second
+	defaultCodeCallProjectionBatchLimit          = 100
+	defaultCodeCallProjectionAcceptanceScanLimit = reducer.DefaultCodeCallAcceptanceScanLimit
+	defaultCodeCallProjectionLeaseOwner          = "code-call-projection-runner"
+	defaultRepoDependencyProjectionPollInterval  = 500 * time.Millisecond
+	defaultRepoDependencyProjectionLeaseTTL      = 60 * time.Second
+	defaultRepoDependencyProjectionBatchLimit    = 100
+	defaultRepoDependencyProjectionLeaseOwner    = "repo-dependency-projection-runner"
+	defaultCodeCallEdgeBatchSize                 = 50
+	defaultCodeCallEdgeGroupBatchSize            = 1
+	defaultInheritanceEdgeGroupBatchSize         = 1
+	defaultSQLRelationshipEdgeGroupBatchSize     = 1
 
 	defaultGraphProjectionRepairPollInterval = time.Second
 	defaultGraphProjectionRepairBatchLimit   = 100
@@ -120,10 +122,11 @@ func loadCodeCallProjectionConfig(getenv func(string) string) reducer.CodeCallPr
 	}
 
 	return reducer.CodeCallProjectionRunnerConfig{
-		LeaseOwner:   loadStringOrDefault(getenv, codeCallProjectionLeaseOwnerEnv, defaultCodeCallProjectionLeaseOwner),
-		PollInterval: loadDurationOrDefault(getenv, codeCallProjectionPollIntervalEnv, defaultCodeCallProjectionPollInterval),
-		LeaseTTL:     loadDurationOrDefault(getenv, codeCallProjectionLeaseTTLEnv, defaultCodeCallProjectionLeaseTTL),
-		BatchLimit:   loadPositiveIntOrDefault(getenv, codeCallProjectionBatchLimitEnv, defaultCodeCallProjectionBatchLimit),
+		LeaseOwner:          loadStringOrDefault(getenv, codeCallProjectionLeaseOwnerEnv, defaultCodeCallProjectionLeaseOwner),
+		PollInterval:        loadDurationOrDefault(getenv, codeCallProjectionPollIntervalEnv, defaultCodeCallProjectionPollInterval),
+		LeaseTTL:            loadDurationOrDefault(getenv, codeCallProjectionLeaseTTLEnv, defaultCodeCallProjectionLeaseTTL),
+		BatchLimit:          loadPositiveIntOrDefault(getenv, codeCallProjectionBatchLimitEnv, defaultCodeCallProjectionBatchLimit),
+		AcceptanceScanLimit: loadPositiveIntOrDefault(getenv, codeCallProjectionAcceptanceScanLimitEnv, defaultCodeCallProjectionAcceptanceScanLimit),
 	}
 }
 

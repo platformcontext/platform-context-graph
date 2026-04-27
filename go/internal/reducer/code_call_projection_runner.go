@@ -19,10 +19,14 @@ import (
 const (
 	defaultCodeCallLeaseOwner = "code-call-projection-runner"
 	maxCodeCallPollInterval   = 5 * time.Second
-	// Acceptance-unit processing must either see the full bounded slice or fail
-	// safely instead of silently truncating the snapshot.
-	maxCodeCallAcceptanceScanLimit = 10_000
 )
+
+// DefaultCodeCallAcceptanceScanLimit bounds how many pending code-call intents
+// the runner may scan or load for one authoritative acceptance unit. The runner
+// must see the complete unit before retracting and rewriting repo-wide CALLS
+// edges; this guard prevents silent partial graph truth while allowing large
+// real repositories to exceed the normal per-cycle batch size.
+const DefaultCodeCallAcceptanceScanLimit = 250_000
 
 // CodeCallProjectionIntentReader reads code-call intents by domain and bounded
 // acceptance unit.
@@ -34,10 +38,11 @@ type CodeCallProjectionIntentReader interface {
 
 // CodeCallProjectionRunnerConfig configures the controlled code-calls lane.
 type CodeCallProjectionRunnerConfig struct {
-	LeaseOwner   string
-	PollInterval time.Duration
-	LeaseTTL     time.Duration
-	BatchLimit   int
+	LeaseOwner          string
+	PollInterval        time.Duration
+	LeaseTTL            time.Duration
+	BatchLimit          int
+	AcceptanceScanLimit int
 }
 
 func (c CodeCallProjectionRunnerConfig) pollInterval() time.Duration {
@@ -59,6 +64,16 @@ func (c CodeCallProjectionRunnerConfig) batchLimit() int {
 		return defaultBatchLimit
 	}
 	return c.BatchLimit
+}
+
+func (c CodeCallProjectionRunnerConfig) acceptanceScanLimit() int {
+	if c.AcceptanceScanLimit <= 0 {
+		return DefaultCodeCallAcceptanceScanLimit
+	}
+	if c.AcceptanceScanLimit < c.batchLimit() {
+		return c.batchLimit()
+	}
+	return c.AcceptanceScanLimit
 }
 
 func (c CodeCallProjectionRunnerConfig) leaseOwner() string {
@@ -240,8 +255,9 @@ func (r *CodeCallProjectionRunner) selectAcceptanceUnitWork(ctx context.Context)
 		Logger:      r.Logger,
 	}
 	scanLimit := r.Config.batchLimit()
-	if scanLimit > maxCodeCallAcceptanceScanLimit {
-		scanLimit = maxCodeCallAcceptanceScanLimit
+	acceptanceScanLimit := r.Config.acceptanceScanLimit()
+	if scanLimit > acceptanceScanLimit {
+		scanLimit = acceptanceScanLimit
 	}
 
 	for {
@@ -387,25 +403,25 @@ func (r *CodeCallProjectionRunner) selectAcceptanceUnitWork(ctx context.Context)
 			})
 			return SharedProjectionAcceptanceKey{}, nil
 		}
-		if scanLimit >= maxCodeCallAcceptanceScanLimit {
+		if scanLimit >= acceptanceScanLimit {
 			acceptanceTelemetry.RecordLookup(ctx, sharedAcceptanceLookupEvent{
 				Runner:   "code_call_projection",
 				Result:   "error",
 				Duration: time.Since(start).Seconds(),
 				Err: fmt.Errorf(
 					"scan limit cap reached before finding accepted code call work (%d)",
-					maxCodeCallAcceptanceScanLimit,
+					acceptanceScanLimit,
 				),
 			})
 			return SharedProjectionAcceptanceKey{}, fmt.Errorf(
 				"code call acceptance scan reached cap (%d) before locating accepted work",
-				maxCodeCallAcceptanceScanLimit,
+				acceptanceScanLimit,
 			)
 		}
 
 		nextLimit := scanLimit * 2
-		if nextLimit > maxCodeCallAcceptanceScanLimit {
-			nextLimit = maxCodeCallAcceptanceScanLimit
+		if nextLimit > acceptanceScanLimit {
+			nextLimit = acceptanceScanLimit
 		}
 		scanLimit = nextLimit
 	}
@@ -413,8 +429,9 @@ func (r *CodeCallProjectionRunner) selectAcceptanceUnitWork(ctx context.Context)
 
 func (r *CodeCallProjectionRunner) loadAllAcceptanceUnitIntents(ctx context.Context, key SharedProjectionAcceptanceKey) ([]SharedProjectionIntentRow, error) {
 	limit := r.Config.batchLimit()
-	if limit > maxCodeCallAcceptanceScanLimit {
-		limit = maxCodeCallAcceptanceScanLimit
+	acceptanceScanLimit := r.Config.acceptanceScanLimit()
+	if limit > acceptanceScanLimit {
+		limit = acceptanceScanLimit
 	}
 	for {
 		rows, err := r.IntentReader.ListPendingAcceptanceUnitIntents(ctx, key, DomainCodeCalls, limit)
@@ -424,18 +441,18 @@ func (r *CodeCallProjectionRunner) loadAllAcceptanceUnitIntents(ctx context.Cont
 		if len(rows) < limit {
 			return rows, nil
 		}
-		if limit >= maxCodeCallAcceptanceScanLimit {
+		if limit >= acceptanceScanLimit {
 			return nil, fmt.Errorf(
 				"code call acceptance intent scan reached cap (%d) for scope %q unit %q run %q",
-				maxCodeCallAcceptanceScanLimit,
+				acceptanceScanLimit,
 				key.ScopeID,
 				key.AcceptanceUnitID,
 				key.SourceRunID,
 			)
 		}
 		nextLimit := limit * 2
-		if nextLimit > maxCodeCallAcceptanceScanLimit {
-			nextLimit = maxCodeCallAcceptanceScanLimit
+		if nextLimit > acceptanceScanLimit {
+			nextLimit = acceptanceScanLimit
 		}
 		limit = nextLimit
 	}

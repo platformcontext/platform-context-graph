@@ -668,6 +668,7 @@ Set any variable to `1` to force sequential processing (useful for debugging).
 | `PCG_SNAPSHOT_WORKERS` | `min(NumCPU, 4)` | Ingester / Bootstrap | Concurrent repository snapshot goroutines |
 | `PCG_REDUCER_WORKERS` | Neo4j: `min(NumCPU, 4)`; NornicDB: `1` | Reducer | Concurrent reducer intent execution goroutines |
 | `PCG_REDUCER_BATCH_CLAIM_SIZE` | Neo4j: `workers * 4` capped at `64`; NornicDB: `1` | Reducer | Reducer intents leased per claim cycle |
+| `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | `250000` | Reducer | Maximum code-call shared intents scanned or loaded for one accepted repo/run before failing safely instead of projecting partial CALLS truth |
 | `PCG_SHARED_PROJECTION_WORKERS` | 1 (sequential) | Reducer | Concurrent shared projection partition goroutines |
 | `PCG_SHARED_PROJECTION_PARTITION_COUNT` | 8 | Reducer | Number of partitions per shared projection domain |
 | `PCG_SHARED_PROJECTION_BATCH_LIMIT` | 100 | Reducer | Max intents processed per partition batch |

@@ -334,6 +334,9 @@ Additional shared projection config:
 - `PCG_SHARED_PROJECTION_BATCH_LIMIT` (default 100) — intents per batch
 - `PCG_SHARED_PROJECTION_POLL_INTERVAL` (default 5s) — cycle poll interval
 - `PCG_SHARED_PROJECTION_LEASE_TTL` (default 60s) — partition lease TTL
+- `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` (default 250000) — maximum
+  code-call shared intents scanned or loaded for one accepted repo/run before
+  failing safely instead of projecting partial CALLS truth
 
 In Kubernetes, size the Postgres connection pool to accommodate the total
 concurrent workers across all reducer replicas. Each worker holds one

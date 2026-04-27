@@ -57,10 +57,19 @@ they are timeouts; only proven transient conflict errors opt into bounded retry.
 | `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | `Annotation=10,Function=10,ImplBlock=10,Module=10,Variable=10` | reducer semantic entity materialization | Overrides NornicDB row caps for semantic labels after parser-enriched semantic metadata proves expensive. |
 | `PCG_REDUCER_WORKERS` | `1` on NornicDB | reducer graph writers | Overrides reducer work concurrency. Leave unset for normal NornicDB runs; raise only when intentionally testing graph-write contention. |
 | `PCG_REDUCER_BATCH_CLAIM_SIZE` | `1` on NornicDB | reducer queue claim window | Limits how many reducer intents one claim cycle leases before workers start them. Keep this near worker count when raising reducer workers so queued-but-not-started items do not expire their leases. |
+| `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | `250000` | reducer code-call projection | Bounds how many code-call shared intents one accepted repo/run may scan or load before failing safely. Raise only when a real repo has more CALLS intents than the default and memory headroom is known. |
 
 Semantic materialization is a reducer-owned phase. Do not copy canonical caps
 blindly; semantic labels should be narrowed only after timeout summaries name
 the semantic label and row count.
+
+Code-call projection is also reducer-owned, but its scan limit is a correctness
+guard rather than a graph-write tuning knob. The runner retracts repo-wide
+CALLS edges and then rewrites the accepted repo/run slice, so it must load the
+whole acceptance unit before marking intents complete. If
+`PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` is exhausted, use the
+discovery advisory report first to confirm the repo is not dominated by
+generated or vendored code before raising the limit.
 
 When `PCG_GRAPH_BACKEND=nornicdb`, PCG defaults reducer intent execution to one
 worker because reducer domains can independently mutate the same graph sidecar.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -28,8 +29,24 @@ func TestCodeCallProjectionRunnerConfigDefaults(t *testing.T) {
 	if got := cfg.batchLimit(); got != defaultBatchLimit {
 		t.Fatalf("batchLimit() = %d, want %d", got, defaultBatchLimit)
 	}
+	if got := cfg.acceptanceScanLimit(); got != DefaultCodeCallAcceptanceScanLimit {
+		t.Fatalf("acceptanceScanLimit() = %d, want %d", got, DefaultCodeCallAcceptanceScanLimit)
+	}
 	if got := cfg.leaseOwner(); got != defaultCodeCallLeaseOwner {
 		t.Fatalf("leaseOwner() = %q, want %q", got, defaultCodeCallLeaseOwner)
+	}
+}
+
+func TestCodeCallProjectionRunnerConfigAcceptanceScanLimitHonorsBatchFloor(t *testing.T) {
+	t.Parallel()
+
+	cfg := CodeCallProjectionRunnerConfig{
+		BatchLimit:          500,
+		AcceptanceScanLimit: 100,
+	}
+
+	if got, want := cfg.acceptanceScanLimit(), 500; got != want {
+		t.Fatalf("acceptanceScanLimit() = %d, want batch floor %d", got, want)
 	}
 }
 
@@ -424,7 +441,7 @@ func TestCodeCallProjectionRunnerRunContinuesAfterCycleError(t *testing.T) {
 	}
 }
 
-func TestCodeCallProjectionRunnerLoadAllAcceptanceUnitIntentsRejectsOversizedSlice(t *testing.T) {
+func TestCodeCallProjectionRunnerLoadAllAcceptanceUnitIntentsRejectsSliceOverConfiguredCap(t *testing.T) {
 	t.Parallel()
 
 	reader := &fakeCodeCallIntentStore{
@@ -446,7 +463,10 @@ func TestCodeCallProjectionRunnerLoadAllAcceptanceUnitIntentsRejectsOversizedSli
 	}
 	runner := CodeCallProjectionRunner{
 		IntentReader: reader,
-		Config:       CodeCallProjectionRunnerConfig{BatchLimit: 100},
+		Config: CodeCallProjectionRunnerConfig{
+			BatchLimit:          100,
+			AcceptanceScanLimit: 1_000,
+		},
 	}
 
 	_, err := runner.loadAllAcceptanceUnitIntents(context.Background(), SharedProjectionAcceptanceKey{
@@ -457,11 +477,57 @@ func TestCodeCallProjectionRunnerLoadAllAcceptanceUnitIntentsRejectsOversizedSli
 	if err == nil {
 		t.Fatal("loadAllAcceptanceUnitIntents() error = nil, want non-nil")
 	}
-	if got, want := reader.acceptanceLimitRequests[len(reader.acceptanceLimitRequests)-1], maxCodeCallAcceptanceScanLimit; got != want {
+	if got, want := reader.acceptanceLimitRequests[len(reader.acceptanceLimitRequests)-1], 1_000; got != want {
 		t.Fatalf("final acceptance scan limit = %d, want cap %d", got, want)
 	}
 	if len(reader.acceptanceLimitRequests) < 2 {
 		t.Fatalf("acceptanceLimitRequests = %v, want growth up to cap", reader.acceptanceLimitRequests)
+	}
+}
+
+func TestCodeCallProjectionRunnerLoadAllAcceptanceUnitIntentsAllowsLargeConfiguredSlice(t *testing.T) {
+	t.Parallel()
+
+	const rowCount = 10_001
+	rows := make([]SharedProjectionIntentRow, rowCount)
+	for i := range rows {
+		rows[i] = SharedProjectionIntentRow{
+			IntentID:         "intent-" + strconv.Itoa(i),
+			ProjectionDomain: DomainCodeCalls,
+			ScopeID:          "scope-a",
+			AcceptanceUnitID: "repo-a",
+			RepositoryID:     "repo-a",
+			SourceRunID:      "run-1",
+			GenerationID:     "gen-1",
+			CreatedAt:        time.Date(2026, time.April, 27, 9, 0, 0, i, time.UTC),
+		}
+	}
+	reader := &fakeCodeCallIntentStore{
+		pendingByAcceptance: map[string][]SharedProjectionIntentRow{
+			"scope-a|repo-a|run-1": rows,
+		},
+	}
+	runner := CodeCallProjectionRunner{
+		IntentReader: reader,
+		Config: CodeCallProjectionRunnerConfig{
+			BatchLimit:          100,
+			AcceptanceScanLimit: 20_000,
+		},
+	}
+
+	got, err := runner.loadAllAcceptanceUnitIntents(context.Background(), SharedProjectionAcceptanceKey{
+		ScopeID:          "scope-a",
+		AcceptanceUnitID: "repo-a",
+		SourceRunID:      "run-1",
+	})
+	if err != nil {
+		t.Fatalf("loadAllAcceptanceUnitIntents() error = %v, want nil", err)
+	}
+	if len(got) != rowCount {
+		t.Fatalf("loaded rows = %d, want %d", len(got), rowCount)
+	}
+	if gotLimit := reader.acceptanceLimitRequests[len(reader.acceptanceLimitRequests)-1]; gotLimit <= rowCount {
+		t.Fatalf("final acceptance scan limit = %d, want larger than row count %d", gotLimit, rowCount)
 	}
 }
 
