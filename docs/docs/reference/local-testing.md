@@ -428,6 +428,11 @@ source-local projection, reducer conflict domains, or graph Cypher shape.
 Repository-bounded pre-scan now uses the configured parser worker count and
 logs `pre_scan_workers`, so compare `pre_scan` and `parse` durations before
 raising `PCG_PARSE_WORKERS` or proposing a deeper chunked-generation workflow.
+If the snapshot front-half is no longer dominant, inspect
+`ingestion commit stage completed`, `projector work stage completed`, and
+`projector runtime stage completed` records next. They split Postgres fact
+commit, fact reload, canonical graph write, content-store write, and reducer
+intent enqueue so the next optimization targets the actual long pole.
 
 ### Local-Authoritative Startup Envelope Smoke
 

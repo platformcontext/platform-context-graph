@@ -160,6 +160,7 @@ func buildIngesterCollectorService(
 	}
 	committer := postgres.NewIngestionStore(database)
 	committer.SkipRelationshipBackfill = true
+	committer.Logger = logger
 
 	return collector.Service{
 		Source: &collector.GitSource{
@@ -242,7 +243,7 @@ func buildIngesterProjectorService(
 		PollInterval:          time.Second,
 		WorkSource:            projectorQueue,
 		FactStore:             postgres.NewFactStore(database),
-		Runner:                buildIngesterProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, getenv, tracer, instruments),
+		Runner:                buildIngesterProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, getenv, tracer, instruments, logger),
 		WorkSink:              projectorQueue,
 		Heartbeater:           projectorQueue,
 		HeartbeatInterval:     projectorHeartbeatInterval(projectorQueue.LeaseDuration),
@@ -314,6 +315,7 @@ func buildIngesterProjectorRuntime(
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
+	logger *slog.Logger,
 ) projector.Runtime {
 	return projector.Runtime{
 		CanonicalWriter:        canonicalWriter,
@@ -325,6 +327,7 @@ func buildIngesterProjectorRuntime(
 		ContentBeforeCanonical: ingesterContentBeforeCanonical(getenv),
 		Tracer:                 tracer,
 		Instruments:            instruments,
+		Logger:                 logger,
 	}
 }
 

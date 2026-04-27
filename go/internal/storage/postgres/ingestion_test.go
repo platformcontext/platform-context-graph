@@ -1,9 +1,11 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +83,65 @@ func TestIngestionStoreCommitScopeGenerationPersistsProjectionInput(t *testing.T
 	}
 	if got, want := db.tx.execs[3].args[3], "source_local"; got != want {
 		t.Fatalf("projector domain arg = %v, want %v", got, want)
+	}
+}
+
+func TestIngestionStoreCommitScopeGenerationLogsCommitStages(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC)
+	db := &fakeTransactionalDB{tx: &fakeTx{}}
+	var logs bytes.Buffer
+	store := NewIngestionStore(db)
+	store.Now = func() time.Time { return now }
+	store.SkipRelationshipBackfill = true
+	store.Logger = slog.New(slog.NewJSONHandler(&logs, nil))
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+	}
+	generation := scope.ScopeGeneration{
+		GenerationID: "generation-456",
+		ScopeID:      "scope-123",
+		ObservedAt:   time.Date(2026, time.April, 12, 11, 59, 0, 0, time.UTC),
+		IngestedAt:   now,
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+	envelopes := []facts.Envelope{{
+		FactID:        "fact-1",
+		ScopeID:       "scope-123",
+		GenerationID:  "generation-456",
+		FactKind:      "repository",
+		StableFactKey: "repository:repo-123",
+		ObservedAt:    generation.ObservedAt,
+		Payload:       map[string]any{"graph_id": "repo-123"},
+		SourceRef: facts.Ref{
+			SourceSystem: "git",
+			FactKey:      "fact-key",
+		},
+	}}
+
+	if err := store.CommitScopeGeneration(context.Background(), scopeValue, generation, testFactChannel(envelopes)); err != nil {
+		t.Fatalf("CommitScopeGeneration() error = %v, want nil", err)
+	}
+
+	output := logs.String()
+	for _, want := range []string{
+		`"msg":"ingestion commit stage completed"`,
+		`"stage":"begin_transaction"`,
+		`"stage":"upsert_facts"`,
+		`"fact_count":1`,
+		`"batch_count":1`,
+		`"stage":"commit_transaction"`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("commit stage logs missing %s:\n%s", want, output)
+		}
 	}
 }
 

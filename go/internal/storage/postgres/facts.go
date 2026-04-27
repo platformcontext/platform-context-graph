@@ -23,6 +23,13 @@ const (
 	columnsPerFactRow = 13
 )
 
+// factUpsertStats summarizes one streaming fact persistence pass without
+// retaining the full generation in memory.
+type factUpsertStats struct {
+	Rows    int
+	Batches int
+}
+
 const countFactsQuery = `SELECT COUNT(*) FROM fact_records WHERE scope_id = $1 AND generation_id = $2`
 
 const listFactsQuery = `
@@ -302,25 +309,26 @@ func upsertStreamingFacts(
 	scopeID string,
 	generationID string,
 	afterBatch func([]facts.Envelope) error,
-) error {
+) (factUpsertStats, error) {
+	var stats factUpsertStats
 	if db == nil {
-		return fmt.Errorf("fact store database is required")
+		return stats, fmt.Errorf("fact store database is required")
 	}
 	if factStream == nil {
-		return nil
+		return stats, nil
 	}
 
 	batch := make([]facts.Envelope, 0, factBatchSize)
 
 	for envelope := range factStream {
 		if envelope.ScopeID != scopeID {
-			return fmt.Errorf(
+			return stats, fmt.Errorf(
 				"fact %q scope_id %q does not match scope %q",
 				envelope.FactID, envelope.ScopeID, scopeID,
 			)
 		}
 		if envelope.GenerationID != generationID {
-			return fmt.Errorf(
+			return stats, fmt.Errorf(
 				"fact %q generation_id %q does not match generation %q",
 				envelope.FactID, envelope.GenerationID, generationID,
 			)
@@ -331,11 +339,13 @@ func upsertStreamingFacts(
 		if len(batch) >= factBatchSize {
 			batch = deduplicateEnvelopes(batch)
 			if err := upsertFactBatch(ctx, db, batch); err != nil {
-				return err
+				return stats, err
 			}
+			stats.Rows += len(batch)
+			stats.Batches++
 			if afterBatch != nil {
 				if err := afterBatch(batch); err != nil {
-					return err
+					return stats, err
 				}
 			}
 			for i := range batch {
@@ -349,16 +359,18 @@ func upsertStreamingFacts(
 	if len(batch) > 0 {
 		batch = deduplicateEnvelopes(batch)
 		if err := upsertFactBatch(ctx, db, batch); err != nil {
-			return err
+			return stats, err
 		}
+		stats.Rows += len(batch)
+		stats.Batches++
 		if afterBatch != nil {
 			if err := afterBatch(batch); err != nil {
-				return err
+				return stats, err
 			}
 		}
 	}
 
-	return nil
+	return stats, nil
 }
 
 // deduplicateEnvelopes removes duplicate fact_ids, keeping the last occurrence.

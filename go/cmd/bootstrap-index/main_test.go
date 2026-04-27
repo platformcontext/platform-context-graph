@@ -57,7 +57,7 @@ func TestRunAppliesSchemaAndDrainsCollectorAndProjector(t *testing.T) {
 				committer: &fakeCommitter{},
 			}, nil
 		},
-		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
+		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (projectorDeps, error) {
 			return projectorDeps{
 				workSource: &fakeWorkSource{
 					items: []projector.ScopeGenerationWork{
@@ -104,7 +104,7 @@ func TestRunReturnsSchemaError(t *testing.T) {
 			t.Fatal("collector builder should not be called after schema error")
 			return collectorDeps{}, nil
 		},
-		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
+		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (projectorDeps, error) {
 			t.Fatal("projector builder should not be called after schema error")
 			return projectorDeps{}, nil
 		},
@@ -138,7 +138,7 @@ func TestRunReturnsCollectorError(t *testing.T) {
 		func(ctx context.Context, database bootstrapDB, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (collectorDeps, error) {
 			return collectorDeps{}, collectorErr
 		},
-		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
+		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (projectorDeps, error) {
 			t.Fatal("projector builder should not be called after collector error")
 			return projectorDeps{}, nil
 		},
@@ -184,6 +184,7 @@ func TestBuildBootstrapProjectorWiresPhasePublisherAndRepairQueue(t *testing.T) 
 		&fakeBootstrapSQLDB{},
 		&noopCanonicalWriter{},
 		func(string) string { return "" },
+		nil,
 		nil,
 		nil,
 	)

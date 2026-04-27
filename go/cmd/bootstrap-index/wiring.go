@@ -62,6 +62,7 @@ func buildBootstrapCollector(
 
 	committer := postgres.NewIngestionStore(instrumentedDB)
 	committer.SkipRelationshipBackfill = true
+	committer.Logger = logger
 
 	return collectorDeps{
 		source:    source,
@@ -76,6 +77,7 @@ func buildBootstrapProjector(
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
+	logger *slog.Logger,
 ) (projectorDeps, error) {
 	instrumentedDB := &postgres.InstrumentedDB{
 		Inner:       database,
@@ -94,6 +96,7 @@ func buildBootstrapProjector(
 		RepairQueue:     postgres.NewGraphProjectionPhaseRepairQueueStore(instrumentedDB),
 		Tracer:          tracer,
 		Instruments:     instruments,
+		Logger:          logger,
 	}
 
 	return projectorDeps{

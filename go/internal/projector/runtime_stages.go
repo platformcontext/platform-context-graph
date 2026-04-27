@@ -35,6 +35,11 @@ func (r Runtime) writeContentProjection(ctx context.Context, scopeValue scope.In
 			attribute.String("stage", "content_write"),
 		))
 	}
+	r.logRuntimeStage(ctx, scopeValue, mat.GenerationID, "content_write", contentStart,
+		"content_record_count", len(mat.Records),
+		"content_entity_count", len(mat.Entities),
+		"deleted_count", contentResult.DeletedCount,
+	)
 
 	return contentResult, nil
 }
@@ -80,6 +85,21 @@ func (r Runtime) writeCanonicalProjection(
 			attribute.String("stage", "canonical_write"),
 		))
 	}
+	r.logRuntimeStage(ctx, scopeValue, generationID, "canonical_write", canonicalStart,
+		"repository_count", canonicalRepositoryCount(mat),
+		"directory_count", len(mat.Directories),
+		"file_count", len(mat.Files),
+		"entity_count", len(mat.Entities),
+		"module_count", len(mat.Modules),
+		"import_count", len(mat.Imports),
+	)
 
 	return nil
+}
+
+func canonicalRepositoryCount(mat CanonicalMaterialization) int {
+	if mat.Repository == nil {
+		return 0
+	}
+	return 1
 }
