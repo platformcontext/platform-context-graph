@@ -83,6 +83,36 @@ func TestSchemaStatementsForBackendAddsNornicDBMergeLookupIndexes(t *testing.T) 
 	}
 }
 
+func TestSchemaStatementsForBackendAddsNornicDBUIDLookupIndexes(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNornicDB, err)
+	}
+
+	expected := []string{
+		"CREATE INDEX nornicdb_function_uid_lookup IF NOT EXISTS FOR (n:Function) ON (n.uid)",
+		"CREATE INDEX nornicdb_type_alias_uid_lookup IF NOT EXISTS FOR (n:TypeAlias) ON (n.uid)",
+		"CREATE INDEX nornicdb_variable_uid_lookup IF NOT EXISTS FOR (n:Variable) ON (n.uid)",
+	}
+	for _, want := range expected {
+		assertContainsStatement(t, stmts, want)
+	}
+}
+
+func TestSchemaStatementsForBackendKeepsUIDLookupIndexesNornicDBOnly(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNeo4j)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNeo4j, err)
+	}
+
+	assertNoStatementContains(t, stmts, "nornicdb_function_uid_lookup")
+	assertNoStatementContains(t, stmts, "nornicdb_type_alias_uid_lookup")
+}
+
 func TestNornicDBSchemaSkipsEveryCompositeUniqueConstraint(t *testing.T) {
 	t.Parallel()
 

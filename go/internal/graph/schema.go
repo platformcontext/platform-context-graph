@@ -196,6 +196,17 @@ var nornicDBMergeLookupIndexes = []string{
 	"CREATE INDEX nornicdb_file_path_lookup IF NOT EXISTS FOR (f:File) ON (f.path)",
 }
 
+func nornicDBUIDLookupIndexes() []string {
+	indexes := make([]string, 0, len(uidConstraintLabels))
+	for _, label := range uidConstraintLabels {
+		indexes = append(indexes, fmt.Sprintf(
+			"CREATE INDEX nornicdb_%s_uid_lookup IF NOT EXISTS FOR (n:%s) ON (n.uid)",
+			labelToSnake(label), label,
+		))
+	}
+	return indexes
+}
+
 // schemaFulltextIndexes lists Neo4j full-text index creation statements.
 // The primary form uses the procedure-based API; the fallback uses modern
 // CREATE FULLTEXT INDEX syntax for newer Neo4j versions.
@@ -264,6 +275,7 @@ func SchemaStatementsForBackend(backend SchemaBackend) ([]string, error) {
 	stmts = append(stmts, schemaPerformanceIndexes...)
 	if dialect.includeMergeLookupIndexes {
 		stmts = append(stmts, nornicDBMergeLookupIndexes...)
+		stmts = append(stmts, nornicDBUIDLookupIndexes()...)
 	}
 	for _, label := range uidConstraintLabels {
 		stmts = append(stmts, fmt.Sprintf(
@@ -330,6 +342,15 @@ func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logge
 	}
 	if dialect.includeMergeLookupIndexes {
 		for _, cypher := range nornicDBMergeLookupIndexes {
+			if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
+				failed++
+				logger.Warn("schema statement warning",
+					"error", err,
+					"cypher", cypher,
+					"graph_backend", dialect.backend)
+			}
+		}
+		for _, cypher := range nornicDBUIDLookupIndexes() {
 			if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
 				failed++
 				logger.Warn("schema statement warning",
