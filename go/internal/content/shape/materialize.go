@@ -284,6 +284,8 @@ func materializeEntities(repoID string, path string, file File) ([]content.Entit
 		startLine := indexed.lineNumber()
 		endLine := entityEndLine(indexedItems, index, file.Body, startLine)
 		sourceCache := entitySourceCache(indexed.label, indexed.item, file.Body, startLine, endLine)
+		metadata := cloneAnyMap(indexed.item.Metadata)
+		sourceCache, metadata = limitEntitySourceCache(indexed.label, sourceCache, metadata)
 		entities = append(entities, content.EntityRecord{
 			EntityID:        content.CanonicalEntityID(repoID, path, indexed.label, indexed.item.Name, startLine),
 			Path:            path,
@@ -298,7 +300,7 @@ func materializeEntities(repoID string, path string, file File) ([]content.Entit
 			TemplateDialect: firstNonEmpty(indexed.item.TemplateDialect, file.TemplateDialect),
 			IACRelevant:     cloneBoolPtr(firstBool(indexed.item.IACRelevant, file.IACRelevant)),
 			SourceCache:     sourceCache,
-			Metadata:        cloneAnyMap(indexed.item.Metadata),
+			Metadata:        metadata,
 			Deleted:         indexed.item.Deleted,
 		})
 	}
@@ -338,32 +340,6 @@ func nextLineNumber(items []indexedEntity, index int, startLine int) *int {
 		}
 	}
 	return nil
-}
-
-func entitySourceCache(label string, item Entity, body string, startLine int, endLine int) string {
-	if isCodeSourceLabel(label) && strings.TrimSpace(item.Source) != "" {
-		return withTrailingNewline(item.Source, label)
-	}
-
-	lines := splitLines(body)
-	if len(lines) > 0 && startLine >= 1 {
-		startIndex := startLine - 1
-		if startIndex < len(lines) {
-			endIndex := endLine
-			if endIndex > len(lines) {
-				endIndex = len(lines)
-			}
-			if endIndex > startIndex {
-				selected := strings.Join(lines[startIndex:endIndex], "\n")
-				return withTrailingNewline(selected, label)
-			}
-		}
-	}
-
-	if strings.TrimSpace(item.Source) != "" {
-		return item.Source
-	}
-	return ""
 }
 
 func splitLines(body string) []string {
