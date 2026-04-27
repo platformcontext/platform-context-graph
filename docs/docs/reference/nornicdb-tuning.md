@@ -120,6 +120,16 @@ and records `source_cache_truncated`, `source_cache_original_bytes`, and
 `source_cache_limit_bytes` metadata. Exact full-source search remains available
 through `content_files`; entity search is a snippet surface.
 
+The follow-up runtime proof on PCG `f8322c41` drained the same repo healthy with
+projector `1/1`, reducer `8/8`, and no retry, dead-letter, failed, timeout, or
+panic/fatal rows. `upsert_entities` fell to `31.956s`, total content write fell
+to `43.762s`, and total source-local projection fell to `165.604s` while
+canonical graph write stayed comparable at `120.248s`. Persisted content still
+contained `160,909` entities; `37,288` oversized `Variable` rows had truncation
+metadata, total entity `source_cache` was `164 MB`, and function/class snippets
+were unchanged. Treat this as the current evidence that source-cache shaping,
+not `PCG_CONTENT_ENTITY_BATCH_SIZE`, is the right fix for this bottleneck.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
