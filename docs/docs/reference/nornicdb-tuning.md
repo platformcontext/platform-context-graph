@@ -68,6 +68,22 @@ that the remaining performance target is high-cardinality source-local
 canonical entity writes and noisy repo input shape, not another semantic
 batch-cap tweak.
 
+Patched-binary batched-containment checkpoint: a 2026-04-27 isolated
+`websites-php-youboat` rerun on PCG `dcb5e466` with
+`PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true`, `PCG_CANONICAL_WRITE_TIMEOUT=120s`,
+`PCG_REDUCER_WORKERS=2`, and the `#119 + #120` NornicDB binary drained the
+main queue cleanly with no graph timeout, retry, dead-letter, panic, or fatal
+lines. The repo discovered `74,475` files and persisted `176,201` facts;
+collection/emission took `161.706108907s`. Source-local projection reached
+`Variable=131,977`, `Function=28,926`, `Class=6`; canonical `Variable` used
+the intended `batch_across_files=true` shape and completed `131,977` rows as
+`13,198` statements / `2,640` grouped executions in `301.798956955s` with no
+singleton fallbacks. This validates the patched-binary switch for correctness
+on the noisy repo, but it is still not a default-path promotion: canonical
+`files` chunks and later `Variable` executions still showed graph-size slope,
+so the next optimization target is NornicDB file-anchor and relationship
+existence lookup behavior before adding more PCG batch caps.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |

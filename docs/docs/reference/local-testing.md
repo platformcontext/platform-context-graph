@@ -367,6 +367,13 @@ rolling summaries every 10 executions and a final summary at label completion,
 so you do not need to wait for an hour-scale phase to finish before you can
 see whether the cumulative cost is node row width, containment edges, grouped
 transaction size, or label ordering.
+For `pcg watch` / `pcg graph start` dogfood, judge completion from the status
+panel queue drain, not from the ingester process exiting. In watch mode the
+owner may keep `pcg-ingester` alive to observe future changes after the first
+batch is fully indexed. A clean first-generation run is the status snapshot
+that shows `Queue: pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`
+with projector and reducer successes, followed by an explicit
+`pcg graph stop --workspace-root <repo>` when the experiment is complete.
 Content-aware discovery skips generated JavaScript bundles before parsing.
 Large Webpack, Rollup, esbuild, and Parcel bundles are reported as
 `files_skipped.content.generated-webpack`, `files_skipped.content.generated-rollup`,
