@@ -434,9 +434,10 @@ func effectiveNeo4jBatchSize(batchSize int) int {
 
 func defaultNornicDBSemanticEntityLabelBatchSizes(batchSize int) map[string]int {
 	return map[string]int{
-		// Multi-repo dogfood showed Annotation rows carry enough decorator
-		// metadata that even 25-row statements can exhaust the write budget.
-		"Annotation": minPositiveInt(batchSize, 10),
+		// Full-corpus timing showed small Annotation and TypeAlias batches can
+		// consume most of the bounded NornicDB write budget, so keep them below
+		// the broader semantic default until the backend path is faster.
+		"Annotation": minPositiveInt(batchSize, 5),
 		"Function":   minPositiveInt(batchSize, 10),
 		"Variable":   minPositiveInt(batchSize, 10),
 		// Module rows can carry declaration-merge metadata, and the self-repo
@@ -445,7 +446,9 @@ func defaultNornicDBSemanticEntityLabelBatchSizes(batchSize int) map[string]int 
 		"Module": minPositiveInt(batchSize, 10),
 		// Rust impl blocks carry trait/receiver context; the self-repo run
 		// showed the 103-row family needs the same narrow default.
-		"ImplBlock": minPositiveInt(batchSize, 10),
+		"ImplBlock":      minPositiveInt(batchSize, 10),
+		"TypeAlias":      minPositiveInt(batchSize, 5),
+		"TypeAnnotation": minPositiveInt(batchSize, 50),
 	}
 }
 
