@@ -82,7 +82,7 @@ not implement the retry contract.
 
 | Variable | Default | Scope | Use |
 | --- | --- | --- | --- |
-| `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | `Annotation=10,Function=10,ImplBlock=10,Module=10,Variable=10` | reducer semantic entity materialization | Overrides NornicDB row caps for semantic labels after parser-enriched semantic metadata proves expensive. |
+| `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | `Annotation=5,Function=10,ImplBlock=10,Module=10,TypeAlias=5,TypeAnnotation=50,Variable=10` | reducer semantic entity materialization | Overrides NornicDB row caps for semantic labels after parser-enriched semantic metadata proves expensive. |
 | `PCG_REDUCER_WORKERS` | `1` on NornicDB | reducer graph writers | Overrides reducer work concurrency. Leave unset for normal NornicDB runs; raise only when intentionally testing graph-write contention. |
 | `PCG_REDUCER_BATCH_CLAIM_SIZE` | `1` on NornicDB | reducer queue claim window | Limits how many reducer intents one claim cycle leases before workers start them. Keep this near worker count when raising reducer workers so queued-but-not-started items do not expire their leases. |
 | `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | `250000` | reducer code-call projection | Bounds how many code-call shared intents one accepted repo/run may scan or load before failing safely. Raise only when a real repo has more CALLS intents than the default and memory headroom is known. |

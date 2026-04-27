@@ -126,10 +126,11 @@ Latest 2026-04-26 NornicDB dogfood evidence:
 - the latest full-corpus lane with PCG `d1141690` and NornicDB `86e78f1` completed source-local/projector work for all `896` repos at about `41m12s`, then hit a reducer `graph_write_timeout` at about `1h05m` on `semantic_entity_materialization` (`Function rows=4`, `attempt_count=1`). Because a nearby same-size Function statement completed in `26.724928881s`, this is timeout-pressure evidence, not enough proof of a deterministic semantic-write bug. Current branch now treats typed graph write deadlines as bounded-retry candidates and documents the next validation ladder: isolate the failing repo with a larger correctness-validation write budget, then rerun a 15-20 repo corpus, then repeat the full corpus only after those smaller lanes drain cleanly.
 - the focused replay of that exact failed repo used PCG `a8ee127b`, NornicDB `86e78f1`, fresh `PCG_HOME`, and `PCG_CANONICAL_WRITE_TIMEOUT=120s` against `/home/ubuntu/pcg-e2e-full/api-node-ai-product-description-generation`. It drained healthy in roughly `12s`: discovery emitted `544` facts, source-local projection succeeded in `0.325947169s`, the prior `Function rows=4` semantic statement completed in `0.006154829s`, all `9` queue rows ended `succeeded`, and the log scan found no `graph_write_timeout`, dead letter, panic, fatal, or acceptance-cap lines. This validates the single-repo-first ladder and moves the next proof gate to a 15-20 repo medium corpus before another full-corpus attempt.
 - the medium gate then used PCG `1a978f69`, NornicDB `86e78f1`, fresh `PCG_HOME`, and `PCG_CANONICAL_WRITE_TIMEOUT=120s` against `/home/ubuntu/pcg-test-repos` (`23` repos). It drained healthy in about `5m09s`: projector `succeeded=23`, reducer `succeeded=184`, total `fact_work_items` `succeeded=207`, queue `pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`, and `content_entities=182,305`. The log scan found no `graph_write_timeout`, panic, fatal, acceptance-cap, or true failure lines. This clears the medium correctness gate and moves the next proof back to the full corpus with the same correctness-validation timeout and discovery-report capture for later performance tuning.
+- the next full-corpus correctness lane used PCG `95f2c8aa`, NornicDB `86e78f1`, fresh `PCG_HOME`, and `PCG_CANONICAL_WRITE_TIMEOUT=120s` against all `896` repos. It was intentionally stopped after about `4h48m` because it had already proved the retry behavior and exposed the next bounded semantic row family: source-local/projector work completed for all repos, queue status still had `dead_letter=0 failed=0`, but the latest retrying failure was `semantic_entity_materialization` with `TypeAlias rows=42`. The same window showed `TypeAlias rows=5` completing in `21.326317754s`, `Annotation rows=6` consuming `108.062344975s`, and `TypeAnnotation rows=181` consuming `118.286012152s`. Current branch therefore narrows the default NornicDB semantic caps to `Annotation=5,TypeAlias=5,TypeAnnotation=50` while keeping the medium/focused proof ladder before another full-corpus drain attempt.
 
 Current tuning plan:
-- keep the safer `Annotation=10,Function=10,Variable=10,Module=10,ImplBlock=10` semantic row-cap baseline in code while we gather better evidence
-- stop adding semantic label caps blindly: the schema-backed rerun proves the remaining wall was missing `uid` constraints, not label row width. Do not lower more PCG batch defaults without a fresh attribution profile showing a new bottleneck.
+- keep the safer `Annotation=5,Function=10,Variable=10,Module=10,ImplBlock=10,TypeAlias=5,TypeAnnotation=50` semantic row-cap baseline in code while we gather better evidence
+- stop adding semantic label caps blindly: lower PCG batch defaults only after a fresh attribution profile names the semantic label, row count, and timeout shape.
 - treat reducer same-scope fencing as an ownership invariant, not a NornicDB-only timeout workaround; measure the next full-corpus run before adding any new batch knobs
 - treat `PCG_REDUCER_WORKERS=1`, the single-item claim window, and the NornicDB source-local drain gate as stability baselines, not the final performance answer: the next design should rerun the corrected drain gate with bounded reducer workers after the contention boundary is removed, then decide whether any additional shared-projection queue seam is needed from live evidence
 - finish the combined `#119 + #120` full-corpus timing run, then either pin the release-backed NornicDB asset if upstream merges/releases both fixes or keep `PCG_NORNICDB_BINARY` / installer `--from` pointed at the combined branch binary for continued evaluation.
@@ -141,12 +142,11 @@ Current tuning plan:
   before adding more global discovery filters. The advisory JSON captures
   top noisy directories/files, entity cardinality, and skip breakdowns so
   `.pcg/discovery.json` changes are evidence-backed rather than timeout-driven.
-- current full-corpus lane `/tmp/pcg-full-20260426T225253Z` is still
-  progressing on PCG `f28aabec` plus NornicDB `86e78f1`; at about `25m04s`,
-  it had projector `succeeded=873/896`, pending `15`, in-flight `8`, reducer
-  pending `6421`, retrying/dead-letter/failed all `0`, and no
-  `graph_write_timeout` or hard-error lines. Do not mark promotion-positive
-  until `Health: healthy` and queue `pending=0 in_flight=0`.
+- the latest full-corpus correctness lane `/tmp/pcg-full-validation-20260427T024256Z-95f2c8aa`
+  was stopped at the next semantic attribution point rather than left to burn
+  another full-run cycle. It proved typed timeouts retry instead of
+  dead-lettering, but it is not promotion-positive because the queue had not
+  drained.
 - keep dead-code truth labeled `derived`; the bounded policy buffer makes small-limit CLI output useful again, but broader root modeling is still required before promoting dead-code from derived to exact
 - keep NornicDB call-chain and transitive relationship reads on bounded BFS until upstream proves parameterized `shortestPath` endpoint anchors and projected map collection behave like Neo4j on the PCG query corpus
 - bundle future small heuristic changes with their safety gate when they are one logical fix, so rollback/bisect history tracks the behavioral unit rather than the order in which the concern was discovered

@@ -248,7 +248,7 @@ export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10,K8sResource=1
 export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=1
-export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Annotation=10,Function=10,Variable=10,Module=10,ImplBlock=10
+export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Annotation=5,Function=10,Variable=10,Module=10,ImplBlock=10,TypeAlias=5,TypeAnnotation=50
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
 ./go/bin/pcg graph start --workspace-root "$PWD"
 ./go/bin/pcg mcp start --workspace-root "$PWD"
@@ -323,10 +323,10 @@ forcing the same statement cap onto every other entity label.
 Reducer-owned semantic entity materialization has its own high-cardinality
 label caps because it runs after source-local canonical projection and writes
 parser-enriched semantic labels such as `Function` and `Variable`. Use
-`PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Function=15,Variable=10` when
-that reducer domain times out; NornicDB semantic writes use the same row-map
-merge shape as the canonical hot path, and timeout errors include the semantic
-label and row count that tripped the deadline.
+`PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Annotation=5,Function=10,TypeAlias=5,TypeAnnotation=50,Variable=10`
+when that reducer domain times out; NornicDB semantic writes use the same
+row-map merge shape as the canonical hot path, and timeout errors include the
+semantic label and row count that tripped the deadline.
 Semantic retract is a separate reducer-owned cleanup step. First-generation
 semantic materialization skips it entirely because there is no prior semantic
 graph state to clean up. Refreshes and retries still retract; Neo4j keeps the
