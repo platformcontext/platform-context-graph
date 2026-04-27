@@ -319,7 +319,7 @@ func buildIngesterProjectorRuntime(
 ) projector.Runtime {
 	return projector.Runtime{
 		CanonicalWriter:        canonicalWriter,
-		ContentWriter:          postgres.NewContentWriter(database),
+		ContentWriter:          postgres.NewContentWriter(database).WithLogger(logger),
 		IntentWriter:           intentWriter,
 		PhasePublisher:         postgres.NewGraphProjectionPhaseStateStore(database),
 		RepairQueue:            postgres.NewGraphProjectionPhaseRepairQueueStore(database),

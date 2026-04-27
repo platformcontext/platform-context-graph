@@ -166,7 +166,10 @@ For shared-write debugging specifically:
 - Source-local projector runs emit `projector work stage completed` for fact
   loading versus projection execution and `projector runtime stage completed`
   for build, canonical graph write, content-store write, and reducer-intent
-  enqueue. Use these before changing NornicDB row caps or worker counts.
+  enqueue. When content-store write is the hot stage, Postgres-backed content
+  writers also emit `content writer stage completed` for file/entity
+  preparation and upsert stages with row and batch counts. Use these before
+  changing NornicDB row caps or worker counts.
 
 ### Admin / CLI Status
 

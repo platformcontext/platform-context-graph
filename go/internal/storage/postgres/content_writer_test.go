@@ -1,7 +1,9 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +112,57 @@ func TestContentWriterBatchesEntityInserts(t *testing.T) {
 	valueGroups := strings.Count(query, "($")
 	if got, want := valueGroups, 2; got != want {
 		t.Fatalf("value groups = %d, want %d (one per entity)", got, want)
+	}
+}
+
+func TestContentWriterLogsStageTimings(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{}
+	var logs bytes.Buffer
+	writer := NewContentWriter(db)
+	writer.Now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }
+	writer.Logger = slog.New(slog.NewJSONHandler(&logs, nil))
+
+	mat := content.Materialization{
+		RepoID:       "test-repo",
+		ScopeID:      "test-scope",
+		GenerationID: "test-gen",
+		Records: []content.Record{
+			{Path: "main.go", Body: "package main\n", Metadata: map[string]string{"language": "go"}},
+		},
+		Entities: []content.EntityRecord{
+			{
+				EntityID:   "entity-1",
+				Path:       "main.go",
+				EntityType: "function",
+				EntityName: "main",
+				StartLine:  1,
+				EndLine:    2,
+			},
+		},
+	}
+
+	if _, err := writer.Write(context.Background(), mat); err != nil {
+		t.Fatalf("Write() error = %v, want nil", err)
+	}
+
+	got := logs.String()
+	for _, want := range []string{
+		`"msg":"content writer stage completed"`,
+		`"stage":"prepare_files"`,
+		`"stage":"upsert_files"`,
+		`"stage":"prepare_entities"`,
+		`"stage":"upsert_entities"`,
+		`"scope_id":"test-scope"`,
+		`"generation_id":"test-gen"`,
+		`"repo_id":"test-repo"`,
+		`"row_count":1`,
+		`"batch_count":1`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("logs missing %s:\n%s", want, got)
+		}
 	}
 }
 

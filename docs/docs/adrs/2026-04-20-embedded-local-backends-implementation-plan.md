@@ -45,6 +45,7 @@ repo identity API queries for `handleRelationships -> transitiveRelationshipsGra
 through the live local-authoritative API.
 
 Latest 2026-04-26 NornicDB dogfood evidence:
+- the 2026-04-27 isolated `websites-php-youboat` stage-ledger rerun on PCG `e774d50c` and NornicDB `v1.0.43` drained healthy and made the remaining local-authoritative cost profile concrete: snapshot stream `40.545s`, streaming fact upsert `52.718s`, fact reload `12.907s`, projection build `1.420s`, content-store write `169.325s`, canonical graph write `117.801s`, reducer-intent enqueue `0.040s`, and all reducer domains completed without timeout. This moves the next Chunk 3.5 tuning slice from blind NornicDB row-cap changes to content writer sub-stage evidence (`prepare_files`, `upsert_files`, `prepare_entities`, `upsert_entities`) plus fact persistence review before any chunked-generation workflow redesign.
 - the narrower `Function=10` lane lowered per-statement cost but over-fragmented the self-repo run, so the built-in row cap now moves to `Function=15`
 - that `Function=15` rerun advanced through `Variable` with stable early chunks around `19.9s-21.4s`
 - the next repo-scale blocker is now the `retract` phase, not `entities`, so the branch runs NornicDB retract statements sequentially instead of bundling all stale deletes into one grouped transaction
