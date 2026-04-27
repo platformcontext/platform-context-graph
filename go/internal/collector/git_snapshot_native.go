@@ -156,7 +156,11 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	}
 
 	preScanStartedAt := time.Now()
-	importsMap, err := engine.PreScanRepositoryPaths(repoPath, fileSet.Files)
+	importsMap, err := engine.PreScanRepositoryPathsWithWorkers(
+		repoPath,
+		fileSet.Files,
+		effectiveSnapshotParseWorkers(s.ParseWorkers),
+	)
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("pre-scan repository imports for %q: %w", repoPath, err)
 	}
@@ -164,6 +168,7 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	s.logSnapshotStageTiming(ctx, repoPath, "pre_scan", preScanStartedAt,
 		slog.Int("file_count", len(fileSet.Files)),
 		slog.Int("import_symbol_count", len(importsMap)),
+		slog.Int("pre_scan_workers", effectiveSnapshotParseWorkers(s.ParseWorkers)),
 	)
 
 	repoMetadata, err := repositoryidentity.MetadataFor(

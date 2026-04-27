@@ -425,6 +425,9 @@ ingester front-half into `discovery`, `pre_scan`, `parse`, and `materialize`.
 If those stages are the long pole, tune or redesign the repo snapshot pipeline;
 if they are small and queue age grows later, focus on fact commit,
 source-local projection, reducer conflict domains, or graph Cypher shape.
+Repository-bounded pre-scan now uses the configured parser worker count and
+logs `pre_scan_workers`, so compare `pre_scan` and `parse` durations before
+raising `PCG_PARSE_WORKERS` or proposing a deeper chunked-generation workflow.
 
 ### Local-Authoritative Startup Envelope Smoke
 
