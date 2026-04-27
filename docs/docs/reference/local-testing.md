@@ -409,12 +409,15 @@ embedded Postgres port automatically. Otherwise pass
 
 Treat low CPU and idle disk while the queue still has only a few in-flight
 graph writes as contention evidence, not as a reason to blindly lower batch
-caps or worker count. The next design step in that shape is conflict-domain
-routing or a NornicDB hot-path patch: preserve concurrency for unrelated repos
-and serialize only the writes that actually share graph/index/relationship
-resources. Capture the monitor log beside `graph-start.log` so the ADR can tie
-queue state, slow statement summaries, process utilization, and disk pressure
-to the same timestamps.
+caps or worker count. Reducer claims now use durable conflict-domain keys:
+code-graph reducer domains for a repo serialize with one another, platform
+graph reducer domains for that repo serialize with one another, and unrelated
+families can still run concurrently after source-local projection drains. If a
+tail persists with that routing enabled, the next design step is exact
+semantic/relationship Cypher shape analysis or a NornicDB hot-path patch.
+Capture the monitor log beside `graph-start.log` so the ADR can tie queue
+state, slow statement summaries, process utilization, and disk pressure to the
+same timestamps.
 
 ### Local-Authoritative Startup Envelope Smoke
 
@@ -710,8 +713,8 @@ Set any variable to `1` to force sequential processing (useful for debugging).
 | --- | --- | --- | --- |
 | `PCG_PROJECTION_WORKERS` | `min(NumCPU, 8)` | Bootstrap-Index | Concurrent bootstrap projection goroutines |
 | `PCG_SNAPSHOT_WORKERS` | `min(NumCPU, 4)` | Ingester / Bootstrap | Concurrent repository snapshot goroutines |
-| `PCG_REDUCER_WORKERS` | Neo4j: `min(NumCPU, 4)`; NornicDB: `1` | Reducer | Concurrent reducer intent execution goroutines |
-| `PCG_REDUCER_BATCH_CLAIM_SIZE` | Neo4j: `workers * 4` capped at `64`; NornicDB: `1` | Reducer | Reducer intents leased per claim cycle |
+| `PCG_REDUCER_WORKERS` | Neo4j: `min(NumCPU, 4)`; NornicDB: `min(NumCPU, 8)` | Reducer | Concurrent reducer intent execution goroutines |
+| `PCG_REDUCER_BATCH_CLAIM_SIZE` | Neo4j: `workers * 4` capped at `64`; NornicDB: `workers` | Reducer | Reducer intents leased per claim cycle |
 | `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | `250000` | Reducer | Maximum code-call shared intents scanned or loaded for one accepted repo/run before failing safely instead of projecting partial CALLS truth |
 | `PCG_SHARED_PROJECTION_WORKERS` | 1 (sequential) | Reducer | Concurrent shared projection partition goroutines |
 | `PCG_SHARED_PROJECTION_PARTITION_COUNT` | 8 | Reducer | Number of partitions per shared projection domain |

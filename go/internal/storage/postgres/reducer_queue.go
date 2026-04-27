@@ -13,11 +13,12 @@ import (
 
 const (
 	reducerEnqueueBatchSize  = 500
-	columnsPerReducerEnqueue = 6
+	columnsPerReducerEnqueue = 8
 )
 
 const enqueueReducerBatchPrefix = `INSERT INTO fact_work_items (
     work_item_id, scope_id, generation_id, stage, domain, status,
+    conflict_domain, conflict_key,
     attempt_count, lease_owner, claim_until, visible_at, last_attempt_at,
     next_attempt_at, failure_class, failure_message, failure_details,
     payload, created_at, updated_at
@@ -44,13 +45,14 @@ WITH candidate AS (
           WHERE projector_work.stage = 'projector'
             AND projector_work.status IN ('pending', 'retrying', 'claimed', 'running')
       ))
-      -- Reducer domains can touch the same graph nodes for a scope. Keep
-      -- cross-scope parallelism, but avoid overlapping writes for one repo.
+      -- Reducer domains can touch the same graph nodes for a scope. Fence by
+      -- explicit conflict key so unrelated graph families can still overlap.
       AND NOT EXISTS (
           SELECT 1
           FROM fact_work_items AS inflight
           WHERE inflight.stage = 'reducer'
-            AND inflight.scope_id = fact_work_items.scope_id
+            AND inflight.conflict_domain = fact_work_items.conflict_domain
+            AND COALESCE(inflight.conflict_key, inflight.scope_id) = COALESCE(fact_work_items.conflict_key, fact_work_items.scope_id)
             AND inflight.work_item_id <> fact_work_items.work_item_id
             AND inflight.status IN ('claimed', 'running')
             AND inflight.claim_until > $1
@@ -247,10 +249,11 @@ func (q ReducerQueue) enqueueReducerBatch(
 		if i > 0 {
 			values.WriteString(", ")
 		}
+		conflictDomain, conflictKey := reducerConflictDomainKey(intent)
 		offset := i * columnsPerReducerEnqueue
 		fmt.Fprintf(&values,
-			"($%d, $%d, $%d, 'reducer', $%d, 'pending', 0, NULL, NULL, $%d, NULL, NULL, NULL, NULL, NULL, $%d::jsonb, $%d, $%d)",
-			offset+1, offset+2, offset+3, offset+4, offset+5, offset+6, offset+5, offset+5,
+			"($%d, $%d, $%d, 'reducer', $%d, 'pending', $%d, $%d, 0, NULL, NULL, $%d, NULL, NULL, NULL, NULL, NULL, $%d::jsonb, $%d, $%d)",
+			offset+1, offset+2, offset+3, offset+4, offset+5, offset+6, offset+7, offset+8, offset+7, offset+7,
 		)
 
 		args = append(args,
@@ -258,6 +261,8 @@ func (q ReducerQueue) enqueueReducerBatch(
 			intent.ScopeID,
 			intent.GenerationID,
 			string(intent.Domain),
+			conflictDomain,
+			conflictKey,
 			now,
 			payloadJSON,
 		)

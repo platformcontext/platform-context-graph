@@ -135,7 +135,7 @@ func (db *proofDomainDB) ExecContext(_ context.Context, query string, args ...an
 		if _, exists := db.state.workItems[workItemID]; exists {
 			return proofResult{}, nil
 		}
-		payload, err := unmarshalPayload(args[5].([]byte))
+		payload, err := unmarshalPayload(args[7].([]byte))
 		if err != nil {
 			return nil, err
 		}
@@ -146,13 +146,13 @@ func (db *proofDomainDB) ExecContext(_ context.Context, query string, args ...an
 			status:       "pending",
 			scopeID:      args[1].(string),
 			generationID: args[2].(string),
-			visibleAt:    args[4].(time.Time).UTC(),
-			createdAt:    args[4].(time.Time).UTC(),
-			updatedAt:    args[4].(time.Time).UTC(),
-			payload:      args[5].([]byte),
+			visibleAt:    args[6].(time.Time).UTC(),
+			createdAt:    args[6].(time.Time).UTC(),
+			updatedAt:    args[6].(time.Time).UTC(),
+			payload:      args[7].([]byte),
 		}
 		if len(payload) > 0 {
-			workItem.payload = args[5].([]byte)
+			workItem.payload = args[7].([]byte)
 		}
 		db.state.workItems[workItem.workItemID] = workItem
 		return proofResult{}, nil

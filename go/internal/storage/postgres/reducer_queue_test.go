@@ -44,6 +44,76 @@ func TestReducerWorkItemIDSanitizesSpecialChars(t *testing.T) {
 	}
 }
 
+func TestReducerConflictDomainKeySplitsCodeAndPlatformGraphFamilies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		domain     reducer.Domain
+		wantDomain string
+		wantKey    string
+	}{
+		{
+			name:       "semantic entities use code graph conflict family",
+			domain:     reducer.DomainSemanticEntityMaterialization,
+			wantDomain: reducerConflictDomainCodeGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "code call edges use code graph conflict family",
+			domain:     reducer.DomainCodeCallMaterialization,
+			wantDomain: reducerConflictDomainCodeGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "sql edges use code graph conflict family",
+			domain:     reducer.DomainSQLRelationshipMaterialization,
+			wantDomain: reducerConflictDomainCodeGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "inheritance edges use code graph conflict family",
+			domain:     reducer.DomainInheritanceMaterialization,
+			wantDomain: reducerConflictDomainCodeGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "workload identity uses platform graph conflict family",
+			domain:     reducer.DomainWorkloadIdentity,
+			wantDomain: reducerConflictDomainPlatformGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "deployment mapping uses platform graph conflict family",
+			domain:     reducer.DomainDeploymentMapping,
+			wantDomain: reducerConflictDomainPlatformGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "unknown future domains fall back to scope serialization",
+			domain:     reducer.DomainOwnership,
+			wantDomain: reducerConflictDomainScope,
+			wantKey:    "scope-1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotDomain, gotKey := reducerConflictDomainKey(projector.ReducerIntent{
+				ScopeID: " scope-1 ",
+				Domain:  tt.domain,
+			})
+			if gotDomain != tt.wantDomain {
+				t.Fatalf("conflict domain = %q, want %q", gotDomain, tt.wantDomain)
+			}
+			if gotKey != tt.wantKey {
+				t.Fatalf("conflict key = %q, want %q", gotKey, tt.wantKey)
+			}
+		})
+	}
+}
+
 func TestReducerQueueBatchEnqueue(t *testing.T) {
 	t.Parallel()
 
@@ -331,9 +401,9 @@ func TestReducerQueueReplayWorkloadMaterializationEnqueuesReplayWhenNoSucceededR
 	if got, want := db.execs[1].args[3], string(reducer.DomainWorkloadMaterialization); got != want {
 		t.Fatalf("enqueue domain arg = %v, want %v", got, want)
 	}
-	payload, ok := db.execs[1].args[5].([]byte)
+	payload, ok := db.execs[1].args[7].([]byte)
 	if !ok {
-		t.Fatalf("enqueue payload type = %T, want []byte", db.execs[1].args[5])
+		t.Fatalf("enqueue payload type = %T, want []byte", db.execs[1].args[7])
 	}
 	if !strings.Contains(string(payload), "deployment mapping resolved stronger evidence") {
 		t.Fatalf("enqueue payload = %s, want replay reason", payload)

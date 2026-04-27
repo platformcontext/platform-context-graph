@@ -25,24 +25,26 @@ WITH candidate AS (
           WHERE projector_work.stage = 'projector'
             AND projector_work.status IN ('pending', 'retrying', 'claimed', 'running')
       ))
-      -- Reducer domains can touch the same graph nodes for a scope. Keep
-      -- cross-scope parallelism, but avoid overlapping writes for one repo.
+      -- Reducer domains can touch the same graph nodes for a scope. Fence by
+      -- explicit conflict key so unrelated graph families can still overlap.
       AND NOT EXISTS (
           SELECT 1
           FROM fact_work_items AS inflight
           WHERE inflight.stage = 'reducer'
-            AND inflight.scope_id = fact_work_items.scope_id
+            AND inflight.conflict_domain = fact_work_items.conflict_domain
+            AND COALESCE(inflight.conflict_key, inflight.scope_id) = COALESCE(fact_work_items.conflict_key, fact_work_items.scope_id)
             AND inflight.work_item_id <> fact_work_items.work_item_id
             AND inflight.status IN ('claimed', 'running')
             AND inflight.claim_until > $1
       )
-      -- A batch claim must not claim two ready domains for the same scope in
-      -- one transaction, or the worker pool can race them immediately.
+      -- A batch claim must not claim two ready rows for the same conflict key
+      -- in one transaction, or the worker pool can race them immediately.
       AND work_item_id = (
           SELECT same.work_item_id
           FROM fact_work_items AS same
           WHERE same.stage = 'reducer'
-            AND same.scope_id = fact_work_items.scope_id
+            AND same.conflict_domain = fact_work_items.conflict_domain
+            AND COALESCE(same.conflict_key, same.scope_id) = COALESCE(fact_work_items.conflict_key, fact_work_items.scope_id)
             AND same.status IN ('pending', 'retrying', 'claimed', 'running')
             AND (same.visible_at IS NULL OR same.visible_at <= $1)
             AND (same.claim_until IS NULL OR same.claim_until <= $1)
