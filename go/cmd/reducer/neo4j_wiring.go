@@ -373,11 +373,11 @@ func semanticEntityWriterForGraphBackend(
 ) (*sourceneo4j.SemanticEntityWriter, error) {
 	writer := sourceneo4j.NewSemanticEntityWriter(executor, batchSize)
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		// NornicDB now supports the same batched UNWIND/MERGE/SET row shape
-		// as Neo4j, but the per-field SET/coalesce form routes through a slow
-		// generic path. Keep semantic writes on the proven row-properties hot
-		// path while preserving smaller row caps for high-cardinality labels.
-		writer = sourceneo4j.NewSemanticEntityWriterWithBatchedProperties(executor, batchSize).WithLabelScopedRetract()
+		// NornicDB's batch executor is template-sensitive: putting MATCH before
+		// MERGE is indexed but misses the generalized UNWIND/MERGE hot path.
+		// Use merge-first explicit row templates and keep smaller row caps for
+		// high-cardinality labels.
+		writer = sourceneo4j.NewSemanticEntityWriterWithMergeFirstRows(executor, batchSize).WithLabelScopedRetract()
 		labelBatchSizes, err := nornicDBSemanticEntityLabelBatchSizes(getenv, effectiveNeo4jBatchSize(batchSize))
 		if err != nil {
 			return nil, err
