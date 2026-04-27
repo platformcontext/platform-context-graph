@@ -375,9 +375,11 @@ func semanticEntityWriterForGraphBackend(
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		// NornicDB's batch executor is template-sensitive: putting MATCH before
 		// MERGE is indexed but misses the generalized UNWIND/MERGE hot path.
-		// Use merge-first explicit row templates and keep smaller row caps for
-		// high-cardinality labels.
-		writer = sourceneo4j.NewSemanticEntityWriterWithMergeFirstRows(executor, batchSize).WithLabelScopedRetract()
+		// Use merge-first explicit row templates, but let source-local canonical
+		// projection retain ownership of File CONTAINS edges for canonical entity
+		// labels. That avoids repeated relationship-existence checks as the graph
+		// grows while still preserving Module's semantic-owned uid nodes.
+		writer = sourceneo4j.NewSemanticEntityWriterWithCanonicalNodeRows(executor, batchSize).WithLabelScopedRetract()
 		labelBatchSizes, err := nornicDBSemanticEntityLabelBatchSizes(getenv, effectiveNeo4jBatchSize(batchSize))
 		if err != nil {
 			return nil, err

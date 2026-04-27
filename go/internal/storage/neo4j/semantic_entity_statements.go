@@ -279,3 +279,130 @@ func semanticEntityMergeFirstRowsUpsertCypher(cypher string) string {
 	}
 	return rewritten[:containmentIndex] + fileMatchLine + rewritten[containmentIndex:]
 }
+
+func semanticEntityCanonicalNodeRowsUpsertCypher(label string, cypher string) string {
+	if !semanticEntityCanonicalNodeOwnedLabel(label) {
+		return semanticEntityMergeFirstRowsUpsertCypher(cypher)
+	}
+	const fileMatchLine = "MATCH (f:File {path: row.file_path})"
+	const containmentMerge = "MERGE (f)-[:CONTAINS]->(n)"
+	const evidenceSourceAssignment = "n.evidence_source = row.evidence_source"
+
+	rewritten := semanticEntityMergeFirstRowsUpsertCypher(cypher)
+	lines := strings.Split(rewritten, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == fileMatchLine ||
+			trimmed == containmentMerge ||
+			strings.Contains(trimmed, evidenceSourceAssignment) {
+			continue
+		}
+		out = append(out, line)
+	}
+	for i := len(out) - 1; i >= 0; i-- {
+		trimmed := strings.TrimSpace(out[i])
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasSuffix(trimmed, ",") {
+			out[i] = strings.TrimRight(strings.TrimRight(out[i], " \t"), ",")
+		}
+		break
+	}
+	return strings.Join(out, "\n")
+}
+
+func semanticEntityCanonicalNodeOwnedLabel(label string) bool {
+	_, ok := semanticEntityCanonicalNodeClearProperties[label]
+	return ok
+}
+
+func semanticEntityClearPropertiesForLabel(label string) []string {
+	props := semanticEntityCanonicalNodeClearProperties[label]
+	return append([]string(nil), props...)
+}
+
+func semanticEntityCanonicalNodeClearCypher(label string, properties []string) string {
+	if len(properties) == 0 {
+		return ""
+	}
+	assignments := make([]string, 0, len(properties))
+	for _, property := range properties {
+		property = strings.TrimSpace(property)
+		if property != "" {
+			assignments = append(assignments, "n."+property)
+		}
+	}
+	return "MATCH (n:" + label + ")\n" +
+		"WHERE n.repo_id IN $repo_ids\n" +
+		"REMOVE " + strings.Join(assignments, ", ")
+}
+
+var semanticEntityCanonicalNodeClearProperties = map[string][]string{
+	"Annotation": {
+		"kind",
+		"target_kind",
+		"semantic_kind",
+	},
+	"Typedef": {
+		"type",
+		"semantic_kind",
+	},
+	"TypeAlias": {
+		"type_alias_kind",
+		"type_parameters",
+		"semantic_kind",
+	},
+	"TypeAnnotation": {
+		"annotation_kind",
+		"context",
+		"type",
+		"semantic_kind",
+	},
+	"Component": {
+		"framework",
+		"jsx_fragment_shorthand",
+		"component_type_assertion",
+		"component_wrapper_kind",
+		"semantic_kind",
+	},
+	"ImplBlock": {
+		"kind",
+		"trait",
+		"target",
+		"semantic_kind",
+	},
+	"Protocol": {
+		"module_kind",
+		"semantic_kind",
+	},
+	"ProtocolImplementation": {
+		"module_kind",
+		"protocol",
+		"implemented_for",
+		"semantic_kind",
+	},
+	"Variable": {
+		"attribute_kind",
+		"value",
+		"component_type_assertion",
+		"semantic_kind",
+	},
+	"Function": {
+		"impl_context",
+		"docstring",
+		"class_context",
+		"method_kind",
+		"constructor_kind",
+		"annotation_kind",
+		"context",
+		"type_annotation_count",
+		"type_annotation_kinds",
+		"type_parameters",
+		"jsx_fragment_shorthand",
+		"decorators",
+		"async",
+		"semantic_kind",
+	},
+}
