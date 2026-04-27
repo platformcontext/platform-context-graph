@@ -90,7 +90,7 @@ func buildBootstrapProjector(
 	reducerQueue := postgres.NewReducerQueue(instrumentedDB, "bootstrap-index", time.Minute)
 	runtime := projector.Runtime{
 		CanonicalWriter: canonicalWriter,
-		ContentWriter:   postgres.NewContentWriter(instrumentedDB),
+		ContentWriter:   postgres.NewContentWriter(instrumentedDB).WithLogger(logger),
 		IntentWriter:    reducerQueue,
 		PhasePublisher:  postgres.NewGraphProjectionPhaseStateStore(instrumentedDB),
 		RepairQueue:     postgres.NewGraphProjectionPhaseRepairQueueStore(instrumentedDB),
