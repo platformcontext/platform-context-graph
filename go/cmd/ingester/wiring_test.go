@@ -198,6 +198,7 @@ func TestBuildIngesterProjectorRuntimeWiresPhasePublisherAndRepairQueue(t *testi
 		func(string) string { return "" },
 		nil,
 		nil,
+		nil,
 	)
 
 	if runtime.PhasePublisher == nil {

@@ -60,7 +60,7 @@ type openBootstrapDBFn func(context.Context, func(string) string) (bootstrapDB, 
 type applyBootstrapFn func(context.Context, bootstrapDB) error
 type openGraphFn func(context.Context, func(string) string, trace.Tracer, *telemetry.Instruments) (graphDeps, error)
 type buildCollectorFn func(context.Context, bootstrapDB, func(string) string, trace.Tracer, *telemetry.Instruments, *slog.Logger) (collectorDeps, error)
-type buildProjectorFn func(context.Context, bootstrapDB, projector.CanonicalWriter, func(string) string, trace.Tracer, *telemetry.Instruments) (projectorDeps, error)
+type buildProjectorFn func(context.Context, bootstrapDB, projector.CanonicalWriter, func(string) string, trace.Tracer, *telemetry.Instruments, *slog.Logger) (projectorDeps, error)
 type discoveryAdvisorySink func(collector.DiscoveryAdvisoryReport) error
 
 func main() {
@@ -146,7 +146,7 @@ func run(
 	// Build projector deps before starting collector so both can run concurrently.
 	// The Postgres projector queue uses FOR UPDATE SKIP LOCKED, so concurrent
 	// collection (producing queue items) and projection (claiming them) is safe.
-	pd, err := projectorFn(ctx, db, gd.writer, getenv, tracer, instruments)
+	pd, err := projectorFn(ctx, db, gd.writer, getenv, tracer, instruments, logger)
 	if err != nil {
 		return err
 	}

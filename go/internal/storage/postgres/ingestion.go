@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -201,6 +202,7 @@ type IngestionStore struct {
 	beginner                 Beginner
 	Now                      func() time.Time
 	SkipRelationshipBackfill bool
+	Logger                   *slog.Logger
 }
 
 // NewIngestionStore constructs a transactional storage boundary for projection
@@ -268,11 +270,13 @@ func (s IngestionStore) CommitScopeGeneration(
 		return fmt.Errorf("transaction beginner is required")
 	}
 
+	stageStart := time.Now()
 	tx, err := s.beginner.Begin(ctx)
 	if err != nil {
 		drainFacts(factStream)
 		return fmt.Errorf("begin ingestion transaction: %w", err)
 	}
+	s.logCommitStage(ctx, scopeValue, generation, "begin_transaction", stageStart)
 
 	committed := false
 	defer func() {
@@ -282,20 +286,27 @@ func (s IngestionStore) CommitScopeGeneration(
 		}
 	}()
 
+	stageStart = time.Now()
 	if err := upsertIngestionScope(ctx, tx, scopeValue, generation); err != nil {
 		return fmt.Errorf("upsert ingestion scope: %w", err)
 	}
+	s.logCommitStage(ctx, scopeValue, generation, "upsert_ingestion_scope", stageStart)
+	stageStart = time.Now()
 	if err := upsertScopeGeneration(ctx, tx, generation); err != nil {
 		return fmt.Errorf("upsert scope generation: %w", err)
 	}
+	s.logCommitStage(ctx, scopeValue, generation, "upsert_scope_generation", stageStart)
+	stageStart = time.Now()
 	catalog, err := loadRepositoryCatalog(ctx, tx)
 	if err != nil {
 		return fmt.Errorf("load repository catalog: %w", err)
 	}
+	s.logCommitStage(ctx, scopeValue, generation, "load_repository_catalog", stageStart, slog.Int("repository_count", len(catalog)))
 	knownRepoIDs := catalogRepoIDs(catalog)
 	currentGenerationRepoIDs := make(map[string]struct{})
 	relationshipStore := NewRelationshipStore(tx)
-	if err := upsertStreamingFacts(
+	stageStart = time.Now()
+	factStats, err := upsertStreamingFacts(
 		ctx,
 		tx,
 		factStream,
@@ -331,10 +342,21 @@ func (s IngestionStore) CommitScopeGeneration(
 			}
 			return nil
 		},
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
+	s.logCommitStage(
+		ctx,
+		scopeValue,
+		generation,
+		"upsert_facts",
+		stageStart,
+		slog.Int("fact_count", factStats.Rows),
+		slog.Int("batch_count", factStats.Batches),
+	)
 	if !s.SkipRelationshipBackfill {
+		stageStart = time.Now()
 		if err := backfillRelationshipEvidenceForNewRepositories(
 			ctx,
 			tx,
@@ -345,19 +367,55 @@ func (s IngestionStore) CommitScopeGeneration(
 		); err != nil {
 			return err
 		}
+		s.logCommitStage(ctx, scopeValue, generation, "relationship_backfill", stageStart)
 	}
 
 	queue := ProjectorQueue{db: tx, Now: s.now}
+	stageStart = time.Now()
 	if err := queue.Enqueue(ctx, scopeValue.ScopeID, generation.GenerationID); err != nil {
 		return err
 	}
+	s.logCommitStage(ctx, scopeValue, generation, "enqueue_projector_work", stageStart)
 
+	stageStart = time.Now()
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit ingestion transaction: %w", err)
 	}
 	committed = true
+	s.logCommitStage(ctx, scopeValue, generation, "commit_transaction", stageStart)
 
 	return nil
+}
+
+// logCommitStage emits one low-cardinality timing record for the durable
+// ingestion transaction. These records intentionally sit at transaction
+// boundaries so dogfood runs can distinguish slow Postgres inserts from queue
+// enqueue, relationship evidence, or commit latency.
+func (s IngestionStore) logCommitStage(
+	ctx context.Context,
+	scopeValue scope.IngestionScope,
+	generation scope.ScopeGeneration,
+	stage string,
+	start time.Time,
+	attrs ...any,
+) {
+	if s.Logger == nil {
+		return
+	}
+
+	scopeAttrs := telemetry.ScopeAttrs(scopeValue.ScopeID, generation.GenerationID, scopeValue.SourceSystem)
+	logAttrs := make([]any, 0, len(scopeAttrs)+len(attrs)+3)
+	for _, attr := range scopeAttrs {
+		logAttrs = append(logAttrs, attr)
+	}
+	logAttrs = append(logAttrs,
+		slog.String("stage", stage),
+		slog.Float64("duration_seconds", time.Since(start).Seconds()),
+		telemetry.PhaseAttr(telemetry.PhaseEmission),
+	)
+	logAttrs = append(logAttrs, attrs...)
+
+	s.Logger.InfoContext(ctx, "ingestion commit stage completed", logAttrs...)
 }
 
 func (s IngestionStore) now() time.Time {

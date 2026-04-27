@@ -24,6 +24,9 @@ func buildCollectorService(
 		return collector.Service{}, err
 	}
 
+	committer := postgres.NewIngestionStore(database)
+	committer.Logger = logger
+
 	return collector.Service{
 		Source: &collector.GitSource{
 			Component: "collector-git",
@@ -43,7 +46,7 @@ func buildCollectorService(
 			Instruments:            instruments,
 			Logger:                 logger,
 		},
-		Committer:    postgres.NewIngestionStore(database),
+		Committer:    committer,
 		PollInterval: defaultCollectorPollInterval,
 		Tracer:       tracer,
 		Instruments:  instruments,

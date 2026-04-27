@@ -220,6 +220,7 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 		defer releaseSem()
 	}
 
+	loadStart := time.Now()
 	factsForGeneration, err := s.FactStore.LoadFacts(projectCtx, work)
 	if err != nil {
 		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
@@ -235,7 +236,9 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 		}
 		return nil
 	}
+	s.recordWorkStage(projectCtx, work, "load_facts", loadStart, len(factsForGeneration), workerID)
 
+	projectStart := time.Now()
 	result, err := s.Runner.Project(projectCtx, work.Scope, work.Generation, factsForGeneration)
 	if err != nil {
 		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
@@ -251,6 +254,7 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 		}
 		return nil
 	}
+	s.recordWorkStage(projectCtx, work, "project_generation", projectStart, len(factsForGeneration), workerID)
 	if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
 		return heartbeatErr
 	}
@@ -262,6 +266,28 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 
 	s.recordProjectionResult(workCtx, work, start, "succeeded", len(factsForGeneration), nil, workerID)
 	return nil
+}
+
+// recordWorkStage logs coarse projector service stages that are outside the
+// Runtime's ownership, especially fact loading before graph/content writes.
+func (s Service) recordWorkStage(ctx context.Context, work ScopeGenerationWork, stage string, start time.Time, factCount int, workerID int) {
+	if s.Logger == nil {
+		return
+	}
+	scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
+	logAttrs := make([]any, 0, len(scopeAttrs)+5)
+	for _, attr := range scopeAttrs {
+		logAttrs = append(logAttrs, attr)
+	}
+	logAttrs = append(logAttrs,
+		slog.String("queue", "projector"),
+		slog.String("stage", stage),
+		slog.Int("fact_count", factCount),
+		slog.Float64("duration_seconds", time.Since(start).Seconds()),
+		slog.Int("worker_id", workerID),
+		telemetry.PhaseAttr(telemetry.PhaseProjection),
+	)
+	s.Logger.InfoContext(ctx, "projector work stage completed", logAttrs...)
 }
 
 func (s Service) recordProjectionResult(ctx context.Context, work ScopeGenerationWork, start time.Time, status string, factCount int, err error, workerID int) {

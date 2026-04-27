@@ -1,10 +1,12 @@
 package projector
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -82,6 +84,62 @@ func TestServiceRunClaimsLoadsProjectsAndAcknowledges(t *testing.T) {
 	}
 	if got, want := sink.failCalls, 0; got != want {
 		t.Fatalf("fail calls = %d, want %d", got, want)
+	}
+}
+
+func TestServiceRunLogsFactLoadAndProjectionStages(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+	var logs bytes.Buffer
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource:   &stubProjectorWorkSource{workItems: []ScopeGenerationWork{work}},
+		FactStore: &stubFactStore{facts: []facts.Envelope{{
+			FactID:       "fact-1",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_node",
+		}}},
+		Runner: &stubProjectionRunner{result: Result{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+		}},
+		WorkSink: &stubProjectorWorkSink{},
+		Wait:     func(context.Context, time.Duration) error { return context.Canceled },
+		Logger:   slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	output := logs.String()
+	for _, want := range []string{
+		`"msg":"projector work stage completed"`,
+		`"stage":"load_facts"`,
+		`"stage":"project_generation"`,
+		`"fact_count":1`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("projector stage logs missing %s:\n%s", want, output)
+		}
 	}
 }
 

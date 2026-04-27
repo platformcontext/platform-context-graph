@@ -137,6 +137,12 @@ For shared-write debugging specifically:
   work-item lifecycle breadcrumbs as structured JSON. On the Go path,
   `event_name` is optional; phase-scoped `slog` fields such as
   `pipeline_phase`, `scope_id`, and `failure_class` are the stable filters.
+- Ingestion commits also emit `ingestion commit stage completed` records for
+  transaction begin, scope/generation upsert, repository-catalog load,
+  streaming fact upsert, relationship backfill, projector enqueue, and
+  transaction commit. Use `fact_count`, `batch_count`, and
+  `duration_seconds` to distinguish slow fact persistence from queue or
+  commit latency.
 
 ### Resolution Engine
 
@@ -157,6 +163,10 @@ For shared-write debugging specifically:
 - Traces show one projection attempt from claim to graph write.
 - Logs capture work-item completion, retry, dead-letter, and per-stage failure
   context.
+- Source-local projector runs emit `projector work stage completed` for fact
+  loading versus projection execution and `projector runtime stage completed`
+  for build, canonical graph write, content-store write, and reducer-intent
+  enqueue. Use these before changing NornicDB row caps or worker counts.
 
 ### Admin / CLI Status
 
