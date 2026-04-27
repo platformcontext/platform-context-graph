@@ -1642,8 +1642,8 @@ func TestNornicDBEntityLabelBatchSizesClampToEntityBatchSize(t *testing.T) {
 	if got["Struct"] != 40 {
 		t.Fatalf("Struct batch size = %d, want 40", got["Struct"])
 	}
-	if got["Variable"] != defaultNornicDBVariableEntityBatchSize {
-		t.Fatalf("Variable batch size = %d, want %d", got["Variable"], defaultNornicDBVariableEntityBatchSize)
+	if got["Variable"] != 40 {
+		t.Fatalf("Variable batch size = %d, want 40", got["Variable"])
 	}
 	if got["K8sResource"] != defaultNornicDBK8sResourceEntityBatchSize {
 		t.Fatalf("K8sResource batch size = %d, want %d", got["K8sResource"], defaultNornicDBK8sResourceEntityBatchSize)

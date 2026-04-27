@@ -58,11 +58,11 @@ const (
 	// Struct entities were the next heavy family on the self-repo dogfood lane
 	// once Function rows were narrowed, so they get the next smaller row cap.
 	defaultNornicDBStructEntityBatchSize = 50
-	// Variable remains the next repo-scale hot family after Function. Fresh
-	// self-repo reruns still spent roughly 22s-31s per five-statement chunk at
-	// 25 rows, so the built-in default now narrows Variable rows further while
-	// keeping the grouped-statement cap unchanged for a clean next comparison.
-	defaultNornicDBVariableEntityBatchSize = 10
+	// Variable is high-cardinality but not row-heavy after file-scoped entity
+	// batching. The 2026-04-27 websites-php-youboat ladder improved from
+	// 196.7s at 10 rows to 102.8s at 100 rows with no retries, no singleton
+	// fallbacks, and max grouped execution under one second.
+	defaultNornicDBVariableEntityBatchSize = 100
 	// K8sResource rows can cluster heavily in one Helm/Kustomize YAML file.
 	// File-scoped inline containment preserves NornicDB row binding correctness,
 	// and full-corpus timing showed even five same-file rows can exceed the
@@ -471,8 +471,8 @@ func defaultNornicDBEntityLabelBatchSizes(entityBatchSize int) map[string]int {
 		// still materially lighter than Function rows on the self-repo dogfood
 		// lane, so they keep a looser cap than Function.
 		"Struct": capOptionalBatchSize(entityBatchSize, defaultNornicDBStructEntityBatchSize),
-		// Variable rows timed out at repo scale with the broader default, so
-		// they follow the same narrowed row cap as Struct for now.
+		// Variable rows are numerous but proved faster at the broader 100-row
+		// cap once file-scoped batching removed the earlier wide-row hazard.
 		"Variable": capOptionalBatchSize(entityBatchSize, defaultNornicDBVariableEntityBatchSize),
 		// K8sResource rows need a per-statement row cap because file-scoped
 		// inline containment can otherwise put enough same-file resources into
