@@ -551,15 +551,15 @@ func TestWaitLocalChildProcessCancelUsesSingleWaiter(t *testing.T) {
 	}
 }
 
-func TestNormalizeLocalChildExitTreatsAlreadyWaitedAsClean(t *testing.T) {
-	err := normalizeLocalChildExit(exec.ErrWaitDelay)
+func TestNormalizeLocalChildNaturalExitTreatsAlreadyWaitedAsClean(t *testing.T) {
+	err := normalizeLocalChildNaturalExit(exec.ErrWaitDelay)
 	if err == nil {
-		t.Fatal("normalizeLocalChildExit(exec.ErrWaitDelay) = nil, want non-nil")
+		t.Fatal("normalizeLocalChildNaturalExit(exec.ErrWaitDelay) = nil, want non-nil")
 	}
 
-	err = normalizeLocalChildExit(&exec.Error{Name: "child", Err: errors.New("Wait was already called")})
+	err = normalizeLocalChildNaturalExit(&exec.Error{Name: "child", Err: errors.New("Wait was already called")})
 	if err != nil {
-		t.Fatalf("normalizeLocalChildExit(already waited) error = %v, want nil", err)
+		t.Fatalf("normalizeLocalChildNaturalExit(already waited) error = %v, want nil", err)
 	}
 }
 
