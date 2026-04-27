@@ -373,7 +373,7 @@ func (e *recordingReducerStatementExecutor) Execute(_ context.Context, stmt sour
 	return nil
 }
 
-func TestSemanticEntityWriterForGraphBackendUsesMergeFirstRowsForNornicDB(t *testing.T) {
+func TestSemanticEntityWriterForGraphBackendUsesCanonicalNodeRowsForNornicDB(t *testing.T) {
 	t.Parallel()
 
 	executor := &recordingReducerStatementExecutor{}
@@ -422,10 +422,14 @@ func TestSemanticEntityWriterForGraphBackendUsesMergeFirstRowsForNornicDB(t *tes
 	if strings.Contains(stmt.Cypher, "shortestPath") {
 		t.Fatalf("upsert cypher inlined docstring metadata: %s", stmt.Cypher)
 	}
-	mergeIndex := strings.Index(stmt.Cypher, "MERGE (n:Function {uid: row.entity_id})")
-	fileMatchIndex := strings.Index(stmt.Cypher, "MATCH (f:File {path: row.file_path})")
-	if mergeIndex < 0 || fileMatchIndex < 0 || mergeIndex > fileMatchIndex {
-		t.Fatalf("upsert cypher = %q, want node MERGE before file MATCH", stmt.Cypher)
+	if strings.Contains(stmt.Cypher, "MATCH (f:File {path: row.file_path})") {
+		t.Fatalf("upsert cypher = %q, want source-local to own file containment", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "MERGE (f)-[:CONTAINS]->(n)") {
+		t.Fatalf("upsert cypher = %q, want no repeated containment MERGE", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "n.evidence_source = row.evidence_source") {
+		t.Fatalf("upsert cypher = %q, want canonical evidence_source preserved", stmt.Cypher)
 	}
 	rows, ok := stmt.Parameters["rows"].([]map[string]any)
 	if !ok {
@@ -439,7 +443,7 @@ func TestSemanticEntityWriterForGraphBackendUsesMergeFirstRowsForNornicDB(t *tes
 	}
 }
 
-func TestSemanticEntityWriterForGraphBackendUsesLabelScopedRetractForNornicDB(t *testing.T) {
+func TestSemanticEntityWriterForGraphBackendUsesOwnershipScopedRetractForNornicDB(t *testing.T) {
 	t.Parallel()
 
 	executor := &recordingReducerStatementExecutor{}
@@ -461,11 +465,18 @@ func TestSemanticEntityWriterForGraphBackendUsesLabelScopedRetractForNornicDB(t 
 	}
 
 	var retracts int
+	var functionRetract, moduleRetract sourceneo4j.Statement
 	for _, call := range executor.calls {
 		if call.Operation != sourceneo4j.OperationCanonicalRetract {
 			continue
 		}
 		retracts++
+		switch call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey] {
+		case "Function":
+			functionRetract = call
+		case "Module":
+			moduleRetract = call
+		}
 		if strings.Contains(call.Cypher, "|") {
 			t.Fatalf("NornicDB retract cypher = %q, want one label per statement", call.Cypher)
 		}
@@ -475,6 +486,21 @@ func TestSemanticEntityWriterForGraphBackendUsesLabelScopedRetractForNornicDB(t 
 	}
 	if got, want := retracts, 11; got != want {
 		t.Fatalf("retract statement count = %d, want %d", got, want)
+	}
+	if functionRetract.Cypher == "" {
+		t.Fatal("missing Function retract statement")
+	}
+	if strings.Contains(functionRetract.Cypher, "DETACH DELETE") {
+		t.Fatalf("Function retract cypher = %q, want semantic property clear", functionRetract.Cypher)
+	}
+	if !strings.Contains(functionRetract.Cypher, "REMOVE n.impl_context") {
+		t.Fatalf("Function retract cypher = %q, want semantic property REMOVE", functionRetract.Cypher)
+	}
+	if moduleRetract.Cypher == "" {
+		t.Fatal("missing Module retract statement")
+	}
+	if !strings.Contains(moduleRetract.Cypher, "DETACH DELETE n") {
+		t.Fatalf("Module retract cypher = %q, want semantic-owned Module delete", moduleRetract.Cypher)
 	}
 }
 

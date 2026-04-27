@@ -28,6 +28,7 @@ const (
 	semanticEntityWriteModeParameterizedRows
 	semanticEntityWriteModeBatchedProperties
 	semanticEntityWriteModeMergeFirstRows
+	semanticEntityWriteModeCanonicalNodeRows
 )
 
 // semanticEntityRetractMode names how stale semantic nodes are removed before
@@ -73,6 +74,19 @@ func NewSemanticEntityWriterWithMergeFirstRows(executor Executor, batchSize int)
 		executor:  executor,
 		BatchSize: batchSize,
 		writeMode: semanticEntityWriteModeMergeFirstRows,
+	}
+}
+
+// NewSemanticEntityWriterWithCanonicalNodeRows returns a semantic-entity writer
+// that enriches canonical source-local nodes by uid without re-owning File
+// containment. This keeps source-local projection responsible for node
+// lifecycle and CONTAINS edges while letting backend adapters avoid repeated
+// relationship-existence checks on already-materialized entities.
+func NewSemanticEntityWriterWithCanonicalNodeRows(executor Executor, batchSize int) *SemanticEntityWriter {
+	return &SemanticEntityWriter{
+		executor:  executor,
+		BatchSize: batchSize,
+		writeMode: semanticEntityWriteModeCanonicalNodeRows,
 	}
 }
 
@@ -181,7 +195,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 			}
 			writes += len(rows)
 		}
-	case semanticEntityWriteModeMergeFirstRows:
+	case semanticEntityWriteModeMergeFirstRows, semanticEntityWriteModeCanonicalNodeRows:
 		rowsByLabel := newSemanticRowsByLabel()
 		for _, row := range write.Rows {
 			rowMap, ok := buildSemanticEntityRowMap(row)
@@ -200,9 +214,14 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 					end = len(rows)
 				}
 				batchRows := rows[start:end]
+				cypher := semanticEntityMergeFirstRowsUpsertCypher(plan.cypher)
+				if w.writeMode == semanticEntityWriteModeCanonicalNodeRows &&
+					semanticEntityCanonicalNodeOwnedLabel(plan.label) {
+					cypher = semanticEntityCanonicalNodeRowsUpsertCypher(plan.label, plan.cypher)
+				}
 				stmts = append(stmts, Statement{
 					Operation: OperationCanonicalUpsert,
-					Cypher:    semanticEntityMergeFirstRowsUpsertCypher(plan.cypher),
+					Cypher:    cypher,
 					Parameters: map[string]any{
 						"rows":                          batchRows,
 						StatementMetadataEntityLabelKey: plan.label,
@@ -281,6 +300,9 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 }
 
 func (w *SemanticEntityWriter) semanticRetractStatements(repoIDs []string) []Statement {
+	if w.writeMode == semanticEntityWriteModeCanonicalNodeRows {
+		return w.semanticCanonicalNodeRetractStatements(repoIDs)
+	}
 	if w.retractMode != semanticEntityRetractModeLabelScoped {
 		return []Statement{{
 			Operation: OperationCanonicalRetract,
@@ -296,6 +318,40 @@ func (w *SemanticEntityWriter) semanticRetractStatements(repoIDs []string) []Sta
 	plans := semanticEntityPlans()
 	stmts := make([]Statement, 0, len(plans))
 	for _, plan := range plans {
+		stmts = append(stmts, Statement{
+			Operation: OperationCanonicalRetract,
+			Cypher:    semanticEntityLabelRetractCypher(plan.label),
+			Parameters: map[string]any{
+				"repo_ids":                      repoIDs,
+				"evidence_source":               semanticEntityEvidenceSource,
+				StatementMetadataEntityLabelKey: plan.label,
+				StatementMetadataSummaryKey:     semanticEntityRetractStatementSummary(plan.label, repoIDs),
+			},
+		})
+	}
+	return stmts
+}
+
+func (w *SemanticEntityWriter) semanticCanonicalNodeRetractStatements(repoIDs []string) []Statement {
+	plans := semanticEntityPlans()
+	stmts := make([]Statement, 0, len(plans))
+	for _, plan := range plans {
+		if semanticEntityCanonicalNodeOwnedLabel(plan.label) {
+			props := semanticEntityClearPropertiesForLabel(plan.label)
+			if len(props) == 0 {
+				continue
+			}
+			stmts = append(stmts, Statement{
+				Operation: OperationCanonicalRetract,
+				Cypher:    semanticEntityCanonicalNodeClearCypher(plan.label, props),
+				Parameters: map[string]any{
+					"repo_ids":                      repoIDs,
+					StatementMetadataEntityLabelKey: plan.label,
+					StatementMetadataSummaryKey:     semanticEntityRetractStatementSummary(plan.label, repoIDs),
+				},
+			})
+			continue
+		}
 		stmts = append(stmts, Statement{
 			Operation: OperationCanonicalRetract,
 			Cypher:    semanticEntityLabelRetractCypher(plan.label),
