@@ -71,6 +71,27 @@ whole acceptance unit before marking intents complete. If
 discovery advisory report first to confirm the repo is not dominated by
 generated or vendored code before raising the limit.
 
+Increase `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` only when all of the
+following are true:
+
+- The reducer log names `code call acceptance scan reached cap` or
+  `code call acceptance intent scan reached cap`.
+- The discovery advisory shows the repo's high code-call volume comes from
+  authored source you intentionally want in the graph, not checked-in bundles,
+  generated output, archives, or third-party vendor trees that should be
+  filtered with `.pcg/discovery.json`.
+- The host has memory headroom for loading the full accepted repo/run slice in
+  one reducer cycle. The guard exists to prevent partial CALLS truth, not to
+  make unbounded in-memory projection safe.
+
+Do not increase it for `graph_write_timeout`, slow canonical phases, semantic
+label timeouts, or queue backlog by itself. Those failures belong to the
+phase/label/write-shape controls above, the discovery advisory workflow, or a
+deeper reducer/code-call projection design change. If a real authored repo
+needs more than the default repeatedly, record the advisory evidence and
+consider redesigning code-call projection to page a complete acceptance unit
+safely instead of growing the cap indefinitely.
+
 When `PCG_GRAPH_BACKEND=nornicdb`, PCG defaults reducer intent execution to one
 worker because reducer domains can independently mutate the same graph sidecar.
 This does not serialize source discovery, parsing, source-local projection, or

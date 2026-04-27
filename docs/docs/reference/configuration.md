@@ -105,6 +105,11 @@ Unsupported runtime controls:
 - `PCG_INDEX_QUEUE_DEPTH`
 - `PCG_WATCH_DEBOUNCE_SECONDS`
 
+Raise `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` only for the explicit
+code-call acceptance-cap failure. It is not a generic queue-throughput or
+graph-timeout knob; capture a discovery advisory first and prefer filtering
+generated/vendor/archive source when that is what inflated the code-call slice.
+
 `pcg index` launches the Go `bootstrap-index` runtime in direct filesystem
 mode, and `pcg watch` hands off to the Go ingester runtime. Neither command
 uses these unsupported controls.

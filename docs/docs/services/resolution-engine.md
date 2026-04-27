@@ -99,6 +99,12 @@ Processing model:
 | `PCG_SHARED_PROJECTION_BATCH_LIMIT` | 100 | Max intents per partition read |
 | `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | 250000 | Max code-call shared intents scanned or loaded for one accepted repo/run before failing safely instead of projecting partial CALLS truth |
 
+Increase `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` only after a reducer
+cycle reports the explicit acceptance-cap failure and discovery evidence shows
+the repo is dominated by authored source that should remain indexed. Do not use
+it for graph write deadlines, slow canonical phases, or ordinary queue backlog;
+those indicate different reducer, discovery, or graph-write bottlenecks.
+
 ## Telemetry
 
 | Signal | Instruments |
