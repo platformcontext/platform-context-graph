@@ -131,13 +131,45 @@ func TestClaimBatchFencesSameScopeCandidates(t *testing.T) {
 		"inflight.claim_until > $1",
 		"work_item_id = (",
 		"same.scope_id = fact_work_items.scope_id",
-		"same.status IN ('pending', 'retrying')",
+		"same.status IN ('pending', 'retrying', 'claimed', 'running')",
 		"ORDER BY same.updated_at ASC, same.work_item_id ASC",
 		"LIMIT 1",
 		"FOR UPDATE SKIP LOCKED",
 	} {
 		if !strings.Contains(query, want) {
 			t.Fatalf("batch claim query missing %q:\n%s", want, query)
+		}
+	}
+}
+
+func TestClaimBatchCanReclaimExpiredClaims(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	q := ReducerQueue{
+		db:            db,
+		LeaseOwner:    "test",
+		LeaseDuration: time.Minute,
+		Now:           func() time.Time { return now },
+	}
+
+	if _, err := q.ClaimBatch(context.Background(), 5); err != nil {
+		t.Fatalf("ClaimBatch() error = %v", err)
+	}
+
+	query := db.queries[0].query
+	for _, want := range []string{
+		"status IN ('pending', 'retrying', 'claimed', 'running')",
+		"same.status IN ('pending', 'retrying', 'claimed', 'running')",
+		"claim_until IS NULL OR claim_until <= $1",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("batch claim query missing expired-claim reclaim predicate %q:\n%s", want, query)
 		}
 	}
 }
