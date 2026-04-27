@@ -1,6 +1,20 @@
 package collector
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestFileParseDurationSecondsUsesSeconds(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Now().Add(-1500 * time.Millisecond)
+
+	got := fileParseDurationSeconds(startedAt)
+	if got < 1.0 || got > 2.0 {
+		t.Fatalf("fileParseDurationSeconds() = %f, want seconds near 1.5", got)
+	}
+}
 
 func TestMergeSCIPSupplementPreservesDeadCodeRootKinds(t *testing.T) {
 	t.Parallel()
