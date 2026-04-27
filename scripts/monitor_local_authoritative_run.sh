@@ -164,6 +164,10 @@ fi
 
 count=0
 while true; do
+	if [[ -z "$POSTGRES_DSN" ]]; then
+		OWNER_RECORD="$(owner_record_path || true)"
+		POSTGRES_DSN="$(postgres_dsn_from_owner "$OWNER_RECORD" || true)"
+	fi
 	sample_once "$POSTGRES_DSN"
 	count=$((count + 1))
 	if [[ "$SAMPLES" != "0" && "$count" -ge "$SAMPLES" ]]; then
