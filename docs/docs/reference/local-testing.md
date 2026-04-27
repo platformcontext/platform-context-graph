@@ -246,7 +246,7 @@ export PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS=5
 export PCG_NORNICDB_FILE_BATCH_SIZE=100
 export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
 export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
-export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10,K8sResource=1
+export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=100,K8sResource=1
 export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=1
 export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Annotation=5,Function=10,Variable=10,Module=10,ImplBlock=10,TypeAlias=5,TypeAnnotation=50
 ./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
@@ -309,7 +309,7 @@ statements in a grouped transaction.
 The current NornicDB writer also keeps `Function` entity upserts on a narrower
 internal row batch than the broader entity default because repo-scale dogfood
 showed `Function` rows remain the heaviest entity shape on this repository.
-Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=10,K8sResource=1`
+Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=100,K8sResource=1`
 when you need to tune specific heavy entity families without recompiling or
 lowering the row cap for the entire entity phase. `K8sResource` needs both a
 row cap and a grouped-statement cap: Helm/Kustomize manifests can contain many

@@ -84,6 +84,20 @@ on the noisy repo, but it is still not a default-path promotion: canonical
 so the next optimization target is NornicDB file-anchor and relationship
 existence lookup behavior before adding more PCG batch caps.
 
+Variable row-cap checkpoint: follow-up 2026-04-27 focused reruns on
+`websites-php-youboat` showed the earlier narrow `Variable=10` default was too
+conservative after file-scoped entity batching. The same `131,977` canonical
+`Variable` rows completed in `196.713s` at `10` rows, `130.082s` at `25`,
+`118.136s` at `50`, and `102.820s` at `100`, with zero singleton fallbacks,
+zero retries, zero dead letters, and max grouped execution `0.607s` at the
+`100`-row cap. A small control run on `terraform-module-karpenter` also
+drained healthy with queue `pending=0 in_flight=0 retrying=0 dead_letter=0
+failed=0`. This promotes `Variable=100` as the built-in default. Raise beyond
+`100` only after a focused run shows max grouped execution remains comfortably
+below `PCG_CANONICAL_WRITE_TIMEOUT`; lower it again only if timeout summaries
+name `Variable` and the discovery advisory confirms the rows are authored
+source that should remain in the graph.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
@@ -102,7 +116,7 @@ existence lookup behavior before adding more PCG batch caps.
 | `PCG_NORNICDB_FILE_BATCH_SIZE` | `100` | canonical `files` phase | Limits rows inside each `phase=files` statement. Use when file groups are narrow but one statement still carries too many rows. |
 | `PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS` | `25` | canonical `entities` and `entity_containment` phases | Limits grouped statement count for canonical entity phases. |
 | `PCG_NORNICDB_ENTITY_BATCH_SIZE` | `100` | canonical entity rows | Limits rows inside normal entity upsert statements before label-specific caps apply. |
-| `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES` | `Function=15,K8sResource=1,Struct=50,Variable=10` | canonical entity rows | Overrides row caps for specific canonical labels, for example `Function=15,Variable=10`. |
+| `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES` | `Function=15,K8sResource=1,Struct=50,Variable=100` | canonical entity rows | Overrides row caps for specific canonical labels, for example `Function=15,Variable=100`. |
 | `PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS` | `Function=5,K8sResource=1,Struct=15,Variable=5` | canonical entity grouping | Overrides grouped-statement caps for specific canonical labels. |
 
 Two knobs often look similar but are different:
