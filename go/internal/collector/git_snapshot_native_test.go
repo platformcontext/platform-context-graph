@@ -239,6 +239,7 @@ func TestNativeRepositorySnapshotterLogsSnapshotStageTimings(t *testing.T) {
 		`"stage":"parse"`,
 		`"stage":"materialize"`,
 		`"duration_seconds":`,
+		`"pre_scan_workers":2`,
 		`"parse_workers":2`,
 	} {
 		if !strings.Contains(logOutput, want) {

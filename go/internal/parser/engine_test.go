@@ -355,6 +355,53 @@ func Greet() {}
 	assertPrescanContains(t, got, "Greet", goPath)
 }
 
+func TestDefaultEnginePreScanRepositoryPathsWithWorkersMatchesSequential(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	pythonPath := filepath.Join(repoRoot, "service.py")
+	goPath := filepath.Join(repoRoot, "main.go")
+	writeTestFile(
+		t,
+		pythonPath,
+		`class Greeter:
+    pass
+
+def hello(name):
+    return name
+`,
+	)
+	writeTestFile(
+		t,
+		goPath,
+		`package main
+
+type Point struct{}
+
+func Greet() {}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	paths := []string{pythonPath, goPath}
+	want, err := engine.PreScanRepositoryPaths(repoRoot, paths)
+	if err != nil {
+		t.Fatalf("PreScanRepositoryPaths() error = %v, want nil", err)
+	}
+	got, err := engine.PreScanRepositoryPathsWithWorkers(repoRoot, paths, 2)
+	if err != nil {
+		t.Fatalf("PreScanRepositoryPathsWithWorkers() error = %v, want nil", err)
+	}
+
+	if !prescanMapsEqual(got, want) {
+		t.Fatalf("parallel prescan = %#v, want %#v", got, want)
+	}
+}
+
 func TestDefaultEnginePreScanPathsJavaScriptAndTypeScript(t *testing.T) {
 	t.Parallel()
 
@@ -469,4 +516,22 @@ func assertPrescanContains(t *testing.T, importsMap map[string][]string, name st
 		}
 	}
 	t.Fatalf("imports map[%q] = %#v, want path %q", name, paths, wantPath)
+}
+
+func prescanMapsEqual(left, right map[string][]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftPaths := range left {
+		rightPaths, ok := right[key]
+		if !ok || len(leftPaths) != len(rightPaths) {
+			return false
+		}
+		for i := range leftPaths {
+			if leftPaths[i] != rightPaths[i] {
+				return false
+			}
+		}
+	}
+	return true
 }
