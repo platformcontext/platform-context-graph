@@ -11,6 +11,7 @@ import (
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -40,11 +41,16 @@ func buildProjectorService(
 	projectorQueue.RetryDelay = retryPolicy.RetryDelay
 	projectorQueue.MaxAttempts = retryPolicy.MaxAttempts
 
+	runner, err := buildProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, getenv)
+	if err != nil {
+		return projector.Service{}, err
+	}
+
 	return projector.Service{
 		PollInterval: time.Second,
 		WorkSource:   projectorQueue,
 		FactStore:    postgres.NewFactStore(database),
-		Runner:       buildProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector),
+		Runner:       runner,
 		WorkSink:     projectorQueue,
 	}, nil
 }
@@ -54,15 +60,21 @@ func buildProjectorRuntime(
 	canonicalWriter projector.CanonicalWriter,
 	intentWriter projector.ReducerIntentWriter,
 	retryInjector projector.RetryInjector,
-) projector.Runtime {
+	getenv func(string) string,
+) (projector.Runtime, error) {
+	contentConfig, err := content.LoadWriterConfig(getenv)
+	if err != nil {
+		return projector.Runtime{}, err
+	}
+
 	return projector.Runtime{
 		CanonicalWriter: canonicalWriter,
-		ContentWriter:   postgres.NewContentWriter(database),
+		ContentWriter:   postgres.NewContentWriter(database).WithEntityBatchSize(contentConfig.EntityBatchSize),
 		IntentWriter:    intentWriter,
 		PhasePublisher:  postgres.NewGraphProjectionPhaseStateStore(database),
 		RepairQueue:     postgres.NewGraphProjectionPhaseRepairQueueStore(database),
 		RetryInjector:   retryInjector,
-	}
+	}, nil
 }
 
 func openProjectorCanonicalWriter(

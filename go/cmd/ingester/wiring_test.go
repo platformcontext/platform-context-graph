@@ -190,7 +190,7 @@ func TestBuildIngesterCollectorServiceDefersRelationshipBackfillToBatchDrain(t *
 func TestBuildIngesterProjectorRuntimeWiresPhasePublisherAndRepairQueue(t *testing.T) {
 	t.Parallel()
 
-	runtime := buildIngesterProjectorRuntime(
+	runtime, err := buildIngesterProjectorRuntime(
 		postgres.SQLDB{},
 		&noopCanonicalWriter{},
 		nil,
@@ -200,6 +200,9 @@ func TestBuildIngesterProjectorRuntimeWiresPhasePublisherAndRepairQueue(t *testi
 		nil,
 		nil,
 	)
+	if err != nil {
+		t.Fatalf("buildIngesterProjectorRuntime() error = %v, want nil", err)
+	}
 
 	if runtime.PhasePublisher == nil {
 		t.Fatal("buildIngesterProjectorRuntime() PhasePublisher = nil, want non-nil")

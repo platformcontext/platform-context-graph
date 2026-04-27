@@ -136,9 +136,10 @@ WHERE repo_id = $1
 
 // ContentWriter persists repo-local content rows into the canonical content store.
 type ContentWriter struct {
-	db     ExecQueryer
-	Now    func() time.Time
-	Logger *slog.Logger
+	db              ExecQueryer
+	entityBatchSize int
+	Now             func() time.Time
+	Logger          *slog.Logger
 }
 
 // NewContentWriter constructs a Postgres-backed canonical content writer.
@@ -149,6 +150,14 @@ func NewContentWriter(db ExecQueryer) ContentWriter {
 // WithLogger returns a copy that emits per-stage write timings to logger.
 func (w ContentWriter) WithLogger(logger *slog.Logger) ContentWriter {
 	w.Logger = logger
+	return w
+}
+
+// WithEntityBatchSize returns a copy that uses size for content-entity upsert batches.
+func (w ContentWriter) WithEntityBatchSize(size int) ContentWriter {
+	if size > 0 {
+		w.entityBatchSize = size
+	}
 	return w
 }
 
@@ -353,7 +362,7 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 	}
 	w.logStage(ctx, cloned, "upsert_entities", entityUpsertStart,
 		"row_count", len(entityUpserts),
-		"batch_count", contentBatchCount(len(entityUpserts), contentEntityBatchSize),
+		"batch_count", contentBatchCount(len(entityUpserts), w.effectiveEntityBatchSize()),
 	)
 
 	return result, nil
@@ -364,6 +373,14 @@ func (w ContentWriter) now() time.Time {
 		return w.Now().UTC()
 	}
 	return time.Now().UTC()
+}
+
+// effectiveEntityBatchSize returns the configured entity batch size or the safe default.
+func (w ContentWriter) effectiveEntityBatchSize() int {
+	if w.entityBatchSize > 0 {
+		return w.entityBatchSize
+	}
+	return contentEntityBatchSize
 }
 
 // logStage records the coarse write-stage ledger for repo-scale content-store diagnosis.
@@ -456,8 +473,9 @@ func (w ContentWriter) upsertContentFileBatch(ctx context.Context, batch []prepa
 
 // upsertContentEntityBatches persists entity records using batched multi-row INSERT statements.
 func (w ContentWriter) upsertContentEntityBatches(ctx context.Context, rows []preparedEntityRow, indexedAt time.Time) error {
-	for i := 0; i < len(rows); i += contentEntityBatchSize {
-		end := i + contentEntityBatchSize
+	batchSize := w.effectiveEntityBatchSize()
+	for i := 0; i < len(rows); i += batchSize {
+		end := i + batchSize
 		if end > len(rows) {
 			end = len(rows)
 		}

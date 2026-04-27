@@ -17,6 +17,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
+	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -238,12 +239,16 @@ func buildIngesterProjectorService(
 	}
 	projectorQueue.RetryDelay = retryPolicy.RetryDelay
 	projectorQueue.MaxAttempts = retryPolicy.MaxAttempts
+	runner, err := buildIngesterProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, getenv, tracer, instruments, logger)
+	if err != nil {
+		return projector.Service{}, err
+	}
 
 	svc := projector.Service{
 		PollInterval:          time.Second,
 		WorkSource:            projectorQueue,
 		FactStore:             postgres.NewFactStore(database),
-		Runner:                buildIngesterProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, getenv, tracer, instruments, logger),
+		Runner:                runner,
 		WorkSink:              projectorQueue,
 		Heartbeater:           projectorQueue,
 		HeartbeatInterval:     projectorHeartbeatInterval(projectorQueue.LeaseDuration),
@@ -316,10 +321,18 @@ func buildIngesterProjectorRuntime(
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 	logger *slog.Logger,
-) projector.Runtime {
+) (projector.Runtime, error) {
+	contentConfig, err := content.LoadWriterConfig(getenv)
+	if err != nil {
+		return projector.Runtime{}, err
+	}
+	contentWriter := postgres.NewContentWriter(database).
+		WithLogger(logger).
+		WithEntityBatchSize(contentConfig.EntityBatchSize)
+
 	return projector.Runtime{
 		CanonicalWriter:        canonicalWriter,
-		ContentWriter:          postgres.NewContentWriter(database).WithLogger(logger),
+		ContentWriter:          contentWriter,
 		IntentWriter:           intentWriter,
 		PhasePublisher:         postgres.NewGraphProjectionPhaseStateStore(database),
 		RepairQueue:            postgres.NewGraphProjectionPhaseRepairQueueStore(database),
@@ -328,7 +341,7 @@ func buildIngesterProjectorRuntime(
 		Tracer:                 tracer,
 		Instruments:            instruments,
 		Logger:                 logger,
-	}
+	}, nil
 }
 
 func openIngesterCanonicalWriter(
