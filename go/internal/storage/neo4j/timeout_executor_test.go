@@ -52,6 +52,12 @@ func TestTimeoutExecutorIncludesStatementSummaryOnTimeout(t *testing.T) {
 	if got, want := timeoutErr.FailureDetails(), "semantic label=Variable rows=500"; got != want {
 		t.Fatalf("FailureDetails() = %q, want %q", got, want)
 	}
+	var retryable interface {
+		Retryable() bool
+	}
+	if !errors.As(err, &retryable) || !retryable.Retryable() {
+		t.Fatalf("Execute() error = %T, want retryable timeout", err)
+	}
 }
 
 func TestTimeoutExecutorGraphWriteTimeoutSurvivesWrapping(t *testing.T) {

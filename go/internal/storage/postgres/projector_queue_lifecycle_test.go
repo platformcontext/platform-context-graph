@@ -207,11 +207,14 @@ func TestProjectorQueueFailSanitizesFailureTextForPostgres(t *testing.T) {
 	}
 }
 
-func TestProjectorQueueFailClassifiesGraphWriteTimeout(t *testing.T) {
+func TestProjectorQueueFailLifecycleRetriesGraphWriteTimeoutWithinAttemptBudget(t *testing.T) {
 	t.Parallel()
 
 	db := &recordingExecQueryer{}
 	queue := NewProjectorQueue(db, "projector-1", 30*time.Second)
+	queue.Now = func() time.Time {
+		return time.Date(2026, time.April, 12, 14, 30, 0, 0, time.UTC)
+	}
 	work := projector.ScopeGenerationWork{
 		Scope: scope.IngestionScope{ScopeID: "scope-123"},
 		Generation: scope.ScopeGeneration{
@@ -231,11 +234,17 @@ func TestProjectorQueueFailClassifiesGraphWriteTimeout(t *testing.T) {
 		t.Fatalf("Fail() error = %v, want nil", err)
 	}
 
-	if got, want := db.execs[0].args[1], "graph_write_timeout"; got != want {
+	if !strings.Contains(db.execs[0].query, "status = 'retrying'") {
+		t.Fatalf("timeout should retry within attempt budget, query:\n%s", db.execs[0].query)
+	}
+	if got, want := db.execs[0].args[1], "projection_retryable"; got != want {
 		t.Fatalf("failure class = %v, want %v", got, want)
 	}
 	if got, want := db.execs[0].args[3], "phase=files rows=100 chunk=21/24"; got != want {
 		t.Fatalf("failure details = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[4], queue.Now().Add(30*time.Second); got != want {
+		t.Fatalf("next attempt = %v, want %v", got, want)
 	}
 }
 
