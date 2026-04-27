@@ -373,7 +373,7 @@ func (e *recordingReducerStatementExecutor) Execute(_ context.Context, stmt sour
 	return nil
 }
 
-func TestSemanticEntityWriterForGraphBackendUsesBatchedRowsForNornicDB(t *testing.T) {
+func TestSemanticEntityWriterForGraphBackendUsesMergeFirstRowsForNornicDB(t *testing.T) {
 	t.Parallel()
 
 	executor := &recordingReducerStatementExecutor{}
@@ -413,22 +413,29 @@ func TestSemanticEntityWriterForGraphBackendUsesBatchedRowsForNornicDB(t *testin
 	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
 		t.Fatalf("upsert cypher = %q, want batched UNWIND rows", stmt.Cypher)
 	}
-	if !strings.Contains(stmt.Cypher, "SET n += row.properties") {
-		t.Fatalf("upsert cypher = %q, want row property map merge", stmt.Cypher)
+	if !strings.Contains(stmt.Cypher, "MERGE (n:Function {uid: row.entity_id})") {
+		t.Fatalf("upsert cypher = %q, want merge-first semantic node anchor", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "SET n += row.properties") {
+		t.Fatalf("upsert cypher = %q, want explicit SET fields for NornicDB hot path", stmt.Cypher)
 	}
 	if strings.Contains(stmt.Cypher, "shortestPath") {
 		t.Fatalf("upsert cypher inlined docstring metadata: %s", stmt.Cypher)
+	}
+	mergeIndex := strings.Index(stmt.Cypher, "MERGE (n:Function {uid: row.entity_id})")
+	fileMatchIndex := strings.Index(stmt.Cypher, "MATCH (f:File {path: row.file_path})")
+	if mergeIndex < 0 || fileMatchIndex < 0 || mergeIndex > fileMatchIndex {
+		t.Fatalf("upsert cypher = %q, want node MERGE before file MATCH", stmt.Cypher)
 	}
 	rows, ok := stmt.Parameters["rows"].([]map[string]any)
 	if !ok {
 		t.Fatalf("rows parameter type = %T, want []map[string]any", stmt.Parameters["rows"])
 	}
-	properties, ok := rows[0]["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("rows[0][properties] type = %T, want map[string]any", rows[0]["properties"])
+	if _, ok := rows[0]["properties"]; ok {
+		t.Fatalf("rows[0] unexpectedly contains properties map: %#v", rows[0])
 	}
-	if got, want := properties["docstring"], docstring; got != want {
-		t.Fatalf("properties[docstring] = %#v, want %#v", got, want)
+	if got, want := rows[0]["docstring"], docstring; got != want {
+		t.Fatalf("rows[0][docstring] = %#v, want %#v", got, want)
 	}
 }
 

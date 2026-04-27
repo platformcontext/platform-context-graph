@@ -1,5 +1,7 @@
 package neo4j
 
+import "strings"
+
 const (
 	semanticEntityEvidenceSource = "parser/semantic-entities"
 
@@ -260,4 +262,20 @@ func semanticEntityBatchedPropertiesUpsertCypher(label string) string {
 		"MERGE (n:" + label + " {uid: row.entity_id})\n" +
 		"SET n += row.properties\n" +
 		"MERGE (f)-[:CONTAINS]->(n)"
+}
+
+func semanticEntityMergeFirstRowsUpsertCypher(cypher string) string {
+	const unwindLine = "UNWIND $rows AS row\n"
+	const fileMatchLine = "MATCH (f:File {path: row.file_path})\n"
+	const containmentMerge = "MERGE (f)-[:CONTAINS]->(n)"
+
+	if !strings.HasPrefix(cypher, unwindLine+fileMatchLine) {
+		return cypher
+	}
+	rewritten := unwindLine + strings.TrimPrefix(cypher, unwindLine+fileMatchLine)
+	containmentIndex := strings.LastIndex(rewritten, containmentMerge)
+	if containmentIndex < 0 {
+		return rewritten
+	}
+	return rewritten[:containmentIndex] + fileMatchLine + rewritten[containmentIndex:]
 }

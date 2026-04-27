@@ -324,9 +324,12 @@ Reducer-owned semantic entity materialization has its own high-cardinality
 label caps because it runs after source-local canonical projection and writes
 parser-enriched semantic labels such as `Function` and `Variable`. Use
 `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Annotation=5,Function=10,TypeAlias=5,TypeAnnotation=50,Variable=10`
-when that reducer domain times out; NornicDB semantic writes use the same
-row-map merge shape as the canonical hot path, and timeout errors include the
-semantic label and row count that tripped the deadline.
+when that reducer domain times out. NornicDB semantic writes intentionally use
+a merge-first explicit row shape (`UNWIND ... MERGE node ... SET field
+assignments ... MATCH File ... MERGE CONTAINS`), because trace probes showed
+the earlier `MATCH File` before `MERGE node` row-map shape was indexed but
+missed NornicDB's generalized `UNWIND/MERGE` batch hot path. Timeout errors
+include the semantic label and row count that tripped the deadline.
 Semantic retract is a separate reducer-owned cleanup step. First-generation
 semantic materialization skips it entirely because there is no prior semantic
 graph state to clean up. Refreshes and retries still retract; Neo4j keeps the

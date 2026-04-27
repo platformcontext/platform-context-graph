@@ -27,6 +27,7 @@ const (
 	semanticEntityWriteModeLegacyRows semanticEntityWriteMode = iota
 	semanticEntityWriteModeParameterizedRows
 	semanticEntityWriteModeBatchedProperties
+	semanticEntityWriteModeMergeFirstRows
 )
 
 // semanticEntityRetractMode names how stale semantic nodes are removed before
@@ -60,6 +61,18 @@ func NewSemanticEntityWriterWithBatchedProperties(executor Executor, batchSize i
 		executor:  executor,
 		BatchSize: batchSize,
 		writeMode: semanticEntityWriteModeBatchedProperties,
+	}
+}
+
+// NewSemanticEntityWriterWithMergeFirstRows returns a semantic-entity writer
+// whose batched Cypher starts with the node MERGE before file containment. This
+// keeps NornicDB on its generalized UNWIND/MERGE batch hot path while retaining
+// the explicit per-label SET fields used by the legacy row templates.
+func NewSemanticEntityWriterWithMergeFirstRows(executor Executor, batchSize int) *SemanticEntityWriter {
+	return &SemanticEntityWriter{
+		executor:  executor,
+		BatchSize: batchSize,
+		writeMode: semanticEntityWriteModeMergeFirstRows,
 	}
 }
 
@@ -159,6 +172,37 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 				stmts = append(stmts, Statement{
 					Operation: OperationCanonicalUpsert,
 					Cypher:    semanticEntityBatchedPropertiesUpsertCypher(plan.label),
+					Parameters: map[string]any{
+						"rows":                          batchRows,
+						StatementMetadataEntityLabelKey: plan.label,
+						StatementMetadataSummaryKey:     semanticEntityStatementSummary(plan.label, batchRows),
+					},
+				})
+			}
+			writes += len(rows)
+		}
+	case semanticEntityWriteModeMergeFirstRows:
+		rowsByLabel := newSemanticRowsByLabel()
+		for _, row := range write.Rows {
+			rowMap, ok := buildSemanticEntityRowMap(row)
+			if !ok {
+				continue
+			}
+			rowsByLabel[row.EntityType] = append(rowsByLabel[row.EntityType], rowMap)
+		}
+
+		for _, plan := range semanticEntityPlans() {
+			rows := rowsByLabel[plan.label]
+			batchSize := w.batchSizeForLabel(plan.label)
+			for start := 0; start < len(rows); start += batchSize {
+				end := start + batchSize
+				if end > len(rows) {
+					end = len(rows)
+				}
+				batchRows := rows[start:end]
+				stmts = append(stmts, Statement{
+					Operation: OperationCanonicalUpsert,
+					Cypher:    semanticEntityMergeFirstRowsUpsertCypher(plan.cypher),
 					Parameters: map[string]any{
 						"rows":                          batchRows,
 						StatementMetadataEntityLabelKey: plan.label,

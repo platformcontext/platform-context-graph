@@ -91,6 +91,13 @@ Semantic materialization is a reducer-owned phase. Do not copy canonical caps
 blindly; semantic labels should be narrowed only after timeout summaries name
 the semantic label and row count.
 
+NornicDB semantic writes use a merge-first explicit row template instead of the
+older `MATCH File` before `MERGE node` row-map shape. The older shape can still
+use schema lookup, but trace probes showed it misses NornicDB's generalized
+`UNWIND/MERGE` batch hot path. Treat semantic timeouts as query-shape evidence
+first, then tune label caps only after confirming the statement is already on
+the intended template.
+
 Code-call projection is also reducer-owned, but its scan limit is a correctness
 guard rather than a graph-write tuning knob. The runner retracts repo-wide
 CALLS edges and then rewrites the accepted repo/run slice, so it must load the
