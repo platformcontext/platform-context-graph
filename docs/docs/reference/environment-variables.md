@@ -190,16 +190,46 @@ advisory report.
 | Variable | Default | Read By | Purpose | Tune When |
 | --- | --- | --- | --- | --- |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | telemetry bootstrap | Enables OTLP traces and metrics. | Set in deployments or compose when exporting to collector/Jaeger. |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | deployment/compose set | OTEL SDK | OTLP transport protocol, normally `grpc` in compose. | Set with the collector endpoint; do not use as a PCG performance knob. |
+| `OTEL_EXPORTER_OTLP_INSECURE` | deployment/compose set | OTEL SDK | Allows insecure OTLP transport for local compose. | Local/dev collector setups only. |
+| `OTEL_TRACES_EXPORTER` | deployment/compose set | OTEL SDK | Selects trace exporter, normally `otlp`. | Deployment telemetry wiring only. |
+| `OTEL_METRICS_EXPORTER` | deployment/compose set | OTEL SDK | Selects metrics exporter, normally `otlp`. | Deployment telemetry wiring only. |
+| `OTEL_LOGS_EXPORTER` | `none` in compose | OTEL SDK | Disables OTEL log export while PCG emits JSON stderr logs. | Leave as `none` unless the logging pipeline explicitly supports OTEL logs. |
 | `OTEL_SERVICE_NAME` | binary/service name | OTEL SDK | Overrides service name resource attribute. | Usually set by Helm/deployment templates, not manually. |
 | `GOMEMLIMIT` | Go runtime default or cgroup-derived 70% when configured by PCG | Go runtime | Soft heap target. | Set when cgroup detection is unavailable or container memory needs a deliberate heap budget. |
 | `GODEBUG` | unset | Go runtime / PCG memlimit setup | Go runtime debug flags; PCG may preserve/add memory-limit related settings. | Use only for Go runtime diagnostics. |
+| `PCG_DEPLOYMENT_ENVIRONMENT` | `local-compose` in compose | deployment/compose | Environment label injected into runtime env. | Set from deployment metadata so logs/traces identify environment. |
+| `PCG_PROMETHEUS_METRICS_ENABLED` | `true` in compose services | deployment/compose | Enables compose/service Prometheus scrape path. | Deployment wiring only. |
+| `PCG_PROMETHEUS_METRICS_PORT` | `9464` in compose services | deployment/compose | In-container metrics port used by services. | Change only with matching service port wiring. |
 | `PCG_FILESYSTEM_HOST_ROOT` | `./tests/fixtures/ecosystems` in compose | Docker Compose | Host repo root mounted into compose fixtures path. | Set to an absolute real directory for compose validation against local repos. |
+| `PCG_PCGIGNORE_PATH` | `/dev/null` in compose | Docker Compose | Optional host `.pcgignore` mounted into compose bootstrap/ingester containers. | Set when compose validation should use a specific ignore file. |
 | `PCG_HTTP_PORT` | `8080` in compose | Docker Compose | Host port for PCG API. | Change to avoid local port conflicts. |
+| `PCG_MCP_PORT` | `8081` in compose | Docker Compose | Host port for MCP HTTP service. | Change to avoid local port conflicts. |
+| `PCG_API_METRICS_PORT` | `19464` in compose | Docker Compose | Host metrics port for API. | Change to avoid local port conflicts. |
+| `PCG_INGESTER_METRICS_PORT` | `19465` in compose | Docker Compose | Host metrics port for ingester. | Change to avoid local port conflicts. |
+| `PCG_RESOLUTION_ENGINE_METRICS_PORT` | `19466` in compose | Docker Compose | Host metrics port for resolution engine. | Change to avoid local port conflicts. |
+| `PCG_BOOTSTRAP_METRICS_PORT` | `19467` in compose | Docker Compose | Host metrics port for bootstrap-index job/service. | Change to avoid local port conflicts. |
+| `PCG_MCP_METRICS_PORT` | `19468` in compose | Docker Compose | Host metrics port for MCP server. | Change to avoid local port conflicts. |
+| `PCG_WORKFLOW_COORDINATOR_HTTP_PORT` | `18082` in compose | Docker Compose | Host HTTP port for workflow coordinator. | Change to avoid local port conflicts. |
+| `PCG_WORKFLOW_COORDINATOR_METRICS_PORT` | `19469` in compose | Docker Compose | Host metrics port for workflow coordinator. | Change to avoid local port conflicts. |
 | `NEO4J_HTTP_PORT` | `7474` in compose examples | Docker Compose | Host Neo4j HTTP port. | Change to avoid local port conflicts. |
 | `NEO4J_BOLT_PORT` | `7687` in compose examples | Docker Compose | Host Neo4j Bolt port. | Change to avoid local port conflicts. |
+| `NEO4J_AUTH` | `neo4j/${PCG_NEO4J_PASSWORD:-change-me}` in compose | Neo4j container | Neo4j container auth string. | Prefer setting `PCG_NEO4J_PASSWORD` rather than editing this directly. |
+| `NEO4J_AUTH_ENABLED` | `true` in legacy compose template | Neo4j container | Enables Neo4j auth in the template variant. | Leave enabled except for disposable local debugging. |
+| `NEO4J_PLUGINS` | `[]` in compose | Neo4j container | Neo4j plugin list. | Leave empty unless a documented graph feature requires a plugin. |
 | `PCG_NEO4J_HEAP_INITIAL_SIZE` | `512m` in compose | Docker Compose Neo4j container | Neo4j initial heap size. | Raise when compose Neo4j OOMs or GC thrashes during validation. |
 | `PCG_NEO4J_HEAP_MAX_SIZE` | `512m` in compose | Docker Compose Neo4j container | Neo4j max heap size. | Raise with heap evidence; keep within host memory. |
 | `PCG_NEO4J_PAGECACHE_SIZE` | `512m` in docs/examples | Docker Compose Neo4j container | Neo4j page cache budget. | Raise when graph read/write workloads are page-cache bound and host memory allows. |
+| `PCG_POSTGRES_PORT` | `15432` in compose | Docker Compose | Host Postgres port. | Change to avoid local port conflicts or expose compose Postgres to host-side tests. |
+| `PCG_POSTGRES_PASSWORD` | `change-me` in compose | Docker Compose/Postgres | Password used by compose Postgres and generated DSNs. | Change for non-local compose; update matching DSNs/secrets. |
+| `PCG_PG_SHARED_BUFFERS` | `4GB` in compose | Postgres container | Postgres shared buffers. | Tune only with Postgres memory/IO evidence. |
+| `PCG_PG_WORK_MEM` | `16MB` in compose | Postgres container | Per-operation work memory. | Raise carefully for sort/hash-heavy queries; multiplied by concurrency. |
+| `PCG_PG_MAINTENANCE_WORK_MEM` | `512MB` in compose | Postgres container | Maintenance operation memory. | Raise for index/build maintenance if host memory allows. |
+| `PCG_PG_MAX_WAL_SIZE` | `8GB` in compose | Postgres container | WAL size before checkpoint pressure. | Raise if checkpoint churn appears during large ingest. |
+| `PCG_PG_WAL_BUFFERS` | `64MB` in compose | Postgres container | WAL buffer budget. | Tune only with Postgres WAL evidence. |
+| `PCG_PG_EFFECTIVE_CACHE_SIZE` | `32GB` in compose | Postgres container | Planner estimate of OS cache. | Match host/container memory; not a direct allocation. |
+| `PCG_PG_SYNCHRONOUS_COMMIT` | `off` in compose | Postgres container | Commit durability/latency trade-off for local compose. | Keep production durability policy explicit; compose uses speed-oriented local default. |
+| `PCG_PG_TOAST_COMPRESSION` | `lz4` in compose | Postgres container | TOAST compression algorithm. | Change only for Postgres compatibility or storage experiments. |
 | `OTEL_COLLECTOR_OTLP_GRPC_PORT` | `4317` in compose | Docker Compose | Host OTLP gRPC port. | Change to avoid local port conflicts. |
 | `OTEL_COLLECTOR_OTLP_HTTP_PORT` | `4318` in compose | Docker Compose | Host OTLP HTTP port. | Change to avoid local port conflicts. |
 | `OTEL_COLLECTOR_PROMETHEUS_PORT` | `9464` in compose | Docker Compose | Host Prometheus scrape/export port. | Change to avoid local port conflicts. |
@@ -209,6 +239,12 @@ advisory report.
 | Variable | Default | Read By | Purpose | Tune When |
 | --- | --- | --- | --- | --- |
 | `PCG_TERRAFORM_SCHEMA_DIR` | packaged/default schema dir | Terraform schema loader | Overrides Terraform provider schema directory. | Use for local schema development or testing newly generated provider schemas. |
+
+## Test And Perf Gates
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_LOCAL_AUTHORITATIVE_PERF` | unset / `false` | opt-in Go tests | Enables local-authoritative startup/query performance smoke tests. | Set only when `PCG_NORNICDB_BINARY` points at a real binary and the host is prepared for sidecar tests. |
 
 ## Deprecated Or Unsupported
 
@@ -220,6 +256,8 @@ not supported tuning surfaces for the current Go runtime:
 - `PCG_WORKER_MAX_TASKS`
 - `PCG_INDEX_QUEUE_DEPTH`
 - `PCG_WATCH_DEBOUNCE_SECONDS`
+- `PCG_COMMIT_WORKERS`
+- `PCG_MAX_CALLS_PER_FILE`
 
 If one of these looks necessary, stop and identify which current Go stage owns
 the behavior before adding a replacement knob.
