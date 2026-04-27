@@ -44,6 +44,15 @@ The medium run covered `23` repos, drained healthy in `316s`, ended with queue
 dead-letter lines. Treat that as the current focused/medium correctness proof;
 the next promotion evidence must come from a DB-driven full-corpus drain.
 
+Follow-up checkpoint: PCG `c598000d` then passed a targeted five-repo lane that
+combined the prior small semantic regressions with the two noisy PHP stress
+repos. It drained healthy in `854s`; the largest projections were
+`api-php-boatwizardwebsolutions` at `148,948` facts in `166.496305644s` and
+`websites-php-youboat` at `176,201` facts in `521.49982913s`; their semantic
+reducers completed in `6.33473887s` and `15.762956452s`; and the run ended
+with `pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`. Use this as
+the current problem-repo proof before moving to a larger representative subset.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
