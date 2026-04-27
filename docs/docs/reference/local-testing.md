@@ -391,6 +391,31 @@ confirmed, stop treating batch size as the only control knob. Use a
 pprof-enabled NornicDB binary with `NORNICDB_ENABLE_PPROF=true` and capture CPU
 and heap profiles during the hot label before changing another default.
 
+### Local-Authoritative Resource Monitoring
+
+Before another full-corpus NornicDB burn, rerun the representative 20-repo lane
+with queue, CPU, process, and disk samples captured every 30 seconds:
+
+```bash
+scripts/monitor_local_authoritative_run.sh \
+  --run-dir /home/ubuntu/pcg-remote-runs/subset-20-<timestamp> \
+  --interval 30 \
+  > /home/ubuntu/pcg-remote-runs/subset-20-<timestamp>/resource-monitor.log
+```
+
+If the run directory contains the local owner record, the monitor discovers the
+embedded Postgres port automatically. Otherwise pass
+`--postgres-dsn postgresql://pcg:change-me@127.0.0.1:<port>/platform_context_graph?sslmode=disable`.
+
+Treat low CPU and idle disk while the queue still has only a few in-flight
+graph writes as contention evidence, not as a reason to blindly lower batch
+caps or worker count. The next design step in that shape is conflict-domain
+routing or a NornicDB hot-path patch: preserve concurrency for unrelated repos
+and serialize only the writes that actually share graph/index/relationship
+resources. Capture the monitor log beside `graph-start.log` so the ADR can tie
+queue state, slow statement summaries, process utilization, and disk pressure
+to the same timestamps.
+
 ### Local-Authoritative Startup Envelope Smoke
 
 Use this gate when touching local-host startup ordering, embedded Postgres
