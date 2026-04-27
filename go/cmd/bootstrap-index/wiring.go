@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
+	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -88,15 +89,21 @@ func buildBootstrapProjector(
 
 	projectorQueue := postgres.NewProjectorQueue(instrumentedDB, "bootstrap-index", time.Minute)
 	reducerQueue := postgres.NewReducerQueue(instrumentedDB, "bootstrap-index", time.Minute)
+	contentConfig, err := content.LoadWriterConfig(getenv)
+	if err != nil {
+		return projectorDeps{}, err
+	}
 	runtime := projector.Runtime{
 		CanonicalWriter: canonicalWriter,
-		ContentWriter:   postgres.NewContentWriter(instrumentedDB).WithLogger(logger),
-		IntentWriter:    reducerQueue,
-		PhasePublisher:  postgres.NewGraphProjectionPhaseStateStore(instrumentedDB),
-		RepairQueue:     postgres.NewGraphProjectionPhaseRepairQueueStore(instrumentedDB),
-		Tracer:          tracer,
-		Instruments:     instruments,
-		Logger:          logger,
+		ContentWriter: postgres.NewContentWriter(instrumentedDB).
+			WithLogger(logger).
+			WithEntityBatchSize(contentConfig.EntityBatchSize),
+		IntentWriter:   reducerQueue,
+		PhasePublisher: postgres.NewGraphProjectionPhaseStateStore(instrumentedDB),
+		RepairQueue:    postgres.NewGraphProjectionPhaseRepairQueueStore(instrumentedDB),
+		Tracer:         tracer,
+		Instruments:    instruments,
+		Logger:         logger,
 	}
 
 	return projectorDeps{

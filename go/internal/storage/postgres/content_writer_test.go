@@ -305,3 +305,42 @@ func TestContentWriterBatchesLargeEntitySet(t *testing.T) {
 		}
 	}
 }
+
+func TestContentWriterUsesCustomEntityBatchSize(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{}
+	writer := NewContentWriter(db).WithEntityBatchSize(200)
+	writer.Now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }
+
+	entities := make([]content.EntityRecord, 450)
+	for i := 0; i < 450; i++ {
+		entities[i] = content.EntityRecord{
+			EntityID:   "entity-" + strings.Repeat("x", i%10),
+			Path:       "file.go",
+			EntityType: "function",
+			EntityName: "func" + strings.Repeat("x", i%10),
+			StartLine:  i + 1,
+			EndLine:    i + 10,
+		}
+	}
+
+	_, err := writer.Write(context.Background(), content.Materialization{
+		RepoID:       "test-repo",
+		ScopeID:      "test-scope",
+		GenerationID: "test-gen",
+		Entities:     entities,
+	})
+	if err != nil {
+		t.Fatalf("Write() error = %v, want nil", err)
+	}
+	if got, want := len(db.execs), 3; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+	for i, wantGroups := range []int{200, 200, 50} {
+		valueGroups := strings.Count(db.execs[i].query, "($")
+		if valueGroups != wantGroups {
+			t.Fatalf("batch %d: value groups = %d, want %d", i, valueGroups, wantGroups)
+		}
+	}
+}

@@ -12,7 +12,10 @@ import (
 func TestBuildProjectorRuntimeWiresPersistentStorageAdapters(t *testing.T) {
 	t.Parallel()
 
-	runtime := buildProjectorRuntime(postgres.SQLDB{}, &noopCanonicalWriter{}, nil, nil)
+	runtime, err := buildProjectorRuntime(postgres.SQLDB{}, &noopCanonicalWriter{}, nil, nil, func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("buildProjectorRuntime() error = %v, want nil", err)
+	}
 
 	if runtime.CanonicalWriter == nil {
 		t.Fatal("CanonicalWriter = nil, want non-nil")

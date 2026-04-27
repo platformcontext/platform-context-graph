@@ -98,6 +98,15 @@ below `PCG_CANONICAL_WRITE_TIMEOUT`; lower it again only if timeout summaries
 name `Variable` and the discovery advisory confirms the rows are authored
 source that should remain in the graph.
 
+Content-store checkpoint: after worker-parallel pre-scan and graph-write
+tuning, the same repo showed Postgres content persistence as the largest
+single source-local stage. On PCG `318c83e4`, `prepare_entities` took `0.117s`
+but `upsert_entities` took `158.293s` for `160,909` rows / `537` batches. Use
+`PCG_CONTENT_ENTITY_BATCH_SIZE` (`300` default, `1..4000` valid range) for
+focused A/B runs only after this exact content-writer ledger points at Postgres
+entity upserts; it is not a NornicDB graph-write knob and should not be used to
+respond to `graph_write_timeout`.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
