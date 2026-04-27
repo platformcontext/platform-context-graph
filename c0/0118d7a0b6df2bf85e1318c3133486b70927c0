@@ -1,0 +1,29 @@
+docs/docs/reference/configuration.md
+  e27ce815bbe89792 108-112
+docs/docs/reference/local-testing.md
+  e27ce815bbe89792 336-344
+docs/docs/reference/nornicdb-tuning.md
+  e27ce815bbe89792 74-94
+docs/docs/services/resolution-engine.md
+  e27ce815bbe89792 102-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "c00118d7a0b6df2bf85e1318c3133486b70927c0",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 41,
+      "total_deletions": 0,
+      "accepted_lines": 66,
+      "overriden_lines": 0
+    }
+  }
+}
