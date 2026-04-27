@@ -27,8 +27,9 @@ var inheritableEntityTypes = map[string]struct{}{
 // canonical INHERITS, OVERRIDES, and ALIASES edge writes using parser entity
 // bases and PHP trait adaptation metadata.
 type InheritanceMaterializationHandler struct {
-	FactLoader FactLoader
-	EdgeWriter SharedProjectionEdgeWriter
+	FactLoader           FactLoader
+	EdgeWriter           SharedProjectionEdgeWriter
+	PriorGenerationCheck PriorGenerationCheck
 }
 
 // Handle executes the inheritance materialization path.
@@ -70,13 +71,25 @@ func (h InheritanceMaterializationHandler) Handle(
 		}, nil
 	}
 
-	if err := h.EdgeWriter.RetractEdges(
-		ctx,
-		DomainInheritanceEdges,
-		buildInheritanceRetractRows(repoIDs),
-		inheritanceEvidenceSource,
-	); err != nil {
-		return Result{}, fmt.Errorf("retract canonical inheritance edges: %w", err)
+	skipRetract, err := h.shouldSkipInheritanceRetract(ctx, intent)
+	if err != nil {
+		return Result{}, err
+	}
+	if skipRetract {
+		slog.InfoContext(ctx, "inheritance materialization skipped first-generation retract",
+			slog.String(telemetry.LogKeyScopeID, intent.ScopeID),
+			slog.String(telemetry.LogKeyGenerationID, intent.GenerationID),
+			slog.String(telemetry.LogKeyDomain, string(intent.Domain)),
+		)
+	} else {
+		if err := h.EdgeWriter.RetractEdges(
+			ctx,
+			DomainInheritanceEdges,
+			buildInheritanceRetractRows(repoIDs),
+			inheritanceEvidenceSource,
+		); err != nil {
+			return Result{}, fmt.Errorf("retract canonical inheritance edges: %w", err)
+		}
 	}
 
 	writeRows := buildInheritanceIntentRows(rows)
@@ -109,6 +122,17 @@ func (h InheritanceMaterializationHandler) Handle(
 		),
 		CanonicalWrites: len(writeRows),
 	}, nil
+}
+
+func (h InheritanceMaterializationHandler) shouldSkipInheritanceRetract(ctx context.Context, intent Intent) (bool, error) {
+	if h.PriorGenerationCheck == nil || intent.AttemptCount > 1 {
+		return false, nil
+	}
+	hasPrior, err := h.PriorGenerationCheck(ctx, intent.ScopeID, intent.GenerationID)
+	if err != nil {
+		return false, fmt.Errorf("check prior generation for inheritance retract: %w", err)
+	}
+	return !hasPrior, nil
 }
 
 // ExtractInheritanceRows builds canonical child/parent edge rows from content
