@@ -5,6 +5,10 @@ variables. Use it when `local_authoritative` indexing is correct but a
 repo-scale run exposes a bounded write timeout, slow phase, or compatibility
 gate.
 
+For the complete PCG environment-variable catalog, including non-NornicDB
+collector, queue, database, telemetry, and Compose settings, see
+[Environment Variables](environment-variables.md).
+
 NornicDB is still a candidate graph backend. Tune from evidence: first identify
 the phase, label, row count, grouped statement count, and timeout shape in the
 structured logs, then change the narrowest matching knob. Do not lower broad

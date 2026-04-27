@@ -1,0 +1,225 @@
+# Environment Variables
+
+This is the operator reference for PCG environment variables. Use it to answer
+three questions before changing a value:
+
+- What runtime reads this variable?
+- What default does PCG use when it is unset?
+- What symptom justifies tuning it?
+
+Tune from evidence, not from vibes. A queue backlog, by itself, is not proof
+that a worker count should go up; a timeout, by itself, is not proof that the
+timeout should be longer. First identify the stage, phase, label, row count,
+claim age, and latest failure class from the status panel, logs, or discovery
+advisory report.
+
+## Tuning Rules
+
+| Rule | Why |
+| --- | --- |
+| Change the narrowest knob that names the failing stage. | Broad knobs hide root cause and make later regressions harder to bisect. |
+| Prefer filtering generated/vendor input before increasing graph-write budgets. | Bigger batches of wrong input still produce wrong or noisy graph truth. |
+| Keep claim windows near worker count for slow backends. | Pre-claiming more work than workers can start causes lease expiry and duplicate work. |
+| Increase timeouts only after the statement shape is proven correct. | A longer timeout can hide missing indexes, bad query routing, or row-shape bugs. |
+| Record the before/after evidence in the active ADR for runtime-profile work. | Performance tuning without provenance turns into folklore. |
+
+## Core Runtime
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_HOME` | Platform user-data dir | CLI, local host, API key resolver | Root for user config, local workspaces, managed binaries, and persisted local API keys. | Set to isolate dogfood runs, CI runs, or disposable local-authoritative workspaces. |
+| `PCG_QUERY_PROFILE` | `production` for API/MCP/reducer; local commands set profile explicitly | API, MCP, ingester, reducer, local host | Selects query/runtime profile such as `production`, `local_lightweight`, or `local_authoritative`. | Change only when switching runtime mode. Do not use it as a performance knob. |
+| `PCG_GRAPH_BACKEND` | `neo4j` | API, MCP, ingester, reducer, local host | Selects graph adapter: `neo4j` or `nornicdb`. | Set to `nornicdb` only for the NornicDB evaluation/local-authoritative lane or a documented deployment using that adapter. |
+| `PCG_LISTEN_ADDR` | `0.0.0.0:8080` | Go service runtimes | HTTP listen address for services using shared runtime config. | Change for deployment port binding, not performance. |
+| `PCG_METRICS_ADDR` | `0.0.0.0:9464` | Go service runtimes | Prometheus metrics listen address. | Change for deployment port binding or sidecar scrape layout. |
+| `PCG_API_ADDR` | unset; CLI wrappers set host/port flags | API CLI service wrapper | API listen address when using `pcg service` helpers. | Use CLI flags first; set only for scripted local service wrappers. |
+| `PCG_MCP_TRANSPORT` | `http` | MCP server | MCP transport: `http` or `stdio`. | Set to `stdio` only for stdio MCP clients or local attach flows. |
+| `PCG_MCP_ADDR` | `:8080` | MCP server | HTTP MCP listen address. | Change for deployment port binding. |
+| `PCG_RUNTIME_DB_TYPE` | CLI flag derived | CLI root command | Legacy CLI database selector written from global flags. | Do not tune directly. Prefer explicit graph/backend settings. |
+| `PCG_WATCH_PATH` | local host sets it | local child processes | Workspace path handed to local child processes. | Internal; do not set manually. |
+| `PCG_DISABLE_NEO4J` | unset | API, MCP, ingester, local host | Transitional local-lightweight skip flag. | Internal compatibility flag; prefer `PCG_QUERY_PROFILE` and `PCG_GRAPH_BACKEND`. |
+
+## Authentication And Remote CLI
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_API_KEY` | unset, or generated/persisted when allowed | API, MCP, CLI | Bearer token for local/API calls. | Set in deployment secrets or local client config. Rotate like a credential. |
+| `PCG_AUTO_GENERATE_API_KEY` | `false` | API/MCP runtime key resolver | Allows local runtimes to generate and persist an API key under `PCG_HOME`. | Use for local compose/dev convenience only. |
+| `PCG_SERVICE_URL` | unset | CLI | Default remote PCG API base URL. | Set for CLI-to-service workflows. |
+| `PCG_SERVICE_PROFILE` | unset | CLI | Selects profile-specific `PCG_SERVICE_URL_<PROFILE>` and `PCG_API_KEY_<PROFILE>`. | Use when switching between QA/stage/prod services. |
+| `PCG_SERVICE_URL_<PROFILE>` | unset | CLI | Profile-specific service URL. | Use for named remote environments. |
+| `PCG_API_KEY_<PROFILE>` | unset | CLI | Profile-specific API key. | Use for named remote environments. |
+| `PCG_REMOTE_TIMEOUT_SECONDS` | `30` | CLI HTTP client | Timeout for remote CLI requests. | Raise for legitimately long read queries over slow links; do not raise for hung services without checking server logs. |
+
+## Postgres
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_FACT_STORE_DSN` | unset | Go runtimes | Primary DSN for fact store and queues. | Required in deployed facts-first runtimes unless falling back to content/Postgres DSN. |
+| `PCG_CONTENT_STORE_DSN` | unset | API, MCP, ingester, reducer | DSN for content store and query surfaces. | Required when content/search/query surfaces read Postgres. |
+| `PCG_POSTGRES_DSN` | unset | Go runtimes, CLI doctor | Backward-compatible Postgres DSN fallback. | Prefer explicit fact/content DSNs in split-service deployments. |
+| `PCG_POSTGRES_MAX_OPEN_CONNS` | `30` | Go runtimes | Maximum open Postgres connections per process. | Raise only when Postgres wait time is visible and the database has capacity; lower when many pods exhaust Postgres connections. |
+| `PCG_POSTGRES_MAX_IDLE_CONNS` | `10` | Go runtimes | Maximum idle Postgres connections. | Tune with max-open conns; keep at or below max-open. |
+| `PCG_POSTGRES_CONN_MAX_LIFETIME` | `30m` | Go runtimes | Maximum lifetime of one Postgres connection. | Lower when load balancers or proxies recycle connections sooner. |
+| `PCG_POSTGRES_CONN_MAX_IDLE_TIME` | `10m` | Go runtimes | Maximum idle lifetime of one Postgres connection. | Lower for constrained DB pools; raise rarely. |
+| `PCG_POSTGRES_PING_TIMEOUT` | `10s` | Go runtimes | Startup ping timeout. | Raise only for slow network startup; a running service should not depend on a long ping. |
+
+## Neo4j And Graph Driver
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_NEO4J_URI` / `NEO4J_URI` | unset | API, MCP, ingester, reducer, CLI doctor | Bolt URI. PCG-prefixed value wins. | Required for Neo4j-backed services. |
+| `PCG_NEO4J_USERNAME` / `NEO4J_USERNAME` | unset | Graph runtimes | Neo4j username. | Set from deployment secrets. |
+| `PCG_NEO4J_PASSWORD` / `NEO4J_PASSWORD` | unset | Graph runtimes | Neo4j password. | Set from deployment secrets. |
+| `PCG_NEO4J_DATABASE` / `NEO4J_DATABASE` | `neo4j` | Graph runtimes | Neo4j database name. | Change only for multi-database deployments. |
+| `DEFAULT_DATABASE` | `neo4j` in Go graph wiring | API graph open path, CLI config | Legacy/default graph database name. | Prefer `PCG_NEO4J_DATABASE`; keep for legacy config compatibility. |
+| `PCG_NEO4J_BATCH_SIZE` | `500` | ingester, reducer, projector, bootstrap-index | Generic graph UNWIND row batch size. | Lower only when Neo4j/NornicDB statement row width is the proven bottleneck; prefer label/phase-specific NornicDB knobs where available. |
+| `PCG_NEO4J_MAX_CONNECTION_POOL_SIZE` | `100` | Graph runtimes | Max driver connections. | Raise when driver acquisition waits and DB capacity exists; lower when too many service pods oversubscribe Neo4j. |
+| `PCG_NEO4J_MAX_CONNECTION_LIFETIME` | `1h` | Graph runtimes | Max driver connection lifetime. | Lower for proxies/load balancers that recycle connections. |
+| `PCG_NEO4J_CONNECTION_ACQUISITION_TIMEOUT` | `1m` | Graph runtimes | Time waiting for a driver connection. | Raise only if pool pressure is expected and bounded; otherwise fix pool sizing or query latency. |
+| `PCG_NEO4J_SOCKET_CONNECT_TIMEOUT` | `5s` | Graph runtimes | Socket connect timeout. | Raise for slow networks; not a graph-write tuning knob. |
+| `PCG_NEO4J_VERIFY_TIMEOUT` | `10s` | Graph runtimes | Startup verification timeout. | Raise only for slow backend startup. |
+
+## Repository Discovery And Parsing
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_REPO_SOURCE_MODE` | `githubOrg` | collector, ingester, bootstrap-index | Repository source mode: `githubOrg`, `explicit`, or `filesystem`. | Change when switching between org sync, explicit repo list, and local filesystem indexing. |
+| `PCG_GITHUB_ORG` | unset | GitHub selector | GitHub organization to discover. | Required for `githubOrg` mode. |
+| `PCG_REPOSITORY_RULES_JSON` | unset | collector selector | Exact/regex include rules; exact rules define repos for `explicit` and `filesystem`. | Use to scope org scans or define a controlled repo subset. |
+| `PCG_REPOS_DIR` | `/data/repos` | collector | Local clone/cache directory. | Put on fast persistent disk; for local-authoritative it is set under workspace cache. |
+| `PCG_REPO_LIMIT` | `4000` | GitHub selector | Maximum repos discovered in one cycle. | Raise only for orgs larger than the default and after checking GitHub rate limits. |
+| `PCG_CLONE_DEPTH` | `1` | collector | Git clone depth. | Raise only if analysis needs history-sensitive files not present in shallow clone. |
+| `PCG_GIT_AUTH_METHOD` | `githubApp` | collector | Git auth mode: GitHub App, token, or SSH path depending on source. | Change to match deployment credentials. |
+| `PCG_GIT_TOKEN` / `GITHUB_TOKEN` | unset | collector | Token auth credential. | Use for token auth; prefer secrets manager in deployments. |
+| `PCG_GITHUB_APP_ID` / `GITHUB_APP_ID` | unset | collector | GitHub App ID. | Required for GitHub App auth. |
+| `PCG_GITHUB_APP_INSTALLATION_ID` / `GITHUB_APP_INSTALLATION_ID` | unset | collector | GitHub App installation ID. | Required for GitHub App auth. |
+| `PCG_GITHUB_APP_PRIVATE_KEY` / `GITHUB_APP_PRIVATE_KEY` | unset | collector | GitHub App private key. | Required for GitHub App auth; handle as secret. |
+| `PCG_SSH_PRIVATE_KEY_PATH` | unset | collector | SSH key path for SSH clone auth. | Use for SSH auth mode. |
+| `PCG_SSH_KNOWN_HOSTS_PATH` | unset | collector | Known-hosts path for SSH clone verification. | Use with SSH auth in locked-down environments. |
+| `PCG_INCLUDE_ARCHIVED_REPOS` | `false` | GitHub selector | Include archived repos. | Enable only when archived repos are intentionally part of the graph. |
+| `PCG_FILESYSTEM_ROOT` | unset | filesystem selector | Root path for filesystem source mode. | Required for direct local indexing outside local-host wrappers. |
+| `PCG_FILESYSTEM_DIRECT` | `false` | filesystem selector | Treat filesystem root as direct source rather than cloned cache flow. | Local/direct indexing only. |
+| `PCG_SNAPSHOT_WORKERS` | `min(NumCPU, 8)` | collector | Concurrent repo snapshot workers. | Raise when CPU/disk/network have headroom and many small repos wait; lower when memory or disk I/O saturates. |
+| `PCG_PARSE_WORKERS` | `min(NumCPU, 8)` | collector snapshotter | Concurrent file parse workers inside each snapshot. | Raise for CPU headroom; lower when parser memory or disk reads saturate. |
+| `PCG_STREAM_BUFFER` | `0` | collector | Generation stream buffer; `0` derives from worker count. | Rarely tune; raise only when profiling shows producer/consumer handoff idle. |
+| `PCG_LARGE_REPO_FILE_THRESHOLD` | `1000` | collector | File-count threshold for large-repo semaphore. | Lower when medium repos cause memory spikes; raise when many medium repos are being over-throttled. |
+| `PCG_LARGE_REPO_MAX_CONCURRENT` | `2` | collector | Concurrent large repo snapshots. | Lower for memory stability; raise on high-memory machines after advisory reports show large repos are the bottleneck. |
+| `PCG_DISCOVERY_REPORT` | unset | `pcg index`, bootstrap-index | Writes per-repo discovery advisory JSON. | Set before changing ignore/vendor rules or raising caps so the input shape is evidence-backed. |
+| `PCG_BOOTSTRAP_IS_DEPENDENCY` | `false` | collector | Marks bootstrap source as dependency package. | Specialized dependency ingestion only. |
+| `PCG_BOOTSTRAP_PACKAGE_NAME` | unset | collector | Dependency package name. | Use with dependency bootstrap mode. |
+| `PCG_BOOTSTRAP_PACKAGE_LANGUAGE` | unset | collector | Dependency package language. | Use with dependency bootstrap mode. |
+| `SCIP_INDEXER` | `false` | collector snapshotter | Enables SCIP supplement indexing. | Enable only when SCIP tooling is installed and semantic supplement output is required. |
+| `SCIP_LANGUAGES` | unset | collector snapshotter | Comma-separated SCIP language selection. | Narrow SCIP work to known supported languages. |
+
+## Projection And Reducer Queues
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_PROJECTOR_WORKERS` | `min(NumCPU, 8)` | ingester projector | Source-local projector worker count. | Raise when source-local projection is CPU-bound and graph backend can absorb writes; lower when graph writes or memory are saturated. |
+| `PCG_LARGE_GEN_THRESHOLD` | `10000` facts | ingester projector | Fact-count threshold for large-generation semaphore. | Lower when medium generations cause memory/write spikes; raise if safe repos are over-throttled. |
+| `PCG_LARGE_GEN_MAX_CONCURRENT` | `2` | ingester projector | Concurrent large source-local generations. | Lower for NornicDB/write stability; raise only with graph-write headroom. |
+| `PCG_PROJECTOR_MAX_ATTEMPTS` | `3` | ingester/projector retry policy | Max projector attempts before terminal failure. | Raise for proven transient failures only; do not hide deterministic write-shape bugs. |
+| `PCG_PROJECTOR_RETRY_DELAY` | `30s` | ingester/projector retry policy | Delay between projector retries. | Tune with backend recovery time; keep short enough to surface permanent failures. |
+| `PCG_PROJECTOR_RETRY_ONCE_SCOPE_GENERATION` | unset | projector runtime | Test/fault-injection retry hook for one scope generation. | Internal verification only. |
+| `PCG_PROJECTION_WORKERS` | `min(NumCPU, 8)` | bootstrap-index | Bootstrap projection worker count. | Same guidance as projector workers; tune after observing projection queue latency and graph-write health. |
+| `PCG_REDUCER_WORKERS` | Neo4j: `min(NumCPU, 4)`; NornicDB: `1` | reducer | Reducer intent worker count. | Raise only after proving reducer graph writes are independent and backend contention is low. Lower if graph conflicts/timeouts rise. |
+| `PCG_REDUCER_BATCH_CLAIM_SIZE` | Neo4j: `workers*4` capped `4..64`; NornicDB: `1` | reducer | Number of reducer intents claimed per poll. | Keep near worker count for slow graph backends to avoid lease expiry. |
+| `PCG_REDUCER_MAX_ATTEMPTS` | `3` | reducer retry policy | Max reducer attempts before terminal failure. | Raise only for proven transient backend failures. |
+| `PCG_REDUCER_RETRY_DELAY` | `30s` | reducer retry policy | Delay between reducer retries. | Tune to backend recovery time, not to mask deterministic failures. |
+| `PCG_SHARED_PROJECTION_WORKERS` | `1` | reducer shared projection | Partition worker count for shared projection domains. | Raise when shared-projection queue age grows and graph write backend is healthy. |
+| `PCG_SHARED_PROJECTION_PARTITION_COUNT` | `8` | reducer shared projection | Partitions per shared domain. | Raise only if workers need more independent partitions; changing this affects partition distribution. |
+| `PCG_SHARED_PROJECTION_BATCH_LIMIT` | `100` | reducer shared projection | Intents per partition batch. | Lower if lease duration is exceeded; raise if each batch is tiny and backend is healthy. |
+| `PCG_SHARED_PROJECTION_POLL_INTERVAL` | `5s` | reducer shared projection | Idle poll interval. | Lower for responsiveness; raise to reduce idle DB polling. |
+| `PCG_SHARED_PROJECTION_LEASE_TTL` | `60s` | reducer shared projection | Partition lease TTL. | Raise when legitimate batches approach TTL; lower only if failed workers need faster takeover. |
+| `PCG_CODE_CALL_PROJECTION_POLL_INTERVAL` | `500ms` | reducer code-call sidecar | Idle poll interval for code-call projection. | Lower for responsiveness; raise to reduce idle polling. |
+| `PCG_CODE_CALL_PROJECTION_LEASE_TTL` | `60s` | reducer code-call sidecar | Lease TTL for code-call projection work. | Raise only when a complete accepted repo/run normally exceeds TTL. |
+| `PCG_CODE_CALL_PROJECTION_BATCH_LIMIT` | `100` | reducer code-call sidecar | Claim batch size for code-call work. | Rarely tune; use latest failure and duration logs first. |
+| `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | `250000` | reducer code-call sidecar | Correctness guard for complete accepted repo/run scan before rewriting CALLS edges. | Increase only for explicit acceptance-cap failures and after a discovery advisory proves the volume is authored source. |
+| `PCG_CODE_CALL_PROJECTION_LEASE_OWNER` | `code-call-projection-runner` | reducer code-call sidecar | Lease owner name. | Internal/multi-run diagnostics only. |
+| `PCG_REPO_DEPENDENCY_PROJECTION_POLL_INTERVAL` | `500ms` | reducer repo-dependency sidecar | Idle poll interval. | Same sidecar polling guidance as code-call projection. |
+| `PCG_REPO_DEPENDENCY_PROJECTION_LEASE_TTL` | `60s` | reducer repo-dependency sidecar | Lease TTL. | Raise only for legitimate long dependency projection batches. |
+| `PCG_REPO_DEPENDENCY_PROJECTION_BATCH_LIMIT` | `100` | reducer repo-dependency sidecar | Claim batch size. | Tune only from sidecar duration/lease evidence. |
+| `PCG_REPO_DEPENDENCY_PROJECTION_LEASE_OWNER` | `repo-dependency-projection-runner` | reducer repo-dependency sidecar | Lease owner name. | Internal/multi-run diagnostics only. |
+| `PCG_GRAPH_PROJECTION_REPAIR_POLL_INTERVAL` | `1s` | reducer repairer | Poll interval for graph projection phase repair. | Lower for faster repair pickup; raise to reduce idle polling. |
+| `PCG_GRAPH_PROJECTION_REPAIR_BATCH_LIMIT` | `100` | reducer repairer | Repair rows per batch. | Lower if repair batches exceed leases/timeouts; raise if repair is healthy but too chatty. |
+| `PCG_GRAPH_PROJECTION_REPAIR_RETRY_DELAY` | `1m` | reducer repairer | Delay before retrying repair. | Tune to backend recovery characteristics. |
+
+## Graph Write Shape And NornicDB
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_CANONICAL_WRITE_TIMEOUT` | `30s` on NornicDB | ingester, reducer graph writers | Client context and Bolt transaction timeout for NornicDB writes. | Raise only after phase/label/index/query shape is proven correct and one statement legitimately needs more time. |
+| `PCG_NORNICDB_PHASE_GROUP_STATEMENTS` | `500` | graph writer | Broad grouped statement cap for phases without a narrower cap. | Tune only when timeout summaries name a broad phase without phase-specific controls. |
+| `PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS` | `5` | graph writer | Grouped statement cap for `phase=files`. | Lower when file-phase grouped execution times out; raise only after file chunks are consistently fast. |
+| `PCG_NORNICDB_FILE_BATCH_SIZE` | `100` | graph writer | Rows per file-upsert statement. | Lower when one file statement is too wide; do not use for entity or reducer semantic failures. |
+| `PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS` | `25` | graph writer | Grouped statement cap for canonical entity phases. | Tune when entity phase group width, not row width, is the proven bottleneck. |
+| `PCG_NORNICDB_ENTITY_BATCH_SIZE` | `100` | graph writer | Default rows per canonical entity statement. | Lower only when many labels are too wide; prefer label-specific caps first. |
+| `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES` | `Function=15,K8sResource=1,Struct=50,Variable=10` | graph writer | Label-specific canonical entity row caps. | Add/narrow labels when timeout logs name that label and row count. |
+| `PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS` | `Function=5,K8sResource=1,Struct=15,Variable=5` | graph writer | Label-specific grouped statement caps. | Tune when row size is healthy but grouped execution of that label drifts upward. |
+| `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | `Annotation=10,Function=10,ImplBlock=10,Module=10,Variable=10` | reducer semantic writer | Label-specific semantic entity row caps. | Tune only for semantic materialization timeout summaries naming that label. |
+| `PCG_CODE_CALL_EDGE_BATCH_SIZE` | `50` | reducer code-call edge writer | Rows per code-call edge write statement. | Lower if code-call edge write statements time out after acceptance scan succeeds. |
+| `PCG_CODE_CALL_EDGE_GROUP_BATCH_SIZE` | `1` | reducer code-call edge writer | Statements per grouped code-call edge execution. | Raise only after backend proves grouped code-call edge writes are safe and faster. |
+| `PCG_INHERITANCE_EDGE_GROUP_BATCH_SIZE` | `1` | reducer shared edge writer | Grouped statements for inheritance edges. | Raise only after edge writes are stable and graph backend can absorb grouping. |
+| `PCG_SQL_RELATIONSHIP_EDGE_GROUP_BATCH_SIZE` | `1` | reducer shared edge writer | Grouped statements for SQL relationship edges. | Same guidance as inheritance edge grouping. |
+| `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` | `false` | graph writer | Conformance switch for Neo4j-style grouped writes on NornicDB. | Test/conformance only. Leave unset for normal laptop runs. |
+| `PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK` | `false` | NornicDB tests | Makes grouped rollback conformance mandatory. | Test gate only. |
+| `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT` | `false` | graph writer | Patched-binary evaluation switch for cross-file batched containment. | Use only with an ADR-approved patched NornicDB binary. |
+| `PCG_NORNICDB_BINARY` | unset | local host, install, tests | Explicit NornicDB binary path. | Use to test a patched or pinned binary before a managed release asset exists. |
+| `PCG_NORNICDB_INSTALL_TIMEOUT` | `30s` | `pcg install nornicdb` | Download timeout for installer sources. | Raise for slow artifact downloads. |
+| `NORNICDB_ENABLE_PPROF` | `false` | NornicDB process | Enables NornicDB profiling. | Use after PCG logs show the statement shape is correct but NornicDB runtime cost remains unknown. |
+| `NORNICDB_ADDRESS`, `NORNICDB_BOLT_PORT`, `NORNICDB_HTTP_PORT`, `NORNICDB_DATA_DIR`, `NORNICDB_AUTH`, `NORNICDB_DEFAULT_DATABASE`, `NORNICDB_HEADLESS`, `NORNICDB_MCP_ENABLED` | local host sets these | NornicDB sidecar | Sidecar process configuration. | Internal for `pcg graph start`; set manually only when running `nornicdb serve` outside PCG. |
+
+## Workflow Coordinator
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE` | `dark` | workflow coordinator | Coordinator mode: `dark` or `active`. | Set to `active` only when deploying coordinator-owned claims. |
+| `PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED` | `false` | workflow coordinator | Enables workflow claims. | Enable only with coordinated collector instances. |
+| `PCG_WORKFLOW_COORDINATOR_ENABLE_CLAIMS` | `false` | workflow coordinator | Backward-compatible claims flag. | Prefer `PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED`. |
+| `PCG_WORKFLOW_COORDINATOR_RECONCILE_INTERVAL` | `30s` | workflow coordinator | Desired-state reconcile interval. | Lower for faster claim orchestration; raise to reduce DB work. |
+| `PCG_WORKFLOW_COORDINATOR_REAP_INTERVAL` | workflow default | workflow coordinator | Expired-claim reap interval. | Tune when failed collectors take too long or too little time to be reaped. |
+| `PCG_WORKFLOW_COORDINATOR_CLAIM_LEASE_TTL` | workflow default | workflow coordinator | Collector claim TTL. | Must be greater than heartbeat interval; raise for long collector work. |
+| `PCG_WORKFLOW_COORDINATOR_HEARTBEAT_INTERVAL` | workflow default | workflow coordinator | Collector claim heartbeat interval. | Keep below claim TTL; lower for faster liveness signal. |
+| `PCG_WORKFLOW_COORDINATOR_EXPIRED_CLAIM_LIMIT` | workflow default | workflow coordinator | Max expired claims reaped per cycle. | Raise only if expired-claim backlog grows. |
+| `PCG_WORKFLOW_COORDINATOR_EXPIRED_CLAIM_REQUEUE_DELAY` | workflow default | workflow coordinator | Delay before requeueing expired work. | Tune to avoid immediate flapping after collector loss. |
+| `PCG_COLLECTOR_INSTANCES_JSON` | unset | workflow coordinator | Desired collector instance list. | Set from deployment config, not ad hoc shell sessions. |
+
+## Telemetry, Memory, And Compose
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | telemetry bootstrap | Enables OTLP traces and metrics. | Set in deployments or compose when exporting to collector/Jaeger. |
+| `OTEL_SERVICE_NAME` | binary/service name | OTEL SDK | Overrides service name resource attribute. | Usually set by Helm/deployment templates, not manually. |
+| `GOMEMLIMIT` | Go runtime default or cgroup-derived 70% when configured by PCG | Go runtime | Soft heap target. | Set when cgroup detection is unavailable or container memory needs a deliberate heap budget. |
+| `GODEBUG` | unset | Go runtime / PCG memlimit setup | Go runtime debug flags; PCG may preserve/add memory-limit related settings. | Use only for Go runtime diagnostics. |
+| `PCG_FILESYSTEM_HOST_ROOT` | `./tests/fixtures/ecosystems` in compose | Docker Compose | Host repo root mounted into compose fixtures path. | Set to an absolute real directory for compose validation against local repos. |
+| `PCG_HTTP_PORT` | `8080` in compose | Docker Compose | Host port for PCG API. | Change to avoid local port conflicts. |
+| `NEO4J_HTTP_PORT` | `7474` in compose examples | Docker Compose | Host Neo4j HTTP port. | Change to avoid local port conflicts. |
+| `NEO4J_BOLT_PORT` | `7687` in compose examples | Docker Compose | Host Neo4j Bolt port. | Change to avoid local port conflicts. |
+| `PCG_NEO4J_HEAP_INITIAL_SIZE` | `512m` in compose | Docker Compose Neo4j container | Neo4j initial heap size. | Raise when compose Neo4j OOMs or GC thrashes during validation. |
+| `PCG_NEO4J_HEAP_MAX_SIZE` | `512m` in compose | Docker Compose Neo4j container | Neo4j max heap size. | Raise with heap evidence; keep within host memory. |
+| `PCG_NEO4J_PAGECACHE_SIZE` | `512m` in docs/examples | Docker Compose Neo4j container | Neo4j page cache budget. | Raise when graph read/write workloads are page-cache bound and host memory allows. |
+| `OTEL_COLLECTOR_OTLP_GRPC_PORT` | `4317` in compose | Docker Compose | Host OTLP gRPC port. | Change to avoid local port conflicts. |
+| `OTEL_COLLECTOR_OTLP_HTTP_PORT` | `4318` in compose | Docker Compose | Host OTLP HTTP port. | Change to avoid local port conflicts. |
+| `OTEL_COLLECTOR_PROMETHEUS_PORT` | `9464` in compose | Docker Compose | Host Prometheus scrape/export port. | Change to avoid local port conflicts. |
+
+## Terraform Schema
+
+| Variable | Default | Read By | Purpose | Tune When |
+| --- | --- | --- | --- | --- |
+| `PCG_TERRAFORM_SCHEMA_DIR` | packaged/default schema dir | Terraform schema loader | Overrides Terraform provider schema directory. | Use for local schema development or testing newly generated provider schemas. |
+
+## Deprecated Or Unsupported
+
+These names may appear in older docs, scripts, or historical configs. They are
+not supported tuning surfaces for the current Go runtime:
+
+- `PCG_REPO_FILE_PARSE_MULTIPROCESS`
+- `PCG_MULTIPROCESS_START_METHOD`
+- `PCG_WORKER_MAX_TASKS`
+- `PCG_INDEX_QUEUE_DEPTH`
+- `PCG_WATCH_DEBOUNCE_SECONDS`
+
+If one of these looks necessary, stop and identify which current Go stage owns
+the behavior before adding a replacement knob.

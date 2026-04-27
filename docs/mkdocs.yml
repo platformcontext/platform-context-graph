@@ -64,6 +64,7 @@ nav:
     - CLI System: reference/cli-system.md
     - CLI K.I.S.S.: reference/cli-kiss.md
     - Configuration: reference/configuration.md
+    - Environment Variables: reference/environment-variables.md
     - Runtime Admin API: reference/runtime-admin-api.md
     - Architecture & Extensibility:
       - Architecture: architecture.md
