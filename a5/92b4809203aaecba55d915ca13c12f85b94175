@@ -1,0 +1,29 @@
+docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md
+  e27ce815bbe89792 132
+go/internal/storage/postgres/reducer_queue_batch.go
+  e27ce815bbe89792 16,46
+go/internal/storage/postgres/reducer_queue_batch_test.go
+  e27ce815bbe89792 134,145-172
+docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md
+  e27ce815bbe89792 124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "a592b4809203aaecba55d915ca13c12f85b94175",
+  "prompts": {
+    "e27ce815bbe89792": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dae10-b3c0-7c90-bdc3-5786c5f09d17",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 37,
+      "total_deletions": 3,
+      "accepted_lines": 62,
+      "overriden_lines": 0
+    }
+  }
+}
