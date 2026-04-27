@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"os/exec"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -250,6 +251,25 @@ func TestWaitLocalHostChildrenAllowsMCPCleanExit(t *testing.T) {
 	}, "pcg-mcp-server")
 	if err != nil {
 		t.Fatalf("waitLocalHostChildren() error = %v, want nil", err)
+	}
+}
+
+func TestWaitLocalChildProcessPreservesUnexpectedExitError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("local graph support is Unix-only for this chunk")
+	}
+
+	cmd := exec.Command("/bin/sh", "-c", "exit 7")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+
+	err := waitLocalChildProcess(context.Background(), cmd)
+	if err == nil {
+		t.Fatal("waitLocalChildProcess() error = nil, want exit error")
+	}
+	if !strings.Contains(err.Error(), "exit status 7") {
+		t.Fatalf("waitLocalChildProcess() error = %v, want exit status", err)
 	}
 }
 

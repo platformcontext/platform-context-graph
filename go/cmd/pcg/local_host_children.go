@@ -146,7 +146,7 @@ func waitLocalChildProcess(ctx context.Context, cmd *exec.Cmd) error {
 
 	select {
 	case err := <-errc:
-		return normalizeLocalChildExit(err)
+		return normalizeLocalChildNaturalExit(err)
 	case <-ctx.Done():
 		if err := interruptLocalChildProcess(cmd); err != nil {
 			return err
@@ -187,7 +187,7 @@ func interruptLocalChildProcess(cmd *exec.Cmd) error {
 func waitForLocalChildExit(cmd *exec.Cmd, done <-chan error, timeout time.Duration) error {
 	select {
 	case err := <-done:
-		return normalizeLocalChildExit(err)
+		return normalizeLocalChildStoppedExit(err)
 	case <-time.After(timeout):
 		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 			return fmt.Errorf("kill child process: %w", err)
@@ -197,7 +197,17 @@ func waitForLocalChildExit(cmd *exec.Cmd, done <-chan error, timeout time.Durati
 	}
 }
 
-func normalizeLocalChildExit(err error) error {
+func normalizeLocalChildNaturalExit(err error) error {
+	if err == nil || errors.Is(err, os.ErrProcessDone) || errors.Is(err, syscall.ECHILD) {
+		return nil
+	}
+	if strings.Contains(err.Error(), "Wait was already called") {
+		return nil
+	}
+	return err
+}
+
+func normalizeLocalChildStoppedExit(err error) error {
 	if err == nil || errors.Is(err, os.ErrProcessDone) || errors.Is(err, syscall.ECHILD) {
 		return nil
 	}
