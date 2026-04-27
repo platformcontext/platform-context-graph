@@ -45,7 +45,9 @@ pcg config db neo4j
 
 ## Configuration Reference
 
-Here are the available settings you can configure.
+Here are the common settings you can configure. For the complete operator
+catalog, including defaults, owner runtime, and when to tune each knob, use the
+[Environment Variables](environment-variables.md) reference.
 
 ### Core Settings
 
