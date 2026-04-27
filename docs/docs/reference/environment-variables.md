@@ -119,13 +119,13 @@ advisory report.
 | `PCG_PROJECTOR_WORKERS` | `min(NumCPU, 8)` | ingester projector | Source-local projector worker count. | Raise when source-local projection is CPU-bound and graph backend can absorb writes; lower when graph writes or memory are saturated. |
 | `PCG_LARGE_GEN_THRESHOLD` | `10000` facts | ingester projector | Fact-count threshold for large-generation semaphore. | Lower when medium generations cause memory/write spikes; raise if safe repos are over-throttled. |
 | `PCG_LARGE_GEN_MAX_CONCURRENT` | `2` | ingester projector | Concurrent large source-local generations. | Lower for NornicDB/write stability; raise only with graph-write headroom. |
-| `PCG_PROJECTOR_MAX_ATTEMPTS` | `3` | ingester/projector retry policy | Max projector attempts before terminal failure. | Raise for proven transient failures only; do not hide deterministic write-shape bugs. |
+| `PCG_PROJECTOR_MAX_ATTEMPTS` | `3` | ingester/projector retry policy | Max projector attempts before terminal failure. | Graph write timeouts and transient backend conflicts use this bounded budget; raise for correctness-validation lanes only after deterministic write-shape bugs are ruled out. |
 | `PCG_PROJECTOR_RETRY_DELAY` | `30s` | ingester/projector retry policy | Delay between projector retries. | Tune with backend recovery time; keep short enough to surface permanent failures. |
 | `PCG_PROJECTOR_RETRY_ONCE_SCOPE_GENERATION` | unset | projector runtime | Test/fault-injection retry hook for one scope generation. | Internal verification only. |
 | `PCG_PROJECTION_WORKERS` | `min(NumCPU, 8)` | bootstrap-index | Bootstrap projection worker count. | Same guidance as projector workers; tune after observing projection queue latency and graph-write health. |
 | `PCG_REDUCER_WORKERS` | Neo4j: `min(NumCPU, 4)`; NornicDB: `1` | reducer | Reducer intent worker count. | Raise only after proving reducer graph writes are independent and backend contention is low. Lower if graph conflicts/timeouts rise. |
 | `PCG_REDUCER_BATCH_CLAIM_SIZE` | Neo4j: `workers*4` capped `4..64`; NornicDB: `1` | reducer | Number of reducer intents claimed per poll. | Keep near worker count for slow graph backends to avoid lease expiry. |
-| `PCG_REDUCER_MAX_ATTEMPTS` | `3` | reducer retry policy | Max reducer attempts before terminal failure. | Raise only for proven transient backend failures. |
+| `PCG_REDUCER_MAX_ATTEMPTS` | `3` | reducer retry policy | Max reducer attempts before terminal failure. | Graph write timeouts and transient backend conflicts use this bounded budget; raise for correctness-validation lanes only after deterministic write-shape bugs are ruled out. |
 | `PCG_REDUCER_RETRY_DELAY` | `30s` | reducer retry policy | Delay between reducer retries. | Tune to backend recovery time, not to mask deterministic failures. |
 | `PCG_SHARED_PROJECTION_WORKERS` | `1` | reducer shared projection | Partition worker count for shared projection domains. | Raise when shared-projection queue age grows and graph write backend is healthy. |
 | `PCG_SHARED_PROJECTION_PARTITION_COUNT` | `8` | reducer shared projection | Partitions per shared domain. | Raise only if workers need more independent partitions; changing this affects partition distribution. |
@@ -149,7 +149,7 @@ advisory report.
 
 | Variable | Default | Read By | Purpose | Tune When |
 | --- | --- | --- | --- | --- |
-| `PCG_CANONICAL_WRITE_TIMEOUT` | `30s` on NornicDB | ingester, reducer graph writers | Client context and Bolt transaction timeout for NornicDB writes. | Raise only after phase/label/index/query shape is proven correct and one statement legitimately needs more time. |
+| `PCG_CANONICAL_WRITE_TIMEOUT` | `30s` on NornicDB | ingester, reducer graph writers | Client context and Bolt transaction timeout for NornicDB writes. | Raise for focused correctness-validation lanes when the only blocker is a bounded graph deadline; keep statement summaries and later tune write shape/concurrency instead of treating a larger timeout as the final perf answer. |
 | `PCG_NORNICDB_PHASE_GROUP_STATEMENTS` | `500` | graph writer | Broad grouped statement cap for phases without a narrower cap. | Tune only when timeout summaries name a broad phase without phase-specific controls. |
 | `PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS` | `5` | graph writer | Grouped statement cap for `phase=files`. | Lower when file-phase grouped execution times out; raise only after file chunks are consistently fast. |
 | `PCG_NORNICDB_FILE_BATCH_SIZE` | `100` | graph writer | Rows per file-upsert statement. | Lower when one file statement is too wide; do not use for entity or reducer semantic failures. |

@@ -54,6 +54,13 @@ func (e GraphWriteTimeoutError) FailureDetails() string {
 	return e.Summary
 }
 
+// Retryable marks graph write deadlines as bounded-retry candidates. A timeout
+// can be caused by transient backend pressure, while syntax/schema failures
+// still remain terminal because they do not implement the retry contract.
+func (e GraphWriteTimeoutError) Retryable() bool {
+	return true
+}
+
 // Execute forwards the statement with an optional deadline.
 func (e TimeoutExecutor) Execute(ctx context.Context, statement Statement) error {
 	if e.Inner == nil {

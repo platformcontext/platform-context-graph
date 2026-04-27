@@ -14,6 +14,27 @@ the phase, label, row count, grouped statement count, and timeout shape in the
 structured logs, then change the narrowest matching knob. Do not lower broad
 defaults because one chunk looked scary.
 
+## Validation Ladder
+
+Do not use the full corpus as the first debugging loop for a timeout. When a
+run names a specific repo, scope, phase, label, and row count, validate in this
+order:
+
+1. Re-run only the failing repo with a fresh `PCG_HOME`, rebuilt PCG binaries,
+   and the exact NornicDB binary under evaluation.
+2. If the timeout is the only blocker and the statement is plausibly correct,
+   raise `PCG_CANONICAL_WRITE_TIMEOUT` for that correctness-validation lane
+   (for example `120s`) so the pipeline can finish and reveal later semantic or
+   query-truth failures.
+3. After the single repo drains with `pending=0`, `in_flight=0`, and no
+   dead letters, run a medium corpus of 15-20 representative repos.
+4. Run the full corpus only after the focused and medium lanes pass end to end.
+
+This ladder separates correctness from performance. A larger timeout is allowed
+to prove the graph, queue, and query surfaces finish correctly; it must not be
+treated as the final tuning answer without later phase timing and write-shape
+analysis.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
@@ -51,8 +72,11 @@ stop waiting while the database keeps executing the same mutation.
 
 When that budget is exhausted, PCG stores the queue failure as
 `graph_write_timeout` and preserves the sanitized phase/label/row summary in
-`failure_details`. Timeout failures are intentionally not retried just because
-they are timeouts; only proven transient conflict errors opt into bounded retry.
+`failure_details`. Typed graph write timeouts are bounded-retry candidates: the
+first timeout can be transient backend pressure or graph-write contention, but
+the queue still dead-letters after the configured attempt budget. Deterministic
+syntax, schema, and unsupported-query failures remain terminal because they do
+not implement the retry contract.
 
 ## Semantic Write Budget
 
