@@ -107,6 +107,19 @@ focused A/B runs only after this exact content-writer ledger points at Postgres
 entity upserts; it is not a NornicDB graph-write knob and should not be used to
 respond to `graph_write_timeout`.
 
+The first focused A/B proved batch size was diagnostic, not causal, for the
+`websites-php-youboat` stress repo: `PCG_CONTENT_ENTITY_BATCH_SIZE=600`
+reduced statements to `269`, but `upsert_entities` stayed flat at `158.814s`.
+A direct Postgres microbench isolated the real cost to the trigram index over
+large entity snippets: copying the same `160,909` rows took `1.661s` without
+indexes, `2.827s` with the btree lookup indexes, and `132.174s` with
+`content_entities_source_trgm_idx`. The repo's `Variable` entities alone
+carried about `1.108 GB` of `source_cache`, mostly generated/vendor-style
+assignments. PCG now bounds oversized `Variable` entity snippets at `4 KiB`
+and records `source_cache_truncated`, `source_cache_original_bytes`, and
+`source_cache_limit_bytes` metadata. Exact full-source search remains available
+through `content_files`; entity search is a snippet surface.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |

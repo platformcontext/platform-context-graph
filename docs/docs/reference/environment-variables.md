@@ -63,7 +63,7 @@ advisory report.
 | `PCG_POSTGRES_CONN_MAX_LIFETIME` | `30m` | Go runtimes | Maximum lifetime of one Postgres connection. | Lower when load balancers or proxies recycle connections sooner. |
 | `PCG_POSTGRES_CONN_MAX_IDLE_TIME` | `10m` | Go runtimes | Maximum idle lifetime of one Postgres connection. | Lower for constrained DB pools; raise rarely. |
 | `PCG_POSTGRES_PING_TIMEOUT` | `10s` | Go runtimes | Startup ping timeout. | Raise only for slow network startup; a running service should not depend on a long ping. |
-| `PCG_CONTENT_ENTITY_BATCH_SIZE` | `300` | bootstrap-index, ingester/projector, projector | Rows per Postgres `content_entities` upsert statement. Values must be `1..4000`. | Tune only after `content writer stage completed` logs show `upsert_entities` dominates and `prepare_entities` is cheap. Raise or lower on one focused repo first; do not use this for graph-write timeouts. |
+| `PCG_CONTENT_ENTITY_BATCH_SIZE` | `300` | bootstrap-index, ingester/projector, projector | Rows per Postgres `content_entities` upsert statement. Values must be `1..4000`. | Tune only after `content writer stage completed` logs show `upsert_entities` dominates and `prepare_entities` is cheap. Raise or lower on one focused repo first; if statement count changes but wall time does not, inspect `source_cache` size and trigram index cost instead of continuing to raise the batch. Do not use this for graph-write timeouts. |
 
 ## Neo4j And Graph Driver
 
