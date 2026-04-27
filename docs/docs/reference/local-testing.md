@@ -333,6 +333,15 @@ graph state to clean up. Refreshes and retries still retract; Neo4j keeps the
 single broad multi-label retract, while NornicDB uses one label-scoped retract
 per semantic label because repo-scale timing showed the broad shape can scan
 and timeout even when the write rows are otherwise bounded.
+Use `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` only for the explicit
+`code call acceptance scan reached cap` or
+`code call acceptance intent scan reached cap` reducer failure. Code-call
+projection retracts repo-wide `CALLS` edges before rewriting the accepted
+repo/run, so the runner must load the whole acceptance unit rather than a
+partial page. Before raising the default `250000`, capture a
+`--discovery-report` and verify the extra code-call volume is authored source
+that should remain indexed; if the report points at generated bundles,
+archives, or vendored libraries, add `.pcg/discovery.json` rules instead.
 When you are tuning repo-scale entity projection, do not decide from one scary
 chunk log alone. NornicDB currently uses a file-scoped combined entity write
 because its current binary does not correctly preserve row-bound identity in
