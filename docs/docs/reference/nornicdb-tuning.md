@@ -53,6 +53,21 @@ reducers completed in `6.33473887s` and `15.762956452s`; and the run ended
 with `pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`. Use this as
 the current problem-repo proof before moving to a larger representative subset.
 
+Representative subset checkpoint: PCG `5c9b169a` with the same NornicDB
+`86e78f1` binary drained a 50-repo subset from `/home/ubuntu/pcg-e2e-full` in
+`884s` with final `Health: healthy` and queue
+`pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`. The log scan found
+no graph write timeout, semantic failure, acceptance-cap, retry, dead-letter,
+panic, or fatal lines. The slow path was not reducer semantic correctness:
+`websites-php-youboat` source-local projection held the queue while writing
+`131,977` `Variable` entities and `28,926` `Function` entities. During that
+phase, `Variable` entity chunks progressed from small subsecond executions to
+a label summary of `102,654` rows, `13,200` statements, and `130.161796981s`
+total label time before the repo drained. Treat this as the current evidence
+that the remaining performance target is high-cardinality source-local
+canonical entity writes and noisy repo input shape, not another semantic
+batch-cap tweak.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
