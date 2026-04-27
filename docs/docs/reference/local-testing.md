@@ -405,7 +405,7 @@ scripts/monitor_local_authoritative_run.sh \
 
 If the run directory contains the local owner record, the monitor discovers the
 embedded Postgres port automatically. Otherwise pass
-`--postgres-dsn postgresql://pcg:change-me@127.0.0.1:<port>/platform_context_graph?sslmode=disable`.
+`--postgres-dsn postgresql://pcg:change-me@127.0.0.1:<port>/postgres?sslmode=disable`.
 
 Treat low CPU and idle disk while the queue still has only a few in-flight
 graph writes as contention evidence, not as a reason to blindly lower batch

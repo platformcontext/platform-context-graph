@@ -75,7 +75,7 @@ postgres_dsn_from_owner() {
 	if [[ -z "$port" || "$port" == "0" ]]; then
 		return 1
 	fi
-	printf 'postgresql://pcg:change-me@127.0.0.1:%s/platform_context_graph?sslmode=disable\n' "$port"
+	printf 'postgresql://pcg:change-me@127.0.0.1:%s/postgres?sslmode=disable\n' "$port"
 }
 
 print_queue_summary() {
