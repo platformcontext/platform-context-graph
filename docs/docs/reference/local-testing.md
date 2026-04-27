@@ -419,6 +419,13 @@ Capture the monitor log beside `graph-start.log` so the ADR can tie queue
 state, slow statement summaries, process utilization, and disk pressure to the
 same timestamps.
 
+For a slow single-repo run, also inspect `collector snapshot stage completed`
+records before designing new worker topology. Those records split the
+ingester front-half into `discovery`, `pre_scan`, `parse`, and `materialize`.
+If those stages are the long pole, tune or redesign the repo snapshot pipeline;
+if they are small and queue age grows later, focus on fact commit,
+source-local projection, reducer conflict domains, or graph Cypher shape.
+
 ### Local-Authoritative Startup Envelope Smoke
 
 Use this gate when touching local-host startup ordering, embedded Postgres
