@@ -392,6 +392,34 @@ func TestBuildRetractCodeCallEdgesStatement(t *testing.T) {
 	if !strings.Contains(stmt.Cypher, "CALLS") {
 		t.Fatalf("Cypher missing CALLS: %s", stmt.Cypher)
 	}
+	if !strings.Contains(stmt.Cypher, "REFERENCES") {
+		t.Fatalf("Cypher missing REFERENCES: %s", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "USES_METACLASS") {
+		t.Fatalf("Cypher unexpectedly includes USES_METACLASS: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "source.repo_id IN $repo_ids") {
+		t.Fatalf("Cypher missing repo_id filter: %s", stmt.Cypher)
+	}
+}
+
+func TestBuildRetractCodeCallEdgesMetaclassStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildRetractCodeCallEdges([]string{"repo-1"}, "parser/python-metaclass")
+
+	if stmt.Operation != OperationCanonicalRetract {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalRetract)
+	}
+	if !strings.Contains(stmt.Cypher, "USES_METACLASS") {
+		t.Fatalf("Cypher missing USES_METACLASS: %s", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "CALLS") {
+		t.Fatalf("Cypher unexpectedly includes CALLS: %s", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "REFERENCES") {
+		t.Fatalf("Cypher unexpectedly includes REFERENCES: %s", stmt.Cypher)
+	}
 	if !strings.Contains(stmt.Cypher, "source.repo_id IN $repo_ids") {
 		t.Fatalf("Cypher missing repo_id filter: %s", stmt.Cypher)
 	}

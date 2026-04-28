@@ -265,7 +265,17 @@ WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`
 
-const retractCodeCallEdgesCypher = `MATCH (source:Function|Class|File)-[rel:CALLS|REFERENCES|USES_METACLASS]->()
+const retractCodeCallParserEdgesCypher = `MATCH (source:Function|Class|File)-[rel:CALLS|REFERENCES]->()
+WHERE source.repo_id IN $repo_ids
+  AND rel.evidence_source = $evidence_source
+DELETE rel`
+
+const retractCodeCallMetaclassEdgesCypher = `MATCH (source:Function|Class|File)-[rel:USES_METACLASS]->()
+WHERE source.repo_id IN $repo_ids
+  AND rel.evidence_source = $evidence_source
+DELETE rel`
+
+const retractCodeCallFallbackEdgesCypher = `MATCH (source:Function|Class|File)-[rel:CALLS|REFERENCES|USES_METACLASS]->()
 WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`
@@ -539,16 +549,27 @@ func BuildRetractWorkloadDependencyEdges(repoIDs []string, evidenceSource string
 	}
 }
 
-// BuildRetractCodeCallEdges builds a batched CALLS edge retraction statement
-// for all source entities owned by the given repositories.
+// BuildRetractCodeCallEdges builds a code-intel edge retraction statement for
+// all source entities owned by the given repositories.
 func BuildRetractCodeCallEdges(repoIDs []string, evidenceSource string) Statement {
 	return Statement{
 		Operation: OperationCanonicalRetract,
-		Cypher:    retractCodeCallEdgesCypher,
+		Cypher:    retractCodeCallEdgesCypher(evidenceSource),
 		Parameters: map[string]any{
 			"repo_ids":        repoIDs,
 			"evidence_source": evidenceSource,
 		},
+	}
+}
+
+func retractCodeCallEdgesCypher(evidenceSource string) string {
+	switch evidenceSource {
+	case "parser/code-calls":
+		return retractCodeCallParserEdgesCypher
+	case "parser/python-metaclass":
+		return retractCodeCallMetaclassEdgesCypher
+	default:
+		return retractCodeCallFallbackEdgesCypher
 	}
 }
 
