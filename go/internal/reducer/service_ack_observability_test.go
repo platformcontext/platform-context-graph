@@ -101,6 +101,76 @@ func TestServiceRunLogsAckFailureWithQueueContext(t *testing.T) {
 	}
 }
 
+func TestServiceRunRecordsReducerQueueWait(t *testing.T) {
+	t.Parallel()
+
+	availableAt := time.Now().UTC().Add(-2 * time.Minute)
+	intent := Intent{
+		IntentID:        "intent-wait",
+		ScopeID:         "scope-wait",
+		GenerationID:    "generation-wait",
+		SourceSystem:    "git",
+		Domain:          DomainSemanticEntityMaterialization,
+		Cause:           "semantic follow-up",
+		EntityKeys:      []string{"semantic:repo-a"},
+		RelatedScopeIDs: []string{"scope-wait"},
+		EnqueuedAt:      availableAt.Add(-30 * time.Second),
+		AvailableAt:     availableAt,
+		Status:          IntentStatusPending,
+	}
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	metricReader := metric.NewManualReader()
+	meterProvider := metric.NewMeterProvider(metric.WithReader(metricReader))
+	instruments, err := telemetry.NewInstruments(meterProvider.Meter("reducer-wait"))
+	if err != nil {
+		t.Fatalf("NewInstruments() error = %v", err)
+	}
+
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource:   &stubReducerWorkSource{intents: []Intent{intent}},
+		Executor: &stubReducerExecutor{
+			result: Result{
+				IntentID: intent.IntentID,
+				Domain:   intent.Domain,
+				Status:   ResultStatusSucceeded,
+			},
+		},
+		WorkSink:    &stubReducerWorkSink{},
+		Wait:        func(context.Context, time.Duration) error { return context.Canceled },
+		Logger:      logger,
+		Instruments: instruments,
+	}
+
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	logOutput := logs.String()
+	for _, want := range []string{
+		`"msg":"reducer execution succeeded"`,
+		`"queue_wait_seconds":`,
+		`"handler_duration_seconds":`,
+	} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("logs missing %s in %s", want, logOutput)
+		}
+	}
+
+	var rm metricdata.ResourceMetrics
+	if err := metricReader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+
+	if got := reducerHistogramCount(t, rm, "pcg_dp_reducer_queue_wait_seconds", map[string]string{
+		"domain": string(intent.Domain),
+	}); got != 1 {
+		t.Fatalf("pcg_dp_reducer_queue_wait_seconds count = %d, want 1", got)
+	}
+}
+
 func reducerCounterValue(t *testing.T, rm metricdata.ResourceMetrics, metricName string, wantAttrs map[string]string) int64 {
 	t.Helper()
 
@@ -118,6 +188,32 @@ func reducerCounterValue(t *testing.T, rm metricdata.ResourceMetrics, metricName
 			for _, dp := range sum.DataPoints {
 				if hasAttrs(dp.Attributes.ToSlice(), wantAttrs) {
 					return dp.Value
+				}
+			}
+		}
+	}
+
+	t.Fatalf("metric %s with attrs %v not found", metricName, wantAttrs)
+	return 0
+}
+
+func reducerHistogramCount(t *testing.T, rm metricdata.ResourceMetrics, metricName string, wantAttrs map[string]string) uint64 {
+	t.Helper()
+
+	for _, scopeMetrics := range rm.ScopeMetrics {
+		for _, m := range scopeMetrics.Metrics {
+			if m.Name != metricName {
+				continue
+			}
+
+			histogram, ok := m.Data.(metricdata.Histogram[float64])
+			if !ok {
+				t.Fatalf("metric %s data = %T, want metricdata.Histogram[float64]", metricName, m.Data)
+			}
+
+			for _, dp := range histogram.DataPoints {
+				if hasAttrs(dp.Attributes.ToSlice(), wantAttrs) {
+					return dp.Count
 				}
 			}
 		}

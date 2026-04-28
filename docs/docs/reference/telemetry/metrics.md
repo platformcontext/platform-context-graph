@@ -149,12 +149,14 @@ collector/projector/reducer path.
 ### `pcg_dp_reducer_intents_enqueued_total`
 ### `pcg_dp_reducer_executions_total`
 ### `pcg_dp_reducer_run_duration_seconds`
+### `pcg_dp_reducer_queue_wait_seconds`
 ### `pcg_dp_reducer_batch_claim_size`
 
-- Type: Counters, histogram, gauge
-- Meaning: Reducer enqueue, execution, latency, and claim-size behavior.
+- Type: Counters and histograms
+- Meaning: Reducer enqueue, execution, queue wait, and claim-size behavior.
 - Use them for: Tuning reducer concurrency and validating that shared follow-up
-  is not starving the main reducer path.
+  is not starving the main reducer path. Compare queue wait with reducer run
+  duration before changing worker counts.
 
 ## Shared Follow-Up And Acceptance
 

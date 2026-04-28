@@ -63,6 +63,11 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 			},
 			{
 				rows: [][]any{
+					{"reducer", "semantic_entity_materialization", "code_graph", "scope-1:generation-b:code", int64(2), 75.0},
+				},
+			},
+			{
+				rows: [][]any{
 					{
 						"reducer",
 						"code_call_materialization",
@@ -155,12 +160,21 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 	if got.DomainBacklogs[0].OldestAge != 90*time.Second {
 		t.Fatalf("ReadRawSnapshot().DomainBacklogs[0].OldestAge = %v, want %v", got.DomainBacklogs[0].OldestAge, 90*time.Second)
 	}
+	if len(got.QueueBlockages) != 1 {
+		t.Fatalf("ReadRawSnapshot().QueueBlockages len = %d, want 1", len(got.QueueBlockages))
+	}
+	if got.QueueBlockages[0].ConflictKey != "scope-1:generation-b:code" {
+		t.Fatalf("ReadRawSnapshot().QueueBlockages[0].ConflictKey = %q, want conflict key", got.QueueBlockages[0].ConflictKey)
+	}
+	if got.QueueBlockages[0].OldestAge != 75*time.Second {
+		t.Fatalf("ReadRawSnapshot().QueueBlockages[0].OldestAge = %v, want 75s", got.QueueBlockages[0].OldestAge)
+	}
 	if got.Coordinator != nil {
 		t.Fatalf("ReadRawSnapshot().Coordinator = %#v, want nil", got.Coordinator)
 	}
 
-	if len(queryer.queries) != 12 {
-		t.Fatalf("QueryContext() call count = %d, want 12", len(queryer.queries))
+	if len(queryer.queries) != 13 {
+		t.Fatalf("QueryContext() call count = %d, want 13", len(queryer.queries))
 	}
 	for _, want := range []string{
 		"FROM ingestion_scopes",
@@ -169,6 +183,7 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 		"activated_at",
 		"superseded_at",
 		"FROM fact_work_items",
+		"inflight.conflict_domain",
 		"failure_details",
 	} {
 		joined := strings.Join(queryer.queries, "\n")

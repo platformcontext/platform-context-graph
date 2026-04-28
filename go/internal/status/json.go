@@ -27,6 +27,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Generations           map[string]int             `json:"generations"`
 		Stages                []StageSummary             `json:"stages"`
 		Domains               []domainBacklogJSON        `json:"domains"`
+		QueueBlockages        []queueBlockageJSON        `json:"queue_blockages"`
 	}{
 		Version:               buildinfo.AppVersion(),
 		AsOf:                  report.AsOf.UTC().Format(time.RFC3339),
@@ -43,6 +44,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Generations:           cloneCounts(report.GenerationTotals),
 		Stages:                slices.Clone(report.StageSummaries),
 		Domains:               domainBacklogsJSON(report.DomainBacklogs),
+		QueueBlockages:        queueBlockagesJSON(report.QueueBlockages),
 	}
 
 	return json.MarshalIndent(payload, "", "  ")
@@ -129,6 +131,16 @@ type domainBacklogJSON struct {
 	OldestAgeSeconds float64 `json:"oldest_age_seconds"`
 }
 
+type queueBlockageJSON struct {
+	Stage            string  `json:"stage"`
+	Domain           string  `json:"domain"`
+	ConflictDomain   string  `json:"conflict_domain"`
+	ConflictKey      string  `json:"conflict_key"`
+	Blocked          int     `json:"blocked"`
+	OldestAge        string  `json:"oldest_age"`
+	OldestAgeSeconds float64 `json:"oldest_age_seconds"`
+}
+
 func queueJSONFromReport(queue QueueSnapshot) queueJSON {
 	return queueJSON{
 		Total:                       queue.Total,
@@ -177,6 +189,23 @@ func domainBacklogsJSON(rows []DomainBacklog) []domainBacklogJSON {
 			Retrying:         row.Retrying,
 			Failed:           row.Failed,
 			DeadLetter:       row.DeadLetter,
+			OldestAge:        row.OldestAge.String(),
+			OldestAgeSeconds: row.OldestAge.Seconds(),
+		})
+	}
+
+	return projected
+}
+
+func queueBlockagesJSON(rows []QueueBlockage) []queueBlockageJSON {
+	projected := make([]queueBlockageJSON, 0, len(rows))
+	for _, row := range rows {
+		projected = append(projected, queueBlockageJSON{
+			Stage:            row.Stage,
+			Domain:           row.Domain,
+			ConflictDomain:   row.ConflictDomain,
+			ConflictKey:      row.ConflictKey,
+			Blocked:          row.Blocked,
 			OldestAge:        row.OldestAge.String(),
 			OldestAgeSeconds: row.OldestAge.Seconds(),
 		})

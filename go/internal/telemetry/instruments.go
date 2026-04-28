@@ -57,6 +57,7 @@ type Instruments struct {
 	ProjectorRunDuration           metric.Float64Histogram
 	ProjectorStageDuration         metric.Float64Histogram
 	ReducerRunDuration             metric.Float64Histogram
+	ReducerQueueWaitDuration       metric.Float64Histogram
 	CanonicalWriteDuration         metric.Float64Histogram
 	QueueClaimDuration             metric.Float64Histogram
 	PostgresQueryDuration          metric.Float64Histogram
@@ -284,6 +285,17 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register ReducerRunDuration histogram: %w", err)
+	}
+
+	reducerWaitBuckets := []float64{0.001, 0.01, 0.1, 1, 5, 10, 30, 60, 300, 900, 1800, 3600, 21600}
+	inst.ReducerQueueWaitDuration, err = meter.Float64Histogram(
+		"pcg_dp_reducer_queue_wait_seconds",
+		metric.WithDescription("Reducer work item time from queue visibility to handler start"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(reducerWaitBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register ReducerQueueWaitDuration histogram: %w", err)
 	}
 
 	canonicalWriteBuckets := []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
