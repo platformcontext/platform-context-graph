@@ -547,12 +547,46 @@ selection, leases, worker defaults, or graph writes. Verification:
 - `go test ./internal/reducer ./internal/telemetry -count=1`;
 - `go vet ./internal/reducer ./internal/telemetry`.
 
+Run `pcg-reducer-large4-readiness-poll-20260428T163313Z` used commit
+`11d74089` with rebuilt binaries and the same focused 4-repo corpus. It drained
+healthy in `139s`, which is effectively flat versus the prior `141s` and `138s`
+proofs. This confirms the code-call readiness polling change is a tail-latency
+cleanup, not the main reducer throughput win. Durable state ended at projector
+`4` succeeded and reducer `32` succeeded. Host resources again showed headroom:
+`cpu_idle_avg=77.10%`, `cpu_idle_p50=87.00%`, `cpu_idle_min=24.00%`,
+`disk_util_avg=9.33%`, `disk_util_p50=4.86%`, and `disk_util_max=44.40%`.
+
+The same run sharpens the next reducer targets. `code_calls` completed `3870`
+shared intents with `119.767s` table wall, but measured completed code-call
+cycles spent only about `5.12s` in processing for `3866` written rows; the
+largest cycle wrote the PHP repo's `2852` rows in `3.98s` processing and
+`4.04s` total. Readiness-blocked code-call logs fired more frequently under the
+base poll interval (`122` observations, max blocked wait `18.979s`), but wall
+time stayed bounded by other reducer dependencies. Reducer handler evidence now
+points at `sql_relationship_materialization` (`handler_max=11.325s`,
+`queue_wait_max=73.366s`, `handler_sum=13.232s`) and deployment mapping queue
+wait (`queue_wait_sum=200.698s` with only `8.530s` handler sum) before any
+worker-count change.
+
+Commit `02d9cdc7` applies the same readiness-polling correction to the generic
+shared projection runner. Readiness-blocked SQL and inheritance shared
+projection partitions now wait the configured base poll interval instead of
+being counted as empty cycles that exponentially back off. The change preserves
+readiness gates, lease scope, partition count, worker defaults, and graph write
+shape; it only keeps known readiness-blocked reducer work responsive. Focused
+verification:
+
+- `go test ./internal/reducer -run 'TestSharedProjectionRunnerUsesBasePollIntervalWhileReadinessBlocked|TestSharedProjectionRunnerBackoffOnEmptyCycles|TestSharedProjectionRunnerBackoffResetsOnWork' -count=1`;
+- `go test ./internal/reducer ./internal/telemetry -count=1`;
+- `go vet ./internal/reducer ./internal/telemetry`;
+- `git diff --check`.
+
 ## Chunk Status
 
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Commit `ec57b741` on branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1`. Remote proofs now include the clean 20-repo edge-index run `pcg-reducer-clean20-20260428T131056Z`, the focused 4-repo run `pcg-reducer-large4-20260428T131734Z`, the resource-headroom baseline `pcg-reducer-large4-resource-baseline-20260428T141520Z`, the SQL label-scope pilot `pcg-reducer-large4-sql-labelscope-20260428T142359Z`, the shared telemetry run `pcg-reducer-large4-shared-telemetry-20260428T144634Z`, and the code-call telemetry run `pcg-reducer-large4-codecall-telemetry-20260428T161400Z`; see Phase 1 Runtime Evidence above. Commit `9c0b6207` adds `PCG_REDUCER_CLAIM_DOMAIN` for split-reducer diagnostics without changing all-domain defaults. Commit `55740672` adds label-scoped SQL relationship writes, but the 4-repo proof showed no wall-clock improvement (`153s` to `154s`) and SQL handler max stayed about `11s`. CPU and disk remained mostly idle in fresh runs, so the next bottleneck is not host saturation. Commit `b0c994b6` adds `pcg_dp_shared_projection_intent_wait_seconds`, `pcg_dp_shared_projection_processing_seconds`, and shared projection logs for readiness-blocked wait, lease claim, selection, and processing durations; focused verification: `go test ./internal/reducer ./internal/telemetry -count=1`, `go vet ./internal/reducer ./internal/telemetry`, `mkdocs build --strict`, and `git diff --check`. The 4-repo rerun on `766fb142` drained in `138s`; `code_calls` shared intents had `119.682s` wall but only about `5.08s` summed graph-write cycle duration, exposing readiness/polling and source-local canonical projection as the immediate bottleneck for that lane. Commit `742d0c56` adds the same wait-versus-processing split to the dedicated code-call projection runner, including processed intent wait, readiness-blocked wait, selection duration, lease claim duration, and processing duration logs/metrics without changing worker defaults or graph writes. The `e0a407ae` remote proof drained in `141s`; `code_calls` table wall was `124.162s` but measured code-call processing summed to about `10.85s`, while CPU and disk stayed idle-heavy. Commit `3e870754` keeps readiness-blocked code-call polling at the base interval instead of exponential empty-queue backoff. | Rebuild and rerun the focused 4-repo corpus to measure the small polling-tail improvement, then inspect large PHP source-local `project_generation`/canonical/content write cost and SQL/code-call Cypher shapes |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Commit `ec57b741` on branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1`. Remote proofs now include the clean 20-repo edge-index run `pcg-reducer-clean20-20260428T131056Z`, the focused 4-repo run `pcg-reducer-large4-20260428T131734Z`, the resource-headroom baseline `pcg-reducer-large4-resource-baseline-20260428T141520Z`, the SQL label-scope pilot `pcg-reducer-large4-sql-labelscope-20260428T142359Z`, the shared telemetry run `pcg-reducer-large4-shared-telemetry-20260428T144634Z`, the code-call telemetry run `pcg-reducer-large4-codecall-telemetry-20260428T161400Z`, and the code-call readiness-poll run `pcg-reducer-large4-readiness-poll-20260428T163313Z`; see Phase 1 Runtime Evidence above. Commit `9c0b6207` adds `PCG_REDUCER_CLAIM_DOMAIN` for split-reducer diagnostics without changing all-domain defaults. Commit `55740672` adds label-scoped SQL relationship writes, but the 4-repo proof showed no wall-clock improvement (`153s` to `154s`) and SQL handler max stayed about `11s`. CPU and disk remained mostly idle in fresh runs, so the next bottleneck is not host saturation. Commit `b0c994b6` adds `pcg_dp_shared_projection_intent_wait_seconds`, `pcg_dp_shared_projection_processing_seconds`, and shared projection logs for readiness-blocked wait, lease claim, selection, and processing durations; focused verification: `go test ./internal/reducer ./internal/telemetry -count=1`, `go vet ./internal/reducer ./internal/telemetry`, `mkdocs build --strict`, and `git diff --check`. The 4-repo rerun on `766fb142` drained in `138s`; `code_calls` shared intents had `119.682s` wall but only about `5.08s` summed graph-write cycle duration, exposing readiness/polling and source-local canonical projection as the immediate bottleneck for that lane. Commit `742d0c56` adds the same wait-versus-processing split to the dedicated code-call projection runner, including processed intent wait, readiness-blocked wait, selection duration, lease claim duration, and processing duration logs/metrics without changing worker defaults or graph writes. The `e0a407ae` remote proof drained in `141s`; `code_calls` table wall was `124.162s` but measured code-call processing summed to about `10.85s`, while CPU and disk stayed idle-heavy. Commit `3e870754` keeps readiness-blocked code-call polling at the base interval instead of exponential empty-queue backoff; the `11d74089` runtime proof drained in `139s`, confirming this is a small tail cleanup. Commit `02d9cdc7` applies the same base-poll behavior to generic shared projection readiness-blocking for SQL and inheritance lanes. | Inspect and optimize reducer-owned SQL/deployment long poles: `sql_relationship_materialization` handler/query shape and deployment-mapping queue wait/conflict routing, before changing worker defaults |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
