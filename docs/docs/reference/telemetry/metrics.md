@@ -161,12 +161,16 @@ collector/projector/reducer path.
 ## Shared Follow-Up And Acceptance
 
 ### `pcg_dp_shared_projection_cycles_total`
+### `pcg_dp_shared_projection_intent_wait_seconds`
+### `pcg_dp_shared_projection_processing_seconds`
 ### `pcg_dp_shared_projection_stale_intents_total`
 
-- Type: Counters
-- Meaning: Shared-projection loop cycles and stale-intent cleanup activity.
+- Type: Counters and histograms
+- Meaning: Shared-projection loop cycles, selected-intent age, processing time,
+  readiness-blocked wait, and stale-intent cleanup activity.
 - Use them for: Detecting whether follow-up work is running but constantly
-  finding stale or superseded intents.
+  finding stale or superseded intents, waiting on semantic readiness, or spending
+  time inside graph writes after partition selection.
 
 ### `pcg_dp_shared_acceptance_lookup_duration_seconds`
 ### `pcg_dp_shared_acceptance_lookup_errors_total`
@@ -305,6 +309,8 @@ collector/projector/reducer path.
 ### Shared Follow-Up
 
 - `pcg_dp_shared_projection_cycles_total`
+- `pcg_dp_shared_projection_intent_wait_seconds`
+- `pcg_dp_shared_projection_processing_seconds`
 - `pcg_dp_shared_projection_stale_intents_total`
 - `pcg_dp_shared_acceptance_lookup_duration_seconds`
 - `pcg_dp_shared_acceptance_lookup_errors_total`

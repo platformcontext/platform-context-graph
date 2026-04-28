@@ -421,6 +421,15 @@ func TestSelectPartitionBatchSkipsSQLAndInheritanceRowsUntilSemanticNodesCommitt
 			if len(result.SupersededIDs) != 0 {
 				t.Fatalf("SupersededIDs = %v, want empty", result.SupersededIDs)
 			}
+			if got, want := result.BlockedCount, 1; got != want {
+				t.Fatalf("BlockedCount = %d, want %d", got, want)
+			}
+			if len(result.BlockedRows) != 1 {
+				t.Fatalf("BlockedRows len = %d, want 1", len(result.BlockedRows))
+			}
+			if got, want := result.BlockedRows[0].IntentID, "blocked-1"; got != want {
+				t.Fatalf("BlockedRows[0].IntentID = %q, want %q", got, want)
+			}
 		})
 	}
 }
@@ -490,6 +499,12 @@ func TestSelectPartitionBatchKeepsScanningForReadyRowsWhenEarlierUnitsAreReadine
 	}
 	if len(result.LatestRows) != 1 {
 		t.Fatalf("len(LatestRows) = %d, want 1 ready row", len(result.LatestRows))
+	}
+	if got, want := result.BlockedCount, 1; got != want {
+		t.Fatalf("BlockedCount = %d, want %d", got, want)
+	}
+	if len(result.BlockedRows) != 1 {
+		t.Fatalf("BlockedRows len = %d, want 1", len(result.BlockedRows))
 	}
 	if got, want := result.LatestRows[0].IntentID, "ready-1"; got != want {
 		t.Fatalf("LatestRows[0].IntentID = %q, want %q", got, want)
@@ -561,6 +576,73 @@ func TestProcessPartitionOnceFullCycle(t *testing.T) {
 	}
 	if len(edges.writeCalls) != 1 {
 		t.Errorf("writeCalls = %d, want 1", len(edges.writeCalls))
+	}
+	if got, want := result.MaxIntentWaitSeconds, 60.0; got != want {
+		t.Errorf("MaxIntentWaitSeconds = %.3f, want %.3f", got, want)
+	}
+	if result.ProcessingDurationSeconds < 0 {
+		t.Errorf("ProcessingDurationSeconds = %.3f, want non-negative", result.ProcessingDurationSeconds)
+	}
+}
+
+func TestProcessPartitionOnceReportsReadinessBlockedWait(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 17, 14, 0, 0, 0, time.UTC)
+	t0 := now.Add(-5 * time.Minute)
+	reader := &stubSharedIntentReader{
+		pending: []SharedProjectionIntentRow{
+			{
+				IntentID:         "blocked-1",
+				ProjectionDomain: DomainSQLRelationships,
+				PartitionKey:     "pk-a",
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-a",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				CreatedAt:        t0,
+			},
+		},
+	}
+	lease := &stubLeaseManager{claimResult: true}
+	edges := &stubEdgeWriter{}
+
+	cfg := PartitionProcessorConfig{
+		Domain:         DomainSQLRelationships,
+		PartitionID:    0,
+		PartitionCount: 1,
+		LeaseOwner:     "worker-1",
+		LeaseTTL:       30 * time.Second,
+		BatchLimit:     100,
+	}
+
+	result, err := ProcessPartitionOnce(
+		context.Background(),
+		now,
+		cfg,
+		lease,
+		reader,
+		edges,
+		acceptedGenerationFixed("gen-1", true),
+		nil,
+		readinessLookupFixed(false, false),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProcessPartitionOnce() error = %v", err)
+	}
+	if got, want := result.BlockedReadiness, 1; got != want {
+		t.Fatalf("BlockedReadiness = %d, want %d", got, want)
+	}
+	if got, want := result.ProcessedIntents, 0; got != want {
+		t.Fatalf("ProcessedIntents = %d, want %d", got, want)
+	}
+	if got, want := result.MaxBlockedIntentWaitSeconds, 300.0; got != want {
+		t.Fatalf("MaxBlockedIntentWaitSeconds = %.3f, want %.3f", got, want)
+	}
+	if len(reader.completedIDs) != 0 {
+		t.Fatalf("completedIDs = %v, want empty while readiness blocked", reader.completedIDs)
 	}
 }
 

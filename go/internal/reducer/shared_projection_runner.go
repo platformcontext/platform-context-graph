@@ -304,18 +304,68 @@ func (r *SharedProjectionRunner) processPartitionWithTelemetry(
 			slog.Int("partition_id", partitionID),
 			slog.Int("partition_count", partitionCount),
 			slog.Int("blocked_count", result.BlockedReadiness),
+			slog.Float64("blocked_intent_wait_seconds", result.MaxBlockedIntentWaitSeconds),
 			telemetry.PhaseAttr(telemetry.PhaseShared),
 		)
 	}
 
+	if err == nil {
+		r.recordSharedProjectionTiming(ctx, domain, result)
+	}
+
 	if err == nil && result.ProcessedIntents > 0 {
-		r.recordSharedProjectionCycle(ctx, domain, duration)
+		r.recordSharedProjectionCycle(ctx, domain, duration, result)
 	}
 
 	return result, err
 }
 
-func (r *SharedProjectionRunner) recordSharedProjectionCycle(ctx context.Context, domain string, duration float64) {
+func (r *SharedProjectionRunner) recordSharedProjectionTiming(
+	ctx context.Context,
+	domain string,
+	result PartitionProcessResult,
+) {
+	if r.Instruments == nil {
+		return
+	}
+	if result.MaxIntentWaitSeconds > 0 {
+		r.Instruments.SharedProjectionIntentWaitDuration.Record(
+			ctx,
+			result.MaxIntentWaitSeconds,
+			metric.WithAttributes(
+				telemetry.AttrDomain(domain),
+				telemetry.AttrOutcome("processed"),
+			),
+		)
+	}
+	if result.MaxBlockedIntentWaitSeconds > 0 {
+		r.Instruments.SharedProjectionIntentWaitDuration.Record(
+			ctx,
+			result.MaxBlockedIntentWaitSeconds,
+			metric.WithAttributes(
+				telemetry.AttrDomain(domain),
+				telemetry.AttrOutcome("readiness_blocked"),
+			),
+		)
+	}
+	if result.ProcessingDurationSeconds > 0 {
+		r.Instruments.SharedProjectionProcessingDuration.Record(
+			ctx,
+			result.ProcessingDurationSeconds,
+			metric.WithAttributes(
+				telemetry.AttrDomain(domain),
+				telemetry.AttrOutcome("completed"),
+			),
+		)
+	}
+}
+
+func (r *SharedProjectionRunner) recordSharedProjectionCycle(
+	ctx context.Context,
+	domain string,
+	duration float64,
+	result PartitionProcessResult,
+) {
 	if r.Instruments != nil {
 		attrs := metric.WithAttributes(
 			telemetry.AttrDomain(domain),
@@ -331,6 +381,10 @@ func (r *SharedProjectionRunner) recordSharedProjectionCycle(ctx context.Context
 			logAttrs = append(logAttrs, a)
 		}
 		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
+		logAttrs = append(logAttrs, slog.Float64("intent_wait_seconds", result.MaxIntentWaitSeconds))
+		logAttrs = append(logAttrs, slog.Float64("processing_duration_seconds", result.ProcessingDurationSeconds))
+		logAttrs = append(logAttrs, slog.Float64("selection_duration_seconds", result.SelectionDurationSeconds))
+		logAttrs = append(logAttrs, slog.Float64("lease_claim_duration_seconds", result.LeaseClaimDurationSeconds))
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseShared))
 		r.Logger.InfoContext(ctx, "shared projection cycle completed", logAttrs...)
 	}

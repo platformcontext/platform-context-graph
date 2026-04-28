@@ -156,11 +156,14 @@ For shared-write debugging specifically:
   held back by an in-flight conflict domain/key, so operators can distinguish
   conflict routing from graph backend slowness.
 - The shared-edge bounded-group path also exposes
+  `pcg_dp_shared_projection_intent_wait_seconds`,
+  `pcg_dp_shared_projection_processing_seconds`,
   `pcg_dp_shared_edge_write_groups_total`,
   `pcg_dp_shared_edge_write_group_duration_seconds`, and
   `pcg_dp_shared_edge_write_group_statement_count` with `domain` attributes so
-  operators can distinguish one monster grouped write from many bounded groups
-  during reducer convergence.
+  operators can distinguish selected-intent wait, readiness blocking, actual
+  shared graph-write processing, and one monster grouped write from many
+  bounded groups during reducer convergence.
 - The `code_call` deadlock-elimination path also exposes
   `pcg_dp_code_call_edge_batches_total` and
   `pcg_dp_code_call_edge_batch_duration_seconds` so operators can measure the
@@ -199,6 +202,11 @@ Shared-write-specific counters:
 
 - `pcg_dp_shared_projection_cycles_total` reports shared projection partition
   cycles by domain and partition key.
+- `pcg_dp_shared_projection_intent_wait_seconds` reports the maximum selected
+  intent age for a partition cycle, labeled by `outcome=processed` or
+  `outcome=readiness_blocked`.
+- `pcg_dp_shared_projection_processing_seconds` reports the graph-write and
+  completion duration after partition selection.
 - `pcg_dp_shared_projection_stale_intents_total` reports stale shared
   projection intents filtered during reducer processing.
 
@@ -211,6 +219,8 @@ When validating shared-write runtime changes in staging or production:
 
 1. Start with `pcg_dp_queue_depth`, `pcg_dp_queue_oldest_age_seconds`,
    `pcg_dp_shared_projection_cycles_total`,
+   `pcg_dp_shared_projection_intent_wait_seconds`,
+   `pcg_dp_shared_projection_processing_seconds`,
    `pcg_dp_shared_projection_stale_intents_total`,
    `pcg_dp_shared_edge_write_groups_total`,
    `pcg_dp_shared_edge_write_group_duration_seconds`,
@@ -300,6 +310,8 @@ log streams.
 | `pcg_dp_projector_stage_duration_seconds` | Projector stage duration | s | default |
 | `pcg_dp_reducer_run_duration_seconds` | Reducer intent execution duration | s | default |
 | `pcg_dp_reducer_queue_wait_seconds` | Reducer time from queue visibility to handler start | s | 0.001 .. 21600 |
+| `pcg_dp_shared_projection_intent_wait_seconds` | Shared projection intent age when a partition processes or blocks it | s | 0.001 .. 21600 |
+| `pcg_dp_shared_projection_processing_seconds` | Shared projection graph-write and completion duration after partition selection | s | 0.001 .. 60 |
 | `pcg_dp_canonical_write_duration_seconds` | Canonical graph write duration | s | default |
 | `pcg_dp_queue_claim_duration_seconds` | Queue work item claim duration | s | default |
 | `pcg_dp_postgres_query_duration_seconds` | Postgres query duration | s | 0.001 .. 2.5 |
@@ -339,6 +351,7 @@ The `pcg_dp_projector_stage_duration_seconds` histogram carries a `stage` attrib
 | `collector_kind` | Collector type (e.g. git) |
 | `domain` | Reducer or projection domain |
 | `partition_key` | Shared projection partition |
+| `outcome` | Timing outcome such as processed, completed, or readiness_blocked |
 | `stage` | Projector stage (build_projection, graph_write, content_write, intent_enqueue) |
 | `status` | Operation outcome (succeeded/failed) |
 | `queue` | Queue name for claim duration (projector/reducer) |
