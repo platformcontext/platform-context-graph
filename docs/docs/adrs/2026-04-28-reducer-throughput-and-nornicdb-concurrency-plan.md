@@ -842,6 +842,29 @@ loosening safe queue conflict families is not enough; the next reducer slice
 should reduce large-repo graph write/data-shape cost or shared projection work,
 then retest with the same 4-repo and 20-repo ladder.
 
+Commit `5756f549` adds inner-stage timing for the two late reducer-tail domains:
+`workload_materialization` and `deployment_mapping`. Focused run
+`pcg-reducer-large4-workload-deploy-timing-20260428T1902Z` drained healthy in
+`125s` with projector `4` succeeded, reducer `32` succeeded, and
+`code_calls 3870/3870`. The large PHP repo showed the next data-shape target:
+`deployment_mapping` spent `5.386s` loading facts and wrote zero infrastructure
+rows, while `workload_materialization` spent `5.479s` loading inputs and
+produced zero candidates. Graph write time in that final workload handler was
+`0.000s`.
+
+Run `pcg-reducer-clean20-workload-deploy-timing-20260428T1905Z` confirmed the
+same shape on the 20-repo corpus. It drained healthy in `129s` with projector
+`20` succeeded, reducer `160` succeeded, `code_calls 3987/3987`, and
+`repo_dependency 8/8`. Workload materialization total was `11.439s`, of which
+`9.064s` was input loading and only `0.378s` was graph writing; the largest
+workload handler spent `5.726s` loading inputs and produced zero candidates.
+Deployment mapping total was `9.265s`, of which `8.939s` was fact loading; it
+extracted only `2` infrastructure rows and spent `0.011s` writing
+infrastructure graph edges. CPU and disk remained idle-heavy:
+`cpu_idle_avg=77.52%`, `io_wait_avg=0.97%`, and `disk_idle_avg=82.84%`.
+This is a diagnostic win that points to filtered/narrow input loading for
+workload and deployment mapping before graph-write or worker-count changes.
+
 ### Change Impact Ledger
 
 Classify every reducer-throughput slice by the metric it was meant to move.
@@ -862,6 +885,7 @@ win when wall-clock evidence does not support that claim.
 | `0bb0fc17` | Skip first-generation SQL retractions | Remove safe no-op graph retractions for initial generations | Focused 4-repo wall `139s` to `133s`; SQL handler sum `12.194s` to `6.920s`; 20-repo wall `140s` to `134s`; SQL handler sum `13.874s` to `7.555s` | Measured reducer handler and wall-clock win |
 | `2c0c2b5a` | Filter SQL and semantic reducer fact loads by required fact kinds | Lower SQL and semantic handler load time | Focused 4-repo wall `133s` to `128s`; 20-repo wall `134s` to `128s`; SQL handler sum `7.555s` to `2.850s`; semantic handler sum `8.117s` to `4.908s` | Measured reducer handler and wall-clock win |
 | `4c2f94d3` / `d6279147` | Isolate code-call intent extraction into its own reducer queue conflict domain, then revert | Reduce code-graph queue wait by letting code-call intent extraction overlap with graph materializers | Focused 4-repo wall `128s` to `127s`, but 20-repo wall `128s` to `129s`; large-repo SQL/semantic queue waits dropped, while overlapping graph/shared work consumed the gain | Rejected throughput hypothesis; reverted |
+| `5756f549` | Workload and deployment-mapping inner-stage timing | Identify whether late reducer tail is input load, graph write, dependency reconciliation, replay, or phase publish | 20-repo workload total `11.439s`: input load `9.064s`, graph write `0.378s`; deployment total `9.265s`: fact load `8.939s`, infra graph write `0.011s`; wall stayed flat (`128s` to `129s`) | Diagnostic win; points to filtered input loading |
 
 The ledger now points past SQL/semantic fact loading as the only easy handler
 win. SQL and semantic graph writes are both small on the focused and 20-repo
@@ -874,7 +898,7 @@ remain idle-heavy.
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Phase 1 now includes reducer queue wait/handler duration telemetry, shared projection wait-versus-processing telemetry, scoped projector-drain proof, SQL retraction-scope proof, semantic and SQL inner-step timing, code-call readiness correction, first-generation SQL retract skipping, filtered reducer fact loading, and a reverted code-call conflict-domain split. Remote proofs include the clean 20-repo baseline `pcg-reducer-clean20-20260428T131056Z`, focused 4-repo proofs through `pcg-reducer-large4-codecall-conflict-20260428T1842Z`, the stopped invalid 20-repo semantic timing run that exposed `18` stuck `code_calls` intents, and completed 20-repo proofs through `pcg-reducer-clean20-codecall-conflict-20260428T18Z`. Commits `afd9fe5f`, `5242bfce`, `d7b7095a`, `0bb0fc17`, and `2c0c2b5a` show semantic graph writes are not the hot substep, code calls must gate on canonical readiness, SQL graph writes are not the hot SQL substep, first-generation SQL retract skipping drops 20-repo wall from `140s` to `134s`, and filtered fact loads drop 20-repo wall from `134s` to `128s` while reducing SQL handler sum from `7.555s` to `2.850s` and semantic handler sum from `8.117s` to `4.908s`. Commit `4c2f94d3` showed narrower code-call conflict routing was not a material throughput win (`128s` to `129s` on 20 repos), so `d6279147` reverted it. CPU and disk remain idle-heavy. | Target large-repo graph write/data-shape and shared projection work before any larger corpus; do not increase workers until a smaller proof moves wall time |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Phase 1 now includes reducer queue wait/handler duration telemetry, shared projection wait-versus-processing telemetry, scoped projector-drain proof, SQL retraction-scope proof, semantic and SQL inner-step timing, code-call readiness correction, first-generation SQL retract skipping, filtered reducer fact loading, a reverted code-call conflict-domain split, and workload/deployment-mapping inner-stage timing. Remote proofs include the clean 20-repo baseline `pcg-reducer-clean20-20260428T131056Z`, focused 4-repo proofs through `pcg-reducer-large4-workload-deploy-timing-20260428T1902Z`, the stopped invalid 20-repo semantic timing run that exposed `18` stuck `code_calls` intents, and completed 20-repo proofs through `pcg-reducer-clean20-workload-deploy-timing-20260428T1905Z`. Commits `afd9fe5f`, `5242bfce`, `d7b7095a`, `0bb0fc17`, and `2c0c2b5a` show semantic graph writes are not the hot substep, code calls must gate on canonical readiness, SQL graph writes are not the hot SQL substep, first-generation SQL retract skipping drops 20-repo wall from `140s` to `134s`, and filtered fact loads drop 20-repo wall from `134s` to `128s` while reducing SQL handler sum from `7.555s` to `2.850s` and semantic handler sum from `8.117s` to `4.908s`. Commit `4c2f94d3` showed narrower code-call conflict routing was not a material throughput win (`128s` to `129s` on 20 repos), so `d6279147` reverted it. Commit `5756f549` shows the remaining workload/deployment tail is dominated by input/fact loading, not graph writes. CPU and disk remain idle-heavy. | Filter/narrow workload and deployment-mapping input loads before graph-write or worker-count changes; do not increase workers until a smaller proof moves wall time |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |

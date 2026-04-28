@@ -22,6 +22,20 @@ behavior, read these pages in this order:
 3. `docs/docs/reference/telemetry/index.md`
 4. `docs/docs/architecture.md`
 
+## Skill Routing
+
+For PCG runtime diagnostics, reducer throughput, graph backend performance,
+queue behavior, remote proof runs, and ADR evidence updates, start with the
+`pcg-diagnostic-rigor` skill. Add specialized skills only when the change
+touches that surface:
+
+- `golang-engineering` for Go code edits and Go tests.
+- `cypher-query-rigor` for graph query/write/index or backend dialect work.
+- `concurrency-deadlock-rigor` for workers, leases, conflict keys, retries, or
+  queue ordering.
+- `pcg-correlation-truth` for correlation, materialization truth, or query truth.
+- `skill-creator` for creating or updating skills.
+
 ## Runtime Contract
 
 | Runtime | Responsibility | Command | Kubernetes shape |
