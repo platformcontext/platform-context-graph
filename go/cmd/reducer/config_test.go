@@ -288,3 +288,16 @@ func TestLoadCodeCallProjectionConfigDefaultsAcceptanceScanLimit(t *testing.T) {
 		t.Fatalf("AcceptanceScanLimit = %d, want %d", got, want)
 	}
 }
+
+func TestLoadCodeCallEdgeWriterTuningDefaultsToMeasuredLargeRepoBatch(t *testing.T) {
+	t.Parallel()
+
+	batchSize, groupBatchSize := loadCodeCallEdgeWriterTuning(func(string) string { return "" })
+
+	if got, want := batchSize, 1000; got != want {
+		t.Fatalf("batchSize = %d, want %d", got, want)
+	}
+	if got, want := groupBatchSize, defaultCodeCallEdgeGroupBatchSize; got != want {
+		t.Fatalf("groupBatchSize = %d, want %d", got, want)
+	}
+}

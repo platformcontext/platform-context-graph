@@ -340,6 +340,10 @@ Additional shared projection config:
 - `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` (default 250000) — maximum
   code-call shared intents scanned or loaded for one accepted repo/run before
   failing safely instead of projecting partial CALLS truth
+- `PCG_CODE_CALL_EDGE_BATCH_SIZE` (default 1000) — code-call edge rows per
+  grouped graph-write statement. Keep `pcg_dp_code_call_edge_batch_duration_seconds`
+  and shared projection completion logs in view when overriding this value; it
+  is a graph-write throughput knob, not a reducer worker-count substitute.
 
 In Kubernetes, size the Postgres connection pool to accommodate the total
 concurrent workers across all reducer replicas. Each worker holds one

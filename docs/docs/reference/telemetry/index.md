@@ -178,7 +178,10 @@ For shared-write debugging specifically:
   `pcg_dp_code_call_edge_batches_total` and
   `pcg_dp_code_call_edge_batch_duration_seconds` so operators can measure the
   isolated Neo4j batch transactions directly instead of inferring their
-  behavior from generic Neo4j timings.
+  behavior from generic Neo4j timings. The code-call edge writer defaults
+  `PCG_CODE_CALL_EDGE_BATCH_SIZE` to `1000`; lowering that value increases the
+  number of grouped graph-write transactions, while raising it should be proven
+  with these metrics and the code-call completion log's `write_duration_seconds`.
 - Traces show one projection attempt from claim to graph write.
 - Logs capture work-item completion, retry, dead-letter, and per-stage failure
   context.

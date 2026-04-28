@@ -46,7 +46,7 @@ const (
 	defaultRepoDependencyProjectionLeaseTTL      = 60 * time.Second
 	defaultRepoDependencyProjectionBatchLimit    = 100
 	defaultRepoDependencyProjectionLeaseOwner    = "repo-dependency-projection-runner"
-	defaultCodeCallEdgeBatchSize                 = 50
+	defaultCodeCallEdgeBatchSize                 = 1000
 	defaultCodeCallEdgeGroupBatchSize            = 1
 	defaultInheritanceEdgeGroupBatchSize         = 1
 	defaultSQLRelationshipEdgeGroupBatchSize     = 1
