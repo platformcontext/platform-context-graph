@@ -168,6 +168,10 @@ collector/projector/reducer path.
 - Type: Counters and histograms
 - Meaning: Shared-projection loop cycles, selected-intent age, processing time,
   readiness-blocked wait, and stale-intent cleanup activity.
+- Notes: `domain=code_calls` also includes the dedicated code-call projection
+  runner, whose logs add selected-intent wait, readiness-blocked wait,
+  selection duration, lease-claim duration, and processing duration for each
+  completed graph-write cycle.
 - Use them for: Detecting whether follow-up work is running but constantly
   finding stale or superseded intents, waiting on semantic readiness, or spending
   time inside graph writes after partition selection.

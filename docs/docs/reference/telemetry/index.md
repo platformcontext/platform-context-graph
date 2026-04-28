@@ -164,6 +164,12 @@ For shared-write debugging specifically:
   operators can distinguish selected-intent wait, readiness blocking, actual
   shared graph-write processing, and one monster grouped write from many
   bounded groups during reducer convergence.
+- The dedicated `code_calls` projection runner emits the same shared
+  projection wait and processing histograms, and its completed-cycle logs add
+  `intent_wait_seconds`, `blocked_intent_wait_seconds`,
+  `selection_duration_seconds`, `lease_claim_duration_seconds`, and
+  `processing_duration_seconds`. Use these fields to separate canonical-node
+  readiness delay and polling from the actual code-call graph write.
 - The `code_call` deadlock-elimination path also exposes
   `pcg_dp_code_call_edge_batches_total` and
   `pcg_dp_code_call_edge_batch_duration_seconds` so operators can measure the
@@ -203,10 +209,12 @@ Shared-write-specific counters:
 - `pcg_dp_shared_projection_cycles_total` reports shared projection partition
   cycles by domain and partition key.
 - `pcg_dp_shared_projection_intent_wait_seconds` reports the maximum selected
-  intent age for a partition cycle, labeled by `outcome=processed` or
+  intent age for a partition cycle, including the dedicated `code_calls`
+  projection runner, labeled by `outcome=processed` or
   `outcome=readiness_blocked`.
 - `pcg_dp_shared_projection_processing_seconds` reports the graph-write and
-  completion duration after partition selection.
+  completion duration after partition selection. For `domain=code_calls`, this
+  covers the code-call runner's retract, write, and completion-mark window.
 - `pcg_dp_shared_projection_stale_intents_total` reports stale shared
   projection intents filtered during reducer processing.
 
