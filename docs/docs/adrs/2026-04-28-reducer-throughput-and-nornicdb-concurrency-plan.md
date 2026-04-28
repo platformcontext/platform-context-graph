@@ -722,6 +722,59 @@ projection completed without readiness-blocked observations; `20` completed
 cycles wrote `3,967` rows with `7.802s` processing time and `8.072s` total
 cycle duration.
 
+Commit `d7b7095a` adds inner-step timing to
+`sql_relationship_materialization`: fact loading, extraction, retraction,
+write-row shaping, graph write, and total handler duration. Focused
+verification:
+
+- `go test ./internal/reducer -run 'TestSQLRelationshipHandlerLogsStageTiming|TestSQLRelationshipHandlerWritesEdges|TestExtractSQLRelationship' -count=1`;
+- `go test ./internal/reducer -count=1`;
+- `go test ./internal/reducer ./internal/telemetry -count=1`;
+- `go vet ./internal/reducer`;
+- `git diff --check`.
+
+Run `pcg-reducer-large4-sql-timing-20260428T1758Z` used commit `d7b7095a`
+with rebuilt binaries and the same focused 4-repo corpus. It drained healthy
+in `139s`, with projector `4` succeeded, reducer `32` succeeded, and
+`code_calls` shared intents `3870/3870` completed. The SQL split showed graph
+write time was not the SQL bottleneck: across `4` SQL handlers and `184,782`
+loaded facts, total SQL handler time was `12.193s`; fact loading was `6.654s`,
+SQL relationship extraction was `0.127s`, retraction was `5.385s`, write-row
+shaping was effectively zero, and graph writes were only `0.027s`.
+
+Commit `0bb0fc17` applies the measured SQL optimization: skip SQL relationship
+retraction for first-generation attempts when `PriorGenerationCheck` proves the
+scope has no previous generation. Retries remain conservative (`attempt_count`
+greater than `1` still retracts), and SQL still retracts when a prior generation
+exists. Focused verification:
+
+- `go test ./internal/reducer -run 'TestSQLRelationshipHandlerSkipsFirstGenerationRetract|TestSQLRelationshipHandlerRetractsWhenPriorGenerationExists|TestSQLRelationshipHandlerLogsStageTiming|TestSQLRelationshipHandlerWritesEdges' -count=1`;
+- `go test ./internal/reducer -count=1`;
+- `go test ./internal/reducer ./internal/telemetry -count=1`;
+- `go vet ./internal/reducer`;
+- `git diff --check`.
+
+Run `pcg-reducer-large4-sql-skip-retract-20260428T1805Z` used commit
+`0bb0fc17` with rebuilt binaries and the same focused 4-repo corpus. It drained
+healthy in `133s`, improving from the prior SQL timing proof at `139s`.
+SQL handler sum dropped from `12.194s` to `6.920s`, SQL handler max dropped
+from `10.636s` to `5.516s`, and measured SQL retraction time dropped from
+`5.385s` to `0.000s`. The remaining SQL cost was almost entirely fact loading:
+`6.752s` load time across `184,782` facts, with graph writes at `0.036s`.
+Host resources still had headroom: `cpu_idle_avg=77.16%`,
+`disk_idle_avg=90.16%`.
+
+Run `pcg-reducer-clean20-sql-skip-retract-20260428T1810Z` then validated the
+same change on the 20-repo corpus. It drained healthy in `134s`, improving from
+the prior completed 20-repo proof at `140s` and the original clean 20-repo
+baseline at `162s`. Terminal state was projector `20` succeeded, reducer `160`
+succeeded, and shared intents complete: `code_calls 3987/3987`,
+`repo_dependency 7/7`. SQL handler sum dropped from `13.874s` in the
+`5242bfce` 20-repo proof to `7.555s`, SQL handler max dropped from `11.076s`
+to `5.477s`, and measured SQL retraction time stayed at `0.000s`. The
+remaining SQL cost was again fact loading: `7.376s` load time across `195,020`
+facts, while graph writes were only `0.029s`.
+
 ### Change Impact Ledger
 
 Classify every reducer-throughput slice by the metric it was meant to move.
@@ -738,20 +791,20 @@ win when wall-clock evidence does not support that claim.
 | `367060fd` | Scope grouped SQL relationship retractions by exact source label and relationship type | Lower SQL handler time | Focused wall moved `140s` to `138s`; SQL handler max moved `11.543s` to `10.634s`; SQL wait stayed flat (`33.651s` to `32.946s`) | Safe query-shape cleanup, marginal handler win |
 | `afd9fe5f` | Semantic materialization inner-step timing | Identify whether semantic cost is fact load, extraction, graph write, or readiness publication | Focused 4-repo semantic total `7.428s`: fact load `6.998s`, graph write `0.256s`; 20-repo semantic total `7.968s`: fact load `7.383s`, graph write `0.402s` | Diagnostic win; points to fact-loading/data-shape work |
 | `5242bfce` | Gate code-call shared projection on canonical-node readiness instead of semantic-node readiness | Remove code-call readiness wait that can never resolve for repos without semantic reducer items | `afd9fe5f` 20-repo run stuck at `3969/3987` code-call intents; `5242bfce` rerun completed `3987/3987` and drained in `140s` versus original clean 20-repo baseline `162s` | Correctness and tail-latency win |
+| `d7b7095a` | SQL materialization inner-step timing | Identify whether SQL cost is fact load, extraction, retract, graph write, or row shaping | Focused 4-repo SQL total `12.193s`: fact load `6.654s`, retract `5.385s`, graph write `0.027s` | Diagnostic win; identified retract and fact-load costs |
+| `0bb0fc17` | Skip first-generation SQL retractions | Remove safe no-op graph retractions for initial generations | Focused 4-repo wall `139s` to `133s`; SQL handler sum `12.194s` to `6.920s`; 20-repo wall `140s` to `134s`; SQL handler sum `13.874s` to `7.555s` | Measured reducer handler and wall-clock win |
 
-The ledger says the next performance slice should not be another broad SQL
-shape tweak unless inner-step SQL timing proves a specific SQL substep is still
-dominant. Semantic timing now shows graph writes are not the hot substep for
-the focused or 20-repo corpus; fact loading/data shape is the first semantic
-target, with SQL handler timing still worth splitting because SQL remains the
-largest handler max in the 20-repo proof.
+The ledger now points to reducer fact loading/data shape as the next
+performance slice. SQL and semantic graph writes are both small on the focused
+and 20-repo proofs; the remaining SQL and semantic handler cost is dominated by
+loading all facts for a generation when each domain only needs a subset.
 
 ## Chunk Status
 
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Phase 1 now includes reducer queue wait/handler duration telemetry, shared projection wait-versus-processing telemetry, scoped projector-drain proof, SQL retraction-scope proof, semantic materialization inner-step timing, and code-call readiness correction. Remote proofs include the clean 20-repo baseline `pcg-reducer-clean20-20260428T131056Z`, focused 4-repo proofs through `pcg-reducer-large4-semantic-timing-20260428T172941Z`, the stopped invalid 20-repo semantic timing run that exposed `18` stuck `code_calls` intents, and the completed 20-repo proof `pcg-reducer-clean20-codecall-readiness-20260428T1748Z`. Commits `afd9fe5f` and `5242bfce` show semantic graph writes are not the hot substep (`20`-repo semantic total `7.968s`, fact load `7.383s`, graph write `0.402s`) and that `code_calls` must gate on `canonical_nodes_committed` instead of `semantic_nodes_committed` (`3987/3987` intents completed; wall `140s` versus original clean 20-repo `162s`). CPU and disk remain idle-heavy (`cpu_idle_avg=77.30%`, `disk_idle_avg=90.85%`). | Split SQL handler timing and start semantic fact-loading/data-shape optimization; then rerun the 20-25 repo proof before any larger corpus |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Phase 1 now includes reducer queue wait/handler duration telemetry, shared projection wait-versus-processing telemetry, scoped projector-drain proof, SQL retraction-scope proof, semantic and SQL inner-step timing, code-call readiness correction, and first-generation SQL retract skipping. Remote proofs include the clean 20-repo baseline `pcg-reducer-clean20-20260428T131056Z`, focused 4-repo proofs through `pcg-reducer-large4-sql-skip-retract-20260428T1805Z`, the stopped invalid 20-repo semantic timing run that exposed `18` stuck `code_calls` intents, and completed 20-repo proofs `pcg-reducer-clean20-codecall-readiness-20260428T1748Z` and `pcg-reducer-clean20-sql-skip-retract-20260428T1810Z`. Commits `afd9fe5f`, `5242bfce`, `d7b7095a`, and `0bb0fc17` show semantic graph writes are not the hot substep, code calls must gate on canonical readiness, SQL graph writes are not the hot SQL substep, and first-generation SQL retract skipping drops 20-repo wall from `140s` to `134s` while reducing SQL handler sum from `13.874s` to `7.555s`. CPU and disk remain idle-heavy. | Start reducer fact-loading/data-shape optimization for SQL and semantic domains; then rerun the 20-25 repo proof before any larger corpus |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
