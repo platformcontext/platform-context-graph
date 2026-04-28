@@ -1020,6 +1020,77 @@ should not split code-call retracts into multiple grouped label statements
 without a NornicDB-side plan or direct query-profile evidence that proves the
 backend can avoid repeating the relationship delete work per label.
 
+Commit `6a6d6c36` applies the durable no-op retract proof for the code-call
+shared lane. The runner skips code-call retraction only when all of these are
+true:
+
+- the loaded acceptance unit has active rows,
+- no stale rows are present for that acceptance unit,
+- the intent store can prove there are no previously completed code-call
+  intents for the same `scope_id + acceptance_unit_id + projection_domain`.
+
+If the history lookup is unavailable, errors, or finds prior completed work,
+the runner keeps the conservative retract-before-write path. This preserves the
+retry and generation-change safety rule: a new generation that sees stale rows
+still retracts, so partial writes from an earlier uncompleted generation cannot
+survive accidentally.
+
+Focused run `pcg-reducer-large4-codecall-skip-20260428T2210Z` rebuilt binaries
+from `6a6d6c36` and drained healthy with projector `4/4`, reducer `32/32`,
+and `code_calls 3870/3870`. Wall time was `122s`, down from `126s` for the
+corrected narrow-retract proof. More importantly, the code-call projection hot
+substep moved decisively: `retract_sum 3.545s -> 0.000s`,
+`duration_sum 5.250s -> 1.844s`, `processing_sum 5.146s -> 1.744s`, and
+`max_duration 4.092s -> 1.415s`. CPU and disk remained idle-heavy:
+`cpu_idle_avg=80.44%`, `io_wait_avg=0.56%`, and `disk_idle_avg=89.52%`.
+
+Run `pcg-reducer-clean20-codecall-skip-20260428T2215Z` repeated the proof on
+the 20-repo corpus and drained healthy with projector `20/20`, reducer
+`160/160`, `code_calls 3987/3987`, `repo_dependency 7/7`, no open work, and no
+failures. Wall time was `126s`, roughly flat against the corrected
+narrow-retract `127s` proof, but the code-call projection aggregate again
+showed the intended reducer-local win: `retract_sum 5.775s -> 0.000s`,
+`duration_sum 7.912s -> 2.016s`, `processing_sum 7.685s -> 1.787s`, and
+`max_duration 4.223s -> 1.356s`. CPU and disk stayed idle-heavy:
+`cpu_idle_avg=80.17%`, `io_wait_avg=0.78%`, and `disk_idle_avg=90.42%`.
+
+Classify this as a measured reducer handler win, not yet a mixed-corpus
+wall-clock breakthrough. The first-projection retract was real wasted work and
+is now removed safely, but the 20-repo wall still sits around the same
+`126-127s` band. That supports a reducer architecture checkpoint: the remaining
+large win is probably not another code-call Cypher tweak. The next track should
+re-evaluate how source-local completion, reducer-domain ordering, shared-lane
+readiness, and graph backend writes interact as a whole while CPU and disk are
+idle.
+
+### Architecture Checkpoint
+
+The evidence now separates three classes of work:
+
+1. **Harvested handler waste.** SQL first-generation retracts, broad fact
+   loads, and code-call first-projection retracts were measurable waste and
+   have been reduced.
+2. **Rejected micro-optimizations.** Code-call conflict splitting and
+   label-scoped grouped code-call retractions did not move throughput, and the
+   latter regressed badly.
+3. **Remaining architecture bottleneck.** CPU and disk remain idle while wall
+   time is governed by source-local long poles, shared projection completion,
+   and graph backend operations that do not saturate the host.
+
+The next reducer design pass should therefore answer bigger questions before
+more tuning:
+
+- Can destructive repo-wide graph rewrites become durable deltas for code,
+  inheritance, and SQL edges?
+- Can source-local projection publish smaller readiness units earlier, so
+  reducers do not wait behind a full-repo long pole?
+- Can shared projection lanes be partitioned by true acceptance unit only after
+  destructive overlaps are removed?
+- Does NornicDB need a direct relationship-delete / relationship-existence
+  hot path for PCG's `(source)-[TYPE]->(target)` edge families?
+- Which domains still do work after their graph writes are no-ops, and can that
+  be proven from durable state rather than inferred from timing?
+
 ### Change Impact Ledger
 
 Classify every reducer-throughput slice by the metric it was meant to move.
@@ -1046,6 +1117,7 @@ win when wall-clock evidence does not support that claim.
 | `29436198` | Split shared projection processing into retract, write, and completion-mark telemetry | Identify whether shared/code-call projection processing time is graph retract, graph write, or Postgres intent marking | Focused 4-repo largest code-call cycle: `4.085s` processing = `2.728s` retract + `1.308s` write + `0.050s` mark; 20-repo largest code-call cycle: `4.033s` processing = `2.781s` retract + `1.203s` write + `0.049s` mark; CPU/disk idle stayed high | Diagnostic win; points to code-call retract/query shape before worker changes |
 | `2ac5712d` | Narrow code-call retract relationship families by evidence source | Reduce unrelated relationship-family work in code-call shared projection retracts | Focused 4-repo wall `122s` to `126s`; code-call retract sum `3.507s` to `3.545s`; 20-repo wall `118s` to `127s`; code-call retract sum `5.937s` to `5.775s`, max retract `2.781s` to `2.794s`; CPU/disk idle stayed high | Safe query-shape cleanup, but rejected wall-clock hypothesis |
 | `1ea01796` / `12a0a0a3` | Add NornicDB code-entity `repo_id` indexes and split code-call retracts into label-scoped grouped statements, then revert | Let NornicDB use concrete label + repo_id anchors for code-call retracts | Corrected focused 4-repo proof waited for shared intents and regressed: wall `126s`/`132s`, code-call retract sum `3.545s` to `15.100s`, max retract `2.771s` to `12.172s`; CPU/disk idle stayed high | Rejected throughput hypothesis; reverted |
+| `6a6d6c36` | Skip first code-call retract when durable intent history proves no prior completed projection | Remove no-op destructive code-call graph deletes on initial accepted projection | Focused 4-repo code-call retract sum `3.545s` to `0.000s`, duration sum `5.250s` to `1.844s`, wall `126s` to `122s`; 20-repo retract sum `5.775s` to `0.000s`, duration sum `7.912s` to `2.016s`, wall `127s` to `126s`; CPU/disk idle stayed high | Measured reducer handler win; not yet a mixed-corpus wall-clock breakthrough |
 
 The ledger now points past SQL/semantic fact loading as the only easy handler
 win. SQL and semantic graph writes are both small on the focused and 20-repo
@@ -1058,7 +1130,7 @@ remain idle-heavy.
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Phase 1 now includes reducer queue wait/handler duration telemetry, shared projection wait-versus-processing telemetry, scoped projector-drain proof, SQL retraction-scope proof, semantic and SQL inner-step timing, code-call readiness correction, first-generation SQL retract skipping, filtered reducer fact loading, a reverted code-call conflict-domain split, workload/deployment-mapping inner-stage timing, filtered workload/deployment input loading, filtered code-call/deployable/inheritance input loading, shared projection retract/write/mark-complete telemetry, and measured code-call retract query-shape cleanup/rejection. Remote proofs include the clean 20-repo baseline `pcg-reducer-clean20-20260428T131056Z`, focused 4-repo proofs through `pcg-reducer-large4-label-retract-complete-20260428T2122Z`, the stopped invalid 20-repo semantic timing run that exposed `18` stuck `code_calls` intents, and completed 20-repo proofs through `pcg-reducer-clean20-narrow-retract-20260428T2045Z`. Commits `afd9fe5f`, `5242bfce`, `d7b7095a`, `0bb0fc17`, `2c0c2b5a`, `0fcc13a4`, `540fa708`, `29436198`, `2ac5712d`, `1ea01796`, and `12a0a0a3` show semantic graph writes are not the hot substep, code calls must gate on canonical readiness, SQL graph writes are not the hot SQL substep, first-generation SQL retract skipping drops 20-repo wall from `140s` to `134s`, filtered SQL/semantic fact loads drop 20-repo wall from `134s` to `128s`, filtered workload/deployment input loads drop 20-repo wall from `129s` to `127s`, filtering code-call/deployable/inheritance input loads cuts those handler sums but does not move wall time (`127s` to `131s`), code-call shared projection processing is dominated by graph retract/write rather than Postgres completion marking, narrowing code-call retract relationship families by evidence source does not improve the large `CALLS|REFERENCES` retract (`118s` to `127s` on 20 repos), and label-scoped grouped code-call retracts regress focused retract time (`~2.77s` max to `12.172s`) so they were reverted. Commit `4c2f94d3` showed narrower code-call conflict routing was not a material throughput win, so `d6279147` reverted it. CPU and disk remain idle-heavy. | Treat remaining broad fact-load cleanup as harvested; next reducer proof should either prove a durable first-generation/no-op code-call retract skip or inspect NornicDB relationship-delete internals directly before changing worker defaults |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Phase 1 now includes reducer queue wait/handler duration telemetry, shared projection wait-versus-processing telemetry, scoped projector-drain proof, SQL retraction-scope proof, semantic and SQL inner-step timing, code-call readiness correction, first-generation SQL retract skipping, filtered reducer fact loading, a reverted code-call conflict-domain split, workload/deployment-mapping inner-stage timing, filtered workload/deployment input loading, filtered code-call/deployable/inheritance input loading, shared projection retract/write/mark-complete telemetry, measured code-call retract query-shape cleanup/rejection, and durable first-projection code-call retract skipping. Remote proofs include the clean 20-repo baseline `pcg-reducer-clean20-20260428T131056Z`, focused 4-repo proofs through `pcg-reducer-large4-codecall-skip-20260428T2210Z`, the stopped invalid 20-repo semantic timing run that exposed `18` stuck `code_calls` intents, and completed 20-repo proofs through `pcg-reducer-clean20-codecall-skip-20260428T2215Z`. Commits `afd9fe5f`, `5242bfce`, `d7b7095a`, `0bb0fc17`, `2c0c2b5a`, `0fcc13a4`, `540fa708`, `29436198`, `2ac5712d`, `1ea01796`, `12a0a0a3`, and `6a6d6c36` show semantic graph writes are not the hot substep, code calls must gate on canonical readiness, SQL graph writes are not the hot SQL substep, first-generation SQL retract skipping drops 20-repo wall from `140s` to `134s`, filtered SQL/semantic fact loads drop 20-repo wall from `134s` to `128s`, filtered workload/deployment input loads drop 20-repo wall from `129s` to `127s`, filtering code-call/deployable/inheritance input loads cuts those handler sums but does not move wall time (`127s` to `131s`), code-call shared projection processing is dominated by graph retract/write rather than Postgres completion marking, narrowing code-call retract relationship families by evidence source does not improve the large `CALLS|REFERENCES` retract (`118s` to `127s` on 20 repos), label-scoped grouped code-call retracts regress focused retract time (`~2.77s` max to `12.172s`) so they were reverted, and durable first-projection code-call retract skipping removes the measured retract cost (`5.775s` to `0.000s` on 20 repos) without materially moving 20-repo wall (`127s` to `126s`). Commit `4c2f94d3` showed narrower code-call conflict routing was not a material throughput win, so `d6279147` reverted it. CPU and disk remain idle-heavy. | Treat reducer micro-tuning as mostly harvested; start an architecture checkpoint on destructive rewrite/delta semantics, source-local readiness granularity, shared-lane ownership, and NornicDB relationship hot paths before changing worker defaults |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
