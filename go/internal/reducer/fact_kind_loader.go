@@ -8,6 +8,8 @@ import (
 
 const (
 	factKindContentEntity = "content_entity"
+	factKindFile          = "file"
+	factKindParsedFile    = "parsed_file_data"
 	factKindRepository    = "repository"
 )
 

@@ -107,7 +107,13 @@ func (h PlatformMaterializationHandler) Handle(
 	// also write PROVISIONS_PLATFORM edges to the canonical graph.
 	if h.FactLoader != nil && h.InfrastructureMaterializer != nil {
 		factLoadStarted := time.Now()
-		facts, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+		facts, err := loadFactsForKinds(
+			ctx,
+			h.FactLoader,
+			intent.ScopeID,
+			intent.GenerationID,
+			[]string{factKindRepository, factKindFile, factKindParsedFile},
+		)
 		timing.factLoadDuration = time.Since(factLoadStarted)
 		if err != nil {
 			return Result{}, fmt.Errorf("load facts for infrastructure platform materialization: %w", err)

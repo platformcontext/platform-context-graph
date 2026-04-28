@@ -28,7 +28,13 @@ func (l CorrelatedWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
 		return nil, nil, fmt.Errorf("correlated workload projection fact loader is required")
 	}
 
-	envelopes, err := l.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	envelopes, err := loadFactsForKinds(
+		ctx,
+		l.FactLoader,
+		intent.ScopeID,
+		intent.GenerationID,
+		[]string{factKindRepository, factKindFile},
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load facts for correlated workload projection: %w", err)
 	}
@@ -143,7 +149,13 @@ func (l CorrelatedWorkloadProjectionInputLoader) enrichDeploymentRepoEnvironment
 	}
 
 	for repoID, identity := range identities {
-		envelopes, err := l.FactLoader.ListFacts(ctx, identity.ScopeID, identity.GenerationID)
+		envelopes, err := loadFactsForKinds(
+			ctx,
+			l.FactLoader,
+			identity.ScopeID,
+			identity.GenerationID,
+			[]string{factKindFile},
+		)
 		if err != nil {
 			slog.Warn("load deployment repo facts for environment extraction",
 				"error", err, "repo_id", repoID,

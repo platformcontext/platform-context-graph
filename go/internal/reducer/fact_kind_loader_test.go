@@ -121,6 +121,125 @@ func TestSemanticEntityMaterializationHandlerUsesKindFilteredFactLoader(t *testi
 	}
 }
 
+func TestCorrelatedWorkloadProjectionInputLoaderUsesKindFilteredFactLoader(t *testing.T) {
+	t.Parallel()
+
+	loader := &recordingKindFactLoader{
+		byKind: []facts.Envelope{
+			{
+				FactKind:  "repository",
+				SourceRef: facts.Ref{SourceSystem: "git"},
+				Payload: map[string]any{
+					"graph_id": "repo-1",
+					"name":     "payments",
+				},
+			},
+			{
+				FactKind:  "file",
+				SourceRef: facts.Ref{SourceSystem: "git"},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"relative_path": "deploy/payment.yaml",
+					"parsed_file_data": map[string]any{
+						"k8s_resources": []any{
+							map[string]any{"kind": "Deployment", "namespace": "prod"},
+						},
+					},
+				},
+			},
+		},
+		all: []facts.Envelope{
+			{FactKind: "content_entity"},
+		},
+	}
+	inputLoader := CorrelatedWorkloadProjectionInputLoader{FactLoader: loader}
+
+	candidates, _, err := inputLoader.LoadWorkloadProjectionInputs(context.Background(), Intent{
+		IntentID:     "intent-workload-kind-filter",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		SourceSystem: "git",
+		Domain:       DomainWorkloadMaterialization,
+		EntityKeys:   []string{"repo-1"},
+		EnqueuedAt:   time.Now(),
+		AvailableAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("LoadWorkloadProjectionInputs() error = %v, want nil", err)
+	}
+	if loader.listFactsCalls != 0 {
+		t.Fatalf("ListFacts() calls = %d, want 0", loader.listFactsCalls)
+	}
+	if got, want := strings.Join(loader.kindCalls[0], ","), "repository,file"; got != want {
+		t.Fatalf("ListFactsByKind() kinds = %q, want %q", got, want)
+	}
+	if got, want := len(candidates), 1; got != want {
+		t.Fatalf("candidates = %d, want %d", got, want)
+	}
+}
+
+func TestPlatformMaterializationHandlerUsesKindFilteredFactLoaderForInfrastructure(t *testing.T) {
+	t.Parallel()
+
+	loader := &recordingKindFactLoader{
+		byKind: []facts.Envelope{
+			{
+				ScopeID:  "scope-1",
+				FactKind: "repository",
+				Payload: map[string]any{
+					"repo_id": "repo-1",
+					"name":    "infra",
+				},
+			},
+			{
+				ScopeID:  "scope-1",
+				FactKind: "file",
+				Payload: map[string]any{
+					"repo_id": "repo-1",
+					"parsed_file_data": map[string]any{
+						"terraform_resources": []any{
+							map[string]any{
+								"resource_type": "aws_eks_cluster",
+								"resource_name": "main",
+							},
+						},
+					},
+				},
+			},
+		},
+		all: []facts.Envelope{
+			{FactKind: "content_entity"},
+		},
+	}
+	handler := PlatformMaterializationHandler{
+		Writer: &recordingPlatformMaterializationWriter{
+			result: PlatformMaterializationWriteResult{CanonicalWrites: 1},
+		},
+		FactLoader:                 loader,
+		InfrastructureMaterializer: NewInfrastructurePlatformMaterializer(&recordingCypherExecutor{}),
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:        "intent-platform-kind-filter",
+		ScopeID:         "scope-1",
+		GenerationID:    "generation-1",
+		Domain:          DomainDeploymentMapping,
+		EntityKeys:      []string{"repo:repo-1"},
+		RelatedScopeIDs: []string{"scope-1"},
+		EnqueuedAt:      time.Now(),
+		AvailableAt:     time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if loader.listFactsCalls != 0 {
+		t.Fatalf("ListFacts() calls = %d, want 0", loader.listFactsCalls)
+	}
+	if got, want := strings.Join(loader.kindCalls[0], ","), "repository,file,parsed_file_data"; got != want {
+		t.Fatalf("ListFactsByKind() kinds = %q, want %q", got, want)
+	}
+}
+
 type recordingKindFactLoader struct {
 	all            []facts.Envelope
 	byKind         []facts.Envelope

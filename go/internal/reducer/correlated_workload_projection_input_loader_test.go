@@ -3,6 +3,7 @@ package reducer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -344,13 +345,14 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironmen
 		},
 	}
 
-	loader := CorrelatedWorkloadProjectionInputLoader{
-		FactLoader: &scopedFactLoader{
-			envelopesByScope: map[string][]facts.Envelope{
-				"scope-app":    sourceEnvelopes,
-				"scope-deploy": deployEnvelopes,
-			},
+	factLoader := &scopedFactLoader{
+		envelopesByScope: map[string][]facts.Envelope{
+			"scope-app":    sourceEnvelopes,
+			"scope-deploy": deployEnvelopes,
 		},
+	}
+	loader := CorrelatedWorkloadProjectionInputLoader{
+		FactLoader: factLoader,
 		ResolvedLoader: &stubResolvedRelationshipLoader{
 			resolved: []relationships.ResolvedRelationship{
 				{
@@ -404,6 +406,18 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironmen
 	}
 	if envs[0] != "production" || envs[1] != "qa" {
 		t.Fatalf("deploymentEnvs[repo-deploy] = %v, want [production qa]", envs)
+	}
+	if got, want := factLoader.kindCalls[0].scopeID, "scope-app"; got != want {
+		t.Fatalf("kindCalls[0].scopeID = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(factLoader.kindCalls[0].kinds, ","), "repository,file"; got != want {
+		t.Fatalf("kindCalls[0].kinds = %q, want %q", got, want)
+	}
+	if got, want := factLoader.kindCalls[1].scopeID, "scope-deploy"; got != want {
+		t.Fatalf("kindCalls[1].scopeID = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(factLoader.kindCalls[1].kinds, ","), "file"; got != want {
+		t.Fatalf("kindCalls[1].kinds = %q, want %q", got, want)
 	}
 }
 
@@ -562,6 +576,12 @@ func TestCorrelatedWorkloadProjectionInputLoaderSkipsSameRepoDeployment(t *testi
 type scopedFactLoader struct {
 	envelopesByScope map[string][]facts.Envelope
 	calls            int
+	kindCalls        []scopedFactKindCall
+}
+
+type scopedFactKindCall struct {
+	scopeID string
+	kinds   []string
 }
 
 func (f *scopedFactLoader) ListFacts(_ context.Context, scopeID, _ string) ([]facts.Envelope, error) {
@@ -571,6 +591,33 @@ func (f *scopedFactLoader) ListFacts(_ context.Context, scopeID, _ string) ([]fa
 		return nil, fmt.Errorf("no envelopes for scope %q", scopeID)
 	}
 	return envelopes, nil
+}
+
+func (f *scopedFactLoader) ListFactsByKind(
+	_ context.Context,
+	scopeID string,
+	_ string,
+	factKinds []string,
+) ([]facts.Envelope, error) {
+	f.kindCalls = append(f.kindCalls, scopedFactKindCall{
+		scopeID: scopeID,
+		kinds:   append([]string(nil), factKinds...),
+	})
+	envelopes, ok := f.envelopesByScope[scopeID]
+	if !ok {
+		return nil, fmt.Errorf("no envelopes for scope %q", scopeID)
+	}
+	allowed := make(map[string]struct{}, len(factKinds))
+	for _, factKind := range factKinds {
+		allowed[factKind] = struct{}{}
+	}
+	filtered := make([]facts.Envelope, 0, len(envelopes))
+	for _, envelope := range envelopes {
+		if _, ok := allowed[envelope.FactKind]; ok {
+			filtered = append(filtered, envelope)
+		}
+	}
+	return filtered, nil
 }
 
 type stubScopeResolver struct {
