@@ -161,6 +161,10 @@ type ReducerQueue struct {
 	MaxAttempts   int
 	Now           func() time.Time
 
+	// ClaimDomain optionally restricts this queue instance to one reducer
+	// domain. Empty keeps the default all-domain reducer behavior.
+	ClaimDomain reducer.Domain
+
 	// RequireProjectorDrainBeforeClaim keeps reducer graph writes from
 	// contending with source-local projection. It is intended for NornicDB
 	// local_authoritative evaluation, where canonical projector writes and
@@ -288,7 +292,7 @@ func (q ReducerQueue) Claim(ctx context.Context) (reducer.Intent, bool, error) {
 		ctx,
 		claimReducerWorkQuery,
 		now,
-		"",
+		q.claimDomainFilter(),
 		q.LeaseOwner,
 		now.Add(q.LeaseDuration),
 		q.RequireProjectorDrainBeforeClaim,
@@ -384,8 +388,20 @@ func (q ReducerQueue) validate() error {
 	if q.LeaseDuration <= 0 {
 		return errors.New("reducer queue lease duration must be positive")
 	}
+	if q.ClaimDomain != "" {
+		if err := q.ClaimDomain.Validate(); err != nil {
+			return err
+		}
+	}
 
 	return nil
+}
+
+func (q ReducerQueue) claimDomainFilter() string {
+	if q.ClaimDomain == "" {
+		return ""
+	}
+	return string(q.ClaimDomain)
 }
 
 func (q ReducerQueue) now() time.Time {

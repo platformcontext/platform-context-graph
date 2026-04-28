@@ -190,9 +190,19 @@ func buildReducerService(
 			"query_profile", string(query.ProfileLocalAuthoritative),
 		)
 	}
+	claimDomain, err := loadReducerClaimDomain(getenv)
+	if err != nil {
+		return reducer.Service{}, fmt.Errorf("load reducer claim domain: %w", err)
+	}
+	if claimDomain != "" && logger != nil {
+		logger.Info("reducer claims restricted to domain",
+			"domain", string(claimDomain),
+		)
+	}
 	workQueue := postgres.NewReducerQueue(database, "reducer", time.Minute)
 	workQueue.RetryDelay = retryCfg.RetryDelay
 	workQueue.MaxAttempts = retryCfg.MaxAttempts
+	workQueue.ClaimDomain = claimDomain
 	workQueue.RequireProjectorDrainBeforeClaim = projectorDrainGate
 
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{

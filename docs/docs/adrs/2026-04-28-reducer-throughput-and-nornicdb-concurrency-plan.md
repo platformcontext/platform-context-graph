@@ -395,12 +395,20 @@ deployable-unit, workload, and deployment reducers, then prove whether the
 primary fix is query shape, backend lookup behavior, or conflict/readiness
 routing.
 
+Every fresh performance proof after this point must capture host resource
+headroom alongside queue timings: CPU idle, disk I/O idle or utilization,
+run wall time, queue wait, handler duration, conflict blocking, and graph
+backend query/write timing. Reducer speed work must classify the bottleneck as
+Cypher/query shape, graph index or lookup behavior, data shape/write
+amplification, conflict routing, or real CPU/disk saturation before changing
+worker defaults.
+
 ## Chunk Status
 
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Commit `ec57b741` on branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1`. Remote proofs now include the noisy first 20-repo run, the clean 20-repo edge-index run `pcg-reducer-clean20-20260428T131056Z`, and the focused 4-repo run `pcg-reducer-large4-20260428T131734Z`; see Phase 1 Runtime Evidence above. | Add shared projection partition wait/processing split and top slow work-item run summary |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Commit `ec57b741` on branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1`. Remote proofs now include the noisy first 20-repo run, the clean 20-repo edge-index run `pcg-reducer-clean20-20260428T131056Z`, and the focused 4-repo run `pcg-reducer-large4-20260428T131734Z`; see Phase 1 Runtime Evidence above. The current domain-lane slice adds `PCG_REDUCER_CLAIM_DOMAIN` so a reducer process can claim one domain for split-reducer diagnostics without changing all-domain defaults; focused tests cover single and batch claims plus startup validation. | Run domain-lane proofs on the 4-repo corpus with CPU idle and disk I/O idle/utilization captured, then add shared projection partition wait/processing split and top slow work-item run summary |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
