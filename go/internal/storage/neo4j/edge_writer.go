@@ -373,6 +373,13 @@ func (w *EdgeWriter) RetractEdges(
 	}
 
 	repoIDs := collectRepoIDs(rows)
+	if domain == reducer.DomainSQLRelationships {
+		if ge, ok := w.executor.(GroupExecutor); ok {
+			stmts := BuildRetractSQLRelationshipEdgeStatements(repoIDs, evidenceSource)
+			return WrapRetryableNeo4jError(ge.ExecuteGroup(ctx, stmts))
+		}
+	}
+
 	stmt, err := buildRetractStatement(domain, repoIDs, evidenceSource)
 	if err != nil {
 		return err
