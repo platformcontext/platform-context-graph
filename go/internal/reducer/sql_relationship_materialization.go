@@ -18,8 +18,9 @@ const (
 // SQLRelationshipMaterializationHandler reduces one SQL relationship follow-up
 // into canonical SQL edge writes (REFERENCES_TABLE, HAS_COLUMN, TRIGGERS).
 type SQLRelationshipMaterializationHandler struct {
-	FactLoader FactLoader
-	EdgeWriter SharedProjectionEdgeWriter
+	FactLoader           FactLoader
+	EdgeWriter           SharedProjectionEdgeWriter
+	PriorGenerationCheck PriorGenerationCheck
 }
 
 // Handle executes the SQL relationship materialization path.
@@ -77,16 +78,29 @@ func (h SQLRelationshipMaterializationHandler) Handle(
 	}
 
 	retractRows := buildSQLRelRetractRows(repositoryIDs)
-	retractStart := time.Now()
-	if err := h.EdgeWriter.RetractEdges(
-		ctx,
-		DomainSQLRelationships,
-		retractRows,
-		sqlRelationshipEvidenceSource,
-	); err != nil {
-		return Result{}, fmt.Errorf("retract canonical sql relationships: %w", err)
+	skipRetract, err := h.shouldSkipSQLRelationshipRetract(ctx, intent)
+	if err != nil {
+		return Result{}, err
 	}
-	retractDuration := time.Since(retractStart)
+	var retractDuration time.Duration
+	if skipRetract {
+		slog.InfoContext(ctx, "sql relationship materialization skipped first-generation retract",
+			slog.String(telemetry.LogKeyScopeID, intent.ScopeID),
+			slog.String(telemetry.LogKeyGenerationID, intent.GenerationID),
+			slog.String(telemetry.LogKeyDomain, string(intent.Domain)),
+		)
+	} else {
+		retractStart := time.Now()
+		if err := h.EdgeWriter.RetractEdges(
+			ctx,
+			DomainSQLRelationships,
+			retractRows,
+			sqlRelationshipEvidenceSource,
+		); err != nil {
+			return Result{}, fmt.Errorf("retract canonical sql relationships: %w", err)
+		}
+		retractDuration = time.Since(retractStart)
+	}
 
 	buildWriteStart := time.Now()
 	writeRows := buildSQLRelIntentRows(edgeRows)
@@ -111,6 +125,7 @@ func (h SQLRelationshipMaterializationHandler) Handle(
 		repoCount:              len(repositoryIDs),
 		edgeCount:              len(edgeRows),
 		writeRowCount:          len(writeRows),
+		skipRetract:            skipRetract,
 		loadDuration:           loadDuration,
 		extractDuration:        extractDuration,
 		retractDuration:        retractDuration,
@@ -141,6 +156,7 @@ type sqlRelationshipMaterializationTiming struct {
 	repoCount              int
 	edgeCount              int
 	writeRowCount          int
+	skipRetract            bool
 	loadDuration           time.Duration
 	extractDuration        time.Duration
 	retractDuration        time.Duration
@@ -161,6 +177,7 @@ func logSQLRelationshipMaterializationCompleted(
 		slog.Int("repo_count", timing.repoCount),
 		slog.Int("edge_count", timing.edgeCount),
 		slog.Int("write_row_count", timing.writeRowCount),
+		slog.Bool("skip_retract", timing.skipRetract),
 		slog.Float64("load_facts_duration_seconds", timing.loadDuration.Seconds()),
 		slog.Float64("extract_duration_seconds", timing.extractDuration.Seconds()),
 		slog.Float64("retract_duration_seconds", timing.retractDuration.Seconds()),
@@ -168,6 +185,17 @@ func logSQLRelationshipMaterializationCompleted(
 		slog.Float64("graph_write_duration_seconds", timing.graphWriteDuration.Seconds()),
 		slog.Float64("total_duration_seconds", timing.totalDuration.Seconds()),
 	)
+}
+
+func (h SQLRelationshipMaterializationHandler) shouldSkipSQLRelationshipRetract(ctx context.Context, intent Intent) (bool, error) {
+	if h.PriorGenerationCheck == nil || intent.AttemptCount > 1 {
+		return false, nil
+	}
+	hasPrior, err := h.PriorGenerationCheck(ctx, intent.ScopeID, intent.GenerationID)
+	if err != nil {
+		return false, fmt.Errorf("check prior generation for sql relationship retract: %w", err)
+	}
+	return !hasPrior, nil
 }
 
 // isSQLEntityType reports whether the entity type is a known SQL entity.

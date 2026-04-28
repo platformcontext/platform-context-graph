@@ -485,7 +485,99 @@ func TestSQLRelationshipHandlerLogsStageTiming(t *testing.T) {
 	}
 }
 
+func TestSQLRelationshipHandlerSkipsFirstGenerationRetract(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingSQLRelEdgeWriter{}
+	handler := SQLRelationshipMaterializationHandler{
+		FactLoader: &stubFactLoader{envelopes: sqlRelationshipEntityFacts()},
+		EdgeWriter: writer,
+		PriorGenerationCheck: func(_ context.Context, scopeID, generationID string) (bool, error) {
+			if scopeID != "scope-db" || generationID != "gen-1" {
+				t.Fatalf("PriorGenerationCheck(%q, %q), want scope-db/gen-1", scopeID, generationID)
+			}
+			return false, nil
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-sql-rel-1",
+		ScopeID:      "scope-db",
+		GenerationID: "gen-1",
+		SourceSystem: "git",
+		Domain:       DomainSQLRelationshipMaterialization,
+		EnqueuedAt:   time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		Status:       IntentStatusPending,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if writer.retractDomain != "" || len(writer.retractRows) != 0 {
+		t.Fatalf("retract = domain %q rows %d, want skipped", writer.retractDomain, len(writer.retractRows))
+	}
+	if len(writer.writeRows) == 0 {
+		t.Fatal("writeRows is empty, want SQL edges still written")
+	}
+}
+
+func TestSQLRelationshipHandlerRetractsWhenPriorGenerationExists(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingSQLRelEdgeWriter{}
+	handler := SQLRelationshipMaterializationHandler{
+		FactLoader: &stubFactLoader{envelopes: sqlRelationshipEntityFacts()},
+		EdgeWriter: writer,
+		PriorGenerationCheck: func(context.Context, string, string) (bool, error) {
+			return true, nil
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-sql-rel-1",
+		ScopeID:      "scope-db",
+		GenerationID: "gen-1",
+		SourceSystem: "git",
+		Domain:       DomainSQLRelationshipMaterialization,
+		EnqueuedAt:   time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		Status:       IntentStatusPending,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if writer.retractDomain != DomainSQLRelationships {
+		t.Fatalf("retractDomain = %q, want %q", writer.retractDomain, DomainSQLRelationships)
+	}
+}
+
 // --- test stubs ---
+
+func sqlRelationshipEntityFacts() []facts.Envelope {
+	return []facts.Envelope{
+		{
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"repo_id":     "repo-123",
+				"entity_id":   "content-entity:e_tbl1",
+				"entity_type": "SqlTable",
+				"entity_name": "public.users",
+			},
+		},
+		{
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"repo_id":     "repo-123",
+				"entity_id":   "content-entity:e_view1",
+				"entity_type": "SqlView",
+				"entity_name": "public.active_users",
+				"entity_metadata": map[string]any{
+					"source_tables": []any{"public.users"},
+				},
+			},
+		},
+	}
+}
 
 type recordingSQLRelEdgeWriter struct {
 	retractDomain         string
