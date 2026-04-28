@@ -343,12 +343,64 @@ The reducer throughput phase is complete when:
   or do PCG Cypher shapes still need label-specific splitting?
 - How much of the tail remains after semantic entity graph writes are fixed?
 
+## Phase 1 Runtime Evidence
+
+The clean 20-repo proof after stopping outstanding remote runs used PCG
+`0aa345d1`, rebuilt `pcg`, `pcg-api`, `pcg-ingester`, and `pcg-reducer`, and
+ran against the first 20 repos from `/home/ubuntu/pcg-test-repos` with
+NornicDB `v1.0.43` via the edge-index binary. `PCG_REDUCER_WORKERS` was unset;
+the runtime logged the default `workers=8`.
+
+Run `pcg-reducer-clean20-20260428T131056Z` drained healthy:
+
+- wall clock from graph start to detected queue drain: `162s`;
+- durable queue wall: projector `105.760s`, reducer `137.209s`;
+- terminal state: projector `20` succeeded, reducer `158` rows succeeded,
+  `pending=0`, `in_flight=0`, `retrying=0`, `dead_letter=0`, `failed=0`;
+- reducer executions logged: `177` successes because deployment mapping
+  re-executed during the local-authoritative reopen flow;
+- reducer queue wait: `p50=5.579s`, `p95=61.525s`, `max=61.549s`;
+- reducer handler duration: `p50=0.036s`, `p95=3.048s`, `max=11.979s`.
+
+The slowest handler was
+`sql_relationship_materialization/sql:api-php-boatwizardwebsolutions`
+(`11.979s` handler, `20.328s` queue wait). The largest queue-wait cluster was
+deployment mapping at about `61.5s` with sub-second handlers, which points to
+phase/readiness waiting rather than handler CPU. The largest source-local
+projector item was `api-php-boatwizardwebsolutions`: `153,902` facts,
+`138,712` content entities, `66.356s` projector duration, and `37.291s`
+canonical graph write.
+
+The focused 4-repo proof used the repos that appeared in the 20-repo reducer
+hot rows: `api-php-boatwizardwebsolutions`, `portal-php-yc-soldboats`,
+`api-node-communicator`, and `api-node-boats`.
+Run `pcg-reducer-large4-20260428T131734Z` also drained healthy:
+
+- wall clock from graph start to detected queue drain: `161s`;
+- durable queue wall: projector `102.459s`, reducer `130.741s`;
+- terminal state: projector `4` succeeded, reducer `32` rows succeeded,
+  all failure classes null;
+- reducer executions logged: `35` successes, again due deployment mapping
+  re-execution;
+- reducer queue wait: `p50=3.005s`, `p95=61.598s`, `max=72.458s`;
+- reducer handler duration: `p50=0.389s`, `p95=6.759s`, `max=11.504s`.
+
+This makes the 4-repo set a good next proof loop. It reproduces the largest
+handler families without waiting for the full 20-repo corpus, and it keeps the
+correctness surface broad enough to include service repos, deployment evidence,
+SQL relationships, semantic materialization, and workload/deployment mapping.
+The next optimization should not start by increasing worker counts. It should
+explain why `api-php-boatwizardwebsolutions` dominates SQL, semantic,
+deployable-unit, workload, and deployment reducers, then prove whether the
+primary fix is query shape, backend lookup behavior, or conflict/readiness
+routing.
+
 ## Chunk Status
 
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Commit `ec57b741` on branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1`. Remote 20-repo proof `pcg-reducer-observability-20-20260428T122028Z` rebuilt `pcg`, `pcg-api`, `pcg-ingester`, and `pcg-reducer` from `ec57b741`, used NornicDB `v1.0.43`, `PCG_CANONICAL_WRITE_TIMEOUT=120s`, and left `PCG_REDUCER_WORKERS` unset (runtime logged default `workers=8`). The run drained healthy despite unrelated background load on the shared test host: projector `20` succeeded, reducer `158` terminal rows succeeded, queue `pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`, and all persisted failure classes were null. Persisted queue wall time was projector `179.151s` and reducer `213.605s`. Reducer logs emitted `176` success events with separate wait/handler fields: queue wait `p50=6.732s p95=133.291s max=133.321s`; handler duration `p50=0.045s p95=3.171s max=12.695s`. Treat this as observability and health evidence, not a clean throughput benchmark, because another full-corpus NornicDB/PCG run was active on the same machine. | Add shared projection partition wait/processing split and top slow work-item run summary |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Commit `ec57b741` on branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1`. Remote proofs now include the noisy first 20-repo run, the clean 20-repo edge-index run `pcg-reducer-clean20-20260428T131056Z`, and the focused 4-repo run `pcg-reducer-large4-20260428T131734Z`; see Phase 1 Runtime Evidence above. | Add shared projection partition wait/processing split and top slow work-item run summary |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
