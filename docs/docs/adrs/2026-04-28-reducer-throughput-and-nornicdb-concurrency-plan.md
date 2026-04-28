@@ -646,6 +646,82 @@ slice should either add inner-step SQL handler timing (`ListFacts`, extraction,
 retract, write) or shift to the larger measured full-corpus reducer cost:
 semantic entity materialization query/write shape.
 
+Commit `afd9fe5f` adds inner-step timing to
+`semantic_entity_materialization`: fact loading, extraction, retract decision,
+graph write, readiness publication, and total handler duration. Focused
+verification:
+
+- `go test ./internal/reducer -run 'TestSemanticEntityMaterializationHandlerLogsStageTiming|TestSemanticEntityMaterialization' -count=1`;
+- `go test ./internal/reducer -count=1`;
+- `go test ./internal/reducer ./internal/telemetry -count=1`;
+- `go vet ./internal/reducer`;
+- `git diff --check`.
+
+Run `pcg-reducer-large4-semantic-timing-20260428T172941Z` used commit
+`afd9fe5f` with rebuilt binaries and the same focused 4-repo corpus. It
+drained healthy in `137s` with projector `4` succeeded, reducer `32`
+succeeded, no failed/dead-letter work, and `code_calls` shared intents
+`3870/3870` completed. Host resources still had headroom:
+`cpu_idle_avg=77.21%`, `cpu_idle_p50=83.00%`, `cpu_idle_min=23.00%`,
+`disk_util_avg=14.05%`, `disk_util_p50=8.90%`, `disk_util_max=49.00%`, and
+`disk_idle_avg=85.95%`.
+
+The semantic split disproved semantic graph write as the focused-corpus hot
+path. Across `4` semantic handlers and `184,779` loaded facts, total semantic
+handler time was `7.428s`; `load_facts` accounted for `6.998s` of that total,
+while graph writes accounted for only `0.256s`. The largest semantic handler
+spent `5.610s` loading facts and only `0.170s` writing the graph. The next
+semantic optimization should therefore target reducer fact loading/data shape
+before Cypher write shape.
+
+The first 20-repo semantic timing run on `afd9fe5f` exposed a reducer
+readiness bug instead of producing a valid throughput proof. The durable
+reducer queue drained, but `18` `code_calls` shared intents remained pending
+across `13` acceptance units because the code-call projection runner waited
+for `semantic_nodes_committed` readiness. Those repos had canonical
+Function/Class/File nodes from source-local projection but no semantic reducer
+item that would ever publish semantic readiness. The run was manually stopped
+after evidence extraction with projector `20` succeeded, reducer `160`
+succeeded, and `code_calls` shared intents at `3969/3987` complete.
+
+Commit `5242bfce` fixes that correctness and tail-latency issue by gating
+`code_calls` shared projection on `canonical_nodes_committed` readiness while
+leaving SQL and inheritance shared edge domains gated on
+`semantic_nodes_committed`. Focused verification:
+
+- `go test ./internal/reducer -run 'TestSharedProjectionReadinessPhaseUsesCanonicalNodesForCodeCalls|TestCodeCallProjectionRunnerUsesCanonicalNodeReadiness|TestCodeCallProjectionRunnerSelectsReadyAcceptanceUnitWhenEarlierUnitIsBlockedByReadiness|TestSharedProjectionReadinessPhaseUsesSemanticNodesForSemanticEdgeDomains' -count=1`;
+- `go test ./internal/reducer -count=1`;
+- `go test ./internal/reducer ./internal/telemetry -count=1`;
+- `go vet ./internal/reducer`;
+- `git diff --check`.
+
+Run `pcg-reducer-clean20-codecall-readiness-20260428T1748Z` used commit
+`5242bfce` with rebuilt binaries and the same 20-repo corpus. It drained
+healthy in `140s`, versus the original clean 20-repo baseline at `162s`.
+The isolated contribution of `5242bfce` is correctness/tail elimination rather
+than a pure handler-speed win, but this is the first completed 20-repo proof
+after the scoped reducer slices. Terminal state was projector `20` succeeded,
+reducer `160` succeeded, and shared intents complete:
+`code_calls 3987/3987`, `repo_dependency 7/7`.
+
+The `5242bfce` run kept the machine idle-heavy:
+`cpu_idle_avg=77.30%`, `cpu_idle_p50=86.00%`, `cpu_idle_min=18.00%`,
+`disk_util_avg=9.15%`, `disk_util_p50=4.83%`, `disk_util_max=44.20%`, and
+`disk_idle_avg=90.85%`. Reducer handler aggregates still point away from CPU
+or disk saturation: `semantic_entity_materialization` handled `7` items with
+`handler_sum=7.985s`, `handler_max=5.910s`; `sql_relationship_materialization`
+handled `20` items with `handler_sum=13.874s`, `handler_max=11.076s`; and
+`workload_materialization` handled `33` items with `handler_sum=12.212s`,
+`handler_max=5.785s`.
+
+The 20-repo semantic split matched the focused 4-repo result. Across `7`
+semantic handlers and `190,324` loaded facts, semantic handler total was
+`7.968s`; fact loading accounted for `7.383s`, extraction `0.148s`, graph
+writes `0.402s`, and readiness publication `0.028s`. Code-call shared
+projection completed without readiness-blocked observations; `20` completed
+cycles wrote `3,967` rows with `7.802s` processing time and `8.072s` total
+cycle duration.
+
 ### Change Impact Ledger
 
 Classify every reducer-throughput slice by the metric it was meant to move.
@@ -660,19 +736,22 @@ win when wall-clock evidence does not support that claim.
 | `02d9cdc7` | Generic shared readiness-blocked polling stays at base interval | Reduce SQL/inheritance readiness-blocked polling tail | Covered by later focused proof; no standalone wall-clock drop established | Correctness-preserving scheduler cleanup |
 | `acc50494` | Scope NornicDB projector-drain claim gate by same `scope_id` | Lower false reducer queue wait behind unrelated source-local work | Focused wall stayed flat (`139s` to `140s`), but deployment-mapping wait dropped `200.698s` to `14.618s` and SQL wait dropped `101.708s` to `33.651s` | Scheduling win, not wall-clock win on 4 repos |
 | `367060fd` | Scope grouped SQL relationship retractions by exact source label and relationship type | Lower SQL handler time | Focused wall moved `140s` to `138s`; SQL handler max moved `11.543s` to `10.634s`; SQL wait stayed flat (`33.651s` to `32.946s`) | Safe query-shape cleanup, marginal handler win |
+| `afd9fe5f` | Semantic materialization inner-step timing | Identify whether semantic cost is fact load, extraction, graph write, or readiness publication | Focused 4-repo semantic total `7.428s`: fact load `6.998s`, graph write `0.256s`; 20-repo semantic total `7.968s`: fact load `7.383s`, graph write `0.402s` | Diagnostic win; points to fact-loading/data-shape work |
+| `5242bfce` | Gate code-call shared projection on canonical-node readiness instead of semantic-node readiness | Remove code-call readiness wait that can never resolve for repos without semantic reducer items | `afd9fe5f` 20-repo run stuck at `3969/3987` code-call intents; `5242bfce` rerun completed `3987/3987` and drained in `140s` versus original clean 20-repo baseline `162s` | Correctness and tail-latency win |
 
 The ledger says the next performance slice should not be another broad SQL
 shape tweak unless inner-step SQL timing proves a specific SQL substep is still
-dominant. The highest full-corpus actual-work cost remains
-`semantic_entity_materialization`, so the next evidence-first target is semantic
-entity materialization query/write timing and shape.
+dominant. Semantic timing now shows graph writes are not the hot substep for
+the focused or 20-repo corpus; fact loading/data shape is the first semantic
+target, with SQL handler timing still worth splitting because SQL remains the
+largest handler max in the 20-repo proof.
 
 ## Chunk Status
 
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Commit `ec57b741` on branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1`. Remote proofs now include the clean 20-repo edge-index run `pcg-reducer-clean20-20260428T131056Z`, the focused 4-repo run `pcg-reducer-large4-20260428T131734Z`, the resource-headroom baseline `pcg-reducer-large4-resource-baseline-20260428T141520Z`, the SQL label-scope pilot `pcg-reducer-large4-sql-labelscope-20260428T142359Z`, the shared telemetry run `pcg-reducer-large4-shared-telemetry-20260428T144634Z`, the code-call telemetry run `pcg-reducer-large4-codecall-telemetry-20260428T161400Z`, the code-call readiness-poll run `pcg-reducer-large4-readiness-poll-20260428T163313Z`, the scoped projector-drain run `pcg-reducer-large4-scope-drain-fresh-20260428T164757Z`, and the SQL retraction-scope run `pcg-reducer-large4-sql-retract-scope-20260428T170204Z`; see Phase 1 Runtime Evidence above. Commit `9c0b6207` adds `PCG_REDUCER_CLAIM_DOMAIN` for split-reducer diagnostics without changing all-domain defaults. Commit `55740672` adds label-scoped SQL relationship writes, but the 4-repo proof showed no wall-clock improvement (`153s` to `154s`) and SQL handler max stayed about `11s`. CPU and disk remained mostly idle in fresh runs, so the next bottleneck is not host saturation. Commit `b0c994b6` adds `pcg_dp_shared_projection_intent_wait_seconds`, `pcg_dp_shared_projection_processing_seconds`, and shared projection logs for readiness-blocked wait, lease claim, selection, and processing durations; focused verification: `go test ./internal/reducer ./internal/telemetry -count=1`, `go vet ./internal/reducer ./internal/telemetry`, `mkdocs build --strict`, and `git diff --check`. The 4-repo rerun on `766fb142` drained in `138s`; `code_calls` shared intents had `119.682s` wall but only about `5.08s` summed graph-write cycle duration, exposing readiness/polling and source-local canonical projection as the immediate bottleneck for that lane. Commit `742d0c56` adds the same wait-versus-processing split to the dedicated code-call projection runner, including processed intent wait, readiness-blocked wait, selection duration, lease claim duration, and processing duration logs/metrics without changing worker defaults or graph writes. The `e0a407ae` remote proof drained in `141s`; `code_calls` table wall was `124.162s` but measured code-call processing summed to about `10.85s`, while CPU and disk stayed idle-heavy. Commit `3e870754` keeps readiness-blocked code-call polling at the base interval instead of exponential empty-queue backoff; the `11d74089` runtime proof drained in `139s`, confirming this is a small tail cleanup. Commit `02d9cdc7` applies the same base-poll behavior to generic shared projection readiness-blocking for SQL and inheritance lanes. Commit `acc50494` narrows the NornicDB projector-drain claim gate to same-scope projector work; the `acc50494` runtime proof drained in `140s`, but deployment-mapping summed queue wait dropped to `14.618s` and SQL summed queue wait dropped to `33.651s`. Commit `367060fd` scopes grouped SQL relationship retractions; the `367060fd` runtime proof drained in `138s`, SQL handler max moved only from `11.543s` to `10.634s`, and CPU/disk still had headroom. | Add inner-step timing for reducer SQL materialization or move to semantic entity materialization query/write shape, which is the largest full-corpus reducer work cost |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Phase 1 now includes reducer queue wait/handler duration telemetry, shared projection wait-versus-processing telemetry, scoped projector-drain proof, SQL retraction-scope proof, semantic materialization inner-step timing, and code-call readiness correction. Remote proofs include the clean 20-repo baseline `pcg-reducer-clean20-20260428T131056Z`, focused 4-repo proofs through `pcg-reducer-large4-semantic-timing-20260428T172941Z`, the stopped invalid 20-repo semantic timing run that exposed `18` stuck `code_calls` intents, and the completed 20-repo proof `pcg-reducer-clean20-codecall-readiness-20260428T1748Z`. Commits `afd9fe5f` and `5242bfce` show semantic graph writes are not the hot substep (`20`-repo semantic total `7.968s`, fact load `7.383s`, graph write `0.402s`) and that `code_calls` must gate on `canonical_nodes_committed` instead of `semantic_nodes_committed` (`3987/3987` intents completed; wall `140s` versus original clean 20-repo `162s`). CPU and disk remain idle-heavy (`cpu_idle_avg=77.30%`, `disk_idle_avg=90.85%`). | Split SQL handler timing and start semantic fact-loading/data-shape optimization; then rerun the 20-25 repo proof before any larger corpus |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
