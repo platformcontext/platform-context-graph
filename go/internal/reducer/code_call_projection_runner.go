@@ -111,7 +111,7 @@ func (r *CodeCallProjectionRunner) Run(ctx context.Context) error {
 		}
 
 		cycleStart := time.Now()
-		didWork, err := r.runOneCycle(ctx)
+		result, err := r.runOneCycle(ctx)
 		if err != nil {
 			consecutiveEmpty++
 			r.recordCodeCallCycleFailure(ctx, err, time.Since(cycleStart).Seconds())
@@ -123,8 +123,18 @@ func (r *CodeCallProjectionRunner) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		if didWork {
+		if result.ProcessedIntents > 0 {
 			consecutiveEmpty = 0
+			continue
+		}
+		if result.BlockedReadiness > 0 {
+			consecutiveEmpty = 0
+			if err := r.wait(ctx, r.Config.pollInterval()); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+					return nil
+				}
+				return fmt.Errorf("wait for code call readiness: %w", err)
+			}
 			continue
 		}
 
@@ -138,12 +148,12 @@ func (r *CodeCallProjectionRunner) Run(ctx context.Context) error {
 	}
 }
 
-func (r *CodeCallProjectionRunner) runOneCycle(ctx context.Context) (bool, error) {
+func (r *CodeCallProjectionRunner) runOneCycle(ctx context.Context) (PartitionProcessResult, error) {
 	result, err := r.processOnce(ctx, time.Now().UTC())
 	if err != nil {
-		return true, err
+		return result, err
 	}
-	return result.ProcessedIntents > 0, nil
+	return result, nil
 }
 
 func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Time) (result PartitionProcessResult, retErr error) {
