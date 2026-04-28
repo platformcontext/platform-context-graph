@@ -130,6 +130,19 @@ metadata, total entity `source_cache` was `164 MB`, and function/class snippets
 were unchanged. Treat this as the current evidence that source-cache shaping,
 not `PCG_CONTENT_ENTITY_BATCH_SIZE`, is the right fix for this bottleneck.
 
+Medium-corpus source-cache checkpoint: PCG `a7078ddf` with NornicDB `v1.0.43`,
+`PCG_REDUCER_WORKERS=8`, `PCG_CANONICAL_WRITE_TIMEOUT=120s`, and
+`PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT=250000` drained the
+`/home/ubuntu/pcg-test-repos` corpus of `23` repos healthy in about `3m11s`.
+Final durable state was projector `23/23`, reducer `184` succeeded work items,
+and queue `pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`. The large
+PHP repo `api-php-sample-appwebsolutions` wrote `138,712` content entities in
+`21.196s`, then spent `78.490s` in canonical graph write. Across the run PCG
+persisted `182,305` content entities, with only `1,463` truncated `Variable`
+rows and `24 MB` total `Variable` source cache. This promotes the source-cache
+shaping rule from focused proof to medium-corpus proof and moves the next tuning
+target back to canonical graph Cypher shape and NornicDB lookup behavior.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
