@@ -56,7 +56,13 @@ func (h InheritanceMaterializationHandler) Handle(
 		slog.String(telemetry.LogKeyDomain, string(intent.Domain)),
 	)
 
-	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	envelopes, err := loadFactsForKinds(
+		ctx,
+		h.FactLoader,
+		intent.ScopeID,
+		intent.GenerationID,
+		[]string{factKindContentEntity},
+	)
 	if err != nil {
 		return Result{}, fmt.Errorf("load facts for inheritance materialization: %w", err)
 	}

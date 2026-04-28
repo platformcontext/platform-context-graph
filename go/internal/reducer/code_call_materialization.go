@@ -57,7 +57,13 @@ func (h CodeCallMaterializationHandler) Handle(
 		return Result{}, fmt.Errorf("code call materialization intent writer is required")
 	}
 
-	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	envelopes, err := loadFactsForKinds(
+		ctx,
+		h.FactLoader,
+		intent.ScopeID,
+		intent.GenerationID,
+		[]string{factKindRepository, factKindFile},
+	)
 	if err != nil {
 		return Result{}, fmt.Errorf("load facts for code call materialization: %w", err)
 	}

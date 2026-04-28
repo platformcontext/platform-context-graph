@@ -45,7 +45,13 @@ func (h DeployableUnitCorrelationHandler) Handle(
 		return Result{}, err
 	}
 
-	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	envelopes, err := loadFactsForKinds(
+		ctx,
+		h.FactLoader,
+		intent.ScopeID,
+		intent.GenerationID,
+		[]string{factKindRepository, factKindFile},
+	)
 	if err != nil {
 		return Result{}, fmt.Errorf("load facts for deployable unit correlation: %w", err)
 	}
