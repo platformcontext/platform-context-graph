@@ -299,46 +299,9 @@ func (s Service) validate() error {
 	return nil
 }
 
-func (s Service) batchClaimSize() int {
-	if s.BatchClaimSize > 0 {
-		return s.BatchClaimSize
-	}
-	n := s.Workers * 4
-	if n > 64 {
-		n = 64
-	}
-	if n < 4 {
-		n = 4
-	}
-	return n
-}
-
-func (s Service) pollInterval() time.Duration {
-	if s.PollInterval <= 0 {
-		return defaultPollInterval
-	}
-
-	return s.PollInterval
-}
-
-func (s Service) wait(ctx context.Context, interval time.Duration) error {
-	if s.Wait != nil {
-		return s.Wait(ctx, interval)
-	}
-
-	timer := time.NewTimer(interval)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
 func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, workerID int) error {
 	start := time.Now()
+	queueWait := reducerQueueWaitSeconds(start, intent.AvailableAt)
 
 	if s.Tracer != nil {
 		var span trace.Span
@@ -360,7 +323,7 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 			err = errors.Join(err, heartbeatErr)
 		}
 		status = "failed"
-		s.recordReducerResult(ctx, intent, duration, status, workerID, err)
+		s.recordReducerResult(ctx, intent, duration, queueWait, status, workerID, err)
 		if failErr := s.WorkSink.Fail(ctx, intent, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail reducer work: %w", failErr))
 		}
@@ -372,20 +335,20 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 	}
 
 	if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
-		s.recordReducerResult(ctx, intent, duration, "ack_failed", workerID, heartbeatErr)
+		s.recordReducerResult(ctx, intent, duration, queueWait, "ack_failed", workerID, heartbeatErr)
 		return fmt.Errorf("heartbeat reducer work: %w", heartbeatErr)
 	}
 
 	if err := s.WorkSink.Ack(ctx, intent, result); err != nil {
-		s.recordReducerResult(ctx, intent, duration, "ack_failed", workerID, err)
+		s.recordReducerResult(ctx, intent, duration, queueWait, "ack_failed", workerID, err)
 		return fmt.Errorf("ack reducer work: %w", err)
 	}
 
-	s.recordReducerResult(ctx, intent, duration, status, workerID, nil)
+	s.recordReducerResult(ctx, intent, duration, queueWait, status, workerID, nil)
 	return nil
 }
 
-func (s Service) recordReducerResult(ctx context.Context, intent Intent, duration float64, status string, workerID int, execErr error) {
+func (s Service) recordReducerResult(ctx context.Context, intent Intent, duration float64, queueWait float64, status string, workerID int, execErr error) {
 	if s.Instruments != nil {
 		attrs := metric.WithAttributes(
 			telemetry.AttrDomain(string(intent.Domain)),
@@ -393,6 +356,9 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 			attribute.String("status", status),
 		)
 		s.Instruments.ReducerRunDuration.Record(ctx, duration, metric.WithAttributes(
+			telemetry.AttrDomain(string(intent.Domain)),
+		))
+		s.Instruments.ReducerQueueWaitDuration.Record(ctx, queueWait, metric.WithAttributes(
 			telemetry.AttrDomain(string(intent.Domain)),
 		))
 		s.Instruments.ReducerExecutions.Add(ctx, 1, attrs)
@@ -412,6 +378,8 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 		logAttrs = append(logAttrs, slog.String("intent_id", intent.IntentID))
 		logAttrs = append(logAttrs, slog.String("status", status))
 		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
+		logAttrs = append(logAttrs, slog.Float64("handler_duration_seconds", duration))
+		logAttrs = append(logAttrs, slog.Float64("queue_wait_seconds", queueWait))
 		logAttrs = append(logAttrs, slog.Int("worker_id", workerID))
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseReduction))
 		switch status {

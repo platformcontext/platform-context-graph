@@ -90,6 +90,7 @@ type RawSnapshot struct {
 	GenerationTransitions []GenerationTransitionSnapshot
 	StageCounts           []StageStatusCount
 	DomainBacklogs        []DomainBacklog
+	QueueBlockages        []QueueBlockage
 	RetryPolicies         []RetryPolicySummary
 	Queue                 QueueSnapshot
 	LatestQueueFailure    *QueueFailureSnapshot
@@ -139,6 +140,7 @@ type Report struct {
 	GenerationTotals      map[string]int
 	StageSummaries        []StageSummary
 	DomainBacklogs        []DomainBacklog
+	QueueBlockages        []QueueBlockage
 	LatestQueueFailure    *QueueFailureSnapshot
 	Coordinator           *CoordinatorSnapshot
 }
@@ -206,6 +208,7 @@ func BuildReport(raw RawSnapshot, opts Options) Report {
 		GenerationTotals:      generationTotals,
 		StageSummaries:        stageSummaries,
 		DomainBacklogs:        domainBacklogs,
+		QueueBlockages:        cloneQueueBlockages(raw.QueueBlockages),
 		LatestQueueFailure:    cloneQueueFailure(raw.LatestQueueFailure),
 		Coordinator:           cloneCoordinatorSnapshot(raw.Coordinator),
 	}
@@ -256,6 +259,7 @@ func RenderText(report Report) string {
 	if latestFailure := queueFailureText(report.LatestQueueFailure); latestFailure != "" {
 		lines = append(lines, fmt.Sprintf("Latest queue failure: %s", latestFailure))
 	}
+	lines = append(lines, renderQueueBlockageLines(report.QueueBlockages)...)
 	lines = append(lines, renderCoordinatorLines(report.Coordinator)...)
 	lines = append(lines, renderFlowLines(report.FlowSummaries)...)
 	if len(report.StageSummaries) > 0 {

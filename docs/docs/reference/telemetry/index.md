@@ -149,6 +149,12 @@ For shared-write debugging specifically:
 - Metrics answer claim latency, worker activity, stage duration, stage output
   volume, stage failures, dead-letter pressure, and shared authoritative
   follow-up backlog.
+- `pcg_dp_reducer_queue_wait_seconds` separates time spent visible in the
+  reducer queue from `pcg_dp_reducer_run_duration_seconds`, which measures the
+  handler execution window after a worker starts the work item.
+- `/admin/status` includes `queue_blockages` when reducer work is eligible but
+  held back by an in-flight conflict domain/key, so operators can distinguish
+  conflict routing from graph backend slowness.
 - The shared-edge bounded-group path also exposes
   `pcg_dp_shared_edge_write_groups_total`,
   `pcg_dp_shared_edge_write_group_duration_seconds`, and
@@ -293,6 +299,7 @@ log streams.
 | `pcg_dp_projector_run_duration_seconds` | Projector run cycle duration | s | 0.1 .. 120 |
 | `pcg_dp_projector_stage_duration_seconds` | Projector stage duration | s | default |
 | `pcg_dp_reducer_run_duration_seconds` | Reducer intent execution duration | s | default |
+| `pcg_dp_reducer_queue_wait_seconds` | Reducer time from queue visibility to handler start | s | 0.001 .. 21600 |
 | `pcg_dp_canonical_write_duration_seconds` | Canonical graph write duration | s | default |
 | `pcg_dp_queue_claim_duration_seconds` | Queue work item claim duration | s | default |
 | `pcg_dp_postgres_query_duration_seconds` | Postgres query duration | s | 0.001 .. 2.5 |

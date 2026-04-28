@@ -170,7 +170,7 @@ Exit criteria:
 
 ### Phase 1: Reducer Observability
 
-Status: `planned`
+Status: `in progress`
 
 Add operator-visible reducer telemetry before changing scheduling semantics:
 
@@ -348,7 +348,7 @@ The reducer throughput phase is complete when:
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | Planned | Queue timing SQL proved queue wait dominates several domains | Add blocked-by-conflict and per-domain work/wait telemetry |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains; branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1` | Add shared projection partition wait/processing split and top slow work-item run summary |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |

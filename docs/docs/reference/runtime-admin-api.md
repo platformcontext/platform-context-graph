@@ -102,6 +102,7 @@ The JSON response follows the shared status report shape from
 - `generations`
 - `stages`
 - `domains`
+- `queue_blockages`
 
 Queue entries include both a duration string and seconds value:
 
@@ -110,6 +111,18 @@ Queue entries include both a duration string and seconds value:
 
 Domain entries include both a duration string and seconds value:
 
+- `oldest_age`
+- `oldest_age_seconds`
+
+`queue_blockages` entries are present when reducer work is visible and
+claimable except for an active coordination gate on the same conflict domain.
+They include:
+
+- `stage`
+- `domain`
+- `conflict_domain`
+- `conflict_key`
+- `blocked`
 - `oldest_age`
 - `oldest_age_seconds`
 
