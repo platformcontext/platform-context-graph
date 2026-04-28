@@ -201,6 +201,7 @@ func TestClaimBatchCanWaitForProjectorDrain(t *testing.T) {
 	for _, want := range []string{
 		"$5 = false OR NOT EXISTS",
 		"projector_work.stage = 'projector'",
+		"projector_work.scope_id = fact_work_items.scope_id",
 		"projector_work.status IN ('pending', 'retrying', 'claimed', 'running')",
 	} {
 		if !strings.Contains(query, want) {
