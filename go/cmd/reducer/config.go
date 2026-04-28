@@ -16,6 +16,7 @@ const (
 	reducerMaxAttemptsEnv = "PCG_REDUCER_MAX_ATTEMPTS"
 	reducerWorkersEnv     = "PCG_REDUCER_WORKERS"
 	reducerBatchClaimEnv  = "PCG_REDUCER_BATCH_CLAIM_SIZE"
+	reducerClaimDomainEnv = "PCG_REDUCER_CLAIM_DOMAIN"
 	queryProfileEnv       = "PCG_QUERY_PROFILE"
 
 	codeCallProjectionPollIntervalEnv        = "PCG_CODE_CALL_PROJECTION_POLL_INTERVAL"
@@ -80,6 +81,21 @@ func loadReducerBatchClaimSize(getenv func(string) string, workers int, graphBac
 		n = 4
 	}
 	return n
+}
+
+func loadReducerClaimDomain(getenv func(string) string) (reducer.Domain, error) {
+	if getenv == nil {
+		getenv = func(string) string { return "" }
+	}
+	raw := strings.TrimSpace(getenv(reducerClaimDomainEnv))
+	if raw == "" {
+		return "", nil
+	}
+	domain, err := reducer.ParseDomain(raw)
+	if err != nil {
+		return "", err
+	}
+	return domain, nil
 }
 
 func loadReducerProjectorDrainGate(

@@ -209,6 +209,55 @@ func TestReducerQueueClaimCanWaitForProjectorDrain(t *testing.T) {
 	}
 }
 
+func TestReducerQueueClaimCanFilterByDomain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 28, 14, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	queue := ReducerQueue{
+		db:            db,
+		LeaseOwner:    "sql-lane",
+		LeaseDuration: time.Minute,
+		Now:           func() time.Time { return now },
+		ClaimDomain:   reducer.DomainSQLRelationshipMaterialization,
+	}
+
+	_, claimed, err := queue.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if claimed {
+		t.Fatal("Claim() claimed = true, want false from empty rows")
+	}
+
+	if got, want := db.queries[0].args[1], string(reducer.DomainSQLRelationshipMaterialization); got != want {
+		t.Fatalf("domain filter arg = %v, want %v", got, want)
+	}
+}
+
+func TestReducerQueueClaimRejectsUnknownDomainFilter(t *testing.T) {
+	t.Parallel()
+
+	queue := ReducerQueue{
+		db:            &fakeExecQueryer{},
+		LeaseOwner:    "bad-lane",
+		LeaseDuration: time.Minute,
+		ClaimDomain:   reducer.Domain("not_a_domain"),
+	}
+
+	_, _, err := queue.Claim(context.Background())
+	if err == nil {
+		t.Fatal("Claim() error = nil, want validation error")
+	}
+	if !strings.Contains(err.Error(), "unknown reducer domain") {
+		t.Fatalf("Claim() error = %v, want unknown domain validation", err)
+	}
+}
+
 func TestReducerQueueReopenSucceededResetsSucceededWorkItemToPending(t *testing.T) {
 	t.Parallel()
 

@@ -103,7 +103,7 @@ func (q ReducerQueue) ClaimBatch(ctx context.Context, limit int) ([]reducer.Inte
 		ctx,
 		claimReducerWorkBatchQuery,
 		now,
-		"",
+		q.claimDomainFilter(),
 		q.LeaseOwner,
 		now.Add(q.LeaseDuration),
 		q.RequireProjectorDrainBeforeClaim,

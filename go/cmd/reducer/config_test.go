@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 )
 
@@ -135,6 +136,49 @@ func TestLoadReducerBatchClaimSize_InvalidEnvFallsBackToBackendDefault(t *testin
 	}, 2, runtimecfg.GraphBackendNornicDB)
 	if got != 2 {
 		t.Fatalf("got %d, want 2 for NornicDB fallback", got)
+	}
+}
+
+func TestLoadReducerClaimDomain_DefaultsToAllDomains(t *testing.T) {
+	t.Parallel()
+
+	got, err := loadReducerClaimDomain(func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("loadReducerClaimDomain() error = %v, want nil", err)
+	}
+	if got != "" {
+		t.Fatalf("loadReducerClaimDomain() = %q, want empty domain filter", got)
+	}
+}
+
+func TestLoadReducerClaimDomain_ParsesKnownDomain(t *testing.T) {
+	t.Parallel()
+
+	got, err := loadReducerClaimDomain(func(k string) string {
+		if k == reducerClaimDomainEnv {
+			return string(reducer.DomainSQLRelationshipMaterialization)
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("loadReducerClaimDomain() error = %v, want nil", err)
+	}
+	if got != reducer.DomainSQLRelationshipMaterialization {
+		t.Fatalf("loadReducerClaimDomain() = %q, want %q", got, reducer.DomainSQLRelationshipMaterialization)
+	}
+}
+
+func TestLoadReducerClaimDomain_RejectsUnknownDomain(t *testing.T) {
+	t.Parallel()
+
+	_, err := loadReducerClaimDomain(func(k string) string {
+		if k == reducerClaimDomainEnv {
+			return "not_a_domain"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("loadReducerClaimDomain() error = nil, want validation error")
 	}
 }
 

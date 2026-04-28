@@ -215,6 +215,31 @@ func TestClaimBatchCanWaitForProjectorDrain(t *testing.T) {
 	}
 }
 
+func TestClaimBatchCanFilterByDomain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 28, 14, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	q := ReducerQueue{
+		db:            db,
+		LeaseOwner:    "sql-lane",
+		LeaseDuration: time.Minute,
+		Now:           func() time.Time { return now },
+		ClaimDomain:   reducer.DomainSQLRelationshipMaterialization,
+	}
+
+	if _, err := q.ClaimBatch(context.Background(), 5); err != nil {
+		t.Fatalf("ClaimBatch() error = %v", err)
+	}
+	if got, want := db.queries[0].args[1], string(reducer.DomainSQLRelationshipMaterialization); got != want {
+		t.Fatalf("domain filter arg = %v, want %v", got, want)
+	}
+}
+
 func TestReducerQueueImplementsBatchInterfaces(t *testing.T) {
 	t.Parallel()
 
