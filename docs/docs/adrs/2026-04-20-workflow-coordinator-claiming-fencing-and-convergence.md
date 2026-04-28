@@ -151,11 +151,22 @@ collector work items have been acknowledged.
 
 A run is complete only when both are true:
 
-1. collector-side work for the run’s bounded slice is complete
-2. required downstream projector/reducer phases for that same bounded slice are
-   complete
+1. collector-side work for the run's bounded slice is complete
+2. required downstream projector/reducer phases for that same bounded
+   slice are complete, where "same bounded slice" means the FULL
+   composite tuple
+   `(scope_id, acceptance_unit_id, source_run_id, generation_id,
+    keyspace, phase)` — not just `(scope_id, generation_id)`.
 
-The reducer-owned phase state remains authoritative for downstream convergence.
+The reducer-owned phase state remains authoritative for downstream
+convergence. Implementations that compute completeness by joining
+`workflow_work_items` to `graph_projection_phase_state` MUST include
+`acceptance_unit_id` and `source_run_id` in the join predicate.
+Current `listWorkflowCollectorPhaseCountsQuery` in
+`go/internal/storage/postgres/workflow_run_reconciliation.go` joins on
+only `scope_id` + `generation_id`; that query is a blocker for
+correct convergence under concurrent runs and must be tightened before
+the coordinator ships multi-run fencing.
 
 ---
 
@@ -165,13 +176,27 @@ The reducer-owned phase state remains authoritative for downstream convergence.
 
 The coordinator should claim bounded work items, not open-ended collector loops.
 
-The minimum durable work identity should include:
+The minimum durable work identity must include:
 
 - `run_id`
 - `collector_instance_id`
 - `scope_id`
 - `source_system`
 - `generation_id`
+- `source_run_id`
+- `acceptance_unit_id`
+
+The last two (`source_run_id` + `acceptance_unit_id`) are required
+because the reducer's canonical convergence truth — the
+`graph_projection_phase_state` row — is keyed by
+`(scope_id, acceptance_unit_id, source_run_id, generation_id, keyspace, phase)`
+(see `go/internal/storage/postgres/graph_projection_phase_state.go`).
+Any workflow-completion computation that joins only on
+`(scope_id, generation_id)` can attribute another run's reducer
+progress to this run, producing false-positive completion signals.
+This was called out as a critical-truth bug in review: the
+authoritative phase-state primary key MUST be represented 1:1 in the
+work identity the coordinator fences against.
 
 If the collector family requires a narrower bounded unit later, it may add
 family-local sub-identity fields, but the global contract must still be able to
