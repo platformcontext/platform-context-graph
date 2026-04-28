@@ -49,7 +49,13 @@ func (h SQLRelationshipMaterializationHandler) Handle(
 	)
 
 	loadStart := time.Now()
-	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	envelopes, err := loadFactsForKinds(
+		ctx,
+		h.FactLoader,
+		intent.ScopeID,
+		intent.GenerationID,
+		[]string{factKindContentEntity},
+	)
 	if err != nil {
 		return Result{}, fmt.Errorf("load facts for sql relationship materialization: %w", err)
 	}

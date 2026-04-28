@@ -77,7 +77,13 @@ func (h SemanticEntityMaterializationHandler) Handle(
 
 	totalStart := time.Now()
 	loadStart := time.Now()
-	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	envelopes, err := loadFactsForKinds(
+		ctx,
+		h.FactLoader,
+		intent.ScopeID,
+		intent.GenerationID,
+		[]string{factKindRepository, factKindContentEntity},
+	)
 	if err != nil {
 		return Result{}, fmt.Errorf("load facts for semantic entity materialization: %w", err)
 	}
