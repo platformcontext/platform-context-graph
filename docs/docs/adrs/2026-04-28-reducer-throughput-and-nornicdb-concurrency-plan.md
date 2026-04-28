@@ -347,9 +347,9 @@ The reducer throughput phase is complete when:
 
 The clean 20-repo proof after stopping outstanding remote runs used PCG
 `0aa345d1`, rebuilt `pcg`, `pcg-api`, `pcg-ingester`, and `pcg-reducer`, and
-ran against the first 20 repos from `/home/ubuntu/pcg-test-repos` with
-NornicDB `v1.0.43` via the edge-index binary. `PCG_REDUCER_WORKERS` was unset;
-the runtime logged the default `workers=8`.
+ran against the first 20 repos from the remote test corpus with NornicDB
+`v1.0.43` via the edge-index binary. `PCG_REDUCER_WORKERS` was unset; the
+runtime logged the default `workers=8`.
 
 Run `pcg-reducer-clean20-20260428T131056Z` drained healthy:
 
@@ -403,12 +403,56 @@ Cypher/query shape, graph index or lookup behavior, data shape/write
 amplification, conflict routing, or real CPU/disk saturation before changing
 worker defaults.
 
+The first resource-headroom proof on the focused 4-repo corpus used commit
+`9c0b6207`, rebuilt all runtime binaries, kept `PCG_REDUCER_WORKERS` unset, and
+captured CPU idle plus disk utilization during the run. Run
+`pcg-reducer-large4-resource-baseline-20260428T141520Z` drained healthy:
+
+- wall clock from graph start to detected queue drain: `153s`;
+- terminal state: projector `4` succeeded, reducer `32` rows succeeded, with
+  `pending=0`, `in_flight=0`, `retrying=0`, `dead_letter=0`, `failed=0`;
+- `cpu_idle_avg=80.58%`, `cpu_idle_p50=86.00%`, `cpu_idle_min=22.00%`;
+- `disk_util_avg=1.28%`, `disk_util_max=46.72%`, so disk idle never fell below
+  about `53%`;
+- slowest handler:
+  `sql_relationship_materialization/sql:api-php-boatwizardwebsolutions`
+  (`11.433s` handler, `20.358s` queue wait);
+- slowest waits were `deployment_mapping` rows at about `100.9s`, while their
+  handlers stayed sub-second.
+
+This evidence rules out host CPU or disk saturation as the primary bottleneck
+for the focused corpus. The next useful questions are why eligible work waits,
+where shared projection backlog accumulates, and whether graph write/query
+shapes are forcing backend-side scans or serialized existence checks.
+
+The first Cypher-shape pilot used commit `55740672`, which writes SQL
+relationship rows with concrete source and target entity labels when the
+reducer knows them, while preserving broad-label fallback for older queued rows.
+Run `pcg-reducer-large4-sql-labelscope-20260428T142359Z` also rebuilt all
+runtime binaries and drained healthy:
+
+- wall clock from graph start to detected queue drain: `154s`;
+- terminal state: projector `4` succeeded, reducer `32` rows succeeded, with
+  `pending=0`, `in_flight=0`, `retrying=0`, `dead_letter=0`, `failed=0`;
+- `cpu_idle_avg=80.74%`, `cpu_idle_p50=86.00%`, `cpu_idle_min=22.00%`;
+- `disk_util_avg=1.28%`, `disk_util_max=46.00%`, so disk idle never fell below
+  about `54%`;
+- slowest SQL handler changed from `11.433s` to `11.702s`, and total wall
+  changed from `153s` to `154s`.
+
+The label-scoped SQL write shape is more selective and keeps the adapter on a
+clear label-property anchor, but this proof did not improve the focused corpus.
+That disproves broad SQL labels as the dominant current wall-clock cause for
+these repos. The next reducer slice should split shared projection
+wait-versus-processing evidence and investigate deployment/readiness routing
+before spending more time on SQL label-shape tuning.
+
 ## Chunk Status
 
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Commit `ec57b741` on branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1`. Remote proofs now include the noisy first 20-repo run, the clean 20-repo edge-index run `pcg-reducer-clean20-20260428T131056Z`, and the focused 4-repo run `pcg-reducer-large4-20260428T131734Z`; see Phase 1 Runtime Evidence above. The current domain-lane slice adds `PCG_REDUCER_CLAIM_DOMAIN` so a reducer process can claim one domain for split-reducer diagnostics without changing all-domain defaults; focused tests cover single and batch claims plus startup validation. | Run domain-lane proofs on the 4-repo corpus with CPU idle and disk I/O idle/utilization captured, then add shared projection partition wait/processing split and top slow work-item run summary |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Commit `ec57b741` on branch `reducer-observability-phase1` adds `pcg_dp_reducer_queue_wait_seconds`, reducer `queue_wait_seconds`/`handler_duration_seconds` logs, and `/admin/status` `queue_blockages`; focused tests: `go test ./internal/reducer ./internal/status ./internal/storage/postgres -run 'TestServiceRunRecordsReducerQueueWait|TestBuildReportClassifiesProgressingQueue|TestRenderTextIncludesOperatorSummary|TestRenderJSONIncludesFlowSummaries|TestStatusStoreReadRawSnapshot' -count=1`. Remote proofs now include the clean 20-repo edge-index run `pcg-reducer-clean20-20260428T131056Z`, the focused 4-repo run `pcg-reducer-large4-20260428T131734Z`, the resource-headroom baseline `pcg-reducer-large4-resource-baseline-20260428T141520Z`, and the SQL label-scope pilot `pcg-reducer-large4-sql-labelscope-20260428T142359Z`; see Phase 1 Runtime Evidence above. Commit `9c0b6207` adds `PCG_REDUCER_CLAIM_DOMAIN` for split-reducer diagnostics without changing all-domain defaults. Commit `55740672` adds label-scoped SQL relationship writes, but the 4-repo proof showed no wall-clock improvement (`153s` to `154s`) and SQL handler max stayed about `11s`. CPU and disk remained mostly idle in both fresh runs, so the next bottleneck is not host saturation. | Add shared projection partition wait/processing split and deployment/readiness routing evidence before changing worker defaults; keep Cypher/index work evidence-driven rather than continuing SQL label-shape tuning blindly |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
