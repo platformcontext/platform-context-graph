@@ -51,6 +51,7 @@ func TestNewInstrumentsNoError(t *testing.T) {
 	assert.NotNil(t, inst.SharedAcceptancePrefetchSize, "SharedAcceptancePrefetchSize histogram should be registered")
 	assert.NotNil(t, inst.SharedProjectionIntentWaitDuration, "SharedProjectionIntentWaitDuration histogram should be registered")
 	assert.NotNil(t, inst.SharedProjectionProcessingDuration, "SharedProjectionProcessingDuration histogram should be registered")
+	assert.NotNil(t, inst.SharedProjectionStepDuration, "SharedProjectionStepDuration histogram should be registered")
 }
 
 func TestNewInstrumentsNilMeterError(t *testing.T) {

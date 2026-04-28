@@ -67,6 +67,7 @@ type Instruments struct {
 	SharedAcceptancePrefetchSize       metric.Int64Histogram
 	SharedProjectionIntentWaitDuration metric.Float64Histogram
 	SharedProjectionProcessingDuration metric.Float64Histogram
+	SharedProjectionStepDuration       metric.Float64Histogram
 
 	// Collector concurrency histograms and counters
 	RepoSnapshotDuration metric.Float64Histogram
@@ -390,6 +391,16 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register SharedProjectionProcessingDuration histogram: %w", err)
+	}
+
+	inst.SharedProjectionStepDuration, err = meter.Float64Histogram(
+		"pcg_dp_shared_projection_step_seconds",
+		metric.WithDescription("Shared projection substep duration by write phase"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(sharedProjectionProcessingBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedProjectionStepDuration histogram: %w", err)
 	}
 
 	// Collector concurrency instruments

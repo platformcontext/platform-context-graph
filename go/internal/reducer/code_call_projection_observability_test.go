@@ -42,11 +42,14 @@ func TestCodeCallProjectionRunnerRecordCycleUsesAcceptanceLogKeys(t *testing.T) 
 		1,
 		time.Now().Add(-250*time.Millisecond),
 		PartitionProcessResult{
-			MaxIntentWaitSeconds:        12.5,
-			ProcessingDurationSeconds:   0.25,
-			SelectionDurationSeconds:    0.05,
-			LeaseClaimDurationSeconds:   0.01,
-			MaxBlockedIntentWaitSeconds: 0,
+			MaxIntentWaitSeconds:         12.5,
+			ProcessingDurationSeconds:    0.25,
+			RetractDurationSeconds:       0.10,
+			WriteDurationSeconds:         0.12,
+			MarkCompletedDurationSeconds: 0.03,
+			SelectionDurationSeconds:     0.05,
+			LeaseClaimDurationSeconds:    0.01,
+			MaxBlockedIntentWaitSeconds:  0,
 		},
 	)
 	if err != nil {
@@ -77,5 +80,14 @@ func TestCodeCallProjectionRunnerRecordCycleUsesAcceptanceLogKeys(t *testing.T) 
 	}
 	if got, want := entry["processing_duration_seconds"], 0.25; got != want {
 		t.Fatalf("processing_duration_seconds = %v, want %v", got, want)
+	}
+	if got, want := entry["retract_duration_seconds"], 0.10; got != want {
+		t.Fatalf("retract_duration_seconds = %v, want %v", got, want)
+	}
+	if got, want := entry["write_duration_seconds"], 0.12; got != want {
+		t.Fatalf("write_duration_seconds = %v, want %v", got, want)
+	}
+	if got, want := entry["mark_completed_duration_seconds"], 0.03; got != want {
+		t.Fatalf("mark_completed_duration_seconds = %v, want %v", got, want)
 	}
 }

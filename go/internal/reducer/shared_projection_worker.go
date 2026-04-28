@@ -62,17 +62,20 @@ type PartitionProcessorConfig struct {
 // PartitionProcessResult captures the outcome of one partition processing
 // cycle.
 type PartitionProcessResult struct {
-	LeaseAcquired               bool
-	ProcessedIntents            int
-	UpsertedRows                int
-	RetractedRows               int
-	StaleIntents                int
-	BlockedReadiness            int
-	MaxIntentWaitSeconds        float64
-	MaxBlockedIntentWaitSeconds float64
-	LeaseClaimDurationSeconds   float64
-	SelectionDurationSeconds    float64
-	ProcessingDurationSeconds   float64
+	LeaseAcquired                bool
+	ProcessedIntents             int
+	UpsertedRows                 int
+	RetractedRows                int
+	StaleIntents                 int
+	BlockedReadiness             int
+	MaxIntentWaitSeconds         float64
+	MaxBlockedIntentWaitSeconds  float64
+	LeaseClaimDurationSeconds    float64
+	SelectionDurationSeconds     float64
+	ProcessingDurationSeconds    float64
+	RetractDurationSeconds       float64
+	WriteDurationSeconds         float64
+	MarkCompletedDurationSeconds float64
 }
 
 // LatestIntentsByRepoAndPartition deduplicates intents to the most recent per
@@ -339,6 +342,7 @@ func ProcessPartitionOnce(
 	}
 
 	processingStart := time.Now()
+	retractStart := time.Now()
 	if err := edgeWriter.RetractEdges(ctx, cfg.Domain, batch.LatestRows, evidenceSource); err != nil {
 		return PartitionProcessResult{
 			LeaseAcquired:             true,
@@ -346,8 +350,10 @@ func ProcessPartitionOnce(
 			SelectionDurationSeconds:  selectionDuration,
 		}, fmt.Errorf("retract edges: %w", err)
 	}
+	retractDuration := time.Since(retractStart).Seconds()
 
 	upsertRows := filterUpsertRows(batch.LatestRows)
+	writeStart := time.Now()
 	if err := edgeWriter.WriteEdges(ctx, cfg.Domain, upsertRows, evidenceSource); err != nil {
 		return PartitionProcessResult{
 			LeaseAcquired:             true,
@@ -355,6 +361,7 @@ func ProcessPartitionOnce(
 			SelectionDurationSeconds:  selectionDuration,
 		}, fmt.Errorf("write edges: %w", err)
 	}
+	writeDuration := time.Since(writeStart).Seconds()
 
 	var processedIDs []string
 	processedIDs = append(processedIDs, batch.StaleIDs...)
@@ -363,7 +370,9 @@ func ProcessPartitionOnce(
 		processedIDs = append(processedIDs, row.IntentID)
 	}
 
+	var markCompletedDuration float64
 	if len(processedIDs) > 0 {
+		markStart := time.Now()
 		if err := reader.MarkIntentsCompleted(ctx, processedIDs, now); err != nil {
 			return PartitionProcessResult{
 				LeaseAcquired:             true,
@@ -371,21 +380,25 @@ func ProcessPartitionOnce(
 				SelectionDurationSeconds:  selectionDuration,
 			}, fmt.Errorf("mark completed: %w", err)
 		}
+		markCompletedDuration = time.Since(markStart).Seconds()
 	}
 	processingDuration := time.Since(processingStart).Seconds()
 
 	return PartitionProcessResult{
-		LeaseAcquired:               true,
-		ProcessedIntents:            len(processedIDs),
-		UpsertedRows:                len(upsertRows),
-		RetractedRows:               len(batch.LatestRows),
-		StaleIntents:                len(batch.StaleIDs),
-		BlockedReadiness:            batch.BlockedCount,
-		MaxIntentWaitSeconds:        maxSharedIntentWaitSeconds(now, batch.LatestRows),
-		MaxBlockedIntentWaitSeconds: maxSharedIntentWaitSeconds(now, batch.BlockedRows),
-		LeaseClaimDurationSeconds:   leaseDuration,
-		SelectionDurationSeconds:    selectionDuration,
-		ProcessingDurationSeconds:   processingDuration,
+		LeaseAcquired:                true,
+		ProcessedIntents:             len(processedIDs),
+		UpsertedRows:                 len(upsertRows),
+		RetractedRows:                len(batch.LatestRows),
+		StaleIntents:                 len(batch.StaleIDs),
+		BlockedReadiness:             batch.BlockedCount,
+		MaxIntentWaitSeconds:         maxSharedIntentWaitSeconds(now, batch.LatestRows),
+		MaxBlockedIntentWaitSeconds:  maxSharedIntentWaitSeconds(now, batch.BlockedRows),
+		LeaseClaimDurationSeconds:    leaseDuration,
+		SelectionDurationSeconds:     selectionDuration,
+		ProcessingDurationSeconds:    processingDuration,
+		RetractDurationSeconds:       retractDuration,
+		WriteDurationSeconds:         writeDuration,
+		MarkCompletedDurationSeconds: markCompletedDuration,
 	}, nil
 }
 

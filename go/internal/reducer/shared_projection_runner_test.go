@@ -1,7 +1,9 @@
 package reducer
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"sync"
 	"testing"
@@ -400,5 +402,49 @@ func TestSharedProjectionRunnerWithTelemetry(t *testing.T) {
 
 	if markedCount == 0 {
 		t.Fatal("expected at least one intent to be marked completed")
+	}
+}
+
+func TestSharedProjectionRunnerRecordCycleLogsSubstepDurations(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	bootstrap, err := telemetry.NewBootstrap("test-reducer")
+	if err != nil {
+		t.Fatalf("NewBootstrap() error = %v", err)
+	}
+	logger := telemetry.NewLoggerWithWriter(bootstrap, "reducer", "reducer", &buf)
+	runner := SharedProjectionRunner{Logger: logger}
+
+	runner.recordSharedProjectionCycle(
+		context.Background(),
+		DomainSQLRelationships,
+		0.40,
+		PartitionProcessResult{
+			MaxIntentWaitSeconds:         8.0,
+			ProcessingDurationSeconds:    0.30,
+			RetractDurationSeconds:       0.11,
+			WriteDurationSeconds:         0.16,
+			MarkCompletedDurationSeconds: 0.03,
+			SelectionDurationSeconds:     0.07,
+			LeaseClaimDurationSeconds:    0.02,
+		},
+	)
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if got, want := entry["processing_duration_seconds"], 0.30; got != want {
+		t.Fatalf("processing_duration_seconds = %v, want %v", got, want)
+	}
+	if got, want := entry["retract_duration_seconds"], 0.11; got != want {
+		t.Fatalf("retract_duration_seconds = %v, want %v", got, want)
+	}
+	if got, want := entry["write_duration_seconds"], 0.16; got != want {
+		t.Fatalf("write_duration_seconds = %v, want %v", got, want)
+	}
+	if got, want := entry["mark_completed_duration_seconds"], 0.03; got != want {
+		t.Fatalf("mark_completed_duration_seconds = %v, want %v", got, want)
 	}
 }

@@ -39,6 +39,9 @@ func (r *CodeCallProjectionRunner) recordCodeCallCycle(
 			slog.Float64("intent_wait_seconds", timing.MaxIntentWaitSeconds),
 			slog.Float64("blocked_intent_wait_seconds", timing.MaxBlockedIntentWaitSeconds),
 			slog.Float64("processing_duration_seconds", timing.ProcessingDurationSeconds),
+			slog.Float64("retract_duration_seconds", timing.RetractDurationSeconds),
+			slog.Float64("write_duration_seconds", timing.WriteDurationSeconds),
+			slog.Float64("mark_completed_duration_seconds", timing.MarkCompletedDurationSeconds),
 			slog.Float64("selection_duration_seconds", timing.SelectionDurationSeconds),
 			slog.Float64("lease_claim_duration_seconds", timing.LeaseClaimDurationSeconds),
 			telemetry.PhaseAttr(telemetry.PhaseReduction),
@@ -83,6 +86,7 @@ func (r *CodeCallProjectionRunner) recordCodeCallTiming(ctx context.Context, res
 			),
 		)
 	}
+	recordSharedProjectionStepDurations(ctx, r.Instruments, DomainCodeCalls, result)
 }
 
 func (r *CodeCallProjectionRunner) recordCodeCallCycleFailure(ctx context.Context, err error, duration float64) {

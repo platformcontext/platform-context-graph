@@ -262,14 +262,18 @@ func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Tim
 	processingStart := time.Now()
 	writtenGroups := 0
 	if len(active) > 0 {
+		retractStart := time.Now()
 		if err := r.retractRepo(ctx, active); err != nil {
 			return result, err
 		}
+		result.RetractDurationSeconds = time.Since(retractStart).Seconds()
 
+		writeStart := time.Now()
 		writtenRows, groups, err := r.writeActiveRows(ctx, active)
 		if err != nil {
 			return result, err
 		}
+		result.WriteDurationSeconds = time.Since(writeStart).Seconds()
 		writtenGroups = groups
 		result.RetractedRows = len(active)
 		result.UpsertedRows = writtenRows
@@ -281,9 +285,11 @@ func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Tim
 		processedIDs = append(processedIDs, row.IntentID)
 	}
 	if len(processedIDs) > 0 {
+		markStart := time.Now()
 		if err := r.IntentReader.MarkIntentsCompleted(ctx, processedIDs, now); err != nil {
 			return result, fmt.Errorf("mark code call intents completed: %w", err)
 		}
+		result.MarkCompletedDurationSeconds = time.Since(markStart).Seconds()
 	}
 
 	result.ProcessedIntents = len(processedIDs)
