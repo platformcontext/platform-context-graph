@@ -1,0 +1,23 @@
+docs/docs/adrs/2026-04-28-reducer-throughput-and-nornicdb-concurrency-plan.md
+  4cb501d5d4ff237f 1083-1115,1172,1185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "33e952c4079caf6d5aabcb709fe8f5e886c890a9",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 35,
+      "total_deletions": 1,
+      "accepted_lines": 60,
+      "overriden_lines": 0
+    }
+  }
+}
