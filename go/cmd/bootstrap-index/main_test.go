@@ -204,6 +204,36 @@ func TestBuildBootstrapProjectorWiresPhasePublisherAndRepairQueue(t *testing.T) 
 	}
 }
 
+func TestBuildBootstrapProjectorWiresLargeGenerationClaimOrder(t *testing.T) {
+	t.Parallel()
+
+	deps, err := buildBootstrapProjector(
+		context.Background(),
+		&fakeBootstrapSQLDB{},
+		&noopCanonicalWriter{},
+		func(name string) string {
+			if name == projectorClaimOrderEnv {
+				return "size_desc"
+			}
+			return ""
+		},
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildBootstrapProjector() error = %v, want nil", err)
+	}
+
+	workSource, ok := deps.workSource.(postgres.ProjectorQueue)
+	if !ok {
+		t.Fatalf("workSource type = %T, want postgres.ProjectorQueue", deps.workSource)
+	}
+	if !workSource.PreferLargeGenerationsFirst {
+		t.Fatal("PreferLargeGenerationsFirst = false, want true")
+	}
+}
+
 // --- fakes ---
 
 type fakeBootstrapDB struct {

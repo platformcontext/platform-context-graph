@@ -372,7 +372,7 @@ func (s IngestionStore) CommitScopeGeneration(
 
 	queue := ProjectorQueue{db: tx, Now: s.now}
 	stageStart = time.Now()
-	if err := queue.Enqueue(ctx, scopeValue.ScopeID, generation.GenerationID); err != nil {
+	if err := queue.EnqueueWithFactCount(ctx, scopeValue.ScopeID, generation.GenerationID, factStats.Rows); err != nil {
 		return err
 	}
 	s.logCommitStage(ctx, scopeValue, generation, "enqueue_projector_work", stageStart)

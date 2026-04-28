@@ -32,7 +32,7 @@ INSERT INTO fact_work_items (
     created_at,
     updated_at
 ) VALUES (
-    $1, $2, $3, 'projector', $4, 'pending', 0, NULL, NULL, $5, NULL, NULL, NULL, NULL, NULL, '{}'::jsonb, $5, $5
+    $1, $2, $3, 'projector', $4, 'pending', 0, NULL, NULL, $5, NULL, NULL, NULL, NULL, NULL, $6::jsonb, $5, $5
 )
 ON CONFLICT (work_item_id) DO NOTHING
 `
@@ -54,7 +54,14 @@ WITH candidate AS (
             AND inflight.status IN ('claimed', 'running')
             AND inflight.claim_until > $1
       )
-    ORDER BY work.updated_at ASC, work.work_item_id ASC
+    ORDER BY
+      CASE
+        WHEN $4 = true AND work.payload->>'fact_count' ~ '^[0-9]+$'
+        THEN (work.payload->>'fact_count')::integer
+        ELSE 0
+      END DESC,
+      work.updated_at ASC,
+      work.work_item_id ASC
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 ),
@@ -219,6 +226,12 @@ type ProjectorQueue struct {
 	RetryDelay    time.Duration
 	MaxAttempts   int
 	Now           func() time.Time
+
+	// PreferLargeGenerationsFirst makes source-local projector claims choose
+	// the largest known pending generation before FIFO order. It is intended as
+	// an evidence-gathering scheduler knob for finite corpus runs where late
+	// large repos otherwise hold reducer readiness behind the final tail.
+	PreferLargeGenerationsFirst bool
 }
 
 // ErrProjectorClaimRejected means the claimed projector work item no longer
@@ -244,6 +257,17 @@ func (q ProjectorQueue) Enqueue(
 	scopeID string,
 	generationID string,
 ) error {
+	return q.EnqueueWithFactCount(ctx, scopeID, generationID, 0)
+}
+
+// EnqueueWithFactCount inserts one durable source-local projection work item
+// with low-cardinality scheduling metadata captured during ingestion.
+func (q ProjectorQueue) EnqueueWithFactCount(
+	ctx context.Context,
+	scopeID string,
+	generationID string,
+	factCount int,
+) error {
 	if q.db == nil {
 		return errors.New("projector queue database is required")
 	}
@@ -253,9 +277,20 @@ func (q ProjectorQueue) Enqueue(
 	if generationID == "" {
 		return errors.New("projector queue generation_id is required")
 	}
+	if factCount < 0 {
+		factCount = 0
+	}
+
+	payloadJSON, err := marshalPayload(map[string]any{
+		"fact_count":     factCount,
+		"repo_size_tier": projectorRepoSizeTier(factCount),
+	})
+	if err != nil {
+		return fmt.Errorf("marshal projector queue payload: %w", err)
+	}
 
 	now := q.now()
-	_, err := q.db.ExecContext(
+	_, err = q.db.ExecContext(
 		ctx,
 		enqueueProjectorWorkQuery,
 		projectorWorkItemID(scopeID, generationID),
@@ -263,6 +298,7 @@ func (q ProjectorQueue) Enqueue(
 		generationID,
 		"source_local",
 		now,
+		payloadJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("enqueue projector work: %w", err)
@@ -278,7 +314,14 @@ func (q ProjectorQueue) Claim(ctx context.Context) (projector.ScopeGenerationWor
 	}
 
 	now := q.now()
-	rows, err := q.db.QueryContext(ctx, claimProjectorWorkQuery, now, q.LeaseOwner, now.Add(q.LeaseDuration))
+	rows, err := q.db.QueryContext(
+		ctx,
+		claimProjectorWorkQuery,
+		now,
+		q.LeaseOwner,
+		now.Add(q.LeaseDuration),
+		q.PreferLargeGenerationsFirst,
+	)
 	if err != nil {
 		return projector.ScopeGenerationWork{}, false, fmt.Errorf("claim projector work: %w", err)
 	}
@@ -535,6 +578,17 @@ func scanProjectorWork(rows Rows) (projector.ScopeGenerationWork, error) {
 
 func projectorWorkItemID(scopeID string, generationID string) string {
 	return fmt.Sprintf("projector_%s_%s", scopeID, generationID)
+}
+
+func projectorRepoSizeTier(factCount int) string {
+	switch {
+	case factCount >= 10000:
+		return "large"
+	case factCount >= 1000:
+		return "medium"
+	default:
+		return "small"
+	}
 }
 
 func projectorScopeMetadata(rawPayload []byte) map[string]string {
