@@ -164,6 +164,15 @@ retry, failed, or dead-letter queue rows. Canonical files completed in `1.496s`,
 upstream review; do not compensate for missing relationship indexes by lowering
 PCG row caps.
 
+Medium-corpus edge-index checkpoint: the same patched NornicDB binary drained
+`23` repos from `/home/ubuntu/pcg-test-repos` healthy, with projector `23/23`,
+reducer `184` succeeded work items, and queue `pending=0 in_flight=0
+retrying=0 dead_letter=0 failed=0`. The large PHP tail still spent `69.750s`
+inside `Variable` entity writes, but file relationship writes stayed bounded:
+the canonical file phase completed `52` statements in `1.683s`. This confirms
+the edge index fixes relationship-existence slope; it does not remove the need
+to tune high-cardinality entity volume from measured label summaries.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
