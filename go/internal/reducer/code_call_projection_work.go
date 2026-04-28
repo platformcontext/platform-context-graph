@@ -49,6 +49,25 @@ func (r *CodeCallProjectionRunner) retractRepo(ctx context.Context, rows []Share
 	return nil
 }
 
+func (r *CodeCallProjectionRunner) shouldSkipCodeCallRetract(
+	ctx context.Context,
+	key SharedProjectionAcceptanceKey,
+	staleIDs []string,
+) (bool, error) {
+	if len(staleIDs) > 0 {
+		return false, nil
+	}
+	history, ok := r.IntentReader.(CodeCallProjectionHistoryLookup)
+	if !ok {
+		return false, nil
+	}
+	hasCompleted, err := history.HasCompletedAcceptanceUnitDomainIntents(ctx, key, DomainCodeCalls)
+	if err != nil {
+		return false, fmt.Errorf("check completed code call projection history: %w", err)
+	}
+	return !hasCompleted, nil
+}
+
 func (r *CodeCallProjectionRunner) writeActiveRows(ctx context.Context, rows []SharedProjectionIntentRow) (int, int, error) {
 	groups := groupCodeCallUpsertRows(rows)
 	if len(groups) == 0 {

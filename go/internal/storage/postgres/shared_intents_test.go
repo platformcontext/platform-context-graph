@@ -408,6 +408,71 @@ func TestSharedIntentStorePersistsAcceptanceIdentity(t *testing.T) {
 	}
 }
 
+func TestSharedIntentStoreHasCompletedAcceptanceUnitDomainIntents(t *testing.T) {
+	t.Parallel()
+
+	db := newSharedIntentTestDB()
+	store := NewSharedIntentStore(db)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	completedAt := now.Add(time.Second)
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:         "si-completed",
+			ProjectionDomain: reducer.DomainCodeCalls,
+			PartitionKey:     "caller->callee",
+			ScopeID:          "scope-a",
+			AcceptanceUnitID: "repo-a",
+			RepositoryID:     "repo-a",
+			SourceRunID:      "run-old",
+			GenerationID:     "gen-old",
+			Payload:          map[string]any{"repo_id": "repo-a"},
+			CreatedAt:        now,
+			CompletedAt:      &completedAt,
+		},
+		{
+			IntentID:         "si-pending",
+			ProjectionDomain: reducer.DomainCodeCalls,
+			PartitionKey:     "caller->callee",
+			ScopeID:          "scope-b",
+			AcceptanceUnitID: "repo-a",
+			RepositoryID:     "repo-a",
+			SourceRunID:      "run-new",
+			GenerationID:     "gen-new",
+			Payload:          map[string]any{"repo_id": "repo-a"},
+			CreatedAt:        now,
+		},
+	}
+	if err := store.UpsertIntents(ctx, rows); err != nil {
+		t.Fatalf("UpsertIntents: %v", err)
+	}
+
+	got, err := store.HasCompletedAcceptanceUnitDomainIntents(ctx, reducer.SharedProjectionAcceptanceKey{
+		ScopeID:          "scope-a",
+		AcceptanceUnitID: "repo-a",
+		SourceRunID:      "run-new",
+	}, reducer.DomainCodeCalls)
+	if err != nil {
+		t.Fatalf("HasCompletedAcceptanceUnitDomainIntents: %v", err)
+	}
+	if !got {
+		t.Fatal("HasCompletedAcceptanceUnitDomainIntents = false, want true")
+	}
+
+	got, err = store.HasCompletedAcceptanceUnitDomainIntents(ctx, reducer.SharedProjectionAcceptanceKey{
+		ScopeID:          "scope-b",
+		AcceptanceUnitID: "repo-a",
+		SourceRunID:      "run-new",
+	}, reducer.DomainCodeCalls)
+	if err != nil {
+		t.Fatalf("HasCompletedAcceptanceUnitDomainIntents pending scope: %v", err)
+	}
+	if got {
+		t.Fatal("HasCompletedAcceptanceUnitDomainIntents for pending-only scope = true, want false")
+	}
+}
+
 // -- test helpers --
 
 // sharedIntentTestDB is an in-memory mock of ExecQueryer that stores shared
@@ -481,6 +546,24 @@ func (db *sharedIntentTestDB) ExecContext(_ context.Context, query string, args 
 
 func (db *sharedIntentTestDB) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
 	switch {
+	case strings.Contains(query, "SELECT EXISTS") &&
+		strings.Contains(query, "completed_at IS NOT NULL"):
+		scopeID := args[0].(string)
+		acceptanceUnitID := args[1].(string)
+		domain := args[2].(string)
+		exists := false
+		for _, stored := range db.intents {
+			intent := stored.row
+			if stored.scopeID != scopeID || stored.acceptanceUnitID != acceptanceUnitID {
+				continue
+			}
+			if intent.ProjectionDomain == domain && intent.CompletedAt != nil {
+				exists = true
+				break
+			}
+		}
+		return newSharedIntentRows([][]any{{exists}}), nil
+
 	case strings.Contains(query, "WHERE scope_id = $1") &&
 		strings.Contains(query, "acceptance_unit_id = $2") &&
 		strings.Contains(query, "projection_domain = $4"):
@@ -697,6 +780,8 @@ func (r *sharedIntentRows) Scan(dest ...any) error {
 				d.Time = val.(time.Time)
 				d.Valid = true
 			}
+		case *bool:
+			*d = val.(bool)
 		default:
 			return fmt.Errorf("unsupported scan dest type %T", dest[i])
 		}

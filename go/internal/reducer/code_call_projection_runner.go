@@ -34,6 +34,14 @@ type CodeCallProjectionIntentReader interface {
 	MarkIntentsCompleted(ctx context.Context, intentIDs []string, completedAt time.Time) error
 }
 
+// CodeCallProjectionHistoryLookup checks whether an acceptance unit has ever
+// completed code-call projection before. Runners use it only to skip proven
+// first-projection no-op retractions; absence or errors keep the conservative
+// retract-before-write path.
+type CodeCallProjectionHistoryLookup interface {
+	HasCompletedAcceptanceUnitDomainIntents(ctx context.Context, key SharedProjectionAcceptanceKey, domain string) (bool, error)
+}
+
 // CodeCallProjectionRunnerConfig configures the controlled code-calls lane.
 type CodeCallProjectionRunnerConfig struct {
 	LeaseOwner          string
@@ -262,11 +270,18 @@ func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Tim
 	processingStart := time.Now()
 	writtenGroups := 0
 	if len(active) > 0 {
-		retractStart := time.Now()
-		if err := r.retractRepo(ctx, active); err != nil {
+		skipRetract, err := r.shouldSkipCodeCallRetract(ctx, selection.Key, staleIDs)
+		if err != nil {
 			return result, err
 		}
-		result.RetractDurationSeconds = time.Since(retractStart).Seconds()
+		if !skipRetract {
+			retractStart := time.Now()
+			if err := r.retractRepo(ctx, active); err != nil {
+				return result, err
+			}
+			result.RetractDurationSeconds = time.Since(retractStart).Seconds()
+			result.RetractedRows = len(active)
+		}
 
 		writeStart := time.Now()
 		writtenRows, groups, err := r.writeActiveRows(ctx, active)
@@ -275,7 +290,6 @@ func (r *CodeCallProjectionRunner) processOnce(ctx context.Context, now time.Tim
 		}
 		result.WriteDurationSeconds = time.Since(writeStart).Seconds()
 		writtenGroups = groups
-		result.RetractedRows = len(active)
 		result.UpsertedRows = writtenRows
 	}
 

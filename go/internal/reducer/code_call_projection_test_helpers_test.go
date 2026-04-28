@@ -20,6 +20,43 @@ type fakeCodeCallIntentStore struct {
 	acceptanceResponder     func(key SharedProjectionAcceptanceKey, limit int) ([]SharedProjectionIntentRow, error)
 }
 
+type historyAwareCodeCallIntentStore struct {
+	*fakeCodeCallIntentStore
+	hasCompleted bool
+	historyErr   error
+}
+
+func (h *historyAwareCodeCallIntentStore) HasCompletedAcceptanceUnitDomainIntents(
+	context.Context,
+	SharedProjectionAcceptanceKey,
+	string,
+) (bool, error) {
+	if h.historyErr != nil {
+		return false, h.historyErr
+	}
+	return h.hasCompleted, nil
+}
+
+func codeCallProjectionTestRow(intentID, generationID string, createdAt time.Time) SharedProjectionIntentRow {
+	return SharedProjectionIntentRow{
+		IntentID:         intentID,
+		ProjectionDomain: DomainCodeCalls,
+		PartitionKey:     "caller->callee",
+		ScopeID:          "scope-a",
+		AcceptanceUnitID: "repo-a",
+		RepositoryID:     "repo-a",
+		SourceRunID:      "run-1",
+		GenerationID:     generationID,
+		Payload: map[string]any{
+			"repo_id":          "repo-a",
+			"caller_entity_id": "caller",
+			"callee_entity_id": "callee",
+			"evidence_source":  codeCallEvidenceSource,
+		},
+		CreatedAt: createdAt,
+	}
+}
+
 func (f *fakeCodeCallIntentStore) ListPendingDomainIntents(_ context.Context, _ string, limit int) ([]SharedProjectionIntentRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
