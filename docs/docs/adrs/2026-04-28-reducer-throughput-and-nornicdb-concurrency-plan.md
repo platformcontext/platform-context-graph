@@ -646,6 +646,27 @@ slice should either add inner-step SQL handler timing (`ListFacts`, extraction,
 retract, write) or shift to the larger measured full-corpus reducer cost:
 semantic entity materialization query/write shape.
 
+### Change Impact Ledger
+
+Classify every reducer-throughput slice by the metric it was meant to move.
+This avoids treating a correctness or observability improvement as a throughput
+win when wall-clock evidence does not support that claim.
+
+| Commit | Change | Intended metric | Measured effect | Classification |
+| --- | --- | --- | --- | --- |
+| `55740672` | Label-scoped SQL relationship writes | Lower SQL handler time | Focused 4-repo wall moved from `153s` to `154s`; slowest SQL handler stayed around `11s` (`11.433s` to `11.702s`) | No material throughput win |
+| `b0c994b6` / `742d0c56` | Shared and code-call wait-vs-processing telemetry | Separate wait from actual graph work | Proved `code_calls` wall (`119.682s` to `124.162s`) was mostly not graph-write processing (`~5.08s` to `~10.85s`) | Diagnostic win |
+| `3e870754` / `11d74089` | Code-call readiness-blocked polling stays at base interval | Reduce readiness-blocked polling tail | Focused 4-repo wall stayed flat (`141s` to `139s`); code-call processing sum later measured around `5.116s` | Small tail cleanup, not material wall-clock win |
+| `02d9cdc7` | Generic shared readiness-blocked polling stays at base interval | Reduce SQL/inheritance readiness-blocked polling tail | Covered by later focused proof; no standalone wall-clock drop established | Correctness-preserving scheduler cleanup |
+| `acc50494` | Scope NornicDB projector-drain claim gate by same `scope_id` | Lower false reducer queue wait behind unrelated source-local work | Focused wall stayed flat (`139s` to `140s`), but deployment-mapping wait dropped `200.698s` to `14.618s` and SQL wait dropped `101.708s` to `33.651s` | Scheduling win, not wall-clock win on 4 repos |
+| `367060fd` | Scope grouped SQL relationship retractions by exact source label and relationship type | Lower SQL handler time | Focused wall moved `140s` to `138s`; SQL handler max moved `11.543s` to `10.634s`; SQL wait stayed flat (`33.651s` to `32.946s`) | Safe query-shape cleanup, marginal handler win |
+
+The ledger says the next performance slice should not be another broad SQL
+shape tweak unless inner-step SQL timing proves a specific SQL substep is still
+dominant. The highest full-corpus actual-work cost remains
+`semantic_entity_materialization`, so the next evidence-first target is semantic
+entity materialization query/write timing and shape.
+
 ## Chunk Status
 
 | Chunk | Status | Evidence | Next action |
