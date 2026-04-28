@@ -976,10 +976,12 @@ func TestEdgeWriterWriteEdgesSQLRelationshipDispatch(t *testing.T) {
 			IntentID:     "i1",
 			RepositoryID: "repo-a",
 			Payload: map[string]any{
-				"source_entity_id":  "entity:sql_view:my_view",
-				"target_entity_id":  "entity:sql_table:users",
-				"repo_id":           "repo-a",
-				"relationship_type": "REFERENCES_TABLE",
+				"source_entity_id":   "entity:sql_view:my_view",
+				"target_entity_id":   "entity:sql_table:users",
+				"source_entity_type": "SqlView",
+				"target_entity_type": "SqlTable",
+				"repo_id":            "repo-a",
+				"relationship_type":  "REFERENCES_TABLE",
 			},
 		},
 	}
@@ -994,11 +996,11 @@ func TestEdgeWriterWriteEdgesSQLRelationshipDispatch(t *testing.T) {
 	if !strings.Contains(executor.calls[0].Cypher, "REFERENCES_TABLE") {
 		t.Fatalf("cypher missing REFERENCES_TABLE: %s", executor.calls[0].Cypher)
 	}
-	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.source_entity_id})") {
-		t.Fatalf("cypher missing labeled source match: %s", executor.calls[0].Cypher)
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source:SqlView {uid: row.source_entity_id})") {
+		t.Fatalf("cypher missing exact source label match: %s", executor.calls[0].Cypher)
 	}
-	if !strings.Contains(executor.calls[0].Cypher, "MATCH (target:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.target_entity_id})") {
-		t.Fatalf("cypher missing labeled target match: %s", executor.calls[0].Cypher)
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (target:SqlTable {uid: row.target_entity_id})") {
+		t.Fatalf("cypher missing exact target label match: %s", executor.calls[0].Cypher)
 	}
 	if strings.Contains(executor.calls[0].Cypher, "HAS_COLUMN") {
 		t.Fatalf("cypher unexpectedly included HAS_COLUMN edge: %s", executor.calls[0].Cypher)
@@ -1015,6 +1017,36 @@ func TestEdgeWriterWriteEdgesSQLRelationshipDispatch(t *testing.T) {
 	}
 	if got, want := batchRows[0]["relationship_type"], "REFERENCES_TABLE"; got != want {
 		t.Fatalf("relationship_type = %v, want %v", got, want)
+	}
+}
+
+func TestEdgeWriterWriteEdgesSQLRelationshipFallsBackForRowsWithoutEntityTypes(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewEdgeWriter(executor, 0)
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:     "i1",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"source_entity_id":  "entity:sql_view:my_view",
+				"target_entity_id":  "entity:sql_table:users",
+				"repo_id":           "repo-a",
+				"relationship_type": "REFERENCES_TABLE",
+			},
+		},
+	}
+
+	if err := writer.WriteEdges(context.Background(), reducer.DomainSQLRelationships, rows, "reducer/sql-relationships"); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.calls), 1; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.source_entity_id})") {
+		t.Fatalf("cypher missing compatibility source match: %s", executor.calls[0].Cypher)
 	}
 }
 

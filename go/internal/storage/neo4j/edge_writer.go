@@ -350,27 +350,7 @@ func buildRowMap(
 		}
 
 	case reducer.DomainSQLRelationships:
-		sourceEntityID := payloadString(row.Payload, "source_entity_id")
-		targetEntityID := payloadString(row.Payload, "target_entity_id")
-		if sourceEntityID == "" || targetEntityID == "" {
-			return "", nil, false
-		}
-		rowMap := map[string]any{
-			"source_entity_id":  sourceEntityID,
-			"target_entity_id":  targetEntityID,
-			"relationship_type": payloadString(row.Payload, "relationship_type"),
-			"evidence_source":   evidenceSource,
-		}
-		switch rowMap["relationship_type"] {
-		case "REFERENCES_TABLE":
-			return batchCanonicalSQLRelationshipUpsertCypher, rowMap, true
-		case "HAS_COLUMN":
-			return batchCanonicalSQLHasColumnUpsertCypher, rowMap, true
-		case "TRIGGERS":
-			return batchCanonicalSQLTriggersUpsertCypher, rowMap, true
-		default:
-			return "", nil, false
-		}
+		return buildSQLRelationshipRowMap(row.Payload, evidenceSource)
 
 	default:
 		return "", nil, false

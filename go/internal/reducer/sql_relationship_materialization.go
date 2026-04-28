@@ -197,10 +197,12 @@ func ExtractSQLRelationshipRows(envelopes []facts.Envelope) ([]string, []map[str
 				}
 				seenEdges[edgeKey] = struct{}{}
 				rows = append(rows, map[string]any{
-					"source_entity_id":  entityID,
-					"target_entity_id":  target.entityID,
-					"repo_id":           repoID,
-					"relationship_type": "REFERENCES_TABLE",
+					"source_entity_id":   entityID,
+					"target_entity_id":   target.entityID,
+					"source_entity_type": entityType,
+					"target_entity_type": target.entityType,
+					"repo_id":            repoID,
+					"relationship_type":  "REFERENCES_TABLE",
 				})
 			}
 
@@ -220,10 +222,12 @@ func ExtractSQLRelationshipRows(envelopes []facts.Envelope) ([]string, []map[str
 			}
 			seenEdges[edgeKey] = struct{}{}
 			rows = append(rows, map[string]any{
-				"source_entity_id":  entityID,
-				"target_entity_id":  target.entityID,
-				"repo_id":           repoID,
-				"relationship_type": "TRIGGERS",
+				"source_entity_id":   entityID,
+				"target_entity_id":   target.entityID,
+				"source_entity_type": entityType,
+				"target_entity_type": target.entityType,
+				"repo_id":            repoID,
+				"relationship_type":  "TRIGGERS",
 			})
 
 		case "SqlColumn":
@@ -242,10 +246,12 @@ func ExtractSQLRelationshipRows(envelopes []facts.Envelope) ([]string, []map[str
 			}
 			seenEdges[edgeKey] = struct{}{}
 			rows = append(rows, map[string]any{
-				"source_entity_id":  source.entityID,
-				"target_entity_id":  entityID,
-				"repo_id":           repoID,
-				"relationship_type": "HAS_COLUMN",
+				"source_entity_id":   source.entityID,
+				"target_entity_id":   entityID,
+				"source_entity_type": source.entityType,
+				"target_entity_type": entityType,
+				"repo_id":            repoID,
+				"relationship_type":  "HAS_COLUMN",
 			})
 		}
 	}

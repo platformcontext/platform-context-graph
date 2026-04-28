@@ -149,6 +149,12 @@ func TestExtractSQLRelationshipRowsFromViewReferencingTable(t *testing.T) {
 	if got, want := rows[0]["relationship_type"], "REFERENCES_TABLE"; got != want {
 		t.Fatalf("relationship_type = %v, want %v", got, want)
 	}
+	if got, want := rows[0]["source_entity_type"], "SqlView"; got != want {
+		t.Fatalf("source_entity_type = %v, want %v", got, want)
+	}
+	if got, want := rows[0]["target_entity_type"], "SqlTable"; got != want {
+		t.Fatalf("target_entity_type = %v, want %v", got, want)
+	}
 	if got, want := rows[0]["repo_id"], "repo-123"; got != want {
 		t.Fatalf("repo_id = %v, want %v", got, want)
 	}
@@ -198,6 +204,12 @@ func TestExtractSQLRelationshipRowsFromTableWithColumn(t *testing.T) {
 	if got, want := rows[0]["relationship_type"], "HAS_COLUMN"; got != want {
 		t.Fatalf("relationship_type = %v, want %v", got, want)
 	}
+	if got, want := rows[0]["source_entity_type"], "SqlTable"; got != want {
+		t.Fatalf("source_entity_type = %v, want %v", got, want)
+	}
+	if got, want := rows[0]["target_entity_type"], "SqlColumn"; got != want {
+		t.Fatalf("target_entity_type = %v, want %v", got, want)
+	}
 }
 
 func TestExtractSQLRelationshipRowsFromTriggerOnTable(t *testing.T) {
@@ -243,6 +255,12 @@ func TestExtractSQLRelationshipRowsFromTriggerOnTable(t *testing.T) {
 	}
 	if got, want := rows[0]["relationship_type"], "TRIGGERS"; got != want {
 		t.Fatalf("relationship_type = %v, want %v", got, want)
+	}
+	if got, want := rows[0]["source_entity_type"], "SqlTrigger"; got != want {
+		t.Fatalf("source_entity_type = %v, want %v", got, want)
+	}
+	if got, want := rows[0]["target_entity_type"], "SqlTable"; got != want {
+		t.Fatalf("target_entity_type = %v, want %v", got, want)
 	}
 }
 
