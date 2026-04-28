@@ -154,6 +154,16 @@ grouped-statement cap to `10` was safe but only marginally faster on that repo;
 raising it to `25` made early Variable chunks clearly slower, so `5` remains
 the best proven default and `10` is only a focused experiment candidate.
 
+Edge-index checkpoint: the NornicDB direct edge-between index proof reran the
+same large PHP repo after patching relationship lookup from outgoing-edge scans
+to indexed `(start,end,type)` existence checks. The run drained healthy with no
+retry, failed, or dead-letter queue rows. Canonical files completed in `1.496s`,
+`Function` completed in `6.053s`, and `Variable` completed `118,768` rows in
+`62.340s` with max grouped execution `0.437s`. Keep `Variable=100` plus
+`Variable=5` as the PCG-side default while the NornicDB patch moves through
+upstream review; do not compensate for missing relationship indexes by lowering
+PCG row caps.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
