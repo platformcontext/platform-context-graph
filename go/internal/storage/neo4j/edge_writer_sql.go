@@ -2,6 +2,26 @@ package neo4j
 
 import "fmt"
 
+const retractSQLViewReferencesTableEdgesCypher = `MATCH (source:SqlView)-[rel:REFERENCES_TABLE]->()
+WHERE source.repo_id IN $repo_ids
+  AND rel.evidence_source = $evidence_source
+DELETE rel`
+
+const retractSQLFunctionReferencesTableEdgesCypher = `MATCH (source:SqlFunction)-[rel:REFERENCES_TABLE]->()
+WHERE source.repo_id IN $repo_ids
+  AND rel.evidence_source = $evidence_source
+DELETE rel`
+
+const retractSQLTableHasColumnEdgesCypher = `MATCH (source:SqlTable)-[rel:HAS_COLUMN]->()
+WHERE source.repo_id IN $repo_ids
+  AND rel.evidence_source = $evidence_source
+DELETE rel`
+
+const retractSQLTriggerEdgesCypher = `MATCH (source:SqlTrigger)-[rel:TRIGGERS]->()
+WHERE source.repo_id IN $repo_ids
+  AND rel.evidence_source = $evidence_source
+DELETE rel`
+
 var sqlRelationshipEntityLabels = map[string]struct{}{
 	"SqlColumn":   {},
 	"SqlFunction": {},
@@ -98,4 +118,27 @@ MERGE (source)-[rel:%s]->(target)
 SET rel.confidence = 0.95,
     rel.reason = '%s',
     rel.evidence_source = row.evidence_source`, sourceLabel, targetLabel, relationshipType, reason)
+}
+
+// BuildRetractSQLRelationshipEdgeStatements builds label-scoped SQL
+// relationship retraction statements for grouped reducer execution.
+func BuildRetractSQLRelationshipEdgeStatements(repoIDs []string, evidenceSource string) []Statement {
+	cyphers := []string{
+		retractSQLViewReferencesTableEdgesCypher,
+		retractSQLFunctionReferencesTableEdgesCypher,
+		retractSQLTableHasColumnEdgesCypher,
+		retractSQLTriggerEdgesCypher,
+	}
+	stmts := make([]Statement, 0, len(cyphers))
+	for _, cypher := range cyphers {
+		stmts = append(stmts, Statement{
+			Operation: OperationCanonicalRetract,
+			Cypher:    cypher,
+			Parameters: map[string]any{
+				"repo_ids":        repoIDs,
+				"evidence_source": evidenceSource,
+			},
+		})
+	}
+	return stmts
 }
