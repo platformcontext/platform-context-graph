@@ -68,7 +68,7 @@ func (r *CodeCallProjectionRunner) selectAcceptanceUnitWorkWithStats(ctx context
 			lookup = resolvedLookup
 		}
 
-		phase, gated := semanticNodeReadinessPhase(DomainCodeCalls)
+		phase, gated := sharedProjectionReadinessPhase(DomainCodeCalls)
 		acceptedByKey := make(map[SharedProjectionAcceptanceKey]string, len(pending))
 		seen := make(map[SharedProjectionAcceptanceKey]struct{}, len(pending))
 		for _, row := range pending {

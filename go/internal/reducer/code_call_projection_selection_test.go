@@ -132,7 +132,7 @@ func TestCodeCallProjectionRunnerSelectsAcceptanceUnitBeyondInitialBatchWindow(t
 	}
 }
 
-func TestCodeCallProjectionRunnerSkipsAcceptanceUnitUntilSemanticNodesCommitted(t *testing.T) {
+func TestCodeCallProjectionRunnerSkipsAcceptanceUnitUntilCanonicalNodesCommitted(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.April, 17, 12, 0, 0, 0, time.UTC)
@@ -163,7 +163,44 @@ func TestCodeCallProjectionRunnerSkipsAcceptanceUnitUntilSemanticNodesCommitted(
 		t.Fatalf("selectAcceptanceUnitWork() error = %v", err)
 	}
 	if key != (SharedProjectionAcceptanceKey{}) {
-		t.Fatalf("key = %#v, want zero value while semantic node readiness is missing", key)
+		t.Fatalf("key = %#v, want zero value while canonical node readiness is missing", key)
+	}
+}
+
+func TestCodeCallProjectionRunnerUsesCanonicalNodeReadiness(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 17, 12, 15, 0, 0, time.UTC)
+	reader := &fakeCodeCallIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			{
+				IntentID:         "accepted-1",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "caller->callee",
+				ScopeID:          "scope-a",
+				AcceptanceUnitID: "repo-a",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				CreatedAt:        now,
+			},
+		},
+	}
+	runner := CodeCallProjectionRunner{
+		IntentReader: reader,
+		AcceptedGen:  acceptedGenerationFixed("gen-1", true),
+		ReadinessLookup: func(_ GraphProjectionPhaseKey, phase GraphProjectionPhase) (bool, bool) {
+			return phase == GraphProjectionPhaseCanonicalNodesCommitted, true
+		},
+		Config: CodeCallProjectionRunnerConfig{BatchLimit: 10},
+	}
+
+	key, err := runner.selectAcceptanceUnitWork(context.Background())
+	if err != nil {
+		t.Fatalf("selectAcceptanceUnitWork() error = %v", err)
+	}
+	if got, want := key.AcceptanceUnitID, "repo-a"; got != want {
+		t.Fatalf("key.AcceptanceUnitID = %q, want %q", got, want)
 	}
 }
 
@@ -210,8 +247,8 @@ func TestCodeCallProjectionRunnerSelectsReadyAcceptanceUnitWhenEarlierUnitIsBloc
 			}
 		},
 		ReadinessLookup: func(key GraphProjectionPhaseKey, phase GraphProjectionPhase) (bool, bool) {
-			if phase != GraphProjectionPhaseSemanticNodesCommitted {
-				t.Fatalf("phase = %q, want %q", phase, GraphProjectionPhaseSemanticNodesCommitted)
+			if phase != GraphProjectionPhaseCanonicalNodesCommitted {
+				t.Fatalf("phase = %q, want %q", phase, GraphProjectionPhaseCanonicalNodesCommitted)
 			}
 			if key.AcceptanceUnitID == "repo-ready" {
 				return true, true

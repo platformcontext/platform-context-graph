@@ -396,7 +396,7 @@ func filterRowsByReadiness(
 	readinessLookup GraphProjectionReadinessLookup,
 	readinessPrefetch GraphProjectionReadinessPrefetch,
 ) ([]SharedProjectionIntentRow, []SharedProjectionIntentRow, error) {
-	phase, gated := semanticNodeReadinessPhase(domain)
+	phase, gated := sharedProjectionReadinessPhase(domain)
 	if !gated || len(rows) == 0 {
 		return rows, nil, nil
 	}
