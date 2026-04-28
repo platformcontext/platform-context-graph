@@ -425,35 +425,6 @@ func TestBuildRetractCodeCallEdgesMetaclassStatement(t *testing.T) {
 	}
 }
 
-func TestBuildRetractCodeCallEdgeStatementsUseLabelScopedAnchors(t *testing.T) {
-	t.Parallel()
-
-	stmts := BuildRetractCodeCallEdgeStatements([]string{"repo-1"}, "parser/python-metaclass")
-	if got, want := len(stmts), 3; got != want {
-		t.Fatalf("statement count = %d, want %d", got, want)
-	}
-
-	expectedLabels := []string{"Function", "Class", "File"}
-	for i, label := range expectedLabels {
-		stmt := stmts[i]
-		if stmt.Operation != OperationCanonicalRetract {
-			t.Fatalf("statement %d operation = %q, want %q", i, stmt.Operation, OperationCanonicalRetract)
-		}
-		if !strings.Contains(stmt.Cypher, "source:"+label) {
-			t.Fatalf("statement %d missing %s anchor: %s", i, label, stmt.Cypher)
-		}
-		if strings.Contains(stmt.Cypher, "Function|Class|File") {
-			t.Fatalf("statement %d uses broad label alternation: %s", i, stmt.Cypher)
-		}
-		if !strings.Contains(stmt.Cypher, "USES_METACLASS") {
-			t.Fatalf("statement %d missing USES_METACLASS: %s", i, stmt.Cypher)
-		}
-		if strings.Contains(stmt.Cypher, "CALLS") || strings.Contains(stmt.Cypher, "REFERENCES") {
-			t.Fatalf("statement %d unexpectedly includes parser call relationships: %s", i, stmt.Cypher)
-		}
-	}
-}
-
 func TestBuildDeleteOrphanPlatformNodesStatement(t *testing.T) {
 	t.Parallel()
 

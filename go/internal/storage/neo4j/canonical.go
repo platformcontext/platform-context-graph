@@ -280,51 +280,6 @@ WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`
 
-const retractCodeCallParserEdgesByFunctionCypher = `MATCH (source:Function)-[rel:CALLS|REFERENCES]->()
-WHERE source.repo_id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
-DELETE rel`
-
-const retractCodeCallParserEdgesByClassCypher = `MATCH (source:Class)-[rel:CALLS|REFERENCES]->()
-WHERE source.repo_id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
-DELETE rel`
-
-const retractCodeCallParserEdgesByFileCypher = `MATCH (source:File)-[rel:CALLS|REFERENCES]->()
-WHERE source.repo_id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
-DELETE rel`
-
-const retractCodeCallMetaclassEdgesByFunctionCypher = `MATCH (source:Function)-[rel:USES_METACLASS]->()
-WHERE source.repo_id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
-DELETE rel`
-
-const retractCodeCallMetaclassEdgesByClassCypher = `MATCH (source:Class)-[rel:USES_METACLASS]->()
-WHERE source.repo_id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
-DELETE rel`
-
-const retractCodeCallMetaclassEdgesByFileCypher = `MATCH (source:File)-[rel:USES_METACLASS]->()
-WHERE source.repo_id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
-DELETE rel`
-
-const retractCodeCallFallbackEdgesByFunctionCypher = `MATCH (source:Function)-[rel:CALLS|REFERENCES|USES_METACLASS]->()
-WHERE source.repo_id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
-DELETE rel`
-
-const retractCodeCallFallbackEdgesByClassCypher = `MATCH (source:Class)-[rel:CALLS|REFERENCES|USES_METACLASS]->()
-WHERE source.repo_id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
-DELETE rel`
-
-const retractCodeCallFallbackEdgesByFileCypher = `MATCH (source:File)-[rel:CALLS|REFERENCES|USES_METACLASS]->()
-WHERE source.repo_id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
-DELETE rel`
-
 const deleteOrphanPlatformNodesCypher = `MATCH (p:Platform)
 WHERE p.evidence_source = $evidence_source
   AND NOT (p)--()
@@ -607,24 +562,6 @@ func BuildRetractCodeCallEdges(repoIDs []string, evidenceSource string) Statemen
 	}
 }
 
-// BuildRetractCodeCallEdgeStatements builds label-scoped code-intel edge
-// retractions so graph backends can use label + repo_id lookup indexes.
-func BuildRetractCodeCallEdgeStatements(repoIDs []string, evidenceSource string) []Statement {
-	cyphers := retractCodeCallLabelScopedCyphers(evidenceSource)
-	stmts := make([]Statement, 0, len(cyphers))
-	for _, cypher := range cyphers {
-		stmts = append(stmts, Statement{
-			Operation: OperationCanonicalRetract,
-			Cypher:    cypher,
-			Parameters: map[string]any{
-				"repo_ids":        repoIDs,
-				"evidence_source": evidenceSource,
-			},
-		})
-	}
-	return stmts
-}
-
 func retractCodeCallEdgesCypher(evidenceSource string) string {
 	switch evidenceSource {
 	case "parser/code-calls":
@@ -633,29 +570,6 @@ func retractCodeCallEdgesCypher(evidenceSource string) string {
 		return retractCodeCallMetaclassEdgesCypher
 	default:
 		return retractCodeCallFallbackEdgesCypher
-	}
-}
-
-func retractCodeCallLabelScopedCyphers(evidenceSource string) []string {
-	switch evidenceSource {
-	case "parser/code-calls":
-		return []string{
-			retractCodeCallParserEdgesByFunctionCypher,
-			retractCodeCallParserEdgesByClassCypher,
-			retractCodeCallParserEdgesByFileCypher,
-		}
-	case "parser/python-metaclass":
-		return []string{
-			retractCodeCallMetaclassEdgesByFunctionCypher,
-			retractCodeCallMetaclassEdgesByClassCypher,
-			retractCodeCallMetaclassEdgesByFileCypher,
-		}
-	default:
-		return []string{
-			retractCodeCallFallbackEdgesByFunctionCypher,
-			retractCodeCallFallbackEdgesByClassCypher,
-			retractCodeCallFallbackEdgesByFileCypher,
-		}
 	}
 }
 

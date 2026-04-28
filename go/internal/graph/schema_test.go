@@ -80,9 +80,6 @@ func TestSchemaStatementsForBackendAddsNornicDBMergeLookupIndexes(t *testing.T) 
 		"CREATE INDEX nornicdb_workload_id_lookup IF NOT EXISTS FOR (w:Workload) ON (w.id)",
 		"CREATE INDEX nornicdb_workload_instance_id_lookup IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.id)",
 		"CREATE INDEX nornicdb_platform_id_lookup IF NOT EXISTS FOR (p:Platform) ON (p.id)",
-		"CREATE INDEX nornicdb_function_repo_id_lookup IF NOT EXISTS FOR (f:Function) ON (f.repo_id)",
-		"CREATE INDEX nornicdb_class_repo_id_lookup IF NOT EXISTS FOR (c:Class) ON (c.repo_id)",
-		"CREATE INDEX nornicdb_file_repo_id_lookup IF NOT EXISTS FOR (f:File) ON (f.repo_id)",
 	}
 	for _, want := range expected {
 		assertContainsStatement(t, stmts, want)
