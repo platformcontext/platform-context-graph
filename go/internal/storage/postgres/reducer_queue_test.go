@@ -60,9 +60,9 @@ func TestReducerConflictDomainKeySplitsCodeAndPlatformGraphFamilies(t *testing.T
 			wantKey:    "scope-1",
 		},
 		{
-			name:       "code call intent emission uses its own conflict family",
+			name:       "code call edges use code graph conflict family",
 			domain:     reducer.DomainCodeCallMaterialization,
-			wantDomain: reducerConflictDomainCodeCallIntents,
+			wantDomain: reducerConflictDomainCodeGraph,
 			wantKey:    "scope-1",
 		},
 		{
