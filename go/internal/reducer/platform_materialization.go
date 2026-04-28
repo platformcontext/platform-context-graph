@@ -3,6 +3,7 @@ package reducer
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -55,11 +56,27 @@ type PlatformMaterializationHandler struct {
 	PhasePublisher                  GraphProjectionPhasePublisher
 }
 
+// platformMaterializationTiming records success-path stage timings for the
+// deployment_mapping reducer domain without affecting reducer ordering.
+type platformMaterializationTiming struct {
+	platformWriteDuration       time.Duration
+	factLoadDuration            time.Duration
+	infrastructureExtract       time.Duration
+	infrastructureGraphWrite    time.Duration
+	crossRepoResolutionDuration time.Duration
+	workloadReplayDuration      time.Duration
+	phasePublishDuration        time.Duration
+	totalDuration               time.Duration
+}
+
 // Handle executes the platform materialization reduction path.
 func (h PlatformMaterializationHandler) Handle(
 	ctx context.Context,
 	intent Intent,
 ) (Result, error) {
+	totalStarted := time.Now()
+	var timing platformMaterializationTiming
+
 	if intent.Domain != DomainDeploymentMapping {
 		return Result{}, fmt.Errorf(
 			"platform materialization handler does not accept domain %q",
@@ -75,39 +92,57 @@ func (h PlatformMaterializationHandler) Handle(
 		return Result{}, err
 	}
 
+	platformWriteStarted := time.Now()
 	writeResult, err := h.Writer.WritePlatformMaterialization(ctx, request)
+	timing.platformWriteDuration = time.Since(platformWriteStarted)
 	if err != nil {
 		return Result{}, err
 	}
 
 	canonicalWrites := writeResult.CanonicalWrites
+	infraRows := 0
+	infraWrites := 0
 
 	// When both FactLoader and InfrastructureMaterializer are provided,
 	// also write PROVISIONS_PLATFORM edges to the canonical graph.
 	if h.FactLoader != nil && h.InfrastructureMaterializer != nil {
+		factLoadStarted := time.Now()
 		facts, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+		timing.factLoadDuration = time.Since(factLoadStarted)
 		if err != nil {
 			return Result{}, fmt.Errorf("load facts for infrastructure platform materialization: %w", err)
 		}
+		extractStarted := time.Now()
 		rows := ExtractInfrastructurePlatformRows(facts)
+		timing.infrastructureExtract = time.Since(extractStarted)
+		infraRows = len(rows)
 		if len(rows) > 0 {
+			infraStarted := time.Now()
 			infraResult, err := h.InfrastructureMaterializer.Materialize(ctx, rows)
+			timing.infrastructureGraphWrite = time.Since(infraStarted)
 			if err != nil {
 				return Result{}, fmt.Errorf("materialize infrastructure platforms: %w", err)
 			}
+			infraWrites = infraResult.PlatformEdgesWritten
 			canonicalWrites += infraResult.PlatformEdgesWritten
 		}
 	}
 
+	crossRepoWrites := 0
+	workloadReplayCount := 0
 	// When CrossRepoResolver is provided, resolve cross-repo dependency edges
 	// from persisted evidence facts after platform materialization completes.
 	if h.CrossRepoResolver != nil {
-		crossRepoWrites, err := h.CrossRepoResolver.Resolve(ctx, intent.ScopeID, intent.GenerationID)
+		crossRepoStarted := time.Now()
+		resolvedCrossRepoWrites, err := h.CrossRepoResolver.Resolve(ctx, intent.ScopeID, intent.GenerationID)
+		timing.crossRepoResolutionDuration = time.Since(crossRepoStarted)
 		if err != nil {
 			return Result{}, fmt.Errorf("cross-repo relationship resolution: %w", err)
 		}
+		crossRepoWrites = resolvedCrossRepoWrites
 		canonicalWrites += crossRepoWrites
 		if crossRepoWrites > 0 && h.WorkloadMaterializationReplayer != nil {
+			replayStarted := time.Now()
 			replayEntityKey := workloadMaterializationReplayEntityKey(intent)
 			for _, scopeID := range workloadMaterializationReplayScopes(intent) {
 				if _, err := h.WorkloadMaterializationReplayer.ReplayWorkloadMaterialization(
@@ -118,7 +153,9 @@ func (h PlatformMaterializationHandler) Handle(
 				); err != nil {
 					return Result{}, fmt.Errorf("replay workload materialization: %w", err)
 				}
+				workloadReplayCount++
 			}
+			timing.workloadReplayDuration = time.Since(replayStarted)
 		}
 	}
 
@@ -130,6 +167,7 @@ func (h PlatformMaterializationHandler) Handle(
 			len(request.RelatedScopeIDs),
 		)
 	}
+	phaseStarted := time.Now()
 	if err := publishIntentGraphPhase(
 		ctx,
 		h.PhasePublisher,
@@ -140,6 +178,19 @@ func (h PlatformMaterializationHandler) Handle(
 	); err != nil {
 		return Result{}, err
 	}
+	timing.phasePublishDuration = time.Since(phaseStarted)
+	timing.totalDuration = time.Since(totalStarted)
+	logPlatformMaterializationCompleted(
+		ctx,
+		intent,
+		request,
+		canonicalWrites,
+		infraRows,
+		infraWrites,
+		crossRepoWrites,
+		workloadReplayCount,
+		timing,
+	)
 
 	return Result{
 		IntentID:        intent.IntentID,
@@ -148,6 +199,39 @@ func (h PlatformMaterializationHandler) Handle(
 		EvidenceSummary: evidenceSummary,
 		CanonicalWrites: canonicalWrites,
 	}, nil
+}
+
+func logPlatformMaterializationCompleted(
+	ctx context.Context,
+	intent Intent,
+	request PlatformMaterializationWrite,
+	canonicalWrites int,
+	infraRows int,
+	infraWrites int,
+	crossRepoWrites int,
+	workloadReplayCount int,
+	timing platformMaterializationTiming,
+) {
+	slog.InfoContext(ctx, "deployment mapping materialization completed",
+		slog.String("scope_id", intent.ScopeID),
+		slog.String("generation_id", intent.GenerationID),
+		slog.String("domain", string(DomainDeploymentMapping)),
+		slog.Int("entity_key_count", len(request.EntityKeys)),
+		slog.Int("related_scope_count", len(request.RelatedScopeIDs)),
+		slog.Int("canonical_write_count", canonicalWrites),
+		slog.Int("infrastructure_row_count", infraRows),
+		slog.Int("infrastructure_write_count", infraWrites),
+		slog.Int("cross_repo_write_count", crossRepoWrites),
+		slog.Int("workload_replay_count", workloadReplayCount),
+		slog.Float64("platform_write_duration_seconds", timing.platformWriteDuration.Seconds()),
+		slog.Float64("fact_load_duration_seconds", timing.factLoadDuration.Seconds()),
+		slog.Float64("infrastructure_extract_duration_seconds", timing.infrastructureExtract.Seconds()),
+		slog.Float64("infrastructure_graph_write_duration_seconds", timing.infrastructureGraphWrite.Seconds()),
+		slog.Float64("cross_repo_resolution_duration_seconds", timing.crossRepoResolutionDuration.Seconds()),
+		slog.Float64("workload_replay_duration_seconds", timing.workloadReplayDuration.Seconds()),
+		slog.Float64("phase_publish_duration_seconds", timing.phasePublishDuration.Seconds()),
+		slog.Float64("total_duration_seconds", timing.totalDuration.Seconds()),
+	)
 }
 
 func platformMaterializationWriteFromIntent(intent Intent) (PlatformMaterializationWrite, error) {

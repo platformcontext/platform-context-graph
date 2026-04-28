@@ -3,6 +3,7 @@ package reducer
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // CypherExecutor executes one parameterised Cypher statement against Neo4j.
@@ -23,6 +24,10 @@ type MaterializeResult struct {
 	RuntimePlatformsWritten     int
 	RepoDependenciesWritten     int
 	WorkloadDependenciesWritten int
+	WorkloadWriteDuration       time.Duration
+	InstanceWriteDuration       time.Duration
+	DeploymentSourceDuration    time.Duration
+	RuntimePlatformDuration     time.Duration
 }
 
 // WorkloadMaterializer converts projection results into canonical Neo4j graph
@@ -93,6 +98,7 @@ func (m *WorkloadMaterializer) Materialize(
 
 	// Batch workloads
 	if len(projection.WorkloadRows) > 0 {
+		stageStarted := time.Now()
 		rows := make([]map[string]any, len(projection.WorkloadRows))
 		for i, row := range projection.WorkloadRows {
 			rows[i] = map[string]any{
@@ -109,11 +115,13 @@ func (m *WorkloadMaterializer) Materialize(
 		if err := m.executeBatched(ctx, batchWorkloadUpsertCypher, rows); err != nil {
 			return result, fmt.Errorf("write workloads: %w", err)
 		}
+		result.WorkloadWriteDuration = time.Since(stageStarted)
 		result.WorkloadsWritten = len(projection.WorkloadRows)
 	}
 
 	// Batch instances
 	if len(projection.InstanceRows) > 0 {
+		stageStarted := time.Now()
 		rows := make([]map[string]any, len(projection.InstanceRows))
 		for i, row := range projection.InstanceRows {
 			rows[i] = map[string]any{
@@ -132,11 +140,13 @@ func (m *WorkloadMaterializer) Materialize(
 		if err := m.executeBatched(ctx, batchWorkloadInstanceUpsertCypher, rows); err != nil {
 			return result, fmt.Errorf("write instances: %w", err)
 		}
+		result.InstanceWriteDuration = time.Since(stageStarted)
 		result.InstancesWritten = len(projection.InstanceRows)
 	}
 
 	// Batch deployment sources
 	if len(projection.DeploymentSourceRows) > 0 {
+		stageStarted := time.Now()
 		rows := make([]map[string]any, len(projection.DeploymentSourceRows))
 		for i, row := range projection.DeploymentSourceRows {
 			rows[i] = map[string]any{
@@ -150,11 +160,13 @@ func (m *WorkloadMaterializer) Materialize(
 		if err := m.executeBatched(ctx, batchDeploymentSourceUpsertCypher, rows); err != nil {
 			return result, fmt.Errorf("write deployment sources: %w", err)
 		}
+		result.DeploymentSourceDuration = time.Since(stageStarted)
 		result.DeploymentSourcesWritten = len(projection.DeploymentSourceRows)
 	}
 
 	// Batch runtime platforms
 	if len(projection.RuntimePlatformRows) > 0 {
+		stageStarted := time.Now()
 		rows := make([]map[string]any, len(projection.RuntimePlatformRows))
 		for i, row := range projection.RuntimePlatformRows {
 			rows[i] = map[string]any{
@@ -173,6 +185,7 @@ func (m *WorkloadMaterializer) Materialize(
 		if err := m.executeBatched(ctx, batchRuntimePlatformUpsertCypher, rows); err != nil {
 			return result, fmt.Errorf("write runtime platforms: %w", err)
 		}
+		result.RuntimePlatformDuration = time.Since(stageStarted)
 		result.RuntimePlatformsWritten = len(projection.RuntimePlatformRows)
 	}
 
