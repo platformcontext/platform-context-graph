@@ -126,11 +126,21 @@ func (r *SharedProjectionRunner) Run(ctx context.Context) error {
 			return nil
 		}
 
-		didWork := r.runOneCycle(ctx)
+		result := r.runOneCycle(ctx)
 
-		if didWork {
+		if result.ProcessedIntents > 0 {
 			consecutiveEmpty = 0
 			continue // immediately re-poll
+		}
+		if result.BlockedReadiness > 0 {
+			consecutiveEmpty = 0
+			if err := r.wait(ctx, r.Config.pollInterval()); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+					return nil
+				}
+				return fmt.Errorf("wait for shared projection readiness: %w", err)
+			}
+			continue
 		}
 
 		consecutiveEmpty++
@@ -151,9 +161,9 @@ func (r *SharedProjectionRunner) Run(ctx context.Context) error {
 	}
 }
 
-// runOneCycle iterates all domains and partitions, returning true if any
-// partition processed work.
-func (r *SharedProjectionRunner) runOneCycle(ctx context.Context) bool {
+// runOneCycle iterates all domains and partitions, returning the aggregate
+// progress and readiness-blocking signal for the cycle.
+func (r *SharedProjectionRunner) runOneCycle(ctx context.Context) PartitionProcessResult {
 	if r.Config.Workers <= 1 {
 		return r.runOneCycleSequential(ctx)
 	}
@@ -161,15 +171,15 @@ func (r *SharedProjectionRunner) runOneCycle(ctx context.Context) bool {
 }
 
 // runOneCycleSequential processes partitions one at a time.
-func (r *SharedProjectionRunner) runOneCycleSequential(ctx context.Context) bool {
+func (r *SharedProjectionRunner) runOneCycleSequential(ctx context.Context) PartitionProcessResult {
 	now := time.Now().UTC()
 	partitionCount := r.Config.partitionCount()
-	didWork := false
+	var cycleResult PartitionProcessResult
 
 	for _, domain := range sharedProjectionDomains {
 		for partitionID := 0; partitionID < partitionCount; partitionID++ {
 			if ctx.Err() != nil {
-				return didWork
+				return cycleResult
 			}
 
 			result, err := r.processPartitionWithTelemetry(
@@ -182,13 +192,11 @@ func (r *SharedProjectionRunner) runOneCycleSequential(ctx context.Context) bool
 			if err != nil {
 				continue
 			}
-			if result.ProcessedIntents > 0 {
-				didWork = true
-			}
+			mergePartitionProcessResult(&cycleResult, result)
 		}
 	}
 
-	return didWork
+	return cycleResult
 }
 
 // partitionWork represents a single domain/partition combination to process.
@@ -198,7 +206,7 @@ type partitionWork struct {
 }
 
 // runOneCycleConcurrent processes partitions across N concurrent workers.
-func (r *SharedProjectionRunner) runOneCycleConcurrent(ctx context.Context) bool {
+func (r *SharedProjectionRunner) runOneCycleConcurrent(ctx context.Context) PartitionProcessResult {
 	now := time.Now().UTC()
 	partitionCount := r.Config.partitionCount()
 
@@ -217,9 +225,9 @@ func (r *SharedProjectionRunner) runOneCycleConcurrent(ctx context.Context) bool
 	close(workChan)
 
 	var (
-		wg      sync.WaitGroup
-		didWork bool
-		mu      sync.Mutex
+		wg          sync.WaitGroup
+		cycleResult PartitionProcessResult
+		mu          sync.Mutex
 	)
 
 	for i := 0; i < r.Config.Workers; i++ {
@@ -241,17 +249,25 @@ func (r *SharedProjectionRunner) runOneCycleConcurrent(ctx context.Context) bool
 				if err != nil {
 					continue
 				}
-				if result.ProcessedIntents > 0 {
-					mu.Lock()
-					didWork = true
-					mu.Unlock()
-				}
+				mu.Lock()
+				mergePartitionProcessResult(&cycleResult, result)
+				mu.Unlock()
 			}
 		}()
 	}
 
 	wg.Wait()
-	return didWork
+	return cycleResult
+}
+
+// mergePartitionProcessResult preserves the cycle-level signals that drive
+// polling behavior without coupling the runner to any one partition result.
+func mergePartitionProcessResult(total *PartitionProcessResult, result PartitionProcessResult) {
+	total.ProcessedIntents += result.ProcessedIntents
+	total.BlockedReadiness += result.BlockedReadiness
+	if result.MaxBlockedIntentWaitSeconds > total.MaxBlockedIntentWaitSeconds {
+		total.MaxBlockedIntentWaitSeconds = result.MaxBlockedIntentWaitSeconds
+	}
 }
 
 func (r *SharedProjectionRunner) processPartitionWithTelemetry(
