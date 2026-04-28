@@ -18,11 +18,13 @@ WITH candidate AS (
       AND (claim_until IS NULL OR claim_until <= $1)
       AND ($2 = '' OR domain = $2)
       -- NornicDB local_authoritative first-generation runs must not let
-      -- reducer graph writes contend with source-local canonical projection.
+      -- reducer graph writes contend with source-local canonical projection
+      -- for the same scope. Unrelated scopes can continue draining.
       AND ($5 = false OR NOT EXISTS (
           SELECT 1
           FROM fact_work_items AS projector_work
           WHERE projector_work.stage = 'projector'
+            AND projector_work.scope_id = fact_work_items.scope_id
             AND projector_work.status IN ('pending', 'retrying', 'claimed', 'running')
       ))
       -- Reducer domains can touch the same graph nodes for a scope. Fence by
