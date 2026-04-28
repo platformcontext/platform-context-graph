@@ -1224,6 +1224,35 @@ Classify this as a measured reducer graph-write win with modest wall-clock
 improvement; it does not change worker defaults, queue semantics, readiness
 gates, or graph truth rules.
 
+The follow-up source-local canonical write pass intentionally stopped at an
+evidence boundary rather than continuing to tune per repo. Focused run
+`pcg-reducer-websites-canonical-phase-20260428T2303Z` on
+`websites-php-youboat` used commit `ead46ef4` with rebuilt binaries and drained
+healthy in `184s`: projector `1/1`, reducer `8/8`, `code_calls 24584/24584`,
+`cpu_idle_avg=80.62%`, and `disk_idle_avg=91.50%`. Existing telemetry was
+enough to attribute the source-local long pole: content write took `43.695s`
+(`upsert_entities=31.833s`, `upsert_files=11.507s`), canonical write took
+`43.544s`, and canonical `entities` accounted for `39.189s` of that graph
+write. Inside the entity phase, `Variable` dominated with `131,977` rows and
+`31.738s`, while `Function` contributed `28,926` rows and `7.390s`.
+
+Two experiments then bounded the obvious tuning space. Enabling the patched
+cross-file containment path with
+`PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` regressed the same repo:
+`pcg-reducer-websites-batched-containment-20260428T2310Z` drained healthy but
+wall rose to `264s`, canonical write rose to `124.322s`, canonical entities
+rose to `119.985s`, and `Variable` alone rose to `106.832s`. Widening
+NornicDB entity phase-group caps without changing row shape helped only
+slightly: `Function=20,Variable=20` moved the isolated repo to `180s`,
+canonical write to `39.167s`, canonical entities to `34.780s`, and
+`Variable` to `29.427s`. The matched hot20 proof
+`pcg-reducer-hot20-entity-phase20-20260428T2334Z` drained healthy with
+projector `20/20`, reducer `160/160`, `code_calls 57987/57987`,
+`repo_dependency 3/3`, `cpu_idle_avg=70.29%`, and `disk_idle_avg=88.20%`.
+Wall moved from the prior hot20 code-call batch proof at `297s` to `292s`.
+This is a small source-local graph-write improvement, not the architectural
+win needed for the full corpus.
+
 ### Architecture Checkpoint
 
 The evidence now separates three classes of work:
@@ -1238,13 +1267,16 @@ The evidence now separates three classes of work:
    time is governed by source-local long poles, shared projection completion,
    and graph backend operations that do not saturate the host.
 
-The next reducer design pass should therefore answer bigger questions before
-more tuning:
+The next reducer design pass should therefore stop chasing global per-label
+batch caps and answer bigger questions:
 
 - Can destructive repo-wide graph rewrites become durable deltas for code,
   inheritance, and SQL edges?
 - Can source-local projection publish smaller readiness units earlier, so
   reducers do not wait behind a full-repo long pole?
+- Should reducer/projector scheduling use explicit repo-size tiers so small
+  and medium repos drain around giant high-cardinality repos instead of sharing
+  one effective tail?
 - Can shared projection lanes be partitioned by true acceptance unit only after
   destructive overlaps are removed?
 - Does NornicDB need a direct relationship-delete / relationship-existence
@@ -1284,11 +1316,13 @@ win when wall-clock evidence does not support that claim.
 | `33e952c4` | Replay original full-corpus top ten semantic long-poles on current reducer code | Confirm the hot3 result at a larger proof size without running the full corpus | Hot10 wall `210s`; old top-ten semantic handler worker-time totaled about `64648s`, current semantic handler sum was `41.037s`; direct semantic graph label counts matched exactly for all ten repos; CPU/disk still idle-heavy | Strong handler and correctness proof; remaining wall is source-local/canonical/code-call graph write shape |
 | `f52e03a4` | Hot10 plus ten smaller/mixed repos | Verify whether the hot semantic fix holds with representative mixed domains and identify the next bottleneck | Hot20 wall `305s`; projector `20/20`, reducer `160/160`, code calls `57987/57987`; semantic handler sum stayed `44.779s`; largest code-call cycles were write-side only (`20.331s` and `13.654s`, retract `0s`); CPU/disk idle averages remained high | Confirms reducer semantic tail is harvested; next target is source-local readiness and large code-call/canonical graph write shape |
 | `b085803c` | Raise code-call edge batch size from `50` to `1000` | Reduce grouped graph-write transaction count for large first-projection code-call cycles | Isolated large repo code-call cycle `15.653s` to `11.328s`; hot20 wall `305s` to `297s`; hot20 largest code-call cycles `20.331s`/`13.654s` to `15.211s`/`9.067s`; no failures and code-call completion stayed exact | Measured reducer graph-write and modest wall-clock win; not a worker-count change |
+| n/a | Test canonical entity containment and phase-group cap variants without changing defaults | Determine whether source-local canonical entity tuning is a large lever | Cross-file batched containment regressed isolated large repo wall `184s` to `264s`; `Function=20,Variable=20` lowered isolated canonical entities `39.189s` to `34.780s` and hot20 wall `297s` to `292s` | Small source-local tuning win only; stop per-label cap fishing and move to size-tiered readiness/data-shape design |
 
 The ledger now points past SQL/semantic fact loading as the only easy handler
 win. SQL and semantic graph writes are both small on the focused and 20-repo
-proofs. The remaining wall-clock tail is dominated by the large-repo projection
-and shared projection/code-call timing around that repo, while CPU and disk
+proofs. Canonical entity cap tuning yields only seconds. The remaining
+wall-clock tail is dominated by large-repo projection, readiness eligibility,
+and shared projection/code-call timing around those repos, while CPU and disk
 remain idle-heavy.
 
 ## Chunk Status
@@ -1296,7 +1330,7 @@ remain idle-heavy.
 | Chunk | Status | Evidence | Next action |
 | --- | --- | --- | --- |
 | ADR baseline | Complete | 2026-04-28 full-corpus timing analysis captured here | Start reducer observability chunk |
-| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Phase 1 now includes reducer queue wait/handler duration telemetry, shared projection wait-versus-processing telemetry, scoped projector-drain proof, SQL retraction-scope proof, semantic and SQL inner-step timing, code-call readiness correction, first-generation SQL retract skipping, filtered reducer fact loading, a reverted code-call conflict-domain split, workload/deployment-mapping inner-stage timing, filtered workload/deployment input loading, filtered code-call/deployable/inheritance input loading, shared projection retract/write/mark-complete telemetry, measured code-call retract query-shape cleanup/rejection, durable first-projection code-call retract skipping, a rejected signal-predicate fact-load experiment, hot3/hot10 replays of the original full-corpus semantic long-poles, a hot20 mixed proof, and a measured code-call edge batch-size bump. Remote proofs include the clean 20-repo baseline `pcg-reducer-clean20-20260428T131056Z`, focused 4-repo proofs through `pcg-reducer-large4-codecall-skip-20260428T2210Z`, the rejected focused signal-predicate proof `pcg-reducer-large4-signal-facts-20260428T2230Z`, hot semantic proofs `pcg-reducer-hot3-semantic-current-20260428T2300Z`, `pcg-reducer-hot10-semantic-current-20260428T2315Z`, `pcg-reducer-hot20-mixed-current-20260428T222132Z`, and `pcg-reducer-hot20-codecall-batch1000-20260428T224610Z`, the stopped invalid 20-repo semantic timing run that exposed `18` stuck `code_calls` intents, and completed 20-repo proofs through `pcg-reducer-clean20-codecall-skip-20260428T2215Z`. Commits `afd9fe5f`, `5242bfce`, `d7b7095a`, `0bb0fc17`, `2c0c2b5a`, `0fcc13a4`, `540fa708`, `29436198`, `2ac5712d`, `1ea01796`, `12a0a0a3`, `6a6d6c36`, `53da37e8`, `33e952c4`, `f52e03a4`, and `b085803c` show semantic graph writes are not the hot substep, code calls must gate on canonical readiness, SQL graph writes are not the hot SQL substep, first-generation SQL retract skipping drops 20-repo wall from `140s` to `134s`, filtered SQL/semantic fact loads drop 20-repo wall from `134s` to `128s`, filtered workload/deployment input loads drop 20-repo wall from `129s` to `127s`, filtering code-call/deployable/inheritance input loads cuts those handler sums but does not move wall time (`127s` to `131s`), code-call shared projection processing is dominated by graph retract/write rather than Postgres completion marking, narrowing code-call retract relationship families by evidence source does not improve the large `CALLS|REFERENCES` retract (`118s` to `127s` on 20 repos), label-scoped grouped code-call retracts regress focused retract time (`~2.77s` max to `12.172s`) so they were reverted, durable first-projection code-call retract skipping removes the measured retract cost (`5.775s` to `0.000s` on 20 repos) without materially moving 20-repo wall (`127s` to `126s`), deeper JSON/path signal filtering regresses focused workload/deployment fact load (`3.485s`/`3.974s` to `4.025s`/`4.559s`) so it was not retained, the original top full-corpus semantic handlers collapsed from hours to seconds/minutes on current code (`14323s`/`12107s`/`10617s` to `1.983s`/`1.760s`/`17.968s` in hot3, then about `64648s` top-ten old worker-time to `41.037s` current worker-time in hot10 with exact semantic graph-count matches, then hot20 wall `305s` with semantic handler sum `44.779s` and code-call retract still `0s`), and a code-call edge batch-size increase from `50` to `1000` reduced hot20 wall from `305s` to `297s` while shrinking the largest code-call write cycles from `20.331s`/`13.654s` to `15.211s`/`9.067s`. Commit `4c2f94d3` showed narrower code-call conflict routing was not a material throughput win, so `d6279147` reverted it. CPU and disk remain idle-heavy. | Treat reducer micro-tuning as mostly harvested; start an architecture checkpoint on source-local readiness granularity, canonical graph write shape, and NornicDB relationship hot paths before changing worker defaults |
+| Reducer observability | In progress | Queue timing SQL proved queue wait dominates several domains. Phase 1 now includes reducer queue wait/handler duration telemetry, shared projection wait-versus-processing telemetry, scoped projector-drain proof, SQL retraction-scope proof, semantic and SQL inner-step timing, code-call readiness correction, first-generation SQL retract skipping, filtered reducer fact loading, a reverted code-call conflict-domain split, workload/deployment-mapping inner-stage timing, filtered workload/deployment input loading, filtered code-call/deployable/inheritance input loading, shared projection retract/write/mark-complete telemetry, measured code-call retract query-shape cleanup/rejection, durable first-projection code-call retract skipping, a rejected signal-predicate fact-load experiment, hot3/hot10 replays of the original full-corpus semantic long-poles, a hot20 mixed proof, a measured code-call edge batch-size bump, and a bounded canonical entity cap experiment. Remote proofs include the clean 20-repo baseline `pcg-reducer-clean20-20260428T131056Z`, focused 4-repo proofs through `pcg-reducer-large4-codecall-skip-20260428T2210Z`, the rejected focused signal-predicate proof `pcg-reducer-large4-signal-facts-20260428T2230Z`, hot semantic proofs `pcg-reducer-hot3-semantic-current-20260428T2300Z`, `pcg-reducer-hot10-semantic-current-20260428T2315Z`, `pcg-reducer-hot20-mixed-current-20260428T222132Z`, `pcg-reducer-hot20-codecall-batch1000-20260428T224610Z`, and `pcg-reducer-hot20-entity-phase20-20260428T2334Z`, the stopped invalid 20-repo semantic timing run that exposed `18` stuck `code_calls` intents, and completed 20-repo proofs through `pcg-reducer-clean20-codecall-skip-20260428T2215Z`. Commits `afd9fe5f`, `5242bfce`, `d7b7095a`, `0bb0fc17`, `2c0c2b5a`, `0fcc13a4`, `540fa708`, `29436198`, `2ac5712d`, `1ea01796`, `12a0a0a3`, `6a6d6c36`, `53da37e8`, `33e952c4`, `f52e03a4`, and `b085803c` show semantic graph writes are not the hot substep, code calls must gate on canonical readiness, SQL graph writes are not the hot SQL substep, first-generation SQL retract skipping drops 20-repo wall from `140s` to `134s`, filtered SQL/semantic fact loads drop 20-repo wall from `134s` to `128s`, filtered workload/deployment input loads drop 20-repo wall from `129s` to `127s`, filtering code-call/deployable/inheritance input loads cuts those handler sums but does not move wall time (`127s` to `131s`), code-call shared projection processing is dominated by graph retract/write rather than Postgres completion marking, narrowing code-call retract relationship families by evidence source does not improve the large `CALLS|REFERENCES` retract (`118s` to `127s` on 20 repos), label-scoped grouped code-call retracts regress focused retract time (`~2.77s` max to `12.172s`) so they were reverted, durable first-projection code-call retract skipping removes the measured retract cost (`5.775s` to `0.000s` on 20 repos) without materially moving 20-repo wall (`127s` to `126s`), deeper JSON/path signal filtering regresses focused workload/deployment fact load (`3.485s`/`3.974s` to `4.025s`/`4.559s`) so it was not retained, the original top full-corpus semantic handlers collapsed from hours to seconds/minutes on current code (`14323s`/`12107s`/`10617s` to `1.983s`/`1.760s`/`17.968s` in hot3, then about `64648s` top-ten old worker-time to `41.037s` current worker-time in hot10 with exact semantic graph-count matches, then hot20 wall `305s` with semantic handler sum `44.779s` and code-call retract still `0s`), a code-call edge batch-size increase from `50` to `1000` reduced hot20 wall from `305s` to `297s` while shrinking the largest code-call write cycles from `20.331s`/`13.654s` to `15.211s`/`9.067s`, and canonical entity phase-group widening only moved the next hot20 proof from `297s` to `292s` while cross-file containment regressed the isolated large repo to `264s`. Commit `4c2f94d3` showed narrower code-call conflict routing was not a material throughput win, so `d6279147` reverted it. CPU and disk remain idle-heavy. | Stop per-label cap fishing; design explicit repo-size-tier scheduling, finer readiness publication, and high-cardinality data-shape handling before changing worker defaults |
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
