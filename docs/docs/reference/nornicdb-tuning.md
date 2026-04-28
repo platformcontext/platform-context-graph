@@ -143,6 +143,17 @@ rows and `24 MB` total `Variable` source cache. This promotes the source-cache
 shaping rule from focused proof to medium-corpus proof and moves the next tuning
 target back to canonical graph Cypher shape and NornicDB lookup behavior.
 
+Variable grouping checkpoint: the follow-up focused run on
+`api-php-boatwizardwebsolutions` showed that the proven `Variable=100` row
+batch and the proven `Variable=5` grouped-statement cap are separate controls,
+not conflicting evidence. `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Variable=100`
+keeps each Variable statement large enough to avoid excessive fragmentation.
+`PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Variable=5` keeps each
+grouped execution bounded to roughly `100 * 5 = 500` Variable rows. Raising the
+grouped-statement cap to `10` was safe but only marginally faster on that repo;
+raising it to `25` made early Variable chunks clearly slower, so `5` remains
+the best proven default and `10` is only a focused experiment candidate.
+
 ## Backend Selection
 
 | Variable | Default | Scope | Use |
@@ -169,6 +180,19 @@ Two knobs often look similar but are different:
 - `*_PHASE_GROUP_STATEMENTS` controls how many statements run in one grouped
   transaction.
 - `*_BATCH_SIZE` controls how many rows are inside one statement.
+
+The effective grouped row pressure is approximately:
+
+```text
+label row batch size * label grouped statement cap
+```
+
+For example, `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Variable=100` with
+`PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Variable=5` means each
+Variable statement can carry up to `100` rows, and a grouped execution can
+carry roughly `500` Variable rows. Increasing the grouped-statement cap to `25`
+would push that pressure toward `2,500` rows per grouped execution, even though
+the row-batch knob still says `Variable=100`.
 
 Use the timeout summary and `nornicdb entity label summary` logs to decide
 which dimension failed.
