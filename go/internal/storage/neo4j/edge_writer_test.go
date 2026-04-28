@@ -426,6 +426,45 @@ func TestEdgeWriterRetractEdgesCodeCallDispatch(t *testing.T) {
 	}
 }
 
+func TestEdgeWriterRetractEdgesCodeCallUsesLabelScopedGroup(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingGroupExecutor{}
+	writer := NewEdgeWriter(executor, 0)
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{IntentID: "i1", RepositoryID: "repo-a", Payload: map[string]any{"repo_id": "repo-a"}},
+	}
+
+	err := writer.RetractEdges(context.Background(), reducer.DomainCodeCalls, rows, "parser/code-calls")
+	if err != nil {
+		t.Fatalf("RetractEdges() error = %v", err)
+	}
+	if got, want := len(executor.groupCalls), 1; got != want {
+		t.Fatalf("ExecuteGroup calls = %d, want %d", got, want)
+	}
+	stmts := executor.groupCalls[0]
+	if got, want := len(stmts), 3; got != want {
+		t.Fatalf("group statement count = %d, want %d", got, want)
+	}
+
+	expectedLabels := []string{"Function", "Class", "File"}
+	for i, label := range expectedLabels {
+		if !strings.Contains(stmts[i].Cypher, "source:"+label) {
+			t.Fatalf("statement %d missing %s anchor: %s", i, label, stmts[i].Cypher)
+		}
+		if !strings.Contains(stmts[i].Cypher, "CALLS|REFERENCES") {
+			t.Fatalf("statement %d missing CALLS|REFERENCES retract: %s", i, stmts[i].Cypher)
+		}
+		if strings.Contains(stmts[i].Cypher, "Function|Class|File") {
+			t.Fatalf("statement %d uses broad label alternation: %s", i, stmts[i].Cypher)
+		}
+		if strings.Contains(stmts[i].Cypher, "USES_METACLASS") {
+			t.Fatalf("statement %d unexpectedly includes USES_METACLASS: %s", i, stmts[i].Cypher)
+		}
+	}
+}
+
 func TestEdgeWriterRetractEdgesEmptyRowsIsNoop(t *testing.T) {
 	t.Parallel()
 

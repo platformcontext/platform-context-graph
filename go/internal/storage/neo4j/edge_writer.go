@@ -379,6 +379,12 @@ func (w *EdgeWriter) RetractEdges(
 			return WrapRetryableNeo4jError(ge.ExecuteGroup(ctx, stmts))
 		}
 	}
+	if domain == reducer.DomainCodeCalls {
+		if ge, ok := w.executor.(GroupExecutor); ok {
+			stmts := BuildRetractCodeCallEdgeStatements(repoIDs, evidenceSource)
+			return WrapRetryableNeo4jError(ge.ExecuteGroup(ctx, stmts))
+		}
+	}
 
 	stmt, err := buildRetractStatement(domain, repoIDs, evidenceSource)
 	if err != nil {
