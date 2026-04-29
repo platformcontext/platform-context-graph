@@ -377,6 +377,15 @@ func TestEdgeWriterRetractEdgesRepoDependencyDispatch(t *testing.T) {
 	if !strings.Contains(executor.calls[0].Cypher, "source_repo:Repository") {
 		t.Fatalf("cypher missing Repository match: %s", executor.calls[0].Cypher)
 	}
+	if !strings.Contains(executor.calls[0].Cypher, "UNWIND $repo_ids AS repo_id") {
+		t.Fatalf("cypher missing per-repo unwind anchor: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source_repo:Repository {id: repo_id})") {
+		t.Fatalf("cypher missing indexed source Repository anchor: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (repo:Repository {id: repo_id})") {
+		t.Fatalf("cypher missing indexed RUNS_ON Repository anchor: %s", executor.calls[0].Cypher)
+	}
 }
 
 func TestEdgeWriterRetractEdgesWorkloadDependencyDispatch(t *testing.T) {

@@ -73,14 +73,13 @@ SET rel.confidence = 0.97,
 
 const batchCanonicalRunsOnUpsertCypher = canonicalRunsOnUpsertCypher
 
-const retractRepoRelationshipAndRunsOnEdgesCypher = `MATCH (source_repo:Repository)-[rel:DEPENDS_ON|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|USES_MODULE]->(:Repository)
-WHERE source_repo.id IN $repo_ids
-  AND rel.evidence_source = $evidence_source
+const retractRepoRelationshipAndRunsOnEdgesCypher = `UNWIND $repo_ids AS repo_id
+MATCH (source_repo:Repository {id: repo_id})-[rel:DEPENDS_ON|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|USES_MODULE]->(:Repository)
+WHERE rel.evidence_source = $evidence_source
 DELETE rel
-WITH $repo_ids AS repo_ids, $evidence_source AS evidence_source
-MATCH (repo:Repository)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:RUNS_ON]->(:Platform)
-WHERE repo.id IN repo_ids
-  AND rel.evidence_source = evidence_source
+WITH DISTINCT repo_id, $evidence_source AS evidence_source
+MATCH (repo:Repository {id: repo_id})-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:RUNS_ON]->(:Platform)
+WHERE rel.evidence_source = evidence_source
 DELETE rel`
 
 // BuildCanonicalRepoRelationshipUpsert builds a typed repository relationship statement.
