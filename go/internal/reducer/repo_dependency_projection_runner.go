@@ -135,6 +135,7 @@ func (r *RepoDependencyProjectionRunner) runOneCycle(ctx context.Context) (bool,
 func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now time.Time) (PartitionProcessResult, error) {
 	cycleStart := time.Now()
 	claimStart := time.Now()
+	result := PartitionProcessResult{}
 	claimed, err := r.LeaseManager.ClaimPartitionLease(
 		ctx,
 		DomainRepoDependency,
@@ -148,6 +149,7 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 			attribute.String("queue", "repo_dependency"),
 		))
 	}
+	result.LeaseClaimDurationSeconds = time.Since(claimStart).Seconds()
 	if err != nil {
 		return PartitionProcessResult{}, fmt.Errorf("claim repo dependency lease: %w", err)
 	}
@@ -158,48 +160,71 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 		_ = r.LeaseManager.ReleasePartitionLease(ctx, DomainRepoDependency, 0, 1, r.Config.leaseOwner())
 	}()
 
+	selectionStart := time.Now()
 	acceptanceUnitID, err := r.selectAcceptanceUnitWork(ctx)
+	result.SelectionDurationSeconds = time.Since(selectionStart).Seconds()
 	if err != nil {
-		return PartitionProcessResult{LeaseAcquired: true}, err
+		result.LeaseAcquired = true
+		return result, err
 	}
 	if acceptanceUnitID == "" {
-		return PartitionProcessResult{LeaseAcquired: true}, nil
+		result.LeaseAcquired = true
+		return result, nil
 	}
 
+	loadAllStart := time.Now()
 	rows, err := r.loadAllAcceptanceUnitIntents(ctx, acceptanceUnitID)
+	result.LoadAllDurationSeconds = time.Since(loadAllStart).Seconds()
 	if err != nil {
-		return PartitionProcessResult{LeaseAcquired: true}, err
+		result.LeaseAcquired = true
+		return result, err
 	}
+	result.AcceptanceUnitRows = len(rows)
 
 	lookup := r.AcceptedGen
 	if r.AcceptedGenPrefetch != nil {
+		prefetchStart := time.Now()
 		resolvedLookup, err := r.AcceptedGenPrefetch(ctx, rows)
+		result.AcceptancePrefetchDurationSeconds = time.Since(prefetchStart).Seconds()
 		if err != nil {
-			return PartitionProcessResult{LeaseAcquired: true}, fmt.Errorf("prefetch accepted generations: %w", err)
+			result.LeaseAcquired = true
+			return result, fmt.Errorf("prefetch accepted generations: %w", err)
 		}
 		lookup = resolvedLookup
 	}
 
 	active, staleIDs := FilterAuthoritativeIntents(rows, lookup)
+	result.StaleIntents = len(staleIDs)
+	result.ActiveIntents = len(active)
 	if len(active) == 0 && len(staleIDs) == 0 {
-		return PartitionProcessResult{LeaseAcquired: true}, nil
+		result.LeaseAcquired = true
+		return result, nil
 	}
 
-	result := PartitionProcessResult{LeaseAcquired: true}
+	result.LeaseAcquired = true
+	writtenRows := 0
+	writtenGroups := 0
 	if len(active) > 0 {
+		retractStart := time.Now()
 		retractedRows, err := r.retractRepo(ctx, active)
+		result.RetractDurationSeconds = time.Since(retractStart).Seconds()
 		if err != nil {
 			return result, err
 		}
-		writtenRows, writtenGroups, err := r.writeActiveRows(ctx, active)
+		writeStart := time.Now()
+		writtenRows, writtenGroups, err = r.writeActiveRows(ctx, active)
+		result.WriteDurationSeconds = time.Since(writeStart).Seconds()
 		if err != nil {
 			return result, err
 		}
 		result.RetractedRows = retractedRows
 		result.UpsertedRows = writtenRows
-		r.recordRepoDependencyCycle(ctx, acceptanceUnitID, active, writtenRows, writtenGroups, cycleStart)
 		if r.WorkloadMaterializationReplayer != nil {
-			if err := r.replayWorkloadMaterialization(ctx, active); err != nil {
+			replayStart := time.Now()
+			replayRequests, err := r.replayWorkloadMaterialization(ctx, active)
+			result.ReplayDurationSeconds = time.Since(replayStart).Seconds()
+			result.ReplayRequests = replayRequests
+			if err != nil {
 				return result, fmt.Errorf("replay workload materialization after repo dependency projection: %w", err)
 			}
 		}
@@ -211,11 +236,17 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 		processedIDs = append(processedIDs, row.IntentID)
 	}
 	if len(processedIDs) > 0 {
+		markCompletedStart := time.Now()
 		if err := r.IntentReader.MarkIntentsCompleted(ctx, processedIDs, now); err != nil {
 			return result, fmt.Errorf("mark repo dependency intents completed: %w", err)
 		}
+		result.MarkCompletedDurationSeconds = time.Since(markCompletedStart).Seconds()
 	}
 	result.ProcessedIntents = len(processedIDs)
+	result.ProcessingDurationSeconds = time.Since(cycleStart).Seconds()
+	if len(active) > 0 {
+		r.recordRepoDependencyCycle(ctx, acceptanceUnitID, active, writtenRows, writtenGroups, cycleStart, result)
+	}
 	return result, nil
 }
 
@@ -369,12 +400,14 @@ func (r *RepoDependencyProjectionRunner) recordRepoDependencyCycle(
 	writtenRows int,
 	writtenGroups int,
 	startedAt time.Time,
+	timing PartitionProcessResult,
 ) {
 	duration := time.Since(startedAt).Seconds()
 	if r.Instruments != nil {
 		attrs := metric.WithAttributes(telemetry.AttrDomain(DomainRepoDependency))
 		r.Instruments.CanonicalWriteDuration.Record(ctx, duration, attrs)
 		r.Instruments.CanonicalWrites.Add(ctx, int64(writtenRows), attrs)
+		recordRepoDependencyStepDurations(ctx, r.Instruments, timing)
 	}
 	if r.Logger != nil {
 		r.Logger.InfoContext(
@@ -383,9 +416,56 @@ func (r *RepoDependencyProjectionRunner) recordRepoDependencyCycle(
 			slog.String(telemetry.LogKeyAcceptanceUnitID, acceptanceUnitID),
 			slog.Int("written_rows", writtenRows),
 			slog.Int("written_groups", writtenGroups),
+			slog.Int("processed_intents", timing.ProcessedIntents),
+			slog.Int("active_intents", timing.ActiveIntents),
+			slog.Int("stale_intents", timing.StaleIntents),
+			slog.Int("acceptance_unit_rows", timing.AcceptanceUnitRows),
+			slog.Int("replay_requests", timing.ReplayRequests),
 			slog.Int("active_generations", len(uniqueGenerationIDs(rows))),
 			slog.Float64("duration_seconds", duration),
+			slog.Float64("processing_duration_seconds", timing.ProcessingDurationSeconds),
+			slog.Float64("selection_duration_seconds", timing.SelectionDurationSeconds),
+			slog.Float64("load_all_duration_seconds", timing.LoadAllDurationSeconds),
+			slog.Float64("acceptance_prefetch_duration_seconds", timing.AcceptancePrefetchDurationSeconds),
+			slog.Float64("retract_duration_seconds", timing.RetractDurationSeconds),
+			slog.Float64("write_duration_seconds", timing.WriteDurationSeconds),
+			slog.Float64("replay_duration_seconds", timing.ReplayDurationSeconds),
+			slog.Float64("mark_completed_duration_seconds", timing.MarkCompletedDurationSeconds),
+			slog.Float64("lease_claim_duration_seconds", timing.LeaseClaimDurationSeconds),
 			telemetry.PhaseAttr(telemetry.PhaseReduction),
+		)
+	}
+}
+
+func recordRepoDependencyStepDurations(
+	ctx context.Context,
+	instruments *telemetry.Instruments,
+	timing PartitionProcessResult,
+) {
+	steps := []struct {
+		phase    string
+		duration float64
+	}{
+		{phase: "selection", duration: timing.SelectionDurationSeconds},
+		{phase: "load_all", duration: timing.LoadAllDurationSeconds},
+		{phase: "acceptance_prefetch", duration: timing.AcceptancePrefetchDurationSeconds},
+		{phase: "retract", duration: timing.RetractDurationSeconds},
+		{phase: "write", duration: timing.WriteDurationSeconds},
+		{phase: "replay", duration: timing.ReplayDurationSeconds},
+		{phase: "mark_completed", duration: timing.MarkCompletedDurationSeconds},
+	}
+	for _, step := range steps {
+		if step.duration <= 0 {
+			continue
+		}
+		instruments.SharedProjectionStepDuration.Record(
+			ctx,
+			step.duration,
+			metric.WithAttributes(
+				telemetry.AttrDomain(DomainRepoDependency),
+				telemetry.AttrWritePhase(step.phase),
+				telemetry.AttrOutcome("completed"),
+			),
 		)
 	}
 }
@@ -463,18 +543,20 @@ type workloadMaterializationReplayRequest struct {
 func (r *RepoDependencyProjectionRunner) replayWorkloadMaterialization(
 	ctx context.Context,
 	rows []SharedProjectionIntentRow,
-) error {
+) (int, error) {
+	requestCount := 0
 	for _, request := range repoDependencyReplayRequests(rows) {
+		requestCount++
 		if _, err := r.WorkloadMaterializationReplayer.ReplayWorkloadMaterialization(
 			ctx,
 			request.scopeID,
 			request.generationID,
 			request.entityKey,
 		); err != nil {
-			return err
+			return requestCount, err
 		}
 	}
-	return nil
+	return requestCount, nil
 }
 
 func repoDependencyAcceptanceUnitID(row SharedProjectionIntentRow) (string, bool) {

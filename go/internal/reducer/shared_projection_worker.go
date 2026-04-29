@@ -62,20 +62,26 @@ type PartitionProcessorConfig struct {
 // PartitionProcessResult captures the outcome of one partition processing
 // cycle.
 type PartitionProcessResult struct {
-	LeaseAcquired                bool
-	ProcessedIntents             int
-	UpsertedRows                 int
-	RetractedRows                int
-	StaleIntents                 int
-	BlockedReadiness             int
-	MaxIntentWaitSeconds         float64
-	MaxBlockedIntentWaitSeconds  float64
-	LeaseClaimDurationSeconds    float64
-	SelectionDurationSeconds     float64
-	ProcessingDurationSeconds    float64
-	RetractDurationSeconds       float64
-	WriteDurationSeconds         float64
-	MarkCompletedDurationSeconds float64
+	LeaseAcquired                     bool
+	ProcessedIntents                  int
+	UpsertedRows                      int
+	RetractedRows                     int
+	StaleIntents                      int
+	BlockedReadiness                  int
+	MaxIntentWaitSeconds              float64
+	MaxBlockedIntentWaitSeconds       float64
+	LeaseClaimDurationSeconds         float64
+	SelectionDurationSeconds          float64
+	LoadAllDurationSeconds            float64
+	AcceptancePrefetchDurationSeconds float64
+	ProcessingDurationSeconds         float64
+	RetractDurationSeconds            float64
+	WriteDurationSeconds              float64
+	ReplayDurationSeconds             float64
+	MarkCompletedDurationSeconds      float64
+	ActiveIntents                     int
+	AcceptanceUnitRows                int
+	ReplayRequests                    int
 }
 
 // LatestIntentsByRepoAndPartition deduplicates intents to the most recent per

@@ -1,12 +1,16 @@
 package reducer
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func TestRepoDependencyProjectionRunnerConfigDefaults(t *testing.T) {
@@ -467,6 +471,70 @@ func TestRepoDependencyProjectionRunnerReplaysWorkloadMaterializationForActiveRe
 	}
 	if got, want := replayer.calls[1].entityKey, "repo:r_repo_a"; got != want {
 		t.Fatalf("replayer calls[1].entityKey = %q, want %q", got, want)
+	}
+}
+
+func TestRepoDependencyProjectionRunnerRecordCycleLogsSubstepDurations(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	bootstrap, err := telemetry.NewBootstrap("test-reducer")
+	if err != nil {
+		t.Fatalf("NewBootstrap() error = %v", err)
+	}
+	logger := telemetry.NewLoggerWithWriter(bootstrap, "reducer", "reducer", &buf)
+	runner := RepoDependencyProjectionRunner{Logger: logger}
+
+	runner.recordRepoDependencyCycle(
+		context.Background(),
+		"repository:r_repo_a",
+		nil,
+		2,
+		1,
+		time.Now().Add(-500*time.Millisecond),
+		PartitionProcessResult{
+			ProcessedIntents:                  3,
+			StaleIntents:                      1,
+			SelectionDurationSeconds:          0.05,
+			LoadAllDurationSeconds:            0.07,
+			AcceptancePrefetchDurationSeconds: 0.03,
+			RetractDurationSeconds:            0.11,
+			WriteDurationSeconds:              0.16,
+			ReplayDurationSeconds:             0.04,
+			MarkCompletedDurationSeconds:      0.02,
+			ActiveIntents:                     2,
+			ReplayRequests:                    1,
+			AcceptanceUnitRows:                3,
+		},
+	)
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	assertFloatLogValue(t, entry, "selection_duration_seconds", 0.05)
+	assertFloatLogValue(t, entry, "load_all_duration_seconds", 0.07)
+	assertFloatLogValue(t, entry, "acceptance_prefetch_duration_seconds", 0.03)
+	assertFloatLogValue(t, entry, "retract_duration_seconds", 0.11)
+	assertFloatLogValue(t, entry, "write_duration_seconds", 0.16)
+	assertFloatLogValue(t, entry, "replay_duration_seconds", 0.04)
+	assertFloatLogValue(t, entry, "mark_completed_duration_seconds", 0.02)
+	assertFloatLogValue(t, entry, "processed_intents", 3)
+	assertFloatLogValue(t, entry, "active_intents", 2)
+	assertFloatLogValue(t, entry, "stale_intents", 1)
+	assertFloatLogValue(t, entry, "acceptance_unit_rows", 3)
+	assertFloatLogValue(t, entry, "replay_requests", 1)
+}
+
+func assertFloatLogValue(t *testing.T, entry map[string]any, key string, want float64) {
+	t.Helper()
+
+	got, ok := entry[key]
+	if !ok {
+		t.Fatalf("missing log key %q in entry %v", key, entry)
+	}
+	if got != want {
+		t.Fatalf("%s = %v, want %v", key, got, want)
 	}
 }
 
