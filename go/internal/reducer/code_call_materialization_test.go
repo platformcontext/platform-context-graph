@@ -259,6 +259,12 @@ func TestCodeCallMaterializationHandlerEmitsSharedIntents(t *testing.T) {
 	if got, want := codeCallRows[0].Payload["callee_entity_id"], "entity:callee"; got != want {
 		t.Fatalf("code-call callee_entity_id = %#v, want %#v", got, want)
 	}
+	if got, want := codeCallRows[0].Payload["caller_entity_label"], "Function"; got != want {
+		t.Fatalf("code-call caller_entity_label = %#v, want %#v", got, want)
+	}
+	if got, want := codeCallRows[0].Payload["callee_entity_label"], "Function"; got != want {
+		t.Fatalf("code-call callee_entity_label = %#v, want %#v", got, want)
+	}
 	if got, want := codeCallRows[0].PartitionKey, "entity:handle->entity:callee"; got != want {
 		t.Fatalf("code-call PartitionKey = %q, want %q", got, want)
 	}
@@ -292,28 +298,32 @@ func TestBuildCodeCallSharedIntentRowsDeduplicatesIntentIdentity(t *testing.T) {
 
 	rows := []map[string]any{
 		{
-			"repo_id":          "repo-a",
-			"caller_entity_id": "entity:caller",
-			"callee_entity_id": "entity:callee",
-			"caller_file":      "caller.py",
-			"callee_file":      "callee.py",
-			"callsite_line":    10,
-			"evidence_source":  codeCallEvidenceSource,
-			"edge_observation": "callsite-a",
-			"source_entity_id": "entity:caller",
-			"target_entity_id": "entity:callee",
+			"repo_id":             "repo-a",
+			"caller_entity_id":    "entity:caller",
+			"callee_entity_id":    "entity:callee",
+			"caller_file":         "caller.py",
+			"callee_file":         "callee.py",
+			"callsite_line":       10,
+			"evidence_source":     codeCallEvidenceSource,
+			"edge_observation":    "callsite-a",
+			"source_entity_id":    "entity:caller",
+			"target_entity_id":    "entity:callee",
+			"caller_entity_label": "Function",
+			"callee_entity_label": "Function",
 		},
 		{
-			"repo_id":          "repo-a",
-			"caller_entity_id": "entity:caller",
-			"callee_entity_id": "entity:callee",
-			"caller_file":      "caller.py",
-			"callee_file":      "callee.py",
-			"callsite_line":    42,
-			"evidence_source":  codeCallEvidenceSource,
-			"edge_observation": "callsite-b",
-			"source_entity_id": "entity:caller",
-			"target_entity_id": "entity:callee",
+			"repo_id":             "repo-a",
+			"caller_entity_id":    "entity:caller",
+			"callee_entity_id":    "entity:callee",
+			"caller_file":         "caller.py",
+			"callee_file":         "callee.py",
+			"callsite_line":       42,
+			"evidence_source":     codeCallEvidenceSource,
+			"edge_observation":    "callsite-b",
+			"source_entity_id":    "entity:caller",
+			"target_entity_id":    "entity:callee",
+			"caller_entity_label": "Function",
+			"callee_entity_label": "Function",
 		},
 	}
 
@@ -330,16 +340,18 @@ func TestBuildCodeCallSharedIntentRowsDeduplicatesIntentIdentity(t *testing.T) {
 		SourceRunID:      "run-a",
 		GenerationID:     "gen-a",
 		Payload: map[string]any{
-			"repo_id":          "repo-a",
-			"caller_entity_id": "entity:caller",
-			"callee_entity_id": "entity:callee",
-			"caller_file":      "caller.py",
-			"callee_file":      "callee.py",
-			"callsite_line":    10,
-			"evidence_source":  codeCallEvidenceSource,
-			"edge_observation": "callsite-a",
-			"source_entity_id": "entity:caller",
-			"target_entity_id": "entity:callee",
+			"repo_id":             "repo-a",
+			"caller_entity_id":    "entity:caller",
+			"callee_entity_id":    "entity:callee",
+			"caller_file":         "caller.py",
+			"callee_file":         "callee.py",
+			"callsite_line":       10,
+			"evidence_source":     codeCallEvidenceSource,
+			"edge_observation":    "callsite-a",
+			"source_entity_id":    "entity:caller",
+			"target_entity_id":    "entity:callee",
+			"caller_entity_label": "Function",
+			"callee_entity_label": "Function",
 		},
 		CreatedAt: createdAt,
 	}).IntentID; got != want {

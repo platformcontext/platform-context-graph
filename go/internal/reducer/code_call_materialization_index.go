@@ -13,6 +13,7 @@ type codeEntityIndex struct {
 	uniqueNameByPath   map[string]map[string]string
 	uniqueNameByRepo   map[string]map[string]string
 	entityFileByID     map[string]string
+	entityLabelByID    map[string]string
 }
 
 type codeFunctionSpan struct {
@@ -28,6 +29,7 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 		uniqueNameByPath:   make(map[string]map[string]string),
 		uniqueNameByRepo:   make(map[string]map[string]string),
 		entityFileByID:     make(map[string]string),
+		entityLabelByID:    make(map[string]string),
 	}
 	nameCandidates := make(map[string]map[string]map[string]struct{})
 	repoNameCandidates := make(map[string]map[string]map[string]struct{})
@@ -59,6 +61,7 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 			if preferredPath != "" {
 				index.entityFileByID[entityID] = preferredPath
 			}
+			index.entityLabelByID[entityID] = "Function"
 			for _, pathKey := range codeCallPathKeys(rawPath, relativePath) {
 				index.entitiesByPathLine[codeCallPathLineKey(pathKey, startLine)] = entityID
 				index.spansByPath[pathKey] = append(index.spansByPath[pathKey], codeFunctionSpan{
@@ -94,6 +97,7 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 			if preferredPath != "" {
 				index.entityFileByID[entityID] = preferredPath
 			}
+			index.entityLabelByID[entityID] = "Class"
 			for _, pathKey := range codeCallPathKeys(rawPath, relativePath) {
 				for _, candidateName := range codeCallTypeCandidateNames(item) {
 					if _, ok := nameCandidates[pathKey]; !ok {
@@ -191,6 +195,7 @@ func extractSCIPCodeCallRows(
 			"callee_entity_id": calleeID,
 			"action":           IntentActionUpsert,
 		}
+		copyCodeCallEntityLabels(row, entityIndex, callerID, calleeID)
 		copyOptionalCodeCallField(row, edge, "caller_symbol")
 		copyOptionalCodeCallField(row, edge, "callee_symbol")
 		copyOptionalCodeCallField(row, edge, "caller_file")
@@ -249,11 +254,23 @@ func extractGenericCodeCallRows(
 			"ref_line":         callLine,
 			"action":           IntentActionUpsert,
 		}
+		copyCodeCallEntityLabels(row, entityIndex, callerID, calleeID)
 		copyOptionalCodeCallField(row, edge, "full_name")
 		copyOptionalCodeCallField(row, edge, "call_kind")
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// copyCodeCallEntityLabels carries parser-owned canonical labels into shared
+// intents so graph writers can choose indexed exact-label write statements.
+func copyCodeCallEntityLabels(row map[string]any, index codeEntityIndex, callerID, calleeID string) {
+	if label := index.entityLabelByID[callerID]; label != "" {
+		row["caller_entity_label"] = label
+	}
+	if label := index.entityLabelByID[calleeID]; label != "" {
+		row["callee_entity_label"] = label
+	}
 }
 
 func resolveContainingCodeEntityID(

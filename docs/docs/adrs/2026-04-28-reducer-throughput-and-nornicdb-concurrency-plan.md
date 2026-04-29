@@ -1321,6 +1321,20 @@ remained idle-heavy (`cpu_idle_avg=80.44%`, `io_wait_avg=0.56%`,
 hypothesis; the code-call path should not widen grouped statement transactions
 without NornicDB-side evidence.
 
+NornicDB commit `5067893` then adds that backend-side evidence. A focused
+regression test proves the exact PCG code-call shape
+`UNWIND ... MATCH (source:Function {uid: row.caller_entity_id}) MATCH
+(target:Function {uid: row.callee_entity_id}) MERGE
+(source)-[rel:CALLS]->(target) SET rel...` previously executed successfully
+but missed the generalized batch-chain hot path. The patch routes no-return
+`UNWIND MATCH ... MERGE` mutation chains through the batch executor and
+preserves relationship `SET` properties for created and matched edges. Local
+microbench evidence on a 512-row code-call batch moved from the fallback path's
+`2260916375 ns/op` to the patched batch path's `1386075 ns/op` on the same
+machine. This re-opens the exact-label PCG code-call routing that commit
+`b0b88a44` reverted, but only paired with the NornicDB hot-path fix that was
+missing in the first proof.
+
 ### Architecture Checkpoint
 
 The evidence now separates three classes of work:
@@ -1407,6 +1421,6 @@ remain idle-heavy.
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
-| NornicDB backend proof | Planned | Backend write path has known edge-existence and validation costs | Benchmark exact PCG write shapes and upstream fixes |
+| NornicDB backend proof | In progress | NornicDB commit `5067893` proves and fixes the no-return `UNWIND MATCH MATCH MERGE rel SET rel...` code-call shape missing the batch-chain hot path; 512-row local microbench improved from `2260916375 ns/op` fallback to `1386075 ns/op` patched | Pull `5067893` on the remote test machine, rebuild NornicDB and PCG binaries, then rerun single-large, small, and hot20 proofs with exact-label PCG routing restored |
 | Concurrency proof | Planned | `8` workers completed healthy but too slowly | Test `16` workers only after telemetry and conflict fixes |
 | Full-corpus acceptance | Planned | Baseline `7h43m40s` is unacceptable | Re-run full corpus after smaller proof ladder passes |

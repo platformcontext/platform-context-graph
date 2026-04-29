@@ -186,6 +186,12 @@ func (w *EdgeWriter) recordCodeCallBatch(ctx context.Context, duration float64) 
 	w.Instruments.CodeCallEdgeDuration.Record(ctx, duration, attrs)
 }
 
+var allowedCodeCallEntityLabels = map[string]struct{}{
+	"Function": {},
+	"Class":    {},
+	"File":     {},
+}
+
 // batchCypherForDomain returns the batched UNWIND Cypher template for the
 // given shared projection domain.
 func batchCypherForDomain(domain string) (string, error) {
@@ -318,11 +324,33 @@ func buildRowMap(
 			"callee_entity_id": calleeEntityID,
 			"evidence_source":  evidenceSource,
 		}
+		callerEntityLabel := payloadString(row.Payload, "caller_entity_label")
+		calleeEntityLabel := payloadString(row.Payload, "callee_entity_label")
+		if callerEntityLabel != "" {
+			rowMap["caller_entity_label"] = callerEntityLabel
+		}
+		if calleeEntityLabel != "" {
+			rowMap["callee_entity_label"] = calleeEntityLabel
+		}
 		if callKind := payloadString(row.Payload, "call_kind"); callKind != "" {
 			rowMap["call_kind"] = callKind
 		}
 		if rowMap["call_kind"] == "jsx_component" {
+			if cypher, ok := codeCallExactLabelCypher(
+				callerEntityLabel,
+				calleeEntityLabel,
+				batchCanonicalJSXComponentReferenceUpsertByLabelTemplate,
+			); ok {
+				return cypher, rowMap, true
+			}
 			return batchCanonicalJSXComponentReferenceUpsertCypher, rowMap, true
+		}
+		if cypher, ok := codeCallExactLabelCypher(
+			callerEntityLabel,
+			calleeEntityLabel,
+			batchCanonicalCodeCallUpsertByLabelTemplate,
+		); ok {
+			return cypher, rowMap, true
 		}
 		return batchCanonicalCodeCallUpsertCypher, rowMap, true
 
@@ -355,6 +383,18 @@ func buildRowMap(
 	default:
 		return "", nil, false
 	}
+}
+
+// codeCallExactLabelCypher returns an exact-label relationship write when the
+// reducer supplied trusted canonical labels for both call endpoints.
+func codeCallExactLabelCypher(sourceLabel, targetLabel, template string) (string, bool) {
+	if _, ok := allowedCodeCallEntityLabels[sourceLabel]; !ok {
+		return "", false
+	}
+	if _, ok := allowedCodeCallEntityLabels[targetLabel]; !ok {
+		return "", false
+	}
+	return fmt.Sprintf(template, sourceLabel, targetLabel), true
 }
 
 // RetractEdges retracts canonical domain edges for the given rows. Retraction
