@@ -149,6 +149,28 @@ MERGE (f)-[rel:CONTAINS]->(n)
 SET rel.evidence_source = 'projector/canonical',
     rel.generation_id = row.generation_id`
 
+const canonicalNodeEntityExplicitSetAssignments = `SET n.id = row.entity_id,
+    n.name = row.name,
+    n.path = row.path,
+    n.relative_path = row.relative_path,
+    n.line_number = row.start_line,
+    n.start_line = row.start_line,
+    n.end_line = row.end_line,
+    n.repo_id = row.repo_id,
+    n.language = row.language,
+    n.lang = row.language,
+    n.scope_id = row.scope_id,
+    n.generation_id = row.generation_id,
+    n.evidence_source = 'projector/canonical'`
+
+const canonicalNodeEntityFileScopedExplicitUpsertWithContainmentTemplate = `UNWIND $rows AS row
+MATCH (f:File {path: $file_path})
+MERGE (n:%s {uid: row.entity_id})
+` + canonicalNodeEntityExplicitSetAssignments + `
+MERGE (f)-[rel:CONTAINS]->(n)
+SET rel.evidence_source = 'projector/canonical',
+    rel.generation_id = row.generation_id`
+
 const canonicalNodeEntityUpsertWithContainmentTemplate = `UNWIND $rows AS row
 MERGE (n:%s {uid: row.entity_id})
 SET n += row.props
