@@ -88,7 +88,7 @@ bootstrap, reducer, and watch flows.
 | **`PCG_LARGE_REPO_MAX_CONCURRENT`** | `2` | Maximum number of large repositories that may be snapshotted concurrently. |
 | **`PCG_PROJECTOR_WORKERS`** | `min(NumCPU, 8)` | Concurrent source-local projection workers in the ingester runtime. |
 | **`PCG_LARGE_GEN_THRESHOLD`** | `10000` | Fact-count threshold above which a projector generation is treated as “large”. |
-| **`PCG_LARGE_GEN_MAX_CONCURRENT`** | `2` | Maximum number of large projector generations processed concurrently. |
+| **`PCG_LARGE_GEN_MAX_CONCURRENT`** | Default: `2`; local-authoritative: `4` | Maximum number of large projector generations processed concurrently. |
 | **`PCG_PROJECTION_WORKERS`** | `min(NumCPU, 8)` | Concurrent bootstrap-index projection workers. |
 | **`PCG_REDUCER_WORKERS`** | Neo4j: `min(NumCPU, 4)`; NornicDB: `min(NumCPU, 8)` | Concurrent reducer intent workers in the resolution engine. |
 | **`PCG_REDUCER_BATCH_CLAIM_SIZE`** | Neo4j: `workers * 4` (min 4, max 64); NornicDB: `workers` | Number of reducer intents claimed per polling cycle. |

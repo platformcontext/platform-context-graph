@@ -275,6 +275,20 @@ func TestLargeGenMaxConcurrentDefault(t *testing.T) {
 	}
 }
 
+func TestLargeGenMaxConcurrentLocalAuthoritativeDefault(t *testing.T) {
+	t.Parallel()
+
+	got := largeGenMaxConcurrent(func(k string) string {
+		if k == "PCG_QUERY_PROFILE" {
+			return "local_authoritative"
+		}
+		return ""
+	})
+	if got != 4 {
+		t.Fatalf("largeGenMaxConcurrent() = %d, want 4", got)
+	}
+}
+
 func TestLargeGenMaxConcurrentFromEnv(t *testing.T) {
 	t.Parallel()
 

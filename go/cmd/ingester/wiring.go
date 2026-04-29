@@ -309,6 +309,9 @@ func largeGenMaxConcurrent(getenv func(string) string) int {
 			return n
 		}
 	}
+	if strings.TrimSpace(getenv("PCG_QUERY_PROFILE")) == "local_authoritative" {
+		return 4
+	}
 	return 2
 }
 
