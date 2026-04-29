@@ -1357,6 +1357,19 @@ single-large proof should use those log lines to compare broad code-call
 routing, exact-label routing, and NornicDB's backend hot path before another
 Cypher/data-shape change is retained.
 
+The first runtime proof with that telemetry,
+`pcg-reducer-websites-write-shape-20260429T0156Z` at PCG commit `97a2ff61`,
+rebuilt binaries and drained `websites-php-youboat` in `188s` with projector
+`1/1`, reducer `8/8`, and `code_calls 24584/24584`. The code-call projection
+cycle took `16.810s`, with `15.770s` in graph write time. Shape logs showed
+one route, zero skipped rows, `25` grouped writes, `24,583` written rows, and
+`15.730s` summed group duration. Full 1,000-row batch duration rose from
+`0.369s` at the start to about `0.84s` near the end while CPU and disk still
+had headroom (`cpu_idle_avg=80.48%`, `io_wait_avg=0.56%`,
+`disk_idle_avg=91.53%`). This rules out route fragmentation as the current
+large code-call bottleneck and points to NornicDB relationship-write cost
+growing as `CALLS` edges accumulate.
+
 ### Architecture Checkpoint
 
 The evidence now separates three classes of work:
@@ -1443,6 +1456,6 @@ remain idle-heavy.
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
-| NornicDB backend proof | In progress | NornicDB runtime-branch commit `9369a40` proves the no-return `UNWIND MATCH MATCH MERGE rel SET rel...` code-call shape has a batch-chain contract; 512-row local microbench improved from `2260916375 ns/op` fallback to `1386075 ns/op` patched, but the combined PCG routing proof regressed single-large wall to `193s` with `15.648s` code-call write time. PCG commit `88f2684f` adds shared edge write-shape logs for execution mode, rows, routes, statement count, batch sizes, and duration. | Keep backend regression coverage, keep PCG exact-label routing reverted, and run a single-large diagnostic proof that extracts statement-count/data-shape evidence before another runtime query-shape change |
+| NornicDB backend proof | In progress | NornicDB runtime-branch commit `9369a40` proves the no-return `UNWIND MATCH MATCH MERGE rel SET rel...` code-call shape has a batch-chain contract; 512-row local microbench improved from `2260916375 ns/op` fallback to `1386075 ns/op` patched, but the combined PCG routing proof regressed single-large wall to `193s` with `15.648s` code-call write time. PCG commit `88f2684f` adds shared edge write-shape logs. Run `pcg-reducer-websites-write-shape-20260429T0156Z` at `97a2ff61` drained healthy in `188s`; shape logs showed one code-call route, zero skipped rows, `25` grouped writes, `24,583` rows, and rising full-batch durations from `0.369s` to about `0.84s`. | Keep PCG exact-label routing reverted; focus next on NornicDB relationship-write/index/validation slope for accumulated `CALLS` edges before another PCG query-shape change |
 | Concurrency proof | Planned | `8` workers completed healthy but too slowly | Test `16` workers only after telemetry and conflict fixes |
 | Full-corpus acceptance | Planned | Baseline `7h43m40s` is unacceptable | Re-run full corpus after smaller proof ladder passes |
