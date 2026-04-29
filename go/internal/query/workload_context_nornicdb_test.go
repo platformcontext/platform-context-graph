@@ -31,6 +31,9 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 				if strings.Contains(cypher, "OPTIONAL MATCH") || strings.Contains(cypher, "collect(DISTINCT {") {
 					t.Fatalf("cypher = %q, want scalar queries without optional map projection", cypher)
 				}
+				if strings.Contains(cypher, "(i:WorkloadInstance)-[runsOn:RUNS_ON]->") {
+					t.Fatalf("cypher = %q, want RUNS_ON traversal in a separate MATCH", cypher)
+				}
 				switch {
 				case strings.Contains(cypher, "MATCH (r:Repository)-[:DEFINES]->(w)"):
 					return []map[string]any{{

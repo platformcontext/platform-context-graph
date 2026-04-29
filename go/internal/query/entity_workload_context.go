@@ -123,7 +123,8 @@ func (h *EntityHandler) fetchWorkloadInstances(ctx context.Context, whereClause 
 
 	platformCypher := fmt.Sprintf(`
 		MATCH (w:Workload) WHERE %s
-		MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[runsOn:RUNS_ON]->(p:Platform)
+		MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)
+		MATCH (i)-[runsOn:RUNS_ON]->(p:Platform)
 		RETURN i.id as instance_id,
 		       p.name as platform_name,
 		       p.kind as platform_kind,
