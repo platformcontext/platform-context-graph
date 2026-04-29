@@ -138,10 +138,22 @@ func TestExtractInfrastructurePlatformRowsIgnoresServiceResourceNamesForPlatform
 						"resource_name": "forward_http80_service_requests",
 					},
 				},
+				"terraform_locals": []any{
+					map[string]any{
+						"name":  "cluster",
+						"value": `"runtime-main"`,
+					},
+				},
 				"terraform_modules": []any{
 					map[string]any{
 						"name":   "service_api",
 						"source": "registry.example.com/platform/ecs-application/aws",
+					},
+				},
+				"terraform_data_sources": []any{
+					map[string]any{
+						"data_type": "aws_iam_policy_document",
+						"data_name": "service_api",
 					},
 				},
 			},
@@ -153,7 +165,7 @@ func TestExtractInfrastructurePlatformRowsIgnoresServiceResourceNamesForPlatform
 	if len(rows) != 1 {
 		t.Fatalf("len(rows) = %d, want 1", len(rows))
 	}
-	if got, want := rows[0].PlatformName, "infra-ecs"; got != want {
+	if got, want := rows[0].PlatformName, "runtime-main"; got != want {
 		t.Fatalf("PlatformName = %q, want %q", got, want)
 	}
 }

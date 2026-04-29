@@ -42,18 +42,18 @@ type InfrastructurePlatformInput struct {
 // nonPlatformIdentifiers are generic names that should not be used as platform
 // names.
 var nonPlatformIdentifiers = map[string]struct{}{
-	"alerts":              {},
-	"current":             {},
-	"default":             {},
-	"eks":                 {},
-	"ingress":             {},
-	"main":                {},
-	"pagerduty":           {},
-	"pipeline":            {},
-	"private":             {},
-	"private-regionless":  {},
-	"public":              {},
-	"terraform_state":     {},
+	"alerts":             {},
+	"current":            {},
+	"default":            {},
+	"eks":                {},
+	"ingress":            {},
+	"main":               {},
+	"pagerduty":          {},
+	"pipeline":           {},
+	"private":            {},
+	"private-regionless": {},
+	"public":             {},
+	"terraform_state":    {},
 }
 
 // InferRuntimePlatformKind infers a runtime platform kind from workload
@@ -145,10 +145,10 @@ func InferInfrastructurePlatformDescriptor(input InfrastructurePlatformInput) *P
 
 	platformLocator := "cluster/" + platformName
 	platformID := CanonicalPlatformID(CanonicalPlatformInput{
-		Kind:    platformKind,
+		Kind:     platformKind,
 		Provider: platformProvider,
-		Name:    platformName,
-		Locator: platformLocator,
+		Name:     platformName,
+		Locator:  platformLocator,
 	})
 	if platformID == "" {
 		return nil
@@ -166,9 +166,8 @@ func InferInfrastructurePlatformDescriptor(input InfrastructurePlatformInput) *P
 // choosePlatformName picks a stable platform name from explicit cluster-like
 // identifiers, falling back to repo name.
 func choosePlatformName(resourceNames, dataNames, moduleNames []string, repoName string) string {
-	candidates := make([]string, 0, len(resourceNames)+len(dataNames)+len(moduleNames))
+	candidates := make([]string, 0, len(resourceNames)+len(moduleNames))
 	candidates = append(candidates, resourceNames...)
-	candidates = append(candidates, dataNames...)
 	candidates = append(candidates, moduleNames...)
 
 	for _, candidate := range candidates {

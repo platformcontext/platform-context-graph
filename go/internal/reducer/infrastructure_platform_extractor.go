@@ -75,6 +75,7 @@ func ExtractInfrastructurePlatformRows(envelopes []facts.Envelope) []Infrastruct
 		extractTerraformResourceSignals(payload, signals)
 		extractTerraformModuleSignals(payload, signals)
 		extractTerraformDataSourceSignals(payload, signals)
+		extractTerraformLocalSignals(payload, signals)
 	}
 
 	// Pass 3: infer platform descriptors for repos with Terraform signals.
@@ -191,6 +192,50 @@ func extractTerraformDataSourceSignals(payload map[string]any, signals *terrafor
 			signals.DataNames = append(signals.DataNames, dn)
 		}
 	}
+}
+
+func extractTerraformLocalSignals(payload map[string]any, signals *terraformRepoSignals) {
+	locals, ok := payload["terraform_locals"].([]any)
+	if !ok {
+		return
+	}
+	for _, item := range locals {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := strings.TrimSpace(strings.ToLower(payloadStr(m, "name")))
+		if !isPlatformClusterLocalName(name) {
+			continue
+		}
+		if value := terraformLiteralString(payloadStr(m, "value")); value != "" {
+			signals.ResourceNames = append([]string{value}, signals.ResourceNames...)
+		}
+	}
+}
+
+// isPlatformClusterLocalName reports whether a Terraform local commonly carries
+// the platform cluster identity rather than a service resource handle.
+func isPlatformClusterLocalName(name string) bool {
+	switch name {
+	case "cluster", "cluster_name", "ecs_cluster", "ecs_cluster_name", "eks_cluster", "eks_cluster_name":
+		return true
+	default:
+		return false
+	}
+}
+
+func terraformLiteralString(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.Contains(trimmed, "${") || strings.HasPrefix(trimmed, "local.") || strings.HasPrefix(trimmed, "var.") {
+		return ""
+	}
+	trimmed = strings.Trim(trimmed, `"`)
+	trimmed = strings.Trim(trimmed, `'`)
+	return strings.TrimSpace(trimmed)
 }
 
 func hasTerraformSignals(signals *terraformRepoSignals) bool {
