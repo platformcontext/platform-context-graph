@@ -300,7 +300,9 @@ func buildRowMap(
 			if sourceEntityID == "" || targetEntityID == "" {
 				return "", nil, false
 			}
-			return batchCanonicalMetaclassUpsertCypher, map[string]any{
+			sourceEntityType := payloadString(row.Payload, "source_entity_type")
+			targetEntityType := payloadString(row.Payload, "target_entity_type")
+			return codeCallMetaclassCypherForLabels(sourceEntityType, targetEntityType), map[string]any{
 				"source_entity_id":  sourceEntityID,
 				"target_entity_id":  targetEntityID,
 				"relationship_type": relationshipType,
@@ -318,13 +320,15 @@ func buildRowMap(
 			"callee_entity_id": calleeEntityID,
 			"evidence_source":  evidenceSource,
 		}
+		callerEntityType := payloadString(row.Payload, "caller_entity_type")
+		calleeEntityType := payloadString(row.Payload, "callee_entity_type")
 		if callKind := payloadString(row.Payload, "call_kind"); callKind != "" {
 			rowMap["call_kind"] = callKind
 		}
 		if rowMap["call_kind"] == "jsx_component" {
-			return batchCanonicalJSXComponentReferenceUpsertCypher, rowMap, true
+			return codeCallJSXReferenceCypherForLabels(callerEntityType, calleeEntityType), rowMap, true
 		}
-		return batchCanonicalCodeCallUpsertCypher, rowMap, true
+		return codeCallUpsertCypherForLabels(callerEntityType, calleeEntityType), rowMap, true
 
 	case reducer.DomainInheritanceEdges:
 		childEntityID := payloadString(row.Payload, "child_entity_id")
