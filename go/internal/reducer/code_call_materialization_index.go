@@ -13,7 +13,6 @@ type codeEntityIndex struct {
 	uniqueNameByPath   map[string]map[string]string
 	uniqueNameByRepo   map[string]map[string]string
 	entityFileByID     map[string]string
-	entityTypeByID     map[string]string
 }
 
 type codeFunctionSpan struct {
@@ -29,7 +28,6 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 		uniqueNameByPath:   make(map[string]map[string]string),
 		uniqueNameByRepo:   make(map[string]map[string]string),
 		entityFileByID:     make(map[string]string),
-		entityTypeByID:     make(map[string]string),
 	}
 	nameCandidates := make(map[string]map[string]map[string]struct{})
 	repoNameCandidates := make(map[string]map[string]map[string]struct{})
@@ -61,7 +59,6 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 			if preferredPath != "" {
 				index.entityFileByID[entityID] = preferredPath
 			}
-			index.entityTypeByID[entityID] = "Function"
 			for _, pathKey := range codeCallPathKeys(rawPath, relativePath) {
 				index.entitiesByPathLine[codeCallPathLineKey(pathKey, startLine)] = entityID
 				index.spansByPath[pathKey] = append(index.spansByPath[pathKey], codeFunctionSpan{
@@ -97,7 +94,6 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 			if preferredPath != "" {
 				index.entityFileByID[entityID] = preferredPath
 			}
-			index.entityTypeByID[entityID] = "Class"
 			for _, pathKey := range codeCallPathKeys(rawPath, relativePath) {
 				for _, candidateName := range codeCallTypeCandidateNames(item) {
 					if _, ok := nameCandidates[pathKey]; !ok {
@@ -190,12 +186,10 @@ func extractSCIPCodeCallRows(
 		seenRows[key] = struct{}{}
 
 		row := map[string]any{
-			"repo_id":            repositoryID,
-			"caller_entity_id":   callerID,
-			"callee_entity_id":   calleeID,
-			"caller_entity_type": entityIndex.entityTypeByID[callerID],
-			"callee_entity_type": entityIndex.entityTypeByID[calleeID],
-			"action":             IntentActionUpsert,
+			"repo_id":          repositoryID,
+			"caller_entity_id": callerID,
+			"callee_entity_id": calleeID,
+			"action":           IntentActionUpsert,
 		}
 		copyOptionalCodeCallField(row, edge, "caller_symbol")
 		copyOptionalCodeCallField(row, edge, "callee_symbol")
@@ -247,15 +241,13 @@ func extractGenericCodeCallRows(
 		seenRows[key] = struct{}{}
 
 		row := map[string]any{
-			"repo_id":            repositoryID,
-			"caller_entity_id":   callerID,
-			"callee_entity_id":   calleeID,
-			"caller_entity_type": entityIndex.entityTypeByID[callerID],
-			"callee_entity_type": entityIndex.entityTypeByID[calleeID],
-			"caller_file":        callerFilePath,
-			"callee_file":        calleeFilePath,
-			"ref_line":           callLine,
-			"action":             IntentActionUpsert,
+			"repo_id":          repositoryID,
+			"caller_entity_id": callerID,
+			"callee_entity_id": calleeID,
+			"caller_file":      callerFilePath,
+			"callee_file":      calleeFilePath,
+			"ref_line":         callLine,
+			"action":           IntentActionUpsert,
 		}
 		copyOptionalCodeCallField(row, edge, "full_name")
 		copyOptionalCodeCallField(row, edge, "call_kind")
