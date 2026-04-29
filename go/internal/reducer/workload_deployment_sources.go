@@ -77,6 +77,42 @@ func applyResolvedDeploymentSources(
 	return enriched
 }
 
+func applyResolvedProvisioningSources(
+	candidates []WorkloadCandidate,
+	resolved []relationships.ResolvedRelationship,
+) []WorkloadCandidate {
+	if len(candidates) == 0 || len(resolved) == 0 {
+		return candidates
+	}
+
+	provisioningReposByTarget := make(map[string][]string, len(resolved))
+	for _, relationship := range resolved {
+		if relationship.RelationshipType != relationships.RelProvisionsDependencyFor {
+			continue
+		}
+		if relationship.SourceRepoID == "" || relationship.TargetRepoID == "" {
+			continue
+		}
+		provisioningReposByTarget[relationship.TargetRepoID] = appendUniqueString(
+			provisioningReposByTarget[relationship.TargetRepoID],
+			relationship.SourceRepoID,
+		)
+	}
+	if len(provisioningReposByTarget) == 0 {
+		return candidates
+	}
+
+	enriched := make([]WorkloadCandidate, len(candidates))
+	for i, candidate := range candidates {
+		enriched[i] = candidate
+		for _, repoID := range provisioningReposByTarget[candidate.RepoID] {
+			enriched[i].ProvisioningRepoIDs = appendUniqueString(enriched[i].ProvisioningRepoIDs, repoID)
+		}
+	}
+
+	return enriched
+}
+
 func hasArgoDeploymentEvidence(details map[string]any) bool {
 	return hasDeploymentEvidence(details)
 }

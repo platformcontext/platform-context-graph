@@ -19,6 +19,7 @@ type DefaultHandlers struct {
 	// Neo4j-backed adapters for canonical graph writes.
 	WorkloadMaterializer               *WorkloadMaterializer
 	InfrastructurePlatformMaterializer *InfrastructurePlatformMaterializer
+	InfrastructurePlatformLookup       InfrastructurePlatformLookup
 	SemanticEntityWriter               SemanticEntityWriter
 	WorkloadProjectionInputLoader      WorkloadProjectionInputLoader
 	WorkloadDependencyLookup           WorkloadDependencyGraphLookup
@@ -153,6 +154,7 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 				FactLoader:                   handlers.FactLoader,
 				ResolvedLoader:               handlers.ResolvedRelationshipLoader,
 				InputLoader:                  handlers.WorkloadProjectionInputLoader,
+				InfrastructurePlatformLookup: handlers.InfrastructurePlatformLookup,
 				Materializer:                 handlers.WorkloadMaterializer,
 				DependencyLookup:             handlers.WorkloadDependencyLookup,
 				WorkloadDependencyEdgeWriter: handlers.WorkloadDependencyEdgeWriter,

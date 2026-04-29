@@ -424,6 +424,85 @@ func TestBuildProjectionRowsInfersKubernetesPlatformFromDeploymentSourceEvidence
 	}
 }
 
+func TestBuildProjectionRowsAddsProvisionedInfrastructurePlatforms(t *testing.T) {
+	t.Parallel()
+
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:              "repo-service",
+			RepoName:            "service-api",
+			DeploymentRepoID:    "repo-delivery",
+			ProvisioningRepoIDs: []string{"repo-infra"},
+			Classification:      "service",
+			Confidence:          0.96,
+			Provenance:          []string{"dockerfile_runtime", "argocd_applicationset_deploy_source"},
+		},
+	}
+	deploymentEnvs := map[string][]string{
+		"repo-delivery": {"prod"},
+		"repo-infra":    {"prod", "qa"},
+	}
+	infraPlatforms := map[string][]InfrastructurePlatformRow{
+		"repo-infra": {
+			{
+				PlatformID:       "platform:ecs:aws:cluster/runtime-main:none:none",
+				PlatformName:     "runtime-main",
+				PlatformKind:     "ecs",
+				PlatformProvider: "aws",
+				PlatformLocator:  "cluster/runtime-main",
+			},
+		},
+	}
+
+	result := BuildProjectionRowsWithInfrastructurePlatforms(candidates, deploymentEnvs, infraPlatforms)
+
+	if got := len(result.InstanceRows); got != 2 {
+		t.Fatalf("len(InstanceRows) = %d, want 2", got)
+	}
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:service-api:prod", "kubernetes") {
+		t.Fatal("missing kubernetes runtime platform for prod deployment environment")
+	}
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:service-api:prod", "ecs") {
+		t.Fatal("missing ecs runtime platform for prod infrastructure environment")
+	}
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:service-api:qa", "ecs") {
+		t.Fatal("missing ecs runtime platform for qa infrastructure environment")
+	}
+}
+
+func TestBuildProjectionRowsSkipsAmbiguousProvisionedInfrastructurePlatforms(t *testing.T) {
+	t.Parallel()
+
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:              "repo-service",
+			RepoName:            "service-api",
+			ProvisioningRepoIDs: []string{"repo-infra"},
+			Classification:      "service",
+			Confidence:          0.96,
+			Provenance:          []string{"dockerfile_runtime"},
+		},
+	}
+	deploymentEnvs := map[string][]string{
+		"repo-infra": {"prod"},
+	}
+	infraPlatforms := map[string][]InfrastructurePlatformRow{
+		"repo-infra": {
+			{PlatformID: "platform:ecs:aws:cluster/runtime-main:none:none", PlatformName: "runtime-main", PlatformKind: "ecs"},
+			{PlatformID: "platform:lambda:aws:cluster/jobs:none:none", PlatformName: "jobs", PlatformKind: "lambda"},
+		},
+	}
+
+	result := BuildProjectionRowsWithInfrastructurePlatforms(candidates, deploymentEnvs, infraPlatforms)
+
+	if got := len(result.RuntimePlatformRows); got != 0 {
+		t.Fatalf("len(RuntimePlatformRows) = %d, want 0 for ambiguous infrastructure platforms", got)
+	}
+	if got := len(result.InstanceRows); got != 0 {
+		t.Fatalf("len(InstanceRows) = %d, want 0 when only ambiguous infrastructure evidence exists", got)
+	}
+}
+
 func TestBuildProjectionRowsDeduplicatesWorkloads(t *testing.T) {
 	t.Parallel()
 	candidates := []WorkloadCandidate{
@@ -637,4 +716,13 @@ func TestBuildProjectionRowsSkipsNamespaceFallbackForNonEnvironmentNamespace(t *
 	if got := len(result.RuntimePlatformRows); got != 0 {
 		t.Fatalf("len(RuntimePlatformRows) = %d, want 0 for non-environment namespace fallback", got)
 	}
+}
+
+func hasRuntimePlatformRow(rows []RuntimePlatformRow, instanceID, platformKind string) bool {
+	for _, row := range rows {
+		if row.InstanceID == instanceID && row.PlatformKind == platformKind {
+			return true
+		}
+	}
+	return false
 }

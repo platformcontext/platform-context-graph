@@ -421,6 +421,122 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironmen
 	}
 }
 
+func TestCorrelatedWorkloadProjectionInputLoaderEnrichesProvisioningRepoEnvironments(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+
+	sourceEnvelopes := []facts.Envelope{
+		{
+			FactID:     "fact-repo",
+			ScopeID:    "scope-app",
+			FactKind:   "repository",
+			Payload:    map[string]any{"graph_id": "repo-app", "name": "my-service"},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-runtime",
+			ScopeID:  "scope-app",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-app",
+				"language":      "dockerfile",
+				"relative_path": "Dockerfile",
+				"parsed_file_data": map[string]any{
+					"dockerfile_stages": []any{map[string]any{"name": "runtime"}},
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+	infraEnvelopes := []facts.Envelope{
+		{
+			FactID:     "fact-infra-repo",
+			ScopeID:    "scope-infra",
+			FactKind:   "repository",
+			Payload:    map[string]any{"graph_id": "repo-infra", "name": "runtime-infra"},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-infra-env",
+			ScopeID:  "scope-infra",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repo-infra",
+				"language":         "hcl",
+				"relative_path":    "environments/prod/terraform.tfvars",
+				"parsed_file_data": map[string]any{},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	factLoader := &scopedFactLoader{
+		envelopesByScope: map[string][]facts.Envelope{
+			"scope-app":   sourceEnvelopes,
+			"scope-infra": infraEnvelopes,
+		},
+	}
+	loader := CorrelatedWorkloadProjectionInputLoader{
+		FactLoader: factLoader,
+		ResolvedLoader: &stubResolvedRelationshipLoader{
+			resolved: []relationships.ResolvedRelationship{
+				{
+					SourceRepoID:     "repo-deploy",
+					TargetRepoID:     "repo-app",
+					RelationshipType: relationships.RelDeploysFrom,
+					Confidence:       0.96,
+					Details: map[string]any{
+						"evidence_kinds": []any{string(relationships.EvidenceKindKustomizeResource)},
+					},
+				},
+				{
+					SourceRepoID:     "repo-infra",
+					TargetRepoID:     "repo-app",
+					RelationshipType: relationships.RelProvisionsDependencyFor,
+					Confidence:       0.94,
+					Details: map[string]any{
+						"evidence_kinds": []any{string(relationships.EvidenceKindTerraformAppRepo)},
+					},
+				},
+			},
+		},
+		ScopeResolver: &stubScopeResolver{
+			generations: map[string]RepoScopeIdentity{
+				"repo-infra": {ScopeID: "scope-infra", GenerationID: "gen-infra-1"},
+			},
+		},
+	}
+
+	intent := Intent{
+		IntentID:        "intent-provisioning-env",
+		ScopeID:         "scope-app",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "test",
+		EntityKeys:      []string{"repo-app"},
+		RelatedScopeIDs: []string{"scope-app"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	candidates, deploymentEnvs, err := loader.LoadWorkloadProjectionInputs(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("LoadWorkloadProjectionInputs() error = %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+	if got, want := candidates[0].ProvisioningRepoIDs, []string{"repo-infra"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("ProvisioningRepoIDs = %v, want %v", got, want)
+	}
+	if got, want := deploymentEnvs["repo-infra"], []string{"prod"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("deploymentEnvs[repo-infra] = %v, want %v", got, want)
+	}
+}
+
 func TestCorrelatedWorkloadProjectionInputLoaderSkipsCrossRepoWhenResolverNil(t *testing.T) {
 	t.Parallel()
 

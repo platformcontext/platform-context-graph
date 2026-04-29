@@ -698,6 +698,79 @@ func TestWorkloadMaterializationHandlerUsesPreCorrelatedInputLoader(t *testing.T
 	}
 }
 
+func TestWorkloadMaterializationHandlerWritesProvisionedInfrastructureRuntimePlatforms(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	inputLoader := &stubWorkloadProjectionInputLoader{
+		candidates: []WorkloadCandidate{
+			{
+				RepoID:              "repo-service",
+				RepoName:            "service-api",
+				ProvisioningRepoIDs: []string{"repo-infra"},
+				Classification:      "service",
+				Confidence:          0.96,
+				Provenance:          []string{"dockerfile_runtime"},
+			},
+		},
+		deploymentEnvironments: map[string][]string{
+			"repo-infra": {"prod"},
+		},
+	}
+	platformLookup := &stubInfrastructurePlatformLookup{
+		platforms: map[string][]InfrastructurePlatformRow{
+			"repo-infra": {
+				{
+					RepoID:           "repo-infra",
+					PlatformID:       "platform:ecs:aws:cluster/runtime-main:none:none",
+					PlatformName:     "runtime-main",
+					PlatformKind:     "ecs",
+					PlatformProvider: "aws",
+					PlatformLocator:  "cluster/runtime-main",
+				},
+			},
+		},
+	}
+	executor := &recordingCypherExecutor{}
+	handler := WorkloadMaterializationHandler{
+		FactLoader:                   &stubFactLoader{},
+		InputLoader:                  inputLoader,
+		InfrastructurePlatformLookup: platformLookup,
+		Materializer:                 NewWorkloadMaterializer(executor),
+	}
+
+	intent := Intent{
+		IntentID:        "intent-wm-infra-platform",
+		ScopeID:         "scope-service",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "replay after infrastructure platform",
+		EntityKeys:      []string{"repo-service"},
+		RelatedScopeIDs: []string{"scope-service"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	result, err := handler.Handle(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if result.CanonicalWrites == 0 {
+		t.Fatal("CanonicalWrites = 0, want > 0")
+	}
+	if got, want := platformLookup.repoIDs, []string{"repo-infra"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("platform lookup repoIDs = %v, want %v", got, want)
+	}
+	if !recordedCallContainsParam(executor.calls, "platform_kind", "ecs") {
+		t.Fatal("missing ecs runtime platform row")
+	}
+	if !recordedCallContainsParam(executor.calls, "platform_id", "platform:ecs:aws:cluster/runtime-main:none:none") {
+		t.Fatal("missing provisioned infrastructure platform id")
+	}
+}
+
 func TestWorkloadMaterializationHandlerRejectsMissingDomain(t *testing.T) {
 	t.Parallel()
 
@@ -794,6 +867,27 @@ func (f *stubWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
 		return nil, nil, f.err
 	}
 	return f.candidates, f.deploymentEnvironments, nil
+}
+
+type stubInfrastructurePlatformLookup struct {
+	platforms map[string][]InfrastructurePlatformRow
+	repoIDs   []string
+	err       error
+}
+
+func (f *stubInfrastructurePlatformLookup) ListProvisionedPlatforms(
+	_ context.Context,
+	repoIDs []string,
+) (map[string][]InfrastructurePlatformRow, error) {
+	f.repoIDs = append([]string(nil), repoIDs...)
+	if f.err != nil {
+		return nil, f.err
+	}
+	result := make(map[string][]InfrastructurePlatformRow)
+	for _, repoID := range repoIDs {
+		result[repoID] = append([]InfrastructurePlatformRow(nil), f.platforms[repoID]...)
+	}
+	return result, nil
 }
 
 type recordingCypherExecutor struct {

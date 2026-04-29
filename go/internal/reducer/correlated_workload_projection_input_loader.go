@@ -46,6 +46,7 @@ func (l CorrelatedWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
 			return nil, nil, fmt.Errorf("load resolved relationships for correlated workload projection: %w", err)
 		}
 		candidates = applyResolvedDeploymentSources(candidates, resolved)
+		candidates = applyResolvedProvisioningSources(candidates, resolved)
 	}
 
 	if l.ScopeResolver != nil {
@@ -122,15 +123,15 @@ func (l CorrelatedWorkloadProjectionInputLoader) enrichDeploymentRepoEnvironment
 	}
 	for _, c := range candidates {
 		if c.DeploymentRepoID == "" {
+			for _, repoID := range c.ProvisioningRepoIDs {
+				markEnvironmentRepoNeeded(repoID, sourceRepos, deploymentEnvironments, needed)
+			}
 			continue
 		}
-		if _, isSameRepo := sourceRepos[c.DeploymentRepoID]; isSameRepo {
-			continue
+		markEnvironmentRepoNeeded(c.DeploymentRepoID, sourceRepos, deploymentEnvironments, needed)
+		for _, repoID := range c.ProvisioningRepoIDs {
+			markEnvironmentRepoNeeded(repoID, sourceRepos, deploymentEnvironments, needed)
 		}
-		if _, hasEnvs := deploymentEnvironments[c.DeploymentRepoID]; hasEnvs {
-			continue
-		}
-		needed[c.DeploymentRepoID] = struct{}{}
 	}
 	if len(needed) == 0 {
 		return deploymentEnvironments
@@ -171,6 +172,24 @@ func (l CorrelatedWorkloadProjectionInputLoader) enrichDeploymentRepoEnvironment
 	}
 
 	return deploymentEnvironments
+}
+
+func markEnvironmentRepoNeeded(
+	repoID string,
+	sourceRepos map[string]struct{},
+	deploymentEnvironments map[string][]string,
+	needed map[string]struct{},
+) {
+	if repoID == "" {
+		return
+	}
+	if _, isSameRepo := sourceRepos[repoID]; isSameRepo {
+		return
+	}
+	if _, hasEnvs := deploymentEnvironments[repoID]; hasEnvs {
+		return
+	}
+	needed[repoID] = struct{}{}
 }
 
 func correlatedWorkloadName(

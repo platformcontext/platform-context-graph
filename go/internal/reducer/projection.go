@@ -22,15 +22,16 @@ const workloadMaterializationMinConfidence = 0.82
 // the Go equivalent of the Python candidate_rows dict produced by
 // _load_candidate_rows.
 type WorkloadCandidate struct {
-	RepoID           string
-	RepoName         string
-	WorkloadName     string
-	ResourceKinds    []string
-	Namespaces       []string
-	DeploymentRepoID string
-	Classification   string
-	Confidence       float64
-	Provenance       []string
+	RepoID              string
+	RepoName            string
+	WorkloadName        string
+	ResourceKinds       []string
+	Namespaces          []string
+	DeploymentRepoID    string
+	ProvisioningRepoIDs []string
+	Classification      string
+	Confidence          float64
+	Provenance          []string
 }
 
 // ProjectionStats tracks counts produced during projection row building.
@@ -192,6 +193,17 @@ func BuildProjectionRows(
 	candidates []WorkloadCandidate,
 	deploymentEnvironments map[string][]string,
 ) *ProjectionResult {
+	return BuildProjectionRowsWithInfrastructurePlatforms(candidates, deploymentEnvironments, nil)
+}
+
+// BuildProjectionRowsWithInfrastructurePlatforms builds batched projection
+// payloads and augments workload instances with provisioned infrastructure
+// platforms when resolved infrastructure evidence is unambiguous.
+func BuildProjectionRowsWithInfrastructurePlatforms(
+	candidates []WorkloadCandidate,
+	deploymentEnvironments map[string][]string,
+	infrastructurePlatforms map[string][]InfrastructurePlatformRow,
+) *ProjectionResult {
 	result := &ProjectionResult{}
 	seenWorkloads := make(map[string]struct{})
 	seenInstances := make(map[string]struct{})
@@ -321,9 +333,81 @@ func BuildProjectionRows(
 				RepoID:       candidate.RepoID,
 			})
 		}
+		for _, row := range provisionedRuntimePlatformRows(
+			candidate,
+			workloadName,
+			confidence,
+			deploymentEnvironments,
+			infrastructurePlatforms,
+		) {
+			if _, ok := seenInstances[row.InstanceID]; !ok {
+				seenInstances[row.InstanceID] = struct{}{}
+				result.InstanceRows = append(result.InstanceRows, InstanceRow{
+					Environment:    row.Environment,
+					InstanceID:     row.InstanceID,
+					RepoID:         candidate.RepoID,
+					WorkloadID:     workloadID,
+					WorkloadKind:   workloadKind,
+					WorkloadName:   workloadName,
+					Classification: classification,
+					Confidence:     confidence,
+					Provenance:     provenance,
+				})
+				result.Stats.Instances++
+			}
+			rpKey := row.InstanceID + "|" + row.PlatformID
+			if _, ok := seenRuntimePlatforms[rpKey]; ok {
+				continue
+			}
+			seenRuntimePlatforms[rpKey] = struct{}{}
+			result.RuntimePlatformRows = append(result.RuntimePlatformRows, row)
+		}
 	}
 
 	return result
+}
+
+func provisionedRuntimePlatformRows(
+	candidate WorkloadCandidate,
+	workloadName string,
+	confidence float64,
+	deploymentEnvironments map[string][]string,
+	infrastructurePlatforms map[string][]InfrastructurePlatformRow,
+) []RuntimePlatformRow {
+	if len(candidate.ProvisioningRepoIDs) == 0 || len(infrastructurePlatforms) == 0 {
+		return nil
+	}
+	var rows []RuntimePlatformRow
+	for _, repoID := range candidate.ProvisioningRepoIDs {
+		platforms := infrastructurePlatforms[repoID]
+		if len(platforms) != 1 {
+			continue
+		}
+		environments := deploymentEnvironments[repoID]
+		if len(environments) == 0 {
+			continue
+		}
+		platform := platforms[0]
+		if platform.PlatformID == "" || platform.PlatformKind == "" {
+			continue
+		}
+		for _, environment := range environments {
+			instanceID := fmt.Sprintf("workload-instance:%s:%s", workloadName, environment)
+			rows = append(rows, RuntimePlatformRow{
+				Environment:      environment,
+				Confidence:       confidence,
+				InstanceID:       instanceID,
+				PlatformID:       platform.PlatformID,
+				PlatformKind:     platform.PlatformKind,
+				PlatformName:     platform.PlatformName,
+				PlatformProvider: platform.PlatformProvider,
+				PlatformRegion:   platform.PlatformRegion,
+				PlatformLocator:  platform.PlatformLocator,
+				RepoID:           candidate.RepoID,
+			})
+		}
+	}
+	return rows
 }
 
 func isMaterializableWorkloadClassification(classification string) bool {

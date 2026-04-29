@@ -224,6 +224,7 @@ func buildReducerService(
 		WorkloadMaterializationReplayer:    workQueue,
 		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
+		InfrastructurePlatformLookup:       reducer.GraphInfrastructurePlatformLookup{Graph: graphReader},
 		FactLoader:                         factStore,
 		CodeCallIntentWriter:               codeCallIntentWriter,
 		GraphProjectionPhasePublisher:      graphProjectionStateStore,

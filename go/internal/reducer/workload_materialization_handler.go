@@ -56,6 +56,15 @@ type WorkloadProjectionInputLoader interface {
 	) ([]WorkloadCandidate, map[string][]string, error)
 }
 
+// InfrastructurePlatformLookup loads platforms provisioned by infrastructure
+// repositories that have already materialized PROVISIONS_PLATFORM graph edges.
+type InfrastructurePlatformLookup interface {
+	ListProvisionedPlatforms(
+		ctx context.Context,
+		repoIDs []string,
+	) (map[string][]InfrastructurePlatformRow, error)
+}
+
 // WorkloadMaterializationHandler reduces one workload materialization intent
 // into canonical graph writes (workloads, instances, deployment sources,
 // runtime platforms). It loads facts from the content store, extracts workload
@@ -64,6 +73,7 @@ type WorkloadMaterializationHandler struct {
 	FactLoader                   FactLoader
 	ResolvedLoader               ResolvedRelationshipLoader
 	InputLoader                  WorkloadProjectionInputLoader
+	InfrastructurePlatformLookup InfrastructurePlatformLookup
 	Materializer                 *WorkloadMaterializer
 	DependencyLookup             WorkloadDependencyGraphLookup
 	WorkloadDependencyEdgeWriter SharedProjectionEdgeWriter
@@ -134,7 +144,15 @@ func (h WorkloadMaterializationHandler) Handle(
 	}
 
 	buildStarted := time.Now()
-	projection := BuildProjectionRows(candidates, deploymentEnvironments)
+	infrastructurePlatforms, err := h.loadInfrastructurePlatforms(ctx, candidates)
+	if err != nil {
+		return Result{}, err
+	}
+	projection := BuildProjectionRowsWithInfrastructurePlatforms(
+		candidates,
+		deploymentEnvironments,
+		infrastructurePlatforms,
+	)
 	timing.buildProjectionDuration = time.Since(buildStarted)
 
 	graphStarted := time.Now()
@@ -228,6 +246,42 @@ func (h WorkloadMaterializationHandler) Handle(
 		),
 		CanonicalWrites: totalWrites,
 	}, nil
+}
+
+func (h WorkloadMaterializationHandler) loadInfrastructurePlatforms(
+	ctx context.Context,
+	candidates []WorkloadCandidate,
+) (map[string][]InfrastructurePlatformRow, error) {
+	if h.InfrastructurePlatformLookup == nil {
+		return nil, nil
+	}
+	repoIDs := uniqueProvisioningRepoIDs(candidates)
+	if len(repoIDs) == 0 {
+		return nil, nil
+	}
+	platforms, err := h.InfrastructurePlatformLookup.ListProvisionedPlatforms(ctx, repoIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load provisioned infrastructure platforms: %w", err)
+	}
+	return platforms, nil
+}
+
+func uniqueProvisioningRepoIDs(candidates []WorkloadCandidate) []string {
+	seen := make(map[string]struct{})
+	var repoIDs []string
+	for _, candidate := range candidates {
+		for _, repoID := range candidate.ProvisioningRepoIDs {
+			if repoID == "" {
+				continue
+			}
+			if _, ok := seen[repoID]; ok {
+				continue
+			}
+			seen[repoID] = struct{}{}
+			repoIDs = append(repoIDs, repoID)
+		}
+	}
+	return repoIDs
 }
 
 func logWorkloadMaterializationCompleted(
