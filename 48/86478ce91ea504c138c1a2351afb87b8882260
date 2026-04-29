@@ -1,0 +1,25 @@
+go/internal/reducer/repo_dependency_projection_runner_test.go
+  4cb501d5d4ff237f 477-537
+go/internal/reducer/repo_dependency_projection_runner.go
+  4cb501d5d4ff237f 208-215,255-268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "4886478ce91ea504c138c1a2351afb87b8882260",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 85,
+      "total_deletions": 6,
+      "accepted_lines": 110,
+      "overriden_lines": 0
+    }
+  }
+}
