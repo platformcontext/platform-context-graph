@@ -203,8 +203,15 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 	repoRoot := t.TempDir()
 	writeCollectorTestFile(t, filepath.Join(repoRoot, ".git", "HEAD"), "ref: refs/heads/main\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "jquery_adapter.js"), "export function adaptJQuery() { return true; }\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "bootstrap.js"), "export function bootstrapApplication() { return true; }\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "src", "marinus", "library", "Zend", "Gdata", "GroupEntry.php"), "<?php\n/** Zend Framework */\nclass Zend_Gdata_GroupEntry {}\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "jquery.js"), "/* jQuery JavaScript Library v1.12.4 */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "aJQuerry.js"), "/*! jQuery v2.2.4 | (c) jQuery Foundation | jquery.org/license */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "bootstrap.js"), "/*!\n * Bootstrap v3.3.1 (http://getbootstrap.com)\n */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "calendar.js"), "/*!\nFullCalendar v5.3.2\nDocs & License: https://fullcalendar.io/\n*/\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "fotorama.js"), "/*!\n * Fotorama 4.6.4 | http://fotorama.io/license/\n */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "gmaps.js"), "/*!\n * GMaps.js v0.4.15\n * http://hpneo.github.com/gmaps/\n */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "masonry.pkgd.js"), "/*!\n * Masonry PACKAGED v3.1.5\n * http://masonry.desandro.com\n */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "shadowbox.js"), "/* Shadowbox.js */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "scripts", "fpdf.php"), "<?php\n/* FPDF */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "framework", "library", "pear", "php", "PEAR", "FixPHP5PEARWarnings.php"), "<?php\n/* PEAR compatibility library */\n")
@@ -221,17 +228,22 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 		t.Fatalf("resolveNativeSnapshotFileSet() error = %v", err)
 	}
 
-	if got, want := len(fileSet.Files), 1; got != want {
+	if got, want := len(fileSet.Files), 2; got != want {
 		t.Fatalf("file count = %d, want %d; files=%v", got, want, fileSet.Files)
 	}
-	if got, want := filepath.ToSlash(fileSet.Files[0]), "src/jquery_adapter.js"; !strings.HasSuffix(got, want) {
-		t.Fatalf("indexed file = %q, want suffix %q", got, want)
+	for _, wantSuffix := range []string{
+		"src/bootstrap.js",
+		"src/jquery_adapter.js",
+	} {
+		if !fileSetContainsSuffix(fileSet.Files, wantSuffix) {
+			t.Fatalf("fileSet missing %q; files=%v", wantSuffix, fileSet.Files)
+		}
 	}
 	if got := stats.FilesSkippedByContent["vendored-zend-framework"]; got != 1 {
 		t.Fatalf("FilesSkippedByContent[vendored-zend-framework] = %d, want 1", got)
 	}
-	if got := stats.FilesSkippedByContent["vendored-browser-library"]; got != 2 {
-		t.Fatalf("FilesSkippedByContent[vendored-browser-library] = %d, want 2", got)
+	if got := stats.FilesSkippedByContent["vendored-browser-library"]; got != 8 {
+		t.Fatalf("FilesSkippedByContent[vendored-browser-library] = %d, want 8", got)
 	}
 	if got := stats.FilesSkippedByContent["vendored-fpdf"]; got != 1 {
 		t.Fatalf("FilesSkippedByContent[vendored-fpdf] = %d, want 1", got)

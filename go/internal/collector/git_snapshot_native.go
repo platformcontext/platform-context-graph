@@ -547,6 +547,7 @@ func resolveNativeSnapshotFileSet(
 }
 
 const generatedJavaScriptBundleMinBytes = 256 * 1024
+const vendoredBrowserLibraryPrefixBytes = 16 * 1024
 
 func filterGeneratedNativeSnapshotFiles(files []string, stats *discovery.DiscoveryStats) []string {
 	filtered := files[:0]
@@ -675,8 +676,56 @@ func isVendoredBrowserLibraryFile(path string) bool {
 	case strings.HasPrefix(name, "swfobject") && strings.HasSuffix(name, ".js"):
 		return true
 	default:
+		return hasVendoredBrowserLibrarySignature(path)
+	}
+}
+
+func hasVendoredBrowserLibrarySignature(path string) bool {
+	prefix, ok := javascriptFilePrefix(path, vendoredBrowserLibraryPrefixBytes)
+	if !ok {
 		return false
 	}
+	normalized := strings.ToLower(prefix)
+	switch {
+	case strings.Contains(normalized, "jquery foundation") &&
+		strings.Contains(normalized, "jquery.org/license"):
+		return true
+	case strings.Contains(normalized, "bootstrap v") &&
+		strings.Contains(normalized, "getbootstrap.com"):
+		return true
+	case strings.Contains(normalized, "fullcalendar v") &&
+		strings.Contains(normalized, "fullcalendar.io"):
+		return true
+	case strings.Contains(normalized, "fotorama") &&
+		strings.Contains(normalized, "fotorama.io/license"):
+		return true
+	case strings.Contains(normalized, "gmaps.js") &&
+		strings.Contains(normalized, "hpneo.github.com/gmaps"):
+		return true
+	case strings.Contains(normalized, "masonry packaged") &&
+		strings.Contains(normalized, "masonry.desandro.com"):
+		return true
+	default:
+		return false
+	}
+}
+
+func javascriptFilePrefix(path string, limit int) (string, bool) {
+	if limit <= 0 {
+		return "", false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = file.Close() }()
+
+	buf := make([]byte, limit)
+	n, err := file.Read(buf)
+	if err != nil && n == 0 {
+		return "", false
+	}
+	return string(buf[:n]), true
 }
 
 func isVendoredFPDFFile(path string) bool {
