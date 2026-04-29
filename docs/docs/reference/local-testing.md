@@ -106,6 +106,18 @@ noisy directories/files by content-entity count; entity counts by type/language;
 and skip breakdowns. Treat it as local diagnostic evidence for
 `.pcg/discovery.json` or `.pcgignore`, not as a stable API contract.
 
+For focused performance proofs where modifying the source repo is not
+appropriate, the collector runtimes also accept a process-local overlay:
+
+```bash
+export PCG_DISCOVERY_IGNORED_PATH_GLOBS='generated/**=generated-template'
+export PCG_DISCOVERY_PRESERVED_PATH_GLOBS='generated/handwritten/**'
+```
+
+Use this only as an evidence-gathering or deployment-owned override. Prefer a
+repo-local `.pcg/discovery.json` once the rule is proven and should travel with
+the source.
+
 ### Discovery Advisory Playbook
 
 Use this loop when a repo is slow, timeout-heavy, or unexpectedly large.

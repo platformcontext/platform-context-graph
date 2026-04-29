@@ -176,6 +176,31 @@ func TestBuildBootstrapCollectorUsesNativeSnapshotter(t *testing.T) {
 	}
 }
 
+func TestBuildBootstrapCollectorWiresDiscoveryPathGlobOverlay(t *testing.T) {
+	t.Parallel()
+
+	deps, err := buildBootstrapCollector(
+		context.Background(),
+		&fakeBootstrapSQLDB{},
+		func(key string) string {
+			if key == "PCG_DISCOVERY_IGNORED_PATH_GLOBS" {
+				return "generated/**=generated-template"
+			}
+			return ""
+		},
+		nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("buildBootstrapCollector() error = %v, want nil", err)
+	}
+
+	source := deps.source.(*collector.GitSource)
+	snapshotter := source.Snapshotter.(collector.NativeRepositorySnapshotter)
+	if got, want := len(snapshotter.DiscoveryOptions.IgnoredPathGlobs), 1; got != want {
+		t.Fatalf("IgnoredPathGlobs length = %d, want %d", got, want)
+	}
+}
+
 func TestBuildBootstrapProjectorWiresPhasePublisherAndRepairQueue(t *testing.T) {
 	t.Parallel()
 

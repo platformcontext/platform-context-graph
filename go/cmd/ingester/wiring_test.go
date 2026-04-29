@@ -159,6 +159,37 @@ func TestBuildIngesterCollectorServiceUsesNativeSnapshotter(t *testing.T) {
 	}
 }
 
+func TestBuildIngesterCollectorServiceWiresDiscoveryPathGlobOverlay(t *testing.T) {
+	t.Parallel()
+
+	service, err := buildIngesterCollectorService(
+		postgres.SQLDB{},
+		func(key string) string {
+			if key == "PCG_DISCOVERY_IGNORED_PATH_GLOBS" {
+				return "generated/**=generated-template"
+			}
+			return ""
+		},
+		func() (string, error) { return t.TempDir(), nil },
+		func() []string { return []string{"PATH=/usr/bin"} },
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildIngesterCollectorService() error = %v, want nil", err)
+	}
+
+	source := service.Source.(*collector.GitSource)
+	snapshotter := source.Snapshotter.(collector.NativeRepositorySnapshotter)
+	if got, want := len(snapshotter.DiscoveryOptions.IgnoredPathGlobs), 1; got != want {
+		t.Fatalf("IgnoredPathGlobs length = %d, want %d", got, want)
+	}
+	if got, want := snapshotter.DiscoveryOptions.IgnoredPathGlobs[0].Pattern, "generated/**"; got != want {
+		t.Fatalf("IgnoredPathGlobs[0].Pattern = %q, want %q", got, want)
+	}
+}
+
 func TestBuildIngesterCollectorServiceDefersRelationshipBackfillToBatchDrain(t *testing.T) {
 	t.Parallel()
 

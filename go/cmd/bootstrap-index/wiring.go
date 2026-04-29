@@ -42,15 +42,20 @@ func buildBootstrapCollector(
 	if err != nil {
 		return collectorDeps{}, err
 	}
+	discoveryOptions, err := collector.LoadDiscoveryOptionsFromEnv(getenv)
+	if err != nil {
+		return collectorDeps{}, err
+	}
 
 	source := &collector.GitSource{
 		Component: "bootstrap-index",
 		Selector:  collector.NativeRepositorySelector{Config: config},
 		Snapshotter: collector.NativeRepositorySnapshotter{
-			ParseWorkers: config.ParseWorkers,
-			Tracer:       tracer,
-			Instruments:  instruments,
-			Logger:       logger,
+			ParseWorkers:     config.ParseWorkers,
+			DiscoveryOptions: discoveryOptions,
+			Tracer:           tracer,
+			Instruments:      instruments,
+			Logger:           logger,
 		},
 		SnapshotWorkers:        config.SnapshotWorkers,
 		LargeRepoThreshold:     config.LargeRepoThreshold,

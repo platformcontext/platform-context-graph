@@ -159,6 +159,10 @@ func buildIngesterCollectorService(
 	if err != nil {
 		return collector.Service{}, err
 	}
+	discoveryOptions, err := collector.LoadDiscoveryOptionsFromEnv(getenv)
+	if err != nil {
+		return collector.Service{}, err
+	}
 	committer := postgres.NewIngestionStore(database)
 	committer.SkipRelationshipBackfill = true
 	committer.Logger = logger
@@ -168,10 +172,11 @@ func buildIngesterCollectorService(
 			Component: "ingester",
 			Selector:  collector.NativeRepositorySelector{Config: config},
 			Snapshotter: collector.NativeRepositorySnapshotter{
-				ParseWorkers: config.ParseWorkers,
-				Tracer:       tracer,
-				Instruments:  instruments,
-				Logger:       logger,
+				ParseWorkers:     config.ParseWorkers,
+				DiscoveryOptions: discoveryOptions,
+				Tracer:           tracer,
+				Instruments:      instruments,
+				Logger:           logger,
 			},
 			SnapshotWorkers:        config.SnapshotWorkers,
 			LargeRepoThreshold:     config.LargeRepoThreshold,
