@@ -1349,6 +1349,14 @@ runtime hypothesis for this PR; keep the NornicDB regression/benchmark as
 backend evidence, but do not keep the PCG routing until a narrower data-shape
 or statement-count proof explains the large-repo regression.
 
+Commit `88f2684f` adds that missing proof surface without changing reducer
+behavior: every shared edge write now logs the execution mode, input rows,
+written rows, skipped rows, route count, statement count, batch size, group
+batch size, and duration. This is classified as a diagnostic win. The next
+single-large proof should use those log lines to compare broad code-call
+routing, exact-label routing, and NornicDB's backend hot path before another
+Cypher/data-shape change is retained.
+
 ### Architecture Checkpoint
 
 The evidence now separates three classes of work:
@@ -1435,6 +1443,6 @@ remain idle-heavy.
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
-| NornicDB backend proof | In progress | NornicDB runtime-branch commit `9369a40` proves the no-return `UNWIND MATCH MATCH MERGE rel SET rel...` code-call shape has a batch-chain contract; 512-row local microbench improved from `2260916375 ns/op` fallback to `1386075 ns/op` patched, but the combined PCG routing proof regressed single-large wall to `193s` with `15.648s` code-call write time | Keep backend regression coverage, revert PCG exact-label routing, and next inspect statement-count/data-shape effects before another runtime proof |
+| NornicDB backend proof | In progress | NornicDB runtime-branch commit `9369a40` proves the no-return `UNWIND MATCH MATCH MERGE rel SET rel...` code-call shape has a batch-chain contract; 512-row local microbench improved from `2260916375 ns/op` fallback to `1386075 ns/op` patched, but the combined PCG routing proof regressed single-large wall to `193s` with `15.648s` code-call write time. PCG commit `88f2684f` adds shared edge write-shape logs for execution mode, rows, routes, statement count, batch sizes, and duration. | Keep backend regression coverage, keep PCG exact-label routing reverted, and run a single-large diagnostic proof that extracts statement-count/data-shape evidence before another runtime query-shape change |
 | Concurrency proof | Planned | `8` workers completed healthy but too slowly | Test `16` workers only after telemetry and conflict fixes |
 | Full-corpus acceptance | Planned | Baseline `7h43m40s` is unacceptable | Re-run full corpus after smaller proof ladder passes |
