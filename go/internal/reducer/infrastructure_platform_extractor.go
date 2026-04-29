@@ -118,10 +118,11 @@ func extractTerraformResourceSignals(payload map[string]any, signals *terraformR
 		if !ok {
 			continue
 		}
-		if rt := strings.TrimSpace(strings.ToLower(payloadStr(m, "resource_type"))); rt != "" {
+		rt := strings.TrimSpace(strings.ToLower(payloadStr(m, "resource_type")))
+		if rt != "" {
 			signals.ResourceTypes = append(signals.ResourceTypes, rt)
 		}
-		if rn := strings.TrimSpace(payloadStr(m, "resource_name")); rn != "" {
+		if rn := strings.TrimSpace(payloadStr(m, "resource_name")); rn != "" && isPlatformClusterResourceType(rt) {
 			signals.ResourceNames = append(signals.ResourceNames, rn)
 		}
 	}
@@ -137,13 +138,40 @@ func extractTerraformModuleSignals(payload map[string]any, signals *terraformRep
 		if !ok {
 			continue
 		}
-		if src := strings.TrimSpace(strings.ToLower(payloadStr(m, "source"))); src != "" {
+		src := strings.TrimSpace(strings.ToLower(payloadStr(m, "source")))
+		if src != "" {
 			signals.ModuleSources = append(signals.ModuleSources, src)
 		}
-		if name := strings.TrimSpace(payloadStr(m, "name")); name != "" {
+		if name := strings.TrimSpace(payloadStr(m, "name")); name != "" && isPlatformClusterModuleSource(src) {
 			signals.ModuleNames = append(signals.ModuleNames, name)
 		}
 	}
+}
+
+// isPlatformClusterResourceType reports whether a Terraform resource type is a
+// registered platform resource, not merely a sibling service dependency.
+func isPlatformClusterResourceType(resourceType string) bool {
+	for _, family := range runtimeFamilies {
+		for _, clusterType := range family.ClusterResourceTypes {
+			if resourceType == clusterType {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isPlatformClusterModuleSource reports whether a module source is a registered
+// cluster module whose name can safely label a platform.
+func isPlatformClusterModuleSource(source string) bool {
+	for _, family := range runtimeFamilies {
+		for _, pattern := range family.ClusterModulePatterns {
+			if strings.Contains(source, pattern) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func extractTerraformDataSourceSignals(payload map[string]any, signals *terraformRepoSignals) {
