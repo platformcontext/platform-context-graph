@@ -289,27 +289,11 @@ func TestCanonicalNodeWriterCanInlineEntityContainmentForBackendCompatibility(t 
 	if !strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") {
 		t.Fatalf("entity cypher = %q, want file-scoped MATCH", stmt.Cypher)
 	}
-	if strings.Contains(stmt.Cypher, "SET n += row.props") {
-		t.Fatalf("entity cypher = %q, want explicit property assignments for NornicDB batch routing", stmt.Cypher)
-	}
-	if !strings.Contains(stmt.Cypher, "SET n.id = row.entity_id,") {
-		t.Fatalf("entity cypher = %q, want explicit base property assignment", stmt.Cypher)
-	}
 	if !strings.Contains(stmt.Cypher, "MERGE (f)-[rel:CONTAINS]->(n)") {
 		t.Fatalf("entity cypher = %q, want inline containment MERGE", stmt.Cypher)
 	}
 	if got := stmt.Parameters["file_path"]; got != "/repos/my-repo/src/main.go" {
 		t.Fatalf("file_path = %#v, want /repos/my-repo/src/main.go", got)
-	}
-	rows, ok := stmt.Parameters["rows"].([]map[string]any)
-	if !ok {
-		t.Fatalf("rows type = %T, want []map[string]any", stmt.Parameters["rows"])
-	}
-	if got, want := rows[0]["name"], "a"; got != want {
-		t.Fatalf("row name = %#v, want %#v", got, want)
-	}
-	if got, want := rows[0]["scope_id"], "scope-1"; got != want {
-		t.Fatalf("row scope_id = %#v, want %#v", got, want)
 	}
 }
 

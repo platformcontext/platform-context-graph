@@ -7,6 +7,77 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 )
 
+func canonicalEntityRowsByLabel(mat projector.CanonicalMaterialization) map[string][]map[string]any {
+	if len(mat.Entities) == 0 {
+		return nil
+	}
+
+	byLabel := make(map[string][]map[string]any, len(mat.Entities))
+	for _, entity := range mat.Entities {
+		row := map[string]any{
+			"entity_id":     entity.EntityID,
+			"generation_id": mat.GenerationID,
+			"props": canonicalEntityProperties(
+				entity,
+				mat.ScopeID,
+				mat.GenerationID,
+			),
+		}
+		byLabel[entity.Label] = append(byLabel[entity.Label], row)
+	}
+
+	return byLabel
+}
+
+func canonicalEntityRowsByLabelWithFile(mat projector.CanonicalMaterialization) map[string][]map[string]any {
+	if len(mat.Entities) == 0 {
+		return nil
+	}
+
+	byLabel := make(map[string][]map[string]any, len(mat.Entities))
+	for _, entity := range mat.Entities {
+		row := map[string]any{
+			"entity_id":     entity.EntityID,
+			"file_path":     entity.FilePath,
+			"generation_id": mat.GenerationID,
+			"props": canonicalEntityProperties(
+				entity,
+				mat.ScopeID,
+				mat.GenerationID,
+			),
+		}
+		byLabel[entity.Label] = append(byLabel[entity.Label], row)
+	}
+
+	return byLabel
+}
+
+func canonicalEntityRowsByLabelAndFile(mat projector.CanonicalMaterialization) map[string]map[string][]map[string]any {
+	if len(mat.Entities) == 0 {
+		return nil
+	}
+
+	byLabel := make(map[string]map[string][]map[string]any, len(mat.Entities))
+	for _, entity := range mat.Entities {
+		byFile := byLabel[entity.Label]
+		if byFile == nil {
+			byFile = make(map[string][]map[string]any)
+			byLabel[entity.Label] = byFile
+		}
+		byFile[entity.FilePath] = append(byFile[entity.FilePath], map[string]any{
+			"entity_id":     entity.EntityID,
+			"generation_id": mat.GenerationID,
+			"props": canonicalEntityProperties(
+				entity,
+				mat.ScopeID,
+				mat.GenerationID,
+			),
+		})
+	}
+
+	return byLabel
+}
+
 func canonicalEntityContainmentRowsByLabelAndFile(mat projector.CanonicalMaterialization) map[string]map[string][]map[string]any {
 	if len(mat.Entities) == 0 {
 		return nil
@@ -170,26 +241,24 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 		byFile := byLabel[label]
 		for _, filePath := range sortedCanonicalEntityContainmentFiles(byFile) {
 			batchRows := make([]map[string]any, 0, batchSize)
-			dynamicRows := make([]map[string]any, 0, batchSize)
-			flushBatch := func(rows []map[string]any, cypher string, mode string) {
-				if len(rows) == 0 {
+			flushBatch := func() {
+				if len(batchRows) == 0 {
 					return
 				}
 				statementSummary := fmt.Sprintf(
-					"label=%s file=%s rows=%d first_id=%v last_id=%v containment=inline row_mode=%s",
+					"label=%s file=%s rows=%d first_id=%v last_id=%v containment=inline",
 					label,
 					filePath,
-					len(rows),
-					rows[0]["entity_id"],
-					rows[len(rows)-1]["entity_id"],
-					mode,
+					len(batchRows),
+					batchRows[0]["entity_id"],
+					batchRows[len(batchRows)-1]["entity_id"],
 				)
 				stmts = append(stmts, Statement{
 					Operation: OperationCanonicalUpsert,
-					Cypher:    fmt.Sprintf(cypher, label),
+					Cypher:    fmt.Sprintf(canonicalNodeEntityFileScopedUpsertWithContainmentTemplate, label),
 					Parameters: map[string]any{
 						"file_path":                      filePath,
-						"rows":                           append([]map[string]any(nil), rows...),
+						"rows":                           append([]map[string]any(nil), batchRows...),
 						StatementMetadataPhaseKey:        CanonicalPhaseEntities,
 						StatementMetadataEntityLabelKey:  label,
 						StatementMetadataSummaryKey:      statementSummary,
@@ -197,25 +266,11 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 						StatementMetadataGenerationIDKey: mat.GenerationID,
 					},
 				})
-			}
-			flushExplicitBatch := func() {
-				if len(batchRows) == 0 {
-					return
-				}
-				flushBatch(batchRows, canonicalNodeEntityFileScopedExplicitUpsertWithContainmentTemplate, "explicit")
 				batchRows = batchRows[:0]
-			}
-			flushDynamicBatch := func() {
-				if len(dynamicRows) == 0 {
-					return
-				}
-				flushBatch(dynamicRows, canonicalNodeEntityFileScopedUpsertWithContainmentTemplate, "map")
-				dynamicRows = dynamicRows[:0]
 			}
 			for _, row := range byFile[filePath] {
 				if canonicalEntityRowNeedsSingletonFallback(row) {
-					flushExplicitBatch()
-					flushDynamicBatch()
+					flushBatch()
 					stmts = append(stmts, canonicalNodeEntitySingletonWithContainmentStatement(
 						label,
 						filePath,
@@ -230,22 +285,12 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 					))
 					continue
 				}
-				if canonicalEntityRowHasDynamicProperties(row) {
-					flushExplicitBatch()
-					dynamicRows = append(dynamicRows, row)
-					if len(dynamicRows) >= batchSize {
-						flushDynamicBatch()
-					}
-					continue
-				}
-				flushDynamicBatch()
 				batchRows = append(batchRows, row)
 				if len(batchRows) >= batchSize {
-					flushExplicitBatch()
+					flushBatch()
 				}
 			}
-			flushExplicitBatch()
-			flushDynamicBatch()
+			flushBatch()
 		}
 	}
 
