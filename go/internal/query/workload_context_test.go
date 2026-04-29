@@ -13,9 +13,14 @@ import (
 type fakeWorkloadGraphReader struct {
 	runSingleByMatch map[string]map[string]any
 	runByMatch       map[string][]map[string]any
+	run              func(context.Context, string, map[string]any) ([]map[string]any, error)
+	runSingle        func(context.Context, string, map[string]any) (map[string]any, error)
 }
 
-func (f fakeWorkloadGraphReader) Run(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+func (f fakeWorkloadGraphReader) Run(ctx context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+	if f.run != nil {
+		return f.run(ctx, cypher, params)
+	}
 	for fragment, rows := range f.runByMatch {
 		if strings.Contains(cypher, fragment) {
 			return rows, nil
@@ -24,7 +29,10 @@ func (f fakeWorkloadGraphReader) Run(_ context.Context, cypher string, _ map[str
 	return nil, nil
 }
 
-func (f fakeWorkloadGraphReader) RunSingle(_ context.Context, cypher string, _ map[string]any) (map[string]any, error) {
+func (f fakeWorkloadGraphReader) RunSingle(ctx context.Context, cypher string, params map[string]any) (map[string]any, error) {
+	if f.runSingle != nil {
+		return f.runSingle(ctx, cypher, params)
+	}
 	for fragment, row := range f.runSingleByMatch {
 		if strings.Contains(cypher, fragment) {
 			return row, nil
