@@ -8,7 +8,6 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
-	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
@@ -61,26 +60,6 @@ func TestRuntimeProjectContentBeforeCanonicalKeepsContentWhenCanonicalFails(t *t
 		t.Fatalf("Project() error = %v, want %v", err, expectedErr)
 	}
 	assertOrder(t, order, []string{"content", "canonical"})
-}
-
-func TestRuntimeProjectEnqueuesReducerIntentsBeforeContentWrite(t *testing.T) {
-	t.Parallel()
-
-	var order []string
-	runtime := Runtime{
-		CanonicalWriter: &orderedCanonicalWriter{order: &order},
-		ContentWriter:   &orderedContentWriter{order: &order, result: content.Result{RecordCount: 1}},
-		IntentWriter:    &orderedIntentWriter{order: &order, result: IntentResult{Count: 1}},
-	}
-
-	result, err := runtime.Project(context.Background(), orderScope(), orderGeneration(), orderFactsWithIntent())
-	if err != nil {
-		t.Fatalf("Project() error = %v, want nil", err)
-	}
-	if got, want := result.Intents.Count, 1; got != want {
-		t.Fatalf("result.Intents.Count = %d, want %d", got, want)
-	}
-	assertOrder(t, order, []string{"canonical", "intent", "content"})
 }
 
 func orderScope() scope.IngestionScope {
@@ -137,23 +116,6 @@ func orderFacts() []facts.Envelope {
 	}
 }
 
-func orderFactsWithIntent() []facts.Envelope {
-	envelopes := orderFacts()
-	envelopes = append(envelopes, facts.Envelope{
-		FactID:       "fact-reducer-intent",
-		ScopeID:      "scope-order",
-		GenerationID: "generation-order",
-		FactKind:     "source_relation",
-		ObservedAt:   time.Date(2026, time.April, 22, 10, 0, 0, 0, time.UTC),
-		Payload: map[string]any{
-			"reducer_domain": string(reducer.DomainCodeCallMaterialization),
-			"entity_key":     "repository:r_order",
-			"reason":         "code-call follow-up required",
-		},
-	})
-	return envelopes
-}
-
 type orderedCanonicalWriter struct {
 	order *[]string
 	err   error
@@ -174,16 +136,6 @@ func (w *orderedContentWriter) Write(_ context.Context, materialization content.
 	if len(materialization.Records) == 0 {
 		return content.Result{}, errors.New("content materialization is empty")
 	}
-	return w.result, nil
-}
-
-type orderedIntentWriter struct {
-	order  *[]string
-	result IntentResult
-}
-
-func (w *orderedIntentWriter) Enqueue(_ context.Context, _ []ReducerIntent) (IntentResult, error) {
-	*w.order = append(*w.order, "intent")
 	return w.result, nil
 }
 

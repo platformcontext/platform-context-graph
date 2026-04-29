@@ -44,49 +44,6 @@ func (r Runtime) writeContentProjection(ctx context.Context, scopeValue scope.In
 	return contentResult, nil
 }
 
-// enqueueReducerIntents publishes reducer follow-up work as soon as canonical
-// graph readiness exists, allowing reducer-only graph work to overlap later
-// source-local content-store writes.
-func (r Runtime) enqueueReducerIntents(
-	ctx context.Context,
-	scopeValue scope.IngestionScope,
-	generationID string,
-	intents []ReducerIntent,
-) (IntentResult, error) {
-	if r.IntentWriter == nil {
-		return IntentResult{}, errors.New("reducer intent writer is required when reducer intents are present")
-	}
-
-	enqueueStart := time.Now()
-	if r.Tracer != nil {
-		var enqueueSpan trace.Span
-		ctx, enqueueSpan = r.Tracer.Start(ctx, telemetry.SpanReducerIntentEnqueue)
-		defer enqueueSpan.End()
-	}
-
-	intentResult, err := r.IntentWriter.Enqueue(ctx, intents)
-	if err != nil {
-		return IntentResult{}, fmt.Errorf("enqueue reducer intents: %w", err)
-	}
-
-	if r.Instruments != nil {
-		duration := time.Since(enqueueStart).Seconds()
-		r.Instruments.ProjectorStageDuration.Record(ctx, duration, metric.WithAttributes(
-			telemetry.AttrScopeID(scopeValue.ScopeID),
-			attribute.String("stage", "intent_enqueue"),
-		))
-		r.Instruments.ReducerIntentsEnqueued.Add(ctx, int64(len(intents)), metric.WithAttributes(
-			telemetry.AttrScopeID(scopeValue.ScopeID),
-		))
-	}
-	r.logRuntimeStage(ctx, scopeValue, generationID, "intent_enqueue", enqueueStart,
-		"reducer_intent_count", len(intents),
-		"enqueued_count", intentResult.Count,
-	)
-
-	return intentResult, nil
-}
-
 func (r Runtime) writeCanonicalProjection(
 	ctx context.Context,
 	scopeValue scope.IngestionScope,
