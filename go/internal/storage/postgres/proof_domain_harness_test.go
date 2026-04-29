@@ -225,8 +225,8 @@ func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...a
 		}
 		return db.claimReducerWork(args[0].(time.Time), args[2].(string), args[3].(time.Time))
 	case strings.Contains(query, "stage = 'projector'"):
-		if len(args) != 4 {
-			return nil, fmt.Errorf("projector claim args = %d, want 4", len(args))
+		if len(args) != 3 {
+			return nil, fmt.Errorf("projector claim args = %d, want 3", len(args))
 		}
 		return db.claimProjectorWork(args[0].(time.Time), args[1].(string), args[2].(time.Time))
 	default:

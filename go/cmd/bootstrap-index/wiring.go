@@ -21,10 +21,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
-const (
-	bootstrapIndexConnectionTimeout = 10 * time.Second
-	projectorClaimOrderEnv          = "PCG_PROJECTOR_CLAIM_ORDER"
-)
+const bootstrapIndexConnectionTimeout = 10 * time.Second
 
 func buildBootstrapCollector(
 	ctx context.Context,
@@ -91,7 +88,6 @@ func buildBootstrapProjector(
 	}
 
 	projectorQueue := postgres.NewProjectorQueue(instrumentedDB, "bootstrap-index", time.Minute)
-	projectorQueue.PreferLargeGenerationsFirst = loadBootstrapProjectorPreferLargeGenerationsFirst(getenv)
 	reducerQueue := postgres.NewReducerQueue(instrumentedDB, "bootstrap-index", time.Minute)
 	contentConfig, err := content.LoadWriterConfig(getenv)
 	if err != nil {
@@ -116,18 +112,6 @@ func buildBootstrapProjector(
 		runner:     runtime,
 		workSink:   projectorQueue,
 	}, nil
-}
-
-func loadBootstrapProjectorPreferLargeGenerationsFirst(getenv func(string) string) bool {
-	if getenv == nil {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(getenv(projectorClaimOrderEnv))) {
-	case "size_desc", "large_first":
-		return true
-	default:
-		return false
-	}
 }
 
 // neo4jBatchSize reads PCG_NEO4J_BATCH_SIZE from the environment.

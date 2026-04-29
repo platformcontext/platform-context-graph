@@ -84,32 +84,6 @@ func TestBuildProjectorServiceWiresRetryPolicyFromEnv(t *testing.T) {
 	}
 }
 
-func TestBuildProjectorServiceWiresLargeGenerationClaimOrder(t *testing.T) {
-	t.Parallel()
-
-	service, err := buildProjectorService(
-		postgres.SQLDB{},
-		&noopCanonicalWriter{},
-		func(name string) string {
-			if name == projectorClaimOrderEnv {
-				return "size_desc"
-			}
-			return ""
-		},
-	)
-	if err != nil {
-		t.Fatalf("buildProjectorService() error = %v, want nil", err)
-	}
-
-	workSource, ok := service.WorkSource.(postgres.ProjectorQueue)
-	if !ok {
-		t.Fatalf("WorkSource type = %T, want postgres.ProjectorQueue", service.WorkSource)
-	}
-	if !workSource.PreferLargeGenerationsFirst {
-		t.Fatal("PreferLargeGenerationsFirst = false, want true")
-	}
-}
-
 func TestCloseProjectorNeo4jDriverAllowsNilDriver(t *testing.T) {
 	t.Parallel()
 

@@ -40,7 +40,6 @@ func buildProjectorService(
 	}
 	projectorQueue.RetryDelay = retryPolicy.RetryDelay
 	projectorQueue.MaxAttempts = retryPolicy.MaxAttempts
-	projectorQueue.PreferLargeGenerationsFirst = loadProjectorPreferLargeGenerationsFirst(getenv)
 
 	runner, err := buildProjectorRuntime(database, canonicalWriter, reducerQueue, retryInjector, getenv)
 	if err != nil {
