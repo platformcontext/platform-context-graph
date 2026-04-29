@@ -85,16 +85,14 @@ func extractPythonMetaclassRowsWithIndex(
 			seenRows[key] = struct{}{}
 
 			row := map[string]any{
-				"repo_id":            repositoryID,
-				"source_entity_id":   sourceEntityID,
-				"target_entity_id":   targetEntityID,
-				"source_entity_type": entityIndex.entityTypeByID[sourceEntityID],
-				"target_entity_type": entityIndex.entityTypeByID[targetEntityID],
-				"source_file":        sourceFilePath,
-				"target_file":        targetFilePath,
-				"relationship_type":  "USES_METACLASS",
-				"reason":             "python_metaclass",
-				"action":             IntentActionUpsert,
+				"repo_id":           repositoryID,
+				"source_entity_id":  sourceEntityID,
+				"target_entity_id":  targetEntityID,
+				"source_file":       sourceFilePath,
+				"target_file":       targetFilePath,
+				"relationship_type": "USES_METACLASS",
+				"reason":            "python_metaclass",
+				"action":            IntentActionUpsert,
 			}
 			rows = append(rows, row)
 		}

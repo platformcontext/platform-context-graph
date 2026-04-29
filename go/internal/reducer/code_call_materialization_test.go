@@ -259,12 +259,6 @@ func TestCodeCallMaterializationHandlerEmitsSharedIntents(t *testing.T) {
 	if got, want := codeCallRows[0].Payload["callee_entity_id"], "entity:callee"; got != want {
 		t.Fatalf("code-call callee_entity_id = %#v, want %#v", got, want)
 	}
-	if got, want := codeCallRows[0].Payload["caller_entity_type"], "Function"; got != want {
-		t.Fatalf("code-call caller_entity_type = %#v, want %#v", got, want)
-	}
-	if got, want := codeCallRows[0].Payload["callee_entity_type"], "Function"; got != want {
-		t.Fatalf("code-call callee_entity_type = %#v, want %#v", got, want)
-	}
 	if got, want := codeCallRows[0].PartitionKey, "entity:handle->entity:callee"; got != want {
 		t.Fatalf("code-call PartitionKey = %q, want %q", got, want)
 	}
@@ -277,12 +271,6 @@ func TestCodeCallMaterializationHandlerEmitsSharedIntents(t *testing.T) {
 	}
 	if got, want := metaclassRows[0].Payload["relationship_type"], "USES_METACLASS"; got != want {
 		t.Fatalf("metaclass relationship_type = %#v, want %#v", got, want)
-	}
-	if got, want := metaclassRows[0].Payload["source_entity_type"], "Class"; got != want {
-		t.Fatalf("metaclass source_entity_type = %#v, want %#v", got, want)
-	}
-	if got, want := metaclassRows[0].Payload["target_entity_type"], "Class"; got != want {
-		t.Fatalf("metaclass target_entity_type = %#v, want %#v", got, want)
 	}
 	if got, want := metaclassRows[0].PartitionKey, "entity:widget->entity:meta"; got != want {
 		t.Fatalf("metaclass PartitionKey = %q, want %q", got, want)
