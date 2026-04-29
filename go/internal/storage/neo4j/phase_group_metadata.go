@@ -15,6 +15,12 @@ const (
 	// StatementMetadataSummaryKey carries a human-readable first-statement
 	// summary used only for logging and error wrapping.
 	StatementMetadataSummaryKey = "_pcg_statement_summary"
+	// StatementMetadataScopeIDKey carries the source-local scope for backend
+	// diagnostics and is stripped before Cypher execution.
+	StatementMetadataScopeIDKey = "_pcg_scope_id"
+	// StatementMetadataGenerationIDKey carries the source-local generation for
+	// backend diagnostics and is stripped before Cypher execution.
+	StatementMetadataGenerationIDKey = "_pcg_generation_id"
 
 	// Canonical phase names form the narrow protocol between graph statement
 	// builders and backend executors. Add a new phase only when repo-scale

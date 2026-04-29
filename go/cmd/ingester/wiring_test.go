@@ -846,8 +846,10 @@ func TestNornicDBPhaseGroupExecutorLogsEntityLabelSummaries(t *testing.T) {
 		{
 			Cypher: "RETURN function1",
 			Parameters: map[string]any{
-				"_pcg_phase":        "entities",
-				"_pcg_entity_label": "Function",
+				"_pcg_phase":         "entities",
+				"_pcg_entity_label":  "Function",
+				"_pcg_scope_id":      "scope-a",
+				"_pcg_generation_id": "gen-a",
 				"rows": []map[string]any{
 					{"entity_id": "f1"},
 					{"entity_id": "f2"},
@@ -857,8 +859,10 @@ func TestNornicDBPhaseGroupExecutorLogsEntityLabelSummaries(t *testing.T) {
 		{
 			Cypher: "RETURN function2",
 			Parameters: map[string]any{
-				"_pcg_phase":        "entities",
-				"_pcg_entity_label": "Function",
+				"_pcg_phase":         "entities",
+				"_pcg_entity_label":  "Function",
+				"_pcg_scope_id":      "scope-a",
+				"_pcg_generation_id": "gen-a",
 				"rows": []map[string]any{
 					{"entity_id": "f3"},
 				},
@@ -910,6 +914,12 @@ func TestNornicDBPhaseGroupExecutorLogsEntityLabelSummaries(t *testing.T) {
 	}
 	if !strings.Contains(functionLine, `"singleton_statements":0`) {
 		t.Fatalf("Function summary line = %q, want singleton_statements=0", functionLine)
+	}
+	if !strings.Contains(functionLine, `"scope_id":"scope-a"`) {
+		t.Fatalf("Function summary line = %q, want scope_id", functionLine)
+	}
+	if !strings.Contains(functionLine, `"generation_id":"gen-a"`) {
+		t.Fatalf("Function summary line = %q, want generation_id", functionLine)
 	}
 
 	variableLine := findEntityLabelSummaryLine(t, logs.String(), "Variable")

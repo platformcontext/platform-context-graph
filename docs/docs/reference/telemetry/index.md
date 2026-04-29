@@ -192,6 +192,11 @@ For shared-write debugging specifically:
   writers also emit `content writer stage completed` for file/entity
   preparation and upsert stages with row and batch counts. Use these before
   changing NornicDB row caps or worker counts.
+- NornicDB canonical entity phases emit `nornicdb entity label summary` with
+  `scope_id`, `generation_id`, label, rows, statements, grouped executions, and
+  duration so large-corpus runs can attribute high-cardinality `Variable` or
+  `Function` costs to the exact repository generation without relying on log
+  adjacency.
 
 ### Admin / CLI Status
 

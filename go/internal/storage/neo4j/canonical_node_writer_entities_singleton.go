@@ -36,7 +36,14 @@ func canonicalEntityValueContainsSubstring(value any, needle string) bool {
 	return false
 }
 
-func canonicalNodeEntitySingletonWithContainmentStatement(label, filePath string, row map[string]any, summary string) Statement {
+func canonicalNodeEntitySingletonWithContainmentStatement(
+	label string,
+	filePath string,
+	row map[string]any,
+	summary string,
+	scopeID string,
+	generationID string,
+) Statement {
 	if summary == "" {
 		summary = fmt.Sprintf(
 			"label=%s rows=1 entity_id=%v singleton_parameterized containment=inline",
@@ -56,6 +63,8 @@ func canonicalNodeEntitySingletonWithContainmentStatement(label, filePath string
 			StatementMetadataEntityLabelKey:    label,
 			StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
 			StatementMetadataSummaryKey:        summary,
+			StatementMetadataScopeIDKey:        scopeID,
+			StatementMetadataGenerationIDKey:   generationID,
 		},
 	}
 }

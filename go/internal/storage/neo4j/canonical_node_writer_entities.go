@@ -171,10 +171,12 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 				Operation: OperationCanonicalUpsert,
 				Cypher:    fmt.Sprintf(canonicalNodeEntityUpsertTemplate, label),
 				Parameters: map[string]any{
-					"rows":                          append([]map[string]any(nil), batchRows...),
-					StatementMetadataPhaseKey:       CanonicalPhaseEntities,
-					StatementMetadataEntityLabelKey: label,
-					StatementMetadataSummaryKey:     statementSummary,
+					"rows":                           append([]map[string]any(nil), batchRows...),
+					StatementMetadataPhaseKey:        CanonicalPhaseEntities,
+					StatementMetadataEntityLabelKey:  label,
+					StatementMetadataSummaryKey:      statementSummary,
+					StatementMetadataScopeIDKey:      mat.ScopeID,
+					StatementMetadataGenerationIDKey: mat.GenerationID,
 				},
 			})
 			batchRows = batchRows[:0]
@@ -192,6 +194,8 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 						StatementMetadataPhaseKey:          CanonicalPhaseEntities,
 						StatementMetadataEntityLabelKey:    label,
 						StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
+						StatementMetadataScopeIDKey:        mat.ScopeID,
+						StatementMetadataGenerationIDKey:   mat.GenerationID,
 						StatementMetadataSummaryKey: fmt.Sprintf(
 							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized",
 							label,
@@ -253,11 +257,13 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 					Operation: OperationCanonicalUpsert,
 					Cypher:    fmt.Sprintf(canonicalNodeEntityFileScopedUpsertWithContainmentTemplate, label),
 					Parameters: map[string]any{
-						"file_path":                     filePath,
-						"rows":                          append([]map[string]any(nil), batchRows...),
-						StatementMetadataPhaseKey:       CanonicalPhaseEntities,
-						StatementMetadataEntityLabelKey: label,
-						StatementMetadataSummaryKey:     statementSummary,
+						"file_path":                      filePath,
+						"rows":                           append([]map[string]any(nil), batchRows...),
+						StatementMetadataPhaseKey:        CanonicalPhaseEntities,
+						StatementMetadataEntityLabelKey:  label,
+						StatementMetadataSummaryKey:      statementSummary,
+						StatementMetadataScopeIDKey:      mat.ScopeID,
+						StatementMetadataGenerationIDKey: mat.GenerationID,
 					},
 				})
 				batchRows = batchRows[:0]
@@ -274,6 +280,8 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 							label,
 							row["entity_id"],
 						),
+						mat.ScopeID,
+						mat.GenerationID,
 					))
 					continue
 				}
@@ -327,10 +335,12 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithBatchedContainment(mat pr
 				Operation: OperationCanonicalUpsert,
 				Cypher:    fmt.Sprintf(canonicalNodeEntityUpsertWithContainmentTemplate, label),
 				Parameters: map[string]any{
-					"rows":                          append([]map[string]any(nil), batchRows...),
-					StatementMetadataPhaseKey:       CanonicalPhaseEntities,
-					StatementMetadataEntityLabelKey: label,
-					StatementMetadataSummaryKey:     statementSummary,
+					"rows":                           append([]map[string]any(nil), batchRows...),
+					StatementMetadataPhaseKey:        CanonicalPhaseEntities,
+					StatementMetadataEntityLabelKey:  label,
+					StatementMetadataSummaryKey:      statementSummary,
+					StatementMetadataScopeIDKey:      mat.ScopeID,
+					StatementMetadataGenerationIDKey: mat.GenerationID,
 				},
 			})
 			batchRows = batchRows[:0]
@@ -348,6 +358,8 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithBatchedContainment(mat pr
 						label,
 						row["entity_id"],
 					),
+					mat.ScopeID,
+					mat.GenerationID,
 				))
 				continue
 			}
@@ -449,11 +461,13 @@ func (w *CanonicalNodeWriter) buildEntityContainmentStatements(mat projector.Can
 					Operation: OperationCanonicalUpsert,
 					Cypher:    fmt.Sprintf(canonicalNodeEntityContainmentEdgeTemplate, label),
 					Parameters: map[string]any{
-						"file_path":                     filePath,
-						"rows":                          append([]map[string]any(nil), batchRows...),
-						StatementMetadataPhaseKey:       CanonicalPhaseEntityContainment,
-						StatementMetadataEntityLabelKey: label,
-						StatementMetadataSummaryKey:     statementSummary,
+						"file_path":                      filePath,
+						"rows":                           append([]map[string]any(nil), batchRows...),
+						StatementMetadataPhaseKey:        CanonicalPhaseEntityContainment,
+						StatementMetadataEntityLabelKey:  label,
+						StatementMetadataSummaryKey:      statementSummary,
+						StatementMetadataScopeIDKey:      mat.ScopeID,
+						StatementMetadataGenerationIDKey: mat.GenerationID,
 					},
 				})
 			}

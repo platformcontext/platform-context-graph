@@ -108,6 +108,12 @@ func TestCanonicalNodeWriterSeparatesEntityUpsertsFromContainmentEdges(t *testin
 	if _, ok := stmt.Parameters["file_path"]; ok {
 		t.Fatalf("entity statement unexpectedly carries statement-level file_path: %#v", stmt.Parameters)
 	}
+	if got := stmt.Parameters[StatementMetadataScopeIDKey]; got != "scope-1" {
+		t.Fatalf("entity statement scope metadata = %#v, want scope-1", got)
+	}
+	if got := stmt.Parameters[StatementMetadataGenerationIDKey]; got != "gen-1" {
+		t.Fatalf("entity statement generation metadata = %#v, want gen-1", got)
+	}
 	for _, row := range rows {
 		if _, ok := row["file_path"]; ok {
 			t.Fatalf("entity row unexpectedly contains file_path: %#v", row)
@@ -133,6 +139,12 @@ func TestCanonicalNodeWriterSeparatesEntityUpsertsFromContainmentEdges(t *testin
 	}
 	if got := containment.Parameters["file_path"]; got != "/repos/my-repo/src/main.go" {
 		t.Fatalf("containment file_path = %#v, want /repos/my-repo/src/main.go", got)
+	}
+	if got := containment.Parameters[StatementMetadataScopeIDKey]; got != "scope-1" {
+		t.Fatalf("containment statement scope metadata = %#v, want scope-1", got)
+	}
+	if got := containment.Parameters[StatementMetadataGenerationIDKey]; got != "gen-1" {
+		t.Fatalf("containment statement generation metadata = %#v, want gen-1", got)
 	}
 	containmentRows, ok := containment.Parameters["rows"].([]map[string]any)
 	if !ok {

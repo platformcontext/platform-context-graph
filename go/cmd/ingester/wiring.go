@@ -687,7 +687,7 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 			e.phaseGroupStatementLimit(grouped),
 			func(chunk []sourceneo4j.Statement, chunkDuration time.Duration) {
 				label := entityStatementLabel(chunk[0])
-				stats := ensureEntityPhaseLabelStats(labelStats, phase, label)
+				stats := ensureEntityPhaseLabelStats(labelStats, phase, label, chunk[0])
 				stats.recordChunk(chunk, chunkDuration)
 				logEntityPhaseLabelSummaryIfDue(stats, false)
 			},
@@ -723,7 +723,7 @@ func (e nornicDBPhaseGroupExecutor) executeEntityPhaseGroup(
 				"duration_s", time.Since(statementStart).Seconds(),
 				"first_statement", statementSummary,
 			)
-			stats := ensureEntityPhaseLabelStats(labelStats, phase, entityStatementLabel(stmt))
+			stats := ensureEntityPhaseLabelStats(labelStats, phase, entityStatementLabel(stmt), stmt)
 			stats.recordSingleton(stmt, time.Since(statementStart))
 			logEntityPhaseLabelSummaryIfDue(stats, false)
 			continue
@@ -816,6 +816,8 @@ func (e nornicDBPhaseGroupExecutor) executeGroupedChunksObserved(
 type entityPhaseLabelStats struct {
 	phase               string
 	label               string
+	scopeID             string
+	generationID        string
 	rows                int
 	statements          int
 	executions          int
@@ -829,7 +831,12 @@ type entityPhaseLabelStats struct {
 	completeLogged      bool
 }
 
-func ensureEntityPhaseLabelStats(stats map[string]*entityPhaseLabelStats, phase string, label string) *entityPhaseLabelStats {
+func ensureEntityPhaseLabelStats(
+	stats map[string]*entityPhaseLabelStats,
+	phase string,
+	label string,
+	stmt sourceneo4j.Statement,
+) *entityPhaseLabelStats {
 	phase = strings.TrimSpace(phase)
 	if phase == "" {
 		phase = "unknown"
@@ -839,11 +846,25 @@ func ensureEntityPhaseLabelStats(stats map[string]*entityPhaseLabelStats, phase 
 		label = "unknown"
 	}
 	if existing := stats[label]; existing != nil {
+		existing.captureStatementContext(stmt)
 		return existing
 	}
 	created := &entityPhaseLabelStats{phase: phase, label: label}
+	created.captureStatementContext(stmt)
 	stats[label] = created
 	return created
+}
+
+func (s *entityPhaseLabelStats) captureStatementContext(stmt sourceneo4j.Statement) {
+	if s == nil || len(stmt.Parameters) == 0 {
+		return
+	}
+	if s.scopeID == "" {
+		s.scopeID, _ = stmt.Parameters[sourceneo4j.StatementMetadataScopeIDKey].(string)
+	}
+	if s.generationID == "" {
+		s.generationID, _ = stmt.Parameters[sourceneo4j.StatementMetadataGenerationIDKey].(string)
+	}
 }
 
 func (s *entityPhaseLabelStats) recordChunk(chunk []sourceneo4j.Statement, duration time.Duration) {
@@ -858,6 +879,7 @@ func (s *entityPhaseLabelStats) recordChunk(chunk []sourceneo4j.Statement, durat
 	}
 	executionRows := 0
 	for _, stmt := range chunk {
+		s.captureStatementContext(stmt)
 		rows := entityStatementRowCount(stmt)
 		s.rows += rows
 		s.statements++
@@ -875,6 +897,7 @@ func (s *entityPhaseLabelStats) recordSingleton(stmt sourceneo4j.Statement, dura
 	if s == nil {
 		return
 	}
+	s.captureStatementContext(stmt)
 	rows := entityStatementRowCount(stmt)
 	s.rows += rows
 	s.statements++
@@ -935,8 +958,7 @@ func logEntityPhaseLabelSummary(summary *entityPhaseLabelStats, complete bool) {
 	if summary.executions > 0 {
 		avgExecutionDuration = summary.totalDuration.Seconds() / float64(summary.executions)
 	}
-	slog.Info(
-		"nornicdb entity label summary",
+	attrs := []any{
 		"phase", summary.phase,
 		"label", summary.label,
 		"complete", complete,
@@ -951,7 +973,14 @@ func logEntityPhaseLabelSummary(summary *entityPhaseLabelStats, complete bool) {
 		"avg_rows_per_statement", avgRowsPerStatement,
 		"max_statement_rows", summary.maxStatementRows,
 		"max_execution_rows", summary.maxExecutionRows,
-	)
+	}
+	if summary.scopeID != "" {
+		attrs = append(attrs, "scope_id", summary.scopeID)
+	}
+	if summary.generationID != "" {
+		attrs = append(attrs, "generation_id", summary.generationID)
+	}
+	slog.Info("nornicdb entity label summary", attrs...)
 	summary.loggedExecutions = summary.executions
 	if complete {
 		summary.completeLogged = true
