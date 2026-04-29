@@ -1,7 +1,10 @@
 package neo4j
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log/slog"
 	"testing"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
@@ -10,6 +13,62 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
+
+func TestEdgeWriterWriteEdgesLogsSharedWriteShape(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	executor := &recordingGroupExecutor{}
+	writer := NewEdgeWriter(executor, 2)
+	writer.Logger = logger
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{IntentID: "i1", RepositoryID: "repo-a", Payload: map[string]any{"caller_entity_id": "entity:function:a", "callee_entity_id": "entity:function:b"}},
+		{IntentID: "i2", RepositoryID: "repo-a", Payload: map[string]any{"caller_entity_id": "entity:function:c", "callee_entity_id": "entity:function:d"}},
+		{IntentID: "i3", RepositoryID: "repo-a", Payload: map[string]any{"caller_entity_id": "entity:function:e", "callee_entity_id": "entity:function:f"}},
+	}
+
+	if err := writer.WriteEdges(context.Background(), reducer.DomainCodeCalls, rows, "parser/code-calls"); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &entry); err != nil {
+		t.Fatalf("unmarshal log entry: %v\nlogs:\n%s", err, logs.String())
+	}
+
+	if got, want := entry["msg"], "shared edge write completed"; got != want {
+		t.Fatalf("log msg = %v, want %v", got, want)
+	}
+	if got, want := entry["domain"], reducer.DomainCodeCalls; got != want {
+		t.Fatalf("domain = %v, want %v", got, want)
+	}
+	if got, want := entry["evidence_source"], "parser/code-calls"; got != want {
+		t.Fatalf("evidence_source = %v, want %v", got, want)
+	}
+	if got, want := entry["execution_mode"], "group"; got != want {
+		t.Fatalf("execution_mode = %v, want %v", got, want)
+	}
+	if got, want := entry["input_rows"], float64(3); got != want {
+		t.Fatalf("input_rows = %v, want %v", got, want)
+	}
+	if got, want := entry["written_rows"], float64(3); got != want {
+		t.Fatalf("written_rows = %v, want %v", got, want)
+	}
+	if got, want := entry["skipped_rows"], float64(0); got != want {
+		t.Fatalf("skipped_rows = %v, want %v", got, want)
+	}
+	if got, want := entry["route_count"], float64(1); got != want {
+		t.Fatalf("route_count = %v, want %v", got, want)
+	}
+	if got, want := entry["statement_count"], float64(2); got != want {
+		t.Fatalf("statement_count = %v, want %v", got, want)
+	}
+	if got, want := entry["batch_size"], float64(2); got != want {
+		t.Fatalf("batch_size = %v, want %v", got, want)
+	}
+}
 
 func TestEdgeWriterWriteEdgesCodeCallIsolationRecordsBatchTelemetry(t *testing.T) {
 	t.Parallel()

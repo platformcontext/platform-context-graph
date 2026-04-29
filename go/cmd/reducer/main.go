@@ -155,6 +155,7 @@ func buildReducerService(
 
 	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	edgeWriterForHandlers.Instruments = instruments
+	edgeWriterForHandlers.Logger = logger
 	edgeWriterForHandlers.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize
 	edgeWriterForHandlers.SQLRelationshipGroupBatchSize = sqlRelationshipEdgeGroupBatchSize
 	relationshipStore := postgres.NewRelationshipStore(database)
@@ -250,6 +251,7 @@ func buildReducerService(
 
 	edgeWriter := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	edgeWriter.Instruments = instruments
+	edgeWriter.Logger = logger
 	edgeWriter.CodeCallBatchSize = codeCallEdgeBatchSize
 	edgeWriter.CodeCallGroupBatchSize = codeCallEdgeGroupBatchSize
 	edgeWriter.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize

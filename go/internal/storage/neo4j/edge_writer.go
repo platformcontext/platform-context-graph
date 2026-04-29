@@ -3,6 +3,7 @@ package neo4j
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"go.opentelemetry.io/otel/metric"
@@ -22,6 +23,7 @@ type EdgeWriter struct {
 	InheritanceGroupBatchSize     int
 	SQLRelationshipGroupBatchSize int
 	Instruments                   *telemetry.Instruments
+	Logger                        *slog.Logger
 }
 
 // NewEdgeWriter returns an EdgeWriter backed by the given Executor.
@@ -108,6 +110,10 @@ func (w *EdgeWriter) WriteEdges(
 	if len(routedRows) == 0 {
 		return nil
 	}
+	writtenRows := 0
+	for _, cypher := range routeOrder {
+		writtenRows += len(routedRows[cypher])
+	}
 
 	// Collect all batches as statements.
 	var stmts []Statement
@@ -130,6 +136,7 @@ func (w *EdgeWriter) WriteEdges(
 				}
 				duration := time.Since(start).Seconds()
 				w.recordGroupedWrite(ctx, domain, duration, stmts[i:end])
+				w.logSharedEdgeWrite(domain, evidenceSource, "group", len(rows), writtenRows, len(routeOrder), bs, groupSize, duration, stmts[i:end])
 				if domain == reducer.DomainCodeCalls {
 					w.recordCodeCallBatch(ctx, duration)
 				}
@@ -140,7 +147,9 @@ func (w *EdgeWriter) WriteEdges(
 		if err := ge.ExecuteGroup(ctx, stmts); err != nil {
 			return WrapRetryableNeo4jError(err)
 		}
-		w.recordGroupedWrite(ctx, domain, time.Since(start).Seconds(), stmts)
+		duration := time.Since(start).Seconds()
+		w.recordGroupedWrite(ctx, domain, duration, stmts)
+		w.logSharedEdgeWrite(domain, evidenceSource, "group", len(rows), writtenRows, len(routeOrder), bs, 0, duration, stmts)
 		return nil
 	}
 
@@ -149,8 +158,10 @@ func (w *EdgeWriter) WriteEdges(
 		if err := w.executor.Execute(ctx, stmt); err != nil {
 			return WrapRetryableNeo4jError(err)
 		}
+		duration := time.Since(start).Seconds()
+		w.logSharedEdgeWrite(domain, evidenceSource, "single", len(rows), writtenRows, len(routeOrder), bs, 0, duration, []Statement{stmt})
 		if domain == reducer.DomainCodeCalls {
-			w.recordCodeCallBatch(ctx, time.Since(start).Seconds())
+			w.recordCodeCallBatch(ctx, duration)
 		}
 	}
 	return nil
