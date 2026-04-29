@@ -134,10 +134,11 @@ When local-authoritative bulk-load proofs still show content trigram index
 maintenance as the long pole, `PCG_LOCAL_AUTHORITATIVE_DEFER_CONTENT_SEARCH_INDEXES=true`
 can defer the `content_files.content` and `content_entities.source_cache`
 trigram indexes during initial writes. The local owner rebuilds those indexes
-after the first clean projector/reducer/shared-intent drain, so content rows
-and search semantics are preserved while write-heavy startup avoids per-batch
-GIN maintenance. Treat this as a local-authoritative proof/load knob, not a
-deployed Postgres schema default.
+after the discovered filesystem repo set reaches a clean
+projector/reducer/shared-intent drain, so content rows and search semantics are
+preserved while write-heavy startup avoids per-batch GIN maintenance. Treat
+this as a local-authoritative proof/load knob, not a deployed Postgres schema
+default.
 
 Medium-corpus source-cache checkpoint: PCG `a7078ddf` with NornicDB `v1.0.43`,
 `PCG_REDUCER_WORKERS=8`, `PCG_CANONICAL_WRITE_TIMEOUT=120s`, and

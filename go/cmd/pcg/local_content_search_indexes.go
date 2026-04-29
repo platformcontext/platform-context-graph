@@ -9,6 +9,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	pgstorage "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
@@ -20,9 +21,18 @@ type localContentSearchIndexDB interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
+type localContentSearchIndexDrainState struct {
+	TotalWork                int
+	OpenWork                 int
+	CompletedProjectorWork   int
+	OpenSharedProjectionWork int
+}
+
+var localContentSearchDiscoverRepos = collector.DiscoverFilesystemRepositoryIDs
+
 // startDeferredContentSearchIndexes restores expensive content search indexes
-// after the first local-authoritative queue drain.
-func startDeferredContentSearchIndexes(ctx context.Context, dsn string) (func() error, error) {
+// after the first local-authoritative queue drain for the discovered repo set.
+func startDeferredContentSearchIndexes(ctx context.Context, dsn string, expectedProjectors int) (func() error, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open deferred content search index connection: %w", err)
@@ -36,7 +46,7 @@ func startDeferredContentSearchIndexes(ctx context.Context, dsn string) (func() 
 	done := make(chan error, 1)
 	go func() {
 		defer func() { _ = db.Close() }()
-		done <- runDeferredContentSearchIndexes(maintainerCtx, db, deferredContentSearchIndexPollInterval)
+		done <- runDeferredContentSearchIndexes(maintainerCtx, db, deferredContentSearchIndexPollInterval, expectedProjectors)
 	}()
 
 	return func() error {
@@ -49,7 +59,7 @@ func startDeferredContentSearchIndexes(ctx context.Context, dsn string) (func() 
 	}, nil
 }
 
-func runDeferredContentSearchIndexes(ctx context.Context, db localContentSearchIndexDB, interval time.Duration) error {
+func runDeferredContentSearchIndexes(ctx context.Context, db localContentSearchIndexDB, interval time.Duration, expectedProjectors int) error {
 	if interval <= 0 {
 		interval = deferredContentSearchIndexPollInterval
 	}
@@ -57,7 +67,7 @@ func runDeferredContentSearchIndexes(ctx context.Context, db localContentSearchI
 	defer ticker.Stop()
 
 	for {
-		ready, err := localContentSearchIndexesReady(ctx, db)
+		ready, err := localContentSearchIndexesReady(ctx, db, expectedProjectors)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: deferred content search index readiness check failed: %v\n", err)
 		}
@@ -69,7 +79,7 @@ func runDeferredContentSearchIndexes(ctx context.Context, db localContentSearchI
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "deferred content search indexes ready duration=%s\n", time.Since(start).Round(time.Millisecond))
+			fmt.Fprintf(os.Stderr, "deferred content search indexes ready expected_projectors=%d duration=%s\n", expectedProjectors, time.Since(start).Round(time.Millisecond))
 			return nil
 		}
 
@@ -81,7 +91,26 @@ func runDeferredContentSearchIndexes(ctx context.Context, db localContentSearchI
 	}
 }
 
-func localContentSearchIndexesReady(ctx context.Context, db localContentSearchIndexDB) (bool, error) {
+func localContentSearchIndexExpectedProjectors(workspaceRoot string) (int, error) {
+	repos, err := localContentSearchDiscoverRepos(workspaceRoot)
+	if err != nil {
+		return 0, err
+	}
+	if len(repos) == 0 {
+		return 1, nil
+	}
+	return len(repos), nil
+}
+
+func localContentSearchIndexesReady(ctx context.Context, db localContentSearchIndexDB, expectedProjectors int) (bool, error) {
+	state, err := queryLocalContentSearchIndexDrainState(ctx, db)
+	if err != nil {
+		return false, err
+	}
+	return localContentSearchIndexesReadyFromState(state, expectedProjectors), nil
+}
+
+func queryLocalContentSearchIndexDrainState(ctx context.Context, db localContentSearchIndexDB) (localContentSearchIndexDrainState, error) {
 	const query = `
 SELECT
   (SELECT count(*) FROM fact_work_items) AS total_work,
@@ -89,9 +118,24 @@ SELECT
   (SELECT count(*) FROM fact_work_items WHERE stage = 'projector' AND status = 'succeeded') AS completed_projector_work,
   (SELECT count(*) FROM shared_projection_intents WHERE completed_at IS NULL) AS open_shared_work
 `
-	var totalWork, openWork, completedProjectorWork, openSharedWork int
-	if err := db.QueryRowContext(ctx, query).Scan(&totalWork, &openWork, &completedProjectorWork, &openSharedWork); err != nil {
-		return false, fmt.Errorf("query local queue drain state: %w", err)
+	var state localContentSearchIndexDrainState
+	if err := db.QueryRowContext(ctx, query).Scan(
+		&state.TotalWork,
+		&state.OpenWork,
+		&state.CompletedProjectorWork,
+		&state.OpenSharedProjectionWork,
+	); err != nil {
+		return localContentSearchIndexDrainState{}, fmt.Errorf("query local queue drain state: %w", err)
 	}
-	return totalWork > 0 && openWork == 0 && completedProjectorWork > 0 && openSharedWork == 0, nil
+	return state, nil
+}
+
+func localContentSearchIndexesReadyFromState(state localContentSearchIndexDrainState, expectedProjectors int) bool {
+	if expectedProjectors < 1 {
+		expectedProjectors = 1
+	}
+	return state.TotalWork > 0 &&
+		state.OpenWork == 0 &&
+		state.CompletedProjectorWork >= expectedProjectors &&
+		state.OpenSharedProjectionWork == 0
 }

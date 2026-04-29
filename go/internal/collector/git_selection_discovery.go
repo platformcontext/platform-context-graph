@@ -83,7 +83,9 @@ func selectGitHubRepositoryIDs(
 	}
 }
 
-func discoverFilesystemRepositoryIDs(filesystemRoot string) ([]string, error) {
+// DiscoverFilesystemRepositoryIDs returns repository IDs discovered under a
+// filesystem source root using the same rules as the filesystem collector.
+func DiscoverFilesystemRepositoryIDs(filesystemRoot string) ([]string, error) {
 	root, err := filepath.Abs(strings.TrimSpace(filesystemRoot))
 	if err != nil {
 		return nil, fmt.Errorf("resolve filesystem root %q: %w", filesystemRoot, err)
@@ -119,6 +121,10 @@ func discoverFilesystemRepositoryIDs(filesystemRoot string) ([]string, error) {
 	}
 	sort.Strings(repoIDs)
 	return repoIDs, nil
+}
+
+func discoverFilesystemRepositoryIDs(filesystemRoot string) ([]string, error) {
+	return DiscoverFilesystemRepositoryIDs(filesystemRoot)
 }
 
 func discoverRepoRoots(root string) ([]string, error) {

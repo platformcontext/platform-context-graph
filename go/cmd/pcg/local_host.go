@@ -41,24 +41,25 @@ var (
 			},
 		})
 	}
-	localHostStartEmbeddedPostgres             = pcglocal.StartEmbeddedPostgres
-	localHostReadOwnerRecord                   = pcglocal.ReadOwnerRecord
-	localHostWriteOwnerRecord                  = pcglocal.WriteOwnerRecord
-	localHostHostname                          = os.Hostname
-	localHostNow                               = func() time.Time { return time.Now().UTC() }
-	localHostLookPath                          = exec.LookPath
-	localHostProcessAlive                      = pcglocal.ProcessAlive
-	localHostSocketHealthy                     = pcglocal.SocketHealthy
-	localHostGraphHealthy                      = graphHealthyFromOwnerRecord
-	localHostStartChildProcess                 = startLocalChildProcess
-	localHostStartManagedGraph                 = startManagedLocalGraph
-	localHostWaitChildProcess                  = waitLocalChildProcess
-	localHostWaitManagedChildren               = waitLocalHostChildren
-	localHostWaitOwnerChildren                 = waitLocalHostChildrenKeepingAllowedCleanExits
-	localHostApplyBootstrap                    = applyLocalBootstrap
-	localHostApplyGraphBootstrap               = applyLocalGraphBootstrap
-	localHostStartProgressReporter             = startLocalHostProgressReporter
-	localHostStartDeferredContentSearchIndexes = startDeferredContentSearchIndexes
+	localHostStartEmbeddedPostgres                = pcglocal.StartEmbeddedPostgres
+	localHostReadOwnerRecord                      = pcglocal.ReadOwnerRecord
+	localHostWriteOwnerRecord                     = pcglocal.WriteOwnerRecord
+	localHostHostname                             = os.Hostname
+	localHostNow                                  = func() time.Time { return time.Now().UTC() }
+	localHostLookPath                             = exec.LookPath
+	localHostProcessAlive                         = pcglocal.ProcessAlive
+	localHostSocketHealthy                        = pcglocal.SocketHealthy
+	localHostGraphHealthy                         = graphHealthyFromOwnerRecord
+	localHostStartChildProcess                    = startLocalChildProcess
+	localHostStartManagedGraph                    = startManagedLocalGraph
+	localHostWaitChildProcess                     = waitLocalChildProcess
+	localHostWaitManagedChildren                  = waitLocalHostChildren
+	localHostWaitOwnerChildren                    = waitLocalHostChildrenKeepingAllowedCleanExits
+	localHostApplyBootstrap                       = applyLocalBootstrap
+	localHostApplyGraphBootstrap                  = applyLocalGraphBootstrap
+	localHostStartProgressReporter                = startLocalHostProgressReporter
+	localHostStartDeferredContentSearchIndexes    = startDeferredContentSearchIndexes
+	localHostContentSearchIndexExpectedProjectors = localContentSearchIndexExpectedProjectors
 )
 
 func init() {
@@ -209,15 +210,20 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 	}
 
 	if runtimeConfig.Profile == query.ProfileLocalAuthoritative && deferContentSearchIndexes(os.Getenv) {
-		stopDeferredIndexes, err := localHostStartDeferredContentSearchIndexes(ctx, managedPostgres.DSN)
+		expectedProjectors, err := localHostContentSearchIndexExpectedProjectors(layout.WorkspaceRoot)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: deferred content search index maintainer unavailable: %v\n", err)
+			fmt.Fprintf(os.Stderr, "warning: deferred content search index maintainer unavailable: discover workspace repos: %v\n", err)
 		} else {
-			defer func() {
-				if err := stopDeferredIndexes(); err != nil && retErr == nil {
-					retErr = fmt.Errorf("stop deferred content search index maintainer: %w", err)
-				}
-			}()
+			stopDeferredIndexes, err := localHostStartDeferredContentSearchIndexes(ctx, managedPostgres.DSN, expectedProjectors)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: deferred content search index maintainer unavailable: %v\n", err)
+			} else {
+				defer func() {
+					if err := stopDeferredIndexes(); err != nil && retErr == nil {
+						retErr = fmt.Errorf("stop deferred content search index maintainer: %w", err)
+					}
+				}()
+			}
 		}
 	}
 
