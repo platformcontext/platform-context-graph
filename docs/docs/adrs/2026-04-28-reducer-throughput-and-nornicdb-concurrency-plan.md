@@ -363,17 +363,17 @@ Run `pcg-reducer-clean20-20260428T131056Z` drained healthy:
 - reducer handler duration: `p50=0.036s`, `p95=3.048s`, `max=11.979s`.
 
 The slowest handler was
-`sql_relationship_materialization/sql:api-php-sample-appwebsolutions`
+`sql_relationship_materialization/sql:php-large-repo-a`
 (`11.979s` handler, `20.328s` queue wait). The largest queue-wait cluster was
 deployment mapping at about `61.5s` with sub-second handlers, which points to
 phase/readiness waiting rather than handler CPU. The largest source-local
-projector item was `api-php-sample-appwebsolutions`: `153,902` facts,
+projector item was `php-large-repo-a`: `153,902` facts,
 `138,712` content entities, `66.356s` projector duration, and `37.291s`
 canonical graph write.
 
 The focused 4-repo proof used the repos that appeared in the 20-repo reducer
-hot rows: `api-php-sample-appwebsolutions`, `portal-php-yc-soldwork`,
-`api-node-communicator`, and `sample-service`.
+hot rows: `php-large-repo-a`, `php-large-repo-c`,
+`api-node-communicator`, and `node-service-a`.
 Run `pcg-reducer-large4-20260428T131734Z` also drained healthy:
 
 - wall clock from graph start to detected queue drain: `161s`;
@@ -390,7 +390,7 @@ handler families without waiting for the full 20-repo corpus, and it keeps the
 correctness surface broad enough to include service repos, deployment evidence,
 SQL relationships, semantic materialization, and workload/deployment mapping.
 The next optimization should not start by increasing worker counts. It should
-explain why `api-php-sample-appwebsolutions` dominates SQL, semantic,
+explain why `php-large-repo-a` dominates SQL, semantic,
 deployable-unit, workload, and deployment reducers, then prove whether the
 primary fix is query shape, backend lookup behavior, or conflict/readiness
 routing.
@@ -415,7 +415,7 @@ captured CPU idle plus disk utilization during the run. Run
 - `disk_util_avg=1.28%`, `disk_util_max=46.72%`, so disk idle never fell below
   about `53%`;
 - slowest handler:
-  `sql_relationship_materialization/sql:api-php-sample-appwebsolutions`
+  `sql_relationship_materialization/sql:php-large-repo-a`
   (`11.433s` handler, `20.358s` queue wait);
 - slowest waits were `deployment_mapping` rows at about `100.9s`, while their
   handlers stayed sub-second.
@@ -474,7 +474,7 @@ Run `pcg-reducer-large4-shared-telemetry-20260428T144634Z` used commit
 The largest reducer waits were still reopened `deployment_mapping` rows for the
 smaller repos at about `61.29s` queue wait with `0.15s`, `0.16s`, and `1.08s`
 handlers. The largest handler remained
-`sql_relationship_materialization/sql:api-php-sample-appwebsolutions`
+`sql_relationship_materialization/sql:php-large-repo-a`
 (`11.165s` handler, `19.439s` queue wait). The large PHP repo also produced
 the next cluster of `5.6s-6.7s` handlers across code-call, deployable-unit,
 inheritance, semantic, deployment, and workload domains.
@@ -1082,7 +1082,7 @@ tables instead of deeper ad hoc JSON predicates in the hot load path.
 
 Run `pcg-reducer-hot3-semantic-current-20260428T2300Z` then replayed the
 three largest semantic long-poles from the original full-corpus reducer log:
-`tap-core`, `tap-sample-app`, and `portal-java-ycm`. It used commit
+`tap-core`, `java-service-b`, and `portal-java-ycm`. It used commit
 `53da37e8` with rebuilt binaries and drained healthy with projector `3/3`,
 reducer `24/24`, `code_calls 20833/20833`, no open work, and no failures. Wall
 time was `192s`. This proof materially changes the full-corpus expectation:
@@ -1104,20 +1104,20 @@ for the three repos after mapping each run's repo IDs:
 | Repo | Old repo ID | New repo ID | Semantic node counts |
 | --- | --- | --- | --- |
 | `tap-core` | `repository:r_6d86b2d4` | `repository:r_02cdc55d` | `Annotation=2749`, `Class=222`, `Enum=43`, `Function=2209`, `Interface=6`, `Variable=1321` |
-| `tap-sample-app` | `repository:r_97fe6172` | `repository:r_f6aad3c1` | `Annotation=2401`, `Class=274`, `Enum=31`, `Function=3266`, `Interface=1`, `Variable=3589` |
+| `java-service-b` | `repository:r_97fe6172` | `repository:r_f6aad3c1` | `Annotation=2401`, `Class=274`, `Enum=31`, `Function=3266`, `Interface=1`, `Variable=3589` |
 | `portal-java-ycm` | `repository:r_c3366057` | `repository:r_aaa31158` | `Annotation=17214`, `Class=3480`, `Component=386`, `Enum=236`, `Function=42116`, `Interface=1354`, `SqlColumn=2601`, `SqlTable=158`, `SqlView=4`, `TypeAlias=59`, `Variable=41802` |
 
 Code-call graph truth also matched for the same repos: old and new runs both
-had `289` `CALLS` edges for `tap-core`, `352` for `tap-sample-app`, and
+had `289` `CALLS` edges for `tap-core`, `352` for `java-service-b`, and
 `19309` for `portal-java-ycm`. This points to an actual reducer performance
 bug that had been forcing broad fact loads and expensive no-op/destructive
 graph work, not to missing output.
 
 Run `pcg-reducer-hot10-semantic-current-20260428T2315Z` extended that proof to
 the ten largest semantic reducers from the original full-corpus timing log:
-`tap-core`, `tap-sample-app`, `portal-java-ycm`, `webapp-workmonitor`,
-`websites-php-youboat`, `webapp-provisioning`, `bg-data-pipeline`,
-`nagios.work.com-config`, `lib-java-provisioning-entity`, and
+`tap-core`, `java-service-b`, `portal-java-ycm`, `webapp-monitor-a`,
+`php-large-repo-b`, `webapp-provisioning`, `bg-data-pipeline`,
+`infra-monitoring-config`, `lib-java-provisioning-entity`, and
 `webapp-react-trident`. It used commit `33e952c4` with rebuilt binaries and
 drained healthy with projector `10/10`, reducer `80/80`,
 `code_calls 54075/54075`, no open work, and no failures. Wall time was
@@ -1133,19 +1133,19 @@ label counts exactly for every repo after mapping old and new repo IDs:
 | Repo | Old repo ID | New repo ID | Direct graph truth |
 | --- | --- | --- | --- |
 | `tap-core` | `repository:r_6d86b2d4` | `repository:r_f872800e` | All semantic label counts matched, including `Annotation=2749`, `Function=2209`, `Variable=1321` |
-| `tap-sample-app` | `repository:r_97fe6172` | `repository:r_b4bd1743` | All semantic label counts matched, including `Annotation=2401`, `Function=3266`, `Variable=3589` |
+| `java-service-b` | `repository:r_97fe6172` | `repository:r_b4bd1743` | All semantic label counts matched, including `Annotation=2401`, `Function=3266`, `Variable=3589` |
 | `portal-java-ycm` | `repository:r_c3366057` | `repository:r_a5aeac9b` | All semantic label counts matched, including `Annotation=17214`, `Function=42116`, `Variable=41802` |
-| `webapp-workmonitor` | `repository:r_5e25cd26` | `repository:r_2a1c9f38` | All semantic label counts matched, including `Annotation=1611`, `Function=5844`, `Variable=5999` |
-| `websites-php-youboat` | `repository:r_8c004fa2` | `repository:r_e816713b` | All semantic label counts matched, including `Directory=1822`, `Function=28926`, `Variable=131977` |
+| `webapp-monitor-a` | `repository:r_5e25cd26` | `repository:r_2a1c9f38` | All semantic label counts matched, including `Annotation=1611`, `Function=5844`, `Variable=5999` |
+| `php-large-repo-b` | `repository:r_8c004fa2` | `repository:r_e816713b` | All semantic label counts matched, including `Directory=1822`, `Function=28926`, `Variable=131977` |
 | `webapp-provisioning` | `repository:r_c1cfbb5a` | `repository:r_d4dc6a0f` | All semantic label counts matched, including `Annotation=761`, `Function=1262`, `Variable=1826` |
 | `bg-data-pipeline` | `repository:r_4f5ff046` | `repository:r_1bed0620` | All semantic label counts matched, including `SqlColumn=1289`, `Function=1918`, `Variable=6136` |
-| `nagios.work.com-config` | `repository:r_96238560` | `repository:r_8854f8cf` | All semantic label counts matched, including `File=1724`, `Function=2683`, `Variable=10181` |
+| `infra-monitoring-config` | `repository:r_96238560` | `repository:r_8854f8cf` | All semantic label counts matched, including `File=1724`, `Function=2683`, `Variable=10181` |
 | `lib-java-provisioning-entity` | `repository:r_2099f106` | `repository:r_ee2cd439` | All semantic label counts matched, including `Annotation=573`, `Function=677`, `Variable=401` |
 | `webapp-react-trident` | `repository:r_19da898d` | `repository:r_78bce920` | All semantic label counts matched, including `Component=107`, `Function=1341`, `Variable=7723` |
 
 The remaining hot10 wall time was no longer semantic handler execution.
 `portal-java-ycm` spent `74.743s` in source-local content write, `44.585s` in
-canonical graph write, and `15.873s` in semantic graph write. `websites-php-youboat`
+canonical graph write, and `15.873s` in semantic graph write. `php-large-repo-b`
 spent `51.888s` in source-local content write and `56.870s` in canonical graph
 write, while its semantic handler completed in `4.372s`. The largest code-call
 shared-projection cycles were `14.999s` and `15.953s`; both had
@@ -1182,9 +1182,9 @@ The hot20 reducer domain summary was:
 The queue-wait numbers are not proof that more reducer workers would help:
 most of the largest waits were readiness waits behind active source-local
 projection, not CPU-bound reducer execution. The long source-local projections
-were `websites-php-youboat` at `177.800s`, `portal-java-ycm` at `129.435s`,
-`portal-php-yc-soldwork` at `94.499s`, `webapp-workmonitor` at `81.554s`,
-and `api-php-sample-appwebsolutions` at `73.353s`. CPU and disk were still not
+were `php-large-repo-b` at `177.800s`, `portal-java-ycm` at `129.435s`,
+`php-large-repo-c` at `94.499s`, `webapp-monitor-a` at `81.554s`,
+and `php-large-repo-a` at `73.353s`. CPU and disk were still not
 saturated on average: `cpu_idle_avg=72.23%`, `io_wait_avg=1.72%`, and
 `disk_idle_avg=85.38%`.
 
@@ -1198,7 +1198,7 @@ retract path.
 
 The first code-call write-shape experiment then tested
 `PCG_CODE_CALL_EDGE_BATCH_SIZE` without changing reducer worker count or
-correctness gates. The isolated `websites-php-youboat` proof at the previous
+correctness gates. The isolated `php-large-repo-b` proof at the previous
 default `50` drained healthy in `188s`; its code-call cycle wrote `24584`
 intents in `15.653s`, with `14.652s` spent in graph write. Batch-size overrides
 kept the same truth volume and showed a clear but flattening curve:
@@ -1227,7 +1227,7 @@ gates, or graph truth rules.
 The follow-up source-local canonical write pass intentionally stopped at an
 evidence boundary rather than continuing to tune per repo. Focused run
 `pcg-reducer-websites-canonical-phase-20260428T2303Z` on
-`websites-php-youboat` used commit `ead46ef4` with rebuilt binaries and drained
+`php-large-repo-b` used commit `ead46ef4` with rebuilt binaries and drained
 healthy in `184s`: projector `1/1`, reducer `8/8`, `code_calls 24584/24584`,
 `cpu_idle_avg=80.62%`, and `disk_idle_avg=91.50%`. Existing telemetry was
 enough to attribute the source-local long pole: content write took `43.695s`
@@ -1359,7 +1359,7 @@ Cypher/data-shape change is retained.
 
 The first runtime proof with that telemetry,
 `pcg-reducer-websites-write-shape-20260429T0156Z` at PCG commit `97a2ff61`,
-rebuilt binaries and drained `websites-php-youboat` in `188s` with projector
+rebuilt binaries and drained `php-large-repo-b` in `188s` with projector
 `1/1`, reducer `8/8`, and `code_calls 24584/24584`. The code-call projection
 cycle took `16.810s`, with `15.770s` in graph write time. Shape logs showed
 one route, zero skipped rows, `25` grouped writes, `24,583` written rows, and
@@ -1381,7 +1381,7 @@ Badger accumulating benchmark for five 1,000-row code-call batches moved from
 
 The remote proof `pcg-reducer-websites-bulk-rel-20260429T021749Z` rebuilt
 NornicDB commit `824c990` and PCG commit `521565f1`, then drained the same
-`websites-php-youboat` repo healthy with projector `1/1`, reducer `8/8`, and
+`php-large-repo-b` repo healthy with projector `1/1`, reducer `8/8`, and
 `code_calls 24584/24584`. Wall time stayed `188s`, but the code-call graph write
 fell from `15.770s` to `14.247s`, and summed edge batch duration fell from
 `15.730s` to `14.209s` across the same `25` batches and `24,583` rows. Batch
@@ -1436,7 +1436,7 @@ reported `595426043 ns/op` after the profiling patch, comparable to the prior
 
 Remote run `pcg-reducer-websites-chain-profile-20260429T0315Z` rebuilt PCG
 `487b683c`, rebuilt NornicDB `2dd6d27`, enabled
-`NORNICDB_PCG_CHAIN_PROFILE=1`, and drained `websites-php-youboat` healthy:
+`NORNICDB_PCG_CHAIN_PROFILE=1`, and drained `php-large-repo-b` healthy:
 projector `1/1`, reducer `8/8`, and `code_calls 24584/24584`. Wall time stayed
 at the current `188s` baseline; code-call graph write was `14.367s`, and summed
 edge batch duration was `14.328s`. The NornicDB profile split for the 26
@@ -1470,7 +1470,7 @@ this handler win across two to four large repos before another full-corpus run.
 
 The 4-large-repo confirmation proof
 `pcg-reducer-large4-tx-edge-20260429T0900Z` reused PCG `487b683c`, NornicDB
-`07b792b`, and the focused large set `websites-php-youboat`,
+`07b792b`, and the focused large set `php-large-repo-b`,
 `portal-java-ycm`, `webapp-provisioning`, and `bg-data-pipeline`. It drained
 healthy with projector `4/4`, reducer `32/32`, and `code_calls 47016/47016`.
 Wall time was `211s`. The four code-call projection cycles completed at
@@ -1606,10 +1606,10 @@ win when wall-clock evidence does not support that claim.
 | `b085803c` | Raise code-call edge batch size from `50` to `1000` | Reduce grouped graph-write transaction count for large first-projection code-call cycles | Isolated large repo code-call cycle `15.653s` to `11.328s`; hot20 wall `305s` to `297s`; hot20 largest code-call cycles `20.331s`/`13.654s` to `15.211s`/`9.067s`; no failures and code-call completion stayed exact | Measured reducer graph-write and modest wall-clock win; not a worker-count change |
 | n/a | Test canonical entity containment and phase-group cap variants without changing defaults | Determine whether source-local canonical entity tuning is a large lever | Cross-file batched containment regressed isolated large repo wall `184s` to `264s`; `Function=20,Variable=20` lowered isolated canonical entities `39.189s` to `34.780s` and hot20 wall `297s` to `292s` | Small source-local tuning win only; stop per-label cap fishing and move to size-tiered readiness/data-shape design |
 | `6602cec1` / `22f37cb7` | Add guarded projector size-desc claim ordering, then revert | Keep large repos from becoming the final source-local readiness tail | Same-commit focused 4-repo FIFO `125s` versus size-desc `128s`; hot20 FIFO `301s` versus size-desc `301s`; all runs completed cleanly, CPU/disk stayed idle-heavy | Rejected scheduling hypothesis; reverted rather than keeping a public knob |
-| n/a | Test `PCG_CODE_CALL_EDGE_BATCH_SIZE=2000` without changing defaults | Reduce large code-call shared write cycles after batch-1000 gains flattened | Single-large `websites-php-youboat` wall `186s`; code-call cycle `12.667s`, write `11.589s`, worse than the prior batch-1000 single-large proof | Rejected batch-size hypothesis; next code-call work needs query/backend shape changes |
-| `519dd6a9` / `b0b88a44` | Route code-call writes to exact Function/Class labels when reducer intent payloads know both labels, then revert | Avoid broad `Function\|Class\|File` anchors and `coalesce()` in large code-call writes | Single-large `websites-php-youboat` wall `184s` versus prior batch-1000 baseline `183s`; code-call write `10.660s` versus `10.304s`; CPU/disk stayed idle-heavy | Rejected PCG-side label-routing hypothesis; reverted |
-| `87646e1b` / `ef856c18` | Enqueue reducer intents after canonical graph write but before normal content-store writes, then revert | Overlap reducer/shared work with source-local content persistence | Single-large `websites-php-youboat` stayed flat at `183s`; small `api-node-chat` drained healthy in `13s`; hot20 regressed from `298s` to `305s` with projector `20/20`, reducer `160/160`, `code_calls 57987/57987`; CPU/disk stayed idle-heavy | Rejected readiness/ordering overlap hypothesis; reverted |
-| n/a | Test `PCG_CODE_CALL_EDGE_GROUP_BATCH_SIZE=4` without changing defaults | Reduce code-call write transaction overhead by grouping multiple 1000-row statements per transaction | Single-large `websites-php-youboat` regressed to `191s`; code-call write rose to `16.725s`; CPU/disk stayed idle-heavy | Rejected grouped-transaction hypothesis; keep default group size `1` |
+| n/a | Test `PCG_CODE_CALL_EDGE_BATCH_SIZE=2000` without changing defaults | Reduce large code-call shared write cycles after batch-1000 gains flattened | Single-large `php-large-repo-b` wall `186s`; code-call cycle `12.667s`, write `11.589s`, worse than the prior batch-1000 single-large proof | Rejected batch-size hypothesis; next code-call work needs query/backend shape changes |
+| `519dd6a9` / `b0b88a44` | Route code-call writes to exact Function/Class labels when reducer intent payloads know both labels, then revert | Avoid broad `Function\|Class\|File` anchors and `coalesce()` in large code-call writes | Single-large `php-large-repo-b` wall `184s` versus prior batch-1000 baseline `183s`; code-call write `10.660s` versus `10.304s`; CPU/disk stayed idle-heavy | Rejected PCG-side label-routing hypothesis; reverted |
+| `87646e1b` / `ef856c18` | Enqueue reducer intents after canonical graph write but before normal content-store writes, then revert | Overlap reducer/shared work with source-local content persistence | Single-large `php-large-repo-b` stayed flat at `183s`; small `api-node-chat` drained healthy in `13s`; hot20 regressed from `298s` to `305s` with projector `20/20`, reducer `160/160`, `code_calls 57987/57987`; CPU/disk stayed idle-heavy | Rejected readiness/ordering overlap hypothesis; reverted |
+| n/a | Test `PCG_CODE_CALL_EDGE_GROUP_BATCH_SIZE=4` without changing defaults | Reduce code-call write transaction overhead by grouping multiple 1000-row statements per transaction | Single-large `php-large-repo-b` regressed to `191s`; code-call write rose to `16.725s`; CPU/disk stayed idle-heavy | Rejected grouped-transaction hypothesis; keep default group size `1` |
 | NornicDB `824c990` | Bulk-create new relationships inside the no-return `UNWIND MATCH MATCH MERGE rel SET rel...` chain-batch path | Reduce per-edge Badger transaction overhead for large first-projection code-call writes | Local 5k accumulating Badger benchmark moved `657270417 ns/op` to `595086583 ns/op`; same large repo wall stayed `188s`, but code-call write moved `15.770s` to `14.247s` and summed batch duration moved `15.730s` to `14.209s`; CPU/disk stayed idle-heavy | Backend handler win; not a wall-clock win on isolated large repo |
 | NornicDB `7017ee2` | Trust ready edge-between index misses instead of falling back to legacy outgoing scans | Remove high-fanout missing-edge scan cost from typed relationship existence checks | Storage benchmark with 5k source fanout moved missing lookup from `6063200 ns/op` legacy scan to `1880 ns/op` ready-index miss, but same large PCG repo stayed `188s`; code-call write was flat/slightly worse (`14.247s` to `14.320s`) and summed batches were flat (`14.209s` to `14.260s`) | Backend microbenchmark win; rejected PCG throughput hypothesis for this repo |
 | `972a7202` / `1f8dbe45` | Retest exact-label code-call write routing after NornicDB bulk-create and ready-index fixes, then revert | Check whether the newer backend changes made exact Function/Class anchors beneficial | Same large repo regressed from `188s` to `200s`; code-call write regressed `14.320s` to `15.328s`; summed edge batches regressed `14.260s` to `15.259s`; CPU/disk stayed idle-heavy | Confirmed rejected PCG-side label-routing hypothesis; reverted |
@@ -1621,7 +1621,7 @@ win when wall-clock evidence does not support that claim.
 | `32d61a6a` / `0f26b3e3` | Defer local-authoritative content trigram search indexes until the discovered filesystem repo set drains | Avoid per-batch GIN maintenance on write-heavy local-authoritative proof loads while preserving content rows and restoring search indexes after drain | Manual no-GIN single-large proof moved wall `188s` to `156s`. Code path proof `pcg-reducer-onebig-deferred-index-code-20260429T115343Z` drained in `152s` with content write `9.660s`; small proof `pcg-reducer-small-deferred-index-code-20260429T115724Z` drained in `14s`. First hot20 proof at `32d61a6a` stayed flat at `239s` because restore fired early between repo enqueue waves. Commit `0f26b3e3` fixed readiness to require the discovered repo count; `pcg-reducer-hot20-deferred-index-fixed-20260429T121040Z` drained in `205s` with projector `20/20`, reducer `160/160`, `code_calls 57987/57987`, CPU idle `63.21%`, IO wait `2.07%`, disk idle `81.71%`, and post-drain search-index restore `1m45.272s`. | Real 20-repo source-local wall-clock win; next bottleneck moved back to canonical graph writes and large code-call shared projection cycles |
 | `643ba778` | Tag NornicDB canonical entity-label summaries with `scope_id` and `generation_id` | Attribute high-cardinality entity-label cost to exact repository generations in large-corpus logs | Focused tests `go test ./cmd/ingester -run 'TestNornicDBPhaseGroupExecutorLogsEntityLabelSummaries\|TestNornicDBPhaseGroupExecutorStripsDiagnosticStatementParameters' -count=1` and `go test ./internal/storage/neo4j -run TestCanonicalNodeWriterSeparatesEntityUpsertsFromContainmentEdges -count=1` passed; broader `go test ./cmd/ingester ./internal/storage/neo4j -count=1`, `go vet ./cmd/ingester ./internal/storage/neo4j`, `git diff --check`, and strict MkDocs passed | Diagnostic win; enables the next hot20/100-repo proof to group Variable/Function costs by scope without log-adjacency inference |
 | n/a | Re-run one-large and 4-large proofs with scope-tagged entity summaries | Verify no regression and test whether reducing large-generation concurrency lowers wall time by reducing NornicDB graph-write contention | `pcg-reducer-onebig-scope-summary-20260429T123439Z` stayed at the prior deferred-index baseline: wall `152s`, queue projector `1/1`, reducer `8/8`, `code_calls 24584/24584`, content write `9.720s`, canonical write `44.029s`, canonical `Variable` `131977` rows in `32.081s`, and code-call write `10.084s`; CPU idle `78.64%`, IO wait `0.59%`, disk idle `92.44%`. `pcg-reducer-large4-default-b068-20260429T123830Z` drained four large repos in `192s` with projector `4/4`, reducer `32/32`, and `code_calls 51092/51092`; canonical writes were `61.347s` / `54.452s` / `43.418s` / `4.664s`. The `PCG_LARGE_GEN_MAX_CONCURRENT=2` A/B `pcg-reducer-large4-largegen2-b068-20260429T124343Z` reduced some canonical writes (`54.012s` / `50.036s` / `40.889s` / `4.687s`) but lost overlap and regressed wall to `202s`; CPU and disk stayed idle-heavy (`65.45%` CPU idle, `85.74%` disk idle). | Rejected large-generation narrowing hypothesis; keep default local-authoritative `4` and move to canonical entity data shape / NornicDB write-path evidence instead of lowering concurrency |
-| `d5e83166` | Skip signature-identified browser libraries during discovery | Remove duplicated static-library JavaScript before content persistence, canonical entity writes, and code-call projection | Advisory and Postgres evidence on `websites-php-youboat` showed the hot `Variable`/`Function` rows were copied browser libraries (`FullCalendar`, renamed jQuery, Fotorama, GMaps, Masonry, Bootstrap), not authored application logic. `pcg-reducer-onebig-browserlib-prune-d5e-20260429T133457Z` drained in `99s` versus the `152s` scoped-summary baseline, with projector `1/1`, reducer `8/8`, `code_calls 4479/4479` versus `24584/24584`, content write `4.995s` versus `9.720s`, canonical write `28.397s` versus `44.029s`, canonical phase-group write `27.630s` versus `42.655s`, and entity rows `96809` versus `160909`; CPU idle `78.79%`, IO wait `0.57%`, disk idle `92.12%`. `pcg-reducer-large4-browserlib-prune-d5e-20260429T133758Z` drained in `154s` versus `192s`, with projector `4/4`, reducer `32/32`, `code_calls 30987/30987` versus `51092/51092`, CPU idle `61.59%`, IO wait `1.86%`, and disk idle `83.44%`. `pcg-reducer-hot20-browserlib-prune-d5e-20260429T134509Z` drained in `165s` versus the prior deferred-index hot20 `205s`, with projector `20/20`, reducer `160/160`, `code_calls 37881/37881`, `repo_dependency 3/3`, CPU idle `59.96%`, IO wait `2.38%`, and disk idle `79.69%`. | Real data-shape wall-clock win; next estimate full-corpus impact and continue with remaining canonical entity write hot paths |
+| `d5e83166` | Skip signature-identified browser libraries during discovery | Remove duplicated static-library JavaScript before content persistence, canonical entity writes, and code-call projection | Advisory and Postgres evidence on `php-large-repo-b` showed the hot `Variable`/`Function` rows were copied browser libraries (`FullCalendar`, renamed jQuery, Fotorama, GMaps, Masonry, Bootstrap), not authored application logic. `pcg-reducer-onebig-browserlib-prune-d5e-20260429T133457Z` drained in `99s` versus the `152s` scoped-summary baseline, with projector `1/1`, reducer `8/8`, `code_calls 4479/4479` versus `24584/24584`, content write `4.995s` versus `9.720s`, canonical write `28.397s` versus `44.029s`, canonical phase-group write `27.630s` versus `42.655s`, and entity rows `96809` versus `160909`; CPU idle `78.79%`, IO wait `0.57%`, disk idle `92.12%`. `pcg-reducer-large4-browserlib-prune-d5e-20260429T133758Z` drained in `154s` versus `192s`, with projector `4/4`, reducer `32/32`, `code_calls 30987/30987` versus `51092/51092`, CPU idle `61.59%`, IO wait `1.86%`, and disk idle `83.44%`. `pcg-reducer-hot20-browserlib-prune-d5e-20260429T134509Z` drained in `165s` versus the prior deferred-index hot20 `205s`, with projector `20/20`, reducer `160/160`, `code_calls 37881/37881`, `repo_dependency 3/3`, CPU idle `59.96%`, IO wait `2.38%`, and disk idle `79.69%`. | Real data-shape wall-clock win; next estimate full-corpus impact and continue with remaining canonical entity write hot paths |
 | `0a838916` | Skip WordPress core dirs, `.min.mjs`, and signed legacy browser runtimes | Remove more third-party/generated browser and CMS-core rows from API/PHP and portal/Java canonical entity writes | Existing 4-large Postgres evidence predicted about `22,254` fewer entity rows across the hot four repos: `wp-includes` `11021`, `wp-admin` `6288`, `pdf.worker.min.mjs` `2940`, JWPlayer `1679`, and reveal.js `326`. Focused TDD covered WordPress core dirs, `.min.mjs`, and JWPlayer/Prototype/reveal signatures. `pcg-reducer-api-wordpress-runtime-0a8-20260429T1405Z` drained API/PHP in `107s` with projector `1/1`, reducer `8/8`, `code_calls 2253/2253`, content entities `120077`, canonical entity phase `28.041s`, `Variable` `103908` rows in `22.549s`, CPU idle `81.07%`, and disk idle `91.07%`. `pcg-reducer-large4-wpcore-runtime-0a8-20260429T1410Z` improved the same four-large slice from `154s` to `141s`, with projector `4/4`, reducer `32/32`, `code_calls 29937/29937`, CPU idle `62.40%`, IO wait `2.25%`, and disk idle `81.24%`; API/PHP projected entities fell to `119398`, and portal/Java projected entities fell to `106470`. `pcg-reducer-hot20-wpcore-runtime-0a8-20260429T1415Z` improved hot20 from `165s` to `153s`, with projector `20/20`, reducer `160/160`, `code_calls 36832/36832`, `repo_dependency 3/3`, CPU idle `54.23%`, IO wait `2.55%`, and disk idle `76.57%`. | Modest real wall-clock data-shape win; not a breakthrough. Remaining large-corpus target is canonical entity write-path efficiency and the large code-call shared projection cycle |
 
 The ledger now points past SQL/semantic fact loading as the only easy handler

@@ -55,7 +55,7 @@ Compared results against the QA Python instance (`pcg-qa.example.test`).
 **Go E2E consumers (7)** — All terraform-stack-* repos via `PROVISIONS_DEPENDENCY_FOR`:
 - terraform-stack-conversation
 - terraform-stack-external-search
-- terraform-stack-mywork
+- terraform-stack-service-a
 - terraform-stack-poc-nlp-search
 - terraform-stack-provisioning
 - terraform-stack-sitemaps

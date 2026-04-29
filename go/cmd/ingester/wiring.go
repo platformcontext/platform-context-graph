@@ -60,7 +60,7 @@ const (
 	// once Function rows were narrowed, so they get the next smaller row cap.
 	defaultNornicDBStructEntityBatchSize = 50
 	// Variable is high-cardinality but not row-heavy after file-scoped entity
-	// batching. The 2026-04-27 websites-php-youboat ladder improved from
+	// batching. The 2026-04-27 php-large-repo-b ladder improved from
 	// 196.7s at 10 rows to 102.8s at 100 rows with no retries, no singleton
 	// fallbacks, and max grouped execution under one second.
 	defaultNornicDBVariableEntityBatchSize = 100

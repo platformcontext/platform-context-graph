@@ -47,8 +47,8 @@ the next promotion evidence must come from a DB-driven full-corpus drain.
 Follow-up checkpoint: PCG `c598000d` then passed a targeted five-repo lane that
 combined the prior small semantic regressions with the two noisy PHP stress
 repos. It drained healthy in `854s`; the largest projections were
-`api-php-sample-appwebsolutions` at `148,948` facts in `166.496305644s` and
-`websites-php-youboat` at `176,201` facts in `521.49982913s`; their semantic
+`php-large-repo-a` at `148,948` facts in `166.496305644s` and
+`php-large-repo-b` at `176,201` facts in `521.49982913s`; their semantic
 reducers completed in `6.33473887s` and `15.762956452s`; and the run ended
 with `pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`. Use this as
 the current problem-repo proof before moving to a larger representative subset.
@@ -59,7 +59,7 @@ Representative subset checkpoint: PCG `5c9b169a` with the same NornicDB
 `pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`. The log scan found
 no graph write timeout, semantic failure, acceptance-cap, retry, dead-letter,
 panic, or fatal lines. The slow path was not reducer semantic correctness:
-`websites-php-youboat` source-local projection held the queue while writing
+`php-large-repo-b` source-local projection held the queue while writing
 `131,977` `Variable` entities and `28,926` `Function` entities. During that
 phase, `Variable` entity chunks progressed from small subsecond executions to
 a label summary of `102,654` rows, `13,200` statements, and `130.161796981s`
@@ -69,7 +69,7 @@ canonical entity writes and noisy repo input shape, not another semantic
 batch-cap tweak.
 
 Patched-binary batched-containment checkpoint: a 2026-04-27 isolated
-`websites-php-youboat` rerun on PCG `dcb5e466` with
+`php-large-repo-b` rerun on PCG `dcb5e466` with
 `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true`, `PCG_CANONICAL_WRITE_TIMEOUT=120s`,
 `PCG_REDUCER_WORKERS=2`, and the `#119 + #120` NornicDB binary drained the
 main queue cleanly with no graph timeout, retry, dead-letter, panic, or fatal
@@ -85,7 +85,7 @@ so the next optimization target is NornicDB file-anchor and relationship
 existence lookup behavior before adding more PCG batch caps.
 
 Variable row-cap checkpoint: follow-up 2026-04-27 focused reruns on
-`websites-php-youboat` showed the earlier narrow `Variable=10` default was too
+`php-large-repo-b` showed the earlier narrow `Variable=10` default was too
 conservative after file-scoped entity batching. The same `131,977` canonical
 `Variable` rows completed in `196.713s` at `10` rows, `130.082s` at `25`,
 `118.136s` at `50`, and `102.820s` at `100`, with zero singleton fallbacks,
@@ -108,7 +108,7 @@ entity upserts; it is not a NornicDB graph-write knob and should not be used to
 respond to `graph_write_timeout`.
 
 The first focused A/B proved batch size was diagnostic, not causal, for the
-`websites-php-youboat` stress repo: `PCG_CONTENT_ENTITY_BATCH_SIZE=600`
+`php-large-repo-b` stress repo: `PCG_CONTENT_ENTITY_BATCH_SIZE=600`
 reduced statements to `269`, but `upsert_entities` stayed flat at `158.814s`.
 A direct Postgres microbench isolated the real cost to the trigram index over
 large entity snippets: copying the same `160,909` rows took `1.661s` without
@@ -146,7 +146,7 @@ Medium-corpus source-cache checkpoint: PCG `a7078ddf` with NornicDB `v1.0.43`,
 `/home/ubuntu/pcg-test-repos` corpus of `23` repos healthy in about `3m11s`.
 Final durable state was projector `23/23`, reducer `184` succeeded work items,
 and queue `pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`. The large
-PHP repo `api-php-sample-appwebsolutions` wrote `138,712` content entities in
+PHP repo `php-large-repo-a` wrote `138,712` content entities in
 `21.196s`, then spent `78.490s` in canonical graph write. Across the run PCG
 persisted `182,305` content entities, with only `1,463` truncated `Variable`
 rows and `24 MB` total `Variable` source cache. This promotes the source-cache
@@ -154,7 +154,7 @@ shaping rule from focused proof to medium-corpus proof and moves the next tuning
 target back to canonical graph Cypher shape and NornicDB lookup behavior.
 
 Variable grouping checkpoint: the follow-up focused run on
-`api-php-sample-appwebsolutions` showed that the proven `Variable=100` row
+`php-large-repo-a` showed that the proven `Variable=100` row
 batch and the proven `Variable=5` grouped-statement cap are separate controls,
 not conflicting evidence. `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Variable=100`
 keeps each Variable statement large enough to avoid excessive fragmentation.
