@@ -165,9 +165,11 @@ func InferInfrastructureRuntimeFamilyKind(resourceTypes, moduleSources []string)
 
 	for _, f := range runtimeFamilies {
 		hasCluster := false
+		hasExplicitClusterResource := false
 		for _, rt := range f.ClusterResourceTypes {
 			if _, ok := normalizedRT[rt]; ok {
 				hasCluster = true
+				hasExplicitClusterResource = true
 				break
 			}
 		}
@@ -188,12 +190,13 @@ func InferInfrastructureRuntimeFamilyKind(resourceTypes, moduleSources []string)
 			continue
 		}
 
-		// Exclude if non-cluster module patterns match.
 		excluded := false
+		excludedByServiceModule := false
 		for _, pattern := range f.NonClusterModulePatterns {
 			for ms := range normalizedMS {
 				if strings.Contains(ms, pattern) {
 					excluded = true
+					excludedByServiceModule = matchesAnyPattern(pattern, f.ServiceModulePatterns)
 					break
 				}
 			}
@@ -201,12 +204,26 @@ func InferInfrastructureRuntimeFamilyKind(resourceTypes, moduleSources []string)
 				break
 			}
 		}
-		if excluded {
+		// Service-only modules should not turn an application stack into an
+		// infrastructure platform, but an explicit cluster resource is stronger
+		// evidence than sibling service modules in the same stack.
+		if excluded && !(hasExplicitClusterResource && excludedByServiceModule) {
 			continue
 		}
 		return f.Kind
 	}
 	return ""
+}
+
+// matchesAnyPattern reports whether value and a registered pattern describe
+// the same module family after normalization by the caller.
+func matchesAnyPattern(value string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if strings.Contains(value, pattern) || strings.Contains(pattern, value) {
+			return true
+		}
+	}
+	return false
 }
 
 // MatchesServiceModuleSource reports whether one module source matches the

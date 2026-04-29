@@ -392,6 +392,38 @@ func TestBuildProjectionRowsRuntimePlatformFromResourceKinds(t *testing.T) {
 	}
 }
 
+func TestBuildProjectionRowsInfersKubernetesPlatformFromDeploymentSourceEvidence(t *testing.T) {
+	t.Parallel()
+
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:           "repo-service",
+			RepoName:         "service-api",
+			DeploymentRepoID: "repo-delivery",
+			Classification:   "service",
+			Confidence:       0.96,
+			Provenance:       []string{"dockerfile_runtime", "argocd_applicationset_deploy_source"},
+		},
+	}
+	deploymentEnvs := map[string][]string{
+		"repo-delivery": {"bg-prod", "bg-qa"},
+	}
+
+	result := BuildProjectionRows(candidates, deploymentEnvs)
+
+	if got := len(result.RuntimePlatformRows); got != 2 {
+		t.Fatalf("len(RuntimePlatformRows) = %d, want 2", got)
+	}
+	for _, row := range result.RuntimePlatformRows {
+		if row.PlatformKind != "kubernetes" {
+			t.Fatalf("PlatformKind = %q, want kubernetes", row.PlatformKind)
+		}
+		if row.PlatformID == "" {
+			t.Fatal("PlatformID is empty")
+		}
+	}
+}
+
 func TestBuildProjectionRowsDeduplicatesWorkloads(t *testing.T) {
 	t.Parallel()
 	candidates := []WorkloadCandidate{

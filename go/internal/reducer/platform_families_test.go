@@ -127,6 +127,18 @@ func TestInferInfrastructureRuntimeFamilyKind(t *testing.T) {
 	}
 }
 
+func TestInferInfrastructureRuntimeFamilyKindKeepsExplicitClusterWithServiceModules(t *testing.T) {
+	t.Parallel()
+
+	got := InferInfrastructureRuntimeFamilyKind(
+		[]string{"aws_ecs_cluster"},
+		[]string{"registry.example.com/platform/ecs-application/aws"},
+	)
+	if got != "ecs" {
+		t.Errorf("got %q, want ecs for explicit cluster resource with service modules", got)
+	}
+}
+
 func TestInferInfrastructureRuntimeFamilyKindSkipsNonCluster(t *testing.T) {
 	t.Parallel()
 

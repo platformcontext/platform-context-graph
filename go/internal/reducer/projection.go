@@ -258,7 +258,7 @@ func BuildProjectionRows(
 				}
 			}
 		}
-		platformKind := InferRuntimePlatformKind(candidate.ResourceKinds)
+		platformKind := inferCandidateRuntimePlatformKind(candidate)
 
 		for _, environment := range environments {
 			instanceID := fmt.Sprintf("workload-instance:%s:%s", workloadName, environment)
@@ -333,6 +333,24 @@ func isMaterializableWorkloadClassification(classification string) bool {
 	default:
 		return false
 	}
+}
+
+func inferCandidateRuntimePlatformKind(candidate WorkloadCandidate) string {
+	if kind := InferRuntimePlatformKind(candidate.ResourceKinds); kind != "" {
+		return kind
+	}
+	if candidate.DeploymentRepoID == "" {
+		return ""
+	}
+	if hasProvenance(candidate.Provenance,
+		"argocd_application_source",
+		"argocd_applicationset_deploy_source",
+		"kustomize_resource",
+		"helm_deployment",
+	) {
+		return "kubernetes"
+	}
+	return ""
 }
 
 func normalizedCandidateConfidence(confidence float64) float64 {
