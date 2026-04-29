@@ -474,6 +474,67 @@ func TestRepoDependencyProjectionRunnerReplaysWorkloadMaterializationForActiveRe
 	}
 }
 
+func TestRepoDependencyProjectionRunnerSkipsRetractForFirstProjection(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 29, 14, 0, 0, 0, time.UTC)
+	repoID := "repository:r_repo_a"
+	reader := &fakeRepoDependencyIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			repoDependencyIntentRow(
+				"active-1", "scope-a", repoID, repoID, "run-1", "gen-1", now,
+				map[string]any{
+					"repo_id":           repoID,
+					"target_repo_id":    "repository:r_target_1",
+					"relationship_type": "DEPENDS_ON",
+					"evidence_source":   crossRepoEvidenceSource,
+				},
+			),
+		},
+		pendingByAcceptanceUnit: map[string][]SharedProjectionIntentRow{
+			repoID: {
+				repoDependencyIntentRow(
+					"active-1", "scope-a", repoID, repoID, "run-1", "gen-1", now,
+					map[string]any{
+						"repo_id":           repoID,
+						"target_repo_id":    "repository:r_target_1",
+						"relationship_type": "DEPENDS_ON",
+						"evidence_source":   crossRepoEvidenceSource,
+					},
+				),
+			},
+		},
+		leaseGranted: true,
+	}
+	writer := &recordingCodeCallProjectionEdgeWriter{}
+	runner := RepoDependencyProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: reader,
+		EdgeWriter:   writer,
+		AcceptedGen: func(key SharedProjectionAcceptanceKey) (string, bool) {
+			return "gen-1", key.AcceptanceUnitID == repoID
+		},
+		Config: RepoDependencyProjectionRunnerConfig{PollInterval: 10 * time.Millisecond},
+	}
+
+	result, err := runner.processOnce(context.Background(), now)
+	if err != nil {
+		t.Fatalf("processOnce() error = %v", err)
+	}
+	if got := len(writer.retractCalls); got != 0 {
+		t.Fatalf("retract calls = %d, want 0 for first projection", got)
+	}
+	if got := len(writer.writeCalls); got != 1 {
+		t.Fatalf("write calls = %d, want 1", got)
+	}
+	if got, want := result.RetractedRows, 0; got != want {
+		t.Fatalf("RetractedRows = %d, want %d", got, want)
+	}
+	if got, want := result.ProcessedIntents, 1; got != want {
+		t.Fatalf("ProcessedIntents = %d, want %d", got, want)
+	}
+}
+
 func TestRepoDependencyProjectionRunnerRecordCycleLogsSubstepDurations(t *testing.T) {
 	t.Parallel()
 

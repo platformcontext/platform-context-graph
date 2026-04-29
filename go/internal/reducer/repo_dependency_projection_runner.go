@@ -205,11 +205,14 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 	writtenRows := 0
 	writtenGroups := 0
 	if len(active) > 0 {
-		retractStart := time.Now()
-		retractedRows, err := r.retractRepo(ctx, active)
-		result.RetractDurationSeconds = time.Since(retractStart).Seconds()
-		if err != nil {
-			return result, err
+		if repoDependencyNeedsRetract(rows, staleIDs) {
+			retractStart := time.Now()
+			retractedRows, err := r.retractRepo(ctx, active)
+			result.RetractDurationSeconds = time.Since(retractStart).Seconds()
+			if err != nil {
+				return result, err
+			}
+			result.RetractedRows = retractedRows
 		}
 		writeStart := time.Now()
 		writtenRows, writtenGroups, err = r.writeActiveRows(ctx, active)
@@ -217,7 +220,6 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 		if err != nil {
 			return result, err
 		}
-		result.RetractedRows = retractedRows
 		result.UpsertedRows = writtenRows
 		if r.WorkloadMaterializationReplayer != nil {
 			replayStart := time.Now()
@@ -248,6 +250,22 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 		r.recordRepoDependencyCycle(ctx, acceptanceUnitID, active, writtenRows, writtenGroups, cycleStart, result)
 	}
 	return result, nil
+}
+
+func repoDependencyNeedsRetract(rows []SharedProjectionIntentRow, staleIDs []string) bool {
+	if len(staleIDs) > 0 {
+		return true
+	}
+	for _, row := range rows {
+		if row.CompletedAt != nil {
+			return true
+		}
+		action := strings.TrimSpace(repoDependencyPayloadString(row, "action"))
+		if action == "delete" || action == "retract" {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *RepoDependencyProjectionRunner) selectAcceptanceUnitWork(ctx context.Context) (string, error) {
