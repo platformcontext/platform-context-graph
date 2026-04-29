@@ -1,0 +1,33 @@
+go/internal/storage/neo4j/edge_writer.go
+  4cb501d5d4ff237f 303-305,323-324,329,331
+go/internal/storage/neo4j/edge_writer_code_calls.go
+  4cb501d5d4ff237f 1-62
+go/internal/reducer/python_metaclass_materialization.go
+  4cb501d5d4ff237f 88-97
+go/internal/reducer/code_call_materialization_index.go
+  4cb501d5d4ff237f 16,32,64,100,193-198,250-258
+go/internal/storage/neo4j/edge_writer_code_call_label_test.go
+  4cb501d5d4ff237f 1-118
+go/internal/reducer/code_call_materialization_test.go
+  4cb501d5d4ff237f 262-267,281-285
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "519dd6a9ae1ad9ca8278abb44550835cc4904d70",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 228,
+      "total_deletions": 22,
+      "accepted_lines": 253,
+      "overriden_lines": 0
+    }
+  }
+}
