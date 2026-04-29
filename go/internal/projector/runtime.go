@@ -2,7 +2,6 @@ package projector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -132,47 +131,20 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 		return Result{}, err
 	}
 
+	if len(projection.reducerIntents) > 0 {
+		intentResult, err := r.enqueueReducerIntents(ctx, scopeValue, generation.GenerationID, projection.reducerIntents)
+		if err != nil {
+			return Result{}, err
+		}
+		result.Intents = intentResult
+	}
+
 	if !r.ContentBeforeCanonical {
 		contentResult, err := r.writeContentProjection(ctx, scopeValue, projection.contentMaterialization)
 		if err != nil {
 			return Result{}, err
 		}
 		result.Content = contentResult
-	}
-
-	if len(projection.reducerIntents) > 0 {
-		if r.IntentWriter == nil {
-			return Result{}, errors.New("reducer intent writer is required when reducer intents are present")
-		}
-
-		enqueueStart := time.Now()
-		if r.Tracer != nil {
-			var enqueueSpan trace.Span
-			ctx, enqueueSpan = r.Tracer.Start(ctx, telemetry.SpanReducerIntentEnqueue)
-			defer enqueueSpan.End()
-		}
-
-		intentResult, err := r.IntentWriter.Enqueue(ctx, projection.reducerIntents)
-		if err != nil {
-			return Result{}, fmt.Errorf("enqueue reducer intents: %w", err)
-		}
-
-		if r.Instruments != nil {
-			duration := time.Since(enqueueStart).Seconds()
-			r.Instruments.ProjectorStageDuration.Record(ctx, duration, metric.WithAttributes(
-				telemetry.AttrScopeID(scopeValue.ScopeID),
-				attribute.String("stage", "intent_enqueue"),
-			))
-			r.Instruments.ReducerIntentsEnqueued.Add(ctx, int64(len(projection.reducerIntents)), metric.WithAttributes(
-				telemetry.AttrScopeID(scopeValue.ScopeID),
-			))
-		}
-		r.logRuntimeStage(ctx, scopeValue, generation.GenerationID, "intent_enqueue", enqueueStart,
-			"reducer_intent_count", len(projection.reducerIntents),
-			"enqueued_count", intentResult.Count,
-		)
-
-		result.Intents = intentResult
 	}
 
 	return result, nil
