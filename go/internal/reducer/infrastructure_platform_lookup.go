@@ -3,6 +3,7 @@ package reducer
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // GraphQueryRunner executes read-only graph queries for reducer lookups.
@@ -29,37 +30,41 @@ func (l GraphInfrastructurePlatformLookup) ListProvisionedPlatforms(
 		return nil, fmt.Errorf("graph infrastructure platform lookup requires graph query runner")
 	}
 
-	rows, err := l.Graph.Run(ctx, provisionedInfrastructurePlatformsCypher, map[string]any{
-		"repo_ids": repoIDs,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	result := make(map[string][]InfrastructurePlatformRow, len(rows))
-	for _, row := range rows {
-		repoID := anyToString(row["repo_id"])
-		platformID := anyToString(row["platform_id"])
-		platformKind := anyToString(row["platform_kind"])
-		if repoID == "" || platformID == "" || platformKind == "" {
+	result := make(map[string][]InfrastructurePlatformRow, len(repoIDs))
+	for _, repoID := range repoIDs {
+		repoID = strings.TrimSpace(repoID)
+		if repoID == "" {
 			continue
 		}
-		result[repoID] = append(result[repoID], InfrastructurePlatformRow{
-			RepoID:           repoID,
-			PlatformID:       platformID,
-			PlatformName:     anyToString(row["platform_name"]),
-			PlatformKind:     platformKind,
-			PlatformProvider: anyToString(row["platform_provider"]),
-			PlatformRegion:   anyToString(row["platform_region"]),
-			PlatformLocator:  anyToString(row["platform_locator"]),
+		rows, err := l.Graph.Run(ctx, provisionedInfrastructurePlatformsCypher, map[string]any{
+			"repo_id": repoID,
 		})
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			platformRepoID := anyToString(row["repo_id"])
+			platformID := anyToString(row["platform_id"])
+			platformKind := anyToString(row["platform_kind"])
+			if platformRepoID == "" || platformID == "" || platformKind == "" {
+				continue
+			}
+			result[platformRepoID] = append(result[platformRepoID], InfrastructurePlatformRow{
+				RepoID:           platformRepoID,
+				PlatformID:       platformID,
+				PlatformName:     anyToString(row["platform_name"]),
+				PlatformKind:     platformKind,
+				PlatformProvider: anyToString(row["platform_provider"]),
+				PlatformRegion:   anyToString(row["platform_region"]),
+				PlatformLocator:  anyToString(row["platform_locator"]),
+			})
+		}
 	}
 	return result, nil
 }
 
-const provisionedInfrastructurePlatformsCypher = `UNWIND $repo_ids AS repo_id
-MATCH (repo:Repository {id: repo_id})-[:PROVISIONS_PLATFORM]->(p:Platform)
-RETURN repo_id,
+const provisionedInfrastructurePlatformsCypher = `MATCH (repo:Repository {id: $repo_id})-[:PROVISIONS_PLATFORM]->(p:Platform)
+RETURN repo.id AS repo_id,
        p.id AS platform_id,
        p.name AS platform_name,
        p.kind AS platform_kind,

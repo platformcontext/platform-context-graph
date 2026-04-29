@@ -36,8 +36,14 @@ func TestGraphInfrastructurePlatformLookupListsProvisionedPlatforms(t *testing.T
 	if !strings.Contains(graph.cypher, "PROVISIONS_PLATFORM") {
 		t.Fatalf("query missing PROVISIONS_PLATFORM: %s", graph.cypher)
 	}
-	if got, want := graph.params["repo_ids"].([]string), []string{"repo-infra", "repo-skip"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("repo_ids params = %v, want %v", got, want)
+	if got, want := len(graph.calls), 2; got != want {
+		t.Fatalf("graph query calls = %d, want %d", got, want)
+	}
+	if got, want := graph.calls[0].params["repo_id"], "repo-infra"; got != want {
+		t.Fatalf("first repo_id param = %v, want %v", got, want)
+	}
+	if got, want := graph.calls[1].params["repo_id"], "repo-skip"; got != want {
+		t.Fatalf("second repo_id param = %v, want %v", got, want)
 	}
 	rows := result["repo-infra"]
 	if len(rows) != 1 {
@@ -54,8 +60,14 @@ func TestGraphInfrastructurePlatformLookupListsProvisionedPlatforms(t *testing.T
 type stubGraphQueryRunner struct {
 	cypher string
 	params map[string]any
+	calls  []stubGraphQueryCall
 	rows   []map[string]any
 	err    error
+}
+
+type stubGraphQueryCall struct {
+	cypher string
+	params map[string]any
 }
 
 func (f *stubGraphQueryRunner) Run(
@@ -65,8 +77,16 @@ func (f *stubGraphQueryRunner) Run(
 ) ([]map[string]any, error) {
 	f.cypher = cypher
 	f.params = params
+	f.calls = append(f.calls, stubGraphQueryCall{cypher: cypher, params: params})
 	if f.err != nil {
 		return nil, f.err
 	}
-	return f.rows, nil
+	repoID := anyToString(params["repo_id"])
+	rows := make([]map[string]any, 0, len(f.rows))
+	for _, row := range f.rows {
+		if anyToString(row["repo_id"]) == repoID {
+			rows = append(rows, row)
+		}
+	}
+	return rows, nil
 }
