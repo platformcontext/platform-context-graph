@@ -408,6 +408,49 @@ func TestExtractWorkloadCandidatesClassifiesJenkinsOnlyRepoAsUtility(t *testing.
 	}
 }
 
+func TestExtractWorkloadCandidatesIncludesGitHubActionsArtifactType(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repo-ci",
+				"name":     "ci-service",
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-1",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-ci",
+				"language":      "yaml",
+				"relative_path": ".github/workflows/main.yml",
+				"parsed_file_data": map[string]any{
+					"artifact_type": "github_actions_workflow",
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	candidates, _ := ExtractWorkloadCandidates(envelopes)
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+
+	candidate := candidates[0]
+	if got, want := candidate.Classification, "utility"; got != want {
+		t.Fatalf("Classification = %q, want %q", got, want)
+	}
+	if !hasProvenance(candidate.Provenance, "github_actions_workflow") {
+		t.Fatalf("Provenance = %v, want github_actions_workflow", candidate.Provenance)
+	}
+}
+
 func TestExtractWorkloadCandidatesRecognizesGroovyPipelineCallsOutsideJenkinsfile(t *testing.T) {
 	t.Parallel()
 

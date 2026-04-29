@@ -68,9 +68,7 @@ func applyResolvedDeploymentSources(
 				enriched[i].Confidence = metadata.confidence
 			}
 			enriched[i].Provenance = appendUniqueString(enriched[i].Provenance, metadata.provenance)
-			if enriched[i].Classification == "" {
-				enriched[i].Classification = InferWorkloadClassification(enriched[i])
-			}
+			enriched[i].Classification = InferWorkloadClassification(enriched[i])
 		}
 	}
 

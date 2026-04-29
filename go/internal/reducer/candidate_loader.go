@@ -218,7 +218,8 @@ func extractArtifactSignals(
 
 	// GitHub Actions workflow: yaml file under .github/workflows/.
 	if lang == "yaml" && strings.HasPrefix(relativePath, ".github/workflows/") {
-		if len(sliceValue(fileData["github_actions_workflow_triggers"])) > 0 ||
+		if strings.TrimSpace(fmt.Sprint(fileData["artifact_type"])) == "github_actions_workflow" ||
+			len(sliceValue(fileData["github_actions_workflow_triggers"])) > 0 ||
 			len(sliceValue(fileData["github_actions_reusable_workflow_refs"])) > 0 {
 			sig.addProvenance("github_actions_workflow", 0.45)
 		}
