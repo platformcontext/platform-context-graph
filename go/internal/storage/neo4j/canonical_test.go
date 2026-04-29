@@ -105,11 +105,14 @@ func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
 	if stmt.Operation != OperationCanonicalUpsert {
 		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
 	}
-	if !strings.Contains(stmt.Cypher, "MERGE (source_repo:Repository {id: row.repo_id})") {
+	if !strings.Contains(stmt.Cypher, "MERGE (source_repo:Repository {id: $repo_id})") {
 		t.Fatalf("Cypher missing source Repository MERGE: %s", stmt.Cypher)
 	}
-	if !strings.Contains(stmt.Cypher, "MERGE (target_repo:Repository {id: row.target_repo_id})") {
+	if !strings.Contains(stmt.Cypher, "MERGE (target_repo:Repository {id: $target_repo_id})") {
 		t.Fatalf("Cypher missing target Repository MERGE: %s", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "FOREACH") {
+		t.Fatalf("Cypher must not rely on FOREACH typed routing: %s", stmt.Cypher)
 	}
 	if !strings.Contains(stmt.Cypher, "MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)") {
 		t.Fatalf("Cypher missing DEPLOYS_FROM edge: %s", stmt.Cypher)
@@ -120,7 +123,7 @@ func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
 	if stmt.Parameters["evidence_type"] != "argocd_application_source" {
 		t.Fatalf("evidence_type = %v", stmt.Parameters["evidence_type"])
 	}
-	if !strings.Contains(stmt.Cypher, "rel.evidence_type = row.evidence_type") {
+	if !strings.Contains(stmt.Cypher, "rel.evidence_type = $evidence_type") {
 		t.Fatalf("Cypher missing evidence_type write: %s", stmt.Cypher)
 	}
 }

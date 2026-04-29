@@ -61,22 +61,43 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteEdges() error = %v", err)
 	}
-	if got, want := len(executor.calls), 1; got != want {
+	if got, want := len(executor.calls), 4; got != want {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
-	cypher := executor.calls[0].Cypher
-	for _, want := range []string{"DEPLOYS_FROM", "DISCOVERS_CONFIG_IN", "PROVISIONS_DEPENDENCY_FOR", "USES_MODULE"} {
-		if !strings.Contains(cypher, want) {
-			t.Fatalf("cypher missing %s branch: %s", want, cypher)
+	wantByType := map[string]string{
+		"DEPLOYS_FROM":              "MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)",
+		"DISCOVERS_CONFIG_IN":       "MERGE (source_repo)-[rel:DISCOVERS_CONFIG_IN]->(target_repo)",
+		"PROVISIONS_DEPENDENCY_FOR": "MERGE (source_repo)-[rel:PROVISIONS_DEPENDENCY_FOR]->(target_repo)",
+		"USES_MODULE":               "MERGE (source_repo)-[rel:USES_MODULE]->(target_repo)",
+	}
+	seen := make(map[string]bool)
+	for _, call := range executor.calls {
+		if strings.Contains(call.Cypher, "FOREACH") {
+			t.Fatalf("typed repo relationship write must not rely on FOREACH routing: %s", call.Cypher)
 		}
+		rowsOut, ok := call.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("rows type = %T, want []map[string]any", call.Parameters["rows"])
+		}
+		if got, want := len(rowsOut), 1; got != want {
+			t.Fatalf("len(rows) = %d, want %d", got, want)
+		}
+		relType, _ := rowsOut[0]["relationship_type"].(string)
+		wantFragment, ok := wantByType[relType]
+		if !ok {
+			t.Fatalf("unexpected relationship_type row: %#v", rowsOut[0])
+		}
+		if !strings.Contains(call.Cypher, wantFragment) {
+			t.Fatalf("cypher for %s missing direct MERGE %q: %s", relType, wantFragment, call.Cypher)
+		}
+		if rowsOut[0]["evidence_type"] == nil || rowsOut[0]["evidence_type"] == "" {
+			t.Fatalf("row missing evidence_type: %#v", rowsOut[0])
+		}
+		seen[relType] = true
 	}
-	rowsOut, ok := executor.calls[0].Parameters["rows"].([]map[string]any)
-	if !ok {
-		t.Fatalf("rows type = %T, want []map[string]any", executor.calls[0].Parameters["rows"])
-	}
-	for _, row := range rowsOut {
-		if row["evidence_type"] == nil || row["evidence_type"] == "" {
-			t.Fatalf("row missing evidence_type: %#v", row)
+	for relType := range wantByType {
+		if !seen[relType] {
+			t.Fatalf("missing write route for %s", relType)
 		}
 	}
 }

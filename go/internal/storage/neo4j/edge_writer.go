@@ -290,7 +290,11 @@ func buildRowMap(
 		if evidenceType := payloadString(row.Payload, "evidence_type"); evidenceType != "" {
 			rowMap["evidence_type"] = evidenceType
 		}
-		return batchCanonicalTypedRepoRelationshipUpsertCypher, rowMap, true
+		cypher, ok := batchCanonicalTypedRepoRelationshipUpsertCypher(relationshipType)
+		if !ok {
+			return "", nil, false
+		}
+		return cypher, rowMap, true
 
 	case reducer.DomainWorkloadDependency:
 		workloadID := payloadString(row.Payload, "workload_id")

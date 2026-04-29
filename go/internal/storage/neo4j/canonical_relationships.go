@@ -57,10 +57,84 @@ FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type =
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
         rel.evidence_type = row.evidence_type,
-        rel.relationship_type = row.relationship_type
+    rel.relationship_type = row.relationship_type
 )`
 
-const batchCanonicalTypedRepoRelationshipUpsertCypher = canonicalRepoRelationshipUpsertCypher
+const canonicalDeploysFromRepoRelationshipUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
+MERGE (target_repo:Repository {id: $target_repo_id})
+MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = $evidence_source,
+    rel.evidence_type = $evidence_type,
+    rel.relationship_type = 'DEPLOYS_FROM'`
+
+const canonicalDiscoversConfigInRepoRelationshipUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
+MERGE (target_repo:Repository {id: $target_repo_id})
+MERGE (source_repo)-[rel:DISCOVERS_CONFIG_IN]->(target_repo)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = $evidence_source,
+    rel.evidence_type = $evidence_type,
+    rel.relationship_type = 'DISCOVERS_CONFIG_IN'`
+
+const canonicalProvisionsDependencyForRepoRelationshipUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
+MERGE (target_repo:Repository {id: $target_repo_id})
+MERGE (source_repo)-[rel:PROVISIONS_DEPENDENCY_FOR]->(target_repo)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = $evidence_source,
+    rel.evidence_type = $evidence_type,
+    rel.relationship_type = 'PROVISIONS_DEPENDENCY_FOR'`
+
+const canonicalUsesModuleRepoRelationshipUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
+MERGE (target_repo:Repository {id: $target_repo_id})
+MERGE (source_repo)-[rel:USES_MODULE]->(target_repo)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = $evidence_source,
+    rel.evidence_type = $evidence_type,
+    rel.relationship_type = 'USES_MODULE'`
+
+const batchCanonicalDeploysFromRepoRelationshipUpsertCypher = `UNWIND $rows AS row
+MERGE (source_repo:Repository {id: row.repo_id})
+MERGE (target_repo:Repository {id: row.target_repo_id})
+MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = row.evidence_source,
+    rel.evidence_type = row.evidence_type,
+    rel.relationship_type = 'DEPLOYS_FROM'`
+
+const batchCanonicalDiscoversConfigInRepoRelationshipUpsertCypher = `UNWIND $rows AS row
+MERGE (source_repo:Repository {id: row.repo_id})
+MERGE (target_repo:Repository {id: row.target_repo_id})
+MERGE (source_repo)-[rel:DISCOVERS_CONFIG_IN]->(target_repo)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = row.evidence_source,
+    rel.evidence_type = row.evidence_type,
+    rel.relationship_type = 'DISCOVERS_CONFIG_IN'`
+
+const batchCanonicalProvisionsDependencyForRepoRelationshipUpsertCypher = `UNWIND $rows AS row
+MERGE (source_repo:Repository {id: row.repo_id})
+MERGE (target_repo:Repository {id: row.target_repo_id})
+MERGE (source_repo)-[rel:PROVISIONS_DEPENDENCY_FOR]->(target_repo)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = row.evidence_source,
+    rel.evidence_type = row.evidence_type,
+    rel.relationship_type = 'PROVISIONS_DEPENDENCY_FOR'`
+
+const batchCanonicalUsesModuleRepoRelationshipUpsertCypher = `UNWIND $rows AS row
+MERGE (source_repo:Repository {id: row.repo_id})
+MERGE (target_repo:Repository {id: row.target_repo_id})
+MERGE (source_repo)-[rel:USES_MODULE]->(target_repo)
+SET rel.confidence = 0.9,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = row.evidence_source,
+    rel.evidence_type = row.evidence_type,
+    rel.relationship_type = 'USES_MODULE'`
 
 const canonicalRunsOnUpsertCypher = `UNWIND $rows AS row
 MATCH (repo:Repository {id: row.repo_id})
@@ -84,9 +158,10 @@ DELETE rel`
 
 // BuildCanonicalRepoRelationshipUpsert builds a typed repository relationship statement.
 func BuildCanonicalRepoRelationshipUpsert(p CanonicalRepoRelationshipParams, evidenceSource string) Statement {
+	cypher := canonicalTypedRepoRelationshipUpsertCypher(p.RelationshipType)
 	return Statement{
 		Operation: OperationCanonicalUpsert,
-		Cypher:    canonicalRepoRelationshipUpsertCypher,
+		Cypher:    cypher,
 		Parameters: map[string]any{
 			"repo_id":           p.RepoID,
 			"target_repo_id":    p.TargetRepoID,
@@ -94,6 +169,36 @@ func BuildCanonicalRepoRelationshipUpsert(p CanonicalRepoRelationshipParams, evi
 			"evidence_type":     p.EvidenceType,
 			"evidence_source":   evidenceSource,
 		},
+	}
+}
+
+func canonicalTypedRepoRelationshipUpsertCypher(relationshipType string) string {
+	switch relationshipType {
+	case "DEPLOYS_FROM":
+		return canonicalDeploysFromRepoRelationshipUpsertCypher
+	case "DISCOVERS_CONFIG_IN":
+		return canonicalDiscoversConfigInRepoRelationshipUpsertCypher
+	case "PROVISIONS_DEPENDENCY_FOR":
+		return canonicalProvisionsDependencyForRepoRelationshipUpsertCypher
+	case "USES_MODULE":
+		return canonicalUsesModuleRepoRelationshipUpsertCypher
+	default:
+		return canonicalRepoDependencyUpsertCypher
+	}
+}
+
+func batchCanonicalTypedRepoRelationshipUpsertCypher(relationshipType string) (string, bool) {
+	switch relationshipType {
+	case "DEPLOYS_FROM":
+		return batchCanonicalDeploysFromRepoRelationshipUpsertCypher, true
+	case "DISCOVERS_CONFIG_IN":
+		return batchCanonicalDiscoversConfigInRepoRelationshipUpsertCypher, true
+	case "PROVISIONS_DEPENDENCY_FOR":
+		return batchCanonicalProvisionsDependencyForRepoRelationshipUpsertCypher, true
+	case "USES_MODULE":
+		return batchCanonicalUsesModuleRepoRelationshipUpsertCypher, true
+	default:
+		return "", false
 	}
 }
 
