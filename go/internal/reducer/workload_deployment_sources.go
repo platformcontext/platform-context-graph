@@ -86,6 +86,7 @@ func applyResolvedProvisioningSources(
 	}
 
 	provisioningReposByTarget := make(map[string][]string, len(resolved))
+	provisioningEvidenceKindsByTarget := make(map[string]map[string][]string, len(resolved))
 	for _, relationship := range resolved {
 		if relationship.RelationshipType != relationships.RelProvisionsDependencyFor {
 			continue
@@ -97,6 +98,15 @@ func applyResolvedProvisioningSources(
 			provisioningReposByTarget[relationship.TargetRepoID],
 			relationship.SourceRepoID,
 		)
+		for _, evidenceKind := range toStringSlice(relationship.Details["evidence_kinds"]) {
+			if provisioningEvidenceKindsByTarget[relationship.TargetRepoID] == nil {
+				provisioningEvidenceKindsByTarget[relationship.TargetRepoID] = make(map[string][]string)
+			}
+			provisioningEvidenceKindsByTarget[relationship.TargetRepoID][relationship.SourceRepoID] = appendUniqueString(
+				provisioningEvidenceKindsByTarget[relationship.TargetRepoID][relationship.SourceRepoID],
+				evidenceKind,
+			)
+		}
 	}
 	if len(provisioningReposByTarget) == 0 {
 		return candidates
@@ -105,8 +115,18 @@ func applyResolvedProvisioningSources(
 	enriched := make([]WorkloadCandidate, len(candidates))
 	for i, candidate := range candidates {
 		enriched[i] = candidate
+		enriched[i].ProvisioningEvidenceKinds = cloneStringSliceMap(candidate.ProvisioningEvidenceKinds)
 		for _, repoID := range provisioningReposByTarget[candidate.RepoID] {
 			enriched[i].ProvisioningRepoIDs = appendUniqueString(enriched[i].ProvisioningRepoIDs, repoID)
+			for _, evidenceKind := range provisioningEvidenceKindsByTarget[candidate.RepoID][repoID] {
+				if enriched[i].ProvisioningEvidenceKinds == nil {
+					enriched[i].ProvisioningEvidenceKinds = make(map[string][]string)
+				}
+				enriched[i].ProvisioningEvidenceKinds[repoID] = appendUniqueString(
+					enriched[i].ProvisioningEvidenceKinds[repoID],
+					evidenceKind,
+				)
+			}
 		}
 	}
 
@@ -208,4 +228,15 @@ func appendUniqueString(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
+}
+
+func cloneStringSliceMap(values map[string][]string) map[string][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string][]string, len(values))
+	for key, slice := range values {
+		cloned[key] = append([]string(nil), slice...)
+	}
+	return cloned
 }

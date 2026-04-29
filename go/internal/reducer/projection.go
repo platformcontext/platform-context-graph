@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
 // Evidence source constant for workload finalization.
@@ -29,9 +31,12 @@ type WorkloadCandidate struct {
 	Namespaces          []string
 	DeploymentRepoID    string
 	ProvisioningRepoIDs []string
-	Classification      string
-	Confidence          float64
-	Provenance          []string
+	// ProvisioningEvidenceKinds keeps per-provisioning-repo evidence so
+	// dependency infrastructure does not become runtime truth by default.
+	ProvisioningEvidenceKinds map[string][]string
+	Classification            string
+	Confidence                float64
+	Provenance                []string
 }
 
 // ProjectionStats tracks counts produced during projection row building.
@@ -383,6 +388,9 @@ func provisionedRuntimePlatformRows(
 		if len(platforms) != 1 {
 			continue
 		}
+		if !hasRuntimeProvisioningEvidence(candidate.ProvisioningEvidenceKinds[repoID]) {
+			continue
+		}
 		environments := deploymentEnvironments[repoID]
 		if len(environments) == 0 {
 			continue
@@ -408,6 +416,30 @@ func provisionedRuntimePlatformRows(
 		}
 	}
 	return rows
+}
+
+func hasRuntimeProvisioningEvidence(kinds []string) bool {
+	for _, kind := range kinds {
+		normalized := strings.ToUpper(strings.TrimSpace(kind))
+		if normalized == "" {
+			continue
+		}
+		if !strings.HasPrefix(normalized, "TERRAFORM_") {
+			continue
+		}
+		switch relationships.EvidenceKind(normalized) {
+		case relationships.EvidenceKindTerraformAppRepo,
+			relationships.EvidenceKindTerraformAppName,
+			relationships.EvidenceKindTerraformGitHubRepo,
+			relationships.EvidenceKindTerraformGitHubActions,
+			relationships.EvidenceKindTerraformConfigPath,
+			relationships.EvidenceKindTerraformModuleSource:
+			continue
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func isMaterializableWorkloadClassification(classification string) bool {

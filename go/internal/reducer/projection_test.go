@@ -2,6 +2,8 @@ package reducer
 
 import (
 	"testing"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
 func TestInferWorkloadKindCronJob(t *testing.T) {
@@ -433,9 +435,12 @@ func TestBuildProjectionRowsAddsProvisionedInfrastructurePlatforms(t *testing.T)
 			RepoName:            "service-api",
 			DeploymentRepoID:    "repo-delivery",
 			ProvisioningRepoIDs: []string{"repo-infra"},
-			Classification:      "service",
-			Confidence:          0.96,
-			Provenance:          []string{"dockerfile_runtime", "argocd_applicationset_deploy_source"},
+			ProvisioningEvidenceKinds: map[string][]string{
+				"repo-infra": {TerraformPlatformEvidenceKind("ecs", "cluster")},
+			},
+			Classification: "service",
+			Confidence:     0.96,
+			Provenance:     []string{"dockerfile_runtime", "argocd_applicationset_deploy_source"},
 		},
 	}
 	deploymentEnvs := map[string][]string{
@@ -467,6 +472,47 @@ func TestBuildProjectionRowsAddsProvisionedInfrastructurePlatforms(t *testing.T)
 	}
 	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:service-api:qa", "ecs") {
 		t.Fatal("missing ecs runtime platform for qa infrastructure environment")
+	}
+}
+
+func TestBuildProjectionRowsSkipsGenericProvisionedDependencyPlatforms(t *testing.T) {
+	t.Parallel()
+
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:              "repo-service",
+			RepoName:            "service-api",
+			ProvisioningRepoIDs: []string{"repo-infra"},
+			ProvisioningEvidenceKinds: map[string][]string{
+				"repo-infra": {string(relationships.EvidenceKindTerraformConfigPath)},
+			},
+			Classification: "service",
+			Confidence:     0.96,
+			Provenance:     []string{"dockerfile_runtime"},
+		},
+	}
+	deploymentEnvs := map[string][]string{
+		"repo-infra": {"prod"},
+	}
+	infraPlatforms := map[string][]InfrastructurePlatformRow{
+		"repo-infra": {
+			{
+				PlatformID:       "platform:lambda:aws:function/shared-dependency:none:none",
+				PlatformName:     "shared-dependency",
+				PlatformKind:     "lambda",
+				PlatformProvider: "aws",
+				PlatformLocator:  "function/shared-dependency",
+			},
+		},
+	}
+
+	result := BuildProjectionRowsWithInfrastructurePlatforms(candidates, deploymentEnvs, infraPlatforms)
+
+	if got := len(result.RuntimePlatformRows); got != 0 {
+		t.Fatalf("len(RuntimePlatformRows) = %d, want 0 for generic dependency evidence", got)
+	}
+	if got := len(result.InstanceRows); got != 0 {
+		t.Fatalf("len(InstanceRows) = %d, want 0 when only generic dependency evidence exists", got)
 	}
 }
 

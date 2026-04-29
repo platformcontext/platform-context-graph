@@ -708,9 +708,12 @@ func TestWorkloadMaterializationHandlerWritesProvisionedInfrastructureRuntimePla
 				RepoID:              "repo-service",
 				RepoName:            "service-api",
 				ProvisioningRepoIDs: []string{"repo-infra"},
-				Classification:      "service",
-				Confidence:          0.96,
-				Provenance:          []string{"dockerfile_runtime"},
+				ProvisioningEvidenceKinds: map[string][]string{
+					"repo-infra": {TerraformPlatformEvidenceKind("ecs", "cluster")},
+				},
+				Classification: "service",
+				Confidence:     0.96,
+				Provenance:     []string{"dockerfile_runtime"},
 			},
 		},
 		deploymentEnvironments: map[string][]string{

@@ -425,6 +425,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesProvisioningRepoEnvironm
 	t.Parallel()
 
 	now := time.Now().UTC()
+	platformEvidenceKind := TerraformPlatformEvidenceKind("ecs", "cluster")
 
 	sourceEnvelopes := []facts.Envelope{
 		{
@@ -496,7 +497,7 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesProvisioningRepoEnvironm
 					RelationshipType: relationships.RelProvisionsDependencyFor,
 					Confidence:       0.94,
 					Details: map[string]any{
-						"evidence_kinds": []any{string(relationships.EvidenceKindTerraformAppRepo)},
+						"evidence_kinds": []any{platformEvidenceKind},
 					},
 				},
 			},
@@ -531,6 +532,9 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesProvisioningRepoEnvironm
 	}
 	if got, want := candidates[0].ProvisioningRepoIDs, []string{"repo-infra"}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("ProvisioningRepoIDs = %v, want %v", got, want)
+	}
+	if got := candidates[0].ProvisioningEvidenceKinds["repo-infra"]; len(got) != 1 || got[0] != platformEvidenceKind {
+		t.Fatalf("ProvisioningEvidenceKinds[repo-infra] = %v, want [%s]", got, platformEvidenceKind)
 	}
 	if got, want := deploymentEnvs["repo-infra"], []string{"prod"}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("deploymentEnvs[repo-infra] = %v, want %v", got, want)
