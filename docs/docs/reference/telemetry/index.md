@@ -174,6 +174,18 @@ For shared-write debugging specifically:
   `mark_completed_duration_seconds`. Use these fields to separate
   canonical-node readiness delay, polling, graph mutation time, and Postgres
   completion marking.
+- The dedicated `repo_dependency` projection runner logs the source-repo-owned
+  cycle shape with `processed_intents`, `active_intents`, `stale_intents`,
+  `acceptance_unit_rows`, `replay_requests`,
+  `selection_duration_seconds`, `load_all_duration_seconds`,
+  `acceptance_prefetch_duration_seconds`, `retract_duration_seconds`,
+  `write_duration_seconds`, `replay_duration_seconds`, and
+  `mark_completed_duration_seconds`. It also records
+  `pcg_dp_shared_projection_step_seconds` with
+  `write_phase=selection|load_all|acceptance_prefetch|retract|write|replay|mark_completed`
+  so operators can separate Postgres scan/load, accepted-generation prefetch,
+  graph backend mutation, replay enqueue, and completion marking before changing
+  worker counts or partitioning.
 - The `code_call` deadlock-elimination path also exposes
   `pcg_dp_code_call_edge_batches_total` and
   `pcg_dp_code_call_edge_batch_duration_seconds` so operators can measure the
@@ -227,9 +239,10 @@ Shared-write-specific counters:
 - `pcg_dp_shared_projection_processing_seconds` reports the graph-write and
   completion duration after partition selection. For `domain=code_calls`, this
   covers the code-call runner's retract, write, and completion-mark window.
-- `pcg_dp_shared_projection_step_seconds` reports the retract, write, and
-  completion-mark portions of shared projection processing using
-  `write_phase=retract|write|mark_completed`.
+- `pcg_dp_shared_projection_step_seconds` reports shared projection substeps.
+  Generic partitioned runners and `code_calls` use
+  `write_phase=retract|write|mark_completed`; `repo_dependency` also uses
+  `write_phase=selection|load_all|acceptance_prefetch|replay`.
 - `pcg_dp_shared_projection_stale_intents_total` reports stale shared
   projection intents filtered during reducer processing.
 
@@ -335,7 +348,7 @@ log streams.
 | `pcg_dp_reducer_queue_wait_seconds` | Reducer time from queue visibility to handler start | s | 0.001 .. 21600 |
 | `pcg_dp_shared_projection_intent_wait_seconds` | Shared projection intent age when a partition processes or blocks it | s | 0.001 .. 21600 |
 | `pcg_dp_shared_projection_processing_seconds` | Shared projection graph-write and completion duration after partition selection | s | 0.001 .. 60 |
-| `pcg_dp_shared_projection_step_seconds` | Shared projection retract, write, and completion-mark substep duration | s | 0.001 .. 60 |
+| `pcg_dp_shared_projection_step_seconds` | Shared projection substep duration | s | 0.001 .. 60 |
 | `pcg_dp_canonical_write_duration_seconds` | Canonical graph write duration | s | default |
 | `pcg_dp_queue_claim_duration_seconds` | Queue work item claim duration | s | default |
 | `pcg_dp_postgres_query_duration_seconds` | Postgres query duration | s | 0.001 .. 2.5 |
