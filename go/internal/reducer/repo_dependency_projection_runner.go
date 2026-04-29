@@ -257,9 +257,6 @@ func repoDependencyNeedsRetract(rows []SharedProjectionIntentRow, staleIDs []str
 		return true
 	}
 	for _, row := range rows {
-		if row.CompletedAt != nil {
-			return true
-		}
 		action := strings.TrimSpace(repoDependencyPayloadString(row, "action"))
 		if action == "delete" || action == "retract" {
 			return true

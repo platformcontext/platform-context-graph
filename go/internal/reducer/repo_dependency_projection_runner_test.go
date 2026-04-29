@@ -377,6 +377,87 @@ func TestRepoDependencyProjectionRunnerRehydratesCompletedContributorRows(t *tes
 	}
 }
 
+func TestRepoDependencyProjectionRunnerSkipsRetractWhenCompletedContributorsRemainAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 29, 15, 0, 0, 0, time.UTC)
+	repoID := "repository:r_repo_a"
+	completedAt := now.Add(-time.Minute)
+	completedContributor := repoDependencyIntentRow(
+		"completed-1", "scope-old", repoID, repoID, "run-old", "gen-old", now.Add(-2*time.Minute),
+		map[string]any{
+			"repo_id":           repoID,
+			"target_repo_id":    "repository:r_target_old",
+			"relationship_type": "DEPENDS_ON",
+			"evidence_source":   crossRepoEvidenceSource,
+		},
+	)
+	completedContributor.CompletedAt = &completedAt
+
+	reader := &fakeRepoDependencyIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			repoDependencyIntentRow(
+				"pending-1", "scope-new", repoID, repoID, "run-new", "gen-new", now,
+				map[string]any{
+					"repo_id":           repoID,
+					"target_repo_id":    "repository:r_target_new",
+					"relationship_type": "DEPLOYS_FROM",
+					"evidence_source":   crossRepoEvidenceSource,
+				},
+			),
+		},
+		pendingByAcceptanceUnit: map[string][]SharedProjectionIntentRow{
+			repoID: {
+				completedContributor,
+				repoDependencyIntentRow(
+					"pending-1", "scope-new", repoID, repoID, "run-new", "gen-new", now,
+					map[string]any{
+						"repo_id":           repoID,
+						"target_repo_id":    "repository:r_target_new",
+						"relationship_type": "DEPLOYS_FROM",
+						"evidence_source":   crossRepoEvidenceSource,
+					},
+				),
+			},
+		},
+		leaseGranted: true,
+	}
+	writer := &recordingCodeCallProjectionEdgeWriter{}
+	runner := RepoDependencyProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: reader,
+		EdgeWriter:   writer,
+		AcceptedGen: func(key SharedProjectionAcceptanceKey) (string, bool) {
+			switch key.SourceRunID {
+			case "run-old":
+				return "gen-old", true
+			case "run-new":
+				return "gen-new", true
+			default:
+				return "", false
+			}
+		},
+		Config: RepoDependencyProjectionRunnerConfig{PollInterval: 10 * time.Millisecond},
+	}
+
+	result, err := runner.processOnce(context.Background(), now)
+	if err != nil {
+		t.Fatalf("processOnce() error = %v", err)
+	}
+	if got := len(writer.retractCalls); got != 0 {
+		t.Fatalf("retract calls = %d, want 0 when completed contributors remain authoritative", got)
+	}
+	if got := len(writer.writeCalls); got != 1 {
+		t.Fatalf("write calls = %d, want 1", got)
+	}
+	if got, want := len(writer.writeCalls[0].rows), 2; got != want {
+		t.Fatalf("written rows = %d, want %d", got, want)
+	}
+	if got, want := result.ProcessedIntents, 2; got != want {
+		t.Fatalf("ProcessedIntents = %d, want %d", got, want)
+	}
+}
+
 func TestRepoDependencyProjectionRunnerReplaysWorkloadMaterializationForActiveRepoDependencyWrites(t *testing.T) {
 	t.Parallel()
 
