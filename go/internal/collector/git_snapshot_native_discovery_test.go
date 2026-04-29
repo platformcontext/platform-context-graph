@@ -22,7 +22,7 @@ func TestNativeRepositorySnapshotterDefaultDiscoverySkipsDependencyDirs(t *testi
 	for _, dir := range []string{
 		"node_modules", "vendor", "__pycache__", "site-packages",
 		".terraform", ".terragrunt-cache", "dist", "build", "Pods",
-		"ansible_collections", ".jenkins", ".yarn",
+		"ansible_collections", ".jenkins", ".yarn", "wp-admin", "wp-includes",
 	} {
 		writeCollectorTestFile(t, filepath.Join(repoRoot, dir, "dep.py"), "def dep(): pass\n")
 	}
@@ -32,6 +32,7 @@ func TestNativeRepositorySnapshotterDefaultDiscoverySkipsDependencyDirs(t *testi
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "server.log"), "log line\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "test.out"), "output\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "app.min.js"), "minified\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "pdf.worker.min.mjs"), "minified\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "style.min.css"), "minified\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "bundle.js.map"), "sourcemap\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "lib.pyc"), "compiled\n")
@@ -212,6 +213,9 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "fotorama.js"), "/*!\n * Fotorama 4.6.4 | http://fotorama.io/license/\n */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "gmaps.js"), "/*!\n * GMaps.js v0.4.15\n * http://hpneo.github.com/gmaps/\n */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "masonry.pkgd.js"), "/*!\n * Masonry PACKAGED v3.1.5\n * http://masonry.desandro.com\n */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "jwplayer.js"), "jwplayer.version=\"6.12.4956\";\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "prototype.js"), "/* Prototype JavaScript framework, version 1.6.0\n * http://www.prototypejs.org/\n */\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "reveal.js"), "/*!\n * reveal.js\n * http://lab.hakim.se/reveal-js\n */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "shadowbox.js"), "/* Shadowbox.js */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "scripts", "fpdf.php"), "<?php\n/* FPDF */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "framework", "library", "pear", "php", "PEAR", "FixPHP5PEARWarnings.php"), "<?php\n/* PEAR compatibility library */\n")
@@ -242,8 +246,8 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 	if got := stats.FilesSkippedByContent["vendored-zend-framework"]; got != 1 {
 		t.Fatalf("FilesSkippedByContent[vendored-zend-framework] = %d, want 1", got)
 	}
-	if got := stats.FilesSkippedByContent["vendored-browser-library"]; got != 8 {
-		t.Fatalf("FilesSkippedByContent[vendored-browser-library] = %d, want 8", got)
+	if got := stats.FilesSkippedByContent["vendored-browser-library"]; got != 11 {
+		t.Fatalf("FilesSkippedByContent[vendored-browser-library] = %d, want 11", got)
 	}
 	if got := stats.FilesSkippedByContent["vendored-fpdf"]; got != 1 {
 		t.Fatalf("FilesSkippedByContent[vendored-fpdf] = %d, want 1", got)

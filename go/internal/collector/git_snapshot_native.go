@@ -322,6 +322,8 @@ var defaultIgnoredDirs = []string{
 	".eggs",
 	// PHP
 	"vendor",
+	"wp-admin",
+	"wp-includes",
 	// Go
 	// (vendor already listed under PHP)
 	// Ruby
@@ -378,6 +380,7 @@ var defaultIgnoredExtensions = []string{
 	".out",
 	// Minified and bundled assets
 	".min.js",
+	".min.mjs",
 	".min.css",
 	".bundle.js",
 	".chunk.js",
@@ -704,6 +707,16 @@ func hasVendoredBrowserLibrarySignature(path string) bool {
 		return true
 	case strings.Contains(normalized, "masonry packaged") &&
 		strings.Contains(normalized, "masonry.desandro.com"):
+		return true
+	case strings.Contains(normalized, "jwplayer.version") ||
+		(strings.Contains(normalized, "d.html5.version") &&
+			strings.Contains(normalized, "jwplayer")):
+		return true
+	case strings.Contains(normalized, "prototype javascript framework") &&
+		strings.Contains(normalized, "prototypejs.org"):
+		return true
+	case strings.Contains(normalized, "reveal.js") &&
+		strings.Contains(normalized, "lab.hakim.se/reveal-js"):
 		return true
 	default:
 		return false
