@@ -73,6 +73,56 @@ func TestRunAttachedLocalMCPStdioUsesRecordedPostgresPort(t *testing.T) {
 	}
 }
 
+func TestLocalBootstrapDefinitionsCanDeferContentSearchIndexes(t *testing.T) {
+	defs := localBootstrapDefinitions(func(key string) string {
+		if key == deferContentSearchIndexesEnv {
+			return "true"
+		}
+		return ""
+	})
+
+	var contentStoreSQL string
+	for _, def := range defs {
+		if def.Name == "content_store" {
+			contentStoreSQL = def.SQL
+			break
+		}
+	}
+	if contentStoreSQL == "" {
+		t.Fatal("content_store definition missing")
+	}
+	if !strings.Contains(contentStoreSQL, "content_entities_repo_idx") {
+		t.Fatal("content_store SQL missing lookup index")
+	}
+	if strings.Contains(contentStoreSQL, "content_entities_source_trgm_idx") {
+		t.Fatal("content_store SQL includes deferred entity search index")
+	}
+	if strings.Contains(contentStoreSQL, "content_files_content_trgm_idx") {
+		t.Fatal("content_store SQL includes deferred file search index")
+	}
+}
+
+func TestLocalBootstrapDefinitionsIncludeContentSearchIndexesByDefault(t *testing.T) {
+	defs := localBootstrapDefinitions(func(string) string { return "" })
+
+	var contentStoreSQL string
+	for _, def := range defs {
+		if def.Name == "content_store" {
+			contentStoreSQL = def.SQL
+			break
+		}
+	}
+	if contentStoreSQL == "" {
+		t.Fatal("content_store definition missing")
+	}
+	if !strings.Contains(contentStoreSQL, "content_entities_source_trgm_idx") {
+		t.Fatal("content_store SQL missing entity search index")
+	}
+	if !strings.Contains(contentStoreSQL, "content_files_content_trgm_idx") {
+		t.Fatal("content_store SQL missing file search index")
+	}
+}
+
 func TestRunAttachedLocalMCPStdioRejectsRequestedProfileMismatch(t *testing.T) {
 	t.Setenv("PCG_QUERY_PROFILE", string(query.ProfileLocalAuthoritative))
 

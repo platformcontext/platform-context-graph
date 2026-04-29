@@ -137,7 +137,7 @@ CREATE INDEX IF NOT EXISTS fact_records_stable_key_idx
     ON fact_records (stable_fact_key, generation_id);
 `
 
-const contentStoreSchemaSQL = `
+const contentStoreBaseSchemaSQL = `
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE IF NOT EXISTS content_files (
@@ -182,11 +182,15 @@ CREATE INDEX IF NOT EXISTS content_entities_type_idx
     ON content_entities (entity_type);
 CREATE INDEX IF NOT EXISTS content_entities_path_idx
     ON content_entities (relative_path);
-CREATE INDEX IF NOT EXISTS content_files_content_trgm_idx
+`
+
+const contentStoreSearchIndexSchemaSQL = `CREATE INDEX IF NOT EXISTS content_files_content_trgm_idx
     ON content_files USING gin (content gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS content_entities_source_trgm_idx
     ON content_entities USING gin (source_cache gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS content_files_artifact_type_idx
+`
+
+const contentStoreFilterIndexSchemaSQL = `CREATE INDEX IF NOT EXISTS content_files_artifact_type_idx
     ON content_files (artifact_type);
 CREATE INDEX IF NOT EXISTS content_files_template_dialect_idx
     ON content_files (template_dialect);
@@ -199,6 +203,10 @@ CREATE INDEX IF NOT EXISTS content_entities_template_dialect_idx
 CREATE INDEX IF NOT EXISTS content_entities_iac_relevant_idx
     ON content_entities (iac_relevant);
 `
+
+const contentStoreSchemaSQL = contentStoreBaseSchemaSQL + contentStoreSearchIndexSchemaSQL + contentStoreFilterIndexSchemaSQL
+
+const contentStoreSchemaWithoutSearchIndexesSQL = contentStoreBaseSchemaSQL + contentStoreFilterIndexSchemaSQL
 
 const workItemSchemaSQL = `
 CREATE TABLE IF NOT EXISTS fact_work_items (
@@ -283,6 +291,21 @@ func BootstrapDefinitions() []Definition {
 	return defs
 }
 
+// BootstrapDefinitionsWithoutContentSearchIndexes returns the bootstrap layout
+// without the expensive content trigram indexes. It is intended for
+// local-authoritative bulk-load flows that call EnsureContentSearchIndexes
+// after the initial write-heavy drain completes.
+func BootstrapDefinitionsWithoutContentSearchIndexes() []Definition {
+	defs := BootstrapDefinitions()
+	for i := range defs {
+		if defs[i].Name == "content_store" {
+			defs[i].SQL = contentStoreSchemaWithoutSearchIndexesSQL
+			break
+		}
+	}
+	return defs
+}
+
 // BootstrapStatements returns the ordered SQL payloads that make up the
 // bootstrap layout.
 func BootstrapStatements() []string {
@@ -338,4 +361,22 @@ func ApplyDefinitions(ctx context.Context, exec Executor, defs []Definition) err
 // ApplyBootstrap applies the Wave 2 schema bootstrap layout.
 func ApplyBootstrap(ctx context.Context, exec Executor) error {
 	return ApplyDefinitions(ctx, exec, BootstrapDefinitions())
+}
+
+// ApplyBootstrapWithoutContentSearchIndexes applies the bootstrap layout while
+// deferring content trigram indexes for a later bulk index build.
+func ApplyBootstrapWithoutContentSearchIndexes(ctx context.Context, exec Executor) error {
+	return ApplyDefinitions(ctx, exec, BootstrapDefinitionsWithoutContentSearchIndexes())
+}
+
+// EnsureContentSearchIndexes creates the trigram indexes that accelerate
+// content file and entity source search.
+func EnsureContentSearchIndexes(ctx context.Context, exec Executor) error {
+	if exec == nil {
+		return fmt.Errorf("executor is required")
+	}
+	if _, err := exec.ExecContext(ctx, contentStoreSearchIndexSchemaSQL); err != nil {
+		return fmt.Errorf("ensure content search indexes: %w", err)
+	}
+	return nil
 }

@@ -24,6 +24,7 @@ import (
 )
 
 const localHostShutdownTimeout = 5 * time.Second
+const deferContentSearchIndexesEnv = "PCG_LOCAL_AUTHORITATIVE_DEFER_CONTENT_SEARCH_INDEXES"
 
 var (
 	localHostBuildLayout = func(workspaceRoot string) (pcglocal.Layout, error) {
@@ -40,23 +41,24 @@ var (
 			},
 		})
 	}
-	localHostStartEmbeddedPostgres = pcglocal.StartEmbeddedPostgres
-	localHostReadOwnerRecord       = pcglocal.ReadOwnerRecord
-	localHostWriteOwnerRecord      = pcglocal.WriteOwnerRecord
-	localHostHostname              = os.Hostname
-	localHostNow                   = func() time.Time { return time.Now().UTC() }
-	localHostLookPath              = exec.LookPath
-	localHostProcessAlive          = pcglocal.ProcessAlive
-	localHostSocketHealthy         = pcglocal.SocketHealthy
-	localHostGraphHealthy          = graphHealthyFromOwnerRecord
-	localHostStartChildProcess     = startLocalChildProcess
-	localHostStartManagedGraph     = startManagedLocalGraph
-	localHostWaitChildProcess      = waitLocalChildProcess
-	localHostWaitManagedChildren   = waitLocalHostChildren
-	localHostWaitOwnerChildren     = waitLocalHostChildrenKeepingAllowedCleanExits
-	localHostApplyBootstrap        = applyLocalBootstrap
-	localHostApplyGraphBootstrap   = applyLocalGraphBootstrap
-	localHostStartProgressReporter = startLocalHostProgressReporter
+	localHostStartEmbeddedPostgres             = pcglocal.StartEmbeddedPostgres
+	localHostReadOwnerRecord                   = pcglocal.ReadOwnerRecord
+	localHostWriteOwnerRecord                  = pcglocal.WriteOwnerRecord
+	localHostHostname                          = os.Hostname
+	localHostNow                               = func() time.Time { return time.Now().UTC() }
+	localHostLookPath                          = exec.LookPath
+	localHostProcessAlive                      = pcglocal.ProcessAlive
+	localHostSocketHealthy                     = pcglocal.SocketHealthy
+	localHostGraphHealthy                      = graphHealthyFromOwnerRecord
+	localHostStartChildProcess                 = startLocalChildProcess
+	localHostStartManagedGraph                 = startManagedLocalGraph
+	localHostWaitChildProcess                  = waitLocalChildProcess
+	localHostWaitManagedChildren               = waitLocalHostChildren
+	localHostWaitOwnerChildren                 = waitLocalHostChildrenKeepingAllowedCleanExits
+	localHostApplyBootstrap                    = applyLocalBootstrap
+	localHostApplyGraphBootstrap               = applyLocalGraphBootstrap
+	localHostStartProgressReporter             = startLocalHostProgressReporter
+	localHostStartDeferredContentSearchIndexes = startDeferredContentSearchIndexes
 )
 
 func init() {
@@ -204,6 +206,19 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 	}
 	if err := localHostWriteOwnerRecord(layout.OwnerRecordPath, record); err != nil {
 		return err
+	}
+
+	if runtimeConfig.Profile == query.ProfileLocalAuthoritative && deferContentSearchIndexes(os.Getenv) {
+		stopDeferredIndexes, err := localHostStartDeferredContentSearchIndexes(ctx, managedPostgres.DSN)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: deferred content search index maintainer unavailable: %v\n", err)
+		} else {
+			defer func() {
+				if err := stopDeferredIndexes(); err != nil && retErr == nil {
+					retErr = fmt.Errorf("stop deferred content search index maintainer: %w", err)
+				}
+			}()
+		}
 	}
 
 	children := make([]localHostChild, 0, 3)
@@ -490,8 +505,23 @@ func applyLocalBootstrap(ctx context.Context, dsn string) error {
 	if err := db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping local postgres bootstrap connection: %w", err)
 	}
-	if err := pgstorage.ApplyBootstrap(ctx, db); err != nil {
+	if err := pgstorage.ApplyDefinitions(ctx, db, localBootstrapDefinitions(os.Getenv)); err != nil {
 		return fmt.Errorf("apply local postgres bootstrap: %w", err)
 	}
 	return nil
+}
+
+func localBootstrapDefinitions(getenv func(string) string) []pgstorage.Definition {
+	if deferContentSearchIndexes(getenv) {
+		return pgstorage.BootstrapDefinitionsWithoutContentSearchIndexes()
+	}
+	return pgstorage.BootstrapDefinitions()
+}
+
+func deferContentSearchIndexes(getenv func(string) string) bool {
+	if getenv == nil {
+		return false
+	}
+	raw := strings.TrimSpace(getenv(deferContentSearchIndexesEnv))
+	return raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
 }

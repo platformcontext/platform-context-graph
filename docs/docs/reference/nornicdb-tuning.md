@@ -130,6 +130,15 @@ metadata, total entity `source_cache` was `164 MB`, and function/class snippets
 were unchanged. Treat this as the current evidence that source-cache shaping,
 not `PCG_CONTENT_ENTITY_BATCH_SIZE`, is the right fix for this bottleneck.
 
+When local-authoritative bulk-load proofs still show content trigram index
+maintenance as the long pole, `PCG_LOCAL_AUTHORITATIVE_DEFER_CONTENT_SEARCH_INDEXES=true`
+can defer the `content_files.content` and `content_entities.source_cache`
+trigram indexes during initial writes. The local owner rebuilds those indexes
+after the first clean projector/reducer/shared-intent drain, so content rows
+and search semantics are preserved while write-heavy startup avoids per-batch
+GIN maintenance. Treat this as a local-authoritative proof/load knob, not a
+deployed Postgres schema default.
+
 Medium-corpus source-cache checkpoint: PCG `a7078ddf` with NornicDB `v1.0.43`,
 `PCG_REDUCER_WORKERS=8`, `PCG_CANONICAL_WRITE_TIMEOUT=120s`, and
 `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT=250000` drained the
