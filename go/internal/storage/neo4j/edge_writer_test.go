@@ -892,54 +892,6 @@ func TestBatchedWriteEdgesUsesUNWINDCypher(t *testing.T) {
 	}
 }
 
-func TestEdgeWriterCodeCallsUsesExactLabelBatchWhenLabelsAreKnown(t *testing.T) {
-	t.Parallel()
-
-	executor := &recordingExecutor{}
-	writer := NewEdgeWriter(executor, 0)
-
-	rows := []reducer.SharedProjectionIntentRow{
-		{
-			IntentID:     "i1",
-			RepositoryID: "repo-a",
-			Payload: map[string]any{
-				"caller_entity_id":    "entity:caller",
-				"callee_entity_id":    "entity:callee",
-				"caller_entity_label": "Function",
-				"callee_entity_label": "Class",
-				"call_kind":           "function_call",
-			},
-		},
-	}
-
-	err := writer.WriteEdges(context.Background(), reducer.DomainCodeCalls, rows, "reducer/code-calls")
-	if err != nil {
-		t.Fatalf("WriteEdges() error = %v", err)
-	}
-	if got, want := len(executor.calls), 1; got != want {
-		t.Fatalf("executor calls = %d, want %d", got, want)
-	}
-	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source:Function {uid: row.caller_entity_id})") {
-		t.Fatalf("cypher missing exact source label: %s", executor.calls[0].Cypher)
-	}
-	if !strings.Contains(executor.calls[0].Cypher, "MATCH (target:Class {uid: row.callee_entity_id})") {
-		t.Fatalf("cypher missing exact target label: %s", executor.calls[0].Cypher)
-	}
-	if strings.Contains(executor.calls[0].Cypher, "Function|Class|File") {
-		t.Fatalf("cypher retained broad label match: %s", executor.calls[0].Cypher)
-	}
-	batchRows, ok := executor.calls[0].Parameters["rows"].([]map[string]any)
-	if !ok || len(batchRows) != 1 {
-		t.Fatalf("expected 1 row in batch, got %v", executor.calls[0].Parameters["rows"])
-	}
-	if got, want := batchRows[0]["caller_entity_label"], "Function"; got != want {
-		t.Fatalf("caller_entity_label = %v, want %v", got, want)
-	}
-	if got, want := batchRows[0]["callee_entity_label"], "Class"; got != want {
-		t.Fatalf("callee_entity_label = %v, want %v", got, want)
-	}
-}
-
 func TestEdgeWriterWriteEdgesInheritanceDispatch(t *testing.T) {
 	t.Parallel()
 

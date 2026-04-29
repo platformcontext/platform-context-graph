@@ -1335,6 +1335,20 @@ machine. This re-opens the exact-label PCG code-call routing that commit
 `b0b88a44` reverted, but only paired with the NornicDB hot-path fix that was
 missing in the first proof.
 
+PCG commit `7508eecc` briefly restored exact-label code-call routing and
+remote-pulled NornicDB commit `9369a40` to test the combined hypothesis. The
+single-large proof `pcg-reducer-websites-label-hotpath-20260429T0140Z`
+rebuilt binaries and drained healthy with projector `1/1`, reducer `8/8`, and
+`code_calls 24584/24584`, but regressed to `193s`; the code-call projection
+cycle was `16.756s` with `15.648s` in graph write time. Host resources still
+had headroom (`cpu_idle_avg=81.54%`, `io_wait_avg=0.57%`,
+`disk_idle_avg=92.57%`). The small sanity proof
+`pcg-reducer-small-label-hotpath-20260429T0145Z` drained healthy in `14s` with
+`code_calls 32/32`. Classify the combined PCG exact-label routing as a rejected
+runtime hypothesis for this PR; keep the NornicDB regression/benchmark as
+backend evidence, but do not keep the PCG routing until a narrower data-shape
+or statement-count proof explains the large-repo regression.
+
 ### Architecture Checkpoint
 
 The evidence now separates three classes of work:
@@ -1421,6 +1435,6 @@ remain idle-heavy.
 | Conflict matrix | Planned | Current conflict routing is safe but coarse | Map true conflict unit per reducer domain |
 | Shared runner partitioning | Planned | Code-call and repo-dependency lanes still have global behavior | Partition by acceptance unit or repo scope |
 | Cypher/index pilot | Planned | SQL and semantic paths show broad anchors and scan risk | Start with SQL relationship materialization |
-| NornicDB backend proof | In progress | NornicDB runtime-branch commit `9369a40` proves and fixes the no-return `UNWIND MATCH MATCH MERGE rel SET rel...` code-call shape missing the batch-chain hot path; 512-row local microbench improved from `2260916375 ns/op` fallback to `1386075 ns/op` patched | Pull `9369a40` on the remote test machine, rebuild NornicDB and PCG binaries, then rerun single-large, small, and hot20 proofs with exact-label PCG routing restored |
+| NornicDB backend proof | In progress | NornicDB runtime-branch commit `9369a40` proves the no-return `UNWIND MATCH MATCH MERGE rel SET rel...` code-call shape has a batch-chain contract; 512-row local microbench improved from `2260916375 ns/op` fallback to `1386075 ns/op` patched, but the combined PCG routing proof regressed single-large wall to `193s` with `15.648s` code-call write time | Keep backend regression coverage, revert PCG exact-label routing, and next inspect statement-count/data-shape effects before another runtime proof |
 | Concurrency proof | Planned | `8` workers completed healthy but too slowly | Test `16` workers only after telemetry and conflict fixes |
 | Full-corpus acceptance | Planned | Baseline `7h43m40s` is unacceptable | Re-run full corpus after smaller proof ladder passes |

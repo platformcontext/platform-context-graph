@@ -165,27 +165,9 @@ SET rel.confidence = 0.95,
     rel.evidence_source = row.evidence_source,
     rel.call_kind = row.call_kind`
 
-const batchCanonicalCodeCallUpsertByLabelTemplate = `UNWIND $rows AS row
-MATCH (source:%s {uid: row.caller_entity_id})
-MATCH (target:%s {uid: row.callee_entity_id})
-MERGE (source)-[rel:CALLS]->(target)
-SET rel.confidence = 0.95,
-    rel.reason = 'Parser and symbol analysis resolved a code call edge',
-    rel.evidence_source = row.evidence_source,
-    rel.call_kind = row.call_kind`
-
 const batchCanonicalJSXComponentReferenceUpsertCypher = `UNWIND $rows AS row
 MATCH (source:Function|Class|File {uid: row.caller_entity_id})
 MATCH (target:Function|Class|File {uid: row.callee_entity_id})
-MERGE (source)-[rel:REFERENCES]->(target)
-SET rel.confidence = 0.95,
-    rel.reason = 'Parser and symbol analysis resolved a TSX component reference edge',
-    rel.evidence_source = row.evidence_source,
-    rel.call_kind = row.call_kind`
-
-const batchCanonicalJSXComponentReferenceUpsertByLabelTemplate = `UNWIND $rows AS row
-MATCH (source:%s {uid: row.caller_entity_id})
-MATCH (target:%s {uid: row.callee_entity_id})
 MERGE (source)-[rel:REFERENCES]->(target)
 SET rel.confidence = 0.95,
     rel.reason = 'Parser and symbol analysis resolved a TSX component reference edge',
