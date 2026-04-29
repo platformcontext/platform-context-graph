@@ -153,12 +153,13 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	}
 	params = map[string]any{"repo_id": repoID}
 
+	counts := queryRepositoryContextCounts(ctx, h.Neo4j, params, baseRow)
 	result := map[string]any{
 		"repository":       RepoRefFromRow(baseRow),
-		"file_count":       IntVal(baseRow, "file_count"),
-		"workload_count":   IntVal(baseRow, "workload_count"),
-		"platform_count":   IntVal(baseRow, "platform_count"),
-		"dependency_count": IntVal(baseRow, "dependency_count"),
+		"file_count":       counts.fileCount,
+		"workload_count":   counts.workloadCount,
+		"platform_count":   counts.platformCount,
+		"dependency_count": counts.dependencyCount,
 	}
 
 	result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, params)
