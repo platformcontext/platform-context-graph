@@ -621,6 +621,15 @@ func repoDependencyReplayRequests(rows []SharedProjectionIntentRow) []workloadMa
 }
 
 func repoDependencyReplayEntityKey(row SharedProjectionIntentRow) string {
+	if strings.EqualFold(
+		strings.TrimSpace(repoDependencyPayloadString(row, "relationship_type")),
+		"PROVISIONS_DEPENDENCY_FOR",
+	) {
+		if targetRepoID := strings.TrimSpace(repoDependencyPayloadString(row, "target_repo_id")); targetRepoID != "" {
+			return repoDependencyReplayRepoKey(targetRepoID)
+		}
+	}
+
 	repoID := strings.TrimSpace(row.RepositoryID)
 	if repoID == "" {
 		repoID = strings.TrimSpace(repoDependencyPayloadString(row, "repo_id"))
@@ -628,6 +637,16 @@ func repoDependencyReplayEntityKey(row SharedProjectionIntentRow) string {
 	if repoID == "" {
 		repoID = strings.TrimSpace(row.AcceptanceUnitID)
 	}
+	if repoID == "" {
+		return ""
+	}
+	return repoDependencyReplayRepoKey(repoID)
+}
+
+// repoDependencyReplayRepoKey normalizes repository identifiers to the
+// workload-materialization entity-key form used by reducer intents.
+func repoDependencyReplayRepoKey(repoID string) string {
+	repoID = strings.TrimSpace(repoID)
 	if repoID == "" {
 		return ""
 	}

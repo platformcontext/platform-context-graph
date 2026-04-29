@@ -555,6 +555,31 @@ func TestRepoDependencyProjectionRunnerReplaysWorkloadMaterializationForActiveRe
 	}
 }
 
+func TestRepoDependencyReplayRequestsUseTargetForProvisionedDependencies(t *testing.T) {
+	t.Parallel()
+
+	rows := []SharedProjectionIntentRow{
+		{
+			ScopeID:      "git-repository-scope:repository:r_service",
+			GenerationID: "gen-service",
+			RepositoryID: "repository:r_infra",
+			Payload: map[string]any{
+				"repo_id":           "repository:r_infra",
+				"target_repo_id":    "repository:r_service",
+				"relationship_type": "PROVISIONS_DEPENDENCY_FOR",
+			},
+		},
+	}
+
+	requests := repoDependencyReplayRequests(rows)
+	if got, want := len(requests), 1; got != want {
+		t.Fatalf("len(requests) = %d, want %d", got, want)
+	}
+	if got, want := requests[0].entityKey, "repo:r_service"; got != want {
+		t.Fatalf("requests[0].entityKey = %q, want %q", got, want)
+	}
+}
+
 func TestRepoDependencyProjectionRunnerSkipsRetractForFirstProjection(t *testing.T) {
 	t.Parallel()
 
