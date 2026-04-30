@@ -62,6 +62,13 @@ func queryServiceGraphDeploymentEvidence(ctx context.Context, graph GraphQuery, 
 	return queryRepoDeploymentEvidence(ctx, graph, map[string]any{"repo_id": repoID})
 }
 
+func queryServiceGraphAPISurface(ctx context.Context, graph GraphQuery, repoID string) map[string]any {
+	if graph == nil || strings.TrimSpace(repoID) == "" {
+		return nil
+	}
+	return queryRepoAPISurface(ctx, graph, map[string]any{"repo_id": repoID})
+}
+
 func mergeServiceDeploymentEvidence(contentEvidence map[string]any, graphEvidence map[string]any) map[string]any {
 	if len(contentEvidence) == 0 {
 		return graphEvidence

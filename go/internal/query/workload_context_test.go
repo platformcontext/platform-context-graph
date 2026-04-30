@@ -522,6 +522,18 @@ func TestGetServiceContextIncludesGraphDeploymentEvidenceWithoutContent(t *testi
 						"target_repo_name":  "checkout-service",
 					},
 				},
+				"EXPOSES_ENDPOINT]->(endpoint:Endpoint)": {
+					{
+						"endpoint_id":     "endpoint:checkout:health",
+						"path":            "/health",
+						"methods":         []any{"get"},
+						"source_kinds":    []any{"framework:express"},
+						"source_paths":    []any{"src/server.ts"},
+						"evidence_source": "workload_materialization",
+						"workload_id":     "workload:checkout-service",
+						"workload_name":   "checkout-service",
+					},
+				},
 			},
 		},
 	}
@@ -557,6 +569,17 @@ func TestGetServiceContextIncludesGraphDeploymentEvidenceWithoutContent(t *testi
 		if !containsStringAny(evidence["artifact_families"].([]any), want) {
 			t.Fatalf("artifact_families missing %q: %#v", want, evidence["artifact_families"])
 		}
+	}
+
+	apiSurface, ok := resp["api_surface"].(map[string]any)
+	if !ok {
+		t.Fatalf("api_surface type = %T, want map[string]any", resp["api_surface"])
+	}
+	if got, want := apiSurface["truth_basis"], "graph"; got != want {
+		t.Fatalf("api_surface.truth_basis = %#v, want %#v", got, want)
+	}
+	if got, want := apiSurface["endpoint_count"], float64(1); got != want {
+		t.Fatalf("api_surface.endpoint_count = %#v, want %#v", got, want)
 	}
 }
 

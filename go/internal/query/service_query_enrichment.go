@@ -38,6 +38,9 @@ func enrichServiceQueryContextWithOptions(
 
 	repoID := safeStr(workloadContext, "repo_id")
 	serviceName := safeStr(workloadContext, "name")
+	if graphAPISurface := queryServiceGraphAPISurface(ctx, graph, repoID); len(graphAPISurface) > 0 {
+		workloadContext["api_surface"] = graphAPISurface
+	}
 	if graphEvidence := queryServiceGraphDeploymentEvidence(ctx, graph, repoID); len(graphEvidence) > 0 {
 		workloadContext["deployment_evidence"] = graphEvidence
 	}
@@ -76,7 +79,7 @@ func enrichServiceQueryContextWithOptions(
 		workloadContext["observed_config_environments"] = observedEnvironments
 	}
 
-	if apiSurface := buildServiceAPISurface(evidence); len(apiSurface) > 0 {
+	if apiSurface := buildServiceAPISurface(evidence); len(apiSurface) > 0 && len(mapValue(workloadContext, "api_surface")) == 0 {
 		workloadContext["api_surface"] = apiSurface
 	}
 	if networkPaths := buildServiceNetworkPaths(workloadContext, mapSliceValue(workloadContext, "entrypoints")); len(networkPaths) > 0 {
