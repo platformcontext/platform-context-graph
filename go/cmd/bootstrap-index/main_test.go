@@ -378,6 +378,7 @@ func TestDrainProjectorConcurrentMultipleItems(t *testing.T) {
 	err := drainProjector(
 		context.Background(),
 		ws, &fakeFactStore{}, &fakeProjectionRunner{}, sink,
+		nil, 0,
 		4, nil, nil, nil,
 	)
 	if err != nil {
@@ -402,6 +403,7 @@ func TestDrainProjectorSequentialFallback(t *testing.T) {
 	err := drainProjector(
 		context.Background(),
 		ws, &fakeFactStore{}, &fakeProjectionRunner{}, sink,
+		nil, 0,
 		1, nil, nil, nil,
 	)
 	if err != nil {
@@ -429,6 +431,7 @@ func TestDrainProjectorErrorCancelsWorkers(t *testing.T) {
 	err := drainProjector(
 		context.Background(),
 		ws, &fakeFactStore{}, runner, &concurrentWorkSink{},
+		nil, 0,
 		4, nil, nil, nil,
 	)
 	if err == nil {
@@ -886,6 +889,58 @@ func TestPipelinedBootstrapWaitsForProjectorDrainBeforeReopen(t *testing.T) {
 	}
 }
 
+func TestPipelinedBootstrapHeartbeatsLongProjectorWork(t *testing.T) {
+	t.Parallel()
+
+	heartbeater := &recordingProjectorHeartbeater{}
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- runPipelined(
+			context.Background(),
+			collectorDeps{source: &fakeSource{generations: nil}, committer: &fakeCommitter{}},
+			projectorDeps{
+				workSource: &concurrentWorkSource{
+					items: []projector.ScopeGenerationWork{{
+						Scope:      scope.IngestionScope{ScopeID: "scope-long"},
+						Generation: scope.ScopeGeneration{GenerationID: "generation-long"},
+					}},
+				},
+				factStore:         &fakeFactStore{},
+				runner:            &blockingProjectionRunner{started: started, release: release},
+				workSink:          &concurrentWorkSink{},
+				heartbeater:       heartbeater,
+				heartbeatInterval: time.Millisecond,
+			},
+			1,
+			nil,
+			nil,
+			nil,
+		)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("projection did not start")
+	}
+	if !heartbeater.waitForHeartbeats(1, time.Second) {
+		t.Fatalf("heartbeat count = %d, want at least 1 before projection completes", heartbeater.count())
+	}
+	close(release)
+
+	select {
+	case err := <-errc:
+		if err != nil {
+			t.Fatalf("runPipelined() error = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runPipelined() did not return")
+	}
+}
+
 // --- additional fakes for pipelined tests ---
 
 type slowSource struct {
@@ -984,6 +1039,51 @@ func (d *delayedProjectionRunner) Project(
 	case <-time.After(d.delay):
 	}
 	return projector.Result{}, nil
+}
+
+type blockingProjectionRunner struct {
+	started chan<- struct{}
+	release <-chan struct{}
+	once    sync.Once
+}
+
+func (r *blockingProjectionRunner) Project(
+	ctx context.Context,
+	_ scope.IngestionScope,
+	_ scope.ScopeGeneration,
+	_ []facts.Envelope,
+) (projector.Result, error) {
+	r.once.Do(func() { close(r.started) })
+	select {
+	case <-ctx.Done():
+		return projector.Result{}, ctx.Err()
+	case <-r.release:
+		return projector.Result{}, nil
+	}
+}
+
+type recordingProjectorHeartbeater struct {
+	countValue atomic.Int64
+}
+
+func (r *recordingProjectorHeartbeater) Heartbeat(context.Context, projector.ScopeGenerationWork) error {
+	r.countValue.Add(1)
+	return nil
+}
+
+func (r *recordingProjectorHeartbeater) count() int64 {
+	return r.countValue.Load()
+}
+
+func (r *recordingProjectorHeartbeater) waitForHeartbeats(want int64, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if r.count() >= want {
+			return true
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return r.count() >= want
 }
 
 type noopCanonicalWriter struct{}

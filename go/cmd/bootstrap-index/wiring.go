@@ -112,11 +112,29 @@ func buildBootstrapProjector(
 	}
 
 	return projectorDeps{
-		workSource: projectorQueue,
-		factStore:  postgres.NewFactStore(instrumentedDB),
-		runner:     runtime,
-		workSink:   projectorQueue,
+		workSource:        projectorQueue,
+		factStore:         postgres.NewFactStore(instrumentedDB),
+		runner:            runtime,
+		workSink:          projectorQueue,
+		heartbeater:       projectorQueue,
+		heartbeatInterval: bootstrapProjectorHeartbeatInterval(projectorQueue.LeaseDuration),
 	}, nil
+}
+
+// bootstrapProjectorHeartbeatInterval renews leases well before expiry while
+// avoiding excessive wakeups for long lease durations.
+func bootstrapProjectorHeartbeatInterval(leaseDuration time.Duration) time.Duration {
+	if leaseDuration <= 0 {
+		return time.Minute
+	}
+	interval := leaseDuration / 3
+	if interval <= 0 {
+		return time.Second
+	}
+	if interval > time.Minute {
+		return time.Minute
+	}
+	return interval
 }
 
 // neo4jBatchSize reads PCG_NEO4J_BATCH_SIZE from the environment.

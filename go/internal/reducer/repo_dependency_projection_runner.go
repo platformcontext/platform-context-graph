@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -159,9 +160,11 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 	defer func() {
 		_ = r.LeaseManager.ReleasePartitionLease(ctx, DomainRepoDependency, 0, 1, r.Config.leaseOwner())
 	}()
+	workCtx, stopHeartbeat := r.startLeaseHeartbeat(ctx)
+	defer stopHeartbeat()
 
 	selectionStart := time.Now()
-	acceptanceUnitID, err := r.selectAcceptanceUnitWork(ctx)
+	acceptanceUnitID, err := r.selectAcceptanceUnitWork(workCtx)
 	result.SelectionDurationSeconds = time.Since(selectionStart).Seconds()
 	if err != nil {
 		result.LeaseAcquired = true
@@ -173,7 +176,7 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 	}
 
 	loadAllStart := time.Now()
-	rows, err := r.loadAllAcceptanceUnitIntents(ctx, acceptanceUnitID)
+	rows, err := r.loadAllAcceptanceUnitIntents(workCtx, acceptanceUnitID)
 	result.LoadAllDurationSeconds = time.Since(loadAllStart).Seconds()
 	if err != nil {
 		result.LeaseAcquired = true
@@ -184,7 +187,7 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 	lookup := r.AcceptedGen
 	if r.AcceptedGenPrefetch != nil {
 		prefetchStart := time.Now()
-		resolvedLookup, err := r.AcceptedGenPrefetch(ctx, rows)
+		resolvedLookup, err := r.AcceptedGenPrefetch(workCtx, rows)
 		result.AcceptancePrefetchDurationSeconds = time.Since(prefetchStart).Seconds()
 		if err != nil {
 			result.LeaseAcquired = true
@@ -207,7 +210,7 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 	if len(active) > 0 {
 		if repoDependencyNeedsRetract(rows, staleIDs) {
 			retractStart := time.Now()
-			retractedRows, err := r.retractRepo(ctx, active)
+			retractedRows, err := r.retractRepo(workCtx, active)
 			result.RetractDurationSeconds = time.Since(retractStart).Seconds()
 			if err != nil {
 				return result, err
@@ -215,7 +218,7 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 			result.RetractedRows = retractedRows
 		}
 		writeStart := time.Now()
-		writtenRows, writtenGroups, err = r.writeActiveRows(ctx, active)
+		writtenRows, writtenGroups, err = r.writeActiveRows(workCtx, active)
 		result.WriteDurationSeconds = time.Since(writeStart).Seconds()
 		if err != nil {
 			return result, err
@@ -223,7 +226,7 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 		result.UpsertedRows = writtenRows
 		if r.WorkloadMaterializationReplayer != nil {
 			replayStart := time.Now()
-			replayRequests, err := r.replayWorkloadMaterialization(ctx, active)
+			replayRequests, err := r.replayWorkloadMaterialization(workCtx, active)
 			result.ReplayDurationSeconds = time.Since(replayStart).Seconds()
 			result.ReplayRequests = replayRequests
 			if err != nil {
@@ -239,7 +242,7 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 	}
 	if len(processedIDs) > 0 {
 		markCompletedStart := time.Now()
-		if err := r.IntentReader.MarkIntentsCompleted(ctx, processedIDs, now); err != nil {
+		if err := r.IntentReader.MarkIntentsCompleted(workCtx, processedIDs, now); err != nil {
 			return result, fmt.Errorf("mark repo dependency intents completed: %w", err)
 		}
 		result.MarkCompletedDurationSeconds = time.Since(markCompletedStart).Seconds()
@@ -250,6 +253,75 @@ func (r *RepoDependencyProjectionRunner) processOnce(ctx context.Context, now ti
 		r.recordRepoDependencyCycle(ctx, acceptanceUnitID, active, writtenRows, writtenGroups, cycleStart, result)
 	}
 	return result, nil
+}
+
+// startLeaseHeartbeat renews the source-repo lane lease while graph writes are
+// in flight so slow backend calls cannot make active work appear abandoned.
+func (r *RepoDependencyProjectionRunner) startLeaseHeartbeat(ctx context.Context) (context.Context, func()) {
+	interval := repoDependencyLeaseHeartbeatInterval(r.Config.leaseTTL())
+	if interval <= 0 {
+		return ctx, func() {}
+	}
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				return
+			case <-done:
+				return
+			case <-ticker.C:
+				claimed, err := r.LeaseManager.ClaimPartitionLease(
+					heartbeatCtx,
+					DomainRepoDependency,
+					0,
+					1,
+					r.Config.leaseOwner(),
+					r.Config.leaseTTL(),
+				)
+				if err != nil || !claimed {
+					if r.Logger != nil {
+						attrs := []any{
+							slog.String(telemetry.LogKeyDomain, DomainRepoDependency),
+							telemetry.PhaseAttr(telemetry.PhaseReduction),
+						}
+						if err != nil {
+							attrs = append(attrs, slog.String("error", err.Error()))
+						}
+						r.Logger.WarnContext(heartbeatCtx, "repo dependency lease heartbeat failed", attrs...)
+					}
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return heartbeatCtx, func() {
+		once.Do(func() {
+			close(done)
+			cancel()
+		})
+	}
+}
+
+// repoDependencyLeaseHeartbeatInterval renews before the lease reaches its
+// deadline while capping idle wakeups for unusually long lease settings.
+func repoDependencyLeaseHeartbeatInterval(leaseTTL time.Duration) time.Duration {
+	if leaseTTL <= 0 {
+		return 0
+	}
+	interval := leaseTTL / 3
+	if interval <= 0 {
+		return leaseTTL
+	}
+	if interval > time.Minute {
+		return time.Minute
+	}
+	return interval
 }
 
 func repoDependencyNeedsRetract(rows []SharedProjectionIntentRow, staleIDs []string) bool {

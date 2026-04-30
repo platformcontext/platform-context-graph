@@ -50,10 +50,12 @@ type collectorDeps struct {
 }
 
 type projectorDeps struct {
-	workSource projector.ProjectorWorkSource
-	factStore  projector.FactStore
-	runner     projector.ProjectionRunner
-	workSink   projector.ProjectorWorkSink
+	workSource        projector.ProjectorWorkSource
+	factStore         projector.FactStore
+	runner            projector.ProjectionRunner
+	workSink          projector.ProjectorWorkSink
+	heartbeater       projector.ProjectorWorkHeartbeater
+	heartbeatInterval time.Duration
 }
 
 type openBootstrapDBFn func(context.Context, func(string) string) (bootstrapDB, error)
@@ -307,7 +309,7 @@ func drainProjectorPipelined(
 		pollInterval:  pollInterval,
 	}
 
-	return drainProjector(ctx, dws, pd.factStore, pd.runner, pd.workSink, workers, tracer, instruments, logger)
+	return drainProjector(ctx, dws, pd.factStore, pd.runner, pd.workSink, pd.heartbeater, pd.heartbeatInterval, workers, tracer, instruments, logger)
 }
 
 // drainingWorkSource wraps a ProjectorWorkSource to add drain-then-exit
@@ -538,13 +540,15 @@ func drainProjector(
 	factStore projector.FactStore,
 	runner projector.ProjectionRunner,
 	workSink projector.ProjectorWorkSink,
+	heartbeater projector.ProjectorWorkHeartbeater,
+	heartbeatInterval time.Duration,
 	workers int,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 	logger *slog.Logger,
 ) error {
 	if workers <= 1 {
-		return drainProjectorSequential(ctx, workSource, factStore, runner, workSink, tracer, instruments, logger)
+		return drainProjectorSequential(ctx, workSource, factStore, runner, workSink, heartbeater, heartbeatInterval, tracer, instruments, logger)
 	}
 
 	overallStart := time.Now()
@@ -570,6 +574,7 @@ func drainProjector(
 
 				if err := drainProjectorWorkItem(
 					ctx, workSource, factStore, runner, workSink,
+					heartbeater, heartbeatInterval,
 					workerID, &completed, tracer, instruments, logger,
 				); err != nil {
 					if errors.Is(err, errProjectorDrained) {
@@ -610,6 +615,8 @@ func drainProjectorWorkItem(
 	factStore projector.FactStore,
 	runner projector.ProjectionRunner,
 	workSink projector.ProjectorWorkSink,
+	heartbeater projector.ProjectorWorkHeartbeater,
+	heartbeatInterval time.Duration,
 	workerID int,
 	completed *atomic.Int64,
 	tracer trace.Tracer,
@@ -645,18 +652,40 @@ func drainProjectorWorkItem(
 		)
 	}
 
+	heartbeatCtx, stopHeartbeat := startBootstrapProjectorHeartbeat(
+		itemCtx,
+		work,
+		heartbeater,
+		heartbeatInterval,
+		workerID,
+		logger,
+	)
+	defer func() {
+		_ = stopHeartbeat()
+	}()
+
 	// Load facts
-	factsForGeneration, loadErr := factStore.LoadFacts(itemCtx, work)
+	factsForGeneration, loadErr := factStore.LoadFacts(heartbeatCtx, work)
 	if loadErr != nil {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+			loadErr = errors.Join(loadErr, heartbeatErr)
+		}
 		recordBootstrapProjectionResult(itemCtx, work, workerID, itemStart, "failed", 0, loadErr, span, instruments, logger)
 		return fmt.Errorf("bootstrap projector load facts (worker %d): %w", workerID, loadErr)
 	}
 
 	// Project
-	result, projectErr := runner.Project(itemCtx, work.Scope, work.Generation, factsForGeneration)
+	result, projectErr := runner.Project(heartbeatCtx, work.Scope, work.Generation, factsForGeneration)
 	if projectErr != nil {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+			projectErr = errors.Join(projectErr, heartbeatErr)
+		}
 		recordBootstrapProjectionResult(itemCtx, work, workerID, itemStart, "failed", len(factsForGeneration), projectErr, span, instruments, logger)
 		return fmt.Errorf("bootstrap projector project (worker %d): %w", workerID, projectErr)
+	}
+	if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+		recordBootstrapProjectionResult(itemCtx, work, workerID, itemStart, "failed", len(factsForGeneration), heartbeatErr, span, instruments, logger)
+		return fmt.Errorf("bootstrap projector heartbeat (worker %d): %w", workerID, heartbeatErr)
 	}
 
 	// Ack
@@ -668,6 +697,69 @@ func drainProjectorWorkItem(
 	completed.Add(1)
 	recordBootstrapProjectionResult(itemCtx, work, workerID, itemStart, "succeeded", len(factsForGeneration), nil, span, instruments, logger)
 	return nil
+}
+
+type bootstrapProjectorHeartbeatStop func() error
+
+// startBootstrapProjectorHeartbeat renews bootstrap projector leases during
+// long source-local graph writes so a still-running worker is not re-claimed.
+func startBootstrapProjectorHeartbeat(
+	ctx context.Context,
+	work projector.ScopeGenerationWork,
+	heartbeater projector.ProjectorWorkHeartbeater,
+	interval time.Duration,
+	workerID int,
+	logger *slog.Logger,
+) (context.Context, bootstrapProjectorHeartbeatStop) {
+	if heartbeater == nil || interval <= 0 {
+		return ctx, func() error { return nil }
+	}
+
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		var heartbeatErr error
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				done <- heartbeatErr
+				return
+			case <-ticker.C:
+				if err := heartbeater.Heartbeat(heartbeatCtx, work); err != nil {
+					heartbeatErr = fmt.Errorf("heartbeat bootstrap projector work: %w", err)
+					if logger != nil {
+						scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
+						logAttrs := make([]any, 0, len(scopeAttrs)+5)
+						for _, attr := range scopeAttrs {
+							logAttrs = append(logAttrs, attr)
+						}
+						logAttrs = append(logAttrs,
+							slog.Int("worker_id", workerID),
+							slog.Duration("heartbeat_interval", interval),
+							telemetry.PhaseAttr(telemetry.PhaseProjection),
+							telemetry.FailureClassAttr("lease_heartbeat_failure"),
+							slog.String("error", heartbeatErr.Error()),
+						)
+						logger.ErrorContext(heartbeatCtx, "bootstrap projector lease heartbeat failed", logAttrs...)
+					}
+					cancel()
+				}
+			}
+		}
+	}()
+
+	var once sync.Once
+	return heartbeatCtx, func() error {
+		var heartbeatErr error
+		once.Do(func() {
+			cancel()
+			heartbeatErr = <-done
+		})
+		return heartbeatErr
+	}
 }
 
 // recordBootstrapProjectionResult records metrics and logs for a single
@@ -738,6 +830,8 @@ func drainProjectorSequential(
 	factStore projector.FactStore,
 	runner projector.ProjectionRunner,
 	workSink projector.ProjectorWorkSink,
+	heartbeater projector.ProjectorWorkHeartbeater,
+	heartbeatInterval time.Duration,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 	logger *slog.Logger,
@@ -747,6 +841,7 @@ func drainProjectorSequential(
 	for {
 		err := drainProjectorWorkItem(
 			ctx, workSource, factStore, runner, workSink,
+			heartbeater, heartbeatInterval,
 			0, &completed, tracer, instruments, logger,
 		)
 		if err != nil {

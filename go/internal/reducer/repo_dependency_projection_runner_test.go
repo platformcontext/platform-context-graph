@@ -217,6 +217,87 @@ func TestRepoDependencyProjectionRunnerProcessesSourceRepoOwnedAcceptance(t *tes
 	}
 }
 
+func TestRepoDependencyProjectionRunnerHeartbeatsLongGraphWrite(t *testing.T) {
+	now := time.Date(2026, time.April, 30, 14, 45, 0, 0, time.UTC)
+	repoID := "repository:r_repo_a"
+	releaseWrite := make(chan struct{})
+	heartbeatObserved := make(chan struct{})
+	var heartbeatOnce sync.Once
+	reader := &fakeRepoDependencyIntentStore{
+		pendingByDomain: []SharedProjectionIntentRow{
+			repoDependencyIntentRow(
+				"active-1", "scope-a", repoID, repoID, "run-1", "gen-1", now,
+				map[string]any{
+					"repo_id":           repoID,
+					"target_repo_id":    "repository:r_target",
+					"relationship_type": "DEPLOYS_FROM",
+					"evidence_source":   crossRepoEvidenceSource,
+				},
+			),
+		},
+		pendingByAcceptanceUnit: map[string][]SharedProjectionIntentRow{
+			repoID: {
+				repoDependencyIntentRow(
+					"active-1", "scope-a", repoID, repoID, "run-1", "gen-1", now,
+					map[string]any{
+						"repo_id":           repoID,
+						"target_repo_id":    "repository:r_target",
+						"relationship_type": "DEPLOYS_FROM",
+						"evidence_source":   crossRepoEvidenceSource,
+					},
+				),
+			},
+		},
+		leaseGranted: true,
+		leaseClaimHook: func(claims int) {
+			if claims >= 2 {
+				heartbeatOnce.Do(func() { close(heartbeatObserved) })
+			}
+		},
+	}
+	writer := &blockingCodeCallProjectionEdgeWriter{release: releaseWrite}
+	runner := RepoDependencyProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: reader,
+		EdgeWriter:   writer,
+		AcceptedGen:  acceptedGenerationFixed("gen-1", true),
+		Config:       RepoDependencyProjectionRunnerConfig{LeaseTTL: 30 * time.Millisecond},
+	}
+
+	resultCh := make(chan struct {
+		result PartitionProcessResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := runner.processOnce(context.Background(), now)
+		resultCh <- struct {
+			result PartitionProcessResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	select {
+	case <-heartbeatObserved:
+	case <-time.After(time.Second):
+		t.Fatal("repo dependency runner did not heartbeat while graph write was blocked")
+	}
+	close(releaseWrite)
+	select {
+	case got := <-resultCh:
+		if got.err != nil {
+			t.Fatalf("processOnce() error = %v", got.err)
+		}
+		if got.result.ProcessedIntents != 1 {
+			t.Fatalf("ProcessedIntents = %d, want 1", got.result.ProcessedIntents)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("processOnce() did not return after graph write was released")
+	}
+	if got := reader.claimCount(); got < 2 {
+		t.Fatalf("lease claims = %d, want initial claim plus heartbeat", got)
+	}
+}
+
 func TestRepoDependencyProjectionRunnerRetractsPerEvidenceSourceAndSkipsRetractRowsOnWrite(t *testing.T) {
 	t.Parallel()
 
@@ -749,6 +830,7 @@ type fakeRepoDependencyIntentStore struct {
 	marked                    []string
 	leaseGranted              bool
 	leaseClaims               int
+	leaseClaimHook            func(int)
 	domainLimitRequests       []int
 	acceptanceLimitRequests   []int
 	acceptanceUnitRequests    []string
@@ -810,13 +892,25 @@ func (f *fakeRepoDependencyIntentStore) MarkIntentsCompleted(_ context.Context, 
 
 func (f *fakeRepoDependencyIntentStore) ClaimPartitionLease(_ context.Context, _ string, _, _ int, _ string, _ time.Duration) (bool, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.leaseClaims++
-	return f.leaseGranted, nil
+	claims := f.leaseClaims
+	leaseGranted := f.leaseGranted
+	hook := f.leaseClaimHook
+	f.mu.Unlock()
+	if hook != nil {
+		hook(claims)
+	}
+	return leaseGranted, nil
 }
 
 func (f *fakeRepoDependencyIntentStore) ReleasePartitionLease(_ context.Context, _ string, _, _ int, _ string) error {
 	return nil
+}
+
+func (f *fakeRepoDependencyIntentStore) claimCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.leaseClaims
 }
 
 func truncatePendingRows(rows []SharedProjectionIntentRow, limit int) []SharedProjectionIntentRow {
