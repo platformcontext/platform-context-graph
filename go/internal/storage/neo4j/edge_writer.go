@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/metric"
@@ -279,6 +280,7 @@ func buildRowMap(
 			if evidenceType := payloadString(row.Payload, "evidence_type"); evidenceType != "" {
 				rowMap["evidence_type"] = evidenceType
 			}
+			copyRepoRelationshipMetadata(rowMap, row.Payload, row.GenerationID)
 			return batchCanonicalRepoDependencyUpsertCypher, rowMap, true
 		}
 		rowMap := map[string]any{
@@ -290,6 +292,7 @@ func buildRowMap(
 		if evidenceType := payloadString(row.Payload, "evidence_type"); evidenceType != "" {
 			rowMap["evidence_type"] = evidenceType
 		}
+		copyRepoRelationshipMetadata(rowMap, row.Payload, row.GenerationID)
 		cypher, ok := batchCanonicalTypedRepoRelationshipUpsertCypher(relationshipType)
 		if !ok {
 			return "", nil, false
@@ -466,4 +469,82 @@ func payloadString(payload map[string]any, key string) string {
 		return ""
 	}
 	return s
+}
+
+// copyRepoRelationshipMetadata preserves durable evidence pointers on graph
+// edge writes while keeping the full evidence payload in Postgres.
+func copyRepoRelationshipMetadata(rowMap map[string]any, payload map[string]any, rowGenerationID string) {
+	rowMap["resolved_id"] = payloadString(payload, "resolved_id")
+	generationID := payloadString(payload, "generation_id")
+	if generationID == "" {
+		generationID = rowGenerationID
+	}
+	rowMap["generation_id"] = generationID
+	rowMap["evidence_count"] = payloadInt(payload, "evidence_count")
+	rowMap["evidence_kinds"] = payloadStringSlice(payload, "evidence_kinds")
+	rowMap["resolution_source"] = payloadString(payload, "resolution_source")
+	rowMap["confidence"] = repoRelationshipConfidence(payloadFloat(payload, "confidence"))
+	rowMap["rationale"] = payloadString(payload, "rationale")
+}
+
+// payloadInt accepts numeric shapes produced by Go maps, JSON decoding, and
+// database drivers.
+func payloadInt(payload map[string]any, key string) int {
+	if payload == nil {
+		return 0
+	}
+	switch value := payload[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
+}
+
+// payloadFloat accepts numeric shapes produced by Go maps, JSON decoding, and
+// database drivers.
+func payloadFloat(payload map[string]any, key string) float64 {
+	if payload == nil {
+		return 0
+	}
+	switch value := payload[key].(type) {
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	default:
+		return 0
+	}
+}
+
+// payloadStringSlice normalizes evidence-kind arrays before passing them to
+// graph drivers.
+func payloadStringSlice(payload map[string]any, key string) []string {
+	if payload == nil {
+		return nil
+	}
+	switch value := payload[key].(type) {
+	case []string:
+		return value
+	case []any:
+		out := make([]string, 0, len(value))
+		for _, item := range value {
+			text := strings.TrimSpace(fmt.Sprint(item))
+			if text == "" || text == "<nil>" {
+				continue
+			}
+			out = append(out, text)
+		}
+		return out
+	default:
+		return nil
+	}
 }

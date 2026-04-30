@@ -23,6 +23,7 @@ func buildRepositoryRelationshipOverview(relationships []map[string]any) map[str
 		if evidenceType != "" {
 			row["evidence_type"] = evidenceType
 		}
+		copyRelationshipEvidenceMetadata(row, relationship)
 		rows = append(rows, row)
 	}
 
@@ -68,6 +69,29 @@ func buildRepositoryRelationshipOverview(relationships []map[string]any) map[str
 	}
 
 	return overview
+}
+
+// copyRelationshipEvidenceMetadata keeps graph-edge evidence pointers visible
+// on query responses without embedding full Postgres evidence details.
+func copyRelationshipEvidenceMetadata(dst map[string]any, src map[string]any) {
+	if resolvedID := StringVal(src, "resolved_id"); resolvedID != "" {
+		dst["resolved_id"] = resolvedID
+	}
+	if generationID := StringVal(src, "generation_id"); generationID != "" {
+		dst["generation_id"] = generationID
+	}
+	if evidenceCount := IntVal(src, "evidence_count"); evidenceCount > 0 {
+		dst["evidence_count"] = evidenceCount
+	}
+	if evidenceKinds := StringSliceVal(src, "evidence_kinds"); len(evidenceKinds) > 0 {
+		dst["evidence_kinds"] = evidenceKinds
+	}
+	if resolutionSource := StringVal(src, "resolution_source"); resolutionSource != "" {
+		dst["resolution_source"] = resolutionSource
+	}
+	if rationale := StringVal(src, "rationale"); rationale != "" {
+		dst["rationale"] = rationale
+	}
 }
 
 func buildRepositoryRelationshipStory(overview map[string]any) string {

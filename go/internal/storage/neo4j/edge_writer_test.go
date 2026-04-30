@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,10 @@ func TestEdgeWriterWriteEdgesRepoDependencyDispatch(t *testing.T) {
 				"repo_id":        "repo-a",
 				"target_repo_id": "repo-b",
 				"evidence_type":  "docker_compose_depends_on",
+				"resolved_id":    "resolved-depends-on-1",
+				"generation_id":  "gen-1",
+				"evidence_count": 2,
+				"evidence_kinds": []string{"DOCKER_COMPOSE_DEPENDS_ON"},
 			},
 		},
 	}
@@ -92,6 +97,18 @@ func TestEdgeWriterWriteEdgesRepoDependencyDispatch(t *testing.T) {
 	}
 	if got, want := rowsOut[0]["evidence_type"], "docker_compose_depends_on"; got != want {
 		t.Fatalf("row evidence_type = %v, want %v", got, want)
+	}
+	if got, want := rowsOut[0]["resolved_id"], "resolved-depends-on-1"; got != want {
+		t.Fatalf("row resolved_id = %v, want %v", got, want)
+	}
+	if got, want := rowsOut[0]["generation_id"], "gen-1"; got != want {
+		t.Fatalf("row generation_id = %v, want %v", got, want)
+	}
+	if got, want := rowsOut[0]["evidence_count"], 2; got != want {
+		t.Fatalf("row evidence_count = %v, want %v", got, want)
+	}
+	if got, want := rowsOut[0]["evidence_kinds"], []string{"DOCKER_COMPOSE_DEPENDS_ON"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("row evidence_kinds = %#v, want %#v", got, want)
 	}
 }
 

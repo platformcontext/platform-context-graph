@@ -1,6 +1,7 @@
 package neo4j
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -100,6 +101,13 @@ func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
 		TargetRepoID:     "repo-b",
 		RelationshipType: "DEPLOYS_FROM",
 		EvidenceType:     "argocd_application_source",
+		ResolvedID:       "resolved-1",
+		GenerationID:     "gen-1",
+		EvidenceCount:    3,
+		EvidenceKinds:    []string{"ARGOCD_APPLICATION_SOURCE", "HELM_VALUES_REFERENCE"},
+		ResolutionSource: "inferred",
+		Confidence:       0.93,
+		Rationale:        "deployment config references service repository",
 	}, "resolver/cross-repo")
 
 	if stmt.Operation != OperationCanonicalUpsert {
@@ -125,6 +133,34 @@ func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
 	}
 	if !strings.Contains(stmt.Cypher, "rel.evidence_type = $evidence_type") {
 		t.Fatalf("Cypher missing evidence_type write: %s", stmt.Cypher)
+	}
+	for _, fragment := range []string{
+		"rel.resolved_id = $resolved_id",
+		"rel.generation_id = $generation_id",
+		"rel.evidence_count = $evidence_count",
+		"rel.evidence_kinds = $evidence_kinds",
+		"rel.resolution_source = $resolution_source",
+		"rel.rationale = $rationale",
+		"rel.confidence = $confidence",
+	} {
+		if !strings.Contains(stmt.Cypher, fragment) {
+			t.Fatalf("Cypher missing evidence metadata write %q: %s", fragment, stmt.Cypher)
+		}
+	}
+	for key, want := range map[string]any{
+		"resolved_id":       "resolved-1",
+		"generation_id":     "gen-1",
+		"evidence_count":    3,
+		"resolution_source": "inferred",
+		"confidence":        0.93,
+		"rationale":         "deployment config references service repository",
+	} {
+		if got := stmt.Parameters[key]; got != want {
+			t.Fatalf("%s = %#v, want %#v", key, got, want)
+		}
+	}
+	if got, want := stmt.Parameters["evidence_kinds"], []string{"ARGOCD_APPLICATION_SOURCE", "HELM_VALUES_REFERENCE"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("evidence_kinds = %#v, want %#v", got, want)
 	}
 }
 

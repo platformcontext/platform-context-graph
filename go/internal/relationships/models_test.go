@@ -43,6 +43,30 @@ func TestEntityIdentity(t *testing.T) {
 	}
 }
 
+func TestResolvedRelationshipIDIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	relationship := ResolvedRelationship{
+		SourceEntityID:   "repo-service",
+		TargetEntityID:   "repo-config",
+		RelationshipType: RelDeploysFrom,
+	}
+
+	got := ResolvedRelationshipID("gen-1", relationship, 3)
+	if got == "" {
+		t.Fatal("ResolvedRelationshipID() = empty, want stable id")
+	}
+	if again := ResolvedRelationshipID("gen-1", relationship, 3); again != got {
+		t.Fatalf("ResolvedRelationshipID() = %q then %q, want deterministic value", got, again)
+	}
+	if changed := ResolvedRelationshipID("gen-2", relationship, 3); changed == got {
+		t.Fatalf("ResolvedRelationshipID() did not include generation: %q", changed)
+	}
+	if changed := ResolvedRelationshipID("gen-1", relationship, 4); changed == got {
+		t.Fatalf("ResolvedRelationshipID() did not include ordinal: %q", changed)
+	}
+}
+
 func TestEvidenceKindConstants(t *testing.T) {
 	t.Parallel()
 

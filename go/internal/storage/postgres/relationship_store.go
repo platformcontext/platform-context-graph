@@ -293,10 +293,7 @@ func (s *RelationshipStore) UpsertResolved(
 	}
 
 	for i, r := range resolved {
-		resolvedID := relationshipDigest("resolved", generationID,
-			r.SourceEntityID, r.TargetEntityID,
-			string(r.RelationshipType), fmt.Sprintf("%d", i),
-		)
+		resolvedID := relationships.ResolvedRelationshipID(generationID, r, i)
 		detailsJSON, err := json.Marshal(r.Details)
 		if err != nil {
 			return fmt.Errorf("marshal resolved details: %w", err)

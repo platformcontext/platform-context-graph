@@ -83,11 +83,17 @@ SET rel.confidence = 0.98,
 const canonicalRepoDependencyUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
 MERGE (target_repo:Repository {id: $target_repo_id})
 MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = $confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = $evidence_source,
     rel.evidence_type = $evidence_type,
-    rel.relationship_type = 'DEPENDS_ON'`
+    rel.relationship_type = 'DEPENDS_ON',
+    rel.resolved_id = $resolved_id,
+    rel.generation_id = $generation_id,
+    rel.evidence_count = $evidence_count,
+    rel.evidence_kinds = $evidence_kinds,
+    rel.resolution_source = $resolution_source,
+    rel.rationale = $rationale`
 
 const canonicalWorkloadDependencyUpsertCypher = `MATCH (source:Workload {id: $workload_id})
 MATCH (target:Workload {id: $target_workload_id})
@@ -142,11 +148,17 @@ const batchCanonicalRepoDependencyUpsertCypher = `UNWIND $rows AS row
 MERGE (source_repo:Repository {id: row.repo_id})
 MERGE (target_repo:Repository {id: row.target_repo_id})
 MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = row.confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = row.evidence_source,
     rel.evidence_type = row.evidence_type,
-    rel.relationship_type = 'DEPENDS_ON'`
+    rel.relationship_type = 'DEPENDS_ON',
+    rel.resolved_id = row.resolved_id,
+    rel.generation_id = row.generation_id,
+    rel.evidence_count = row.evidence_count,
+    rel.evidence_kinds = row.evidence_kinds,
+    rel.resolution_source = row.resolution_source,
+    rel.rationale = row.rationale`
 
 const batchCanonicalWorkloadDependencyUpsertCypher = `UNWIND $rows AS row
 MATCH (source:Workload {id: row.workload_id})
@@ -342,9 +354,16 @@ type CanonicalDeploymentSourceParams struct {
 // CanonicalRepoDependencyParams holds the parameters for a Repository
 // DEPENDS_ON edge upsert.
 type CanonicalRepoDependencyParams struct {
-	RepoID       string
-	TargetRepoID string
-	EvidenceType string
+	RepoID           string
+	TargetRepoID     string
+	EvidenceType     string
+	ResolvedID       string
+	GenerationID     string
+	EvidenceCount    int
+	EvidenceKinds    []string
+	ResolutionSource string
+	Confidence       float64
+	Rationale        string
 }
 
 // CanonicalWorkloadDependencyParams holds the parameters for a Workload
@@ -459,10 +478,17 @@ func BuildCanonicalRepoDependencyUpsert(p CanonicalRepoDependencyParams, evidenc
 		Operation: OperationCanonicalUpsert,
 		Cypher:    canonicalRepoDependencyUpsertCypher,
 		Parameters: map[string]any{
-			"repo_id":         p.RepoID,
-			"target_repo_id":  p.TargetRepoID,
-			"evidence_type":   p.EvidenceType,
-			"evidence_source": evidenceSource,
+			"repo_id":           p.RepoID,
+			"target_repo_id":    p.TargetRepoID,
+			"evidence_type":     p.EvidenceType,
+			"evidence_source":   evidenceSource,
+			"resolved_id":       p.ResolvedID,
+			"generation_id":     p.GenerationID,
+			"evidence_count":    p.EvidenceCount,
+			"evidence_kinds":    p.EvidenceKinds,
+			"resolution_source": p.ResolutionSource,
+			"confidence":        repoRelationshipConfidence(p.Confidence),
+			"rationale":         p.Rationale,
 		},
 	}
 }

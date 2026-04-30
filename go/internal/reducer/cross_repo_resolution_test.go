@@ -626,6 +626,21 @@ func TestCrossRepoResolutionPreservesGitHubActionsTypedRelationships(t *testing.
 		if got := stringValue(row.Payload["target_repo_id"]); got != "repo-automation" {
 			t.Fatalf("row target_repo_id = %q, want %q", got, "repo-automation")
 		}
+		if got := stringValue(row.Payload["generation_id"]); got != "gen-gha" {
+			t.Fatalf("row generation_id = %q, want %q", got, "gen-gha")
+		}
+		if got := stringValue(row.Payload["resolved_id"]); got == "" {
+			t.Fatalf("row missing resolved_id: %#v", row.Payload)
+		}
+		if got := stringValue(row.Payload["resolution_source"]); got != string(relationships.ResolutionSourceInferred) {
+			t.Fatalf("row resolution_source = %q, want %q", got, relationships.ResolutionSourceInferred)
+		}
+		if got := intValue(row.Payload["evidence_count"]); got != 1 {
+			t.Fatalf("row evidence_count = %d, want 1", got)
+		}
+		if got := stringSliceValue(row.Payload["evidence_kinds"]); len(got) != 1 {
+			t.Fatalf("row evidence_kinds = %#v, want one kind", got)
+		}
 	}
 	for _, want := range []string{string(relationships.RelDeploysFrom), string(relationships.RelDiscoversConfigIn)} {
 		if _, ok := gotTypes[want]; !ok {
@@ -670,5 +685,35 @@ func TestCrossRepoResolutionDeduplicatesEvidence(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("Resolve() = %d, want 1 (deduped)", count)
+	}
+}
+
+func intValue(v any) int {
+	switch value := v.(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
+}
+
+func stringSliceValue(v any) []string {
+	switch value := v.(type) {
+	case []string:
+		return value
+	case []any:
+		out := make([]string, 0, len(value))
+		for _, item := range value {
+			if str, ok := item.(string); ok {
+				out = append(out, str)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }

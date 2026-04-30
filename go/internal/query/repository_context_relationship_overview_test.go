@@ -31,10 +31,16 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 			runByMatch: map[string][]map[string]any{
 				"RETURN type(rel) AS type": {
 					{
-						"type":          "DEPLOYS_FROM",
-						"target_name":   "infra-configs",
-						"target_id":     "repo-2",
-						"evidence_type": "argocd_application_source",
+						"type":              "DEPLOYS_FROM",
+						"target_name":       "infra-configs",
+						"target_id":         "repo-2",
+						"evidence_type":     "argocd_application_source",
+						"resolved_id":       "resolved-1",
+						"generation_id":     "gen-1",
+						"evidence_count":    int64(3),
+						"evidence_kinds":    []any{"ARGOCD_APPLICATION_SOURCE", "HELM_VALUES_REFERENCE"},
+						"resolution_source": "inferred",
+						"rationale":         "deployment config references service repository",
 					},
 					{
 						"type":          "DEPLOYS_FROM",
@@ -96,6 +102,33 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 
 	if got, want := overview["relationship_count"], float64(5); got != want {
 		t.Fatalf("relationship_overview.relationship_count = %#v, want %#v", got, want)
+	}
+
+	relationships, ok := resp["relationships"].([]any)
+	if !ok {
+		t.Fatalf("relationships type = %T, want []any", resp["relationships"])
+	}
+	firstRelationship, ok := relationships[0].(map[string]any)
+	if !ok {
+		t.Fatalf("relationships[0] type = %T, want map[string]any", relationships[0])
+	}
+	for key, want := range map[string]any{
+		"resolved_id":       "resolved-1",
+		"generation_id":     "gen-1",
+		"evidence_count":    float64(3),
+		"resolution_source": "inferred",
+		"rationale":         "deployment config references service repository",
+	} {
+		if got := firstRelationship[key]; got != want {
+			t.Fatalf("relationships[0].%s = %#v, want %#v", key, got, want)
+		}
+	}
+	evidenceKinds, ok := firstRelationship["evidence_kinds"].([]any)
+	if !ok {
+		t.Fatalf("relationships[0].evidence_kinds type = %T, want []any", firstRelationship["evidence_kinds"])
+	}
+	if !containsStringAny(evidenceKinds, "ARGOCD_APPLICATION_SOURCE") {
+		t.Fatalf("relationships[0].evidence_kinds = %#v, want ARGOCD_APPLICATION_SOURCE", evidenceKinds)
 	}
 
 	controllerDriven, ok := overview["controller_driven"].([]any)

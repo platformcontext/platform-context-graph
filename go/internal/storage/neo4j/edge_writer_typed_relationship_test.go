@@ -2,6 +2,7 @@ package neo4j
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -23,6 +24,13 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 				"target_repo_id":    "repo-b",
 				"relationship_type": "DEPLOYS_FROM",
 				"evidence_type":     "argocd_application_source",
+				"resolved_id":       "resolved-1",
+				"generation_id":     "gen-1",
+				"evidence_count":    3,
+				"evidence_kinds":    []string{"ARGOCD_APPLICATION_SOURCE", "HELM_VALUES_REFERENCE"},
+				"resolution_source": "inferred",
+				"confidence":        0.93,
+				"rationale":         "deployment config references service repository",
 			},
 		},
 		{
@@ -92,6 +100,24 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 		}
 		if rowsOut[0]["evidence_type"] == nil || rowsOut[0]["evidence_type"] == "" {
 			t.Fatalf("row missing evidence_type: %#v", rowsOut[0])
+		}
+		if relType == "DEPLOYS_FROM" {
+			for key, want := range map[string]any{
+				"resolved_id":       "resolved-1",
+				"generation_id":     "gen-1",
+				"evidence_count":    3,
+				"resolution_source": "inferred",
+				"confidence":        0.93,
+				"rationale":         "deployment config references service repository",
+			} {
+				if got := rowsOut[0][key]; got != want {
+					t.Fatalf("row %s = %#v, want %#v", key, got, want)
+				}
+			}
+			wantKinds := []string{"ARGOCD_APPLICATION_SOURCE", "HELM_VALUES_REFERENCE"}
+			if got := rowsOut[0]["evidence_kinds"]; !reflect.DeepEqual(got, wantKinds) {
+				t.Fatalf("row evidence_kinds = %#v, want %#v", got, wantKinds)
+			}
 		}
 		seen[relType] = true
 	}

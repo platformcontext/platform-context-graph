@@ -7,6 +7,13 @@ type CanonicalRepoRelationshipParams struct {
 	TargetRepoID     string
 	RelationshipType string
 	EvidenceType     string
+	ResolvedID       string
+	GenerationID     string
+	EvidenceCount    int
+	EvidenceKinds    []string
+	ResolutionSource string
+	Confidence       float64
+	Rationale        string
 }
 
 // CanonicalRunsOnParams holds the parameters for a repository-scoped RUNS_ON
@@ -21,120 +28,198 @@ MERGE (source_repo:Repository {id: row.repo_id})
 MERGE (target_repo:Repository {id: row.target_repo_id})
 FOREACH (_ IN CASE WHEN row.relationship_type = 'DEPLOYS_FROM' THEN [1] ELSE [] END |
     MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)
-    SET rel.confidence = 0.9,
+    SET rel.confidence = row.confidence,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
         rel.evidence_type = row.evidence_type,
-        rel.relationship_type = row.relationship_type
+        rel.relationship_type = row.relationship_type,
+        rel.resolved_id = row.resolved_id,
+        rel.generation_id = row.generation_id,
+        rel.evidence_count = row.evidence_count,
+        rel.evidence_kinds = row.evidence_kinds,
+        rel.resolution_source = row.resolution_source,
+        rel.rationale = row.rationale
 )
 FOREACH (_ IN CASE WHEN row.relationship_type = 'DISCOVERS_CONFIG_IN' THEN [1] ELSE [] END |
     MERGE (source_repo)-[rel:DISCOVERS_CONFIG_IN]->(target_repo)
-    SET rel.confidence = 0.9,
+    SET rel.confidence = row.confidence,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
         rel.evidence_type = row.evidence_type,
-        rel.relationship_type = row.relationship_type
+        rel.relationship_type = row.relationship_type,
+        rel.resolved_id = row.resolved_id,
+        rel.generation_id = row.generation_id,
+        rel.evidence_count = row.evidence_count,
+        rel.evidence_kinds = row.evidence_kinds,
+        rel.resolution_source = row.resolution_source,
+        rel.rationale = row.rationale
 )
 FOREACH (_ IN CASE WHEN row.relationship_type = 'PROVISIONS_DEPENDENCY_FOR' THEN [1] ELSE [] END |
     MERGE (source_repo)-[rel:PROVISIONS_DEPENDENCY_FOR]->(target_repo)
-    SET rel.confidence = 0.9,
+    SET rel.confidence = row.confidence,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
         rel.evidence_type = row.evidence_type,
-        rel.relationship_type = row.relationship_type
+        rel.relationship_type = row.relationship_type,
+        rel.resolved_id = row.resolved_id,
+        rel.generation_id = row.generation_id,
+        rel.evidence_count = row.evidence_count,
+        rel.evidence_kinds = row.evidence_kinds,
+        rel.resolution_source = row.resolution_source,
+        rel.rationale = row.rationale
 )
 FOREACH (_ IN CASE WHEN row.relationship_type = 'USES_MODULE' THEN [1] ELSE [] END |
     MERGE (source_repo)-[rel:USES_MODULE]->(target_repo)
-    SET rel.confidence = 0.9,
+    SET rel.confidence = row.confidence,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
         rel.evidence_type = row.evidence_type,
-        rel.relationship_type = row.relationship_type
+        rel.relationship_type = row.relationship_type,
+        rel.resolved_id = row.resolved_id,
+        rel.generation_id = row.generation_id,
+        rel.evidence_count = row.evidence_count,
+        rel.evidence_kinds = row.evidence_kinds,
+        rel.resolution_source = row.resolution_source,
+        rel.rationale = row.rationale
 )
 FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type = '' OR row.relationship_type = 'DEPENDS_ON' THEN [1] ELSE [] END |
     MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)
-    SET rel.confidence = 0.9,
+    SET rel.confidence = row.confidence,
         rel.reason = 'Runtime services list declares repository dependency',
         rel.evidence_source = row.evidence_source,
         rel.evidence_type = row.evidence_type,
-    rel.relationship_type = row.relationship_type
+        rel.relationship_type = row.relationship_type,
+        rel.resolved_id = row.resolved_id,
+        rel.generation_id = row.generation_id,
+        rel.evidence_count = row.evidence_count,
+        rel.evidence_kinds = row.evidence_kinds,
+        rel.resolution_source = row.resolution_source,
+        rel.rationale = row.rationale
 )`
 
 const canonicalDeploysFromRepoRelationshipUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
 MERGE (target_repo:Repository {id: $target_repo_id})
 MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = $confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = $evidence_source,
     rel.evidence_type = $evidence_type,
-    rel.relationship_type = 'DEPLOYS_FROM'`
+    rel.relationship_type = 'DEPLOYS_FROM',
+    rel.resolved_id = $resolved_id,
+    rel.generation_id = $generation_id,
+    rel.evidence_count = $evidence_count,
+    rel.evidence_kinds = $evidence_kinds,
+    rel.resolution_source = $resolution_source,
+    rel.rationale = $rationale`
 
 const canonicalDiscoversConfigInRepoRelationshipUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
 MERGE (target_repo:Repository {id: $target_repo_id})
 MERGE (source_repo)-[rel:DISCOVERS_CONFIG_IN]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = $confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = $evidence_source,
     rel.evidence_type = $evidence_type,
-    rel.relationship_type = 'DISCOVERS_CONFIG_IN'`
+    rel.relationship_type = 'DISCOVERS_CONFIG_IN',
+    rel.resolved_id = $resolved_id,
+    rel.generation_id = $generation_id,
+    rel.evidence_count = $evidence_count,
+    rel.evidence_kinds = $evidence_kinds,
+    rel.resolution_source = $resolution_source,
+    rel.rationale = $rationale`
 
 const canonicalProvisionsDependencyForRepoRelationshipUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
 MERGE (target_repo:Repository {id: $target_repo_id})
 MERGE (source_repo)-[rel:PROVISIONS_DEPENDENCY_FOR]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = $confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = $evidence_source,
     rel.evidence_type = $evidence_type,
-    rel.relationship_type = 'PROVISIONS_DEPENDENCY_FOR'`
+    rel.relationship_type = 'PROVISIONS_DEPENDENCY_FOR',
+    rel.resolved_id = $resolved_id,
+    rel.generation_id = $generation_id,
+    rel.evidence_count = $evidence_count,
+    rel.evidence_kinds = $evidence_kinds,
+    rel.resolution_source = $resolution_source,
+    rel.rationale = $rationale`
 
 const canonicalUsesModuleRepoRelationshipUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
 MERGE (target_repo:Repository {id: $target_repo_id})
 MERGE (source_repo)-[rel:USES_MODULE]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = $confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = $evidence_source,
     rel.evidence_type = $evidence_type,
-    rel.relationship_type = 'USES_MODULE'`
+    rel.relationship_type = 'USES_MODULE',
+    rel.resolved_id = $resolved_id,
+    rel.generation_id = $generation_id,
+    rel.evidence_count = $evidence_count,
+    rel.evidence_kinds = $evidence_kinds,
+    rel.resolution_source = $resolution_source,
+    rel.rationale = $rationale`
 
 const batchCanonicalDeploysFromRepoRelationshipUpsertCypher = `UNWIND $rows AS row
 MERGE (source_repo:Repository {id: row.repo_id})
 MERGE (target_repo:Repository {id: row.target_repo_id})
 MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = row.confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = row.evidence_source,
     rel.evidence_type = row.evidence_type,
-    rel.relationship_type = 'DEPLOYS_FROM'`
+    rel.relationship_type = 'DEPLOYS_FROM',
+    rel.resolved_id = row.resolved_id,
+    rel.generation_id = row.generation_id,
+    rel.evidence_count = row.evidence_count,
+    rel.evidence_kinds = row.evidence_kinds,
+    rel.resolution_source = row.resolution_source,
+    rel.rationale = row.rationale`
 
 const batchCanonicalDiscoversConfigInRepoRelationshipUpsertCypher = `UNWIND $rows AS row
 MERGE (source_repo:Repository {id: row.repo_id})
 MERGE (target_repo:Repository {id: row.target_repo_id})
 MERGE (source_repo)-[rel:DISCOVERS_CONFIG_IN]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = row.confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = row.evidence_source,
     rel.evidence_type = row.evidence_type,
-    rel.relationship_type = 'DISCOVERS_CONFIG_IN'`
+    rel.relationship_type = 'DISCOVERS_CONFIG_IN',
+    rel.resolved_id = row.resolved_id,
+    rel.generation_id = row.generation_id,
+    rel.evidence_count = row.evidence_count,
+    rel.evidence_kinds = row.evidence_kinds,
+    rel.resolution_source = row.resolution_source,
+    rel.rationale = row.rationale`
 
 const batchCanonicalProvisionsDependencyForRepoRelationshipUpsertCypher = `UNWIND $rows AS row
 MERGE (source_repo:Repository {id: row.repo_id})
 MERGE (target_repo:Repository {id: row.target_repo_id})
 MERGE (source_repo)-[rel:PROVISIONS_DEPENDENCY_FOR]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = row.confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = row.evidence_source,
     rel.evidence_type = row.evidence_type,
-    rel.relationship_type = 'PROVISIONS_DEPENDENCY_FOR'`
+    rel.relationship_type = 'PROVISIONS_DEPENDENCY_FOR',
+    rel.resolved_id = row.resolved_id,
+    rel.generation_id = row.generation_id,
+    rel.evidence_count = row.evidence_count,
+    rel.evidence_kinds = row.evidence_kinds,
+    rel.resolution_source = row.resolution_source,
+    rel.rationale = row.rationale`
 
 const batchCanonicalUsesModuleRepoRelationshipUpsertCypher = `UNWIND $rows AS row
 MERGE (source_repo:Repository {id: row.repo_id})
 MERGE (target_repo:Repository {id: row.target_repo_id})
 MERGE (source_repo)-[rel:USES_MODULE]->(target_repo)
-SET rel.confidence = 0.9,
+SET rel.confidence = row.confidence,
     rel.reason = 'Runtime services list declares repository dependency',
     rel.evidence_source = row.evidence_source,
     rel.evidence_type = row.evidence_type,
-    rel.relationship_type = 'USES_MODULE'`
+    rel.relationship_type = 'USES_MODULE',
+    rel.resolved_id = row.resolved_id,
+    rel.generation_id = row.generation_id,
+    rel.evidence_count = row.evidence_count,
+    rel.evidence_kinds = row.evidence_kinds,
+    rel.resolution_source = row.resolution_source,
+    rel.rationale = row.rationale`
 
 const canonicalRunsOnUpsertCypher = `UNWIND $rows AS row
 MATCH (repo:Repository {id: row.repo_id})
@@ -168,8 +253,22 @@ func BuildCanonicalRepoRelationshipUpsert(p CanonicalRepoRelationshipParams, evi
 			"relationship_type": p.RelationshipType,
 			"evidence_type":     p.EvidenceType,
 			"evidence_source":   evidenceSource,
+			"resolved_id":       p.ResolvedID,
+			"generation_id":     p.GenerationID,
+			"evidence_count":    p.EvidenceCount,
+			"evidence_kinds":    p.EvidenceKinds,
+			"resolution_source": p.ResolutionSource,
+			"confidence":        repoRelationshipConfidence(p.Confidence),
+			"rationale":         p.Rationale,
 		},
 	}
+}
+
+func repoRelationshipConfidence(value float64) float64 {
+	if value <= 0 {
+		return 0.9
+	}
+	return value
 }
 
 func canonicalTypedRepoRelationshipUpsertCypher(relationshipType string) string {

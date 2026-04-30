@@ -253,7 +253,13 @@ func queryRepoDependencies(ctx context.Context, reader GraphQuery, params map[st
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(target:Repository)
 		RETURN type(rel) AS type, target.name AS target_name,
-		       target.id AS target_id, rel.evidence_type AS evidence_type
+		       target.id AS target_id, rel.evidence_type AS evidence_type,
+		       rel.resolved_id AS resolved_id,
+		       rel.generation_id AS generation_id,
+		       rel.evidence_count AS evidence_count,
+		       rel.evidence_kinds AS evidence_kinds,
+		       rel.resolution_source AS resolution_source,
+		       rel.rationale AS rationale
 		ORDER BY type, target_name
 	`, params)
 	if err != nil || len(rows) == 0 {
@@ -270,6 +276,7 @@ func queryRepoDependencies(ctx context.Context, reader GraphQuery, params map[st
 		if evidenceType := StringVal(row, "evidence_type"); evidenceType != "" {
 			entry["evidence_type"] = evidenceType
 		}
+		copyRelationshipEvidenceMetadata(entry, row)
 		result = append(result, entry)
 	}
 	return result
