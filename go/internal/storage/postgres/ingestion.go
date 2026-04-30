@@ -466,21 +466,21 @@ func (s IngestionStore) BackfillAllRelationshipEvidence(
 	)
 
 	var totalEvidence int64
-	evidenceByTargetRepo := make(map[string][]relationships.EvidenceFact)
+	evidenceBySourceRepo := make(map[string][]relationships.EvidenceFact)
 	for _, fact := range discoveredEvidence {
-		if strings.TrimSpace(fact.TargetRepoID) == "" {
+		if strings.TrimSpace(fact.SourceRepoID) == "" || strings.TrimSpace(fact.TargetRepoID) == "" {
 			continue
 		}
-		evidenceByTargetRepo[fact.TargetRepoID] = append(evidenceByTargetRepo[fact.TargetRepoID], fact)
+		evidenceBySourceRepo[fact.SourceRepoID] = append(evidenceBySourceRepo[fact.SourceRepoID], fact)
 		totalEvidence++
 	}
 
 	relationshipStore := NewRelationshipStore(s.db)
-	for repoID, repoEvidence := range evidenceByTargetRepo {
+	for repoID, repoEvidence := range evidenceBySourceRepo {
 		repoGeneration, ok := repoGenerations[repoID]
 		if !ok {
 			log.Printf(
-				"relationship_backfill_deferred_target_skipped=true target_repo_id=%q reason=%q",
+				"relationship_backfill_deferred_source_skipped=true source_repo_id=%q reason=%q",
 				repoID,
 				"missing_active_generation",
 			)
