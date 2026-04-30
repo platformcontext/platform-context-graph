@@ -163,6 +163,83 @@ func TestFetchServiceTraceContextAcceptsQualifiedWorkloadID(t *testing.T) {
 	}
 }
 
+func TestFetchServiceTraceContextIncludesGraphDeploymentEvidenceWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	ctx, err := fetchServiceTraceContext(
+		t.Context(),
+		fakeWorkloadGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"w.name = $service_name OR w.id = $service_name": {
+					"id":        "workload:checkout-service",
+					"name":      "checkout-service",
+					"kind":      "service",
+					"repo_id":   "repo-service",
+					"repo_name": "checkout-service",
+					"instances": []any{},
+				},
+			},
+			runByMatch: map[string][]map[string]any{
+				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {},
+				"K8sResource OR":                      {},
+				"fn.name IN":                          {},
+				"EVIDENCES_REPOSITORY_RELATIONSHIP]->(r:Repository": {
+					{
+						"direction":         "incoming",
+						"artifact_id":       "evidence-artifact:kustomize:1",
+						"name":              "apps/checkout/kustomization.yaml",
+						"domain":            "deployment",
+						"path":              "apps/checkout/kustomization.yaml",
+						"evidence_kind":     "KUSTOMIZE_RESOURCE_REFERENCE",
+						"artifact_family":   "kustomize",
+						"extractor":         "kustomize",
+						"relationship_type": "DEPLOYS_FROM",
+						"resolved_id":       "resolved-kustomize",
+						"generation_id":     "gen-deploy",
+						"confidence":        0.9,
+						"environment":       "prod",
+						"matched_alias":     "checkout-service",
+						"matched_value":     "checkout-service",
+						"evidence_source":   "resolver/cross-repo",
+						"source_repo_id":    "repo-deploy",
+						"source_repo_name":  "deployment-configs",
+						"target_repo_id":    "repo-service",
+						"target_repo_name":  "checkout-service",
+					},
+				},
+				"(r:Repository {id: $repo_id})-[source_rel:HAS_DEPLOYMENT_EVIDENCE]->": {},
+			},
+		},
+		nil,
+		"checkout-service",
+		traceEnrichmentOptions(traceDeploymentChainRequest{ServiceName: "checkout-service"}),
+	)
+	if err != nil {
+		t.Fatalf("fetchServiceTraceContext() error = %v, want nil", err)
+	}
+
+	evidence := mapValue(ctx, "deployment_evidence")
+	if len(evidence) == 0 {
+		t.Fatal("deployment_evidence = nil, want graph-backed deployment evidence")
+	}
+	if got, want := evidence["truth_basis"], "graph"; got != want {
+		t.Fatalf("deployment_evidence.truth_basis = %#v, want %#v", got, want)
+	}
+	if got, want := evidence["artifact_count"], 1; got != want {
+		t.Fatalf("deployment_evidence.artifact_count = %#v, want %#v", got, want)
+	}
+
+	response := buildDeploymentTraceResponse("checkout-service", ctx)
+	traceEvidence := mapValue(response, "deployment_evidence")
+	if got, want := traceEvidence["artifact_count"], 1; got != want {
+		t.Fatalf("trace deployment_evidence.artifact_count = %#v, want %#v", got, want)
+	}
+	deploymentOverview := mapValue(response, "deployment_overview")
+	if !slices.Contains(stringSliceValue(deploymentOverview, "deployment_tool_families"), "kustomize") {
+		t.Fatalf("deployment_overview.deployment_tool_families = %#v, want kustomize", deploymentOverview["deployment_tool_families"])
+	}
+}
+
 func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	t.Parallel()
 

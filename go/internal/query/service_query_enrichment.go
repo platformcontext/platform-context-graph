@@ -32,13 +32,16 @@ func enrichServiceQueryContextWithOptions(
 	opts serviceQueryEnrichmentOptions,
 ) error {
 	delete(workloadContext, "entry_points")
-	if len(workloadContext) == 0 || content == nil {
+	if len(workloadContext) == 0 {
 		return nil
 	}
 
 	repoID := safeStr(workloadContext, "repo_id")
 	serviceName := safeStr(workloadContext, "name")
-	if repoID == "" || serviceName == "" {
+	if graphEvidence := queryServiceGraphDeploymentEvidence(ctx, graph, repoID); len(graphEvidence) > 0 {
+		workloadContext["deployment_evidence"] = graphEvidence
+	}
+	if repoID == "" || serviceName == "" || content == nil {
 		return nil
 	}
 
@@ -120,6 +123,9 @@ func enrichServiceQueryContextWithOptions(
 		return fmt.Errorf("load service deployment evidence: %w", err)
 	}
 	if len(deploymentEvidence) > 0 {
+		if graphEvidence := mapValue(workloadContext, "deployment_evidence"); len(graphEvidence) > 0 {
+			deploymentEvidence = mergeServiceDeploymentEvidence(deploymentEvidence, graphEvidence)
+		}
 		workloadContext["deployment_evidence"] = deploymentEvidence
 	}
 	if supportOverview := buildServiceSupportOverview(workloadContext); len(supportOverview) > 0 {
@@ -197,8 +203,11 @@ func buildServiceDeploymentOverview(workloadContext map[string]any) map[string]a
 		overview["provisioning_source_chain_count"] = len(provisioningChains)
 	}
 	if deploymentEvidence := mapValue(workloadContext, "deployment_evidence"); len(deploymentEvidence) > 0 {
-		if toolFamilies := stringSliceValue(deploymentEvidence, "tool_families"); len(toolFamilies) > 0 {
+		if toolFamilies := serviceDeploymentToolFamilies(deploymentEvidence); len(toolFamilies) > 0 {
 			overview["deployment_tool_families"] = toolFamilies
+		}
+		if artifactCount := IntVal(deploymentEvidence, "artifact_count"); artifactCount > 0 {
+			overview["deployment_evidence_artifact_count"] = artifactCount
 		}
 		if deliveryPaths := mapSliceValue(deploymentEvidence, "delivery_paths"); len(deliveryPaths) > 0 {
 			overview["delivery_path_count"] = len(deliveryPaths)
@@ -269,16 +278,28 @@ func buildServiceStorySections(workloadContext map[string]any) []map[string]any 
 		})
 	}
 	if deploymentEvidence := mapValue(workloadContext, "deployment_evidence"); len(deploymentEvidence) > 0 {
+		toolFamilies := serviceDeploymentToolFamilies(deploymentEvidence)
+		deliveryPathCount := len(mapSliceValue(deploymentEvidence, "delivery_paths"))
+		if deliveryPathCount == 0 {
+			deliveryPathCount = IntVal(deploymentEvidence, "artifact_count")
+		}
 		sections = append(sections, map[string]any{
 			"title": "delivery",
 			"summary": fmt.Sprintf(
-				"%d delivery path(s) across tool families %s",
-				len(mapSliceValue(deploymentEvidence, "delivery_paths")),
-				joinOrNone(stringSliceValue(deploymentEvidence, "tool_families")),
+				"%d delivery evidence item(s) across tool families %s",
+				deliveryPathCount,
+				joinOrNone(toolFamilies),
 			),
 		})
 	}
 	return sections
+}
+
+func serviceDeploymentToolFamilies(deploymentEvidence map[string]any) []string {
+	if toolFamilies := stringSliceValue(deploymentEvidence, "tool_families"); len(toolFamilies) > 0 {
+		return toolFamilies
+	}
+	return stringSliceValue(deploymentEvidence, "artifact_families")
 }
 
 func buildServiceDocumentationOverview(
