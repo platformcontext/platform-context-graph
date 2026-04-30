@@ -23,7 +23,7 @@ func extractRelationships(row map[string]any) []map[string]any {
 func extractInstances(row map[string]any) []map[string]any {
 	return extractCollection(row, "instances", func(m map[string]any) (map[string]any, bool) {
 		if instID := StringVal(m, "instance_id"); instID != "" {
-			return map[string]any{
+			instance := map[string]any{
 				"instance_id":                instID,
 				"platform_name":              StringVal(m, "platform_name"),
 				"platform_kind":              StringVal(m, "platform_kind"),
@@ -32,7 +32,18 @@ func extractInstances(row map[string]any) []map[string]any {
 				"materialization_provenance": StringSliceVal(m, "materialization_provenance"),
 				"platform_confidence":        floatVal(m, "platform_confidence"),
 				"platform_reason":            StringVal(m, "platform_reason"),
-			}, true
+			}
+			if platforms := mapSliceValue(m, "platforms"); len(platforms) > 0 {
+				instance["platforms"] = platforms
+			} else if platformName := StringVal(m, "platform_name"); platformName != "" {
+				instance["platforms"] = []map[string]any{{
+					"platform_name":       platformName,
+					"platform_kind":       StringVal(m, "platform_kind"),
+					"platform_confidence": floatVal(m, "platform_confidence"),
+					"platform_reason":     StringVal(m, "platform_reason"),
+				}}
+			}
+			return instance, true
 		}
 		return nil, false
 	})
@@ -101,10 +112,12 @@ func buildWorkloadStory(ctx map[string]any) string {
 	}
 	story += " It is deployed as " + instCount + ":"
 	for _, inst := range instances {
-		env, platform, platformKind := safeStr(inst, "environment"), safeStr(inst, "platform_name"), safeStr(inst, "platform_kind")
-		story += " " + env + " on " + platform
-		if platformKind != "" {
-			story += " (" + platformKind + ")"
+		env := safeStr(inst, "environment")
+		platforms := platformTargetLabels(platformTargets(inst))
+		if len(platforms) == 0 {
+			story += " " + env
+		} else {
+			story += " " + env + " on " + strings.Join(platforms, ", ")
 		}
 		story += ";"
 	}
@@ -137,4 +150,35 @@ func safeStr(m map[string]any, key string) string {
 		return ""
 	}
 	return v
+}
+
+func platformTargets(instance map[string]any) []map[string]any {
+	platforms := mapSliceValue(instance, "platforms")
+	if len(platforms) > 0 {
+		return platforms
+	}
+	if platformName := StringVal(instance, "platform_name"); platformName != "" {
+		return []map[string]any{{
+			"platform_name":       platformName,
+			"platform_kind":       StringVal(instance, "platform_kind"),
+			"platform_confidence": floatVal(instance, "platform_confidence"),
+			"platform_reason":     StringVal(instance, "platform_reason"),
+		}}
+	}
+	return nil
+}
+
+func platformTargetLabels(platforms []map[string]any) []string {
+	labels := make([]string, 0, len(platforms))
+	for _, platform := range platforms {
+		name := StringVal(platform, "platform_name")
+		if name == "" {
+			continue
+		}
+		if kind := StringVal(platform, "platform_kind"); kind != "" {
+			name += " (" + kind + ")"
+		}
+		labels = append(labels, name)
+	}
+	return labels
 }

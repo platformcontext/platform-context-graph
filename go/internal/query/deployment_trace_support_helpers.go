@@ -546,25 +546,27 @@ func buildDeploymentFacts(
 ) []map[string]any {
 	facts := make([]map[string]any, 0, len(instances)*2+len(deploymentSources))
 	for _, instance := range instances {
-		platform := StringVal(instance, "platform_name")
-		if platform == "" {
-			continue
+		for _, platform := range platformTargets(instance) {
+			platformName := StringVal(platform, "platform_name")
+			if platformName == "" {
+				continue
+			}
+			fact := map[string]any{
+				"type":   "RUNS_ON_PLATFORM",
+				"target": platformName,
+				"confidence": firstPositiveFloat(
+					floatVal(platform, "platform_confidence"),
+					floatVal(instance, "materialization_confidence"),
+				),
+			}
+			if kind := StringVal(platform, "platform_kind"); kind != "" {
+				fact["kind"] = kind
+			}
+			if reason := StringVal(platform, "platform_reason"); reason != "" {
+				fact["reason"] = reason
+			}
+			facts = append(facts, fact)
 		}
-		fact := map[string]any{
-			"type":   "RUNS_ON_PLATFORM",
-			"target": platform,
-			"confidence": firstPositiveFloat(
-				floatVal(instance, "platform_confidence"),
-				floatVal(instance, "materialization_confidence"),
-			),
-		}
-		if kind := StringVal(instance, "platform_kind"); kind != "" {
-			fact["kind"] = kind
-		}
-		if reason := StringVal(instance, "platform_reason"); reason != "" {
-			fact["reason"] = reason
-		}
-		facts = append(facts, fact)
 	}
 	for _, environment := range distinctSortedInstanceField(instances, "environment") {
 		facts = append(facts, map[string]any{

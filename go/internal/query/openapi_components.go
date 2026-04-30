@@ -220,6 +220,7 @@ const openAPIComponents = `  "components": {
                 "instance_id": {"type": "string"},
                 "platform_name": {"type": "string"},
                 "platform_kind": {"type": "string"},
+                "platforms": {"type": "array", "items": {"type": "object"}},
                 "environment": {"type": "string"}
               }
             }

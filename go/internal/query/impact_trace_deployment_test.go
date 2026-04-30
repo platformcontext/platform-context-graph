@@ -423,6 +423,42 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	}
 }
 
+func TestBuildDeploymentFactsIncludesEveryRuntimePlatformTarget(t *testing.T) {
+	t.Parallel()
+
+	facts := buildDeploymentFacts([]map[string]any{
+		{
+			"instance_id":                "instance:sample-service:production",
+			"environment":                "production",
+			"materialization_confidence": 0.92,
+			"platforms": []map[string]any{
+				{
+					"platform_name":       "production-eks",
+					"platform_kind":       "kubernetes",
+					"platform_confidence": 0.95,
+				},
+				{
+					"platform_name":       "production-ecs",
+					"platform_kind":       "ecs",
+					"platform_confidence": 0.91,
+				},
+			},
+		},
+	}, nil)
+
+	targets := map[string]bool{}
+	for _, fact := range facts {
+		if StringVal(fact, "type") == "RUNS_ON_PLATFORM" {
+			targets[StringVal(fact, "target")] = true
+		}
+	}
+	for _, want := range []string{"production-ecs", "production-eks"} {
+		if !targets[want] {
+			t.Fatalf("RUNS_ON_PLATFORM targets = %#v, want %q", targets, want)
+		}
+	}
+}
+
 func TestBuildDeploymentTraceResponseUsesCanonicalServiceNameAndDrilldowns(t *testing.T) {
 	t.Parallel()
 

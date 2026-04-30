@@ -111,6 +111,7 @@ func (h *EntityHandler) fetchWorkloadInstances(ctx context.Context, whereClause 
 			"instance_id":                instanceID,
 			"platform_name":              "",
 			"platform_kind":              "",
+			"platforms":                  []map[string]any{},
 			"environment":                StringVal(row, "environment"),
 			"materialization_confidence": floatVal(row, "materialization_confidence"),
 			"materialization_provenance": StringSliceVal(row, "materialization_provenance"),
@@ -138,13 +139,22 @@ func (h *EntityHandler) fetchWorkloadInstances(ctx context.Context, whereClause 
 	}
 	for _, row := range platformRows {
 		instance := byID[StringVal(row, "instance_id")]
-		if instance == nil || StringVal(instance, "platform_name") != "" {
+		if instance == nil {
 			continue
 		}
-		instance["platform_name"] = StringVal(row, "platform_name")
-		instance["platform_kind"] = StringVal(row, "platform_kind")
-		instance["platform_confidence"] = floatVal(row, "platform_confidence")
-		instance["platform_reason"] = StringVal(row, "platform_reason")
+		platform := map[string]any{
+			"platform_name":       StringVal(row, "platform_name"),
+			"platform_kind":       StringVal(row, "platform_kind"),
+			"platform_confidence": floatVal(row, "platform_confidence"),
+			"platform_reason":     StringVal(row, "platform_reason"),
+		}
+		instance["platforms"] = append(platformTargets(instance), platform)
+		if StringVal(instance, "platform_name") == "" {
+			instance["platform_name"] = platform["platform_name"]
+			instance["platform_kind"] = platform["platform_kind"]
+			instance["platform_confidence"] = platform["platform_confidence"]
+			instance["platform_reason"] = platform["platform_reason"]
+		}
 	}
 
 	return instances, nil

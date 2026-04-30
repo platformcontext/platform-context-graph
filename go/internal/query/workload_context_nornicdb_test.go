@@ -50,6 +50,13 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 							"platform_reason":     "resolved_deployment_evidence",
 						},
 						{
+							"instance_id":         "workload-instance:api-node-datax:bg-prod",
+							"platform_name":       "ecs-prod",
+							"platform_kind":       "ecs",
+							"platform_confidence": 0.91,
+							"platform_reason":     "terraform_service_evidence",
+						},
+						{
 							"instance_id":         "workload-instance:api-node-datax:ops-qa",
 							"platform_name":       "ops-qa",
 							"platform_kind":       "kubernetes",
@@ -110,5 +117,20 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 	}
 	if got, want := instances[0]["platform_name"], "bg-prod"; got != want {
 		t.Fatalf("instances[0].platform_name = %#v, want %#v", got, want)
+	}
+	bgProdPlatforms := mapSliceValue(instances[0], "platforms")
+	if got, want := len(bgProdPlatforms), 2; got != want {
+		t.Fatalf("len(instances[0].platforms) = %d, want %d", got, want)
+	}
+	if got, want := bgProdPlatforms[1]["platform_name"], "ecs-prod"; got != want {
+		t.Fatalf("instances[0].platforms[1].platform_name = %#v, want %#v", got, want)
+	}
+	overview := buildServiceDeploymentOverview(ctx)
+	if got, want := overview["platform_count"], 3; got != want {
+		t.Fatalf("deployment_overview.platform_count = %#v, want %#v", got, want)
+	}
+	story := buildWorkloadStory(ctx)
+	if !strings.Contains(story, "bg-prod on bg-prod (kubernetes), ecs-prod (ecs)") {
+		t.Fatalf("story = %q, want both platform targets for bg-prod", story)
 	}
 }

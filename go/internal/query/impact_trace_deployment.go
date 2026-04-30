@@ -621,6 +621,16 @@ func (h *ImpactHandler) fetchK8sResources(
 func distinctSortedInstanceField(instances []map[string]any, key string) []string {
 	values := make(map[string]struct{}, len(instances))
 	for _, instance := range instances {
+		if key == "platform_name" || key == "platform_kind" {
+			for _, platform := range platformTargets(instance) {
+				value := safeStr(platform, key)
+				if value == "" {
+					continue
+				}
+				values[value] = struct{}{}
+			}
+			continue
+		}
 		value := safeStr(instance, key)
 		if value == "" {
 			continue
