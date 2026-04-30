@@ -139,6 +139,10 @@ func openBootstrapCanonicalWriter(
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) (projector.CanonicalWriter, io.Closer, error) {
+	graphBackend, err := runtimecfg.LoadGraphBackend(getenv)
+	if err != nil {
+		return nil, nil, err
+	}
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err
@@ -147,21 +151,50 @@ func openBootstrapCanonicalWriter(
 	rawExecutor := bootstrapNeo4jExecutor{
 		Driver:       driver,
 		DatabaseName: cfg.DatabaseName,
+		TxTimeout:    bootstrapCanonicalTransactionTimeout(graphBackend, getenv),
+	}
+
+	executor, err := bootstrapCanonicalExecutorForGraphBackend(
+		rawExecutor,
+		graphBackend,
+		getenv,
+		tracer,
+		instruments,
+	)
+	if err != nil {
+		_ = closeBootstrapNeo4jDriver(driver)
+		return nil, nil, err
 	}
 
 	writer := sourceneo4j.NewCanonicalNodeWriter(
-		&sourceneo4j.InstrumentedExecutor{
-			Inner: &sourceneo4j.RetryingExecutor{
-				Inner:       rawExecutor,
-				MaxRetries:  3,
-				Instruments: instruments,
-			},
-			Tracer:      tracer,
-			Instruments: instruments,
-		},
+		executor,
 		neo4jBatchSize(getenv),
 		instruments,
 	)
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		fileBatchSize, err := nornicDBPositiveIntEnv(getenv, nornicDBFileBatchSizeEnv, defaultNornicDBFileBatchSize)
+		if err != nil {
+			_ = closeBootstrapNeo4jDriver(driver)
+			return nil, nil, err
+		}
+		entityBatchSize, err := nornicDBPositiveIntEnv(getenv, nornicDBEntityBatchSizeEnv, defaultNornicDBEntityBatchSize)
+		if err != nil {
+			_ = closeBootstrapNeo4jDriver(driver)
+			return nil, nil, err
+		}
+		labelBatchSizes, err := nornicDBEntityLabelBatchSizes(getenv, entityBatchSize)
+		if err != nil {
+			_ = closeBootstrapNeo4jDriver(driver)
+			return nil, nil, err
+		}
+		writer = writer.
+			WithFileBatchSize(fileBatchSize).
+			WithEntityBatchSize(entityBatchSize).
+			WithEntityContainmentInEntityUpsert()
+		for label, batchSize := range labelBatchSizes {
+			writer = writer.WithEntityLabelBatchSize(label, batchSize)
+		}
+	}
 
 	return writer, bootstrapNeo4jDriverCloser{Driver: driver}, nil
 }
@@ -169,6 +202,7 @@ func openBootstrapCanonicalWriter(
 type bootstrapNeo4jExecutor struct {
 	Driver       neo4jdriver.DriverWithContext
 	DatabaseName string
+	TxTimeout    time.Duration
 }
 
 func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
@@ -198,7 +232,7 @@ func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []source
 			}
 		}
 		return nil, nil
-	})
+	}, e.transactionConfigurers()...)
 	return err
 }
 
@@ -215,12 +249,26 @@ func (e bootstrapNeo4jExecutor) Execute(ctx context.Context, statement sourceneo
 		_ = session.Close(ctx)
 	}()
 
-	result, err := session.Run(ctx, statement.Cypher, statement.Parameters)
+	result, err := session.Run(ctx, statement.Cypher, statement.Parameters, e.transactionConfigurers()...)
 	if err != nil {
 		return err
 	}
 	_, err = result.Consume(ctx)
 	return err
+}
+
+func (e bootstrapNeo4jExecutor) transactionConfigurers() []func(*neo4jdriver.TransactionConfig) {
+	if e.TxTimeout <= 0 {
+		return nil
+	}
+	return []func(*neo4jdriver.TransactionConfig){neo4jdriver.WithTxTimeout(e.TxTimeout)}
+}
+
+func bootstrapCanonicalTransactionTimeout(graphBackend runtimecfg.GraphBackend, getenv func(string) string) time.Duration {
+	if graphBackend != runtimecfg.GraphBackendNornicDB {
+		return 0
+	}
+	return nornicDBCanonicalWriteTimeout(getenv)
 }
 
 type bootstrapNeo4jDriverCloser struct {
