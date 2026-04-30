@@ -8,17 +8,29 @@ import (
 func buildRepositoryRelationshipOverview(relationships []map[string]any) map[string]any {
 	rows := make([]map[string]any, 0, len(relationships))
 	for _, relationship := range relationships {
+		direction := StringVal(relationship, "direction")
 		relType := StringVal(relationship, "type")
+		sourceName := StringVal(relationship, "source_name")
+		sourceID := StringVal(relationship, "source_id")
 		targetName := StringVal(relationship, "target_name")
 		targetID := StringVal(relationship, "target_id")
 		evidenceType := StringVal(relationship, "evidence_type")
-		if relType == "" && targetName == "" && targetID == "" && evidenceType == "" {
+		if relType == "" && sourceName == "" && sourceID == "" && targetName == "" && targetID == "" && evidenceType == "" {
 			continue
 		}
 		row := map[string]any{
 			"type":        relType,
 			"target_name": targetName,
 			"target_id":   targetID,
+		}
+		if direction != "" {
+			row["direction"] = direction
+		}
+		if sourceName != "" {
+			row["source_name"] = sourceName
+		}
+		if sourceID != "" {
+			row["source_id"] = sourceID
 		}
 		if evidenceType != "" {
 			row["evidence_type"] = evidenceType
@@ -32,7 +44,13 @@ func buildRepositoryRelationshipOverview(relationships []map[string]any) map[str
 	}
 
 	slices.SortFunc(rows, func(left, right map[string]any) int {
+		if cmp := strings.Compare(StringVal(left, "direction"), StringVal(right, "direction")); cmp != 0 {
+			return cmp
+		}
 		if cmp := strings.Compare(StringVal(left, "type"), StringVal(right, "type")); cmp != 0 {
+			return cmp
+		}
+		if cmp := strings.Compare(StringVal(left, "source_name"), StringVal(right, "source_name")); cmp != 0 {
 			return cmp
 		}
 		if cmp := strings.Compare(StringVal(left, "target_name"), StringVal(right, "target_name")); cmp != 0 {
@@ -79,6 +97,9 @@ func copyRelationshipEvidenceMetadata(dst map[string]any, src map[string]any) {
 	}
 	if generationID := StringVal(src, "generation_id"); generationID != "" {
 		dst["generation_id"] = generationID
+	}
+	if confidence := relationshipFloatVal(src, "confidence"); confidence > 0 {
+		dst["confidence"] = confidence
 	}
 	if evidenceCount := IntVal(src, "evidence_count"); evidenceCount > 0 {
 		dst["evidence_count"] = evidenceCount
@@ -157,7 +178,10 @@ func excludeRepositoryRelationships(rows []map[string]any, groups ...[]map[strin
 
 func repositoryRelationshipKey(row map[string]any) string {
 	return strings.Join([]string{
+		StringVal(row, "direction"),
 		StringVal(row, "type"),
+		StringVal(row, "source_name"),
+		StringVal(row, "source_id"),
 		StringVal(row, "target_name"),
 		StringVal(row, "target_id"),
 		StringVal(row, "evidence_type"),
@@ -168,13 +192,18 @@ func relationshipSummaries(rows []map[string]any) []string {
 	summaries := make([]string, 0, len(rows))
 	for _, row := range rows {
 		relType := StringVal(row, "type")
+		direction := StringVal(row, "direction")
+		sourceName := StringVal(row, "source_name")
 		targetName := StringVal(row, "target_name")
 		evidenceType := StringVal(row, "evidence_type")
 		parts := make([]string, 0, 3)
+		if direction == "incoming" && sourceName != "" {
+			parts = append(parts, sourceName)
+		}
 		if relType != "" {
 			parts = append(parts, relType)
 		}
-		if targetName != "" {
+		if direction != "incoming" && targetName != "" {
 			parts = append(parts, targetName)
 		}
 		if evidenceType != "" {
@@ -201,6 +230,25 @@ func uniqueRelationshipStrings(rows []map[string]any, key string) []string {
 	}
 	slices.Sort(values)
 	return values
+}
+
+func relationshipFloatVal(row map[string]any, key string) float64 {
+	v, ok := row[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	default:
+		return 0
+	}
 }
 
 var iacEvidenceTypePrefixes = []string{

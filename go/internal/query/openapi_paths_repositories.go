@@ -73,7 +73,21 @@ const openAPIPathsRepositories = `
                     "file_count": {"type": "integer"},
                     "workload_count": {"type": "integer"},
                     "platform_count": {"type": "integer"},
-                    "dependency_count": {"type": "integer"}
+                    "dependency_count": {"type": "integer"},
+                    "relationships": {
+                      "type": "array",
+                      "description": "Outgoing repository relationships.",
+                      "items": {"type": "object"}
+                    },
+                    "relationship_overview": {
+                      "type": "object",
+                      "description": "Incoming and outgoing typed repository relationships with lightweight evidence pointers."
+                    },
+                    "consumers": {
+                      "type": "array",
+                      "description": "Repositories with incoming relationships to this repository.",
+                      "items": {"type": "object"}
+                    }
                   }
                 }
               }

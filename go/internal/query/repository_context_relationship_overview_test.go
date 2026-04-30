@@ -29,6 +29,78 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 				},
 			},
 			runByMatch: map[string][]map[string]any{
+				"RETURN 'outgoing' AS direction": {
+					{
+						"direction":         "outgoing",
+						"type":              "DEPLOYS_FROM",
+						"source_name":       "payments",
+						"source_id":         "repo-1",
+						"target_name":       "infra-configs",
+						"target_id":         "repo-2",
+						"evidence_type":     "argocd_application_source",
+						"resolved_id":       "resolved-1",
+						"generation_id":     "gen-1",
+						"confidence":        0.9,
+						"evidence_count":    int64(3),
+						"evidence_kinds":    []any{"ARGOCD_APPLICATION_SOURCE", "HELM_VALUES_REFERENCE"},
+						"resolution_source": "inferred",
+						"rationale":         "deployment config references service repository",
+					},
+					{
+						"direction":     "outgoing",
+						"type":          "DEPLOYS_FROM",
+						"source_name":   "payments",
+						"source_id":     "repo-1",
+						"target_name":   "ci-workflows",
+						"target_id":     "repo-3",
+						"evidence_type": "github_actions_reusable_workflow_ref",
+					},
+					{
+						"direction":     "outgoing",
+						"type":          "DEPENDS_ON",
+						"source_name":   "payments",
+						"source_id":     "repo-1",
+						"target_name":   "terraform-modules",
+						"target_id":     "repo-4",
+						"evidence_type": "terraform_module_source",
+					},
+					{
+						"direction":     "outgoing",
+						"type":          "DISCOVERS_CONFIG_IN",
+						"source_name":   "payments",
+						"source_id":     "repo-1",
+						"target_name":   "shared-pipelines",
+						"target_id":     "repo-5",
+						"evidence_type": "jenkins_shared_library",
+					},
+					{
+						"direction":     "outgoing",
+						"type":          "DEPENDS_ON",
+						"source_name":   "payments",
+						"source_id":     "repo-1",
+						"target_name":   "ansible-ops",
+						"target_id":     "repo-6",
+						"evidence_type": "ansible_role_reference",
+					},
+				},
+				"RETURN 'incoming' AS direction": {
+					{
+						"direction":         "incoming",
+						"type":              "PROVISIONS_DEPENDENCY_FOR",
+						"source_name":       "terraform-live",
+						"source_id":         "repo-7",
+						"target_name":       "payments",
+						"target_id":         "repo-1",
+						"evidence_type":     "terraform_runtime_service",
+						"resolved_id":       "resolved-incoming-1",
+						"generation_id":     "gen-incoming-1",
+						"confidence":        0.96,
+						"evidence_count":    int64(8),
+						"evidence_kinds":    []any{"TERRAFORM_ECS_SERVICE"},
+						"resolution_source": "inferred",
+						"rationale":         "terraform runtime service references this repository",
+					},
+				},
 				"RETURN type(rel) AS type": {
 					{
 						"type":              "DEPLOYS_FROM",
@@ -37,6 +109,7 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 						"evidence_type":     "argocd_application_source",
 						"resolved_id":       "resolved-1",
 						"generation_id":     "gen-1",
+						"confidence":        0.9,
 						"evidence_count":    int64(3),
 						"evidence_kinds":    []any{"ARGOCD_APPLICATION_SOURCE", "HELM_VALUES_REFERENCE"},
 						"resolution_source": "inferred",
@@ -100,7 +173,7 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 		t.Fatalf("relationship_overview type = %T, want map[string]any", resp["relationship_overview"])
 	}
 
-	if got, want := overview["relationship_count"], float64(5); got != want {
+	if got, want := overview["relationship_count"], float64(6); got != want {
 		t.Fatalf("relationship_overview.relationship_count = %#v, want %#v", got, want)
 	}
 
@@ -115,6 +188,7 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 	for key, want := range map[string]any{
 		"resolved_id":       "resolved-1",
 		"generation_id":     "gen-1",
+		"confidence":        float64(0.9),
 		"evidence_count":    float64(3),
 		"resolution_source": "inferred",
 		"rationale":         "deployment config references service repository",
@@ -129,6 +203,41 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 	}
 	if !containsStringAny(evidenceKinds, "ARGOCD_APPLICATION_SOURCE") {
 		t.Fatalf("relationships[0].evidence_kinds = %#v, want ARGOCD_APPLICATION_SOURCE", evidenceKinds)
+	}
+
+	overviewRows, ok := overview["relationships"].([]any)
+	if !ok {
+		t.Fatalf("relationship_overview.relationships type = %T, want []any", overview["relationships"])
+	}
+	var incoming map[string]any
+	for _, item := range overviewRows {
+		row, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("relationship_overview.relationships item type = %T, want map[string]any", item)
+		}
+		if row["direction"] == "incoming" && row["type"] == "PROVISIONS_DEPENDENCY_FOR" {
+			incoming = row
+			break
+		}
+	}
+	if incoming == nil {
+		t.Fatalf("relationship_overview.relationships missing incoming provisioning relationship: %#v", overviewRows)
+	}
+	for key, want := range map[string]any{
+		"source_name":       "terraform-live",
+		"source_id":         "repo-7",
+		"target_name":       "payments",
+		"target_id":         "repo-1",
+		"resolved_id":       "resolved-incoming-1",
+		"generation_id":     "gen-incoming-1",
+		"confidence":        float64(0.96),
+		"evidence_count":    float64(8),
+		"resolution_source": "inferred",
+		"rationale":         "terraform runtime service references this repository",
+	} {
+		if got := incoming[key]; got != want {
+			t.Fatalf("incoming.%s = %#v, want %#v", key, got, want)
+		}
 	}
 
 	controllerDriven, ok := overview["controller_driven"].([]any)
@@ -171,25 +280,31 @@ func TestGetRepositoryContextIncludesTypedRelationshipOverview(t *testing.T) {
 	if !ok {
 		t.Fatalf("iac_driven type = %T, want []any", overview["iac_driven"])
 	}
-	if len(iacDriven) != 1 {
-		t.Fatalf("len(iac_driven) = %d, want 1", len(iacDriven))
+	if len(iacDriven) != 2 {
+		t.Fatalf("len(iac_driven) = %d, want 2", len(iacDriven))
 	}
-	iacRow, ok := iacDriven[0].(map[string]any)
-	if !ok {
-		t.Fatalf("iac_driven[0] type = %T, want map[string]any", iacDriven[0])
+	iacEvidence := map[string]struct{}{}
+	for index, item := range iacDriven {
+		row, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("iac_driven[%d] type = %T, want map[string]any", index, item)
+		}
+		iacEvidence[StringVal(row, "evidence_type")] = struct{}{}
 	}
-	if got, want := iacRow["evidence_type"], "terraform_module_source"; got != want {
-		t.Fatalf("iac_driven[0].evidence_type = %#v, want %#v", got, want)
+	for _, want := range []string{"terraform_module_source", "terraform_runtime_service"} {
+		if _, ok := iacEvidence[want]; !ok {
+			t.Fatalf("iac_driven missing evidence_type %q", want)
+		}
 	}
 
 	relationshipTypes, ok := overview["relationship_types"].([]any)
 	if !ok {
 		t.Fatalf("relationship_types type = %T, want []any", overview["relationship_types"])
 	}
-	if len(relationshipTypes) != 3 {
-		t.Fatalf("len(relationship_types) = %d, want 3", len(relationshipTypes))
+	if len(relationshipTypes) != 4 {
+		t.Fatalf("len(relationship_types) = %d, want 4", len(relationshipTypes))
 	}
-	for _, want := range []string{"DEPENDS_ON", "DEPLOYS_FROM", "DISCOVERS_CONFIG_IN"} {
+	for _, want := range []string{"DEPENDS_ON", "DEPLOYS_FROM", "DISCOVERS_CONFIG_IN", "PROVISIONS_DEPENDENCY_FOR"} {
 		if !containsStringAny(relationshipTypes, want) {
 			t.Fatalf("relationship_types missing %q", want)
 		}

@@ -165,7 +165,11 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, params)
 	result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, params)
 	result["relationships"] = queryRepoDependencies(ctx, h.Neo4j, params)
-	if relationshipOverview := buildRepositoryRelationshipOverview(result["relationships"].([]map[string]any)); relationshipOverview != nil {
+	relationshipRows := queryRepoRelationshipOverview(ctx, h.Neo4j, params)
+	if len(relationshipRows) == 0 {
+		relationshipRows = result["relationships"].([]map[string]any)
+	}
+	if relationshipOverview := buildRepositoryRelationshipOverview(relationshipRows); relationshipOverview != nil {
 		result["relationship_overview"] = relationshipOverview
 	}
 	result["consumers"] = queryRepoConsumers(ctx, h.Neo4j, params)
@@ -256,6 +260,7 @@ func queryRepoDependencies(ctx context.Context, reader GraphQuery, params map[st
 		       target.id AS target_id, rel.evidence_type AS evidence_type,
 		       rel.resolved_id AS resolved_id,
 		       rel.generation_id AS generation_id,
+		       rel.confidence AS confidence,
 		       rel.evidence_count AS evidence_count,
 		       rel.evidence_kinds AS evidence_kinds,
 		       rel.resolution_source AS resolution_source,
@@ -270,6 +275,74 @@ func queryRepoDependencies(ctx context.Context, reader GraphQuery, params map[st
 	for _, row := range rows {
 		entry := map[string]any{
 			"type":        StringVal(row, "type"),
+			"target_name": StringVal(row, "target_name"),
+			"target_id":   StringVal(row, "target_id"),
+		}
+		if evidenceType := StringVal(row, "evidence_type"); evidenceType != "" {
+			entry["evidence_type"] = evidenceType
+		}
+		copyRelationshipEvidenceMetadata(entry, row)
+		result = append(result, entry)
+	}
+	return result
+}
+
+func queryRepoRelationshipOverview(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
+	outgoing := queryRepoRelationshipOverviewDirection(ctx, reader, params, `
+		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(target:Repository)
+		RETURN 'outgoing' AS direction,
+		       type(rel) AS type,
+		       r.name AS source_name,
+		       r.id AS source_id,
+		       target.name AS target_name,
+		       target.id AS target_id,
+		       rel.evidence_type AS evidence_type,
+		       rel.resolved_id AS resolved_id,
+		       rel.generation_id AS generation_id,
+		       rel.confidence AS confidence,
+		       rel.evidence_count AS evidence_count,
+		       rel.evidence_kinds AS evidence_kinds,
+		       rel.resolution_source AS resolution_source,
+		       rel.rationale AS rationale
+		ORDER BY type, target_name
+	`)
+	incoming := queryRepoRelationshipOverviewDirection(ctx, reader, params, `
+		MATCH (source:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(r:Repository {id: $repo_id})
+		RETURN 'incoming' AS direction,
+		       type(rel) AS type,
+		       source.name AS source_name,
+		       source.id AS source_id,
+		       r.name AS target_name,
+		       r.id AS target_id,
+		       rel.evidence_type AS evidence_type,
+		       rel.resolved_id AS resolved_id,
+		       rel.generation_id AS generation_id,
+		       rel.confidence AS confidence,
+		       rel.evidence_count AS evidence_count,
+		       rel.evidence_kinds AS evidence_kinds,
+		       rel.resolution_source AS resolution_source,
+		       rel.rationale AS rationale
+		ORDER BY type, source_name
+	`)
+	if len(outgoing) == 0 {
+		return incoming
+	}
+	return append(outgoing, incoming...)
+}
+
+func queryRepoRelationshipOverviewDirection(ctx context.Context, reader GraphQuery, params map[string]any, cypher string) []map[string]any {
+	rows, err := reader.Run(ctx, cypher, params)
+	if err != nil || len(rows) == 0 {
+		return make([]map[string]any, 0)
+	}
+
+	result := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		entry := map[string]any{
+			"direction":   StringVal(row, "direction"),
+			"type":        StringVal(row, "type"),
+			"source_name": StringVal(row, "source_name"),
+			"source_id":   StringVal(row, "source_id"),
 			"target_name": StringVal(row, "target_name"),
 			"target_id":   StringVal(row, "target_id"),
 		}

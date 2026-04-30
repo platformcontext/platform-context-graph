@@ -56,6 +56,7 @@ func TestServeOpenAPI(t *testing.T) {
 	expectedPaths := []string{
 		"/health",
 		"/api/v0/repositories",
+		"/api/v0/repositories/{repo_id}/context",
 		"/api/v0/entities/resolve",
 		"/api/v0/code/search",
 		"/api/v0/code/call-chain",
@@ -91,6 +92,22 @@ func TestServeOpenAPI(t *testing.T) {
 	for _, schema := range expectedSchemas {
 		if _, exists := schemas[schema]; !exists {
 			t.Errorf("expected schema %s not found", schema)
+		}
+	}
+
+	repositoryContextPath := mustMapField(t, paths, "/api/v0/repositories/{repo_id}/context")
+	repositoryContextGet := mustMapField(t, repositoryContextPath, "get")
+	repositoryContextResponses := mustMapField(t, repositoryContextGet, "responses")
+	repositoryContextOK := mustMapField(t, repositoryContextResponses, "200")
+	repositoryContextContent := mustMapField(t, mustMapField(t, repositoryContextOK, "content"), "application/json")
+	repositoryContextSchema := mustMapField(t, mustMapField(t, repositoryContextContent, "schema"), "properties")
+	for _, field := range []string{
+		"relationships",
+		"relationship_overview",
+		"consumers",
+	} {
+		if _, ok := repositoryContextSchema[field]; !ok {
+			t.Fatalf("repositories/{repo_id}/context response schema missing %s", field)
 		}
 	}
 }
