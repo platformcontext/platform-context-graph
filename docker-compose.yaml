@@ -182,7 +182,8 @@ services:
     command: ["/usr/local/bin/pcg-api"]
     ports:
       - "${PCG_HTTP_PORT:-8080}:8080"
-      - "${PCG_API_METRICS_PORT:-19464}:9464"
+      # API mounts /metrics on the main HTTP listener.
+      - "${PCG_API_METRICS_PORT:-19464}:8080"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -237,7 +238,8 @@ services:
     command: ["/usr/local/bin/pcg-mcp-server"]
     ports:
       - "${PCG_MCP_PORT:-8081}:8080"
-      - "${PCG_MCP_METRICS_PORT:-19468}:9464"
+      # MCP mounts /metrics on the main HTTP listener.
+      - "${PCG_MCP_METRICS_PORT:-19468}:8080"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
