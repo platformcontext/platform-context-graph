@@ -596,7 +596,7 @@ func TestSemanticEntityMaterializationHandlerSkipsRetractForFirstGeneration(t *t
 	}
 }
 
-func TestSemanticEntityMaterializationHandlerRetractsPriorOrRetriedGeneration(t *testing.T) {
+func TestSemanticEntityMaterializationHandlerRetractsWhenPriorGenerationExists(t *testing.T) {
 	t.Parallel()
 
 	loader := &fakeSemanticEntityFactLoader{
@@ -619,11 +619,11 @@ func TestSemanticEntityMaterializationHandlerRetractsPriorOrRetriedGeneration(t 
 
 	tests := []struct {
 		name         string
-		prior        bool
 		attemptCount int
+		prior        bool
 	}{
-		{name: "prior generation exists", prior: true, attemptCount: 1},
-		{name: "retry of first generation", prior: false, attemptCount: 2},
+		{name: "first attempt", attemptCount: 1, prior: true},
+		{name: "retry", attemptCount: 2, prior: true},
 	}
 
 	for _, tt := range tests {
@@ -659,6 +659,56 @@ func TestSemanticEntityMaterializationHandlerRetractsPriorOrRetriedGeneration(t 
 				t.Fatal("writer SkipRetract = true, want false for prior or retried generation")
 			}
 		})
+	}
+}
+
+func TestSemanticEntityMaterializationHandlerSkipsRetractForRetriedFirstGeneration(t *testing.T) {
+	t.Parallel()
+
+	loader := &fakeSemanticEntityFactLoader{
+		envelopes: []facts.Envelope{
+			{FactKind: "repository", Payload: map[string]any{"repo_id": "repo-1"}},
+			{
+				FactKind:  "content_entity",
+				SourceRef: facts.Ref{SourceURI: "/repo/main.go"},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "function-1",
+					"relative_path": "main.go",
+					"entity_type":   "Function",
+					"entity_name":   "main",
+					"language":      "go",
+				},
+			},
+		},
+	}
+	writer := &recordingSemanticEntityWriter{}
+	handler := SemanticEntityMaterializationHandler{
+		FactLoader: loader,
+		Writer:     writer,
+		PriorGenerationCheck: func(context.Context, string, string) (bool, error) {
+			return false, nil
+		},
+	}
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-1",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		SourceSystem: "git",
+		Domain:       DomainSemanticEntityMaterialization,
+		Status:       IntentStatusClaimed,
+		AttemptCount: 2,
+		EnqueuedAt:   time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(writer.writes), 1; got != want {
+		t.Fatalf("writer writes = %d, want %d", got, want)
+	}
+	if !writer.writes[0].SkipRetract {
+		t.Fatal("writer SkipRetract = false, want true for retried first generation")
 	}
 }
 

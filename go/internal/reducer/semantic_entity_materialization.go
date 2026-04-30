@@ -202,7 +202,7 @@ func logSemanticEntityMaterializationCompleted(
 }
 
 func (h SemanticEntityMaterializationHandler) shouldSkipSemanticRetract(ctx context.Context, intent Intent) (bool, error) {
-	if h.PriorGenerationCheck == nil || intent.AttemptCount > 1 {
+	if h.PriorGenerationCheck == nil {
 		return false, nil
 	}
 	hasPrior, err := h.PriorGenerationCheck(ctx, intent.ScopeID, intent.GenerationID)
