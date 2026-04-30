@@ -74,3 +74,46 @@ func (l neo4jWorkloadDependencyLookup) ListRepoWorkloads(
 	}
 	return workloads, nil
 }
+
+// ListWorkloadDependencyEdges checks whether the workload dependency retract
+// path has any current graph truth to remove for the requested repositories.
+func (l neo4jWorkloadDependencyLookup) ListWorkloadDependencyEdges(
+	ctx context.Context,
+	repoIDs []string,
+	evidenceSource string,
+) ([]reducer.ExistingWorkloadDependencyEdge, error) {
+	if l.reader == nil || len(repoIDs) == 0 {
+		return nil, nil
+	}
+
+	rows, err := l.reader.Run(ctx, `
+		MATCH (source:Workload)-[rel:DEPENDS_ON]->(target:Workload)
+		WHERE source.repo_id IN $repo_ids
+		  AND rel.evidence_source = $evidence_source
+		RETURN DISTINCT source.repo_id AS repo_id,
+			source.id AS workload_id,
+			target.id AS target_workload_id
+	`, map[string]any{
+		"repo_ids":        repoIDs,
+		"evidence_source": evidenceSource,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	edges := make([]reducer.ExistingWorkloadDependencyEdge, 0, len(rows))
+	for _, row := range rows {
+		repoID := query.StringVal(row, "repo_id")
+		workloadID := query.StringVal(row, "workload_id")
+		targetWorkloadID := query.StringVal(row, "target_workload_id")
+		if repoID == "" || workloadID == "" || targetWorkloadID == "" {
+			continue
+		}
+		edges = append(edges, reducer.ExistingWorkloadDependencyEdge{
+			RepoID:           repoID,
+			WorkloadID:       workloadID,
+			TargetWorkloadID: targetWorkloadID,
+		})
+	}
+	return edges, nil
+}

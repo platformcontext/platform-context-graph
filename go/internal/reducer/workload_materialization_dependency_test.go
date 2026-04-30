@@ -88,6 +88,13 @@ func TestWorkloadMaterializationHandlerReconcilesWorkloadDependencies(t *testing
 		workloads: []RepoWorkload{
 			{RepoID: "repo-service-b", WorkloadID: "workload:service-b"},
 		},
+		workloadDependencyRows: []ExistingWorkloadDependencyEdge{
+			{
+				RepoID:           "repo-service-a",
+				WorkloadID:       "workload:service-a",
+				TargetWorkloadID: "workload:old-service",
+			},
+		},
 	}
 	edgeWriter := &recordingWorkloadDependencyEdgeWriter{}
 
