@@ -359,6 +359,47 @@ func TestServiceRunAcksWithLiveContextAfterHeartbeatStops(t *testing.T) {
 	}
 }
 
+func TestServiceHeartbeatStopIgnoresStopContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+	heartbeater := &contextCanceledProjectorWorkHeartbeater{
+		entered: make(chan struct{}),
+	}
+
+	service := Service{
+		Heartbeater:       heartbeater,
+		HeartbeatInterval: time.Millisecond,
+	}
+	_, stopHeartbeat := service.startHeartbeat(context.Background(), work, 0)
+
+	select {
+	case <-heartbeater.entered:
+	case <-time.After(time.Second):
+		t.Fatal("heartbeat did not start")
+	}
+
+	if err := stopHeartbeat(); err != nil {
+		t.Fatalf("stopHeartbeat() error = %v, want nil", err)
+	}
+}
+
 type stubProjectorWorkSource struct {
 	mu         sync.Mutex
 	claimCalls int
@@ -484,6 +525,17 @@ func (s *stubProjectorWorkHeartbeater) Heartbeat(context.Context, ScopeGeneratio
 		return s.err
 	}
 	return nil
+}
+
+type contextCanceledProjectorWorkHeartbeater struct {
+	entered chan struct{}
+	once    sync.Once
+}
+
+func (s *contextCanceledProjectorWorkHeartbeater) Heartbeat(ctx context.Context, _ ScopeGenerationWork) error {
+	s.once.Do(func() { close(s.entered) })
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func TestServiceRunWithTelemetry(t *testing.T) {

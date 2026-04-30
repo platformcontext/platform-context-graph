@@ -941,6 +941,37 @@ func TestPipelinedBootstrapHeartbeatsLongProjectorWork(t *testing.T) {
 	}
 }
 
+func TestBootstrapProjectorHeartbeatStopIgnoresStopContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	heartbeater := &contextCanceledProjectorHeartbeater{
+		entered: make(chan struct{}),
+	}
+	work := projector.ScopeGenerationWork{
+		Scope:      scope.IngestionScope{ScopeID: "scope-heartbeat"},
+		Generation: scope.ScopeGeneration{GenerationID: "generation-heartbeat"},
+	}
+
+	_, stopHeartbeat := startBootstrapProjectorHeartbeat(
+		context.Background(),
+		work,
+		heartbeater,
+		time.Millisecond,
+		0,
+		nil,
+	)
+
+	select {
+	case <-heartbeater.entered:
+	case <-time.After(time.Second):
+		t.Fatal("heartbeat did not start")
+	}
+
+	if err := stopHeartbeat(); err != nil {
+		t.Fatalf("stopHeartbeat() error = %v, want nil", err)
+	}
+}
+
 // --- additional fakes for pipelined tests ---
 
 type slowSource struct {
@@ -1084,6 +1115,17 @@ func (r *recordingProjectorHeartbeater) waitForHeartbeats(want int64, timeout ti
 		time.Sleep(time.Millisecond)
 	}
 	return r.count() >= want
+}
+
+type contextCanceledProjectorHeartbeater struct {
+	entered chan struct{}
+	once    sync.Once
+}
+
+func (c *contextCanceledProjectorHeartbeater) Heartbeat(ctx context.Context, _ projector.ScopeGenerationWork) error {
+	c.once.Do(func() { close(c.entered) })
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 type noopCanonicalWriter struct{}

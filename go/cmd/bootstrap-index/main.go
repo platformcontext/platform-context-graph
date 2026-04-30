@@ -729,6 +729,10 @@ func startBootstrapProjectorHeartbeat(
 				return
 			case <-ticker.C:
 				if err := heartbeater.Heartbeat(heartbeatCtx, work); err != nil {
+					if heartbeatCtx.Err() != nil && errors.Is(err, heartbeatCtx.Err()) {
+						done <- nil
+						return
+					}
 					heartbeatErr = fmt.Errorf("heartbeat bootstrap projector work: %w", err)
 					if logger != nil {
 						scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)

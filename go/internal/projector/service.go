@@ -384,6 +384,10 @@ func (s Service) startHeartbeat(ctx context.Context, work ScopeGenerationWork, w
 				return
 			case <-ticker.C:
 				if err := s.Heartbeater.Heartbeat(heartbeatCtx, work); err != nil {
+					if heartbeatCtx.Err() != nil && errors.Is(err, heartbeatCtx.Err()) {
+						done <- nil
+						return
+					}
 					heartbeatErr = fmt.Errorf("heartbeat projector work: %w", err)
 					if s.Logger != nil {
 						scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
