@@ -299,6 +299,9 @@ func discoverTerraformEvidence(
 	evidence = append(evidence, discoverTerraformModuleSourceEvidence(
 		sourceRepoID, filePath, content, catalog, seen,
 	)...)
+	evidence = append(evidence, discoverTerraformRuntimeServiceModuleEvidence(
+		sourceRepoID, filePath, content, catalog, seen,
+	)...)
 	evidence = append(evidence, discoverTerragruntDependencyConfigPathEvidence(
 		sourceRepoID, filePath, content, catalog, seen,
 	)...)

@@ -105,6 +105,36 @@ func TestDiscoverTerraformGitHubEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverTerraformRuntimeServiceModuleEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-infra",
+			Payload: map[string]any{
+				"artifact_type": "terraform_hcl",
+				"relative_path": "shared/resources.tf",
+				"content": `module "api_service" {
+  source = "registry.example.com/platform/ecs-application/aws"
+
+  name = "payments-service"
+}`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if !hasEvidenceKind(evidence, EvidenceKind("TERRAFORM_ECS_SERVICE")) {
+		t.Fatal("missing TERRAFORM_ECS_SERVICE evidence")
+	}
+	if !hasRelationshipType(evidence, RelProvisionsDependencyFor) {
+		t.Fatalf("missing %q relationship evidence", RelProvisionsDependencyFor)
+	}
+}
+
 func TestDiscoverTerraformModuleSourceEvidence(t *testing.T) {
 	t.Parallel()
 

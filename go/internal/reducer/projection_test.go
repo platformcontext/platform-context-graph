@@ -436,7 +436,7 @@ func TestBuildProjectionRowsAddsProvisionedInfrastructurePlatforms(t *testing.T)
 			DeploymentRepoID:    "repo-delivery",
 			ProvisioningRepoIDs: []string{"repo-infra"},
 			ProvisioningEvidenceKinds: map[string][]string{
-				"repo-infra": {TerraformPlatformEvidenceKind("ecs", "cluster")},
+				"repo-infra": {TerraformPlatformEvidenceKind("ecs", "service")},
 			},
 			Classification: "service",
 			Confidence:     0.96,
