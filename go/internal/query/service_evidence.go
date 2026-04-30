@@ -65,7 +65,7 @@ type ServiceAPIEndpointEvidence struct {
 }
 
 // FrameworkRouteEvidence captures routes detected by parser framework_semantics
-// (Express, Hapi, FastAPI, Flask) from fact_records.
+// from fact_records.
 type FrameworkRouteEvidence struct {
 	Framework    string   `json:"framework"`
 	RelativePath string   `json:"relative_path"`

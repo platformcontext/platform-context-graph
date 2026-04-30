@@ -576,6 +576,34 @@ func TestParseFrameworkSemanticsExtractsHapiAndExpressRoutes(t *testing.T) {
 	}
 }
 
+func TestParseFrameworkSemanticsExtractsNextJSRouteModules(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"frameworks": ["nextjs"],
+		"nextjs": {
+			"module_kind": "route",
+			"route_segments": ["api", "catalog"],
+			"route_verbs": ["GET", "POST"]
+		}
+	}`)
+
+	results := parseFrameworkSemantics("src/app/api/catalog/route.ts", raw)
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	route := results[0]
+	if route.Framework != "nextjs" {
+		t.Fatalf("Framework = %q, want nextjs", route.Framework)
+	}
+	if len(route.RoutePaths) != 1 || route.RoutePaths[0] != "/api/catalog" {
+		t.Fatalf("RoutePaths = %#v, want [/api/catalog]", route.RoutePaths)
+	}
+	if len(route.RouteMethods) != 2 || route.RouteMethods[0] != "GET" || route.RouteMethods[1] != "POST" {
+		t.Fatalf("RouteMethods = %#v, want [GET POST]", route.RouteMethods)
+	}
+}
+
 func TestParseFrameworkSemanticsSkipsEmptyFrameworks(t *testing.T) {
 	t.Parallel()
 

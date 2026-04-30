@@ -208,6 +208,63 @@ func TestExtractWorkloadCandidatesIncludesFrameworkRouteEndpoints(t *testing.T) 
 	}
 }
 
+func TestExtractWorkloadCandidatesIncludesNextJSRouteEndpoints(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repo-web-api",
+				"name":     "web-api",
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-route",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-web-api",
+				"relative_path": "src/app/api/catalog/route.ts",
+				"parsed_file_data": map[string]any{
+					"framework_semantics": map[string]any{
+						"frameworks": []any{"nextjs"},
+						"nextjs": map[string]any{
+							"module_kind":    "route",
+							"route_segments": []any{"api", "catalog"},
+							"route_verbs":    []any{"GET", "POST"},
+						},
+					},
+					"k8s_resources": []any{
+						map[string]any{"name": "web-api", "kind": "Deployment"},
+					},
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	candidates, _ := ExtractWorkloadCandidates(envelopes)
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+	if got, want := len(candidates[0].APIEndpoints), 1; got != want {
+		t.Fatalf("len(APIEndpoints) = %d, want %d", got, want)
+	}
+	endpoint := candidates[0].APIEndpoints[0]
+	if got, want := endpoint.SourceKinds, []string{"framework:nextjs"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("endpoint.SourceKinds = %#v, want %#v", got, want)
+	}
+	if got, want := endpoint.Path, "/api/catalog"; got != want {
+		t.Fatalf("endpoint.Path = %q, want %q", got, want)
+	}
+	if got, want := endpoint.Methods, []string{"get", "post"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("endpoint.Methods = %#v, want %#v", got, want)
+	}
+}
+
 func TestExtractWorkloadCandidatesFromArgoCDApplicationFacts(t *testing.T) {
 	t.Parallel()
 

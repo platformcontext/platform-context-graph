@@ -103,6 +103,12 @@ func frameworkAPIEndpointSignals(relativePath string, fileData map[string]any) [
 		if framework == "" || frameworkData == nil {
 			continue
 		}
+		if framework == "nextjs" {
+			if signal, ok := nextJSAPIEndpointSignal(relativePath, frameworkData); ok {
+				signals = append(signals, signal)
+			}
+			continue
+		}
 		methods := normalizeHTTPMethods(toStringSlice(frameworkData["route_methods"]))
 		for _, routePath := range toStringSlice(frameworkData["route_paths"]) {
 			routePath = strings.TrimSpace(routePath)
@@ -118,6 +124,41 @@ func frameworkAPIEndpointSignals(relativePath string, fileData map[string]any) [
 		}
 	}
 	return signals
+}
+
+// nextJSAPIEndpointSignal translates parser-owned Next.js route module
+// metadata into one URL path without guessing from arbitrary source text.
+func nextJSAPIEndpointSignal(relativePath string, frameworkData map[string]any) (APIEndpointSignal, bool) {
+	if apiStringValue(frameworkData["module_kind"]) != "route" {
+		return APIEndpointSignal{}, false
+	}
+	routePath := nextJSRoutePath(toStringSlice(frameworkData["route_segments"]))
+	if routePath == "" {
+		return APIEndpointSignal{}, false
+	}
+	return APIEndpointSignal{
+		Path:        routePath,
+		Methods:     normalizeHTTPMethods(toStringSlice(frameworkData["route_verbs"])),
+		SourceKinds: []string{"framework:nextjs"},
+		SourcePaths: []string{relativePath},
+	}, true
+}
+
+// nextJSRoutePath preserves parser-emitted route segment names while removing
+// Next.js route-group folders that are not part of the public URL.
+func nextJSRoutePath(segments []string) string {
+	pathSegments := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		segment = strings.TrimSpace(segment)
+		if segment == "" || (strings.HasPrefix(segment, "(") && strings.HasSuffix(segment, ")")) {
+			continue
+		}
+		pathSegments = append(pathSegments, segment)
+	}
+	if len(pathSegments) == 0 {
+		return ""
+	}
+	return "/" + strings.Join(pathSegments, "/")
 }
 
 // openAPIEndpointSignals extracts endpoint paths from one OpenAPI root file
