@@ -22,9 +22,10 @@ func DiscoverEvidence(envelopes []facts.Envelope, catalog []CatalogEntry) []Evid
 
 	var evidence []EvidenceFact
 	seen := make(map[evidenceKey]struct{})
+	contentIndex := buildEvidenceContentIndex(envelopes)
 
 	for i := range envelopes {
-		discovered := discoverFromEnvelope(envelopes[i], catalog, seen)
+		discovered := discoverFromEnvelopeWithIndex(envelopes[i], catalog, seen, contentIndex)
 		evidence = append(evidence, discovered...)
 	}
 
@@ -116,22 +117,18 @@ func discoverFromEnvelope(
 	catalog []CatalogEntry,
 	seen map[evidenceKey]struct{},
 ) []EvidenceFact {
-	artifactType, _ := envelope.Payload["artifact_type"].(string)
-	filePath, _ := envelope.Payload["relative_path"].(string)
-	content, _ := envelope.Payload["content"].(string)
-	parsedFileData, _ := envelope.Payload["parsed_file_data"].(map[string]any)
-	sourceRepoID := sourceRepositoryIDFromEnvelope(envelope)
+	return discoverFromEnvelopeWithIndex(envelope, catalog, seen, nil)
+}
 
-	// Fall back to Go collector content fact payload keys. The collector
-	// emits content_path and content_body instead of relative_path and
-	// content. Both formats are supported so evidence discovery works
-	// regardless of how facts were produced.
-	if filePath == "" {
-		filePath, _ = envelope.Payload["content_path"].(string)
-	}
-	if content == "" {
-		content, _ = envelope.Payload["content_body"].(string)
-	}
+func discoverFromEnvelopeWithIndex(
+	envelope facts.Envelope,
+	catalog []CatalogEntry,
+	seen map[evidenceKey]struct{},
+	contentIndex evidenceContentIndex,
+) []EvidenceFact {
+	artifactType, _ := envelope.Payload["artifact_type"].(string)
+	parsedFileData, _ := envelope.Payload["parsed_file_data"].(map[string]any)
+	sourceRepoID, filePath, content := envelopeContentIdentity(envelope)
 
 	if filePath == "" {
 		return nil
@@ -176,7 +173,7 @@ func discoverFromEnvelope(
 		)...)
 	case isArgoCDArtifact(artifactType, content):
 		evidence = append(evidence, discoverArgoCDEvidence(
-			sourceRepoID, filePath, content, catalog, seen,
+			sourceRepoID, filePath, content, catalog, seen, contentIndex,
 		)...)
 	case isJenkinsArtifact(filePath):
 		evidence = append(evidence, discoverJenkinsEvidence(
@@ -491,11 +488,12 @@ func discoverArgoCDEvidence(
 	sourceRepoID, filePath, content string,
 	catalog []CatalogEntry,
 	seen map[evidenceKey]struct{},
+	contentIndex evidenceContentIndex,
 ) []EvidenceFact {
 	var evidence []EvidenceFact
 	for _, document := range parseYAMLDocuments(content) {
 		evidence = append(evidence, discoverArgoCDDocumentEvidence(
-			sourceRepoID, filePath, document, catalog, seen,
+			sourceRepoID, filePath, document, catalog, seen, contentIndex,
 		)...)
 	}
 

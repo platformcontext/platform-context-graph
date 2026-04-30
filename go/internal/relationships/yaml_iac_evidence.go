@@ -8,39 +8,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func discoverKustomizeDocumentEvidence(
-	sourceRepoID, filePath string,
-	document map[string]any,
-	catalog []CatalogEntry,
-	seen map[evidenceKey]struct{},
-) []EvidenceFact {
-	var evidence []EvidenceFact
-
-	appendValues := func(values []string, kind EvidenceKind, confidence float64, rationale string) {
-		for _, value := range values {
-			evidence = append(evidence, matchCatalog(
-				sourceRepoID, value, filePath,
-				kind, RelDeploysFrom, confidence, rationale,
-				"kustomize", catalog, seen, nil,
-			)...)
-		}
-	}
-
-	appendValues(kustomizeResourceStrings(document), EvidenceKindKustomizeResource, 0.90,
-		"Kustomize resources source deployment config from the target repository")
-	appendValues(kustomizeHelmStrings(document), EvidenceKindKustomizeHelmChart, 0.89,
-		"Kustomize Helm configuration deploys from the target repository")
-	appendValues(kustomizeImageStrings(document), EvidenceKindKustomizeImage, 0.86,
-		"Kustomize image configuration deploys artifacts from the target repository")
-
-	return evidence
-}
-
 func discoverArgoCDDocumentEvidence(
 	controlRepoID, filePath string,
 	document map[string]any,
 	catalog []CatalogEntry,
 	seen map[evidenceKey]struct{},
+	contentIndex evidenceContentIndex,
 ) []EvidenceFact {
 	var evidence []EvidenceFact
 
@@ -62,7 +35,8 @@ func discoverArgoCDDocumentEvidence(
 
 	discoveryTargets := argocdApplicationSetDiscoveryTargets(document)
 	templateSources := argocdApplicationSetTemplateSources(document)
-	if len(discoveryTargets) == 0 || len(templateSources) == 0 {
+	templateSourceSpecs := argocdApplicationSetTemplateSourceSpecs(document)
+	if len(discoveryTargets) == 0 {
 		return evidence
 	}
 
@@ -74,7 +48,10 @@ func discoverArgoCDDocumentEvidence(
 			evidence = append(evidence, appendDiscoveryEvidence(
 				controlRepoID, configRepo, filePath, discovery.path, seen,
 			)...)
-			for _, templateSource := range templateSources {
+			for _, templateSource := range append(
+				templateSources,
+				argocdEvaluatedTemplateSources(templateSourceSpecs, discovery, configRepo.RepoID, contentIndex)...,
+			) {
 				for _, deployedRepo := range matchingCatalogEntries(templateSource, catalog) {
 					if deployedRepo.RepoID == configRepo.RepoID || deployedRepo.RepoID == controlRepoID {
 						continue
@@ -98,6 +75,12 @@ func discoverArgoCDDocumentEvidence(
 type argocdDiscoveryTarget struct {
 	repoURL string
 	path    string
+}
+
+type argocdTemplateSourceSpec struct {
+	repoURL string
+	path    string
+	chart   string
 }
 
 type argocdDestination struct {
@@ -281,7 +264,7 @@ func argocdApplicationSetDiscoveryTargets(document map[string]any) []argocdDisco
 	var targets []argocdDiscoveryTarget
 	for _, generator := range collectGitGenerators(sliceValue(spec["generators"])) {
 		repoURL := stringValue(generator["repoURL"])
-		if repoURL == "" {
+		if repoURL == "" || isArgoTemplateString(repoURL) {
 			continue
 		}
 		for _, fileEntry := range sliceValue(generator["files"]) {
@@ -290,7 +273,7 @@ func argocdApplicationSetDiscoveryTargets(document map[string]any) []argocdDisco
 				continue
 			}
 			path := stringValue(entry["path"])
-			if path == "" || !strings.Contains(strings.ToLower(path), "config.yaml") {
+			if path == "" || !isArgoCDGitFileGeneratorPath(path) {
 				continue
 			}
 			targets = append(targets, argocdDiscoveryTarget{repoURL: repoURL, path: path})
@@ -309,7 +292,54 @@ func argocdApplicationSetTemplateSources(document map[string]any) []string {
 	if templateSpec == nil {
 		return nil
 	}
-	return argocdApplicationRepoURLs(map[string]any{"spec": templateSpec})
+	var sources []string
+	for _, repoURL := range argocdApplicationRepoURLs(map[string]any{"spec": templateSpec}) {
+		if isArgoTemplateString(repoURL) {
+			continue
+		}
+		sources = append(sources, repoURL)
+	}
+	return uniqueStrings(sources)
+}
+
+func argocdApplicationSetTemplateSourceSpecs(document map[string]any) []argocdTemplateSourceSpec {
+	if !strings.EqualFold(stringValue(document["kind"]), "ApplicationSet") {
+		return nil
+	}
+	spec, _ := nestedMap(document, "spec")
+	template, _ := nestedMap(spec, "template")
+	templateSpec, _ := nestedMap(template, "spec")
+	if templateSpec == nil {
+		return nil
+	}
+
+	var sources []argocdTemplateSourceSpec
+	appendSource := func(source map[string]any) {
+		if source == nil {
+			return
+		}
+		sourceSpec := argocdTemplateSourceSpec{
+			repoURL: stringValue(source["repoURL"]),
+			path:    stringValue(source["path"]),
+			chart:   stringValue(source["chart"]),
+		}
+		if sourceSpec.repoURL == "" && sourceSpec.path == "" && sourceSpec.chart == "" {
+			return
+		}
+		sources = append(sources, sourceSpec)
+	}
+
+	if source, _ := nestedMap(templateSpec, "source"); source != nil {
+		appendSource(source)
+	}
+	for _, item := range sliceValue(templateSpec["sources"]) {
+		source, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		appendSource(source)
+	}
+	return sources
 }
 
 func argocdDestinationFromSpec(spec map[string]any) argocdDestination {
@@ -344,46 +374,6 @@ func collectGitGenerators(items []any) []map[string]any {
 		}
 	}
 	return result
-}
-
-func kustomizeResourceStrings(document map[string]any) []string {
-	return gatherStrings(document, "resources", "components")
-}
-
-func kustomizeHelmStrings(document map[string]any) []string {
-	return gatherObjectStrings(document, "helmCharts", "name", "repo", "releaseName")
-}
-
-func kustomizeImageStrings(document map[string]any) []string {
-	return gatherObjectStrings(document, "images", "name", "newName")
-}
-
-func gatherStrings(document map[string]any, keys ...string) []string {
-	var result []string
-	for _, key := range keys {
-		for _, item := range sliceValue(document[key]) {
-			if value := stringValue(item); value != "" {
-				result = append(result, value)
-			}
-		}
-	}
-	return uniqueStrings(result)
-}
-
-func gatherObjectStrings(document map[string]any, listKey string, fieldKeys ...string) []string {
-	var result []string
-	for _, item := range sliceValue(document[listKey]) {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		for _, key := range fieldKeys {
-			if value := stringValue(entry[key]); value != "" {
-				result = append(result, value)
-			}
-		}
-	}
-	return uniqueStrings(result)
 }
 
 func argocdDestinationPlatformID(destination argocdDestination) string {
