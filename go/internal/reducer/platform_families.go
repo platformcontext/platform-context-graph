@@ -159,17 +159,23 @@ func InferRuntimeFamilyKindFromIdentifiers(values []string) string {
 // InferInfrastructureRuntimeFamilyKind infers a runtime family for infra repos
 // with explicit cluster signals, excluding families that match non-cluster
 // module patterns.
-func InferInfrastructureRuntimeFamilyKind(resourceTypes, moduleSources []string) string {
+func InferInfrastructureRuntimeFamilyKind(resourceTypes, moduleSources, dataTypes []string) string {
 	normalizedRT := normalizeSet(resourceTypes)
 	normalizedMS := normalizeSet(moduleSources)
+	normalizedDT := normalizeSet(dataTypes)
 
 	for _, f := range runtimeFamilies {
 		hasCluster := false
-		hasExplicitClusterResource := false
+		hasExplicitClusterSignal := false
 		for _, rt := range f.ClusterResourceTypes {
 			if _, ok := normalizedRT[rt]; ok {
 				hasCluster = true
-				hasExplicitClusterResource = true
+				hasExplicitClusterSignal = true
+				break
+			}
+			if _, ok := normalizedDT[rt]; ok {
+				hasCluster = true
+				hasExplicitClusterSignal = true
 				break
 			}
 		}
@@ -205,9 +211,10 @@ func InferInfrastructureRuntimeFamilyKind(resourceTypes, moduleSources []string)
 			}
 		}
 		// Service-only modules should not turn an application stack into an
-		// infrastructure platform, but an explicit cluster resource is stronger
-		// evidence than sibling service modules in the same stack.
-		if excluded && !(hasExplicitClusterResource && excludedByServiceModule) {
+		// infrastructure platform, but an explicit cluster resource or data
+		// source is stronger evidence than sibling service modules in the same
+		// stack.
+		if excluded && !(hasExplicitClusterSignal && excludedByServiceModule) {
 			continue
 		}
 		return f.Kind
