@@ -461,9 +461,13 @@ func (s IngestionStore) BackfillAllRelationshipEvidence(
 		return fmt.Errorf("load latest facts for deferred relationship backfill: %w", err)
 	}
 
+	discoveredEvidence := relationships.DedupeEvidenceFacts(
+		relationships.DiscoverEvidence(activeFacts, catalog),
+	)
+
 	var totalEvidence int64
 	evidenceByTargetRepo := make(map[string][]relationships.EvidenceFact)
-	for _, fact := range relationships.DiscoverEvidence(activeFacts, catalog) {
+	for _, fact := range discoveredEvidence {
 		if strings.TrimSpace(fact.TargetRepoID) == "" {
 			continue
 		}
@@ -675,7 +679,7 @@ func backfillRelationshipEvidenceForNewRepositories(
 		return fmt.Errorf("load latest facts for relationship backfill: %w", err)
 	}
 	evidence := filterEvidenceByTargetRepo(
-		relationships.DiscoverEvidence(activeFacts, refreshedCatalog),
+		relationships.DedupeEvidenceFacts(relationships.DiscoverEvidence(activeFacts, refreshedCatalog)),
 		newRepoIDs,
 	)
 	if len(evidence) == 0 {

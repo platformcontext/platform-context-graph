@@ -338,6 +338,45 @@ func TestRelationshipStoreUpsertEvidenceFactsUsesStableContentIdentity(t *testin
 	}
 }
 
+func TestRelationshipStoreUpsertEvidenceFactsDedupesRepeatedInput(t *testing.T) {
+	t.Parallel()
+
+	db := newRelationshipTestDB()
+	store := NewRelationshipStore(db)
+	ctx := context.Background()
+
+	genID, err := store.CreateGeneration(ctx, "repo_deps", "run-003c")
+	if err != nil {
+		t.Fatalf("CreateGeneration: %v", err)
+	}
+
+	evidence := relationships.EvidenceFact{
+		EvidenceKind:     relationships.EvidenceKindKustomizeResource,
+		RelationshipType: relationships.RelDeploysFrom,
+		SourceRepoID:     "repo-kustomize",
+		TargetRepoID:     "repo-api",
+		Confidence:       0.90,
+		Rationale:        "Kustomize resources source deployment config from the target repository",
+		Details: map[string]any{
+			"path":          "overlays/prod/kustomization.yaml",
+			"matched_alias": "api",
+			"matched_value": "../../base/api",
+			"extractor":     "kustomize",
+		},
+	}
+
+	if err := store.UpsertEvidenceFacts(ctx, genID, []relationships.EvidenceFact{evidence, evidence}); err != nil {
+		t.Fatalf("UpsertEvidenceFacts: %v", err)
+	}
+
+	if got, want := len(db.evidenceFacts), 1; got != want {
+		t.Fatalf("evidence count = %d, want %d", got, want)
+	}
+	if got, want := db.insertCounts["relationship_evidence_facts"], 1; got != want {
+		t.Fatalf("relationship evidence insert count = %d, want %d", got, want)
+	}
+}
+
 func TestRelationshipStoreUpsertCandidates(t *testing.T) {
 	t.Parallel()
 
@@ -476,6 +515,7 @@ type relationshipTestDB struct {
 	evidenceFacts map[string]evidenceRecord
 	candidates    map[string]candidateRecord
 	resolved      map[string]resolvedRecord
+	insertCounts  map[string]int
 }
 
 func newRelationshipTestDB() *relationshipTestDB {
@@ -485,12 +525,14 @@ func newRelationshipTestDB() *relationshipTestDB {
 		evidenceFacts: make(map[string]evidenceRecord),
 		candidates:    make(map[string]candidateRecord),
 		resolved:      make(map[string]resolvedRecord),
+		insertCounts:  make(map[string]int),
 	}
 }
 
 func (db *relationshipTestDB) ExecContext(_ context.Context, query string, args ...any) (sql.Result, error) {
 	switch {
 	case strings.Contains(query, "INSERT INTO relationship_assertions"):
+		db.insertCounts["relationship_assertions"]++
 		now := args[9].(time.Time)
 		srcEntity := nullableToString(args[3])
 		tgtEntity := nullableToString(args[4])
@@ -508,6 +550,7 @@ func (db *relationshipTestDB) ExecContext(_ context.Context, query string, args 
 		return proofResult{}, nil
 
 	case strings.Contains(query, "INSERT INTO relationship_generations"):
+		db.insertCounts["relationship_generations"]++
 		if strings.Contains(query, "run_id") {
 			runID := ""
 			if args[2] != nil {
@@ -553,6 +596,7 @@ func (db *relationshipTestDB) ExecContext(_ context.Context, query string, args 
 		return proofResult{}, nil
 
 	case strings.Contains(query, "INSERT INTO relationship_evidence_facts"):
+		db.insertCounts["relationship_evidence_facts"]++
 		details := parseJSONBytes(args[10])
 		db.evidenceFacts[args[0].(string)] = evidenceRecord{
 			generationID:   args[1].(string),
@@ -569,6 +613,7 @@ func (db *relationshipTestDB) ExecContext(_ context.Context, query string, args 
 		return proofResult{}, nil
 
 	case strings.Contains(query, "INSERT INTO relationship_candidates"):
+		db.insertCounts["relationship_candidates"]++
 		details := parseJSONBytes(args[10])
 		db.candidates[args[0].(string)] = candidateRecord{
 			generationID:   args[1].(string),

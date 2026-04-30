@@ -393,6 +393,14 @@ func TestBuildRepositoryConfigArtifactsExtractsAnsibleConfigAssets(t *testing.T)
 
 	got := buildRepositoryConfigArtifacts("ansible-ops", []FileContent{
 		{
+			RelativePath: "deploy.yml",
+			Content: `- hosts: workers
+  tasks:
+    - debug:
+        msg: deploy
+`,
+		},
+		{
 			RelativePath: "playbooks/site.yml",
 			Content: `- hosts: all
   roles:
@@ -422,11 +430,12 @@ func TestBuildRepositoryConfigArtifactsExtractsAnsibleConfigAssets(t *testing.T)
 	}
 
 	configPaths := mapSliceValue(got, "config_paths")
-	if len(configPaths) != 5 {
-		t.Fatalf("len(config_paths) = %d, want 5", len(configPaths))
+	if len(configPaths) != 6 {
+		t.Fatalf("len(config_paths) = %d, want 6", len(configPaths))
 	}
 
 	want := map[string]string{
+		"deploy.yml":                 "ansible_playbook",
 		"playbooks/site.yml":         "ansible_playbook",
 		"inventories/prod/hosts.yml": "ansible_inventory",
 		"group_vars/all.yml":         "ansible_vars",
@@ -445,6 +454,49 @@ func TestBuildRepositoryConfigArtifactsExtractsAnsibleConfigAssets(t *testing.T)
 			t.Fatalf("config_paths[%q].source_repo = %#v, want %q", path, row["source_repo"], "ansible-ops")
 		}
 	}
+}
+
+func TestBuildRepositoryConfigArtifactsDoesNotTreatHelmValuesAsAnsiblePlaybook(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("helm-comprehensive", []FileContent{
+		{
+			RelativePath: "values-prod.yaml",
+			Content: `ingress:
+  enabled: true
+  hosts:
+    - host: api.production.example.com
+      paths:
+        - path: /
+`,
+		},
+	})
+
+	assertNoConfigArtifactEvidenceKind(t, got, "ansible_playbook")
+}
+
+func TestBuildRepositoryConfigArtifactsDoesNotTreatKubernetesIngressAsAnsiblePlaybook(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepositoryConfigArtifacts("kubernetes-comprehensive", []FileContent{
+		{
+			RelativePath: "ingress.yaml",
+			Content: `apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+spec:
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+`,
+		},
+	})
+
+	assertNoConfigArtifactEvidenceKind(t, got, "ansible_playbook")
 }
 
 func TestBuildRepositoryConfigArtifactsExtractsLocalVariableConfigAssets(t *testing.T) {
@@ -752,6 +804,21 @@ remote_state {
 	for _, row := range mapSliceValue(got, "config_paths") {
 		if strings.Contains(StringVal(row, "path"), "terraform.tfstate") {
 			t.Fatalf("config_paths contains remote state key row = %#v, want omitted", row)
+		}
+	}
+}
+
+// assertNoConfigArtifactEvidenceKind guards reporting regressions where generic
+// YAML config files are surfaced as stronger deployment evidence than they are.
+func assertNoConfigArtifactEvidenceKind(t *testing.T, got map[string]any, evidenceKind string) {
+	t.Helper()
+
+	if got == nil {
+		return
+	}
+	for _, row := range mapSliceValue(got, "config_paths") {
+		if row["evidence_kind"] == evidenceKind {
+			t.Fatalf("unexpected config_paths row with evidence_kind %q: %#v", evidenceKind, row)
 		}
 	}
 }

@@ -159,6 +159,10 @@ func (s *RelationshipStore) UpsertEvidenceFacts(
 	if len(facts) == 0 {
 		return nil
 	}
+	facts = relationships.DedupeEvidenceFacts(facts)
+	if len(facts) == 0 {
+		return nil
+	}
 
 	now := time.Now().UTC()
 	for _, f := range facts {
