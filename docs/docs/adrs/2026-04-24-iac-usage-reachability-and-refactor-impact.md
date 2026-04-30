@@ -882,6 +882,7 @@ Mitigations:
 | Phase 3: Helm | Not started | Existing chart and values extraction | Add Go-template value references, values-file usage, optional rendering |
 | Phase 4: Kubernetes | Not started | Existing K8s resource extraction and basic Service heuristic | Add typed resource usage edges and conservative orphan findings |
 | Phase 5: CloudFormation/Crossplane/Compose/Ansible | Not started | Existing parser and evidence surfaces | Add reference graph and findings per family |
+| Code dead-code / IaC boundary | Guarded | Query contract now reports `iac_reachability_mode=not_modeled_by_code_dead_code` and `iac_deadness_capability=iac_usage.reachability`; tests prove Terraform, Helm, Kustomize, Kubernetes, and ArgoCD graph rows are not returned as code dead-code candidates. | Implement the first-class IaC usage/reachability graph before exposing dead-IaC cleanup findings. |
 
 ---
 

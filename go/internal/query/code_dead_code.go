@@ -426,6 +426,8 @@ func buildDeadCodeAnalysis(results []map[string]any, excluded []string, stats de
 		"framework_roots_from_source_fallback": stats.SourceFallbackFrameworkRoots,
 		"roots_skipped_missing_source":         stats.RootsSkippedMissingSource,
 		"user_overrides_applied":               len(excluded) > 0,
+		"iac_reachability_mode":                "not_modeled_by_code_dead_code",
+		"iac_deadness_capability":              "iac_usage.reachability",
 		"modeled_entrypoints":                  []string{"go.main", "go.init", "python.__main__"},
 		"modeled_framework_roots": []string{
 			"go.cobra_run_registration",
@@ -446,6 +448,7 @@ func buildDeadCodeAnalysis(results []map[string]any, excluded []string, stats de
 			"analysis reports whether a modeled framework root came from parser metadata or the legacy source fallback path",
 			"go framework-root signature checks require entity source; missing source leaves those roots unevaluated",
 			"go exported symbols outside cmd/, internal/, and vendor/ are treated as public API roots by default",
+			"IaC deadness is not inferred by the code dead-code analyzer; use the IaC usage/reachability capability once available",
 		},
 	}
 }

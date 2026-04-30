@@ -102,8 +102,15 @@ Any dead-code result should be able to report:
   text was unavailable
 - how many framework roots came from parser metadata versus legacy query-time
   source fallback
+- whether IaC reachability was modeled by this analysis
 
 That explanation must be returned in structured form, not just text prose.
+
+The current `code_quality.dead_code` capability is code-call oriented. It must
+not classify Terraform, Helm, Kustomize, Kubernetes, ArgoCD, or other IaC
+artifacts as dead simply because they lack code-call inbound edges. Dead-IaC
+requires the separate IaC usage and reachability graph described in
+`../adrs/2026-04-24-iac-usage-reachability-and-refactor-impact.md`.
 
 ## Default Scope Policy
 

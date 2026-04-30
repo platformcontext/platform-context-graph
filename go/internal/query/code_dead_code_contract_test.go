@@ -124,6 +124,12 @@ func TestHandleDeadCodeReturnsDerivedTruthAndAnalysisMetadata(t *testing.T) {
 	if got, want := analysis["user_overrides_applied"], false; got != want {
 		t.Fatalf("analysis[user_overrides_applied] = %#v, want %#v", got, want)
 	}
+	if got, want := analysis["iac_reachability_mode"], "not_modeled_by_code_dead_code"; got != want {
+		t.Fatalf("analysis[iac_reachability_mode] = %#v, want %#v", got, want)
+	}
+	if got, want := analysis["iac_deadness_capability"], "iac_usage.reachability"; got != want {
+		t.Fatalf("analysis[iac_deadness_capability] = %#v, want %#v", got, want)
+	}
 	rootCategories, ok := analysis["root_categories_used"].([]any)
 	if !ok {
 		t.Fatalf("analysis[root_categories_used] type = %T, want []any", analysis["root_categories_used"])
@@ -320,6 +326,18 @@ func TestHandleDeadCodeExcludesNonCodeEntitiesFromBackendRows(t *testing.T) {
 						"file_path": "deploy/k8s/api.yaml", "repo_id": "repo-1", "repo_name": "platform-context-graph", "language": "yaml",
 					},
 					{
+						"entity_id": "terraform-module", "name": "service", "labels": []any{"TerraformModule"},
+						"file_path": "infra/modules/service/main.tf", "repo_id": "repo-1", "repo_name": "platform-context-graph", "language": "hcl",
+					},
+					{
+						"entity_id": "helm-chart", "name": "api", "labels": []any{"HelmChart"},
+						"file_path": "charts/api/Chart.yaml", "repo_id": "repo-1", "repo_name": "platform-context-graph", "language": "yaml",
+					},
+					{
+						"entity_id": "kustomize-overlay", "name": "prod", "labels": []any{"KustomizeOverlay"},
+						"file_path": "deploy/overlays/prod/kustomization.yaml", "repo_id": "repo-1", "repo_name": "platform-context-graph", "language": "yaml",
+					},
+					{
 						"entity_id": "function-1", "name": "helper", "labels": []any{"Function"},
 						"file_path": "go/internal/query/helper.go", "repo_id": "repo-1", "repo_name": "platform-context-graph", "language": "go",
 					},
@@ -330,7 +348,16 @@ func TestHandleDeadCodeExcludesNonCodeEntitiesFromBackendRows(t *testing.T) {
 			entities: map[string]EntityContent{
 				"argo-app":     {EntityID: "argo-app", RelativePath: "deploy/argocd/app.yaml", EntityType: "ArgoCDApplication", EntityName: "platform-context-graph", Language: "yaml"},
 				"k8s-resource": {EntityID: "k8s-resource", RelativePath: "deploy/k8s/api.yaml", EntityType: "K8sResource", EntityName: "api-deployment", Language: "yaml"},
-				"function-1":   {EntityID: "function-1", RelativePath: "go/internal/query/helper.go", EntityType: "Function", EntityName: "helper", Language: "go", SourceCache: "func helper() {}"},
+				"terraform-module": {
+					EntityID: "terraform-module", RelativePath: "infra/modules/service/main.tf", EntityType: "TerraformModule", EntityName: "service", Language: "hcl",
+				},
+				"helm-chart": {
+					EntityID: "helm-chart", RelativePath: "charts/api/Chart.yaml", EntityType: "HelmChart", EntityName: "api", Language: "yaml",
+				},
+				"kustomize-overlay": {
+					EntityID: "kustomize-overlay", RelativePath: "deploy/overlays/prod/kustomization.yaml", EntityType: "KustomizeOverlay", EntityName: "prod", Language: "yaml",
+				},
+				"function-1": {EntityID: "function-1", RelativePath: "go/internal/query/helper.go", EntityType: "Function", EntityName: "helper", Language: "go", SourceCache: "func helper() {}"},
 			},
 		},
 	}
