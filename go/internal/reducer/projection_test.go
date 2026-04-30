@@ -266,6 +266,51 @@ func TestBuildProjectionRowsSingleCandidate(t *testing.T) {
 	}
 }
 
+func TestBuildProjectionRowsMaterializesAPIEndpointRows(t *testing.T) {
+	t.Parallel()
+
+	result := BuildProjectionRows([]WorkloadCandidate{
+		{
+			RepoID:         "repo-service-api",
+			RepoName:       "service-api",
+			Classification: "service",
+			Confidence:     0.96,
+			Provenance:     []string{"dockerfile_runtime"},
+			APIEndpoints: []APIEndpointSignal{
+				{
+					Path:         "/widgets",
+					Methods:      []string{"get", "post"},
+					OperationIDs: []string{"createWidget", "listWidgets"},
+					SourceKinds:  []string{"openapi"},
+					SourcePaths:  []string{"specs/index.yaml"},
+					SpecVersions: []string{"3.1.0"},
+					APIVersions:  []string{"v3"},
+				},
+			},
+		},
+	}, nil)
+
+	if got, want := len(result.EndpointRows), 1; got != want {
+		t.Fatalf("len(EndpointRows) = %d, want %d", got, want)
+	}
+	endpoint := result.EndpointRows[0]
+	if got, want := endpoint.WorkloadID, "workload:service-api"; got != want {
+		t.Fatalf("endpoint.WorkloadID = %q, want %q", got, want)
+	}
+	if got, want := endpoint.Path, "/widgets"; got != want {
+		t.Fatalf("endpoint.Path = %q, want %q", got, want)
+	}
+	if got, want := endpoint.Methods, []string{"get", "post"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("endpoint.Methods = %#v, want %#v", got, want)
+	}
+	if endpoint.EndpointID == "" {
+		t.Fatal("endpoint.EndpointID = empty, want stable graph id")
+	}
+	if got, want := result.Stats.Endpoints, 1; got != want {
+		t.Fatalf("Stats.Endpoints = %d, want %d", got, want)
+	}
+}
+
 func TestBuildProjectionRowsUsesExplicitWorkloadName(t *testing.T) {
 	t.Parallel()
 

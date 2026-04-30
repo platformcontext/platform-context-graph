@@ -339,6 +339,72 @@ post:
 	t.Fatal("/catalog endpoint not found in resolved spec")
 }
 
+func TestLoadServiceQueryEvidenceResolvesNestedOpenAPIPathRefs(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubServiceEvidenceReader{
+		files: []FileContent{
+			{RepoID: "repo-api", RelativePath: "specs/index.yaml"},
+			{RepoID: "repo-api", RelativePath: "specs/paths/index.yaml"},
+			{RepoID: "repo-api", RelativePath: "specs/paths/widgets.yaml"},
+		},
+		fileContent: map[string]string{
+			"specs/index.yaml": `
+openapi: 3.1.0
+info:
+  title: Service API
+  version: v3
+paths:
+  $ref: './paths/index.yaml'
+`,
+			"specs/paths/index.yaml": `
+/widgets:
+  $ref: './widgets.yaml'
+`,
+			"specs/paths/widgets.yaml": `
+get:
+  operationId: listWidgets
+post:
+  operationId: createWidget
+`,
+		},
+	}
+
+	evidence, err := loadServiceQueryEvidence(context.Background(), reader, "repo-api", "api")
+	if err != nil {
+		t.Fatalf("loadServiceQueryEvidence() error = %v", err)
+	}
+
+	var spec *ServiceAPISpecEvidence
+	for i := range evidence.APISpecs {
+		if evidence.APISpecs[i].Parsed && evidence.APISpecs[i].RelativePath == "specs/index.yaml" {
+			spec = &evidence.APISpecs[i]
+			break
+		}
+	}
+	if spec == nil {
+		t.Fatal("parsed spec for specs/index.yaml not found")
+	}
+	if got, want := spec.EndpointCount, 1; got != want {
+		t.Fatalf("EndpointCount = %d, want %d", got, want)
+	}
+	if got, want := spec.MethodCount, 2; got != want {
+		t.Fatalf("MethodCount = %d, want %d", got, want)
+	}
+	if got, want := spec.OperationIDCount, 2; got != want {
+		t.Fatalf("OperationIDCount = %d, want %d", got, want)
+	}
+	if got, want := spec.Endpoints[0].Path, "/widgets"; got != want {
+		t.Fatalf("Endpoints[0].Path = %q, want %q", got, want)
+	}
+	if got, want := spec.Endpoints[0].Methods, []string{"get", "post"}; !slices.Equal(got, want) {
+		t.Fatalf("Endpoints[0].Methods = %#v, want %#v", got, want)
+	}
+	if got, want := spec.Endpoints[0].OperationIDs, []string{"createWidget", "listWidgets"}; !slices.Equal(got, want) {
+		t.Fatalf("Endpoints[0].OperationIDs = %#v, want %#v", got, want)
+	}
+}
+
 func TestLoadServiceQueryEvidencePropagatesReaderErrors(t *testing.T) {
 	t.Parallel()
 

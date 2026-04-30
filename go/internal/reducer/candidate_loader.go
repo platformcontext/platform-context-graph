@@ -46,6 +46,7 @@ func ExtractWorkloadCandidates(envelopes []facts.Envelope) ([]WorkloadCandidate,
 	// Pass 2: scan file facts for K8s resources and ArgoCD apps.
 	signals := make(map[string]*repoSignals)
 	deploymentEnvs := make(map[string]map[string]struct{})
+	apiEndpoints := extractAPIEndpointSignals(envelopes)
 
 	for _, env := range envelopes {
 		if env.FactKind != "file" {
@@ -95,6 +96,7 @@ func ExtractWorkloadCandidates(envelopes []facts.Envelope) ([]WorkloadCandidate,
 			Namespaces:    sortedKeys(sig.namespaces),
 			Confidence:    sig.confidence,
 			Provenance:    append([]string(nil), sig.provenance...),
+			APIEndpoints:  append([]APIEndpointSignal(nil), apiEndpoints[repoID]...),
 		}
 		candidate.Classification = InferWorkloadClassification(candidate)
 		candidates = append(candidates, candidate)

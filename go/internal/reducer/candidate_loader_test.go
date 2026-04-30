@@ -59,6 +59,155 @@ func TestExtractWorkloadCandidatesFromK8sResourceFacts(t *testing.T) {
 	}
 }
 
+func TestExtractWorkloadCandidatesIncludesNestedOpenAPIEndpoints(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repo-service-api",
+				"name":     "service-api",
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-runtime",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repo-service-api",
+				"relative_path":    "Dockerfile",
+				"language":         "dockerfile",
+				"parsed_file_data": map[string]any{"dockerfile_stages": []any{map[string]any{"name": "runner"}}},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-spec",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-service-api",
+				"relative_path": "specs/index.yaml",
+				"parsed_file_data": map[string]any{
+					"source": `
+openapi: 3.1.0
+info:
+  version: v3
+paths:
+  $ref: './paths/index.yaml'
+`,
+				},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-paths",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-service-api",
+				"relative_path": "specs/paths/index.yaml",
+				"parsed_file_data": map[string]any{
+					"source": `
+/widgets:
+  $ref: './widgets.yaml'
+`,
+				},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-route",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-service-api",
+				"relative_path": "specs/paths/widgets.yaml",
+				"parsed_file_data": map[string]any{
+					"source": `
+get:
+  operationId: listWidgets
+post:
+  operationId: createWidget
+`,
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	candidates, _ := ExtractWorkloadCandidates(envelopes)
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+	if got, want := len(candidates[0].APIEndpoints), 1; got != want {
+		t.Fatalf("len(APIEndpoints) = %d, want %d", got, want)
+	}
+	endpoint := candidates[0].APIEndpoints[0]
+	if got, want := endpoint.Path, "/widgets"; got != want {
+		t.Fatalf("endpoint.Path = %q, want %q", got, want)
+	}
+	if got, want := endpoint.Methods, []string{"get", "post"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("endpoint.Methods = %#v, want %#v", got, want)
+	}
+	if got, want := endpoint.OperationIDs, []string{"createWidget", "listWidgets"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("endpoint.OperationIDs = %#v, want %#v", got, want)
+	}
+}
+
+func TestExtractWorkloadCandidatesIncludesFrameworkRouteEndpoints(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"graph_id": "repo-service-api",
+				"name":     "service-api",
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-app",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-service-api",
+				"relative_path": "src/app.py",
+				"parsed_file_data": map[string]any{
+					"framework_semantics": map[string]any{
+						"frameworks": []any{"fastapi"},
+						"fastapi": map[string]any{
+							"route_paths":   []any{"/health"},
+							"route_methods": []any{"GET"},
+						},
+					},
+					"k8s_resources": []any{
+						map[string]any{"name": "service-api", "kind": "Deployment"},
+					},
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	candidates, _ := ExtractWorkloadCandidates(envelopes)
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+	if got, want := len(candidates[0].APIEndpoints), 1; got != want {
+		t.Fatalf("len(APIEndpoints) = %d, want %d", got, want)
+	}
+	endpoint := candidates[0].APIEndpoints[0]
+	if got, want := endpoint.SourceKinds, []string{"framework:fastapi"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("endpoint.SourceKinds = %#v, want %#v", got, want)
+	}
+	if got, want := endpoint.Path, "/health"; got != want {
+		t.Fatalf("endpoint.Path = %q, want %q", got, want)
+	}
+}
+
 func TestExtractWorkloadCandidatesFromArgoCDApplicationFacts(t *testing.T) {
 	t.Parallel()
 

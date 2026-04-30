@@ -22,7 +22,7 @@ type ServiceQueryEvidence struct {
 	Environments    []ServiceEnvironmentEvidence `json:"environments,omitempty"`
 	DocsRoutes      []ServiceDocsRouteEvidence   `json:"docs_routes,omitempty"`
 	APISpecs        []ServiceAPISpecEvidence     `json:"api_specs,omitempty"`
-	FrameworkRoutes []FrameworkRouteEvidence      `json:"framework_routes,omitempty"`
+	FrameworkRoutes []FrameworkRouteEvidence     `json:"framework_routes,omitempty"`
 }
 
 type ServiceHostnameEvidence struct {
@@ -74,9 +74,9 @@ type FrameworkRouteEvidence struct {
 }
 
 var (
-	serviceHostnamePattern  = regexp.MustCompile(`(?i)\b(?:https?://)?((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62})\b`)
-	serviceDocsRoutePattern = regexp.MustCompile(`(?i)['"](/[^'"]+)['"]`)
-	serviceHostnameKeyPattern = regexp.MustCompile(`(?i)(?:^|[\s\[{,])["']?(?:host|hostname|url|origin|endpoint|ingress|server_name|base_url|baseurl|public_url|publicurl|service_url|serviceurl|api_url|apiurl)["']?\s*:`)
+	serviceHostnamePattern       = regexp.MustCompile(`(?i)\b(?:https?://)?((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62})\b`)
+	serviceDocsRoutePattern      = regexp.MustCompile(`(?i)['"](/[^'"]+)['"]`)
+	serviceHostnameKeyPattern    = regexp.MustCompile(`(?i)(?:^|[\s\[{,])["']?(?:host|hostname|url|origin|endpoint|ingress|server_name|base_url|baseurl|public_url|publicurl|service_url|serviceurl|api_url|apiurl)["']?\s*:`)
 	serviceHostnameEnvKeyPattern = regexp.MustCompile(`(?i)\b(?:host|hostname|url|origin|endpoint|base_url|public_url|service_url|api_url|ingress)\b\s*=`)
 )
 
@@ -498,10 +498,15 @@ func resolveOpenAPIPathRefs(doc map[string]any, baseRelativePath string, resolve
 			return
 		}
 		doc["paths"] = resolved
+		resolveOpenAPIPathItemRefs(resolved, openAPIRefFilePath(baseRelativePath, ref), resolver)
 		return
 	}
 
 	// Case 2: per-path-item $ref — individual path items reference external files.
+	resolveOpenAPIPathItemRefs(paths, baseRelativePath, resolver)
+}
+
+func resolveOpenAPIPathItemRefs(paths map[string]any, baseRelativePath string, resolver specFileResolver) {
 	for route, rawPathItem := range paths {
 		pathItemMap := serviceMapValue(rawPathItem)
 		if pathItemMap == nil {
@@ -622,9 +627,7 @@ func buildSpecFileResolver(reader serviceEvidenceReader, ctx context.Context, re
 			return ""
 		}
 		// Resolve relative path against the base spec file's directory.
-		baseDir := filepath.Dir(baseRelativePath)
-		resolved := filepath.Join(baseDir, ref)
-		resolved = filepath.Clean(resolved)
+		resolved := openAPIRefFilePath(baseRelativePath, ref)
 
 		fc, err := reader.GetFileContent(ctx, repoID, resolved)
 		if err != nil || fc == nil {
@@ -632,6 +635,21 @@ func buildSpecFileResolver(reader serviceEvidenceReader, ctx context.Context, re
 		}
 		return fc.Content
 	}
+}
+
+func openAPIRefFilePath(baseRelativePath, ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return ""
+	}
+	if fragmentIndex := strings.Index(ref, "#"); fragmentIndex >= 0 {
+		ref = ref[:fragmentIndex]
+	}
+	if ref == "" {
+		return ""
+	}
+	baseDir := filepath.Dir(baseRelativePath)
+	return filepath.Clean(filepath.Join(baseDir, ref))
 }
 
 func serviceEvidenceFormat(relativePath string) string {

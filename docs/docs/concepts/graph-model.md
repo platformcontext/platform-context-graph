@@ -28,6 +28,8 @@ Some edges describe direct technical structure:
 - `(:Class)-[:INHERITS]->(:Class)`
 - `(:File)-[:CONTAINS]->(:Function)`
 - `(:Repository)-[:DEFINES]->(:Workload)`
+- `(:Repository)-[:EXPOSES_ENDPOINT]->(:Endpoint)`
+- `(:Workload)-[:EXPOSES_ENDPOINT]->(:Endpoint)`
 
 Some edges describe deployable-system context:
 

@@ -165,7 +165,8 @@ func (h WorkloadMaterializationHandler) Handle(
 	totalWrites := materializeResult.WorkloadsWritten +
 		materializeResult.InstancesWritten +
 		materializeResult.DeploymentSourcesWritten +
-		materializeResult.RuntimePlatformsWritten
+		materializeResult.RuntimePlatformsWritten +
+		materializeResult.EndpointsWritten
 
 	dependencyRetractRows := 0
 	dependencyWriteRows := 0
@@ -238,11 +239,12 @@ func (h WorkloadMaterializationHandler) Handle(
 		Domain:   DomainWorkloadMaterialization,
 		Status:   ResultStatusSucceeded,
 		EvidenceSummary: fmt.Sprintf(
-			"materialized %d workloads, %d instances, %d deployment sources, %d runtime platforms",
+			"materialized %d workloads, %d instances, %d deployment sources, %d runtime platforms, %d endpoints",
 			materializeResult.WorkloadsWritten,
 			materializeResult.InstancesWritten,
 			materializeResult.DeploymentSourcesWritten,
 			materializeResult.RuntimePlatformsWritten,
+			materializeResult.EndpointsWritten,
 		),
 		CanonicalWrites: totalWrites,
 	}, nil
@@ -298,11 +300,13 @@ func logWorkloadMaterializationCompleted(
 	instanceRows := 0
 	deploymentSourceRows := 0
 	runtimePlatformRows := 0
+	endpointRows := 0
 	if projection != nil {
 		workloadRows = len(projection.WorkloadRows)
 		instanceRows = len(projection.InstanceRows)
 		deploymentSourceRows = len(projection.DeploymentSourceRows)
 		runtimePlatformRows = len(projection.RuntimePlatformRows)
+		endpointRows = len(projection.EndpointRows)
 	}
 
 	slog.InfoContext(ctx, "workload materialization completed",
@@ -314,10 +318,12 @@ func logWorkloadMaterializationCompleted(
 		slog.Int("instance_row_count", instanceRows),
 		slog.Int("deployment_source_row_count", deploymentSourceRows),
 		slog.Int("runtime_platform_row_count", runtimePlatformRows),
+		slog.Int("endpoint_row_count", endpointRows),
 		slog.Int("workloads_written", materializeResult.WorkloadsWritten),
 		slog.Int("instances_written", materializeResult.InstancesWritten),
 		slog.Int("deployment_sources_written", materializeResult.DeploymentSourcesWritten),
 		slog.Int("runtime_platforms_written", materializeResult.RuntimePlatformsWritten),
+		slog.Int("endpoints_written", materializeResult.EndpointsWritten),
 		slog.Int("dependency_retract_row_count", dependencyRetractRows),
 		slog.Int("dependency_write_row_count", dependencyWriteRows),
 		slog.Float64("load_inputs_duration_seconds", timing.loadInputsDuration.Seconds()),
@@ -327,6 +333,7 @@ func logWorkloadMaterializationCompleted(
 		slog.Float64("instance_graph_write_duration_seconds", materializeResult.InstanceWriteDuration.Seconds()),
 		slog.Float64("deployment_source_graph_write_duration_seconds", materializeResult.DeploymentSourceDuration.Seconds()),
 		slog.Float64("runtime_platform_graph_write_duration_seconds", materializeResult.RuntimePlatformDuration.Seconds()),
+		slog.Float64("endpoint_graph_write_duration_seconds", materializeResult.EndpointWriteDuration.Seconds()),
 		slog.Float64("dependency_reconcile_duration_seconds", timing.dependencyReconcile.Seconds()),
 		slog.Float64("dependency_retract_duration_seconds", timing.dependencyRetract.Seconds()),
 		slog.Float64("dependency_write_duration_seconds", timing.dependencyWrite.Seconds()),

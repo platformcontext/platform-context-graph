@@ -224,6 +224,52 @@ func TestWorkloadMaterializerWritesRuntimePlatforms(t *testing.T) {
 	}
 }
 
+func TestWorkloadMaterializerWritesAPIEndpoints(t *testing.T) {
+	t.Parallel()
+
+	executor := &fakeNeo4jExecutor{}
+	m := NewWorkloadMaterializer(executor)
+
+	projection := &ProjectionResult{
+		EndpointRows: []APIEndpointRow{
+			{
+				EndpointID:   "endpoint:repo-service-api:1234",
+				RepoID:       "repo-service-api",
+				WorkloadID:   "workload:service-api",
+				WorkloadName: "service-api",
+				Path:         "/widgets",
+				Methods:      []string{"get", "post"},
+				OperationIDs: []string{"createWidget", "listWidgets"},
+				SourceKinds:  []string{"openapi"},
+				SourcePaths:  []string{"specs/index.yaml"},
+				SpecVersions: []string{"3.1.0"},
+				APIVersions:  []string{"v3"},
+			},
+		},
+	}
+
+	result, err := m.Materialize(context.Background(), projection)
+	if err != nil {
+		t.Fatalf("Materialize() error = %v", err)
+	}
+	if result.EndpointsWritten != 1 {
+		t.Fatalf("EndpointsWritten = %d, want 1", result.EndpointsWritten)
+	}
+	if !containsCypher(executor.calls, "MERGE (endpoint:Endpoint {id: row.endpoint_id})") {
+		t.Fatal("missing Endpoint MERGE cypher")
+	}
+	if !containsCypher(executor.calls, "MERGE (repo)-[repo_rel:EXPOSES_ENDPOINT]->(endpoint)") {
+		t.Fatal("missing Repository EXPOSES_ENDPOINT MERGE cypher")
+	}
+	if !containsCypher(executor.calls, "MERGE (workload)-[workload_rel:EXPOSES_ENDPOINT]->(endpoint)") {
+		t.Fatal("missing Workload EXPOSES_ENDPOINT MERGE cypher")
+	}
+	rows := executor.calls[0].Parameters["rows"].([]map[string]any)
+	if got, want := rows[0]["path"], "/widgets"; got != want {
+		t.Fatalf("path = %#v, want %#v", got, want)
+	}
+}
+
 func TestWorkloadMaterializerFullPipeline(t *testing.T) {
 	t.Parallel()
 

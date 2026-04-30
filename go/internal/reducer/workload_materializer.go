@@ -22,12 +22,14 @@ type MaterializeResult struct {
 	InstancesWritten            int
 	DeploymentSourcesWritten    int
 	RuntimePlatformsWritten     int
+	EndpointsWritten            int
 	RepoDependenciesWritten     int
 	WorkloadDependenciesWritten int
 	WorkloadWriteDuration       time.Duration
 	InstanceWriteDuration       time.Duration
 	DeploymentSourceDuration    time.Duration
 	RuntimePlatformDuration     time.Duration
+	EndpointWriteDuration       time.Duration
 }
 
 // WorkloadMaterializer converts projection results into canonical Neo4j graph
@@ -85,7 +87,8 @@ func (m *WorkloadMaterializer) Materialize(
 	total := len(projection.WorkloadRows) +
 		len(projection.InstanceRows) +
 		len(projection.DeploymentSourceRows) +
-		len(projection.RuntimePlatformRows)
+		len(projection.RuntimePlatformRows) +
+		len(projection.EndpointRows)
 
 	if total == 0 {
 		return MaterializeResult{}, nil
@@ -187,6 +190,33 @@ func (m *WorkloadMaterializer) Materialize(
 		}
 		result.RuntimePlatformDuration = time.Since(stageStarted)
 		result.RuntimePlatformsWritten = len(projection.RuntimePlatformRows)
+	}
+
+	// Batch API endpoints.
+	if len(projection.EndpointRows) > 0 {
+		stageStarted := time.Now()
+		rows := make([]map[string]any, len(projection.EndpointRows))
+		for i, row := range projection.EndpointRows {
+			rows[i] = map[string]any{
+				"endpoint_id":     row.EndpointID,
+				"repo_id":         row.RepoID,
+				"workload_id":     row.WorkloadID,
+				"workload_name":   row.WorkloadName,
+				"path":            row.Path,
+				"methods":         row.Methods,
+				"operation_ids":   row.OperationIDs,
+				"source_kinds":    row.SourceKinds,
+				"source_paths":    row.SourcePaths,
+				"spec_versions":   row.SpecVersions,
+				"api_versions":    row.APIVersions,
+				"evidence_source": EvidenceSourceWorkloads,
+			}
+		}
+		if err := m.executeBatched(ctx, batchAPIEndpointUpsertCypher, rows); err != nil {
+			return result, fmt.Errorf("write api endpoints: %w", err)
+		}
+		result.EndpointWriteDuration = time.Since(stageStarted)
+		result.EndpointsWritten = len(projection.EndpointRows)
 	}
 
 	return result, nil
@@ -322,4 +352,27 @@ MERGE (source)-[rel:DEPENDS_ON]->(target)
 SET rel.confidence = 0.9,
     rel.reason = 'Runtime services list declares workload dependency',
     rel.evidence_source = row.evidence_source`
+
+	batchAPIEndpointUpsertCypher = `UNWIND $rows AS row
+MATCH (repo:Repository {id: row.repo_id})
+MATCH (workload:Workload {id: row.workload_id})
+MERGE (endpoint:Endpoint {id: row.endpoint_id})
+SET endpoint.type = 'endpoint',
+    endpoint.path = row.path,
+    endpoint.methods = row.methods,
+    endpoint.operation_ids = row.operation_ids,
+    endpoint.repo_id = row.repo_id,
+    endpoint.workload_id = row.workload_id,
+    endpoint.workload_name = row.workload_name,
+    endpoint.source_kinds = row.source_kinds,
+    endpoint.source_paths = row.source_paths,
+    endpoint.spec_versions = row.spec_versions,
+    endpoint.api_versions = row.api_versions,
+    endpoint.evidence_source = row.evidence_source
+MERGE (repo)-[repo_rel:EXPOSES_ENDPOINT]->(endpoint)
+SET repo_rel.evidence_source = row.evidence_source,
+    repo_rel.reason = 'Repository exposes API endpoint'
+MERGE (workload)-[workload_rel:EXPOSES_ENDPOINT]->(endpoint)
+SET workload_rel.evidence_source = row.evidence_source,
+    workload_rel.reason = 'Workload exposes API endpoint'`
 )

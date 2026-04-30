@@ -1,6 +1,8 @@
 package reducer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
@@ -37,6 +39,19 @@ type WorkloadCandidate struct {
 	Classification            string
 	Confidence                float64
 	Provenance                []string
+	APIEndpoints              []APIEndpointSignal
+}
+
+// APIEndpointSignal is source evidence for one externally visible API route
+// detected from parsed framework semantics or API specification files.
+type APIEndpointSignal struct {
+	Path         string
+	Methods      []string
+	OperationIDs []string
+	SourceKinds  []string
+	SourcePaths  []string
+	SpecVersions []string
+	APIVersions  []string
 }
 
 // ProjectionStats tracks counts produced during projection row building.
@@ -44,6 +59,7 @@ type ProjectionStats struct {
 	Workloads         int
 	Instances         int
 	DeploymentSources int
+	Endpoints         int
 }
 
 // WorkloadRow is one canonical workload upsert payload.
@@ -94,6 +110,21 @@ type RuntimePlatformRow struct {
 	RepoID           string
 }
 
+// APIEndpointRow is one canonical Endpoint graph upsert payload.
+type APIEndpointRow struct {
+	EndpointID   string
+	RepoID       string
+	WorkloadID   string
+	WorkloadName string
+	Path         string
+	Methods      []string
+	OperationIDs []string
+	SourceKinds  []string
+	SourcePaths  []string
+	SpecVersions []string
+	APIVersions  []string
+}
+
 // RepoDescriptor maps a repository to its inferred workload identity.
 type RepoDescriptor struct {
 	RepoID     string
@@ -108,6 +139,7 @@ type ProjectionResult struct {
 	InstanceRows         []InstanceRow
 	DeploymentSourceRows []DeploymentSourceRow
 	RuntimePlatformRows  []RuntimePlatformRow
+	EndpointRows         []APIEndpointRow
 	RepoDescriptors      []RepoDescriptor
 }
 
@@ -214,6 +246,7 @@ func BuildProjectionRowsWithInfrastructurePlatforms(
 	seenInstances := make(map[string]struct{})
 	seenDeploymentSources := make(map[string]struct{})
 	seenRuntimePlatforms := make(map[string]struct{})
+	seenEndpoints := make(map[string]int)
 
 	for _, candidate := range candidates {
 		if candidate.RepoID == "" || candidate.RepoName == "" {
@@ -258,6 +291,7 @@ func BuildProjectionRowsWithInfrastructurePlatforms(
 			})
 			result.Stats.Workloads++
 		}
+		addAPIEndpointRows(result, candidate, workloadID, workloadName, seenEndpoints)
 
 		// Resolve environments: deployment overlay environments first (by
 		// deployment repo when linked, otherwise source repo), then namespace
@@ -370,6 +404,53 @@ func BuildProjectionRowsWithInfrastructurePlatforms(
 	}
 
 	return result
+}
+
+func addAPIEndpointRows(
+	result *ProjectionResult,
+	candidate WorkloadCandidate,
+	workloadID string,
+	workloadName string,
+	seen map[string]int,
+) {
+	for _, endpoint := range candidate.APIEndpoints {
+		path := strings.TrimSpace(endpoint.Path)
+		if path == "" {
+			continue
+		}
+		endpointID := stableAPIEndpointID(candidate.RepoID, workloadID, path)
+		if index, ok := seen[endpointID]; ok {
+			existing := result.EndpointRows[index]
+			existing.Methods = uniqueSortedStrings(append(existing.Methods, endpoint.Methods...))
+			existing.OperationIDs = uniqueSortedStrings(append(existing.OperationIDs, endpoint.OperationIDs...))
+			existing.SourceKinds = uniqueSortedStrings(append(existing.SourceKinds, endpoint.SourceKinds...))
+			existing.SourcePaths = uniqueSortedStrings(append(existing.SourcePaths, endpoint.SourcePaths...))
+			existing.SpecVersions = uniqueSortedStrings(append(existing.SpecVersions, endpoint.SpecVersions...))
+			existing.APIVersions = uniqueSortedStrings(append(existing.APIVersions, endpoint.APIVersions...))
+			result.EndpointRows[index] = existing
+			continue
+		}
+		seen[endpointID] = len(result.EndpointRows)
+		result.EndpointRows = append(result.EndpointRows, APIEndpointRow{
+			EndpointID:   endpointID,
+			RepoID:       candidate.RepoID,
+			WorkloadID:   workloadID,
+			WorkloadName: workloadName,
+			Path:         path,
+			Methods:      uniqueSortedStrings(endpoint.Methods),
+			OperationIDs: uniqueSortedStrings(endpoint.OperationIDs),
+			SourceKinds:  uniqueSortedStrings(endpoint.SourceKinds),
+			SourcePaths:  uniqueSortedStrings(endpoint.SourcePaths),
+			SpecVersions: uniqueSortedStrings(endpoint.SpecVersions),
+			APIVersions:  uniqueSortedStrings(endpoint.APIVersions),
+		})
+		result.Stats.Endpoints++
+	}
+}
+
+func stableAPIEndpointID(repoID, workloadID, path string) string {
+	digest := sha256.Sum256([]byte(repoID + "|" + workloadID + "|" + path))
+	return "endpoint:" + hex.EncodeToString(digest[:12])
 }
 
 func provisionedRuntimePlatformRows(
