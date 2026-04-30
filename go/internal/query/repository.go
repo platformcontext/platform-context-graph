@@ -176,6 +176,9 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	if apiSurface := queryRepoAPISurface(ctx, h.Neo4j, params); len(apiSurface) > 0 {
 		result["api_surface"] = apiSurface
 	}
+	if deploymentEvidence := queryRepoDeploymentEvidence(ctx, h.Neo4j, params); len(deploymentEvidence) > 0 {
+		result["deployment_evidence"] = deploymentEvidence
+	}
 	if h.Content != nil {
 		files, err := h.Content.ListRepoFiles(ctx, repoID, repositorySemanticEntityLimit)
 		if err == nil {

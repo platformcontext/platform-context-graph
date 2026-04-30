@@ -87,6 +87,10 @@ const openAPIPathsRepositories = `
                       "type": "object",
                       "description": "Graph-backed API endpoint surface exposed by this repository."
                     },
+                    "deployment_evidence": {
+                      "type": "object",
+                      "description": "Graph-backed deployment, CI, and environment evidence pointers for this repository."
+                    },
                     "consumers": {
                       "type": "array",
                       "description": "Repositories with incoming relationships to this repository.",
