@@ -1,0 +1,25 @@
+go/cmd/bootstrap-index/nornicdb_wiring_test.go
+  4cb501d5d4ff237f 1-112
+go/cmd/bootstrap-index/nornicdb_wiring.go
+  4cb501d5d4ff237f 1-453
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "76a0909f5bbcff0b9e73812e96d63bc62dda68af",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 568,
+      "total_deletions": 3,
+      "accepted_lines": 600,
+      "overriden_lines": 0
+    }
+  }
+}
