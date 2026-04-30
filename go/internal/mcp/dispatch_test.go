@@ -350,6 +350,7 @@ func TestResolveRouteMapsFindDeadCodeExclusions(t *testing.T) {
 
 	route, err := resolveRoute("find_dead_code", map[string]any{
 		"repo_id":                "repo-1",
+		"limit":                  float64(25),
 		"exclude_decorated_with": []any{"@route", "@app.route"},
 	})
 	if err != nil {
@@ -365,12 +366,38 @@ func TestResolveRouteMapsFindDeadCodeExclusions(t *testing.T) {
 	if got, want := body["repo_id"], "repo-1"; got != want {
 		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
 	}
+	if got, want := body["limit"], 25; got != want {
+		t.Fatalf("body[limit] = %#v, want %#v", got, want)
+	}
 	exclusions, ok := body["exclude_decorated_with"].([]any)
 	if !ok {
 		t.Fatalf("body[exclude_decorated_with] type = %T, want []any", body["exclude_decorated_with"])
 	}
 	if len(exclusions) != 2 {
 		t.Fatalf("len(body[exclude_decorated_with]) = %d, want 2", len(exclusions))
+	}
+}
+
+func TestResolveRouteMapsAnalyzeDeadCodeLimit(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("analyze_code_relationships", map[string]any{
+		"query_type": "dead_code",
+		"repo_id":    "repo-1",
+		"limit":      12,
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if route.path != "/api/v0/code/dead-code" {
+		t.Fatalf("route.path = %q, want /api/v0/code/dead-code", route.path)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["limit"], 12; got != want {
+		t.Fatalf("body[limit] = %#v, want %#v", got, want)
 	}
 }
 

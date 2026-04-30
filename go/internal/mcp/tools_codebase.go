@@ -104,6 +104,11 @@ func codebaseTools() []ToolDefinition {
 						"type":        "string",
 						"description": "Optional canonical repository identifier",
 					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "Maximum dead-code candidates to return",
+						"default":     100,
+					},
 					"scope": map[string]any{
 						"type":        "string",
 						"description": "Search scope",

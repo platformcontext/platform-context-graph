@@ -117,11 +117,16 @@ func str(args map[string]any, key string) string {
 }
 
 func intOr(args map[string]any, key string, def int) int {
-	v, ok := args[key].(float64)
-	if !ok {
+	switch v := args[key].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
 		return def
 	}
-	return int(v)
 }
 
 func boolOr(args map[string]any, key string, def bool) bool {
@@ -290,6 +295,7 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 		case "dead_code":
 			return &route{method: "POST", path: "/api/v0/code/dead-code", body: map[string]any{
 				"repo_id":                str(args, "repo_id"),
+				"limit":                  intOr(args, "limit", 100),
 				"exclude_decorated_with": stringSlice(args, "exclude_decorated_with"),
 			}}, nil
 		}
@@ -297,6 +303,7 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 	case "find_dead_code":
 		return &route{method: "POST", path: "/api/v0/code/dead-code", body: map[string]any{
 			"repo_id":                str(args, "repo_id"),
+			"limit":                  intOr(args, "limit", 100),
 			"exclude_decorated_with": stringSlice(args, "exclude_decorated_with"),
 		}}, nil
 	case "calculate_cyclomatic_complexity":
