@@ -2,6 +2,8 @@ package neo4j
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -97,6 +99,8 @@ func (w *EdgeWriter) WriteEdges(
 
 	routedRows := make(map[string][]map[string]any)
 	routeOrder := make([]string, 0, 2)
+	artifactRows := make(map[string][]map[string]any)
+	artifactRouteOrder := make([]string, 0, 2)
 	for _, row := range rows {
 		cypher, rowMap, ok := buildRowMap(domain, row, evidenceSource)
 		if !ok {
@@ -106,6 +110,18 @@ func (w *EdgeWriter) WriteEdges(
 			routeOrder = append(routeOrder, cypher)
 		}
 		routedRows[cypher] = append(routedRows[cypher], rowMap)
+		if domain == reducer.DomainRepoDependency {
+			for _, artifactRow := range repoEvidenceArtifactRowsFromIntent(row, evidenceSource) {
+				artifactCypher := batchCanonicalRepoEvidenceArtifactUpsertCypher
+				if payloadString(artifactRow, "environment") != "" {
+					artifactCypher = batchCanonicalRepoEvidenceArtifactWithEnvironmentUpsertCypher
+				}
+				if _, seen := artifactRows[artifactCypher]; !seen {
+					artifactRouteOrder = append(artifactRouteOrder, artifactCypher)
+				}
+				artifactRows[artifactCypher] = append(artifactRows[artifactCypher], artifactRow)
+			}
+		}
 	}
 
 	if len(routedRows) == 0 {
@@ -121,6 +137,9 @@ func (w *EdgeWriter) WriteEdges(
 	bs := w.batchSizeForDomain(domain)
 	for _, cypher := range routeOrder {
 		stmts = append(stmts, buildBatchedStatements(cypher, routedRows[cypher], bs)...)
+	}
+	for _, cypher := range artifactRouteOrder {
+		stmts = append(stmts, buildBatchedStatements(cypher, artifactRows[cypher], bs)...)
 	}
 
 	// Prefer atomic grouped execution; fall back to sequential.
@@ -397,6 +416,35 @@ func (w *EdgeWriter) RetractEdges(
 			return WrapRetryableNeo4jError(ge.ExecuteGroup(ctx, stmts))
 		}
 	}
+	if domain == reducer.DomainRepoDependency {
+		stmts := []Statement{
+			{
+				Operation: OperationCanonicalRetract,
+				Cypher:    retractRepoRelationshipAndRunsOnEdgesCypher,
+				Parameters: map[string]any{
+					"repo_ids":        repoIDs,
+					"evidence_source": evidenceSource,
+				},
+			},
+			{
+				Operation: OperationCanonicalRetract,
+				Cypher:    retractRepoEvidenceArtifactsCypher,
+				Parameters: map[string]any{
+					"repo_ids":        repoIDs,
+					"evidence_source": evidenceSource,
+				},
+			},
+		}
+		if ge, ok := w.executor.(GroupExecutor); ok {
+			return WrapRetryableNeo4jError(ge.ExecuteGroup(ctx, stmts))
+		}
+		for _, stmt := range stmts {
+			if err := w.executor.Execute(ctx, stmt); err != nil {
+				return WrapRetryableNeo4jError(err)
+			}
+		}
+		return nil
+	}
 
 	stmt, err := buildRetractStatement(domain, repoIDs, evidenceSource)
 	if err != nil {
@@ -487,6 +535,67 @@ func copyRepoRelationshipMetadata(rowMap map[string]any, payload map[string]any,
 	rowMap["rationale"] = payloadString(payload, "rationale")
 }
 
+// repoEvidenceArtifactRowsFromIntent builds bounded graph nodes from reducer
+// evidence summaries while preserving raw detail ownership in Postgres.
+func repoEvidenceArtifactRowsFromIntent(
+	row reducer.SharedProjectionIntentRow,
+	evidenceSource string,
+) []map[string]any {
+	payload := row.Payload
+	repoID := payloadString(payload, "repo_id")
+	targetRepoID := payloadString(payload, "target_repo_id")
+	if repoID == "" || targetRepoID == "" {
+		return nil
+	}
+	artifacts := payloadMapSlice(payload, "evidence_artifacts")
+	if len(artifacts) == 0 {
+		return nil
+	}
+
+	relationshipType := payloadString(payload, "relationship_type")
+	resolvedID := payloadString(payload, "resolved_id")
+	generationID := payloadString(payload, "generation_id")
+	if generationID == "" {
+		generationID = row.GenerationID
+	}
+	rows := make([]map[string]any, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		evidenceKind := payloadString(artifact, "evidence_kind")
+		path := payloadString(artifact, "path")
+		matchedValue := payloadString(artifact, "matched_value")
+		name := path
+		if name == "" {
+			name = evidenceKind
+		}
+		artifactID := repoEvidenceArtifactID(resolvedID, evidenceKind, path, matchedValue)
+		rows = append(rows, map[string]any{
+			"artifact_id":           artifactID,
+			"name":                  name,
+			"repo_id":               repoID,
+			"target_repo_id":        targetRepoID,
+			"relationship_type":     relationshipType,
+			"resolved_id":           resolvedID,
+			"generation_id":         generationID,
+			"evidence_kind":         evidenceKind,
+			"artifact_family":       payloadString(artifact, "artifact_family"),
+			"path":                  path,
+			"extractor":             payloadString(artifact, "extractor"),
+			"environment":           payloadString(artifact, "environment"),
+			"runtime_platform_kind": payloadString(artifact, "runtime_platform_kind"),
+			"matched_alias":         payloadString(artifact, "matched_alias"),
+			"matched_value":         matchedValue,
+			"confidence":            payloadFloat(artifact, "confidence"),
+			"evidence_source":       evidenceSource,
+		})
+	}
+	return rows
+}
+
+func repoEvidenceArtifactID(resolvedID string, evidenceKind string, path string, matchedValue string) string {
+	hash := sha1.Sum([]byte(strings.Join([]string{resolvedID, evidenceKind, path, matchedValue}, "\x00")))
+	return "evidence-artifact:" + hex.EncodeToString(hash[:8])
+}
+
 // payloadInt accepts numeric shapes produced by Go maps, JSON decoding, and
 // database drivers.
 func payloadInt(payload map[string]any, key string) int {
@@ -522,6 +631,28 @@ func payloadFloat(payload map[string]any, key string) float64 {
 		return float64(value)
 	default:
 		return 0
+	}
+}
+
+// payloadMapSlice normalizes graph-story evidence summaries after JSON
+// decoding or direct Go construction in reducer tests.
+func payloadMapSlice(payload map[string]any, key string) []map[string]any {
+	if payload == nil {
+		return nil
+	}
+	switch value := payload[key].(type) {
+	case []map[string]any:
+		return value
+	case []any:
+		out := make([]map[string]any, 0, len(value))
+		for _, item := range value {
+			if mapped, ok := item.(map[string]any); ok {
+				out = append(out, mapped)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }
 

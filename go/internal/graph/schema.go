@@ -38,6 +38,10 @@ var schemaConstraints = []string{
 	// Directory identity
 	"CREATE CONSTRAINT directory_path IF NOT EXISTS FOR (d:Directory) REQUIRE d.path IS UNIQUE",
 
+	// Evidence story identity
+	"CREATE CONSTRAINT evidence_artifact_id IF NOT EXISTS FOR (a:EvidenceArtifact) REQUIRE a.id IS UNIQUE",
+	"CREATE CONSTRAINT environment_name IF NOT EXISTS FOR (e:Environment) REQUIRE e.name IS UNIQUE",
+
 	// Code entity node-key constraints
 	"CREATE CONSTRAINT function_unique IF NOT EXISTS FOR (f:Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE",
 	"CREATE CONSTRAINT class_unique IF NOT EXISTS FOR (c:Class) REQUIRE (c.name, c.path, c.line_number) IS UNIQUE",
@@ -197,6 +201,8 @@ var nornicDBMergeLookupIndexes = []string{
 	"CREATE INDEX nornicdb_workload_id_lookup IF NOT EXISTS FOR (w:Workload) ON (w.id)",
 	"CREATE INDEX nornicdb_workload_instance_id_lookup IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.id)",
 	"CREATE INDEX nornicdb_platform_id_lookup IF NOT EXISTS FOR (p:Platform) ON (p.id)",
+	"CREATE INDEX nornicdb_evidence_artifact_id_lookup IF NOT EXISTS FOR (a:EvidenceArtifact) ON (a.id)",
+	"CREATE INDEX nornicdb_environment_name_lookup IF NOT EXISTS FOR (e:Environment) ON (e.name)",
 }
 
 func nornicDBUIDLookupIndexes() []string {

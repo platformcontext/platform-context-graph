@@ -221,6 +221,40 @@ SET rel.confidence = row.confidence,
     rel.resolution_source = row.resolution_source,
     rel.rationale = row.rationale`
 
+const batchCanonicalRepoEvidenceArtifactUpsertCypher = `UNWIND $rows AS row
+MATCH (source_repo:Repository {id: row.repo_id})
+MATCH (target_repo:Repository {id: row.target_repo_id})
+MERGE (artifact:EvidenceArtifact {id: row.artifact_id})
+SET artifact.name = row.name,
+    artifact.domain = 'deployment',
+    artifact.path = row.path,
+    artifact.evidence_kind = row.evidence_kind,
+    artifact.artifact_family = row.artifact_family,
+    artifact.extractor = row.extractor,
+    artifact.relationship_type = row.relationship_type,
+    artifact.resolved_id = row.resolved_id,
+    artifact.generation_id = row.generation_id,
+    artifact.confidence = row.confidence,
+    artifact.environment = row.environment,
+    artifact.runtime_platform_kind = row.runtime_platform_kind,
+    artifact.matched_alias = row.matched_alias,
+    artifact.matched_value = row.matched_value,
+    artifact.evidence_source = row.evidence_source
+MERGE (source_repo)-[source_rel:HAS_DEPLOYMENT_EVIDENCE]->(artifact)
+SET source_rel.evidence_source = row.evidence_source,
+    source_rel.resolved_id = row.resolved_id,
+    source_rel.relationship_type = row.relationship_type
+MERGE (artifact)-[target_rel:EVIDENCES_REPOSITORY_RELATIONSHIP]->(target_repo)
+SET target_rel.relationship_type = row.relationship_type,
+    target_rel.resolved_id = row.resolved_id,
+    target_rel.evidence_source = row.evidence_source`
+
+const batchCanonicalRepoEvidenceArtifactWithEnvironmentUpsertCypher = batchCanonicalRepoEvidenceArtifactUpsertCypher + `
+MERGE (env:Environment {name: row.environment})
+MERGE (artifact)-[env_rel:TARGETS_ENVIRONMENT]->(env)
+SET env_rel.evidence_source = row.evidence_source,
+    env_rel.resolved_id = row.resolved_id`
+
 const canonicalRunsOnUpsertCypher = `UNWIND $rows AS row
 MATCH (repo:Repository {id: row.repo_id})
 MATCH (repo)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)
@@ -240,6 +274,11 @@ WITH DISTINCT repo_id, $evidence_source AS evidence_source
 MATCH (repo:Repository {id: repo_id})-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[rel:RUNS_ON]->(:Platform)
 WHERE rel.evidence_source = evidence_source
 DELETE rel`
+
+const retractRepoEvidenceArtifactsCypher = `UNWIND $repo_ids AS repo_id
+MATCH (source_repo:Repository {id: repo_id})-[rel:HAS_DEPLOYMENT_EVIDENCE]->(artifact:EvidenceArtifact)
+WHERE rel.evidence_source = $evidence_source
+DETACH DELETE artifact`
 
 // BuildCanonicalRepoRelationshipUpsert builds a typed repository relationship statement.
 func BuildCanonicalRepoRelationshipUpsert(p CanonicalRepoRelationshipParams, evidenceSource string) Statement {

@@ -20,6 +20,8 @@ func TestSchemaStatementsContainsExpectedConstraints(t *testing.T) {
 		"CREATE CONSTRAINT repository_path IF NOT EXISTS",
 		"CREATE CONSTRAINT path IF NOT EXISTS FOR (f:File)",
 		"CREATE CONSTRAINT directory_path IF NOT EXISTS",
+		"CREATE CONSTRAINT evidence_artifact_id IF NOT EXISTS",
+		"CREATE CONSTRAINT environment_name IF NOT EXISTS",
 		"CREATE CONSTRAINT function_unique IF NOT EXISTS",
 		"CREATE CONSTRAINT class_unique IF NOT EXISTS",
 		"CREATE CONSTRAINT parameter_unique IF NOT EXISTS",
@@ -80,6 +82,8 @@ func TestSchemaStatementsForBackendAddsNornicDBMergeLookupIndexes(t *testing.T) 
 		"CREATE INDEX nornicdb_workload_id_lookup IF NOT EXISTS FOR (w:Workload) ON (w.id)",
 		"CREATE INDEX nornicdb_workload_instance_id_lookup IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.id)",
 		"CREATE INDEX nornicdb_platform_id_lookup IF NOT EXISTS FOR (p:Platform) ON (p.id)",
+		"CREATE INDEX nornicdb_evidence_artifact_id_lookup IF NOT EXISTS FOR (a:EvidenceArtifact) ON (a.id)",
+		"CREATE INDEX nornicdb_environment_name_lookup IF NOT EXISTS FOR (e:Environment) ON (e.name)",
 	}
 	for _, want := range expected {
 		assertContainsStatement(t, stmts, want)

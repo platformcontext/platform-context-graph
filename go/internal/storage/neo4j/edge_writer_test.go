@@ -388,7 +388,7 @@ func TestEdgeWriterRetractEdgesRepoDependencyDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RetractEdges() error = %v", err)
 	}
-	if got, want := len(executor.calls), 1; got != want {
+	if got, want := len(executor.calls), 2; got != want {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "source_repo:Repository") {
@@ -402,6 +402,12 @@ func TestEdgeWriterRetractEdgesRepoDependencyDispatch(t *testing.T) {
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "MATCH (repo:Repository {id: repo_id})") {
 		t.Fatalf("cypher missing indexed RUNS_ON Repository anchor: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[1].Cypher, "HAS_DEPLOYMENT_EVIDENCE") {
+		t.Fatalf("artifact retract cypher missing evidence edge: %s", executor.calls[1].Cypher)
+	}
+	if !strings.Contains(executor.calls[1].Cypher, "DETACH DELETE artifact") {
+		t.Fatalf("artifact retract cypher missing DETACH DELETE: %s", executor.calls[1].Cypher)
 	}
 }
 

@@ -364,6 +364,9 @@ func buildResolvedEdgeIntentRow(
 	if evidenceType := resolvedRelationshipEvidenceType(r); evidenceType != "" {
 		payload["evidence_type"] = evidenceType
 	}
+	if artifacts := resolvedRelationshipEvidenceArtifacts(r); len(artifacts) > 0 {
+		payload["evidence_artifacts"] = artifacts
+	}
 
 	partitionKey := ""
 	routeType := string(r.RelationshipType)

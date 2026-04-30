@@ -128,6 +128,102 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 	}
 }
 
+func TestEdgeWriterWriteEdgesMaterializesRepoEvidenceArtifacts(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewEdgeWriter(executor, 0)
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:     "i1",
+			RepositoryID: "repo-deploy",
+			GenerationID: "gen-1",
+			Payload: map[string]any{
+				"repo_id":           "repo-deploy",
+				"target_repo_id":    "repo-service",
+				"relationship_type": "DEPLOYS_FROM",
+				"resolved_id":       "resolved-1",
+				"generation_id":     "gen-1",
+				"evidence_artifacts": []map[string]any{
+					{
+						"evidence_kind":   "HELM_VALUES_REFERENCE",
+						"artifact_family": "helm",
+						"path":            "argocd/service-api/overlays/prod/values.yaml",
+						"extractor":       "helm",
+						"environment":     "prod",
+						"matched_alias":   "service-api",
+						"matched_value":   "registry.example.test/service-api",
+						"confidence":      0.84,
+					},
+				},
+			},
+		},
+	}
+
+	err := writer.WriteEdges(context.Background(), reducer.DomainRepoDependency, rows, "resolver/cross-repo")
+	if err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.calls), 2; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+
+	var artifactCall *Statement
+	for i := range executor.calls {
+		if strings.Contains(executor.calls[i].Cypher, "HAS_DEPLOYMENT_EVIDENCE") {
+			artifactCall = &executor.calls[i]
+			break
+		}
+	}
+	if artifactCall == nil {
+		t.Fatalf("missing evidence artifact write call: %#v", executor.calls)
+	}
+	for _, fragment := range []string{
+		"MERGE (artifact:EvidenceArtifact {id: row.artifact_id})",
+		"MERGE (source_repo)-[source_rel:HAS_DEPLOYMENT_EVIDENCE]->(artifact)",
+		"MERGE (artifact)-[target_rel:EVIDENCES_REPOSITORY_RELATIONSHIP]->(target_repo)",
+		"MERGE (env:Environment {name: row.environment})",
+		"MERGE (artifact)-[env_rel:TARGETS_ENVIRONMENT]->(env)",
+	} {
+		if !strings.Contains(artifactCall.Cypher, fragment) {
+			t.Fatalf("artifact cypher missing %q: %s", fragment, artifactCall.Cypher)
+		}
+	}
+
+	rowsOut, ok := artifactCall.Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows type = %T, want []map[string]any", artifactCall.Parameters["rows"])
+	}
+	if got, want := len(rowsOut), 1; got != want {
+		t.Fatalf("len(rows) = %d, want %d", got, want)
+	}
+	artifact := rowsOut[0]
+	for key, want := range map[string]any{
+		"repo_id":           "repo-deploy",
+		"target_repo_id":    "repo-service",
+		"relationship_type": "DEPLOYS_FROM",
+		"resolved_id":       "resolved-1",
+		"generation_id":     "gen-1",
+		"evidence_kind":     "HELM_VALUES_REFERENCE",
+		"artifact_family":   "helm",
+		"path":              "argocd/service-api/overlays/prod/values.yaml",
+		"extractor":         "helm",
+		"environment":       "prod",
+		"matched_alias":     "service-api",
+		"matched_value":     "registry.example.test/service-api",
+		"confidence":        0.84,
+		"evidence_source":   "resolver/cross-repo",
+	} {
+		if got := artifact[key]; got != want {
+			t.Fatalf("artifact[%s] = %#v, want %#v; artifact=%#v", key, got, want, artifact)
+		}
+	}
+	if got, ok := artifact["artifact_id"].(string); !ok || !strings.HasPrefix(got, "evidence-artifact:") {
+		t.Fatalf("artifact_id = %#v, want evidence-artifact:*", artifact["artifact_id"])
+	}
+}
+
 func TestEdgeWriterWriteEdgesRunsOnDispatchUsesWorkloadInstanceShape(t *testing.T) {
 	t.Parallel()
 
