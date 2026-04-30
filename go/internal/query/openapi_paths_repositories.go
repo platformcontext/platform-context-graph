@@ -83,6 +83,10 @@ const openAPIPathsRepositories = `
                       "type": "object",
                       "description": "Incoming and outgoing typed repository relationships with lightweight evidence pointers."
                     },
+                    "api_surface": {
+                      "type": "object",
+                      "description": "Graph-backed API endpoint surface exposed by this repository."
+                    },
                     "consumers": {
                       "type": "array",
                       "description": "Repositories with incoming relationships to this repository.",

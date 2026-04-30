@@ -104,6 +104,7 @@ func TestServeOpenAPI(t *testing.T) {
 	for _, field := range []string{
 		"relationships",
 		"relationship_overview",
+		"api_surface",
 		"consumers",
 	} {
 		if _, ok := repositoryContextSchema[field]; !ok {
