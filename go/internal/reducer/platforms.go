@@ -110,9 +110,8 @@ func CanonicalPlatformID(input CanonicalPlatformInput) string {
 func InferInfrastructurePlatformDescriptor(input InfrastructurePlatformInput) *PlatformDescriptor {
 	normalizedRT := normalizeSlice(input.ResourceTypes)
 	normalizedMS := normalizeSlice(input.ModuleSources)
-	normalizedDT := normalizeSlice(input.DataTypes)
 
-	platformKind := InferInfrastructureRuntimeFamilyKind(normalizedRT, normalizedMS, normalizedDT)
+	platformKind := InferInfrastructureRuntimeFamilyKind(normalizedRT, normalizedMS)
 	if platformKind == "" {
 		return nil
 	}
@@ -125,6 +124,7 @@ func InferInfrastructurePlatformDescriptor(input InfrastructurePlatformInput) *P
 
 	// AWS provider fallback from data types or resource types.
 	if platformProvider == "" {
+		normalizedDT := normalizeSlice(input.DataTypes)
 		for _, v := range append(normalizedDT, normalizedRT...) {
 			if strings.HasPrefix(v, "aws_") {
 				platformProvider = "aws"

@@ -8,14 +8,15 @@ import (
 
 // terraformRepoSignals aggregates Terraform signal data per repository scope.
 type terraformRepoSignals struct {
-	RepoID        string
-	RepoName      string
-	ResourceTypes []string
-	ResourceNames []string
-	ModuleSources []string
-	ModuleNames   []string
-	DataTypes     []string
-	DataNames     []string
+	RepoID               string
+	RepoName             string
+	ResourceTypes        []string
+	ResourceNames        []string
+	ClusterResourceTypes []string
+	ModuleSources        []string
+	ModuleNames          []string
+	DataTypes            []string
+	DataNames            []string
 }
 
 // ExtractInfrastructurePlatformRows reads fact envelopes, extracts Terraform
@@ -89,7 +90,7 @@ func ExtractInfrastructurePlatformRows(envelopes []facts.Envelope) []Infrastruct
 			DataNames:     signals.DataNames,
 			ModuleSources: signals.ModuleSources,
 			ModuleNames:   signals.ModuleNames,
-			ResourceTypes: signals.ResourceTypes,
+			ResourceTypes: append(signals.ResourceTypes, signals.ClusterResourceTypes...),
 			ResourceNames: signals.ResourceNames,
 			RepoName:      signals.RepoName,
 		})
@@ -146,6 +147,10 @@ func extractTerraformModuleSignals(payload map[string]any, signals *terraformRep
 		if name := strings.TrimSpace(payloadStr(m, "name")); name != "" && isPlatformClusterModuleSource(src) {
 			signals.ModuleNames = append(signals.ModuleNames, name)
 		}
+		if clusterName, clusterType := runtimeServiceModuleClusterSignal(m, src); clusterName != "" && clusterType != "" {
+			signals.ResourceNames = append([]string{clusterName}, signals.ResourceNames...)
+			signals.ClusterResourceTypes = append(signals.ClusterResourceTypes, clusterType)
+		}
 	}
 }
 
@@ -187,11 +192,48 @@ func extractTerraformDataSourceSignals(payload map[string]any, signals *terrafor
 		}
 		if dt := strings.TrimSpace(strings.ToLower(payloadStr(m, "data_type"))); dt != "" {
 			signals.DataTypes = append(signals.DataTypes, dt)
-		}
-		if dn := strings.TrimSpace(payloadStr(m, "data_name")); dn != "" {
-			signals.DataNames = append(signals.DataNames, dn)
+			if dn := strings.TrimSpace(payloadStr(m, "data_name")); dn != "" && isPlatformClusterResourceType(dt) {
+				signals.DataNames = append(signals.DataNames, dn)
+			}
 		}
 	}
+}
+
+func runtimeServiceModuleClusterSignal(module map[string]any, source string) (string, string) {
+	source = strings.TrimSpace(strings.ToLower(source))
+	if source == "" {
+		return "", ""
+	}
+	clusterName := terraformClusterNameReference(payloadStr(module, "cluster_name"))
+	if clusterName == "" {
+		return "", ""
+	}
+	for _, family := range RuntimeFamilies() {
+		if !MatchesServiceModuleSource(source, family.Kind) || len(family.ClusterResourceTypes) == 0 {
+			continue
+		}
+		return clusterName, family.ClusterResourceTypes[0]
+	}
+	return "", ""
+}
+
+func terraformClusterNameReference(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.Trim(value, `"`)
+	value = strings.Trim(value, `'`)
+	if value == "" || strings.Contains(value, "${") || strings.HasPrefix(value, "var.") {
+		return ""
+	}
+	const dataPrefix = "data.aws_ecs_cluster."
+	const dataSuffix = ".cluster_name"
+	if strings.HasPrefix(value, dataPrefix) && strings.HasSuffix(value, dataSuffix) {
+		name := strings.TrimSuffix(strings.TrimPrefix(value, dataPrefix), dataSuffix)
+		return strings.TrimSpace(name)
+	}
+	if strings.Contains(value, ".") {
+		return ""
+	}
+	return value
 }
 
 func extractTerraformLocalSignals(payload map[string]any, signals *terraformRepoSignals) {

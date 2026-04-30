@@ -121,7 +121,6 @@ func TestInferInfrastructureRuntimeFamilyKind(t *testing.T) {
 	got := InferInfrastructureRuntimeFamilyKind(
 		[]string{"aws_ecs_cluster"},
 		[]string{},
-		[]string{},
 	)
 	if got != "ecs" {
 		t.Errorf("got %q, want ecs", got)
@@ -134,7 +133,6 @@ func TestInferInfrastructureRuntimeFamilyKindKeepsExplicitClusterWithServiceModu
 	got := InferInfrastructureRuntimeFamilyKind(
 		[]string{"aws_ecs_cluster"},
 		[]string{"registry.example.com/platform/ecs-application/aws"},
-		[]string{},
 	)
 	if got != "ecs" {
 		t.Errorf("got %q, want ecs for explicit cluster resource with service modules", got)
@@ -147,7 +145,6 @@ func TestInferInfrastructureRuntimeFamilyKindSkipsNonCluster(t *testing.T) {
 	got := InferInfrastructureRuntimeFamilyKind(
 		[]string{"aws_eks_cluster"},
 		[]string{"iam-role-for-service-accounts-eks"},
-		[]string{},
 	)
 	if got != "" {
 		t.Errorf("got %q, want empty (non-cluster exclusion)", got)
@@ -160,23 +157,9 @@ func TestInferInfrastructureRuntimeFamilyKindByModuleSource(t *testing.T) {
 	got := InferInfrastructureRuntimeFamilyKind(
 		[]string{},
 		[]string{"terraform-google-modules/kubernetes-engine"},
-		[]string{},
 	)
 	if got != "gke" {
 		t.Errorf("got %q, want gke", got)
-	}
-}
-
-func TestInferInfrastructureRuntimeFamilyKindKeepsClusterDataSourceWithServiceModule(t *testing.T) {
-	t.Parallel()
-
-	got := InferInfrastructureRuntimeFamilyKind(
-		[]string{},
-		[]string{"registry.example.com/platform/ecs-application/aws"},
-		[]string{"aws_ecs_cluster"},
-	)
-	if got != "ecs" {
-		t.Errorf("got %q, want ecs for explicit cluster data source with service module", got)
 	}
 }
 

@@ -190,8 +190,9 @@ func TestExtractInfrastructurePlatformRowsFromServiceModuleClusterDataSource(t *
 			Payload: map[string]any{
 				"terraform_modules": []any{
 					map[string]any{
-						"name":   "api_service",
-						"source": "registry.example.com/platform/ecs-application/aws",
+						"name":         "api_service",
+						"source":       "registry.example.com/platform/ecs-application/aws",
+						"cluster_name": "data.aws_ecs_cluster.runtime-main.cluster_name",
 					},
 				},
 				"terraform_data_sources": []any{
