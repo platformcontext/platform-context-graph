@@ -1,0 +1,29 @@
+go/internal/reducer/platforms.go
+  4cb501d5d4ff237f 114,127
+go/internal/reducer/platform_families.go
+  4cb501d5d4ff237f 162,168,172,208-210
+go/internal/reducer/infrastructure_platform_extractor_test.go
+  4cb501d5d4ff237f 193-195
+go/internal/reducer/infrastructure_platform_extractor.go
+  4cb501d5d4ff237f 11-19,93,150-153,195-197,199-213,215-234,236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "94ca93d82086b7c6626af7fcd70a09ef68160ab2",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 64,
+      "total_deletions": 45,
+      "accepted_lines": 99,
+      "overriden_lines": 0
+    }
+  }
+}
