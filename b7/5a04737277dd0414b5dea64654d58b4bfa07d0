@@ -1,0 +1,23 @@
+go/internal/relationships/evidence_test.go
+  4cb501d5d4ff237f 1270-1497
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "b75a04737277dd0414b5dea64654d58b4bfa07d0",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 228,
+      "total_deletions": 0,
+      "accepted_lines": 263,
+      "overriden_lines": 0
+    }
+  }
+}
