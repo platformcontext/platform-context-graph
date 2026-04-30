@@ -98,7 +98,7 @@ done
 if [ $WAITED -ge $MAX_WAIT ]; then
     log "ERROR: NornicDB did not become healthy within ${MAX_WAIT}s"
     log "Container logs:"
-    $COMPOSE logs neo4j 2>&1 | tail -30
+    "${COMPOSE_CMD[@]}" logs neo4j 2>&1 | tail -30
     exit 1
 fi
 
@@ -208,7 +208,7 @@ log ""
 if [ $INTEGRATION_RESULT -ne 0 ]; then
     log "Some tests failed. Review output above for details."
     log "NornicDB logs:"
-    $COMPOSE logs neo4j 2>&1 | tail -20
+    "${COMPOSE_CMD[@]}" logs neo4j 2>&1 | tail -20
     exit 1
 fi
 

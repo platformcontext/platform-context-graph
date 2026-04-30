@@ -4,8 +4,9 @@
 #   docker-compose -f docker-compose.yaml -f docker-compose.nornicdb.yml up --build
 #
 # NornicDB is a Go-based graph database with Bolt/Cypher compatibility.
-# It exposes the same ports as Neo4j (7474 HTTP, 7687 Bolt) so PCG
-# connects without configuration changes.
+# It exposes the same ports as Neo4j (7474 HTTP, 7687 Bolt), while PCG
+# services must explicitly select the NornicDB graph backend and the
+# "nornic" database.
 #
 # Image: uses the same upstream amd64 CPU image deployed to EKS via JFrog.
 # Override via NORNICDB_IMAGE env var:
@@ -13,8 +14,14 @@
 #     -f docker-compose.yaml -f docker-compose.nornicdb.yml up --build
 #
 # IMPORTANT: NornicDB's default database is "nornic", not "neo4j".
-# Set NEO4J_DATABASE=nornic in PCG services (DEFAULT_DATABASE stays "neo4j"
-# since that selects the backend type, not the database name).
+# PCG_GRAPH_BACKEND selects the adapter; PCG_NEO4J_DATABASE / NEO4J_DATABASE
+# select the Bolt database name used by the compatibility driver.
+
+x-pcg-nornicdb-env: &pcg-nornicdb-env
+  PCG_GRAPH_BACKEND: nornicdb
+  DEFAULT_DATABASE: nornic
+  PCG_NEO4J_DATABASE: nornic
+  NEO4J_DATABASE: nornic
 
 services:
   # Override the neo4j service -- keep the service name so that all
@@ -49,19 +56,35 @@ services:
       retries: 20
       start_period: 10s
 
-  # Patch PCG services: DEFAULT_DATABASE stays "neo4j" (backend type selector),
-  # but NEO4J_DATABASE must be "nornic" (NornicDB's default database name).
+  # Patch graph-using PCG services so migrations, writes, and reads all target
+  # the same NornicDB backend/database pair.
+  db-migrate:
+    environment:
+      <<: *pcg-nornicdb-env
+
   platform-context-graph:
     environment:
-      NEO4J_DATABASE: nornic
+      <<: *pcg-nornicdb-env
+
+  mcp-server:
+    environment:
+      <<: *pcg-nornicdb-env
 
   bootstrap-index:
     environment:
-      NEO4J_DATABASE: nornic
+      <<: *pcg-nornicdb-env
 
-  repo-sync:
+  ingester:
     environment:
-      NEO4J_DATABASE: nornic
+      <<: *pcg-nornicdb-env
+
+  resolution-engine:
+    environment:
+      <<: *pcg-nornicdb-env
+
+  workflow-coordinator:
+    environment:
+      <<: *pcg-nornicdb-env
 
 volumes:
   nornicdb_data:

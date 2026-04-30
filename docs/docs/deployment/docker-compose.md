@@ -17,12 +17,24 @@ The repository includes a Docker Compose stack that mirrors the deployable-servi
 Compose files:
 - `docker-compose.yaml`
 - `docker-compose.template.yml`
+- `docker-compose.nornicdb.yml`
 
 Run it with:
 
 ```bash
 docker compose up --build
 ```
+
+To run the same service stack against NornicDB instead of Neo4j, add the
+NornicDB override:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.nornicdb.yml up --build
+```
+
+That override keeps the `neo4j` service name for network compatibility while
+setting PCG graph runtimes to `PCG_GRAPH_BACKEND=nornicdb` and database
+`nornic`.
 
 ## Index One Repo Or Multiple Repos From Your Machine
 
