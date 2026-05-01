@@ -189,6 +189,75 @@ func (s *IaCReachabilityStore) ListCleanupFindings(
 	return result, rows.Err()
 }
 
+// ListLatestCleanupFindings returns cleanup findings for active generations of
+// the requested repositories.
+func (s *IaCReachabilityStore) ListLatestCleanupFindings(
+	ctx context.Context,
+	repoIDs []string,
+	includeAmbiguous bool,
+	limit int,
+) ([]IaCReachabilityRow, error) {
+	if len(repoIDs) == 0 {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	query, args := buildListLatestIaCCleanupFindingsQuery(repoIDs, includeAmbiguous, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query latest IaC cleanup findings: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]IaCReachabilityRow, 0)
+	for rows.Next() {
+		row, err := scanIaCReachabilityRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func buildListLatestIaCCleanupFindingsQuery(repoIDs []string, includeAmbiguous bool, limit int) (string, []any) {
+	args := make([]any, 0, len(repoIDs)+2)
+	var placeholders strings.Builder
+	for i, repoID := range repoIDs {
+		if i > 0 {
+			placeholders.WriteString(", ")
+		}
+		fmt.Fprintf(&placeholders, "$%d", i+1)
+		args = append(args, repoID)
+	}
+	includeIdx := len(args) + 1
+	limitIdx := len(args) + 2
+	args = append(args, includeAmbiguous, limit)
+
+	query := fmt.Sprintf(`
+SELECT row.scope_id, row.generation_id, row.repo_id, row.family, row.artifact_path,
+       row.artifact_name, row.reachability, row.finding, row.confidence,
+       row.evidence, row.limitations, row.observed_at, row.updated_at
+FROM iac_reachability_rows AS row
+JOIN scope_generations AS generation
+  ON generation.scope_id = row.scope_id
+ AND generation.generation_id = row.generation_id
+WHERE generation.status = 'active'
+  AND row.repo_id IN (%s)
+  AND (
+      row.reachability = 'unused'
+      OR ($%d = true AND row.reachability = 'ambiguous')
+  )
+ORDER BY row.family, row.artifact_path
+LIMIT $%d
+`, placeholders.String(), includeIdx, limitIdx)
+	return query, args
+}
+
 func upsertIaCReachabilityBatch(ctx context.Context, db ExecQueryer, batch []IaCReachabilityRow) error {
 	args := make([]any, 0, len(batch)*iacReachabilityColumns)
 	var values strings.Builder

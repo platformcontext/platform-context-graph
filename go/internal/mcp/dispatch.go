@@ -306,6 +306,14 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 			"limit":                  intOr(args, "limit", 100),
 			"exclude_decorated_with": stringSlice(args, "exclude_decorated_with"),
 		}}, nil
+	case "find_dead_iac":
+		return &route{method: "POST", path: "/api/v0/iac/dead", body: map[string]any{
+			"repo_id":           str(args, "repo_id"),
+			"repo_ids":          stringSlice(args, "repo_ids"),
+			"families":          stringSlice(args, "families"),
+			"include_ambiguous": boolOr(args, "include_ambiguous", false),
+			"limit":             intOr(args, "limit", 100),
+		}}, nil
 	case "calculate_cyclomatic_complexity":
 		return &route{method: "POST", path: "/api/v0/code/complexity", body: map[string]any{
 			"function_name": str(args, "function_name"), "repo_id": str(args, "repo_id"),

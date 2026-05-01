@@ -192,8 +192,9 @@ func newRouter(
 			Profile: queryProfile,
 		},
 		IaC: &query.IaCHandler{
-			Content: contentReader,
-			Profile: queryProfile,
+			Content:      contentReader,
+			Reachability: query.NewPostgresIaCReachabilityStore(db),
+			Profile:      queryProfile,
 		},
 		Impact: &query.ImpactHandler{
 			Neo4j:   neo4jReader,

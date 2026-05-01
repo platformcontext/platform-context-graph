@@ -119,6 +119,40 @@ func codebaseTools() []ToolDefinition {
 			},
 		},
 		{
+			Name:        "find_dead_iac",
+			Description: "Find unused or ambiguous Terraform modules, Helm charts, and Ansible roles across an explicit set of canonical repository identifiers.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"repo_id": map[string]any{
+						"type":        "string",
+						"description": "Optional single canonical repository identifier",
+					},
+					"repo_ids": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "string"},
+						"description": "Canonical repository identifiers to include in the IaC reachability scope",
+					},
+					"families": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "string"},
+						"description": "Optional IaC families to include: terraform, helm, ansible",
+					},
+					"include_ambiguous": map[string]any{
+						"type":        "boolean",
+						"description": "Whether to include dynamically referenced artifacts that need stronger evidence",
+						"default":     false,
+					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "Maximum IaC cleanup findings to return",
+						"default":     100,
+					},
+				},
+				"required": []string{},
+			},
+		},
+		{
 			Name:        "calculate_cyclomatic_complexity",
 			Description: "Calculate the cyclomatic complexity of a specific function to measure its complexity.",
 			InputSchema: map[string]any{

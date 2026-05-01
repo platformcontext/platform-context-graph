@@ -96,6 +96,22 @@ func TestIaCReachabilityStoreUpsertAndListCleanupFindings(t *testing.T) {
 	if withoutAmbiguous[0].Reachability != IaCReachabilityUnused {
 		t.Fatalf("reachability without ambiguous = %q, want %q", withoutAmbiguous[0].Reachability, IaCReachabilityUnused)
 	}
+
+	latest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, true, 100)
+	if err != nil {
+		t.Fatalf("ListLatestCleanupFindings: %v", err)
+	}
+	if gotLen, wantLen := len(latest), 2; gotLen != wantLen {
+		t.Fatalf("latest len = %d, want %d", gotLen, wantLen)
+	}
+	for _, row := range latest {
+		if row.RepoID != "terraform-modules" {
+			t.Fatalf("latest repo_id = %q, want terraform-modules", row.RepoID)
+		}
+		if row.Reachability == IaCReachabilityUsed {
+			t.Fatalf("latest returned used row: %#v", row)
+		}
+	}
 }
 
 func TestIaCReachabilitySchemaSQL(t *testing.T) {
@@ -184,15 +200,35 @@ func (db *iacReachabilityTestDB) QueryContext(_ context.Context, query string, a
 	if !strings.Contains(query, "FROM iac_reachability_rows") {
 		return nil, fmt.Errorf("unexpected query: %s", query)
 	}
-	scopeID := args[0].(string)
-	generationID := args[1].(string)
-	includeAmbiguous := args[2].(bool)
-	limit := args[3].(int)
+	latestActive := strings.Contains(query, "JOIN scope_generations")
+	var scopeID, generationID string
+	var repoIDs map[string]struct{}
+	var includeAmbiguous bool
+	var limit int
+	if latestActive {
+		repoIDs = map[string]struct{}{}
+		for i := 0; i < len(args)-2; i++ {
+			repoIDs[args[i].(string)] = struct{}{}
+		}
+		includeAmbiguous = args[len(args)-2].(bool)
+		limit = args[len(args)-1].(int)
+	} else {
+		scopeID = args[0].(string)
+		generationID = args[1].(string)
+		includeAmbiguous = args[2].(bool)
+		limit = args[3].(int)
+	}
 
 	var matches [][]any
 	for _, row := range db.rows {
-		if row.ScopeID != scopeID || row.GenerationID != generationID {
-			continue
+		if latestActive {
+			if _, ok := repoIDs[row.RepoID]; !ok {
+				continue
+			}
+		} else {
+			if row.ScopeID != scopeID || row.GenerationID != generationID {
+				continue
+			}
 		}
 		switch row.Reachability {
 		case string(IaCReachabilityUnused):

@@ -14,6 +14,7 @@ import (
 type fakeIaCDeadContentStore struct {
 	fakePortContentStore
 	files map[string][]FileContent
+	calls int
 }
 
 func (f fakeIaCDeadContentStore) ListRepoFiles(_ context.Context, repoID string, _ int) ([]FileContent, error) {
@@ -28,6 +29,68 @@ func (f fakeIaCDeadContentStore) GetFileContent(_ context.Context, repoID, relat
 		}
 	}
 	return nil, nil
+}
+
+type fakeIaCReachabilityStore struct {
+	rows []IaCReachabilityFindingRow
+}
+
+func (f fakeIaCReachabilityStore) ListLatestCleanupFindings(
+	_ context.Context,
+	_ []string,
+	_ bool,
+	_ int,
+) ([]IaCReachabilityFindingRow, error) {
+	return append([]IaCReachabilityFindingRow(nil), f.rows...), nil
+}
+
+func TestHandleDeadIaCPrefersMaterializedReachabilityRows(t *testing.T) {
+	t.Parallel()
+
+	handler := &IaCHandler{
+		Profile: ProfileLocalAuthoritative,
+		Reachability: fakeIaCReachabilityStore{rows: []IaCReachabilityFindingRow{
+			{
+				ID:           "terraform:terraform-modules:modules/orphan-cache",
+				Family:       "terraform",
+				RepoID:       "terraform-modules",
+				ArtifactPath: "modules/orphan-cache",
+				Reachability: "unused",
+				Finding:      "candidate_dead_iac",
+				Confidence:   0.75,
+				Evidence:     []string{"modules/orphan-cache/main.tf: module directory exists"},
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/iac/dead", bytes.NewBufferString(`{
+		"repo_ids": ["terraform-modules"],
+		"include_ambiguous": true
+	}`))
+	req.Header.Set("Accept", EnvelopeMIMEType)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+	var resp ResponseEnvelope
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	data := resp.Data.(map[string]any)
+	if got, want := data["analysis_status"], "materialized_reachability"; got != want {
+		t.Fatalf("analysis_status = %q, want %q", got, want)
+	}
+	if got, want := data["truth_basis"], "materialized_reducer_rows"; got != want {
+		t.Fatalf("truth_basis = %q, want %q", got, want)
+	}
+	rawFindings := data["findings"].([]any)
+	if got, want := len(rawFindings), 1; got != want {
+		t.Fatalf("findings len = %d, want %d", got, want)
+	}
 }
 
 func TestHandleDeadIaCReturnsScopedDerivedFindings(t *testing.T) {

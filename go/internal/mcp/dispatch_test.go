@@ -378,6 +378,41 @@ func TestResolveRouteMapsFindDeadCodeExclusions(t *testing.T) {
 	}
 }
 
+func TestResolveRouteMapsFindDeadIaC(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("find_dead_iac", map[string]any{
+		"repo_ids":          []any{"terraform-stack", "terraform-modules"},
+		"families":          []any{"terraform"},
+		"include_ambiguous": true,
+		"limit":             float64(25),
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if route.path != "/api/v0/iac/dead" {
+		t.Fatalf("route.path = %q, want /api/v0/iac/dead", route.path)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["limit"], 25; got != want {
+		t.Fatalf("body[limit] = %#v, want %#v", got, want)
+	}
+	if got, want := body["include_ambiguous"], true; got != want {
+		t.Fatalf("body[include_ambiguous] = %#v, want %#v", got, want)
+	}
+	repoIDs := body["repo_ids"].([]any)
+	if len(repoIDs) != 2 {
+		t.Fatalf("len(repo_ids) = %d, want 2", len(repoIDs))
+	}
+	families := body["families"].([]any)
+	if len(families) != 1 || families[0] != "terraform" {
+		t.Fatalf("families = %#v, want terraform", families)
+	}
+}
+
 func TestResolveRouteMapsAnalyzeDeadCodeLimit(t *testing.T) {
 	t.Parallel()
 

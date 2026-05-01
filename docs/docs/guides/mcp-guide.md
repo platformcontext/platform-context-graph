@@ -167,6 +167,7 @@ assumptions from a partial code snapshot.
 | "Search across indexed code" | `search_file_content` |
 | "Find complex functions" | `find_most_complex_functions` |
 | "What's dead code?" | `find_dead_code` |
+| "Which IaC artifacts look unused?" | `find_dead_iac` |
 
 ## Story-first responses
 
@@ -258,8 +259,9 @@ For programming prompts, keep using the code-query tools directly:
 - `calculate_cyclomatic_complexity`
 - `find_most_complex_functions`
 - `find_dead_code`
+- `find_dead_iac`
 
-Those remain the primary public contract for callers/callees/class hierarchy/import/complexity/dead-code questions. The story tools are for end-to-end narratives, not a replacement for the code tools.
+Those remain the primary public contract for callers/callees/class hierarchy/import/complexity/dead-code and dead-IaC questions. The story tools are for end-to-end narratives, not a replacement for the code tools.
 
 ## Repository access handoff
 

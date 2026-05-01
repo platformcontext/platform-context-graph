@@ -538,11 +538,13 @@ Use these routes when you need infrastructure-as-code cleanup candidates:
 - `POST /api/v0/iac/dead`
 
 The dead-IaC route requires an explicit `repo_id` or bounded `repo_ids` scope.
-It currently returns `derived` candidate findings from indexed content for
-Terraform modules, Helm charts, and Ansible roles/playbooks. Used artifacts are
-omitted; unreferenced artifacts are returned as `candidate_dead_iac`, and
-variable or template-selected artifacts are returned as
-`ambiguous_dynamic_reference` when `include_ambiguous=true`.
+When reducer-materialized reachability rows exist, the route returns those rows
+with `analysis_status=materialized_reachability`. Otherwise it falls back to
+bounded indexed-content analysis for Terraform modules, Helm charts, and
+Ansible roles/playbooks. Used artifacts are omitted from cleanup findings;
+unreferenced artifacts are returned as `candidate_dead_iac`, and variable or
+template-selected artifacts are returned as `ambiguous_dynamic_reference` when
+`include_ambiguous=true`.
 
 Example dead-IaC workflow:
 
@@ -555,9 +557,9 @@ Example dead-IaC workflow:
 }
 ```
 
-The current route is intentionally bounded and derived. Exact cleanup support
-still requires reducer-materialized IaC usage rows so operators can explain
-every finding from persisted evidence instead of broad graph anti-joins.
+The content fallback is intentionally bounded and derived. Exact cleanup
+support should prefer reducer-materialized IaC usage rows so operators can
+explain every finding from persisted evidence instead of broad graph anti-joins.
 
 ## Content API
 
