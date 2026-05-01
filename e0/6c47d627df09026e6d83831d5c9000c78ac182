@@ -1,0 +1,49 @@
+tests/fixtures/product_truth/manifest.json
+  4cb501d5d4ff237f 73,75
+docs/docs/why-pcg.md
+  4cb501d5d4ff237f 182
+tests/fixtures/product_truth/dead_iac/README.md
+  4cb501d5d4ff237f 19-20
+go/internal/iacreachability/analyzer_test.go
+  4cb501d5d4ff237f 70-87,105-108
+go/internal/query/iac_dead_test.go
+  4cb501d5d4ff237f 356-373,381,429-430,441,451
+go/internal/iacreachability/compose.go
+  4cb501d5d4ff237f 1-107
+scripts/verify_dead_iac_compose.sh
+  4cb501d5d4ff237f 19-22,155-161,169-177,181,186,195-197,207-209,212-215,217-219,225,234,238-274,344
+tests/fixtures/product_truth/expected/dead_iac.json
+  4cb501d5d4ff237f 121-160
+docs/docs/reference/http-api.md
+  4cb501d5d4ff237f 545-550,556-557
+go/internal/iacreachability/analyzer.go
+  4cb501d5d4ff237f 177-181,208
+scripts/verify_product_truth_fixtures.sh
+  4cb501d5d4ff237f 98-99,109-110,132-139
+tests/fixtures/product_truth/dead_iac/compose-app/compose.yaml
+  4cb501d5d4ff237f 1-9
+tests/fixtures/product_truth/dead_iac/compose-controller/.github/workflows/deploy-compose.yaml
+  4cb501d5d4ff237f 1-15
+tests/fixtures/product_truth/planned/dead_iac_cases.json
+  4cb501d5d4ff237f 39-51,66-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e06c47d627df09026e6d83831d5c9000c78ac182",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 350,
+      "total_deletions": 22,
+      "accepted_lines": 355,
+      "overriden_lines": 0
+    }
+  }
+}
