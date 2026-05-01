@@ -184,6 +184,7 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 		for _, row := range byLabel[label] {
 			if canonicalEntityRowNeedsSingletonFallback(label, row) {
 				flushBatch()
+				mode := canonicalEntitySingletonFallbackMode(label, row)
 				stmts = append(stmts, Statement{
 					Operation: OperationCanonicalUpsert,
 					Cypher:    fmt.Sprintf(canonicalNodeEntitySingletonUpsertTemplate, label),
@@ -193,13 +194,14 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 						"generation_id":                    row["generation_id"],
 						StatementMetadataPhaseKey:          CanonicalPhaseEntities,
 						StatementMetadataEntityLabelKey:    label,
-						StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
+						StatementMetadataPhaseGroupModeKey: mode,
 						StatementMetadataScopeIDKey:        mat.ScopeID,
 						StatementMetadataGenerationIDKey:   mat.GenerationID,
 						StatementMetadataSummaryKey: fmt.Sprintf(
-							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized",
+							"label=%s rows=1 entity_id=%v fallback=%s",
 							label,
 							row["entity_id"],
+							canonicalEntitySingletonFallbackName(mode),
 						),
 					},
 				})
@@ -271,14 +273,16 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 			for _, row := range byFile[filePath] {
 				if canonicalEntityRowNeedsSingletonFallback(label, row) {
 					flushBatch()
+					mode := canonicalEntitySingletonFallbackMode(label, row)
 					stmts = append(stmts, canonicalNodeEntitySingletonWithContainmentStatement(
 						label,
 						filePath,
 						row,
 						fmt.Sprintf(
-							"label=%s rows=1 entity_id=%v fallback=singleton_parameterized containment=inline",
+							"label=%s rows=1 entity_id=%v fallback=%s containment=inline",
 							label,
 							row["entity_id"],
+							canonicalEntitySingletonFallbackName(mode),
 						),
 						mat.ScopeID,
 						mat.GenerationID,
@@ -349,14 +353,16 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithBatchedContainment(mat pr
 			if canonicalEntityRowNeedsSingletonFallback(label, row) {
 				flushBatch()
 				filePath, _ := row["file_path"].(string)
+				mode := canonicalEntitySingletonFallbackMode(label, row)
 				stmts = append(stmts, canonicalNodeEntitySingletonWithContainmentStatement(
 					label,
 					filePath,
 					row,
 					fmt.Sprintf(
-						"label=%s rows=1 entity_id=%v fallback=singleton_parameterized containment=inline",
+						"label=%s rows=1 entity_id=%v fallback=%s containment=inline",
 						label,
 						row["entity_id"],
+						canonicalEntitySingletonFallbackName(mode),
 					),
 					mat.ScopeID,
 					mat.GenerationID,

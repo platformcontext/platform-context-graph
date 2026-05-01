@@ -867,6 +867,66 @@ func TestNornicDBPhaseGroupExecutorExecutesEntitySingletonFallbackOutsideGroup(t
 	}
 }
 
+func TestNornicDBPhaseGroupExecutorGroupsEligibleSingletonFallbacks(t *testing.T) {
+	t.Parallel()
+
+	inner := &recordingGroupChunkExecutor{}
+	executor := nornicDBPhaseGroupExecutor{
+		inner:               inner,
+		maxStatements:       5,
+		entityMaxStatements: 5,
+	}
+
+	stmts := []sourceneo4j.Statement{
+		{
+			Cypher: "RETURN grouped1",
+			Parameters: map[string]any{
+				"_pcg_phase":        "entities",
+				"_pcg_entity_label": "TerraformVariable",
+				"rows": []map[string]any{
+					{"entity_id": "one"},
+				},
+			},
+		},
+		{
+			Cypher: "RETURN fallback",
+			Parameters: map[string]any{
+				"_pcg_phase":             "entities",
+				"_pcg_entity_label":      "TerraformVariable",
+				"_pcg_phase_group_mode":  sourceneo4j.PhaseGroupModeGroupedSingleton,
+				"_pcg_statement_summary": "label=TerraformVariable rows=1 entity_id=fallback fallback=grouped_singleton",
+				"entity_id":              "fallback",
+				"props":                  map[string]any{"name": "fallback"},
+			},
+		},
+		{
+			Cypher: "RETURN grouped2",
+			Parameters: map[string]any{
+				"_pcg_phase":        "entities",
+				"_pcg_entity_label": "TerraformVariable",
+				"rows": []map[string]any{
+					{"entity_id": "two"},
+				},
+			},
+		},
+	}
+
+	if err := executor.ExecutePhaseGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecutePhaseGroup() error = %v, want nil", err)
+	}
+	if got, want := inner.groupSizes, []int{3}; !equalIntSlices(got, want) {
+		t.Fatalf("group sizes = %v, want %v", got, want)
+	}
+	if got := len(inner.executeParams); got != 0 {
+		t.Fatalf("execute params count = %d, want 0", got)
+	}
+	for _, stmt := range inner.groupStatements {
+		if _, ok := stmt.Parameters["_pcg_phase_group_mode"]; ok {
+			t.Fatalf("grouped params include group-mode diagnostic: %#v", stmt.Parameters)
+		}
+	}
+}
+
 func TestNornicDBPhaseGroupExecutorWrapsChunkFailureDetails(t *testing.T) {
 	t.Parallel()
 

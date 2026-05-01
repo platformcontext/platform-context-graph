@@ -11,6 +11,20 @@ func canonicalEntityRowNeedsSingletonFallback(label string, row map[string]any) 
 		canonicalEntityRowHasTerraformVariableCurlyBraceProps(label, row)
 }
 
+func canonicalEntitySingletonFallbackMode(label string, row map[string]any) string {
+	if canonicalEntityRowHasTerraformVariableCurlyBraceProps(label, row) {
+		return PhaseGroupModeGroupedSingleton
+	}
+	return PhaseGroupModeExecuteOnly
+}
+
+func canonicalEntitySingletonFallbackName(mode string) string {
+	if mode == PhaseGroupModeGroupedSingleton {
+		return "grouped_singleton"
+	}
+	return "singleton_parameterized"
+}
+
 func canonicalEntityValueContainsSubstring(value any, needle string) bool {
 	switch typed := value.(type) {
 	case string:
@@ -67,11 +81,13 @@ func canonicalNodeEntitySingletonWithContainmentStatement(
 	scopeID string,
 	generationID string,
 ) Statement {
+	mode := canonicalEntitySingletonFallbackMode(label, row)
 	if summary == "" {
 		summary = fmt.Sprintf(
-			"label=%s rows=1 entity_id=%v singleton_parameterized containment=inline",
+			"label=%s rows=1 entity_id=%v fallback=%s containment=inline",
 			label,
 			row["entity_id"],
+			canonicalEntitySingletonFallbackName(mode),
 		)
 	}
 	return Statement{
@@ -84,7 +100,7 @@ func canonicalNodeEntitySingletonWithContainmentStatement(
 			"generation_id":                    row["generation_id"],
 			StatementMetadataPhaseKey:          CanonicalPhaseEntities,
 			StatementMetadataEntityLabelKey:    label,
-			StatementMetadataPhaseGroupModeKey: PhaseGroupModeExecuteOnly,
+			StatementMetadataPhaseGroupModeKey: mode,
 			StatementMetadataSummaryKey:        summary,
 			StatementMetadataScopeIDKey:        scopeID,
 			StatementMetadataGenerationIDKey:   generationID,

@@ -138,7 +138,7 @@ func TestCanonicalNodeWriterFileScopedContainmentOnlySingletonsFallbackRows(t *t
 	}
 }
 
-func TestCanonicalNodeWriterFileScopedContainmentFallsBackForCurlyBraceMetadata(t *testing.T) {
+func TestCanonicalNodeWriterFileScopedContainmentGroupsTerraformVariableCurlyBraceFallback(t *testing.T) {
 	t.Parallel()
 
 	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
@@ -176,7 +176,7 @@ func TestCanonicalNodeWriterFileScopedContainmentFallsBackForCurlyBraceMetadata(
 	if strings.Contains(fallback.Cypher, "UNWIND $rows AS row") {
 		t.Fatalf("fallback cypher = %q, want singleton shape for curly brace metadata", fallback.Cypher)
 	}
-	if got, want := fallback.Parameters[StatementMetadataPhaseGroupModeKey], PhaseGroupModeExecuteOnly; got != want {
+	if got, want := fallback.Parameters[StatementMetadataPhaseGroupModeKey], PhaseGroupModeGroupedSingleton; got != want {
 		t.Fatalf("fallback phase group mode = %#v, want %#v", got, want)
 	}
 	if got, want := fallback.Parameters["entity_id"], "tf-var-1"; got != want {
@@ -184,7 +184,7 @@ func TestCanonicalNodeWriterFileScopedContainmentFallsBackForCurlyBraceMetadata(
 	}
 }
 
-func TestCanonicalNodeWriterFileScopedContainmentFallsBackForTerraformVariableDescriptionBraces(t *testing.T) {
+func TestCanonicalNodeWriterFileScopedContainmentGroupsTerraformVariableDescriptionBraces(t *testing.T) {
 	t.Parallel()
 
 	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
@@ -223,7 +223,7 @@ func TestCanonicalNodeWriterFileScopedContainmentFallsBackForTerraformVariableDe
 	if strings.Contains(fallback.Cypher, "UNWIND $rows AS row") {
 		t.Fatalf("fallback cypher = %q, want singleton shape for TerraformVariable description braces", fallback.Cypher)
 	}
-	if got, want := fallback.Parameters[StatementMetadataPhaseGroupModeKey], PhaseGroupModeExecuteOnly; got != want {
+	if got, want := fallback.Parameters[StatementMetadataPhaseGroupModeKey], PhaseGroupModeGroupedSingleton; got != want {
 		t.Fatalf("fallback phase group mode = %#v, want %#v", got, want)
 	}
 }

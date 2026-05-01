@@ -30,4 +30,7 @@ const (
 	CanonicalPhaseEntityContainment = "entity_containment"
 	CanonicalPhaseFiles             = "files"
 	PhaseGroupModeExecuteOnly       = "execute_only"
+	// PhaseGroupModeGroupedSingleton keeps singleton Cypher shape while allowing
+	// the backend executor to batch the statement with same-label entity writes.
+	PhaseGroupModeGroupedSingleton = "grouped_singleton"
 )
