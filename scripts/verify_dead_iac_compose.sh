@@ -148,6 +148,13 @@ api_post_envelope_json() {
 	curl "${curl_args[@]}" "$API_BASE_URL$path" >"$output_file"
 }
 
+api_get() {
+	local path="$1" output_file="$2"
+	local -a curl_args=(-fsS)
+	[[ -z "$API_KEY" ]] || curl_args+=(-H "Authorization: Bearer $API_KEY")
+	curl "${curl_args[@]}" "$API_BASE_URL$path" >"$output_file"
+}
+
 verify_api() {
 	local payload
 	payload="$(jq -cn --args '{repo_ids: $ARGS.positional, include_ambiguous: true, limit: 100}' \
