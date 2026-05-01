@@ -1,0 +1,93 @@
+tests/fixtures/product_truth/dead_iac/ansible-ops/playbooks/dynamic-role.yml
+  4cb501d5d4ff237f 1-4
+tests/fixtures/product_truth/dead_iac/ansible-ops/roles/checkout_deploy/tasks/main.yml
+  4cb501d5d4ff237f 1-4
+tests/fixtures/product_truth/planned/dead_iac_cases.json
+  4cb501d5d4ff237f 6-7
+tests/fixtures/product_truth/dead_iac/ansible-ops/roles/dynamic_role/tasks/main.yml
+  4cb501d5d4ff237f 1-5
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/orphan-worker/Chart.yaml
+  4cb501d5d4ff237f 1-4
+tests/fixtures/product_truth/dead_iac/README.md
+  4cb501d5d4ff237f 1-19
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/worker-service/values.yaml
+  4cb501d5d4ff237f 1-3
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/dynamic-target/values.yaml
+  4cb501d5d4ff237f 1-3
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/checkout-service/Chart.yaml
+  4cb501d5d4ff237f 1-4
+tests/fixtures/product_truth/dead_iac/ansible-ops/roles/orphan_maintenance/tasks/main.yml
+  4cb501d5d4ff237f 1-5
+tests/fixtures/product_truth/dead_iac/helm-controller/argocd/applications/dynamic-target.yaml
+  4cb501d5d4ff237f 1-21
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/worker-service/Chart.yaml
+  4cb501d5d4ff237f 1-4
+scripts/verify_product_truth_fixtures.sh
+  4cb501d5d4ff237f 98,101-131,133
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/checkout-service/values.yaml
+  4cb501d5d4ff237f 1-3
+tests/fixtures/product_truth/dead_iac/terraform-modules/modules/dynamic-target/main.tf
+  4cb501d5d4ff237f 1-11
+tests/fixtures/product_truth/dead_iac/terraform-modules/modules/orphan-cache/main.tf
+  4cb501d5d4ff237f 1-12
+tests/fixtures/product_truth/dead_iac/ansible-controller/jenkins/Jenkinsfile
+  4cb501d5d4ff237f 1-11
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/worker-service/templates/deployment.yaml
+  4cb501d5d4ff237f 1-16
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/checkout-service/templates/deployment.yaml
+  4cb501d5d4ff237f 1-16
+tests/fixtures/product_truth/dead_iac/helm-controller/.github/workflows/deploy-worker.yaml
+  4cb501d5d4ff237f 1-12
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/orphan-worker/templates/deployment.yaml
+  4cb501d5d4ff237f 1-16
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/orphan-worker/values.yaml
+  4cb501d5d4ff237f 1-3
+tests/fixtures/product_truth/dead_iac/helm-controller/argocd/applications/checkout-service.yaml
+  4cb501d5d4ff237f 1-13
+tests/fixtures/product_truth/README.md
+  4cb501d5d4ff237f 22-24
+tests/fixtures/product_truth/dead_iac/ansible-ops/playbooks/site.yml
+  4cb501d5d4ff237f 1-4
+tests/fixtures/product_truth/dead_iac/terraform-modules/modules/checkout-service/main.tf
+  4cb501d5d4ff237f 1-10
+tests/fixtures/product_truth/manifest.json
+  4cb501d5d4ff237f 65,67-69
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/dynamic-target/templates/deployment.yaml
+  4cb501d5d4ff237f 1-16
+tests/fixtures/product_truth/dead_iac/ansible-ops/playbooks/orphan-maintenance.yml
+  4cb501d5d4ff237f 1-4
+tests/fixtures/product_truth/dead_iac/helm-charts/charts/dynamic-target/Chart.yaml
+  4cb501d5d4ff237f 1-4
+docs/docs/reference/local-testing.md
+  4cb501d5d4ff237f 599-602
+docs/docs/adrs/2026-04-24-iac-usage-reachability-and-refactor-impact.md
+  4cb501d5d4ff237f 886
+tests/fixtures/product_truth/dead_iac/terraform-stack/main.tf
+  4cb501d5d4ff237f 1-16
+tests/fixtures/product_truth/dead_iac/terraform-stack/terragrunt.hcl
+  4cb501d5d4ff237f 1-7
+tests/fixtures/product_truth/expected/dead_iac.json
+  4cb501d5d4ff237f 1-119
+tests/fixtures/product_truth/dead_iac/ansible-controller/.github/workflows/deploy-ops.yaml
+  4cb501d5d4ff237f 1-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "17af2941fe68d802999cc8b23d91c937118b175e",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 428,
+      "total_deletions": 9,
+      "accepted_lines": 458,
+      "overriden_lines": 0
+    }
+  }
+}
