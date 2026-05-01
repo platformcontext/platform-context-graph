@@ -4,19 +4,53 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 )
 
 // fetchWorkloadContext queries graph-backed workload context with a custom
 // WHERE clause and enriches linked repositories with local context evidence.
 func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause string, params map[string]any) (map[string]any, error) {
+	return h.fetchWorkloadContextForOperation(ctx, whereClause, params, "workload_context")
+}
+
+// fetchServiceWorkloadContext avoids a backend-sensitive OR predicate by
+// trying exact service-name lookup before exact workload-id lookup.
+func (h *EntityHandler) fetchServiceWorkloadContext(ctx context.Context, serviceName string, operation string) (map[string]any, error) {
+	serviceName = strings.TrimSpace(serviceName)
+	if serviceName == "" {
+		return nil, nil
+	}
+	result, err := h.fetchWorkloadContextForOperation(
+		ctx,
+		"w.name = $service_name",
+		map[string]any{"service_name": serviceName},
+		operation,
+	)
+	if err != nil || result != nil {
+		return result, err
+	}
+	return h.fetchWorkloadContextForOperation(
+		ctx,
+		"w.id = $service_name",
+		map[string]any{"service_name": serviceName},
+		operation,
+	)
+}
+
+// fetchWorkloadContextForOperation queries workload context and tags timing
+// logs with the caller operation that will render the context.
+func (h *EntityHandler) fetchWorkloadContextForOperation(ctx context.Context, whereClause string, params map[string]any, operation string) (map[string]any, error) {
 	serviceName := StringVal(params, "service_name")
 	if serviceName == "" {
 		serviceName = StringVal(params, "workload_id")
 	}
-	timer := startServiceQueryStage(ctx, h.Logger, "workload_context", serviceName, "", "workload_lookup")
+	if operation == "" {
+		operation = "workload_context"
+	}
+	timer := startServiceQueryStage(ctx, h.Logger, operation, serviceName, "", "workload_lookup")
 	baseCypher := fmt.Sprintf(`
 		MATCH (w:Workload) WHERE %s
-		RETURN w.id as id, w.name as name, w.kind as kind
+		RETURN w.id as id, w.name as name, w.kind as kind, w.repo_id as repo_id
 		LIMIT 1
 	`, whereClause)
 
@@ -37,20 +71,23 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 		followupParams = map[string]any{"workload_id": workloadID}
 	}
 
-	timer = startServiceQueryStage(ctx, h.Logger, "workload_context", StringVal(row, "name"), "", "repository_lookup")
-	repoID, repoName, err := h.fetchWorkloadRepository(ctx, followupWhereClause, followupParams)
+	repoID := StringVal(row, "repo_id")
+	timer = startServiceQueryStage(ctx, h.Logger, operation, StringVal(row, "name"), repoID, "repository_lookup")
+	repoName := ""
+	if repoID != "" {
+		repoName, err = h.fetchRepositoryNameByID(ctx, repoID)
+	} else {
+		repoID, repoName, err = h.fetchWorkloadRepository(ctx, followupWhereClause, followupParams)
+	}
 	timer.Done(ctx, slog.String("resolved_repo_id", repoID))
 	if err != nil {
 		return nil, err
-	}
-	if repoID == "" {
-		repoID = StringVal(row, "repo_id")
 	}
 	if repoName == "" {
 		repoName = StringVal(row, "repo_name")
 	}
 
-	timer = startServiceQueryStage(ctx, h.Logger, "workload_context", StringVal(row, "name"), repoID, "instance_lookup")
+	timer = startServiceQueryStage(ctx, h.Logger, operation, StringVal(row, "name"), repoID, "instance_lookup")
 	instances, err := h.fetchWorkloadInstances(ctx, followupWhereClause, followupParams)
 	timer.Done(ctx, slog.Int("row_count", len(instances)))
 	if err != nil {
@@ -71,15 +108,30 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 
 	if repoID != "" {
 		repoParams := map[string]any{"repo_id": repoID}
-		timer = startServiceQueryStage(ctx, h.Logger, "workload_context", StringVal(row, "name"), repoID, "repo_dependencies")
+		timer = startServiceQueryStage(ctx, h.Logger, operation, StringVal(row, "name"), repoID, "repo_dependencies")
 		result["dependencies"] = queryRepoDependencies(ctx, h.Neo4j, repoParams)
 		timer.Done(ctx, slog.Int("row_count", len(mapSliceValue(result, "dependencies"))))
-		timer = startServiceQueryStage(ctx, h.Logger, "workload_context", StringVal(row, "name"), repoID, "repo_infrastructure")
+		timer = startServiceQueryStage(ctx, h.Logger, operation, StringVal(row, "name"), repoID, "repo_infrastructure")
 		result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, repoParams)
 		timer.Done(ctx, slog.Int("row_count", len(mapSliceValue(result, "infrastructure"))))
 	}
 
 	return result, nil
+}
+
+// fetchRepositoryNameByID uses the workload repo_id property as the selective
+// anchor and avoids a relationship traversal on hot service read paths.
+func (h *EntityHandler) fetchRepositoryNameByID(ctx context.Context, repoID string) (string, error) {
+	cypher := `
+		MATCH (r:Repository {id: $repo_id})
+		RETURN r.name as repo_name
+		LIMIT 1
+	`
+	row, err := h.Neo4j.RunSingle(ctx, cypher, map[string]any{"repo_id": repoID})
+	if err != nil || row == nil {
+		return "", err
+	}
+	return StringVal(row, "repo_name"), nil
 }
 
 // fetchWorkloadRepository resolves the repository link without OPTIONAL MATCH,

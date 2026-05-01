@@ -137,11 +137,7 @@ func fetchServiceTraceContext(
 	traceOptions traceEnrichmentConfig,
 ) (map[string]any, error) {
 	entityHandler := &EntityHandler{Neo4j: graph, Content: content, Logger: logger}
-	workloadContext, err := entityHandler.fetchWorkloadContext(
-		ctx,
-		serviceLookupWhereClause,
-		map[string]any{"service_name": serviceName},
-	)
+	workloadContext, err := entityHandler.fetchServiceWorkloadContext(ctx, serviceName, "deployment_trace")
 	if err != nil || workloadContext == nil {
 		return workloadContext, err
 	}

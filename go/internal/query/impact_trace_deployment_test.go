@@ -1,6 +1,8 @@
 package query
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -122,25 +124,36 @@ func TestFetchDeploymentSourcesDedupesCanonicalAndRepositoryOverlap(t *testing.T
 func TestFetchServiceTraceContextAcceptsQualifiedWorkloadID(t *testing.T) {
 	t.Parallel()
 
+	seenBroadServiceLookup := false
 	ctx, err := fetchServiceTraceContext(
 		t.Context(),
 		fakeWorkloadGraphReader{
-			runSingleByMatch: map[string]map[string]any{
-				"w.name = $service_name OR w.id = $service_name": {
-					"id":        "workload:service-edge-api",
-					"name":      "service-edge-api",
-					"kind":      "service",
-					"repo_id":   "repo-service-edge-api",
-					"repo_name": "service-edge-api",
-					"instances": []any{
-						map[string]any{
-							"instance_id":   "instance:service-edge-api:modern",
-							"platform_name": "modern-cluster",
-							"platform_kind": "kubernetes",
-							"environment":   "modern",
+			runSingle: func(ctx context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if strings.Contains(cypher, " OR ") {
+					seenBroadServiceLookup = true
+					return nil, errors.New("broad service lookup should not run")
+				}
+				if strings.Contains(cypher, "w.name = $service_name") {
+					return nil, nil
+				}
+				if strings.Contains(cypher, "w.id = $service_name") {
+					return map[string]any{
+						"id":        "workload:service-edge-api",
+						"name":      "service-edge-api",
+						"kind":      "service",
+						"repo_id":   "repo-service-edge-api",
+						"repo_name": "service-edge-api",
+						"instances": []any{
+							map[string]any{
+								"instance_id":   "instance:service-edge-api:modern",
+								"platform_name": "modern-cluster",
+								"platform_kind": "kubernetes",
+								"environment":   "modern",
+							},
 						},
-					},
-				},
+					}, nil
+				}
+				return nil, nil
 			},
 			runByMatch: map[string][]map[string]any{
 				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {},
@@ -155,6 +168,9 @@ func TestFetchServiceTraceContextAcceptsQualifiedWorkloadID(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("fetchServiceTraceContext() error = %v, want nil", err)
+	}
+	if seenBroadServiceLookup {
+		t.Fatal("fetchServiceTraceContext used broad service OR lookup")
 	}
 	if got, want := safeStr(ctx, "id"), "workload:service-edge-api"; got != want {
 		t.Fatalf("context.id = %#v, want %#v", got, want)
@@ -171,7 +187,7 @@ func TestFetchServiceTraceContextIncludesGraphDeploymentEvidenceWithoutContent(t
 		t.Context(),
 		fakeWorkloadGraphReader{
 			runSingleByMatch: map[string]map[string]any{
-				"w.name = $service_name OR w.id = $service_name": {
+				"w.name = $service_name": {
 					"id":        "workload:checkout-service",
 					"name":      "checkout-service",
 					"kind":      "service",

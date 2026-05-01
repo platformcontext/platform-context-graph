@@ -296,7 +296,7 @@ func TestGetServiceContextAcceptsQualifiedWorkloadID(t *testing.T) {
 	handler := &EntityHandler{
 		Neo4j: fakeWorkloadGraphReader{
 			runSingleByMatch: map[string]map[string]any{
-				"w.name = $service_name OR w.id = $service_name": {
+				"w.id = $service_name": {
 					"id":        "workload:service-edge-api",
 					"name":      "service-edge-api",
 					"kind":      "Deployment",
@@ -351,7 +351,7 @@ func TestGetServiceStoryAcceptsPlainServiceName(t *testing.T) {
 	handler := &EntityHandler{
 		Neo4j: fakeWorkloadGraphReader{
 			runSingleByMatch: map[string]map[string]any{
-				"w.name = $service_name OR w.id = $service_name": {
+				"w.name = $service_name": {
 					"id":        "workload:service-edge-api",
 					"name":      "service-edge-api",
 					"kind":      "Deployment",
@@ -406,7 +406,7 @@ func TestGetServiceStoryAcceptsQualifiedWorkloadIDAndNormalizesServiceName(t *te
 	handler := &EntityHandler{
 		Neo4j: fakeWorkloadGraphReader{
 			runSingleByMatch: map[string]map[string]any{
-				"w.name = $service_name OR w.id = $service_name": {
+				"w.id = $service_name": {
 					"id":        "workload:service-edge-api",
 					"name":      "service-edge-api",
 					"kind":      "Deployment",
@@ -462,7 +462,7 @@ func TestGetServiceContextOmitsRepoEntryPoints(t *testing.T) {
 	handler := &EntityHandler{
 		Neo4j: fakeWorkloadGraphReader{
 			runSingleByMatch: map[string]map[string]any{
-				"w.name = $service_name OR w.id = $service_name": {
+				"w.name = $service_name": {
 					"id":        "workload:service-edge-api",
 					"name":      "service-edge-api",
 					"kind":      "Deployment",
@@ -523,7 +523,7 @@ func TestFetchWorkloadContextAnchorsFollowUpQueriesByResolvedWorkloadID(t *testi
 	handler := &EntityHandler{
 		Neo4j: fakeWorkloadGraphReader{
 			runSingleByMatch: map[string]map[string]any{
-				"w.name = $service_name OR w.id = $service_name": {
+				"w.name = $service_name": {
 					"id":   "workload:service-edge-api",
 					"name": "service-edge-api",
 					"kind": "service",
@@ -564,7 +564,7 @@ func TestGetServiceContextIncludesGraphDeploymentEvidenceWithoutContent(t *testi
 	handler := &EntityHandler{
 		Neo4j: fakeWorkloadGraphReader{
 			runSingleByMatch: map[string]map[string]any{
-				"w.name = $service_name OR w.id = $service_name": {
+				"w.name = $service_name": {
 					"id":        "workload:checkout-service",
 					"name":      "checkout-service",
 					"kind":      "service",
