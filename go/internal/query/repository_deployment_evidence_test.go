@@ -1,9 +1,11 @@
 package query
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -145,4 +147,42 @@ func TestGetRepositoryContextIncludesGraphDeploymentEvidence(t *testing.T) {
 			t.Fatalf("artifact[0].%s = %#v, want %#v; artifact=%#v", key, got, want, first)
 		}
 	}
+}
+
+func TestQueryRepoDeploymentEvidenceIncomingUsesArtifactFirstBoundary(t *testing.T) {
+	t.Parallel()
+
+	reader := &recordingDeploymentEvidenceGraphReader{}
+	queryRepoDeploymentEvidence(context.Background(), reader, map[string]any{"repo_id": "repo-service"})
+
+	if len(reader.cypherCalls) != 2 {
+		t.Fatalf("len(cypherCalls) = %d, want 2", len(reader.cypherCalls))
+	}
+	incoming := reader.cypherCalls[1]
+	for _, want := range []string{
+		"MATCH (artifact:EvidenceArtifact)-[:EVIDENCES_REPOSITORY_RELATIONSHIP]->(r:Repository {id: $repo_id})",
+		"WITH artifact, r",
+		"MATCH (source:Repository)-[:HAS_DEPLOYMENT_EVIDENCE]->(artifact)",
+	} {
+		if !strings.Contains(incoming, want) {
+			t.Fatalf("incoming query missing %q:\n%s", want, incoming)
+		}
+	}
+	oldShape := "MATCH (source:Repository)-[:HAS_DEPLOYMENT_EVIDENCE]->(artifact:EvidenceArtifact)-[:EVIDENCES_REPOSITORY_RELATIONSHIP]->(r:Repository {id: $repo_id})"
+	if strings.Contains(incoming, oldShape) {
+		t.Fatalf("incoming query still uses source-first NornicDB-slow shape:\n%s", incoming)
+	}
+}
+
+type recordingDeploymentEvidenceGraphReader struct {
+	cypherCalls []string
+}
+
+func (r *recordingDeploymentEvidenceGraphReader) Run(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+	r.cypherCalls = append(r.cypherCalls, cypher)
+	return nil, nil
+}
+
+func (r *recordingDeploymentEvidenceGraphReader) RunSingle(context.Context, string, map[string]any) (map[string]any, error) {
+	return nil, nil
 }

@@ -34,7 +34,9 @@ func queryRepoDeploymentEvidence(ctx context.Context, reader GraphQuery, params 
 		ORDER BY path, artifact_id
 	`)
 	incoming := queryRepoDeploymentEvidenceDirection(ctx, reader, params, `
-		MATCH (source:Repository)-[:HAS_DEPLOYMENT_EVIDENCE]->(artifact:EvidenceArtifact)-[:EVIDENCES_REPOSITORY_RELATIONSHIP]->(r:Repository {id: $repo_id})
+		MATCH (artifact:EvidenceArtifact)-[:EVIDENCES_REPOSITORY_RELATIONSHIP]->(r:Repository {id: $repo_id})
+		WITH artifact, r
+		MATCH (source:Repository)-[:HAS_DEPLOYMENT_EVIDENCE]->(artifact)
 		RETURN 'incoming' AS direction,
 		       artifact.id AS artifact_id,
 		       artifact.name AS name,
