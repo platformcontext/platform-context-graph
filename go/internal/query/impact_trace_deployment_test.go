@@ -200,7 +200,7 @@ func TestFetchServiceTraceContextIncludesGraphDeploymentEvidenceWithoutContent(t
 				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {},
 				"K8sResource OR":                      {},
 				"fn.name IN":                          {},
-				"<-[target_rel:EVIDENCES_REPOSITORY_RELATIONSHIP]-(artifact:EvidenceArtifact)": {
+				"EVIDENCES_REPOSITORY_RELATIONSHIP]->(r:Repository": {
 					{
 						"direction":         "incoming",
 						"artifact_id":       "evidence-artifact:kustomize:1",

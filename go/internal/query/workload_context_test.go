@@ -600,7 +600,7 @@ func TestGetServiceContextIncludesGraphDeploymentEvidenceWithoutContent(t *testi
 						"target_repo_name":  "shared-workflows",
 					},
 				},
-				"<-[target_rel:EVIDENCES_REPOSITORY_RELATIONSHIP]-(artifact:EvidenceArtifact)": {
+				"EVIDENCES_REPOSITORY_RELATIONSHIP]->(r:Repository": {
 					{
 						"direction":         "incoming",
 						"artifact_id":       "evidence-artifact:helm:1",

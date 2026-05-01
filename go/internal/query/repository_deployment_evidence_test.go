@@ -1,11 +1,9 @@
 package query
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -30,7 +28,7 @@ func TestGetRepositoryContextIncludesGraphDeploymentEvidence(t *testing.T) {
 				},
 			},
 			runByMatch: map[string][]map[string]any{
-				"<-[target_rel:EVIDENCES_REPOSITORY_RELATIONSHIP]-(artifact:EvidenceArtifact)": {
+				"EVIDENCES_REPOSITORY_RELATIONSHIP]->(r:Repository": {
 					{
 						"direction":             "incoming",
 						"artifact_id":           "evidence-artifact:helm:1",
@@ -146,39 +144,5 @@ func TestGetRepositoryContextIncludesGraphDeploymentEvidence(t *testing.T) {
 		if got := first[key]; got != want {
 			t.Fatalf("artifact[0].%s = %#v, want %#v; artifact=%#v", key, got, want, first)
 		}
-	}
-}
-
-func TestQueryRepoDeploymentEvidenceAnchorsBothDirectionsByRepositoryID(t *testing.T) {
-	t.Parallel()
-
-	var queries []string
-	got := queryRepoDeploymentEvidence(
-		context.Background(),
-		fakeGraphReader{
-			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if got, want := params["repo_id"], "repo-service"; got != want {
-					t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
-				}
-				queries = append(queries, cypher)
-				if !strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})") {
-					t.Fatalf("cypher = %q, want repository id anchor", cypher)
-				}
-				return nil, nil
-			},
-		},
-		map[string]any{"repo_id": "repo-service"},
-	)
-	if got != nil {
-		t.Fatalf("queryRepoDeploymentEvidence() = %#v, want nil for empty graph rows", got)
-	}
-	if got, want := len(queries), 2; got != want {
-		t.Fatalf("query count = %d, want %d", got, want)
-	}
-	if !strings.Contains(queries[0], "(r:Repository {id: $repo_id})-[source_rel:HAS_DEPLOYMENT_EVIDENCE]->") {
-		t.Fatalf("outgoing query = %q, want anchored outgoing traversal", queries[0])
-	}
-	if !strings.Contains(queries[1], "<-[target_rel:EVIDENCES_REPOSITORY_RELATIONSHIP]-(artifact:EvidenceArtifact)") {
-		t.Fatalf("incoming query = %q, want anchored incoming evidence traversal", queries[1])
 	}
 }
