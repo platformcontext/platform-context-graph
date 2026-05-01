@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "description": "Feature-level fixture truth registry for graph, evidence, API, MCP, and cleanup capabilities.",
+  "suites": [
+    {
+      "id": "graph_analysis",
+      "status": "owned",
+      "fixture_root": "tests/fixtures/graph_analysis_compose",
+      "compose_gate": "scripts/verify_graph_analysis_compose.sh",
+      "expected_truth_files": [
+        "tests/fixtures/product_truth/expected/graph_analysis.json"
+      ],
+      "capabilities": [
+        "call_graph.direct_callers",
+        "call_graph.transitive_callers",
+        "call_graph.call_chain_path",
+        "code_quality.dead_code"
+      ]
+    },
+    {
+      "id": "correlation_dsl",
+      "status": "owned",
+      "fixture_root": "tests/fixtures/correlation_dsl",
+      "compose_gate": "scripts/verify_correlation_dsl_compose.sh",
+      "expected_truth_files": [
+        "tests/fixtures/product_truth/expected/correlation_dsl.json"
+      ],
+      "capabilities": [
+        "deployable_unit.correlation",
+        "delivery.github_actions",
+        "delivery.jenkins",
+        "delivery.ansible",
+        "delivery.docker_compose",
+        "delivery.argocd",
+        "delivery.terraform",
+        "correlation.negative_cases"
+      ]
+    },
+    {
+      "id": "relationship_platform",
+      "status": "owned",
+      "fixture_root": "tests/fixtures/relationship_platform",
+      "compose_gate": "scripts/verify_relationship_platform_compose.sh",
+      "expected_truth_files": [
+        "tests/fixtures/relationship_platform/expected_relationships.yaml",
+        "tests/fixtures/product_truth/expected/relationship_platform.json"
+      ],
+      "capabilities": [
+        "relationship_evidence.mapping",
+        "repository.relationship_overview",
+        "repository.deployment_artifacts",
+        "repository.api_surface",
+        "service.deployment_trace",
+        "delivery.helm",
+        "delivery.kustomize",
+        "delivery.cloudformation",
+        "delivery.docker_compose"
+      ]
+    }
+  ],
+  "planned": [
+    {
+      "id": "iac_quality.dead_iac",
+      "status": "planned",
+      "fixture_plan": "tests/fixtures/product_truth/planned/dead_iac_cases.json",
+      "required_before_claiming": [
+        "Terraform module positive, negative, and ambiguous reachability cases",
+        "Helm chart positive, negative, and ambiguous reachability cases",
+        "Ansible role and playbook positive, negative, and ambiguous reachability cases",
+        "API and MCP responses with explicit truth level and limitations",
+        "Postgres evidence rows or materialized usage rows that explain each finding"
+      ]
+    }
+  ]
+}
+

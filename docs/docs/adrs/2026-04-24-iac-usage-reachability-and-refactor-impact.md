@@ -883,6 +883,7 @@ Mitigations:
 | Phase 4: Kubernetes | Not started | Existing K8s resource extraction and basic Service heuristic | Add typed resource usage edges and conservative orphan findings |
 | Phase 5: CloudFormation/Crossplane/Compose/Ansible | Not started | Existing parser and evidence surfaces | Add reference graph and findings per family |
 | Code dead-code / IaC boundary | Guarded | Query contract now reports `iac_reachability_mode=not_modeled_by_code_dead_code` and `iac_deadness_capability=iac_usage.reachability`; tests prove Terraform, Helm, Kustomize, Kubernetes, and ArgoCD graph rows are not returned as code dead-code candidates. | Implement the first-class IaC usage/reachability graph before exposing dead-IaC cleanup findings. |
+| Product-truth fixture contract | Started | `tests/fixtures/product_truth/manifest.json` now registers owned graph-analysis, correlation-DSL, and relationship-platform suites plus the planned `iac_quality.dead_iac` capability. `scripts/verify_product_truth_fixtures.sh` verifies that owned suites have fixture roots, executable verifiers, and expected truth files, and that dead-IaC explicitly covers Terraform, Helm, and Ansible planned cases. | Promote dead-IaC from planned to owned by adding fixture repos and expected API/MCP/Postgres evidence assertions for positive, negative, and ambiguous reachability. Then wire the runtime compose verifier to execute those golden expectations. |
 
 ---
 

@@ -167,6 +167,7 @@ libraries.
 | Parser platform or collector snapshot flow | `cd go && go test ./internal/parser ./internal/collector/discovery ./internal/collector -count=1` |
 | Terraform provider-schema evidence or relationship extraction | `cd go && go test ./internal/terraformschema ./internal/relationships ./internal/storage/postgres -count=1` |
 | Compose, Helm, or deployable runtime shape | `cd go && go test ./cmd/api ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1` and `helm lint deploy/helm/platform-context-graph` |
+| Product-truth fixture registry or expected feature ownership | `./scripts/verify_product_truth_fixtures.sh` |
 | Correlation DSL fixture corpus or compose verification lane | `./scripts/verify_correlation_dsl_compose.sh` |
 | Graph-backed call-chain, caller/callee, or dead-code compose contract | `./scripts/verify_graph_analysis_compose.sh` |
 | Facts-first indexing, queue, or resolution flow | `cd go && go test ./internal/projector ./internal/reducer ./internal/storage/postgres -count=1` |
@@ -579,6 +580,26 @@ The wrapper starts a clean Compose stack against the dedicated
   derived truth metadata
 - the canonical Neo4j graph contains the expected `CALLS` edges after the
   fresh bootstrap run
+
+## Product-Truth Fixture Registry
+
+Use this gate when adding or changing a feature PCG claims as product truth
+across graph, evidence, API, MCP, CLI, or cleanup workflows:
+
+```bash
+./scripts/verify_product_truth_fixtures.sh
+```
+
+The registry lives under `tests/fixtures/product_truth/` and lists each owned
+fixture suite, the verifier that proves it, and the expected truth files that
+describe the product claim. The fast check is intentionally static: it verifies
+that owned capabilities have a fixture root, executable verifier, and expected
+truth contract before a slower Compose proof runs.
+
+Dead-IaC is currently tracked there as a planned capability, not an owned one.
+Before PCG claims dead-IaC support, the planned contract must become an owned
+fixture suite with Terraform module, Helm chart, and Ansible role/playbook
+positive, negative, and ambiguous cases plus API/MCP evidence expectations.
 
 ### NornicDB Grouped-Write Safety Probe
 

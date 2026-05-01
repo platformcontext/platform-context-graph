@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "capability": "iac_quality.dead_iac",
+  "status": "planned",
+  "definition": "IaC artifacts or definitions that are not reachable from same-repo references, cross-repo references, CI/CD workflows, deployment controllers, or deployment roots.",
+  "families": [
+    {
+      "family": "terraform",
+      "positive_cases": [
+        "local module referenced by module.source",
+        "module repository referenced by a cross-repo Terraform or Terragrunt source"
+      ],
+      "negative_cases": [
+        "local module directory with no same-repo or cross-repo reference"
+      ],
+      "ambiguous_cases": [
+        "dynamic module source built from variables or helper expressions",
+        "remote source that does not resolve to an indexed repository"
+      ]
+    },
+    {
+      "family": "helm",
+      "positive_cases": [
+        "chart reached by ArgoCD Application or ApplicationSet source",
+        "chart reached by workflow helm command",
+        "chart reached by Kustomize helmCharts reference"
+      ],
+      "negative_cases": [
+        "chart directory with no controller, workflow, or local reference"
+      ],
+      "ambiguous_cases": [
+        "templated chart path",
+        "values-driven chart reference that cannot be resolved statically"
+      ]
+    },
+    {
+      "family": "ansible",
+      "positive_cases": [
+        "role referenced by a playbook",
+        "playbook invoked by Jenkins or GitHub Actions"
+      ],
+      "negative_cases": [
+        "role directory with no playbook import/include and no controller invocation",
+        "playbook file with no workflow/controller/root reference"
+      ],
+      "ambiguous_cases": [
+        "dynamic role name from vars",
+        "external collection role that is not expected to resolve to a local repo artifact"
+      ]
+    }
+  ],
+  "required_truth_surfaces": [
+    "graph or materialized usage edges",
+    "Postgres evidence rows explaining each finding",
+    "API /api/v0/iac/dead with truth envelope and limitations",
+    "MCP find_dead_iac tool after API contract is proven"
+  ]
+}
+

@@ -63,6 +63,13 @@ run_e2e() {
     )
 }
 
+run_fixtures() {
+    (
+        cd "$REPO_ROOT"
+        ./scripts/verify_product_truth_fixtures.sh
+    )
+}
+
 print_usage() {
     cat <<'EOF'
 Usage: ./tests/run_tests.sh [option]
@@ -70,6 +77,7 @@ Usage: ./tests/run_tests.sh [option]
 Options:
   unit         Run focused Go package tests
   integration  Run Go CLI/runtime integration package tests
+  fixtures     Run the fast product-truth fixture contract check
   e2e          Run the relationship-platform compose proof
   docs         Run the strict MkDocs build
   fast         Run unit + integration Go tests
@@ -88,6 +96,9 @@ main() {
         integration|int|2)
             run_go_test "${INTEGRATION_PACKAGES[@]}"
             ;;
+        fixtures)
+            run_fixtures
+            ;;
         e2e|3)
             run_e2e
             ;;
@@ -102,6 +113,7 @@ main() {
             run_go_test "${UNIT_PACKAGES[@]}"
             run_go_test "${INTEGRATION_PACKAGES[@]}"
             run_go_test "${EXTENDED_PACKAGES[@]}"
+            run_fixtures
             run_docs
             run_diff_check
             run_e2e
