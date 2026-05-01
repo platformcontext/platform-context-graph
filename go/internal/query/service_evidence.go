@@ -350,6 +350,7 @@ var falsePositiveTLDs = map[string]struct{}{
 	"plugin": {}, "length": {}, "push": {}, "map": {},
 	"filter": {}, "reduce": {}, "keys": {}, "values": {},
 	"then": {}, "catch": {}, "resolve": {}, "reject": {},
+	"endpoint": {}, "env": {}, "host": {}, "hostname": {},
 }
 
 var camelCaseRE = regexp.MustCompile(`[a-z][A-Z]`)

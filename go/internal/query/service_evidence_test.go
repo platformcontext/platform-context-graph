@@ -208,6 +208,24 @@ stub: "sandbox.stub"
 	}
 }
 
+func TestExtractObservedHostnamesRejectsConfigIdentifierTLDs(t *testing.T) {
+	t.Parallel()
+
+	content := `
+host: "api.qa.example.test"
+host: "db.host"
+endpoint: "aws.endpoint"
+env: "process.env"
+hostname: "config.client.hostname"
+`
+
+	got := extractObservedHostnames(content)
+	want := []string{"api.qa.example.test"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("extractObservedHostnames() = %#v, want %#v", got, want)
+	}
+}
+
 func TestLoadServiceQueryEvidenceResolvesOpenAPIPathsRef(t *testing.T) {
 	t.Parallel()
 
