@@ -15,6 +15,9 @@ func loadServiceDeploymentEvidence(
 	if content == nil || len(workloadContext) == 0 {
 		return nil, nil
 	}
+	if graphEvidence := mapValue(workloadContext, "deployment_evidence"); len(graphEvidence) > 0 {
+		return graphEvidence, nil
+	}
 
 	repoID := safeStr(workloadContext, "repo_id")
 	repoName := safeStr(workloadContext, "repo_name")

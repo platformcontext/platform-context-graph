@@ -259,6 +259,42 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 	}
 }
 
+func TestLoadServiceDeploymentEvidenceUsesGraphEvidenceWithoutContentHydration(t *testing.T) {
+	t.Parallel()
+
+	content := failListRepoFilesContentStore{t: t}
+	workloadContext := map[string]any{
+		"repo_id":   "repo-service",
+		"repo_name": "service-edge-api",
+		"deployment_evidence": map[string]any{
+			"truth_basis":       "graph",
+			"artifact_count":    2,
+			"artifact_families": []string{"github_actions", "helm"},
+		},
+	}
+
+	got, err := loadServiceDeploymentEvidence(context.Background(), nil, content, workloadContext)
+	if err != nil {
+		t.Fatalf("loadServiceDeploymentEvidence() error = %v, want nil", err)
+	}
+	if got["truth_basis"] != "graph" {
+		t.Fatalf("truth_basis = %#v, want graph", got["truth_basis"])
+	}
+	if got["artifact_count"] != 2 {
+		t.Fatalf("artifact_count = %#v, want 2", got["artifact_count"])
+	}
+}
+
+type failListRepoFilesContentStore struct {
+	fakePortContentStore
+	t *testing.T
+}
+
+func (s failListRepoFilesContentStore) ListRepoFiles(context.Context, string, int) ([]FileContent, error) {
+	s.t.Fatal("ListRepoFiles should not run when graph deployment evidence already exists")
+	return nil, nil
+}
+
 func TestBuildServiceStoryResponseKeepsStoryFirstShape(t *testing.T) {
 	t.Parallel()
 
