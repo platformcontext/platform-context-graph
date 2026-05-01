@@ -414,12 +414,19 @@ func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitUsesBoundedDefaultSear
 
 	gotSearchTerms := make([]string, 0, len(recorder.args))
 	for i, query := range recorder.queries {
-		if !strings.Contains(query, "content ILIKE '%' || $1 || '%'") || len(recorder.args[i]) < 2 {
+		if !(strings.Contains(query, "content ILIKE '%' || $1 || '%'") ||
+			strings.Contains(query, "content LIKE '%' || $1 || '%'")) || len(recorder.args[i]) < 2 {
 			continue
 		}
 		term, ok := recorder.args[i][0].(string)
 		if !ok {
 			t.Fatalf("recorder.args[%d][0] type = %T, want string", i, recorder.args[i][0])
+		}
+		if term == "sample-service-api" && !strings.Contains(query, "content ILIKE '%' || $1 || '%'") {
+			t.Fatalf("service-name query = %q, want case-insensitive ILIKE", query)
+		}
+		if term != "sample-service-api" && !strings.Contains(query, "content LIKE '%' || $1 || '%'") {
+			t.Fatalf("hostname query for %q = %q, want case-sensitive LIKE", term, query)
 		}
 		gotSearchTerms = append(gotSearchTerms, term)
 		if got, want := numericDriverValue(t, recorder.args[i][1]), int64(25); got != want {

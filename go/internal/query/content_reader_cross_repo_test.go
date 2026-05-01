@@ -58,6 +58,35 @@ func TestContentReaderSearchFileContentAnyRepo(t *testing.T) {
 	}
 }
 
+func TestContentReaderSearchFileContentAnyRepoExactCaseUsesCaseSensitiveLike(t *testing.T) {
+	t.Parallel()
+
+	db, recorder := openRecordingContentReaderDB(t, []recordingContentReaderQueryResult{
+		{
+			columns: []string{
+				"repo_id", "relative_path", "commit_sha", "content",
+				"content_hash", "line_count", "language", "artifact_type",
+			},
+			rows: [][]driver.Value{},
+		},
+	})
+
+	reader := NewContentReader(db)
+	_, err := reader.SearchFileContentAnyRepoExactCase(context.Background(), "api.qa.example.test", 10)
+	if err != nil {
+		t.Fatalf("SearchFileContentAnyRepoExactCase() error = %v, want nil", err)
+	}
+	if len(recorder.queries) != 1 {
+		t.Fatalf("len(recorder.queries) = %d, want 1", len(recorder.queries))
+	}
+	if !strings.Contains(recorder.queries[0], "content LIKE '%' || $1 || '%'") {
+		t.Fatalf("query = %q, want case-sensitive LIKE", recorder.queries[0])
+	}
+	if strings.Contains(recorder.queries[0], "ILIKE") {
+		t.Fatalf("query = %q, must not use ILIKE for exact-case hostname search", recorder.queries[0])
+	}
+}
+
 func TestContentReaderSearchFileContentAnyRepoDefaultsLimit(t *testing.T) {
 	t.Parallel()
 

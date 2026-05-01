@@ -41,6 +41,10 @@ func (f fakePortContentStore) SearchFileContentAnyRepo(context.Context, string, 
 	return nil, nil
 }
 
+func (f fakePortContentStore) SearchFileContentAnyRepoExactCase(context.Context, string, int) ([]FileContent, error) {
+	return nil, nil
+}
+
 func (f fakePortContentStore) SearchEntityContent(context.Context, string, string, int) ([]EntityContent, error) {
 	return nil, nil
 }

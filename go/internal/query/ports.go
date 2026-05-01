@@ -18,6 +18,7 @@ type ContentStore interface {
 	GetEntityContent(ctx context.Context, entityID string) (*EntityContent, error)
 	SearchFileContent(ctx context.Context, repoID, pattern string, limit int) ([]FileContent, error)
 	SearchFileContentAnyRepo(ctx context.Context, pattern string, limit int) ([]FileContent, error)
+	SearchFileContentAnyRepoExactCase(ctx context.Context, pattern string, limit int) ([]FileContent, error)
 	SearchEntityContent(ctx context.Context, repoID, pattern string, limit int) ([]EntityContent, error)
 	SearchEntityContentAnyRepo(ctx context.Context, pattern string, limit int) ([]EntityContent, error)
 	SearchEntitiesByName(ctx context.Context, repoID, entityType, name string, limit int) ([]EntityContent, error)

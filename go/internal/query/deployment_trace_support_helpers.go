@@ -342,7 +342,7 @@ func searchConsumerEvidenceAnyRepo(
 		collectSearchRowsByRepo(evidenceByRepo, rows, serviceRepoID, "repository_reference", serviceName)
 	}
 	for _, hostname := range hostnames {
-		rows, err := content.SearchFileContentAnyRepo(ctx, hostname, limit)
+		rows, err := content.SearchFileContentAnyRepoExactCase(ctx, hostname, limit)
 		if err != nil {
 			return evidenceByRepo, fmt.Errorf("search consumer evidence for hostname %q: %w", hostname, err)
 		}

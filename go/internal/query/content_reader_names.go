@@ -14,10 +14,37 @@ func (cr *ContentReader) SearchFileContentAnyRepo(
 	pattern string,
 	limit int,
 ) ([]FileContent, error) {
+	return cr.searchFileContentAnyRepo(ctx, pattern, limit, false)
+}
+
+// SearchFileContentAnyRepoExactCase searches file content by exact-case
+// substring across all repos. Use it for normalized tokens such as lowercased
+// hostnames where case-insensitive matching is unnecessary and measurably more
+// expensive on large corpora.
+func (cr *ContentReader) SearchFileContentAnyRepoExactCase(
+	ctx context.Context,
+	pattern string,
+	limit int,
+) ([]FileContent, error) {
+	return cr.searchFileContentAnyRepo(ctx, pattern, limit, true)
+}
+
+func (cr *ContentReader) searchFileContentAnyRepo(
+	ctx context.Context,
+	pattern string,
+	limit int,
+	exactCase bool,
+) ([]FileContent, error) {
+	operation := "search_file_content_any_repo"
+	operator := "ILIKE"
+	if exactCase {
+		operation = "search_file_content_any_repo_exact_case"
+		operator = "LIKE"
+	}
 	ctx, span := cr.tracer.Start(ctx, "postgres.query",
 		trace.WithAttributes(
 			attribute.String("db.system", "postgresql"),
-			attribute.String("db.operation", "search_file_content_any_repo"),
+			attribute.String("db.operation", operation),
 			attribute.String("db.sql.table", "content_files"),
 		),
 	)
@@ -27,15 +54,16 @@ func (cr *ContentReader) SearchFileContentAnyRepo(
 		limit = 50
 	}
 
-	rows, err := cr.db.QueryContext(ctx, `
+	query := fmt.Sprintf(`
 		SELECT repo_id, relative_path, coalesce(commit_sha, ''),
 		       '', content_hash, line_count, coalesce(language, ''),
 		       coalesce(artifact_type, '')
 		FROM content_files
-		WHERE content ILIKE '%' || $1 || '%'
+		WHERE content %s '%%' || $1 || '%%'
 		ORDER BY repo_id, relative_path
 		LIMIT $2
-	`, pattern, limit)
+	`, operator)
+	rows, err := cr.db.QueryContext(ctx, query, pattern, limit)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("search file content across repos: %w", err)
