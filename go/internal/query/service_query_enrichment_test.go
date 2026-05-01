@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -441,6 +442,7 @@ func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitUsesBoundedDefaultSear
 		"sample-service.prod.example.test",
 		"sample-service.qa.example.test",
 	}
+	sort.Strings(gotSearchTerms)
 	if !reflect.DeepEqual(gotSearchTerms, wantSearchTerms) {
 		t.Fatalf("search terms = %#v, want %#v", gotSearchTerms, wantSearchTerms)
 	}

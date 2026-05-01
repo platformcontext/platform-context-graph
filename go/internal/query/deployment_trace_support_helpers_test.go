@@ -112,28 +112,18 @@ func TestLoadProvisioningSourceChainsBuildsCompactTerraformEvidence(t *testing.T
 func TestLoadConsumerRepositoryEnrichmentPreservesDualViews(t *testing.T) {
 	t.Parallel()
 
-	db := openContentReaderTestDB(t, []contentReaderQueryResult{
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows: [][]driver.Value{
-				{"repo-consumer-1", "config/service.json", "sha-1", "", "hash-1", int64(3), "json", "json"},
+	content := patternConsumerSearchContentStore{
+		fileRows: map[string][]FileContent{
+			"sample-service-api": {
+				{RepoID: "repo-consumer-1", RelativePath: "config/service.json"},
 			},
 		},
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows: [][]driver.Value{
-				{"repo-consumer-1", "deploy/values.yaml", "sha-2", "", "hash-2", int64(5), "yaml", "yaml"},
+		exactRows: map[string][]FileContent{
+			"sample-service-api.qa.example.test": {
+				{RepoID: "repo-consumer-1", RelativePath: "deploy/values.yaml"},
 			},
 		},
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows:    [][]driver.Value{},
-		},
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows:    [][]driver.Value{},
-		},
-	})
+	}
 
 	got, err := loadConsumerRepositoryEnrichment(
 		context.Background(),
@@ -166,7 +156,7 @@ func TestLoadConsumerRepositoryEnrichmentPreservesDualViews(t *testing.T) {
 				}
 			},
 		},
-		NewContentReader(db),
+		content,
 		"repo-sample-service-api",
 		"sample-service-api",
 		[]string{"sample-service-api.qa.example.test"},
@@ -217,20 +207,18 @@ func TestLoadConsumerRepositoryEnrichmentPreservesDualViews(t *testing.T) {
 func TestLoadConsumerRepositoryEnrichmentFindsCrossRepoConsumersOutsideGraphCandidates(t *testing.T) {
 	t.Parallel()
 
-	db := openContentReaderTestDB(t, []contentReaderQueryResult{
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows: [][]driver.Value{
-				{"repo-consumer-9", "configs/service.json", "sha-1", "", "hash-1", int64(3), "json", "json"},
+	content := patternConsumerSearchContentStore{
+		fileRows: map[string][]FileContent{
+			"sample-service-api": {
+				{RepoID: "repo-consumer-9", RelativePath: "configs/service.json"},
 			},
 		},
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows: [][]driver.Value{
-				{"repo-consumer-9", "deploy/values.yaml", "sha-2", "", "hash-2", int64(5), "yaml", "yaml"},
+		exactRows: map[string][]FileContent{
+			"sample-service-api.qa.example.test": {
+				{RepoID: "repo-consumer-9", RelativePath: "deploy/values.yaml"},
 			},
 		},
-	})
+	}
 
 	got, err := loadConsumerRepositoryEnrichment(
 		context.Background(),
@@ -250,7 +238,7 @@ func TestLoadConsumerRepositoryEnrichmentFindsCrossRepoConsumersOutsideGraphCand
 				}
 			},
 		},
-		NewContentReader(db),
+		content,
 		"repo-sample-service-api",
 		"sample-service-api",
 		[]string{"sample-service-api.qa.example.test"},
@@ -283,22 +271,20 @@ func TestLoadConsumerRepositoryEnrichmentFindsCrossRepoConsumersOutsideGraphCand
 func TestLoadConsumerRepositoryEnrichmentWithLimitCapsMergedConsumersByEvidenceStrength(t *testing.T) {
 	t.Parallel()
 
-	db := openContentReaderTestDB(t, []contentReaderQueryResult{
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows: [][]driver.Value{
-				{"repo-consumer-1", "config/service.json", "sha-1", "", "hash-1", int64(3), "json", "json"},
-				{"repo-consumer-3", "config/service.json", "sha-2", "", "hash-2", int64(3), "json", "json"},
+	content := patternConsumerSearchContentStore{
+		fileRows: map[string][]FileContent{
+			"sample-service-api": {
+				{RepoID: "repo-consumer-1", RelativePath: "config/service.json"},
+				{RepoID: "repo-consumer-3", RelativePath: "config/service.json"},
 			},
 		},
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows: [][]driver.Value{
-				{"repo-consumer-1", "deploy/values.yaml", "sha-3", "", "hash-3", int64(5), "yaml", "yaml"},
-				{"repo-consumer-4", "deploy/values.yaml", "sha-4", "", "hash-4", int64(5), "yaml", "yaml"},
+		exactRows: map[string][]FileContent{
+			"sample-service-api.qa.example.test": {
+				{RepoID: "repo-consumer-1", RelativePath: "deploy/values.yaml"},
+				{RepoID: "repo-consumer-4", RelativePath: "deploy/values.yaml"},
 			},
 		},
-	})
+	}
 
 	got, err := loadConsumerRepositoryEnrichmentWithLimit(
 		context.Background(),
@@ -337,7 +323,7 @@ func TestLoadConsumerRepositoryEnrichmentWithLimitCapsMergedConsumersByEvidenceS
 				}
 			},
 		},
-		NewContentReader(db),
+		content,
 		"repo-sample-service-api",
 		"sample-service-api",
 		[]string{"sample-service-api.qa.example.test"},
@@ -360,20 +346,18 @@ func TestLoadConsumerRepositoryEnrichmentWithLimitCapsMergedConsumersByEvidenceS
 func TestLoadConsumerRepositoryEnrichmentBackfillsRepositoryNamesForContentOnlyConsumers(t *testing.T) {
 	t.Parallel()
 
-	db := openContentReaderTestDB(t, []contentReaderQueryResult{
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows: [][]driver.Value{
-				{"repo-consumer-9", "configs/service.json", "sha-1", "", "hash-1", int64(3), "json", "json"},
+	content := patternConsumerSearchContentStore{
+		fileRows: map[string][]FileContent{
+			"sample-service-api": {
+				{RepoID: "repo-consumer-9", RelativePath: "configs/service.json"},
 			},
 		},
-		{
-			columns: []string{"repo_id", "relative_path", "commit_sha", "content", "content_hash", "line_count", "language", "artifact_type"},
-			rows: [][]driver.Value{
-				{"repo-consumer-9", "deploy/values.yaml", "sha-2", "", "hash-2", int64(5), "yaml", "yaml"},
+		exactRows: map[string][]FileContent{
+			"sample-service-api.qa.example.test": {
+				{RepoID: "repo-consumer-9", RelativePath: "deploy/values.yaml"},
 			},
 		},
-	})
+	}
 
 	got, err := loadConsumerRepositoryEnrichment(
 		context.Background(),
@@ -398,7 +382,7 @@ func TestLoadConsumerRepositoryEnrichmentBackfillsRepositoryNamesForContentOnlyC
 				}
 			},
 		},
-		NewContentReader(db),
+		content,
 		"repo-sample-service-api",
 		"sample-service-api",
 		[]string{"sample-service-api.qa.example.test"},

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -124,6 +125,8 @@ type recordingContentReaderQueryResult struct {
 }
 
 type recordingContentReader struct {
+	mu      sync.Mutex
+	results []recordingContentReaderQueryResult
 	queries []string
 	args    [][]driver.Value
 }
@@ -132,9 +135,8 @@ func openRecordingContentReaderDB(t *testing.T, results []recordingContentReader
 	t.Helper()
 
 	name := fmt.Sprintf("content-reader-recording-test-%d", atomic.AddUint64(&recordingContentReaderDriverSeq, 1))
-	recorder := &recordingContentReader{}
+	recorder := &recordingContentReader{results: append([]recordingContentReaderQueryResult(nil), results...)}
 	sql.Register(name, &recordingContentReaderDriver{
-		results:  results,
 		recorder: recorder,
 	})
 
@@ -151,19 +153,16 @@ func openRecordingContentReaderDB(t *testing.T, results []recordingContentReader
 var recordingContentReaderDriverSeq uint64
 
 type recordingContentReaderDriver struct {
-	results  []recordingContentReaderQueryResult
 	recorder *recordingContentReader
 }
 
 func (d *recordingContentReaderDriver) Open(string) (driver.Conn, error) {
 	return &recordingContentReaderConn{
-		results:  append([]recordingContentReaderQueryResult(nil), d.results...),
 		recorder: d.recorder,
 	}, nil
 }
 
 type recordingContentReaderConn struct {
-	results  []recordingContentReaderQueryResult
 	recorder *recordingContentReader
 }
 
@@ -180,6 +179,9 @@ func (c *recordingContentReaderConn) Begin() (driver.Tx, error) {
 }
 
 func (c *recordingContentReaderConn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	c.recorder.mu.Lock()
+	defer c.recorder.mu.Unlock()
+
 	c.recorder.queries = append(c.recorder.queries, query)
 
 	recordedArgs := make([]driver.Value, 0, len(args))
@@ -188,11 +190,11 @@ func (c *recordingContentReaderConn) QueryContext(_ context.Context, query strin
 	}
 	c.recorder.args = append(c.recorder.args, recordedArgs)
 
-	if len(c.results) == 0 {
+	if len(c.recorder.results) == 0 {
 		return nil, fmt.Errorf("unexpected query")
 	}
-	result := c.results[0]
-	c.results = c.results[1:]
+	result := c.recorder.results[0]
+	c.recorder.results = c.recorder.results[1:]
 	if result.err != nil {
 		return nil, result.err
 	}
