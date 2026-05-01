@@ -29,6 +29,7 @@ func searchConsumerEvidenceAnyRepo(
 		searches = append(searches, consumerEvidenceSearch{
 			matchedValue: serviceName,
 			evidenceKind: "repository_reference",
+			exactCase:    exactCaseServiceNameSearch(serviceName),
 		})
 	}
 	for _, hostname := range hostnames {
@@ -73,6 +74,10 @@ func searchConsumerEvidenceAnyRepo(
 		mergeTraceEvidenceByRepo(evidenceByRepo, result.evidence)
 	}
 	return evidenceByRepo, nil
+}
+
+func exactCaseServiceNameSearch(serviceName string) bool {
+	return serviceName != "" && serviceName == strings.ToLower(serviceName)
 }
 
 type consumerEvidenceSearch struct {

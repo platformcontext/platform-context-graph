@@ -51,6 +51,68 @@ func TestSearchConsumerEvidenceAnyRepoStartsBoundedSearchesConcurrently(t *testi
 	}
 }
 
+func TestSearchConsumerEvidenceAnyRepoUsesExactCaseForLowercaseServiceToken(t *testing.T) {
+	t.Parallel()
+
+	store := &methodChoiceConsumerSearchContentStore{}
+	_, err := searchConsumerEvidenceAnyRepo(
+		context.Background(),
+		store,
+		"repo-sample-service-api",
+		"sample-service-api",
+		nil,
+		25,
+	)
+	if err != nil {
+		t.Fatalf("searchConsumerEvidenceAnyRepo() error = %v, want nil", err)
+	}
+	if got, want := store.insensitiveCalls, 0; got != want {
+		t.Fatalf("insensitiveCalls = %d, want %d for lower-case service token", got, want)
+	}
+	if got, want := store.exactCalls, 1; got != want {
+		t.Fatalf("exactCalls = %d, want %d for lower-case service token", got, want)
+	}
+}
+
+func TestSearchConsumerEvidenceAnyRepoKeepsInsensitiveSearchForMixedCaseServiceToken(t *testing.T) {
+	t.Parallel()
+
+	store := &methodChoiceConsumerSearchContentStore{}
+	_, err := searchConsumerEvidenceAnyRepo(
+		context.Background(),
+		store,
+		"repo-sample-service-api",
+		"Sample-Service-API",
+		nil,
+		25,
+	)
+	if err != nil {
+		t.Fatalf("searchConsumerEvidenceAnyRepo() error = %v, want nil", err)
+	}
+	if got, want := store.insensitiveCalls, 1; got != want {
+		t.Fatalf("insensitiveCalls = %d, want %d for mixed-case service token", got, want)
+	}
+	if got, want := store.exactCalls, 0; got != want {
+		t.Fatalf("exactCalls = %d, want %d for mixed-case service token", got, want)
+	}
+}
+
+type methodChoiceConsumerSearchContentStore struct {
+	fakePortContentStore
+	insensitiveCalls int
+	exactCalls       int
+}
+
+func (s *methodChoiceConsumerSearchContentStore) SearchFileContentAnyRepo(context.Context, string, int) ([]FileContent, error) {
+	s.insensitiveCalls++
+	return nil, nil
+}
+
+func (s *methodChoiceConsumerSearchContentStore) SearchFileContentAnyRepoExactCase(context.Context, string, int) ([]FileContent, error) {
+	s.exactCalls++
+	return nil, nil
+}
+
 type blockingConsumerSearchContentStore struct {
 	fakePortContentStore
 	started chan string
@@ -95,5 +157,9 @@ func (s patternConsumerSearchContentStore) SearchFileContentAnyRepo(_ context.Co
 }
 
 func (s patternConsumerSearchContentStore) SearchFileContentAnyRepoExactCase(_ context.Context, pattern string, _ int) ([]FileContent, error) {
-	return append([]FileContent(nil), s.exactRows[pattern]...), nil
+	rows := s.exactRows[pattern]
+	if len(rows) == 0 {
+		rows = s.fileRows[pattern]
+	}
+	return append([]FileContent(nil), rows...), nil
 }

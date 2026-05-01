@@ -423,8 +423,8 @@ func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitUsesBoundedDefaultSear
 		if !ok {
 			t.Fatalf("recorder.args[%d][0] type = %T, want string", i, recorder.args[i][0])
 		}
-		if term == "sample-service-api" && !strings.Contains(query, "content ILIKE '%' || $1 || '%'") {
-			t.Fatalf("service-name query = %q, want case-insensitive ILIKE", query)
+		if term == "sample-service-api" && !strings.Contains(query, "content LIKE '%' || $1 || '%'") {
+			t.Fatalf("service-name query = %q, want exact-case LIKE for lower-case service token", query)
 		}
 		if term != "sample-service-api" && !strings.Contains(query, "content LIKE '%' || $1 || '%'") {
 			t.Fatalf("hostname query for %q = %q, want case-sensitive LIKE", term, query)
@@ -641,7 +641,8 @@ func TestTraceDeploymentChainBoundsCrossRepoSearchByMaxDepth(t *testing.T) {
 	var searchLimit int64
 	foundAnyRepoSearch := false
 	for i, query := range recorder.queries {
-		if !strings.Contains(query, "content ILIKE '%' || $1 || '%'") {
+		if !(strings.Contains(query, "content ILIKE '%' || $1 || '%'") ||
+			strings.Contains(query, "content LIKE '%' || $1 || '%'")) {
 			continue
 		}
 		if strings.Contains(query, "repo_id = $1") {
