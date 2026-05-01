@@ -1,0 +1,31 @@
+docs/docs/adrs/2026-04-24-iac-usage-reachability-and-refactor-impact.md
+  4cb501d5d4ff237f 888
+go/internal/storage/postgres/schema_test.go
+  4cb501d5d4ff237f 16-17,36
+schema/data-plane/postgres/016_iac_reachability.sql
+  4cb501d5d4ff237f 1-22
+go/internal/storage/postgres/iac_reachability.go
+  4cb501d5d4ff237f 1-282
+go/internal/storage/postgres/iac_reachability_test.go
+  4cb501d5d4ff237f 1-280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "91d62f45b17bad9658e93feb35b0df89098ce271",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 588,
+      "total_deletions": 2,
+      "accepted_lines": 593,
+      "overriden_lines": 0
+    }
+  }
+}
