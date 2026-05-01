@@ -225,6 +225,9 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 			if _, err := w.db.ExecContext(ctx, deleteContentEntityQuery, cloned.RepoID, record.Path); err != nil {
 				return content.Result{}, fmt.Errorf("delete content_entities for %q: %w", record.Path, err)
 			}
+			if err := w.deleteContentReferences(ctx, cloned.RepoID, record.Path); err != nil {
+				return content.Result{}, fmt.Errorf("delete content_file_references for %q: %w", record.Path, err)
+			}
 			if _, err := w.db.ExecContext(ctx, deleteContentFileQuery, cloned.RepoID, record.Path); err != nil {
 				return content.Result{}, fmt.Errorf("delete content_files for %q: %w", record.Path, err)
 			}
@@ -433,6 +436,10 @@ func (w ContentWriter) upsertContentFileBatch(ctx context.Context, batch []prepa
 		return nil
 	}
 
+	if err := w.deleteContentReferenceBatch(ctx, batch); err != nil {
+		return err
+	}
+
 	args := make([]any, 0, len(batch)*columnsPerContentFile)
 	var values strings.Builder
 
@@ -466,6 +473,10 @@ func (w ContentWriter) upsertContentFileBatch(ctx context.Context, batch []prepa
 
 	if _, err := w.db.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("upsert content_files batch (%d files): %w", len(batch), err)
+	}
+
+	if err := w.upsertContentReferenceBatch(ctx, batch, indexedAt); err != nil {
+		return err
 	}
 
 	return nil

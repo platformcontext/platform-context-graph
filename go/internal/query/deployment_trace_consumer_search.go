@@ -91,12 +91,27 @@ type consumerEvidenceSearchResult struct {
 	err      error
 }
 
+type contentReferenceSearchStore interface {
+	SearchFileReferenceAnyRepo(ctx context.Context, kind string, value string, limit int) ([]FileContent, bool, error)
+}
+
 func runConsumerEvidenceSearch(
 	ctx context.Context,
 	content ContentStore,
 	search consumerEvidenceSearch,
 	limit int,
 ) ([]FileContent, error) {
+	if search.evidenceKind == "hostname_reference" {
+		if indexed, ok := content.(contentReferenceSearchStore); ok {
+			rows, available, err := indexed.SearchFileReferenceAnyRepo(ctx, "hostname", search.matchedValue, limit)
+			if err != nil {
+				return nil, fmt.Errorf("search indexed consumer evidence for hostname %q: %w", search.matchedValue, err)
+			}
+			if available {
+				return rows, nil
+			}
+		}
+	}
 	if search.exactCase {
 		rows, err := content.SearchFileContentAnyRepoExactCase(ctx, search.matchedValue, limit)
 		if err != nil {

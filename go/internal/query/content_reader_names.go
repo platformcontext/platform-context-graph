@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -27,6 +28,108 @@ func (cr *ContentReader) SearchFileContentAnyRepoExactCase(
 	limit int,
 ) ([]FileContent, error) {
 	return cr.searchFileContentAnyRepo(ctx, pattern, limit, true)
+}
+
+// SearchFileReferenceAnyRepo searches normalized file-reference indexes across
+// repositories and reports whether the reference table is available.
+func (cr *ContentReader) SearchFileReferenceAnyRepo(
+	ctx context.Context,
+	kind string,
+	value string,
+	limit int,
+) ([]FileContent, bool, error) {
+	ctx, span := cr.tracer.Start(ctx, "postgres.query",
+		trace.WithAttributes(
+			attribute.String("db.system", "postgresql"),
+			attribute.String("db.operation", "search_file_reference_any_repo"),
+			attribute.String("db.sql.table", "content_file_references"),
+		),
+	)
+	defer span.End()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var available bool
+	err := cr.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM content_file_references
+			WHERE reference_kind = $1
+			LIMIT 1
+		)
+	`, kind).Scan(&available)
+	if err != nil {
+		if contentReferenceIndexUnavailable(err) {
+			return nil, false, nil
+		}
+		span.RecordError(err)
+		return nil, false, fmt.Errorf("check content file reference index: %w", err)
+	}
+	if !available {
+		return nil, false, nil
+	}
+
+	rows, err := cr.db.QueryContext(ctx, `
+		SELECT f.repo_id, f.relative_path, coalesce(f.commit_sha, ''),
+		       '', f.content_hash, f.line_count, coalesce(f.language, ''),
+		       coalesce(f.artifact_type, '')
+		FROM content_file_references ref
+		JOIN content_files f
+		  ON f.repo_id = ref.repo_id
+		 AND f.relative_path = ref.relative_path
+		WHERE ref.reference_kind = $1
+		  AND ref.reference_value = $2
+		ORDER BY f.repo_id, f.relative_path
+		LIMIT $3
+	`, kind, value, limit)
+	if err != nil {
+		if contentReferenceIndexUnavailable(err) {
+			return nil, false, nil
+		}
+		span.RecordError(err)
+		return nil, true, fmt.Errorf("search content file references across repos: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []FileContent
+	for rows.Next() {
+		var file FileContent
+		if err := rows.Scan(
+			&file.RepoID,
+			&file.RelativePath,
+			&file.CommitSHA,
+			&file.Content,
+			&file.ContentHash,
+			&file.LineCount,
+			&file.Language,
+			&file.ArtifactType,
+		); err != nil {
+			span.RecordError(err)
+			return nil, true, fmt.Errorf("scan cross-repo file reference result: %w", err)
+		}
+		results = append(results, file)
+	}
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		return results, true, err
+	}
+	if len(results) == 0 {
+		return nil, false, nil
+	}
+	return results, true, nil
+}
+
+func contentReferenceIndexUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "content_file_references") &&
+		(strings.Contains(message, "does not exist") ||
+			strings.Contains(message, "undefined_table") ||
+			strings.Contains(message, "42p01"))
 }
 
 func (cr *ContentReader) searchFileContentAnyRepo(

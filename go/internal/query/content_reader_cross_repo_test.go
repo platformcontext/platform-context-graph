@@ -88,6 +88,63 @@ func TestContentReaderSearchFileContentAnyRepoExactCaseUsesCaseSensitiveLike(t *
 	}
 }
 
+func TestContentReaderSearchFileReferenceAnyRepoUsesIndexedReferences(t *testing.T) {
+	t.Parallel()
+
+	db, recorder := openRecordingContentReaderDB(t, []recordingContentReaderQueryResult{
+		{
+			columns: []string{"available"},
+			rows:    [][]driver.Value{{true}},
+		},
+		{
+			columns: []string{
+				"repo_id", "relative_path", "commit_sha", "content",
+				"content_hash", "line_count", "language", "artifact_type",
+			},
+			rows: [][]driver.Value{
+				{
+					"deployment-charts", "charts/sample-service-api/values-qa.yaml", "", "",
+					"hash-1", int64(18), "yaml", "helm_values",
+				},
+			},
+		},
+	})
+
+	reader := NewContentReader(db)
+	results, available, err := reader.SearchFileReferenceAnyRepo(context.Background(), "hostname", "api.qa.example.test", 10)
+	if err != nil {
+		t.Fatalf("SearchFileReferenceAnyRepo() error = %v, want nil", err)
+	}
+	if !available {
+		t.Fatal("SearchFileReferenceAnyRepo() available = false, want true")
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	if got, want := results[0].RepoID, "deployment-charts"; got != want {
+		t.Fatalf("results[0].RepoID = %#v, want %#v", got, want)
+	}
+
+	if len(recorder.queries) != 2 {
+		t.Fatalf("len(recorder.queries) = %d, want 2", len(recorder.queries))
+	}
+	if !strings.Contains(recorder.queries[0], "FROM content_file_references") {
+		t.Fatalf("availability query = %q, want content_file_references", recorder.queries[0])
+	}
+	if !strings.Contains(recorder.queries[1], "JOIN content_files") {
+		t.Fatalf("lookup query = %q, want content_files join", recorder.queries[1])
+	}
+	if strings.Contains(recorder.queries[1], "content LIKE") || strings.Contains(recorder.queries[1], "content ILIKE") {
+		t.Fatalf("lookup query = %q, must not scan content body", recorder.queries[1])
+	}
+	if got, want := recorder.args[1][0], "hostname"; got != want {
+		t.Fatalf("lookup reference kind arg = %#v, want %#v", got, want)
+	}
+	if got, want := recorder.args[1][1], "api.qa.example.test"; got != want {
+		t.Fatalf("lookup reference value arg = %#v, want %#v", got, want)
+	}
+}
+
 func TestContentReaderSearchFileContentAnyRepoDefaultsLimit(t *testing.T) {
 	t.Parallel()
 
@@ -190,6 +247,14 @@ func (c *recordingContentReaderConn) QueryContext(_ context.Context, query strin
 	}
 	c.recorder.args = append(c.recorder.args, recordedArgs)
 
+	if strings.Contains(query, "SELECT EXISTS") &&
+		strings.Contains(query, "FROM content_file_references") &&
+		(len(c.recorder.results) == 0 || !recordingContentReaderResultColumnsEqual(c.recorder.results[0], []string{"available"})) {
+		return &recordingContentReaderRows{
+			columns: []string{"available"},
+			rows:    [][]driver.Value{{false}},
+		}, nil
+	}
 	if len(c.recorder.results) == 0 {
 		return nil, fmt.Errorf("unexpected query")
 	}
@@ -199,6 +264,18 @@ func (c *recordingContentReaderConn) QueryContext(_ context.Context, query strin
 		return nil, result.err
 	}
 	return &recordingContentReaderRows{columns: result.columns, rows: result.rows}, nil
+}
+
+func recordingContentReaderResultColumnsEqual(result recordingContentReaderQueryResult, columns []string) bool {
+	if len(result.columns) != len(columns) {
+		return false
+	}
+	for i, column := range columns {
+		if result.columns[i] != column {
+			return false
+		}
+	}
+	return true
 }
 
 type recordingContentReaderRows struct {

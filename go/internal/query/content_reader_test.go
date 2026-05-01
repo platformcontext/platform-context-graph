@@ -489,7 +489,15 @@ func (c *contentReaderConn) Begin() (driver.Tx, error) {
 	return nil, fmt.Errorf("Begin not implemented")
 }
 
-func (c *contentReaderConn) QueryContext(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
+func (c *contentReaderConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+	if strings.Contains(query, "SELECT EXISTS") &&
+		strings.Contains(query, "FROM content_file_references") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"available"})) {
+		return &contentReaderRows{
+			columns: []string{"available"},
+			rows:    [][]driver.Value{{false}},
+		}, nil
+	}
 	if len(c.results) == 0 {
 		return nil, fmt.Errorf("unexpected query")
 	}
@@ -499,6 +507,18 @@ func (c *contentReaderConn) QueryContext(context.Context, string, []driver.Named
 		return nil, result.err
 	}
 	return &contentReaderRows{columns: result.columns, rows: result.rows}, nil
+}
+
+func contentReaderResultColumnsEqual(result contentReaderQueryResult, columns []string) bool {
+	if len(result.columns) != len(columns) {
+		return false
+	}
+	for i, column := range columns {
+		if result.columns[i] != column {
+			return false
+		}
+	}
+	return true
 }
 
 type contentReaderRows struct {

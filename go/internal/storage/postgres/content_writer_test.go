@@ -40,13 +40,16 @@ func TestContentWriterBatchesFileInserts(t *testing.T) {
 		t.Fatalf("RecordCount = %d, want %d", got, want)
 	}
 
-	// Should have exactly 1 exec call (batched insert)
-	if got, want := len(db.execs), 1; got != want {
-		t.Fatalf("exec count = %d, want %d (batched)", got, want)
+	// Should have one stale-reference delete and one batched file insert.
+	if got, want := len(db.execs), 2; got != want {
+		t.Fatalf("exec count = %d, want %d (reference delete + batched insert)", got, want)
+	}
+	if !strings.Contains(db.execs[0].query, "DELETE FROM content_file_references") {
+		t.Fatalf("first query should delete stale file references: %s", db.execs[0].query)
 	}
 
 	// Query should be a multi-row INSERT
-	query := db.execs[0].query
+	query := db.execs[1].query
 	if !strings.Contains(query, "INSERT INTO content_files") {
 		t.Fatalf("query should contain content_files insert: %s", query)
 	}
@@ -193,15 +196,63 @@ func TestContentWriterDeletesAreNotBatched(t *testing.T) {
 		t.Fatalf("DeletedCount = %d, want %d", got, want)
 	}
 
-	// Deletes should result in 2 exec calls (entity delete + file delete)
-	if got, want := len(db.execs), 2; got != want {
-		t.Fatalf("exec count = %d, want %d (2 deletes)", got, want)
+	// Deletes should remove entities, indexed file references, and the file row.
+	if got, want := len(db.execs), 3; got != want {
+		t.Fatalf("exec count = %d, want %d (3 deletes)", got, want)
 	}
 	if !strings.Contains(db.execs[0].query, "DELETE FROM content_entities") {
 		t.Fatalf("first query should delete entities: %s", db.execs[0].query)
 	}
-	if !strings.Contains(db.execs[1].query, "DELETE FROM content_files") {
-		t.Fatalf("second query should delete files: %s", db.execs[1].query)
+	if !strings.Contains(db.execs[1].query, "DELETE FROM content_file_references") {
+		t.Fatalf("second query should delete file references: %s", db.execs[1].query)
+	}
+	if !strings.Contains(db.execs[2].query, "DELETE FROM content_files") {
+		t.Fatalf("third query should delete files: %s", db.execs[2].query)
+	}
+}
+
+func TestContentWriterMaterializesHostnameReferences(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{}
+	writer := NewContentWriter(db)
+	writer.Now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }
+
+	_, err := writer.Write(context.Background(), content.Materialization{
+		RepoID:       "repo-service",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		Records: []content.Record{
+			{
+				Path: "deploy/ingress.yaml",
+				Body: "rules:\n- host: api.qa.example.test\n- host: docs.example.test\n",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Write() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.execs), 3; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+	if !strings.Contains(db.execs[0].query, "DELETE FROM content_file_references") {
+		t.Fatalf("first query = %q, want stale content_file_references delete", db.execs[0].query)
+	}
+	if !strings.Contains(db.execs[1].query, "INSERT INTO content_files") {
+		t.Fatalf("second query = %q, want content_files upsert", db.execs[1].query)
+	}
+	if !strings.Contains(db.execs[2].query, "INSERT INTO content_file_references") {
+		t.Fatalf("third query = %q, want content_file_references upsert", db.execs[2].query)
+	}
+	if got, want := strings.Count(db.execs[2].query, "($"), 2; got != want {
+		t.Fatalf("reference value groups = %d, want %d", got, want)
+	}
+	args := db.execs[2].args
+	for _, want := range []string{"repo-service", "deploy/ingress.yaml", "hostname", "api.qa.example.test", "docs.example.test"} {
+		if !fakeExecArgsContain(args, want) {
+			t.Fatalf("reference upsert args missing %q: %#v", want, args)
+		}
 	}
 }
 
@@ -237,13 +288,14 @@ func TestContentWriterBatchesLargeFileSet(t *testing.T) {
 		t.Fatalf("RecordCount = %d, want %d", got, want)
 	}
 
-	// Should have exactly 2 exec calls (2 batches of 500)
-	if got, want := len(db.execs), 2; got != want {
-		t.Fatalf("exec count = %d, want %d (2 batches)", got, want)
+	// Should have a stale-reference delete and file insert per batch.
+	if got, want := len(db.execs), 4; got != want {
+		t.Fatalf("exec count = %d, want %d (reference delete + insert per batch)", got, want)
 	}
 
 	// Both queries should be multi-row INSERTs
-	for i, exec := range db.execs {
+	for i, execIndex := range []int{1, 3} {
+		exec := db.execs[execIndex]
 		if !strings.Contains(exec.query, "INSERT INTO content_files") {
 			t.Fatalf("query %d should contain content_files insert", i)
 		}
@@ -252,6 +304,15 @@ func TestContentWriterBatchesLargeFileSet(t *testing.T) {
 			t.Fatalf("batch %d: value groups = %d, want %d", i, got, want)
 		}
 	}
+}
+
+func fakeExecArgsContain(args []any, want string) bool {
+	for _, arg := range args {
+		if value, ok := arg.(string); ok && value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestContentWriterBatchesLargeEntitySet(t *testing.T) {

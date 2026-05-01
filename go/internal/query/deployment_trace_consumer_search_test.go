@@ -74,6 +74,66 @@ func TestSearchConsumerEvidenceAnyRepoUsesExactCaseForLowercaseServiceToken(t *t
 	}
 }
 
+func TestSearchConsumerEvidenceAnyRepoUsesIndexedHostnameReferences(t *testing.T) {
+	t.Parallel()
+
+	store := &indexedHostnameConsumerSearchContentStore{
+		referenceRows: []FileContent{
+			{RepoID: "repo-consumer", RelativePath: "deploy/values.yaml"},
+		},
+	}
+	got, err := searchConsumerEvidenceAnyRepo(
+		context.Background(),
+		store,
+		"repo-sample-service-api",
+		"",
+		[]string{"sample-service-api.qa.example.test"},
+		25,
+	)
+	if err != nil {
+		t.Fatalf("searchConsumerEvidenceAnyRepo() error = %v, want nil", err)
+	}
+	if got, want := store.referenceCalls, 1; got != want {
+		t.Fatalf("referenceCalls = %d, want %d", got, want)
+	}
+	if got, want := store.exactCalls, 0; got != want {
+		t.Fatalf("exactCalls = %d, want %d when indexed references are available", got, want)
+	}
+	if _, ok := got["repo-consumer"]; !ok {
+		t.Fatalf("evidence repos = %#v, want repo-consumer", got)
+	}
+}
+
+func TestSearchConsumerEvidenceAnyRepoFallsBackWhenIndexedHostnameMissing(t *testing.T) {
+	t.Parallel()
+
+	store := &indexedHostnameConsumerSearchContentStore{
+		exactRows: []FileContent{
+			{RepoID: "repo-consumer", RelativePath: "deploy/values.yaml"},
+		},
+	}
+	got, err := searchConsumerEvidenceAnyRepo(
+		context.Background(),
+		store,
+		"repo-sample-service-api",
+		"",
+		[]string{"sample-service-api.qa.example.test"},
+		25,
+	)
+	if err != nil {
+		t.Fatalf("searchConsumerEvidenceAnyRepo() error = %v, want nil", err)
+	}
+	if got, want := store.referenceCalls, 1; got != want {
+		t.Fatalf("referenceCalls = %d, want %d", got, want)
+	}
+	if got, want := store.exactCalls, 1; got != want {
+		t.Fatalf("exactCalls = %d, want %d after empty indexed lookup", got, want)
+	}
+	if _, ok := got["repo-consumer"]; !ok {
+		t.Fatalf("evidence repos = %#v, want repo-consumer", got)
+	}
+}
+
 func TestSearchConsumerEvidenceAnyRepoKeepsInsensitiveSearchForMixedCaseServiceToken(t *testing.T) {
 	t.Parallel()
 
@@ -95,6 +155,31 @@ func TestSearchConsumerEvidenceAnyRepoKeepsInsensitiveSearchForMixedCaseServiceT
 	if got, want := store.exactCalls, 0; got != want {
 		t.Fatalf("exactCalls = %d, want %d for mixed-case service token", got, want)
 	}
+}
+
+type indexedHostnameConsumerSearchContentStore struct {
+	fakePortContentStore
+	referenceCalls int
+	exactCalls     int
+	referenceRows  []FileContent
+	exactRows      []FileContent
+}
+
+func (s *indexedHostnameConsumerSearchContentStore) SearchFileReferenceAnyRepo(_ context.Context, kind string, value string, _ int) ([]FileContent, bool, error) {
+	s.referenceCalls++
+	if kind != "hostname" {
+		return nil, true, nil
+	}
+	if value != "sample-service-api.qa.example.test" {
+		return nil, true, nil
+	}
+	rows := append([]FileContent(nil), s.referenceRows...)
+	return rows, len(rows) > 0, nil
+}
+
+func (s *indexedHostnameConsumerSearchContentStore) SearchFileContentAnyRepoExactCase(context.Context, string, int) ([]FileContent, error) {
+	s.exactCalls++
+	return append([]FileContent(nil), s.exactRows...), nil
 }
 
 type methodChoiceConsumerSearchContentStore struct {

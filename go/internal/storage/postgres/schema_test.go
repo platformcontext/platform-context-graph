@@ -70,6 +70,12 @@ func TestBootstrapDefinitionsIncludeContentStoreTables(t *testing.T) {
 	if !strings.Contains(contentStore.SQL, "CREATE TABLE IF NOT EXISTS content_entities") {
 		t.Fatal("content_store SQL missing content_entities table")
 	}
+	if !strings.Contains(contentStore.SQL, "CREATE TABLE IF NOT EXISTS content_file_references") {
+		t.Fatal("content_store SQL missing content_file_references table")
+	}
+	if !strings.Contains(contentStore.SQL, "content_file_references_lookup_idx") {
+		t.Fatal("content_store SQL missing content file reference lookup index")
+	}
 	if !strings.Contains(contentStore.SQL, "metadata JSONB NOT NULL DEFAULT '{}'::jsonb") {
 		t.Fatal("content_store SQL missing content_entities metadata jsonb column")
 	}
@@ -124,6 +130,9 @@ func TestBootstrapDefinitionsWithoutContentSearchIndexesKeepsLookupIndexes(t *te
 	}
 	if !strings.Contains(contentStore.SQL, "content_entities_repo_idx") {
 		t.Fatal("content_store SQL missing content entity lookup index")
+	}
+	if !strings.Contains(contentStore.SQL, "content_file_references_lookup_idx") {
+		t.Fatal("content_store SQL missing content file reference lookup index")
 	}
 	if strings.Contains(contentStore.SQL, "content_files_content_trgm_idx") {
 		t.Fatal("content_store SQL includes content_files trigram index")
