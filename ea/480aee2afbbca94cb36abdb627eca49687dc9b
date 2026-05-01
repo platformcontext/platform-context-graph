@@ -1,0 +1,25 @@
+go/internal/storage/neo4j/canonical_node_writer_entities_singleton_test.go
+  4cb501d5d4ff237f 186-227
+go/internal/storage/neo4j/canonical_node_writer_entities_singleton.go
+  4cb501d5d4ff237f 11,40-45,47-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ea480aee2afbbca94cb36abdb627eca49687dc9b",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 54,
+      "total_deletions": 26,
+      "accepted_lines": 555,
+      "overriden_lines": 0
+    }
+  }
+}
