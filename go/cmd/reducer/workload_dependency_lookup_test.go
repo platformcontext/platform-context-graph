@@ -7,15 +7,46 @@ import (
 	"time"
 )
 
+func TestWorkloadDependencyLookupListsRepoDependencyEdgesWithAnchoredDirections(t *testing.T) {
+	t.Parallel()
+
+	reader := &recordingWorkloadDependencyGraphReader{
+		rows: []map[string]any{
+			{"source_repo_id": "repo-a", "target_repo_id": "repo-b"},
+			{"source_repo_id": "repo-c", "target_repo_id": "repo-a"},
+		},
+	}
+	lookup := neo4jWorkloadDependencyLookup{reader: reader}
+
+	rows, err := lookup.ListRepoDependencyEdges(context.Background(), []string{"repo-a"})
+	if err != nil {
+		t.Fatalf("ListRepoDependencyEdges() error = %v", err)
+	}
+
+	if got, want := len(rows), 2; got != want {
+		t.Fatalf("len(rows) = %d, want %d", got, want)
+	}
+	if strings.Contains(reader.cypher, " OR ") {
+		t.Fatalf("cypher = %q, want anchored outgoing/incoming branches without OR", reader.cypher)
+	}
+	for _, want := range []string{
+		"UNWIND $repo_ids AS repo_id",
+		"MATCH (source:Repository {id: repo_id})-[:DEPENDS_ON]->(target:Repository)",
+		"MATCH (source:Repository)-[:DEPENDS_ON]->(target:Repository {id: repo_id})",
+	} {
+		if !strings.Contains(reader.cypher, want) {
+			t.Fatalf("cypher = %q, want fragment %q", reader.cypher, want)
+		}
+	}
+}
+
 func TestWorkloadDependencyLookupListsExistingEdgesByRepoAndEvidenceSource(t *testing.T) {
 	t.Parallel()
 
 	reader := &recordingWorkloadDependencyGraphReader{
 		rows: []map[string]any{
 			{
-				"repo_id":            "repo-a",
-				"workload_id":        "workload:svc-a",
-				"target_workload_id": "workload:svc-b",
+				"repo_id": "repo-a",
 			},
 		},
 	}
@@ -36,12 +67,6 @@ func TestWorkloadDependencyLookupListsExistingEdgesByRepoAndEvidenceSource(t *te
 	if got, want := rows[0].RepoID, "repo-a"; got != want {
 		t.Fatalf("rows[0].RepoID = %q, want %q", got, want)
 	}
-	if got, want := rows[0].WorkloadID, "workload:svc-a"; got != want {
-		t.Fatalf("rows[0].WorkloadID = %q, want %q", got, want)
-	}
-	if got, want := rows[0].TargetWorkloadID, "workload:svc-b"; got != want {
-		t.Fatalf("rows[0].TargetWorkloadID = %q, want %q", got, want)
-	}
 	if !strings.Contains(reader.cypher, "MATCH (source:Workload)-[rel:DEPENDS_ON]->(target:Workload)") {
 		t.Fatalf("cypher = %q, want workload dependency match", reader.cypher)
 	}
@@ -50,6 +75,9 @@ func TestWorkloadDependencyLookupListsExistingEdgesByRepoAndEvidenceSource(t *te
 	}
 	if got, want := reader.params["evidence_source"], "finalization/workloads"; got != want {
 		t.Fatalf("evidence_source param = %#v, want %#v", got, want)
+	}
+	if strings.Contains(reader.cypher, "target.id AS target_workload_id") || strings.Contains(reader.cypher, "source.id AS workload_id") {
+		t.Fatalf("cypher = %q, want repo-id-only existing dependency projection", reader.cypher)
 	}
 }
 

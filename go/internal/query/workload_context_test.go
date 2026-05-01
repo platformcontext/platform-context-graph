@@ -401,6 +401,7 @@ func TestGetServiceStoryAcceptsQualifiedWorkloadIDAndNormalizesServiceName(t *te
 func TestGetServiceContextOmitsRepoEntryPoints(t *testing.T) {
 	t.Parallel()
 
+	entryPointQueried := false
 	handler := &EntityHandler{
 		Neo4j: fakeWorkloadGraphReader{
 			runSingleByMatch: map[string]map[string]any{
@@ -420,16 +421,16 @@ func TestGetServiceContextOmitsRepoEntryPoints(t *testing.T) {
 					},
 				},
 			},
-			runByMatch: map[string][]map[string]any{
-				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {},
-				"K8sResource OR":                      {},
-				"fn.name IN": {
-					{
-						"name":          "main",
-						"relative_path": "cmd/server/main.go",
-						"language":      "go",
-					},
-				},
+			run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+				switch {
+				case strings.Contains(cypher, "MATCH (r:Repository)-[:DEFINES]->(w)"):
+					return []map[string]any{{"repo_id": "repo-1", "repo_name": "service-edge-api"}}, nil
+				case strings.Contains(cypher, "fn.name IN"):
+					entryPointQueried = true
+					return []map[string]any{{"name": "main", "relative_path": "cmd/server/main.go", "language": "go"}}, nil
+				default:
+					return nil, nil
+				}
 			},
 		},
 	}
@@ -453,6 +454,9 @@ func TestGetServiceContextOmitsRepoEntryPoints(t *testing.T) {
 
 	if _, exists := resp["entry_points"]; exists {
 		t.Fatalf("entry_points = %#v, want omitted for service context", resp["entry_points"])
+	}
+	if entryPointQueried {
+		t.Fatal("service context queried repo entry points even though enrichment omits them")
 	}
 }
 
