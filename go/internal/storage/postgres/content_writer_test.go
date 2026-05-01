@@ -256,6 +256,42 @@ func TestContentWriterMaterializesHostnameReferences(t *testing.T) {
 	}
 }
 
+func TestContentWriterMaterializesServiceNameReferences(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{}
+	writer := NewContentWriter(db)
+	writer.Now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }
+
+	_, err := writer.Write(context.Background(), content.Materialization{
+		RepoID:       "repo-service",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		Records: []content.Record{
+			{
+				Path: "deploy/values.yaml",
+				Body: "service:\n  name: sample-service-api\n  url: https://sample-service-api.qa.example.test\n",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Write() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.execs), 3; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+	if !strings.Contains(db.execs[2].query, "INSERT INTO content_file_references") {
+		t.Fatalf("third query = %q, want content_file_references upsert", db.execs[2].query)
+	}
+	args := db.execs[2].args
+	for _, want := range []string{"hostname", "sample-service-api.qa.example.test", "service_name", "sample-service-api"} {
+		if !fakeExecArgsContain(args, want) {
+			t.Fatalf("reference upsert args missing %q: %#v", want, args)
+		}
+	}
+}
+
 func TestContentWriterBatchesLargeFileSet(t *testing.T) {
 	t.Parallel()
 

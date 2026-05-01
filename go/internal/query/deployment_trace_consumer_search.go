@@ -101,6 +101,17 @@ func runConsumerEvidenceSearch(
 	search consumerEvidenceSearch,
 	limit int,
 ) ([]FileContent, error) {
+	if search.evidenceKind == "repository_reference" && search.exactCase {
+		if indexed, ok := content.(contentReferenceSearchStore); ok {
+			rows, available, err := indexed.SearchFileReferenceAnyRepo(ctx, "service_name", search.matchedValue, limit)
+			if err != nil {
+				return nil, fmt.Errorf("search indexed consumer evidence for service name %q: %w", search.matchedValue, err)
+			}
+			if available {
+				return rows, nil
+			}
+		}
+	}
 	if search.evidenceKind == "hostname_reference" {
 		if indexed, ok := content.(contentReferenceSearchStore); ok {
 			rows, available, err := indexed.SearchFileReferenceAnyRepo(ctx, "hostname", search.matchedValue, limit)

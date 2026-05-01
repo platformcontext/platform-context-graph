@@ -91,6 +91,14 @@ func contentReferencesForFiles(rows []preparedFileRow) []preparedContentReferenc
 				value:  hostname,
 			})
 		}
+		for _, serviceName := range contentrefs.ServiceNames(row.body) {
+			references = append(references, preparedContentReferenceRow{
+				repoID: row.repoID,
+				path:   row.path,
+				kind:   "service_name",
+				value:  serviceName,
+			})
+		}
 	}
 	return references
 }
