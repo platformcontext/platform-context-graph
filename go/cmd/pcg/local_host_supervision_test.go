@@ -29,6 +29,8 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 	originalWaitOwnerChildren := localHostWaitOwnerChildren
 	originalApplyBootstrap := localHostApplyBootstrap
 	originalApplyGraphBootstrap := localHostApplyGraphBootstrap
+	originalExpectedProjectors := localHostContentSearchIndexExpectedProjectors
+	originalStartIaCReachabilityFinalizer := localHostStartIaCReachabilityFinalizer
 	t.Cleanup(func() {
 		localHostPrepareWorkspace = originalPrepareWorkspace
 		localHostStartEmbeddedPostgres = originalStartEmbeddedPostgres
@@ -40,6 +42,8 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 		localHostWaitOwnerChildren = originalWaitOwnerChildren
 		localHostApplyBootstrap = originalApplyBootstrap
 		localHostApplyGraphBootstrap = originalApplyGraphBootstrap
+		localHostContentSearchIndexExpectedProjectors = originalExpectedProjectors
+		localHostStartIaCReachabilityFinalizer = originalStartIaCReachabilityFinalizer
 	})
 
 	localHostPrepareWorkspace = func(layout pcglocal.Layout) (*pcglocal.OwnerLock, error) {
@@ -78,6 +82,12 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeWatchStartsReducerAndIngester(t
 	}
 	localHostApplyGraphBootstrap = func(ctx context.Context, runtimeConfig localHostRuntimeConfig, graph *managedLocalGraph) error {
 		return nil
+	}
+	localHostContentSearchIndexExpectedProjectors = func(workspaceRoot string) (int, error) {
+		return 1, nil
+	}
+	localHostStartIaCReachabilityFinalizer = func(ctx context.Context, dsn string, expectedProjectors int) (func() error, error) {
+		return func() error { return nil }, nil
 	}
 
 	var started []string

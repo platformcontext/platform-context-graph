@@ -2,15 +2,12 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 
@@ -20,7 +17,6 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
-	pgstorage "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
 const localHostShutdownTimeout = 5 * time.Second
@@ -60,6 +56,7 @@ var (
 	localHostStartProgressReporter                = startLocalHostProgressReporter
 	localHostStartDeferredContentSearchIndexes    = startDeferredContentSearchIndexes
 	localHostContentSearchIndexExpectedProjectors = localContentSearchIndexExpectedProjectors
+	localHostStartIaCReachabilityFinalizer        = startLocalIaCReachabilityFinalizer
 )
 
 func init() {
@@ -209,21 +206,33 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 		return err
 	}
 
-	if runtimeConfig.Profile == query.ProfileLocalAuthoritative && deferContentSearchIndexes(os.Getenv) {
-		expectedProjectors, err := localHostContentSearchIndexExpectedProjectors(layout.WorkspaceRoot)
+	expectedProjectors := 0
+	if runtimeConfig.Profile == query.ProfileLocalAuthoritative {
+		expectedProjectors, err = localHostContentSearchIndexExpectedProjectors(layout.WorkspaceRoot)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: deferred content search index maintainer unavailable: discover workspace repos: %v\n", err)
-		} else {
-			stopDeferredIndexes, err := localHostStartDeferredContentSearchIndexes(ctx, managedPostgres.DSN, expectedProjectors)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "warning: deferred content search index maintainer unavailable: %v\n", err)
-			} else {
-				defer func() {
-					if err := stopDeferredIndexes(); err != nil && retErr == nil {
-						retErr = fmt.Errorf("stop deferred content search index maintainer: %w", err)
-					}
-				}()
+			return fmt.Errorf("discover workspace repos for local authoritative finalization: %w", err)
+		}
+		stopIaCReachability, err := localHostStartIaCReachabilityFinalizer(ctx, managedPostgres.DSN, expectedProjectors)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := stopIaCReachability(); err != nil && retErr == nil {
+				retErr = fmt.Errorf("stop IaC reachability finalizer: %w", err)
 			}
+		}()
+	}
+
+	if runtimeConfig.Profile == query.ProfileLocalAuthoritative && deferContentSearchIndexes(os.Getenv) {
+		stopDeferredIndexes, err := localHostStartDeferredContentSearchIndexes(ctx, managedPostgres.DSN, expectedProjectors)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: deferred content search index maintainer unavailable: %v\n", err)
+		} else {
+			defer func() {
+				if err := stopDeferredIndexes(); err != nil && retErr == nil {
+					retErr = fmt.Errorf("stop deferred content search index maintainer: %w", err)
+				}
+			}()
 		}
 	}
 
@@ -352,182 +361,4 @@ func runAttachedLocalMCPStdio(ctx context.Context, layout pcglocal.Layout) (bool
 		return true, err
 	}
 	return true, localHostWaitChildProcess(ctx, mcpServer)
-}
-
-func localHostEnv(dsn string, runtimeConfig localHostRuntimeConfig, graph *managedLocalGraph, overrides map[string]string) []string {
-	values := map[string]string{
-		"PCG_POSTGRES_DSN":      dsn,
-		"PCG_FACT_STORE_DSN":    dsn,
-		"PCG_CONTENT_STORE_DSN": dsn,
-		"PCG_LISTEN_ADDR":       "127.0.0.1:0",
-		"PCG_METRICS_ADDR":      "127.0.0.1:0",
-		"PCG_QUERY_PROFILE":     string(runtimeConfig.Profile),
-		"PCG_DISABLE_NEO4J":     "",
-	}
-	if runtimeConfig.Profile == query.ProfileLocalLightweight {
-		values["PCG_DISABLE_NEO4J"] = "true"
-	}
-	if runtimeConfig.GraphBackend != "" {
-		values["PCG_GRAPH_BACKEND"] = string(runtimeConfig.GraphBackend)
-	}
-	for key, value := range graphEnvOverrides(graph) {
-		values[key] = value
-	}
-	for key, value := range overrides {
-		values[key] = value
-	}
-	return mergeEnvironment(pcgEnviron(), values)
-}
-
-func localHostIngesterOverrides(layout pcglocal.Layout, mode localHostMode, runtimeConfig localHostRuntimeConfig) map[string]string {
-	overrides := map[string]string{
-		"PCG_WATCH_PATH":        layout.WorkspaceRoot,
-		"PCG_REPO_SOURCE_MODE":  "filesystem",
-		"PCG_FILESYSTEM_ROOT":   layout.WorkspaceRoot,
-		"PCG_FILESYSTEM_DIRECT": "true",
-		"PCG_REPOS_DIR":         filepath.Join(layout.CacheDir, "repos"),
-	}
-	if runtimeConfig.GraphBackend != "" {
-		overrides["PCG_GRAPH_BACKEND"] = string(runtimeConfig.GraphBackend)
-	}
-	return overrides
-}
-
-func resolveLocalHostRuntimeConfig(getenv func(string) string) (localHostRuntimeConfig, error) {
-	profile := query.ProfileLocalLightweight
-	rawProfile := strings.TrimSpace(getenv("PCG_QUERY_PROFILE"))
-	if rawProfile != "" {
-		parsedProfile, err := query.ParseQueryProfile(rawProfile)
-		if err != nil {
-			return localHostRuntimeConfig{}, fmt.Errorf("parse PCG_QUERY_PROFILE: %w", err)
-		}
-		switch parsedProfile {
-		case query.ProfileLocalLightweight, query.ProfileLocalAuthoritative:
-			profile = parsedProfile
-		default:
-			return localHostRuntimeConfig{}, fmt.Errorf(
-				"local host supports only %q or %q query profiles, got %q",
-				query.ProfileLocalLightweight,
-				query.ProfileLocalAuthoritative,
-				parsedProfile,
-			)
-		}
-	}
-
-	rawGraphBackend := strings.TrimSpace(getenv("PCG_GRAPH_BACKEND"))
-	if profile == query.ProfileLocalLightweight {
-		if rawGraphBackend != "" {
-			return localHostRuntimeConfig{}, fmt.Errorf("PCG_GRAPH_BACKEND is not supported with %q", profile)
-		}
-		return localHostRuntimeConfig{Profile: profile}, nil
-	}
-
-	if rawGraphBackend == "" {
-		return localHostRuntimeConfig{
-			Profile:      profile,
-			GraphBackend: query.GraphBackendNornicDB,
-		}, nil
-	}
-
-	graphBackend, err := query.ParseGraphBackend(rawGraphBackend)
-	if err != nil {
-		return localHostRuntimeConfig{}, fmt.Errorf("parse PCG_GRAPH_BACKEND: %w", err)
-	}
-	return localHostRuntimeConfig{
-		Profile:      profile,
-		GraphBackend: graphBackend,
-	}, nil
-}
-
-func requestedAttachRuntimeConfig(getenv func(string) string) (localHostRuntimeConfig, bool, error) {
-	explicit := strings.TrimSpace(getenv("PCG_QUERY_PROFILE")) != "" || strings.TrimSpace(getenv("PCG_GRAPH_BACKEND")) != ""
-	if !explicit {
-		return localHostRuntimeConfig{}, false, nil
-	}
-
-	runtimeConfig, err := resolveLocalHostRuntimeConfig(getenv)
-	if err != nil {
-		return localHostRuntimeConfig{}, false, err
-	}
-	return runtimeConfig, true, nil
-}
-
-func runtimeConfigFromOwnerRecord(record pcglocal.OwnerRecord) (localHostRuntimeConfig, error) {
-	if strings.TrimSpace(record.Profile) == "" {
-		return localHostRuntimeConfig{Profile: query.ProfileLocalLightweight}, nil
-	}
-
-	profile, err := query.ParseQueryProfile(record.Profile)
-	if err != nil {
-		return localHostRuntimeConfig{}, fmt.Errorf("parse owner record profile: %w", err)
-	}
-	if profile == query.ProfileLocalLightweight {
-		return localHostRuntimeConfig{Profile: profile}, nil
-	}
-	if strings.TrimSpace(record.GraphBackend) == "" {
-		return localHostRuntimeConfig{
-			Profile:      profile,
-			GraphBackend: query.GraphBackendNornicDB,
-		}, nil
-	}
-
-	graphBackend, err := query.ParseGraphBackend(record.GraphBackend)
-	if err != nil {
-		return localHostRuntimeConfig{}, fmt.Errorf("parse owner record graph backend: %w", err)
-	}
-	return localHostRuntimeConfig{
-		Profile:      profile,
-		GraphBackend: graphBackend,
-	}, nil
-}
-
-func mergeEnvironment(base []string, overrides map[string]string) []string {
-	merged := make(map[string]string, len(base)+len(overrides))
-	for _, entry := range base {
-		for i := 0; i < len(entry); i++ {
-			if entry[i] == '=' {
-				merged[entry[:i]] = entry[i+1:]
-				break
-			}
-		}
-	}
-	for key, value := range overrides {
-		merged[key] = value
-	}
-	env := make([]string, 0, len(merged))
-	for key, value := range merged {
-		env = append(env, key+"="+value)
-	}
-	return env
-}
-
-func applyLocalBootstrap(ctx context.Context, dsn string) error {
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		return fmt.Errorf("open local postgres bootstrap connection: %w", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("ping local postgres bootstrap connection: %w", err)
-	}
-	if err := pgstorage.ApplyDefinitions(ctx, db, localBootstrapDefinitions(os.Getenv)); err != nil {
-		return fmt.Errorf("apply local postgres bootstrap: %w", err)
-	}
-	return nil
-}
-
-func localBootstrapDefinitions(getenv func(string) string) []pgstorage.Definition {
-	if deferContentSearchIndexes(getenv) {
-		return pgstorage.BootstrapDefinitionsWithoutContentSearchIndexes()
-	}
-	return pgstorage.BootstrapDefinitions()
-}
-
-func deferContentSearchIndexes(getenv func(string) string) bool {
-	if getenv == nil {
-		return false
-	}
-	raw := strings.TrimSpace(getenv(deferContentSearchIndexesEnv))
-	return raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
 }

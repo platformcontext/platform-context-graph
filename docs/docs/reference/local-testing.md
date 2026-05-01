@@ -285,6 +285,10 @@ source-local projector work is still outstanding. The status panel can therefore
 show reducer backlog while projector lanes are active; that is expected and
 prevents first-generation canonical writes and reducer graph writes from
 contending on the embedded graph sidecar.
+After the same drain condition is met, the local host materializes IaC
+reachability rows so `POST /api/v0/iac/dead` can return
+`analysis_status=materialized_reachability` instead of the bounded derived
+fallback for supported IaC families.
 
 From an MCP client, call:
 
@@ -596,11 +600,11 @@ describe the product claim. The fast check is intentionally static: it verifies
 that owned capabilities have a fixture root, executable verifier, and expected
 truth contract before a slower Compose proof runs.
 
-Dead-IaC is currently tracked there as a planned capability with a concrete
-fixture corpus, not an owned runtime capability. Before PCG claims dead-IaC
-support, the planned contract must become an owned fixture suite with runtime
-verification for Terraform module, Helm chart, and Ansible role/playbook
-positive, negative, and ambiguous cases plus API/MCP evidence expectations.
+Dead-IaC is tracked there as an owned runtime capability. The checked verifier
+copies fixture repos into a real Git corpus, runs the NornicDB-backed stack,
+and validates materialized Terraform module, Helm chart, Ansible role/playbook,
+Kustomize, and Docker Compose positive, negative, and ambiguous cases through
+API, MCP, and persisted reachability evidence.
 
 ### NornicDB Grouped-Write Safety Probe
 

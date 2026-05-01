@@ -152,6 +152,8 @@ func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testi
 	originalApplyBootstrap := localHostApplyBootstrap
 	originalApplyGraphBootstrap := localHostApplyGraphBootstrap
 	originalStartProgressReporter := localHostStartProgressReporter
+	originalExpectedProjectors := localHostContentSearchIndexExpectedProjectors
+	originalStartIaCReachabilityFinalizer := localHostStartIaCReachabilityFinalizer
 	t.Cleanup(func() {
 		localHostPrepareWorkspace = originalPrepareWorkspace
 		localHostStartEmbeddedPostgres = originalStartEmbeddedPostgres
@@ -164,6 +166,8 @@ func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testi
 		localHostApplyBootstrap = originalApplyBootstrap
 		localHostApplyGraphBootstrap = originalApplyGraphBootstrap
 		localHostStartProgressReporter = originalStartProgressReporter
+		localHostContentSearchIndexExpectedProjectors = originalExpectedProjectors
+		localHostStartIaCReachabilityFinalizer = originalStartIaCReachabilityFinalizer
 	})
 
 	localHostPrepareWorkspace = func(layout pcglocal.Layout) (*pcglocal.OwnerLock, error) {
@@ -205,6 +209,12 @@ func TestRunOwnedLocalHostWithLayoutWatchStartsAndStopsProgressReporter(t *testi
 	}
 	localHostStartChildProcess = func(name string, args []string, env []string) (*exec.Cmd, error) {
 		return &exec.Cmd{}, nil
+	}
+	localHostContentSearchIndexExpectedProjectors = func(workspaceRoot string) (int, error) {
+		return 1, nil
+	}
+	localHostStartIaCReachabilityFinalizer = func(ctx context.Context, dsn string, expectedProjectors int) (func() error, error) {
+		return func() error { return nil }, nil
 	}
 
 	progressStarts := 0
