@@ -54,6 +54,7 @@ func TestSpanNames(t *testing.T) {
 		"canonical.projection",
 		"canonical.retract",
 		"ingestion.evidence_discovery",
+		"iac_reachability.materialize",
 		"reducer.sql_relationship_materialization",
 		"reducer.inheritance_materialization",
 		"reducer.cross_repo_resolution",

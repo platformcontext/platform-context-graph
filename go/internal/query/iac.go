@@ -59,9 +59,11 @@ type IaCReachabilityStore interface {
 	ListLatestCleanupFindings(
 		ctx context.Context,
 		repoIDs []string,
+		families []string,
 		includeAmbiguous bool,
 		limit int,
 	) ([]IaCReachabilityFindingRow, error)
+	HasLatestRows(ctx context.Context, repoIDs []string, families []string) (bool, error)
 }
 
 // IaCReachabilityFindingRow is the query-facing shape of one materialized IaC
@@ -109,10 +111,12 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 	if req.Limit > 500 {
 		req.Limit = 500
 	}
+	families := normalizeDeadIaCFamilies(req.Families)
 	if h != nil && h.Reachability != nil {
 		rows, err := h.Reachability.ListLatestCleanupFindings(
 			r.Context(),
 			repoIDs,
+			families,
 			req.IncludeAmbiguous,
 			req.Limit,
 		)
@@ -121,16 +125,16 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(rows) > 0 {
-			WriteSuccess(w, r, http.StatusOK, map[string]any{
-				"repo_ids":        repoIDs,
-				"findings":        materializedDeadIaCFindings(rows),
-				"findings_count":  len(rows),
-				"truth_basis":     "materialized_reducer_rows",
-				"analysis_status": "materialized_reachability",
-				"limitations": []string{
-					"dynamic templates and variable-selected references are reported as ambiguous",
-				},
-			}, BuildTruthEnvelope(h.profile(), iacDeadCapability, TruthBasisSemanticFacts, "resolved from reducer-materialized IaC reachability rows"))
+			writeMaterializedDeadIaC(w, r, h.profile(), repoIDs, materializedDeadIaCFindings(rows))
+			return
+		}
+		hasRows, err := h.Reachability.HasLatestRows(r.Context(), repoIDs, families)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if hasRows {
+			writeMaterializedDeadIaC(w, r, h.profile(), repoIDs, nil)
 			return
 		}
 	}
@@ -144,7 +148,7 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	findings := analyzeDeadIaC(filesByRepo, iacreachability.FamilyFilter(req.Families), req.IncludeAmbiguous)
+	findings := analyzeDeadIaC(filesByRepo, iacreachability.FamilyFilter(families), req.IncludeAmbiguous)
 	if len(findings) > req.Limit {
 		findings = findings[:req.Limit]
 	}
@@ -161,6 +165,25 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 			"exact dead-IaC requires reducer-materialized usage rows",
 		},
 	}, BuildTruthEnvelope(h.profile(), iacDeadCapability, TruthBasisContentIndex, "derived from bounded IaC content references"))
+}
+
+func writeMaterializedDeadIaC(
+	w http.ResponseWriter,
+	r *http.Request,
+	profile QueryProfile,
+	repoIDs []string,
+	findings []deadIaCFinding,
+) {
+	WriteSuccess(w, r, http.StatusOK, map[string]any{
+		"repo_ids":        repoIDs,
+		"findings":        findings,
+		"findings_count":  len(findings),
+		"truth_basis":     "materialized_reducer_rows",
+		"analysis_status": "materialized_reachability",
+		"limitations": []string{
+			"dynamic templates and variable-selected references are reported as ambiguous",
+		},
+	}, BuildTruthEnvelope(profile, iacDeadCapability, TruthBasisSemanticFacts, "resolved from reducer-materialized IaC reachability rows"))
 }
 
 func materializedDeadIaCFindings(rows []IaCReachabilityFindingRow) []deadIaCFinding {
@@ -201,6 +224,24 @@ func normalizeDeadIaCRepoScope(req deadIaCRequest) []string {
 	}
 	sort.Strings(repoIDs)
 	return repoIDs
+}
+
+func normalizeDeadIaCFamilies(raw []string) []string {
+	seen := map[string]struct{}{}
+	var families []string
+	for _, family := range raw {
+		family = strings.ToLower(strings.TrimSpace(family))
+		if family == "" {
+			continue
+		}
+		if _, ok := seen[family]; ok {
+			continue
+		}
+		seen[family] = struct{}{}
+		families = append(families, family)
+	}
+	sort.Strings(families)
+	return families
 }
 
 func loadIaCDeadFiles(ctx context.Context, content ContentStore, repoIDs []string) (map[string][]iacreachability.File, error) {

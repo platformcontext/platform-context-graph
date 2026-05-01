@@ -331,6 +331,7 @@ log streams.
 | `pcg_dp_reducer_executions_total` | Total reducer intent executions | `domain`, status (`succeeded`/`failed`) |
 | `pcg_dp_canonical_writes_total` | Total canonical graph write batches | `domain` |
 | `pcg_dp_shared_projection_cycles_total` | Total shared projection partition cycles | `domain`, `partition_key` |
+| `pcg_dp_iac_reachability_rows_total` | Total IaC reachability rows materialized after source-local projection | `outcome` (`used`/`unused`/`ambiguous`) |
 | `pcg_dp_repos_snapshotted_total` | Total repositories snapshotted | status (`succeeded`/`failed`/`skipped`) |
 | `pcg_dp_files_parsed_total` | Total files parsed | status (`succeeded`/`failed`/`skipped`) |
 | `pcg_dp_fact_batches_committed_total` | Total fact batches committed to Postgres during streaming ingestion | `scope_id`, `source_system` |
@@ -349,6 +350,7 @@ log streams.
 | `pcg_dp_shared_projection_intent_wait_seconds` | Shared projection intent age when a partition processes or blocks it | s | 0.001 .. 21600 |
 | `pcg_dp_shared_projection_processing_seconds` | Shared projection graph-write and completion duration after partition selection | s | 0.001 .. 60 |
 | `pcg_dp_shared_projection_step_seconds` | Shared projection substep duration | s | 0.001 .. 60 |
+| `pcg_dp_iac_reachability_materialization_duration_seconds` | Corpus-wide IaC reachability materialization duration after source-local projection drains | s | 0.1 .. 300 |
 | `pcg_dp_canonical_write_duration_seconds` | Canonical graph write duration | s | default |
 | `pcg_dp_queue_claim_duration_seconds` | Queue work item claim duration | s | default |
 | `pcg_dp_postgres_query_duration_seconds` | Postgres query duration | s | 0.001 .. 2.5 |
@@ -406,6 +408,7 @@ The `pcg_dp_projector_stage_duration_seconds` histogram carries a `stage` attrib
 | `projector.run` | Ingester projector loop | One claim + project + ack cycle |
 | `reducer_intent.enqueue` | Projector runtime | Enqueuing reducer intents after projection |
 | `reducer.run` | Reducer main loop | One claim + execute + ack cycle |
+| `iac_reachability.materialize` | Bootstrap finalization | Corpus-wide active-generation IaC usage classification and Postgres row upsert |
 | `canonical.write` | Projector runtime / Reducer shared projection | Graph and content writes to Neo4j |
 
 #### Dependency service spans

@@ -120,9 +120,11 @@ type Instruments struct {
 	EvidenceFactsDiscovered metric.Int64Counter
 
 	// Deferred bootstrap backfill and reopen metrics
-	DeferredBackfillDuration  metric.Float64Histogram
-	DeferredBackfillEvidence  metric.Int64Counter
-	DeploymentMappingReopened metric.Int64Counter
+	DeferredBackfillDuration               metric.Float64Histogram
+	DeferredBackfillEvidence               metric.Int64Counter
+	DeploymentMappingReopened              metric.Int64Counter
+	IaCReachabilityMaterializationDuration metric.Float64Histogram
+	IaCReachabilityRows                    metric.Int64Counter
 
 	// Cross-repo resolution metrics
 	CrossRepoResolutionDuration metric.Float64Histogram
@@ -707,6 +709,24 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register DeploymentMappingReopened counter: %w", err)
+	}
+
+	inst.IaCReachabilityMaterializationDuration, err = meter.Float64Histogram(
+		"pcg_dp_iac_reachability_materialization_duration_seconds",
+		metric.WithDescription("Duration of corpus-wide IaC reachability materialization"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(backfillBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register IaCReachabilityMaterializationDuration histogram: %w", err)
+	}
+
+	inst.IaCReachabilityRows, err = meter.Int64Counter(
+		"pcg_dp_iac_reachability_rows_total",
+		metric.WithDescription("Total IaC reachability rows materialized by reachability outcome"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register IaCReachabilityRows counter: %w", err)
 	}
 
 	// Cross-repo resolution instruments

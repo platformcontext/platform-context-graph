@@ -59,6 +59,7 @@ const (
 	SpanCanonicalRetract     = "canonical.retract"
 
 	SpanEvidenceDiscovery              = "ingestion.evidence_discovery"
+	SpanIaCReachabilityMaterialization = "iac_reachability.materialize"
 	SpanSQLRelationshipMaterialization = "reducer.sql_relationship_materialization"
 	SpanInheritanceMaterialization     = "reducer.inheritance_materialization"
 	SpanCrossRepoResolution            = "reducer.cross_repo_resolution"
@@ -124,6 +125,7 @@ var spanNames = []string{
 	SpanCanonicalProjection,
 	SpanCanonicalRetract,
 	SpanEvidenceDiscovery,
+	SpanIaCReachabilityMaterialization,
 	SpanSQLRelationshipMaterialization,
 	SpanInheritanceMaterialization,
 	SpanCrossRepoResolution,

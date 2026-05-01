@@ -194,6 +194,7 @@ func (s *IaCReachabilityStore) ListCleanupFindings(
 func (s *IaCReachabilityStore) ListLatestCleanupFindings(
 	ctx context.Context,
 	repoIDs []string,
+	families []string,
 	includeAmbiguous bool,
 	limit int,
 ) ([]IaCReachabilityRow, error) {
@@ -206,7 +207,7 @@ func (s *IaCReachabilityStore) ListLatestCleanupFindings(
 	if limit > 500 {
 		limit = 500
 	}
-	query, args := buildListLatestIaCCleanupFindingsQuery(repoIDs, includeAmbiguous, limit)
+	query, args := buildListLatestIaCCleanupFindingsQuery(repoIDs, families, includeAmbiguous, limit)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query latest IaC cleanup findings: %w", err)
@@ -224,16 +225,37 @@ func (s *IaCReachabilityStore) ListLatestCleanupFindings(
 	return result, rows.Err()
 }
 
-func buildListLatestIaCCleanupFindingsQuery(repoIDs []string, includeAmbiguous bool, limit int) (string, []any) {
-	args := make([]any, 0, len(repoIDs)+2)
-	var placeholders strings.Builder
-	for i, repoID := range repoIDs {
-		if i > 0 {
-			placeholders.WriteString(", ")
-		}
-		fmt.Fprintf(&placeholders, "$%d", i+1)
-		args = append(args, repoID)
+// HasLatestRows reports whether active-generation reachability rows exist for
+// the requested repositories and optional families.
+func (s *IaCReachabilityStore) HasLatestRows(
+	ctx context.Context,
+	repoIDs []string,
+	families []string,
+) (bool, error) {
+	if len(repoIDs) == 0 {
+		return false, nil
 	}
+	query, args := buildHasLatestIaCReachabilityRowsQuery(repoIDs, families)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return false, fmt.Errorf("query latest IaC reachability row existence: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if rows.Next() {
+		return true, rows.Err()
+	}
+	return false, rows.Err()
+}
+
+func buildListLatestIaCCleanupFindingsQuery(
+	repoIDs []string,
+	families []string,
+	includeAmbiguous bool,
+	limit int,
+) (string, []any) {
+	args := make([]any, 0, len(repoIDs)+2)
+	repoPlaceholders := appendPlaceholders(&args, repoIDs)
+	familyClause := buildFamilyFilterClause(&args, families)
 	includeIdx := len(args) + 1
 	limitIdx := len(args) + 2
 	args = append(args, includeAmbiguous, limit)
@@ -248,14 +270,53 @@ JOIN scope_generations AS generation
  AND generation.generation_id = row.generation_id
 WHERE generation.status = 'active'
   AND row.repo_id IN (%s)
+  %s
   AND (
       row.reachability = 'unused'
       OR ($%d = true AND row.reachability = 'ambiguous')
   )
 ORDER BY row.family, row.artifact_path
 LIMIT $%d
-`, placeholders.String(), includeIdx, limitIdx)
+`, repoPlaceholders, familyClause, includeIdx, limitIdx)
 	return query, args
+}
+
+func buildHasLatestIaCReachabilityRowsQuery(repoIDs []string, families []string) (string, []any) {
+	args := make([]any, 0, len(repoIDs)+len(families))
+	repoPlaceholders := appendPlaceholders(&args, repoIDs)
+	familyClause := buildFamilyFilterClause(&args, families)
+	query := fmt.Sprintf(`
+SELECT 1
+FROM iac_reachability_rows AS row
+JOIN scope_generations AS generation
+  ON generation.scope_id = row.scope_id
+ AND generation.generation_id = row.generation_id
+WHERE generation.status = 'active'
+  AND row.repo_id IN (%s)
+  %s
+LIMIT 1
+`, repoPlaceholders, familyClause)
+	return query, args
+}
+
+func appendPlaceholders(args *[]any, values []string) string {
+	var placeholders strings.Builder
+	for _, value := range values {
+		if placeholders.Len() > 0 {
+			placeholders.WriteString(", ")
+		}
+		*args = append(*args, value)
+		fmt.Fprintf(&placeholders, "$%d", len(*args))
+	}
+	return placeholders.String()
+}
+
+func buildFamilyFilterClause(args *[]any, families []string) string {
+	if len(families) == 0 {
+		return ""
+	}
+	placeholders := appendPlaceholders(args, families)
+	return fmt.Sprintf("AND row.family IN (%s)", placeholders)
 }
 
 func upsertIaCReachabilityBatch(ctx context.Context, db ExecQueryer, batch []IaCReachabilityRow) error {

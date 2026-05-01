@@ -97,7 +97,7 @@ func TestIaCReachabilityStoreUpsertAndListCleanupFindings(t *testing.T) {
 		t.Fatalf("reachability without ambiguous = %q, want %q", withoutAmbiguous[0].Reachability, IaCReachabilityUnused)
 	}
 
-	latest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, true, 100)
+	latest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, nil, true, 100)
 	if err != nil {
 		t.Fatalf("ListLatestCleanupFindings: %v", err)
 	}
@@ -111,6 +111,28 @@ func TestIaCReachabilityStoreUpsertAndListCleanupFindings(t *testing.T) {
 		if row.Reachability == IaCReachabilityUsed {
 			t.Fatalf("latest returned used row: %#v", row)
 		}
+	}
+
+	terraformLatest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, []string{"terraform"}, true, 100)
+	if err != nil {
+		t.Fatalf("ListLatestCleanupFindings terraform: %v", err)
+	}
+	if gotLen, wantLen := len(terraformLatest), 2; gotLen != wantLen {
+		t.Fatalf("terraform latest len = %d, want %d", gotLen, wantLen)
+	}
+	helmLatest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, []string{"helm"}, true, 100)
+	if err != nil {
+		t.Fatalf("ListLatestCleanupFindings helm: %v", err)
+	}
+	if len(helmLatest) != 0 {
+		t.Fatalf("helm latest len = %d, want 0", len(helmLatest))
+	}
+	hasRows, err := store.HasLatestRows(ctx, []string{"terraform-modules"}, []string{"terraform"})
+	if err != nil {
+		t.Fatalf("HasLatestRows terraform: %v", err)
+	}
+	if !hasRows {
+		t.Fatal("HasLatestRows terraform = false, want true")
 	}
 }
 
@@ -129,6 +151,76 @@ func TestIaCReachabilitySchemaSQL(t *testing.T) {
 	}
 	if !strings.Contains(sqlStr, "evidence JSONB NOT NULL") {
 		t.Fatal("missing evidence JSONB column")
+	}
+}
+
+func TestIngestionStoreMaterializeIaCReachabilityWritesActiveCorpusRows(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{
+				rows: [][]any{
+					{"terraform-modules", "scope-modules", "gen-modules"},
+					{"terraform-stack", "scope-stack", "gen-stack"},
+				},
+			},
+			{
+				rows: [][]any{
+					{"terraform-modules", "modules/checkout-service/main.tf", `variable "x" {}`},
+					{"terraform-modules", "modules/orphan-cache/main.tf", `variable "x" {}`},
+					{"terraform-modules", "modules/dynamic-target/main.tf", `variable "x" {}`},
+					{"terraform-stack", "env/main.tf", `
+module "checkout" {
+  source = "../terraform-modules/modules/checkout-service"
+}
+module "dynamic" {
+  source = "../terraform-modules/modules/${var.module_name}"
+}
+variable "module_name" {
+  default = "dynamic-target"
+}
+`},
+					{"inactive-modules", "modules/ghost/main.tf", `variable "x" {}`},
+				},
+			},
+		},
+	}
+	store := NewIngestionStore(db)
+	store.Now = func() time.Time { return now }
+
+	if err := store.MaterializeIaCReachability(context.Background(), nil, nil); err != nil {
+		t.Fatalf("MaterializeIaCReachability() error = %v, want nil", err)
+	}
+
+	inserted := iacReachabilityRowsFromExecs(t, db.execs)
+	if got, want := len(inserted), 3; got != want {
+		t.Fatalf("materialized row count = %d, want %d: %#v", got, want, inserted)
+	}
+
+	byPath := map[string]iacReachabilityStoredRow{}
+	for _, row := range inserted {
+		byPath[row.ArtifactPath] = row
+		if row.ScopeID != "scope-modules" || row.GenerationID != "gen-modules" {
+			t.Fatalf("row stored against %s/%s, want module repo active generation: %#v", row.ScopeID, row.GenerationID, row)
+		}
+		if row.ObservedAt != now || row.UpdatedAt != now {
+			t.Fatalf("row timestamps = %s/%s, want %s", row.ObservedAt, row.UpdatedAt, now)
+		}
+	}
+
+	if got := byPath["modules/checkout-service"].Reachability; got != string(IaCReachabilityUsed) {
+		t.Fatalf("checkout reachability = %q, want used", got)
+	}
+	if got := byPath["modules/orphan-cache"].Reachability; got != string(IaCReachabilityUnused) {
+		t.Fatalf("orphan reachability = %q, want unused", got)
+	}
+	if got := byPath["modules/dynamic-target"].Reachability; got != string(IaCReachabilityAmbiguous) {
+		t.Fatalf("dynamic reachability = %q, want ambiguous", got)
+	}
+	if _, ok := byPath["modules/ghost"]; ok {
+		t.Fatal("inactive repository artifact was materialized")
 	}
 }
 
@@ -201,17 +293,33 @@ func (db *iacReachabilityTestDB) QueryContext(_ context.Context, query string, a
 		return nil, fmt.Errorf("unexpected query: %s", query)
 	}
 	latestActive := strings.Contains(query, "JOIN scope_generations")
+	existenceQuery := strings.Contains(query, "SELECT 1")
 	var scopeID, generationID string
 	var repoIDs map[string]struct{}
+	var families map[string]struct{}
 	var includeAmbiguous bool
 	var limit int
 	if latestActive {
 		repoIDs = map[string]struct{}{}
-		for i := 0; i < len(args)-2; i++ {
-			repoIDs[args[i].(string)] = struct{}{}
+		families = map[string]struct{}{}
+		cleanupArgTail := 0
+		if !existenceQuery {
+			cleanupArgTail = 2
+			includeAmbiguous = args[len(args)-2].(bool)
+			limit = args[len(args)-1].(int)
+		} else {
+			limit = 100
 		}
-		includeAmbiguous = args[len(args)-2].(bool)
-		limit = args[len(args)-1].(int)
+		filterArgs := args[:len(args)-cleanupArgTail]
+		familyFilter := strings.Contains(query, "row.family IN")
+		for i, arg := range filterArgs {
+			value := arg.(string)
+			if familyFilter && i == len(filterArgs)-1 {
+				families[value] = struct{}{}
+				continue
+			}
+			repoIDs[value] = struct{}{}
+		}
 	} else {
 		scopeID = args[0].(string)
 		generationID = args[1].(string)
@@ -225,19 +333,26 @@ func (db *iacReachabilityTestDB) QueryContext(_ context.Context, query string, a
 			if _, ok := repoIDs[row.RepoID]; !ok {
 				continue
 			}
+			if len(families) > 0 {
+				if _, ok := families[row.Family]; !ok {
+					continue
+				}
+			}
 		} else {
 			if row.ScopeID != scopeID || row.GenerationID != generationID {
 				continue
 			}
 		}
-		switch row.Reachability {
-		case string(IaCReachabilityUnused):
-		case string(IaCReachabilityAmbiguous):
-			if !includeAmbiguous {
+		if !existenceQuery {
+			switch row.Reachability {
+			case string(IaCReachabilityUnused):
+			case string(IaCReachabilityAmbiguous):
+				if !includeAmbiguous {
+					continue
+				}
+			default:
 				continue
 			}
-		default:
-			continue
 		}
 		evidence, _ := json.Marshal(row.Evidence)
 		limitations, _ := json.Marshal(row.Limitations)
@@ -313,4 +428,45 @@ func decodeStringArrayJSON(raw any) ([]string, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func iacReachabilityRowsFromExecs(t *testing.T, execs []fakeExecCall) []iacReachabilityStoredRow {
+	t.Helper()
+
+	var rows []iacReachabilityStoredRow
+	for _, execCall := range execs {
+		if !strings.Contains(execCall.query, "INSERT INTO iac_reachability_rows") {
+			continue
+		}
+		const columnsPerRow = 13
+		if len(execCall.args)%columnsPerRow != 0 {
+			t.Fatalf("iac reachability insert args = %d, want multiple of %d", len(execCall.args), columnsPerRow)
+		}
+		for i := 0; i < len(execCall.args); i += columnsPerRow {
+			evidence, err := decodeStringArrayJSON(execCall.args[i+9])
+			if err != nil {
+				t.Fatalf("decode evidence: %v", err)
+			}
+			limitations, err := decodeStringArrayJSON(execCall.args[i+10])
+			if err != nil {
+				t.Fatalf("decode limitations: %v", err)
+			}
+			rows = append(rows, iacReachabilityStoredRow{
+				ScopeID:      execCall.args[i+0].(string),
+				GenerationID: execCall.args[i+1].(string),
+				RepoID:       execCall.args[i+2].(string),
+				Family:       execCall.args[i+3].(string),
+				ArtifactPath: execCall.args[i+4].(string),
+				ArtifactName: execCall.args[i+5].(string),
+				Reachability: execCall.args[i+6].(string),
+				Finding:      execCall.args[i+7].(string),
+				Confidence:   execCall.args[i+8].(float64),
+				Evidence:     evidence,
+				Limitations:  limitations,
+				ObservedAt:   execCall.args[i+11].(time.Time),
+				UpdatedAt:    execCall.args[i+12].(time.Time),
+			})
+		}
+	}
+	return rows
 }

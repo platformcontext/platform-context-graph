@@ -41,6 +41,7 @@ type graphDeps struct {
 type bootstrapCommitter interface {
 	collector.Committer
 	BackfillAllRelationshipEvidence(context.Context, trace.Tracer, *telemetry.Instruments) error
+	MaterializeIaCReachability(context.Context, trace.Tracer, *telemetry.Instruments) error
 	ReopenDeploymentMappingWorkItems(context.Context, trace.Tracer, *telemetry.Instruments) error
 }
 
@@ -250,6 +251,16 @@ func runPipelined(
 	projectorErr := <-errc
 	if projectorErr != nil {
 		return projectorErr
+	}
+
+	if err := cd.committer.MaterializeIaCReachability(ctx, tracer, instruments); err != nil {
+		if logger != nil {
+			logger.ErrorContext(ctx, "iac reachability materialization failed",
+				slog.String("error", err.Error()),
+				telemetry.FailureClassAttr("iac_reachability_materialization_failure"),
+			)
+		}
+		return fmt.Errorf("iac reachability materialization fatal: %w", err)
 	}
 
 	// Reopen only the deployment_mapping items that already succeeded with the

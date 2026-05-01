@@ -539,7 +539,8 @@ Use these routes when you need infrastructure-as-code cleanup candidates:
 
 The dead-IaC route requires an explicit `repo_id` or bounded `repo_ids` scope.
 When reducer-materialized reachability rows exist, the route returns those rows
-with `analysis_status=materialized_reachability`. Otherwise it falls back to
+with `analysis_status=materialized_reachability`; bootstrap materializes these
+rows after source-local content projection drains. Otherwise it falls back to
 bounded indexed-content analysis for Terraform modules, Helm charts, and
 Ansible roles/playbooks. Used artifacts are omitted from cleanup findings;
 unreferenced artifacts are returned as `candidate_dead_iac`, and variable or

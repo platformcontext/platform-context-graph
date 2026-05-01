@@ -32,16 +32,46 @@ func (f fakeIaCDeadContentStore) GetFileContent(_ context.Context, repoID, relat
 }
 
 type fakeIaCReachabilityStore struct {
-	rows []IaCReachabilityFindingRow
+	rows    []IaCReachabilityFindingRow
+	hasRows bool
 }
 
 func (f fakeIaCReachabilityStore) ListLatestCleanupFindings(
 	_ context.Context,
 	_ []string,
+	families []string,
 	_ bool,
 	_ int,
 ) ([]IaCReachabilityFindingRow, error) {
-	return append([]IaCReachabilityFindingRow(nil), f.rows...), nil
+	filter := map[string]bool{}
+	for _, family := range families {
+		filter[family] = true
+	}
+	rows := make([]IaCReachabilityFindingRow, 0, len(f.rows))
+	for _, row := range f.rows {
+		if len(filter) > 0 && !filter[row.Family] {
+			continue
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+func (f fakeIaCReachabilityStore) HasLatestRows(_ context.Context, _ []string, families []string) (bool, error) {
+	if f.hasRows {
+		return true, nil
+	}
+	if len(families) == 0 {
+		return len(f.rows) > 0, nil
+	}
+	for _, row := range f.rows {
+		for _, family := range families {
+			if row.Family == family {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func TestHandleDeadIaCPrefersMaterializedReachabilityRows(t *testing.T) {
@@ -90,6 +120,101 @@ func TestHandleDeadIaCPrefersMaterializedReachabilityRows(t *testing.T) {
 	rawFindings := data["findings"].([]any)
 	if got, want := len(rawFindings), 1; got != want {
 		t.Fatalf("findings len = %d, want %d", got, want)
+	}
+}
+
+func TestHandleDeadIaCMaterializedRowsHonorFamilyFilter(t *testing.T) {
+	t.Parallel()
+
+	handler := &IaCHandler{
+		Profile: ProfileLocalAuthoritative,
+		Reachability: fakeIaCReachabilityStore{rows: []IaCReachabilityFindingRow{
+			{
+				ID:           "helm:helm-charts:charts/orphan-worker",
+				Family:       "helm",
+				RepoID:       "helm-charts",
+				ArtifactPath: "charts/orphan-worker",
+				Reachability: "unused",
+				Finding:      "candidate_dead_iac",
+				Confidence:   0.75,
+			},
+			{
+				ID:           "terraform:terraform-modules:modules/orphan-cache",
+				Family:       "terraform",
+				RepoID:       "terraform-modules",
+				ArtifactPath: "modules/orphan-cache",
+				Reachability: "unused",
+				Finding:      "candidate_dead_iac",
+				Confidence:   0.75,
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/iac/dead", bytes.NewBufferString(`{
+		"repo_ids": ["terraform-modules", "helm-charts"],
+		"families": ["terraform"]
+	}`))
+	req.Header.Set("Accept", EnvelopeMIMEType)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+	var resp ResponseEnvelope
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	data := resp.Data.(map[string]any)
+	rawFindings := data["findings"].([]any)
+	if got, want := len(rawFindings), 1; got != want {
+		t.Fatalf("findings len = %d, want %d", got, want)
+	}
+	row := rawFindings[0].(map[string]any)
+	if got, want := row["family"], "terraform"; got != want {
+		t.Fatalf("family = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleDeadIaCUsesMaterializedEmptyResultWhenRowsExist(t *testing.T) {
+	t.Parallel()
+
+	handler := &IaCHandler{
+		Profile:      ProfileLocalAuthoritative,
+		Reachability: fakeIaCReachabilityStore{hasRows: true},
+		Content: fakeIaCDeadContentStore{
+			files: map[string][]FileContent{
+				"terraform-modules": {
+					{RepoID: "terraform-modules", RelativePath: "modules/orphan-cache/main.tf", Content: `resource "aws_elasticache_cluster" "this" {}`},
+				},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/iac/dead", bytes.NewBufferString(`{
+		"repo_ids": ["terraform-modules"]
+	}`))
+	req.Header.Set("Accept", EnvelopeMIMEType)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+	var resp ResponseEnvelope
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	data := resp.Data.(map[string]any)
+	if got, want := data["truth_basis"], "materialized_reducer_rows"; got != want {
+		t.Fatalf("truth_basis = %q, want %q", got, want)
+	}
+	if got, want := int(data["findings_count"].(float64)), 0; got != want {
+		t.Fatalf("findings_count = %d, want %d", got, want)
 	}
 }
 

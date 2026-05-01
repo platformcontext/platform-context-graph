@@ -24,13 +24,14 @@ func NewPostgresIaCReachabilityStore(db *sql.DB) *PostgresIaCReachabilityStore {
 func (s *PostgresIaCReachabilityStore) ListLatestCleanupFindings(
 	ctx context.Context,
 	repoIDs []string,
+	families []string,
 	includeAmbiguous bool,
 	limit int,
 ) ([]IaCReachabilityFindingRow, error) {
 	if s == nil || s.store == nil {
 		return nil, nil
 	}
-	rows, err := s.store.ListLatestCleanupFindings(ctx, repoIDs, includeAmbiguous, limit)
+	rows, err := s.store.ListLatestCleanupFindings(ctx, repoIDs, families, includeAmbiguous, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -49,4 +50,17 @@ func (s *PostgresIaCReachabilityStore) ListLatestCleanupFindings(
 		})
 	}
 	return result, nil
+}
+
+// HasLatestRows reports whether active-generation IaC reachability has been
+// materialized for the requested repository ids and optional families.
+func (s *PostgresIaCReachabilityStore) HasLatestRows(
+	ctx context.Context,
+	repoIDs []string,
+	families []string,
+) (bool, error) {
+	if s == nil || s.store == nil {
+		return false, nil
+	}
+	return s.store.HasLatestRows(ctx, repoIDs, families)
 }
