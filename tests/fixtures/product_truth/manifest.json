@@ -56,26 +56,24 @@
         "delivery.cloudformation",
         "delivery.docker_compose"
       ]
-    }
-  ],
-  "planned": [
+    },
     {
       "id": "iac_quality.dead_iac",
-      "status": "planned",
+      "status": "owned",
       "fixture_root": "tests/fixtures/product_truth/dead_iac",
-      "fixture_plan": "tests/fixtures/product_truth/planned/dead_iac_cases.json",
+      "compose_gate": "scripts/verify_dead_iac_compose.sh",
       "expected_truth_files": [
         "tests/fixtures/product_truth/expected/dead_iac.json"
       ],
-      "required_before_claiming": [
-        "Terraform module positive, negative, and ambiguous reachability cases",
-        "Helm chart positive, negative, and ambiguous reachability cases",
-        "Kustomize base/overlay positive, negative, and ambiguous reachability cases",
-        "Ansible role and playbook positive, negative, and ambiguous reachability cases",
-        "Docker Compose service positive, negative, and ambiguous reachability cases",
-        "API and MCP responses with explicit truth level and limitations",
-        "Postgres evidence rows or materialized usage rows that explain each finding"
+      "capabilities": [
+        "iac_quality.dead_iac",
+        "iac_reachability.terraform",
+        "iac_reachability.helm",
+        "iac_reachability.kustomize",
+        "iac_reachability.ansible",
+        "iac_reachability.compose"
       ]
     }
-  ]
+  ],
+  "planned": []
 }

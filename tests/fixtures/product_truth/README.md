@@ -19,9 +19,9 @@ source of truth for feature correctness.
 - `manifest.json` lists owned and planned product-truth suites.
 - `expected/*.json` describes the current expected assertions for existing
   fixture-backed gates.
-- `dead_iac/` is the first concrete fixture corpus for the planned dead-IaC
-  capability, with Terraform, Helm, and Ansible used, unused, and ambiguous
-  examples.
+- `dead_iac/` is the owned fixture corpus for the dead-IaC capability, with
+  Terraform, Helm, Kustomize, Ansible, and Docker Compose used, unused, and
+  ambiguous examples.
 - `planned/*.json` describes feature gaps that must become owned suites before
   PCG can claim the capability.
 

@@ -47,9 +47,9 @@ require_json_query() {
 
 require_file "$MANIFEST"
 require_json_query "$MANIFEST" '.schema_version == 1' "Product truth manifest schema_version must be 1"
-require_json_query "$MANIFEST" '(.suites // []) | length >= 3' "Product truth manifest must register owned fixture suites"
-require_json_query "$MANIFEST" '(.planned // []) | any(.id == "iac_quality.dead_iac" and .status == "planned")' \
-    "Product truth manifest must track the planned dead-IaC capability"
+require_json_query "$MANIFEST" '(.suites // []) | length >= 4' "Product truth manifest must register owned fixture suites"
+require_json_query "$MANIFEST" '(.suites // []) | any(.id == "iac_quality.dead_iac" and .status == "owned")' \
+    "Product truth manifest must track dead-IaC as an owned capability"
 
 while IFS= read -r suite; do
     id="$(jq -r '.id' <<<"$suite")"
@@ -92,11 +92,6 @@ while IFS= read -r suite; do
 
     echo "verified product truth suite: $id"
 done < <(jq -c '.suites[]' "$MANIFEST")
-
-require_file "$REPO_ROOT/tests/fixtures/product_truth/planned/dead_iac_cases.json"
-require_json_query "$REPO_ROOT/tests/fixtures/product_truth/planned/dead_iac_cases.json" \
-    '.capability == "iac_quality.dead_iac" and .status == "planned" and .fixture_root == "tests/fixtures/product_truth/dead_iac" and .expected_truth_file == "tests/fixtures/product_truth/expected/dead_iac.json" and ((.families // []) | length) >= 5' \
-    "Dead-IaC planned contract must cover Terraform, Helm, Kustomize, Ansible, and Compose families"
 
 DEAD_IAC_ROOT="$REPO_ROOT/tests/fixtures/product_truth/dead_iac"
 DEAD_IAC_EXPECTED="$REPO_ROOT/tests/fixtures/product_truth/expected/dead_iac.json"
