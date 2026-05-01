@@ -542,18 +542,19 @@ When reducer-materialized reachability rows exist, the route returns those rows
 with `analysis_status=materialized_reachability`; bootstrap materializes these
 rows after source-local content projection drains. Otherwise it falls back to
 bounded indexed-content analysis for Terraform modules, Helm charts, Kustomize
-bases/overlays, and Ansible roles/playbooks. Used artifacts are omitted from
-cleanup findings; unreferenced artifacts are returned as `candidate_dead_iac`,
-and variable or template-selected artifacts are returned as
-`ambiguous_dynamic_reference` when `include_ambiguous=true`. Findings expose the
-canonical `repo_id` plus `repo_name` when the repository catalog can resolve it.
+bases/overlays, Ansible roles/playbooks, and Docker Compose services. Used
+artifacts are omitted from cleanup findings; unreferenced artifacts are returned
+as `candidate_dead_iac`, and variable or template-selected artifacts are
+returned as `ambiguous_dynamic_reference` when `include_ambiguous=true`.
+Findings expose the canonical `repo_id` plus `repo_name` when the repository
+catalog can resolve it.
 
 Example dead-IaC workflow:
 
 ```json
 {
-  "repo_ids": ["terraform-stack", "terraform-modules", "helm-controller", "helm-charts", "kustomize-controller", "kustomize-config"],
-  "families": ["terraform", "helm", "kustomize"],
+  "repo_ids": ["terraform-stack", "terraform-modules", "helm-controller", "helm-charts", "kustomize-controller", "kustomize-config", "compose-controller", "compose-app"],
+  "families": ["terraform", "helm", "kustomize", "compose"],
   "include_ambiguous": true,
   "limit": 100
 }

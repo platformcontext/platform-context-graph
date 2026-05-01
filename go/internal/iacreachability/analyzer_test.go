@@ -67,6 +67,24 @@ vars:
 			{RepoID: "kustomize-config", RelativePath: "base/dynamic-target/kustomization.yaml", Content: `resources:
   - deployment.yaml`},
 		},
+		"compose-controller": {
+			{RepoID: "compose-controller", RelativePath: ".github/workflows/deploy-compose.yaml", Content: `steps:
+  - run: docker compose -f ../compose-app/compose.yaml up -d api worker
+  - run: docker compose -f ../compose-app/compose.yaml up -d ${SERVICE_NAME}
+env:
+  SERVICE_NAME: dynamic-target`},
+		},
+		"compose-app": {
+			{RepoID: "compose-app", RelativePath: "compose.yaml", Content: `services:
+  api:
+    image: example/api:latest
+  worker:
+    image: example/worker:latest
+  orphan-cache:
+    image: example/cache:latest
+  dynamic-target:
+    image: example/dynamic:latest`},
+		},
 	}, Options{IncludeAmbiguous: true})
 
 	got := map[string]Reachability{}
@@ -84,6 +102,10 @@ vars:
 		"kustomize:kustomize-config:base/dynamic-target":       ReachabilityAmbiguous,
 		"kustomize:kustomize-config:base/orphan-api":           ReachabilityUnused,
 		"kustomize:kustomize-config:overlays/prod":             ReachabilityUsed,
+		"compose:compose-app:services/api":                     ReachabilityUsed,
+		"compose:compose-app:services/dynamic-target":          ReachabilityAmbiguous,
+		"compose:compose-app:services/orphan-cache":            ReachabilityUnused,
+		"compose:compose-app:services/worker":                  ReachabilityUsed,
 		"terraform:terraform-modules:modules/checkout-service": ReachabilityUsed,
 		"terraform:terraform-modules:modules/dynamic-target":   ReachabilityAmbiguous,
 		"terraform:terraform-modules:modules/orphan-cache":     ReachabilityUnused,

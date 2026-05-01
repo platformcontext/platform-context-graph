@@ -16,6 +16,10 @@ INDEX_STATUS_FILE="$TMP_DIR/index-status.json"
 API_RESPONSE_FILE="$TMP_DIR/dead-iac-api.json"
 MCP_RESPONSE_FILE="$TMP_DIR/dead-iac-mcp.json"
 ROW_COUNTS_FILE="$TMP_DIR/iac-row-counts.json"
+POSTGRES_ROWS_FILE="$TMP_DIR/iac-reachability-rows.json"
+GRAPH_NODES_FILE="$TMP_DIR/graph-repository-nodes.json"
+GRAPH_RELATIONSHIPS_FILE="$TMP_DIR/graph-repository-relationships.json"
+GRAPH_EVIDENCE_FILE="$TMP_DIR/graph-deployment-evidence.json"
 BOOTSTRAP_LOG_FILE="$TMP_DIR/bootstrap.log"
 KEEP_STACK="${PCG_KEEP_COMPOSE_STACK:-false}"
 GRAPH_BACKEND="${PCG_DEAD_IAC_GRAPH_BACKEND:-nornicdb}"
@@ -148,6 +152,13 @@ api_post_envelope_json() {
 	curl "${curl_args[@]}" "$API_BASE_URL$path" >"$output_file"
 }
 
+api_post_json() {
+	local path="$1" payload="$2" output_file="$3"
+	local -a curl_args=(-fsS -X POST -H "Content-Type: application/json" -d "$payload")
+	[[ -z "$API_KEY" ]] || curl_args+=(-H "Authorization: Bearer $API_KEY")
+	curl "${curl_args[@]}" "$API_BASE_URL$path" >"$output_file"
+}
+
 api_get() {
 	local path="$1" output_file="$2"
 	local -a curl_args=(-fsS)
@@ -155,15 +166,24 @@ api_get() {
 	curl "${curl_args[@]}" "$API_BASE_URL$path" >"$output_file"
 }
 
+dead_iac_repo_names() {
+	printf '%s\n' \
+		terraform-stack terraform-modules \
+		helm-controller helm-charts \
+		ansible-controller ansible-ops \
+		kustomize-controller kustomize-config \
+		compose-controller compose-app
+}
+
 verify_api() {
 	local payload
 	payload="$(jq -cn --args '{repo_ids: $ARGS.positional, include_ambiguous: true, limit: 100}' \
-		terraform-stack terraform-modules helm-controller helm-charts ansible-controller ansible-ops kustomize-controller kustomize-config)"
+		$(dead_iac_repo_names))"
 	api_post_envelope_json "/iac/dead" "$payload" "$API_RESPONSE_FILE"
 	pcg_assert_json_query "$API_RESPONSE_FILE" '
 		.data.truth_basis == "materialized_reducer_rows" and
 		.data.analysis_status == "materialized_reachability" and
-		.data.findings_count == 8 and
+		.data.findings_count == 10 and
 		((.data.findings // []) | any(.repo_name == "terraform-modules" and .artifact == "modules/orphan-cache" and .reachability == "unused")) and
 		((.data.findings // []) | any(.repo_name == "terraform-modules" and .artifact == "modules/dynamic-target" and .reachability == "ambiguous")) and
 		((.data.findings // []) | any(.repo_name == "helm-charts" and .artifact == "charts/orphan-worker" and .reachability == "unused")) and
@@ -172,7 +192,9 @@ verify_api() {
 		((.data.findings // []) | any(.repo_name == "ansible-ops" and .artifact == "roles/dynamic_role" and .reachability == "ambiguous")) and
 		((.data.findings // []) | any(.repo_name == "kustomize-config" and .artifact == "base/orphan-api" and .reachability == "unused")) and
 		((.data.findings // []) | any(.repo_name == "kustomize-config" and .artifact == "base/dynamic-target" and .reachability == "ambiguous")) and
-		((.data.findings // []) | all(.artifact != "modules/checkout-service" and .artifact != "charts/checkout-service" and .artifact != "charts/worker-service" and .artifact != "roles/checkout_deploy" and .artifact != "base/checkout-service" and .artifact != "overlays/prod"))
+		((.data.findings // []) | any(.repo_name == "compose-app" and .artifact == "services/orphan-cache" and .reachability == "unused")) and
+		((.data.findings // []) | any(.repo_name == "compose-app" and .artifact == "services/dynamic-target" and .reachability == "ambiguous")) and
+		((.data.findings // []) | all(.artifact != "modules/checkout-service" and .artifact != "charts/checkout-service" and .artifact != "charts/worker-service" and .artifact != "roles/checkout_deploy" and .artifact != "base/checkout-service" and .artifact != "overlays/prod" and .artifact != "services/api" and .artifact != "services/worker"))
 	' "dead-IaC API response did not match materialized product truth"
 }
 
@@ -182,19 +204,25 @@ verify_postgres_rows() {
 		| jq -R -s 'split("\n") | map(select(length > 0) | split("|")) | map({family:.[0], reachability:.[1], count:(.[2]|tonumber)})' \
 		>"$ROW_COUNTS_FILE"
 	pcg_assert_json_query "$ROW_COUNTS_FILE" '
-		(map(select(.reachability == "used") | .count) | add) == 6 and
-		(map(select(.reachability == "unused") | .count) | add) == 4 and
-		(map(select(.reachability == "ambiguous") | .count) | add) == 4 and
+		(map(select(.reachability == "used") | .count) | add) == 8 and
+		(map(select(.reachability == "unused") | .count) | add) == 5 and
+		(map(select(.reachability == "ambiguous") | .count) | add) == 5 and
 		(any(.family == "kustomize" and .reachability == "used" and .count == 2)) and
 		(any(.family == "kustomize" and .reachability == "unused" and .count == 1)) and
-		(any(.family == "kustomize" and .reachability == "ambiguous" and .count == 1))
+		(any(.family == "kustomize" and .reachability == "ambiguous" and .count == 1)) and
+		(any(.family == "compose" and .reachability == "used" and .count == 2)) and
+		(any(.family == "compose" and .reachability == "unused" and .count == 1)) and
+		(any(.family == "compose" and .reachability == "ambiguous" and .count == 1))
 	' "materialized IaC reachability row counts did not match expected truth"
+	"${COMPOSE_CMD[@]}" exec -T postgres psql -U pcg -d platform_context_graph -t -A -c \
+		"SELECT jsonb_pretty(jsonb_agg(jsonb_build_object('repo_id', repo_id, 'family', family, 'artifact_path', artifact_path, 'reachability', reachability, 'finding', finding, 'confidence', confidence, 'evidence', evidence, 'limitations', limitations) ORDER BY family, artifact_path)) FROM iac_reachability_rows;" \
+		>"$POSTGRES_ROWS_FILE"
 }
 
 verify_mcp() {
 	local payload
 	payload="$(jq -cn --args '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"find_dead_iac","arguments":{"repo_ids": $ARGS.positional, "include_ambiguous": true, "limit": 100}}}' \
-		terraform-stack terraform-modules helm-controller helm-charts ansible-controller ansible-ops kustomize-controller kustomize-config)"
+		$(dead_iac_repo_names))"
 	local -a curl_args=(-fsS -X POST -H "Content-Type: application/json" -d "$payload")
 	[[ -z "$API_KEY" ]] || curl_args+=(-H "Authorization: Bearer $API_KEY")
 	curl "${curl_args[@]}" "http://localhost:${MCP_PORT}/mcp/message" >"$MCP_RESPONSE_FILE"
@@ -203,8 +231,45 @@ verify_mcp() {
 		((.result.content // []) | map(select(.type == "resource" and .resource.uri == "pcg://tool-result/envelope") | .resource.text | fromjson) | first) as $env |
 		$env.data.truth_basis == "materialized_reducer_rows" and
 		$env.data.analysis_status == "materialized_reachability" and
-		$env.data.findings_count == 8
+		$env.data.findings_count == 10
 	' "dead-IaC MCP response did not mirror the materialized API truth"
+}
+
+verify_graph() {
+	local repo_list cypher payload
+	repo_list="$(dead_iac_repo_names | jq -R . | jq -r -s 'join(", ")')"
+	cypher="MATCH (r:Repository) WHERE r.name IN [$repo_list] RETURN r.id AS id, r.name AS name ORDER BY r.name"
+	payload="$(jq -cn --arg cypher "$cypher" '{cypher_query: $cypher}')"
+	api_post_json "/code/cypher" "$payload" "$GRAPH_NODES_FILE"
+	pcg_assert_json_query "$GRAPH_NODES_FILE" '
+		(.results // []) as $rows |
+		($rows | length == 10) and
+		($rows | any(.name == "terraform-stack")) and
+		($rows | any(.name == "helm-controller")) and
+		($rows | any(.name == "kustomize-controller")) and
+		($rows | any(.name == "compose-app"))
+	' "graph repository nodes did not include every dead-IaC fixture repository"
+
+	cypher="MATCH (r:Repository)-[rel]->(n) WHERE r.name IN [$repo_list] RETURN r.name AS source, type(rel) AS relationship_type, n.id AS target_id, n.name AS target_name ORDER BY source, relationship_type, target_name LIMIT 200"
+	payload="$(jq -cn --arg cypher "$cypher" '{cypher_query: $cypher}')"
+	api_post_json "/code/cypher" "$payload" "$GRAPH_RELATIONSHIPS_FILE"
+	pcg_assert_json_query "$GRAPH_RELATIONSHIPS_FILE" '
+		(.results // []) as $rows |
+		($rows | any(.source == "terraform-stack" and .relationship_type == "USES_MODULE" and .target_name == "terraform-modules")) and
+		($rows | any(.source == "helm-controller" and .relationship_type == "DEPLOYS_FROM" and .target_name == "helm-charts")) and
+		($rows | any(.source == "kustomize-controller" and .relationship_type == "DEPLOYS_FROM" and .target_name == "kustomize-config")) and
+		($rows | any(.source == "compose-app" and .relationship_type == "REPO_CONTAINS" and .target_name == "compose.yaml"))
+	' "graph relationships did not expose expected IaC repository/evidence edges"
+
+	cypher="MATCH (r:Repository)-[:HAS_DEPLOYMENT_EVIDENCE]->(e) WHERE r.name IN ['terraform-stack', 'helm-controller', 'kustomize-controller'] RETURN r.name AS repo, e.id AS evidence_id, e.path AS path, e.name AS name, e.evidence_kind AS evidence_kind ORDER BY repo, path LIMIT 100"
+	payload="$(jq -cn --arg cypher "$cypher" '{cypher_query: $cypher}')"
+	api_post_json "/code/cypher" "$payload" "$GRAPH_EVIDENCE_FILE"
+	pcg_assert_json_query "$GRAPH_EVIDENCE_FILE" '
+		(.results // []) as $rows |
+		($rows | any(.repo == "terraform-stack" and .evidence_kind == "TERRAFORM_MODULE_SOURCE")) and
+		($rows | any(.repo == "helm-controller" and .evidence_kind == "ARGOCD_APPLICATION_SOURCE")) and
+		($rows | any(.repo == "kustomize-controller" and .evidence_kind == "ARGOCD_APPLICATION_SOURCE"))
+	' "graph deployment evidence nodes did not expose expected evidence kinds"
 }
 
 pcg_require_tool curl
@@ -276,6 +341,7 @@ pcg_compose_wait_for_index_completion 240 5 "$INDEX_STATUS_FILE"
 verify_postgres_rows
 verify_api
 verify_mcp
+verify_graph
 "${COMPOSE_CMD[@]}" logs --no-color bootstrap-index >"$BOOTSTRAP_LOG_FILE"
 rg -n "iac reachability materialized|iac_reachability_materialized" "$BOOTSTRAP_LOG_FILE" >/dev/null
 

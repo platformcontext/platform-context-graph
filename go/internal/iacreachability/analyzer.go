@@ -174,6 +174,11 @@ func discoverArtifacts(filesByRepo map[string][]File, families map[string]bool) 
 					evidence: []string{file.RelativePath + ": kustomization entrypoint exists"},
 				})
 			}
+			if familyEnabled(families, "compose") {
+				for _, composeArtifact := range composeServiceArtifacts(file) {
+					artifacts = appendUniqueArtifact(artifacts, seen, composeArtifact)
+				}
+			}
 		}
 	}
 	return artifacts
@@ -200,6 +205,7 @@ func buildReferenceIndex(filesByRepo map[string][]File) referenceIndex {
 			recordHelmReferences(index, file)
 			recordAnsibleReferences(index, file, reachedPlaybooks)
 			recordKustomizeReferences(index, file)
+			recordComposeReferences(index, file)
 		}
 	}
 	return index

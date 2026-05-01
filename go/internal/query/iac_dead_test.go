@@ -353,6 +353,24 @@ vars:
 					{RepoID: "ansible-ops", RelativePath: "roles/orphan_maintenance/tasks/main.yml", Content: `- debug: msg=unused`},
 					{RepoID: "ansible-ops", RelativePath: "roles/dynamic_role/tasks/main.yml", Content: `- debug: msg=dynamic`},
 				},
+				"compose-controller": {
+					{RepoID: "compose-controller", RelativePath: ".github/workflows/deploy-compose.yaml", Content: `steps:
+  - run: docker compose -f ../compose-app/compose.yaml up -d api worker
+  - run: docker compose -f ../compose-app/compose.yaml up -d ${SERVICE_NAME}
+env:
+  SERVICE_NAME: dynamic-target`},
+				},
+				"compose-app": {
+					{RepoID: "compose-app", RelativePath: "compose.yaml", Content: `services:
+  api:
+    image: example/api:latest
+  worker:
+    image: example/worker:latest
+  orphan-cache:
+    image: example/cache:latest
+  dynamic-target:
+    image: example/dynamic:latest`},
+				},
 			},
 		},
 	}
@@ -360,7 +378,7 @@ vars:
 	handler.Mount(mux)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/iac/dead", bytes.NewBufferString(`{
-		"repo_ids": ["terraform-stack", "terraform-modules", "helm-controller", "helm-charts", "ansible-controller", "ansible-ops"],
+		"repo_ids": ["terraform-stack", "terraform-modules", "helm-controller", "helm-charts", "ansible-controller", "ansible-ops", "compose-controller", "compose-app"],
 		"include_ambiguous": true
 	}`))
 	req.Header.Set("Accept", EnvelopeMIMEType)
@@ -408,6 +426,8 @@ vars:
 	wantIDs := []string{
 		"ansible:ansible-ops:roles/dynamic_role",
 		"ansible:ansible-ops:roles/orphan_maintenance",
+		"compose:compose-app:services/dynamic-target",
+		"compose:compose-app:services/orphan-cache",
 		"helm:helm-charts:charts/dynamic-target",
 		"helm:helm-charts:charts/orphan-worker",
 		"terraform:terraform-modules:modules/dynamic-target",
@@ -418,6 +438,7 @@ vars:
 	}
 	for _, id := range []string{
 		"ansible:ansible-ops:roles/dynamic_role",
+		"compose:compose-app:services/dynamic-target",
 		"helm:helm-charts:charts/dynamic-target",
 		"terraform:terraform-modules:modules/dynamic-target",
 	} {
@@ -427,6 +448,7 @@ vars:
 	}
 	for _, id := range []string{
 		"ansible:ansible-ops:roles/orphan_maintenance",
+		"compose:compose-app:services/orphan-cache",
 		"helm:helm-charts:charts/orphan-worker",
 		"terraform:terraform-modules:modules/orphan-cache",
 	} {

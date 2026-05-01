@@ -16,6 +16,8 @@ The corpus covers:
   resources, unreferenced, and dynamically templated.
 - Ansible roles and playbooks reached by controllers, unreferenced, and
   dynamically selected.
+- Docker Compose services reached by workflow commands, unreferenced, and
+  dynamically selected.
 
 Dynamic cases are intentionally ambiguous. They should not be reported as
 confidently dead without renderer or runtime evidence.

@@ -118,6 +118,47 @@
       "expected_finding": "ambiguous_dynamic_reference"
     },
     {
+      "id": "compose.workflow_service_used",
+      "family": "compose",
+      "artifact": "compose-app/services/api",
+      "expected_reachability": "used",
+      "required_evidence": [
+        "compose-controller/.github/workflows/deploy-compose.yaml: docker compose up api"
+      ],
+      "must_not_report_as_dead": true
+    },
+    {
+      "id": "compose.workflow_service_used_worker",
+      "family": "compose",
+      "artifact": "compose-app/services/worker",
+      "expected_reachability": "used",
+      "required_evidence": [
+        "compose-controller/.github/workflows/deploy-compose.yaml: docker compose up worker"
+      ],
+      "must_not_report_as_dead": true
+    },
+    {
+      "id": "compose.service_unused",
+      "family": "compose",
+      "artifact": "compose-app/services/orphan-cache",
+      "expected_reachability": "unused",
+      "required_evidence": [
+        "compose service exists",
+        "no workflow or controller command references this compose service"
+      ],
+      "expected_finding": "candidate_dead_iac"
+    },
+    {
+      "id": "compose.dynamic_service_ambiguous",
+      "family": "compose",
+      "artifact": "compose-app/services/dynamic-target",
+      "expected_reachability": "ambiguous",
+      "required_evidence": [
+        "compose-controller/.github/workflows/deploy-compose.yaml: docker compose up ${SERVICE_NAME}"
+      ],
+      "expected_finding": "ambiguous_dynamic_reference"
+    },
+    {
       "id": "ansible.playbook_and_role_used",
       "family": "ansible",
       "artifact": "ansible-ops/roles/checkout_deploy",

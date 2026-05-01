@@ -36,6 +36,20 @@
       ]
     },
     {
+      "family": "kustomize",
+      "positive_cases": [
+        "overlay reached by ArgoCD Application source path",
+        "base reached by kustomization resources"
+      ],
+      "negative_cases": [
+        "base or overlay directory with no ArgoCD, ApplicationSet, or kustomization reference"
+      ],
+      "ambiguous_cases": [
+        "templated ArgoCD source path",
+        "variable-selected kustomization resource path"
+      ]
+    },
+    {
       "family": "ansible",
       "positive_cases": [
         "role referenced by a playbook",
@@ -48,6 +62,19 @@
       "ambiguous_cases": [
         "dynamic role name from vars",
         "external collection role that is not expected to resolve to a local repo artifact"
+      ]
+    },
+    {
+      "family": "compose",
+      "positive_cases": [
+        "service reached by Docker Compose workflow command",
+        "service reached by Docker Compose controller command"
+      ],
+      "negative_cases": [
+        "compose service with no workflow or controller reference"
+      ],
+      "ambiguous_cases": [
+        "dynamic service name selected from workflow or controller variables"
       ]
     }
   ],

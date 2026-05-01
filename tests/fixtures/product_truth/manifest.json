@@ -70,7 +70,9 @@
       "required_before_claiming": [
         "Terraform module positive, negative, and ambiguous reachability cases",
         "Helm chart positive, negative, and ambiguous reachability cases",
+        "Kustomize base/overlay positive, negative, and ambiguous reachability cases",
         "Ansible role and playbook positive, negative, and ambiguous reachability cases",
+        "Docker Compose service positive, negative, and ambiguous reachability cases",
         "API and MCP responses with explicit truth level and limitations",
         "Postgres evidence rows or materialized usage rows that explain each finding"
       ]
