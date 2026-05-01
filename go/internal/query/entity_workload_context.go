@@ -23,7 +23,14 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 		return nil, nil
 	}
 
-	repoID, repoName, err := h.fetchWorkloadRepository(ctx, whereClause, params)
+	followupWhereClause := whereClause
+	followupParams := params
+	if workloadID := StringVal(row, "id"); workloadID != "" {
+		followupWhereClause = "w.id = $workload_id"
+		followupParams = map[string]any{"workload_id": workloadID}
+	}
+
+	repoID, repoName, err := h.fetchWorkloadRepository(ctx, followupWhereClause, followupParams)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +41,7 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 		repoName = StringVal(row, "repo_name")
 	}
 
-	instances, err := h.fetchWorkloadInstances(ctx, whereClause, params)
+	instances, err := h.fetchWorkloadInstances(ctx, followupWhereClause, followupParams)
 	if err != nil {
 		return nil, err
 	}

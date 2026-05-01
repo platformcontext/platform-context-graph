@@ -460,6 +460,47 @@ func TestGetServiceContextOmitsRepoEntryPoints(t *testing.T) {
 	}
 }
 
+func TestFetchWorkloadContextAnchorsFollowUpQueriesByResolvedWorkloadID(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeWorkloadGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"w.name = $service_name OR w.id = $service_name": {
+					"id":   "workload:service-edge-api",
+					"name": "service-edge-api",
+					"kind": "service",
+				},
+			},
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "w.name = $service_name OR w.id = $service_name") {
+					t.Fatalf("follow-up cypher used broad service lookup after workload id was resolved: %s", cypher)
+				}
+				if strings.Contains(cypher, "MATCH (w:Workload)") && params["workload_id"] != "workload:service-edge-api" {
+					got := params["workload_id"]
+					t.Fatalf("params[workload_id] = %#v, want %#v", got, "workload:service-edge-api")
+				}
+				if strings.Contains(cypher, "MATCH (r:Repository)-[:DEFINES]->(w)") {
+					return []map[string]any{{"repo_id": "repo-1", "repo_name": "service-edge-api"}}, nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	ctx, err := handler.fetchWorkloadContext(
+		context.Background(),
+		serviceLookupWhereClause,
+		map[string]any{"service_name": "service-edge-api"},
+	)
+	if err != nil {
+		t.Fatalf("fetchWorkloadContext() error = %v, want nil", err)
+	}
+	if got, want := ctx["repo_id"], "repo-1"; got != want {
+		t.Fatalf("ctx[repo_id] = %#v, want %#v", got, want)
+	}
+}
+
 func TestGetServiceContextIncludesGraphDeploymentEvidenceWithoutContent(t *testing.T) {
 	t.Parallel()
 
