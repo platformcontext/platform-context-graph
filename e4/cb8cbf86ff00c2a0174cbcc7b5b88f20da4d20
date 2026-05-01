@@ -1,0 +1,59 @@
+tests/fixtures/product_truth/dead_iac/kustomize-controller/argocd/applications/dynamic-target.yaml
+  4cb501d5d4ff237f 1-11
+tests/fixtures/product_truth/dead_iac/README.md
+  4cb501d5d4ff237f 15-16
+tests/fixtures/product_truth/expected/dead_iac.json
+  4cb501d5d4ff237f 80-119
+go/internal/query/iac_dead_test.go
+  4cb501d5d4ff237f 201-205
+.gitignore
+  4cb501d5d4ff237f 65
+go/internal/query/iac.go
+  4cb501d5d4ff237f 49,134-136,163,216-235
+tests/fixtures/product_truth/dead_iac/kustomize-config/base/checkout-service/kustomization.yaml
+  4cb501d5d4ff237f 1-3
+tests/fixtures/product_truth/dead_iac/kustomize-config/overlays/prod/kustomization.yaml
+  4cb501d5d4ff237f 1-3
+go/internal/iacreachability/analyzer_test.go
+  4cb501d5d4ff237f 55-69,83-86
+tests/fixtures/product_truth/dead_iac/kustomize-config/base/orphan-api/kustomization.yaml
+  4cb501d5d4ff237f 1-3
+scripts/verify_dead_iac_compose.sh
+  4cb501d5d4ff237f 1-279
+tests/fixtures/product_truth/dead_iac/kustomize-config/base/checkout-service/deployment.yaml
+  4cb501d5d4ff237f 1-5
+tests/fixtures/product_truth/dead_iac/kustomize-config/base/dynamic-target/kustomization.yaml
+  4cb501d5d4ff237f 1-3
+docs/docs/why-pcg.md
+  4cb501d5d4ff237f 182
+go/internal/iacreachability/analyzer.go
+  4cb501d5d4ff237f 171-176,202,276-288,361-403
+docs/docs/reference/http-api.md
+  4cb501d5d4ff237f 544-549,555-556
+tests/fixtures/product_truth/dead_iac/kustomize-config/base/dynamic-target/deployment.yaml
+  4cb501d5d4ff237f 1-5
+tests/fixtures/product_truth/dead_iac/kustomize-config/base/orphan-api/deployment.yaml
+  4cb501d5d4ff237f 1-5
+tests/fixtures/product_truth/dead_iac/kustomize-controller/argocd/applications/checkout-prod.yaml
+  4cb501d5d4ff237f 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e4cb8cbf86ff00c2a0174cbcc7b5b88f20da4d20",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 497,
+      "total_deletions": 9,
+      "accepted_lines": 502,
+      "overriden_lines": 0
+    }
+  }
+}
