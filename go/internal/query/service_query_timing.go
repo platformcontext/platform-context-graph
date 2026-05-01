@@ -42,7 +42,7 @@ func startServiceQueryStage(
 			telemetry.EventAttr("service_query.stage_started"),
 			slog.String("operation", operation),
 			slog.String("stage", stage),
-			slog.String("service_name", service),
+			slog.String("target_service", service),
 			slog.String("repo_id", repoID),
 		)
 	}
@@ -59,7 +59,7 @@ func (t serviceQueryStageTimer) Done(ctx context.Context, attrs ...slog.Attr) {
 		telemetry.EventAttr("service_query.stage_completed"),
 		slog.String("operation", t.operation),
 		slog.String("stage", t.stage),
-		slog.String("service_name", t.service),
+		slog.String("target_service", t.service),
 		slog.String("repo_id", t.repoID),
 		slog.Float64("duration_seconds", time.Since(t.startedAt).Seconds()),
 	}

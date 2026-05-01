@@ -164,6 +164,8 @@ func TestSchemaStatementsContainsPerformanceIndexes(t *testing.T) {
 		"CREATE INDEX function_name IF NOT EXISTS",
 		"CREATE INDEX class_name IF NOT EXISTS",
 		"CREATE INDEX workload_name IF NOT EXISTS",
+		"CREATE INDEX workload_instance_workload_id IF NOT EXISTS",
+		"CREATE INDEX workload_instance_repo_id IF NOT EXISTS",
 	}
 	for _, want := range expected {
 		found := false

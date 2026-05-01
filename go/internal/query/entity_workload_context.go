@@ -156,6 +156,7 @@ func (h *EntityHandler) fetchWorkloadRepository(ctx context.Context, whereClause
 // fetchWorkloadInstances assembles instance and platform fields from scalar
 // rows so query surfaces do not depend on backend map-projection semantics.
 func (h *EntityHandler) fetchWorkloadInstances(ctx context.Context, whereClause string, params map[string]any) ([]map[string]any, error) {
+	workloadID := StringVal(params, "workload_id")
 	instanceCypher := fmt.Sprintf(`
 		MATCH (w:Workload) WHERE %s
 		MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)
@@ -165,6 +166,17 @@ func (h *EntityHandler) fetchWorkloadInstances(ctx context.Context, whereClause 
 		       i.materialization_provenance as materialization_provenance
 		ORDER BY environment, instance_id
 	`, whereClause)
+	if workloadID != "" {
+		instanceCypher = `
+			MATCH (i:WorkloadInstance)
+			WHERE i.workload_id = $workload_id
+			RETURN i.id as instance_id,
+			       i.environment as environment,
+			       i.materialization_confidence as materialization_confidence,
+			       i.materialization_provenance as materialization_provenance
+			ORDER BY environment, instance_id
+		`
+	}
 	instanceRows, err := h.Neo4j.Run(ctx, instanceCypher, params)
 	if err != nil {
 		return nil, err
@@ -206,6 +218,19 @@ func (h *EntityHandler) fetchWorkloadInstances(ctx context.Context, whereClause 
 		       runsOn.reason as platform_reason
 		ORDER BY instance_id, platform_name
 	`, whereClause)
+	if workloadID != "" {
+		platformCypher = `
+			MATCH (i:WorkloadInstance)
+			WHERE i.workload_id = $workload_id
+			MATCH (i)-[runsOn:RUNS_ON]->(p:Platform)
+			RETURN i.id as instance_id,
+			       p.name as platform_name,
+			       p.kind as platform_kind,
+			       runsOn.confidence as platform_confidence,
+			       runsOn.reason as platform_reason
+			ORDER BY instance_id, platform_name
+		`
+	}
 	platformRows, err := h.Neo4j.Run(ctx, platformCypher, params)
 	if err != nil {
 		return nil, err

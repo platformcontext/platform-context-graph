@@ -187,6 +187,8 @@ var schemaPerformanceIndexes = []string{
 	"CREATE INDEX workload_name IF NOT EXISTS FOR (w:Workload) ON (w.name)",
 	"CREATE INDEX workload_repo_id IF NOT EXISTS FOR (w:Workload) ON (w.repo_id)",
 	"CREATE INDEX workload_instance_environment IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.environment)",
+	"CREATE INDEX workload_instance_workload_id IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.workload_id)",
+	"CREATE INDEX workload_instance_repo_id IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.repo_id)",
 	"CREATE INDEX function_name IF NOT EXISTS FOR (f:Function) ON (f.name)",
 	"CREATE INDEX class_name IF NOT EXISTS FOR (c:Class) ON (c.name)",
 }

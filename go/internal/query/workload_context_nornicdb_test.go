@@ -64,7 +64,7 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 							"platform_reason":     "resolved_deployment_evidence",
 						},
 					}, nil
-				case strings.Contains(cypher, "MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)"):
+				case strings.Contains(cypher, "WHERE i.workload_id = $workload_id"):
 					return []map[string]any{
 						{
 							"instance_id":                "workload-instance:api-node-datax:bg-prod",
