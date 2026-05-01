@@ -120,7 +120,7 @@ func codebaseTools() []ToolDefinition {
 		},
 		{
 			Name:        "find_dead_iac",
-			Description: "Find unused or ambiguous Terraform modules, Helm charts, and Ansible roles across an explicit set of canonical repository identifiers.",
+			Description: "Find unused or ambiguous Terraform modules, Helm charts, Kustomize paths, Ansible roles, and Docker Compose services across an explicit set of canonical repository identifiers.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -136,7 +136,7 @@ func codebaseTools() []ToolDefinition {
 					"families": map[string]any{
 						"type":        "array",
 						"items":       map[string]any{"type": "string"},
-						"description": "Optional IaC families to include: terraform, helm, ansible",
+						"description": "Optional IaC families to include: terraform, helm, kustomize, ansible, compose",
 					},
 					"include_ambiguous": map[string]any{
 						"type":        "boolean",
@@ -147,6 +147,11 @@ func codebaseTools() []ToolDefinition {
 						"type":        "integer",
 						"description": "Maximum IaC cleanup findings to return",
 						"default":     100,
+					},
+					"offset": map[string]any{
+						"type":        "integer",
+						"description": "Zero-based result offset for paging materialized or derived findings",
+						"default":     0,
 					},
 				},
 				"required": []string{},

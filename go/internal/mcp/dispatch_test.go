@@ -386,6 +386,7 @@ func TestResolveRouteMapsFindDeadIaC(t *testing.T) {
 		"families":          []any{"terraform"},
 		"include_ambiguous": true,
 		"limit":             float64(25),
+		"offset":            float64(50),
 	})
 	if err != nil {
 		t.Fatalf("resolveRoute() error = %v, want nil", err)
@@ -399,6 +400,9 @@ func TestResolveRouteMapsFindDeadIaC(t *testing.T) {
 	}
 	if got, want := body["limit"], 25; got != want {
 		t.Fatalf("body[limit] = %#v, want %#v", got, want)
+	}
+	if got, want := body["offset"], 50; got != want {
+		t.Fatalf("body[offset] = %#v, want %#v", got, want)
 	}
 	if got, want := body["include_ambiguous"], true; got != want {
 		t.Fatalf("body[include_ambiguous] = %#v, want %#v", got, want)

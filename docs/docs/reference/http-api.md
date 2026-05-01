@@ -548,7 +548,9 @@ cleanup findings; unreferenced artifacts are returned as `candidate_dead_iac`,
 and variable or template-selected artifacts are returned as
 `ambiguous_dynamic_reference` when `include_ambiguous=true`.
 Findings expose the canonical `repo_id` plus `repo_name` when the repository
-catalog can resolve it.
+catalog can resolve it. `findings_count` reports the number of rows returned
+on the current page; `total_findings_count`, `truncated`, and `next_offset`
+report whether more materialized or derived findings are available.
 
 Example dead-IaC workflow:
 
@@ -557,7 +559,8 @@ Example dead-IaC workflow:
   "repo_ids": ["terraform-stack", "terraform-modules", "helm-controller", "helm-charts", "kustomize-controller", "kustomize-config", "compose-controller", "compose-app"],
   "families": ["terraform", "helm", "kustomize", "compose"],
   "include_ambiguous": true,
-  "limit": 100
+  "limit": 100,
+  "offset": 0
 }
 ```
 

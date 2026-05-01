@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	iacDeadCapability = "iac_quality.dead_iac"
-	iacDeadFileLimit  = 10000
+	iacDeadCapability   = "iac_quality.dead_iac"
+	iacDeadFileLimit    = 10000
+	iacDeadDefaultLimit = 100
+	iacDeadMaxLimit     = 500
 )
 
 // IaCHandler serves infrastructure-as-code quality query routes.
@@ -40,6 +42,7 @@ type deadIaCRequest struct {
 	Families         []string `json:"families"`
 	IncludeAmbiguous bool     `json:"include_ambiguous"`
 	Limit            int      `json:"limit"`
+	Offset           int      `json:"offset"`
 }
 
 type deadIaCFinding struct {
@@ -63,7 +66,9 @@ type IaCReachabilityStore interface {
 		families []string,
 		includeAmbiguous bool,
 		limit int,
+		offset int,
 	) ([]IaCReachabilityFindingRow, error)
+	CountLatestCleanupFindings(ctx context.Context, repoIDs []string, families []string, includeAmbiguous bool) (int, error)
 	HasLatestRows(ctx context.Context, repoIDs []string, families []string) (bool, error)
 }
 
@@ -111,20 +116,26 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.Limit <= 0 {
-		req.Limit = 100
-	}
-	if req.Limit > 500 {
-		req.Limit = 500
-	}
+	normalizeDeadIaCPaging(&req)
 	families := normalizeDeadIaCFamilies(req.Families)
 	if h != nil && h.Reachability != nil {
+		totalFindings, err := h.Reachability.CountLatestCleanupFindings(
+			r.Context(),
+			repoIDs,
+			families,
+			req.IncludeAmbiguous,
+		)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		rows, err := h.Reachability.ListLatestCleanupFindings(
 			r.Context(),
 			repoIDs,
 			families,
 			req.IncludeAmbiguous,
 			req.Limit,
+			req.Offset,
 		)
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, err.Error())
@@ -133,7 +144,9 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 		if len(rows) > 0 {
 			findings := materializedDeadIaCFindings(rows)
 			h.enrichDeadIaCRepoNames(r.Context(), findings)
-			writeMaterializedDeadIaC(w, r, h.profile(), repoIDs, findings)
+			writeMaterializedDeadIaC(w, r, h.profile(), repoIDs, findings, deadIaCPage{
+				Limit: req.Limit, Offset: req.Offset, Total: totalFindings,
+			})
 			return
 		}
 		hasRows, err := h.Reachability.HasLatestRows(r.Context(), repoIDs, families)
@@ -142,7 +155,9 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasRows {
-			writeMaterializedDeadIaC(w, r, h.profile(), repoIDs, nil)
+			writeMaterializedDeadIaC(w, r, h.profile(), repoIDs, nil, deadIaCPage{
+				Limit: req.Limit, Offset: req.Offset, Total: totalFindings,
+			})
 			return
 		}
 	}
@@ -157,17 +172,21 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	findings := analyzeDeadIaC(filesByRepo, iacreachability.FamilyFilter(families), req.IncludeAmbiguous)
-	if len(findings) > req.Limit {
-		findings = findings[:req.Limit]
-	}
+	totalFindings := len(findings)
+	findings = pageDeadIaCFindings(findings, req.Limit, req.Offset)
 	h.enrichDeadIaCRepoNames(r.Context(), findings)
 
 	WriteSuccess(w, r, http.StatusOK, map[string]any{
-		"repo_ids":        repoIDs,
-		"findings":        findings,
-		"findings_count":  len(findings),
-		"truth_basis":     "content_scope",
-		"analysis_status": "derived_candidate_analysis",
+		"repo_ids":             repoIDs,
+		"findings":             findings,
+		"findings_count":       len(findings),
+		"total_findings_count": totalFindings,
+		"limit":                req.Limit,
+		"offset":               req.Offset,
+		"truncated":            deadIaCTruncated(req.Offset, len(findings), totalFindings),
+		"next_offset":          deadIaCNextOffset(req.Offset, len(findings), totalFindings),
+		"truth_basis":          "content_scope",
+		"analysis_status":      "derived_candidate_analysis",
 		"limitations": []string{
 			"bounded to the requested repository scope",
 			"dynamic templates and variable-selected references are reported as ambiguous",
@@ -182,17 +201,29 @@ func writeMaterializedDeadIaC(
 	profile QueryProfile,
 	repoIDs []string,
 	findings []deadIaCFinding,
+	page deadIaCPage,
 ) {
 	WriteSuccess(w, r, http.StatusOK, map[string]any{
-		"repo_ids":        repoIDs,
-		"findings":        findings,
-		"findings_count":  len(findings),
-		"truth_basis":     "materialized_reducer_rows",
-		"analysis_status": "materialized_reachability",
+		"repo_ids":             repoIDs,
+		"findings":             findings,
+		"findings_count":       len(findings),
+		"total_findings_count": page.Total,
+		"limit":                page.Limit,
+		"offset":               page.Offset,
+		"truncated":            deadIaCTruncated(page.Offset, len(findings), page.Total),
+		"next_offset":          deadIaCNextOffset(page.Offset, len(findings), page.Total),
+		"truth_basis":          "materialized_reducer_rows",
+		"analysis_status":      "materialized_reachability",
 		"limitations": []string{
 			"dynamic templates and variable-selected references are reported as ambiguous",
 		},
 	}, BuildTruthEnvelope(profile, iacDeadCapability, TruthBasisSemanticFacts, "resolved from reducer-materialized IaC reachability rows"))
+}
+
+type deadIaCPage struct {
+	Limit  int
+	Offset int
+	Total  int
 }
 
 func materializedDeadIaCFindings(rows []IaCReachabilityFindingRow) []deadIaCFinding {
@@ -255,6 +286,41 @@ func normalizeDeadIaCRepoScope(req deadIaCRequest) []string {
 	}
 	sort.Strings(repoIDs)
 	return repoIDs
+}
+
+func normalizeDeadIaCPaging(req *deadIaCRequest) {
+	if req.Limit <= 0 {
+		req.Limit = iacDeadDefaultLimit
+	}
+	if req.Limit > iacDeadMaxLimit {
+		req.Limit = iacDeadMaxLimit
+	}
+	if req.Offset < 0 {
+		req.Offset = 0
+	}
+}
+
+func pageDeadIaCFindings(findings []deadIaCFinding, limit int, offset int) []deadIaCFinding {
+	if offset >= len(findings) {
+		return nil
+	}
+	end := offset + limit
+	if end > len(findings) {
+		end = len(findings)
+	}
+	return findings[offset:end]
+}
+
+func deadIaCTruncated(offset int, returned int, total int) bool {
+	return offset+returned < total
+}
+
+func deadIaCNextOffset(offset int, returned int, total int) *int {
+	if !deadIaCTruncated(offset, returned, total) {
+		return nil
+	}
+	next := offset + returned
+	return &next
 }
 
 func (h *IaCHandler) resolveRepositoryScope(ctx context.Context, selectors []string) ([]string, error) {

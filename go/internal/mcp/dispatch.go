@@ -313,6 +313,7 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 			"families":          stringSlice(args, "families"),
 			"include_ambiguous": boolOr(args, "include_ambiguous", false),
 			"limit":             intOr(args, "limit", 100),
+			"offset":            intOr(args, "offset", 0),
 		}}, nil
 	case "calculate_cyclomatic_complexity":
 		return &route{method: "POST", path: "/api/v0/code/complexity", body: map[string]any{

@@ -69,7 +69,7 @@ func TestIaCReachabilityStoreUpsertAndListCleanupFindings(t *testing.T) {
 		t.Fatalf("Upsert: %v", err)
 	}
 
-	got, err := store.ListCleanupFindings(ctx, "scope-1", "gen-1", true, 100)
+	got, err := store.ListCleanupFindings(ctx, "scope-1", "gen-1", true, 100, 0)
 	if err != nil {
 		t.Fatalf("ListCleanupFindings: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestIaCReachabilityStoreUpsertAndListCleanupFindings(t *testing.T) {
 		t.Fatalf("second artifact = %q, want orphan-cache", got[1].ArtifactName)
 	}
 
-	withoutAmbiguous, err := store.ListCleanupFindings(ctx, "scope-1", "gen-1", false, 100)
+	withoutAmbiguous, err := store.ListCleanupFindings(ctx, "scope-1", "gen-1", false, 100, 0)
 	if err != nil {
 		t.Fatalf("ListCleanupFindings without ambiguous: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestIaCReachabilityStoreUpsertAndListCleanupFindings(t *testing.T) {
 		t.Fatalf("reachability without ambiguous = %q, want %q", withoutAmbiguous[0].Reachability, IaCReachabilityUnused)
 	}
 
-	latest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, nil, true, 100)
+	latest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, nil, true, 100, 0)
 	if err != nil {
 		t.Fatalf("ListLatestCleanupFindings: %v", err)
 	}
@@ -113,14 +113,14 @@ func TestIaCReachabilityStoreUpsertAndListCleanupFindings(t *testing.T) {
 		}
 	}
 
-	terraformLatest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, []string{"terraform"}, true, 100)
+	terraformLatest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, []string{"terraform"}, true, 100, 0)
 	if err != nil {
 		t.Fatalf("ListLatestCleanupFindings terraform: %v", err)
 	}
 	if gotLen, wantLen := len(terraformLatest), 2; gotLen != wantLen {
 		t.Fatalf("terraform latest len = %d, want %d", gotLen, wantLen)
 	}
-	helmLatest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, []string{"helm"}, true, 100)
+	helmLatest, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, []string{"helm"}, true, 100, 0)
 	if err != nil {
 		t.Fatalf("ListLatestCleanupFindings helm: %v", err)
 	}
@@ -133,6 +133,23 @@ func TestIaCReachabilityStoreUpsertAndListCleanupFindings(t *testing.T) {
 	}
 	if !hasRows {
 		t.Fatal("HasLatestRows terraform = false, want true")
+	}
+	count, err := store.CountLatestCleanupFindings(ctx, []string{"terraform-modules"}, []string{"terraform"}, true)
+	if err != nil {
+		t.Fatalf("CountLatestCleanupFindings terraform: %v", err)
+	}
+	if got, want := count, 2; got != want {
+		t.Fatalf("CountLatestCleanupFindings terraform = %d, want %d", got, want)
+	}
+	page, err := store.ListLatestCleanupFindings(ctx, []string{"terraform-modules"}, []string{"terraform"}, true, 1, 1)
+	if err != nil {
+		t.Fatalf("ListLatestCleanupFindings page: %v", err)
+	}
+	if got, want := len(page), 1; got != want {
+		t.Fatalf("paged len = %d, want %d", got, want)
+	}
+	if got, want := page[0].ArtifactName, "orphan-cache"; got != want {
+		t.Fatalf("paged artifact = %q, want %q", got, want)
 	}
 }
 
@@ -294,27 +311,36 @@ func (db *iacReachabilityTestDB) QueryContext(_ context.Context, query string, a
 	}
 	latestActive := strings.Contains(query, "JOIN scope_generations")
 	existenceQuery := strings.Contains(query, "SELECT 1")
+	countQuery := strings.Contains(query, "SELECT COUNT(*)")
 	var scopeID, generationID string
 	var repoIDs map[string]struct{}
 	var families map[string]struct{}
 	var includeAmbiguous bool
 	var limit int
+	var offset int
 	if latestActive {
 		repoIDs = map[string]struct{}{}
 		families = map[string]struct{}{}
 		cleanupArgTail := 0
-		if !existenceQuery {
-			cleanupArgTail = 2
-			includeAmbiguous = args[len(args)-2].(bool)
-			limit = args[len(args)-1].(int)
-		} else {
+		switch {
+		case countQuery:
+			cleanupArgTail = 1
+			includeAmbiguous = args[len(args)-1].(bool)
+			limit = 100000
+		case !existenceQuery:
+			cleanupArgTail = 3
+			includeAmbiguous = args[len(args)-3].(bool)
+			limit = args[len(args)-2].(int)
+			offset = args[len(args)-1].(int)
+		default:
 			limit = 100
 		}
 		filterArgs := args[:len(args)-cleanupArgTail]
-		familyFilter := strings.Contains(query, "row.family IN")
+		repoPlaceholderCount := placeholderCountInClause(query, "row.repo_id IN")
+		familyPlaceholderCount := placeholderCountInClause(query, "row.family IN")
 		for i, arg := range filterArgs {
 			value := arg.(string)
-			if familyFilter && i == len(filterArgs)-1 {
+			if i >= repoPlaceholderCount && i < repoPlaceholderCount+familyPlaceholderCount {
 				families[value] = struct{}{}
 				continue
 			}
@@ -325,6 +351,7 @@ func (db *iacReachabilityTestDB) QueryContext(_ context.Context, query string, a
 		generationID = args[1].(string)
 		includeAmbiguous = args[2].(bool)
 		limit = args[3].(int)
+		offset = args[4].(int)
 	}
 
 	var matches [][]any
@@ -370,10 +397,31 @@ func (db *iacReachabilityTestDB) QueryContext(_ context.Context, query string, a
 		}
 		return matches[i][4].(string) < matches[j][4].(string)
 	})
+	if countQuery {
+		return &iacReachabilityRows{data: [][]any{{len(matches)}}, idx: -1}, nil
+	}
+	if offset > len(matches) {
+		matches = nil
+	} else {
+		matches = matches[offset:]
+	}
 	if len(matches) > limit {
 		matches = matches[:limit]
 	}
 	return &iacReachabilityRows{data: matches, idx: -1}, nil
+}
+
+func placeholderCountInClause(query string, clause string) int {
+	idx := strings.Index(query, clause)
+	if idx < 0 {
+		return 0
+	}
+	start := strings.Index(query[idx:], "(")
+	end := strings.Index(query[idx:], ")")
+	if start < 0 || end < 0 || end <= start {
+		return 0
+	}
+	return strings.Count(query[idx+start:idx+end], "$")
 }
 
 type iacReachabilityRows struct {
@@ -404,6 +452,8 @@ func (r *iacReachabilityRows) Scan(dest ...any) error {
 			*d = val.([]byte)
 		case *time.Time:
 			*d = val.(time.Time)
+		case *int:
+			*d = val.(int)
 		default:
 			return fmt.Errorf("unsupported scan dest type %T", dest[i])
 		}

@@ -27,11 +27,12 @@ func (s *PostgresIaCReachabilityStore) ListLatestCleanupFindings(
 	families []string,
 	includeAmbiguous bool,
 	limit int,
+	offset int,
 ) ([]IaCReachabilityFindingRow, error) {
 	if s == nil || s.store == nil {
 		return nil, nil
 	}
-	rows, err := s.store.ListLatestCleanupFindings(ctx, repoIDs, families, includeAmbiguous, limit)
+	rows, err := s.store.ListLatestCleanupFindings(ctx, repoIDs, families, includeAmbiguous, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +51,20 @@ func (s *PostgresIaCReachabilityStore) ListLatestCleanupFindings(
 		})
 	}
 	return result, nil
+}
+
+// CountLatestCleanupFindings returns the full active-generation cleanup count
+// for the same filters used by ListLatestCleanupFindings.
+func (s *PostgresIaCReachabilityStore) CountLatestCleanupFindings(
+	ctx context.Context,
+	repoIDs []string,
+	families []string,
+	includeAmbiguous bool,
+) (int, error) {
+	if s == nil || s.store == nil {
+		return 0, nil
+	}
+	return s.store.CountLatestCleanupFindings(ctx, repoIDs, families, includeAmbiguous)
 }
 
 // HasLatestRows reports whether active-generation IaC reachability has been

@@ -22,11 +22,12 @@ const openAPIPathsIaC = `
                   },
                   "families": {
                     "type": "array",
-                    "description": "Optional IaC families to include: terraform, helm, ansible.",
+                    "description": "Optional IaC families to include: terraform, helm, kustomize, ansible, compose.",
                     "items": {"type": "string"}
                   },
                   "include_ambiguous": {"type": "boolean", "description": "Include dynamic-reference candidates.", "default": false},
-                  "limit": {"type": "integer", "description": "Maximum findings to return (default 100, max 500).", "default": 100}
+                  "limit": {"type": "integer", "description": "Maximum findings to return (default 100, max 500).", "default": 100},
+                  "offset": {"type": "integer", "description": "Zero-based result offset for paging findings.", "default": 0}
                 }
               }
             }
@@ -42,6 +43,11 @@ const openAPIPathsIaC = `
                   "properties": {
                     "repo_ids": {"type": "array", "items": {"type": "string"}},
                     "findings_count": {"type": "integer"},
+                    "total_findings_count": {"type": "integer"},
+                    "limit": {"type": "integer"},
+                    "offset": {"type": "integer"},
+                    "truncated": {"type": "boolean"},
+                    "next_offset": {"type": ["integer", "null"]},
                     "truth_basis": {"type": "string"},
                     "analysis_status": {"type": "string"},
                     "limitations": {"type": "array", "items": {"type": "string"}},

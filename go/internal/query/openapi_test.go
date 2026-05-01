@@ -304,12 +304,24 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if _, ok := deadIaCSchema["include_ambiguous"]; !ok {
 		t.Fatal("iac/dead request schema missing include_ambiguous")
 	}
+	if _, ok := deadIaCSchema["offset"]; !ok {
+		t.Fatal("iac/dead request schema missing offset")
+	}
 	deadIaCResponses := mustMapField(t, deadIaCPost, "responses")
 	deadIaCOK := mustMapField(t, deadIaCResponses, "200")
 	deadIaCContent := mustMapField(t, mustMapField(t, deadIaCOK, "content"), "application/json")
 	deadIaCResponse := mustMapField(t, mustMapField(t, deadIaCContent, "schema"), "properties")
 	if _, ok := deadIaCResponse["findings"]; !ok {
 		t.Fatal("iac/dead response schema missing findings")
+	}
+	if _, ok := deadIaCResponse["total_findings_count"]; !ok {
+		t.Fatal("iac/dead response schema missing total_findings_count")
+	}
+	if _, ok := deadIaCResponse["truncated"]; !ok {
+		t.Fatal("iac/dead response schema missing truncated")
+	}
+	if _, ok := deadIaCResponse["next_offset"]; !ok {
+		t.Fatal("iac/dead response schema missing next_offset")
 	}
 	if _, ok := deadIaCResponse["limitations"]; !ok {
 		t.Fatal("iac/dead response schema missing limitations")

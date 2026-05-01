@@ -71,6 +71,7 @@ WHERE scope_id = $1
   )
 ORDER BY family, artifact_path
 LIMIT $4
+OFFSET $5
 `
 
 // IaCReachability identifies the materialized reachability class for one IaC
@@ -165,14 +166,10 @@ func (s *IaCReachabilityStore) ListCleanupFindings(
 	generationID string,
 	includeAmbiguous bool,
 	limit int,
+	offset int,
 ) ([]IaCReachabilityRow, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 500 {
-		limit = 500
-	}
-	rows, err := s.db.QueryContext(ctx, listIaCCleanupFindingsSQL, scopeID, generationID, includeAmbiguous, limit)
+	limit, offset = normalizeIaCReachabilityPaging(limit, offset)
+	rows, err := s.db.QueryContext(ctx, listIaCCleanupFindingsSQL, scopeID, generationID, includeAmbiguous, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query IaC cleanup findings: %w", err)
 	}
@@ -197,17 +194,13 @@ func (s *IaCReachabilityStore) ListLatestCleanupFindings(
 	families []string,
 	includeAmbiguous bool,
 	limit int,
+	offset int,
 ) ([]IaCReachabilityRow, error) {
 	if len(repoIDs) == 0 {
 		return nil, nil
 	}
-	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 500 {
-		limit = 500
-	}
-	query, args := buildListLatestIaCCleanupFindingsQuery(repoIDs, families, includeAmbiguous, limit)
+	limit, offset = normalizeIaCReachabilityPaging(limit, offset)
+	query, args := buildListLatestIaCCleanupFindingsQuery(repoIDs, families, includeAmbiguous, limit, offset)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query latest IaC cleanup findings: %w", err)
@@ -223,6 +216,33 @@ func (s *IaCReachabilityStore) ListLatestCleanupFindings(
 		result = append(result, row)
 	}
 	return result, rows.Err()
+}
+
+// CountLatestCleanupFindings returns the unpaged count for active-generation
+// cleanup findings matching the requested repository and family filters.
+func (s *IaCReachabilityStore) CountLatestCleanupFindings(
+	ctx context.Context,
+	repoIDs []string,
+	families []string,
+	includeAmbiguous bool,
+) (int, error) {
+	if len(repoIDs) == 0 {
+		return 0, nil
+	}
+	query, args := buildCountLatestIaCCleanupFindingsQuery(repoIDs, families, includeAmbiguous)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("count latest IaC cleanup findings: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		return 0, rows.Err()
+	}
+	var count int
+	if err := rows.Scan(&count); err != nil {
+		return 0, fmt.Errorf("scan latest IaC cleanup count: %w", err)
+	}
+	return count, rows.Err()
 }
 
 // HasLatestRows reports whether active-generation reachability rows exist for
@@ -252,13 +272,15 @@ func buildListLatestIaCCleanupFindingsQuery(
 	families []string,
 	includeAmbiguous bool,
 	limit int,
+	offset int,
 ) (string, []any) {
 	args := make([]any, 0, len(repoIDs)+2)
 	repoPlaceholders := appendPlaceholders(&args, repoIDs)
 	familyClause := buildFamilyFilterClause(&args, families)
 	includeIdx := len(args) + 1
 	limitIdx := len(args) + 2
-	args = append(args, includeAmbiguous, limit)
+	offsetIdx := len(args) + 3
+	args = append(args, includeAmbiguous, limit, offset)
 
 	query := fmt.Sprintf(`
 SELECT row.scope_id, row.generation_id, row.repo_id, row.family, row.artifact_path,
@@ -277,8 +299,49 @@ WHERE generation.status = 'active'
   )
 ORDER BY row.family, row.artifact_path
 LIMIT $%d
-`, repoPlaceholders, familyClause, includeIdx, limitIdx)
+OFFSET $%d
+`, repoPlaceholders, familyClause, includeIdx, limitIdx, offsetIdx)
 	return query, args
+}
+
+func buildCountLatestIaCCleanupFindingsQuery(
+	repoIDs []string,
+	families []string,
+	includeAmbiguous bool,
+) (string, []any) {
+	args := make([]any, 0, len(repoIDs)+len(families)+1)
+	repoPlaceholders := appendPlaceholders(&args, repoIDs)
+	familyClause := buildFamilyFilterClause(&args, families)
+	includeIdx := len(args) + 1
+	args = append(args, includeAmbiguous)
+	query := fmt.Sprintf(`
+SELECT COUNT(*)
+FROM iac_reachability_rows AS row
+JOIN scope_generations AS generation
+  ON generation.scope_id = row.scope_id
+ AND generation.generation_id = row.generation_id
+WHERE generation.status = 'active'
+  AND row.repo_id IN (%s)
+  %s
+  AND (
+      row.reachability = 'unused'
+      OR ($%d = true AND row.reachability = 'ambiguous')
+  )
+`, repoPlaceholders, familyClause, includeIdx)
+	return query, args
+}
+
+func normalizeIaCReachabilityPaging(limit int, offset int) (int, int) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
 }
 
 func buildHasLatestIaCReachabilityRowsQuery(repoIDs []string, families []string) (string, []any) {
