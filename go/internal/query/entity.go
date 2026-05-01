@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 )
 
@@ -11,6 +12,7 @@ type EntityHandler struct {
 	Neo4j   GraphQuery
 	Content ContentStore
 	Profile QueryProfile
+	Logger  *slog.Logger
 }
 
 // Mount registers all entity routes on the given mux.
@@ -383,7 +385,11 @@ func (h *EntityHandler) getWorkloadContext(w http.ResponseWriter, r *http.Reques
 		WriteError(w, http.StatusNotFound, "workload not found")
 		return
 	}
-	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
+		IncludeRelatedModuleUsage: true,
+		Logger:                    h.Logger,
+		Operation:                 "workload_context",
+	}); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich workload context: %v", err))
 		return
 	}
@@ -409,7 +415,11 @@ func (h *EntityHandler) getWorkloadStory(w http.ResponseWriter, r *http.Request)
 		WriteError(w, http.StatusNotFound, "workload not found")
 		return
 	}
-	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
+		IncludeRelatedModuleUsage: true,
+		Logger:                    h.Logger,
+		Operation:                 "workload_story",
+	}); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich workload story: %v", err))
 		return
 	}
@@ -458,7 +468,11 @@ func (h *EntityHandler) getServiceContext(w http.ResponseWriter, r *http.Request
 		WriteError(w, http.StatusNotFound, "service not found")
 		return
 	}
-	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
+		IncludeRelatedModuleUsage: true,
+		Logger:                    h.Logger,
+		Operation:                 "service_context",
+	}); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich service context: %v", err))
 		return
 	}
@@ -488,7 +502,11 @@ func (h *EntityHandler) getServiceStory(w http.ResponseWriter, r *http.Request) 
 		WriteError(w, http.StatusNotFound, "service not found")
 		return
 	}
-	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
+		IncludeRelatedModuleUsage: true,
+		Logger:                    h.Logger,
+		Operation:                 "service_story",
+	}); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich service story: %v", err))
 		return
 	}

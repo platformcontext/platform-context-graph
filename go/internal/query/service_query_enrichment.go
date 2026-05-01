@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 )
@@ -11,6 +12,8 @@ type serviceQueryEnrichmentOptions struct {
 	DirectOnly                bool
 	IncludeRelatedModuleUsage bool
 	MaxDepth                  int
+	Logger                    *slog.Logger
+	Operation                 string
 }
 
 func enrichServiceQueryContext(
@@ -21,6 +24,7 @@ func enrichServiceQueryContext(
 ) error {
 	return enrichServiceQueryContextWithOptions(ctx, graph, content, workloadContext, serviceQueryEnrichmentOptions{
 		IncludeRelatedModuleUsage: true,
+		Operation:                 "service_context",
 	})
 }
 
@@ -38,17 +42,30 @@ func enrichServiceQueryContextWithOptions(
 
 	repoID := safeStr(workloadContext, "repo_id")
 	serviceName := safeStr(workloadContext, "name")
+	operation := opts.Operation
+	if operation == "" {
+		operation = "service_context"
+	}
+	timer := startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "graph_api_surface")
 	if graphAPISurface := queryServiceGraphAPISurface(ctx, graph, repoID); len(graphAPISurface) > 0 {
 		workloadContext["api_surface"] = graphAPISurface
 	}
+	timer.Done(ctx, slog.Bool("has_result", len(mapValue(workloadContext, "api_surface")) > 0))
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "graph_deployment_evidence")
 	if graphEvidence := queryServiceGraphDeploymentEvidence(ctx, graph, repoID); len(graphEvidence) > 0 {
 		workloadContext["deployment_evidence"] = graphEvidence
 	}
+	timer.Done(ctx, slog.Bool("has_result", len(mapValue(workloadContext, "deployment_evidence")) > 0))
 	if repoID == "" || serviceName == "" || content == nil {
 		return nil
 	}
 
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "service_evidence_content")
 	evidence, err := loadServiceQueryEvidence(ctx, content, repoID, serviceName)
+	timer.Done(ctx,
+		slog.Int("hostname_count", len(evidence.Hostnames)),
+		slog.Int("environment_count", len(evidence.Environments)),
+	)
 	if err != nil {
 		return fmt.Errorf("load service query evidence: %w", err)
 	}
@@ -56,7 +73,9 @@ func enrichServiceQueryContextWithOptions(
 	// Load framework-detected routes from fact_records when ContentReader
 	// is available (it has access to the same Postgres database).
 	if content != nil {
+		timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "framework_routes")
 		frameworkRoutes, err := content.ListFrameworkRoutes(ctx, repoID)
+		timer.Done(ctx, slog.Int("row_count", len(frameworkRoutes)))
 		if err != nil {
 			return fmt.Errorf("load framework routes: %w", err)
 		}
@@ -90,7 +109,9 @@ func enrichServiceQueryContextWithOptions(
 		hostnames := serviceEvidenceHostnames(evidence)
 		traceLimit := boundedTraceEnrichmentLimit(opts.MaxDepth)
 		if !opts.DirectOnly {
+			timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "graph_dependents")
 			dependentCandidates, err := queryProvisioningRepositoryCandidates(ctx, graph, repoID, traceLimit)
+			timer.Done(ctx, slog.Int("row_count", len(dependentCandidates)))
 			if err != nil {
 				return fmt.Errorf("load graph dependents: %w", err)
 			}
@@ -98,7 +119,9 @@ func enrichServiceQueryContextWithOptions(
 				workloadContext["dependents"] = dependents
 			}
 
+			timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "consumer_repository_enrichment")
 			consumers, err := loadConsumerRepositoryEnrichmentWithLimit(ctx, graph, content, repoID, serviceName, hostnames, traceLimit)
+			timer.Done(ctx, slog.Int("row_count", len(consumers)))
 			if err != nil {
 				return fmt.Errorf("load consumer repository enrichment: %w", err)
 			}
@@ -108,7 +131,9 @@ func enrichServiceQueryContextWithOptions(
 		}
 
 		if opts.IncludeRelatedModuleUsage {
+			timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "provisioning_source_chains")
 			provisioningChains, err := loadProvisioningSourceChainsWithLimit(ctx, graph, content, repoID, traceLimit)
+			timer.Done(ctx, slog.Int("row_count", len(provisioningChains)))
 			if err != nil {
 				return fmt.Errorf("load provisioning source chains: %w", err)
 			}
@@ -118,10 +143,14 @@ func enrichServiceQueryContextWithOptions(
 		}
 	}
 
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "documentation_overview")
 	if documentationOverview := buildServiceDocumentationOverview(ctx, graph, workloadContext, evidence); len(documentationOverview) > 0 {
 		workloadContext["documentation_overview"] = documentationOverview
 	}
+	timer.Done(ctx, slog.Bool("has_result", len(mapValue(workloadContext, "documentation_overview")) > 0))
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "deployment_evidence")
 	deploymentEvidence, err := loadServiceDeploymentEvidence(ctx, graph, content, workloadContext)
+	timer.Done(ctx, slog.Bool("has_result", len(deploymentEvidence) > 0))
 	if err != nil {
 		return fmt.Errorf("load service deployment evidence: %w", err)
 	}
@@ -134,8 +163,10 @@ func enrichServiceQueryContextWithOptions(
 	if supportOverview := buildServiceSupportOverview(workloadContext); len(supportOverview) > 0 {
 		workloadContext["support_overview"] = supportOverview
 	}
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "overview_assembly")
 	workloadContext["deployment_overview"] = buildServiceDeploymentOverview(workloadContext)
 	workloadContext["story_sections"] = buildServiceStorySections(workloadContext)
+	timer.Done(ctx)
 
 	return nil
 }

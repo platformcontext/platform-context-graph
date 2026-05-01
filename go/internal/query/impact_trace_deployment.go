@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -81,7 +82,7 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 	}
 
 	traceOptions := traceEnrichmentOptions(req)
-	ctx, err := fetchServiceTraceContext(r.Context(), h.Neo4j, h.Content, req.ServiceName, traceOptions)
+	ctx, err := fetchServiceTraceContext(r.Context(), h.Neo4j, h.Content, h.Logger, req.ServiceName, traceOptions)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -131,10 +132,11 @@ func fetchServiceTraceContext(
 	ctx context.Context,
 	graph GraphQuery,
 	content ContentStore,
+	logger *slog.Logger,
 	serviceName string,
 	traceOptions traceEnrichmentConfig,
 ) (map[string]any, error) {
-	entityHandler := &EntityHandler{Neo4j: graph, Content: content}
+	entityHandler := &EntityHandler{Neo4j: graph, Content: content, Logger: logger}
 	workloadContext, err := entityHandler.fetchWorkloadContext(
 		ctx,
 		serviceLookupWhereClause,
@@ -148,6 +150,8 @@ func fetchServiceTraceContext(
 		DirectOnly:                !traceOptions.includeConsumers,
 		IncludeRelatedModuleUsage: traceOptions.includeProvisioningChains,
 		MaxDepth:                  traceOptions.maxDepth,
+		Logger:                    logger,
+		Operation:                 "deployment_trace",
 	}); err != nil {
 		return nil, fmt.Errorf("enrich service trace context: %w", err)
 	}

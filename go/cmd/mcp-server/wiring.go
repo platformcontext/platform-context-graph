@@ -80,7 +80,7 @@ func wireAPI(
 	neo4jReader := query.NewNeo4jReader(driver, neo4jDB)
 	contentReader := query.NewContentReader(db)
 
-	router := newMCPQueryRouter(db, neo4jReader, contentReader, queryProfile, graphBackend)
+	router := newMCPQueryRouter(db, neo4jReader, contentReader, queryProfile, graphBackend, logger)
 
 	mux := http.NewServeMux()
 	router.Mount(mux)
@@ -114,6 +114,7 @@ func newMCPQueryRouter(
 	contentReader query.ContentStore,
 	queryProfile query.QueryProfile,
 	graphBackend query.GraphBackend,
+	logger *slog.Logger,
 ) *query.APIRouter {
 	return &query.APIRouter{
 		Repositories: &query.RepositoryHandler{
@@ -125,6 +126,7 @@ func newMCPQueryRouter(
 			Neo4j:   neo4jReader,
 			Content: contentReader,
 			Profile: queryProfile,
+			Logger:  logger,
 		},
 		Code: &query.CodeHandler{
 			GraphBackend: graphBackend,
@@ -148,6 +150,7 @@ func newMCPQueryRouter(
 			Neo4j:   neo4jReader,
 			Content: contentReader,
 			Profile: queryProfile,
+			Logger:  logger,
 		},
 		Status: &query.StatusHandler{
 			Neo4j:        neo4jReader,

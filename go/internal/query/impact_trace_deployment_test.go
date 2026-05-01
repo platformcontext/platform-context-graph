@@ -149,6 +149,7 @@ func TestFetchServiceTraceContextAcceptsQualifiedWorkloadID(t *testing.T) {
 			},
 		},
 		nil,
+		nil,
 		"workload:service-edge-api",
 		traceEnrichmentOptions(traceDeploymentChainRequest{ServiceName: "workload:service-edge-api"}),
 	)
@@ -210,6 +211,7 @@ func TestFetchServiceTraceContextIncludesGraphDeploymentEvidenceWithoutContent(t
 				"(r:Repository {id: $repo_id})-[source_rel:HAS_DEPLOYMENT_EVIDENCE]->": {},
 			},
 		},
+		nil,
 		nil,
 		"checkout-service",
 		traceEnrichmentOptions(traceDeploymentChainRequest{ServiceName: "checkout-service"}),

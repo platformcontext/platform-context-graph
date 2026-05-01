@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 )
 
@@ -11,6 +12,7 @@ type ImpactHandler struct {
 	Neo4j   GraphQuery
 	Content ContentStore
 	Profile QueryProfile
+	Logger  *slog.Logger
 }
 
 // Mount registers impact analysis routes on the given mux.

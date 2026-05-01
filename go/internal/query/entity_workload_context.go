@@ -3,11 +3,17 @@ package query
 import (
 	"context"
 	"fmt"
+	"log/slog"
 )
 
 // fetchWorkloadContext queries graph-backed workload context with a custom
 // WHERE clause and enriches linked repositories with local context evidence.
 func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause string, params map[string]any) (map[string]any, error) {
+	serviceName := StringVal(params, "service_name")
+	if serviceName == "" {
+		serviceName = StringVal(params, "workload_id")
+	}
+	timer := startServiceQueryStage(ctx, h.Logger, "workload_context", serviceName, "", "workload_lookup")
 	baseCypher := fmt.Sprintf(`
 		MATCH (w:Workload) WHERE %s
 		RETURN w.id as id, w.name as name, w.kind as kind
@@ -15,6 +21,7 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 	`, whereClause)
 
 	row, err := h.Neo4j.RunSingle(ctx, baseCypher, params)
+	timer.Done(ctx, slog.Bool("found", row != nil))
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +37,9 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 		followupParams = map[string]any{"workload_id": workloadID}
 	}
 
+	timer = startServiceQueryStage(ctx, h.Logger, "workload_context", StringVal(row, "name"), "", "repository_lookup")
 	repoID, repoName, err := h.fetchWorkloadRepository(ctx, followupWhereClause, followupParams)
+	timer.Done(ctx, slog.String("resolved_repo_id", repoID))
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +50,9 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 		repoName = StringVal(row, "repo_name")
 	}
 
+	timer = startServiceQueryStage(ctx, h.Logger, "workload_context", StringVal(row, "name"), repoID, "instance_lookup")
 	instances, err := h.fetchWorkloadInstances(ctx, followupWhereClause, followupParams)
+	timer.Done(ctx, slog.Int("row_count", len(instances)))
 	if err != nil {
 		return nil, err
 	}
@@ -60,8 +71,12 @@ func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause st
 
 	if repoID != "" {
 		repoParams := map[string]any{"repo_id": repoID}
+		timer = startServiceQueryStage(ctx, h.Logger, "workload_context", StringVal(row, "name"), repoID, "repo_dependencies")
 		result["dependencies"] = queryRepoDependencies(ctx, h.Neo4j, repoParams)
+		timer.Done(ctx, slog.Int("row_count", len(mapSliceValue(result, "dependencies"))))
+		timer = startServiceQueryStage(ctx, h.Logger, "workload_context", StringVal(row, "name"), repoID, "repo_infrastructure")
 		result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, repoParams)
+		timer.Done(ctx, slog.Int("row_count", len(mapSliceValue(result, "infrastructure"))))
 	}
 
 	return result, nil

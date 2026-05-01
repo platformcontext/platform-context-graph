@@ -1,8 +1,10 @@
 package query
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -159,6 +161,61 @@ func TestGetWorkloadContextReturnsEnrichedResponse(t *testing.T) {
 
 	if _, exists := resp["entry_points"]; exists {
 		t.Fatalf("entry_points = %#v, want omitted for workload context", resp["entry_points"])
+	}
+}
+
+func TestFetchWorkloadContextLogsStageTimings(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	handler := &EntityHandler{
+		Logger: slog.New(slog.NewJSONHandler(&logs, nil)),
+		Neo4j: fakeWorkloadGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"MATCH (w:Workload)": {
+					"id":   "workload-1",
+					"name": "checkout-service",
+					"kind": "service",
+				},
+			},
+			runByMatch: map[string][]map[string]any{
+				"DEFINES": {
+					{
+						"repo_id":   "repo-1",
+						"repo_name": "checkout-service",
+					},
+				},
+				"INSTANCE_OF":                         {},
+				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {},
+				"K8sResource OR":                      {},
+			},
+		},
+	}
+
+	got, err := handler.fetchWorkloadContext(
+		t.Context(),
+		"w.id = $workload_id",
+		map[string]any{"workload_id": "workload-1"},
+	)
+	if err != nil {
+		t.Fatalf("fetchWorkloadContext() error = %v, want nil", err)
+	}
+	if got == nil {
+		t.Fatal("fetchWorkloadContext() = nil, want context")
+	}
+
+	logText := logs.String()
+	for _, want := range []string{
+		`"event_name":"service_query.stage_started"`,
+		`"event_name":"service_query.stage_completed"`,
+		`"operation":"workload_context"`,
+		`"stage":"workload_lookup"`,
+		`"stage":"repository_lookup"`,
+		`"duration_seconds"`,
+	} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("logs missing %s; logs = %s", want, logText)
+		}
 	}
 }
 

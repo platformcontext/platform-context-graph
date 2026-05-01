@@ -81,7 +81,7 @@ func wireAPI(
 	neo4jReader := query.NewNeo4jReader(driver, neo4jDB)
 	contentReader := query.NewContentReader(db)
 	statusReader := pgstatus.NewStatusStore(pgstatus.SQLQueryer{DB: db})
-	router, err := newRouter(db, neo4jReader, contentReader, queryProfile, graphBackend)
+	router, err := newRouter(db, neo4jReader, contentReader, queryProfile, graphBackend, logger)
 	if err != nil {
 		_ = db.Close()
 		if driver != nil {
@@ -166,6 +166,7 @@ func newRouter(
 	contentReader query.ContentStore,
 	queryProfile query.QueryProfile,
 	graphBackend query.GraphBackend,
+	logger *slog.Logger,
 ) (*query.APIRouter, error) {
 	router := &query.APIRouter{
 		Repositories: &query.RepositoryHandler{
@@ -177,6 +178,7 @@ func newRouter(
 			Neo4j:   neo4jReader,
 			Content: contentReader,
 			Profile: queryProfile,
+			Logger:  logger,
 		},
 		Code: &query.CodeHandler{
 			GraphBackend: graphBackend,
@@ -200,6 +202,7 @@ func newRouter(
 			Neo4j:   neo4jReader,
 			Content: contentReader,
 			Profile: queryProfile,
+			Logger:  logger,
 		},
 		Status: &query.StatusHandler{
 			Neo4j:        neo4jReader,

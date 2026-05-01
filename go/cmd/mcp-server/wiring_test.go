@@ -60,6 +60,7 @@ func TestNewMCPQueryRouterMountsIaCHandler(t *testing.T) {
 		nil,
 		query.ProfileLocalFullStack,
 		query.GraphBackendNornicDB,
+		nil,
 	)
 
 	if router.IaC == nil {

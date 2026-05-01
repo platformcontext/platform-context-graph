@@ -75,7 +75,7 @@ func TestOpenQueryGraphAcceptsNornicDBOnSharedBoltPath(t *testing.T) {
 func TestNewRouter_MountsAdminRoutes(t *testing.T) {
 	t.Parallel()
 
-	router, err := newRouter(nil, nil, nil, "production", "neo4j")
+	router, err := newRouter(nil, nil, nil, "production", "neo4j", nil)
 	if err != nil {
 		t.Fatalf("newRouter() error = %v, want nil", err)
 	}
