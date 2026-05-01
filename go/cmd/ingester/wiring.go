@@ -289,6 +289,10 @@ func projectorWorkerCount(getenv func(string) string) int {
 			return n
 		}
 	}
+	if strings.TrimSpace(getenv("PCG_QUERY_PROFILE")) == "local_authoritative" &&
+		strings.TrimSpace(getenv("PCG_GRAPH_BACKEND")) == string(runtimecfg.GraphBackendNornicDB) {
+		return 1
+	}
 	n := runtime.NumCPU()
 	if n > 8 {
 		n = 8

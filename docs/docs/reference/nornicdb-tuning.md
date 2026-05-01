@@ -243,6 +243,7 @@ not implement the retry contract.
 
 | Variable | Default | Scope | Use |
 | --- | --- | --- | --- |
+| `PCG_PROJECTOR_WORKERS` | `1` on NornicDB local-authoritative | ingester source-local projector | Keeps canonical source-local graph writes serialized for NornicDB until backend write concurrency is proven safe. Override only when the NornicDB binary has passed concurrent canonical-write proof runs. |
 | `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | `Annotation=5,Function=10,ImplBlock=10,Module=10,TypeAlias=5,TypeAnnotation=50,Variable=10` | reducer semantic entity materialization | Overrides NornicDB row caps for semantic labels after parser-enriched semantic metadata proves expensive. |
 | `PCG_REDUCER_WORKERS` | `min(NumCPU, 8)` on NornicDB | reducer graph writers | Overrides reducer work concurrency. Leave unset for normal NornicDB runs; lower only when conflict-domain fencing still shows graph write conflicts or backend saturation. |
 | `PCG_REDUCER_BATCH_CLAIM_SIZE` | `workers` on NornicDB | reducer queue claim window | Limits how many reducer intents one claim cycle leases before workers start them. Keep this near worker count so queued-but-not-started items do not expire their leases. |

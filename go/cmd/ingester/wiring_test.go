@@ -63,6 +63,44 @@ func TestNornicDBTuningDocCanonicalDefaultsMatchCode(t *testing.T) {
 	}
 }
 
+func TestProjectorWorkerCountDefaultsToOneForNornicDBLocalAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	got := projectorWorkerCount(func(key string) string {
+		switch key {
+		case "PCG_QUERY_PROFILE":
+			return "local_authoritative"
+		case "PCG_GRAPH_BACKEND":
+			return "nornicdb"
+		default:
+			return ""
+		}
+	})
+	if got != 1 {
+		t.Fatalf("projectorWorkerCount() = %d, want 1 for NornicDB local_authoritative safety", got)
+	}
+}
+
+func TestProjectorWorkerCountKeepsExplicitOverride(t *testing.T) {
+	t.Parallel()
+
+	got := projectorWorkerCount(func(key string) string {
+		switch key {
+		case "PCG_PROJECTOR_WORKERS":
+			return "3"
+		case "PCG_QUERY_PROFILE":
+			return "local_authoritative"
+		case "PCG_GRAPH_BACKEND":
+			return "nornicdb"
+		default:
+			return ""
+		}
+	})
+	if got != 3 {
+		t.Fatalf("projectorWorkerCount() = %d, want explicit override", got)
+	}
+}
+
 func TestBuildIngesterServiceProducesCompositeRunner(t *testing.T) {
 	t.Parallel()
 

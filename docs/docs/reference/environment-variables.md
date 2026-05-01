@@ -120,7 +120,7 @@ advisory report.
 
 | Variable | Default | Read By | Purpose | Tune When |
 | --- | --- | --- | --- | --- |
-| `PCG_PROJECTOR_WORKERS` | `min(NumCPU, 8)` | ingester projector | Source-local projector worker count. | Raise when source-local projection is CPU-bound and graph backend can absorb writes; lower when graph writes or memory are saturated. |
+| `PCG_PROJECTOR_WORKERS` | Default: `min(NumCPU, 8)`; NornicDB local-authoritative: `1` | ingester projector | Source-local projector worker count. | Raise when source-local projection is CPU-bound and graph backend can absorb writes; keep NornicDB local-authoritative serialized until backend write concurrency is proven safe. |
 | `PCG_LARGE_GEN_THRESHOLD` | `10000` facts | ingester projector | Fact-count threshold for large-generation semaphore. | Lower when medium generations cause memory/write spikes; raise if safe repos are over-throttled. |
 | `PCG_LARGE_GEN_MAX_CONCURRENT` | Default: `2`; local-authoritative: `4` | ingester projector | Concurrent large source-local generations. | Lower for NornicDB/write stability; raise only with graph-write headroom. |
 | `PCG_PROJECTOR_MAX_ATTEMPTS` | `3` | ingester/projector retry policy | Max projector attempts before terminal failure. | Graph write timeouts and transient backend conflicts use this bounded budget; raise for correctness-validation lanes only after deterministic write-shape bugs are ruled out. |

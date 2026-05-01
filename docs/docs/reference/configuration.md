@@ -86,7 +86,7 @@ bootstrap, reducer, and watch flows.
 | **`PCG_STREAM_BUFFER`** | `0` | Optional buffer for streaming collected generations. `0` means use the worker-count-derived default. |
 | **`PCG_LARGE_REPO_FILE_THRESHOLD`** | `1000` | File-count threshold above which a repository is treated as “large” for concurrency limiting. |
 | **`PCG_LARGE_REPO_MAX_CONCURRENT`** | `2` | Maximum number of large repositories that may be snapshotted concurrently. |
-| **`PCG_PROJECTOR_WORKERS`** | `min(NumCPU, 8)` | Concurrent source-local projection workers in the ingester runtime. |
+| **`PCG_PROJECTOR_WORKERS`** | Default: `min(NumCPU, 8)`; NornicDB local-authoritative: `1` | Concurrent source-local projection workers in the ingester runtime. |
 | **`PCG_LARGE_GEN_THRESHOLD`** | `10000` | Fact-count threshold above which a projector generation is treated as “large”. |
 | **`PCG_LARGE_GEN_MAX_CONCURRENT`** | Default: `2`; local-authoritative: `4` | Maximum number of large projector generations processed concurrently. |
 | **`PCG_PROJECTION_WORKERS`** | `min(NumCPU, 8)` | Concurrent bootstrap-index projection workers. |
