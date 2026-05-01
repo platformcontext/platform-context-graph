@@ -1,0 +1,34 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "951c4c556fc82944ef74cc40bda2df38607cac28",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 555,
+      "total_deletions": 0,
+      "accepted_lines": 499,
+      "overriden_lines": 2
+    },
+    "a4544622702cdf8c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019de4ca-ba6e-7d90-96bd-1ec1261f4320",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 557,
+      "total_deletions": 61,
+      "accepted_lines": 496,
+      "overriden_lines": 0
+    }
+  }
+}
