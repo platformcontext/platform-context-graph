@@ -596,9 +596,10 @@ describe the product claim. The fast check is intentionally static: it verifies
 that owned capabilities have a fixture root, executable verifier, and expected
 truth contract before a slower Compose proof runs.
 
-Dead-IaC is currently tracked there as a planned capability, not an owned one.
-Before PCG claims dead-IaC support, the planned contract must become an owned
-fixture suite with Terraform module, Helm chart, and Ansible role/playbook
+Dead-IaC is currently tracked there as a planned capability with a concrete
+fixture corpus, not an owned runtime capability. Before PCG claims dead-IaC
+support, the planned contract must become an owned fixture suite with runtime
+verification for Terraform module, Helm chart, and Ansible role/playbook
 positive, negative, and ambiguous cases plus API/MCP evidence expectations.
 
 ### NornicDB Grouped-Write Safety Probe

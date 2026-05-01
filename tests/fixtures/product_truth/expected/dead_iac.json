@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "suite_id": "iac_quality.dead_iac",
+  "fixture_root": "tests/fixtures/product_truth/dead_iac",
+  "capability_assertions": [
+    {
+      "id": "terraform.local_module_used",
+      "family": "terraform",
+      "artifact": "terraform-modules/modules/checkout-service",
+      "expected_reachability": "used",
+      "required_evidence": [
+        "terraform-stack/main.tf: module.checkout_service source",
+        "terraform-stack/terragrunt.hcl: terraform.source"
+      ],
+      "must_not_report_as_dead": true
+    },
+    {
+      "id": "terraform.local_module_unused",
+      "family": "terraform",
+      "artifact": "terraform-modules/modules/orphan-cache",
+      "expected_reachability": "unused",
+      "required_evidence": [
+        "module directory exists",
+        "no same-corpus module.source or terragrunt source reference"
+      ],
+      "expected_finding": "candidate_dead_iac"
+    },
+    {
+      "id": "terraform.dynamic_source_ambiguous",
+      "family": "terraform",
+      "artifact": "terraform-modules/modules/dynamic-target",
+      "expected_reachability": "ambiguous",
+      "required_evidence": [
+        "terraform-stack/main.tf: module.dynamic_target source contains interpolation"
+      ],
+      "expected_finding": "ambiguous_dynamic_reference"
+    },
+    {
+      "id": "helm.argocd_chart_used",
+      "family": "helm",
+      "artifact": "helm-charts/charts/checkout-service",
+      "expected_reachability": "used",
+      "required_evidence": [
+        "helm-controller/argocd/applications/checkout-service.yaml: spec.source.path"
+      ],
+      "must_not_report_as_dead": true
+    },
+    {
+      "id": "helm.workflow_chart_used",
+      "family": "helm",
+      "artifact": "helm-charts/charts/worker-service",
+      "expected_reachability": "used",
+      "required_evidence": [
+        "helm-controller/.github/workflows/deploy-worker.yaml: helm upgrade path"
+      ],
+      "must_not_report_as_dead": true
+    },
+    {
+      "id": "helm.chart_unused",
+      "family": "helm",
+      "artifact": "helm-charts/charts/orphan-worker",
+      "expected_reachability": "unused",
+      "required_evidence": [
+        "chart directory exists",
+        "no ArgoCD, workflow, Kustomize, or local chart reference"
+      ],
+      "expected_finding": "candidate_dead_iac"
+    },
+    {
+      "id": "helm.templated_path_ambiguous",
+      "family": "helm",
+      "artifact": "helm-charts/charts/dynamic-target",
+      "expected_reachability": "ambiguous",
+      "required_evidence": [
+        "helm-controller/argocd/applications/dynamic-target.yaml: templated spec.source.path"
+      ],
+      "expected_finding": "ambiguous_dynamic_reference"
+    },
+    {
+      "id": "ansible.playbook_and_role_used",
+      "family": "ansible",
+      "artifact": "ansible-ops/roles/checkout_deploy",
+      "expected_reachability": "used",
+      "required_evidence": [
+        "ansible-controller/.github/workflows/deploy-ops.yaml: ansible-playbook site.yml",
+        "ansible-controller/jenkins/Jenkinsfile: ansible-playbook site.yml",
+        "ansible-ops/playbooks/site.yml: role checkout_deploy"
+      ],
+      "must_not_report_as_dead": true
+    },
+    {
+      "id": "ansible.role_unused",
+      "family": "ansible",
+      "artifact": "ansible-ops/roles/orphan_maintenance",
+      "expected_reachability": "unused",
+      "required_evidence": [
+        "role directory exists",
+        "ansible-ops/playbooks/orphan-maintenance.yml is not reached by a workflow or controller"
+      ],
+      "expected_finding": "candidate_dead_iac"
+    },
+    {
+      "id": "ansible.dynamic_role_ambiguous",
+      "family": "ansible",
+      "artifact": "ansible-ops/roles/dynamic_role",
+      "expected_reachability": "ambiguous",
+      "required_evidence": [
+        "ansible-ops/playbooks/dynamic-role.yml: role uses variable interpolation"
+      ],
+      "expected_finding": "ambiguous_dynamic_reference"
+    }
+  ],
+  "truth_surface_requirements": [
+    "Postgres or materialized usage rows explain every used, unused, and ambiguous artifact",
+    "Graph edges expose artifact-to-evidence mapping without forcing broad query anti-joins",
+    "API /api/v0/iac/dead returns truth level and limitations",
+    "MCP find_dead_iac mirrors the API only after the API contract is proven"
+  ]
+}

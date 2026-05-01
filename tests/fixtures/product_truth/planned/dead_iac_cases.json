@@ -3,6 +3,8 @@
   "capability": "iac_quality.dead_iac",
   "status": "planned",
   "definition": "IaC artifacts or definitions that are not reachable from same-repo references, cross-repo references, CI/CD workflows, deployment controllers, or deployment roots.",
+  "fixture_root": "tests/fixtures/product_truth/dead_iac",
+  "expected_truth_file": "tests/fixtures/product_truth/expected/dead_iac.json",
   "families": [
     {
       "family": "terraform",
@@ -56,4 +58,3 @@
     "MCP find_dead_iac tool after API contract is proven"
   ]
 }
-

@@ -62,7 +62,11 @@
     {
       "id": "iac_quality.dead_iac",
       "status": "planned",
+      "fixture_root": "tests/fixtures/product_truth/dead_iac",
       "fixture_plan": "tests/fixtures/product_truth/planned/dead_iac_cases.json",
+      "expected_truth_files": [
+        "tests/fixtures/product_truth/expected/dead_iac.json"
+      ],
       "required_before_claiming": [
         "Terraform module positive, negative, and ambiguous reachability cases",
         "Helm chart positive, negative, and ambiguous reachability cases",
@@ -73,4 +77,3 @@
     }
   ]
 }
-
