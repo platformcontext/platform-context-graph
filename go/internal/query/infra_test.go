@@ -63,16 +63,16 @@ func TestSearchInfraResourcesUsesInfrastructureLabelsForCategory(t *testing.T) {
 	if strings.Contains(reader.lastCypher, "Platform") || strings.Contains(reader.lastCypher, "Workload") {
 		t.Fatalf("cypher = %q, want infrastructure-only label search", reader.lastCypher)
 	}
-
-	labels, ok := reader.lastParams["labels"].([]string)
-	if !ok {
-		t.Fatalf("params[labels] type = %T, want []string", reader.lastParams["labels"])
+	if strings.Contains(reader.lastCypher, "any(label IN labels(n)") {
+		t.Fatalf("cypher = %q, want direct label predicates for NornicDB compatibility", reader.lastCypher)
 	}
-	if got, want := len(labels), 2; got != want {
-		t.Fatalf("len(params[labels]) = %d, want %d", got, want)
+	for _, fragment := range []string{"n:K8sResource", "n:KustomizeOverlay"} {
+		if !strings.Contains(reader.lastCypher, fragment) {
+			t.Fatalf("cypher = %q, want fragment %q", reader.lastCypher, fragment)
+		}
 	}
-	if got, want := labels[0], "K8sResource"; got != want {
-		t.Fatalf("labels[0] = %q, want %q", got, want)
+	if _, ok := reader.lastParams["labels"]; ok {
+		t.Fatalf("params[labels] = %#v, want no dynamic label parameter", reader.lastParams["labels"])
 	}
 
 	var resp map[string]any
@@ -118,7 +118,7 @@ func TestSearchInfraResourcesFiltersTerraformClassification(t *testing.T) {
 	if got, want := w.Code, http.StatusOK; got != want {
 		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
 	}
-	for _, fragment := range []string{"coalesce(n.resource_type, n.data_type, '')", "n.provider", "n.resource_service", "n.resource_category"} {
+	for _, fragment := range []string{"n:TerraformResource", "n:TerraformDataSource", "coalesce(n.resource_type, n.data_type, '')", "n.provider", "n.resource_service", "n.resource_category"} {
 		if !strings.Contains(reader.lastCypher, fragment) {
 			t.Fatalf("cypher = %q, want fragment %q", reader.lastCypher, fragment)
 		}
