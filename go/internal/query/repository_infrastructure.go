@@ -67,6 +67,7 @@ func queryRepoInfrastructureFromGraph(ctx context.Context, reader GraphQuery, pa
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(infra)
 		WHERE infra:K8sResource OR infra:TerraformResource OR infra:TerraformModule
+		      OR infra:TerraformDataSource
 		      OR infra:TerragruntConfig OR infra:TerragruntDependency
 		      OR infra:ArgoCDApplication OR infra:ArgoCDApplicationSet
 		      OR infra:HelmChart OR infra:HelmValues
@@ -77,6 +78,10 @@ func queryRepoInfrastructureFromGraph(ctx context.Context, reader GraphQuery, pa
 		       infra.kind AS kind, infra.source AS source,
 		       infra.terraform_source AS terraform_source,
 		       infra.config_path AS config_path,
+		       infra.provider AS provider,
+		       coalesce(infra.resource_type, infra.data_type, '') AS resource_type,
+		       infra.resource_service AS resource_service,
+		       infra.resource_category AS resource_category,
 		       f.relative_path AS file_path
 		ORDER BY type, name
 	`, params)
@@ -109,6 +114,7 @@ func repositoryInfrastructureEntryFromRow(row map[string]any) map[string]any {
 	if configPath := StringVal(row, "config_path"); configPath != "" {
 		entry["config_path"] = configPath
 	}
+	copyInfrastructureClassification(entry, row)
 	return entry
 }
 
@@ -146,17 +152,26 @@ func repositoryInfrastructureEntryFromContent(entity EntityContent) (map[string]
 		}
 	case "ArgoCDApplication", "ArgoCDApplicationSet", "KustomizeOverlay", "HelmChart",
 		"HelmValues", "CrossplaneXRD", "CrossplaneComposition", "CrossplaneClaim",
-		"CloudFormationResource", "K8sResource", "TerraformResource":
+		"CloudFormationResource", "K8sResource", "TerraformResource", "TerraformDataSource":
 		if source, ok := metadataNonEmptyString(entity.Metadata, "source"); ok {
 			entry["source"] = source
 		}
 		if kind, ok := metadataNonEmptyString(entity.Metadata, "kind"); ok {
 			entry["kind"] = kind
 		}
+		copyInfrastructureClassification(entry, entity.Metadata)
 	default:
 		return nil, false
 	}
 	return entry, true
+}
+
+func copyInfrastructureClassification(entry map[string]any, source map[string]any) {
+	for _, key := range []string{"provider", "resource_type", "resource_service", "resource_category"} {
+		if value := StringVal(source, key); value != "" {
+			entry[key] = value
+		}
+	}
 }
 
 func repositoryInfrastructureEntryKey(entry map[string]any) string {

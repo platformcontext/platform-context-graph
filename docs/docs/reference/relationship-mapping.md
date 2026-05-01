@@ -390,6 +390,11 @@ batches are matched against that catalog, and evidence rows are persisted to
   `go/internal/terraformschema/schemas/*.json.gz`
 - Terraform relationship extraction is runtime-owned by the Go relationship and
   provider-schema packages today
+- Terraform resource and data-source nodes also keep `provider`,
+  `resource_type`, `resource_service`, and `resource_category` metadata on the
+  canonical graph and read surfaces. This supports broad AWS resource-family
+  inspection without inventing relationship verbs for resources that only prove
+  infrastructure presence.
 
 ## Terraform-Managed Runtime Variants
 

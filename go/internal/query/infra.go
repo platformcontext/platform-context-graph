@@ -101,10 +101,13 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Query    string `json:"query"`
-		Kind     string `json:"kind"`
-		Category string `json:"category"`
-		Limit    int    `json:"limit"`
+		Query            string `json:"query"`
+		Kind             string `json:"kind"`
+		Category         string `json:"category"`
+		Provider         string `json:"provider"`
+		ResourceService  string `json:"resource_service"`
+		ResourceCategory string `json:"resource_category"`
+		Limit            int    `json:"limit"`
 	}
 	if err := ReadJSON(r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
@@ -118,6 +121,10 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 	if req.Limit <= 0 {
 		req.Limit = 50
 	}
+	kind := strings.TrimSpace(req.Kind)
+	provider := strings.TrimSpace(req.Provider)
+	resourceService := strings.TrimSpace(req.ResourceService)
+	resourceCategory := strings.TrimSpace(req.ResourceCategory)
 
 	labels := allInfraLabels
 	if category := strings.TrimSpace(req.Category); category != "" {
@@ -138,17 +145,29 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 		       OR coalesce(n.kind, '') CONTAINS $query
 		       OR coalesce(n.source, '') CONTAINS $query
 		       OR coalesce(n.config_path, '') CONTAINS $query
-		  )
+		)
 	`
 
-	if req.Kind != "" {
-		cypher += " AND (n.kind = $kind OR coalesce(n.resource_type, '') = $kind)"
+	if kind != "" {
+		cypher += " AND (n.kind = $kind OR coalesce(n.resource_type, n.data_type, '') = $kind)"
+	}
+	if provider != "" {
+		cypher += " AND coalesce(n.provider, '') = $provider"
+	}
+	if resourceService != "" {
+		cypher += " AND coalesce(n.resource_service, '') = $resource_service"
+	}
+	if resourceCategory != "" {
+		cypher += " AND coalesce(n.resource_category, '') = $resource_category"
 	}
 
 	cypher += `
 		RETURN n.id as id, n.name as name, labels(n) as labels,
 		       n.kind as kind, n.provider as provider, n.environment as environment,
-		       n.source as source, n.config_path as config_path
+		       n.source as source, n.config_path as config_path,
+		       coalesce(n.resource_type, n.data_type, '') as resource_type,
+		       n.resource_service as resource_service,
+		       n.resource_category as resource_category
 		ORDER BY n.name
 		LIMIT $limit
 	`
@@ -158,8 +177,17 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 		"limit":  req.Limit,
 		"labels": labels,
 	}
-	if req.Kind != "" {
-		params["kind"] = req.Kind
+	if kind != "" {
+		params["kind"] = kind
+	}
+	if provider != "" {
+		params["provider"] = provider
+	}
+	if resourceService != "" {
+		params["resource_service"] = resourceService
+	}
+	if resourceCategory != "" {
+		params["resource_category"] = resourceCategory
 	}
 
 	rows, err := h.Neo4j.Run(r.Context(), cypher, params)
@@ -170,7 +198,7 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 
 	results := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		results = append(results, map[string]any{
+		result := map[string]any{
 			"id":          StringVal(row, "id"),
 			"name":        StringVal(row, "name"),
 			"labels":      StringSliceVal(row, "labels"),
@@ -179,7 +207,17 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 			"environment": StringVal(row, "environment"),
 			"source":      StringVal(row, "source"),
 			"config_path": StringVal(row, "config_path"),
-		})
+		}
+		if resourceType := StringVal(row, "resource_type"); resourceType != "" {
+			result["resource_type"] = resourceType
+		}
+		if resourceService := StringVal(row, "resource_service"); resourceService != "" {
+			result["resource_service"] = resourceService
+		}
+		if resourceCategory := StringVal(row, "resource_category"); resourceCategory != "" {
+			result["resource_category"] = resourceCategory
+		}
+		results = append(results, result)
 	}
 
 	WriteSuccess(w, r, http.StatusOK, map[string]any{

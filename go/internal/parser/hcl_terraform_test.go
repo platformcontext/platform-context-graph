@@ -90,9 +90,21 @@ resource "aws_iam_user" "writer" {
 	if got, want := bucket["count"], "2"; got != want {
 		t.Fatalf("terraform_resources[aws_s3_bucket.logs].count = %#v, want %#v", got, want)
 	}
+	if got, want := bucket["provider"], "aws"; got != want {
+		t.Fatalf("terraform_resources[aws_s3_bucket.logs].provider = %#v, want %#v", got, want)
+	}
+	if got, want := bucket["resource_service"], "s3"; got != want {
+		t.Fatalf("terraform_resources[aws_s3_bucket.logs].resource_service = %#v, want %#v", got, want)
+	}
+	if got, want := bucket["resource_category"], "storage"; got != want {
+		t.Fatalf("terraform_resources[aws_s3_bucket.logs].resource_category = %#v, want %#v", got, want)
+	}
 
 	user := findNamedBucketItem(t, got, "terraform_resources", "aws_iam_user.writer")
 	if got, want := user["for_each"], `{ alice = "reader" }`; got != want {
 		t.Fatalf("terraform_resources[aws_iam_user.writer].for_each = %#v, want %#v", got, want)
+	}
+	if got, want := user["resource_category"], "security"; got != want {
+		t.Fatalf("terraform_resources[aws_iam_user.writer].resource_category = %#v, want %#v", got, want)
 	}
 }

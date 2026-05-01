@@ -629,6 +629,25 @@ Example file-content search:
 
 These routes are for tracing shared infrastructure, blast radius, dependency explanation, and environment drift.
 
+`POST /api/v0/infra/resources/search` accepts `query`, `category`, `kind`,
+`provider`, `resource_service`, `resource_category`, and `limit`. Terraform AWS
+resource and data-source nodes preserve provider classification in both graph
+and content-backed responses, so callers can narrow a search to families such
+as `provider=aws`, `resource_service=s3`, or `resource_category=storage`.
+
+Example infrastructure search:
+
+```json
+{
+  "query": "aws_s3",
+  "category": "terraform",
+  "provider": "aws",
+  "resource_service": "s3",
+  "resource_category": "storage",
+  "limit": 10
+}
+```
+
 ## Repository API
 
 - `GET /api/v0/repositories`

@@ -216,6 +216,16 @@ output "bucket_name" {
 	assertNamedBucketContains(t, got, "terraform_data_sources", "aws_caller_identity.current")
 	assertNamedBucketContains(t, got, "terraform_providers", "aws")
 	assertNamedBucketContains(t, got, "terraform_locals", "environment")
+	callerIdentity := findNamedBucketItem(t, got, "terraform_data_sources", "aws_caller_identity.current")
+	if got, want := callerIdentity["provider"], "aws"; got != want {
+		t.Fatalf("terraform_data_sources[aws_caller_identity.current].provider = %#v, want %#v", got, want)
+	}
+	if got, want := callerIdentity["resource_service"], "caller_identity"; got != want {
+		t.Fatalf("terraform_data_sources[aws_caller_identity.current].resource_service = %#v, want %#v", got, want)
+	}
+	if got, want := callerIdentity["resource_category"], "governance"; got != want {
+		t.Fatalf("terraform_data_sources[aws_caller_identity.current].resource_category = %#v, want %#v", got, want)
+	}
 	assertBucketContainsFieldValue(t, got, "terraform_providers", "source", "hashicorp/aws")
 	assertBucketContainsFieldValue(t, got, "terraform_modules", "source", "./modules/service")
 	if got["artifact_type"] != "terraform_hcl" {

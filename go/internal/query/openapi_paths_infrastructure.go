@@ -17,6 +17,12 @@ const openAPIPathsInfrastructure = `
                 "properties": {
                   "query": {"type": "string"},
                   "kind": {"type": "string"},
+                  "provider": {"type": "string"},
+                  "resource_service": {"type": "string"},
+                  "resource_category": {
+                    "type": "string",
+                    "enum": ["compute", "storage", "data", "networking", "messaging", "security", "monitoring", "cicd", "governance", "infrastructure"]
+                  },
                   "category": {
                     "type": "string",
                     "enum": ["k8s", "terraform", "argocd", "crossplane", "helm"]

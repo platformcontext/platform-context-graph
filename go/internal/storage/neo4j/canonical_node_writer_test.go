@@ -520,6 +520,23 @@ func TestCanonicalNodeWriterProjectsInfrastructureIdentityMetadata(t *testing.T)
 					"qualified_name": "prod/Deployment/api",
 				},
 			},
+			{
+				EntityID:     "terraform-rds-1",
+				Label:        "TerraformResource",
+				EntityName:   "aws_rds_cluster.primary",
+				FilePath:     "/repos/infra/terraform/rds.tf",
+				RelativePath: "terraform/rds.tf",
+				StartLine:    1,
+				EndLine:      12,
+				Language:     "hcl",
+				RepoID:       "repo-infra-1",
+				Metadata: map[string]any{
+					"provider":          "aws",
+					"resource_type":     "aws_rds_cluster",
+					"resource_service":  "rds",
+					"resource_category": "data",
+				},
+			},
 		},
 	}
 
@@ -533,7 +550,7 @@ func TestCanonicalNodeWriterProjectsInfrastructureIdentityMetadata(t *testing.T)
 		if call.Operation != OperationCanonicalUpsert {
 			continue
 		}
-		for _, label := range []string{"CrossplaneClaim", "K8sResource"} {
+		for _, label := range []string{"CrossplaneClaim", "K8sResource", "TerraformResource"} {
 			if !strings.Contains(call.Cypher, "MERGE (n:"+label) {
 				continue
 			}
@@ -575,6 +592,21 @@ func TestCanonicalNodeWriterProjectsInfrastructureIdentityMetadata(t *testing.T)
 	}
 	if got, want := resourceProps["qualified_name"], "prod/Deployment/api"; got != want {
 		t.Fatalf("K8sResource qualified_name = %#v, want %#v", got, want)
+	}
+
+	terraformProps := propsByLabel["TerraformResource"]
+	if len(terraformProps) == 0 {
+		t.Fatal("missing TerraformResource properties")
+	}
+	for key, want := range map[string]any{
+		"provider":          "aws",
+		"resource_type":     "aws_rds_cluster",
+		"resource_service":  "rds",
+		"resource_category": "data",
+	} {
+		if got := terraformProps[key]; got != want {
+			t.Fatalf("TerraformResource %s = %#v, want %#v", key, got, want)
+		}
 	}
 }
 
