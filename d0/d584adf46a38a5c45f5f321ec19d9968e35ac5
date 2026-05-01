@@ -1,0 +1,33 @@
+go/internal/storage/postgres/content_writer_test.go
+  4cb501d5d4ff237f 259-294
+go/internal/query/deployment_trace_consumer_search_test.go
+  4cb501d5d4ff237f 54,57-64,75-77,79-109,112-115,202-218
+go/internal/contentrefs/service_names.go
+  4cb501d5d4ff237f 1-102
+go/internal/contentrefs/service_names_test.go
+  4cb501d5d4ff237f 1-42
+go/internal/query/deployment_trace_consumer_search.go
+  4cb501d5d4ff237f 104-114
+go/internal/storage/postgres/content_writer_references.go
+  4cb501d5d4ff237f 94-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "d0d584adf46a38a5c45f5f321ec19d9968e35ac5",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 265,
+      "total_deletions": 5,
+      "accepted_lines": 766,
+      "overriden_lines": 0
+    }
+  }
+}
