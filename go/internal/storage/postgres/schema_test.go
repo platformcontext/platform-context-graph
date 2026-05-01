@@ -81,6 +81,31 @@ func TestBootstrapDefinitionsIncludeContentStoreTables(t *testing.T) {
 	}
 }
 
+func TestBootstrapDefinitionsIncludeFrameworkRouteFactIndex(t *testing.T) {
+	t.Parallel()
+
+	var facts Definition
+	for _, def := range BootstrapDefinitions() {
+		if def.Name == "fact_records" {
+			facts = def
+			break
+		}
+	}
+	if facts.Name == "" {
+		t.Fatal("fact_records definition missing")
+	}
+	for _, want := range []string{
+		"fact_records_framework_routes_repo_path_idx",
+		"(payload->>'repo_id')",
+		"(payload->>'relative_path')",
+		"payload->'parsed_file_data'->'framework_semantics' IS NOT NULL",
+	} {
+		if !strings.Contains(facts.SQL, want) {
+			t.Fatalf("fact_records SQL missing %q", want)
+		}
+	}
+}
+
 func TestBootstrapDefinitionsWithoutContentSearchIndexesKeepsLookupIndexes(t *testing.T) {
 	t.Parallel()
 

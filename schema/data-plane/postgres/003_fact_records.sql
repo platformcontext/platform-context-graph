@@ -19,3 +19,11 @@ CREATE INDEX IF NOT EXISTS fact_records_scope_generation_idx
 
 CREATE INDEX IF NOT EXISTS fact_records_stable_key_idx
     ON fact_records (stable_fact_key, generation_id);
+
+CREATE INDEX IF NOT EXISTS fact_records_framework_routes_repo_path_idx
+    ON fact_records ((payload->>'repo_id'), (payload->>'relative_path'))
+    WHERE fact_kind = 'file'
+      AND payload->'parsed_file_data'->'framework_semantics' IS NOT NULL
+      AND jsonb_array_length(
+          COALESCE(payload->'parsed_file_data'->'framework_semantics'->'frameworks', '[]'::jsonb)
+      ) > 0;
