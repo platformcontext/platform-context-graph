@@ -105,6 +105,7 @@
       "artifact": "ansible-ops/roles/dynamic_role",
       "expected_reachability": "ambiguous",
       "required_evidence": [
+        "ansible-controller/jenkins/Jenkinsfile: ansible-playbook dynamic-role.yml",
         "ansible-ops/playbooks/dynamic-role.yml: role uses variable interpolation"
       ],
       "expected_finding": "ambiguous_dynamic_reference"

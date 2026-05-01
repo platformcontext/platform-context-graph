@@ -117,6 +117,7 @@ func TestQueryHandlersAcceptCapabilityPorts(t *testing.T) {
 	_ = &EntityHandler{Neo4j: graph, Content: content}
 	_ = &RepositoryHandler{Neo4j: graph, Content: content}
 	_ = &ImpactHandler{Neo4j: graph, Content: content}
+	_ = &IaCHandler{Content: content}
 	_ = &LanguageQueryHandler{Neo4j: graph, Content: content}
 	_ = &CompareHandler{Neo4j: graph, Content: content}
 	_ = &ContentHandler{Content: content}

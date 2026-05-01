@@ -14,6 +14,7 @@ func OpenAPISpec() string {
 			openAPIPathsRepositories+
 			openAPIPathsEntities+
 			openAPIPathsCode+
+			openAPIPathsIaC+
 			openAPIPathsContent+
 			openAPIPathsAdmin+
 			openAPIPathsInfrastructure+

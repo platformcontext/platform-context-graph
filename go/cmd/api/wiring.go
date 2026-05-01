@@ -191,6 +191,10 @@ func newRouter(
 			Neo4j:   neo4jReader,
 			Profile: queryProfile,
 		},
+		IaC: &query.IaCHandler{
+			Content: contentReader,
+			Profile: queryProfile,
+		},
 		Impact: &query.ImpactHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,

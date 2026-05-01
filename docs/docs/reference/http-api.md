@@ -531,6 +531,34 @@ source heuristic path. `limit` defaults to `100` and is capped at `500`. The
 response also includes `truncated=true` when the bounded dead-code scan found
 more candidates than were returned.
 
+## IaC Quality API
+
+Use these routes when you need infrastructure-as-code cleanup candidates:
+
+- `POST /api/v0/iac/dead`
+
+The dead-IaC route requires an explicit `repo_id` or bounded `repo_ids` scope.
+It currently returns `derived` candidate findings from indexed content for
+Terraform modules, Helm charts, and Ansible roles/playbooks. Used artifacts are
+omitted; unreferenced artifacts are returned as `candidate_dead_iac`, and
+variable or template-selected artifacts are returned as
+`ambiguous_dynamic_reference` when `include_ambiguous=true`.
+
+Example dead-IaC workflow:
+
+```json
+{
+  "repo_ids": ["terraform-stack", "terraform-modules", "helm-controller", "helm-charts"],
+  "families": ["terraform", "helm"],
+  "include_ambiguous": true,
+  "limit": 100
+}
+```
+
+The current route is intentionally bounded and derived. Exact cleanup support
+still requires reducer-materialized IaC usage rows so operators can explain
+every finding from persisted evidence instead of broad graph anti-joins.
+
 ## Content API
 
 Use these routes when a caller needs source text or indexed content search without relying on raw server filesystem paths.

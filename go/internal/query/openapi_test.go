@@ -63,6 +63,7 @@ func TestServeOpenAPI(t *testing.T) {
 		"/api/v0/code/language-query",
 		"/api/v0/content/files/read",
 		"/api/v0/infra/resources/search",
+		"/api/v0/iac/dead",
 		"/api/v0/impact/trace-deployment-chain",
 		"/api/v0/impact/blast-radius",
 		"/api/v0/status/pipeline",
@@ -290,6 +291,28 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	deadCodeAnalysis := mustMapField(t, mustMapField(t, deadCodeResponse, "analysis"), "properties")
 	if _, ok := deadCodeAnalysis["modeled_public_api"]; !ok {
 		t.Fatal("code/dead-code analysis schema missing modeled_public_api")
+	}
+
+	deadIaCPath := mustMapField(t, paths, "/api/v0/iac/dead")
+	deadIaCPost := mustMapField(t, deadIaCPath, "post")
+	deadIaCBody := mustMapField(t, mustMapField(t, deadIaCPost, "requestBody"), "content")
+	deadIaCJSON := mustMapField(t, deadIaCBody, "application/json")
+	deadIaCSchema := mustMapField(t, mustMapField(t, deadIaCJSON, "schema"), "properties")
+	if _, ok := deadIaCSchema["repo_ids"]; !ok {
+		t.Fatal("iac/dead request schema missing repo_ids")
+	}
+	if _, ok := deadIaCSchema["include_ambiguous"]; !ok {
+		t.Fatal("iac/dead request schema missing include_ambiguous")
+	}
+	deadIaCResponses := mustMapField(t, deadIaCPost, "responses")
+	deadIaCOK := mustMapField(t, deadIaCResponses, "200")
+	deadIaCContent := mustMapField(t, mustMapField(t, deadIaCOK, "content"), "application/json")
+	deadIaCResponse := mustMapField(t, mustMapField(t, deadIaCContent, "schema"), "properties")
+	if _, ok := deadIaCResponse["findings"]; !ok {
+		t.Fatal("iac/dead response schema missing findings")
+	}
+	if _, ok := deadIaCResponse["limitations"]; !ok {
+		t.Fatal("iac/dead response schema missing limitations")
 	}
 
 	relationshipsPath := mustMapField(t, paths, "/api/v0/code/relationships")

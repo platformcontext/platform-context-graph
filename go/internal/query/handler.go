@@ -113,6 +113,7 @@ type APIRouter struct {
 	Code         *CodeHandler
 	Content      *ContentHandler
 	Infra        *InfraHandler
+	IaC          *IaCHandler
 	Impact       *ImpactHandler
 	Status       *StatusHandler
 	Compare      *CompareHandler
@@ -152,6 +153,11 @@ func (a *APIRouter) Mount(mux *http.ServeMux) {
 	// Infra
 	if a.Infra != nil {
 		a.Infra.Mount(mux)
+	}
+
+	// IaC
+	if a.IaC != nil {
+		a.IaC.Mount(mux)
 	}
 
 	// Impact
