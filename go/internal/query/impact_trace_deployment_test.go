@@ -617,7 +617,7 @@ func TestTraceEnrichmentOptionsHonorsRelatedModuleUsageFlag(t *testing.T) {
 func TestBoundedIndirectEvidenceHostnamesTrimsDeduplicatesAndCaps(t *testing.T) {
 	t.Parallel()
 
-	got := boundedIndirectEvidenceHostnames([]string{
+	got := boundedIndirectEvidenceHostnamesForService([]string{
 		"",
 		"api.qa.example.test",
 		" api.qa.example.test ",
@@ -625,7 +625,7 @@ func TestBoundedIndirectEvidenceHostnamesTrimsDeduplicatesAndCaps(t *testing.T) 
 		"api.stage.example.test",
 		"api.dev.example.test",
 		"api.extra.example.test",
-	})
+	}, "")
 
 	want := []string{
 		"api.dev.example.test",
@@ -634,7 +634,27 @@ func TestBoundedIndirectEvidenceHostnamesTrimsDeduplicatesAndCaps(t *testing.T) 
 		"api.stage.example.test",
 	}
 	if !slices.Equal(got, want) {
-		t.Fatalf("boundedIndirectEvidenceHostnames() = %#v, want %#v", got, want)
+		t.Fatalf("boundedIndirectEvidenceHostnamesForService() = %#v, want %#v", got, want)
+	}
+}
+
+func TestBoundedIndirectEvidenceHostnamesPrefersServiceOwnedHosts(t *testing.T) {
+	t.Parallel()
+
+	got := boundedIndirectEvidenceHostnamesForService([]string{
+		"api.vendor.example.test",
+		"docs.vendor.example.test",
+		"checkout.qa.example.test",
+		"metrics.vendor.example.test",
+		"checkout.prod.example.test",
+	}, "sample-checkout-api")
+
+	want := []string{
+		"checkout.prod.example.test",
+		"checkout.qa.example.test",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("boundedIndirectEvidenceHostnamesForService() = %#v, want %#v", got, want)
 	}
 }
 

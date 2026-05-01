@@ -30,29 +30,6 @@ func traceEnrichmentOptions(req traceDeploymentChainRequest) traceEnrichmentConf
 		maxDepth:                  req.MaxDepth,
 	}
 }
-func boundedIndirectEvidenceHostnames(hostnames []string) []string {
-	if len(hostnames) == 0 {
-		return nil
-	}
-	seen := map[string]struct{}{}
-	bounded := make([]string, 0, len(hostnames))
-	for _, hostname := range hostnames {
-		hostname = strings.TrimSpace(hostname)
-		if hostname == "" {
-			continue
-		}
-		if _, ok := seen[hostname]; ok {
-			continue
-		}
-		seen[hostname] = struct{}{}
-		bounded = append(bounded, hostname)
-		if len(bounded) == 4 {
-			break
-		}
-	}
-	sort.Strings(bounded)
-	return bounded
-}
 
 // traceDeploymentChain returns a story-first deployment trace for a service.
 // POST /api/v0/impact/trace-deployment-chain

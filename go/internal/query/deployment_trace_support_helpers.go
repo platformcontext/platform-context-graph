@@ -125,7 +125,7 @@ func loadConsumerRepositoryEnrichmentWithLimit(
 
 	trimmedHostnames := normalizedIndirectEvidenceHostnames(hostnames)
 	if limit > 0 {
-		trimmedHostnames = boundedIndirectEvidenceHostnames(trimmedHostnames)
+		trimmedHostnames = boundedIndirectEvidenceHostnamesForService(trimmedHostnames, serviceName)
 		if len(trimmedHostnames) > limit {
 			trimmedHostnames = trimmedHostnames[:limit]
 		}

@@ -456,6 +456,7 @@ func openContentReaderTestDB(t *testing.T, results []contentReaderQueryResult) *
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v, want nil", err)
 	}
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() {
 		_ = db.Close()
 	})
