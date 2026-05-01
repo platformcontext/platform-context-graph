@@ -1,0 +1,63 @@
+# CodeGraphContext ignore patterns.
+# Keep generated, vendored, local-only, and binary assets out of context.
+
+# Version control and local tool state.
+.git/
+.claude/
+.worktrees/
+.mcp.json
+.omc/
+.serena/
+.superpowers/
+.vercel/
+
+# Dependency and environment directories.
+node_modules/
+venv/
+.venv/
+env/
+.env
+.envrc
+
+# Build, docs, and generated outputs.
+build/
+dist/
+target/
+out/
+go/bin/
+docs/site/
+/site
+
+# Python and test caches.
+__pycache__/
+*.py[codz]
+*.test
+*.out
+
+# Editor, OS, and scratch files.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*.bak
+*.temp
+*.tmp
+*.log
+
+# Binary and media assets.
+*.dll
+*.dylib
+*.exe
+*.exe~
+*.gif
+*.gz
+*.jpeg
+*.jpg
+*.mp3
+*.mp4
+*.png
+*.so
+*.svg
+*.tar
+*.zip
