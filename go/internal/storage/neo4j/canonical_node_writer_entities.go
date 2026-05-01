@@ -182,7 +182,7 @@ func (w *CanonicalNodeWriter) buildEntityStatements(mat projector.CanonicalMater
 			batchRows = batchRows[:0]
 		}
 		for _, row := range byLabel[label] {
-			if canonicalEntityRowNeedsSingletonFallback(row) {
+			if canonicalEntityRowNeedsSingletonFallback(label, row) {
 				flushBatch()
 				stmts = append(stmts, Statement{
 					Operation: OperationCanonicalUpsert,
@@ -269,7 +269,7 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithContainment(mat projector
 				batchRows = batchRows[:0]
 			}
 			for _, row := range byFile[filePath] {
-				if canonicalEntityRowNeedsSingletonFallback(row) {
+				if canonicalEntityRowNeedsSingletonFallback(label, row) {
 					flushBatch()
 					stmts = append(stmts, canonicalNodeEntitySingletonWithContainmentStatement(
 						label,
@@ -346,7 +346,7 @@ func (w *CanonicalNodeWriter) buildEntityStatementsWithBatchedContainment(mat pr
 			batchRows = batchRows[:0]
 		}
 		for _, row := range byLabel[label] {
-			if canonicalEntityRowNeedsSingletonFallback(row) {
+			if canonicalEntityRowNeedsSingletonFallback(label, row) {
 				flushBatch()
 				filePath, _ := row["file_path"].(string)
 				stmts = append(stmts, canonicalNodeEntitySingletonWithContainmentStatement(

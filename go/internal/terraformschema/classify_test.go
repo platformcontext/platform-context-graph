@@ -80,3 +80,62 @@ func TestClassifyResourceService(t *testing.T) {
 		})
 	}
 }
+
+func TestClassifyCommonAWSResourceTypesAvoidsGenericInfrastructure(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		resourceType string
+		wantService  string
+		wantCategory string
+	}{
+		{resourceType: "aws_account_alternate_contact", wantService: "account", wantCategory: "governance"},
+		{resourceType: "aws_ami", wantService: "ami", wantCategory: "compute"},
+		{resourceType: "aws_appconfig_application", wantService: "appconfig", wantCategory: "governance"},
+		{resourceType: "aws_athena_workgroup", wantService: "athena", wantCategory: "data"},
+		{resourceType: "aws_availability_zones", wantService: "availability_zones", wantCategory: "governance"},
+		{resourceType: "aws_bedrock_guardrail", wantService: "bedrock", wantCategory: "compute"},
+		{resourceType: "aws_canonical_user_id", wantService: "canonical_user_id", wantCategory: "governance"},
+		{resourceType: "aws_ce_cost_allocation_tag", wantService: "ce", wantCategory: "governance"},
+		{resourceType: "aws_codestarnotifications_notification_rule", wantService: "codestarnotifications", wantCategory: "cicd"},
+		{resourceType: "aws_default_network_acl", wantService: "default_network_acl", wantCategory: "networking"},
+		{resourceType: "aws_default_route_table", wantService: "default_route_table", wantCategory: "networking"},
+		{resourceType: "aws_default_security_group", wantService: "default_security_group", wantCategory: "networking"},
+		{resourceType: "aws_default_vpc", wantService: "default_vpc", wantCategory: "networking"},
+		{resourceType: "aws_detective_graph", wantService: "detective", wantCategory: "security"},
+		{resourceType: "aws_dlm_lifecycle_policy", wantService: "dlm", wantCategory: "storage"},
+		{resourceType: "aws_egress_only_internet_gateway", wantService: "egress_only_internet_gateway", wantCategory: "networking"},
+		{resourceType: "aws_flow_log", wantService: "flow_log", wantCategory: "monitoring"},
+		{resourceType: "aws_glue_catalog_database", wantService: "glue", wantCategory: "data"},
+		{resourceType: "aws_identitystore_group", wantService: "identitystore", wantCategory: "security"},
+		{resourceType: "aws_instances", wantService: "instances", wantCategory: "compute"},
+		{resourceType: "aws_key_pair", wantService: "key_pair", wantCategory: "security"},
+		{resourceType: "aws_lakeformation_permissions", wantService: "lakeformation", wantCategory: "data"},
+		{resourceType: "aws_macie2_account", wantService: "macie2", wantCategory: "security"},
+		{resourceType: "aws_network_acls", wantService: "network_acls", wantCategory: "networking"},
+		{resourceType: "aws_osis_pipeline", wantService: "osis", wantCategory: "data"},
+		{resourceType: "aws_outposts_outpost", wantService: "outposts", wantCategory: "compute"},
+		{resourceType: "aws_partition", wantService: "partition", wantCategory: "governance"},
+		{resourceType: "aws_quicksight_folder", wantService: "quicksight", wantCategory: "data"},
+		{resourceType: "aws_redshiftserverless_namespace", wantService: "redshiftserverless", wantCategory: "data"},
+		{resourceType: "aws_regions", wantService: "regions", wantCategory: "governance"},
+		{resourceType: "aws_security_groups", wantService: "security_groups", wantCategory: "networking"},
+		{resourceType: "aws_securityhub_account", wantService: "securityhub", wantCategory: "security"},
+		{resourceType: "aws_vpcs", wantService: "vpcs", wantCategory: "networking"},
+		{resourceType: "aws_volume_attachment", wantService: "volume", wantCategory: "storage"},
+		{resourceType: "aws_wafregional_web_acl_association", wantService: "wafregional", wantCategory: "security"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.resourceType, func(t *testing.T) {
+			t.Parallel()
+			if got := ClassifyResourceService(tc.resourceType); got != tc.wantService {
+				t.Fatalf("ClassifyResourceService(%q) = %q, want %q", tc.resourceType, got, tc.wantService)
+			}
+			if got := ClassifyResourceCategory(tc.resourceType); got != tc.wantCategory {
+				t.Fatalf("ClassifyResourceCategory(%q) = %q, want %q", tc.resourceType, got, tc.wantCategory)
+			}
+		})
+	}
+}

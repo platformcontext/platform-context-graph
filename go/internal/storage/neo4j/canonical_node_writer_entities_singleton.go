@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-func canonicalEntityRowNeedsSingletonFallback(row map[string]any) bool {
+func canonicalEntityRowNeedsSingletonFallback(label string, row map[string]any) bool {
 	return canonicalEntityValueContainsSubstring(row, "shortestpath") ||
 		canonicalEntityValueContainsSubstring(row, "allshortestpaths") ||
-		canonicalEntityRowHasCurlyBraceDefault(row)
+		canonicalEntityRowHasTerraformVariableCurlyBraceProps(label, row)
 }
 
 func canonicalEntityValueContainsSubstring(value any, needle string) bool {
@@ -37,18 +37,26 @@ func canonicalEntityValueContainsSubstring(value any, needle string) bool {
 	return false
 }
 
-// canonicalEntityRowHasCurlyBraceDefault detects Terraform default map
-// literals that can confuse NornicDB's grouped UNWIND parser as row metadata.
-func canonicalEntityRowHasCurlyBraceDefault(row map[string]any) bool {
+// canonicalEntityRowHasTerraformVariableCurlyBraceProps detects Terraform
+// variable metadata that can confuse NornicDB's grouped UNWIND parser.
+func canonicalEntityRowHasTerraformVariableCurlyBraceProps(label string, row map[string]any) bool {
+	if label != "TerraformVariable" {
+		return false
+	}
 	props, ok := row["props"].(map[string]any)
 	if !ok {
 		return false
 	}
-	defaultValue, ok := props["default"].(string)
-	if !ok {
-		return false
+	for _, key := range []string{"default", "var_type", "description"} {
+		value, ok := props[key].(string)
+		if !ok {
+			continue
+		}
+		if strings.Contains(value, "{") || strings.Contains(value, "}") {
+			return true
+		}
 	}
-	return strings.Contains(defaultValue, "{") || strings.Contains(defaultValue, "}")
+	return false
 }
 
 func canonicalNodeEntitySingletonWithContainmentStatement(
