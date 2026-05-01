@@ -1,0 +1,51 @@
+docs/docs/reference/http-api.md
+  4cb501d5d4ff237f 542-543
+go/internal/telemetry/instruments.go
+  4cb501d5d4ff237f 123-127,714-729
+go/internal/telemetry/instruments_test.go
+  4cb501d5d4ff237f 31,56
+go/internal/query/iac.go
+  4cb501d5d4ff237f 62,66,114,119,128-137,151,170-188,229-244
+go/internal/query/iac_reachability_store.go
+  4cb501d5d4ff237f 27,34,54-65
+go/internal/storage/postgres/iac_reachability_test.go
+  4cb501d5d4ff237f 100,115-136,157-226,296,299,304-321,336-340,346-353,432-471
+go/internal/telemetry/contract.go
+  4cb501d5d4ff237f 62,128
+go/cmd/bootstrap-index/main.go
+  4cb501d5d4ff237f 44,256-263
+docs/docs/adrs/2026-04-28-reducer-throughput-and-nornicdb-concurrency-plan.md
+  4cb501d5d4ff237f 1664
+docs/docs/reference/telemetry/index.md
+  4cb501d5d4ff237f 334,353,411
+go/internal/query/iac_dead_test.go
+  4cb501d5d4ff237f 35-36,42,46-74,126-217
+go/internal/storage/postgres/iac_reachability.go
+  4cb501d5d4ff237f 197,210,228-236,238-258,273,280,284-319
+go/internal/storage/postgres/iac_reachability_materializer.go
+  4cb501d5d4ff237f 1-178
+go/cmd/bootstrap-index/main_test.go
+  4cb501d5d4ff237f 271,274,303-314,800,839-869,896,932
+go/internal/telemetry/contract_test.go
+  4cb501d5d4ff237f 57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "63d00643497747d6b40f3fe01535af1584ba5ab9",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 709,
+      "total_deletions": 49,
+      "accepted_lines": 709,
+      "overriden_lines": 0
+    }
+  }
+}
