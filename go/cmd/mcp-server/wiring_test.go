@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/query"
 )
 
 func TestWireAPIReturnsResolveAPIKeyErrorBeforeConnectingDatastores(t *testing.T) {
@@ -46,6 +48,25 @@ func TestWireAPIReturnsInvalidGraphBackendErrorBeforeConnectingDatastores(t *tes
 	}
 	if !strings.Contains(err.Error(), "load graph backend") {
 		t.Fatalf("wireAPI() error = %q, want load graph backend context", err)
+	}
+}
+
+func TestNewMCPQueryRouterMountsIaCHandler(t *testing.T) {
+	t.Parallel()
+
+	router := newMCPQueryRouter(
+		nil,
+		nil,
+		nil,
+		query.ProfileLocalFullStack,
+		query.GraphBackendNornicDB,
+	)
+
+	if router.IaC == nil {
+		t.Fatal("newMCPQueryRouter().IaC = nil, want MCP find_dead_iac route mounted")
+	}
+	if router.IaC.Reachability == nil {
+		t.Fatal("newMCPQueryRouter().IaC.Reachability = nil, want materialized reachability store")
 	}
 }
 
