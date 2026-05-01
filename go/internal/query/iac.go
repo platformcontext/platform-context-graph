@@ -105,6 +105,11 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "repo_id or repo_ids is required")
 		return
 	}
+	repoIDs, err := h.resolveRepositoryScope(r.Context(), repoIDs)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if req.Limit <= 0 {
 		req.Limit = 100
 	}
@@ -224,6 +229,27 @@ func normalizeDeadIaCRepoScope(req deadIaCRequest) []string {
 	}
 	sort.Strings(repoIDs)
 	return repoIDs
+}
+
+func (h *IaCHandler) resolveRepositoryScope(ctx context.Context, selectors []string) ([]string, error) {
+	if h == nil || h.Content == nil {
+		return selectors, nil
+	}
+	resolved := make([]string, 0, len(selectors))
+	seen := make(map[string]struct{}, len(selectors))
+	for _, selector := range selectors {
+		repoID, err := resolveRepositorySelectorExact(ctx, nil, h.Content, selector)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[repoID]; ok {
+			continue
+		}
+		seen[repoID] = struct{}{}
+		resolved = append(resolved, repoID)
+	}
+	sort.Strings(resolved)
+	return resolved, nil
 }
 
 func normalizeDeadIaCFamilies(raw []string) []string {

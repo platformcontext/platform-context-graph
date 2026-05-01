@@ -31,18 +31,36 @@ func (f fakeIaCDeadContentStore) GetFileContent(_ context.Context, repoID, relat
 	return nil, nil
 }
 
+func (f fakeIaCDeadContentStore) MatchRepositories(
+	ctx context.Context,
+	selector string,
+) ([]RepositoryCatalogEntry, error) {
+	entries, err := f.fakePortContentStore.MatchRepositories(ctx, selector)
+	if err != nil || len(entries) > 0 || len(f.fakePortContentStore.repositories) > 0 {
+		return entries, err
+	}
+	if _, ok := f.files[selector]; !ok {
+		return nil, nil
+	}
+	return []RepositoryCatalogEntry{{ID: selector, Name: selector}}, nil
+}
+
 type fakeIaCReachabilityStore struct {
-	rows    []IaCReachabilityFindingRow
-	hasRows bool
+	rows            []IaCReachabilityFindingRow
+	hasRows         bool
+	observedRepoIDs *[]string
 }
 
 func (f fakeIaCReachabilityStore) ListLatestCleanupFindings(
 	_ context.Context,
-	_ []string,
+	repoIDs []string,
 	families []string,
 	_ bool,
 	_ int,
 ) ([]IaCReachabilityFindingRow, error) {
+	if f.observedRepoIDs != nil {
+		*f.observedRepoIDs = append([]string(nil), repoIDs...)
+	}
 	filter := map[string]bool{}
 	for _, family := range families {
 		filter[family] = true
@@ -120,6 +138,65 @@ func TestHandleDeadIaCPrefersMaterializedReachabilityRows(t *testing.T) {
 	rawFindings := data["findings"].([]any)
 	if got, want := len(rawFindings), 1; got != want {
 		t.Fatalf("findings len = %d, want %d", got, want)
+	}
+}
+
+func TestHandleDeadIaCResolvesRepositorySelectorAliasesForMaterializedRows(t *testing.T) {
+	t.Parallel()
+
+	var observedRepoIDs []string
+	handler := &IaCHandler{
+		Profile: ProfileLocalAuthoritative,
+		Content: fakeIaCDeadContentStore{
+			fakePortContentStore: fakePortContentStore{
+				repositories: []RepositoryCatalogEntry{
+					{ID: "repository:r_modules", Name: "terraform-modules"},
+				},
+			},
+		},
+		Reachability: fakeIaCReachabilityStore{
+			observedRepoIDs: &observedRepoIDs,
+			rows: []IaCReachabilityFindingRow{
+				{
+					ID:           "terraform:repository:r_modules:modules/orphan-cache",
+					Family:       "terraform",
+					RepoID:       "repository:r_modules",
+					ArtifactPath: "modules/orphan-cache",
+					Reachability: "unused",
+					Finding:      "candidate_dead_iac",
+					Confidence:   0.75,
+					Evidence:     []string{"modules/orphan-cache/main.tf: module directory exists"},
+				},
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/iac/dead", bytes.NewBufferString(`{
+		"repo_ids": ["terraform-modules"],
+		"include_ambiguous": true
+	}`))
+	req.Header.Set("Accept", EnvelopeMIMEType)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+	if got, want := observedRepoIDs, []string{"repository:r_modules"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("reachability repoIDs = %#v, want %#v", got, want)
+	}
+	var resp ResponseEnvelope
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	data := resp.Data.(map[string]any)
+	if got, want := data["truth_basis"], "materialized_reducer_rows"; got != want {
+		t.Fatalf("truth_basis = %q, want %q", got, want)
+	}
+	if got, want := data["repo_ids"], []any{"repository:r_modules"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("repo_ids = %#v, want %#v", got, want)
 	}
 }
 
