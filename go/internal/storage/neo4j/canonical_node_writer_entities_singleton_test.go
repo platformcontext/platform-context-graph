@@ -183,3 +183,45 @@ func TestCanonicalNodeWriterFileScopedContainmentFallsBackForCurlyBraceMetadata(
 		t.Fatalf("fallback entity_id = %#v, want %#v", got, want)
 	}
 }
+
+func TestCanonicalNodeWriterFileScopedContainmentKeepsNonDefaultCurlyMetadataBatched(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
+		WithEntityContainmentInEntityUpsert().
+		WithEntityBatchSize(10)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "tf-local-1",
+				Label:        "TerraformLocal",
+				EntityName:   "tags",
+				FilePath:     "/repos/my-repo/env/common.tf",
+				RelativePath: "env/common.tf",
+				StartLine:    20,
+				EndLine:      24,
+				Language:     "hcl",
+				RepoID:       "repo-1",
+				Metadata: map[string]any{
+					"value": "${var.environment}",
+				},
+			},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 1; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+	stmt := stmts[0]
+	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
+		t.Fatalf("entity cypher = %q, want grouped UNWIND shape", stmt.Cypher)
+	}
+	if got := stmt.Parameters[StatementMetadataPhaseGroupModeKey]; got != nil {
+		t.Fatalf("phase group mode = %#v, want grouped row", got)
+	}
+}

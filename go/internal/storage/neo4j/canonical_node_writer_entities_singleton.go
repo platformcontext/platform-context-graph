@@ -8,7 +8,7 @@ import (
 func canonicalEntityRowNeedsSingletonFallback(row map[string]any) bool {
 	return canonicalEntityValueContainsSubstring(row, "shortestpath") ||
 		canonicalEntityValueContainsSubstring(row, "allshortestpaths") ||
-		canonicalEntityValueContainsCurlyBrace(row)
+		canonicalEntityRowHasCurlyBraceDefault(row)
 }
 
 func canonicalEntityValueContainsSubstring(value any, needle string) bool {
@@ -37,32 +37,18 @@ func canonicalEntityValueContainsSubstring(value any, needle string) bool {
 	return false
 }
 
-// canonicalEntityValueContainsCurlyBrace detects row metadata that can confuse
-// NornicDB's grouped UNWIND parser when map literals are carried as strings.
-func canonicalEntityValueContainsCurlyBrace(value any) bool {
-	switch typed := value.(type) {
-	case string:
-		return strings.Contains(typed, "{") || strings.Contains(typed, "}")
-	case []string:
-		for _, item := range typed {
-			if canonicalEntityValueContainsCurlyBrace(item) {
-				return true
-			}
-		}
-	case []any:
-		for _, item := range typed {
-			if canonicalEntityValueContainsCurlyBrace(item) {
-				return true
-			}
-		}
-	case map[string]any:
-		for _, item := range typed {
-			if canonicalEntityValueContainsCurlyBrace(item) {
-				return true
-			}
-		}
+// canonicalEntityRowHasCurlyBraceDefault detects Terraform default map
+// literals that can confuse NornicDB's grouped UNWIND parser as row metadata.
+func canonicalEntityRowHasCurlyBraceDefault(row map[string]any) bool {
+	props, ok := row["props"].(map[string]any)
+	if !ok {
+		return false
 	}
-	return false
+	defaultValue, ok := props["default"].(string)
+	if !ok {
+		return false
+	}
+	return strings.Contains(defaultValue, "{") || strings.Contains(defaultValue, "}")
 }
 
 func canonicalNodeEntitySingletonWithContainmentStatement(
