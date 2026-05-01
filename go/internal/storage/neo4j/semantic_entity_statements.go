@@ -289,6 +289,12 @@ func semanticEntityCanonicalNodeRowsUpsertCypher(label string, cypher string) st
 	const evidenceSourceAssignment = "n.evidence_source = row.evidence_source"
 
 	rewritten := semanticEntityMergeFirstRowsUpsertCypher(cypher)
+	rewritten = strings.Replace(
+		rewritten,
+		"MERGE (n:"+label+" {uid: row.entity_id})",
+		"MATCH (n:"+label+" {uid: row.entity_id})",
+		1,
+	)
 	lines := strings.Split(rewritten, "\n")
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {

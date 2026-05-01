@@ -74,8 +74,11 @@ func TestSemanticEntityWriterWithCanonicalNodeRowsSkipsFileContainmentForCanonic
 	}
 
 	upsert := executor.calls[0]
-	if !strings.Contains(upsert.Cypher, "UNWIND $rows AS row\nMERGE (n:Function {uid: row.entity_id})") {
-		t.Fatalf("upsert cypher = %q, want merge-first function shape", upsert.Cypher)
+	if !strings.Contains(upsert.Cypher, "UNWIND $rows AS row\nMATCH (n:Function {uid: row.entity_id})") {
+		t.Fatalf("upsert cypher = %q, want canonical Function match shape", upsert.Cypher)
+	}
+	if strings.Contains(upsert.Cypher, "MERGE (n:Function {uid: row.entity_id})") {
+		t.Fatalf("upsert cypher = %q, want no duplicate MERGE for source-local owned Function", upsert.Cypher)
 	}
 	if strings.Contains(upsert.Cypher, "MATCH (f:File") {
 		t.Fatalf("upsert cypher = %q, want no file match in canonical-node mode", upsert.Cypher)

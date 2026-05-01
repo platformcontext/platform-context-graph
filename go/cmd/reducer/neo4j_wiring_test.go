@@ -413,8 +413,11 @@ func TestSemanticEntityWriterForGraphBackendUsesCanonicalNodeRowsForNornicDB(t *
 	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
 		t.Fatalf("upsert cypher = %q, want batched UNWIND rows", stmt.Cypher)
 	}
-	if !strings.Contains(stmt.Cypher, "MERGE (n:Function {uid: row.entity_id})") {
-		t.Fatalf("upsert cypher = %q, want merge-first semantic node anchor", stmt.Cypher)
+	if !strings.Contains(stmt.Cypher, "MATCH (n:Function {uid: row.entity_id})") {
+		t.Fatalf("upsert cypher = %q, want source-local owned semantic node anchor", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "MERGE (n:Function {uid: row.entity_id})") {
+		t.Fatalf("upsert cypher = %q, want no duplicate MERGE for source-local owned Function", stmt.Cypher)
 	}
 	if strings.Contains(stmt.Cypher, "SET n += row.properties") {
 		t.Fatalf("upsert cypher = %q, want explicit SET fields for NornicDB hot path", stmt.Cypher)

@@ -137,3 +137,49 @@ func TestCanonicalNodeWriterFileScopedContainmentOnlySingletonsFallbackRows(t *t
 		t.Fatalf("fallback entity_id = %#v, want %#v", got, want)
 	}
 }
+
+func TestCanonicalNodeWriterFileScopedContainmentFallsBackForCurlyBraceMetadata(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
+		WithEntityContainmentInEntityUpsert().
+		WithEntityBatchSize(10)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "tf-var-1",
+				Label:        "TerraformVariable",
+				EntityName:   "environment_vars",
+				FilePath:     "/repos/my-repo/env/common.tf",
+				RelativePath: "env/common.tf",
+				StartLine:    12,
+				EndLine:      16,
+				Language:     "hcl",
+				RepoID:       "repo-1",
+				Metadata: map[string]any{
+					"default":  "{}",
+					"var_type": "any",
+				},
+			},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 1; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+	fallback := stmts[0]
+	if strings.Contains(fallback.Cypher, "UNWIND $rows AS row") {
+		t.Fatalf("fallback cypher = %q, want singleton shape for curly brace metadata", fallback.Cypher)
+	}
+	if got, want := fallback.Parameters[StatementMetadataPhaseGroupModeKey], PhaseGroupModeExecuteOnly; got != want {
+		t.Fatalf("fallback phase group mode = %#v, want %#v", got, want)
+	}
+	if got, want := fallback.Parameters["entity_id"], "tf-var-1"; got != want {
+		t.Fatalf("fallback entity_id = %#v, want %#v", got, want)
+	}
+}
