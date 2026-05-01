@@ -235,7 +235,7 @@ func queryProvisioningRepositoryCandidates(
 	}
 
 	query := `
-		MATCH (target:Repository {id: $repo_id})<-[rel:PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN]-(repo:Repository)
+		MATCH (target:Repository {id: $repo_id})<-[rel:PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN|READS_CONFIG_FROM]-(repo:Repository)
 		RETURN repo.id AS repo_id,
 		       repo.name AS repo_name,
 		       type(rel) AS relationship_type,
@@ -309,6 +309,10 @@ func collectProvisioningChainEvidence(entities []EntityContent) traceEvidenceAcc
 					evidence.modules[targetName] = struct{}{}
 				}
 			case "DISCOVERS_CONFIG_IN":
+				if targetName != "" {
+					evidence.configPaths[targetName] = struct{}{}
+				}
+			case "READS_CONFIG_FROM":
 				if targetName != "" {
 					evidence.configPaths[targetName] = struct{}{}
 				}

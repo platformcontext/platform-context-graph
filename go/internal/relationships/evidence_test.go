@@ -135,6 +135,93 @@ func TestDiscoverTerraformRuntimeServiceModuleEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverTerraformIAMSSMConfigReadEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-terraform-stack",
+			Payload: map[string]any{
+				"artifact_type": "terraform_hcl",
+				"relative_path": "shared/resources.tf",
+				"content": `data "aws_iam_policy_document" "consumer" {
+  statement {
+    sid = "AllowReadSSMParameters"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath",
+    ]
+    resources = [
+      "arn:aws:ssm:us-east-1:123456789012:parameter/configd/payments-service/client/*",
+    ]
+  }
+}`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	var configRead *EvidenceFact
+	for i := range evidence {
+		item := evidence[i]
+		if item.TargetRepoID == "repo-payments" && item.RelationshipType == RelReadsConfigFrom {
+			configRead = &item
+		}
+		if item.TargetRepoID == "repo-payments" &&
+			item.EvidenceKind == EvidenceKindTerraformConfigPath &&
+			item.RelationshipType == RelProvisionsDependencyFor {
+			t.Fatalf("IAM SSM config read must not emit provisioning evidence: %#v", item)
+		}
+	}
+	if configRead == nil {
+		t.Fatalf("missing %q evidence in %#v", RelReadsConfigFrom, evidence)
+	}
+	if configRead.EvidenceKind != EvidenceKindTerraformIAMPermission {
+		t.Fatalf("kind = %q, want %q", configRead.EvidenceKind, EvidenceKindTerraformIAMPermission)
+	}
+	if got, want := configRead.Details["permission_family"], "ssm_config_read"; got != want {
+		t.Fatalf("permission_family = %#v, want %#v", got, want)
+	}
+	if got, want := configRead.Details["matched_resource"], "/configd/payments-service/client/*"; got != want {
+		t.Fatalf("matched_resource = %#v, want %#v", got, want)
+	}
+}
+
+func TestDiscoverTerraformConfigPathWithoutIAMReadStillProvisions(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-terraform-stack",
+			Payload: map[string]any{
+				"artifact_type": "terraform_hcl",
+				"relative_path": "shared/resources.tf",
+				"content":       `config_path = "/configd/payments-service/runtime.yaml"`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if !hasEvidenceKind(evidence, EvidenceKindTerraformConfigPath) {
+		t.Fatal("missing Terraform config path evidence")
+	}
+	if !hasRelationshipType(evidence, RelProvisionsDependencyFor) {
+		t.Fatalf("missing %q relationship evidence", RelProvisionsDependencyFor)
+	}
+	if hasRelationshipType(evidence, RelReadsConfigFrom) {
+		t.Fatalf("unexpected %q relationship evidence for a non-IAM config path", RelReadsConfigFrom)
+	}
+}
+
 func TestDiscoverTerraformModuleSourceEvidence(t *testing.T) {
 	t.Parallel()
 

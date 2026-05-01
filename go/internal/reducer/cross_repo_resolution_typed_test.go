@@ -39,6 +39,13 @@ func TestCrossRepoResolutionPreservesTypedRelationshipFamilies(t *testing.T) {
 			TargetEntityID:   "platform:eks:aws:cluster-1:prod:us-east-1",
 			Confidence:       0.98,
 		},
+		{
+			EvidenceKind:     relationships.EvidenceKindTerraformIAMPermission,
+			RelationshipType: relationships.RelReadsConfigFrom,
+			SourceRepoID:     "consumer-repo",
+			TargetRepoID:     "config-owner-repo",
+			Confidence:       0.92,
+		},
 	}
 
 	intentWriter := &recordingRepoDependencyIntentWriter{}
@@ -52,16 +59,16 @@ func TestCrossRepoResolutionPreservesTypedRelationshipFamilies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	if count != 4 {
-		t.Fatalf("Resolve() = %d, want 4", count)
+	if count != 5 {
+		t.Fatalf("Resolve() = %d, want 5", count)
 	}
 
 	if len(intentWriter.rows) != 1 {
 		t.Fatalf("expected 1 intent write, got %d", len(intentWriter.rows))
 	}
 	rows := intentWriter.rows[0]
-	if len(rows) != 4 {
-		t.Fatalf("expected 4 write rows, got %d", len(rows))
+	if len(rows) != 5 {
+		t.Fatalf("expected 5 write rows, got %d", len(rows))
 	}
 
 	gotTypes := make(map[string]bool, len(rows))
@@ -73,9 +80,19 @@ func TestCrossRepoResolutionPreservesTypedRelationshipFamilies(t *testing.T) {
 		string(relationships.RelDeploysFrom),
 		string(relationships.RelDiscoversConfigIn),
 		string(relationships.RelRunsOn),
+		string(relationships.RelReadsConfigFrom),
 	} {
 		if !gotTypes[want] {
 			t.Fatalf("missing relationship_type %q in write rows", want)
+		}
+	}
+
+	for _, row := range rows {
+		if stringValue(row.Payload["relationship_type"]) != string(relationships.RelReadsConfigFrom) {
+			continue
+		}
+		if got, want := stringValue(row.Payload["evidence_type"]), "terraform_iam_permission"; got != want {
+			t.Fatalf("READS_CONFIG_FROM evidence_type = %q, want %q", got, want)
 		}
 	}
 

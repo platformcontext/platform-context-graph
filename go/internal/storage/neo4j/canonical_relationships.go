@@ -82,6 +82,20 @@ FOREACH (_ IN CASE WHEN row.relationship_type = 'USES_MODULE' THEN [1] ELSE [] E
         rel.resolution_source = row.resolution_source,
         rel.rationale = row.rationale
 )
+FOREACH (_ IN CASE WHEN row.relationship_type = 'READS_CONFIG_FROM' THEN [1] ELSE [] END |
+    MERGE (source_repo)-[rel:READS_CONFIG_FROM]->(target_repo)
+    SET rel.confidence = row.confidence,
+        rel.reason = 'Runtime services list declares repository dependency',
+        rel.evidence_source = row.evidence_source,
+        rel.evidence_type = row.evidence_type,
+        rel.relationship_type = row.relationship_type,
+        rel.resolved_id = row.resolved_id,
+        rel.generation_id = row.generation_id,
+        rel.evidence_count = row.evidence_count,
+        rel.evidence_kinds = row.evidence_kinds,
+        rel.resolution_source = row.resolution_source,
+        rel.rationale = row.rationale
+)
 FOREACH (_ IN CASE WHEN row.relationship_type IS NULL OR row.relationship_type = '' OR row.relationship_type = 'DEPENDS_ON' THEN [1] ELSE [] END |
     MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)
     SET rel.confidence = row.confidence,
@@ -157,6 +171,21 @@ SET rel.confidence = $confidence,
     rel.resolution_source = $resolution_source,
     rel.rationale = $rationale`
 
+const canonicalReadsConfigFromRepoRelationshipUpsertCypher = `MERGE (source_repo:Repository {id: $repo_id})
+MERGE (target_repo:Repository {id: $target_repo_id})
+MERGE (source_repo)-[rel:READS_CONFIG_FROM]->(target_repo)
+SET rel.confidence = $confidence,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = $evidence_source,
+    rel.evidence_type = $evidence_type,
+    rel.relationship_type = 'READS_CONFIG_FROM',
+    rel.resolved_id = $resolved_id,
+    rel.generation_id = $generation_id,
+    rel.evidence_count = $evidence_count,
+    rel.evidence_kinds = $evidence_kinds,
+    rel.resolution_source = $resolution_source,
+    rel.rationale = $rationale`
+
 const batchCanonicalDeploysFromRepoRelationshipUpsertCypher = `UNWIND $rows AS row
 MERGE (source_repo:Repository {id: row.repo_id})
 MERGE (target_repo:Repository {id: row.target_repo_id})
@@ -221,6 +250,22 @@ SET rel.confidence = row.confidence,
     rel.resolution_source = row.resolution_source,
     rel.rationale = row.rationale`
 
+const batchCanonicalReadsConfigFromRepoRelationshipUpsertCypher = `UNWIND $rows AS row
+MERGE (source_repo:Repository {id: row.repo_id})
+MERGE (target_repo:Repository {id: row.target_repo_id})
+MERGE (source_repo)-[rel:READS_CONFIG_FROM]->(target_repo)
+SET rel.confidence = row.confidence,
+    rel.reason = 'Runtime services list declares repository dependency',
+    rel.evidence_source = row.evidence_source,
+    rel.evidence_type = row.evidence_type,
+    rel.relationship_type = 'READS_CONFIG_FROM',
+    rel.resolved_id = row.resolved_id,
+    rel.generation_id = row.generation_id,
+    rel.evidence_count = row.evidence_count,
+    rel.evidence_kinds = row.evidence_kinds,
+    rel.resolution_source = row.resolution_source,
+    rel.rationale = row.rationale`
+
 const batchCanonicalRepoEvidenceArtifactUpsertCypher = `UNWIND $rows AS row
 MATCH (source_repo:Repository {id: row.repo_id})
 MATCH (target_repo:Repository {id: row.target_repo_id})
@@ -267,7 +312,7 @@ SET rel.confidence = 0.97,
 const batchCanonicalRunsOnUpsertCypher = canonicalRunsOnUpsertCypher
 
 const retractRepoRelationshipAndRunsOnEdgesCypher = `UNWIND $repo_ids AS repo_id
-MATCH (source_repo:Repository {id: repo_id})-[rel:DEPENDS_ON|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|USES_MODULE]->(:Repository)
+MATCH (source_repo:Repository {id: repo_id})-[rel:DEPENDS_ON|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|USES_MODULE|READS_CONFIG_FROM]->(:Repository)
 WHERE rel.evidence_source = $evidence_source
 DELETE rel
 WITH DISTINCT repo_id, $evidence_source AS evidence_source
@@ -320,6 +365,8 @@ func canonicalTypedRepoRelationshipUpsertCypher(relationshipType string) string 
 		return canonicalProvisionsDependencyForRepoRelationshipUpsertCypher
 	case "USES_MODULE":
 		return canonicalUsesModuleRepoRelationshipUpsertCypher
+	case "READS_CONFIG_FROM":
+		return canonicalReadsConfigFromRepoRelationshipUpsertCypher
 	default:
 		return canonicalRepoDependencyUpsertCypher
 	}
@@ -335,6 +382,8 @@ func batchCanonicalTypedRepoRelationshipUpsertCypher(relationshipType string) (s
 		return batchCanonicalProvisionsDependencyForRepoRelationshipUpsertCypher, true
 	case "USES_MODULE":
 		return batchCanonicalUsesModuleRepoRelationshipUpsertCypher, true
+	case "READS_CONFIG_FROM":
+		return batchCanonicalReadsConfigFromRepoRelationshipUpsertCypher, true
 	default:
 		return "", false
 	}

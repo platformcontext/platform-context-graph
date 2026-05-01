@@ -28,7 +28,7 @@ func queryRepositoryContextCounts(ctx context.Context, reader GraphQuery, params
 			RETURN count(DISTINCT p) AS count
 		`, fallback),
 		dependencyCount: queryRepositoryContextCount(ctx, reader, params, "dependency_count", `
-			MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(dep:Repository)
+			MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(dep:Repository)
 			RETURN count(DISTINCT dep) AS count
 		`, fallback),
 	}

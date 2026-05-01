@@ -23,6 +23,8 @@ const (
 	EvidenceKindTerraformGitHubActions EvidenceKind = "TERRAFORM_GITHUB_ACTIONS_REPOSITORY"
 	// EvidenceKindTerraformConfigPath is a Terraform config path reference.
 	EvidenceKindTerraformConfigPath EvidenceKind = "TERRAFORM_CONFIG_PATH"
+	// EvidenceKindTerraformIAMPermission is a Terraform IAM permission reference.
+	EvidenceKindTerraformIAMPermission EvidenceKind = "TERRAFORM_IAM_PERMISSION"
 	// EvidenceKindTerraformModuleSource is a Terraform or Terragrunt module source reference.
 	EvidenceKindTerraformModuleSource EvidenceKind = "TERRAFORM_MODULE_SOURCE"
 	// EvidenceKindTerragruntDependencyConfigPath is a Terragrunt dependency config_path reference.
@@ -89,6 +91,8 @@ const (
 	RelDependsOn RelationshipType = "DEPENDS_ON"
 	// RelUsesModule indicates the source consumes a target module repository.
 	RelUsesModule RelationshipType = "USES_MODULE"
+	// RelReadsConfigFrom indicates the source is granted read access to target config.
+	RelReadsConfigFrom RelationshipType = "READS_CONFIG_FROM"
 )
 
 // ResolutionSource classifies how a resolved relationship was determined.

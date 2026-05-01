@@ -305,6 +305,10 @@ func discoverTerraformEvidence(
 	evidence = append(evidence, discoverTerragruntDependencyConfigPathEvidence(
 		sourceRepoID, filePath, content, catalog, seen,
 	)...)
+	iamConfigReads := terraformIAMSSMConfigReadCandidates(content)
+	evidence = append(evidence, discoverTerraformIAMSSMConfigReadEvidence(
+		sourceRepoID, filePath, iamConfigReads, catalog, seen,
+	)...)
 
 	for _, tp := range terraformPatterns {
 		matches := tp.Pattern.FindAllStringSubmatch(content, -1)
@@ -313,6 +317,9 @@ func discoverTerraformEvidence(
 				continue
 			}
 			candidate := strings.TrimSpace(match[1])
+			if tp.EvidenceKind == EvidenceKindTerraformConfigPath && isTerraformIAMConfigReadCandidate(candidate, iamConfigReads) {
+				continue
+			}
 			evidence = append(evidence, matchCatalog(
 				sourceRepoID, candidate, filePath,
 				tp.EvidenceKind, tp.RelationshipType, tp.Confidence, tp.Rationale,

@@ -134,7 +134,7 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
 		OPTIONAL MATCH (r)-[:DEFINES]->(w:Workload)
 		OPTIONAL MATCH (r)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
-		OPTIONAL MATCH (r)-[:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(dep:Repository)
+		OPTIONAL MATCH (r)-[:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(dep:Repository)
 		RETURN %s,
 		       count(DISTINCT f) as file_count,
 		       count(DISTINCT w) as workload_count,
@@ -261,7 +261,7 @@ func queryRepoLanguageDistribution(ctx context.Context, reader GraphQuery, param
 
 func queryRepoDependencies(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
-		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(target:Repository)
+		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(target:Repository)
 		RETURN type(rel) AS type, target.name AS target_name,
 		       target.id AS target_id, rel.evidence_type AS evidence_type,
 		       rel.resolved_id AS resolved_id,
@@ -295,7 +295,7 @@ func queryRepoDependencies(ctx context.Context, reader GraphQuery, params map[st
 
 func queryRepoRelationshipOverview(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
 	outgoing := queryRepoRelationshipOverviewDirection(ctx, reader, params, `
-		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(target:Repository)
+		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(target:Repository)
 		RETURN 'outgoing' AS direction,
 		       type(rel) AS type,
 		       r.name AS source_name,
@@ -313,7 +313,7 @@ func queryRepoRelationshipOverview(ctx context.Context, reader GraphQuery, param
 		ORDER BY type, target_name
 	`)
 	incoming := queryRepoRelationshipOverviewDirection(ctx, reader, params, `
-		MATCH (source:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(r:Repository {id: $repo_id})
+		MATCH (source:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(r:Repository {id: $repo_id})
 		RETURN 'incoming' AS direction,
 		       type(rel) AS type,
 		       source.name AS source_name,
@@ -363,7 +363,7 @@ func queryRepoRelationshipOverviewDirection(ctx context.Context, reader GraphQue
 
 func queryRepoConsumers(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
-		MATCH (consumer:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(r:Repository {id: $repo_id})
+		MATCH (consumer:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(r:Repository {id: $repo_id})
 		RETURN consumer.name AS consumer_name, consumer.id AS consumer_id
 		ORDER BY consumer_name
 	`, params)
@@ -395,7 +395,7 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		WITH r, file_count, languages, collect(DISTINCT w.name) as workload_names
 		OPTIONAL MATCH (r)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
 		WITH r, file_count, languages, workload_names, collect(DISTINCT p.type) as platform_types
-		OPTIONAL MATCH (r)-[:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(dep:Repository)
+		OPTIONAL MATCH (r)-[:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(dep:Repository)
 		RETURN %s,
 		       file_count,
 		       languages,

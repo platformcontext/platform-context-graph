@@ -63,13 +63,23 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 				"evidence_type":     "terraform_module_source",
 			},
 		},
+		{
+			IntentID:     "i5",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"repo_id":           "repo-a",
+				"target_repo_id":    "repo-f",
+				"relationship_type": "READS_CONFIG_FROM",
+				"evidence_type":     "terraform_iam_permission",
+			},
+		},
 	}
 
 	err := writer.WriteEdges(context.Background(), reducer.DomainRepoDependency, rows, "resolver/cross-repo")
 	if err != nil {
 		t.Fatalf("WriteEdges() error = %v", err)
 	}
-	if got, want := len(executor.calls), 4; got != want {
+	if got, want := len(executor.calls), 5; got != want {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
 	wantByType := map[string]string{
@@ -77,6 +87,7 @@ func TestEdgeWriterWriteEdgesTypedRepoRelationshipDispatch(t *testing.T) {
 		"DISCOVERS_CONFIG_IN":       "MERGE (source_repo)-[rel:DISCOVERS_CONFIG_IN]->(target_repo)",
 		"PROVISIONS_DEPENDENCY_FOR": "MERGE (source_repo)-[rel:PROVISIONS_DEPENDENCY_FOR]->(target_repo)",
 		"USES_MODULE":               "MERGE (source_repo)-[rel:USES_MODULE]->(target_repo)",
+		"READS_CONFIG_FROM":         "MERGE (source_repo)-[rel:READS_CONFIG_FROM]->(target_repo)",
 	}
 	seen := make(map[string]bool)
 	for _, call := range executor.calls {
