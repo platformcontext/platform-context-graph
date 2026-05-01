@@ -12,6 +12,8 @@ The corpus covers:
 - Terraform modules referenced locally, unreferenced, and dynamically sourced.
 - Helm charts reached by ArgoCD or workflow commands, unreferenced, and
   dynamically templated.
+- Kustomize bases and overlays reached by ArgoCD Applications or kustomization
+  resources, unreferenced, and dynamically templated.
 - Ansible roles and playbooks reached by controllers, unreferenced, and
   dynamically selected.
 

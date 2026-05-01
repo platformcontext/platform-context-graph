@@ -168,6 +168,12 @@ func discoverArtifacts(filesByRepo map[string][]File, families map[string]bool) 
 					evidence: []string{file.RelativePath + ": role task entrypoint exists"},
 				})
 			}
+			if kustomizePath, name, ok := kustomizeArtifact(file.RelativePath); ok && familyEnabled(families, "kustomize") {
+				artifacts = appendUniqueArtifact(artifacts, seen, artifact{
+					family: "kustomize", repoID: repoID, path: kustomizePath, name: name,
+					evidence: []string{file.RelativePath + ": kustomization entrypoint exists"},
+				})
+			}
 		}
 	}
 	return artifacts
@@ -193,6 +199,7 @@ func buildReferenceIndex(filesByRepo map[string][]File) referenceIndex {
 			recordTerraformReferences(index, file)
 			recordHelmReferences(index, file)
 			recordAnsibleReferences(index, file, reachedPlaybooks)
+			recordKustomizeReferences(index, file)
 		}
 	}
 	return index
@@ -266,6 +273,19 @@ func ansibleRoleArtifact(relativePath string) (string, string, bool) {
 	return "", "", false
 }
 
+func kustomizeArtifact(relativePath string) (string, string, bool) {
+	clean := path.Clean(relativePath)
+	fileName := strings.ToLower(path.Base(clean))
+	if fileName != "kustomization.yaml" && fileName != "kustomization.yml" {
+		return "", "", false
+	}
+	dir := path.Dir(clean)
+	if dir == "." || dir == "/" {
+		return "", "", false
+	}
+	return dir, path.Base(dir), true
+}
+
 var (
 	terraformSourcePattern = regexp.MustCompile(`(?m)\bsource\s*=\s*["']([^"']+)["']`)
 	ansiblePlaybookPattern = regexp.MustCompile(`ansible-playbook\s+([^\s'"]+)`)
@@ -336,6 +356,51 @@ func recordAnsibleReferences(index referenceIndex, file File, reachedPlaybooks m
 			addReference(index.used, "ansible", strings.TrimSpace(strings.TrimPrefix(line, "- ")), append(controllerEvidence, file.RelativePath+": role reference")...)
 		}
 	}
+}
+
+func recordKustomizeReferences(index referenceIndex, file File) {
+	for _, line := range strings.Split(file.Content, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "path:"):
+			recordKustomizePathReference(index, file, strings.TrimSpace(strings.TrimPrefix(line, "path:")))
+		case isKustomizationFile(file.RelativePath) && strings.HasPrefix(line, "- "):
+			recordKustomizePathReference(index, file, strings.TrimSpace(strings.TrimPrefix(line, "- ")))
+		}
+	}
+}
+
+func recordKustomizePathReference(index referenceIndex, file File, raw string) {
+	cleaned := strings.Trim(strings.TrimSpace(raw), `"'`)
+	if cleaned == "" {
+		return
+	}
+	if !looksKustomizeReference(cleaned) && !strings.Contains(cleaned, "{{") && !strings.Contains(cleaned, "${") {
+		return
+	}
+	evidence := file.RelativePath + ": kustomize path reference " + cleaned
+	if strings.Contains(cleaned, "{{") || strings.Contains(cleaned, "${") {
+		for _, token := range referenceTokens(file.Content) {
+			addReference(index.ambiguous, "kustomize", token, evidence)
+		}
+		return
+	}
+	addReference(index.used, "kustomize", cleaned, evidence)
+}
+
+func isKustomizationFile(relativePath string) bool {
+	base := strings.ToLower(path.Base(relativePath))
+	return base == "kustomization.yaml" || base == "kustomization.yml"
+}
+
+func looksKustomizeReference(value string) bool {
+	clean := path.Clean(value)
+	return strings.Contains(clean, "/base/") ||
+		strings.Contains(clean, "/bases/") ||
+		strings.Contains(clean, "/overlays/") ||
+		strings.HasPrefix(clean, "base/") ||
+		strings.HasPrefix(clean, "bases/") ||
+		strings.HasPrefix(clean, "overlays/")
 }
 
 func normalizeAnsiblePlaybookPath(raw string) string {

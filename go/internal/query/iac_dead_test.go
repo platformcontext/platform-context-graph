@@ -198,6 +198,11 @@ func TestHandleDeadIaCResolvesRepositorySelectorAliasesForMaterializedRows(t *te
 	if got, want := data["repo_ids"], []any{"repository:r_modules"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("repo_ids = %#v, want %#v", got, want)
 	}
+	rawFindings := data["findings"].([]any)
+	finding := rawFindings[0].(map[string]any)
+	if got, want := finding["repo_name"], "terraform-modules"; got != want {
+		t.Fatalf("repo_name = %#v, want %#v", got, want)
+	}
 }
 
 func TestHandleDeadIaCMaterializedRowsHonorFamilyFilter(t *testing.T) {

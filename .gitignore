@@ -62,6 +62,7 @@ mcp.json
 *.log
 playground/
 todo.md
+.pcg-compose-runs/
 
 # macOS system files
 .DS_Store

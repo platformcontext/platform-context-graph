@@ -77,6 +77,47 @@
       "expected_finding": "ambiguous_dynamic_reference"
     },
     {
+      "id": "kustomize.argocd_overlay_used",
+      "family": "kustomize",
+      "artifact": "kustomize-config/overlays/prod",
+      "expected_reachability": "used",
+      "required_evidence": [
+        "kustomize-controller/argocd/applications/checkout-prod.yaml: spec.source.path"
+      ],
+      "must_not_report_as_dead": true
+    },
+    {
+      "id": "kustomize.overlay_base_used",
+      "family": "kustomize",
+      "artifact": "kustomize-config/base/checkout-service",
+      "expected_reachability": "used",
+      "required_evidence": [
+        "kustomize-config/overlays/prod/kustomization.yaml: resources base/checkout-service"
+      ],
+      "must_not_report_as_dead": true
+    },
+    {
+      "id": "kustomize.base_unused",
+      "family": "kustomize",
+      "artifact": "kustomize-config/base/orphan-api",
+      "expected_reachability": "unused",
+      "required_evidence": [
+        "kustomization entrypoint exists",
+        "no ArgoCD Application, ApplicationSet, or kustomization resource reference"
+      ],
+      "expected_finding": "candidate_dead_iac"
+    },
+    {
+      "id": "kustomize.templated_path_ambiguous",
+      "family": "kustomize",
+      "artifact": "kustomize-config/base/dynamic-target",
+      "expected_reachability": "ambiguous",
+      "required_evidence": [
+        "kustomize-controller/argocd/applications/dynamic-target.yaml: templated spec.source.path"
+      ],
+      "expected_finding": "ambiguous_dynamic_reference"
+    },
+    {
       "id": "ansible.playbook_and_role_used",
       "family": "ansible",
       "artifact": "ansible-ops/roles/checkout_deploy",

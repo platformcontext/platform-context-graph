@@ -46,6 +46,7 @@ type deadIaCFinding struct {
 	ID           string   `json:"id"`
 	Family       string   `json:"family"`
 	RepoID       string   `json:"repo_id"`
+	RepoName     string   `json:"repo_name,omitempty"`
 	Artifact     string   `json:"artifact"`
 	Reachability string   `json:"reachability"`
 	Finding      string   `json:"finding"`
@@ -130,7 +131,9 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(rows) > 0 {
-			writeMaterializedDeadIaC(w, r, h.profile(), repoIDs, materializedDeadIaCFindings(rows))
+			findings := materializedDeadIaCFindings(rows)
+			h.enrichDeadIaCRepoNames(r.Context(), findings)
+			writeMaterializedDeadIaC(w, r, h.profile(), repoIDs, findings)
 			return
 		}
 		hasRows, err := h.Reachability.HasLatestRows(r.Context(), repoIDs, families)
@@ -157,6 +160,7 @@ func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
 	if len(findings) > req.Limit {
 		findings = findings[:req.Limit]
 	}
+	h.enrichDeadIaCRepoNames(r.Context(), findings)
 
 	WriteSuccess(w, r, http.StatusOK, map[string]any{
 		"repo_ids":        repoIDs,
@@ -207,6 +211,28 @@ func materializedDeadIaCFindings(rows []IaCReachabilityFindingRow) []deadIaCFind
 		})
 	}
 	return findings
+}
+
+func (h *IaCHandler) enrichDeadIaCRepoNames(ctx context.Context, findings []deadIaCFinding) {
+	if h == nil || h.Content == nil || len(findings) == 0 {
+		return
+	}
+	repositories, err := h.Content.ListRepositories(ctx)
+	if err != nil {
+		return
+	}
+	namesByID := make(map[string]string, len(repositories))
+	for _, repo := range repositories {
+		if strings.TrimSpace(repo.ID) == "" || strings.TrimSpace(repo.Name) == "" {
+			continue
+		}
+		namesByID[repo.ID] = repo.Name
+	}
+	for i := range findings {
+		if name := namesByID[findings[i].RepoID]; name != "" {
+			findings[i].RepoName = name
+		}
+	}
 }
 
 func normalizeDeadIaCRepoScope(req deadIaCRequest) []string {

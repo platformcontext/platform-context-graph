@@ -52,6 +52,21 @@ vars:
 			{RepoID: "ansible-ops", RelativePath: "roles/orphan_maintenance/tasks/main.yml", Content: `- debug: msg=unused`},
 			{RepoID: "ansible-ops", RelativePath: "roles/dynamic_role/tasks/main.yml", Content: `- debug: msg=dynamic`},
 		},
+		"kustomize-controller": {
+			{RepoID: "kustomize-controller", RelativePath: "argocd/applications/checkout-prod.yaml", Content: `path: overlays/prod`},
+			{RepoID: "kustomize-controller", RelativePath: "argocd/applications/dynamic-target.yaml", Content: `path: "base/{{service}}"
+- service: dynamic-target`},
+		},
+		"kustomize-config": {
+			{RepoID: "kustomize-config", RelativePath: "overlays/prod/kustomization.yaml", Content: `resources:
+  - ../../base/checkout-service`},
+			{RepoID: "kustomize-config", RelativePath: "base/checkout-service/kustomization.yaml", Content: `resources:
+  - deployment.yaml`},
+			{RepoID: "kustomize-config", RelativePath: "base/orphan-api/kustomization.yaml", Content: `resources:
+  - deployment.yaml`},
+			{RepoID: "kustomize-config", RelativePath: "base/dynamic-target/kustomization.yaml", Content: `resources:
+  - deployment.yaml`},
+		},
 	}, Options{IncludeAmbiguous: true})
 
 	got := map[string]Reachability{}
@@ -65,6 +80,10 @@ vars:
 		"helm:helm-charts:charts/checkout-service":             ReachabilityUsed,
 		"helm:helm-charts:charts/dynamic-target":               ReachabilityAmbiguous,
 		"helm:helm-charts:charts/orphan-worker":                ReachabilityUnused,
+		"kustomize:kustomize-config:base/checkout-service":     ReachabilityUsed,
+		"kustomize:kustomize-config:base/dynamic-target":       ReachabilityAmbiguous,
+		"kustomize:kustomize-config:base/orphan-api":           ReachabilityUnused,
+		"kustomize:kustomize-config:overlays/prod":             ReachabilityUsed,
 		"terraform:terraform-modules:modules/checkout-service": ReachabilityUsed,
 		"terraform:terraform-modules:modules/dynamic-target":   ReachabilityAmbiguous,
 		"terraform:terraform-modules:modules/orphan-cache":     ReachabilityUnused,
