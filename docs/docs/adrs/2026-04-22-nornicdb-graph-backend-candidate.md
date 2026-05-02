@@ -57,7 +57,9 @@ Latest 2026-04-26 NornicDB dogfood evidence:
   review comment was resolved in NornicDB commit `2461a46`, which adds
   `ON CREATE SET` plus standalone relationship `SET` regression coverage and
   passed `go test -tags 'noui nolocalllm' ./pkg/cypher -count=1` plus
-  `git diff --check`.
+  `git diff --check`. A rebuilt PR-branch headless binary also passed a direct
+  HTTP probe for `ON CREATE SET` plus standalone relationship `SET`, preserving
+  `resolved_id` through `properties(rel)`.
 - `Function=15` is the better built-in compromise: it avoids the over-fragmented `Function=10` lane and still reaches `Variable` with stable early chunks around `19.9s-21.4s`
 - the next repo-scale blocker is now `retract`, not `entities`; bundling all 9 stale-delete statements into one grouped transaction overflowed NornicDB's request budget
 - the branch now executes NornicDB retract statements sequentially and sanitizes backend error text before projector dead-letter persistence so NUL bytes cannot break Postgres updates
