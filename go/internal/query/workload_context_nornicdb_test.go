@@ -43,8 +43,11 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 				case strings.Contains(cypher, "<-[rel:PROVISIONS_DEPENDENCY_FOR]-"):
 					return nil, nil
 				case strings.Contains(cypher, "-[runsOn:RUNS_ON]->(p:Platform)"):
-					switch params["instance_id"] {
-					case "workload-instance:api-node-datax:bg-prod":
+					if len(params) != 0 {
+						t.Fatalf("RUNS_ON params = %#v, want literal exact-instance anchor", params)
+					}
+					switch {
+					case strings.Contains(cypher, "'workload-instance:api-node-datax:bg-prod'"):
 						return []map[string]any{
 							{
 								"instance_id":         "workload-instance:api-node-datax:bg-prod",
@@ -61,7 +64,7 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 								"platform_reason":     "terraform_service_evidence",
 							},
 						}, nil
-					case "workload-instance:api-node-datax:ops-qa":
+					case strings.Contains(cypher, "'workload-instance:api-node-datax:ops-qa'"):
 						return []map[string]any{
 							{
 								"instance_id":         "workload-instance:api-node-datax:ops-qa",
@@ -72,7 +75,7 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 							},
 						}, nil
 					default:
-						t.Fatalf("params[instance_id] = %#v, want known workload instance", params["instance_id"])
+						t.Fatalf("cypher = %q, want known exact instance anchor", cypher)
 					}
 				case strings.Contains(cypher, "WHERE i.workload_id = $workload_id"):
 					return []map[string]any{
@@ -167,11 +170,10 @@ func TestFetchWorkloadContextPrefersInstanceRunsOnTruthOverProvisionedPlatformSh
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
 				switch {
 				case strings.Contains(cypher, "-[runsOn:RUNS_ON]->(p:Platform)"):
-					if params["instance_id"] != "workload-instance:sample-service:bg-prod" &&
-						params["instance_id"] != "workload-instance:sample-service:ops-qa" {
-						t.Fatalf("params[instance_id] = %#v, want exact instance id", params["instance_id"])
+					if len(params) != 0 {
+						t.Fatalf("RUNS_ON params = %#v, want literal exact-instance anchor", params)
 					}
-					if params["instance_id"] == "workload-instance:sample-service:ops-qa" {
+					if strings.Contains(cypher, "'workload-instance:sample-service:ops-qa'") {
 						return []map[string]any{
 							{
 								"instance_id":         "workload-instance:sample-service:ops-qa",
@@ -181,6 +183,9 @@ func TestFetchWorkloadContextPrefersInstanceRunsOnTruthOverProvisionedPlatformSh
 								"platform_reason":     "Workload instance runs on inferred platform",
 							},
 						}, nil
+					}
+					if !strings.Contains(cypher, "'workload-instance:sample-service:bg-prod'") {
+						t.Fatalf("cypher = %q, want exact instance id", cypher)
 					}
 					return []map[string]any{
 						{
@@ -283,6 +288,16 @@ func TestFetchWorkloadContextPrefersInstanceRunsOnTruthOverProvisionedPlatformSh
 	}
 	if got, want := instances[1]["platform_kind"], "kubernetes"; got != want {
 		t.Fatalf("ops-qa platform_kind = %#v, want %#v", got, want)
+	}
+}
+
+func TestCypherStringLiteralEscapesInstanceIDs(t *testing.T) {
+	t.Parallel()
+
+	got := cypherStringLiteral("workload-instance:sample-service:prod's\\blue")
+	want := `'workload-instance:sample-service:prod\'s\\blue'`
+	if got != want {
+		t.Fatalf("cypherStringLiteral() = %q, want %q", got, want)
 	}
 }
 

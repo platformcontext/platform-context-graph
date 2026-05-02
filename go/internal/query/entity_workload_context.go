@@ -251,8 +251,8 @@ func (h *EntityHandler) fetchWorkloadPlatformRows(ctx context.Context, instances
 	if h == nil || h.Neo4j == nil || len(instances) == 0 {
 		return nil, nil
 	}
-	const platformCypher = `
-		MATCH (i:WorkloadInstance {id: $instance_id})
+	const platformCypherTemplate = `
+		MATCH (i:WorkloadInstance {id: %s})
 		MATCH (i)-[runsOn:RUNS_ON]->(p:Platform)
 		RETURN i.id as instance_id,
 		       p.name as platform_name,
@@ -268,13 +268,40 @@ func (h *EntityHandler) fetchWorkloadPlatformRows(ctx context.Context, instances
 		if instanceID == "" {
 			continue
 		}
-		instanceRows, err := h.Neo4j.Run(ctx, platformCypher, map[string]any{"instance_id": instanceID})
+		instanceRows, err := h.Neo4j.Run(ctx, fmt.Sprintf(platformCypherTemplate, cypherStringLiteral(instanceID)), nil)
 		if err != nil {
 			return nil, err
 		}
 		rows = append(rows, instanceRows...)
 	}
 	return rows, nil
+}
+
+// cypherStringLiteral returns a single-quoted Cypher string literal for values
+// that already came from graph truth and must be used in backend-sensitive
+// exact-id read anchors.
+func cypherStringLiteral(value string) string {
+	var b strings.Builder
+	b.Grow(len(value) + 2)
+	b.WriteByte('\'')
+	for _, r := range value {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\'':
+			b.WriteString(`\'`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('\'')
+	return b.String()
 }
 
 // platformEdgeConfidence preserves edge confidence when a backend can return
