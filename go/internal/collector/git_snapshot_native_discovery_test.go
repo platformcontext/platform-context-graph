@@ -214,6 +214,7 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "gmaps.js"), "/*!\n * GMaps.js v0.4.15\n * http://hpneo.github.com/gmaps/\n */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "masonry.pkgd.js"), "/*!\n * Masonry PACKAGED v3.1.5\n * http://masonry.desandro.com\n */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "jwplayer.js"), "jwplayer.version=\"6.12.4956\";\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "filepond.esm.js"), "/*!\n * FilePond 4.30.6\n * Please visit https://pqina.nl/filepond/ for details.\n */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "prototype.js"), "/* Prototype JavaScript framework, version 1.6.0\n * http://www.prototypejs.org/\n */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "reveal.js"), "/*!\n * reveal.js\n * http://lab.hakim.se/reveal-js\n */\n")
 	writeCollectorTestFile(t, filepath.Join(repoRoot, "public", "js", "shadowbox.js"), "/* Shadowbox.js */\n")
@@ -246,8 +247,8 @@ func TestResolveNativeSnapshotFileSetSkipsLegacyVendoredLibraries(t *testing.T) 
 	if got := stats.FilesSkippedByContent["vendored-zend-framework"]; got != 1 {
 		t.Fatalf("FilesSkippedByContent[vendored-zend-framework] = %d, want 1", got)
 	}
-	if got := stats.FilesSkippedByContent["vendored-browser-library"]; got != 11 {
-		t.Fatalf("FilesSkippedByContent[vendored-browser-library] = %d, want 11", got)
+	if got := stats.FilesSkippedByContent["vendored-browser-library"]; got != 12 {
+		t.Fatalf("FilesSkippedByContent[vendored-browser-library] = %d, want 12", got)
 	}
 	if got := stats.FilesSkippedByContent["vendored-fpdf"]; got != 1 {
 		t.Fatalf("FilesSkippedByContent[vendored-fpdf] = %d, want 1", got)

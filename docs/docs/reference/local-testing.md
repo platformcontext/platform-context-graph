@@ -872,8 +872,8 @@ artifacts can produce tens of thousands of generated JavaScript variables while
 contributing little repo-authored code truth. Legacy repos that check
 third-party packages outside a conventional `vendor/` directory are also pruned
 for known library families such as Zend Framework,
-jQuery/Galleria/Shadowbox/Sizzle/SWFObject, FPDF, and PEAR packages such as
-Phing.
+jQuery/Galleria/Shadowbox/Sizzle/SWFObject/FilePond, FPDF, and PEAR packages
+such as Phing.
 
 ```bash
 PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos docker compose up --build

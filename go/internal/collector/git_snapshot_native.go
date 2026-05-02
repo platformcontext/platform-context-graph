@@ -712,6 +712,9 @@ func hasVendoredBrowserLibrarySignature(path string) bool {
 		(strings.Contains(normalized, "d.html5.version") &&
 			strings.Contains(normalized, "jwplayer")):
 		return true
+	case strings.Contains(normalized, "filepond") &&
+		strings.Contains(normalized, "pqina.nl/filepond"):
+		return true
 	case strings.Contains(normalized, "prototype javascript framework") &&
 		strings.Contains(normalized, "prototypejs.org"):
 		return true
