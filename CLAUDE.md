@@ -262,6 +262,20 @@ go test -tags 'noui nolocalllm' ./...
 go build -tags 'noui nolocalllm' ...
 ```
 
+### NornicDB Maintainer Patch Bar
+
+PCG maintainers are allowed to patch NornicDB, but only when the change is
+evidence-backed:
+
+- a correctness fix for NornicDB itself,
+- a measured NornicDB performance win that generalizes beyond one PCG symptom,
+  or
+- a measured PCG runtime win proven by focused and corpus-level evidence.
+
+Do not keep NornicDB patches for speculative PCG throughput hypotheses. If a
+patch does not produce a real backend or PCG win, revert it and continue testing
+against upstream `main` or the latest owner-merged build.
+
 ## TDD And Bug Fix Workflow
 
 For bugs, use this mandatory sequence:
