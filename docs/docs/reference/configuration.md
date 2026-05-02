@@ -92,6 +92,7 @@ bootstrap, reducer, and watch flows.
 | **`PCG_PROJECTION_WORKERS`** | `min(NumCPU, 8)` | Concurrent bootstrap-index projection workers. |
 | **`PCG_REDUCER_WORKERS`** | Neo4j: `min(NumCPU, 4)`; NornicDB: `min(NumCPU, 8)` | Concurrent reducer intent workers in the resolution engine. |
 | **`PCG_REDUCER_BATCH_CLAIM_SIZE`** | Neo4j: `workers * 4` (min 4, max 64); NornicDB: `workers` | Number of reducer intents claimed per polling cycle. |
+| **`PCG_REDUCER_SEMANTIC_ENTITY_CLAIM_LIMIT`** | NornicDB: `1`; otherwise disabled | Concurrent semantic entity materialization claims after source-local drain. |
 | **`PCG_REDUCER_CLAIM_DOMAIN`** | unset | Optional domain filter for split-reducer diagnostics, for example `sql_relationship_materialization` or `deployment_mapping`. Leave unset for the normal all-domain reducer. |
 | **`PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT`** | `250000` | Maximum pending code-call shared intents the reducer may scan or load for one accepted repo/run before failing safely instead of rewriting CALLS edges from a partial slice. |
 | **`PCG_SHARED_PROJECTION_WORKERS`** | `1` | Concurrent shared-projection partition workers. |

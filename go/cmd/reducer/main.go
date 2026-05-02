@@ -206,9 +206,15 @@ func buildReducerService(
 	workQueue.ClaimDomain = claimDomain
 	workQueue.RequireProjectorDrainBeforeClaim = projectorDrainGate
 	workQueue.ExpectedSourceLocalProjectors = loadReducerExpectedSourceLocalProjectors(getenv)
+	workQueue.SemanticEntityClaimLimit = loadReducerSemanticEntityClaimLimit(getenv, graphBackend)
 	if workQueue.ExpectedSourceLocalProjectors > 0 && logger != nil {
 		logger.Info("semantic reducers will wait for expected source-local projectors",
 			"expected_source_local_projectors", workQueue.ExpectedSourceLocalProjectors,
+		)
+	}
+	if projectorDrainGate && logger != nil {
+		logger.Info("semantic reducer claim limit configured",
+			"semantic_entity_claim_limit", workQueue.SemanticEntityClaimLimit,
 		)
 	}
 

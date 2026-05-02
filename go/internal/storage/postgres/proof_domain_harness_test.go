@@ -216,8 +216,8 @@ func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...a
 		generationID, _ := args[1].(string)
 		return newProofRows(proofFactRows(db.state.facts, scopeID, generationID)), nil
 	case strings.Contains(query, "stage = 'reducer'"):
-		if len(args) != 6 {
-			return nil, fmt.Errorf("reducer claim args = %d, want 6", len(args))
+		if len(args) != 7 {
+			return nil, fmt.Errorf("reducer claim args = %d, want 7", len(args))
 		}
 		waitForProjectorDrain, _ := args[4].(bool)
 		if waitForProjectorDrain && proofProjectorWorkOutstanding(db.state.workItems) {

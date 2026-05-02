@@ -287,6 +287,54 @@ func TestLoadReducerExpectedSourceLocalProjectorsIgnoresInvalidValues(t *testing
 	}
 }
 
+func TestLoadReducerSemanticEntityClaimLimitDefaultsForNornicDB(t *testing.T) {
+	t.Parallel()
+
+	got := loadReducerSemanticEntityClaimLimit(func(string) string { return "" }, runtimecfg.GraphBackendNornicDB)
+	if got != 1 {
+		t.Fatalf("loadReducerSemanticEntityClaimLimit() = %d, want 1", got)
+	}
+}
+
+func TestLoadReducerSemanticEntityClaimLimitDefaultsDisabledForNeo4j(t *testing.T) {
+	t.Parallel()
+
+	got := loadReducerSemanticEntityClaimLimit(func(string) string { return "" }, runtimecfg.GraphBackendNeo4j)
+	if got != 0 {
+		t.Fatalf("loadReducerSemanticEntityClaimLimit() = %d, want 0", got)
+	}
+}
+
+func TestLoadReducerSemanticEntityClaimLimitReadsOverride(t *testing.T) {
+	t.Parallel()
+
+	got := loadReducerSemanticEntityClaimLimit(func(k string) string {
+		if k == reducerSemanticEntityClaimLimitEnv {
+			return "4"
+		}
+		return ""
+	}, runtimecfg.GraphBackendNornicDB)
+	if got != 4 {
+		t.Fatalf("loadReducerSemanticEntityClaimLimit() = %d, want 4", got)
+	}
+}
+
+func TestLoadReducerSemanticEntityClaimLimitIgnoresInvalidOverride(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"", "0", "-1", "nope"} {
+		got := loadReducerSemanticEntityClaimLimit(func(k string) string {
+			if k == reducerSemanticEntityClaimLimitEnv {
+				return raw
+			}
+			return ""
+		}, runtimecfg.GraphBackendNornicDB)
+		if got != 1 {
+			t.Fatalf("loadReducerSemanticEntityClaimLimit(%q) = %d, want default 1", raw, got)
+		}
+	}
+}
+
 func TestLoadCodeCallProjectionConfigReadsAcceptanceScanLimit(t *testing.T) {
 	t.Parallel()
 

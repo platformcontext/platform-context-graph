@@ -75,15 +75,15 @@ WITH candidate AS (
       -- semantic writers have repeatedly timed out on tiny row sets, so cap
       -- only this reducer domain while preserving concurrency for unrelated
       -- reducer domains.
-      AND ($5 = false OR domain <> 'semantic_entity_materialization' OR NOT EXISTS (
-          SELECT 1
+      AND ($5 = false OR domain <> 'semantic_entity_materialization' OR (
+          SELECT count(*)
           FROM fact_work_items AS semantic_inflight
           WHERE semantic_inflight.stage = 'reducer'
             AND semantic_inflight.domain = 'semantic_entity_materialization'
             AND semantic_inflight.work_item_id <> fact_work_items.work_item_id
             AND semantic_inflight.status IN ('claimed', 'running')
             AND semantic_inflight.claim_until > $1
-      ))
+      ) < $7)
       -- Reducer domains can touch the same graph nodes for a scope. Fence by
       -- explicit conflict key so unrelated graph families can still overlap.
       AND NOT EXISTS (
@@ -213,6 +213,11 @@ type ReducerQueue struct {
 	// ExpectedSourceLocalProjectors optionally requires semantic reducers to
 	// wait until local-host has completed the discovered source-local corpus.
 	ExpectedSourceLocalProjectors int
+
+	// SemanticEntityClaimLimit caps concurrent semantic entity reducer claims
+	// under the NornicDB local-authoritative drain gate. Values <= 0 keep the
+	// conservative one-claim default when the gate is enabled.
+	SemanticEntityClaimLimit int
 }
 
 // ErrReducerClaimRejected means the claimed reducer work item no longer belongs
@@ -340,6 +345,7 @@ func (q ReducerQueue) Claim(ctx context.Context) (reducer.Intent, bool, error) {
 		now.Add(q.LeaseDuration),
 		q.RequireProjectorDrainBeforeClaim,
 		q.ExpectedSourceLocalProjectors,
+		q.semanticEntityClaimLimit(),
 	)
 	if err != nil {
 		return reducer.Intent{}, false, fmt.Errorf("claim reducer work: %w", err)
@@ -446,6 +452,16 @@ func (q ReducerQueue) claimDomainFilter() string {
 		return ""
 	}
 	return string(q.ClaimDomain)
+}
+
+func (q ReducerQueue) semanticEntityClaimLimit() int {
+	if !q.RequireProjectorDrainBeforeClaim {
+		return 0
+	}
+	if q.SemanticEntityClaimLimit > 0 {
+		return q.SemanticEntityClaimLimit
+	}
+	return 1
 }
 
 func (q ReducerQueue) now() time.Time {

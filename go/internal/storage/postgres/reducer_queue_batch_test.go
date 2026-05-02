@@ -211,7 +211,7 @@ func TestClaimBatchCanWaitForProjectorDrain(t *testing.T) {
 	if got, want := db.queries[0].args[4], true; got != want {
 		t.Fatalf("projector drain arg = %v, want %v", got, want)
 	}
-	if got, want := db.queries[0].args[6], 5; got != want {
+	if got, want := db.queries[0].args[7], 5; got != want {
 		t.Fatalf("limit arg = %v, want %v", got, want)
 	}
 }
@@ -249,12 +249,18 @@ func TestClaimBatchGatesSemanticEntitiesOnGlobalProjectorDrain(t *testing.T) {
 		"semantic_inflight.domain = 'semantic_entity_materialization'",
 		"semantic_inflight.status IN ('claimed', 'running')",
 		"semantic_inflight.claim_until > $1",
+		"< $7",
 		"semantic_next.domain = 'semantic_entity_materialization'",
-		"semantic_next.work_item_id",
+		"semantic_next.updated_at < fact_work_items.updated_at",
+		"semantic_next.work_item_id <= fact_work_items.work_item_id",
+		"<= $7 - (",
 	} {
 		if !strings.Contains(query, want) {
 			t.Fatalf("batch claim query missing semantic global projector gate %q:\n%s", want, query)
 		}
+	}
+	if got, want := db.queries[0].args[6], 1; got != want {
+		t.Fatalf("semantic claim limit arg = %v, want %v", got, want)
 	}
 }
 
@@ -282,7 +288,37 @@ func TestClaimBatchPassesExpectedSourceLocalProjectors(t *testing.T) {
 	if got, want := db.queries[0].args[5], 878; got != want {
 		t.Fatalf("expected source-local projector arg = %v, want %v", got, want)
 	}
-	if got, want := db.queries[0].args[6], 5; got != want {
+	if got, want := db.queries[0].args[7], 5; got != want {
+		t.Fatalf("limit arg = %v, want %v", got, want)
+	}
+}
+
+func TestClaimBatchPassesSemanticEntityClaimLimit(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 2, 15, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	q := ReducerQueue{
+		db:                               db,
+		LeaseOwner:                       "test",
+		LeaseDuration:                    time.Minute,
+		Now:                              func() time.Time { return now },
+		RequireProjectorDrainBeforeClaim: true,
+		SemanticEntityClaimLimit:         4,
+	}
+
+	if _, err := q.ClaimBatch(context.Background(), 5); err != nil {
+		t.Fatalf("ClaimBatch() error = %v", err)
+	}
+
+	if got, want := db.queries[0].args[6], 4; got != want {
+		t.Fatalf("semantic claim limit arg = %v, want %v", got, want)
+	}
+	if got, want := db.queries[0].args[7], 5; got != want {
 		t.Fatalf("limit arg = %v, want %v", got, want)
 	}
 }

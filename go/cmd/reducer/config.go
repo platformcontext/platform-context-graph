@@ -19,6 +19,7 @@ const (
 	reducerClaimDomainEnv                   = "PCG_REDUCER_CLAIM_DOMAIN"
 	queryProfileEnv                         = "PCG_QUERY_PROFILE"
 	reducerExpectedSourceLocalProjectorsEnv = "PCG_REDUCER_EXPECTED_SOURCE_LOCAL_PROJECTORS"
+	reducerSemanticEntityClaimLimitEnv      = "PCG_REDUCER_SEMANTIC_ENTITY_CLAIM_LIMIT"
 
 	codeCallProjectionPollIntervalEnv        = "PCG_CODE_CALL_PROJECTION_POLL_INTERVAL"
 	codeCallProjectionLeaseTTLEnv            = "PCG_CODE_CALL_PROJECTION_LEASE_TTL"
@@ -109,6 +110,26 @@ func loadReducerExpectedSourceLocalProjectors(getenv func(string) string) int {
 		return 0
 	}
 	return n
+}
+
+func loadReducerSemanticEntityClaimLimit(
+	getenv func(string) string,
+	graphBackend runtimecfg.GraphBackend,
+) int {
+	if getenv == nil {
+		getenv = func(string) string { return "" }
+	}
+	raw := strings.TrimSpace(getenv(reducerSemanticEntityClaimLimitEnv))
+	if raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err == nil && n > 0 {
+			return n
+		}
+	}
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		return 1
+	}
+	return 0
 }
 
 func loadReducerProjectorDrainGate(
