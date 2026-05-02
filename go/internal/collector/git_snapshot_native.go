@@ -678,6 +678,8 @@ func isVendoredBrowserLibraryFile(path string) bool {
 		return true
 	case strings.HasPrefix(name, "swfobject") && strings.HasSuffix(name, ".js"):
 		return true
+	case strings.Contains("/"+filepath.ToSlash(path)+"/", "/jwplayer/"):
+		return true
 	default:
 		return hasVendoredBrowserLibrarySignature(path)
 	}
