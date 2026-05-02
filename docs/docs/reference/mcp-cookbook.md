@@ -333,6 +333,16 @@ The response includes a list of methods and child classes.
 {}
 ```
 
+### Explain a relationship evidence pointer
+
+> "Why does this deployment edge exist?"
+
+**Tool:** `get_relationship_evidence`
+
+```json
+{ "resolved_id": "resolved_abc123" }
+```
+
 ### Check job status
 
 > "What is the status of job `4cb9a60e-...`?"

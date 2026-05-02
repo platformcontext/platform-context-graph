@@ -159,6 +159,7 @@ assumptions from a partial code snapshot.
 | "What provisions this database?" | `trace_resource_to_code` |
 | "Compare prod and staging" | `compare_environments` |
 | "What does this repo contain?" | `get_repo_context` |
+| "Why does this deployment or dependency edge exist?" | `get_relationship_evidence` with the `resolved_id` from `deployment_evidence` |
 | "Tell me the Internet-to-cloud-to-code story for this repo" | `get_repo_story` |
 | "Tell me the deployment story for this workload or service" | `get_workload_story`, `get_service_story` |
 | "Explain this service, then cite the relevant files and docs" | `get_service_story` followed by `get_file_content`, `get_file_lines`, `search_file_content` |
@@ -183,7 +184,7 @@ Use it this way:
 2. for deployment questions, use `trace_deployment_chain` and then read `story_sections` for grouped supporting context
 3. use `deployment_overview`, `gitops_overview`, `controller_overview`, or `deployment_fact_summary` for structured deployment evidence
 4. if the answer needs exact file or docs evidence, follow with Postgres-backed content reads or search
-5. use `drilldowns` to move into `get_repo_context`, `get_workload_context`, `get_service_context`, `trace_deployment_chain`, content reads, or lower-level relationship tools
+5. use `drilldowns` to move into `get_repo_context`, `get_workload_context`, `get_service_context`, `trace_deployment_chain`, content reads, `get_relationship_evidence`, or lower-level relationship tools
 
 This keeps answers concise without hiding the underlying evidence.
 

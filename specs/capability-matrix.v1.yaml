@@ -139,7 +139,7 @@ capabilities:
       local_full_stack: {status: supported, max_truth_level: exact, required_runtime: full_stack, p95_latency_ms: 4000, max_scope_size: indexed_workspace, verification: [{compose_e2e: context-overview}], notes: authoritative repository, service, and ecosystem context}
       production: {status: supported, max_truth_level: exact, required_runtime: deployed_services, p95_latency_ms: 6000, max_scope_size: multi_repo_platform, verification: [{remote_validation: prod-context-overview}], notes: authoritative repository, service, and ecosystem context}
   - capability: relationship_evidence.drilldown
-    tools: [get_repo_context]
+    tools: [get_repo_context, get_relationship_evidence]
     profiles:
       local_lightweight: {status: unsupported, max_truth_level: unsupported, required_runtime: local_host, p95_latency_ms: null, max_scope_size: active_monofolder, verification: [{integration_test: local-lightweight-unsupported-relationship-evidence}], notes: requires durable relationship read model}
       local_authoritative: {status: supported, max_truth_level: exact, required_runtime: local_host_plus_graph, p95_latency_ms: 1000, max_scope_size: active_repo, verification: [{go_test: ./internal/query}], notes: resolved_relationships drilldown by resolved_id}

@@ -51,7 +51,7 @@ func TestWireAPIReturnsInvalidGraphBackendErrorBeforeConnectingDatastores(t *tes
 	}
 }
 
-func TestNewMCPQueryRouterMountsIaCHandler(t *testing.T) {
+func TestNewMCPQueryRouterMountsMCPBackedHandlers(t *testing.T) {
 	t.Parallel()
 
 	router := newMCPQueryRouter(
@@ -68,6 +68,9 @@ func TestNewMCPQueryRouterMountsIaCHandler(t *testing.T) {
 	}
 	if router.IaC.Reachability == nil {
 		t.Fatal("newMCPQueryRouter().IaC.Reachability = nil, want materialized reachability store")
+	}
+	if router.Evidence == nil {
+		t.Fatal("newMCPQueryRouter().Evidence = nil, want relationship evidence drilldown route mounted")
 	}
 }
 

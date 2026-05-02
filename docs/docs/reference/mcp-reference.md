@@ -66,6 +66,7 @@ Use these tools when the user is asking for a narrative answer such as
 | **`resolve_entity`** | Resolve fuzzy input into canonical entities before story or context calls, with an optional repository selector filter. | "What canonical entity matches `payments prod rds`?" |
 | **`get_entity_context`** | Fetch full context for one canonical entity id. | "Show me the context for this resolved entity." |
 | **`get_repo_context`** | Durable drill-down for repository details after the story answer. Accepts a repository selector: canonical ID, name, repo slug, or indexed path. | "Show me the full repo context behind that story." |
+| **`get_relationship_evidence`** | Durable drill-down for a relationship evidence pointer returned as `resolved_id` in deployment evidence artifacts or evidence indexes. | "Why does this dependency/deployment edge exist?" |
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
 | **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
 

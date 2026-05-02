@@ -53,6 +53,23 @@ func TestResolveRouteMapsQualifiedServiceIDToServicePath(t *testing.T) {
 	}
 }
 
+func TestResolveRouteMapsRelationshipEvidenceToDrilldownPath(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("get_relationship_evidence", map[string]any{
+		"resolved_id": "resolved/example id",
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if got, want := route.method, "GET"; got != want {
+		t.Fatalf("route.method = %q, want %q", got, want)
+	}
+	if got, want := route.path, "/api/v0/evidence/relationships/resolved%2Fexample%20id"; got != want {
+		t.Fatalf("route.path = %q, want %q", got, want)
+	}
+}
+
 func TestResolveRouteMapsSearchFileContentPatternAndRepoIDs(t *testing.T) {
 	t.Parallel()
 
