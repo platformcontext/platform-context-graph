@@ -50,7 +50,10 @@ func discoverArgoCDDocumentEvidence(
 			)...)
 			for _, templateSource := range append(
 				templateSources,
-				argocdEvaluatedTemplateSources(templateSourceSpecs, discovery, configRepo.RepoID, contentIndex)...,
+				append(
+					argocdEvaluatedTemplateSources(templateSourceSpecs, discovery, configRepo.RepoID, contentIndex),
+					argocdConfigIdentityDeploySources(discovery, configRepo.RepoID, contentIndex)...,
+				)...,
 			) {
 				for _, deployedRepo := range matchingCatalogEntries(templateSource, catalog) {
 					if deployedRepo.RepoID == configRepo.RepoID || deployedRepo.RepoID == controlRepoID {

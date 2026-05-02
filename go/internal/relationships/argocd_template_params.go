@@ -50,6 +50,63 @@ func argocdEvaluatedTemplateSources(
 	return uniqueStrings(sources)
 }
 
+func argocdConfigIdentityDeploySources(
+	discovery argocdDiscoveryTarget,
+	configRepoID string,
+	contentIndex evidenceContentIndex,
+) []string {
+	if len(contentIndex) == 0 {
+		return nil
+	}
+
+	var sources []string
+	for _, configFile := range contentIndex[configRepoID] {
+		if !argocdGeneratorPathMatches(discovery.path, configFile.path) {
+			continue
+		}
+		params, ok := argocdTemplateParamsFromFile(configFile.path, configFile.content)
+		if !ok {
+			continue
+		}
+		sources = append(sources, argocdServiceIdentityValues(params)...)
+	}
+	return uniqueStrings(sources)
+}
+
+func argocdServiceIdentityValues(params map[string]string) []string {
+	identityKeys := []string{
+		"addon",
+		"app",
+		"application",
+		"name",
+		"service",
+		"service.name",
+		"serviceName",
+		"helm.releaseName",
+		"releaseName",
+		"metadata.name",
+	}
+	values := make([]string, 0, len(identityKeys))
+	for _, key := range identityKeys {
+		value := strings.TrimSpace(params[key])
+		if value == "" || isBroadArgoServiceIdentity(value) {
+			continue
+		}
+		values = append(values, value)
+	}
+	return values
+}
+
+func isBroadArgoServiceIdentity(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "", "api", "app", "application", "backend", "frontend", "platform", "service", "server", "worker":
+		return true
+	default:
+		return len(normalized) < 4
+	}
+}
+
 func argocdGeneratorPathMatches(pattern, candidate string) bool {
 	pattern = strings.TrimPrefix(strings.TrimSpace(pattern), "/")
 	candidate = strings.TrimPrefix(strings.TrimSpace(candidate), "/")

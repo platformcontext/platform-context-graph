@@ -137,6 +137,13 @@ relationship extraction runs; otherwise Helm, GitOps, Terraform, Ansible,
 workflow, or service evidence can be absent from Postgres and the graph even
 though the source files exist on disk.
 
+GitOps evidence is allowed to resolve deploy sources from service identity
+fields inside generator config files when the ApplicationSet uses a shared
+chart or values repository. This is intentionally narrower than matching any
+string in the config: generic client references remain dependency/config
+evidence, while fields such as `addon`, `service.name`, or Helm release names
+can identify the deployed repository when they match the repository catalog.
+
 Several verbs are naturally multi-valued. Do not collapse them to one winner
 unless a truth rule marks the older or weaker path stale. A workload may have
 multiple deployment repositories during controller migrations, multiple

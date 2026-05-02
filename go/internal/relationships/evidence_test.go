@@ -1514,6 +1514,70 @@ client:
 	}
 }
 
+func TestDiscoverArgoCDApplicationSetDeploySourceFromConfigServiceIdentity(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"artifact_type": "argocd",
+				"relative_path": "applicationsets/services.yaml",
+				"content": `apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/myorg/platform-config.git
+        files:
+          - path: services/*/config.yaml
+  template:
+    spec:
+      sources:
+        - repoURL: "{{ .helm.repoURL }}"
+          chart: "{{ .helm.chart }}"
+        - repoURL: "{{ .git.repoURL }}"
+          path: "{{ .git.overlayPath }}"
+`,
+			},
+		},
+		{
+			ScopeID: "repo-config",
+			Payload: map[string]any{
+				"artifact_type": "yaml",
+				"relative_path": "services/prod/config.yaml",
+				"content": `addon: payments-service
+environment: prod
+git:
+  repoURL: https://github.com/myorg/platform-config.git
+  overlayPath: services/prod
+helm:
+  repoURL: https://charts.example.invalid
+  chart: shared-service
+  releaseName: payments-service
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-config", Aliases: []string{"platform-config"}},
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	deploySource, ok := findEvidenceByKind(evidence, EvidenceKindArgoCDApplicationSetDeploySource)
+	if !ok {
+		t.Fatalf("missing service-identity deploy-source evidence: %#v", evidence)
+	}
+	if got, want := deploySource.SourceRepoID, "repo-payments"; got != want {
+		t.Fatalf("deploy source = %q, want %q", got, want)
+	}
+	if got, want := deploySource.TargetRepoID, "repo-config"; got != want {
+		t.Fatalf("deploy target = %q, want %q", got, want)
+	}
+}
+
 func TestDiscoverArgoCDApplicationSetUnsupportedTemplateStaysDiscoveryOnly(t *testing.T) {
 	t.Parallel()
 
