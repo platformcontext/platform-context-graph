@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"sort"
+	"strings"
 )
 
 // queryRepoDeploymentEvidence reads compact graph evidence pointers for
@@ -31,6 +32,8 @@ func queryRepoDeploymentEvidence(ctx context.Context, reader GraphQuery, content
 		       artifact.matched_alias AS matched_alias,
 		       artifact.matched_value AS matched_value,
 		       artifact.evidence_source AS evidence_source,
+		       artifact.start_line AS start_line,
+		       artifact.end_line AS end_line,
 		       r.id AS source_repo_id,
 		       r.name AS source_repo_name,
 		       target.id AS target_repo_id,
@@ -58,6 +61,8 @@ func queryRepoDeploymentEvidence(ctx context.Context, reader GraphQuery, content
 		       artifact.matched_alias AS matched_alias,
 		       artifact.matched_value AS matched_value,
 		       artifact.evidence_source AS evidence_source,
+		       artifact.start_line AS start_line,
+		       artifact.end_line AS end_line,
 		       source.id AS source_repo_id,
 		       source.name AS source_repo_name,
 		       r.id AS target_repo_id,
@@ -110,6 +115,7 @@ func buildGraphDeploymentEvidence(rows []map[string]any) map[string]any {
 			"evidence_source":   StringVal(row, "evidence_source"),
 		}
 		copyOptionalDeploymentEvidenceFields(artifact, row)
+		attachDeploymentEvidenceSourceLocation(artifact)
 
 		family := StringVal(row, "artifact_family")
 		if family == "github_actions" || family == "jenkins" {
@@ -139,6 +145,7 @@ func buildGraphDeploymentEvidence(rows []map[string]any) map[string]any {
 		"ci_artifact_count":  ciArtifactCount,
 		"environment_count":  len(uniqueSortedStrings(environments)),
 		"artifacts":          artifacts,
+		"evidence_index":     buildDeploymentEvidenceIndex(artifacts),
 		"artifact_families":  uniqueSortedStrings(families),
 		"evidence_kinds":     uniqueSortedStrings(evidenceKinds),
 		"relationship_types": uniqueSortedStrings(relationshipTypes),
@@ -146,6 +153,73 @@ func buildGraphDeploymentEvidence(rows []map[string]any) map[string]any {
 		"source_repo_ids":    uniqueSortedStrings(sourceRepoIDs),
 		"target_repo_ids":    uniqueSortedStrings(targetRepoIDs),
 	}
+}
+
+type deploymentEvidenceIndexBucket struct {
+	artifactCount     int
+	resolvedIDs       []string
+	generationIDs     []string
+	evidenceKinds     []string
+	artifactFamilies  []string
+	relationshipTypes []string
+}
+
+// buildDeploymentEvidenceIndex keeps the deployment evidence drilldown path
+// visible without duplicating heavyweight evidence payloads from Postgres.
+func buildDeploymentEvidenceIndex(artifacts []map[string]any) map[string]any {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	byRelationshipType := map[string]*deploymentEvidenceIndexBucket{}
+	byArtifactFamily := map[string]*deploymentEvidenceIndexBucket{}
+	byEvidenceKind := map[string]*deploymentEvidenceIndexBucket{}
+	for _, artifact := range artifacts {
+		addDeploymentEvidenceIndexBucket(byRelationshipType, StringVal(artifact, "relationship_type"), artifact)
+		addDeploymentEvidenceIndexBucket(byArtifactFamily, StringVal(artifact, "artifact_family"), artifact)
+		addDeploymentEvidenceIndexBucket(byEvidenceKind, StringVal(artifact, "evidence_kind"), artifact)
+	}
+	return map[string]any{
+		"lookup_basis":       "resolved_id",
+		"relationship_types": finalizeDeploymentEvidenceIndex(byRelationshipType),
+		"artifact_families":  finalizeDeploymentEvidenceIndex(byArtifactFamily),
+		"evidence_kinds":     finalizeDeploymentEvidenceIndex(byEvidenceKind),
+	}
+}
+
+func addDeploymentEvidenceIndexBucket(buckets map[string]*deploymentEvidenceIndexBucket, key string, artifact map[string]any) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	bucket := buckets[key]
+	if bucket == nil {
+		bucket = &deploymentEvidenceIndexBucket{}
+		buckets[key] = bucket
+	}
+	bucket.artifactCount++
+	bucket.resolvedIDs = append(bucket.resolvedIDs, StringVal(artifact, "resolved_id"))
+	bucket.generationIDs = append(bucket.generationIDs, StringVal(artifact, "generation_id"))
+	bucket.evidenceKinds = append(bucket.evidenceKinds, StringVal(artifact, "evidence_kind"))
+	bucket.artifactFamilies = append(bucket.artifactFamilies, StringVal(artifact, "artifact_family"))
+	bucket.relationshipTypes = append(bucket.relationshipTypes, StringVal(artifact, "relationship_type"))
+}
+
+func finalizeDeploymentEvidenceIndex(buckets map[string]*deploymentEvidenceIndexBucket) map[string]any {
+	if len(buckets) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(buckets))
+	for key, bucket := range buckets {
+		out[key] = map[string]any{
+			"artifact_count":     bucket.artifactCount,
+			"resolved_ids":       uniqueSortedStrings(bucket.resolvedIDs),
+			"generation_ids":     uniqueSortedStrings(bucket.generationIDs),
+			"evidence_kinds":     uniqueSortedStrings(bucket.evidenceKinds),
+			"artifact_families":  uniqueSortedStrings(bucket.artifactFamilies),
+			"relationship_types": uniqueSortedStrings(bucket.relationshipTypes),
+		}
+	}
+	return out
 }
 
 func copyOptionalDeploymentEvidenceFields(dst map[string]any, src map[string]any) {
@@ -159,6 +233,12 @@ func copyOptionalDeploymentEvidenceFields(dst map[string]any, src map[string]any
 	if confidence := relationshipFloatVal(src, "confidence"); confidence > 0 {
 		dst["confidence"] = confidence
 	}
+	if startLine := firstPositiveInt(src, "start_line", "line_number", "line_start", "line"); startLine > 0 {
+		dst["start_line"] = startLine
+	}
+	if endLine := firstPositiveInt(src, "end_line", "line_end"); endLine > 0 {
+		dst["end_line"] = endLine
+	}
 	if environment := StringVal(src, "environment"); environment != "" {
 		dst["environment"] = environment
 	}
@@ -171,4 +251,33 @@ func copyOptionalDeploymentEvidenceFields(dst map[string]any, src map[string]any
 	if matchedValue := StringVal(src, "matched_value"); matchedValue != "" {
 		dst["matched_value"] = matchedValue
 	}
+}
+
+func attachDeploymentEvidenceSourceLocation(artifact map[string]any) {
+	repoID := StringVal(artifact, "source_repo_id")
+	path := StringVal(artifact, "path")
+	if repoID == "" || path == "" {
+		return
+	}
+	location := map[string]any{
+		"repo_id":   repoID,
+		"repo_name": StringVal(artifact, "source_repo_name"),
+		"path":      path,
+	}
+	if startLine := IntVal(artifact, "start_line"); startLine > 0 {
+		location["start_line"] = startLine
+	}
+	if endLine := IntVal(artifact, "end_line"); endLine > 0 {
+		location["end_line"] = endLine
+	}
+	artifact["source_location"] = location
+}
+
+func firstPositiveInt(row map[string]any, keys ...string) int {
+	for _, key := range keys {
+		if value := IntVal(row, key); value > 0 {
+			return value
+		}
+	}
+	return 0
 }

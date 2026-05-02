@@ -45,6 +45,8 @@ func TestGetRepositoryContextIncludesGraphDeploymentEvidence(t *testing.T) {
 						"resolved_id":           "resolved-1",
 						"generation_id":         "gen-1",
 						"confidence":            0.91,
+						"start_line":            int64(24),
+						"end_line":              int64(28),
 						"environment":           "prod",
 						"runtime_platform_kind": "kubernetes",
 						"matched_alias":         "checkout-service",
@@ -70,6 +72,8 @@ func TestGetRepositoryContextIncludesGraphDeploymentEvidence(t *testing.T) {
 						"resolved_id":       "resolved-2",
 						"generation_id":     "gen-1",
 						"confidence":        0.82,
+						"start_line":        int64(12),
+						"end_line":          int64(16),
 						"matched_alias":     "deploy.yaml",
 						"matched_value":     ".github/workflows/deploy.yaml",
 						"evidence_source":   "resolver/cross-repo",
@@ -110,6 +114,30 @@ func TestGetRepositoryContextIncludesGraphDeploymentEvidence(t *testing.T) {
 	if got, want := surface["artifact_count"], float64(2); got != want {
 		t.Fatalf("deployment_evidence.artifact_count = %#v, want %#v", got, want)
 	}
+	evidenceIndex, ok := surface["evidence_index"].(map[string]any)
+	if !ok {
+		t.Fatalf("deployment_evidence.evidence_index type = %T, want map[string]any", surface["evidence_index"])
+	}
+	if got, want := evidenceIndex["lookup_basis"], "resolved_id"; got != want {
+		t.Fatalf("evidence_index.lookup_basis = %#v, want %#v", got, want)
+	}
+	relationshipTypes := evidenceIndex["relationship_types"].(map[string]any)
+	deploysFrom := relationshipTypes["DEPLOYS_FROM"].(map[string]any)
+	if got, want := deploysFrom["artifact_count"], float64(2); got != want {
+		t.Fatalf("DEPLOYS_FROM.artifact_count = %#v, want %#v", got, want)
+	}
+	if !containsStringAny(deploysFrom["resolved_ids"].([]any), "resolved-1") ||
+		!containsStringAny(deploysFrom["resolved_ids"].([]any), "resolved-2") {
+		t.Fatalf("DEPLOYS_FROM.resolved_ids = %#v, want both resolved ids", deploysFrom["resolved_ids"])
+	}
+	artifactFamilies := evidenceIndex["artifact_families"].(map[string]any)
+	helm := artifactFamilies["helm"].(map[string]any)
+	if got, want := helm["artifact_count"], float64(1); got != want {
+		t.Fatalf("helm.artifact_count = %#v, want %#v", got, want)
+	}
+	if !containsStringAny(helm["resolved_ids"].([]any), "resolved-1") {
+		t.Fatalf("helm.resolved_ids = %#v, want resolved-1", helm["resolved_ids"])
+	}
 
 	for _, want := range []string{"helm", "github_actions"} {
 		if !containsStringAny(surface["artifact_families"].([]any), want) {
@@ -146,6 +174,18 @@ func TestGetRepositoryContextIncludesGraphDeploymentEvidence(t *testing.T) {
 	} {
 		if got := first[key]; got != want {
 			t.Fatalf("artifact[0].%s = %#v, want %#v; artifact=%#v", key, got, want, first)
+		}
+	}
+	sourceLocation := first["source_location"].(map[string]any)
+	for key, want := range map[string]any{
+		"repo_id":    "repo-service",
+		"repo_name":  "checkout-service",
+		"path":       ".github/workflows/deploy.yaml",
+		"start_line": float64(12),
+		"end_line":   float64(16),
+	} {
+		if got := sourceLocation[key]; got != want {
+			t.Fatalf("artifact[0].source_location.%s = %#v, want %#v; location=%#v", key, got, want, sourceLocation)
 		}
 	}
 }

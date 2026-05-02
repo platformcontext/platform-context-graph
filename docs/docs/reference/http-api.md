@@ -198,6 +198,26 @@ whether the latest published Go checkpoint is finished.
 - documentation-oriented clients should resolve canonical graph identity first, then use `repo_id + relative_path` or `entity_id` for exact evidence reads.
 - repository-oriented context, summary, story, stats, and file routes accept a repository selector at the public boundary and normalize it to the canonical `repo_id` server-side.
 
+### Deployment Evidence Pointers
+
+Repository, workload, service, and deployment-trace responses may include
+`deployment_evidence`. This object is intentionally compact: it returns counts
+and grouped pointers instead of embedding full Postgres evidence payloads.
+
+- `artifacts[]` carries the inspectable evidence pointer for one deployment,
+  CI, IaC, or config signal.
+- `artifacts[].resolved_id` is the durable lookup key for the
+  `resolved_relationships` row in Postgres.
+- `artifacts[].generation_id` identifies the relationship generation that
+  produced the row.
+- `artifacts[].source_location` identifies where the signal came from with
+  `repo_id`, `repo_name`, `path`, and `start_line` / `end_line` when the
+  extractor produced line data.
+- `evidence_index.lookup_basis` is `resolved_id`.
+- `evidence_index.relationship_types`, `evidence_index.artifact_families`, and
+  `evidence_index.evidence_kinds` group artifact counts with the unique
+  `resolved_ids` and `generation_ids` needed for drilldown.
+
 ## Context API
 
 ### Resolve fuzzy input into canonical entities

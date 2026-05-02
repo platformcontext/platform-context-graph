@@ -89,7 +89,7 @@ const openAPIPathsRepositories = `
                     },
                     "deployment_evidence": {
                       "type": "object",
-                      "description": "Graph-backed deployment, CI, and environment evidence pointers for this repository."
+                      "description": "Deployment, CI, and environment evidence pointers. Artifacts include source_location plus resolved_id/generation_id for Postgres evidence drilldown; evidence_index groups those pointers by relationship type, artifact family, and evidence kind."
                     },
                     "consumers": {
                       "type": "array",

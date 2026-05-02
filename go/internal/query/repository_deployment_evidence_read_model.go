@@ -176,6 +176,12 @@ func deploymentEvidenceArtifactFromPreview(preview map[string]any, direction, re
 	} else if environment := deploymentEnvironmentFromPath(path); environment != "" {
 		artifact["environment"] = environment
 	}
+	if startLine := firstPositiveInt(details, "start_line", "line_number", "line_start", "line"); startLine > 0 {
+		artifact["start_line"] = startLine
+	}
+	if endLine := firstPositiveInt(details, "end_line", "line_end"); endLine > 0 {
+		artifact["end_line"] = endLine
+	}
 	if runtimeKind := firstDeploymentArtifactString(details, "runtime_platform_kind", "platform_kind"); runtimeKind != "" {
 		artifact["runtime_platform_kind"] = runtimeKind
 	}
