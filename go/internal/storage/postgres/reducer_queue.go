@@ -59,6 +59,17 @@ WITH candidate AS (
             AND projector_any.domain = 'source_local'
             AND projector_any.status IN ('pending', 'retrying', 'claimed', 'running')
       ))
+      -- In local-host watch mode the ingester discovers and enqueues source
+      -- projector work incrementally. A temporary enqueue gap is not proof
+      -- that the whole corpus has drained, so semantic reducers can also wait
+      -- for the owner-discovered source-local success count.
+      AND ($5 = false OR domain <> 'semantic_entity_materialization' OR $6 <= 0 OR (
+          SELECT count(*)
+          FROM fact_work_items AS projector_done
+          WHERE projector_done.stage = 'projector'
+            AND projector_done.domain = 'source_local'
+            AND projector_done.status = 'succeeded'
+      ) >= $6)
       -- NornicDB's semantic label update path is backed by the same label/uid
       -- indexes touched by source-local canonical entities. Eight concurrent
       -- semantic writers have repeatedly timed out on tiny row sets, so cap
@@ -198,6 +209,10 @@ type ReducerQueue struct {
 	// NornicDB local_authoritative evaluation, where canonical projector
 	// writes and reducer writes share one embedded graph backend.
 	RequireProjectorDrainBeforeClaim bool
+
+	// ExpectedSourceLocalProjectors optionally requires semantic reducers to
+	// wait until local-host has completed the discovered source-local corpus.
+	ExpectedSourceLocalProjectors int
 }
 
 // ErrReducerClaimRejected means the claimed reducer work item no longer belongs
@@ -324,6 +339,7 @@ func (q ReducerQueue) Claim(ctx context.Context) (reducer.Intent, bool, error) {
 		q.LeaseOwner,
 		now.Add(q.LeaseDuration),
 		q.RequireProjectorDrainBeforeClaim,
+		q.ExpectedSourceLocalProjectors,
 	)
 	if err != nil {
 		return reducer.Intent{}, false, fmt.Errorf("claim reducer work: %w", err)

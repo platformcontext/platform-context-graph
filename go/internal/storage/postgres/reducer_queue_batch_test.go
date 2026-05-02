@@ -211,7 +211,7 @@ func TestClaimBatchCanWaitForProjectorDrain(t *testing.T) {
 	if got, want := db.queries[0].args[4], true; got != want {
 		t.Fatalf("projector drain arg = %v, want %v", got, want)
 	}
-	if got, want := db.queries[0].args[5], 5; got != want {
+	if got, want := db.queries[0].args[6], 5; got != want {
 		t.Fatalf("limit arg = %v, want %v", got, want)
 	}
 }
@@ -243,6 +243,9 @@ func TestClaimBatchGatesSemanticEntitiesOnGlobalProjectorDrain(t *testing.T) {
 		"projector_any.stage = 'projector'",
 		"projector_any.domain = 'source_local'",
 		"projector_any.status IN ('pending', 'retrying', 'claimed', 'running')",
+		"projector_done.domain = 'source_local'",
+		"projector_done.status = 'succeeded'",
+		">= $6",
 		"semantic_inflight.domain = 'semantic_entity_materialization'",
 		"semantic_inflight.status IN ('claimed', 'running')",
 		"semantic_inflight.claim_until > $1",
@@ -252,6 +255,35 @@ func TestClaimBatchGatesSemanticEntitiesOnGlobalProjectorDrain(t *testing.T) {
 		if !strings.Contains(query, want) {
 			t.Fatalf("batch claim query missing semantic global projector gate %q:\n%s", want, query)
 		}
+	}
+}
+
+func TestClaimBatchPassesExpectedSourceLocalProjectors(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 2, 4, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	q := ReducerQueue{
+		db:                            db,
+		LeaseOwner:                    "test",
+		LeaseDuration:                 time.Minute,
+		Now:                           func() time.Time { return now },
+		ExpectedSourceLocalProjectors: 878,
+	}
+
+	if _, err := q.ClaimBatch(context.Background(), 5); err != nil {
+		t.Fatalf("ClaimBatch() error = %v", err)
+	}
+
+	if got, want := db.queries[0].args[5], 878; got != want {
+		t.Fatalf("expected source-local projector arg = %v, want %v", got, want)
+	}
+	if got, want := db.queries[0].args[6], 5; got != want {
+		t.Fatalf("limit arg = %v, want %v", got, want)
 	}
 }
 

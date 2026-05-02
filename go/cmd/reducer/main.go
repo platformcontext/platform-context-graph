@@ -205,6 +205,12 @@ func buildReducerService(
 	workQueue.MaxAttempts = retryCfg.MaxAttempts
 	workQueue.ClaimDomain = claimDomain
 	workQueue.RequireProjectorDrainBeforeClaim = projectorDrainGate
+	workQueue.ExpectedSourceLocalProjectors = loadReducerExpectedSourceLocalProjectors(getenv)
+	if workQueue.ExpectedSourceLocalProjectors > 0 && logger != nil {
+		logger.Info("semantic reducers will wait for expected source-local projectors",
+			"expected_source_local_projectors", workQueue.ExpectedSourceLocalProjectors,
+		)
+	}
 
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
 		DeployableUnitCorrelationHandler: reducer.DeployableUnitCorrelationHandler{

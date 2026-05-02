@@ -12,12 +12,13 @@ import (
 )
 
 const (
-	reducerRetryDelayEnv  = "PCG_REDUCER_RETRY_DELAY"
-	reducerMaxAttemptsEnv = "PCG_REDUCER_MAX_ATTEMPTS"
-	reducerWorkersEnv     = "PCG_REDUCER_WORKERS"
-	reducerBatchClaimEnv  = "PCG_REDUCER_BATCH_CLAIM_SIZE"
-	reducerClaimDomainEnv = "PCG_REDUCER_CLAIM_DOMAIN"
-	queryProfileEnv       = "PCG_QUERY_PROFILE"
+	reducerRetryDelayEnv                    = "PCG_REDUCER_RETRY_DELAY"
+	reducerMaxAttemptsEnv                   = "PCG_REDUCER_MAX_ATTEMPTS"
+	reducerWorkersEnv                       = "PCG_REDUCER_WORKERS"
+	reducerBatchClaimEnv                    = "PCG_REDUCER_BATCH_CLAIM_SIZE"
+	reducerClaimDomainEnv                   = "PCG_REDUCER_CLAIM_DOMAIN"
+	queryProfileEnv                         = "PCG_QUERY_PROFILE"
+	reducerExpectedSourceLocalProjectorsEnv = "PCG_REDUCER_EXPECTED_SOURCE_LOCAL_PROJECTORS"
 
 	codeCallProjectionPollIntervalEnv        = "PCG_CODE_CALL_PROJECTION_POLL_INTERVAL"
 	codeCallProjectionLeaseTTLEnv            = "PCG_CODE_CALL_PROJECTION_LEASE_TTL"
@@ -96,6 +97,18 @@ func loadReducerClaimDomain(getenv func(string) string) (reducer.Domain, error) 
 		return "", err
 	}
 	return domain, nil
+}
+
+func loadReducerExpectedSourceLocalProjectors(getenv func(string) string) int {
+	if getenv == nil {
+		getenv = func(string) string { return "" }
+	}
+	raw := strings.TrimSpace(getenv(reducerExpectedSourceLocalProjectorsEnv))
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }
 
 func loadReducerProjectorDrainGate(

@@ -257,6 +257,36 @@ func TestLoadReducerProjectorDrainGate_InvalidProfile(t *testing.T) {
 	}
 }
 
+func TestLoadReducerExpectedSourceLocalProjectors(t *testing.T) {
+	t.Parallel()
+
+	got := loadReducerExpectedSourceLocalProjectors(func(k string) string {
+		if k == reducerExpectedSourceLocalProjectorsEnv {
+			return "878"
+		}
+		return ""
+	})
+	if got != 878 {
+		t.Fatalf("loadReducerExpectedSourceLocalProjectors() = %d, want 878", got)
+	}
+}
+
+func TestLoadReducerExpectedSourceLocalProjectorsIgnoresInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"", "0", "-1", "nope"} {
+		got := loadReducerExpectedSourceLocalProjectors(func(k string) string {
+			if k == reducerExpectedSourceLocalProjectorsEnv {
+				return raw
+			}
+			return ""
+		})
+		if got != 0 {
+			t.Fatalf("loadReducerExpectedSourceLocalProjectors(%q) = %d, want 0", raw, got)
+		}
+	}
+}
+
 func TestLoadCodeCallProjectionConfigReadsAcceptanceScanLimit(t *testing.T) {
 	t.Parallel()
 

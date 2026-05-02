@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 
 const localHostShutdownTimeout = 5 * time.Second
 const deferContentSearchIndexesEnv = "PCG_LOCAL_AUTHORITATIVE_DEFER_CONTENT_SEARCH_INDEXES"
+const reducerExpectedSourceLocalProjectorsEnv = "PCG_REDUCER_EXPECTED_SOURCE_LOCAL_PROJECTORS"
 
 var (
 	localHostBuildLayout = func(workspaceRoot string) (pcglocal.Layout, error) {
@@ -242,7 +244,7 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 		reducerCmd, err := localHostStartChildProcess(
 			"pcg-reducer",
 			[]string{"pcg-reducer"},
-			localHostEnv(managedPostgres.DSN, runtimeConfig, managedGraph, nil),
+			localHostEnv(managedPostgres.DSN, runtimeConfig, managedGraph, localHostReducerOverrides(expectedProjectors)),
 		)
 		if err != nil {
 			return err
@@ -306,6 +308,15 @@ func runOwnedLocalHostWithLayout(ctx context.Context, layout pcglocal.Layout, mo
 	}()
 	children = append(children, localHostChild{name: "pcg-mcp-server", cmd: mcpServer})
 	return localHostWaitManagedChildren(ctx, children, "pcg-mcp-server")
+}
+
+func localHostReducerOverrides(expectedProjectors int) map[string]string {
+	if expectedProjectors <= 0 {
+		return nil
+	}
+	return map[string]string{
+		reducerExpectedSourceLocalProjectorsEnv: strconv.Itoa(expectedProjectors),
+	}
 }
 
 func runAttachedLocalMCPStdio(ctx context.Context, layout pcglocal.Layout) (bool, error) {

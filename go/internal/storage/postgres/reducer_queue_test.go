@@ -241,6 +241,9 @@ func TestReducerQueueClaimGatesSemanticEntitiesOnGlobalProjectorDrain(t *testing
 		"projector_any.stage = 'projector'",
 		"projector_any.domain = 'source_local'",
 		"projector_any.status IN ('pending', 'retrying', 'claimed', 'running')",
+		"projector_done.domain = 'source_local'",
+		"projector_done.status = 'succeeded'",
+		">= $6",
 		"semantic_inflight.domain = 'semantic_entity_materialization'",
 		"semantic_inflight.status IN ('claimed', 'running')",
 		"semantic_inflight.claim_until > $1",
@@ -248,6 +251,32 @@ func TestReducerQueueClaimGatesSemanticEntitiesOnGlobalProjectorDrain(t *testing
 		if !strings.Contains(query, want) {
 			t.Fatalf("claim query missing semantic global projector gate %q:\n%s", want, query)
 		}
+	}
+}
+
+func TestReducerQueueClaimPassesExpectedSourceLocalProjectors(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.May, 2, 4, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	queue := ReducerQueue{
+		db:                            db,
+		LeaseOwner:                    "test-owner",
+		LeaseDuration:                 30 * time.Second,
+		Now:                           func() time.Time { return now },
+		ExpectedSourceLocalProjectors: 878,
+	}
+
+	_, _, err := queue.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if got, want := db.queries[0].args[5], 878; got != want {
+		t.Fatalf("expected source-local projector arg = %v, want %v", got, want)
 	}
 }
 

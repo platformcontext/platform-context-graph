@@ -324,6 +324,35 @@ func TestBuildReducerServiceWiresNornicDBProjectorDrainGate(t *testing.T) {
 	}
 }
 
+func TestBuildReducerServiceWiresExpectedSourceLocalProjectors(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeReducerDB{}
+	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(name string) string {
+		switch name {
+		case "PCG_GRAPH_BACKEND":
+			return string(runtimecfg.GraphBackendNornicDB)
+		case queryProfileEnv:
+			return string(query.ProfileLocalAuthoritative)
+		case reducerExpectedSourceLocalProjectorsEnv:
+			return "878"
+		default:
+			return ""
+		}
+	}, nil, nil, slog.Default())
+	if err != nil {
+		t.Fatalf("buildReducerService() error = %v, want nil", err)
+	}
+
+	queue, ok := service.WorkSource.(postgres.ReducerQueue)
+	if !ok {
+		t.Fatalf("WorkSource type = %T, want postgres.ReducerQueue", service.WorkSource)
+	}
+	if got, want := queue.ExpectedSourceLocalProjectors, 878; got != want {
+		t.Fatalf("ExpectedSourceLocalProjectors = %d, want %d", got, want)
+	}
+}
+
 type fakeReducerDB struct {
 	execs []fakeReducerExecCall
 }

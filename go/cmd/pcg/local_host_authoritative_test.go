@@ -120,6 +120,9 @@ func TestRunOwnedLocalHostWithLayoutAuthoritativeStartsManagedGraph(t *testing.T
 		if envValue(env, "PCG_NEO4J_URI") != "bolt://127.0.0.1:17687" {
 			t.Fatalf("PCG_NEO4J_URI = %q, want %q", envValue(env, "PCG_NEO4J_URI"), "bolt://127.0.0.1:17687")
 		}
+		if name == "pcg-reducer" && envValue(env, "PCG_REDUCER_EXPECTED_SOURCE_LOCAL_PROJECTORS") != "2" {
+			t.Fatalf("PCG_REDUCER_EXPECTED_SOURCE_LOCAL_PROJECTORS = %q, want 2", envValue(env, "PCG_REDUCER_EXPECTED_SOURCE_LOCAL_PROJECTORS"))
+		}
 		return &exec.Cmd{}, nil
 	}
 	localHostWaitManagedChildren = func(ctx context.Context, children []localHostChild, allowCleanExit string) error {
