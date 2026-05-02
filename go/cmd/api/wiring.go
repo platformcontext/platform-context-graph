@@ -205,6 +205,10 @@ func newRouter(
 			Profile: queryProfile,
 			Logger:  logger,
 		},
+		Evidence: &query.EvidenceHandler{
+			Content: contentReader,
+			Profile: queryProfile,
+		},
 		Status: &query.StatusHandler{
 			Neo4j:        neo4jReader,
 			DB:           db,

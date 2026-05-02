@@ -115,6 +115,7 @@ type APIRouter struct {
 	Infra        *InfraHandler
 	IaC          *IaCHandler
 	Impact       *ImpactHandler
+	Evidence     *EvidenceHandler
 	Status       *StatusHandler
 	Compare      *CompareHandler
 	Admin        *AdminHandler
@@ -163,6 +164,11 @@ func (a *APIRouter) Mount(mux *http.ServeMux) {
 	// Impact
 	if a.Impact != nil {
 		a.Impact.Mount(mux)
+	}
+
+	// Evidence
+	if a.Evidence != nil {
+		a.Evidence.Mount(mux)
 	}
 
 	// Status

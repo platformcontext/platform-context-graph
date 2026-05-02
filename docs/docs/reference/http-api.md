@@ -218,6 +218,15 @@ and grouped pointers instead of embedding full Postgres evidence payloads.
   `evidence_index.evidence_kinds` group artifact counts with the unique
   `resolved_ids` and `generation_ids` needed for drilldown.
 
+`GET /api/v0/evidence/relationships/{resolved_id}` dereferences one pointer
+into the durable relationship evidence row. The response includes
+`lookup_basis: "resolved_id"`, source and target repo metadata, relationship
+type, confidence, evidence count, evidence kinds, rationale, resolution source,
+generation metadata, `evidence_preview`, and the decoded `details` JSON stored
+with the resolved relationship. Use this endpoint when an API or MCP client
+needs to explain why an edge exists without embedding the full evidence payload
+in every graph-facing response.
+
 ## Context API
 
 ### Resolve fuzzy input into canonical entities

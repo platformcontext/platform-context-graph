@@ -58,6 +58,7 @@ The initial capability families are:
 - `code_quality.dead_code`
 - `platform_impact.deployment_chain`
 - `platform_impact.context_overview`
+- `relationship_evidence.drilldown`
 - `platform_impact.resource_to_code`
 - `platform_impact.dependency_path`
 - `platform_impact.environment_compare`
@@ -82,7 +83,7 @@ The same capability ID may back more than one surface or tool. Initial mapping:
 | `trace_deployment_chain` | `platform_impact.deployment_chain` |
 | `find_infra_resources` | `platform_impact.deployment_chain` |
 | `analyze_infra_relationships` | `platform_impact.deployment_chain` |
-| `get_repo_context` | `platform_impact.context_overview` |
+| `get_repo_context` | `platform_impact.context_overview`, `relationship_evidence.drilldown` |
 | `get_service_context` | `platform_impact.context_overview` |
 | `get_ecosystem_overview` | `platform_impact.context_overview` |
 | `execute_language_query` | `symbol_graph.decorators`, `symbol_graph.argument_names`, `symbol_graph.class_methods`, `symbol_graph.imports`, `symbol_graph.inheritance` |

@@ -22,6 +22,7 @@ type fakePortContentStore struct {
 	relationshipReadModel repositoryRelationshipReadModel
 	entryPoints           repositoryEntryPointReadModel
 	deploymentEvidence    repositoryDeploymentEvidenceReadModel
+	relationshipEvidence  relationshipEvidenceReadModel
 	entities              []EntityContent
 	repositories          []RepositoryCatalogEntry
 }
@@ -106,6 +107,10 @@ func (f fakePortContentStore) repositoryDeploymentEvidence(context.Context, stri
 	return f.deploymentEvidence, nil
 }
 
+func (f fakePortContentStore) relationshipEvidenceByResolvedID(context.Context, string) (relationshipEvidenceReadModel, error) {
+	return f.relationshipEvidence, nil
+}
+
 func (f fakePortContentStore) ListRepositories(context.Context) ([]RepositoryCatalogEntry, error) {
 	return append([]RepositoryCatalogEntry(nil), f.repositories...), nil
 }
@@ -146,6 +151,7 @@ func TestQueryHandlersAcceptCapabilityPorts(t *testing.T) {
 	_ = &LanguageQueryHandler{Neo4j: graph, Content: content}
 	_ = &CompareHandler{Neo4j: graph, Content: content}
 	_ = &ContentHandler{Content: content}
+	_ = &EvidenceHandler{Content: content}
 	_ = &StatusHandler{Neo4j: graph}
 }
 

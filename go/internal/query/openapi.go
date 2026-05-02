@@ -19,6 +19,7 @@ func OpenAPISpec() string {
 			openAPIPathsAdmin+
 			openAPIPathsInfrastructure+
 			openAPIPathsImpact+
+			openAPIPathsEvidence+
 			openAPIPathsStatusAndCompare+
 			openAPIComponents,
 		"__PCG_VERSION__",

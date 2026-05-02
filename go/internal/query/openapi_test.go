@@ -58,6 +58,7 @@ func TestServeOpenAPI(t *testing.T) {
 		"/api/v0/repositories",
 		"/api/v0/repositories/{repo_id}/context",
 		"/api/v0/entities/resolve",
+		"/api/v0/evidence/relationships/{resolved_id}",
 		"/api/v0/code/search",
 		"/api/v0/code/call-chain",
 		"/api/v0/code/language-query",

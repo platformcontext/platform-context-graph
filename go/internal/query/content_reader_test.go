@@ -545,6 +545,10 @@ func (c *contentReaderConn) QueryContext(_ context.Context, query string, _ []dr
 		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], contentReaderRelationshipReadModelColumns())) {
 		return &contentReaderRows{columns: contentReaderRelationshipReadModelColumns(), rows: nil}, nil
 	}
+	if strings.Contains(query, "WHERE r.resolved_id = $1") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], contentReaderRelationshipEvidenceColumns())) {
+		return &contentReaderRows{columns: contentReaderRelationshipEvidenceColumns(), rows: nil}, nil
+	}
 	if strings.Contains(query, "FROM resolved_relationships") &&
 		strings.Contains(query, "count(") &&
 		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"count"})) {
@@ -573,6 +577,16 @@ func contentReaderDeploymentEvidenceColumns() []string {
 	return []string{
 		"direction", "resolved_id", "generation_id", "source_repo_id", "source_name",
 		"target_repo_id", "target_name", "relationship_type", "confidence", "details",
+	}
+}
+
+func contentReaderRelationshipEvidenceColumns() []string {
+	return []string{
+		"resolved_id", "generation_id", "source_repo_id", "source_name",
+		"source_entity_id", "target_repo_id", "target_name", "target_entity_id",
+		"relationship_type", "confidence", "evidence_count", "rationale",
+		"resolution_source", "details", "generation_scope", "generation_run_id",
+		"generation_status",
 	}
 }
 
