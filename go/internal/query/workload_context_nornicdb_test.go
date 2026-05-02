@@ -31,8 +31,8 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 				if strings.Contains(cypher, "OPTIONAL MATCH") || strings.Contains(cypher, "collect(DISTINCT {") {
 					t.Fatalf("cypher = %q, want scalar queries without optional map projection", cypher)
 				}
-				if strings.Contains(cypher, "(i:WorkloadInstance)-[runsOn:RUNS_ON]->") {
-					t.Fatalf("cypher = %q, want RUNS_ON traversal in a separate MATCH", cypher)
+				if strings.Contains(cypher, "MATCH (i)-[runsOn:RUNS_ON]->") {
+					t.Fatalf("cypher = %q, want exact instance and RUNS_ON traversal in one MATCH", cypher)
 				}
 				switch {
 				case strings.Contains(cypher, "MATCH (r:Repository)-[:DEFINES]->(w)"):
@@ -48,6 +48,9 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 					}
 					switch {
 					case strings.Contains(cypher, "'workload-instance:api-node-datax:bg-prod'"):
+						if !strings.Contains(cypher, "(i:WorkloadInstance {id: 'workload-instance:api-node-datax:bg-prod'})-[runsOn:RUNS_ON]->(p:Platform)") {
+							t.Fatalf("cypher = %q, want compound exact-instance RUNS_ON pattern", cypher)
+						}
 						return []map[string]any{
 							{
 								"instance_id":         "workload-instance:api-node-datax:bg-prod",
@@ -65,6 +68,9 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 							},
 						}, nil
 					case strings.Contains(cypher, "'workload-instance:api-node-datax:ops-qa'"):
+						if !strings.Contains(cypher, "(i:WorkloadInstance {id: 'workload-instance:api-node-datax:ops-qa'})-[runsOn:RUNS_ON]->(p:Platform)") {
+							t.Fatalf("cypher = %q, want compound exact-instance RUNS_ON pattern", cypher)
+						}
 						return []map[string]any{
 							{
 								"instance_id":         "workload-instance:api-node-datax:ops-qa",
@@ -173,7 +179,13 @@ func TestFetchWorkloadContextPrefersInstanceRunsOnTruthOverProvisionedPlatformSh
 					if len(params) != 0 {
 						t.Fatalf("RUNS_ON params = %#v, want literal exact-instance anchor", params)
 					}
+					if strings.Contains(cypher, "MATCH (i)-[runsOn:RUNS_ON]->") {
+						t.Fatalf("cypher = %q, want exact instance and RUNS_ON traversal in one MATCH", cypher)
+					}
 					if strings.Contains(cypher, "'workload-instance:sample-service:ops-qa'") {
+						if !strings.Contains(cypher, "(i:WorkloadInstance {id: 'workload-instance:sample-service:ops-qa'})-[runsOn:RUNS_ON]->(p:Platform)") {
+							t.Fatalf("cypher = %q, want compound exact-instance RUNS_ON pattern", cypher)
+						}
 						return []map[string]any{
 							{
 								"instance_id":         "workload-instance:sample-service:ops-qa",
@@ -186,6 +198,9 @@ func TestFetchWorkloadContextPrefersInstanceRunsOnTruthOverProvisionedPlatformSh
 					}
 					if !strings.Contains(cypher, "'workload-instance:sample-service:bg-prod'") {
 						t.Fatalf("cypher = %q, want exact instance id", cypher)
+					}
+					if !strings.Contains(cypher, "(i:WorkloadInstance {id: 'workload-instance:sample-service:bg-prod'})-[runsOn:RUNS_ON]->(p:Platform)") {
+						t.Fatalf("cypher = %q, want compound exact-instance RUNS_ON pattern", cypher)
 					}
 					return []map[string]any{
 						{

@@ -252,8 +252,7 @@ func (h *EntityHandler) fetchWorkloadPlatformRows(ctx context.Context, instances
 		return nil, nil
 	}
 	const platformCypherTemplate = `
-		MATCH (i:WorkloadInstance {id: %s})
-		MATCH (i)-[runsOn:RUNS_ON]->(p:Platform)
+		MATCH (i:WorkloadInstance {id: %s})-[runsOn:RUNS_ON]->(p:Platform)
 		RETURN i.id as instance_id,
 		       p.name as platform_name,
 		       p.kind as platform_kind,
