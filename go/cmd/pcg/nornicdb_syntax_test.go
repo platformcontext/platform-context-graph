@@ -190,6 +190,127 @@ RETURN count(f) AS count`, map[string]any{
 	})
 }
 
+func TestNornicDBBatchedTerraformVariableBraceMetadataCompatibility(t *testing.T) {
+	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
+		setup := []string{
+			"CREATE CONSTRAINT pcg_syntax_tf_variable_uid IF NOT EXISTS FOR (n:TerraformVariable) REQUIRE n.uid IS UNIQUE",
+			"CREATE CONSTRAINT pcg_syntax_tf_file_path IF NOT EXISTS FOR (f:File) REQUIRE f.path IS UNIQUE",
+			"MERGE (:File {path: '/tmp/pcg-nornicdb-batch/variables.tf'})",
+		}
+		runNornicDBSyntaxSequence(t, ctx, driver, setup)
+
+		query := `UNWIND $rows AS row
+MATCH (f:File {path: $file_path})
+MERGE (n:TerraformVariable {uid: row.entity_id})
+SET n += row.props
+MERGE (f)-[rel:CONTAINS]->(n)
+SET rel.evidence_source = 'projector/canonical',
+    rel.generation_id = row.generation_id
+RETURN count(*) AS processed_rows`
+
+		description := `symbols from the following set: ^$*.[]{}()?"!@#%&/\\,><':;|_~`
+		rows := []map[string]any{
+			{
+				"entity_id":     "tf-var:empty-map",
+				"generation_id": "gen-batch",
+				"props": map[string]any{
+					"id":            "tf-var:empty-map",
+					"name":          "environment_vars",
+					"path":          "/tmp/pcg-nornicdb-batch/variables.tf",
+					"relative_path": "variables.tf",
+					"line_number":   12,
+					"start_line":    12,
+					"end_line":      16,
+					"repo_id":       "repo-batch",
+					"language":      "hcl",
+					"lang":          "hcl",
+					"scope_id":      "scope-batch",
+					"generation_id": "gen-batch",
+					"default":       "{}",
+					"var_type":      "map(object({ name = string }))",
+				},
+			},
+			{
+				"entity_id":     "tf-var:description-braces",
+				"generation_id": "gen-batch",
+				"props": map[string]any{
+					"id":            "tf-var:description-braces",
+					"name":          "passwords_require_symbols",
+					"path":          "/tmp/pcg-nornicdb-batch/variables.tf",
+					"relative_path": "variables.tf",
+					"line_number":   24,
+					"start_line":    24,
+					"end_line":      28,
+					"repo_id":       "repo-batch",
+					"language":      "hcl",
+					"lang":          "hcl",
+					"scope_id":      "scope-batch",
+					"generation_id": "gen-batch",
+					"default":       "cty.True",
+					"var_type":      "bool",
+					"description":   description,
+				},
+			},
+		}
+
+		session := driver.NewSession(ctx, neo4jdriver.SessionConfig{
+			AccessMode:   neo4jdriver.AccessModeWrite,
+			DatabaseName: localNornicDBDefaultDatabase,
+		})
+		defer func() {
+			_ = session.Close(ctx)
+		}()
+
+		result, err := session.Run(ctx, query, map[string]any{
+			"file_path": "/tmp/pcg-nornicdb-batch/variables.tf",
+			"rows":      rows,
+		})
+		if err != nil {
+			t.Fatalf("batched TerraformVariable brace metadata query error = %v, want nil", err)
+		}
+		if _, err := result.Consume(ctx); err != nil {
+			t.Fatalf("batched TerraformVariable brace metadata consume error = %v, want nil", err)
+		}
+
+		count, err := nornicDBReadCount(ctx, driver, `
+MATCH (:File {path: $file_path})-[:CONTAINS]->(v:TerraformVariable)
+WHERE v.repo_id = $repo_id
+RETURN count(v) AS count`, map[string]any{
+			"file_path": "/tmp/pcg-nornicdb-batch/variables.tf",
+			"repo_id":   "repo-batch",
+		})
+		if err != nil {
+			t.Fatalf("count batched TerraformVariable containment error = %v, want nil", err)
+		}
+		if count != 2 {
+			t.Fatalf("batched TerraformVariable containment count = %d, want 2", count)
+		}
+
+		result, err = session.Run(ctx, `
+MATCH (:File {path: $file_path})-[:CONTAINS]->(v:TerraformVariable)
+RETURN v.name AS name, v.default AS default_value, v.var_type AS var_type, v.description AS description`, map[string]any{
+			"file_path": "/tmp/pcg-nornicdb-batch/variables.tf",
+		})
+		if err != nil {
+			t.Fatalf("read batched TerraformVariable metadata error = %v, want nil", err)
+		}
+		metadataByName := make(map[string][]any)
+		for result.Next(ctx) {
+			record := result.Record()
+			metadataByName[record.Values[0].(string)] = record.Values
+		}
+		if err := result.Err(); err != nil {
+			t.Fatalf("iterate batched TerraformVariable metadata error = %v, want nil", err)
+		}
+		if got := metadataByName["environment_vars"]; got[1] != "{}" || got[2] != "map(object({ name = string }))" {
+			t.Fatalf("environment_vars metadata = %#v, want brace-bearing default and var_type", got)
+		}
+		if got := metadataByName["passwords_require_symbols"]; got[1] != "cty.True" || got[2] != "bool" || got[3] != description {
+			t.Fatalf("passwords_require_symbols metadata = %#v, want description %#v", got, description)
+		}
+	})
+}
+
 func TestNornicDBCanonicalEntitySingletonFallbackForShortestPathValues(t *testing.T) {
 	withNornicDBSyntaxDriver(t, func(ctx context.Context, driver neo4jdriver.DriverWithContext) {
 		setup := []string{

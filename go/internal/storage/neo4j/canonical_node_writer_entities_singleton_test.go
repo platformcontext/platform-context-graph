@@ -138,7 +138,7 @@ func TestCanonicalNodeWriterFileScopedContainmentOnlySingletonsFallbackRows(t *t
 	}
 }
 
-func TestCanonicalNodeWriterFileScopedContainmentGroupsTerraformVariableCurlyBraceFallback(t *testing.T) {
+func TestCanonicalNodeWriterFileScopedContainmentBatchesTerraformVariableCurlyBraceMetadata(t *testing.T) {
 	t.Parallel()
 
 	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
@@ -172,19 +172,26 @@ func TestCanonicalNodeWriterFileScopedContainmentGroupsTerraformVariableCurlyBra
 	if got, want := len(stmts), 1; got != want {
 		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
 	}
-	fallback := stmts[0]
-	if strings.Contains(fallback.Cypher, "UNWIND $rows AS row") {
-		t.Fatalf("fallback cypher = %q, want singleton shape for curly brace metadata", fallback.Cypher)
+	stmt := stmts[0]
+	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
+		t.Fatalf("entity cypher = %q, want batched shape for curly brace metadata", stmt.Cypher)
 	}
-	if got, want := fallback.Parameters[StatementMetadataPhaseGroupModeKey], PhaseGroupModeGroupedSingleton; got != want {
-		t.Fatalf("fallback phase group mode = %#v, want %#v", got, want)
+	if got := stmt.Parameters[StatementMetadataPhaseGroupModeKey]; got != nil {
+		t.Fatalf("phase group mode = %#v, want grouped row", got)
 	}
-	if got, want := fallback.Parameters["entity_id"], "tf-var-1"; got != want {
-		t.Fatalf("fallback entity_id = %#v, want %#v", got, want)
+	rows, ok := stmt.Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows type = %T, want []map[string]any", stmt.Parameters["rows"])
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("rows = %d, want %d", got, want)
+	}
+	if got, want := rows[0]["entity_id"], "tf-var-1"; got != want {
+		t.Fatalf("row entity_id = %#v, want %#v", got, want)
 	}
 }
 
-func TestCanonicalNodeWriterFileScopedContainmentGroupsTerraformVariableDescriptionBraces(t *testing.T) {
+func TestCanonicalNodeWriterFileScopedContainmentBatchesTerraformVariableDescriptionBraces(t *testing.T) {
 	t.Parallel()
 
 	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
@@ -219,12 +226,26 @@ func TestCanonicalNodeWriterFileScopedContainmentGroupsTerraformVariableDescript
 	if got, want := len(stmts), 1; got != want {
 		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
 	}
-	fallback := stmts[0]
-	if strings.Contains(fallback.Cypher, "UNWIND $rows AS row") {
-		t.Fatalf("fallback cypher = %q, want singleton shape for TerraformVariable description braces", fallback.Cypher)
+	stmt := stmts[0]
+	if !strings.Contains(stmt.Cypher, "UNWIND $rows AS row") {
+		t.Fatalf("entity cypher = %q, want batched shape for TerraformVariable description braces", stmt.Cypher)
 	}
-	if got, want := fallback.Parameters[StatementMetadataPhaseGroupModeKey], PhaseGroupModeGroupedSingleton; got != want {
-		t.Fatalf("fallback phase group mode = %#v, want %#v", got, want)
+	if got := stmt.Parameters[StatementMetadataPhaseGroupModeKey]; got != nil {
+		t.Fatalf("phase group mode = %#v, want grouped row", got)
+	}
+	rows, ok := stmt.Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows type = %T, want []map[string]any", stmt.Parameters["rows"])
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("rows = %d, want %d", got, want)
+	}
+	props, ok := rows[0]["props"].(map[string]any)
+	if !ok {
+		t.Fatalf("props type = %T, want map[string]any", rows[0]["props"])
+	}
+	if got, want := props["description"], `symbols from the following set: ^$*.[]{}()?"!@#%&/\\,><':;|_~`; got != want {
+		t.Fatalf("description = %#v, want %#v", got, want)
 	}
 }
 
