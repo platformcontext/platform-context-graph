@@ -168,7 +168,7 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	}
 
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "entry_points")
-	result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, params)
+	result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, h.Content, params)
 	timer.Done(ctx, slog.Int("row_count", len(result["entry_points"].([]map[string]any))))
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "infrastructure")
 	result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, params)
@@ -255,7 +255,12 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	WriteSuccess(w, r, http.StatusOK, result, BuildTruthEnvelope(h.profile(), "platform_impact.context_overview", TruthBasisHybrid, "resolved from repository context and platform evidence"))
 }
 
-func queryRepoEntryPoints(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
+func queryRepoEntryPoints(ctx context.Context, reader GraphQuery, content ContentStore, params map[string]any) []map[string]any {
+	repoID := StringVal(params, "repo_id")
+	if entryPoints := loadRepositoryEntryPoints(ctx, content, repoID); entryPoints != nil {
+		return entryPoints
+	}
+
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(fn:Function)
 		WHERE fn.name IN ['main', 'handler', 'app', 'create_app', 'lambda_handler',
@@ -269,6 +274,9 @@ func queryRepoEntryPoints(ctx context.Context, reader GraphQuery, params map[str
 
 	result := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
+		if !isRepositoryEntryPointName(StringVal(row, "name")) {
+			continue
+		}
 		result = append(result, map[string]any{
 			"name":          StringVal(row, "name"),
 			"relative_path": StringVal(row, "relative_path"),
@@ -276,6 +284,16 @@ func queryRepoEntryPoints(ctx context.Context, reader GraphQuery, params map[str
 		})
 	}
 	return result
+}
+
+func isRepositoryEntryPointName(name string) bool {
+	switch name {
+	case "main", "handler", "app", "create_app", "lambda_handler",
+		"Main", "Handler", "App", "CreateApp", "LambdaHandler":
+		return true
+	default:
+		return false
+	}
 }
 
 func queryRepoInfrastructure(ctx context.Context, reader GraphQuery, content ContentStore, params map[string]any) []map[string]any {

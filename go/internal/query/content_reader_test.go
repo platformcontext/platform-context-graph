@@ -514,6 +514,12 @@ func (c *contentReaderConn) QueryContext(_ context.Context, query string, _ []dr
 		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"language", "file_count"})) {
 		return &contentReaderRows{columns: []string{"language", "file_count"}, rows: nil}, nil
 	}
+	if strings.Contains(query, "FROM content_entities") &&
+		strings.Contains(query, "entity_type = 'Function'") &&
+		strings.Contains(query, "entity_name IN") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"entity_name", "relative_path", "language"})) {
+		return &contentReaderRows{columns: []string{"entity_name", "relative_path", "language"}, rows: nil}, nil
+	}
 	if strings.Contains(query, "FROM ingestion_scopes") &&
 		strings.Contains(query, "SELECT scope_id") &&
 		strings.Contains(query, "LIMIT 1") &&
