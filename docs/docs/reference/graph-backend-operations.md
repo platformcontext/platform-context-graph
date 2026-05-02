@@ -263,11 +263,13 @@ surface through a backend schema dialect:
 - NornicDB intentionally skips Neo4j's multi-label
   `CREATE FULLTEXT INDEX` fallback because NornicDB only verified the
   procedure-based multi-label fulltext path.
-- NornicDB also receives explicit property indexes for `Repository.id`,
-  `Directory.path`, and `File.path` because its `MERGE` lookup path uses
-  property indexes before falling back to label scans. Neo4j does not receive
-  these duplicate indexes because uniqueness constraints already create backing
-  indexes there.
+- NornicDB also receives explicit property indexes for hot `MERGE` lookup
+  identities such as `Repository.id`, `Directory.path`, `File.path`,
+  `Workload.id`, `WorkloadInstance.id`, `Platform.id`, `Endpoint.id`,
+  `EvidenceArtifact.id`, `Environment.name`, and canonical `uid` labels
+  because its `MERGE` lookup path uses property indexes before falling back to
+  label scans. Neo4j does not receive these duplicate indexes because
+  uniqueness constraints already create backing indexes there.
 
 The opt-in verification gate is:
 
