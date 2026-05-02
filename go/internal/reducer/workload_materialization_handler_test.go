@@ -842,8 +842,11 @@ func (f *stubFactLoader) ListFacts(_ context.Context, _, _ string) ([]facts.Enve
 }
 
 type stubResolvedRelationshipLoader struct {
-	resolved []relationships.ResolvedRelationship
-	calls    int
+	resolved     []relationships.ResolvedRelationship
+	repoResolved []relationships.ResolvedRelationship
+	calls        int
+	repoCalls    int
+	repoIDs      []string
 }
 
 func (f *stubResolvedRelationshipLoader) GetResolvedRelationships(
@@ -852,6 +855,15 @@ func (f *stubResolvedRelationshipLoader) GetResolvedRelationships(
 ) ([]relationships.ResolvedRelationship, error) {
 	f.calls++
 	return f.resolved, nil
+}
+
+func (f *stubResolvedRelationshipLoader) GetResolvedRelationshipsForRepos(
+	_ context.Context,
+	repoIDs []string,
+) ([]relationships.ResolvedRelationship, error) {
+	f.repoCalls++
+	f.repoIDs = append([]string(nil), repoIDs...)
+	return f.repoResolved, nil
 }
 
 type stubWorkloadProjectionInputLoader struct {

@@ -90,6 +90,14 @@ CREATE TABLE IF NOT EXISTS resolved_relationships (
 CREATE INDEX IF NOT EXISTS resolved_relationships_generation_idx
     ON resolved_relationships (generation_id, relationship_type);
 
+CREATE INDEX IF NOT EXISTS resolved_relationships_source_repo_idx
+    ON resolved_relationships (source_repo_id, generation_id, relationship_type)
+    WHERE source_repo_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS resolved_relationships_target_repo_idx
+    ON resolved_relationships (target_repo_id, generation_id, relationship_type)
+    WHERE target_repo_id IS NOT NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS resolved_relationships_identity_idx
     ON resolved_relationships (
         generation_id,
@@ -236,6 +244,25 @@ JOIN relationship_generations AS g
   ON g.generation_id = r.generation_id
 WHERE g.scope = $1
   AND g.generation_id = $2
+ORDER BY COALESCE(r.source_entity_id, r.source_repo_id),
+         COALESCE(r.target_entity_id, r.target_repo_id),
+         r.relationship_type
+`
+
+const listResolvedByReposSQL = `
+SELECT r.source_repo_id, r.target_repo_id,
+       COALESCE(r.source_entity_id, r.source_repo_id),
+       COALESCE(r.target_entity_id, r.target_repo_id),
+       r.relationship_type, r.confidence, r.evidence_count,
+       r.rationale, r.resolution_source, r.details
+FROM resolved_relationships AS r
+JOIN relationship_generations AS g
+  ON g.generation_id = r.generation_id
+WHERE g.status = 'active'
+  AND (
+    r.source_repo_id IN (%s)
+    OR r.target_repo_id IN (%s)
+  )
 ORDER BY COALESCE(r.source_entity_id, r.source_repo_id),
          COALESCE(r.target_entity_id, r.target_repo_id),
          r.relationship_type

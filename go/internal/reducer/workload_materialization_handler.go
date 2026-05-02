@@ -34,6 +34,16 @@ type GenerationScopedResolvedRelationshipLoader interface {
 	) ([]relationships.ResolvedRelationship, error)
 }
 
+// RepositoryScopedResolvedRelationshipLoader returns active resolved
+// relationships touching one or more repositories, regardless of which
+// repository generation produced the relationship evidence.
+type RepositoryScopedResolvedRelationshipLoader interface {
+	GetResolvedRelationshipsForRepos(
+		ctx context.Context,
+		repoIDs []string,
+	) ([]relationships.ResolvedRelationship, error)
+}
+
 // RepoScopeIdentity holds the active scope and generation for a repository.
 type RepoScopeIdentity struct {
 	ScopeID      string

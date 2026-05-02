@@ -81,6 +81,14 @@ CREATE TABLE IF NOT EXISTS resolved_relationships (
 CREATE INDEX IF NOT EXISTS resolved_relationships_generation_idx
     ON resolved_relationships (generation_id, relationship_type);
 
+CREATE INDEX IF NOT EXISTS resolved_relationships_source_repo_idx
+    ON resolved_relationships (source_repo_id, generation_id, relationship_type)
+    WHERE source_repo_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS resolved_relationships_target_repo_idx
+    ON resolved_relationships (target_repo_id, generation_id, relationship_type)
+    WHERE target_repo_id IS NOT NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS resolved_relationships_identity_idx
     ON resolved_relationships (
         generation_id,

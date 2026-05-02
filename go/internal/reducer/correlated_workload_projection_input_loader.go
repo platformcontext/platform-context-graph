@@ -8,6 +8,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/correlation/engine"
 	correlationmodel "github.com/platformcontext/platform-context-graph/go/internal/correlation/model"
+	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
 // CorrelatedWorkloadProjectionInputLoader reuses deployable-unit correlation
@@ -41,7 +42,7 @@ func (l CorrelatedWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
 
 	candidates, deploymentEnvironments := ExtractWorkloadCandidates(envelopes)
 	if l.ResolvedLoader != nil {
-		resolved, err := loadResolvedRelationshipsForIntent(ctx, l.ResolvedLoader, intent)
+		resolved, err := loadWorkloadResolvedRelationships(ctx, l.ResolvedLoader, intent, candidates)
 		if err != nil {
 			return nil, nil, fmt.Errorf("load resolved relationships for correlated workload projection: %w", err)
 		}
@@ -68,6 +69,70 @@ func (l CorrelatedWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
 		return nil, nil, err
 	}
 	return admitted, deploymentEnvironments, nil
+}
+
+func loadWorkloadResolvedRelationships(
+	ctx context.Context,
+	loader ResolvedRelationshipLoader,
+	intent Intent,
+	candidates []WorkloadCandidate,
+) ([]relationships.ResolvedRelationship, error) {
+	resolved, err := loadResolvedRelationshipsForIntent(ctx, loader, intent)
+	if err != nil {
+		return nil, err
+	}
+
+	repoScoped, ok := loader.(RepositoryScopedResolvedRelationshipLoader)
+	if !ok {
+		return resolved, nil
+	}
+	repoIDs := workloadCandidateRepoIDs(candidates)
+	if len(repoIDs) == 0 {
+		return resolved, nil
+	}
+	repoResolved, err := repoScoped.GetResolvedRelationshipsForRepos(ctx, repoIDs)
+	if err != nil {
+		return nil, err
+	}
+	return mergeResolvedRelationships(resolved, repoResolved), nil
+}
+
+func workloadCandidateRepoIDs(candidates []WorkloadCandidate) []string {
+	repoIDs := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		repoIDs = appendUniqueString(repoIDs, candidate.RepoID)
+	}
+	return uniqueSortedStrings(repoIDs)
+}
+
+func mergeResolvedRelationships(
+	base []relationships.ResolvedRelationship,
+	extra []relationships.ResolvedRelationship,
+) []relationships.ResolvedRelationship {
+	if len(extra) == 0 {
+		return base
+	}
+	merged := make([]relationships.ResolvedRelationship, 0, len(base)+len(extra))
+	seen := make(map[string]struct{}, len(base)+len(extra))
+	for _, relationship := range append(base, extra...) {
+		key := resolvedRelationshipMergeKey(relationship)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		merged = append(merged, relationship)
+	}
+	return merged
+}
+
+func resolvedRelationshipMergeKey(relationship relationships.ResolvedRelationship) string {
+	return fmt.Sprintf("%s|%s|%s|%s|%s",
+		relationship.SourceRepoID,
+		relationship.TargetRepoID,
+		relationship.SourceEntityID,
+		relationship.TargetEntityID,
+		relationship.RelationshipType,
+	)
 }
 
 func admittedCorrelatedWorkloadCandidates(
