@@ -150,9 +150,9 @@ SET rel.evidence_source = 'projector/canonical',
     rel.generation_id = row.generation_id`
 
 const canonicalNodeEntityUpsertWithContainmentTemplate = `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
 MERGE (n:%s {uid: row.entity_id})
 SET n += row.props
-MATCH (f:File {path: row.file_path})
 MERGE (f)-[rel:CONTAINS]->(n)
 SET rel.evidence_source = 'projector/canonical',
     rel.generation_id = row.generation_id`

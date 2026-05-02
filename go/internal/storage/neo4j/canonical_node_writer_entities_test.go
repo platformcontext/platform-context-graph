@@ -348,8 +348,13 @@ func TestCanonicalNodeWriterCanInlineEntityContainmentAcrossFilesForPatchedBacke
 	}
 
 	stmt := entityCalls[0]
-	if !strings.Contains(stmt.Cypher, "MERGE (n:Function {uid: row.entity_id})\nSET n += row.props\nMATCH (f:File {path: row.file_path})") {
-		t.Fatalf("entity cypher = %q, want MERGE-first row-scoped file MATCH", stmt.Cypher)
+	fileMatchIndex := strings.Index(stmt.Cypher, "MATCH (f:File {path: row.file_path})")
+	entityMergeIndex := strings.Index(stmt.Cypher, "MERGE (n:Function {uid: row.entity_id})")
+	if fileMatchIndex < 0 || entityMergeIndex < 0 {
+		t.Fatalf("entity cypher = %q, want row-scoped file MATCH and entity MERGE", stmt.Cypher)
+	}
+	if fileMatchIndex > entityMergeIndex {
+		t.Fatalf("entity cypher = %q, want row-scoped file MATCH before entity MERGE for NornicDB hot path", stmt.Cypher)
 	}
 	if _, ok := stmt.Parameters["file_path"]; ok {
 		t.Fatalf("entity statement unexpectedly carries statement-level file_path: %#v", stmt.Parameters)

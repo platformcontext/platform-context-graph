@@ -87,9 +87,9 @@ func TestNornicDBBatchedEntityContainmentHotPathCompatibility(t *testing.T) {
 		runNornicDBSyntaxSequence(t, ctx, driver, setup)
 
 		nodeQuery := `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
 MERGE (n:Function {uid: row.entity_id})
 SET n += row.props
-MATCH (f:File {path: row.file_path})
 MERGE (f)-[:CONTAINS]->(n)
 RETURN count(*) AS processed_rows`
 
