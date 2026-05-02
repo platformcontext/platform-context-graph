@@ -149,6 +149,7 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	}
 	contentCoverage := loadRepositoryContentCoverage(ctx, h.Content, repoID)
 	readModelSummary := loadRepositoryReadModelSummary(ctx, h.Content, repoID)
+	relationshipReadModel := loadRepositoryRelationshipReadModel(ctx, h.Content, repoID)
 
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "summary_counts")
 	counts := queryRepositoryContextCounts(ctx, h.Neo4j, params, baseRow, contentCoverage, readModelSummary)
@@ -173,10 +174,19 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, params)
 	timer.Done(ctx, slog.Int("row_count", len(result["infrastructure"].([]map[string]any))))
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "relationships")
-	result["relationships"] = queryRepoDependencies(ctx, h.Neo4j, params)
+	if dependencies := repositoryReadModelDependencies(relationshipReadModel); dependencies != nil {
+		result["relationships"] = dependencies
+	} else {
+		result["relationships"] = queryRepoDependencies(ctx, h.Neo4j, params)
+	}
 	timer.Done(ctx, slog.Int("row_count", len(result["relationships"].([]map[string]any))))
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "relationship_overview")
-	relationshipRows := queryRepoRelationshipOverview(ctx, h.Neo4j, params)
+	var relationshipRows []map[string]any
+	if relationshipReadModel != nil {
+		relationshipRows = relationshipReadModel.Relationships
+	} else {
+		relationshipRows = queryRepoRelationshipOverview(ctx, h.Neo4j, params)
+	}
 	timer.Done(ctx, slog.Int("row_count", len(relationshipRows)))
 	if len(relationshipRows) == 0 {
 		relationshipRows = result["relationships"].([]map[string]any)
@@ -185,7 +195,11 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		result["relationship_overview"] = relationshipOverview
 	}
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "consumers")
-	result["consumers"] = queryRepoConsumers(ctx, h.Neo4j, params)
+	if relationshipReadModel != nil {
+		result["consumers"] = relationshipReadModel.Consumers
+	} else {
+		result["consumers"] = queryRepoConsumers(ctx, h.Neo4j, params)
+	}
 	timer.Done(ctx, slog.Int("row_count", len(result["consumers"].([]map[string]any))))
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "api_surface")
 	if apiSurface := queryRepoAPISurface(ctx, h.Neo4j, params); len(apiSurface) > 0 {

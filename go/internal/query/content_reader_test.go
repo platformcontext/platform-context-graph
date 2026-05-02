@@ -515,6 +515,7 @@ func (c *contentReaderConn) QueryContext(_ context.Context, query string, _ []dr
 		return &contentReaderRows{columns: []string{"language", "file_count"}, rows: nil}, nil
 	}
 	if strings.Contains(query, "FROM ingestion_scopes") &&
+		strings.Contains(query, "SELECT scope_id") &&
 		strings.Contains(query, "LIMIT 1") &&
 		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"scope_id"})) {
 		return &contentReaderRows{columns: []string{"scope_id"}, rows: nil}, nil
@@ -527,7 +528,12 @@ func (c *contentReaderConn) QueryContext(_ context.Context, query string, _ []dr
 		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"count"})) {
 		return &contentReaderRows{columns: []string{"count"}, rows: [][]driver.Value{{int64(0)}}}, nil
 	}
+	if strings.Contains(query, "WITH scoped_relationships AS") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], contentReaderRelationshipReadModelColumns())) {
+		return &contentReaderRows{columns: contentReaderRelationshipReadModelColumns(), rows: nil}, nil
+	}
 	if strings.Contains(query, "FROM resolved_relationships") &&
+		strings.Contains(query, "count(") &&
 		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"count"})) {
 		return &contentReaderRows{columns: []string{"count"}, rows: [][]driver.Value{{int64(0)}}}, nil
 	}
@@ -540,6 +546,14 @@ func (c *contentReaderConn) QueryContext(_ context.Context, query string, _ []dr
 		return nil, result.err
 	}
 	return &contentReaderRows{columns: result.columns, rows: result.rows}, nil
+}
+
+func contentReaderRelationshipReadModelColumns() []string {
+	return []string{
+		"direction", "relationship_type", "source_repo_id", "source_name",
+		"target_repo_id", "target_name", "resolved_id", "generation_id",
+		"confidence", "evidence_count", "rationale", "resolution_source", "details",
+	}
 }
 
 func contentReaderResultColumnsEqual(result contentReaderQueryResult, columns []string) bool {

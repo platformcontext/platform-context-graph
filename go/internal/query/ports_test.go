@@ -17,9 +17,10 @@ func (fakePortGraphQuery) RunSingle(context.Context, string, map[string]any) (ma
 }
 
 type fakePortContentStore struct {
-	coverage     RepositoryContentCoverage
-	summary      repositoryReadModelSummary
-	repositories []RepositoryCatalogEntry
+	coverage              RepositoryContentCoverage
+	summary               repositoryReadModelSummary
+	relationshipReadModel repositoryRelationshipReadModel
+	repositories          []RepositoryCatalogEntry
 }
 
 func (f fakePortContentStore) GetFileContent(context.Context, string, string) (*FileContent, error) {
@@ -88,6 +89,10 @@ func (f fakePortContentStore) RepositoryCoverage(context.Context, string) (Repos
 
 func (f fakePortContentStore) repositoryReadModelSummary(context.Context, string) (repositoryReadModelSummary, error) {
 	return f.summary, nil
+}
+
+func (f fakePortContentStore) repositoryRelationshipReadModel(context.Context, string) (repositoryRelationshipReadModel, error) {
+	return f.relationshipReadModel, nil
 }
 
 func (f fakePortContentStore) ListRepositories(context.Context) ([]RepositoryCatalogEntry, error) {
