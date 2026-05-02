@@ -100,3 +100,46 @@ func TestDiscoverRepoRootsNestedOrganizations(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscoverRepoRootsPrefersNestedGitReposOverVisibleGroupFiles(t *testing.T) {
+	root := t.TempDir()
+	groupDir := filepath.Join(root, "platform")
+	if err := os.MkdirAll(groupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(groupDir, "README.md"), []byte("# platform repos"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repos := []string{
+		"platform/gitops-control",
+		"platform/service-charts",
+	}
+	for _, repo := range repos {
+		repoDir := filepath.Join(root, filepath.FromSlash(repo))
+		if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repoDir, "main.yaml"), []byte("kind: ApplicationSet"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ids, err := discoverFilesystemRepositoryIDs(root)
+	if err != nil {
+		t.Fatalf("discover failed: %v", err)
+	}
+
+	expected := map[string]bool{
+		"platform/gitops-control": true,
+		"platform/service-charts": true,
+	}
+	if len(ids) != len(expected) {
+		t.Fatalf("expected nested repos only, got %d: %v", len(ids), ids)
+	}
+	for _, id := range ids {
+		if !expected[id] {
+			t.Errorf("unexpected repo ID: %s", id)
+		}
+	}
+}

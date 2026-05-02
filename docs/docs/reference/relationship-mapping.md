@@ -129,6 +129,14 @@ A family is not done because a parser emitted metadata. It is done only when
 the right verb survives persistence, projection, and query-visible
 verification.
 
+Relationship evidence also depends on repository selection completeness. A
+filesystem corpus may contain organization or platform grouping directories
+with README or local metadata files plus nested real Git checkouts. Discovery
+must index the nested Git checkouts as independent repositories before
+relationship extraction runs; otherwise Helm, GitOps, Terraform, Ansible,
+workflow, or service evidence can be absent from Postgres and the graph even
+though the source files exist on disk.
+
 Several verbs are naturally multi-valued. Do not collapse them to one winner
 unless a truth rule marks the older or weaker path stale. A workload may have
 multiple deployment repositories during controller migrations, multiple
