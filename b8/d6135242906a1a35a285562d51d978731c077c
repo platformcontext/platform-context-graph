@@ -1,0 +1,31 @@
+go/internal/query/repository_entry_points_test.go
+  4cb501d5d4ff237f 1-95
+go/internal/query/repository.go
+  4cb501d5d4ff237f 171,258-263,277-279,289-296
+go/internal/query/repository_entry_points.go
+  4cb501d5d4ff237f 1-72
+go/internal/query/content_reader_test.go
+  4cb501d5d4ff237f 517-522
+go/internal/query/ports_test.go
+  4cb501d5d4ff237f 23,100-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "b8d6135242906a1a35a285562d51d978731c077c",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 198,
+      "total_deletions": 2,
+      "accepted_lines": 727,
+      "overriden_lines": 0
+    }
+  }
+}
