@@ -1,0 +1,25 @@
+go/internal/query/entity_workload_context.go
+  4cb501d5d4ff237f 254-255,271,280-304
+go/internal/query/workload_context_nornicdb_test.go
+  4cb501d5d4ff237f 46-50,67,78,173-174,176,187-189,294-300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "dbf5c187ff02c1eaf8f69ffb221a3cabc68a773d",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 53,
+      "total_deletions": 11,
+      "accepted_lines": 53,
+      "overriden_lines": 0
+    }
+  }
+}
