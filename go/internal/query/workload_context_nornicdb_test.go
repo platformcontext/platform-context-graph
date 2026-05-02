@@ -40,6 +40,8 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 						"repo_id":   "repository:datax",
 						"repo_name": "api-node-datax",
 					}}, nil
+				case strings.Contains(cypher, "<-[rel:PROVISIONS_DEPENDENCY_FOR]-"):
+					return nil, nil
 				case strings.Contains(cypher, "-[runsOn:RUNS_ON]->(p:Platform)"):
 					return []map[string]any{
 						{
@@ -132,5 +134,97 @@ func TestFetchWorkloadContextUsesScalarQueriesForNornicDBOptionalProjectionSafet
 	story := buildWorkloadStory(ctx)
 	if !strings.Contains(story, "bg-prod on bg-prod (kubernetes), ecs-prod (ecs)") {
 		t.Fatalf("story = %q, want both platform targets for bg-prod", story)
+	}
+}
+
+func TestFetchWorkloadContextUsesProvisionedPlatformAnchorBeforeRunsOnExpansion(t *testing.T) {
+	t.Parallel()
+
+	handler := &EntityHandler{
+		Neo4j: fakeWorkloadGraphReader{
+			runSingle: func(_ context.Context, cypher string, _ map[string]any) (map[string]any, error) {
+				if strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})") {
+					return map[string]any{"repo_name": "sample-service"}, nil
+				}
+				if !strings.Contains(cypher, "RETURN w.id as id, w.name as name, w.kind as kind") {
+					t.Fatalf("unexpected RunSingle cypher: %q", cypher)
+				}
+				return map[string]any{
+					"id":      "workload:sample-service",
+					"name":    "sample-service",
+					"kind":    "service",
+					"repo_id": "repository:r_fdb82379",
+				}, nil
+			},
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				switch {
+				case strings.Contains(cypher, "WHERE i.workload_id = $workload_id"):
+					if got, want := params["workload_id"], "workload:sample-service"; got != want {
+						t.Fatalf("params[workload_id] = %#v, want %#v", got, want)
+					}
+					return []map[string]any{
+						{
+							"instance_id":                "workload-instance:sample-service:bg-prod",
+							"environment":                "bg-prod",
+							"materialization_confidence": 0.96,
+							"materialization_provenance": []any{"terraform_ecs_service"},
+						},
+						{
+							"instance_id":                "workload-instance:sample-service:bg-qa",
+							"environment":                "bg-qa",
+							"materialization_confidence": 0.96,
+							"materialization_provenance": []any{"terraform_ecs_service"},
+						},
+					}, nil
+				case strings.Contains(cypher, "<-[rel:PROVISIONS_DEPENDENCY_FOR]-"):
+					if got, want := params["repo_id"], "repository:r_fdb82379"; got != want {
+						t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+					}
+					return []map[string]any{
+						{
+							"platform_id":         "platform:ecs:aws:cluster/shared-runtime-cluster:none:none",
+							"platform_name":       "shared-runtime-cluster",
+							"platform_kind":       "ecs",
+							"platform_confidence": 0.96,
+							"platform_reason":     "Runtime services list declares repository dependency",
+						},
+					}, nil
+				case strings.Contains(cypher, "-[runsOn:RUNS_ON]->(p:Platform)"):
+					t.Fatalf("cypher = %q, want provisioned-platform anchor to avoid RUNS_ON expansion", cypher)
+				case strings.Contains(cypher, "DEPENDS_ON|USES_MODULE|DEPLOYS_FROM"):
+					return nil, nil
+				case strings.Contains(cypher, "K8sResource OR"):
+					return nil, nil
+				default:
+					return nil, nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	ctx, err := handler.fetchServiceWorkloadContext(
+		context.Background(),
+		"sample-service",
+		"service_context",
+	)
+	if err != nil {
+		t.Fatalf("fetchServiceWorkloadContext() error = %v, want nil", err)
+	}
+
+	instances, ok := ctx["instances"].([]map[string]any)
+	if !ok {
+		t.Fatalf("instances type = %T, want []map[string]any", ctx["instances"])
+	}
+	if got, want := len(instances), 2; got != want {
+		t.Fatalf("len(instances) = %d, want %d", got, want)
+	}
+	for _, instance := range instances {
+		if got, want := instance["platform_name"], "shared-runtime-cluster"; got != want {
+			t.Fatalf("instance platform_name = %#v, want %#v", got, want)
+		}
+		if got, want := instance["platform_kind"], "ecs"; got != want {
+			t.Fatalf("instance platform_kind = %#v, want %#v", got, want)
+		}
 	}
 }
