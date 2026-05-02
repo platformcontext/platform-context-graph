@@ -421,6 +421,12 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 	workloadNames := StringSliceVal(row, "workload_names")
 	platformTypes := StringSliceVal(row, "platform_types")
 	dependencyCount := IntVal(row, "dependency_count")
+	storySummary := queryRepositoryStoryGraphSummary(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID}, row)
+	fileCount = storySummary.fileCount
+	languages = storySummary.languages
+	workloadNames = storySummary.workloadNames
+	platformTypes = storySummary.platformTypes
+	dependencyCount = storySummary.dependencyCount
 	semanticOverview, err := loadRepositorySemanticOverview(r.Context(), h.Content, repoID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("semantic overview failed: %v", err))
