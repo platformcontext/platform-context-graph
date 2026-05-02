@@ -479,7 +479,7 @@ Switch GitHub auth before any `git push` or `gh pr create`:
 | Repo path | Auth user | Command |
 | --- | --- | --- |
 | `~/personal-repos/*` | `linuxdynasty` | `gh auth switch --user linuxdynasty` |
-| `~/repos/*` | `allen-sanabria_work` | `gh auth switch --user allen-sanabria_work` |
+| `~/repos/*` | configured work account | `gh auth switch --user <work-account>` |
 
 When working across both paths in one workflow, switch at each repo boundary.
 
