@@ -4,17 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 )
 
 const repositorySelectorWhereClause = "r.id = $repo_selector OR r.name = $repo_selector"
 
+var repositoryBaseCypher = fmt.Sprintf(`
+	MATCH (r:Repository {id: $repo_id})
+	RETURN %s
+`, RepoProjection("r"))
+
 // RepositoryHandler exposes HTTP routes for repository queries.
 type RepositoryHandler struct {
 	Neo4j   GraphQuery
 	Content ContentStore
 	Profile QueryProfile
+	Logger  *slog.Logger
 }
 
 // Mount registers all repository routes on the given mux.
@@ -127,22 +134,11 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	params := map[string]any{"repo_selector": repoID}
+	params := map[string]any{"repo_id": repoID}
 
-	baseCypher := fmt.Sprintf(`
-		MATCH (r:Repository) WHERE %s
-		OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
-		OPTIONAL MATCH (r)-[:DEFINES]->(w:Workload)
-		OPTIONAL MATCH (r)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
-		OPTIONAL MATCH (r)-[:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(dep:Repository)
-		RETURN %s,
-		       count(DISTINCT f) as file_count,
-		       count(DISTINCT w) as workload_count,
-		       count(DISTINCT p) as platform_count,
-		       count(DISTINCT dep) as dependency_count
-	`, repositorySelectorWhereClause, RepoProjection("r"))
-
-	baseRow, err := h.Neo4j.RunSingle(ctx, baseCypher, params)
+	timer := startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "repository_lookup")
+	baseRow, err := h.Neo4j.RunSingle(ctx, repositoryBaseCypher, params)
+	timer.Done(ctx, slog.Bool("found", baseRow != nil), slog.Bool("error", err != nil))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -151,9 +147,15 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		WriteError(w, http.StatusNotFound, "repository not found")
 		return
 	}
-	params = map[string]any{"repo_id": repoID}
 
+	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "summary_counts")
 	counts := queryRepositoryContextCounts(ctx, h.Neo4j, params, baseRow)
+	timer.Done(ctx,
+		slog.Int("file_count", counts.fileCount),
+		slog.Int("workload_count", counts.workloadCount),
+		slog.Int("platform_count", counts.platformCount),
+		slog.Int("dependency_count", counts.dependencyCount),
+	)
 	result := map[string]any{
 		"repository":       RepoRefFromRow(baseRow),
 		"file_count":       counts.fileCount,
@@ -162,24 +164,43 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		"dependency_count": counts.dependencyCount,
 	}
 
+	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "entry_points")
 	result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, params)
+	timer.Done(ctx, slog.Int("row_count", len(result["entry_points"].([]map[string]any))))
+	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "infrastructure")
 	result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, params)
+	timer.Done(ctx, slog.Int("row_count", len(result["infrastructure"].([]map[string]any))))
+	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "relationships")
 	result["relationships"] = queryRepoDependencies(ctx, h.Neo4j, params)
+	timer.Done(ctx, slog.Int("row_count", len(result["relationships"].([]map[string]any))))
+	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "relationship_overview")
 	relationshipRows := queryRepoRelationshipOverview(ctx, h.Neo4j, params)
+	timer.Done(ctx, slog.Int("row_count", len(relationshipRows)))
 	if len(relationshipRows) == 0 {
 		relationshipRows = result["relationships"].([]map[string]any)
 	}
 	if relationshipOverview := buildRepositoryRelationshipOverview(relationshipRows); relationshipOverview != nil {
 		result["relationship_overview"] = relationshipOverview
 	}
+	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "consumers")
 	result["consumers"] = queryRepoConsumers(ctx, h.Neo4j, params)
+	timer.Done(ctx, slog.Int("row_count", len(result["consumers"].([]map[string]any))))
+	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "api_surface")
 	if apiSurface := queryRepoAPISurface(ctx, h.Neo4j, params); len(apiSurface) > 0 {
 		result["api_surface"] = apiSurface
+		timer.Done(ctx, slog.Int("row_count", len(apiSurface)))
+	} else {
+		timer.Done(ctx, slog.Int("row_count", 0))
 	}
+	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "deployment_evidence")
 	if deploymentEvidence := queryRepoDeploymentEvidence(ctx, h.Neo4j, params); len(deploymentEvidence) > 0 {
 		result["deployment_evidence"] = deploymentEvidence
+		timer.Done(ctx, slog.Int("row_count", len(deploymentEvidence)))
+	} else {
+		timer.Done(ctx, slog.Int("row_count", 0))
 	}
 	if h.Content != nil {
+		timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "content_infrastructure_overview")
 		files, err := h.Content.ListRepoFiles(ctx, repoID, repositorySemanticEntityLimit)
 		if err == nil {
 			if files == nil {
@@ -205,8 +226,11 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 				result["infrastructure_overview"] = overview
 			}
 		}
+		timer.Done(ctx, slog.Bool("error", err != nil))
 	}
+	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "languages")
 	result["languages"] = queryRepoLanguageDistribution(ctx, h.Neo4j, params)
+	timer.Done(ctx, slog.Int("row_count", len(result["languages"].([]map[string]any))))
 
 	WriteSuccess(w, r, http.StatusOK, result, BuildTruthEnvelope(h.profile(), "platform_impact.context_overview", TruthBasisHybrid, "resolved from repository context and platform evidence"))
 }
@@ -387,24 +411,9 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	cypher := fmt.Sprintf(`
-		MATCH (r:Repository) WHERE %s
-		OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
-		WITH r, count(DISTINCT f) as file_count, collect(DISTINCT f.language) as languages
-		OPTIONAL MATCH (r)-[:DEFINES]->(w:Workload)
-		WITH r, file_count, languages, collect(DISTINCT w.name) as workload_names
-		OPTIONAL MATCH (r)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
-		WITH r, file_count, languages, workload_names, collect(DISTINCT p.type) as platform_types
-		OPTIONAL MATCH (r)-[:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(dep:Repository)
-		RETURN %s,
-		       file_count,
-		       languages,
-		       workload_names,
-		       platform_types,
-		       count(DISTINCT dep) as dependency_count
-	`, repositorySelectorWhereClause, RepoProjection("r"))
-
-	row, err := h.Neo4j.RunSingle(r.Context(), cypher, map[string]any{"repo_selector": repoID})
+	timer := startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "repository_lookup")
+	row, err := h.Neo4j.RunSingle(r.Context(), repositoryBaseCypher, map[string]any{"repo_id": repoID})
+	timer.Done(r.Context(), slog.Bool("found", row != nil), slog.Bool("error", err != nil))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -421,13 +430,22 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 	workloadNames := StringSliceVal(row, "workload_names")
 	platformTypes := StringSliceVal(row, "platform_types")
 	dependencyCount := IntVal(row, "dependency_count")
+	timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "graph_summary")
 	storySummary := queryRepositoryStoryGraphSummary(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID}, row)
+	timer.Done(r.Context(),
+		slog.Int("file_count", storySummary.fileCount),
+		slog.Int("workload_count", len(storySummary.workloadNames)),
+		slog.Int("platform_count", len(storySummary.platformTypes)),
+		slog.Int("dependency_count", storySummary.dependencyCount),
+	)
 	fileCount = storySummary.fileCount
 	languages = storySummary.languages
 	workloadNames = storySummary.workloadNames
 	platformTypes = storySummary.platformTypes
 	dependencyCount = storySummary.dependencyCount
+	timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "semantic_overview")
 	semanticOverview, err := loadRepositorySemanticOverview(r.Context(), h.Content, repoID)
+	timer.Done(r.Context(), slog.Bool("error", err != nil))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("semantic overview failed: %v", err))
 		return
@@ -435,7 +453,9 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 	var infrastructureOverview map[string]any
 	narrativeFiles := []FileContent(nil)
 	if h.Content != nil {
+		timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "content_files")
 		files, err := h.Content.ListRepoFiles(r.Context(), repoID, repositorySemanticEntityLimit)
+		timer.Done(r.Context(), slog.Bool("error", err != nil), slog.Int("file_count", len(files)))
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("list repository files failed: %v", err))
 			return
@@ -443,8 +463,11 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		if files == nil {
 			files = []FileContent{}
 		}
+		timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "infrastructure")
 		infrastructure := queryRepoInfrastructure(r.Context(), h.Neo4j, h.Content, map[string]any{"repo_id": repoID})
+		timer.Done(r.Context(), slog.Int("row_count", len(infrastructure)))
 		infrastructureOverview = buildRepositoryInfrastructureOverview(infrastructure, files)
+		timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "deployment_artifacts")
 		deploymentOverview, _ := loadDeploymentArtifactOverview(
 			r.Context(),
 			h.Neo4j,
@@ -457,12 +480,17 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		if deploymentOverview != nil {
 			infrastructureOverview = deploymentOverview
 		}
+		timer.Done(r.Context(), slog.Bool("found", deploymentOverview != nil))
+		timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "narrative_files")
 		narrativeFiles, err = hydrateRepositoryNarrativeFiles(r.Context(), h.Content, repoID, files)
+		timer.Done(r.Context(), slog.Bool("error", err != nil), slog.Int("file_count", len(narrativeFiles)))
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("hydrate repository narrative files failed: %v", err))
 			return
 		}
+		timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "relationships")
 		relationships := queryRepoDependencies(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID})
+		timer.Done(r.Context(), slog.Int("row_count", len(relationships)))
 		if relationshipOverview := buildRepositoryRelationshipOverview(relationships); relationshipOverview != nil {
 			if infrastructureOverview == nil {
 				infrastructureOverview = map[string]any{}

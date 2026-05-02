@@ -173,6 +173,7 @@ func newRouter(
 			Neo4j:   neo4jReader,
 			Content: contentReader,
 			Profile: queryProfile,
+			Logger:  logger,
 		},
 		Entities: &query.EntityHandler{
 			Neo4j:   neo4jReader,

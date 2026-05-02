@@ -13,8 +13,8 @@ type selectorAwareRepoGraphReader struct{}
 
 func (selectorAwareRepoGraphReader) RunSingle(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
 	switch {
-	case strings.Contains(cypher, "count(DISTINCT dep) as dependency_count"):
-		if got, want := params["repo_selector"], "repo-1"; got != want {
+	case strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})"):
+		if got, want := params["repo_id"], "repo-1"; got != want {
 			return nil, nil
 		}
 		return map[string]any{
@@ -115,11 +115,11 @@ func TestGetRepositoryContextAcceptsRepositoryNameSelector(t *testing.T) {
 type canonicalSelectorRepoGraphReader struct{}
 
 func (canonicalSelectorRepoGraphReader) RunSingle(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
-	if got, want := params["repo_selector"], "repo-1"; got != want {
-		return nil, nil
-	}
 	switch {
-	case strings.Contains(cypher, "count(DISTINCT dep) as dependency_count"):
+	case strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})"):
+		if got, want := params["repo_id"], "repo-1"; got != want {
+			return nil, nil
+		}
 		return map[string]any{
 			"id":               "repo-1",
 			"name":             "order-service",
@@ -134,6 +134,9 @@ func (canonicalSelectorRepoGraphReader) RunSingle(_ context.Context, cypher stri
 			"dependency_count": int64(1),
 		}, nil
 	case strings.Contains(cypher, "collect(DISTINCT p.type) as platform_types"):
+		if got, want := params["repo_selector"], "repo-1"; got != want {
+			return nil, nil
+		}
 		return map[string]any{
 			"id":               "repo-1",
 			"name":             "order-service",
@@ -149,6 +152,9 @@ func (canonicalSelectorRepoGraphReader) RunSingle(_ context.Context, cypher stri
 			"dependency_count": int64(1),
 		}, nil
 	case strings.Contains(cypher, "collect(DISTINCT labels(e)[0]) as entity_types"):
+		if got, want := params["repo_selector"], "repo-1"; got != want {
+			return nil, nil
+		}
 		return map[string]any{
 			"id":           "repo-1",
 			"name":         "order-service",

@@ -1,9 +1,11 @@
 package query
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,9 +20,14 @@ type fakeRepoGraphReader struct {
 	runSingleByMatch map[string]map[string]any
 	// runByMatch maps a Cypher fragment to multiple result rows.
 	runByMatch map[string][]map[string]any
+	run        func(context.Context, string, map[string]any) ([]map[string]any, error)
+	runSingle  func(context.Context, string, map[string]any) (map[string]any, error)
 }
 
 func (f fakeRepoGraphReader) Run(ctx context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+	if f.run != nil {
+		return f.run(ctx, cypher, params)
+	}
 	var (
 		bestRows []map[string]any
 		bestLen  int
@@ -35,6 +42,9 @@ func (f fakeRepoGraphReader) Run(ctx context.Context, cypher string, params map[
 }
 
 func (f fakeRepoGraphReader) RunSingle(ctx context.Context, cypher string, params map[string]any) (map[string]any, error) {
+	if f.runSingle != nil {
+		return f.runSingle(ctx, cypher, params)
+	}
 	var (
 		bestRow map[string]any
 		bestLen int
@@ -45,7 +55,172 @@ func (f fakeRepoGraphReader) RunSingle(ctx context.Context, cypher string, param
 			bestLen = len(fragment)
 		}
 	}
+	if bestRow == nil && strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})") && len(f.runSingleByMatch) == 1 {
+		for _, row := range f.runSingleByMatch {
+			return row, nil
+		}
+	}
 	return bestRow, nil
+}
+
+func TestGetRepositoryContextUsesNarrowRepositoryLookupAndLogsStages(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	var runSingleCyphers []string
+	reader := fakeRepoGraphReader{
+		runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+			runSingleCyphers = append(runSingleCyphers, cypher)
+			if got, want := params["repo_id"], "repo-observed"; got != want {
+				t.Fatalf("repo_id param = %#v, want %#v", got, want)
+			}
+			return map[string]any{
+				"id":         "repo-observed",
+				"name":       "observed-service",
+				"path":       "/repos/observed-service",
+				"local_path": "/repos/observed-service",
+				"has_remote": false,
+			}, nil
+		},
+		run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+			if got, want := params["repo_id"], "repo-observed"; got != want {
+				t.Fatalf("repo_id param = %#v, want %#v", got, want)
+			}
+			switch {
+			case strings.Contains(cypher, "RETURN count(DISTINCT f) AS count"):
+				return []map[string]any{{"count": int64(2)}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT w) AS count"):
+				return []map[string]any{{"count": int64(1)}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT p) AS count"):
+				return []map[string]any{{"count": int64(1)}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT dep) AS count"):
+				return []map[string]any{{"count": int64(0)}}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+	handler := &RepositoryHandler{
+		Neo4j:  reader,
+		Logger: slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-observed/context", nil)
+	req.SetPathValue("repo_id", "repo-observed")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	if len(runSingleCyphers) != 1 {
+		t.Fatalf("RunSingle calls = %d, want 1", len(runSingleCyphers))
+	}
+	baseLookup := runSingleCyphers[0]
+	if !strings.Contains(baseLookup, "MATCH (r:Repository {id: $repo_id})") {
+		t.Fatalf("base lookup = %s, want repository-id anchor", baseLookup)
+	}
+	if strings.Contains(baseLookup, "OPTIONAL MATCH") || strings.Contains(baseLookup, "INSTANCE_OF") {
+		t.Fatalf("base lookup still uses broad aggregation shape:\n%s", baseLookup)
+	}
+
+	logText := logs.String()
+	for _, want := range []string{
+		`"event_name":"repository_query.stage_started"`,
+		`"event_name":"repository_query.stage_completed"`,
+		`"operation":"repository_context"`,
+		`"stage":"repository_lookup"`,
+		`"stage":"summary_counts"`,
+		`"duration_seconds"`,
+	} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("logs missing %s; logs = %s", want, logText)
+		}
+	}
+}
+
+func TestGetRepositoryStoryUsesNarrowRepositoryLookupAndLogsStages(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	var runSingleCyphers []string
+	reader := fakeRepoGraphReader{
+		runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+			runSingleCyphers = append(runSingleCyphers, cypher)
+			if got, want := params["repo_id"], "repo-story"; got != want {
+				t.Fatalf("repo_id param = %#v, want %#v", got, want)
+			}
+			return map[string]any{
+				"id":         "repo-story",
+				"name":       "story-service",
+				"path":       "/repos/story-service",
+				"local_path": "/repos/story-service",
+				"has_remote": false,
+			}, nil
+		},
+		run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+			if got, want := params["repo_id"], "repo-story"; got != want {
+				t.Fatalf("repo_id param = %#v, want %#v", got, want)
+			}
+			switch {
+			case strings.Contains(cypher, "RETURN count(DISTINCT f) AS count"):
+				return []map[string]any{{"count": int64(7)}}, nil
+			case strings.Contains(cypher, "RETURN f.language AS language, count(DISTINCT f) AS file_count"):
+				return []map[string]any{{"language": "go", "file_count": int64(7)}}, nil
+			case strings.Contains(cypher, "RETURN w.name AS workload_name"):
+				return []map[string]any{{"workload_name": "story-service"}}, nil
+			case strings.Contains(cypher, "RETURN p.type AS platform_type"):
+				return []map[string]any{{"platform_type": "ecs"}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT dep) AS count"):
+				return []map[string]any{{"count": int64(1)}}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+	handler := &RepositoryHandler{
+		Neo4j:  reader,
+		Logger: slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-story/story", nil)
+	req.SetPathValue("repo_id", "repo-story")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	if len(runSingleCyphers) != 1 {
+		t.Fatalf("RunSingle calls = %d, want 1", len(runSingleCyphers))
+	}
+	baseLookup := runSingleCyphers[0]
+	if !strings.Contains(baseLookup, "MATCH (r:Repository {id: $repo_id})") {
+		t.Fatalf("base lookup = %s, want repository-id anchor", baseLookup)
+	}
+	if strings.Contains(baseLookup, "OPTIONAL MATCH") || strings.Contains(baseLookup, "INSTANCE_OF") {
+		t.Fatalf("base lookup still uses broad aggregation shape:\n%s", baseLookup)
+	}
+
+	logText := logs.String()
+	for _, want := range []string{
+		`"event_name":"repository_query.stage_started"`,
+		`"event_name":"repository_query.stage_completed"`,
+		`"operation":"repository_story"`,
+		`"stage":"repository_lookup"`,
+		`"stage":"graph_summary"`,
+		`"duration_seconds"`,
+	} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("logs missing %s; logs = %s", want, logText)
+		}
+	}
 }
 
 func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
