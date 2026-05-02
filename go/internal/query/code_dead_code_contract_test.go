@@ -309,6 +309,25 @@ func TestHandleDeadCodeCandidateQueryRestrictsCodeEntityLabelsBeforeLimit(t *tes
 	}
 }
 
+func TestHandleDeadCodeCandidateQueryAnchorsRepoScopedReads(t *testing.T) {
+	t.Parallel()
+
+	for _, backend := range []GraphBackend{GraphBackendNeo4j, GraphBackendNornicDB} {
+		backend := backend
+		t.Run(string(backend), func(t *testing.T) {
+			t.Parallel()
+
+			cypher := buildDeadCodeGraphCypher(true, backend)
+			if !strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(e)") {
+				t.Fatalf("cypher = %q, want repo-scoped query to anchor on Repository id before entity traversal", cypher)
+			}
+			if strings.Contains(cypher, "AND r.id = $repo_id") {
+				t.Fatalf("cypher = %q, want repo id in MATCH anchor, not late WHERE filter", cypher)
+			}
+		})
+	}
+}
+
 func TestHandleDeadCodeExcludesNonCodeEntitiesFromBackendRows(t *testing.T) {
 	t.Parallel()
 

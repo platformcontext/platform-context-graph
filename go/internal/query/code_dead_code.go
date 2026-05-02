@@ -90,16 +90,15 @@ func buildDeadCodeGraphCypher(hasRepoID bool, backend GraphBackend) string {
 	cypher := `
 		MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
 	`
+	if hasRepoID {
+		cypher = `
+		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(e)
+	`
+	}
 	if backend == GraphBackendNornicDB {
 		cypher += ` WHERE ` + deadCodeCandidateLabelPredicate + ` AND NOT EXISTS { MATCH (e)<-[:CALLS|IMPORTS|REFERENCES]-() }`
-		if hasRepoID {
-			cypher += ` AND r.id = $repo_id`
-		}
 	} else {
 		cypher += ` WHERE ` + deadCodeCandidateLabelPredicate + ` AND NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)`
-		if hasRepoID {
-			cypher += ` AND r.id = $repo_id`
-		}
 	}
 	cypher += `
 		RETURN coalesce(e.id, e.uid) as entity_id, e.name as name, labels(e) as labels,
