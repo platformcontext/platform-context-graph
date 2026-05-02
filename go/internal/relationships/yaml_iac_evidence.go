@@ -380,6 +380,9 @@ func collectGitGenerators(items []any) []map[string]any {
 }
 
 func argocdDestinationPlatformID(destination argocdDestination) string {
+	if isArgoTemplateString(destination.name) || isArgoTemplateString(destination.server) {
+		return ""
+	}
 	clusterName := normalizePlatformToken(destination.name)
 	if clusterName != "" {
 		return "platform:kubernetes:none:cluster/" + clusterName + ":none:none"

@@ -91,6 +91,46 @@ spec:
 	}
 }
 
+func TestDiscoverArgoCDApplicationSetSkipsTemplatedDestinationPlatform(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"artifact_type": "argocd",
+				"relative_path": "apps/applicationset.yaml",
+				"content": `apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/myorg/platform-config.git
+        files:
+          - path: services/*/config.yaml
+  template:
+    spec:
+      source:
+        repoURL: https://github.com/myorg/payments-service.git
+      destination:
+        server: "{{.server}}"
+        namespace: "{{.namespace}}"
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-config", Aliases: []string{"platform-config"}},
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if _, ok := findEvidenceByKind(evidence, EvidenceKindArgoCDDestinationPlatform); ok {
+		t.Fatalf("unexpected templated destination platform evidence: %#v", evidence)
+	}
+}
+
 func findEvidenceByKind(evidence []EvidenceFact, want EvidenceKind) (EvidenceFact, bool) {
 	for _, fact := range evidence {
 		if fact.EvidenceKind == want {
