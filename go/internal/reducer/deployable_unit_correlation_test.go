@@ -68,6 +68,32 @@ func TestDeployableUnitCorrelationHandleRejectsWrongDomain(t *testing.T) {
 	}
 }
 
+func TestDeployableUnitModelCandidateKeepsMultipleDeploymentRepos(t *testing.T) {
+	t.Parallel()
+
+	intent := deployableUnitIntent("api-service")
+	candidate := WorkloadCandidate{
+		RepoID:            "repo-api",
+		RepoName:          "api-service",
+		DeploymentRepoIDs: []string{"repo-current-deploy", "repo-next-deploy"},
+		Classification:    "service",
+		Confidence:        0.96,
+		Provenance:        []string{"argocd_applicationset_deploy_source"},
+	}
+
+	model := deployableUnitModelCandidate(intent, candidate, "api-service", false)
+
+	var got []string
+	for _, atom := range model.Evidence {
+		if atom.Key == "deployment_repo_id" {
+			got = append(got, atom.Value)
+		}
+	}
+	if want := []string{"repo-current-deploy", "repo-next-deploy"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("deployment_repo_id evidence = %#v, want %#v", got, want)
+	}
+}
+
 func TestDeployableUnitCorrelationHandleRequiresFactLoader(t *testing.T) {
 	t.Parallel()
 

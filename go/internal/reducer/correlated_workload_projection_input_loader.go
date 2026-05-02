@@ -187,13 +187,16 @@ func (l CorrelatedWorkloadProjectionInputLoader) enrichDeploymentRepoEnvironment
 		sourceRepos[c.RepoID] = struct{}{}
 	}
 	for _, c := range candidates {
-		if c.DeploymentRepoID == "" {
+		deploymentRepoIDs := candidateDeploymentRepoIDs(c)
+		if len(deploymentRepoIDs) == 0 {
 			for _, repoID := range c.ProvisioningRepoIDs {
 				markEnvironmentRepoNeeded(repoID, sourceRepos, deploymentEnvironments, needed)
 			}
 			continue
 		}
-		markEnvironmentRepoNeeded(c.DeploymentRepoID, sourceRepos, deploymentEnvironments, needed)
+		for _, repoID := range deploymentRepoIDs {
+			markEnvironmentRepoNeeded(repoID, sourceRepos, deploymentEnvironments, needed)
+		}
 		for _, repoID := range c.ProvisioningRepoIDs {
 			markEnvironmentRepoNeeded(repoID, sourceRepos, deploymentEnvironments, needed)
 		}

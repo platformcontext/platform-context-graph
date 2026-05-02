@@ -382,6 +382,52 @@ func TestBuildProjectionRowsWithDeploymentEnvironments(t *testing.T) {
 	}
 }
 
+func TestBuildProjectionRowsUsesMultipleDeploymentSources(t *testing.T) {
+	t.Parallel()
+
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:            "repo-1",
+			RepoName:          "my-api",
+			DeploymentRepoIDs: []string{"deploy-current", "deploy-next"},
+			Classification:    "service",
+			Confidence:        0.96,
+			Provenance:        []string{"argocd_applicationset_deploy_source", "helm_deployment"},
+		},
+	}
+	deploymentEnvs := map[string][]string{
+		"deploy-current": {"current"},
+		"deploy-next":    {"poc", "new"},
+	}
+
+	result := BuildProjectionRows(candidates, deploymentEnvs)
+
+	if got, want := len(result.InstanceRows), 3; got != want {
+		t.Fatalf("len(InstanceRows) = %d, want %d", got, want)
+	}
+	if got, want := len(result.DeploymentSourceRows), 3; got != want {
+		t.Fatalf("len(DeploymentSourceRows) = %d, want %d", got, want)
+	}
+	if !hasDeploymentSourceRow(result.DeploymentSourceRows, "workload-instance:my-api:current", "deploy-current") {
+		t.Fatal("missing current deployment source row")
+	}
+	if !hasDeploymentSourceRow(result.DeploymentSourceRows, "workload-instance:my-api:poc", "deploy-next") {
+		t.Fatal("missing poc deployment source row")
+	}
+	if !hasDeploymentSourceRow(result.DeploymentSourceRows, "workload-instance:my-api:new", "deploy-next") {
+		t.Fatal("missing new deployment source row")
+	}
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:my-api:current", "kubernetes") {
+		t.Fatal("missing current kubernetes runtime platform")
+	}
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:my-api:poc", "kubernetes") {
+		t.Fatal("missing poc kubernetes runtime platform")
+	}
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:my-api:new", "kubernetes") {
+		t.Fatal("missing new kubernetes runtime platform")
+	}
+}
+
 func TestBuildProjectionRowsUsesRepoIDOverlaysWhenNoDeploymentRepo(t *testing.T) {
 	t.Parallel()
 	candidates := []WorkloadCandidate{
@@ -517,6 +563,63 @@ func TestBuildProjectionRowsAddsProvisionedInfrastructurePlatforms(t *testing.T)
 	}
 	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:service-api:qa", "ecs") {
 		t.Fatal("missing ecs runtime platform for qa infrastructure environment")
+	}
+}
+
+func TestBuildProjectionRowsAddsMultipleProvisionedInfrastructurePlatforms(t *testing.T) {
+	t.Parallel()
+
+	candidates := []WorkloadCandidate{
+		{
+			RepoID:              "repo-service",
+			RepoName:            "service-api",
+			ProvisioningRepoIDs: []string{"repo-infra"},
+			ProvisioningEvidenceKinds: map[string][]string{
+				"repo-infra": {
+					TerraformPlatformEvidenceKind("ecs", "service"),
+					TerraformPlatformEvidenceKind("eks", "cluster"),
+				},
+			},
+			Classification: "service",
+			Confidence:     0.96,
+			Provenance:     []string{"dockerfile_runtime"},
+		},
+	}
+	deploymentEnvs := map[string][]string{
+		"repo-infra": {"current", "poc"},
+	}
+	infraPlatforms := map[string][]InfrastructurePlatformRow{
+		"repo-infra": {
+			{
+				PlatformID:       "platform:ecs:aws:cluster/current-runtime:none:none",
+				PlatformName:     "current-runtime",
+				PlatformKind:     "ecs",
+				PlatformProvider: "aws",
+				PlatformLocator:  "cluster/current-runtime",
+			},
+			{
+				PlatformID:       "platform:eks:aws:cluster/poc-runtime:none:none",
+				PlatformName:     "poc-runtime",
+				PlatformKind:     "eks",
+				PlatformProvider: "aws",
+				PlatformLocator:  "cluster/poc-runtime",
+			},
+		},
+	}
+
+	result := BuildProjectionRowsWithInfrastructurePlatforms(candidates, deploymentEnvs, infraPlatforms)
+
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:service-api:current", "ecs") {
+		t.Fatal("missing current ecs runtime platform")
+	}
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:service-api:current", "eks") {
+		t.Fatal("missing current eks runtime platform")
+	}
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:service-api:poc", "ecs") {
+		t.Fatal("missing poc ecs runtime platform")
+	}
+	if !hasRuntimePlatformRow(result.RuntimePlatformRows, "workload-instance:service-api:poc", "eks") {
+		t.Fatal("missing poc eks runtime platform")
 	}
 }
 
@@ -812,6 +915,15 @@ func TestBuildProjectionRowsSkipsNamespaceFallbackForNonEnvironmentNamespace(t *
 func hasRuntimePlatformRow(rows []RuntimePlatformRow, instanceID, platformKind string) bool {
 	for _, row := range rows {
 		if row.InstanceID == instanceID && row.PlatformKind == platformKind {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDeploymentSourceRow(rows []DeploymentSourceRow, instanceID, deploymentRepoID string) bool {
+	for _, row := range rows {
+		if row.InstanceID == instanceID && row.DeploymentRepoID == deploymentRepoID {
 			return true
 		}
 	}

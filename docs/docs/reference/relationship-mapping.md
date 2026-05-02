@@ -129,6 +129,14 @@ A family is not done because a parser emitted metadata. It is done only when
 the right verb survives persistence, projection, and query-visible
 verification.
 
+Several verbs are naturally multi-valued. Do not collapse them to one winner
+unless a truth rule marks the older or weaker path stale. A workload may have
+multiple deployment repositories during controller migrations, multiple
+delivery systems for different environments, multiple provisioning repos, and
+multiple runtime platforms. Query surfaces should expose these as lists with
+evidence metadata and Postgres drilldown pointers, not as a single
+`deployment_repo`, `platform`, or `ci_cd` value.
+
 ## Story-First Answer Contract
 
 MCP and HTTP responses now intentionally expose a top-level `story` field on `get_repo_summary` and `trace_deployment_chain`.

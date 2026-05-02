@@ -336,14 +336,14 @@ func deployableUnitModelCandidate(
 			Confidence:   confidence,
 		})
 	}
-	if candidate.DeploymentRepoID != "" {
+	for idx, deploymentRepoID := range candidateDeploymentRepoIDs(candidate) {
 		evidence = append(evidence, correlationmodel.EvidenceAtom{
-			ID:           fmt.Sprintf("%s:%s:deploy-repo", intent.IntentID, candidate.RepoID),
+			ID:           fmt.Sprintf("%s:%s:deploy-repo:%d", intent.IntentID, candidate.RepoID, idx),
 			SourceSystem: intent.SourceSystem,
 			EvidenceType: "deployment_repo",
 			ScopeID:      intent.ScopeID,
 			Key:          "deployment_repo_id",
-			Value:        candidate.DeploymentRepoID,
+			Value:        deploymentRepoID,
 			Confidence:   confidence,
 		})
 	}

@@ -6,6 +6,12 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
+type deploymentSourceMetadata struct {
+	repoID     string
+	confidence float64
+	provenance string
+}
+
 func applyResolvedDeploymentSources(
 	candidates []WorkloadCandidate,
 	resolved []relationships.ResolvedRelationship,
@@ -14,13 +20,7 @@ func applyResolvedDeploymentSources(
 		return candidates
 	}
 
-	type deploymentSourceMetadata struct {
-		repoID     string
-		confidence float64
-		provenance string
-	}
-
-	deploymentRepoBySource := make(map[string]deploymentSourceMetadata, len(resolved))
+	deploymentReposBySource := make(map[string][]deploymentSourceMetadata, len(resolved))
 	for _, relationship := range resolved {
 		if relationship.RelationshipType != relationships.RelDeploysFrom {
 			continue
@@ -44,35 +44,56 @@ func applyResolvedDeploymentSources(
 			appRepoID, deployRepoID = relationship.TargetRepoID, relationship.SourceRepoID
 		}
 
-		existing, exists := deploymentRepoBySource[appRepoID]
-		if exists && existing.confidence >= relationship.Confidence {
-			continue
-		}
-		deploymentRepoBySource[appRepoID] = deploymentSourceMetadata{
+		metadata := deploymentSourceMetadata{
 			repoID:     deployRepoID,
 			confidence: relationship.Confidence,
 			provenance: provenance,
 		}
+		deploymentReposBySource[appRepoID] = appendDeploymentSourceMetadata(
+			deploymentReposBySource[appRepoID],
+			metadata,
+		)
 	}
 
-	if len(deploymentRepoBySource) == 0 {
+	if len(deploymentReposBySource) == 0 {
 		return candidates
 	}
 
 	enriched := make([]WorkloadCandidate, len(candidates))
 	for i, candidate := range candidates {
 		enriched[i] = candidate
-		if metadata, ok := deploymentRepoBySource[candidate.RepoID]; ok {
-			enriched[i].DeploymentRepoID = metadata.repoID
+		for _, metadata := range deploymentReposBySource[candidate.RepoID] {
+			enriched[i].DeploymentRepoIDs = appendUniqueString(enriched[i].DeploymentRepoIDs, metadata.repoID)
+			if enriched[i].DeploymentRepoID == "" || metadata.confidence > enriched[i].Confidence {
+				enriched[i].DeploymentRepoID = metadata.repoID
+			}
 			if metadata.confidence > enriched[i].Confidence {
 				enriched[i].Confidence = metadata.confidence
 			}
 			enriched[i].Provenance = appendUniqueString(enriched[i].Provenance, metadata.provenance)
+		}
+		if len(deploymentReposBySource[candidate.RepoID]) > 0 {
 			enriched[i].Classification = InferWorkloadClassification(enriched[i])
 		}
 	}
 
 	return enriched
+}
+
+func appendDeploymentSourceMetadata(existing []deploymentSourceMetadata, candidate deploymentSourceMetadata) []deploymentSourceMetadata {
+	if candidate.repoID == "" {
+		return existing
+	}
+	for i, item := range existing {
+		if item.repoID != candidate.repoID {
+			continue
+		}
+		if candidate.confidence > item.confidence {
+			existing[i] = candidate
+		}
+		return existing
+	}
+	return append(existing, candidate)
 }
 
 func applyResolvedProvisioningSources(

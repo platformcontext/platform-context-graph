@@ -26,12 +26,15 @@ const workloadMaterializationMinConfidence = 0.82
 // the Go equivalent of the Python candidate_rows dict produced by
 // _load_candidate_rows.
 type WorkloadCandidate struct {
-	RepoID              string
-	RepoName            string
-	WorkloadName        string
-	ResourceKinds       []string
-	Namespaces          []string
-	DeploymentRepoID    string
+	RepoID           string
+	RepoName         string
+	WorkloadName     string
+	ResourceKinds    []string
+	Namespaces       []string
+	DeploymentRepoID string
+	// DeploymentRepoIDs preserves all deployment/config repositories that
+	// source this workload. DeploymentRepoID remains the compatibility primary.
+	DeploymentRepoIDs   []string
 	ProvisioningRepoIDs []string
 	// ProvisioningEvidenceKinds keeps per-provisioning-repo evidence so
 	// dependency infrastructure does not become runtime truth by default.
@@ -296,9 +299,13 @@ func BuildProjectionRowsWithInfrastructurePlatforms(
 		// Resolve environments: deployment overlay environments first (by
 		// deployment repo when linked, otherwise source repo), then namespace
 		// fallback.
+		deploymentRepoIDs := candidateDeploymentRepoIDs(candidate)
 		var environments []string
-		if candidate.DeploymentRepoID != "" {
-			environments = deploymentEnvironments[candidate.DeploymentRepoID]
+		if len(deploymentRepoIDs) > 0 {
+			for _, deploymentRepoID := range deploymentRepoIDs {
+				environments = append(environments, deploymentEnvironments[deploymentRepoID]...)
+			}
+			environments = uniqueSortedStrings(environments)
 		} else {
 			environments = deploymentEnvironments[candidate.RepoID]
 		}
@@ -330,20 +337,24 @@ func BuildProjectionRowsWithInfrastructurePlatforms(
 				result.Stats.Instances++
 			}
 
-			if candidate.DeploymentRepoID != "" {
-				dsKey := instanceID + "|" + candidate.DeploymentRepoID
-				if _, ok := seenDeploymentSources[dsKey]; !ok {
-					seenDeploymentSources[dsKey] = struct{}{}
-					result.DeploymentSourceRows = append(result.DeploymentSourceRows, DeploymentSourceRow{
-						DeploymentRepoID: candidate.DeploymentRepoID,
-						Environment:      environment,
-						InstanceID:       instanceID,
-						WorkloadName:     workloadName,
-						Confidence:       confidence,
-						Provenance:       provenance,
-					})
-					result.Stats.DeploymentSources++
+			for _, deploymentRepoID := range deploymentRepoIDs {
+				if !deploymentRepoHasEnvironment(deploymentEnvironments, deploymentRepoID, environment) {
+					continue
 				}
+				dsKey := instanceID + "|" + deploymentRepoID
+				if _, ok := seenDeploymentSources[dsKey]; ok {
+					continue
+				}
+				seenDeploymentSources[dsKey] = struct{}{}
+				result.DeploymentSourceRows = append(result.DeploymentSourceRows, DeploymentSourceRow{
+					DeploymentRepoID: deploymentRepoID,
+					Environment:      environment,
+					InstanceID:       instanceID,
+					WorkloadName:     workloadName,
+					Confidence:       confidence,
+					Provenance:       provenance,
+				})
+				result.Stats.DeploymentSources++
 			}
 
 			if platformKind == "" {
@@ -453,6 +464,28 @@ func stableAPIEndpointID(repoID, workloadID, path string) string {
 	return "endpoint:" + hex.EncodeToString(digest[:12])
 }
 
+func candidateDeploymentRepoIDs(candidate WorkloadCandidate) []string {
+	repoIDs := make([]string, 0, 1+len(candidate.DeploymentRepoIDs))
+	repoIDs = appendUniqueString(repoIDs, strings.TrimSpace(candidate.DeploymentRepoID))
+	for _, repoID := range candidate.DeploymentRepoIDs {
+		repoIDs = appendUniqueString(repoIDs, strings.TrimSpace(repoID))
+	}
+	return repoIDs
+}
+
+func deploymentRepoHasEnvironment(deploymentEnvironments map[string][]string, repoID string, environment string) bool {
+	environments := deploymentEnvironments[repoID]
+	if len(environments) == 0 {
+		return true
+	}
+	for _, candidate := range environments {
+		if candidate == environment {
+			return true
+		}
+	}
+	return false
+}
+
 func provisionedRuntimePlatformRows(
 	candidate WorkloadCandidate,
 	workloadName string,
@@ -466,9 +499,6 @@ func provisionedRuntimePlatformRows(
 	var rows []RuntimePlatformRow
 	for _, repoID := range candidate.ProvisioningRepoIDs {
 		platforms := infrastructurePlatforms[repoID]
-		if len(platforms) != 1 {
-			continue
-		}
 		if !hasRuntimeProvisioningEvidence(candidate.ProvisioningEvidenceKinds[repoID]) {
 			continue
 		}
@@ -476,24 +506,25 @@ func provisionedRuntimePlatformRows(
 		if len(environments) == 0 {
 			continue
 		}
-		platform := platforms[0]
-		if platform.PlatformID == "" || platform.PlatformKind == "" {
-			continue
-		}
-		for _, environment := range environments {
-			instanceID := fmt.Sprintf("workload-instance:%s:%s", workloadName, environment)
-			rows = append(rows, RuntimePlatformRow{
-				Environment:      environment,
-				Confidence:       confidence,
-				InstanceID:       instanceID,
-				PlatformID:       platform.PlatformID,
-				PlatformKind:     platform.PlatformKind,
-				PlatformName:     platform.PlatformName,
-				PlatformProvider: platform.PlatformProvider,
-				PlatformRegion:   platform.PlatformRegion,
-				PlatformLocator:  platform.PlatformLocator,
-				RepoID:           candidate.RepoID,
-			})
+		for _, platform := range platforms {
+			if platform.PlatformID == "" || platform.PlatformKind == "" {
+				continue
+			}
+			for _, environment := range environments {
+				instanceID := fmt.Sprintf("workload-instance:%s:%s", workloadName, environment)
+				rows = append(rows, RuntimePlatformRow{
+					Environment:      environment,
+					Confidence:       confidence,
+					InstanceID:       instanceID,
+					PlatformID:       platform.PlatformID,
+					PlatformKind:     platform.PlatformKind,
+					PlatformName:     platform.PlatformName,
+					PlatformProvider: platform.PlatformProvider,
+					PlatformRegion:   platform.PlatformRegion,
+					PlatformLocator:  platform.PlatformLocator,
+					RepoID:           candidate.RepoID,
+				})
+			}
 		}
 	}
 	return rows
@@ -536,7 +567,7 @@ func inferCandidateRuntimePlatformKind(candidate WorkloadCandidate) string {
 	if kind := InferRuntimePlatformKind(candidate.ResourceKinds); kind != "" {
 		return kind
 	}
-	if candidate.DeploymentRepoID == "" {
+	if len(candidateDeploymentRepoIDs(candidate)) == 0 {
 		return ""
 	}
 	if hasProvenance(candidate.Provenance,
