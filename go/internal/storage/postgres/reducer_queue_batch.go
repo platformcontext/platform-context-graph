@@ -39,6 +39,31 @@ WITH candidate AS (
             AND projector_any.domain = 'source_local'
             AND projector_any.status IN ('pending', 'retrying', 'claimed', 'running')
       ))
+      -- NornicDB's semantic label update path is backed by the same label/uid
+      -- indexes touched by source-local canonical entities. Eight concurrent
+      -- semantic writers have repeatedly timed out on tiny row sets, so cap
+      -- only this reducer domain while preserving concurrency for unrelated
+      -- reducer domains.
+      AND ($5 = false OR domain <> 'semantic_entity_materialization' OR NOT EXISTS (
+          SELECT 1
+          FROM fact_work_items AS semantic_inflight
+          WHERE semantic_inflight.stage = 'reducer'
+            AND semantic_inflight.domain = 'semantic_entity_materialization'
+            AND semantic_inflight.work_item_id <> fact_work_items.work_item_id
+            AND semantic_inflight.status IN ('claimed', 'running')
+            AND semantic_inflight.claim_until > $1
+      ))
+      AND ($5 = false OR domain <> 'semantic_entity_materialization' OR work_item_id = (
+          SELECT semantic_next.work_item_id
+          FROM fact_work_items AS semantic_next
+          WHERE semantic_next.stage = 'reducer'
+            AND semantic_next.domain = 'semantic_entity_materialization'
+            AND semantic_next.status IN ('pending', 'retrying', 'claimed', 'running')
+            AND (semantic_next.visible_at IS NULL OR semantic_next.visible_at <= $1)
+            AND (semantic_next.claim_until IS NULL OR semantic_next.claim_until <= $1)
+          ORDER BY semantic_next.updated_at ASC, semantic_next.work_item_id ASC
+          LIMIT 1
+      ))
       -- Reducer domains can touch the same graph nodes for a scope. Fence by
       -- explicit conflict key so unrelated graph families can still overlap.
       AND NOT EXISTS (

@@ -243,6 +243,11 @@ func TestClaimBatchGatesSemanticEntitiesOnGlobalProjectorDrain(t *testing.T) {
 		"projector_any.stage = 'projector'",
 		"projector_any.domain = 'source_local'",
 		"projector_any.status IN ('pending', 'retrying', 'claimed', 'running')",
+		"semantic_inflight.domain = 'semantic_entity_materialization'",
+		"semantic_inflight.status IN ('claimed', 'running')",
+		"semantic_inflight.claim_until > $1",
+		"semantic_next.domain = 'semantic_entity_materialization'",
+		"semantic_next.work_item_id",
 	} {
 		if !strings.Contains(query, want) {
 			t.Fatalf("batch claim query missing semantic global projector gate %q:\n%s", want, query)
