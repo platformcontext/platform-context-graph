@@ -45,6 +45,18 @@ repo identity API queries for `handleRelationships -> transitiveRelationshipsGra
 through the live local-authoritative API.
 
 Latest 2026-04-26 NornicDB dogfood evidence:
+- 2026-05-02 focused evidence-pointer proof found and isolated a NornicDB
+  relationship-property persistence bug in the embedded backend path. PCG's
+  graph writer was already setting `resolved_id`, `generation_id`,
+  `evidence_type`, `evidence_kinds`, and counts on typed repository edges, but
+  NornicDB `main` (`v1.0.43`) returned empty relationship properties. The
+  minimal NornicDB HTTP probe `MERGE (a)-[rel:T]->(b) SET rel.resolved_id =
+  $rid` reproduced the backend issue. After the NornicDB patch and a fresh
+  focused PCG rerun with rebuilt binaries, projector `6/6` and reducer `56/56`
+  drained with no retrying/failed/dead-letter rows, and direct graph API proof
+  showed repo edges plus evidence-hop edges carrying `resolved_id` and evidence
+  metadata. The remaining action is upstreaming the NornicDB fix before
+  release-backed evidence-pointer validation.
 - the 2026-04-27 isolated `php-large-repo-b` stage-ledger rerun on PCG `e774d50c` and NornicDB `v1.0.43` drained healthy and made the remaining local-authoritative cost profile concrete: snapshot stream `40.545s`, streaming fact upsert `52.718s`, fact reload `12.907s`, projection build `1.420s`, content-store write `169.325s`, canonical graph write `117.801s`, reducer-intent enqueue `0.040s`, and all reducer domains completed without timeout. This moves the next Chunk 3.5 tuning slice from blind NornicDB row-cap changes to content writer sub-stage evidence (`prepare_files`, `upsert_files`, `prepare_entities`, `upsert_entities`) plus fact persistence review before any chunked-generation workflow redesign.
 - the narrower `Function=10` lane lowered per-statement cost but over-fragmented the self-repo run, so the built-in row cap now moves to `Function=15`
 - that `Function=15` rerun advanced through `Variable` with stable early chunks around `19.9s-21.4s`
