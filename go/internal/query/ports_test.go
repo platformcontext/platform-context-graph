@@ -20,6 +20,7 @@ type fakePortContentStore struct {
 	coverage              RepositoryContentCoverage
 	summary               repositoryReadModelSummary
 	relationshipReadModel repositoryRelationshipReadModel
+	entities              []EntityContent
 	repositories          []RepositoryCatalogEntry
 }
 
@@ -72,7 +73,7 @@ func (f fakePortContentStore) ListRepoFiles(context.Context, string, int) ([]Fil
 }
 
 func (f fakePortContentStore) ListRepoEntities(context.Context, string, int) ([]EntityContent, error) {
-	return nil, nil
+	return append([]EntityContent(nil), f.entities...), nil
 }
 
 func (f fakePortContentStore) SearchEntitiesByLanguageAndType(context.Context, string, string, string, string, int) ([]EntityContent, error) {

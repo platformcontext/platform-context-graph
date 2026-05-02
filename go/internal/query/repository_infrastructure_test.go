@@ -33,3 +33,44 @@ func TestQueryRepoInfrastructureFiltersNonInfrastructureGraphRows(t *testing.T) 
 		t.Fatalf("name = %q, want %q", got, want)
 	}
 }
+
+func TestQueryRepoInfrastructureUsesContentRowsBeforeGraph(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeRepoGraphReader{
+		run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+			if strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})") {
+				t.Fatalf("cypher = %q, want content infrastructure rows before graph fallback", cypher)
+			}
+			return nil, nil
+		},
+	}
+	content := fakePortContentStore{
+		entities: []EntityContent{
+			{
+				EntityType:   "K8sResource",
+				EntityName:   "api",
+				RelativePath: "deploy/api.yaml",
+				Metadata: map[string]any{
+					"kind": "Deployment",
+				},
+			},
+		},
+	}
+
+	got := queryRepoInfrastructureRows(
+		t.Context(),
+		reader,
+		content,
+		map[string]any{"repo_id": "repo-1"},
+	)
+	if len(got) != 1 {
+		t.Fatalf("len(queryRepoInfrastructureRows) = %d, want 1 content row: %#v", len(got), got)
+	}
+	if got, want := StringVal(got[0], "type"), "K8sResource"; got != want {
+		t.Fatalf("type = %q, want %q", got, want)
+	}
+	if got, want := StringVal(got[0], "kind"), "Deployment"; got != want {
+		t.Fatalf("kind = %q, want %q", got, want)
+	}
+}

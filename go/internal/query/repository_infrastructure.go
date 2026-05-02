@@ -13,26 +13,26 @@ func queryRepoInfrastructureRows(
 	content ContentStore,
 	params map[string]any,
 ) []map[string]any {
-	result := queryRepoInfrastructureFromGraph(ctx, reader, params)
-	if content == nil {
-		return result
-	}
-
 	repoID := StringVal(params, "repo_id")
-	if repoID == "" {
-		return result
+	if content != nil && repoID != "" {
+		if rows := queryRepoInfrastructureFromContent(ctx, content, repoID); len(rows) > 0 {
+			return rows
+		}
 	}
 
+	return queryRepoInfrastructureFromGraph(ctx, reader, params)
+}
+
+// queryRepoInfrastructureFromContent uses the content read model as the
+// preferred source when parsed infrastructure entities are present.
+func queryRepoInfrastructureFromContent(ctx context.Context, content ContentStore, repoID string) []map[string]any {
 	entities, err := content.ListRepoEntities(ctx, repoID, repositoryInfrastructureEntityLimit)
 	if err != nil || len(entities) == 0 {
-		return result
+		return nil
 	}
 
-	seen := make(map[string]struct{}, len(result))
-	for _, row := range result {
-		seen[repositoryInfrastructureEntryKey(row)] = struct{}{}
-	}
-
+	result := make([]map[string]any, 0, len(entities))
+	seen := make(map[string]struct{}, len(entities))
 	for _, entity := range entities {
 		entry, ok := repositoryInfrastructureEntryFromContent(entity)
 		if !ok {
