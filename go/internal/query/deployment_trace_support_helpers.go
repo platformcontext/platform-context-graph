@@ -370,17 +370,21 @@ func buildStorySections(platforms, platformKinds, environments []string) []map[s
 	return sections
 }
 
-func buildGitOpsOverview(platforms, platformKinds []string) map[string]any {
-	enabled := false
-	for _, kind := range platformKinds {
-		if kind == "argocd_application" || kind == "argocd_applicationset" {
-			enabled = true
-			break
-		}
+func buildGitOpsOverview(
+	platforms []string,
+	platformKinds []string,
+	deploymentSources []map[string]any,
+	deploymentEvidence map[string]any,
+	controllerEntities []map[string]any,
+) map[string]any {
+	toolFamilies := deploymentTraceGitOpsToolFamilies(platformKinds, deploymentSources, deploymentEvidence, controllerEntities)
+	enabled := len(toolFamilies) > 0
+	if len(toolFamilies) == 0 {
+		toolFamilies = platformKinds
 	}
 	return map[string]any{
 		"enabled":          enabled,
-		"tool_families":    platformKinds,
+		"tool_families":    toolFamilies,
 		"observed_targets": platforms,
 	}
 }
@@ -469,21 +473,104 @@ func firstPositiveFloat(candidates ...float64) float64 {
 	return 0
 }
 
-func buildControllerDrivenPaths(platforms, platformKinds []string) []map[string]any {
-	paths := make([]map[string]any, 0, max(len(platforms), len(platformKinds)))
-	limit := max(len(platforms), len(platformKinds))
-	for i := range limit {
-		path := map[string]any{}
-		if i < len(platformKinds) && platformKinds[i] != "" {
-			path["controller_kind"] = platformKinds[i]
+func buildControllerDrivenPaths(instances []map[string]any) []map[string]any {
+	seen := make(map[string]struct{}, len(instances))
+	paths := make([]map[string]any, 0, len(instances))
+	for _, instance := range instances {
+		for _, platform := range platformTargets(instance) {
+			platformName := StringVal(platform, "platform_name")
+			platformKind := StringVal(platform, "platform_kind")
+			if platformName == "" && platformKind == "" {
+				continue
+			}
+			key := platformName + "|" + platformKind
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			path := map[string]any{}
+			if platformKind != "" {
+				path["controller_kind"] = platformKind
+			}
+			if platformName != "" {
+				path["observed_target"] = platformName
+			}
+			paths = append(paths, path)
 		}
-		if i < len(platforms) && platforms[i] != "" {
-			path["observed_target"] = platforms[i]
-		}
-		if len(path) == 0 {
-			continue
-		}
-		paths = append(paths, path)
 	}
+	sortDeploymentTraceMaps(paths)
 	return paths
+}
+
+// deploymentTraceGitOpsToolFamilies returns GitOps tool families backed by
+// controller entities, platform kinds, or relationship evidence.
+func deploymentTraceGitOpsToolFamilies(
+	platformKinds []string,
+	deploymentSources []map[string]any,
+	deploymentEvidence map[string]any,
+	controllerEntities []map[string]any,
+) []string {
+	families := deploymentTraceEvidenceControllerFamilies(deploymentSources, deploymentEvidence, controllerEntities)
+	for _, kind := range platformKinds {
+		switch strings.TrimSpace(strings.ToLower(kind)) {
+		case "argocd", "argocd_application", "argocd_applicationset":
+			families = append(families, "argocd")
+		case "flux", "flux_kustomization", "flux_helmrelease":
+			families = append(families, "flux")
+		}
+	}
+	return uniqueSortedStrings(families)
+}
+
+// deploymentTraceEvidenceControllerFamilies lifts controller families out of
+// provenance evidence so read surfaces do not lose GitOps truth when runtime
+// platform kinds are generic values like kubernetes or ecs.
+func deploymentTraceEvidenceControllerFamilies(
+	deploymentSources []map[string]any,
+	deploymentEvidence map[string]any,
+	controllerEntities []map[string]any,
+) []string {
+	families := make([]string, 0, len(controllerEntities)+len(deploymentSources))
+	for _, entity := range controllerEntities {
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(entity, "controller_kind")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(entity, "entity_type")))
+	}
+	for _, source := range deploymentSources {
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(source, "reason")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(source, "evidence_type")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(source, "evidence_kind")))
+	}
+	for _, family := range stringSliceMapValue(deploymentEvidence, "tool_families") {
+		families = append(families, deploymentTraceControllerFamilyFromText(family))
+	}
+	for _, artifact := range mapSliceValue(deploymentEvidence, "artifacts") {
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(artifact, "family")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(artifact, "tool_family")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(artifact, "evidence_type")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(artifact, "evidence_kind")))
+		for _, kind := range StringSliceVal(artifact, "evidence_kinds") {
+			families = append(families, deploymentTraceControllerFamilyFromText(kind))
+		}
+	}
+	for _, path := range mapSliceValue(deploymentEvidence, "delivery_paths") {
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(path, "family")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(path, "tool_family")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(path, "kind")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(path, "evidence_type")))
+	}
+	return uniqueSortedStrings(families)
+}
+
+func deploymentTraceControllerFamilyFromText(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch {
+	case normalized == "":
+		return ""
+	case strings.Contains(normalized, "argocd"):
+		return "argocd"
+	case strings.Contains(normalized, "flux"):
+		return "flux"
+	default:
+		return ""
+	}
 }

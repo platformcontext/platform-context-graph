@@ -825,6 +825,93 @@ func TestBuildDeploymentTraceResponseIncludesServiceEvidenceConsumersAndProvisio
 	}
 }
 
+func TestBuildDeploymentTraceResponseRecognizesGitOpsFromReadModelEvidence(t *testing.T) {
+	t.Parallel()
+
+	ctx := map[string]any{
+		"id":        "workload:sample-service-api",
+		"name":      "sample-service-api",
+		"kind":      "service",
+		"repo_id":   "repo-sample-service-api",
+		"repo_name": "sample-service-api",
+		"instances": []map[string]any{
+			{
+				"instance_id":   "workload-instance:sample-service-api:prod",
+				"platform_name": "prod",
+				"platform_kind": "kubernetes",
+				"environment":   "prod",
+				"platforms": []map[string]any{
+					{
+						"platform_name": "prod",
+						"platform_kind": "kubernetes",
+					},
+					{
+						"platform_name": "runtime-ecs",
+						"platform_kind": "ecs",
+					},
+				},
+			},
+		},
+		"deployment_sources": []map[string]any{
+			{
+				"repo_id":    "repo-gitops",
+				"repo_name":  "delivery-gitops",
+				"confidence": 0.99,
+				"reason":     "argocd_applicationset_deploy_source",
+			},
+		},
+		"deployment_evidence": map[string]any{
+			"tool_families": []string{"argocd", "github_actions", "helm", "kustomize"},
+			"artifacts": []map[string]any{
+				{
+					"family":        "argocd",
+					"evidence_type": "argocd_applicationset_deploy_source",
+					"resolved_id":   "resolved-gitops",
+				},
+			},
+		},
+	}
+
+	got := buildDeploymentTraceResponse("sample-service-api", ctx)
+
+	gitopsOverview, ok := got["gitops_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("gitops_overview type = %T, want map[string]any", got["gitops_overview"])
+	}
+	if gitopsOverview["enabled"] != true {
+		t.Fatalf("gitops_overview.enabled = %#v, want true", gitopsOverview["enabled"])
+	}
+	if !slices.Contains(StringSliceVal(gitopsOverview, "tool_families"), "argocd") {
+		t.Fatalf("gitops_overview.tool_families = %#v, want argocd", gitopsOverview["tool_families"])
+	}
+
+	controllerOverview, ok := got["controller_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("controller_overview type = %T, want map[string]any", got["controller_overview"])
+	}
+	if !slices.Contains(StringSliceVal(controllerOverview, "controller_kinds"), "argocd") {
+		t.Fatalf("controller_overview.controller_kinds = %#v, want argocd", controllerOverview["controller_kinds"])
+	}
+
+	controllerDrivenPaths, ok := got["controller_driven_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("controller_driven_paths type = %T, want []map[string]any", got["controller_driven_paths"])
+	}
+	if len(controllerDrivenPaths) != 2 {
+		t.Fatalf("len(controller_driven_paths) = %d, want 2", len(controllerDrivenPaths))
+	}
+	pathsByTarget := make(map[string]map[string]any, len(controllerDrivenPaths))
+	for _, path := range controllerDrivenPaths {
+		pathsByTarget[StringVal(path, "observed_target")] = path
+	}
+	if gotKind, wantKind := StringVal(pathsByTarget["prod"], "controller_kind"), "kubernetes"; gotKind != wantKind {
+		t.Fatalf("controller_driven_paths[prod].controller_kind = %q, want %q", gotKind, wantKind)
+	}
+	if gotKind, wantKind := StringVal(pathsByTarget["runtime-ecs"], "controller_kind"), "ecs"; gotKind != wantKind {
+		t.Fatalf("controller_driven_paths[runtime-ecs].controller_kind = %q, want %q", gotKind, wantKind)
+	}
+}
+
 func TestBuildDeploymentTraceResponseDeduplicatesRepositoryDeliveryPaths(t *testing.T) {
 	t.Parallel()
 

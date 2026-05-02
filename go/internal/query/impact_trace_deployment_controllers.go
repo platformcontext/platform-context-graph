@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 var controllerEntityTypes = map[string]string{
@@ -64,9 +65,15 @@ func buildControllerOverview(
 	platforms []string,
 	platformKinds []string,
 	controllerEntities []map[string]any,
+	deploymentSources []map[string]any,
+	deploymentEvidence map[string]any,
 ) map[string]any {
 	controllerNames := controllerEntityNames(controllerEntities)
 	controllerKinds := controllerOverviewKinds(controllerEntities, platformKinds)
+	controllerKinds = mergeControllerKinds(
+		controllerKinds,
+		deploymentTraceEvidenceControllerFamilies(deploymentSources, deploymentEvidence, controllerEntities),
+	)
 	controllerCount := len(controllerNames)
 	if controllerCount == 0 {
 		controllerCount = len(controllerKinds)
@@ -85,6 +92,28 @@ func buildControllerOverview(
 		overview["entities"] = controllerEntities
 	}
 	return overview
+}
+
+// mergeControllerKinds preserves the runtime/controller kind list while adding
+// controller families that only appear in relationship evidence.
+func mergeControllerKinds(kinds []string, families []string) []string {
+	if len(families) == 0 {
+		return kinds
+	}
+	seen := make(map[string]struct{}, len(kinds)+len(families))
+	merged := make([]string, 0, len(kinds)+len(families))
+	for _, kind := range append(append([]string{}, kinds...), families...) {
+		kind = strings.TrimSpace(kind)
+		if kind == "" {
+			continue
+		}
+		if _, ok := seen[kind]; ok {
+			continue
+		}
+		seen[kind] = struct{}{}
+		merged = append(merged, kind)
+	}
+	return merged
 }
 
 func controllerEntityNames(controllerEntities []map[string]any) []string {
