@@ -52,7 +52,12 @@ Latest 2026-04-26 NornicDB dogfood evidence:
   remote headless binary preserved relationship properties through HTTP, and a
   fresh focused PCG rerun drained with projector `6/6`, reducer `56/56`, no
   retrying/failed/dead-letter rows, and direct graph API proof that repo edges
-  and evidence hop edges carry `resolved_id` pointers.
+  and evidence hop edges carry `resolved_id` pointers. The backend fix is now
+  tracked upstream as `orneryd/NornicDB#135`; Copilot's standalone-`SET`
+  review comment was resolved in NornicDB commit `2461a46`, which adds
+  `ON CREATE SET` plus standalone relationship `SET` regression coverage and
+  passed `go test -tags 'noui nolocalllm' ./pkg/cypher -count=1` plus
+  `git diff --check`.
 - `Function=15` is the better built-in compromise: it avoids the over-fragmented `Function=10` lane and still reaches `Variable` with stable early chunks around `19.9s-21.4s`
 - the next repo-scale blocker is now `retract`, not `entities`; bundling all 9 stale-delete statements into one grouped transaction overflowed NornicDB's request budget
 - the branch now executes NornicDB retract statements sequentially and sanitizes backend error text before projector dead-letter persistence so NUL bytes cannot break Postgres updates
