@@ -207,42 +207,19 @@ func (h *EntityHandler) fetchWorkloadInstances(ctx context.Context, whereClause 
 		byID[instanceID] = instance
 	}
 
-	provisionedRows, err := h.fetchProvisionedPlatformRows(ctx, repoID)
+	platformRows, err := h.fetchWorkloadPlatformRows(ctx, instances)
 	if err != nil {
 		return nil, err
 	}
-	if len(provisionedRows) == 1 {
-		attachProvisionedPlatform(instances, provisionedRows[0])
-		return instances, nil
-	}
-
-	platformCypher := fmt.Sprintf(`
-		MATCH (w:Workload) WHERE %s
-		MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)
-		MATCH (i)-[runsOn:RUNS_ON]->(p:Platform)
-		RETURN i.id as instance_id,
-		       p.name as platform_name,
-		       p.kind as platform_kind,
-		       runsOn.confidence as platform_confidence,
-		       runsOn.reason as platform_reason
-		ORDER BY instance_id, platform_name
-	`, whereClause)
-	if workloadID != "" {
-		platformCypher = `
-			MATCH (i:WorkloadInstance)
-			WHERE i.workload_id = $workload_id
-			MATCH (i)-[runsOn:RUNS_ON]->(p:Platform)
-			RETURN i.id as instance_id,
-			       p.name as platform_name,
-			       p.kind as platform_kind,
-			       runsOn.confidence as platform_confidence,
-			       runsOn.reason as platform_reason
-			ORDER BY instance_id, platform_name
-		`
-	}
-	platformRows, err := h.Neo4j.Run(ctx, platformCypher, params)
-	if err != nil {
-		return nil, err
+	if len(platformRows) == 0 {
+		provisionedRows, err := h.fetchProvisionedPlatformRows(ctx, repoID)
+		if err != nil {
+			return nil, err
+		}
+		if len(provisionedRows) == 1 {
+			attachProvisionedPlatform(instances, provisionedRows[0])
+			return instances, nil
+		}
 	}
 	for _, row := range platformRows {
 		instance := byID[StringVal(row, "instance_id")]
@@ -252,8 +229,8 @@ func (h *EntityHandler) fetchWorkloadInstances(ctx context.Context, whereClause 
 		platform := map[string]any{
 			"platform_name":       StringVal(row, "platform_name"),
 			"platform_kind":       StringVal(row, "platform_kind"),
-			"platform_confidence": floatVal(row, "platform_confidence"),
-			"platform_reason":     StringVal(row, "platform_reason"),
+			"platform_confidence": platformEdgeConfidence(row),
+			"platform_reason":     platformEdgeReason(row),
 		}
 		instance["platforms"] = append(platformTargets(instance), platform)
 		if StringVal(instance, "platform_name") == "" {
@@ -265,6 +242,57 @@ func (h *EntityHandler) fetchWorkloadInstances(ctx context.Context, whereClause 
 	}
 
 	return instances, nil
+}
+
+// fetchWorkloadPlatformRows anchors each platform lookup by exact instance id
+// so NornicDB can preserve relationship properties and avoid workload-wide
+// relationship expansion shapes on service read paths.
+func (h *EntityHandler) fetchWorkloadPlatformRows(ctx context.Context, instances []map[string]any) ([]map[string]any, error) {
+	if h == nil || h.Neo4j == nil || len(instances) == 0 {
+		return nil, nil
+	}
+	const platformCypher = `
+		MATCH (i:WorkloadInstance {id: $instance_id})
+		MATCH (i)-[runsOn:RUNS_ON]->(p:Platform)
+		RETURN i.id as instance_id,
+		       p.name as platform_name,
+		       p.kind as platform_kind,
+		       runsOn.confidence as platform_confidence,
+		       runsOn.reason as platform_reason,
+		       properties(runsOn) as platform_edge
+		ORDER BY platform_name
+	`
+	rows := make([]map[string]any, 0, len(instances))
+	for _, instance := range instances {
+		instanceID := StringVal(instance, "instance_id")
+		if instanceID == "" {
+			continue
+		}
+		instanceRows, err := h.Neo4j.Run(ctx, platformCypher, map[string]any{"instance_id": instanceID})
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, instanceRows...)
+	}
+	return rows, nil
+}
+
+// platformEdgeConfidence preserves edge confidence when a backend can return
+// relationship properties but not the scalar relationship-property projection.
+func platformEdgeConfidence(row map[string]any) float64 {
+	if confidence := floatVal(row, "platform_confidence"); confidence != 0 {
+		return confidence
+	}
+	return floatVal(mapValue(row, "platform_edge"), "confidence")
+}
+
+// platformEdgeReason preserves edge rationale through the same relationship
+// properties fallback used for confidence.
+func platformEdgeReason(row map[string]any) string {
+	if reason := StringVal(row, "platform_reason"); reason != "" {
+		return reason
+	}
+	return StringVal(mapValue(row, "platform_edge"), "reason")
 }
 
 // fetchProvisionedPlatformRows uses repository-level platform evidence as a
