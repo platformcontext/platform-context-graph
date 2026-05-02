@@ -91,7 +91,11 @@ func queryRepoInfrastructureFromGraph(ctx context.Context, reader GraphQuery, pa
 
 	result := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, repositoryInfrastructureEntryFromRow(row))
+		entry := repositoryInfrastructureEntryFromRow(row)
+		if !isRepositoryInfrastructureType(StringVal(entry, "type")) {
+			continue
+		}
+		result = append(result, entry)
 	}
 	return result
 }
@@ -164,6 +168,22 @@ func repositoryInfrastructureEntryFromContent(entity EntityContent) (map[string]
 		return nil, false
 	}
 	return entry, true
+}
+
+// isRepositoryInfrastructureType is a defensive response gate for backends that
+// may over-return rows for OR-heavy label predicates.
+func isRepositoryInfrastructureType(entityType string) bool {
+	switch entityType {
+	case "K8sResource", "TerraformResource", "TerraformModule", "TerraformDataSource",
+		"TerragruntConfig", "TerragruntDependency",
+		"ArgoCDApplication", "ArgoCDApplicationSet",
+		"HelmChart", "HelmValues", "KustomizeOverlay",
+		"CrossplaneXRD", "CrossplaneComposition", "CrossplaneClaim",
+		"CloudFormationResource":
+		return true
+	default:
+		return false
+	}
 }
 
 func copyInfrastructureClassification(entry map[string]any, source map[string]any) {
