@@ -21,6 +21,7 @@ type fakePortContentStore struct {
 	summary               repositoryReadModelSummary
 	relationshipReadModel repositoryRelationshipReadModel
 	entryPoints           repositoryEntryPointReadModel
+	deploymentEvidence    repositoryDeploymentEvidenceReadModel
 	entities              []EntityContent
 	repositories          []RepositoryCatalogEntry
 }
@@ -99,6 +100,10 @@ func (f fakePortContentStore) repositoryRelationshipReadModel(context.Context, s
 
 func (f fakePortContentStore) repositoryEntryPoints(context.Context, string) (repositoryEntryPointReadModel, error) {
 	return f.entryPoints, nil
+}
+
+func (f fakePortContentStore) repositoryDeploymentEvidence(context.Context, string) (repositoryDeploymentEvidenceReadModel, error) {
+	return f.deploymentEvidence, nil
 }
 
 func (f fakePortContentStore) ListRepositories(context.Context) ([]RepositoryCatalogEntry, error) {

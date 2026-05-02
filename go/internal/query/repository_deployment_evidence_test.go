@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -149,11 +150,136 @@ func TestGetRepositoryContextIncludesGraphDeploymentEvidence(t *testing.T) {
 	}
 }
 
+func TestGetRepositoryContextUsesReadModelForDeploymentEvidence(t *testing.T) {
+	t.Parallel()
+
+	handler := &RepositoryHandler{
+		Neo4j: fakeRepoGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"MATCH (r:Repository {id: $repo_id})": {
+					"id":         "repo-service",
+					"name":       "checkout-service",
+					"path":       "/repos/checkout-service",
+					"local_path": "/repos/checkout-service",
+					"has_remote": false,
+				},
+			},
+			run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "EvidenceArtifact") {
+					t.Fatalf("cypher = %q, want deployment evidence read model before graph fallback", cypher)
+				}
+				return nil, nil
+			},
+		},
+		Content: fakePortContentStore{
+			deploymentEvidence: repositoryDeploymentEvidenceReadModel{
+				Available: true,
+				Rows: []map[string]any{
+					{
+						"direction":             "incoming",
+						"artifact_id":           "evidence-artifact:1",
+						"name":                  "environments/prod/ecs.tf",
+						"domain":                "deployment",
+						"path":                  "environments/prod/ecs.tf",
+						"evidence_kind":         "TERRAFORM_ECS_SERVICE",
+						"artifact_family":       "terraform",
+						"extractor":             "terraform-runtime-service-module",
+						"relationship_type":     "PROVISIONS_DEPENDENCY_FOR",
+						"resolved_id":           "resolved-1",
+						"generation_id":         "gen-1",
+						"confidence":            0.96,
+						"environment":           "prod",
+						"runtime_platform_kind": "ecs",
+						"matched_alias":         "checkout-service",
+						"matched_value":         "checkout-service",
+						"evidence_source":       "resolver/cross-repo",
+						"source_repo_id":        "repo-terraform",
+						"source_repo_name":      "terraform-live",
+						"target_repo_id":        "repo-service",
+						"target_repo_name":      "checkout-service",
+					},
+				},
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-service/context", nil)
+	req.SetPathValue("repo_id", "repo-service")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	surface := resp["deployment_evidence"].(map[string]any)
+	artifacts := surface["artifacts"].([]any)
+	first := artifacts[0].(map[string]any)
+	if got, want := first["direction"], "incoming"; got != want {
+		t.Fatalf("direction = %#v, want %#v", got, want)
+	}
+	if got, want := first["source_repo_id"], "repo-terraform"; got != want {
+		t.Fatalf("source_repo_id = %#v, want %#v", got, want)
+	}
+	if got, want := first["target_repo_id"], "repo-service"; got != want {
+		t.Fatalf("target_repo_id = %#v, want %#v", got, want)
+	}
+}
+
+func TestContentReaderRepositoryDeploymentEvidenceHydratesPreviewArtifacts(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: contentReaderDeploymentEvidenceColumns(),
+			rows: [][]driver.Value{
+				{
+					"incoming", "resolved-1", "gen-1", "repo-terraform", "terraform-live",
+					"repo-service", "checkout-service", "PROVISIONS_DEPENDENCY_FOR", float64(0.96),
+					[]byte(`{"evidence_preview":[{"kind":"TERRAFORM_ECS_SERVICE","confidence":0.96,"details":{"path":"environments/prod/ecs.tf","extractor":"terraform-runtime-service-module","matched_alias":"checkout-service","matched_value":"checkout-service","runtime_platform_kind":"ecs"}}]}`),
+				},
+			},
+		},
+	})
+
+	reader := NewContentReader(db)
+	got, err := reader.repositoryDeploymentEvidence(t.Context(), "repo-service")
+	if err != nil {
+		t.Fatalf("repositoryDeploymentEvidence() error = %v, want nil", err)
+	}
+	if !got.Available {
+		t.Fatal("repositoryDeploymentEvidence().Available = false, want true")
+	}
+	if len(got.Rows) != 1 {
+		t.Fatalf("len(Rows) = %d, want 1", len(got.Rows))
+	}
+	row := got.Rows[0]
+	for key, want := range map[string]any{
+		"direction":             "incoming",
+		"source_repo_id":        "repo-terraform",
+		"source_repo_name":      "terraform-live",
+		"target_repo_id":        "repo-service",
+		"target_repo_name":      "checkout-service",
+		"environment":           "prod",
+		"runtime_platform_kind": "ecs",
+	} {
+		if got := row[key]; got != want {
+			t.Fatalf("Rows[0].%s = %#v, want %#v", key, got, want)
+		}
+	}
+}
+
 func TestQueryRepoDeploymentEvidenceIncomingUsesArtifactFirstBoundary(t *testing.T) {
 	t.Parallel()
 
 	reader := &recordingDeploymentEvidenceGraphReader{}
-	queryRepoDeploymentEvidence(context.Background(), reader, map[string]any{"repo_id": "repo-service"})
+	queryRepoDeploymentEvidence(context.Background(), reader, nil, map[string]any{"repo_id": "repo-service"})
 
 	if len(reader.cypherCalls) != 2 {
 		t.Fatalf("len(cypherCalls) = %d, want 2", len(reader.cypherCalls))

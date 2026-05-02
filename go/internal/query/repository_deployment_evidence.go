@@ -7,7 +7,11 @@ import (
 
 // queryRepoDeploymentEvidence reads compact graph evidence pointers for
 // repository relationships without embedding raw Postgres evidence payloads.
-func queryRepoDeploymentEvidence(ctx context.Context, reader GraphQuery, params map[string]any) map[string]any {
+func queryRepoDeploymentEvidence(ctx context.Context, reader GraphQuery, content ContentStore, params map[string]any) map[string]any {
+	if readModel := loadRepositoryDeploymentEvidence(ctx, content, StringVal(params, "repo_id")); readModel != nil {
+		return readModel
+	}
+
 	outgoing := queryRepoDeploymentEvidenceDirection(ctx, reader, params, `
 		MATCH (r:Repository {id: $repo_id})-[source_rel:HAS_DEPLOYMENT_EVIDENCE]->(artifact:EvidenceArtifact)-[:EVIDENCES_REPOSITORY_RELATIONSHIP]->(target:Repository)
 		RETURN 'outgoing' AS direction,

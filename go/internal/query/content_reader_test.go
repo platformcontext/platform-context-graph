@@ -535,6 +535,13 @@ func (c *contentReaderConn) QueryContext(_ context.Context, query string, _ []dr
 		return &contentReaderRows{columns: []string{"count"}, rows: [][]driver.Value{{int64(0)}}}, nil
 	}
 	if strings.Contains(query, "WITH scoped_relationships AS") &&
+		strings.Contains(query, "r.details") &&
+		!strings.Contains(query, "r.evidence_count") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], contentReaderDeploymentEvidenceColumns())) {
+		return &contentReaderRows{columns: contentReaderDeploymentEvidenceColumns(), rows: nil}, nil
+	}
+	if strings.Contains(query, "WITH scoped_relationships AS") &&
+		strings.Contains(query, "r.evidence_count") &&
 		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], contentReaderRelationshipReadModelColumns())) {
 		return &contentReaderRows{columns: contentReaderRelationshipReadModelColumns(), rows: nil}, nil
 	}
@@ -559,6 +566,13 @@ func contentReaderRelationshipReadModelColumns() []string {
 		"direction", "relationship_type", "source_repo_id", "source_name",
 		"target_repo_id", "target_name", "resolved_id", "generation_id",
 		"confidence", "evidence_count", "rationale", "resolution_source", "details",
+	}
+}
+
+func contentReaderDeploymentEvidenceColumns() []string {
+	return []string{
+		"direction", "resolved_id", "generation_id", "source_repo_id", "source_name",
+		"target_repo_id", "target_name", "relationship_type", "confidence", "details",
 	}
 }
 

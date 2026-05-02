@@ -62,7 +62,7 @@ func queryServiceGraphDeploymentEvidence(ctx context.Context, graph GraphQuery, 
 	if graph == nil || strings.TrimSpace(repoID) == "" {
 		return nil
 	}
-	return queryRepoDeploymentEvidence(ctx, graph, map[string]any{"repo_id": repoID})
+	return queryRepoDeploymentEvidence(ctx, graph, nil, map[string]any{"repo_id": repoID})
 }
 
 func queryServiceGraphAPISurface(ctx context.Context, graph GraphQuery, repoID string) map[string]any {
