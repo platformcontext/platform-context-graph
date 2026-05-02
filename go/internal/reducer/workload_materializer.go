@@ -115,8 +115,11 @@ func (m *WorkloadMaterializer) Materialize(
 				"evidence_source":            EvidenceSourceWorkloads,
 			}
 		}
-		if err := m.executeBatched(ctx, batchWorkloadUpsertCypher, rows); err != nil {
+		if err := m.executeBatched(ctx, batchWorkloadNodeUpsertCypher, rows); err != nil {
 			return result, fmt.Errorf("write workloads: %w", err)
+		}
+		if err := m.executeBatched(ctx, batchWorkloadDefinesEdgeUpsertCypher, rows); err != nil {
+			return result, fmt.Errorf("write workload defines edges: %w", err)
 		}
 		result.WorkloadWriteDuration = time.Since(stageStarted)
 		result.WorkloadsWritten = len(projection.WorkloadRows)
@@ -140,8 +143,11 @@ func (m *WorkloadMaterializer) Materialize(
 				"evidence_source":            EvidenceSourceWorkloads,
 			}
 		}
-		if err := m.executeBatched(ctx, batchWorkloadInstanceUpsertCypher, rows); err != nil {
+		if err := m.executeBatched(ctx, batchWorkloadInstanceNodeUpsertCypher, rows); err != nil {
 			return result, fmt.Errorf("write instances: %w", err)
+		}
+		if err := m.executeBatched(ctx, batchWorkloadInstanceOfEdgeUpsertCypher, rows); err != nil {
+			return result, fmt.Errorf("write instance edges: %w", err)
 		}
 		result.InstanceWriteDuration = time.Since(stageStarted)
 		result.InstancesWritten = len(projection.InstanceRows)
@@ -181,12 +187,15 @@ func (m *WorkloadMaterializer) Materialize(
 				"environment":         row.Environment,
 				"platform_region":     row.PlatformRegion,
 				"platform_locator":    row.PlatformLocator,
-				"platform_confidence": row.Confidence,
+				"platform_confidence": runtimePlatformConfidence(row.Confidence),
 				"evidence_source":     EvidenceSourceWorkloads,
 			}
 		}
-		if err := m.executeBatched(ctx, batchRuntimePlatformUpsertCypher, rows); err != nil {
+		if err := m.executeBatched(ctx, batchRuntimePlatformNodeUpsertCypher, rows); err != nil {
 			return result, fmt.Errorf("write runtime platforms: %w", err)
+		}
+		if err := m.executeBatched(ctx, batchRuntimePlatformRunsOnEdgeUpsertCypher, rows); err != nil {
+			return result, fmt.Errorf("write runtime platform edges: %w", err)
 		}
 		result.RuntimePlatformDuration = time.Since(stageStarted)
 		result.RuntimePlatformsWritten = len(projection.RuntimePlatformRows)
@@ -212,8 +221,14 @@ func (m *WorkloadMaterializer) Materialize(
 				"evidence_source": EvidenceSourceWorkloads,
 			}
 		}
-		if err := m.executeBatched(ctx, batchAPIEndpointUpsertCypher, rows); err != nil {
+		if err := m.executeBatched(ctx, batchAPIEndpointNodeUpsertCypher, rows); err != nil {
 			return result, fmt.Errorf("write api endpoints: %w", err)
+		}
+		if err := m.executeBatched(ctx, batchAPIEndpointRepoEdgeUpsertCypher, rows); err != nil {
+			return result, fmt.Errorf("write api endpoint repository edges: %w", err)
+		}
+		if err := m.executeBatched(ctx, batchAPIEndpointWorkloadEdgeUpsertCypher, rows); err != nil {
+			return result, fmt.Errorf("write api endpoint workload edges: %w", err)
 		}
 		result.EndpointWriteDuration = time.Since(stageStarted)
 		result.EndpointsWritten = len(projection.EndpointRows)
@@ -273,10 +288,16 @@ func (m *WorkloadMaterializer) MaterializeDependencies(
 	return result, nil
 }
 
+func runtimePlatformConfidence(confidence float64) float64 {
+	if confidence <= 0 {
+		return 0.9
+	}
+	return confidence
+}
+
 // Batched UNWIND Cypher templates for bulk operations.
 const (
-	batchWorkloadUpsertCypher = `UNWIND $rows AS row
-MATCH (repo:Repository {id: row.repo_id})
+	batchWorkloadNodeUpsertCypher = `UNWIND $rows AS row
 MERGE (w:Workload {id: row.workload_id})
 SET w.type = 'workload',
     w.name = row.workload_name,
@@ -285,14 +306,17 @@ SET w.type = 'workload',
     w.repo_id = row.repo_id,
     w.materialization_confidence = row.materialization_confidence,
     w.materialization_provenance = row.materialization_provenance,
-    w.evidence_source = row.evidence_source
+    w.evidence_source = row.evidence_source`
+
+	batchWorkloadDefinesEdgeUpsertCypher = `UNWIND $rows AS row
+MATCH (repo:Repository {id: row.repo_id})
+MATCH (w:Workload {id: row.workload_id})
 MERGE (repo)-[rel:DEFINES]->(w)
 SET rel.confidence = row.materialization_confidence,
     rel.reason = 'Repository defines workload',
     rel.evidence_source = row.evidence_source`
 
-	batchWorkloadInstanceUpsertCypher = `UNWIND $rows AS row
-MATCH (w:Workload {id: row.workload_id})
+	batchWorkloadInstanceNodeUpsertCypher = `UNWIND $rows AS row
 MERGE (i:WorkloadInstance {id: row.instance_id})
 SET i.type = 'workload_instance',
     i.name = row.workload_name,
@@ -303,7 +327,11 @@ SET i.type = 'workload_instance',
     i.repo_id = row.repo_id,
     i.materialization_confidence = row.materialization_confidence,
     i.materialization_provenance = row.materialization_provenance,
-    i.evidence_source = row.evidence_source
+    i.evidence_source = row.evidence_source`
+
+	batchWorkloadInstanceOfEdgeUpsertCypher = `UNWIND $rows AS row
+MATCH (i:WorkloadInstance {id: row.instance_id})
+MATCH (w:Workload {id: row.workload_id})
 MERGE (i)-[rel:INSTANCE_OF]->(w)
 SET rel.confidence = row.materialization_confidence,
     rel.reason = 'Workload instance belongs to workload',
@@ -318,8 +346,7 @@ SET rel.confidence = row.deployment_confidence,
     rel.provenance = row.deployment_provenance,
     rel.evidence_source = row.evidence_source`
 
-	batchRuntimePlatformUpsertCypher = `UNWIND $rows AS row
-MATCH (i:WorkloadInstance {id: row.instance_id})
+	batchRuntimePlatformNodeUpsertCypher = `UNWIND $rows AS row
 MERGE (p:Platform {id: row.platform_id})
 ON CREATE SET p.evidence_source = row.evidence_source
 SET p.type = 'platform',
@@ -328,12 +355,13 @@ SET p.type = 'platform',
     p.provider = row.platform_provider,
     p.environment = row.environment,
     p.region = row.platform_region,
-    p.locator = row.platform_locator
+    p.locator = row.platform_locator`
+
+	batchRuntimePlatformRunsOnEdgeUpsertCypher = `UNWIND $rows AS row
+MATCH (i:WorkloadInstance {id: row.instance_id})
+MATCH (p:Platform {id: row.platform_id})
 MERGE (i)-[rel:RUNS_ON]->(p)
-SET rel.confidence = CASE
-        WHEN row.platform_confidence IS NULL OR row.platform_confidence <= 0 THEN 0.9
-        ELSE row.platform_confidence
-    END,
+SET rel.confidence = row.platform_confidence,
     rel.reason = 'Workload instance runs on inferred platform',
     rel.evidence_source = row.evidence_source`
 
@@ -353,9 +381,7 @@ SET rel.confidence = 0.9,
     rel.reason = 'Runtime services list declares workload dependency',
     rel.evidence_source = row.evidence_source`
 
-	batchAPIEndpointUpsertCypher = `UNWIND $rows AS row
-MATCH (repo:Repository {id: row.repo_id})
-MATCH (workload:Workload {id: row.workload_id})
+	batchAPIEndpointNodeUpsertCypher = `UNWIND $rows AS row
 MERGE (endpoint:Endpoint {id: row.endpoint_id})
 SET endpoint.type = 'endpoint',
     endpoint.path = row.path,
@@ -368,10 +394,18 @@ SET endpoint.type = 'endpoint',
     endpoint.source_paths = row.source_paths,
     endpoint.spec_versions = row.spec_versions,
     endpoint.api_versions = row.api_versions,
-    endpoint.evidence_source = row.evidence_source
+    endpoint.evidence_source = row.evidence_source`
+
+	batchAPIEndpointRepoEdgeUpsertCypher = `UNWIND $rows AS row
+MATCH (repo:Repository {id: row.repo_id})
+MATCH (endpoint:Endpoint {id: row.endpoint_id})
 MERGE (repo)-[repo_rel:EXPOSES_ENDPOINT]->(endpoint)
 SET repo_rel.evidence_source = row.evidence_source,
-    repo_rel.reason = 'Repository exposes API endpoint'
+    repo_rel.reason = 'Repository exposes API endpoint'`
+
+	batchAPIEndpointWorkloadEdgeUpsertCypher = `UNWIND $rows AS row
+MATCH (workload:Workload {id: row.workload_id})
+MATCH (endpoint:Endpoint {id: row.endpoint_id})
 MERGE (workload)-[workload_rel:EXPOSES_ENDPOINT]->(endpoint)
 SET workload_rel.evidence_source = row.evidence_source,
     workload_rel.reason = 'Workload exposes API endpoint'`
