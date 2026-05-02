@@ -1,0 +1,29 @@
+go/internal/storage/postgres/reducer_queue_batch_test.go
+  4cb501d5d4ff237f 246-250
+go/internal/storage/postgres/reducer_queue_test.go
+  4cb501d5d4ff237f 244-246
+go/internal/storage/postgres/reducer_queue_batch.go
+  4cb501d5d4ff237f 42-66
+go/internal/storage/postgres/reducer_queue.go
+  4cb501d5d4ff237f 62-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "632bd799d989a841c23a1333945bc1b1fb975012",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 47,
+      "total_deletions": 0,
+      "accepted_lines": 548,
+      "overriden_lines": 0
+    }
+  }
+}
