@@ -146,6 +146,9 @@ func discoverRepoRootsWithGitPriority(root string) ([]string, bool, error) {
 		if !entry.IsDir() {
 			continue
 		}
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
 		child := filepath.Join(root, entry.Name())
 		discovered, childGitBacked, err := discoverRepoRootsWithGitPriority(child)
 		if err != nil {

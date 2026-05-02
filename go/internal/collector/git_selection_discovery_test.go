@@ -143,3 +143,29 @@ func TestDiscoverRepoRootsPrefersNestedGitReposOverVisibleGroupFiles(t *testing.
 		}
 	}
 }
+
+func TestDiscoverRepoRootsSkipsHiddenGroupStateDirectories(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "platform", ".state", "cache"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "platform", ".state", "cache", "data.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repoDir := filepath.Join(root, "platform", "service-charts")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "Chart.yaml"), []byte("name: service"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ids, err := discoverFilesystemRepositoryIDs(root)
+	if err != nil {
+		t.Fatalf("discover failed: %v", err)
+	}
+
+	if len(ids) != 1 || ids[0] != "platform/service-charts" {
+		t.Fatalf("repository IDs = %v, want only platform/service-charts", ids)
+	}
+}
