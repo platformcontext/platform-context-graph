@@ -17,24 +17,64 @@ func queryRepositoryContextCounts(
 	params map[string]any,
 	fallback map[string]any,
 	contentCoverage *RepositoryContentCoverage,
+	readModelSummary *repositoryReadModelSummary,
 ) repositoryContextCounts {
 	return repositoryContextCounts{
-		fileCount: queryRepositoryFileCount(ctx, reader, params, fallback, contentCoverage),
-		workloadCount: queryRepositoryContextCount(ctx, reader, params, "workload_count", `
+		fileCount:       queryRepositoryFileCount(ctx, reader, params, fallback, contentCoverage),
+		workloadCount:   queryRepositoryWorkloadCount(ctx, reader, params, fallback, readModelSummary),
+		platformCount:   queryRepositoryPlatformCount(ctx, reader, params, fallback, readModelSummary),
+		dependencyCount: queryRepositoryDependencyCount(ctx, reader, params, fallback, readModelSummary),
+	}
+}
+
+func queryRepositoryWorkloadCount(
+	ctx context.Context,
+	reader GraphQuery,
+	params map[string]any,
+	fallback map[string]any,
+	readModelSummary *repositoryReadModelSummary,
+) int {
+	if readModelSummary != nil && readModelSummary.Available {
+		return len(readModelSummary.WorkloadNames)
+	}
+	return queryRepositoryContextCount(ctx, reader, params, "workload_count", `
 			MATCH (r:Repository {id: $repo_id})-[:DEFINES]->(w:Workload)
 			RETURN count(DISTINCT w) AS count
-		`, fallback),
-		platformCount: queryRepositoryContextCount(ctx, reader, params, "platform_count", `
+		`, fallback)
+}
+
+func queryRepositoryPlatformCount(
+	ctx context.Context,
+	reader GraphQuery,
+	params map[string]any,
+	fallback map[string]any,
+	readModelSummary *repositoryReadModelSummary,
+) int {
+	if readModelSummary != nil && readModelSummary.Available {
+		return readModelSummary.PlatformCount
+	}
+	return queryRepositoryContextCount(ctx, reader, params, "platform_count", `
 			MATCH (r:Repository {id: $repo_id})-[:DEFINES]->(w:Workload)
 			MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)
 			MATCH (i)-[:RUNS_ON]->(p:Platform)
 			RETURN count(DISTINCT p) AS count
-		`, fallback),
-		dependencyCount: queryRepositoryContextCount(ctx, reader, params, "dependency_count", `
+		`, fallback)
+}
+
+func queryRepositoryDependencyCount(
+	ctx context.Context,
+	reader GraphQuery,
+	params map[string]any,
+	fallback map[string]any,
+	readModelSummary *repositoryReadModelSummary,
+) int {
+	if readModelSummary != nil && readModelSummary.Available {
+		return readModelSummary.DependencyCount
+	}
+	return queryRepositoryContextCount(ctx, reader, params, "dependency_count", `
 			MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(dep:Repository)
 			RETURN count(DISTINCT dep) AS count
-		`, fallback),
-	}
+		`, fallback)
 }
 
 func queryRepositoryFileCount(

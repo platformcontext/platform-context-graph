@@ -18,27 +18,51 @@ func queryRepositoryStoryGraphSummary(
 	params map[string]any,
 	fallback map[string]any,
 	contentCoverage *RepositoryContentCoverage,
+	readModelSummary *repositoryReadModelSummary,
 ) repositoryStoryGraphSummary {
 	return repositoryStoryGraphSummary{
-		fileCount: queryRepositoryFileCount(ctx, reader, params, fallback, contentCoverage),
-		languages: queryRepositoryStoryLanguages(ctx, reader, params, fallback, contentCoverage),
-		workloadNames: queryRepositoryStoryStringRows(ctx, reader, params, "workload_names", "workload_name", `
+		fileCount:       queryRepositoryFileCount(ctx, reader, params, fallback, contentCoverage),
+		languages:       queryRepositoryStoryLanguages(ctx, reader, params, fallback, contentCoverage),
+		workloadNames:   queryRepositoryStoryWorkloadNames(ctx, reader, params, fallback, readModelSummary),
+		platformTypes:   queryRepositoryStoryPlatformTypes(ctx, reader, params, fallback, readModelSummary),
+		dependencyCount: queryRepositoryDependencyCount(ctx, reader, params, fallback, readModelSummary),
+	}
+}
+
+func queryRepositoryStoryWorkloadNames(
+	ctx context.Context,
+	reader GraphQuery,
+	params map[string]any,
+	fallback map[string]any,
+	readModelSummary *repositoryReadModelSummary,
+) []string {
+	if readModelSummary != nil && readModelSummary.Available {
+		return readModelSummary.WorkloadNames
+	}
+	return queryRepositoryStoryStringRows(ctx, reader, params, "workload_names", "workload_name", `
 			MATCH (r:Repository {id: $repo_id})-[:DEFINES]->(w:Workload)
 			RETURN w.name AS workload_name
 			ORDER BY workload_name
-		`, fallback),
-		platformTypes: queryRepositoryStoryStringRows(ctx, reader, params, "platform_types", "platform_type", `
+		`, fallback)
+}
+
+func queryRepositoryStoryPlatformTypes(
+	ctx context.Context,
+	reader GraphQuery,
+	params map[string]any,
+	fallback map[string]any,
+	readModelSummary *repositoryReadModelSummary,
+) []string {
+	if readModelSummary != nil && readModelSummary.Available {
+		return readModelSummary.PlatformTypes
+	}
+	return queryRepositoryStoryStringRows(ctx, reader, params, "platform_types", "platform_type", `
 			MATCH (r:Repository {id: $repo_id})-[:DEFINES]->(w:Workload)
 			MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)
 			MATCH (i)-[:RUNS_ON]->(p:Platform)
 			RETURN p.type AS platform_type
 			ORDER BY platform_type
-		`, fallback),
-		dependencyCount: queryRepositoryContextCount(ctx, reader, params, "dependency_count", `
-			MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(dep:Repository)
-			RETURN count(DISTINCT dep) AS count
-		`, fallback),
-	}
+		`, fallback)
 }
 
 func queryRepositoryStoryLanguages(

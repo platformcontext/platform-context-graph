@@ -514,6 +514,23 @@ func (c *contentReaderConn) QueryContext(_ context.Context, query string, _ []dr
 		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"language", "file_count"})) {
 		return &contentReaderRows{columns: []string{"language", "file_count"}, rows: nil}, nil
 	}
+	if strings.Contains(query, "FROM ingestion_scopes") &&
+		strings.Contains(query, "LIMIT 1") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"scope_id"})) {
+		return &contentReaderRows{columns: []string{"scope_id"}, rows: nil}, nil
+	}
+	if strings.Contains(query, "fact_kind = 'reducer_workload_identity'") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"entity_key"})) {
+		return &contentReaderRows{columns: []string{"entity_key"}, rows: nil}, nil
+	}
+	if strings.Contains(query, "fact_kind = 'reducer_platform_materialization'") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"count"})) {
+		return &contentReaderRows{columns: []string{"count"}, rows: [][]driver.Value{{int64(0)}}}, nil
+	}
+	if strings.Contains(query, "FROM resolved_relationships") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"count"})) {
+		return &contentReaderRows{columns: []string{"count"}, rows: [][]driver.Value{{int64(0)}}}, nil
+	}
 	if len(c.results) == 0 {
 		return nil, fmt.Errorf("unexpected query")
 	}

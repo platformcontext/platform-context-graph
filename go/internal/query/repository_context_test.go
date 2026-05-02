@@ -240,19 +240,18 @@ func TestGetRepositoryContextUsesContentCoverageForFileCountsAndLanguages(t *tes
 			}, nil
 		},
 		run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
-			if strings.Contains(cypher, "RETURN count(DISTINCT f) AS count") || strings.Contains(cypher, "f.language IS NOT NULL") {
-				t.Fatalf("cypher = %q, want content coverage instead of graph file/language fanout", cypher)
+			for _, forbidden := range []string{
+				"RETURN count(DISTINCT f) AS count",
+				"RETURN count(DISTINCT w) AS count",
+				"RETURN count(DISTINCT p) AS count",
+				"RETURN count(DISTINCT dep) AS count",
+				"f.language IS NOT NULL",
+			} {
+				if strings.Contains(cypher, forbidden) {
+					t.Fatalf("cypher = %q, want read-model summary instead of graph summary fanout", cypher)
+				}
 			}
-			switch {
-			case strings.Contains(cypher, "RETURN count(DISTINCT w) AS count"):
-				return []map[string]any{{"count": int64(1)}}, nil
-			case strings.Contains(cypher, "RETURN count(DISTINCT p) AS count"):
-				return []map[string]any{{"count": int64(1)}}, nil
-			case strings.Contains(cypher, "RETURN count(DISTINCT dep) AS count"):
-				return []map[string]any{{"count": int64(2)}}, nil
-			default:
-				return nil, nil
-			}
+			return nil, nil
 		},
 	}
 	handler := &RepositoryHandler{
@@ -265,6 +264,12 @@ func TestGetRepositoryContextUsesContentCoverageForFileCountsAndLanguages(t *tes
 					{Language: "go", FileCount: 300},
 					{Language: "yaml", FileCount: 156},
 				},
+			},
+			summary: repositoryReadModelSummary{
+				Available:       true,
+				WorkloadNames:   []string{"coverage-service"},
+				PlatformCount:   1,
+				DependencyCount: 2,
 			},
 		},
 	}
@@ -286,6 +291,15 @@ func TestGetRepositoryContextUsesContentCoverageForFileCountsAndLanguages(t *tes
 	}
 	if got, want := resp["file_count"], float64(456); got != want {
 		t.Fatalf("file_count = %#v, want %#v", got, want)
+	}
+	if got, want := resp["workload_count"], float64(1); got != want {
+		t.Fatalf("workload_count = %#v, want %#v", got, want)
+	}
+	if got, want := resp["platform_count"], float64(1); got != want {
+		t.Fatalf("platform_count = %#v, want %#v", got, want)
+	}
+	if got, want := resp["dependency_count"], float64(2); got != want {
+		t.Fatalf("dependency_count = %#v, want %#v", got, want)
 	}
 	languages, ok := resp["languages"].([]any)
 	if !ok || len(languages) != 2 {
@@ -317,19 +331,18 @@ func TestGetRepositoryStoryUsesContentCoverageForFileCountsAndLanguages(t *testi
 			}, nil
 		},
 		run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
-			if strings.Contains(cypher, "RETURN count(DISTINCT f) AS count") || strings.Contains(cypher, "RETURN f.language AS language") {
-				t.Fatalf("cypher = %q, want content coverage instead of graph file/language fanout", cypher)
+			for _, forbidden := range []string{
+				"RETURN count(DISTINCT f) AS count",
+				"RETURN f.language AS language",
+				"RETURN w.name AS workload_name",
+				"RETURN p.type AS platform_type",
+				"RETURN count(DISTINCT dep) AS count",
+			} {
+				if strings.Contains(cypher, forbidden) {
+					t.Fatalf("cypher = %q, want read-model summary instead of graph summary fanout", cypher)
+				}
 			}
-			switch {
-			case strings.Contains(cypher, "RETURN w.name AS workload_name"):
-				return []map[string]any{{"workload_name": "story-coverage-service"}}, nil
-			case strings.Contains(cypher, "RETURN p.type AS platform_type"):
-				return []map[string]any{{"platform_type": "ecs"}}, nil
-			case strings.Contains(cypher, "RETURN count(DISTINCT dep) AS count"):
-				return []map[string]any{{"count": int64(2)}}, nil
-			default:
-				return nil, nil
-			}
+			return nil, nil
 		},
 	}
 	handler := &RepositoryHandler{
@@ -342,6 +355,13 @@ func TestGetRepositoryStoryUsesContentCoverageForFileCountsAndLanguages(t *testi
 					{Language: "typescript", FileCount: 500},
 					{Language: "yaml", FileCount: 289},
 				},
+			},
+			summary: repositoryReadModelSummary{
+				Available:       true,
+				WorkloadNames:   []string{"story-coverage-service"},
+				PlatformTypes:   []string{"ecs"},
+				PlatformCount:   1,
+				DependencyCount: 2,
 			},
 		},
 	}
@@ -365,6 +385,8 @@ func TestGetRepositoryStoryUsesContentCoverageForFileCountsAndLanguages(t *testi
 	for _, want := range []string{
 		"Repository story-coverage-service contains 789 indexed files.",
 		"Languages: typescript, yaml.",
+		"Defines 1 workload(s): story-coverage-service.",
+		"Runs on platform signal(s): ecs.",
 	} {
 		if !strings.Contains(story, want) {
 			t.Fatalf("story = %q, want fragment %q", story, want)

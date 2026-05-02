@@ -148,9 +148,10 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		return
 	}
 	contentCoverage := loadRepositoryContentCoverage(ctx, h.Content, repoID)
+	readModelSummary := loadRepositoryReadModelSummary(ctx, h.Content, repoID)
 
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "summary_counts")
-	counts := queryRepositoryContextCounts(ctx, h.Neo4j, params, baseRow, contentCoverage)
+	counts := queryRepositoryContextCounts(ctx, h.Neo4j, params, baseRow, contentCoverage, readModelSummary)
 	timer.Done(ctx,
 		slog.Int("file_count", counts.fileCount),
 		slog.Int("workload_count", counts.workloadCount),
@@ -436,8 +437,9 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 	platformTypes := StringSliceVal(row, "platform_types")
 	dependencyCount := IntVal(row, "dependency_count")
 	contentCoverage := loadRepositoryContentCoverage(r.Context(), h.Content, repoID)
+	readModelSummary := loadRepositoryReadModelSummary(r.Context(), h.Content, repoID)
 	timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "graph_summary")
-	storySummary := queryRepositoryStoryGraphSummary(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID}, row, contentCoverage)
+	storySummary := queryRepositoryStoryGraphSummary(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID}, row, contentCoverage, readModelSummary)
 	timer.Done(r.Context(),
 		slog.Int("file_count", storySummary.fileCount),
 		slog.Int("workload_count", len(storySummary.workloadNames)),
