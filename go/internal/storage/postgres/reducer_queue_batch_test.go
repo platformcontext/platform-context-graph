@@ -216,6 +216,40 @@ func TestClaimBatchCanWaitForProjectorDrain(t *testing.T) {
 	}
 }
 
+func TestClaimBatchGatesSemanticEntitiesOnGlobalProjectorDrain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	q := ReducerQueue{
+		db:                               db,
+		LeaseOwner:                       "test",
+		LeaseDuration:                    time.Minute,
+		Now:                              func() time.Time { return now },
+		RequireProjectorDrainBeforeClaim: true,
+	}
+
+	if _, err := q.ClaimBatch(context.Background(), 5); err != nil {
+		t.Fatalf("ClaimBatch() error = %v", err)
+	}
+
+	query := db.queries[0].query
+	for _, want := range []string{
+		"domain <> 'semantic_entity_materialization'",
+		"projector_any.stage = 'projector'",
+		"projector_any.domain = 'source_local'",
+		"projector_any.status IN ('pending', 'retrying', 'claimed', 'running')",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("batch claim query missing semantic global projector gate %q:\n%s", want, query)
+		}
+	}
+}
+
 func TestClaimBatchCanFilterByDomain(t *testing.T) {
 	t.Parallel()
 

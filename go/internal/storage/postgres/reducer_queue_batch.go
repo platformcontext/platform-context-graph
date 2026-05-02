@@ -27,6 +27,18 @@ WITH candidate AS (
             AND projector_work.scope_id = fact_work_items.scope_id
             AND projector_work.status IN ('pending', 'retrying', 'claimed', 'running')
       ))
+      -- Semantic entity materialization writes labels onto source-local
+      -- content-entity nodes. On NornicDB, running those writes while any
+      -- source-local projection is still active causes cross-scope graph
+      -- backend contention and retry storms; non-semantic reducer domains can
+      -- still drain once their own scope has passed the gate above.
+      AND ($5 = false OR domain <> 'semantic_entity_materialization' OR NOT EXISTS (
+          SELECT 1
+          FROM fact_work_items AS projector_any
+          WHERE projector_any.stage = 'projector'
+            AND projector_any.domain = 'source_local'
+            AND projector_any.status IN ('pending', 'retrying', 'claimed', 'running')
+      ))
       -- Reducer domains can touch the same graph nodes for a scope. Fence by
       -- explicit conflict key so unrelated graph families can still overlap.
       AND NOT EXISTS (
