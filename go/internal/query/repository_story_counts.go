@@ -17,18 +17,11 @@ func queryRepositoryStoryGraphSummary(
 	reader GraphQuery,
 	params map[string]any,
 	fallback map[string]any,
+	contentCoverage *RepositoryContentCoverage,
 ) repositoryStoryGraphSummary {
 	return repositoryStoryGraphSummary{
-		fileCount: queryRepositoryContextCount(ctx, reader, params, "file_count", `
-			MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
-			RETURN count(DISTINCT f) AS count
-		`, fallback),
-		languages: queryRepositoryStoryStringRows(ctx, reader, params, "languages", "language", `
-			MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
-			WHERE f.language IS NOT NULL
-			RETURN f.language AS language, count(DISTINCT f) AS file_count
-			ORDER BY file_count DESC
-		`, fallback),
+		fileCount: queryRepositoryFileCount(ctx, reader, params, fallback, contentCoverage),
+		languages: queryRepositoryStoryLanguages(ctx, reader, params, fallback, contentCoverage),
 		workloadNames: queryRepositoryStoryStringRows(ctx, reader, params, "workload_names", "workload_name", `
 			MATCH (r:Repository {id: $repo_id})-[:DEFINES]->(w:Workload)
 			RETURN w.name AS workload_name
@@ -46,6 +39,24 @@ func queryRepositoryStoryGraphSummary(
 			RETURN count(DISTINCT dep) AS count
 		`, fallback),
 	}
+}
+
+func queryRepositoryStoryLanguages(
+	ctx context.Context,
+	reader GraphQuery,
+	params map[string]any,
+	fallback map[string]any,
+	contentCoverage *RepositoryContentCoverage,
+) []string {
+	if languages, ok := repositoryLanguageNamesFromCoverage(contentCoverage); ok {
+		return languages
+	}
+	return queryRepositoryStoryStringRows(ctx, reader, params, "languages", "language", `
+		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
+		WHERE f.language IS NOT NULL
+		RETURN f.language AS language, count(DISTINCT f) AS file_count
+		ORDER BY file_count DESC
+	`, fallback)
 }
 
 func queryRepositoryStoryStringRows(

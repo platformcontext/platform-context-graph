@@ -11,12 +11,15 @@ type repositoryContextCounts struct {
 
 // queryRepositoryContextCounts uses scalar count queries to avoid relying on a
 // broad OPTIONAL MATCH aggregation for graph-backend-sensitive repo summaries.
-func queryRepositoryContextCounts(ctx context.Context, reader GraphQuery, params map[string]any, fallback map[string]any) repositoryContextCounts {
+func queryRepositoryContextCounts(
+	ctx context.Context,
+	reader GraphQuery,
+	params map[string]any,
+	fallback map[string]any,
+	contentCoverage *RepositoryContentCoverage,
+) repositoryContextCounts {
 	return repositoryContextCounts{
-		fileCount: queryRepositoryContextCount(ctx, reader, params, "file_count", `
-			MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
-			RETURN count(DISTINCT f) AS count
-		`, fallback),
+		fileCount: queryRepositoryFileCount(ctx, reader, params, fallback, contentCoverage),
 		workloadCount: queryRepositoryContextCount(ctx, reader, params, "workload_count", `
 			MATCH (r:Repository {id: $repo_id})-[:DEFINES]->(w:Workload)
 			RETURN count(DISTINCT w) AS count
@@ -34,6 +37,22 @@ func queryRepositoryContextCounts(ctx context.Context, reader GraphQuery, params
 	}
 }
 
+func queryRepositoryFileCount(
+	ctx context.Context,
+	reader GraphQuery,
+	params map[string]any,
+	fallback map[string]any,
+	contentCoverage *RepositoryContentCoverage,
+) int {
+	if contentCoverage != nil && contentCoverage.Available {
+		return contentCoverage.FileCount
+	}
+	return queryRepositoryContextCount(ctx, reader, params, "file_count", `
+		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
+		RETURN count(DISTINCT f) AS count
+	`, fallback)
+}
+
 // queryRepositoryContextCount falls back to the legacy base row if a narrow
 // count query fails or returns no rows, preserving degraded read behavior.
 func queryRepositoryContextCount(ctx context.Context, reader GraphQuery, params map[string]any, fallbackKey string, cypher string, fallback map[string]any) int {
@@ -42,4 +61,46 @@ func queryRepositoryContextCount(ctx context.Context, reader GraphQuery, params 
 		return IntVal(fallback, fallbackKey)
 	}
 	return IntVal(rows[0], "count")
+}
+
+func loadRepositoryContentCoverage(ctx context.Context, content ContentStore, repoID string) *RepositoryContentCoverage {
+	if content == nil || repoID == "" {
+		return nil
+	}
+	coverage, err := content.RepositoryCoverage(ctx, repoID)
+	if err != nil || !coverage.Available {
+		return nil
+	}
+	return &coverage
+}
+
+func repositoryLanguageDistributionFromCoverage(contentCoverage *RepositoryContentCoverage) ([]map[string]any, bool) {
+	if contentCoverage == nil || !contentCoverage.Available {
+		return nil, false
+	}
+	languages := make([]map[string]any, 0, len(contentCoverage.Languages))
+	for _, language := range contentCoverage.Languages {
+		if language.Language == "" {
+			continue
+		}
+		languages = append(languages, map[string]any{
+			"language":   language.Language,
+			"file_count": language.FileCount,
+		})
+	}
+	return languages, true
+}
+
+func repositoryLanguageNamesFromCoverage(contentCoverage *RepositoryContentCoverage) ([]string, bool) {
+	if contentCoverage == nil || !contentCoverage.Available {
+		return nil, false
+	}
+	languages := make([]string, 0, len(contentCoverage.Languages))
+	for _, language := range contentCoverage.Languages {
+		if language.Language == "" {
+			continue
+		}
+		languages = append(languages, language.Language)
+	}
+	return languages, true
 }

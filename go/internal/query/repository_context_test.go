@@ -223,6 +223,155 @@ func TestGetRepositoryStoryUsesNarrowRepositoryLookupAndLogsStages(t *testing.T)
 	}
 }
 
+func TestGetRepositoryContextUsesContentCoverageForFileCountsAndLanguages(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeRepoGraphReader{
+		runSingle: func(_ context.Context, cypher string, _ map[string]any) (map[string]any, error) {
+			if !strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})") {
+				t.Fatalf("RunSingle cypher = %q, want repository base lookup", cypher)
+			}
+			return map[string]any{
+				"id":         "repo-coverage",
+				"name":       "coverage-service",
+				"path":       "/repos/coverage-service",
+				"local_path": "/repos/coverage-service",
+				"has_remote": false,
+			}, nil
+		},
+		run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+			if strings.Contains(cypher, "RETURN count(DISTINCT f) AS count") || strings.Contains(cypher, "f.language IS NOT NULL") {
+				t.Fatalf("cypher = %q, want content coverage instead of graph file/language fanout", cypher)
+			}
+			switch {
+			case strings.Contains(cypher, "RETURN count(DISTINCT w) AS count"):
+				return []map[string]any{{"count": int64(1)}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT p) AS count"):
+				return []map[string]any{{"count": int64(1)}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT dep) AS count"):
+				return []map[string]any{{"count": int64(2)}}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+	handler := &RepositoryHandler{
+		Neo4j: reader,
+		Content: fakePortContentStore{
+			coverage: RepositoryContentCoverage{
+				Available: true,
+				FileCount: 456,
+				Languages: []RepositoryLanguageCount{
+					{Language: "go", FileCount: 300},
+					{Language: "yaml", FileCount: 156},
+				},
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-coverage/context", nil)
+	req.SetPathValue("repo_id", "repo-coverage")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got, want := resp["file_count"], float64(456); got != want {
+		t.Fatalf("file_count = %#v, want %#v", got, want)
+	}
+	languages, ok := resp["languages"].([]any)
+	if !ok || len(languages) != 2 {
+		t.Fatalf("languages = %#v, want two content coverage rows", resp["languages"])
+	}
+	first, ok := languages[0].(map[string]any)
+	if !ok {
+		t.Fatalf("languages[0] = %#v, want map", languages[0])
+	}
+	if got, want := first["language"], "go"; got != want {
+		t.Fatalf("languages[0].language = %#v, want %#v", got, want)
+	}
+}
+
+func TestGetRepositoryStoryUsesContentCoverageForFileCountsAndLanguages(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeRepoGraphReader{
+		runSingle: func(_ context.Context, cypher string, _ map[string]any) (map[string]any, error) {
+			if !strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})") {
+				t.Fatalf("RunSingle cypher = %q, want repository base lookup", cypher)
+			}
+			return map[string]any{
+				"id":         "repo-story-coverage",
+				"name":       "story-coverage-service",
+				"path":       "/repos/story-coverage-service",
+				"local_path": "/repos/story-coverage-service",
+				"has_remote": false,
+			}, nil
+		},
+		run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+			if strings.Contains(cypher, "RETURN count(DISTINCT f) AS count") || strings.Contains(cypher, "RETURN f.language AS language") {
+				t.Fatalf("cypher = %q, want content coverage instead of graph file/language fanout", cypher)
+			}
+			switch {
+			case strings.Contains(cypher, "RETURN w.name AS workload_name"):
+				return []map[string]any{{"workload_name": "story-coverage-service"}}, nil
+			case strings.Contains(cypher, "RETURN p.type AS platform_type"):
+				return []map[string]any{{"platform_type": "ecs"}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT dep) AS count"):
+				return []map[string]any{{"count": int64(2)}}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+	handler := &RepositoryHandler{
+		Neo4j: reader,
+		Content: fakePortContentStore{
+			coverage: RepositoryContentCoverage{
+				Available: true,
+				FileCount: 789,
+				Languages: []RepositoryLanguageCount{
+					{Language: "typescript", FileCount: 500},
+					{Language: "yaml", FileCount: 289},
+				},
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-story-coverage/story", nil)
+	req.SetPathValue("repo_id", "repo-story-coverage")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	story := StringVal(resp, "story")
+	for _, want := range []string{
+		"Repository story-coverage-service contains 789 indexed files.",
+		"Languages: typescript, yaml.",
+	} {
+		if !strings.Contains(story, want) {
+			t.Fatalf("story = %q, want fragment %q", story, want)
+		}
+	}
+}
+
 func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 	t.Parallel()
 

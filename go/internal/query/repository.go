@@ -147,9 +147,10 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		WriteError(w, http.StatusNotFound, "repository not found")
 		return
 	}
+	contentCoverage := loadRepositoryContentCoverage(ctx, h.Content, repoID)
 
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "summary_counts")
-	counts := queryRepositoryContextCounts(ctx, h.Neo4j, params, baseRow)
+	counts := queryRepositoryContextCounts(ctx, h.Neo4j, params, baseRow, contentCoverage)
 	timer.Done(ctx,
 		slog.Int("file_count", counts.fileCount),
 		slog.Int("workload_count", counts.workloadCount),
@@ -229,7 +230,11 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		timer.Done(ctx, slog.Bool("error", err != nil))
 	}
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "languages")
-	result["languages"] = queryRepoLanguageDistribution(ctx, h.Neo4j, params)
+	if languages, ok := repositoryLanguageDistributionFromCoverage(contentCoverage); ok {
+		result["languages"] = languages
+	} else {
+		result["languages"] = queryRepoLanguageDistribution(ctx, h.Neo4j, params)
+	}
 	timer.Done(ctx, slog.Int("row_count", len(result["languages"].([]map[string]any))))
 
 	WriteSuccess(w, r, http.StatusOK, result, BuildTruthEnvelope(h.profile(), "platform_impact.context_overview", TruthBasisHybrid, "resolved from repository context and platform evidence"))
@@ -430,8 +435,9 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 	workloadNames := StringSliceVal(row, "workload_names")
 	platformTypes := StringSliceVal(row, "platform_types")
 	dependencyCount := IntVal(row, "dependency_count")
+	contentCoverage := loadRepositoryContentCoverage(r.Context(), h.Content, repoID)
 	timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "graph_summary")
-	storySummary := queryRepositoryStoryGraphSummary(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID}, row)
+	storySummary := queryRepositoryStoryGraphSummary(r.Context(), h.Neo4j, map[string]any{"repo_id": repoID}, row, contentCoverage)
 	timer.Done(r.Context(),
 		slog.Int("file_count", storySummary.fileCount),
 		slog.Int("workload_count", len(storySummary.workloadNames)),

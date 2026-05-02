@@ -498,6 +498,22 @@ func (c *contentReaderConn) QueryContext(_ context.Context, query string, _ []dr
 			rows:    [][]driver.Value{{false}},
 		}, nil
 	}
+	if strings.Contains(query, "SELECT count(*) FROM content_files WHERE repo_id = $1") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"count"})) {
+		return &contentReaderRows{columns: []string{"count"}, rows: [][]driver.Value{{int64(0)}}}, nil
+	}
+	if strings.Contains(query, "SELECT count(*) FROM content_entities WHERE repo_id = $1") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"count"})) {
+		return &contentReaderRows{columns: []string{"count"}, rows: [][]driver.Value{{int64(0)}}}, nil
+	}
+	if strings.Contains(query, "SELECT max(indexed_at) as indexed_at") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"indexed_at"})) {
+		return &contentReaderRows{columns: []string{"indexed_at"}, rows: [][]driver.Value{{nil}}}, nil
+	}
+	if strings.Contains(query, "SELECT coalesce(language, 'unknown') as language, count(*) as file_count") &&
+		(len(c.results) == 0 || !contentReaderResultColumnsEqual(c.results[0], []string{"language", "file_count"})) {
+		return &contentReaderRows{columns: []string{"language", "file_count"}, rows: nil}, nil
+	}
 	if len(c.results) == 0 {
 		return nil, fmt.Errorf("unexpected query")
 	}
