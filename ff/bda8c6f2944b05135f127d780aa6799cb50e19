@@ -1,0 +1,33 @@
+go/internal/query/repository_deployment_evidence_test.go
+  4cb501d5d4ff237f 48-49,75-76,117-140,179-188
+go/internal/query/repository_deployment_evidence.go
+  4cb501d5d4ff237f 6,35-36,64-65,118,148,158-224,236-241,255-282
+go/internal/query/openapi_paths_repositories.go
+  4cb501d5d4ff237f 92
+go/internal/query/repository_deployment_evidence_read_model.go
+  4cb501d5d4ff237f 179-184
+go/internal/query/openapi_paths_entities.go
+  4cb501d5d4ff237f 199-202
+docs/docs/reference/http-api.md
+  4cb501d5d4ff237f 201-220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ffbda8c6f2944b05135f127d780aa6799cb50e19",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 180,
+      "total_deletions": 2,
+      "accepted_lines": 180,
+      "overriden_lines": 0
+    }
+  }
+}
