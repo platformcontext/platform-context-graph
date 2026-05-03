@@ -3,6 +3,7 @@ package runtime
 import (
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -70,7 +71,7 @@ func TestDefaultComposeFilesDoNotStartTelemetry(t *testing.T) {
 			t.Fatalf("%s includes otel-collector; telemetry must stay in docker-compose.telemetry.yml", fileName)
 		}
 
-		for _, serviceName := range graphRuntimeServices() {
+		for _, serviceName := range telemetryRuntimeServices() {
 			service := requireComposeService(t, doc, serviceName)
 			assertComposeEnvMissing(t, service, "OTEL_EXPORTER_OTLP_ENDPOINT")
 			assertComposeEnvMissing(t, service, "OTEL_TRACES_EXPORTER")
@@ -91,14 +92,7 @@ func TestTelemetryComposeOverlayDefinesTelemetryStack(t *testing.T) {
 		t.Fatal("docker-compose.telemetry.yml missing otel-collector service")
 	}
 
-	for _, serviceName := range []string{
-		"bootstrap-index",
-		"platform-context-graph",
-		"mcp-server",
-		"ingester",
-		"workflow-coordinator",
-		"resolution-engine",
-	} {
+	for _, serviceName := range telemetryOverlayServices() {
 		service := requireComposeService(t, doc, serviceName)
 		assertComposeEnv(t, service, "OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317")
 		assertComposeEnv(t, service, "OTEL_TRACES_EXPORTER", "otlp")
@@ -213,6 +207,41 @@ func TestHTTPDocsMatchServedOpenAPISurface(t *testing.T) {
 	}
 }
 
+func TestInstallLocalBinariesUsesFirstGOPATHEntry(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.Join("..", "..", "..")
+	fakeBin := t.TempDir()
+	firstGoPath := filepath.Join(t.TempDir(), "first")
+	secondGoPath := filepath.Join(t.TempDir(), "second")
+	fakeGo := filepath.Join(fakeBin, "go")
+	fakeGoScript := "#!/usr/bin/env bash\n" +
+		"if [[ \"$1\" == \"env\" && \"$2\" == \"GOPATH\" ]]; then\n" +
+		"  printf '%s:%s\\n' \"$FAKE_GOPATH_FIRST\" \"$FAKE_GOPATH_SECOND\"\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"printf 'unexpected go invocation' >&2\n" +
+		"exit 1\n"
+	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+		t.Fatalf("write fake go command: %v", err)
+	}
+
+	cmd := exec.Command("bash", "-c", `source "$SCRIPT"; unset GOBIN; resolve_install_dir`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"SCRIPT="+filepath.Join(root, "scripts", "install-local-binaries.sh"),
+		"FAKE_GOPATH_FIRST="+firstGoPath,
+		"FAKE_GOPATH_SECOND="+secondGoPath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("resolve install dir: %v\n%s", err, output)
+	}
+	if got, want := strings.TrimSpace(string(output)), filepath.Join(firstGoPath, "bin"); got != want {
+		t.Fatalf("install dir = %q, want %q", got, want)
+	}
+}
+
 func graphRuntimeServices() []string {
 	return []string{
 		"db-migrate",
@@ -221,6 +250,22 @@ func graphRuntimeServices() []string {
 		"mcp-server",
 		"ingester",
 		"resolution-engine",
+	}
+}
+
+func telemetryRuntimeServices() []string {
+	services := append([]string{}, graphRuntimeServices()...)
+	return append(services, "workflow-coordinator")
+}
+
+func telemetryOverlayServices() []string {
+	return []string{
+		"bootstrap-index",
+		"platform-context-graph",
+		"mcp-server",
+		"ingester",
+		"resolution-engine",
+		"workflow-coordinator",
 	}
 }
 
