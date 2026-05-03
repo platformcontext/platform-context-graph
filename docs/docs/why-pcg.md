@@ -80,9 +80,8 @@ they can evolve independently.
 
 Every HTTP handler, MCP tool, and CLI command reads data through narrow
 interfaces such as `GraphQuery` and `ContentStore` — not through concrete
-database drivers. Neo4j is the default graph adapter today. NornicDB is a
-pure-Go candidate under evaluation with the goal of unifying the graph
-backend across laptop, Compose, and production — details in
+database drivers. NornicDB is the default graph adapter today. Neo4j remains
+an explicit compatibility backend behind the same ports — details in
 [ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
 Capability ports are why swapping a backend is a wiring concern plus a
 conformance-matrix run, not a handler rewrite. We explicitly rejected an

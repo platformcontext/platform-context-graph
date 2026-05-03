@@ -3,7 +3,10 @@
 This chart deploys PlatformContextGraph as separate API, MCP, ingester,
 workflow-coordinator, and resolution-engine workloads with:
 
-- External Neo4j and Postgres connectivity
+- External Bolt-compatible graph backend and Postgres connectivity
+- NornicDB as the default graph adapter through the Bolt-compatible graph
+  connection values; set `env.PCG_GRAPH_BACKEND=neo4j` for the explicit Neo4j
+  compatibility path
 - A short-lived `pcg-bootstrap-data-plane` init container on every database-backed workload
 - A stateless API `Deployment` for HTTP API
 - A stateless MCP `Deployment` for MCP transport and mounted query routes
@@ -72,6 +75,9 @@ repoSync:
       - regex: myorg/platform-.*
 
 env:
+  PCG_GRAPH_BACKEND: nornicdb
+  DEFAULT_DATABASE: nornic
+  NEO4J_DATABASE: nornic
   PCG_ENABLE_PUBLIC_DOCS: "true"
 
 observability:
@@ -90,4 +96,6 @@ observability:
       enabled: true
 ```
 
-See [docs/docs/deployment/helm.md](../../../docs/docs/deployment/helm.md) for the full deployment guide.
+See [Helm Quickstart](../../../docs/docs/deploy/kubernetes/helm-quickstart.md)
+and [Helm Values](../../../docs/docs/deploy/kubernetes/helm-values.md) for the
+deployment guide.

@@ -25,12 +25,12 @@ const (
 )
 
 // ParseGraphBackend validates the raw value against the supported adapter
-// set. Empty is treated as the Neo4j default for backwards compatibility
-// during the evaluation window. Invalid non-empty values are rejected.
+// set. Empty is treated as the NornicDB default. Invalid non-empty values are
+// rejected.
 func ParseGraphBackend(raw string) (GraphBackend, error) {
 	switch GraphBackend(strings.TrimSpace(raw)) {
 	case "":
-		return GraphBackendNeo4j, nil
+		return GraphBackendNornicDB, nil
 	case GraphBackendNeo4j:
 		return GraphBackendNeo4j, nil
 	case GraphBackendNornicDB:

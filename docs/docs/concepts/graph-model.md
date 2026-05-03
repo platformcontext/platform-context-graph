@@ -65,6 +65,8 @@ This model lets PCG answer both:
 - code-only questions like callers, callees, imports, or dead code
 - code-to-cloud questions like "what workloads use this shared RDS cluster?"
 
+For the broader concept path, start with [Understand PCG](../understand/index.md).
+
 ## Example query
 
 ```cypher

@@ -28,3 +28,41 @@ func TestSetConfigValuePersistsApiKey(t *testing.T) {
 		t.Fatalf(".env = %q, want persisted token", string(envBytes))
 	}
 }
+
+func TestConfigureDatabaseBackendPersistsNornicDBSelection(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(appHomeEnvVar, home)
+
+	if _, err := configureDatabaseBackend("nornicdb"); err != nil {
+		t.Fatalf("configureDatabaseBackend() error = %v, want nil", err)
+	}
+
+	if got := resolveConfigValue("PCG_GRAPH_BACKEND", ""); got != "nornicdb" {
+		t.Fatalf("PCG_GRAPH_BACKEND = %q, want nornicdb", got)
+	}
+	if got := resolveConfigValue("DEFAULT_DATABASE", ""); got != "nornic" {
+		t.Fatalf("DEFAULT_DATABASE = %q, want nornic", got)
+	}
+	if got := resolveConfigValue("PCG_NEO4J_DATABASE", ""); got != "nornic" {
+		t.Fatalf("PCG_NEO4J_DATABASE = %q, want nornic", got)
+	}
+}
+
+func TestConfigureDatabaseBackendPersistsNeo4jSelection(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(appHomeEnvVar, home)
+
+	if _, err := configureDatabaseBackend("neo4j"); err != nil {
+		t.Fatalf("configureDatabaseBackend() error = %v, want nil", err)
+	}
+
+	if got := resolveConfigValue("PCG_GRAPH_BACKEND", ""); got != "neo4j" {
+		t.Fatalf("PCG_GRAPH_BACKEND = %q, want neo4j", got)
+	}
+	if got := resolveConfigValue("DEFAULT_DATABASE", ""); got != "neo4j" {
+		t.Fatalf("DEFAULT_DATABASE = %q, want neo4j", got)
+	}
+	if got := resolveConfigValue("PCG_NEO4J_DATABASE", ""); got != "neo4j" {
+		t.Fatalf("PCG_NEO4J_DATABASE = %q, want neo4j", got)
+	}
+}

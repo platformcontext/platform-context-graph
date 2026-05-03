@@ -213,7 +213,7 @@ func TestBuildRepositoryRuntimeArtifactsCapturesDockerComposeCommandAndEntrypoin
 
 	got := buildRepositoryRuntimeArtifacts([]FileContent{
 		{
-			RelativePath: "docker-compose.nornicdb.yml",
+			RelativePath: "docker-compose.neo4j.yml",
 			ArtifactType: "",
 			Content: `services:
   api:
@@ -235,7 +235,7 @@ func TestBuildRepositoryRuntimeArtifactsCapturesDockerComposeCommandAndEntrypoin
 	}
 
 	api := artifacts[0]
-	if got, want := api["relative_path"], "docker-compose.nornicdb.yml"; got != want {
+	if got, want := api["relative_path"], "docker-compose.neo4j.yml"; got != want {
 		t.Fatalf("api.relative_path = %#v, want %#v", got, want)
 	}
 	if got, want := api["artifact_type"], "docker_compose"; got != want {

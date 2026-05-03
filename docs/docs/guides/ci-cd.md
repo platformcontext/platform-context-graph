@@ -55,8 +55,9 @@ Syntax follows `.gitignore` patterns. See the [.pcgignore reference](../referenc
 
 For repositories with 100,000+ lines of code:
 
-1. **Use Neo4j** — FalkorDB Lite may run out of RAM on large graphs
-2. **Increase memory** — `NEO4J_dbms_memory_heap_max_size=4G`
+1. **Use the default NornicDB or explicit Neo4j stack** — do not use retired
+   local-only graph backends for large graphs
+2. **Increase graph/backend memory when needed** — tune the backend you selected
 3. **Exclude test fixtures** — add `tests/` to `.pcgignore` if test code inflates the graph without adding signal
 4. **Reuse stable artifacts** — cache the built PCG binary and any database or bundle artifacts your pipeline already produces, instead of rebuilding them in every stage
 

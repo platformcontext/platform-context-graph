@@ -34,8 +34,8 @@ The inference layer is what makes PCG different from a code search tool. It conn
 
 The graph is written to the backing database:
 
-- **Neo4j** — production deployments, handles large graphs with full Cypher query support
-- **FalkorDB / KuzuDB** — local development, zero-config embedded graph
+- **NornicDB** — default graph backend for local and deployable service paths
+- **Neo4j** — explicit Bolt-compatible compatibility backend
 - **PostgreSQL** — content store for source text retrieval and full-text search
 
 All three query interfaces (CLI, MCP, HTTP) read from the same storage layer.
@@ -50,6 +50,7 @@ The same query model works across CLI, MCP, and HTTP API — same capabilities, 
 
 ## Next steps
 
+- [Understand PCG](../understand/index.md) — the concept entry path
 - [Architecture](../architecture.md) — deeper technical detail on graph schema and query resolution
 - [Interfaces](modes.md) — choosing between CLI, MCP, and HTTP
 - [Fixture Ecosystems](../guides/fixture-ecosystems.md) — test data that exercises this pipeline

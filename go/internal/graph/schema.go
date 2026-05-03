@@ -262,7 +262,8 @@ type fulltextIndex struct {
 // SchemaStatements returns the complete ordered list of Cypher statements
 // that EnsureSchema would execute. Useful for inspection and testing.
 func SchemaStatements() []string {
-	// The Neo4j backend is the default branch and cannot fail normalization.
+	// Keep the legacy no-argument helper on Neo4j. Runtime bootstraps that
+	// need the configured default call SchemaStatementsForBackend instead.
 	stmts, _ := SchemaStatementsForBackend(SchemaBackendNeo4j)
 	return stmts
 }
@@ -312,8 +313,8 @@ func EnsureSchema(ctx context.Context, executor CypherExecutor, logger *slog.Log
 }
 
 // EnsureSchemaWithBackend creates all constraints and indexes required by the
-// selected graph backend. Neo4j remains the default production dialect;
-// NornicDB uses only syntax translations proven by compatibility tests.
+// selected graph backend. NornicDB uses only syntax translations proven by
+// compatibility tests.
 func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logger *slog.Logger, backend SchemaBackend) error {
 	if executor == nil {
 		return fmt.Errorf("schema executor is required")

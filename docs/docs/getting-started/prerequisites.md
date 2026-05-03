@@ -16,12 +16,14 @@ Before you install PlatformContextGraph, decide which mode you want first:
 
 ### Graph database
 
-PCG can run locally, but the production and deployable-service path assumes **external Neo4j**.
+PCG uses a Bolt/Cypher-compatible graph backend plus Postgres. The officially
+supported graph databases are NornicDB and Neo4j; Postgres is the supported
+relational database for facts, queues, status, recovery state, and content.
 
 | Backend | Best fit | Notes |
 | --- | --- | --- |
-| FalkorDB Lite | local experimentation on supported platforms | Useful for lightweight local workflows, but not the production deployment contract |
-| Neo4j | shared usage, Kubernetes, production, large graphs | Canonical backend for the deployable service path |
+| NornicDB | default local CLI/MCP and default Compose stack | Used by `pcg graph start` and `docker compose up` |
+| Neo4j | explicit compatibility and migration path | Use `docker-compose.neo4j.yml` or set `PCG_GRAPH_BACKEND=neo4j` |
 
 ### Optional infrastructure tooling
 
@@ -33,7 +35,9 @@ PCG can run locally, but the production and deployable-service path assumes **ex
 
 - **macOS / Linux:** local CLI and MCP setup is straightforward.
 - **Windows:** use [Windows Setup](windows-setup.md) if you need WSL guidance or Neo4j-specific setup help.
-- **Kubernetes:** the public chart assumes external Neo4j and a persistent workspace volume for bootstrap indexing and repo sync.
+- **Kubernetes:** the chart expects an external Bolt-compatible graph endpoint,
+  external Postgres, and a persistent workspace volume for bootstrap indexing
+  and repo sync.
 
 ## Before your first index
 

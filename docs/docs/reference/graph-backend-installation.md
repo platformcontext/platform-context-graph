@@ -2,8 +2,8 @@
 
 PCG's `local_authoritative` profile and its Compose / production profiles
 read the canonical graph through a **graph backend adapter**. The default
-adapter today is Neo4j. PCG is also evaluating NornicDB as an alternative
-backend. Adoption criteria live in
+adapter is NornicDB. Neo4j remains available as an explicit compatibility
+backend. Adoption history lives in
 [ADR 2026-04-22 — NornicDB As Candidate Graph Backend](../adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
 
 This page documents how to install a graph backend locally so the PCG
@@ -14,8 +14,8 @@ Compose.
 
 Set the graph backend explicitly via environment variable:
 
-- `PCG_GRAPH_BACKEND=neo4j` — default, matches today's behavior
-- `PCG_GRAPH_BACKEND=nornicdb` — opt in to the NornicDB adapter
+- `PCG_GRAPH_BACKEND=nornicdb` — default
+- `PCG_GRAPH_BACKEND=neo4j` — explicit Neo4j compatibility path
 
 Invalid values are rejected at startup. There is no silent default.
 
@@ -28,12 +28,12 @@ and in telemetry span / metric labels as `graph_backend`.
 | --- | --- |
 | `local_lightweight` | None |
 | `local_authoritative` | Yes, installed locally via the steps below |
-| `local_full_stack` | Provided by Compose |
-| `production` | Provided by Helm / Kubernetes |
+| `local_full_stack` | Provided by Compose; NornicDB by default, Neo4j via `docker-compose.neo4j.yml` |
+| `production` | Provided by Helm / Kubernetes as an external Bolt-compatible graph endpoint |
 
 ## Current local-authoritative requirement
 
-Today, `local_authoritative` requires a verified NornicDB binary. PCG
+`local_authoritative` requires a verified NornicDB binary. PCG
 defaults to the laptop-friendly headless artifact and discovers binaries in
 this order:
 
@@ -301,8 +301,8 @@ pcg graph status
 
 ## Non-goals
 
-- Installing Neo4j. Neo4j remains an operator responsibility in Compose and
-  Kubernetes.
+- Installing Neo4j. Neo4j remains an explicit operator-managed compatibility
+  path.
 - Running the graph backend as a system service. The sidecar is a
   user-level process tied to the PCG lightweight host lifecycle.
 - Bundling the graph backend into the `pcg` binary. See the rejection in

@@ -388,27 +388,23 @@ NornicDB" until:
 
 ### 3. Dual-backend operation during evaluation
 
-PCG supports both Neo4j and NornicDB adapters simultaneously during the
-evaluation window. Operators select the graph backend via the
-`PCG_GRAPH_BACKEND` environment variable:
+PCG supports both NornicDB and Neo4j adapters simultaneously. Operators select
+the graph backend via the `PCG_GRAPH_BACKEND` environment variable:
 
-- `PCG_GRAPH_BACKEND=neo4j` — default today, preserves current behavior
-- `PCG_GRAPH_BACKEND=nornicdb` — new adapter
+- `PCG_GRAPH_BACKEND=nornicdb` — default today
+- `PCG_GRAPH_BACKEND=neo4j` — explicit compatibility path
 
 This dimension is also surfaced in responses (optional `truth.backend`
 field) and in telemetry span / metric labels.
 
 ### 4. Plan for Neo4j deprecation
 
-If NornicDB passes all three profile gates, PCG will:
+After the default flip, PCG will:
 
 - Announce Neo4j deprecation with a defined support window.
 - Ship migration tooling from Neo4j to NornicDB.
 - Keep the Neo4j adapter supported through the deprecation window.
-- Flip the default `PCG_GRAPH_BACKEND` value to `nornicdb` at the end of
-  the window.
-
-Until then, Neo4j remains the default. NornicDB is opt-in.
+- Keep `PCG_GRAPH_BACKEND=neo4j` available as the explicit compatibility path.
 
 ### 5. Reject outright embedding
 
@@ -538,7 +534,7 @@ has a reviewed backend-specific compatibility plan.
 `TestNornicDBCompatibilityWorkarounds` passed against the same binary with
 composite `IS NODE KEY` and the multi-label fulltext procedure form. That
 workaround is viable only behind a graph-backend schema adapter or an upstream
-NornicDB parser fix; it must not replace the default Neo4j schema globally.
+NornicDB parser fix; it must not replace the explicit Neo4j schema globally.
 
 `TestNornicDBSchemaAdapterVerification` passed against the same binary after
 the schema-dialect router rendered NornicDB-compatible DDL. This validates the

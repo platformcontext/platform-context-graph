@@ -109,7 +109,7 @@ value = ${var.name}
 		},
 		{
 			name:         "docker compose overlay file is classified",
-			relativePath: filepath.Join("deploy", "docker-compose.nornicdb.yml"),
+			relativePath: filepath.Join("deploy", "docker-compose.neo4j.yml"),
 			content: `services:
   api:
     command: ["bundle", "exec", "puma"]

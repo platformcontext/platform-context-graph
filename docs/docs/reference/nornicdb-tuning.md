@@ -187,7 +187,7 @@ to tune high-cardinality entity volume from measured label summaries.
 
 | Variable | Default | Scope | Use |
 | --- | --- | --- | --- |
-| `PCG_GRAPH_BACKEND` | `neo4j` | API, MCP, ingester, reducer, local host | Set to `nornicdb` to opt into the NornicDB adapter. Invalid values fail startup. |
+| `PCG_GRAPH_BACKEND` | `nornicdb` | API, MCP, ingester, reducer, local host | Selects the graph adapter. Set to `neo4j` only for the explicit Neo4j compatibility path. Invalid values fail startup. |
 | `PCG_NORNICDB_BINARY` | unset | local host / install / tests | Points PCG at an explicit NornicDB binary. This wins over managed `${PCG_HOME}/bin/nornicdb-headless` and `PATH`. |
 | `PCG_NORNICDB_INSTALL_TIMEOUT` | `30s` | `pcg install nornicdb` | Extends remote download timeouts for slow links. |
 

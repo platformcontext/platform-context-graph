@@ -18,6 +18,7 @@ const (
 	defaultPostgresConnMaxLifetime           = 30 * time.Minute
 	defaultPostgresConnMaxIdleTime           = 10 * time.Minute
 	defaultPostgresPingTimeout               = 10 * time.Second
+	defaultNornicDBDatabaseName              = "nornic"
 	defaultNeo4jDatabaseName                 = "neo4j"
 	defaultNeo4jMaxConnectionPoolSize        = 100
 	defaultNeo4jMaxConnectionLifetime        = time.Hour
@@ -73,12 +74,11 @@ type Neo4jConfig struct {
 }
 
 // LoadGraphBackend validates the selected graph backend for the current
-// process. Empty preserves the current Neo4j default during the evaluation
-// window.
+// process. Empty uses the NornicDB default.
 func LoadGraphBackend(getenv func(string) string) (GraphBackend, error) {
 	switch GraphBackend(strings.TrimSpace(getenv("PCG_GRAPH_BACKEND"))) {
 	case "":
-		return GraphBackendNeo4j, nil
+		return GraphBackendNornicDB, nil
 	case GraphBackendNeo4j:
 		return GraphBackendNeo4j, nil
 	case GraphBackendNornicDB:
@@ -245,7 +245,15 @@ func LoadNeo4jConfig(getenv func(string) string) (Neo4jConfig, error) {
 		VerifyTimeout:                verifyTimeout,
 	}
 	if cfg.DatabaseName == "" {
-		cfg.DatabaseName = defaultNeo4jDatabaseName
+		graphBackend, err := LoadGraphBackend(getenv)
+		if err != nil {
+			return Neo4jConfig{}, err
+		}
+		if graphBackend == GraphBackendNeo4j {
+			cfg.DatabaseName = defaultNeo4jDatabaseName
+		} else {
+			cfg.DatabaseName = defaultNornicDBDatabaseName
+		}
 	}
 	if cfg.URI == "" || cfg.Username == "" || cfg.Password == "" {
 		return Neo4jConfig{}, fmt.Errorf(

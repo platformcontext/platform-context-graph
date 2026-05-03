@@ -118,7 +118,7 @@ func TestLoadNeo4jConfigUsesDefaultsAndOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNeo4jConfig() error = %v, want nil", err)
 	}
-	if got, want := cfg.DatabaseName, defaultNeo4jDatabaseName; got != want {
+	if got, want := cfg.DatabaseName, defaultNornicDBDatabaseName; got != want {
 		t.Fatalf("DatabaseName = %q, want %q", got, want)
 	}
 	if got, want := cfg.MaxConnectionPoolSize, 33; got != want {
@@ -129,15 +129,40 @@ func TestLoadNeo4jConfigUsesDefaultsAndOverrides(t *testing.T) {
 	}
 }
 
-func TestLoadGraphBackendDefaultsToNeo4j(t *testing.T) {
+func TestLoadNeo4jConfigDefaultsDatabaseForExplicitNeo4jBackend(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := LoadNeo4jConfig(func(key string) string {
+		switch key {
+		case "PCG_GRAPH_BACKEND":
+			return "neo4j"
+		case "NEO4J_URI":
+			return "bolt://localhost:7687"
+		case "NEO4J_USERNAME":
+			return "neo4j"
+		case "NEO4J_PASSWORD":
+			return "change-me"
+		default:
+			return ""
+		}
+	})
+	if err != nil {
+		t.Fatalf("LoadNeo4jConfig() error = %v, want nil", err)
+	}
+	if got, want := cfg.DatabaseName, defaultNeo4jDatabaseName; got != want {
+		t.Fatalf("DatabaseName = %q, want %q", got, want)
+	}
+}
+
+func TestLoadGraphBackendDefaultsToNornicDB(t *testing.T) {
 	t.Parallel()
 
 	got, err := LoadGraphBackend(func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("LoadGraphBackend() error = %v, want nil", err)
 	}
-	if got != GraphBackendNeo4j {
-		t.Fatalf("LoadGraphBackend() = %q, want %q", got, GraphBackendNeo4j)
+	if got != GraphBackendNornicDB {
+		t.Fatalf("LoadGraphBackend() = %q, want %q", got, GraphBackendNornicDB)
 	}
 }
 
