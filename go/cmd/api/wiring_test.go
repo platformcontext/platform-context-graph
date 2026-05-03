@@ -72,6 +72,18 @@ func TestOpenQueryGraphAcceptsNornicDBOnSharedBoltPath(t *testing.T) {
 	}
 }
 
+func TestLoadGraphBackendDefaultsToNornicDB(t *testing.T) {
+	t.Parallel()
+
+	got, err := loadGraphBackend(func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("loadGraphBackend() error = %v, want nil", err)
+	}
+	if got != "nornicdb" {
+		t.Fatalf("loadGraphBackend() = %q, want nornicdb", got)
+	}
+}
+
 func TestNewRouter_MountsAdminRoutes(t *testing.T) {
 	t.Parallel()
 

@@ -62,6 +62,6 @@ Directly modify settings without editing text files.
 
 *   `pcg config show`: Print current configuration.
 *   `pcg config set <key> <value>`: Update a setting.
-    *   Example: `pcg config set DEFAULT_DATABASE neo4j`
+    *   Example: `pcg config set PCG_GRAPH_BACKEND nornicdb`
 *   `pcg config db <backend>`: Switch backends (shortcut).
-    *   Example: `pcg config db falkordb`
+    *   Example: `pcg config db neo4j`

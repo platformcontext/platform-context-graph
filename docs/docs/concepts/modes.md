@@ -73,6 +73,7 @@ Split roles when you need to scale API serving and indexing independently. See [
 
 ## Next steps
 
+- [Understand PCG](../understand/index.md) — concepts, architecture, truth, and service workflows
 - [MCP Guide](../guides/mcp-guide.md) — connect PCG to your AI assistant
 - [HTTP API Reference](../reference/http-api.md) — full endpoint documentation
 - [CLI Reference](../reference/cli-reference.md) — all CLI commands and flags

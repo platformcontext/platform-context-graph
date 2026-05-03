@@ -26,38 +26,75 @@ theme:
 nav:
   - Home:
     - Overview: index.md
+    - Start Here: start-here.md
     - Why PCG: why-pcg.md
     - Use Cases: use-cases.md
-  - Get Started:
-    - Prerequisites: getting-started/prerequisites.md
-    - Installation: getting-started/installation.md
-    - Quickstart: getting-started/quickstart.md
+  - Run Locally:
+    - Choose Your Local Path: run-locally/index.md
+    - Local Binaries: run-locally/local-binaries.md
+    - Docker Compose: run-locally/docker-compose.md
+    - Local MCP: run-locally/mcp-local.md
     - Windows Setup: getting-started/windows-setup.md
-  - Deploy:
-    - Overview: deployment/overview.md
-    - Service Runtimes: deployment/service-runtimes.md
-    - Docker Compose: deployment/docker-compose.md
-    - Helm: deployment/helm.md
-    - Minimal Manifests: deployment/manifests.md
-    - Argo CD: deployment/argocd.md
-    - Local Testing: reference/local-testing.md
-    - Cloud Validation: reference/cloud-validation.md
-  - Guides:
+  - Use PCG:
+    - Overview: use/index.md
+    - Index Repositories: use/index-repositories.md
+    - Ask Code Questions: use/code-questions.md
+    - Trace Infrastructure: use/trace-infrastructure.md
     - Starter Prompts: guides/starter-prompts.md
-    - Connect an MCP Client: guides/mcp-guide.md
-    - Collector Authoring: guides/collector-authoring.md
     - Explore Relationship Graphs: guides/relationship-graphs.md
     - Visualize Query Results: guides/visualization.md
     - Work With Bundles: guides/bundles.md
-    - Neo4j Setup: guides/neo4j-setup.md
     - Shared Infra Trace: guides/shared-infra-trace.md
     - Fixture Ecosystems: guides/fixture-ecosystems.md
     - CI/CD: guides/ci-cd.md
-  - API & MCP:
-    - HTTP API: reference/http-api.md
+  - Connect MCP:
+    - Overview: mcp/index.md
+    - MCP Guide: guides/mcp-guide.md
     - MCP Reference: reference/mcp-reference.md
     - MCP Cookbook: reference/mcp-cookbook.md
+  - Deploy to Kubernetes:
+    - Overview: deploy/kubernetes/index.md
+    - Prerequisites: deploy/kubernetes/prerequisites.md
+    - Storage: deploy/kubernetes/storage.md
+    - Helm Quickstart: deploy/kubernetes/helm-quickstart.md
+    - Helm Values: deploy/kubernetes/helm-values.md
+    - Minimal Manifests: deploy/kubernetes/manifests.md
+    - Argo CD / GitOps: deploy/kubernetes/argocd.md
+    - Production Checklist: deploy/kubernetes/production-checklist.md
+    - Upgrade and Rollback: deploy/kubernetes/upgrades-rollbacks.md
+  - Operate PCG:
+    - Overview: operate/index.md
+    - Health Checks: operate/health-checks.md
+    - Telemetry: operate/telemetry.md
+    - Troubleshooting: operate/troubleshooting.md
+    - Service Runtimes: deployment/service-runtimes.md
+    - Local Testing: reference/local-testing.md
+    - Cloud Validation: reference/cloud-validation.md
+  - Understand PCG:
+    - Overview: understand/index.md
+    - Architecture: architecture.md
+    - How It Works: concepts/how-it-works.md
+    - Graph Model: concepts/graph-model.md
+    - Modes: concepts/modes.md
+    - Service Workflows: reference/service-workflows.md
+  - Extend PCG:
+    - Overview: extend/index.md
+    - Collector Authoring: guides/collector-authoring.md
+    - Fact Envelope And Plugins: reference/fact-envelope-reference.md
+    - Fact Schema Versioning: reference/fact-schema-versioning.md
+    - Plugin Trust Model: reference/plugin-trust-model.md
+    - Language Query DSL: reference/language-query-dsl.md
+    - Language Support: contributing-language-support.md
+    - Terraform Providers:
+      - Overview: guides/terraform-providers/index.md
+      - Adding Providers: guides/terraform-providers/adding-providers.md
+      - Updating Providers: guides/terraform-providers/updating-providers.md
+      - Service Categories: guides/terraform-providers/service-categories.md
   - Reference:
+    - API & MCP:
+      - HTTP API: reference/http-api.md
+      - MCP Reference: reference/mcp-reference.md
+      - MCP Cookbook: reference/mcp-cookbook.md
     - CLI Reference: reference/cli-reference.md
     - CLI Indexing: reference/cli-indexing.md
     - CLI Analysis: reference/cli-analysis.md
@@ -66,11 +103,16 @@ nav:
     - Configuration: reference/configuration.md
     - Environment Variables: reference/environment-variables.md
     - Runtime Admin API: reference/runtime-admin-api.md
-    - Architecture & Extensibility:
-      - Architecture: architecture.md
-      - How It Works: concepts/how-it-works.md
-      - Graph Model: concepts/graph-model.md
-      - Modes: concepts/modes.md
+    - Legacy Entry Pages:
+      - Prerequisites: getting-started/prerequisites.md
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+      - Deployment Overview: deployment/overview.md
+      - Docker Compose: deployment/docker-compose.md
+      - Helm: deployment/helm.md
+      - Minimal Manifests: deployment/manifests.md
+      - Argo CD: deployment/argocd.md
+      - Neo4j Setup: guides/neo4j-setup.md
     - Local Host & Capabilities:
       - Capability Conformance Spec: reference/capability-conformance-spec.md
       - Truth Label Protocol: reference/truth-label-protocol.md
@@ -81,13 +123,7 @@ nav:
       - Graph Backend Installation: reference/graph-backend-installation.md
       - Graph Backend Operations: reference/graph-backend-operations.md
       - NornicDB Tuning: reference/nornicdb-tuning.md
-    - Extensibility Contracts:
-      - Language Query DSL: reference/language-query-dsl.md
-      - Fact Envelope And Plugins: reference/fact-envelope-reference.md
-      - Fact Schema Versioning: reference/fact-schema-versioning.md
-      - Plugin Trust Model: reference/plugin-trust-model.md
     - Parity Closure Matrix: reference/parity-closure-matrix.md
-    - Service Workflows: reference/service-workflows.md
     - Relationship Mapping: reference/relationship-mapping.md
     - Relationship Mapping Observability: reference/relationship-mapping-observability.md
     - ".pcgignore": reference/pcgignore.md
@@ -104,7 +140,6 @@ nav:
       - Ingester: services/ingester.md
       - Resolution Engine: services/resolution-engine.md
     - Source Layout: reference/source-layout.md
-    - Language Support: contributing-language-support.md
     - Languages:
       - Feature Matrix: languages/feature-matrix.md
       - Support Maturity: languages/support-maturity.md
@@ -139,11 +174,6 @@ nav:
       - Terraform: languages/terraform.md
       - Terragrunt: languages/terragrunt.md
   - Project:
-    - Terraform Providers:
-      - Overview: guides/terraform-providers/index.md
-      - Adding Providers: guides/terraform-providers/adding-providers.md
-      - Updating Providers: guides/terraform-providers/updating-providers.md
-      - Service Categories: guides/terraform-providers/service-categories.md
     - Contributing: contributing.md
     - License: license.md
 

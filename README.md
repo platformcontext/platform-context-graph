@@ -1,6 +1,6 @@
 # PlatformContextGraph
 
-**A self-hosted Code-to-cloud context graph for engineering teams and AI systems.**
+**A self-hosted code-to-cloud context graph for engineering teams and AI systems.**
 
 <p align="center">
   <a href="LICENSE">
@@ -18,16 +18,19 @@
   <img src="https://img.shields.io/badge/helm-OCI-0F1689?style=flat-square&logo=helm&logoColor=white" alt="Helm OCI Chart">
 </p>
 
-PlatformContextGraph (PCG) builds one queryable model across source code,
-Terraform, Helm, Kubernetes, Argo CD, Crossplane, and runtime topology. It is
-designed for teams that need to answer questions that span repositories,
-services, workloads, and infrastructure without stitching the answer together by
-hand.
+PlatformContextGraph (PCG) gives your team one living map across source code,
+Terraform, Helm, Kubernetes, Argo CD, Crossplane, and runtime topology. It turns
+the context that usually lives across repos, dashboards, and senior engineers'
+heads into something your CLI, API, and AI assistants can query.
+
+PCG is useful locally, but it shines when you deploy it to Kubernetes. Then the
+same MCP server can serve every engineer in the company. Your assistants stop
+guessing from one checkout and start asking a shared graph that knows code,
+deployment paths, workloads, and infrastructure.
 
 ## Why Teams Use PCG
 
-PCG is useful when the answer is spread across code, infrastructure, and runtime
-context instead of sitting in one repository.
+PCG is for the questions that do not fit inside one repository.
 
 What that looks like in practice:
 
@@ -44,13 +47,18 @@ What that looks like in practice:
   - "Trace this cloud resource back to the code that defines it."
   - "Explain how these two services are connected."
 
-Core strengths:
+What PCG brings together:
 
-- one graph for code and infrastructure
-- the same query model over CLI, MCP, and HTTP API
-- deployable shared service with API, MCP server, ingester, and resolution-engine runtimes
-- facts-first indexing for durability, recovery, and operator visibility
-- direct code-to-cloud tracing, blast radius, and environment comparison
+- **Company-wide MCP context:** deploy PCG once, then let every MCP-compatible
+  assistant query the same graph.
+- **Code-to-cloud tracing:** follow a function, workload, deployment, or cloud
+  resource back to the repos that define it.
+- **Blast-radius analysis:** see likely callers, dependencies, shared
+  infrastructure, and environment differences before you merge.
+- **Shared platform memory:** API, MCP, CLI, ingester, reducer, Postgres, and
+  graph backend run as one service shape instead of one-off local scripts.
+- **Operator visibility:** facts-first indexing, queues, status, metrics,
+  traces, and logs give platform teams something they can run and debug.
 
 Starter examples are collected in [Starter Prompts](docs/docs/guides/starter-prompts.md). The highest-value prompts explicitly ask PCG to scan all related repositories, deployment sources, and indexed documentation before answering.
 
@@ -63,74 +71,68 @@ PCG exposes the same graph through:
 
 ## Quick Start
 
-Choose the path that matches what you want to do first.
+Pick the path that matches what you are trying to do.
 
-PCG is not a self-contained CLI — it always reads and writes through Neo4j
-and Postgres, and `pcg index`, `pcg list`, and `pcg analyze …` all require a
-running API + data plane. Pick the path that stands those up for you.
+| Goal | Start here |
+| --- | --- |
+| Run one workspace with local binaries | [Local Binaries](docs/docs/run-locally/local-binaries.md) |
+| Run the full stack on your laptop | [Docker Compose](docs/docs/run-locally/docker-compose.md) |
+| Connect an assistant to PCG | [Connect MCP](docs/docs/mcp/index.md) |
+| Give the company a shared MCP graph | [Deploy to Kubernetes](docs/docs/deploy/kubernetes/index.md) |
 
-### Run the full platform locally
-
-Bring up Neo4j, Postgres, the API, the ingester, the resolution engine, and
-the one-shot bootstrap indexer with one command:
+For the fastest full-stack local run, use Docker Compose:
 
 ```bash
 docker compose up --build
 ```
 
-This starts:
-
-- Neo4j
-- Postgres
-- OpenTelemetry collector
-- Jaeger
-- a one-shot bootstrap indexer
-- the API runtime
-- the MCP server runtime
-- the ingester runtime
-- the resolution-engine runtime
-
-### Use the CLI against the running stack
-
-Build and put `pcg` on `PATH`:
+The default Compose stack runs NornicDB, Postgres, API, MCP server, ingester,
+reducer, bootstrap indexer, OpenTelemetry collector, and Jaeger. To run the
+same stack with Neo4j:
 
 ```bash
-cd go && go build -o bin/ ./cmd/pcg ./cmd/bootstrap-index
+docker compose -f docker-compose.neo4j.yml up --build
+```
+
+For local binary development, build the CLI and runtime binaries:
+
+```bash
+cd go
+go build -o ./bin/pcg ./cmd/pcg
+go build -o ./bin/pcg-api ./cmd/api
+go build -o ./bin/pcg-mcp-server ./cmd/mcp-server
+go build -o ./bin/pcg-bootstrap-index ./cmd/bootstrap-index
+go build -o ./bin/pcg-ingester ./cmd/ingester
+go build -o ./bin/pcg-reducer ./cmd/reducer
 export PATH="$PWD/bin:$PATH"
-pcg --help
 ```
 
-The CLI talks to the API at `http://localhost:8080` by default. Point it at
-the Compose-started Neo4j and Postgres when indexing locally:
+Then install the managed NornicDB sidecar and start a local workspace owner:
 
 ```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-
-pcg index .                              # runs pcg-bootstrap-index against your DBs
-pcg list                                 # reads the API
-pcg analyze callers process_payment      # reads the API
+pcg install nornicdb
+pcg graph start --workspace-root "$PWD"
 ```
 
-`pcg index` invokes the `pcg-bootstrap-index` binary, so build that binary
-too (shown above). `pcg list` and `pcg analyze …` are HTTP clients — they
-require the `platform-context-graph` API service (started by Compose) to be
-reachable.
+PCG officially supports NornicDB and Neo4j for graph storage. NornicDB is the
+default. Postgres stores relational state, facts, queues, status, content, and
+recovery data.
 
-### Deploy to Kubernetes
+## Where PCG Shines
 
-Use Helm for the supported split-service deployment shape:
+The local workflows are great for development and proofs. The Kubernetes
+deployment is where PCG becomes a shared platform.
 
-```bash
-helm install platform-context-graph ./deploy/helm/platform-context-graph
-```
+Once PCG is running in-cluster, teams get:
 
-For the operator view of the deployed services, start with
-[Service Runtimes](docs/docs/deployment/service-runtimes.md) and
-[Deployment Overview](docs/docs/deployment/overview.md).
+- one MCP endpoint for company-wide AI tooling
+- one API for internal automation and platform workflows
+- continuous indexing instead of one person's local snapshot
+- shared graph truth for code, deploy paths, workloads, and infrastructure
+- operator-grade health checks, telemetry, and recovery state
+
+That turns PCG from "a useful local graph" into a source of context your whole
+engineering org can use.
 
 ## How It Works
 
@@ -143,7 +145,7 @@ flowchart LR
   C --> D["Fact work queue"]
   D --> E["Resolution Engine"]
   E --> F["Canonical graph projection"]
-  F --> G["Neo4j"]
+  F --> G["Graph backend"]
   F --> H["Postgres content store"]
   I["CLI / MCP / HTTP API"] --> G
   I --> H
@@ -163,7 +165,7 @@ The deployed platform has five long-running runtimes plus two one-shot helpers:
 
 | Runtime | What it owns | Default command |
 | --- | --- | --- |
-| DB Migrate | Postgres + Neo4j schema DDL before the long-running workloads start | `/usr/local/bin/pcg-bootstrap-data-plane` |
+| DB Migrate | Postgres + graph schema DDL before the long-running workloads start | `/usr/local/bin/pcg-bootstrap-data-plane` |
 | API | HTTP API, graph and content reads, admin endpoints | `pcg api start --host 0.0.0.0 --port 8080` |
 | MCP Server | MCP transport plus mounted query routes | `pcg mcp start` |
 | Ingester | repo sync, workspace ownership, parsing, fact emission | `/usr/local/bin/pcg-ingester` |
@@ -192,7 +194,6 @@ In local Compose runs, you can inspect the runtime scrape endpoints directly:
 - API: `http://localhost:19464/metrics`
 - Ingester: `http://localhost:19465/metrics`
 - Resolution Engine: `http://localhost:19466/metrics`
-- Bootstrap Index: `http://localhost:19467/metrics`
 - MCP Server: `http://localhost:19468/metrics`
 - Workflow Coordinator: `http://localhost:19469/metrics` (enabled via compose profile)
 
@@ -218,31 +219,33 @@ Role-based prompt sets and follow-up patterns live in
 
 ## Quick Navigation
 
-- CLI: local indexing, search, and graph-backed analysis
-- MCP: AI tooling and assistant integrations
-- HTTP API: automation and internal platforms
-- Deploy: Docker Compose, Helm, and GitOps deployment paths
+- [Run locally](docs/docs/run-locally/index.md): local binaries or Docker Compose
+- [Use PCG](docs/docs/use/index.md): index repos and ask code or infrastructure questions
+- [Connect MCP](docs/docs/mcp/index.md): wire PCG into AI tools
+- [Deploy to Kubernetes](docs/docs/deploy/kubernetes/index.md): run PCG for a team
+- [Operate PCG](docs/docs/operate/index.md): health checks, telemetry, troubleshooting
+- [Understand PCG](docs/docs/understand/index.md): architecture and graph model
 
 ## Documentation Paths
 
 Start with the path that matches what you are doing:
 
-- Getting started:
-  [Quickstart](docs/docs/getting-started/quickstart.md)
+- Start here:
+  [Start Here](docs/docs/start-here.md)
+- Local setup:
+  [Run Locally](docs/docs/run-locally/index.md)
 - AI tooling:
-  [MCP Guide](docs/docs/guides/mcp-guide.md)
+  [Connect MCP](docs/docs/mcp/index.md)
 - Prompt cookbook:
   [Starter Prompts](docs/docs/guides/starter-prompts.md)
-- Deployment:
-  [Deployment Overview](docs/docs/deployment/overview.md)
+- Kubernetes:
+  [Deploy to Kubernetes](docs/docs/deploy/kubernetes/index.md)
 - Operations:
-  [Service Runtimes](docs/docs/deployment/service-runtimes.md)
+  [Operate PCG](docs/docs/operate/index.md)
 - Architecture:
-  [System Architecture](docs/docs/architecture.md)
+  [Understand PCG](docs/docs/understand/index.md)
 - Verification:
   [Local Testing Runbook](docs/docs/reference/local-testing.md)
-- Local Compose:
-  [Docker Compose](docs/docs/deployment/docker-compose.md)
 
 ## Verification
 

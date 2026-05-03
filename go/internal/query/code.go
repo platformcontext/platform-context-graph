@@ -44,6 +44,9 @@ func (h *CodeHandler) graphBackend() GraphBackend {
 	if h == nil {
 		return GraphBackendNeo4j
 	}
+	if h.GraphBackend == "" {
+		return GraphBackendNeo4j
+	}
 	backend, err := ParseGraphBackend(string(h.GraphBackend))
 	if err != nil {
 		panic(err)

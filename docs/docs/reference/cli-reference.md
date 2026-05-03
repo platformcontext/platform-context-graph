@@ -2,28 +2,37 @@
 
 This is the single-page reference for the public `pcg` CLI.
 
-Use this page when you want one place that explains:
+Use this page when you need command lookup material: command names, flags,
+remote/API behavior, and config keys.
 
-- what the CLI can do
-- which commands are local-only vs remote-aware
-- how remote auth and profiles work
-- where to go for deeper topic-specific docs
+For task workflows, start with:
 
-If you want the shortest path first, start with [CLI K.I.S.S.](cli-kiss.md).
+- [Index repositories](../use/index-repositories.md)
+- [Ask code questions](../use/code-questions.md)
+- [Trace infrastructure](../use/trace-infrastructure.md)
+- [Connect MCP](../mcp/index.md)
 
 ## How the CLI works
 
-`pcg` has two public operating modes:
+`pcg` has two public command families:
 
-- Local mode: commands run against your local database, local workspace, and local files.
-- Remote mode: selected commands call a deployed PCG HTTP API.
+- Local owner commands start or manage local processes and files. `pcg index`
+  launches `pcg-bootstrap-index` and writes to the configured Postgres and
+  graph stores.
+- API-backed commands call a PCG HTTP API. `pcg list`, `pcg stats`,
+  `pcg index-status`, `pcg find ...`, and `pcg analyze ...` are API clients.
 
-Remote mode is explicit. A command only runs remotely when it supports remote execution and you pass `--service-url` or `--profile`.
+The API client resolves its base URL from command flags, config, environment,
+then the built-in default `http://localhost:8080`. Local Docker Compose
+publishes the API on that default port.
 
-Remote mode facts for this release:
+Remote/API facts for this release:
 
-- It uses the HTTP API, not MCP.
-- It is available for a limited set of query, status, and admin commands.
+- CLI read commands use the HTTP API, not MCP.
+- Commands with `--service-url`, `--api-key`, and `--profile` can be pointed at
+  a deployed API directly.
+- `pcg list` and `pcg stats` are API-backed but currently resolve the API URL
+  from config or environment rather than per-command flags.
 - Remote `find` and `analyze` commands do not support `--visual`.
 - `pcg admin reindex` queues a reindex request for the ingester to execute. The API process does not do the full reindex work inline.
 - `pcg admin facts replay` replays dead-lettered facts-first work items back
@@ -63,13 +72,13 @@ Truth-level behavior per profile is defined by
 ### Graph backend
 
 Separately from profile, PCG selects a graph adapter via
-`PCG_GRAPH_BACKEND`. Allowed values: `neo4j` (default), `nornicdb`.
+`PCG_GRAPH_BACKEND`. Allowed values: `nornicdb` (default), `neo4j`.
 Invalid values are rejected at startup. See
 [Graph Backend Installation](graph-backend-installation.md) and
 [ADR 2026-04-22](../adrs/2026-04-22-nornicdb-graph-backend-candidate.md)
-for the evaluation path.
+for the backend history and compatibility notes.
 
-Today, `local_authoritative` auto-manages NornicDB when a verified NornicDB
+`local_authoritative` auto-manages NornicDB when a verified NornicDB
 binary is available. The laptop default is the headless artifact; the full
 binary remains an explicit opt-in. PCG resolves it in this order:
 
@@ -93,14 +102,9 @@ conformance-only switches, see [NornicDB Tuning](nornicdb-tuning.md).
 
 `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` is reserved for NornicDB adapter
 conformance runs. It enables the same grouped canonical write surface used by
-Neo4j so PCG can prove NornicDB rollback, timeout, and no-partial-write
-behavior before promotion. The 2026-04-23 safety probe against the rebuilt
-linuxdynasty-fork headless binary `/tmp/nornicdb-headless-pcg-rollback`
-(`v1.0.42-hotfix`) reports rollback marker count `0` across grouped,
-clean-explicit, and failed-explicit rollback surfaces. Keep the switch unset
-for normal laptop coding until that fixed binary is release-backed and broader
-adapter conformance passes. Manual conformance runs must use a disposable
-`PCG_HOME` / workspace data root.
+Neo4j so PCG can prove rollback, timeout, and no-partial-write behavior.
+Keep the switch unset for normal laptop coding. Manual conformance runs must
+use a disposable `PCG_HOME` / workspace data root.
 
 ### Graph backend commands
 
@@ -169,7 +173,7 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 
 ### Root commands
 
-| Command | Purpose | Remote-aware |
+| Command | Purpose | API-backed |
 | :--- | :--- | :--- |
 | `pcg help` | Show the full root help screen. | No |
 | `pcg version` | Print the installed version. | No |
@@ -178,10 +182,10 @@ See [Local Data Root Spec](local-data-root-spec.md) and
 | `pcg index-status` | Show the latest checkpointed index status. This is the completeness signal, not process health. | Yes |
 | `pcg finalize` | Compatibility stub. Prints the current ingester recovery endpoints and exits non-zero. | No |
 | `pcg clean` | Compatibility stub. Prints cleanup guidance and exits non-zero. | No |
-| `pcg stats [repo-or-path]` | Show indexing statistics. Existing local paths are normalized to absolute indexed paths; other arguments are treated as repository selectors such as name or repo slug. | No |
+| `pcg stats [repo-or-path]` | Show indexing statistics. Existing local paths are normalized to absolute indexed paths; other arguments are treated as repository selectors such as name or repo slug. | Yes |
 | `pcg delete <path>` | Compatibility stub. Prints deletion guidance and exits non-zero. | No |
 | `pcg delete --all` | Compatibility stub. Prints deletion guidance and exits non-zero. | No |
-| `pcg list` | List indexed repositories. | No |
+| `pcg list` | List indexed repositories. | Yes |
 | `pcg add-package` | Compatibility stub. Prints package-indexing guidance and exits non-zero. | No |
 | `pcg watch [path]` | Watch a local path and keep the graph updated. In local-host mode it now prints a live progress panel for indexing and projection instead of a fake percentage bar. | No |
 | `pcg unwatch <path>` | Compatibility stub. Prints watcher-lifecycle guidance and exits non-zero. | No |
@@ -200,7 +204,7 @@ fix.
 
 `pcg workspace` is the shared-workspace command group.
 
-| Command | Purpose | Remote-aware |
+| Command | Purpose | API-backed |
 | :--- | :--- | :--- |
 | `pcg workspace plan` | Queue a workspace reindex plan through the Go admin reindex flow. | No |
 | `pcg workspace sync` | Queue a workspace sync through the Go admin reindex flow. | No |
@@ -212,7 +216,7 @@ fix.
 
 `pcg find` is for lookup and discovery in the graph.
 
-| Command | Purpose | Remote-aware |
+| Command | Purpose | API-backed |
 | :--- | :--- | :--- |
 | `pcg find name <name>` | Exact-name search. | Yes |
 | `pcg find pattern <text>` | Substring search. | Yes |
@@ -226,7 +230,7 @@ fix.
 
 `pcg analyze` is for graph relationships and code quality signals.
 
-| Command | Purpose | Remote-aware |
+| Command | Purpose | API-backed |
 | :--- | :--- | :--- |
 | `pcg analyze calls <function>` | Show what a function calls. Supports `--transitive` and `--depth`. | Yes |
 | `pcg analyze callers <function>` | Show what calls a function. Supports `--transitive` and `--depth`. | Yes |
@@ -240,7 +244,7 @@ fix.
 
 ### Admin commands
 
-| Command | Purpose | Remote-aware |
+| Command | Purpose | API-backed |
 | :--- | :--- | :--- |
 | `pcg admin reindex` | Queue a remote ingester reindex request. | Yes |
 | `pcg admin tuning-report` | Show shared-projection tuning state from the admin API. | Yes |
@@ -296,11 +300,11 @@ These are public aliases:
 | `pcg rm` | `pcg delete` compatibility stub |
 | `pcg w` | `pcg watch` |
 
-## Remote mode
+## API URL and profiles
 
-### Commands that support remote execution
+### Commands with per-command API flags
 
-Remote mode is available for:
+These commands accept `--service-url`, `--api-key`, and `--profile`:
 
 - `pcg index-status`
 - `pcg workspace status`
@@ -330,17 +334,20 @@ Remote mode is available for:
 - `pcg analyze overrides`
 - `pcg analyze variable`
 
-### Per-command remote flags
+`pcg list` and `pcg stats` also call the API, but they currently use config,
+environment, or the built-in default URL rather than per-command API flags.
 
-Remote-aware commands use the same flag pattern:
+### Per-command API flags
+
+Commands listed above use the same flag pattern:
 
 - `--service-url`: remote HTTP base URL
 - `--api-key`: bearer token
 - `--profile`: named profile for resolving service URL and token
 
-### Remote config keys
+### API config keys
 
-You can avoid repeating remote flags by storing config values.
+You can avoid repeating API flags by storing config values.
 
 Shared keys:
 
@@ -373,9 +380,9 @@ pcg admin facts list --profile qa --status failed
 pcg admin facts decisions --profile qa --repository-id repository:r_payments --source-run-id run-123
 ```
 
-### Remote mode examples
+### API examples
 
-Check remote workspace status:
+Check workspace status against a deployed API:
 
 ```bash
 pcg workspace status --service-url https://pcg.qa.example.test --api-key "$PCG_API_KEY"
@@ -408,7 +415,7 @@ Replay failed facts-first work for one repository:
 pcg admin facts replay --profile qa --repository-id repository:r_payments --limit 25
 ```
 
-Run remote query commands:
+Run query commands against a deployed API:
 
 ```bash
 pcg find name handle_payment --profile qa
@@ -416,76 +423,15 @@ pcg analyze callers handle_payment --profile qa
 pcg analyze complexity --profile qa
 ```
 
-## Local mode examples
+## Workflow entry points
 
-Index the current repository:
+Keep this page as a reference. Use the task pages for beginner workflows and
+examples:
 
-```bash
-pcg index .
-```
-
-Force a clean rebuild of the current repository:
-
-```bash
-pcg index . --force
-```
-
-List indexed repositories:
-
-```bash
-pcg list
-```
-
-Watch a local repo for changes:
-
-```bash
-pcg watch .
-```
-
-Inspect callers before a refactor:
-
-```bash
-pcg analyze callers process_payment
-```
-
-Inspect indirect callers with an explicit depth bound:
-
-```bash
-pcg analyze callers process_payment --transitive --depth 7
-```
-
-Search by exact name:
-
-```bash
-pcg find name PaymentProcessor
-```
-
-Preview shared workspace selection:
-
-```bash
-pcg workspace plan
-```
-
-Show workspace status:
-
-```bash
-pcg workspace status
-```
-
-## When to use which path
-
-Use local mode when:
-
-- you are indexing your own checkout
-- you want `--visual` output
-- you need local-only setup or maintenance commands
-
-Use remote mode when:
-
-- you want to inspect a deployed PCG service
-- you want CLI-driven status checks against a hosted workspace
-- you want to queue a hosted ingester reindex
-- you want to upload a `.pcg` bundle into a deployed service
+- [Index repositories](../use/index-repositories.md)
+- [Ask code questions](../use/code-questions.md)
+- [Trace infrastructure](../use/trace-infrastructure.md)
+- [Connect MCP](../mcp/index.md)
 
 ## Related docs
 

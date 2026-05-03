@@ -8,6 +8,12 @@ The highest-value PCG prompts usually do one extra thing: they tell PCG to
 scan all related repositories, deployment sources, and indexed documentation
 before answering. That is where PCG shines compared with repo-local assistants.
 
+For setup and workflow steps before prompting, use
+[Index repositories](../use/index-repositories.md),
+[Ask code questions](../use/code-questions.md),
+[Trace infrastructure](../use/trace-infrastructure.md), or
+[Connect MCP](../mcp/index.md).
+
 ```mermaid
 flowchart TD
   A["Start With A Goal"] --> B["Code Question"]

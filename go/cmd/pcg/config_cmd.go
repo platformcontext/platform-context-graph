@@ -69,11 +69,8 @@ func init() {
 		Short: "Switch the default database backend",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			backend := strings.ToLower(args[0])
-			if backend != "neo4j" && backend != "falkordb" && backend != "falkordb-remote" {
-				return fmt.Errorf("invalid backend: %s (must be neo4j, falkordb, or falkordb-remote)", backend)
-			}
-			if err := setConfigValue("DEFAULT_DATABASE", backend); err != nil {
+			backend, err := configureDatabaseBackend(args[0])
+			if err != nil {
 				return err
 			}
 			printSuccess(fmt.Sprintf("Default database switched to %s", backend))
@@ -110,4 +107,34 @@ func init() {
 		},
 	}
 	rootCmd.AddCommand(nAlias)
+}
+
+func configureDatabaseBackend(rawBackend string) (string, error) {
+	backend := strings.ToLower(strings.TrimSpace(rawBackend))
+	switch backend {
+	case "nornicdb", "nornic":
+		if err := setConfigValue("PCG_GRAPH_BACKEND", "nornicdb"); err != nil {
+			return "", err
+		}
+		if err := setConfigValue("DEFAULT_DATABASE", "nornic"); err != nil {
+			return "", err
+		}
+		if err := setConfigValue("PCG_NEO4J_DATABASE", "nornic"); err != nil {
+			return "", err
+		}
+		return "nornicdb", nil
+	case "neo4j":
+		if err := setConfigValue("PCG_GRAPH_BACKEND", "neo4j"); err != nil {
+			return "", err
+		}
+		if err := setConfigValue("DEFAULT_DATABASE", "neo4j"); err != nil {
+			return "", err
+		}
+		if err := setConfigValue("PCG_NEO4J_DATABASE", "neo4j"); err != nil {
+			return "", err
+		}
+		return "neo4j", nil
+	default:
+		return "", fmt.Errorf("invalid backend: %s (must be nornicdb or neo4j)", backend)
+	}
 }

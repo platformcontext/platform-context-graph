@@ -19,8 +19,8 @@ Update a setting permanently. This writes to `~/.platform-context-graph/.env`.
 **Syntax:** `pcg config set <KEY> <VALUE>`
 
 ```bash
-# Switch to Neo4j backend
-pcg config set DEFAULT_DATABASE neo4j
+# Switch to the explicit Neo4j compatibility backend
+pcg config db neo4j
 
 # Select filesystem discovery for a local workspace
 pcg config set PCG_REPO_SOURCE_MODE filesystem
@@ -35,9 +35,11 @@ Go API and MCP runtimes use `PCG_API_KEY` from the running container
 environment.
 
 ### 3. Quick Switch Database
-A shortcut to toggle between `falkordb` and `neo4j`.
+A shortcut to toggle between the default NornicDB backend and the explicit
+Neo4j compatibility backend.
 
 ```bash
+pcg config db nornicdb
 pcg config db neo4j
 ```
 
@@ -53,7 +55,9 @@ catalog, including defaults, owner runtime, and when to tune each knob, use the
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| **`DEFAULT_DATABASE`** | `falkordb` | The database engine to use (`neo4j`, `falkordb`, or `kuzudb`). |
+| **`PCG_GRAPH_BACKEND`** | `nornicdb` | Graph adapter to use (`nornicdb` or `neo4j`). |
+| **`DEFAULT_DATABASE`** | `nornic` | Bolt database name used by the selected graph backend. |
+| **`PCG_NEO4J_DATABASE`** | `nornic` | Bolt database name passed through the Neo4j driver compatibility layer. |
 
 ### Logging And Tracing
 

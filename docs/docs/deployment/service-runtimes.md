@@ -9,6 +9,10 @@ Use this page when you need the operator view of PlatformContextGraph:
 - where metrics are exposed
 - where `ServiceMonitor` applies
 
+For installation steps, use the
+[Kubernetes deployment lane](../deploy/kubernetes/index.md). This page focuses
+on runtime ownership and operator signals.
+
 Every long-running runtime should also follow one operator principle:
 
 - the service should expose a familiar admin/status story through the shared
@@ -51,13 +55,13 @@ Current platform reality:
 
 | Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
 | --- | --- | --- | --- | --- | --- |
-| DB Migrate | Postgres + Neo4j schema DDL | `/usr/local/bin/pcg-bootstrap-data-plane` | Postgres DDL + Neo4j DDL | none (exits immediately) | `initContainer` |
+| DB Migrate | Postgres + graph schema DDL | `/usr/local/bin/pcg-bootstrap-data-plane` | Postgres DDL + graph DDL | none (exits immediately) | `initContainer` |
 | API | HTTP API, query reads, admin endpoints | `pcg api start --host 0.0.0.0 --port 8080` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | MCP Server | MCP tool transport plus mounted query passthrough | `pcg mcp start` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
-| Ingester | repo sync, parsing, fact emission, workspace ownership | `/usr/local/bin/pcg-ingester` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
-| Workflow Coordinator | scheduling, trigger intake, claims, completeness, run orchestration | `/usr/local/bin/pcg-workflow-coordinator` | Postgres + Neo4j | internal admin/status service plus `/metrics`, optional `ServiceMonitor` | `Deployment` |
-| Resolution Engine | queue draining, projection, retries, replay, recovery | `/usr/local/bin/pcg-reducer` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
-| Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + Neo4j | OTEL export only; no mounted runtime `/metrics` endpoint | one-shot local helper |
+| Ingester | repo sync, parsing, fact emission, workspace ownership | `/usr/local/bin/pcg-ingester` | workspace PVC + Postgres + graph backend | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
+| Workflow Coordinator | scheduling, trigger intake, claims, completeness, run orchestration | `/usr/local/bin/pcg-workflow-coordinator` | Postgres + graph backend | internal admin/status service plus `/metrics`, optional `ServiceMonitor` | `Deployment` |
+| Resolution Engine | queue draining, projection, retries, replay, recovery | `/usr/local/bin/pcg-reducer` | Postgres + graph backend | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
+| Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + graph backend | OTEL export only; no mounted runtime `/metrics` endpoint | one-shot local helper |
 
 ## Health, Status, And Completeness
 
@@ -173,7 +177,7 @@ flowchart LR
   B --> C["Postgres fact store"]
   C --> D["Fact work queue"]
   D --> E["Resolution Engine"]
-  E --> F["Neo4j"]
+  E --> F["Graph backend"]
   E --> G["Postgres content store"]
   H["API"] --> F
   H --> G
@@ -197,7 +201,7 @@ flowchart LR
 ### Responsibilities
 
 - serve HTTP query and admin requests
-- read canonical graph state from Neo4j
+- read canonical graph state from the configured graph backend
 - read file and entity content from Postgres
 - serve operator/admin endpoints
 
@@ -324,7 +328,7 @@ adding more workers.
 ### Concurrency tuning
 
 The reducer supports concurrent intent execution (`PCG_REDUCER_WORKERS`,
-default Neo4j `min(NumCPU, 4)`, NornicDB `1`) and concurrent shared projection
+default NornicDB `min(NumCPU, 8)`, Neo4j `min(NumCPU, 4)`) and concurrent shared projection
 partition processing (`PCG_SHARED_PROJECTION_WORKERS`, default 1). Increase
 these when queue age rises and single-worker CPU is not saturated. On
 NornicDB, raise reducer workers only with queue and graph-write telemetry in
@@ -392,7 +396,7 @@ The coordinator ships dark by default in this slice:
 
 ## DB Migrate (Schema Init Container)
 
-`pcg-bootstrap-data-plane` applies all Postgres and Neo4j schema DDL then
+`pcg-bootstrap-data-plane` applies all Postgres and graph backend schema DDL then
 exits. It uses `CREATE TABLE IF NOT EXISTS` and `CREATE CONSTRAINT IF NOT
 EXISTS` so it is safe to run repeatedly (idempotent).
 
@@ -401,7 +405,7 @@ EXISTS` so it is safe to run repeatedly (idempotent).
 1. Connects to Postgres and runs `ApplyBootstrap` — creates all tables and
    indexes for facts, scopes, generations, content store, work queue, audit,
    relationships, shared intents, and projection decisions.
-2. Connects to Neo4j and runs `EnsureSchema` — creates all node constraints,
+2. Connects to the graph backend and runs schema bootstrap — creates all node constraints,
    uniqueness indexes, performance indexes, and full-text indexes.
 3. Exits with code 0 on success.
 
@@ -425,13 +429,15 @@ db-migrate:
   image: platform-context-graph:dev
   command: ["/usr/local/bin/pcg-bootstrap-data-plane"]
   environment:
-    DEFAULT_DATABASE: neo4j
-    NEO4J_URI: bolt://neo4j:7687
+    PCG_GRAPH_BACKEND: nornicdb
+    DEFAULT_DATABASE: nornic
+    PCG_NEO4J_DATABASE: nornic
+    NEO4J_URI: bolt://nornicdb:7687
     NEO4J_USERNAME: neo4j
     NEO4J_PASSWORD: change-me
     PCG_POSTGRES_DSN: postgresql://pcg:change-me@postgres:5432/platform_context_graph
   depends_on:
-    neo4j:
+    nornicdb:
       condition: service_healthy
     postgres:
       condition: service_healthy
@@ -465,7 +471,7 @@ spec:
                   name: pcg-db-credentials
                   key: dsn
             - name: NEO4J_URI
-              value: bolt://neo4j:7687
+              value: bolt://nornicdb:7687
             - name: NEO4J_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -476,8 +482,10 @@ spec:
                 secretKeyRef:
                   name: pcg-neo4j-credentials
                   key: password
+            - name: PCG_GRAPH_BACKEND
+              value: nornicdb
             - name: DEFAULT_DATABASE
-              value: neo4j
+              value: nornic
       containers:
         - name: api
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
@@ -489,20 +497,21 @@ Apply the same init container to:
 
 | Workload | Kind | Why |
 | --- | --- | --- |
-| `platform-context-graph` (API) | `Deployment` | Reads from Postgres + Neo4j |
-| `mcp-server` | `Deployment` | Reads from Postgres + Neo4j |
+| `platform-context-graph` (API) | `Deployment` | Reads from Postgres + graph backend |
+| `mcp-server` | `Deployment` | Reads from Postgres + graph backend |
 | `ingester` | `StatefulSet` | Writes facts to Postgres |
-| `resolution-engine` (reducer) | `Deployment` | Writes to Postgres + Neo4j |
+| `resolution-engine` (reducer) | `Deployment` | Writes to Postgres + graph backend |
 
 ### Environment variables
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `PCG_POSTGRES_DSN` | Yes | Postgres connection string |
-| `NEO4J_URI` | Yes | Neo4j Bolt URI |
-| `NEO4J_USERNAME` | Yes | Neo4j auth username |
-| `NEO4J_PASSWORD` | Yes | Neo4j auth password |
-| `DEFAULT_DATABASE` | No | Neo4j database name (default: `neo4j`) |
+| `PCG_GRAPH_BACKEND` | No | Graph adapter, default `nornicdb` |
+| `NEO4J_URI` | Yes | Bolt URI for NornicDB or Neo4j |
+| `NEO4J_USERNAME` | Yes | Bolt auth username |
+| `NEO4J_PASSWORD` | Yes | Bolt auth password |
+| `DEFAULT_DATABASE` | No | Bolt database name, default `nornic` |
 
 ### Operational notes
 

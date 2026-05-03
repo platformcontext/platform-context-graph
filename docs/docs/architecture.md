@@ -12,6 +12,11 @@ Use this page for the current architecture only:
 - which contracts are shared across services
 - where to look for the operator view
 
+If you want the shorter concept path first, start with
+[Understand PCG](understand/index.md). If you are operating a running system,
+start with [Operate PCG](operate/index.md). If you are adding collectors,
+facts, or language support, start with [Extend PCG](extend/index.md).
+
 For runtime commands and deployment shapes, use
 [Service Runtimes](deployment/service-runtimes.md). For concrete operator
 validation, use [Local Testing](reference/local-testing.md). For metrics,
@@ -31,9 +36,9 @@ PCG is split into a small number of clear service and storage boundaries:
 - **Bootstrap Index** runs the same write path as a one-shot seeding flow.
 - **Postgres** stores facts, queues, status, recovery state, and content.
 - **Graph backend** stores canonical graph nodes and relationships through the
-  Cypher-compatible `GraphQuery` and `GraphWrite` ports. Neo4j remains the
-  default backend; NornicDB uses the same backend-neutral Cypher writer surface
-  plus narrow backend-dialect seams.
+  Cypher-compatible `GraphQuery` and `GraphWrite` ports. NornicDB is the
+  default backend; Neo4j remains available through the same backend-neutral
+  Cypher writer surface plus narrow backend-dialect seams.
 
 The platform is intentionally facts-first:
 
@@ -276,7 +281,7 @@ surface grows; the pattern is unchanged. See
 §5 for the target port list and the explicit rejection of an ORM-centric
 abstraction.
 
-Current graph adapters: Neo4j (default) and NornicDB. Both satisfy the same
+Current graph adapters: NornicDB (default) and Neo4j. Both satisfy the same
 `GraphQuery` + `GraphWrite` ports and share the backend-neutral
 `go/internal/storage/cypher` writer surface. The active adapter is chosen via
 `PCG_GRAPH_BACKEND={neo4j,nornicdb}` and surfaced in telemetry as
@@ -356,11 +361,11 @@ same capability surface but with different truth levels.
 | --- | --- | --- | --- |
 | `local_lightweight` | Single `pcg` binary with embedded Postgres | No | Developer-laptop code intelligence |
 | `local_authoritative` | `pcg` binary + embedded Postgres + local graph backend sidecar installed via `pcg install nornicdb [--from <source>]` today; pinned bare install only on covered host platforms until broader release coverage exists | Yes | Laptop-scale transitive / call-chain / dead-code without Compose |
-| `local_full_stack` | Docker Compose: Postgres, Neo4j (or NornicDB), ingester, reducer, API/MCP | Yes | Pre-merge validation, reducer convergence testing |
+| `local_full_stack` | Docker Compose: Postgres, NornicDB by default, optional Neo4j, ingester, reducer, API/MCP | Yes | Pre-merge validation, reducer convergence testing |
 | `production` | Kubernetes / Helm split runtimes, shared Postgres and graph backend | Yes | Incident, refactor, blast-radius analysis at scale |
 
 The graph backend is a separate axis from profile. Current adapters are
-Neo4j (default) and NornicDB. See
+NornicDB (default) and Neo4j. See
 [Graph Backend Installation](reference/graph-backend-installation.md),
 [Graph Backend Operations](reference/graph-backend-operations.md), and
 [ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
@@ -368,7 +373,7 @@ Neo4j (default) and NornicDB. See
 The local-authoritative NornicDB path is intentionally guarded while under
 evaluation: canonical graph writes are sequential and timeout-bounded, and
 the local content index is written before graph projection. That preserves
-developer MCP code-search usefulness without changing the production Neo4j
+developer MCP code-search usefulness while preserving the explicit Neo4j
 grouped-write path. NornicDB grouped writes are available only through the
 explicit conformance switch `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true`;
 promotion requires proving the same rollback, timeout, and no-partial-write

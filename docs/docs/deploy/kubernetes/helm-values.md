@@ -1,0 +1,40 @@
+# Helm values
+
+The chart lives at `deploy/helm/platform-context-graph`.
+
+## Values to review first
+
+| Value | Default | Purpose |
+| --- | --- | --- |
+| `image.repository` | `ghcr.io/platformcontext/platform-context-graph` | Runtime image. |
+| `image.tag` | `v0.1.0` | Runtime image tag. |
+| `service.type` | `ClusterIP` | API service type. |
+| `api.replicas` | `1` | API replica count. |
+| `mcpServer.enabled` | `true` | Deploy the MCP runtime. |
+| `ingester.persistence.size` | `100Gi` | Workspace PVC size. |
+| `resolutionEngine.enabled` | `true` | Deploy the reducer runtime. |
+| `workflowCoordinator.enabled` | `false` | Deploy dark-mode workflow coordinator. |
+| `contentStore.dsn` | empty | Postgres DSN. |
+| `neo4j.uri` | `bolt://neo4j:7687` | Bolt URI for NornicDB or Neo4j. |
+| `env.PCG_GRAPH_BACKEND` | `nornicdb` | Active graph adapter. |
+| `observability.prometheus.serviceMonitor.enabled` | `false` | Render `ServiceMonitor` resources. |
+
+Each runtime has `resources` and `connectionTuning` blocks. Connection tuning
+supports Postgres pool settings and Bolt driver settings per workload.
+
+## Repository sync
+
+`repoSync.source.rules` is rendered to `PCG_REPOSITORY_RULES_JSON`. Use
+`type: exact` or `type: regex` with a `value` field so the chart schema can
+validate the file before install.
+
+## Exposure
+
+The default service type is `ClusterIP`. For external traffic, use one of:
+
+- `service.type=LoadBalancer`
+- `exposure.ingress.enabled=true`
+- `exposure.gateway.enabled=true`
+
+Do not enable ingress and gateway at the same time. Each ingress or gateway
+block routes to one backend: `api` or `mcp`.

@@ -1,6 +1,10 @@
 # MCP Guide
 
-Your AI assistant sees one file at a time. It can read imports, guess at dependencies, and search for string matches — but it cannot see the Terraform module that provisions the database, the ArgoCD app that deploys the workload, or the three other repos that break if you change an API contract. MCP gives it the full dependency graph.
+MCP is the assistant-facing interface for PCG. Use it when a coding assistant
+needs indexed repository, code, deployment, and infrastructure context.
+
+For the path chooser across local owner stdio, Compose MCP, and deployed MCP,
+start with [Connect MCP](../mcp/index.md).
 
 ## Setup
 
@@ -98,20 +102,23 @@ For the broader Compose workflow and shutdown details, see
 
 ## Start the server
 
-For stdio-based MCP (local, single-user):
+For stdio-based MCP with one local workspace owner:
 
 ```bash
-pcg mcp start
+pcg mcp start --workspace-root /path/to/repo
 ```
 
-For a shared deployment over HTTP:
+For Compose, start the stack and point the MCP client at the published MCP
+service:
 
 ```bash
-pcg mcp start
+docker compose up --build
 ```
 
-In the deployable split-service shape, the dedicated `mcp-server` runtime is
-the MCP HTTP endpoint. Do not point MCP clients at the HTTP API runtime.
+Compose publishes the API at `http://localhost:8080` and the MCP service at
+`http://localhost:8081` by default. In the deployable split-service shape, the
+dedicated `mcp-server` runtime is the MCP HTTP endpoint. Do not point MCP
+clients at the HTTP API runtime.
 
 ## Canonical Versus Repair Surfaces
 
@@ -298,7 +305,9 @@ These rules keep prompt tests from leaking server paths or normalizing unsafe qu
 
 **"No repositories indexed"** — MCP queries the graph, which requires indexing first. Run `pcg index /path/to/repo` or start docker-compose to index fixtures.
 
-**Slow responses** — large graphs on FalkorDB Lite may hit memory limits. Switch to Neo4j for production-scale graphs.
+**Slow responses** — check the local-host progress panel, graph-write metrics,
+and the selected graph backend. Use the default NornicDB path or the explicit
+Neo4j compatibility stack for production-scale graphs.
 
 ## Related docs
 

@@ -902,7 +902,7 @@ implementation plan, not in this ADR.
 **Likely files:**
 
 - `docker-compose.yaml`
-- `docker-compose.template.yml`
+- `docker-compose.neo4j.yml`
 - `docs/docs/deployment/docker-compose.md`
 - private IaC deployment repo overlays and chart values after this repo lands
 

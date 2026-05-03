@@ -25,4 +25,6 @@ Typical behavior:
 - wrong credentials for a remote Neo4j instance
 - local MCP or HTTP runtime not receiving the same environment values you configured interactively
 
-For Kubernetes deployments, the public contract is still **external Neo4j via secrets or environment values**, not an in-chart database.
+For Kubernetes deployments, the public contract is an **external
+Bolt-compatible graph endpoint via secrets or environment values**, not an
+in-chart database. Set `PCG_GRAPH_BACKEND=neo4j` when that endpoint is Neo4j.

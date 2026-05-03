@@ -15,7 +15,7 @@ func TestCodeHandlerGraphBackendRejectsInvalidConfiguredBackend(t *testing.T) {
 	_ = handler.graphBackend()
 }
 
-func TestCodeHandlerGraphBackendDefaultsEmptyBackendToNeo4j(t *testing.T) {
+func TestCodeHandlerGraphBackendKeepsZeroValueBackendNeo4jCompatible(t *testing.T) {
 	t.Parallel()
 
 	handler := &CodeHandler{}

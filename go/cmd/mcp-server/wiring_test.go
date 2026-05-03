@@ -94,3 +94,15 @@ func TestOpenQueryGraphAcceptsNornicDBOnSharedBoltPath(t *testing.T) {
 		t.Fatalf("openQueryGraph() error = %q, want shared bolt config context", err)
 	}
 }
+
+func TestLoadGraphBackendDefaultsToNornicDB(t *testing.T) {
+	t.Parallel()
+
+	got, err := loadGraphBackend(func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("loadGraphBackend() error = %v, want nil", err)
+	}
+	if got != query.GraphBackendNornicDB {
+		t.Fatalf("loadGraphBackend() = %q, want %q", got, query.GraphBackendNornicDB)
+	}
+}

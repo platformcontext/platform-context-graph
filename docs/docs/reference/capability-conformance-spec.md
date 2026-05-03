@@ -136,8 +136,9 @@ Allowed values:
 - `neo4j`
 - `nornicdb`
 
-Default today is `neo4j`. Evaluation and adoption criteria for `nornicdb`
-live in `docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`.
+Default today is `nornicdb`. Neo4j remains the explicit compatibility backend.
+Evaluation and release-backed adoption criteria for NornicDB live in
+`docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`.
 `local_lightweight` does not bind a graph backend because it refuses
 graph-backed capabilities.
 

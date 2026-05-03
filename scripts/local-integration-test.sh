@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local integration test runner for PCG.
-# Copies real repos into a flat workspace, runs docker-compose ingestion,
-# waits for completion, and validates the results.
+# Copies real repos into a flat workspace, runs Compose ingestion against the
+# Neo4j compatibility stack, waits for completion, and validates the results.
 #
 # Usage:
 #   ./scripts/local-integration-test.sh                    # Tier 1 (10 repos)
@@ -24,6 +24,7 @@ TIER="tier1"
 WORKSPACE_ONLY=false
 VALIDATE_ONLY=false
 WORKSPACE="${PCG_WORKSPACE:-"$REPO_ROOT/.pcg-test-workspace"}"
+COMPOSE_CMD=()
 
 # Parse args
 for arg in "$@"; do
@@ -37,6 +38,15 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker compose -f "$REPO_ROOT/docker-compose.neo4j.yml")
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose -f "$REPO_ROOT/docker-compose.neo4j.yml")
+else
+    echo "Missing required compose command: docker compose or docker-compose" >&2
+    exit 1
+fi
 
 # Tier 1 repos (10 repos, ~2,060 parseable files)
 TIER1_REPOS=(
@@ -92,11 +102,11 @@ prepare_workspace() {
 start_stack() {
     log "Stopping existing stack..."
     cd "$REPO_ROOT"
-    docker-compose down -v 2>/dev/null || true
+    "${COMPOSE_CMD[@]}" down -v 2>/dev/null || true
     sleep 2
 
-    log "Starting docker-compose with $TIER workspace..."
-    PCG_FILESYSTEM_HOST_ROOT="$WORKSPACE" docker-compose up --build --force-recreate -d 2>&1 | tail -5
+    log "Starting Neo4j compose stack with $TIER workspace..."
+    PCG_FILESYSTEM_HOST_ROOT="$WORKSPACE" "${COMPOSE_CMD[@]}" up --build --force-recreate -d 2>&1 | tail -5
 
     log "Waiting for bootstrap indexer to complete..."
     local waited=0
@@ -123,13 +133,13 @@ start_stack() {
 
     if [ $waited -ge $max_wait ]; then
         log "ERROR: Bootstrap timed out after ${max_wait}s"
-        docker-compose logs bootstrap-index 2>&1 | tail -30
+        "${COMPOSE_CMD[@]}" logs bootstrap-index 2>&1 | tail -30
         exit 1
     fi
 
     # Show finalization timing
     log "=== Finalization Timing ==="
-    docker-compose logs bootstrap-index 2>&1 \
+    "${COMPOSE_CMD[@]}" logs bootstrap-index 2>&1 \
         | rg "Finalization timings" \
         | tail -1 \
         | sed 's/^.*| //' \
@@ -138,7 +148,7 @@ start_stack() {
 
     # Show memory
     log "=== Peak Memory ==="
-    docker-compose logs bootstrap-index 2>&1 \
+    "${COMPOSE_CMD[@]}" logs bootstrap-index 2>&1 \
         | rg "After finalization" \
         | tail -1 \
         | sed 's/^.*| //' \
@@ -154,7 +164,7 @@ validate() {
     local repo_count variable_count function_count relationship_count argocd_count xrd_count terraform_count
 
     repo_count=$(
-        docker-compose exec -T neo4j cypher-shell \
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
             -u neo4j \
             -p "$neo4j_password" \
             --format plain \
@@ -162,7 +172,7 @@ validate() {
             | tail -n 1
     )
     variable_count=$(
-        docker-compose exec -T neo4j cypher-shell \
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
             -u neo4j \
             -p "$neo4j_password" \
             --format plain \
@@ -170,7 +180,7 @@ validate() {
             | tail -n 1
     )
     function_count=$(
-        docker-compose exec -T neo4j cypher-shell \
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
             -u neo4j \
             -p "$neo4j_password" \
             --format plain \
@@ -178,7 +188,7 @@ validate() {
             | tail -n 1
     )
     relationship_count=$(
-        docker-compose exec -T neo4j cypher-shell \
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
             -u neo4j \
             -p "$neo4j_password" \
             --format plain \
@@ -186,7 +196,7 @@ validate() {
             | tail -n 1
     )
     argocd_count=$(
-        docker-compose exec -T neo4j cypher-shell \
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
             -u neo4j \
             -p "$neo4j_password" \
             --format plain \
@@ -194,7 +204,7 @@ validate() {
             | tail -n 1
     )
     xrd_count=$(
-        docker-compose exec -T neo4j cypher-shell \
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
             -u neo4j \
             -p "$neo4j_password" \
             --format plain \
@@ -202,7 +212,7 @@ validate() {
             | tail -n 1
     )
     terraform_count=$(
-        docker-compose exec -T neo4j cypher-shell \
+        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell \
             -u neo4j \
             -p "$neo4j_password" \
             --format plain \
@@ -225,7 +235,7 @@ validate() {
     log "=== API Check ==="
     local api_key
     api_key=$(
-        docker-compose exec -T platform-context-graph sh -lc '
+        "${COMPOSE_CMD[@]}" exec -T platform-context-graph sh -lc '
             token="${PCG_API_KEY:-}";
             if [ -n "$token" ]; then
                 printf %s "$token";

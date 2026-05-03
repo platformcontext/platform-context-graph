@@ -412,6 +412,8 @@ else
 	echo "Missing required compose command: docker compose or docker-compose" >&2
 	exit 1
 fi
+COMPOSE_CMD+=(-f docker-compose.neo4j.yml)
+COMPOSE_DISPLAY+=" -f docker-compose.neo4j.yml"
 cd "$REPO_ROOT"
 export COMPOSE_PROJECT_NAME
 if [[ -z "${PCG_FILESYSTEM_HOST_ROOT:-}" ]]; then

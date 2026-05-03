@@ -35,15 +35,43 @@ for arg in "$@"; do
 done
 
 if docker compose version >/dev/null 2>&1; then
-    COMPOSE_CMD=(docker compose -f "$REPO_ROOT/docker-compose.yaml" -f "$REPO_ROOT/docker-compose.nornicdb.yml")
+    COMPOSE_CMD=(docker compose -f "$REPO_ROOT/docker-compose.yaml")
 elif command -v docker-compose >/dev/null 2>&1; then
-    COMPOSE_CMD=(docker-compose -f "$REPO_ROOT/docker-compose.yaml" -f "$REPO_ROOT/docker-compose.nornicdb.yml")
+    COMPOSE_CMD=(docker-compose -f "$REPO_ROOT/docker-compose.yaml")
 else
     echo "Missing required compose command: docker compose or docker-compose" >&2
     exit 1
 fi
 
+GRAPH_SERVICE=nornicdb
+GRAPH_NETWORK=""
+
 log() { echo "[$(date +%H:%M:%S)] $*"; }
+
+discover_graph_network() {
+    local cid
+    cid=$("${COMPOSE_CMD[@]}" ps -q "$GRAPH_SERVICE" 2>/dev/null || true)
+    if [ -z "$cid" ]; then
+        echo "Could not determine $GRAPH_SERVICE container id" >&2
+        return 1
+    fi
+    GRAPH_NETWORK="$(
+        docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$cid" |
+            awk 'NF {print; exit}'
+    )"
+    if [ -z "$GRAPH_NETWORK" ]; then
+        echo "Could not determine $GRAPH_SERVICE compose network" >&2
+        return 1
+    fi
+}
+
+run_cypher() {
+    docker run --rm --network "$GRAPH_NETWORK" neo4j:2026-community \
+        cypher-shell -a "bolt://$GRAPH_SERVICE:7687" \
+        -u "$NEO4J_USERNAME" \
+        -p "$NEO4J_PASSWORD" \
+        "$@"
+}
 
 cleanup() {
     if [ "$KEEP" = false ]; then
@@ -78,7 +106,7 @@ log "=== Step 2: Waiting for NornicDB to be healthy ==="
 MAX_WAIT=120
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
-    CID=$("${COMPOSE_CMD[@]}" ps -q neo4j 2>/dev/null || true)
+    CID=$("${COMPOSE_CMD[@]}" ps -q "$GRAPH_SERVICE" 2>/dev/null || true)
     if [ -n "$CID" ]; then
         HEALTH=$(docker inspect --format '{{.State.Health.Status}}' "$CID" 2>/dev/null || echo "unknown")
     else
@@ -98,7 +126,7 @@ done
 if [ $WAITED -ge $MAX_WAIT ]; then
     log "ERROR: NornicDB did not become healthy within ${MAX_WAIT}s"
     log "Container logs:"
-    "${COMPOSE_CMD[@]}" logs neo4j 2>&1 | tail -30
+    "${COMPOSE_CMD[@]}" logs "$GRAPH_SERVICE" 2>&1 | tail -30
     exit 1
 fi
 
@@ -111,14 +139,15 @@ export NEO4J_URI=bolt://localhost:${NEO4J_BOLT_PORT:-7687}
 export NEO4J_USERNAME=neo4j
 export NEO4J_PASSWORD=${PCG_NEO4J_PASSWORD:-change-me}
 export NEO4J_DATABASE=nornic
+discover_graph_network
 BOLT_RESULT="$(
     {
         echo "Connecting to $NEO4J_URI as $NEO4J_USERNAME..."
-        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" --format plain "RETURN 1 AS n" | tail -n 1
-        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" "CREATE (t:_NornicDBTest {ts: timestamp()}) RETURN t;" >/dev/null
-        COUNT="$("${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" --format plain "MATCH (t:_NornicDBTest) RETURN count(t) AS cnt" | tail -n 1)"
+        run_cypher --format plain "RETURN 1 AS n" | tail -n 1
+        run_cypher "CREATE (t:_NornicDBTest {ts: timestamp()}) RETURN t;" >/dev/null
+        COUNT="$(run_cypher --format plain "MATCH (t:_NornicDBTest) RETURN count(t) AS cnt" | tail -n 1)"
         echo "Write/read test: OK (count=${COUNT})"
-        "${COMPOSE_CMD[@]}" exec -T neo4j cypher-shell -u "$NEO4J_USERNAME" -p "$NEO4J_PASSWORD" "MATCH (t:_NornicDBTest) DELETE t;" >/dev/null
+        run_cypher "MATCH (t:_NornicDBTest) DELETE t;" >/dev/null
         echo "Cleanup: OK"
         echo "All Bolt connectivity checks passed."
     } 2>&1
@@ -208,7 +237,7 @@ log ""
 if [ $INTEGRATION_RESULT -ne 0 ]; then
     log "Some tests failed. Review output above for details."
     log "NornicDB logs:"
-    "${COMPOSE_CMD[@]}" logs neo4j 2>&1 | tail -20
+    "${COMPOSE_CMD[@]}" logs "$GRAPH_SERVICE" 2>&1 | tail -20
     exit 1
 fi
 

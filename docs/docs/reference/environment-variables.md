@@ -29,7 +29,7 @@ advisory report.
 | --- | --- | --- | --- | --- |
 | `PCG_HOME` | Platform user-data dir | CLI, local host, API key resolver | Root for user config, local workspaces, managed binaries, and persisted local API keys. | Set to isolate dogfood runs, CI runs, or disposable local-authoritative workspaces. |
 | `PCG_QUERY_PROFILE` | `production` for API/MCP/reducer; local commands set profile explicitly | API, MCP, ingester, reducer, local host | Selects query/runtime profile such as `production`, `local_lightweight`, or `local_authoritative`. | Change only when switching runtime mode. Do not use it as a performance knob. |
-| `PCG_GRAPH_BACKEND` | `neo4j` | API, MCP, ingester, reducer, local host | Selects graph adapter: `neo4j` or `nornicdb`. | Set to `nornicdb` only for the NornicDB evaluation/local-authoritative lane or a documented deployment using that adapter. |
+| `PCG_GRAPH_BACKEND` | `nornicdb` | API, MCP, ingester, reducer, local host | Selects graph adapter: `nornicdb` or `neo4j`. | Set to `neo4j` only for the explicit Neo4j compatibility path. |
 | `PCG_LISTEN_ADDR` | `0.0.0.0:8080` | Go service runtimes | HTTP listen address for services using shared runtime config. | Change for deployment port binding, not performance. |
 | `PCG_METRICS_ADDR` | `0.0.0.0:9464` | Go service runtimes | Prometheus metrics listen address. | Change for deployment port binding or sidecar scrape layout. |
 | `PCG_API_ADDR` | unset; CLI wrappers set host/port flags | API CLI service wrapper | API listen address when using `pcg service` helpers. | Use CLI flags first; set only for scripted local service wrappers. |
@@ -68,15 +68,15 @@ advisory report.
 | `PCG_DISCOVERY_IGNORED_PATH_GLOBS` | unset | bootstrap-index, collector-git, ingester | Comma- or newline-separated repo-relative discovery globs. Entries may use `pattern=reason`; the default reason is `env-ignore`. | Operator-controlled overlay for focused generated/vendor/archive input-shape proofs. Prefer repo-local `.pcg/discovery.json` for durable source-owned rules. |
 | `PCG_DISCOVERY_PRESERVED_PATH_GLOBS` | unset | bootstrap-index, collector-git, ingester | Comma- or newline-separated repo-relative globs to keep when a broader ignored glob covers an ancestor. | Pair with broad ignored globs so authored subtrees stay indexable. |
 
-## Neo4j And Graph Driver
+## Graph Driver
 
 | Variable | Default | Read By | Purpose | Tune When |
 | --- | --- | --- | --- | --- |
-| `PCG_NEO4J_URI` / `NEO4J_URI` | unset | API, MCP, ingester, reducer, CLI doctor | Bolt URI. PCG-prefixed value wins. | Required for Neo4j-backed services. |
-| `PCG_NEO4J_USERNAME` / `NEO4J_USERNAME` | unset | Graph runtimes | Neo4j username. | Set from deployment secrets. |
-| `PCG_NEO4J_PASSWORD` / `NEO4J_PASSWORD` | unset | Graph runtimes | Neo4j password. | Set from deployment secrets. |
-| `PCG_NEO4J_DATABASE` / `NEO4J_DATABASE` | `neo4j` | Graph runtimes | Neo4j database name. | Change only for multi-database deployments. |
-| `DEFAULT_DATABASE` | `neo4j` in Go graph wiring | API graph open path, CLI config | Legacy/default graph database name. | Prefer `PCG_NEO4J_DATABASE`; keep for legacy config compatibility. |
+| `PCG_NEO4J_URI` / `NEO4J_URI` | unset | API, MCP, ingester, reducer, CLI doctor | Bolt URI for NornicDB or Neo4j. PCG-prefixed value wins. | Required for graph-backed services. |
+| `PCG_NEO4J_USERNAME` / `NEO4J_USERNAME` | unset | Graph runtimes | Bolt auth username. | Set from deployment secrets. |
+| `PCG_NEO4J_PASSWORD` / `NEO4J_PASSWORD` | unset | Graph runtimes | Bolt auth password. | Set from deployment secrets. |
+| `PCG_NEO4J_DATABASE` / `NEO4J_DATABASE` | `nornic` for default stacks | Graph runtimes | Bolt database name. | Change when switching between NornicDB (`nornic`) and Neo4j (`neo4j`) or for explicit multi-database deployments. |
+| `DEFAULT_DATABASE` | `nornic` for default stacks | API graph open path, CLI config | Legacy/default Bolt database name. | Prefer `PCG_NEO4J_DATABASE`; keep for legacy config compatibility. |
 | `PCG_NEO4J_BATCH_SIZE` | `500` | ingester, reducer, projector, bootstrap-index | Generic graph UNWIND row batch size. | Lower only when Neo4j/NornicDB statement row width is the proven bottleneck; prefer label/phase-specific NornicDB knobs where available. |
 | `PCG_NEO4J_MAX_CONNECTION_POOL_SIZE` | `100` | Graph runtimes | Max driver connections. | Raise when driver acquisition waits and DB capacity exists; lower when too many service pods oversubscribe Neo4j. |
 | `PCG_NEO4J_MAX_CONNECTION_LIFETIME` | `1h` | Graph runtimes | Max driver connection lifetime. | Lower for proxies/load balancers that recycle connections. |

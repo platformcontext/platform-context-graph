@@ -291,11 +291,11 @@ else
 fi
 
 if [[ "$GRAPH_BACKEND" == "nornicdb" ]]; then
-	COMPOSE_CMD+=(-f docker-compose.yaml -f docker-compose.nornicdb.yml)
-	COMPOSE_DISPLAY+=" -f docker-compose.yaml -f docker-compose.nornicdb.yml"
-else
 	COMPOSE_CMD+=(-f docker-compose.yaml)
 	COMPOSE_DISPLAY+=" -f docker-compose.yaml"
+else
+	COMPOSE_CMD+=(-f docker-compose.neo4j.yml)
+	COMPOSE_DISPLAY+=" -f docker-compose.neo4j.yml"
 fi
 
 cd "$REPO_ROOT"
