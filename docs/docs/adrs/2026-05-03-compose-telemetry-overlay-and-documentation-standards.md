@@ -54,6 +54,8 @@ Repository standards now have a stricter contract:
   and fixture leaf directories are exempt.
 - OpenAPI changes must update the Go OpenAPI fragments, handler tests, and HTTP
   API reference together.
+- The public API router serves `/api/v0/openapi.json`, `/api/v0/docs`, and
+  `/api/v0/redoc`; all three documentation routes intentionally bypass API auth.
 - CI must run `golangci-lint run ./...` for Go changes.
 
 ## Consequences
@@ -85,7 +87,8 @@ This branch must prove:
   file
 - `AGENTS.md` and `CLAUDE.md` are identical
 - ownership-root README files exist
-- HTTP docs only advertise served OpenAPI routes
+- HTTP docs only advertise served OpenAPI routes and mark documentation routes
+  public
 - `.github/workflows/test.yml` runs `golangci-lint run ./...`
 - `golangci-lint run ./...` passes locally
 - the MkDocs build passes in strict mode
@@ -96,4 +99,5 @@ This branch must prove:
 - No move from `deploy/` to `infra/`, `k8s/`, or `deployment/`; `deploy/`
   remains the best name because it contains Helm, manifests, Argo CD examples,
   Grafana dashboards, and observability assets.
-- No checked-in Swagger UI or ReDoc endpoint until the Go server registers one.
+- No vendored Swagger UI or ReDoc asset bundle; the lightweight browser pages
+  load their UI libraries from a CDN.

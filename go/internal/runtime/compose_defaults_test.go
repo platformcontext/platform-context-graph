@@ -206,9 +206,9 @@ func TestHTTPDocsMatchServedOpenAPISurface(t *testing.T) {
 	if !strings.Contains(httpDocs, "/api/v0/openapi.json") {
 		t.Fatal("HTTP API docs must document the served OpenAPI JSON endpoint")
 	}
-	for _, unsupportedRoute := range []string{"/api/v0/docs", "/api/v0/redoc"} {
-		if strings.Contains(httpDocs, unsupportedRoute) {
-			t.Fatalf("HTTP API docs advertise unsupported route %s", unsupportedRoute)
+	for _, supportedRoute := range []string{"/api/v0/docs", "/api/v0/redoc"} {
+		if !strings.Contains(httpDocs, supportedRoute) {
+			t.Fatalf("HTTP API docs missing served documentation route %s", supportedRoute)
 		}
 	}
 }

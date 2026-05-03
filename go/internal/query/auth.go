@@ -14,7 +14,9 @@ var publicHTTPPaths = map[string]bool{
 	"/metrics":             true,
 	"/admin/status":        true,
 	"/api/v0/health":       true,
+	"/api/v0/docs":         true,
 	"/api/v0/openapi.json": true,
+	"/api/v0/redoc":        true,
 }
 
 // AuthMiddleware wraps an HTTP handler with bearer token authentication.
