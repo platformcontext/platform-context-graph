@@ -157,6 +157,50 @@ func TestSearchInfraResourcesFiltersTerraformClassification(t *testing.T) {
 	}
 }
 
+func TestSearchInfraResourcesMatchesResourceTypeAsFreeText(t *testing.T) {
+	t.Parallel()
+
+	reader := &recordingInfraGraphReader{
+		runRows: []map[string]any{
+			{
+				"id":            "cloudformation:sample-function",
+				"name":          "SampleFunction",
+				"labels":        []any{"CloudFormationResource"},
+				"resource_type": "AWS::Serverless::Function",
+			},
+		},
+	}
+	handler := &InfraHandler{Neo4j: reader}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/infra/resources/search",
+		bytes.NewBufferString(`{"query":"AWS::Serverless::Function","category":"terraform","limit":5}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	if !strings.Contains(reader.lastCypher, "coalesce(n.resource_type, n.data_type, '') = $resource_type_query") {
+		t.Fatalf("cypher = %q, want exact resource type identifier predicate", reader.lastCypher)
+	}
+	if strings.Contains(reader.lastCypher, "n.name CONTAINS $query") {
+		t.Fatalf("cypher = %q, want exact resource type query outside generic free-text predicate", reader.lastCypher)
+	}
+	if got := reader.lastParams["query"]; got != "AWS::Serverless::Function" {
+		t.Fatalf("params[query] = %#v, want resource type query", got)
+	}
+	if got := reader.lastParams["resource_type_query"]; got != "AWS::Serverless::Function" {
+		t.Fatalf("params[resource_type_query] = %#v, want resource type query", got)
+	}
+}
+
 func TestSearchInfraResourcesRejectsUnknownCategory(t *testing.T) {
 	t.Parallel()
 

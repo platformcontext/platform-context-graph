@@ -138,15 +138,24 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 
 	cypher := `
 		MATCH (n)
-		WHERE ` + infraLabelPredicate(labels) + `
+		WHERE ` + infraLabelPredicate(labels)
+	if strings.Contains(req.Query, "::") {
+		cypher += `
+		  AND coalesce(n.resource_type, n.data_type, '') = $resource_type_query
+	`
+	} else {
+		cypher += `
 		  AND (
 		       n.name CONTAINS $query
 		       OR n.id CONTAINS $query
 		       OR coalesce(n.kind, '') CONTAINS $query
+		       OR coalesce(n.resource_type, n.data_type, '') = $resource_type_query
+		       OR coalesce(n.resource_type, n.data_type, '') CONTAINS $resource_type_query
 		       OR coalesce(n.source, '') CONTAINS $query
 		       OR coalesce(n.config_path, '') CONTAINS $query
 		)
 	`
+	}
 
 	if kind != "" {
 		cypher += " AND (n.kind = $kind OR coalesce(n.resource_type, n.data_type, '') = $kind)"
@@ -173,8 +182,9 @@ func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
 	`
 
 	params := map[string]any{
-		"query": req.Query,
-		"limit": req.Limit,
+		"query":               req.Query,
+		"resource_type_query": req.Query,
+		"limit":               req.Limit,
 	}
 	if kind != "" {
 		params["kind"] = kind

@@ -671,6 +671,11 @@ These routes are for tracing shared infrastructure, blast radius, dependency exp
 resource and data-source nodes preserve provider classification in both graph
 and content-backed responses, so callers can narrow a search to families such
 as `provider=aws`, `resource_service=s3`, or `resource_category=storage`.
+Free-text `query` also checks typed resource identifiers such as Terraform
+resource types and CloudFormation/SAM `resource_type` values. CloudFormation
+type identifiers such as `AWS::Serverless::Function` use an exact
+resource-type predicate so graph backends do not have to scan broad text fields
+to answer a typed resource lookup.
 
 Example infrastructure search:
 
