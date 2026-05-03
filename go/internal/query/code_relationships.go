@@ -362,7 +362,7 @@ func buildTransitiveRelationshipRowsCypher(
 			cypher.WriteString("\t\tWHERE ")
 			cypher.WriteString(graphEntityIDPredicate("e", "$entity_id"))
 			cypher.WriteString("\n\t\tMATCH path = (e)<-[:CALLS*1..")
-			cypher.WriteString(fmt.Sprintf("%d", maxDepth))
+			fmt.Fprint(&cypher, maxDepth)
 			cypher.WriteString("]-(source)\n")
 			cypher.WriteString("\t\tRETURN source.name as source_name,\n")
 			cypher.WriteString("\t\t       coalesce(source.id, source.uid) as source_id,\n")
@@ -374,7 +374,7 @@ func buildTransitiveRelationshipRowsCypher(
 		cypher.WriteString("\t\tWHERE ")
 		cypher.WriteString(graphEntityIDPredicate("e", "$entity_id"))
 		cypher.WriteString("\n\t\tMATCH path = (e)-[:CALLS*1..")
-		cypher.WriteString(fmt.Sprintf("%d", maxDepth))
+		fmt.Fprint(&cypher, maxDepth)
 		cypher.WriteString("]->(target)\n")
 		cypher.WriteString("\t\tRETURN target.name as target_name,\n")
 		cypher.WriteString("\t\t       coalesce(target.id, target.uid) as target_id,\n")
@@ -388,7 +388,7 @@ func buildTransitiveRelationshipRowsCypher(
 	cypher.WriteString("\n")
 	if direction == "incoming" {
 		cypher.WriteString("\t\tMATCH path = (e)<-[:CALLS*1..")
-		cypher.WriteString(fmt.Sprintf("%d", maxDepth))
+		fmt.Fprint(&cypher, maxDepth)
 		cypher.WriteString("]-(source)\n")
 		cypher.WriteString("\t\tRETURN source.name as source_name,\n")
 		cypher.WriteString("\t\t       coalesce(source.id, source.uid) as source_id,\n")
@@ -397,7 +397,7 @@ func buildTransitiveRelationshipRowsCypher(
 	}
 
 	cypher.WriteString("\t\tMATCH path = (e)-[:CALLS*1..")
-	cypher.WriteString(fmt.Sprintf("%d", maxDepth))
+	fmt.Fprint(&cypher, maxDepth)
 	cypher.WriteString("]->(target)\n")
 	cypher.WriteString("\t\tRETURN target.name as target_name,\n")
 	cypher.WriteString("\t\t       coalesce(target.id, target.uid) as target_id,\n")

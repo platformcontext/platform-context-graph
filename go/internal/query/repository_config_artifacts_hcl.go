@@ -392,13 +392,6 @@ func exactQuotedString(value string) string {
 	return trimmed[1 : len(trimmed)-1]
 }
 
-func normalizeLocalConfigAssetPath(match []string) string {
-	if len(match) < 2 {
-		return ""
-	}
-	return normalizeLocalConfigAssetPathValue(match[1], nil)
-}
-
 func normalizeLocalConfigAssetPathValue(value string, localAssignments map[string]string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {

@@ -83,6 +83,7 @@ until the report proves the input shape is already correct.
 | Recovery, replay, or repair controls | `cd go && go test ./internal/recovery ./internal/runtime ./internal/status -count=1` |
 | Facts-first telemetry or queue scaling | `cd go && go test ./internal/telemetry ./internal/runtime ./internal/projector ./internal/reducer -count=1` |
 | Admin replay flow | `cd go && go test ./internal/query ./internal/recovery ./internal/runtime -count=1` |
+| Go source, comments, package contracts, or generated docs | `cd go && golangci-lint run ./...` |
 | Repo hygiene gates | `git diff --check` |
 
 ## Go Runtime Package Gate
@@ -101,15 +102,11 @@ go test ./internal/parser ./internal/collector/discovery ./internal/content/shap
 ## Local-Authoritative Gates
 
 Before a local-authoritative run that executes local PCG binaries, rebuild the
-owner and child binaries and put `go/bin` on `PATH`.
+owner and child binaries and put the install directory on `PATH`.
 
 ```bash
-cd go
-go build -o ./bin/pcg ./cmd/pcg
-go build -o ./bin/pcg-api ./cmd/api
-go build -o ./bin/pcg-ingester ./cmd/ingester
-go build -o ./bin/pcg-reducer ./cmd/reducer
-export PATH="$PWD/bin:$PATH"
+./scripts/install-local-binaries.sh
+export PATH="$(go env GOPATH)/bin:$PATH"
 ```
 
 Use these focused gates when touching local-host startup, graph-backed query

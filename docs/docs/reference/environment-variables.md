@@ -195,12 +195,12 @@ advisory report.
 
 | Variable | Default | Read By | Purpose | Tune When |
 | --- | --- | --- | --- | --- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | telemetry bootstrap | Enables OTLP traces and metrics. | Set in deployments or compose when exporting to collector/Jaeger. |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | deployment/compose set | OTEL SDK | OTLP transport protocol, normally `grpc` in compose. | Set with the collector endpoint; do not use as a PCG performance knob. |
-| `OTEL_EXPORTER_OTLP_INSECURE` | deployment/compose set | OTEL SDK | Allows insecure OTLP transport for local compose. | Local/dev collector setups only. |
-| `OTEL_TRACES_EXPORTER` | deployment/compose set | OTEL SDK | Selects trace exporter, normally `otlp`. | Deployment telemetry wiring only. |
-| `OTEL_METRICS_EXPORTER` | deployment/compose set | OTEL SDK | Selects metrics exporter, normally `otlp`. | Deployment telemetry wiring only. |
-| `OTEL_LOGS_EXPORTER` | `none` in compose | OTEL SDK | Disables OTEL log export while PCG emits JSON stderr logs. | Leave as `none` unless the logging pipeline explicitly supports OTEL logs. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | telemetry bootstrap | Enables OTLP traces and metrics. | Set in deployments or the Compose telemetry overlay when exporting to collector/Jaeger. |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | deployment/overlay set | OTEL SDK | OTLP transport protocol, normally `grpc` in the local telemetry overlay. | Set with the collector endpoint; do not use as a PCG performance knob. |
+| `OTEL_EXPORTER_OTLP_INSECURE` | deployment/overlay set | OTEL SDK | Allows insecure OTLP transport for local Compose telemetry. | Local/dev collector setups only. |
+| `OTEL_TRACES_EXPORTER` | deployment/overlay set | OTEL SDK | Selects trace exporter, normally `otlp`. | Deployment telemetry wiring only. |
+| `OTEL_METRICS_EXPORTER` | deployment/overlay set | OTEL SDK | Selects metrics exporter, normally `otlp`. | Deployment telemetry wiring only. |
+| `OTEL_LOGS_EXPORTER` | `none` in telemetry overlay | OTEL SDK | Disables OTEL log export while PCG emits JSON stderr logs. | Leave as `none` unless the logging pipeline explicitly supports OTEL logs. |
 | `OTEL_SERVICE_NAME` | binary/service name | OTEL SDK | Overrides service name resource attribute. | Usually set by Helm/deployment templates, not manually. |
 | `GOMEMLIMIT` | Go runtime default or cgroup-derived 70% when configured by PCG | Go runtime | Soft heap target. | Set when cgroup detection is unavailable or container memory needs a deliberate heap budget. |
 | `GODEBUG` | unset | Go runtime / PCG memlimit setup | Go runtime debug flags; PCG may preserve/add memory-limit related settings. | Use only for Go runtime diagnostics. |

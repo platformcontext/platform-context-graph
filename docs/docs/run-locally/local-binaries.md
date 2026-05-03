@@ -7,23 +7,36 @@ This mode starts embedded Postgres, a managed NornicDB sidecar, the ingester,
 and the reducer. It does not start the full HTTP API unless you run that
 separately.
 
-## Build the binaries
+## Install the CLI
 
-From the repository root:
+For the user-facing CLI, use modern Go install syntax:
 
 ```bash
-cd go
-go build -o ./bin/pcg ./cmd/pcg
-go build -o ./bin/pcg-api ./cmd/api
-go build -o ./bin/pcg-mcp-server ./cmd/mcp-server
-go build -o ./bin/pcg-bootstrap-index ./cmd/bootstrap-index
-go build -o ./bin/pcg-ingester ./cmd/ingester
-go build -o ./bin/pcg-reducer ./cmd/reducer
-export PATH="$PWD/bin:$PATH"
+go install github.com/platformcontext/platform-context-graph/go/cmd/pcg@latest
 ```
 
-`pcg graph start` discovers `pcg-ingester` and `pcg-reducer` through `PATH`, so
-keep `go/bin` on `PATH` for the shell where you start PCG.
+Use a pinned version instead of `latest` when you need repeatable installs.
+Make sure `$(go env GOPATH)/bin` or `GOBIN` is on `PATH`.
+
+## Install the full local binary set
+
+`go install` names binaries after the command directory, so `./cmd/api` becomes
+`api`, not `pcg-api`. Local owner mode expects the PCG-prefixed runtime names on
+`PATH`, so use the repo installer when you are developing PCG or running
+`pcg graph start` from a checkout:
+
+```bash
+./scripts/install-local-binaries.sh
+```
+
+By default the script installs to `GOBIN`, or to `$(go env GOPATH)/bin` when
+`GOBIN` is unset. It installs `pcg`, `pcg-api`, `pcg-mcp-server`,
+`pcg-bootstrap-index`, `pcg-ingester`, `pcg-reducer`, and the supporting
+runtime helpers.
+
+`pcg graph start` discovers `pcg-ingester`, `pcg-reducer`, and
+`pcg-mcp-server` through `PATH`, so keep that install directory on `PATH` for
+the shell where you start PCG.
 
 ## Install NornicDB
 

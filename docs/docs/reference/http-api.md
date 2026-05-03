@@ -6,9 +6,10 @@ The HTTP API is versioned under `/api/v0` and shares the same query model as CLI
 
 The live OpenAPI spec is always canonical. If this page and the spec disagree, the spec wins.
 
-- `GET /api/v0/openapi.json` — machine-readable schema
-- `GET /api/v0/docs` — Swagger UI
-- `GET /api/v0/redoc` — ReDoc
+- `GET /api/v0/openapi.json` - machine-readable schema
+
+PCG does not currently serve a bundled Swagger UI or ReDoc page. Point your
+OpenAPI viewer at `/api/v0/openapi.json`.
 
 For the mounted Go runtime admin surface, the checked-in OpenAPI contract lives
 in `docs/openapi/runtime-admin-v1.yaml`. That contract is separate from the

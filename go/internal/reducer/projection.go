@@ -10,7 +10,8 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
-// Evidence source constant for workload finalization.
+// EvidenceSourceWorkloads identifies workload finalization evidence emitted by
+// reducer-owned projection.
 const EvidenceSourceWorkloads = "finalization/workloads"
 
 var environmentPathPatterns = []*regexp.Regexp{

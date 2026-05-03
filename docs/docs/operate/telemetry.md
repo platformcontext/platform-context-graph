@@ -20,9 +20,10 @@ PCG exposes four operator views:
 Go data-plane metrics use the `pcg_dp_` prefix. Runtime status gauges use the
 `pcg_runtime_` prefix.
 
-Docker Compose starts an OpenTelemetry collector and Jaeger at
-`http://localhost:16686`. Prometheus-format metrics are exposed by the runtime
-ports listed in [Health Checks](health-checks.md).
+Docker Compose exposes Prometheus-format metrics on the runtime ports listed in
+[Health Checks](health-checks.md). Add `docker-compose.telemetry.yml` when you
+want a local OpenTelemetry collector and Jaeger at `http://localhost:16686` for
+developer or DevOps testing.
 
 ## Reference
 

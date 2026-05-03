@@ -517,7 +517,6 @@ func TestHandleCallChainUsesNornicDBBFSForNameAnchors(t *testing.T) {
 				default:
 					return []map[string]any{}, nil
 				}
-				return nil, nil
 			},
 		},
 	}
@@ -647,7 +646,6 @@ func TestHandleCallChainSupportsEntityIDAndRepoScopedLookupForNornicDB(t *testin
 				default:
 					return []map[string]any{}, nil
 				}
-				return nil, nil
 			},
 		},
 	}

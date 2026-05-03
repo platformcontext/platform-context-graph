@@ -260,7 +260,6 @@ func TestFetchWorkloadContextPrefersInstanceRunsOnTruthOverProvisionedPlatformSh
 				default:
 					return nil, nil
 				}
-				return nil, nil
 			},
 		},
 	}

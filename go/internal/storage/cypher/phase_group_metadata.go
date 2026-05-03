@@ -22,14 +22,16 @@ const (
 	// backend diagnostics and is stripped before Cypher execution.
 	StatementMetadataGenerationIDKey = "_pcg_generation_id"
 
-	// Canonical phase names form the narrow protocol between graph statement
-	// builders and backend executors. Add a new phase only when repo-scale
-	// evidence proves it needs different grouping, batching, or diagnostics
-	// from the existing phases.
-	CanonicalPhaseEntities          = "entities"
+	// CanonicalPhaseEntities identifies the canonical entity-node write phase.
+	CanonicalPhaseEntities = "entities"
+	// CanonicalPhaseEntityContainment identifies file-to-entity containment
+	// writes that may need backend-specific grouping limits.
 	CanonicalPhaseEntityContainment = "entity_containment"
-	CanonicalPhaseFiles             = "files"
-	PhaseGroupModeExecuteOnly       = "execute_only"
+	// CanonicalPhaseFiles identifies canonical file-node writes.
+	CanonicalPhaseFiles = "files"
+	// PhaseGroupModeExecuteOnly tells executors to run a statement outside the
+	// default grouped-write path while preserving phase ordering.
+	PhaseGroupModeExecuteOnly = "execute_only"
 	// PhaseGroupModeGroupedSingleton keeps singleton Cypher shape while allowing
 	// the backend executor to batch the statement with same-label entity writes.
 	PhaseGroupModeGroupedSingleton = "grouped_singleton"

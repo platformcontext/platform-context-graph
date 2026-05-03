@@ -470,11 +470,6 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 	repoID = StringVal(row, "id")
 
 	repo := RepoRefFromRow(row)
-	fileCount := IntVal(row, "file_count")
-	languages := StringSliceVal(row, "languages")
-	workloadNames := StringSliceVal(row, "workload_names")
-	platformTypes := StringSliceVal(row, "platform_types")
-	dependencyCount := IntVal(row, "dependency_count")
 	contentCoverage := loadRepositoryContentCoverage(r.Context(), h.Content, repoID)
 	readModelSummary := loadRepositoryReadModelSummary(r.Context(), h.Content, repoID)
 	timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "graph_summary")
@@ -485,11 +480,11 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 		slog.Int("platform_count", len(storySummary.platformTypes)),
 		slog.Int("dependency_count", storySummary.dependencyCount),
 	)
-	fileCount = storySummary.fileCount
-	languages = storySummary.languages
-	workloadNames = storySummary.workloadNames
-	platformTypes = storySummary.platformTypes
-	dependencyCount = storySummary.dependencyCount
+	fileCount := storySummary.fileCount
+	languages := storySummary.languages
+	workloadNames := storySummary.workloadNames
+	platformTypes := storySummary.platformTypes
+	dependencyCount := storySummary.dependencyCount
 	timer = startRepositoryQueryStage(r.Context(), h.Logger, "repository_story", repoID, "semantic_overview")
 	semanticOverview, err := loadRepositorySemanticOverview(r.Context(), h.Content, repoID)
 	timer.Done(r.Context(), slog.Bool("error", err != nil))

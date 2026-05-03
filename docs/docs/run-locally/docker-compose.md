@@ -2,7 +2,7 @@
 
 Use Docker Compose when you want the full PCG service stack on your laptop.
 This is the easiest local path for trying API, MCP, ingestion, reduction,
-telemetry, Postgres, and the graph backend together.
+Postgres, and the graph backend together.
 
 ## Start the default stack
 
@@ -24,8 +24,6 @@ It starts:
 - ingester
 - reducer
 - bootstrap indexer
-- OpenTelemetry collector
-- Jaeger
 
 ## Start the Neo4j stack
 
@@ -37,6 +35,28 @@ docker compose -f docker-compose.neo4j.yml up --build
 
 Use this when you need to validate Neo4j behavior or migrate an existing Neo4j
 deployment path.
+
+## Add local telemetry
+
+Jaeger and the OpenTelemetry collector are not part of the default Compose
+files. Use the telemetry overlay when you want a local collector and trace UI
+for developer or DevOps testing:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.telemetry.yml up --build
+```
+
+For Neo4j with the same local telemetry stack:
+
+```bash
+docker compose -f docker-compose.neo4j.yml -f docker-compose.telemetry.yml up --build
+```
+
+The overlay adds:
+
+- OpenTelemetry collector
+- Jaeger
+- OTLP trace and metric export settings for the PCG runtimes
 
 ## Point local CLI commands at Compose
 
@@ -69,8 +89,10 @@ database `neo4j` instead of `nornic`.
 
 - API: `http://localhost:8080`
 - MCP server: `http://localhost:8081`
-- Jaeger: `http://localhost:16686`
 - Postgres: `localhost:15432`
 - Graph Bolt endpoint: `localhost:7687`
+
+When the telemetry overlay is enabled, Jaeger is available at
+`http://localhost:16686`.
 
 See [Connect MCP locally](mcp-local.md) for MCP client setup.

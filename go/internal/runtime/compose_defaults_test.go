@@ -16,6 +16,7 @@ type composeDocument struct {
 
 type composeService struct {
 	Image       string         `yaml:"image"`
+	DependsOn   any            `yaml:"depends_on"`
 	Environment map[string]any `yaml:"environment"`
 }
 
@@ -57,6 +58,55 @@ func TestNeo4jComposeUsesNeo4jBackend(t *testing.T) {
 	}
 }
 
+func TestDefaultComposeFilesDoNotStartTelemetry(t *testing.T) {
+	t.Parallel()
+
+	for _, fileName := range []string{"docker-compose.yaml", "docker-compose.neo4j.yml"} {
+		doc := readComposeDocument(t, fileName)
+		if _, ok := doc.Services["jaeger"]; ok {
+			t.Fatalf("%s includes jaeger; telemetry must stay in docker-compose.telemetry.yml", fileName)
+		}
+		if _, ok := doc.Services["otel-collector"]; ok {
+			t.Fatalf("%s includes otel-collector; telemetry must stay in docker-compose.telemetry.yml", fileName)
+		}
+
+		for _, serviceName := range graphRuntimeServices() {
+			service := requireComposeService(t, doc, serviceName)
+			assertComposeEnvMissing(t, service, "OTEL_EXPORTER_OTLP_ENDPOINT")
+			assertComposeEnvMissing(t, service, "OTEL_TRACES_EXPORTER")
+			assertComposeDependencyMissing(t, service, "otel-collector")
+			assertComposeDependencyMissing(t, service, "jaeger")
+		}
+	}
+}
+
+func TestTelemetryComposeOverlayDefinesTelemetryStack(t *testing.T) {
+	t.Parallel()
+
+	doc := readComposeDocument(t, "docker-compose.telemetry.yml")
+	if _, ok := doc.Services["jaeger"]; !ok {
+		t.Fatal("docker-compose.telemetry.yml missing jaeger service")
+	}
+	if _, ok := doc.Services["otel-collector"]; !ok {
+		t.Fatal("docker-compose.telemetry.yml missing otel-collector service")
+	}
+
+	for _, serviceName := range []string{
+		"bootstrap-index",
+		"platform-context-graph",
+		"mcp-server",
+		"ingester",
+		"workflow-coordinator",
+		"resolution-engine",
+	} {
+		service := requireComposeService(t, doc, serviceName)
+		assertComposeEnv(t, service, "OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317")
+		assertComposeEnv(t, service, "OTEL_TRACES_EXPORTER", "otlp")
+		assertComposeDependency(t, service, "otel-collector")
+		assertComposeDependency(t, service, "jaeger")
+	}
+}
+
 func TestRepositoryAutomationUsesCurrentComposeFiles(t *testing.T) {
 	t.Parallel()
 
@@ -82,6 +132,83 @@ func TestRepositoryAutomationUsesCurrentComposeFiles(t *testing.T) {
 		isSharedHelper := strings.HasPrefix(relativePath, filepath.Join("scripts", "lib")+string(os.PathSeparator))
 		if usesNeo4jService && !isSharedHelper && !strings.Contains(content, "docker-compose.neo4j.yml") {
 			t.Fatalf("%s targets the neo4j Compose service without docker-compose.neo4j.yml", relativePath)
+		}
+		isExecutableAutomation := filepath.Ext(relativePath) != ".md"
+		if isExecutableAutomation &&
+			strings.Contains(content, "docker-compose.telemetry.yml") &&
+			!strings.Contains(content, "docker-compose.yaml") &&
+			!strings.Contains(content, "docker-compose.neo4j.yml") {
+			t.Fatalf("%s uses the telemetry overlay without an explicit base compose file", relativePath)
+		}
+	}
+}
+
+func TestRepositoryDocumentationStandardsAreEnforced(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.Join("..", "..", "..")
+	for _, relativePath := range []string{
+		"README.md",
+		"deploy/README.md",
+		"docs/openapi/README.md",
+		"go/README.md",
+		"go/cmd/README.md",
+		"go/internal/README.md",
+		"go/internal/collector/README.md",
+		"go/internal/facts/README.md",
+		"go/internal/mcp/README.md",
+		"go/internal/parser/README.md",
+		"go/internal/projector/README.md",
+		"go/internal/query/README.md",
+		"go/internal/reducer/README.md",
+		"go/internal/relationships/README.md",
+		"go/internal/runtime/README.md",
+		"go/internal/status/README.md",
+		"go/internal/storage/README.md",
+		"go/internal/storage/cypher/README.md",
+		"go/internal/storage/neo4j/README.md",
+		"go/internal/storage/postgres/README.md",
+		"go/internal/telemetry/README.md",
+		"scripts/README.md",
+	} {
+		if _, err := os.Stat(filepath.Join(root, relativePath)); err != nil {
+			t.Fatalf("documentation ownership root %s missing: %v", relativePath, err)
+		}
+	}
+
+	agents := readRepositoryFile(t, root, "AGENTS.md")
+	claude := readRepositoryFile(t, root, "CLAUDE.md")
+	if agents != claude {
+		t.Fatal("AGENTS.md and CLAUDE.md diverged; agent standards must stay in lockstep")
+	}
+	for _, required := range []string{
+		"golangci-lint run ./...",
+		"Document every new or touched exported Go type",
+		"Keep OpenAPI changes in lockstep",
+		"Keep README coverage at ownership roots",
+	} {
+		if !strings.Contains(agents, required) {
+			t.Fatalf("agent standards missing %q", required)
+		}
+	}
+
+	workflow := readRepositoryFile(t, root, ".github/workflows/test.yml")
+	if !strings.Contains(workflow, "golangci-lint run ./...") {
+		t.Fatal(".github/workflows/test.yml must run golangci-lint")
+	}
+}
+
+func TestHTTPDocsMatchServedOpenAPISurface(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.Join("..", "..", "..")
+	httpDocs := readRepositoryFile(t, root, "docs/docs/reference/http-api.md")
+	if !strings.Contains(httpDocs, "/api/v0/openapi.json") {
+		t.Fatal("HTTP API docs must document the served OpenAPI JSON endpoint")
+	}
+	for _, unsupportedRoute := range []string{"/api/v0/docs", "/api/v0/redoc"} {
+		if strings.Contains(httpDocs, unsupportedRoute) {
+			t.Fatalf("HTTP API docs advertise unsupported route %s", unsupportedRoute)
 		}
 	}
 }
@@ -130,6 +257,16 @@ func repositoryAutomationFiles(t *testing.T, root string) []string {
 	return paths
 }
 
+func readRepositoryFile(t *testing.T, root, relativePath string) string {
+	t.Helper()
+
+	raw, err := os.ReadFile(filepath.Join(root, relativePath))
+	if err != nil {
+		t.Fatalf("read %s: %v", relativePath, err)
+	}
+	return string(raw)
+}
+
 func readComposeDocument(t *testing.T, name string) composeDocument {
 	t.Helper()
 
@@ -165,4 +302,43 @@ func assertComposeEnv(t *testing.T, service composeService, key, want string) {
 	if got != want {
 		t.Fatalf("compose env %s = %#v, want %q", key, got, want)
 	}
+}
+
+func assertComposeEnvMissing(t *testing.T, service composeService, key string) {
+	t.Helper()
+
+	if _, ok := service.Environment[key]; ok {
+		t.Fatalf("compose env %s is set", key)
+	}
+}
+
+func assertComposeDependency(t *testing.T, service composeService, key string) {
+	t.Helper()
+
+	if !composeDependencyExists(service.DependsOn, key) {
+		t.Fatalf("compose dependency %s missing", key)
+	}
+}
+
+func assertComposeDependencyMissing(t *testing.T, service composeService, key string) {
+	t.Helper()
+
+	if composeDependencyExists(service.DependsOn, key) {
+		t.Fatalf("compose dependency %s is set", key)
+	}
+}
+
+func composeDependencyExists(dependsOn any, key string) bool {
+	switch dependencies := dependsOn.(type) {
+	case map[string]any:
+		_, ok := dependencies[key]
+		return ok
+	case []any:
+		for _, dependency := range dependencies {
+			if dependency == key {
+				return true
+			}
+		}
+	}
+	return false
 }

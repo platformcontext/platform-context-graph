@@ -415,8 +415,8 @@ func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitUsesBoundedDefaultSear
 
 	gotSearchTerms := make([]string, 0, len(recorder.args))
 	for i, query := range recorder.queries {
-		if !(strings.Contains(query, "content ILIKE '%' || $1 || '%'") ||
-			strings.Contains(query, "content LIKE '%' || $1 || '%'")) || len(recorder.args[i]) < 2 {
+		if (!strings.Contains(query, "content ILIKE '%' || $1 || '%'") &&
+			!strings.Contains(query, "content LIKE '%' || $1 || '%'")) || len(recorder.args[i]) < 2 {
 			continue
 		}
 		term, ok := recorder.args[i][0].(string)
@@ -694,8 +694,8 @@ func TestTraceDeploymentChainBoundsCrossRepoSearchByMaxDepth(t *testing.T) {
 	var searchLimit int64
 	foundAnyRepoSearch := false
 	for i, query := range recorder.queries {
-		if !(strings.Contains(query, "content ILIKE '%' || $1 || '%'") ||
-			strings.Contains(query, "content LIKE '%' || $1 || '%'")) {
+		if !strings.Contains(query, "content ILIKE '%' || $1 || '%'") &&
+			!strings.Contains(query, "content LIKE '%' || $1 || '%'") {
 			continue
 		}
 		if strings.Contains(query, "repo_id = $1") {

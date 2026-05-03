@@ -18,25 +18,6 @@ services:
       timeout: 5s
       retries: 10
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.76.0
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    ports:
-      - "${JAEGER_UI_PORT:-16686}:16686"
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.143.0
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
-    volumes:
-      - ./deploy/observability/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
-    ports:
-      - "${OTEL_COLLECTOR_OTLP_GRPC_PORT:-4317}:4317"
-      - "${OTEL_COLLECTOR_OTLP_HTTP_PORT:-4318}:4318"
-      - "${OTEL_COLLECTOR_PROMETHEUS_PORT:-9464}:9464"
-    depends_on:
-      - jaeger
-
   postgres:
     image: postgres:18-alpine
     ports:
@@ -145,12 +126,6 @@ services:
       PCG_GIT_AUTH_METHOD: none
       PCG_REPOSITORY_RULES_JSON: ${PCG_REPOSITORY_RULES_JSON:-[]}
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-      OTEL_EXPORTER_OTLP_INSECURE: "true"
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
-      OTEL_LOGS_EXPORTER: none
       PCG_PROJECTION_WORKERS: ${PCG_PROJECTION_WORKERS:-}
       PCG_SNAPSHOT_WORKERS: ${PCG_SNAPSHOT_WORKERS:-}
       PCG_PARSE_WORKERS: ${PCG_PARSE_WORKERS:-}
@@ -172,10 +147,6 @@ services:
         condition: service_completed_successfully
       workspace-setup:
         condition: service_completed_successfully
-      otel-collector:
-        condition: service_started
-      jaeger:
-        condition: service_started
 
   platform-context-graph:
     build:
@@ -203,12 +174,6 @@ services:
       PCG_API_KEY: ${PCG_API_KEY:-}
       PCG_AUTO_GENERATE_API_KEY: "true"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-      OTEL_EXPORTER_OTLP_INSECURE: "true"
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
-      OTEL_LOGS_EXPORTER: none
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
@@ -224,10 +189,6 @@ services:
         condition: service_completed_successfully
       workspace-setup:
         condition: service_completed_successfully
-      otel-collector:
-        condition: service_started
-      jaeger:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 15s
@@ -262,12 +223,6 @@ services:
       PCG_API_KEY: ${PCG_API_KEY:-}
       PCG_AUTO_GENERATE_API_KEY: "true"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-      OTEL_EXPORTER_OTLP_INSECURE: "true"
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
-      OTEL_LOGS_EXPORTER: none
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
@@ -283,10 +238,6 @@ services:
         condition: service_completed_successfully
       workspace-setup:
         condition: service_completed_successfully
-      otel-collector:
-        condition: service_started
-      jaeger:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
       interval: 15s
@@ -320,12 +271,6 @@ services:
       PCG_GIT_AUTH_METHOD: none
       PCG_REPOSITORY_RULES_JSON: ${PCG_REPOSITORY_RULES_JSON:-[]}
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-      OTEL_EXPORTER_OTLP_INSECURE: "true"
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
-      OTEL_LOGS_EXPORTER: none
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
       PCG_SNAPSHOT_WORKERS: ${PCG_SNAPSHOT_WORKERS:-}
@@ -349,10 +294,6 @@ services:
         condition: service_completed_successfully
       workspace-setup:
         condition: service_completed_successfully
-      otel-collector:
-        condition: service_started
-      jaeger:
-        condition: service_started
 
   workflow-coordinator:
     profiles:
@@ -375,12 +316,6 @@ services:
       PCG_HOME: /tmp/.platform-context-graph
       HOME: /tmp
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-      OTEL_EXPORTER_OTLP_INSECURE: "true"
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
-      OTEL_LOGS_EXPORTER: none
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
       PCG_COLLECTOR_INSTANCES_JSON: '${PCG_COLLECTOR_INSTANCES_JSON:-[{"instance_id":"collector-git-default","collector_kind":"git","mode":"continuous","enabled":true,"bootstrap":true,"configuration":{"source":"local-compose"}}]}'
@@ -389,10 +324,6 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
-      otel-collector:
-        condition: service_started
-      jaeger:
-        condition: service_started
 
   # Production (8+ vCPU): PCG_REDUCER_WORKERS=8, PCG_SHARED_PROJECTION_WORKERS=4,
   # PCG_SHARED_PROJECTION_PARTITION_COUNT=8, PCG_REDUCER_BATCH_CLAIM_SIZE=64
@@ -424,12 +355,6 @@ services:
       PCG_GIT_AUTH_METHOD: none
       PCG_REPOSITORY_RULES_JSON: ${PCG_REPOSITORY_RULES_JSON:-[]}
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-      OTEL_EXPORTER_OTLP_INSECURE: "true"
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
-      OTEL_LOGS_EXPORTER: none
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
       PCG_REDUCER_WORKERS: ${PCG_REDUCER_WORKERS:-4}
@@ -452,10 +377,6 @@ services:
         condition: service_completed_successfully
       workspace-setup:
         condition: service_completed_successfully
-      otel-collector:
-        condition: service_started
-      jaeger:
-        condition: service_started
 
 volumes:
   neo4j_data:

@@ -136,7 +136,7 @@ func buildCallChainCypher(req callChainRequest, backend GraphBackend) (string, m
 	}
 	cypher.WriteString("\n\t\tMATCH path = shortestPath(\n")
 	cypher.WriteString("\t\t\t(start)-[:CALLS*1..")
-	cypher.WriteString(fmt.Sprintf("%d", req.MaxDepth))
+	fmt.Fprint(&cypher, req.MaxDepth)
 	cypher.WriteString("]->(end)\n")
 	cypher.WriteString("\t\t)\n")
 	if backend == GraphBackendNornicDB {
@@ -191,7 +191,7 @@ func buildNornicDBCallChainCypher(req callChainRequest) (string, map[string]any)
 	}
 	cypher.WriteString("\n\t\tMATCH path = shortestPath(\n")
 	cypher.WriteString("\t\t\t(start)-[:CALLS*1..")
-	cypher.WriteString(fmt.Sprintf("%d", req.MaxDepth))
+	fmt.Fprint(&cypher, req.MaxDepth)
 	cypher.WriteString("]->(end)\n")
 	cypher.WriteString("\t\t)\n")
 	// NornicDB returns typed Bolt nodes for raw nodes(path); the handler

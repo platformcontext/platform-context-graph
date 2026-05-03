@@ -8,7 +8,9 @@ the NornicDB install command, and the `pcg graph start` workflow.
 
 Use [Docker Compose](../run-locally/docker-compose.md) when you want the full
 local service stack. Compose starts Postgres, the graph backend, API, MCP
-server, ingester, reducer, bootstrap indexer, OTEL collector, and Jaeger.
+server, ingester, reducer, and bootstrap indexer. Add the telemetry overlay
+when you want a local OTEL collector and Jaeger for developer or DevOps
+testing.
 
 NornicDB is the default graph backend. Neo4j remains the explicit supported
 compatibility path.

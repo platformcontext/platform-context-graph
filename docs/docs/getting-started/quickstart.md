@@ -9,7 +9,8 @@ binaries, installs NornicDB, and starts `pcg graph start`.
 If you want the full local service stack, use
 [Docker Compose](../run-locally/docker-compose.md). That path starts the API,
 MCP server, ingester, reducer, bootstrap indexer, Postgres, graph backend,
-OTEL collector, and Jaeger.
+and relational state. Add the telemetry overlay only when you want a local
+OTEL collector and Jaeger.
 
 For MCP client setup, use [Local MCP](../run-locally/mcp-local.md).
 

@@ -27,10 +27,13 @@ const (
 	defaultNeo4jVerifyTimeout                = 10 * time.Second
 )
 
+// GraphBackend names the graph database adapter selected for a PCG runtime.
 type GraphBackend string
 
 const (
-	GraphBackendNeo4j    GraphBackend = "neo4j"
+	// GraphBackendNeo4j selects the official Neo4j graph adapter.
+	GraphBackendNeo4j GraphBackend = "neo4j"
+	// GraphBackendNornicDB selects the official NornicDB graph adapter.
 	GraphBackendNornicDB GraphBackend = "nornicdb"
 )
 

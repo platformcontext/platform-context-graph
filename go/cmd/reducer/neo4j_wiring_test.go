@@ -113,7 +113,7 @@ func formatSemanticLabelSizes(labelSizes map[string]int) string {
 		}
 		builder.WriteString(label)
 		builder.WriteByte('=')
-		builder.WriteString(fmt.Sprint(labelSizes[label]))
+		fmt.Fprint(&builder, labelSizes[label])
 	}
 	return builder.String()
 }

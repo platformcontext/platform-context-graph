@@ -87,24 +87,30 @@ docker compose up --build
 ```
 
 The default Compose stack runs NornicDB, Postgres, API, MCP server, ingester,
-reducer, bootstrap indexer, OpenTelemetry collector, and Jaeger. To run the
-same stack with Neo4j:
+reducer, and bootstrap indexer. To run the same stack with Neo4j:
 
 ```bash
 docker compose -f docker-compose.neo4j.yml up --build
 ```
 
-For local binary development, build the CLI and runtime binaries:
+Telemetry is opt-in for local developer and DevOps testing. Add the telemetry
+overlay when you want an OpenTelemetry collector and Jaeger on your laptop:
 
 ```bash
-cd go
-go build -o ./bin/pcg ./cmd/pcg
-go build -o ./bin/pcg-api ./cmd/api
-go build -o ./bin/pcg-mcp-server ./cmd/mcp-server
-go build -o ./bin/pcg-bootstrap-index ./cmd/bootstrap-index
-go build -o ./bin/pcg-ingester ./cmd/ingester
-go build -o ./bin/pcg-reducer ./cmd/reducer
-export PATH="$PWD/bin:$PATH"
+docker compose -f docker-compose.yaml -f docker-compose.telemetry.yml up --build
+```
+
+For the CLI only, use Go's install command:
+
+```bash
+go install github.com/platformcontext/platform-context-graph/go/cmd/pcg@latest
+```
+
+For local owner development, install the full PCG-prefixed runtime binary set
+from a checkout:
+
+```bash
+./scripts/install-local-binaries.sh
 ```
 
 Then install the managed NornicDB sidecar and start a local workspace owner:

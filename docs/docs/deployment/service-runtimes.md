@@ -48,8 +48,11 @@ Current platform reality:
   `canonical_nodes_committed` is published by the projector,
   `semantic_nodes_committed` is published by semantic-entity materialization,
   and reducer-owned edge domains wait for that state before writing
-- the API, MCP, ingester, workflow-coordinator, reducer, local verification runtimes, and bootstrap
-  helpers emit structured JSON logs through the shared Go telemetry logger
+- the API, MCP, ingester, workflow-coordinator, reducer, local verification
+  runtimes, and bootstrap helpers emit structured JSON logs through the shared
+  Go telemetry logger
+- local Docker Compose does not start Jaeger or the OTEL collector by default;
+  add `docker-compose.telemetry.yml` when you want laptop trace export
 
 ## Runtime Contract
 
@@ -62,6 +65,13 @@ Current platform reality:
 | Workflow Coordinator | scheduling, trigger intake, claims, completeness, run orchestration | `/usr/local/bin/pcg-workflow-coordinator` | Postgres + graph backend | internal admin/status service plus `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `/usr/local/bin/pcg-reducer` | Postgres + graph backend | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + graph backend | OTEL export only; no mounted runtime `/metrics` endpoint | one-shot local helper |
+
+Local trace export is opt-in. For the NornicDB stack, run
+`docker compose -f docker-compose.yaml -f docker-compose.telemetry.yml up
+--build`. For the Neo4j stack, replace the base file with
+`docker-compose.neo4j.yml`. Kubernetes deployments should wire telemetry
+through the chart and cluster observability stack rather than the local Compose
+overlay.
 
 ## Health, Status, And Completeness
 

@@ -148,36 +148,6 @@ func collectServiceDeploymentToolFamilies(overview map[string]any) []string {
 	return sorted
 }
 
-func mergeTraceRepositoryDeliveryPaths(
-	paths []map[string]any,
-	deploymentEvidence map[string]any,
-) []map[string]any {
-	if len(deploymentEvidence) == 0 {
-		return paths
-	}
-
-	seen := make(map[string]struct{}, len(paths))
-	merged := make([]map[string]any, 0, len(paths)+len(mapSliceValue(deploymentEvidence, "delivery_paths")))
-	for _, row := range paths {
-		key := deploymentTraceDeliveryPathKey(row)
-		seen[key] = struct{}{}
-		merged = append(merged, row)
-	}
-	for _, row := range mapSliceValue(deploymentEvidence, "delivery_paths") {
-		entry := cloneAnyMap(row)
-		if StringVal(entry, "type") == "" {
-			entry["type"] = "repository_delivery_artifact"
-		}
-		key := deploymentTraceDeliveryPathKey(entry)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		merged = append(merged, entry)
-	}
-	return merged
-}
-
 func cloneAnyMap(src map[string]any) map[string]any {
 	if len(src) == 0 {
 		return map[string]any{}
@@ -187,14 +157,4 @@ func cloneAnyMap(src map[string]any) map[string]any {
 		dst[key] = value
 	}
 	return dst
-}
-
-func deploymentTraceDeliveryPathKey(row map[string]any) string {
-	return strings.Join([]string{
-		StringVal(row, "type"),
-		StringVal(row, "kind"),
-		StringVal(row, "path"),
-		StringVal(row, "relative_path"),
-		StringVal(row, "target"),
-	}, "|")
 }
