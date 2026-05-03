@@ -1,20 +1,37 @@
 # ADR: Bootstrap Relationship Backfill Quadratic Cost
 
-**Status:** Accepted with follow-up
+**Status:** Implemented with follow-up
 **Date:** 2026-04-18
 **Related:** `2026-04-17-semantic-entity-materialization-bottleneck.md`
 
 ## Status Review (2026-05-03)
 
-**Current disposition:** Implemented.
+**Current disposition:** Implemented; ADR workstream closed.
 
-The deferred bootstrap backfill design is implemented. `SkipRelationshipBackfill`
-suppresses per-commit bootstrap backfill, bootstrap and ingester wiring run
-`BackfillAllRelationshipEvidence` and `ReopenDeploymentMappingWorkItems`, and
-Postgres tests cover generation-scoped persistence and readiness publishing.
+The deferred relationship-backfill design is in the current runtime.
+`SkipRelationshipBackfill` suppresses per-commit bootstrap and ingester
+backfill, bootstrap and ingester wiring run one deferred
+`BackfillAllRelationshipEvidence` pass plus
+`ReopenDeploymentMappingWorkItems`, and the implementation publishes
+`backward_evidence_committed` readiness through
+`graph_projection_phase_state`.
 
-**Remaining work:** track automatic replay for the documented reopen straggler
-window if it resurfaces. The quadratic backfill fix itself is done.
+Read-only validation on 2026-05-03 found the current code and tests at the
+expected ownership points:
+
+- `go/internal/storage/postgres/ingestion.go` owns
+  `SkipRelationshipBackfill`, `BackfillAllRelationshipEvidence`, readiness
+  publication, and `ReopenDeploymentMappingWorkItems`.
+- `go/cmd/bootstrap-index/main.go` waits for source-local projector drain
+  before reopening succeeded `deployment_mapping` rows.
+- `go/cmd/ingester/wiring.go` defers ingester relationship maintenance to the
+  collector batch-drain hook.
+- `go/internal/storage/postgres/ingestion_test.go` covers skipped unknown
+  generations and generation-scoped deferred evidence persistence.
+- `go/cmd/ingester/wiring_test.go` covers deferred ingester wiring.
+
+**Remaining work:** only the documented automatic replay for the narrow reopen
+straggler window remains. The quadratic backfill fix itself is done.
 
 ## Decision
 

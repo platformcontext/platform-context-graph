@@ -14,35 +14,35 @@ still needs an owner.
 | --- | --- | --- |
 | `2026-04-17-neo4j-deadlock-elimination-batch-isolation.md` | Complete | Readiness, repair, and bounded write contracts are implemented. |
 | `2026-04-17-semantic-entity-materialization-bottleneck.md` | Implemented; follow-up moved | Acceptance-unit semantic work landed. Remaining semantic throughput work moved to the reducer/NornicDB ADR. |
+| `2026-04-18-bootstrap-relationship-backfill-quadratic-cost.md` | Implemented with follow-up | Quadratic bootstrap backfill fix is closed; only automatic replay for the narrow reopen-straggler window remains. |
 | `2026-04-18-e2e-validation-atomic-writes-deferred-backfill.md` | Historical validation | The implementation landed; newer full-corpus proof supersedes this acceptance run. |
 | `2026-04-18-reducer-full-convergence-optimization.md` | Superseded | Replaced by the broader reducer/NornicDB throughput workstream. |
 | `2026-04-20-pre-merge-validation-local-mcp-and-iac-chart-parity.md` | Superseded | Old pre-merge gate for a prior branch; current public checks live in CI and local-testing docs. |
+| `2026-04-28-reducer-throughput-and-nornicdb-concurrency-plan.md` | Implemented with follow-up | PR #129 workstream is closed against the 896-repo NornicDB proof; release/pin and maintainability follow-ups continue separately. |
 | `2026-05-03-compose-telemetry-overlay-and-documentation-standards.md` | Accepted | Default Compose is runtime-only; telemetry is opt-in through the overlay. |
 
 ## Accepted With Follow-Up
 
 | ADR | Current state | What remains |
 | --- | --- | --- |
-| `2026-04-18-bootstrap-relationship-backfill-quadratic-cost.md` | Implemented with follow-up | Track automatic replay for the reopen straggler window if it resurfaces. |
 | `2026-04-18-query-time-service-enrichment-gap.md` | Accepted with follow-up | Finish full service-query parity and deployment-mapping response shape. |
 | `2026-04-19-ci-cd-relationship-parity-across-delivery-families.md` | Accepted with follow-up | Finish partial delivery-family parity and controller-driven service-story integration. |
 | `2026-04-19-deployable-unit-correlation-and-materialization-framework.md` | Accepted with follow-up | Continue full admission/materialization across multi-source runtime evidence. |
 | `2026-04-20-aws-cloud-scanner-collector.md` | Design accepted; runtime not implemented | Build the AWS collector runtime, fact emission, claim loop, telemetry, and docs. |
-| `2026-04-20-embedded-local-backends-desktop-mode.md` | Accepted with follow-up | Finish NornicDB hardening, conformance, release-backed pins, and host coverage. |
+| `2026-04-20-embedded-local-backends-desktop-mode.md` | Accepted with follow-up | Local backend path is shipped; finish NornicDB hardening, conformance, release-backed pins, and host coverage. |
 | `2026-04-20-multi-source-reducer-and-consumer-contract.md` | Architecture accepted; implementation partial | Build collector-backed projectors and consumer MCP/HTTP tools. |
 | `2026-04-20-terraform-state-collector.md` | Design accepted; runtime not implemented | Build the Terraform state collector runtime, readers, redaction, facts, and docs. |
 | `2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md` | Accepted; production ownership incomplete | Keep claims dark until collector families and convergence gates are ready. |
 | `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md` | Accepted; claim substrate partial | Add acceptance-unit and source-run identity to work items and reconciliation before production claim ownership. |
 | `2026-04-22-nornicdb-graph-backend-candidate.md` | Accepted with conditions | Finish release-backed pinning, signature policy, host coverage, and conformance matrix gates. |
-| `2026-04-28-reducer-throughput-and-nornicdb-concurrency-plan.md` | Accepted with follow-up | Keep NornicDB release/pin status explicit and continue query/file-size maintainability work. |
 
 ## In Progress
 
 | ADR | Current state | What remains |
 | --- | --- | --- |
-| `2026-04-19-multi-source-correlation-dsl-and-collector-readiness.md` | In progress | DSL/rule-pack substrate exists; AWS, Terraform-state, webhook, and full cloud/runtime joins remain. |
-| `2026-04-20-embedded-local-backends-implementation-plan.md` | In progress | Finish release-backed NornicDB acceptance, graph-analysis hardening, backend conformance, profile matrix, and plugin work. |
-| `2026-04-24-iac-usage-reachability-and-refactor-impact.md` | In progress | Dead-IaC reachability is proven; impact, integrity, more IaC families, and large-result pagination remain. |
+| `2026-04-19-multi-source-correlation-dsl-and-collector-readiness.md` | In progress | DSL/rule-pack substrate and source-kind contracts exist; AWS, Terraform-state, webhook, and full cloud/runtime joins remain. |
+| `2026-04-20-embedded-local-backends-implementation-plan.md` | In progress | Local host and local-authoritative runtime slices shipped; release-backed NornicDB acceptance, backend conformance, profile matrix, and plugin work remain. |
+| `2026-04-24-iac-usage-reachability-and-refactor-impact.md` | In progress | Dead-IaC reachability and pagination are proven; shared neighborhood, impact, integrity, and remaining IaC-family coverage remain. |
 
 ## Discussion Shortlist
 

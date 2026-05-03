@@ -1,7 +1,7 @@
 # ADR: Reducer Throughput And NornicDB Concurrency Plan
 
 **Date:** 2026-04-28
-**Status:** Accepted with follow-up (PR #129 merged)
+**Status:** Implemented with follow-up (PR #129 merged)
 **Related:**
 
 - `2026-04-18-reducer-full-convergence-optimization.md`
@@ -11,16 +11,23 @@
 
 ## Status Review (2026-05-03)
 
-**Current disposition:** Accepted with follow-up.
+**Current disposition:** Implemented for PR #129; ADR workstream closed.
 
 The main workstream closed with PR #129 merged to `main` on 2026-05-03. The
-accepted proof recorded in this ADR is the full-corpus NornicDB run that drained
-896 repositories in about 14m33s with healthy projector, reducer, API, MCP,
-graph, and Postgres parity.
+accepted proof recorded in this ADR is the full-corpus NornicDB run
+`pcg-full-pr136-01413d04-a9ccd0f-20260503T0121Z`, which drained `896`
+repositories and `8458` queue rows in about `14m33s` with healthy projector,
+reducer, API, MCP, graph, and Postgres parity.
+
+Read-only validation on 2026-05-03 found the current repo aligned with the
+closeout state: NornicDB reducer workers default to `min(NumCPU, 8)`, reducer
+batch claims default to the worker count on NornicDB, durable reducer conflict
+keys are present in `fact_work_items`, `/admin/status` can report
+`queue_blockages`, and the service/runtime docs now point at those defaults.
 
 **Remaining work:** keep NornicDB PR #136 release/pin status explicit, continue
-file-size and query maintainability follow-ups, and keep runtime defaults and
-environment-variable docs in lockstep.
+large query-file and storage-boundary maintainability follow-ups, and keep
+runtime defaults and environment-variable docs in lockstep.
 
 ## Decision
 
@@ -163,7 +170,7 @@ long as we keep the fixes behind backend-safe seams.
 
 ### Phase 0: Baseline And Guardrails
 
-Status: `in progress`
+Status: `closed for PR #129`
 
 - Record the full-corpus baseline in this ADR.
 - Keep the remote run artifacts and queue SQL used for timing analysis.
@@ -183,7 +190,7 @@ Exit criteria:
 
 ### Phase 1: Reducer Observability
 
-Status: `in progress`
+Status: `implemented for PR #129`
 
 Add operator-visible reducer telemetry before changing scheduling semantics:
 
@@ -200,7 +207,7 @@ conflict keys are too broad, or because the graph backend is slow?"
 
 ### Phase 2: Conflict-Domain Matrix
 
-Status: `planned`
+Status: `implemented with follow-up`
 
 Create an explicit matrix for each reducer domain:
 
@@ -226,7 +233,7 @@ Required edge cases:
 
 ### Phase 3: Shared Runner Partitioning
 
-Status: `planned`
+Status: `partially implemented; follow-up only with new telemetry evidence`
 
 The shared projection runners must stop behaving like global lanes when the
 data model allows narrower ownership.
@@ -246,7 +253,7 @@ acks.
 
 ### Phase 4: Cypher And Index Hot-Path Work
 
-Status: `planned`
+Status: `implemented where evidenced; follow-up remains`
 
 Use `cypher-query-rigor` rules: understand the data distribution and the graph
 shape before rewriting queries.
@@ -277,7 +284,7 @@ corpus run.
 
 ### Phase 5: NornicDB Backend Collaboration
 
-Status: `planned`
+Status: `active follow-up`
 
 Continue upstream-first work when PCG exposes a true NornicDB limitation.
 
@@ -293,7 +300,7 @@ Candidate backend improvements:
 
 ### Phase 6: Controlled Concurrency Increase
 
-Status: `planned`
+Status: `implemented for current defaults; future increases require new proof`
 
 After Phases 1-4 expose the true safe overlap, test:
 
@@ -322,6 +329,14 @@ The reducer throughput phase is complete when:
   relationships, workloads, and deployment mapping,
 - the status surface can explain the slowest active domain without log mining,
 - worker utilization drops only when no safe eligible work remains.
+
+Closeout result on 2026-05-03: PR #129 met the wall-clock and correctness
+criteria for this ADR. The accepted full-corpus proof drained the `896`-repo
+corpus in about `14m33s`, kept failed and dead-letter rows at `0`, restarted
+API and MCP against the completed stack, and validated graph/API/Postgres
+relationship-evidence drilldown and representative service/query truth. Treat
+new reducer scheduling work after this point as a new slice, not as unfinished
+PR #129 work.
 
 ## Non-Goals
 

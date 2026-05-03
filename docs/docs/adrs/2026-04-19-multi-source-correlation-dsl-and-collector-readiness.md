@@ -11,15 +11,19 @@
 
 **Current disposition:** In progress.
 
-The constrained DSL direction is implemented as code scaffolding and first-party
-rule packs. The repo has a deterministic evaluator, supported rule schema, and
-packs for Dockerfile, Docker Compose, GitHub Actions, Jenkins, Helm, ArgoCD,
-Kustomize, Terraform, Terragrunt, Ansible, and CloudFormation.
+The constrained DSL direction is already in the tree as code scaffolding and
+first-party rule packs. The repo has a deterministic evaluator, a supported
+rule schema, and packs for Dockerfile, Docker Compose, GitHub Actions, Jenkins,
+Helm, ArgoCD, Kustomize, Terraform, Terragrunt, Ansible, and CloudFormation.
 
 **Remaining work:** finish collector readiness and true multi-source
-correlation. Current evidence proves the DSL/rule-pack substrate, not the AWS
-scanner, Terraform-state scanner, webhook freshness, or full cloud/runtime
-cross-source joins.
+correlation. Current evidence proves the DSL/rule-pack substrate, but the real
+AWS scanner, Terraform-state scanner, webhook freshness ingress, and full
+cloud/runtime cross-source joins are still open.
+
+The `ScopeKind` and `CollectorKind` enums already carry the future source
+boundaries, but those values are still contracts without the scanner runtimes
+behind them.
 
 ## Context
 
