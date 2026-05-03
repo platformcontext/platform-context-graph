@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/iacreachability"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 const (
@@ -87,6 +88,9 @@ type IaCReachabilityFindingRow struct {
 }
 
 func (h *IaCHandler) handleDeadIaC(w http.ResponseWriter, r *http.Request) {
+	r, span := startQueryHandlerSpan(r, telemetry.SpanQueryDeadIaC, "POST /api/v0/iac/dead", iacDeadCapability)
+	defer span.End()
+
 	if capabilityUnsupported(h.profile(), iacDeadCapability) {
 		WriteContractError(
 			w,

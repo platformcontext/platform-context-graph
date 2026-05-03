@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 const relationshipEvidenceCapability = "relationship_evidence.drilldown"
@@ -37,6 +39,14 @@ func (h *EvidenceHandler) profile() QueryProfile {
 }
 
 func (h *EvidenceHandler) getRelationshipEvidence(w http.ResponseWriter, r *http.Request) {
+	r, span := startQueryHandlerSpan(
+		r,
+		telemetry.SpanQueryRelationshipEvidence,
+		"GET /api/v0/evidence/relationships/{resolved_id}",
+		relationshipEvidenceCapability,
+	)
+	defer span.End()
+
 	resolvedID := strings.TrimSpace(PathParam(r, "resolved_id"))
 	if resolvedID == "" {
 		WriteError(w, http.StatusBadRequest, "resolved_id is required")

@@ -52,7 +52,12 @@ func enrichServiceQueryContextWithOptions(
 	}
 	timer.Done(ctx, slog.Bool("has_result", len(mapValue(workloadContext, "api_surface")) > 0))
 	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "graph_deployment_evidence")
-	if graphEvidence := queryServiceGraphDeploymentEvidence(ctx, graph, content, repoID); len(graphEvidence) > 0 {
+	graphEvidence, err := queryServiceGraphDeploymentEvidence(ctx, graph, content, repoID)
+	if err != nil {
+		timer.Done(ctx, slog.Bool("error", true))
+		return fmt.Errorf("load graph deployment evidence: %w", err)
+	}
+	if len(graphEvidence) > 0 {
 		workloadContext["deployment_evidence"] = graphEvidence
 	}
 	timer.Done(ctx, slog.Bool("has_result", len(mapValue(workloadContext, "deployment_evidence")) > 0))

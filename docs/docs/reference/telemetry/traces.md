@@ -32,12 +32,18 @@ The stable span families are:
 - `reducer.cross_repo_resolution`
 - `shared_acceptance.lookup`
 - `shared_acceptance.upsert`
+- `query.relationship_evidence`
+- `query.dead_iac`
+- `query.infra_resource_search`
 - `postgres.exec`
 - `postgres.query`
 - `neo4j.execute`
 
 The read/query layer also emits:
 
+- `query.relationship_evidence`
+- `query.dead_iac`
+- `query.infra_resource_search`
 - `postgres.query`
 - `neo4j.query`
 - `neo4j.query.single`

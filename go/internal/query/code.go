@@ -46,7 +46,7 @@ func (h *CodeHandler) graphBackend() GraphBackend {
 	}
 	backend, err := ParseGraphBackend(string(h.GraphBackend))
 	if err != nil {
-		return GraphBackendNeo4j
+		panic(err)
 	}
 	return backend
 }

@@ -209,7 +209,13 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 		timer.Done(ctx, slog.Int("row_count", 0))
 	}
 	timer = startRepositoryQueryStage(ctx, h.Logger, "repository_context", repoID, "deployment_evidence")
-	if deploymentEvidence := queryRepoDeploymentEvidence(ctx, h.Neo4j, h.Content, params); len(deploymentEvidence) > 0 {
+	deploymentEvidence, err := queryRepoDeploymentEvidence(ctx, h.Neo4j, h.Content, params)
+	if err != nil {
+		timer.Done(ctx, slog.Bool("error", true))
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("load deployment evidence: %v", err))
+		return
+	}
+	if len(deploymentEvidence) > 0 {
 		result["deployment_evidence"] = deploymentEvidence
 		timer.Done(ctx, slog.Int("row_count", len(deploymentEvidence)))
 	} else {

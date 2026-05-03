@@ -411,6 +411,14 @@ The `pcg_dp_projector_stage_duration_seconds` histogram carries a `stage` attrib
 | `iac_reachability.materialize` | Bootstrap finalization | Corpus-wide active-generation IaC usage classification and Postgres row upsert |
 | `canonical.write` | Projector runtime / Reducer shared projection | Graph and content writes to Neo4j |
 
+#### Query handler spans
+
+| Span | Where | Description |
+| --- | --- | --- |
+| `query.relationship_evidence` | HTTP relationship evidence drilldown | Resolves compact `resolved_id` graph pointers to durable Postgres evidence |
+| `query.dead_iac` | HTTP dead-IaC read surface | Reads reducer-materialized IaC cleanup findings |
+| `query.infra_resource_search` | HTTP infrastructure resource search | Searches graph-backed infrastructure resources |
+
 #### Dependency service spans
 
 | Span | Where | Description |

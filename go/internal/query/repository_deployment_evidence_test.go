@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -272,6 +273,48 @@ func TestGetRepositoryContextUsesReadModelForDeploymentEvidence(t *testing.T) {
 	}
 }
 
+func TestGetRepositoryContextReturnsErrorWhenDeploymentEvidenceReadModelFails(t *testing.T) {
+	t.Parallel()
+
+	handler := &RepositoryHandler{
+		Neo4j: fakeRepoGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"MATCH (r:Repository {id: $repo_id})": {
+					"id":         "repo-service",
+					"name":       "checkout-service",
+					"path":       "/repos/checkout-service",
+					"local_path": "/repos/checkout-service",
+					"has_remote": false,
+				},
+			},
+			run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "EvidenceArtifact") {
+					t.Fatalf("cypher = %q, want no graph fallback after read-model error", cypher)
+				}
+				return nil, nil
+			},
+		},
+		Content: fakePortContentStore{
+			deploymentEvidenceErr: errors.New("postgres read model unavailable"),
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-service/context", nil)
+	req.SetPathValue("repo_id", "repo-service")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusInternalServerError; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, "postgres read model unavailable") {
+		t.Fatalf("body = %s, want read-model error", body)
+	}
+}
+
 func TestContentReaderRepositoryDeploymentEvidenceHydratesPreviewArtifacts(t *testing.T) {
 	t.Parallel()
 
@@ -319,7 +362,9 @@ func TestQueryRepoDeploymentEvidenceIncomingUsesArtifactFirstBoundary(t *testing
 	t.Parallel()
 
 	reader := &recordingDeploymentEvidenceGraphReader{}
-	queryRepoDeploymentEvidence(context.Background(), reader, nil, map[string]any{"repo_id": "repo-service"})
+	if _, err := queryRepoDeploymentEvidence(context.Background(), reader, nil, map[string]any{"repo_id": "repo-service"}); err != nil {
+		t.Fatalf("queryRepoDeploymentEvidence() error = %v, want nil", err)
+	}
 
 	if len(reader.cypherCalls) != 2 {
 		t.Fatalf("len(cypherCalls) = %d, want 2", len(reader.cypherCalls))

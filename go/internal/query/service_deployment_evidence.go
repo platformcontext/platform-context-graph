@@ -59,9 +59,9 @@ func loadServiceDeploymentEvidence(
 	return buildServiceDeploymentEvidenceFromOverview(overview), nil
 }
 
-func queryServiceGraphDeploymentEvidence(ctx context.Context, graph GraphQuery, content ContentStore, repoID string) map[string]any {
+func queryServiceGraphDeploymentEvidence(ctx context.Context, graph GraphQuery, content ContentStore, repoID string) (map[string]any, error) {
 	if graph == nil || strings.TrimSpace(repoID) == "" {
-		return nil
+		return nil, nil
 	}
 	return queryRepoDeploymentEvidence(ctx, graph, content, map[string]any{"repo_id": repoID})
 }

@@ -485,7 +485,10 @@ func TestQueryServiceDeploymentEvidenceUsesReadModelBeforeGraphFallback(t *testi
 		},
 	}
 
-	got := queryServiceGraphDeploymentEvidence(context.Background(), graph, content, "repo-service")
+	got, err := queryServiceGraphDeploymentEvidence(context.Background(), graph, content, "repo-service")
+	if err != nil {
+		t.Fatalf("queryServiceGraphDeploymentEvidence() error = %v, want nil", err)
+	}
 	if got == nil {
 		t.Fatal("queryServiceGraphDeploymentEvidence() = nil, want read-model evidence")
 	}

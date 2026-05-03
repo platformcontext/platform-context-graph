@@ -3,6 +3,8 @@ package query
 import (
 	"net/http"
 	"strings"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 // InfraHandler serves HTTP endpoints for querying infrastructure resources
@@ -86,6 +88,14 @@ func (h *InfraHandler) profile() QueryProfile {
 // POST /api/v0/infra/resources/search
 // Body: {"query": "...", "kind": "...", "limit": 50}
 func (h *InfraHandler) searchResources(w http.ResponseWriter, r *http.Request) {
+	r, span := startQueryHandlerSpan(
+		r,
+		telemetry.SpanQueryInfraResourceSearch,
+		"POST /api/v0/infra/resources/search",
+		"platform_impact.deployment_chain",
+	)
+	defer span.End()
+
 	if capabilityUnsupported(h.profile(), "platform_impact.deployment_chain") {
 		WriteContractError(
 			w,

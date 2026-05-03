@@ -65,6 +65,9 @@ const (
 	SpanCrossRepoResolution            = "reducer.cross_repo_resolution"
 	SpanSharedAcceptanceLookup         = "shared_acceptance.lookup"
 	SpanSharedAcceptanceUpsert         = "shared_acceptance.upsert"
+	SpanQueryRelationshipEvidence      = "query.relationship_evidence"
+	SpanQueryDeadIaC                   = "query.dead_iac"
+	SpanQueryInfraResourceSearch       = "query.infra_resource_search"
 
 	// Dependency service spans — track external call performance.
 	SpanPostgresExec  = "postgres.exec"
@@ -131,6 +134,9 @@ var spanNames = []string{
 	SpanCrossRepoResolution,
 	SpanSharedAcceptanceLookup,
 	SpanSharedAcceptanceUpsert,
+	SpanQueryRelationshipEvidence,
+	SpanQueryDeadIaC,
+	SpanQueryInfraResourceSearch,
 	SpanPostgresExec,
 	SpanPostgresQuery,
 	SpanNeo4jExecute,

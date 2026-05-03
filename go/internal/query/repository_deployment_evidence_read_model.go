@@ -19,16 +19,19 @@ type repositoryDeploymentEvidenceReadModelStore interface {
 	repositoryDeploymentEvidence(context.Context, string) (repositoryDeploymentEvidenceReadModel, error)
 }
 
-func loadRepositoryDeploymentEvidence(ctx context.Context, content ContentStore, repoID string) map[string]any {
+func loadRepositoryDeploymentEvidence(ctx context.Context, content ContentStore, repoID string) (map[string]any, error) {
 	store, ok := content.(repositoryDeploymentEvidenceReadModelStore)
 	if !ok || repoID == "" {
-		return nil
+		return nil, nil
 	}
 	readModel, err := store.repositoryDeploymentEvidence(ctx, repoID)
-	if err != nil || !readModel.Available || len(readModel.Rows) == 0 {
-		return nil
+	if err != nil {
+		return nil, err
 	}
-	return buildGraphDeploymentEvidence(readModel.Rows)
+	if !readModel.Available || len(readModel.Rows) == 0 {
+		return nil, nil
+	}
+	return buildGraphDeploymentEvidence(readModel.Rows), nil
 }
 
 // repositoryDeploymentEvidence builds the deployment-evidence response rows

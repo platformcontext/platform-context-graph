@@ -8,9 +8,11 @@ import (
 
 // queryRepoDeploymentEvidence reads compact graph evidence pointers for
 // repository relationships without embedding raw Postgres evidence payloads.
-func queryRepoDeploymentEvidence(ctx context.Context, reader GraphQuery, content ContentStore, params map[string]any) map[string]any {
-	if readModel := loadRepositoryDeploymentEvidence(ctx, content, StringVal(params, "repo_id")); readModel != nil {
-		return readModel
+func queryRepoDeploymentEvidence(ctx context.Context, reader GraphQuery, content ContentStore, params map[string]any) (map[string]any, error) {
+	if readModel, err := loadRepositoryDeploymentEvidence(ctx, content, StringVal(params, "repo_id")); err != nil {
+		return nil, err
+	} else if readModel != nil {
+		return readModel, nil
 	}
 
 	outgoing := queryRepoDeploymentEvidenceDirection(ctx, reader, params, `
@@ -71,9 +73,9 @@ func queryRepoDeploymentEvidence(ctx context.Context, reader GraphQuery, content
 	`)
 	rows := append(outgoing, incoming...)
 	if len(rows) == 0 {
-		return nil
+		return nil, nil
 	}
-	return buildGraphDeploymentEvidence(rows)
+	return buildGraphDeploymentEvidence(rows), nil
 }
 
 func queryRepoDeploymentEvidenceDirection(ctx context.Context, reader GraphQuery, params map[string]any, cypher string) []map[string]any {
