@@ -24,14 +24,14 @@
 
 **Current disposition:** In progress.
 
-Dead-IaC reachability has substantial runtime proof: the analyzer, durable
+Dead-IaC reachability has real runtime proof now: the analyzer, durable
 Postgres rows, API materialized-row path, MCP route, OpenAPI path, product-truth
 fixtures, and full-corpus materialization evidence are all present.
 
-**Remaining work:** do not mark this complete yet. Phase 0 dependency
-neighborhood work, impact and integrity workflows, CloudFormation, Crossplane,
-deeper Helm rendering, Argo ApplicationSet templating, conservative Kubernetes
-orphan semantics, and large-result pagination are still open.
+**Remaining work:** do not mark the broader ADR complete yet. The shared
+dependency-neighborhood contract, impact and integrity workflows, CloudFormation,
+Crossplane, deeper Helm rendering, Argo ApplicationSet templating, conservative
+Kubernetes orphan semantics, and large-result pagination are still open.
 
 ## Context
 
@@ -889,10 +889,10 @@ Mitigations:
 | Chunk | Status | Evidence | Remaining Work |
 |---|---|---|---|
 | ADR | Proposed | This document | Review and accept/revise decision |
-| Phase 0: Shared Dependency Neighborhood Contract | Not started | Existing code relationship API, content relationship builders, and VS Code dependency panel | Add shared route/MCP response and UI backed by documented query surfaces |
-| Phase 1: Terraform/Terragrunt | Not started | Existing HCL entity extraction and relationship evidence | Add traversal references, path validation, usage edges, queries |
+| Phase 0: Shared Dependency Neighborhood Contract | Not started | Existing code relationship API, content relationship builders, and individual impact routes; the shared `/api/v0/graph/neighborhood` contract is still absent. | Add shared route/MCP response and UI backed by documented query surfaces |
+| Phase 1: Terraform/Terragrunt | Started | Dead-IaC product-truth fixtures and full-corpus proofs already materialize Terraform/Terragrunt reachability rows, but the refactor-impact traversal and path-validation queries are still incomplete. | Add traversal references, path validation, usage edges, queries |
 | Phase 2: Kustomize/ArgoCD | Started | Existing parser buckets and content-backed relationships. Commit `e4cb8cbf` adds Kustomize base/overlay reachability fixture coverage and treats ArgoCD source paths plus `kustomization.yaml` resources as static roots/references for dead-IaC classification. | Promote the current static reachability proof into the broader durable usage graph and impact/integrity queries. |
-| Phase 3: Helm | Not started | Existing chart and values extraction | Add Go-template value references, values-file usage, optional rendering |
+| Phase 3: Helm | Started | Existing chart and values extraction. Helm chart and values artifacts already appear in the materialized dead-IaC proofs, but Go-template value references and renderer-backed reachability are still incomplete. | Add Go-template value references, values-file usage, optional rendering |
 | Phase 4: Kubernetes | Not started | Existing K8s resource extraction and basic Service heuristic | Add typed resource usage edges and conservative orphan findings |
 | Phase 5: CloudFormation/Crossplane/Compose/Ansible | Started | Existing parser and evidence surfaces. Commits through `c965dd52` added Ansible role/playbook static reachability to the product-truth fixture set. Commit `e06c47d6` adds Docker Compose service artifacts plus static and dynamic `docker compose` command references, proving used, unused, and ambiguous Compose service classifications with focused Go tests and the checked-in NornicDB Compose verifier. | Continue CloudFormation/Crossplane family work and promote local-host/full-corpus IaC reachability finalization so non-bootstrap runs can serve materialized rows. |
 | Code dead-code / IaC boundary | Guarded | Query contract now reports `iac_reachability_mode=not_modeled_by_code_dead_code` and `iac_deadness_capability=iac_usage.reachability`; tests prove Terraform, Helm, Kustomize, Kubernetes, and ArgoCD graph rows are not returned as code dead-code candidates. | Implement the first-class IaC usage/reachability graph before exposing dead-IaC cleanup findings. |

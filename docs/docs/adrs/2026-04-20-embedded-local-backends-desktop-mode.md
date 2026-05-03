@@ -23,16 +23,22 @@
 
 ## Status Review (2026-05-03)
 
-**Current disposition:** Accepted with follow-up.
+**Current disposition:** Accepted with follow-up; local backend shipped, backend
+promotion still gated.
 
 The local-host and local-authoritative split is implemented in the CLI path:
 the repo has local host supervision, local graph lifecycle, owner records,
 progress reporting, NornicDB installation, query profile contracts, and
 unsupported-capability tests.
 
-**Remaining work:** local-authoritative/NornicDB hardening, backend conformance,
-release-backed pins, signature verification, broader host coverage, and plugin
-or deprecation chunks remain in the implementation plan and NornicDB ADR.
+Current runtime docs and Compose defaults now use NornicDB as the default graph
+backend. That default switch does not close the backend ADR: release-backed
+pins for the accepted NornicDB build, signature verification, broader host
+coverage, backend conformance, and profile-matrix gates still live in the
+implementation plan and NornicDB ADR.
+
+**Remaining work:** finish those NornicDB promotion gates, then decide whether
+any Neo4j deprecation path should start. Plugin chunks remain separate work.
 
 ## Context
 
@@ -54,7 +60,8 @@ Today, the deployed platform has a clear runtime contract:
 - `ingester` owns collection, parsing, and fact emission
 - `reducer` owns queued reduction and authoritative graph convergence
 - `api` and `mcp` are read surfaces
-- Neo4j is the authoritative graph store in deployed environments
+- the configured graph backend is the authoritative graph store; NornicDB is
+  now the default backend and Neo4j remains the compatibility backend
 - Postgres is the durable control plane, fact store, queue, content store, and
   status store
 
@@ -115,10 +122,15 @@ The deployed and full-stack local authoritative path remains:
 
 - split runtimes
 - Postgres as durable control plane and content/facts truth
-- Neo4j as the authoritative graph store
+- one configured graph backend behind `GraphQuery` and `GraphWrite`
 
 This ADR does **not** create a second co-equal authoritative graph path for
 local mode.
+
+Current implementation note: `PCG_GRAPH_BACKEND=nornicdb` is now the default in
+runtime docs and Compose. Neo4j remains available through the explicit
+compatibility path. NornicDB's default-backend status is still governed by
+the conditional acceptance and conformance gates in the NornicDB ADR.
 
 Production remains the source of truth for:
 

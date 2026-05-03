@@ -20,16 +20,33 @@
 
 ## Status Review (2026-05-03)
 
-**Current disposition:** In progress.
+**Current disposition:** In progress; shipped runtime slices are separate from
+promotion blockers.
 
 The plan has shipped the local host foundation, local-authoritative graph
 lifecycle, NornicDB installer path, progress view, and the docs/runtime split
 between local binaries, default NornicDB Compose, and Neo4j compatibility
 Compose.
 
-**Remaining work:** finish release-backed NornicDB acceptance, graph-analysis
-hardening, backend conformance, profile matrix runs, OCI/plugin contract work,
-and any explicit Neo4j deprecation path before closing this plan.
+**Remaining work:** finish release-backed NornicDB acceptance, backend
+conformance, profile matrix runs, OCI/plugin contract work, and any explicit
+Neo4j deprecation path before closing this plan. Graph-analysis work has
+shipped useful local-authoritative read paths, but broader hardening and
+truth-class promotion remain tracked work.
+
+## Wave 1 Closeout Split (2026-05-03)
+
+The current branch has two different kinds of work in this plan. Keep them
+separate when reviewing the ADR:
+
+| Bucket | Chunks | Current state |
+| --- | --- | --- |
+| Shipped | 1, 2, 3 | Capability labels, storage capability ports, local host supervision, embedded Postgres lifecycle, owner records, progress/status surfaces, and local-host startup evidence are in place. |
+| Shipped with open promotion gates | 3.5, 4 | `local_authoritative` NornicDB lifecycle, installer/upgrade/log/stop commands, backend-routed graph queries, query selector normalization, graph-analysis compose coverage, and full-corpus patched-binary evidence are present. They are not a completed backend promotion until the accepted NornicDB build is released or pinned, signature policy is enforced, and conformance/profile-matrix gates pass. |
+| Blocked / not started | 5, 5b, 6, 7 | Backend conformance, NornicDB profile matrix, OCI collector plugins, and any Neo4j deprecation path are not complete. Chunk 7 must not start until 5b passes and a migration/deprecation plan exists. |
+
+The long table below remains the evidence ledger. This split is the reviewer
+shortcut for what shipped versus what still blocks closeout.
 
 ## Chunk Status
 
@@ -57,7 +74,7 @@ direct `CALLS`, transitive caller, entity-ID call-chain, and entity-resolution
 repo identity API queries for `handleRelationships -> transitiveRelationshipsGraphRow`
 through the live local-authoritative API.
 
-Latest 2026-04-26 NornicDB dogfood evidence:
+Latest 2026-05-03 NornicDB dogfood evidence:
 - 2026-05-03 full-corpus proof `pcg-full-pr136-01413d04-a9ccd0f-20260503T0121Z`
   rebuilt PCG `01413d04` and a clean NornicDB `a9ccd0f` binary from the
   `UNWIND MATCH SET` hot-path branch, drained `896` repos / `8458` queue rows
@@ -65,7 +82,8 @@ Latest 2026-04-26 NornicDB dogfood evidence:
   API/MCP health passed against the completed stack, `/api/v0/repositories`
   returned `896`, and relationship-evidence drilldown returned durable
   Postgres detail through `resolved_id`. This is promotion-positive for the
-  hot path but still waits on `orneryd/NornicDB#136` merge/release before it is
+  hot path. `orneryd/NornicDB#136` has since merged, but the lane still waits
+  on a release asset or explicitly accepted pinned build before it is
   release-backed.
 - 2026-05-02 focused evidence-pointer proof found and isolated a NornicDB
   relationship-property persistence bug in the embedded backend path. PCG's
