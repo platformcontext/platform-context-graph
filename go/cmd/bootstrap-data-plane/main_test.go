@@ -54,12 +54,12 @@ func TestNewLoggerOutputsJSON(t *testing.T) {
 	assert.Equal(t, "INFO", logEntry["severity_text"])
 }
 
-func TestRunAppliesPostgresAndNeo4jSchemas(t *testing.T) {
+func TestRunAppliesPostgresAndDefaultGraphSchema(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeBootstrapDB{}
 	pgApplied := false
-	neo4jApplied := false
+	graphApplied := false
 	logger := testLogger(t)
 
 	err := run(
@@ -79,12 +79,12 @@ func TestRunAppliesPostgresAndNeo4jSchemas(t *testing.T) {
 		},
 		noopNeo4j,
 		func(_ context.Context, exec graph.CypherExecutor, _ *slog.Logger, backend graph.SchemaBackend) error {
-			neo4jApplied = true
+			graphApplied = true
 			if exec == nil {
 				t.Fatal("neo4j executor is nil")
 			}
-			if backend != graph.SchemaBackendNeo4j {
-				t.Fatalf("schema backend = %q, want %q", backend, graph.SchemaBackendNeo4j)
+			if backend != graph.SchemaBackendNornicDB {
+				t.Fatalf("schema backend = %q, want %q", backend, graph.SchemaBackendNornicDB)
 			}
 			return nil
 		},
@@ -95,11 +95,46 @@ func TestRunAppliesPostgresAndNeo4jSchemas(t *testing.T) {
 	if !pgApplied {
 		t.Fatal("run() did not apply postgres schema")
 	}
-	if !neo4jApplied {
-		t.Fatal("run() did not apply neo4j schema")
+	if !graphApplied {
+		t.Fatal("run() did not apply graph schema")
 	}
 	if !db.closed {
 		t.Fatal("run() did not close postgres database")
+	}
+}
+
+func TestRunPassesNeo4jBackendToSchemaApplicator(t *testing.T) {
+	t.Parallel()
+
+	logger := testLogger(t)
+	var gotBackend graph.SchemaBackend
+
+	err := run(
+		context.Background(),
+		func(key string) string {
+			if key == "PCG_GRAPH_BACKEND" {
+				return "neo4j"
+			}
+			return ""
+		},
+		logger,
+		func(context.Context, func(string) string) (bootstrapDB, error) {
+			return &fakeBootstrapDB{}, nil
+		},
+		func(context.Context, bootstrapExecutor) error {
+			return nil
+		},
+		noopNeo4j,
+		func(_ context.Context, _ graph.CypherExecutor, _ *slog.Logger, backend graph.SchemaBackend) error {
+			gotBackend = backend
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("run() error = %v, want nil", err)
+	}
+	if gotBackend != graph.SchemaBackendNeo4j {
+		t.Fatalf("schema backend = %q, want %q", gotBackend, graph.SchemaBackendNeo4j)
 	}
 }
 
