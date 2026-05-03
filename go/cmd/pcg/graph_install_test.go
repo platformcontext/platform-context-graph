@@ -470,6 +470,32 @@ func TestInstallNornicDBExtractsHeadlessBinaryFromTarGz(t *testing.T) {
 	}
 }
 
+func TestPrepareNornicDBInstallSourceClosesArchiveExtraction(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a Unix executable script")
+	}
+
+	sourceBinary := filepath.Join(t.TempDir(), "nornicdb-headless")
+	writeFakeNornicDBBinaryAt(t, sourceBinary, "NornicDB v1.0.42\n")
+	archivePath := filepath.Join(t.TempDir(), "nornicdb-headless-darwin-arm64.tar.gz")
+	writeTarGzWithBinary(t, archivePath, "release/bin/nornicdb-headless", sourceBinary)
+
+	prepared, err := prepareNornicDBInstallSource(context.Background(), archivePath)
+	if err != nil {
+		t.Fatalf("prepareNornicDBInstallSource() error = %v, want nil", err)
+	}
+	extractionDir := filepath.Dir(prepared.LocalBinaryPath)
+	if _, err := os.Stat(extractionDir); err != nil {
+		t.Fatalf("os.Stat(extractionDir) error = %v, want extracted directory before Close", err)
+	}
+	if err := prepared.Close(); err != nil {
+		t.Fatalf("prepared.Close() error = %v, want nil", err)
+	}
+	if _, err := os.Stat(extractionDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("os.Stat(extractionDir) error = %v, want removed extraction directory", err)
+	}
+}
+
 func TestInstallNornicDBDownloadsArchiveFromURL(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a Unix executable script")

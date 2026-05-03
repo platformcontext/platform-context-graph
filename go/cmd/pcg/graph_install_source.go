@@ -75,8 +75,25 @@ func prepareNornicDBInstallSource(ctx context.Context, sourceRef string) (prepar
 		return preparedNornicDBInstallSource{}, err
 	}
 	prepared.SourceSHA256 = sourceSHA
-	prepared.cleanup = cleanup
+	prepared.cleanup = combineNornicDBInstallCleanups(prepared.cleanup, cleanup)
 	return prepared, nil
+}
+
+// combineNornicDBInstallCleanups preserves independent source and extraction
+// cleanup callbacks so archive/package installs do not leak temporary trees.
+func combineNornicDBInstallCleanups(cleanups ...func() error) func() error {
+	return func() error {
+		var errs []error
+		for _, cleanup := range cleanups {
+			if cleanup == nil {
+				continue
+			}
+			if err := cleanup(); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		return errors.Join(errs...)
+	}
 }
 
 func materializeNornicDBInstallSource(ctx context.Context, sourceRef string) (string, nornicDBInstallSourceKind, func() error, error) {
