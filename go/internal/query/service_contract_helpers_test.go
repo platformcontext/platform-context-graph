@@ -53,6 +53,11 @@ func TestBuildServiceAPISurfaceMergesFrameworkRoutes(t *testing.T) {
 				RelativePath: "src/routes/catalog.js",
 				RoutePaths:   []string{"/elastic", "/alias/{index}/create", "/schema/{index}"},
 				RouteMethods: []string{"GET", "POST", "PUT"},
+				RouteEntries: []FrameworkRouteEntryEvidence{
+					{Method: "GET", Path: "/elastic"},
+					{Method: "POST", Path: "/alias/{index}/create"},
+					{Method: "PUT", Path: "/schema/{index}"},
+				},
 			},
 			{
 				Framework:    "fastapi",
@@ -84,6 +89,20 @@ func TestBuildServiceAPISurfaceMergesFrameworkRoutes(t *testing.T) {
 		if StringVal(ep, "source") != "framework" {
 			t.Fatalf("endpoint source = %q, want \"framework\"", StringVal(ep, "source"))
 		}
+	}
+
+	endpointsByPath := map[string]map[string]any{}
+	for _, ep := range endpoints {
+		endpointsByPath[StringVal(ep, "path")] = ep
+	}
+	if got, want := StringSliceVal(endpointsByPath["/elastic"], "methods"), []string{"get"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("/elastic methods = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(endpointsByPath["/alias/{index}/create"], "methods"), []string{"post"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("/alias/{{index}}/create methods = %#v, want %#v", got, want)
+	}
+	if got, want := StringSliceVal(endpointsByPath["/schema/{index}"], "methods"), []string{"put"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("/schema/{{index}} methods = %#v, want %#v", got, want)
 	}
 }
 

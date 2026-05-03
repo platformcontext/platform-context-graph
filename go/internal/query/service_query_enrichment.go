@@ -490,10 +490,11 @@ func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
 	frameworkSet := map[string]struct{}{}
 	for _, fr := range evidence.FrameworkRoutes {
 		frameworkSet[fr.Framework] = struct{}{}
-		for _, routePath := range fr.RoutePaths {
+		frameworkEndpoints := frameworkRouteEndpoints(fr)
+		for _, endpoint := range frameworkEndpoints {
 			endpoints = append(endpoints, map[string]any{
-				"path":      routePath,
-				"methods":   lowerStrings(fr.RouteMethods),
+				"path":      endpoint.Path,
+				"methods":   lowerStrings(endpoint.Methods),
 				"source":    "framework",
 				"framework": fr.Framework,
 				"spec_path": fr.RelativePath,
@@ -533,6 +534,50 @@ func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
 		result["frameworks"] = frameworks
 	}
 	return result
+}
+
+type frameworkRouteEndpoint struct {
+	Path    string
+	Methods []string
+}
+
+// frameworkRouteEndpoints uses paired parser evidence when available so method
+// lists stay attached to the route path where they were declared.
+func frameworkRouteEndpoints(fr FrameworkRouteEvidence) []frameworkRouteEndpoint {
+	if len(fr.RouteEntries) == 0 {
+		endpoints := make([]frameworkRouteEndpoint, 0, len(fr.RoutePaths))
+		for _, routePath := range fr.RoutePaths {
+			endpoints = append(endpoints, frameworkRouteEndpoint{
+				Path:    routePath,
+				Methods: fr.RouteMethods,
+			})
+		}
+		return endpoints
+	}
+
+	methodsByPath := make(map[string][]string, len(fr.RouteEntries))
+	for _, entry := range fr.RouteEntries {
+		path := strings.TrimSpace(entry.Path)
+		method := strings.TrimSpace(entry.Method)
+		if path == "" || method == "" {
+			continue
+		}
+		methodsByPath[path] = append(methodsByPath[path], method)
+	}
+	paths := make([]string, 0, len(methodsByPath))
+	for path := range methodsByPath {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	endpoints := make([]frameworkRouteEndpoint, 0, len(paths))
+	for _, path := range paths {
+		endpoints = append(endpoints, frameworkRouteEndpoint{
+			Path:    path,
+			Methods: uniqueSortedStrings(methodsByPath[path]),
+		})
+	}
+	return endpoints
 }
 
 func serviceEvidenceHostnames(evidence ServiceQueryEvidence) []string {

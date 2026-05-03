@@ -643,6 +643,10 @@ func TestParseFrameworkSemanticsExtractsHapiAndExpressRoutes(t *testing.T) {
 		"hapi": {
 			"route_methods": ["GET", "POST"],
 			"route_paths": ["/elastic", "/alias/{index}/create"],
+			"route_entries": [
+				{"method": "GET", "path": "/elastic"},
+				{"method": "POST", "path": "/alias/{index}/create"}
+			],
 			"server_symbols": ["server"]
 		},
 		"express": {
@@ -667,6 +671,15 @@ func TestParseFrameworkSemanticsExtractsHapiAndExpressRoutes(t *testing.T) {
 	}
 	if hapi.RelativePath != "src/routes.js" {
 		t.Fatalf("hapi.RelativePath = %q, want \"src/routes.js\"", hapi.RelativePath)
+	}
+	if len(hapi.RouteEntries) != 2 {
+		t.Fatalf("len(hapi.RouteEntries) = %d, want 2", len(hapi.RouteEntries))
+	}
+	if got, want := hapi.RouteEntries[1].Path, "/alias/{index}/create"; got != want {
+		t.Fatalf("hapi.RouteEntries[1].Path = %q, want %q", got, want)
+	}
+	if got, want := hapi.RouteEntries[1].Method, "POST"; got != want {
+		t.Fatalf("hapi.RouteEntries[1].Method = %q, want %q", got, want)
 	}
 
 	express := results[1]

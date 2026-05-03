@@ -68,10 +68,17 @@ type ServiceAPIEndpointEvidence struct {
 // FrameworkRouteEvidence captures routes detected by parser framework_semantics
 // from fact_records.
 type FrameworkRouteEvidence struct {
-	Framework    string   `json:"framework"`
-	RelativePath string   `json:"relative_path"`
-	RoutePaths   []string `json:"route_paths"`
-	RouteMethods []string `json:"route_methods"`
+	Framework    string                        `json:"framework"`
+	RelativePath string                        `json:"relative_path"`
+	RoutePaths   []string                      `json:"route_paths"`
+	RouteMethods []string                      `json:"route_methods"`
+	RouteEntries []FrameworkRouteEntryEvidence `json:"route_entries,omitempty"`
+}
+
+// FrameworkRouteEntryEvidence preserves one parser-observed route declaration.
+type FrameworkRouteEntryEvidence struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
 }
 
 var (

@@ -707,6 +707,7 @@ func parseFrameworkSemantics(relativePath string, raw []byte) []FrameworkRouteEv
 			RelativePath: relativePath,
 			RoutePaths:   routePaths,
 			RouteMethods: anySliceToStrings(fwData["route_methods"]),
+			RouteEntries: frameworkRouteEntries(fwData["route_entries"]),
 		})
 	}
 	return results
@@ -762,6 +763,31 @@ func anySliceToStrings(raw any) []string {
 		if s, ok := item.(string); ok && s != "" {
 			result = append(result, s)
 		}
+	}
+	return result
+}
+
+// frameworkRouteEntries decodes the parser's paired route evidence while
+// tolerating older facts that only carry route_paths and route_methods.
+func frameworkRouteEntries(raw any) []FrameworkRouteEntryEvidence {
+	slice, _ := raw.([]any)
+	if len(slice) == 0 {
+		return nil
+	}
+	result := make([]FrameworkRouteEntryEvidence, 0, len(slice))
+	for _, item := range slice {
+		row, _ := item.(map[string]any)
+		if len(row) == 0 {
+			continue
+		}
+		entry := FrameworkRouteEntryEvidence{
+			Method: strings.TrimSpace(stringValue(row["method"])),
+			Path:   strings.TrimSpace(stringValue(row["path"])),
+		}
+		if entry.Method == "" || entry.Path == "" {
+			continue
+		}
+		result = append(result, entry)
 	}
 	return result
 }

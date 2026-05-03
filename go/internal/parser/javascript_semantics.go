@@ -14,12 +14,15 @@ var (
 	javaScriptExpressRouteRe   = regexp.MustCompile(`(?m)\b([A-Za-z_$][A-Za-z0-9_$]*)\.(get|post|put|patch|delete|head|options)\(\s*["']([^"']+)["']`)
 	javaScriptHapiMethodRe     = regexp.MustCompile(`(?m)\bmethod\s*:\s*["']([A-Za-z]+)["']`)
 	javaScriptHapiPathRe       = regexp.MustCompile(`(?m)\bpath\s*:\s*["']([^"']+)["']`)
-	javaScriptAWSImportRe      = regexp.MustCompile(`@aws-sdk/client-([a-z0-9-]+)`)
-	javaScriptGCPImportRe      = regexp.MustCompile(`@google-cloud/([a-z0-9-]+)`)
-	javaScriptClientSymbolRe   = regexp.MustCompile(`\b([A-Z][A-Za-z0-9]+Client)\b`)
-	javaScriptHookCallRe       = regexp.MustCompile(`\b(use[A-Z][A-Za-z0-9_]*)\s*\(`)
-	javaScriptDirectiveRe      = regexp.MustCompile(`(?m)^\s*["']use\s+(client|server)["'];?`)
-	javaScriptJSXReturnRe      = regexp.MustCompile(`(?m)(return\s*<|=>\s*<)`)
+	javaScriptHapiRoutePairRe  = regexp.MustCompile(
+		`(?s)\bmethod\s*:\s*["']([A-Za-z]+)["'][\s\S]{0,800}?\bpath\s*:\s*["'](/[^"']*)["']|\bpath\s*:\s*["'](/[^"']*)["'][\s\S]{0,800}?\bmethod\s*:\s*["']([A-Za-z]+)["']`,
+	)
+	javaScriptAWSImportRe    = regexp.MustCompile(`@aws-sdk/client-([a-z0-9-]+)`)
+	javaScriptGCPImportRe    = regexp.MustCompile(`@google-cloud/([a-z0-9-]+)`)
+	javaScriptClientSymbolRe = regexp.MustCompile(`\b([A-Z][A-Za-z0-9]+Client)\b`)
+	javaScriptHookCallRe     = regexp.MustCompile(`\b(use[A-Z][A-Za-z0-9_]*)\s*\(`)
+	javaScriptDirectiveRe    = regexp.MustCompile(`(?m)^\s*["']use\s+(client|server)["'];?`)
+	javaScriptJSXReturnRe    = regexp.MustCompile(`(?m)(return\s*<|=>\s*<)`)
 )
 
 func maybeAppendJavaScriptComponent(
@@ -276,6 +279,7 @@ func detectExpressSemantics(source string) (map[string]any, bool) {
 
 	methods := make([]string, 0, len(matches))
 	paths := make([]string, 0, len(matches))
+	entries := make([]map[string]string, 0, len(matches))
 	serverSymbols := make([]string, 0, len(matches))
 	seenMethods := make(map[string]struct{})
 	seenPaths := make(map[string]struct{})
@@ -284,6 +288,7 @@ func detectExpressSemantics(source string) (map[string]any, bool) {
 		symbol := match[1]
 		method := strings.ToUpper(match[2])
 		path := match[3]
+		entries = append(entries, routeEntry(method, path))
 		if _, ok := seenMethods[method]; !ok {
 			seenMethods[method] = struct{}{}
 			methods = append(methods, method)
@@ -301,12 +306,16 @@ func detectExpressSemantics(source string) (map[string]any, bool) {
 	return map[string]any{
 		"route_methods":  methods,
 		"route_paths":    paths,
+		"route_entries":  entries,
 		"server_symbols": serverSymbols,
 	}, true
 }
 
 func detectHapiSemantics(source string) (map[string]any, bool) {
 	if strings.Contains(source, "server.inject(") {
+		return nil, false
+	}
+	if !javaScriptHasHapiRouteSignal(source) {
 		return nil, false
 	}
 	methods := uniqueOrderedUpper(javaScriptHapiMethodRe.FindAllStringSubmatch(source, -1), 1)
@@ -317,8 +326,49 @@ func detectHapiSemantics(source string) (map[string]any, bool) {
 	return map[string]any{
 		"route_methods":  methods,
 		"route_paths":    paths,
+		"route_entries":  javaScriptHapiRouteEntries(source),
 		"server_symbols": []string{},
 	}, true
+}
+
+// javaScriptHasHapiRouteSignal keeps generic config objects with method/path
+// fields from being classified as Hapi routes unless the file shows Hapi usage.
+func javaScriptHasHapiRouteSignal(source string) bool {
+	return strings.Contains(source, "server.route(") ||
+		strings.Contains(source, `require("@hapi/hapi")`) ||
+		strings.Contains(source, `require('@hapi/hapi')`) ||
+		strings.Contains(source, `require("hapi")`) ||
+		strings.Contains(source, `require('hapi')`) ||
+		strings.Contains(source, `from "@hapi/hapi"`) ||
+		strings.Contains(source, `from '@hapi/hapi'`)
+}
+
+// javaScriptHapiRouteEntries preserves the observed method/path pairing for
+// Hapi route objects, including routes with nested config blocks.
+func javaScriptHapiRouteEntries(source string) []map[string]string {
+	matches := javaScriptHapiRoutePairRe.FindAllStringSubmatch(source, -1)
+	entries := make([]map[string]string, 0, len(matches))
+	for _, match := range matches {
+		method := match[1]
+		path := match[2]
+		if method == "" {
+			path = match[3]
+			method = match[4]
+		}
+		if method == "" || path == "" {
+			continue
+		}
+		entries = append(entries, routeEntry(method, path))
+	}
+	return entries
+}
+
+// routeEntry is the parser-owned wire shape consumed by query read models.
+func routeEntry(method string, path string) map[string]string {
+	return map[string]string{
+		"method": strings.ToUpper(strings.TrimSpace(method)),
+		"path":   strings.TrimSpace(path),
+	}
 }
 
 func detectAWSSemantics(source string) (map[string]any, bool) {

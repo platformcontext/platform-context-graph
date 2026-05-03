@@ -160,12 +160,65 @@ const client = new vision.ImageAnnotatorClient();
 	assertFrameworksEqual(t, got, "express", "gcp", "react")
 	assertNestedStringSliceEqual(t, got, "express", "route_methods", []string{"GET", "POST"})
 	assertNestedStringSliceEqual(t, got, "express", "route_paths", []string{"/auth/login", "/"})
+	assertNestedRouteEntriesEqual(t, got, "express", []map[string]string{
+		{"method": "GET", "path": "/auth/login"},
+		{"method": "POST", "path": "/"},
+	})
 	assertNestedStringSliceEqual(t, got, "express", "server_symbols", []string{"router"})
 	assertNestedStringSliceEqual(t, got, "gcp", "services", []string{"vision"})
 	assertNestedStringSliceEqual(t, got, "gcp", "client_symbols", []string{"ImageAnnotatorClient"})
 	assertNestedStringValue(t, got, "react", "boundary", "client")
 	assertNestedStringSliceEqual(t, got, "react", "component_exports", []string{"ToolbarButton"})
 	assertNestedStringSliceEqual(t, got, "react", "hooks_used", []string{"useState", "useToolbarOverflow"})
+}
+
+func TestDefaultEngineParsePathJavaScriptHapiRouteEntriesPreserveMethodPathPairs(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "server", "routes.js")
+	writeTestFile(
+		t,
+		filePath,
+		`const Hapi = require("@hapi/hapi");
+
+module.exports = function registerRoutes(server) {
+  server.route([
+    { method: "GET", path: "/health", handler: health },
+    { path: "/orders/{id}", method: "POST", handler: createOrder },
+    { method: "DELETE", path: "/orders/{id}", handler: deleteOrder },
+    {
+      method: "PUT",
+      path: "/orders/{id}/metadata",
+      config: {
+        handler: updateMetadata,
+        auth: "default"
+      }
+    },
+  ]);
+};
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertFrameworksEqual(t, got, "hapi")
+	assertNestedStringSliceEqual(t, got, "hapi", "route_methods", []string{"GET", "POST", "DELETE", "PUT"})
+	assertNestedStringSliceEqual(t, got, "hapi", "route_paths", []string{"/health", "/orders/{id}", "/orders/{id}/metadata"})
+	assertNestedRouteEntriesEqual(t, got, "hapi", []map[string]string{
+		{"method": "GET", "path": "/health"},
+		{"method": "POST", "path": "/orders/{id}"},
+		{"method": "DELETE", "path": "/orders/{id}"},
+		{"method": "PUT", "path": "/orders/{id}/metadata"},
+	})
 }
 
 func TestDefaultEngineParsePathJavaScriptDocstringsAndMethodKinds(t *testing.T) {
@@ -508,6 +561,24 @@ func assertNestedStringSliceEqual(
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("framework_semantics.%s.%s = %#v, want %#v", section, key, got, want)
+	}
+}
+
+func assertNestedRouteEntriesEqual(
+	t *testing.T,
+	payload map[string]any,
+	section string,
+	want []map[string]string,
+) {
+	t.Helper()
+
+	nested := nestedSemanticsSection(t, payload, section)
+	raw, ok := nested["route_entries"].([]map[string]string)
+	if !ok {
+		t.Fatalf("framework_semantics.%s.route_entries = %T, want []map[string]string", section, nested["route_entries"])
+	}
+	if !reflect.DeepEqual(raw, want) {
+		t.Fatalf("framework_semantics.%s.route_entries = %#v, want %#v", section, raw, want)
 	}
 }
 
