@@ -42,7 +42,7 @@ client opts into the canonical envelope via
 Canonical names accepted by the `language` field:
 
 `c`, `cpp`, `csharp`, `dart`, `go`, `haskell`, `java`, `javascript`, `perl`,
-`python`, `ruby`, `rust`, `scala`, `swift`, `typescript`.
+`python`, `ruby`, `rust`, `scala`, `sql`, `swift`, `typescript`.
 
 Common aliases are normalized at request time. Unsupported languages return
 HTTP 400 with a list of valid values.
@@ -59,7 +59,8 @@ Entity types are resolved against three backing stores:
 Accepted values in the `entity_type` enum:
 
 `repository`, `directory`, `file`, `module`, `function`, `class`, `struct`,
-`enum`, `union`, `macro`, `variable`.
+`enum`, `union`, `macro`, `variable`, `sql_table`, `sql_view`,
+`sql_function`, `sql_trigger`, `sql_index`, `sql_column`.
 
 The surface also accepts `guard` as a semantic filter over `function`
 entities (returns guard-classified functions only).

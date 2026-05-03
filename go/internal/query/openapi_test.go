@@ -492,7 +492,13 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		!containsValue(enumValues, "terragrunt_config") ||
 		!containsValue(enumValues, "terragrunt_dependency") ||
 		!containsValue(enumValues, "terragrunt_local") ||
-		!containsValue(enumValues, "terragrunt_input") {
+		!containsValue(enumValues, "terragrunt_input") ||
+		!containsValue(enumValues, "sql_table") ||
+		!containsValue(enumValues, "sql_view") ||
+		!containsValue(enumValues, "sql_function") ||
+		!containsValue(enumValues, "sql_trigger") ||
+		!containsValue(enumValues, "sql_index") ||
+		!containsValue(enumValues, "sql_column") {
 		t.Fatalf("language-query entity_type enum = %#v, want content-backed entity types", enumValues)
 	}
 }

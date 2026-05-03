@@ -79,7 +79,13 @@ const openAPIPathsCode = `
                       "terragrunt_config",
                       "terragrunt_dependency",
                       "terragrunt_local",
-                      "terragrunt_input"
+                      "terragrunt_input",
+                      "sql_table",
+                      "sql_view",
+                      "sql_function",
+                      "sql_trigger",
+                      "sql_index",
+                      "sql_column"
                     ]
                   },
                   "query": {"type": "string", "description": "Optional name filter"},
