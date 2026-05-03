@@ -15,7 +15,7 @@ work. It runs indefinitely until stopped via SIGTERM.
 
 ```text
 1. Initialize telemetry
-2. Open Postgres and Neo4j connections
+2. Open Postgres and the configured graph backend connection
 3. Build collector service (GitSource + IngestionStore)
 4. Build projector service (ProjectorQueue + ProjectionRunner)
 5. compositeRunner.Run() — starts both concurrently:
@@ -25,7 +25,7 @@ work. It runs indefinitely until stopped via SIGTERM.
    loop forever:                    loop forever (N workers):
      poll GitSource.Next()            claim from projector queue
      if work available:               load facts
-       commit facts to Postgres       project → Neo4j batch write
+       commit facts to Postgres       project → Cypher graph write
        enqueue projector work         write content to Postgres
      else:                            enqueue reducer intents
        sleep PollInterval (1s)        ack work item
@@ -52,7 +52,7 @@ work. It runs indefinitely until stopped via SIGTERM.
 | Store | Usage |
 |-------|-------|
 | Postgres | Facts, projector queue, content store, reducer intents |
-| Neo4j | Source-local graph records (batched UNWIND via InstrumentedExecutor) |
+| Graph backend | Source-local graph records via backend-neutral Cypher writers |
 
 ## Configuration
 
@@ -77,13 +77,13 @@ monitoring claim latency under contention.
 
 ### Performance
 
-**1. Neo4j edge writes are per-row** (`storage/neo4j/edge_writer.go:36-42`)
+**1. Cypher edge writes are per-row** (`storage/cypher/edge_writer.go`)
 
 The `EdgeWriter.WriteEdges()` method loops through rows and executes one
 Cypher statement per edge record. This is the same N+1 problem we fixed for
 source-local writes with batched UNWIND.
 
-- **Fix**: Apply the batched UNWIND pattern from `neo4j/writer.go` to the
+- **Fix**: Apply the batched UNWIND pattern from `cypher/writer.go` to the
   edge writer. Group rows by domain, convert to `[]map[string]any`, execute
   as `UNWIND $rows AS row MERGE ...`.
 - **Impact**: Proportional to edge count per projection cycle. For repos with
@@ -117,11 +117,11 @@ A hung git clone or pathological parse blocks the collector indefinitely.
 Fix: configurable per-repo context timeout (`PCG_REPO_TIMEOUT=5m`). Log
 timeouts with `failure_class=timeout` and `scope_id`.
 
-**6. No circuit breaker for Neo4j**
+**6. No circuit breaker for the graph backend**
 
-If Neo4j is down, projector workers retry infinitely. Fix: circuit breaker
-that opens after N consecutive failures, backs off exponentially, half-opens
-to test recovery.
+If the graph backend is down, projector workers retry indefinitely. Fix:
+circuit breaker that opens after N consecutive failures, backs off
+exponentially, and half-opens to test recovery.
 
 **7. Missing queue depth gauge**
 

@@ -16,7 +16,7 @@ type DefaultHandlers struct {
 	PlatformMaterializationWriter    PlatformMaterializationWriter
 	WorkloadMaterializationReplayer  WorkloadMaterializationReplayer
 
-	// Neo4j-backed adapters for canonical graph writes.
+	// Cypher-backed adapters for canonical graph writes.
 	WorkloadMaterializer               *WorkloadMaterializer
 	InfrastructurePlatformMaterializer *InfrastructurePlatformMaterializer
 	InfrastructurePlatformLookup       InfrastructurePlatformLookup

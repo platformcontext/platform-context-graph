@@ -12,7 +12,7 @@ import (
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 )
 
 func TestNornicDBGroupedWriteSafetyProbe(t *testing.T) {
@@ -24,7 +24,7 @@ func TestNornicDBGroupedWriteSafetyProbe(t *testing.T) {
 		}
 
 		t.Run("canonical writer grouped transaction commits PCG node shape", func(t *testing.T) {
-			writer := sourceneo4j.NewCanonicalNodeWriter(executor, 500, nil)
+			writer := sourcecypher.NewCanonicalNodeWriter(executor, 500, nil)
 			if err := writer.Write(ctx, groupedWriteMaterialization("pcg-nornicdb-grouped-commit")); err != nil {
 				t.Fatalf("Write() error = %v, want nil", err)
 			}
@@ -45,7 +45,7 @@ RETURN count(*) AS count`, map[string]any{
 		})
 
 		t.Run("canonical writer preserves distinct entity ids for multiple functions", func(t *testing.T) {
-			writer := sourceneo4j.NewCanonicalNodeWriter(executor, 500, nil)
+			writer := sourcecypher.NewCanonicalNodeWriter(executor, 500, nil)
 			if err := writer.Write(ctx, groupedWriteMaterializationWithTwoFunctions("pcg-nornicdb-multi-entity")); err != nil {
 				t.Fatalf("Write() error = %v, want nil", err)
 			}
@@ -131,12 +131,12 @@ RETURN count(f) AS count`, map[string]any{
 
 		t.Run("grouped transaction honors caller timeout without partial write", func(t *testing.T) {
 			nodeID := "pcg-nornicdb-grouped-timeout"
-			timeoutExecutor := sourceneo4j.TimeoutExecutor{
+			timeoutExecutor := sourcecypher.TimeoutExecutor{
 				Inner:   executor,
 				Timeout: time.Nanosecond,
 			}
-			err := timeoutExecutor.ExecuteGroup(ctx, []sourceneo4j.Statement{{
-				Operation: sourceneo4j.OperationCanonicalUpsert,
+			err := timeoutExecutor.ExecuteGroup(ctx, []sourcecypher.Statement{{
+				Operation: sourcecypher.OperationCanonicalUpsert,
 				Cypher:    "MERGE (n:PCGConformanceTimeout {id: $id}) SET n.value = $value",
 				Parameters: map[string]any{
 					"id":    nodeID,
@@ -218,7 +218,7 @@ type nornicDBConformanceExecutor struct {
 	txTimeout    time.Duration
 }
 
-func (e nornicDBConformanceExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
+func (e nornicDBConformanceExecutor) Execute(ctx context.Context, stmt sourcecypher.Statement) error {
 	if e.driver == nil {
 		return fmt.Errorf("neo4j driver is required")
 	}
@@ -238,7 +238,7 @@ func (e nornicDBConformanceExecutor) Execute(ctx context.Context, stmt sourceneo
 	return err
 }
 
-func (e nornicDBConformanceExecutor) ExecuteGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+func (e nornicDBConformanceExecutor) ExecuteGroup(ctx context.Context, stmts []sourcecypher.Statement) error {
 	if e.driver == nil {
 		return fmt.Errorf("neo4j driver is required")
 	}
@@ -359,9 +359,9 @@ func groupedWriteMaterializationWithTwoFunctions(repoID string) projector.Canoni
 }
 
 func executeRollbackProbe(ctx context.Context, executor nornicDBConformanceExecutor, nodeID string) error {
-	return executor.ExecuteGroup(ctx, []sourceneo4j.Statement{
+	return executor.ExecuteGroup(ctx, []sourcecypher.Statement{
 		{
-			Operation: sourceneo4j.OperationCanonicalUpsert,
+			Operation: sourcecypher.OperationCanonicalUpsert,
 			Cypher:    "MERGE (n:PCGConformanceRollback {id: $id}) SET n.value = $value",
 			Parameters: map[string]any{
 				"id":    nodeID,
@@ -369,7 +369,7 @@ func executeRollbackProbe(ctx context.Context, executor nornicDBConformanceExecu
 			},
 		},
 		{
-			Operation:  sourceneo4j.OperationCanonicalUpsert,
+			Operation:  sourcecypher.OperationCanonicalUpsert,
 			Cypher:     "THIS IS NOT CYPHER",
 			Parameters: map[string]any{},
 		},

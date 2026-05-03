@@ -51,7 +51,7 @@ HTTP 400 with a list of valid values.
 
 Entity types are resolved against three backing stores:
 
-- **Graph-backed** — served from the canonical Neo4j graph when available.
+- **Graph-backed** — served from the canonical graph backend when available.
 - **Graph-first with content fallback** — graph first, falls back to Postgres
   content store if graph is empty for the language/type.
 - **Content-only** — served from the Postgres content store.

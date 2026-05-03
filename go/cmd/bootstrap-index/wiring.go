@@ -16,7 +16,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
@@ -184,7 +184,7 @@ func openBootstrapCanonicalWriter(
 		return nil, nil, err
 	}
 
-	writer := sourceneo4j.NewCanonicalNodeWriter(
+	writer := sourcecypher.NewCanonicalNodeWriter(
 		executor,
 		neo4jBatchSize(getenv),
 		instruments,
@@ -223,7 +223,7 @@ type bootstrapNeo4jExecutor struct {
 	TxTimeout    time.Duration
 }
 
-func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourcecypher.Statement) error {
 	if e.Driver == nil {
 		return fmt.Errorf("neo4j driver is required")
 	}
@@ -254,7 +254,7 @@ func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []source
 	return err
 }
 
-func (e bootstrapNeo4jExecutor) Execute(ctx context.Context, statement sourceneo4j.Statement) error {
+func (e bootstrapNeo4jExecutor) Execute(ctx context.Context, statement sourcecypher.Statement) error {
 	if e.Driver == nil {
 		return fmt.Errorf("neo4j driver is required")
 	}

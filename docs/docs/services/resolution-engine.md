@@ -5,7 +5,7 @@
 The Resolution Engine is a **long-running Deployment** that processes
 cross-domain reducer intents and shared projection work. It takes the
 source-local facts produced by the Ingester/Bootstrap-Index and materializes
-canonical cross-repo relationships in the Neo4j graph.
+canonical cross-repo relationships in the configured graph backend.
 
 **Binary**: `/usr/local/bin/pcg-reducer`
 **Docker service name**: `resolution-engine`
@@ -16,7 +16,8 @@ canonical cross-repo relationships in the Neo4j graph.
 
 ```text
 1. Initialize telemetry
-2. Open Postgres (InstrumentedDB) and Neo4j (InstrumentedExecutor) connections
+2. Open Postgres (InstrumentedDB) and graph backend (InstrumentedExecutor)
+   connections
 3. Build reducer service with:
    - DefaultRuntime executor (domain-specific handlers)
    - SharedProjectionRunner (canonical edge writer)
@@ -31,7 +32,7 @@ canonical cross-repo relationships in the Neo4j graph.
      on success: ack intent               acquire partition lease
      on failure: fail intent              read pending intents (batch 100)
      if no work: sleep 1s                 filter by accepted generation
-                                          write edges to Neo4j
+                                          write edges through Cypher
                                           ack processed intents
                                         if no work: sleep 5s
 ```
@@ -49,7 +50,7 @@ The reducer processes 8 intent domains:
 | `ownership` | (registered handler) | Resolve ownership records |
 | `governance` | (registered handler) | Resolve governance attribution |
 | `workload_materialization` | WorkloadMaterializer (Cypher) | Materialize workload graph nodes |
-| `code_call_materialization` | CodeCallEdgeWriter (Neo4j) | Materialize code call edges |
+| `code_call_materialization` | CodeCallEdgeWriter (Cypher) | Materialize code call edges |
 
 ## Shared Projection
 
@@ -82,7 +83,7 @@ Processing model:
 | Store | Usage |
 |-------|-------|
 | Postgres | Intent queue (claim/ack/fail), shared intent store, fact lookups, workload/cloud asset writes |
-| Neo4j | Canonical edge writes (per-row), workload/infrastructure materialization (Cypher) |
+| Graph backend | Canonical edge writes, workload/infrastructure materialization, and other Cypher graph writes |
 
 ## Configuration
 
@@ -120,12 +121,12 @@ those indicate different reducer, discovery, or graph-write bottlenecks.
 
 ### Performance
 
-**1. Canonical edge writes are per-row** (`storage/neo4j/edge_writer.go:36-42`)
+**1. Canonical edge writes are per-row** (`storage/cypher/edge_writer.go`)
 
 This is the single biggest performance bottleneck in the reducer.
 `EdgeWriter.WriteEdges()` executes one Cypher statement per row for all 4
 shared projection domains. At scale (thousands of cross-repo edges per cycle),
-this means thousands of Neo4j round-trips.
+this means thousands of graph backend round-trips.
 
 - **Fix**: Batch UNWIND for edge writes. Group rows by domain, convert to
   parameter maps, execute as `UNWIND $rows AS row MERGE ...` in batches of
@@ -153,7 +154,7 @@ but isn't activated. Fix: wire `PCG_REDUCER_WORKERS` env var, default to
 **5. InstrumentedExecutor batch metrics gap**
 
 Once edge write batching is added (#1), ensure `InstrumentedExecutor`
-records batch size and duration correctly on the reducer's Neo4j path.
+records batch size and duration correctly on the reducer's Cypher graph path.
 
 ### SRE / Operability
 
@@ -185,9 +186,9 @@ Answers "how stale is the canonical graph?" and enables SLA alerting.
 **10. Partial projection on error leaves inconsistent graph**
 
 If `EdgeWriter.WriteEdges()` fails mid-batch, some edges are written and
-others are not. Fix: wrap shared projection writes in a Neo4j explicit
-transaction so all edges for a partition cycle commit or roll back atomically.
-Alternative: ensure projection is fully idempotent so re-runs converge.
+others are not. Fix: wrap shared projection writes in a backend transaction so
+all edges for a partition cycle commit or roll back atomically. Alternative:
+ensure projection is fully idempotent so re-runs converge.
 
 **11. No generation-aware edge cleanup**
 

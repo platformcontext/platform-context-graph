@@ -33,7 +33,7 @@ flowchart LR
   B --> C["Postgres fact store"]
   C --> D["Fact work queue"]
   D --> E["Resolution Engine"]
-  E --> F["Neo4j graph"]
+  E --> F["Graph backend"]
   E --> G["Postgres content store"]
   H["API"] --> F
   H --> G

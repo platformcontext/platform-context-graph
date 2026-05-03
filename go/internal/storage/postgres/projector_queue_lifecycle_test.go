@@ -11,7 +11,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 )
 
 func TestProjectorQueueAckPromotesGenerationAndSupersedesPriorActive(t *testing.T) {
@@ -222,7 +222,7 @@ func TestProjectorQueueFailLifecycleRetriesGraphWriteTimeoutWithinAttemptBudget(
 		},
 		AttemptCount: 1,
 	}
-	cause := sourceneo4j.GraphWriteTimeoutError{
+	cause := sourcecypher.GraphWriteTimeoutError{
 		Operation:   "neo4j execute group timed out",
 		Timeout:     30 * time.Second,
 		TimeoutHint: "PCG_CANONICAL_WRITE_TIMEOUT",

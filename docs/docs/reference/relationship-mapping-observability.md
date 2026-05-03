@@ -90,7 +90,7 @@ The important packages are typically:
 - `go/internal/relationships`
 - `go/internal/reducer`
 - `go/internal/storage/postgres`
-- `go/internal/storage/neo4j`
+- `go/internal/storage/cypher`
 - `go/internal/query`
 
 ## Investigation Recipes
