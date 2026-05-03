@@ -45,6 +45,15 @@ repo identity API queries for `handleRelationships -> transitiveRelationshipsGra
 through the live local-authoritative API.
 
 Latest 2026-04-26 NornicDB dogfood evidence:
+- 2026-05-03 full-corpus proof `pcg-full-pr136-01413d04-a9ccd0f-20260503T0121Z`
+  rebuilt PCG `01413d04` and a clean NornicDB `a9ccd0f` binary from the
+  `UNWIND MATCH SET` hot-path branch, drained `896` repos / `8458` queue rows
+  in about `873s`, and ended with `0` retrying, failed, or dead-lettered rows.
+  API/MCP health passed against the completed stack, `/api/v0/repositories`
+  returned `896`, and relationship-evidence drilldown returned durable
+  Postgres detail through `resolved_id`. This is promotion-positive for the
+  hot path but still waits on `orneryd/NornicDB#136` merge/release before it is
+  release-backed.
 - 2026-05-02 focused evidence-pointer proof found and isolated a NornicDB
   relationship-property persistence bug in the embedded backend path. PCG's
   graph writer was already setting `resolved_id`, `generation_id`,
