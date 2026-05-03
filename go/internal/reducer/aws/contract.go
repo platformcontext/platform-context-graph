@@ -44,8 +44,8 @@ func DefaultRuntimeContract() RuntimeContract {
 	return contract
 }
 
-// RuntimeContract returns a defensive copy of the accepted AWS reducer
-// scaffold.
+// RuntimeContractTemplate returns a defensive copy of the accepted AWS reducer
+// scaffold for ADR and test fixtures.
 func RuntimeContractTemplate() RuntimeContract {
 	return DefaultRuntimeContract()
 }

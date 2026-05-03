@@ -143,6 +143,8 @@ else
     echo "Missing required compose command: docker compose or docker-compose" >&2
     exit 1
 fi
+COMPOSE_CMD+=(-f docker-compose.yaml -f docker-compose.telemetry.yml)
+COMPOSE_DISPLAY+=" -f docker-compose.yaml -f docker-compose.telemetry.yml"
 
 configure_ports() {
     export NEO4J_HTTP_PORT="$(pick_port "${NEO4J_HTTP_PORT:-17474}")"

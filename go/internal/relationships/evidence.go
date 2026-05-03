@@ -110,16 +110,6 @@ var kustomizationFilenames = map[string]struct{}{
 	"kustomization.yml":  {},
 }
 
-// discoverFromEnvelope extracts evidence from a single fact envelope based
-// on its artifact type and content.
-func discoverFromEnvelope(
-	envelope facts.Envelope,
-	catalog []CatalogEntry,
-	seen map[evidenceKey]struct{},
-) []EvidenceFact {
-	return discoverFromEnvelopeWithIndex(envelope, catalog, seen, nil)
-}
-
 func discoverFromEnvelopeWithIndex(
 	envelope facts.Envelope,
 	catalog []CatalogEntry,

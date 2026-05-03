@@ -207,7 +207,7 @@ func InferInfrastructureRuntimeFamilyKind(resourceTypes, moduleSources []string)
 		// Service-only modules should not turn an application stack into an
 		// infrastructure platform, but an explicit cluster resource is stronger
 		// evidence than sibling service modules in the same stack.
-		if excluded && !(hasExplicitClusterResource && excludedByServiceModule) {
+		if excluded && (!hasExplicitClusterResource || !excludedByServiceModule) {
 			continue
 		}
 		return f.Kind

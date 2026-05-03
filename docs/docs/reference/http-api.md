@@ -6,9 +6,12 @@ The HTTP API is versioned under `/api/v0` and shares the same query model as CLI
 
 The live OpenAPI spec is always canonical. If this page and the spec disagree, the spec wins.
 
-- `GET /api/v0/openapi.json` — machine-readable schema
-- `GET /api/v0/docs` — Swagger UI
-- `GET /api/v0/redoc` — ReDoc
+- `GET /api/v0/openapi.json` - machine-readable schema
+- `GET /api/v0/docs` - Swagger UI for trying requests in a browser
+- `GET /api/v0/redoc` - ReDoc reference for reading the API contract
+
+These documentation routes are intentionally public, like the OpenAPI JSON
+schema. API data routes still follow the configured API auth policy.
 
 For the mounted Go runtime admin surface, the checked-in OpenAPI contract lives
 in `docs/openapi/runtime-admin-v1.yaml`. That contract is separate from the

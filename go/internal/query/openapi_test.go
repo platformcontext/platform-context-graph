@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
@@ -136,6 +137,60 @@ func TestAPIRouter_OpenAPIEndpoint(t *testing.T) {
 
 	if spec["openapi"] != "3.0.3" {
 		t.Errorf("expected openapi version 3.0.3, got %v", spec["openapi"])
+	}
+}
+
+func TestAPIRouter_OpenAPIDocumentationEndpoints(t *testing.T) {
+	router := &APIRouter{}
+	mux := http.NewServeMux()
+	router.Mount(mux)
+
+	tests := []struct {
+		name     string
+		path     string
+		contains []string
+	}{
+		{
+			name: "swagger ui",
+			path: "/api/v0/docs",
+			contains: []string{
+				"Swagger UI",
+				"/api/v0/openapi.json",
+				"swagger-ui",
+			},
+		},
+		{
+			name: "redoc",
+			path: "/api/v0/redoc",
+			contains: []string{
+				"ReDoc",
+				"/api/v0/openapi.json",
+				"redoc",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			w := httptest.NewRecorder()
+
+			mux.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("GET %s status = %d, want %d", tt.path, w.Code, http.StatusOK)
+			}
+			if got, want := w.Header().Get("Content-Type"), "text/html; charset=utf-8"; got != want {
+				t.Fatalf("GET %s Content-Type = %q, want %q", tt.path, got, want)
+			}
+			body := w.Body.String()
+			for _, want := range tt.contains {
+				if !strings.Contains(body, want) {
+					t.Fatalf("GET %s body missing %q", tt.path, want)
+				}
+			}
+		})
 	}
 }
 

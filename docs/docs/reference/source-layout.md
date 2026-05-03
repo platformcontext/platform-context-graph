@@ -32,7 +32,7 @@ live in the repository today.
 | `go/internal/telemetry/` | OTEL tracing, metrics, and structured logging |
 | `go/internal/terraformschema/` | packaged Terraform provider schemas and schema loader |
 | `go/internal/truth/` | canonical truth contracts |
-| `deploy/` | Docker, Helm, compose, and manifest assets |
+| `deploy/` | deployment assets: Helm chart, minimal Kubernetes manifests, Argo CD examples, and local observability add-ons |
 | `docs/` | operator docs, architecture, workflows, runtime references, and language references |
 | `tests/fixtures/` | parser and ecosystem fixture corpora only |
 

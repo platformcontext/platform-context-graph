@@ -11,11 +11,16 @@ import (
 type RequestState string
 
 const (
-	RequestStateIdle      RequestState = "idle"
-	RequestStatePending   RequestState = "pending"
-	RequestStateRunning   RequestState = "running"
+	// RequestStateIdle means no scan or reindex request is currently active.
+	RequestStateIdle RequestState = "idle"
+	// RequestStatePending means the request has been stored but not claimed.
+	RequestStatePending RequestState = "pending"
+	// RequestStateRunning means a runtime has claimed and started the request.
+	RequestStateRunning RequestState = "running"
+	// RequestStateCompleted means the claimed request finished successfully.
 	RequestStateCompleted RequestState = "completed"
-	RequestStateFailed    RequestState = "failed"
+	// RequestStateFailed means the claimed request ended with an error.
+	RequestStateFailed RequestState = "failed"
 )
 
 // Validate returns an error if the state is not a known value.

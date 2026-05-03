@@ -250,10 +250,7 @@ func coordinatorJSON(snapshot *CoordinatorSnapshot) *coordinatorSnapshotJSON {
 func namedCountsJSON(rows []NamedCount) []namedCountJSON {
 	projected := make([]namedCountJSON, 0, len(rows))
 	for _, row := range rows {
-		projected = append(projected, namedCountJSON{
-			Name:  row.Name,
-			Count: row.Count,
-		})
+		projected = append(projected, namedCountJSON(row))
 	}
 	return projected
 }

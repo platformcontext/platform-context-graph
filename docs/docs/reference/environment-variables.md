@@ -164,7 +164,7 @@ advisory report.
 | `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES` | `Function=15,K8sResource=1,Struct=50,Variable=100` | graph writer | Label-specific canonical entity row caps. | Add/narrow labels when timeout logs name that label and row count. |
 | `PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS` | `Function=5,K8sResource=1,Struct=15,Variable=5` | graph writer | Label-specific grouped statement caps. | Tune when row size is healthy but grouped execution of that label drifts upward. |
 | `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | `Annotation=5,Function=10,ImplBlock=10,Module=10,TypeAlias=5,TypeAnnotation=50,Variable=10` | reducer semantic writer | Label-specific semantic entity row caps. | Tune only for semantic materialization timeout summaries naming that label. |
-| `PCG_CODE_CALL_EDGE_BATCH_SIZE` | `50` | reducer code-call edge writer | Rows per code-call edge write statement. | Lower if code-call edge write statements time out after acceptance scan succeeds. |
+| `PCG_CODE_CALL_EDGE_BATCH_SIZE` | `1000` | reducer code-call edge writer | Rows per code-call edge write statement. | Lower if code-call edge write statements time out after acceptance scan succeeds. |
 | `PCG_CODE_CALL_EDGE_GROUP_BATCH_SIZE` | `1` | reducer code-call edge writer | Statements per grouped code-call edge execution. | Raise only after backend proves grouped code-call edge writes are safe and faster. |
 | `PCG_INHERITANCE_EDGE_GROUP_BATCH_SIZE` | `1` | reducer shared edge writer | Grouped statements for inheritance edges. | Raise only after edge writes are stable and graph backend can absorb grouping. |
 | `PCG_SQL_RELATIONSHIP_EDGE_GROUP_BATCH_SIZE` | `1` | reducer shared edge writer | Grouped statements for SQL relationship edges. | Same guidance as inheritance edge grouping. |
@@ -195,12 +195,12 @@ advisory report.
 
 | Variable | Default | Read By | Purpose | Tune When |
 | --- | --- | --- | --- | --- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | telemetry bootstrap | Enables OTLP traces and metrics. | Set in deployments or compose when exporting to collector/Jaeger. |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | deployment/compose set | OTEL SDK | OTLP transport protocol, normally `grpc` in compose. | Set with the collector endpoint; do not use as a PCG performance knob. |
-| `OTEL_EXPORTER_OTLP_INSECURE` | deployment/compose set | OTEL SDK | Allows insecure OTLP transport for local compose. | Local/dev collector setups only. |
-| `OTEL_TRACES_EXPORTER` | deployment/compose set | OTEL SDK | Selects trace exporter, normally `otlp`. | Deployment telemetry wiring only. |
-| `OTEL_METRICS_EXPORTER` | deployment/compose set | OTEL SDK | Selects metrics exporter, normally `otlp`. | Deployment telemetry wiring only. |
-| `OTEL_LOGS_EXPORTER` | `none` in compose | OTEL SDK | Disables OTEL log export while PCG emits JSON stderr logs. | Leave as `none` unless the logging pipeline explicitly supports OTEL logs. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | telemetry bootstrap | Enables OTLP traces and metrics. | Set in deployments or the Compose telemetry overlay when exporting to collector/Jaeger. |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | deployment/overlay set | OTEL SDK | OTLP transport protocol, normally `grpc` in the local telemetry overlay. | Set with the collector endpoint; do not use as a PCG performance knob. |
+| `OTEL_EXPORTER_OTLP_INSECURE` | deployment/overlay set | OTEL SDK | Allows insecure OTLP transport for local Compose telemetry. | Local/dev collector setups only. |
+| `OTEL_TRACES_EXPORTER` | deployment/overlay set | OTEL SDK | Selects trace exporter, normally `otlp`. | Deployment telemetry wiring only. |
+| `OTEL_METRICS_EXPORTER` | deployment/overlay set | OTEL SDK | Selects metrics exporter, normally `otlp`. | Deployment telemetry wiring only. |
+| `OTEL_LOGS_EXPORTER` | `none` in telemetry overlay | OTEL SDK | Disables OTEL log export while PCG emits JSON stderr logs. | Leave as `none` unless the logging pipeline explicitly supports OTEL logs. |
 | `OTEL_SERVICE_NAME` | binary/service name | OTEL SDK | Overrides service name resource attribute. | Usually set by Helm/deployment templates, not manually. |
 | `GOMEMLIMIT` | Go runtime default or cgroup-derived 70% when configured by PCG | Go runtime | Soft heap target. | Set when cgroup detection is unavailable or container memory needs a deliberate heap budget. |
 | `GODEBUG` | unset | Go runtime / PCG memlimit setup | Go runtime debug flags; PCG may preserve/add memory-limit related settings. | Use only for Go runtime diagnostics. |

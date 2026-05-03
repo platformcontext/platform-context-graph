@@ -48,8 +48,8 @@ observability:
     excludedUrls:
       - /health
       - /api/v0/health
-      - /api/v0/openapi.json
       - /api/v0/docs
+      - /api/v0/openapi.json
       - /api/v0/redoc
     metricExportIntervalSeconds: 30
 

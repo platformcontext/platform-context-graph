@@ -152,10 +152,6 @@ func applyResolvedProvisioningSources(
 	return enriched
 }
 
-func hasArgoDeploymentEvidence(details map[string]any) bool {
-	return hasDeploymentEvidence(details)
-}
-
 // hasDeploymentEvidence returns true when the resolved relationship carries
 // evidence kinds that indicate a deployment source linkage (ArgoCD, Kustomize,
 // or Helm).

@@ -297,6 +297,8 @@ else
 	COMPOSE_CMD+=(-f docker-compose.neo4j.yml)
 	COMPOSE_DISPLAY+=" -f docker-compose.neo4j.yml"
 fi
+COMPOSE_CMD+=(-f docker-compose.telemetry.yml)
+COMPOSE_DISPLAY+=" -f docker-compose.telemetry.yml"
 
 cd "$REPO_ROOT"
 build_fixture_repositories

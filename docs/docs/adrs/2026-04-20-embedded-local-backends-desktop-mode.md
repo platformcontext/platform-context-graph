@@ -1,7 +1,7 @@
 # ADR: Local Code Intelligence Host, Authoritative Graph Mode, And Backend Capability Ports
 
 **Date:** 2026-04-20
-**Status:** Proposed
+**Status:** Accepted with follow-up
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 **Related:**
@@ -20,6 +20,19 @@
 - `docs/docs/reference/local-host-lifecycle.md`
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Accepted with follow-up.
+
+The local-host and local-authoritative split is implemented in the CLI path:
+the repo has local host supervision, local graph lifecycle, owner records,
+progress reporting, NornicDB installation, query profile contracts, and
+unsupported-capability tests.
+
+**Remaining work:** local-authoritative/NornicDB hardening, backend conformance,
+release-backed pins, signature verification, broader host coverage, and plugin
+or deprecation chunks remain in the implementation plan and NornicDB ADR.
 
 ## Context
 

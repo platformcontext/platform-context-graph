@@ -1,11 +1,26 @@
 # ADR: Deployable-Unit Correlation And Materialization Framework
 
 **Date:** 2026-04-19
-**Status:** Proposed
+**Status:** Accepted with follow-up; extension seam partially superseded
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Accepted with follow-up.
+
+The deployable-unit framework exists in the reducer. It evaluates
+evidence-backed candidates, splits multiple Dockerfiles conservatively, admits
+resolved deployment evidence, handles Jenkins-backed service candidates, and
+materializes workloads, instances, deployment sources, runtime platforms, and
+endpoints.
+
+**Remaining work:** the extension-mechanism portion is partially superseded by
+`2026-04-19-multi-source-correlation-dsl-and-collector-readiness.md`. Full
+admission and materialization across multi-source runtime evidence is still
+follow-up work.
 
 ## Context
 

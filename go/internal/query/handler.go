@@ -130,6 +130,8 @@ func (a *APIRouter) Mount(mux *http.ServeMux) {
 
 	// OpenAPI spec
 	mux.HandleFunc("GET /api/v0/openapi.json", ServeOpenAPI)
+	mux.HandleFunc("GET /api/v0/docs", ServeSwaggerUI)
+	mux.HandleFunc("GET /api/v0/redoc", ServeReDoc)
 
 	// Repositories
 	if a.Repositories != nil {

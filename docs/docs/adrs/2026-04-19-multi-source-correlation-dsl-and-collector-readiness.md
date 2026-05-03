@@ -1,11 +1,25 @@
 # ADR: Multi-Source Correlation DSL And Collector Readiness
 
 **Date:** 2026-04-19
-**Status:** Proposed
+**Status:** In Progress
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** In progress.
+
+The constrained DSL direction is implemented as code scaffolding and first-party
+rule packs. The repo has a deterministic evaluator, supported rule schema, and
+packs for Dockerfile, Docker Compose, GitHub Actions, Jenkins, Helm, ArgoCD,
+Kustomize, Terraform, Terragrunt, Ansible, and CloudFormation.
+
+**Remaining work:** finish collector readiness and true multi-source
+correlation. Current evidence proves the DSL/rule-pack substrate, not the AWS
+scanner, Terraform-state scanner, webhook freshness, or full cloud/runtime
+cross-source joins.
 
 ## Context
 

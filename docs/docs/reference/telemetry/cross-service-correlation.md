@@ -1,9 +1,11 @@
 # Cross-Service Trace Correlation
 
-PlatformContextGraph runs multiple Go runtimes that emit OTEL traces to the
-same Jaeger backend via an OTEL Collector. This guide shows operators how to
-correlate traces across service boundaries when debugging end-to-end pipeline
-behavior.
+PlatformContextGraph runs multiple Go runtimes that can emit OTEL traces through
+an OTEL Collector to a trace backend such as Jaeger. In Kubernetes, that collector
+is part of the deployment observability stack. On a laptop, add
+`docker-compose.telemetry.yml` to the NornicDB or Neo4j Compose command when you
+want Jaeger and the local collector. This guide shows operators how to correlate
+traces across service boundaries when debugging end-to-end pipeline behavior.
 
 ## Why Traces Don't Automatically Stitch
 

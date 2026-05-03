@@ -1,8 +1,21 @@
 # ADR: Reducer Full-Convergence Optimization
 
-**Status:** Proposed
+**Status:** Superseded
 **Date:** 2026-04-18
 **Related:** `2026-04-18-e2e-validation-atomic-writes-deferred-backfill.md`
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Superseded.
+
+This ADR correctly separated reducer convergence from bootstrap performance, but
+its optimization plan has been replaced by the broader NornicDB/reducer
+throughput workstream. The active evidence, benchmark target, rejected
+hypotheses, and merged closeout now live in
+`2026-04-28-reducer-throughput-and-nornicdb-concurrency-plan.md`.
+
+**Remaining work:** none in this ADR. Keep it as historical context for why
+bootstrap success did not imply reducer convergence success.
 
 ## Decision
 

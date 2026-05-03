@@ -443,7 +443,20 @@ chunk boundaries must include:
    - `docs/docs/getting-started/*`
 3. Add `doc.go` for any new Go package, with a package-level comment naming
    the spec it implements.
-4. Document new extensibility seams in `docs/docs/architecture.md`,
+4. Document every new or touched exported Go type, interface, function, method,
+   constant group, and variable with a useful Go doc comment. The comment must
+   explain the contract, invariant, failure mode, or operational reason for the
+   API; placeholder comments that only repeat the identifier are not acceptable.
+5. Add comments for new or touched unexported Go helpers when they encode a
+   contract, storage/query assumption, concurrency rule, retry rule, or
+   regression purpose.
+6. Keep README coverage at ownership roots. Go package leaf directories may use
+   `doc.go`; docs directories may use `index.md`; generated, vendor, build,
+   cache, and fixture leaf directories are exempt.
+7. Keep OpenAPI changes in lockstep with `go/internal/query/openapi*.go`,
+   handler tests, and `docs/docs/reference/http-api.md`. Do not document
+   Swagger UI or ReDoc routes unless the server actually registers them.
+8. Document new extensibility seams in `docs/docs/architecture.md`,
    `docs/docs/why-pcg.md`, and a dedicated reference page.
 
 `AGENTS.md` mirrors `CLAUDE.md`. Any edit to one must be mirrored in the other
@@ -460,6 +473,7 @@ cd go && go test ./cmd/pcg ./cmd/api ./cmd/mcp-server ./internal/query ./interna
 cd go && go test ./internal/parser ./internal/collector/discovery ./internal/content/shape ./internal/collector -count=1
 cd go && go test ./internal/terraformschema ./internal/relationships -count=1
 cd go && go test ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer ./internal/runtime ./internal/status ./internal/storage/postgres -count=1
+cd go && golangci-lint run ./...
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
   mkdocs build --strict --clean --config-file docs/mkdocs.yml
 git diff --check
@@ -507,5 +521,6 @@ Before saying work is complete:
 - telemetry added for runtime behavior
 - docs and active ADRs updated for contract changes
 - `AGENTS.md` and `CLAUDE.md` kept in lockstep if either changed
+- `golangci-lint run ./...` clean for Go changes
 - focused verification run and cited
 - `git diff --check` clean

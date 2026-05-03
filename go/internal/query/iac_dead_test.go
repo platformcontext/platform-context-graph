@@ -14,7 +14,6 @@ import (
 type fakeIaCDeadContentStore struct {
 	fakePortContentStore
 	files map[string][]FileContent
-	calls int
 }
 
 func (f fakeIaCDeadContentStore) ListRepoFiles(_ context.Context, repoID string, _ int) ([]FileContent, error) {
@@ -36,7 +35,7 @@ func (f fakeIaCDeadContentStore) MatchRepositories(
 	selector string,
 ) ([]RepositoryCatalogEntry, error) {
 	entries, err := f.fakePortContentStore.MatchRepositories(ctx, selector)
-	if err != nil || len(entries) > 0 || len(f.fakePortContentStore.repositories) > 0 {
+	if err != nil || len(entries) > 0 || len(f.repositories) > 0 {
 		return entries, err
 	}
 	if _, ok := f.files[selector]; !ok {

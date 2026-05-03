@@ -1,8 +1,20 @@
 # ADR: Bootstrap Relationship Backfill Quadratic Cost
 
-**Status:** Proposed
+**Status:** Accepted with follow-up
 **Date:** 2026-04-18
 **Related:** `2026-04-17-semantic-entity-materialization-bottleneck.md`
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Implemented.
+
+The deferred bootstrap backfill design is implemented. `SkipRelationshipBackfill`
+suppresses per-commit bootstrap backfill, bootstrap and ingester wiring run
+`BackfillAllRelationshipEvidence` and `ReopenDeploymentMappingWorkItems`, and
+Postgres tests cover generation-scoped persistence and readiness publishing.
+
+**Remaining work:** track automatic replay for the documented reopen straggler
+window if it resurfaces. The quadratic backfill fix itself is done.
 
 ## Decision
 

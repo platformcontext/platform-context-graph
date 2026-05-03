@@ -1,9 +1,21 @@
 # ADR: E2E Validation — Atomic Canonical Writes and Deferred Bootstrap Backfill
 
-**Status:** Proposed
+**Status:** Superseded by later acceptance evidence
 **Date:** 2026-04-18
 **Validates:** `2026-04-17-neo4j-deadlock-elimination-batch-isolation.md`,
 `2026-04-18-bootstrap-relationship-backfill-quadratic-cost.md`
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Historical validation.
+
+The validated decisions landed: canonical writes use the atomic/grouped writer,
+retryable Cypher error handling covers `EntityNotFound` and `DeadlockDetected`,
+and deferred relationship backfill is now normal bootstrap behavior. Current
+acceptance evidence has moved to newer full-corpus proofs.
+
+**Remaining work:** none for this validation ADR. Use the active ADR that owns a
+change to record new E2E evidence.
 
 ## Decision
 

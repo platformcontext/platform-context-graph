@@ -15,10 +15,6 @@ import (
 )
 
 var (
-	watchLookPath = exec.LookPath
-	watchExec     = func(binary string, args []string, env []string) error { return syscall.Exec(binary, args, env) }
-	watchSetenv   = os.Setenv
-	watchEnviron  = os.Environ
 	indexLookPath = exec.LookPath
 	indexExec     = func(binary string, args []string, env []string) error { return syscall.Exec(binary, args, env) }
 )

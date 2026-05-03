@@ -125,7 +125,9 @@ func installNornicDB(opts installNornicDBOptions) (installNornicDBResult, error)
 	if err != nil {
 		return installNornicDBResult{}, err
 	}
-	defer source.Close()
+	defer func() {
+		_ = source.Close()
+	}()
 
 	if expected := strings.ToLower(strings.TrimSpace(opts.SHA256)); expected != "" && expected != source.SourceSHA256 {
 		return installNornicDBResult{}, fmt.Errorf("sha256 mismatch for %q: got %s, want %s", source.SourcePath, source.SourceSHA256, expected)
