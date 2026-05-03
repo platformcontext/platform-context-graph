@@ -5,6 +5,18 @@
 **Authors:** Platform Engineering
 **Deciders:** Platform Engineering
 
+## Status Review (2026-05-03)
+
+**Current disposition:** Accepted.
+
+This branch implements the decision: default Compose stays focused on the
+runtime stack, the telemetry overlay owns Jaeger and the OTEL collector, docs
+routes are public, README/docs/OpenAPI surfaces are aligned, and docs standards
+are enforced by tests and CI.
+
+**Remaining work:** none for the overlay split. Keep running the ADR's stated
+verification gates before merge.
+
 ## Context
 
 PCG now has two local full-stack Compose lanes:

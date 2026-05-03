@@ -3,7 +3,7 @@
 **Date:** 2026-04-20
 **Owner:** Allen Sanabria
 **Tracks ADR:** `2026-04-20-embedded-local-backends-desktop-mode.md`
-**Status:** In Progress (Chunks 1-3 shipped; Chunks 3.5 and 4 in progress; full-corpus NornicDB drain gate active)
+**Status:** In Progress (local host and local-authoritative path shipped; release and conformance gates remain)
 
 **Companion Specs:**
 
@@ -17,6 +17,19 @@
 - `docs/docs/reference/local-host-lifecycle.md`
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** In progress.
+
+The plan has shipped the local host foundation, local-authoritative graph
+lifecycle, NornicDB installer path, progress view, and the docs/runtime split
+between local binaries, default NornicDB Compose, and Neo4j compatibility
+Compose.
+
+**Remaining work:** finish release-backed NornicDB acceptance, graph-analysis
+hardening, backend conformance, profile matrix runs, OCI/plugin contract work,
+and any explicit Neo4j deprecation path before closing this plan.
 
 ## Chunk Status
 

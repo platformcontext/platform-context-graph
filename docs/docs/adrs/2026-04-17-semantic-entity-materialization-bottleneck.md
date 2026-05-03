@@ -1,8 +1,22 @@
 # ADR: Semantic Entity Materialization Throughput Bottleneck
 
-**Status:** Proposed  
+**Status:** Accepted; follow-up superseded by 2026-04-28
 **Date:** 2026-04-17  
 **Related:** `2026-04-17-neo4j-deadlock-elimination-batch-isolation.md`
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Implemented, with follow-up owned by the reducer
+throughput ADR.
+
+The acceptance-unit fix is present in code: semantic intents are keyed by
+repository acceptance unit, the reducer filters materialization to that target
+repository, and reducer tests cover readiness publication plus target-repo
+filtering.
+
+**Remaining work:** semantic throughput remains a measured NornicDB/full-corpus
+hot path, but that work moved to
+`2026-04-28-reducer-throughput-and-nornicdb-concurrency-plan.md`.
 
 ## Decision
 

@@ -18,6 +18,17 @@ downstream gates + second-pass domain first-class gates) and **gates** the
 
 ---
 
+## Status Review (2026-05-03)
+
+**Current disposition:** Architecture accepted; implementation partial.
+
+The phase registry, workflow contracts, reducer skeletons, and shared consumer
+shape exist. This ADR remains the contract future collectors must plug into.
+
+**Remaining work:** Terraform-state and AWS collectors, real projectors, DSL
+materialization, and collector-backed MCP/HTTP consumer tools are still
+incomplete.
+
 ## Context
 
 The platform currently runs a Git-only facts pipeline end-to-end:

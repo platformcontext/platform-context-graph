@@ -1,13 +1,26 @@
 # ADR: Reducer Throughput And NornicDB Concurrency Plan
 
 **Date:** 2026-04-28
-**Status:** Proposed
+**Status:** Accepted with follow-up (PR #129 merged)
 **Related:**
 
 - `2026-04-18-reducer-full-convergence-optimization.md`
 - `2026-04-22-nornicdb-graph-backend-candidate.md`
 - `docs/docs/reference/nornicdb-tuning.md`
 - `docs/docs/reference/telemetry/index.md`
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Accepted with follow-up.
+
+The main workstream closed with PR #129 merged to `main` on 2026-05-03. The
+accepted proof recorded in this ADR is the full-corpus NornicDB run that drained
+896 repositories in about 14m33s with healthy projector, reducer, API, MCP,
+graph, and Postgres parity.
+
+**Remaining work:** keep NornicDB PR #136 release/pin status explicit, continue
+file-size and query maintainability follow-ups, and keep runtime defaults and
+environment-variable docs in lockstep.
 
 ## Decision
 

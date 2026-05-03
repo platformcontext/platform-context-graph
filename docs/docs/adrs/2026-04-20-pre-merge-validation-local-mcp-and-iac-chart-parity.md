@@ -1,7 +1,7 @@
 # ADR: Pre-Merge Validation — Local MCP Self-Indexing + IaC Chart Parity For Go Runtime
 
 **Date:** 2026-04-20
-**Status:** Proposed
+**Status:** Superseded
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 **Related:**
@@ -13,6 +13,19 @@
 - `~/repos/mobius/iac-eks-pcg/chart/` (private internal)
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Superseded.
+
+This ADR was a pre-merge gate for an older Go-runtime branch and mixed public
+repo requirements with private IaC chart validation. Current public deployment
+docs, Helm templates, Docker Compose docs, local-testing docs, and CI gates have
+replaced the actionable parts.
+
+**Remaining work:** create a new deployment/parity tracker if private ops-qa or
+internal IaC validation is still needed. Do not treat this ADR as the active
+public chart contract.
 
 ## Context
 

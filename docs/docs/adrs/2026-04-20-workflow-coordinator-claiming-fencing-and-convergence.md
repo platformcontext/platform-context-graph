@@ -8,6 +8,20 @@
 
 ---
 
+## Status Review (2026-05-03)
+
+**Current disposition:** Accepted; claim substrate partial.
+
+Claim tables, fencing operations, and claim issuance exist. Production
+convergence is still blocked by narrower identity work: some workflow
+reconciliation still joins readiness on `scope_id + generation_id` while graph
+projection phase state is keyed by `scope_id`, `acceptance_unit_id`,
+`source_run_id`, `generation_id`, keyspace, and phase.
+
+**Remaining work:** add the missing acceptance-unit and source-run identity to
+workflow work items and reconciliation before enabling production claim
+ownership.
+
 ## Context
 
 The workflow coordinator ADR establishes the control-plane shape for a

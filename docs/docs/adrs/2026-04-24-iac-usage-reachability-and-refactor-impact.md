@@ -1,7 +1,7 @@
 # ADR: IaC Usage, Reachability, And Refactor Impact Graph
 
 **Date:** 2026-04-24
-**Status:** Proposed
+**Status:** In Progress
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 **Related:**
@@ -19,6 +19,19 @@
 - `../../superpowers/plans/2026-04-26-cross-repo-contract-bridge-and-service-dependency-graph-implementation.md`
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** In progress.
+
+Dead-IaC reachability has substantial runtime proof: the analyzer, durable
+Postgres rows, API materialized-row path, MCP route, OpenAPI path, product-truth
+fixtures, and full-corpus materialization evidence are all present.
+
+**Remaining work:** do not mark this complete yet. Phase 0 dependency
+neighborhood work, impact and integrity workflows, CloudFormation, Crossplane,
+deeper Helm rendering, Argo ApplicationSet templating, conservative Kubernetes
+orphan semantics, and large-result pagination are still open.
 
 ## Context
 

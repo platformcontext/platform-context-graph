@@ -1,7 +1,7 @@
 # ADR: AWS Cloud Scanner Collector
 
 **Date:** 2026-04-20
-**Status:** Proposed
+**Status:** Accepted with follow-up
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 **Related:**
@@ -15,6 +15,19 @@
   incorporates directly.
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Design accepted; runtime not implemented.
+
+The shared identity and workflow substrate exists, including the AWS collector
+kind and reducer phase contract. The actual collector runtime does not exist in
+this repo yet: there is no `go/cmd/collector-aws-cloud` or
+`go/internal/collector/awscloud` implementation.
+
+**Remaining work:** implement the collector runtime, IAM-first scanner, service
+packages, claim loop, AWS telemetry, fact emission, correlation consumers,
+tests, and operator docs.
 
 ## Context
 

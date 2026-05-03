@@ -1,11 +1,27 @@
 # ADR: Relationship-Mapping Accuracy And MCP Contract Parity — Closing the Gap Between Go and Python Data Planes
 
 **Date:** 2026-04-18
-**Status:** Proposed
+**Status:** Accepted with follow-up
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Accepted with follow-up.
+
+The P0 contract and enrichment gaps are largely implemented. Service and
+workload context now load graph API surface, deployment evidence, hostnames,
+entrypoints, consumers, provisioning chains, docs, support signals, and story
+sections. Tests cover plain service names, qualified workload IDs, graph-backed
+deployment evidence, API surface, and observed signals without materialized
+instances.
+
+**Remaining work:** keep closing full service-query parity. Materialized runtime
+instances and environments are still separate from query-time observed config
+signals, and workload/service story responses remain narrative-first rather
+than complete deployment-mapping contracts.
 
 ## Context
 

@@ -5,6 +5,18 @@
 **Supersedes:** Previous deadlock assessment (`61132c4b`) and the earlier
 batch-isolation draft that treated this as a code-call batching problem
 
+## Status Review (2026-05-03)
+
+**Current disposition:** Complete.
+
+The durable readiness contract, repair queue, and bounded code-entity write
+shape have been absorbed into the reducer and storage contracts. Later ADRs
+still tune reducer throughput, but they no longer reopen this deadlock decision.
+
+**Remaining work:** none for this ADR. Future deadlock or graph-write
+contention work belongs in a new, evidence-backed ADR or in the active NornicDB
+throughput track.
+
 ## Decision
 
 Adopt a **durable graph-readiness contract** for the `uid`-keyed code-entity

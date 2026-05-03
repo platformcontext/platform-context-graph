@@ -1,11 +1,24 @@
 # ADR: CI/CD Relationship Parity Across Delivery Families
 
 **Date:** 2026-04-19
-**Status:** Proposed
+**Status:** Accepted with follow-up
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Accepted with follow-up.
+
+The relationship-family extraction and read surfaces are real. Tests cover
+GitHub Actions reusable workflows, Jenkins/Ansible controller evidence, Docker
+Compose build/image/dependency signals, ArgoCD ApplicationSet discovery,
+Terragrunt module evidence, and Terraform-backed delivery signals.
+
+**Remaining work:** the parity matrix still marks several families as partial.
+Broaden real-corpus proof and finish service-story integration for
+controller-driven services before calling delivery-family parity complete.
 
 ## Context
 

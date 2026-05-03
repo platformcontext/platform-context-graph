@@ -1,7 +1,7 @@
 # ADR: Terraform State Collector
 
 **Date:** 2026-04-20
-**Status:** Proposed
+**Status:** Accepted with follow-up
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 **Related:**
@@ -15,6 +15,19 @@
   incorporates directly.
 
 ---
+
+## Status Review (2026-05-03)
+
+**Current disposition:** Design accepted; runtime not implemented.
+
+The shared primitives exist, including `state_snapshot` scope, Terraform-state
+collector identity, and the reducer phase contract. The actual collector runtime
+does not exist in this repo yet: there is no `go/cmd/collector-terraform-state`
+or `go/internal/collector/terraformstate` implementation.
+
+**Remaining work:** implement `StateSource`, local and S3 readers, streaming
+parser/redaction, fact emission, coordinator claim integration, Terragrunt,
+output/module/tag coverage, DSL consumers, tests, telemetry, and operator docs.
 
 ## Context
 

@@ -32,6 +32,18 @@
 
 ---
 
+## Status Review (2026-05-03)
+
+**Current disposition:** Accepted with conditions; default backend promoted.
+
+NornicDB is now the default graph backend, and Neo4j remains the official
+compatibility backend. The latest full-corpus evidence is strong, but the
+acceptance conditions are not all closed.
+
+**Remaining work:** finish the release-backed NornicDB pin, signature policy,
+broader host coverage, and Chunk 5/5b conformance and profile-matrix gates
+before treating this ADR as complete.
+
 ## Evaluation Status
 
 | Phase | Status | Evidence | Remaining |

@@ -11,6 +11,18 @@
 
 ---
 
+## Status Review (2026-05-03)
+
+**Current disposition:** Accepted; production ownership incomplete.
+
+The dark-mode coordinator runtime, config, Compose, Helm, and status wiring
+exist. Claims remain disabled by default while Git collector migration, new
+collector families, webhook intake, and production ownership gates are still
+unfinished.
+
+**Remaining work:** finish claim-enabled production ownership only after the
+collector families and convergence checks are ready.
+
 ## Context
 
 PlatformContextGraph is no longer a Git-only indexing tool in spirit, even if
