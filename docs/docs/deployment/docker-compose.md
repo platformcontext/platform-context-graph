@@ -333,6 +333,7 @@ It also exercises the content-store contract:
 
 - `PCG_CONTENT_STORE_DSN` and `PCG_POSTGRES_DSN` are wired by default
 - host-side e2e runs can reach the bundled Postgres content store through `PCG_POSTGRES_PORT` (default `15432`)
+- the bundled Postgres 18 service mounts its named volume at `/var/lib/postgresql`, allowing the image to manage its versioned data directory internally
 - file and entity content reads prefer Postgres and fall back to the server workspace
 - `PCG_REPOSITORY_RULES_JSON` can be set to structured exact or regex include rules for Git-backed sync, and Compose passes that override through to every Go runtime in the stack
 - `PCG_COLLECTOR_INSTANCES_JSON` configures the workflow-coordinator desired collector set in local Compose; the optional coordinator profile defaults it to one Git collector instance so dark-mode status has a concrete control-plane row to reconcile

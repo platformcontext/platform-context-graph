@@ -68,7 +68,7 @@ services:
       - "-c"
       - "random_page_cost=1.1"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pcg -d platform_context_graph"]
       interval: 5s
