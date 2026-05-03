@@ -101,65 +101,56 @@ func TestCrossRepoResolutionDispatchesTypedRelationshipsIntoNeo4jWrites(t *testi
 		t.Fatalf("WriteEdges() error = %v", err)
 	}
 
-	if got, want := len(executor.calls), 2; got != want {
+	if got, want := len(executor.calls), 4; got != want {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
 
-	var typedRepoWrite *Statement
+	typedRepoWrites := map[string]*Statement{}
 	var runsOnWrite *Statement
 	for i := range executor.calls {
 		call := &executor.calls[i]
 		switch {
 		case strings.Contains(call.Cypher, "MERGE (i)-[rel:RUNS_ON]->(p)"):
 			runsOnWrite = call
-		case strings.Contains(call.Cypher, "DEPLOYS_FROM") ||
-			strings.Contains(call.Cypher, "DISCOVERS_CONFIG_IN") ||
-			strings.Contains(call.Cypher, "PROVISIONS_DEPENDENCY_FOR"):
-			typedRepoWrite = call
+		case strings.Contains(call.Cypher, "MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)"):
+			typedRepoWrites[string(relationships.RelDeploysFrom)] = call
+		case strings.Contains(call.Cypher, "MERGE (source_repo)-[rel:DISCOVERS_CONFIG_IN]->(target_repo)"):
+			typedRepoWrites[string(relationships.RelDiscoversConfigIn)] = call
+		case strings.Contains(call.Cypher, "MERGE (source_repo)-[rel:PROVISIONS_DEPENDENCY_FOR]->(target_repo)"):
+			typedRepoWrites[string(relationships.RelProvisionsDependencyFor)] = call
 		}
 	}
 
-	if typedRepoWrite == nil {
-		t.Fatal("typed repo write call not found")
-	}
-	if typedRepoWrite.Operation != OperationCanonicalUpsert {
-		t.Fatalf("typed repo write operation = %q, want %q", typedRepoWrite.Operation, OperationCanonicalUpsert)
-	}
-	if !strings.Contains(typedRepoWrite.Cypher, "DEPLOYS_FROM") {
-		t.Fatalf("typed repo cypher missing DEPLOYS_FROM branch: %s", typedRepoWrite.Cypher)
-	}
-	if !strings.Contains(typedRepoWrite.Cypher, "DISCOVERS_CONFIG_IN") {
-		t.Fatalf("typed repo cypher missing DISCOVERS_CONFIG_IN branch: %s", typedRepoWrite.Cypher)
-	}
-	if !strings.Contains(typedRepoWrite.Cypher, "PROVISIONS_DEPENDENCY_FOR") {
-		t.Fatalf("typed repo cypher missing PROVISIONS_DEPENDENCY_FOR branch: %s", typedRepoWrite.Cypher)
-	}
-
-	typedRows, ok := typedRepoWrite.Parameters["rows"].([]map[string]any)
-	if !ok {
-		t.Fatalf("typed repo rows type = %T, want []map[string]any", typedRepoWrite.Parameters["rows"])
-	}
-	if got, want := len(typedRows), 3; got != want {
-		t.Fatalf("len(typed repo rows) = %d, want %d", got, want)
-	}
-
-	gotRepoTypes := map[string]bool{}
 	gotEvidenceTypes := map[string]bool{}
-	for _, row := range typedRows {
-		relType, _ := row["relationship_type"].(string)
-		gotRepoTypes[relType] = true
-		evidenceType, _ := row["evidence_type"].(string)
-		if evidenceType != "" {
-			gotEvidenceTypes[evidenceType] = true
-		}
-	}
 	for _, want := range []string{
 		string(relationships.RelProvisionsDependencyFor),
 		string(relationships.RelDeploysFrom),
 		string(relationships.RelDiscoversConfigIn),
 	} {
-		if !gotRepoTypes[want] {
-			t.Fatalf("typed repo rows missing relationship_type %q", want)
+		typedRepoWrite := typedRepoWrites[want]
+		if typedRepoWrite == nil {
+			t.Fatalf("typed repo write call not found for %q", want)
+		}
+		if typedRepoWrite.Operation != OperationCanonicalUpsert {
+			t.Fatalf("typed repo write operation = %q, want %q", typedRepoWrite.Operation, OperationCanonicalUpsert)
+		}
+		if strings.Contains(typedRepoWrite.Cypher, "FOREACH") {
+			t.Fatalf("typed repo write must use direct MERGE, got FOREACH: %s", typedRepoWrite.Cypher)
+		}
+		typedRows, ok := typedRepoWrite.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("typed repo rows type = %T, want []map[string]any", typedRepoWrite.Parameters["rows"])
+		}
+		if got, wantRows := len(typedRows), 1; got != wantRows {
+			t.Fatalf("len(typed repo rows) = %d, want %d for %q", got, wantRows, want)
+		}
+		relType, _ := typedRows[0]["relationship_type"].(string)
+		if relType != want {
+			t.Fatalf("typed repo row relationship_type = %q, want %q", relType, want)
+		}
+		evidenceType, _ := typedRows[0]["evidence_type"].(string)
+		if evidenceType != "" {
+			gotEvidenceTypes[evidenceType] = true
 		}
 	}
 	for _, want := range []string{"terraform_app_repo", "helm_chart_reference", "argocd_applicationset_discovery"} {

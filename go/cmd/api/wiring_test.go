@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -20,10 +21,61 @@ func TestWireAPIReturnsResolveAPIKeyErrorBeforeConnectingDatastores(t *testing.T
 	}
 }
 
+func TestWireAPIReturnsInvalidQueryProfileErrorBeforeConnectingDatastores(t *testing.T) {
+	_, _, err := wireAPI(context.Background(), func(key string) string {
+		if key == "PCG_QUERY_PROFILE" {
+			return "not-a-real-profile"
+		}
+		return ""
+	}, nil, nil)
+	if err == nil {
+		t.Fatal("wireAPI() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "load query profile") {
+		t.Fatalf("wireAPI() error = %q, want load query profile context", err)
+	}
+}
+
+func TestWireAPIReturnsInvalidGraphBackendErrorBeforeConnectingDatastores(t *testing.T) {
+	_, _, err := wireAPI(context.Background(), func(key string) string {
+		if key == "PCG_GRAPH_BACKEND" {
+			return "not-a-real-backend"
+		}
+		return ""
+	}, nil, nil)
+	if err == nil {
+		t.Fatal("wireAPI() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "load graph backend") {
+		t.Fatalf("wireAPI() error = %q, want load graph backend context", err)
+	}
+}
+
+func TestOpenQueryGraphAcceptsNornicDBOnSharedBoltPath(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := openQueryGraph(context.Background(), func(key string) string {
+		switch key {
+		case "PCG_GRAPH_BACKEND":
+			return "nornicdb"
+		case "PCG_QUERY_PROFILE":
+			return "production"
+		default:
+			return ""
+		}
+	}, "production", nil)
+	if err == nil {
+		t.Fatal("openQueryGraph() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "PCG_NEO4J_URI") && !strings.Contains(err.Error(), "NEO4J_URI") {
+		t.Fatalf("openQueryGraph() error = %q, want shared bolt config context", err)
+	}
+}
+
 func TestNewRouter_MountsAdminRoutes(t *testing.T) {
 	t.Parallel()
 
-	router, err := newRouter(nil, nil, nil)
+	router, err := newRouter(nil, nil, nil, "production", "neo4j", nil)
 	if err != nil {
 		t.Fatalf("newRouter() error = %v, want nil", err)
 	}

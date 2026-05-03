@@ -43,7 +43,7 @@ func (r *RetryingExecutor) Execute(ctx context.Context, stmt Statement) error {
 			return nil
 		}
 
-		if !isTransientNeo4jError(lastErr) {
+		if !isRetryableGraphWriteError(lastErr, stmt) {
 			return lastErr
 		}
 
@@ -75,7 +75,10 @@ func (r *RetryingExecutor) Execute(ctx context.Context, stmt Statement) error {
 		}
 	}
 
-	return fmt.Errorf("neo4j transient error after %d retries: %w", maxRetries, lastErr)
+	return &neo4jRetryableError{
+		inner: fmt.Errorf("neo4j transient error after %d retries: %w", maxRetries, lastErr),
+		code:  "TransientError",
+	}
 }
 
 // ExecuteGroup forwards to Inner.ExecuteGroup without a retry loop.
@@ -99,5 +102,36 @@ func isTransientNeo4jError(err error) bool {
 	return strings.Contains(msg, "TransientError") ||
 		strings.Contains(msg, "DeadlockDetected") ||
 		strings.Contains(msg, "LockClient") ||
-		strings.Contains(msg, "lock acquisition")
+		strings.Contains(msg, "lock acquisition") ||
+		isNornicDBWriteConflict(msg)
+}
+
+// isRetryableGraphWriteError classifies bounded graph-write retries using both
+// driver-level transient signals and statement-aware NornicDB commit conflicts.
+func isRetryableGraphWriteError(err error, stmt Statement) bool {
+	if isTransientNeo4jError(err) {
+		return true
+	}
+	if err == nil {
+		return false
+	}
+	return isNornicDBMergeUniqueConflict(err.Error(), stmt.Cypher)
+}
+
+func isNornicDBWriteConflict(msg string) bool {
+	return strings.Contains(msg, "conflict:") &&
+		strings.Contains(msg, "changed after transaction start")
+}
+
+// isNornicDBMergeUniqueConflict treats commit-time unique conflicts from
+// MERGE-shaped upserts as retryable because a concurrent writer may have
+// created the intended node between match and commit.
+func isNornicDBMergeUniqueConflict(msg string, cypher string) bool {
+	if !strings.Contains(strings.ToUpper(cypher), "MERGE") {
+		return false
+	}
+	return strings.Contains(msg, "failed to commit implicit transaction") &&
+		strings.Contains(msg, "constraint violation") &&
+		strings.Contains(msg, "UNIQUE on") &&
+		strings.Contains(msg, "already exists")
 }

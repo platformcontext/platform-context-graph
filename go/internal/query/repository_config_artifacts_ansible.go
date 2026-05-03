@@ -127,7 +127,18 @@ func ansiblePlaybookEvidencePath(lowerPath, lowerBase, content string) bool {
 	case strings.Contains(lowerPath, "/roles/"), strings.Contains(lowerPath, "/group_vars/"), strings.Contains(lowerPath, "/host_vars/"):
 		return false
 	default:
-		return ansiblePlaybookContent(content)
+		return plausibleAnsiblePlaybookPath(lowerBase) && ansiblePlaybookContent(content)
+	}
+}
+
+// plausibleAnsiblePlaybookPath keeps content heuristics scoped to conventional
+// playbook filenames so generic Kubernetes or Helm YAML cannot be promoted.
+func plausibleAnsiblePlaybookPath(lowerBase string) bool {
+	switch lowerBase {
+	case "deploy.yml", "deploy.yaml", "playbook.yml", "playbook.yaml", "main-playbook.yml", "main-playbook.yaml":
+		return true
+	default:
+		return strings.HasSuffix(lowerBase, "-playbook.yml") || strings.HasSuffix(lowerBase, "-playbook.yaml")
 	}
 }
 

@@ -45,6 +45,12 @@ var graphFirstContentBackedEntityTypes = map[string]string{
 	"terraform_module":        "TerraformModule",
 	"terragrunt_config":       "TerragruntConfig",
 	"terragrunt_dependency":   "TerragruntDependency",
+	"sql_column":              "SqlColumn",
+	"sql_function":            "SqlFunction",
+	"sql_index":               "SqlIndex",
+	"sql_table":               "SqlTable",
+	"sql_trigger":             "SqlTrigger",
+	"sql_view":                "SqlView",
 	"type_alias":              "TypeAlias",
 	"typedef":                 "Typedef",
 }
@@ -101,6 +107,9 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	metadata := map[string]any{}
 	if v := StringVal(row, "docstring"); v != "" {
 		metadata["docstring"] = v
+	}
+	if v := StringVal(row, "class_context"); v != "" {
+		metadata["class_context"] = v
 	}
 	if v := StringVal(row, "method_kind"); v != "" {
 		metadata["method_kind"] = v
@@ -247,6 +256,30 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	if v := StringVal(row, "deploy_entry_point"); v != "" {
 		metadata["deploy_entry_point"] = v
 	}
+	if v := StringVal(row, "qualified_name"); v != "" {
+		metadata["qualified_name"] = v
+	}
+	if v := StringVal(row, "sql_entity_type"); v != "" {
+		metadata["sql_entity_type"] = v
+	}
+	if v := StringVal(row, "schema"); v != "" {
+		metadata["schema"] = v
+	}
+	if v := StringVal(row, "data_type"); v != "" {
+		metadata["data_type"] = v
+	}
+	if v := StringVal(row, "table_name"); v != "" {
+		metadata["table_name"] = v
+	}
+	if v := StringVal(row, "column_name"); v != "" {
+		metadata["column_name"] = v
+	}
+	if v := StringVal(row, "routine_kind"); v != "" {
+		metadata["routine_kind"] = v
+	}
+	if v := StringVal(row, "function_language"); v != "" {
+		metadata["function_language"] = v
+	}
 	if len(metadata) == 0 {
 		return nil
 	}
@@ -256,6 +289,7 @@ func graphResultMetadata(row map[string]any) map[string]any {
 func graphSemanticMetadataProjection() string {
 	return `
 		       e.docstring as docstring,
+		       e.class_context as class_context,
 		       e.method_kind as method_kind,
 		       e.constructor_kind as constructor_kind,
 		       e.annotation_kind as annotation_kind,
@@ -294,7 +328,15 @@ func graphSemanticMetadataProjection() string {
 		       e.create_deploy as create_deploy,
 		       e.cluster_name as cluster_name,
 		       e.zone_id as zone_id,
-		       e.deploy_entry_point as deploy_entry_point`
+		       e.deploy_entry_point as deploy_entry_point,
+		       e.qualified_name as qualified_name,
+		       e.sql_entity_type as sql_entity_type,
+		       e.schema as schema,
+		       e.data_type as data_type,
+		       e.table_name as table_name,
+		       e.column_name as column_name,
+		       e.routine_kind as routine_kind,
+		       e.function_language as function_language`
 }
 
 func graphLabelToContentEntityType(label string) string {
@@ -302,6 +344,8 @@ func graphLabelToContentEntityType(label string) string {
 	case "Annotation":
 		return "Annotation"
 	case "Function", "Class", "Interface", "Module", "Variable", "Struct", "Enum", "Union", "Macro", "ImplBlock", "Typedef", "TypeAlias", "TypeAnnotation", "Component":
+		return label
+	case "SqlColumn", "SqlFunction", "SqlIndex", "SqlTable", "SqlTrigger", "SqlView":
 		return label
 	case "TerraformModule", "TerragruntConfig", "TerragruntDependency":
 		return label

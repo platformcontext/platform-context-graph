@@ -3,6 +3,8 @@ package neo4j
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -18,6 +20,20 @@ type mockExecutor struct {
 func (m *mockExecutor) Execute(_ context.Context, stmt Statement) error {
 	m.calls = append(m.calls, stmt)
 	return m.err
+}
+
+type selectiveErrorExecutor struct {
+	calls []Statement
+	match func(Statement) bool
+	err   error
+}
+
+func (m *selectiveErrorExecutor) Execute(_ context.Context, stmt Statement) error {
+	m.calls = append(m.calls, stmt)
+	if m.match != nil && m.match(stmt) {
+		return m.err
+	}
+	return nil
 }
 
 // mockGroupExecutor implements both Executor and GroupExecutor for testing
@@ -38,6 +54,25 @@ func (m *mockGroupExecutor) ExecuteGroup(_ context.Context, stmts []Statement) e
 	m.groupCalls++
 	m.groupStmts = stmts
 	return m.groupErr
+}
+
+type mockPhaseGroupExecutor struct {
+	executeCalls    []Statement
+	phaseGroupCalls int
+	phaseGroups     [][]Statement
+	phaseGroupErr   error
+}
+
+func (m *mockPhaseGroupExecutor) Execute(_ context.Context, stmt Statement) error {
+	m.executeCalls = append(m.executeCalls, stmt)
+	return nil
+}
+
+func (m *mockPhaseGroupExecutor) ExecutePhaseGroup(_ context.Context, stmts []Statement) error {
+	m.phaseGroupCalls++
+	cloned := append([]Statement(nil), stmts...)
+	m.phaseGroups = append(m.phaseGroups, cloned)
+	return m.phaseGroupErr
 }
 
 func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
@@ -86,7 +121,7 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 		t.Fatal("expected executor calls, got 0")
 	}
 
-	// Verify strict phase order: retract phases first, then repository, directories, files, entities, modules, structural edges.
+	// Verify strict phase order: retract phases first, then repository, directories, files, entities, entity containment, modules, structural edges.
 	// Find the phase boundaries by inspecting operation types and cypher content.
 	phaseOrder := []string{}
 	for _, call := range exec.calls {
@@ -110,6 +145,10 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 				if len(phaseOrder) == 0 || phaseOrder[len(phaseOrder)-1] != "entities" {
 					phaseOrder = append(phaseOrder, "entities")
 				}
+			} else if call.Parameters[StatementMetadataPhaseKey] == CanonicalPhaseEntityContainment {
+				if len(phaseOrder) == 0 || phaseOrder[len(phaseOrder)-1] != "entity_containment" {
+					phaseOrder = append(phaseOrder, "entity_containment")
+				}
 			} else if strings.Contains(call.Cypher, "MERGE (m:Module") {
 				if len(phaseOrder) == 0 || phaseOrder[len(phaseOrder)-1] != "modules" {
 					phaseOrder = append(phaseOrder, "modules")
@@ -122,7 +161,7 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 		}
 	}
 
-	expected := []string{"retract", "repository", "directories", "files", "entities", "modules", "structural_edges"}
+	expected := []string{"retract", "repository", "directories", "files", "entities", "entity_containment", "modules", "structural_edges"}
 	if len(phaseOrder) != len(expected) {
 		t.Fatalf("phase order = %v, want %v", phaseOrder, expected)
 	}
@@ -130,6 +169,48 @@ func TestCanonicalNodeWriterWritePhaseOrder(t *testing.T) {
 		if phaseOrder[i] != expected[i] {
 			t.Fatalf("phase[%d] = %q, want %q (full order: %v)", i, phaseOrder[i], expected[i], phaseOrder)
 		}
+	}
+}
+
+func TestCanonicalNodeWriterWriteReportsSequentialPhaseOnFailure(t *testing.T) {
+	t.Parallel()
+
+	exec := &selectiveErrorExecutor{
+		match: func(stmt Statement) bool {
+			return stmt.Operation == OperationCanonicalUpsert && strings.Contains(stmt.Cypher, "IMPORTS")
+		},
+		err: errors.New("boom"),
+	}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID:    "repo-1",
+			Name:      "my-repo",
+			Path:      "/repos/my-repo",
+			LocalPath: "/repos/my-repo",
+			RemoteURL: "https://github.com/org/my-repo",
+			RepoSlug:  "org/my-repo",
+			HasRemote: true,
+		},
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", Name: "main.go", Language: "go", RepoID: "repo-1", DirPath: "/repos/my-repo/src"},
+		},
+		Imports: []projector.ImportRow{
+			{FilePath: "/repos/my-repo/src/main.go", ModuleName: "fmt", ImportedName: "fmt", LineNumber: 3},
+		},
+	}
+
+	err := writer.Write(context.Background(), mat)
+	if err == nil {
+		t.Fatal("Write() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "canonical sequential write (structural_edges)") {
+		t.Fatalf("Write() error = %q, want structural_edges phase context", err.Error())
 	}
 }
 
@@ -187,7 +268,7 @@ func TestCanonicalNodeWriterDirectoryDepthOrder(t *testing.T) {
 	}
 }
 
-func TestCanonicalNodeWriterEntityGroupsByLabel(t *testing.T) {
+func TestCanonicalNodeWriterEntityUpsertsRemainLabelScoped(t *testing.T) {
 	t.Parallel()
 
 	exec := &mockExecutor{}
@@ -215,7 +296,7 @@ func TestCanonicalNodeWriterEntityGroupsByLabel(t *testing.T) {
 		t.Fatalf("Write() error = %v", err)
 	}
 
-	// Collect entity-phase calls
+	// Collect batched entity-phase calls
 	var entityCalls []Statement
 	for _, call := range exec.calls {
 		if call.Operation == OperationCanonicalUpsert &&
@@ -225,38 +306,36 @@ func TestCanonicalNodeWriterEntityGroupsByLabel(t *testing.T) {
 	}
 
 	if len(entityCalls) != 2 {
-		t.Fatalf("expected 2 entity label groups (Function, Class), got %d", len(entityCalls))
+		t.Fatalf("expected 2 entity batches (Function + Class), got %d", len(entityCalls))
 	}
 
-	// Verify one UNWIND per label
+	var functionCount, classCount int
 	for _, call := range entityCalls {
-		if !strings.HasPrefix(strings.TrimSpace(call.Cypher), "UNWIND") {
-			t.Fatalf("entity call should use UNWIND: %s", call.Cypher)
+		rows, ok := call.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("rows type = %T, want []map[string]any", call.Parameters["rows"])
 		}
-	}
-
-	// Function group should have 2 rows, Class group should have 1
-	funcFound, classFound := false, false
-	for _, call := range entityCalls {
-		rows := call.Parameters["rows"].([]map[string]any)
 		if strings.Contains(call.Cypher, "MERGE (n:Function") {
-			funcFound = true
-			if len(rows) != 2 {
-				t.Fatalf("Function group rows = %d, want 2", len(rows))
+			functionCount += len(rows)
+			if got, want := len(rows), 2; got != want {
+				t.Fatalf("function batch size = %d, want %d", got, want)
 			}
+			continue
 		}
 		if strings.Contains(call.Cypher, "MERGE (n:Class") {
-			classFound = true
-			if len(rows) != 1 {
-				t.Fatalf("Class group rows = %d, want 1", len(rows))
+			classCount += len(rows)
+			if got, want := len(rows), 1; got != want {
+				t.Fatalf("class batch size = %d, want %d", got, want)
 			}
+			continue
 		}
+		t.Fatalf("unexpected entity cypher: %s", call.Cypher)
 	}
-	if !funcFound {
-		t.Fatal("missing Function entity group")
+	if got, want := functionCount, 2; got != want {
+		t.Fatalf("function upsert count = %d, want %d", got, want)
 	}
-	if !classFound {
-		t.Fatal("missing Class entity group")
+	if got, want := classCount, 1; got != want {
+		t.Fatalf("class upsert count = %d, want %d", got, want)
 	}
 }
 
@@ -345,42 +424,189 @@ func TestCanonicalNodeWriterProjectsTypeScriptClassFamilyMetadata(t *testing.T) 
 		}
 	}
 	if len(entityCalls) != 3 {
-		t.Fatalf("expected 3 TS class-family entity groups, got %d", len(entityCalls))
+		t.Fatalf("expected 3 TS class-family entity upserts, got %d", len(entityCalls))
 	}
 
 	for _, call := range entityCalls {
-		if !strings.Contains(call.Cypher, "n.decorators = row.decorators") ||
-			!strings.Contains(call.Cypher, "n.type_parameters = row.type_parameters") ||
-			!strings.Contains(call.Cypher, "n.declaration_merge_group = row.declaration_merge_group") ||
-			!strings.Contains(call.Cypher, "n.declaration_merge_count = row.declaration_merge_count") ||
-			!strings.Contains(call.Cypher, "n.declaration_merge_kinds = row.declaration_merge_kinds") {
-			t.Fatalf("TS class-family cypher missing metadata assignments: %s", call.Cypher)
+		if !strings.Contains(call.Cypher, "SET n += row.props") {
+			t.Fatalf("TS class-family cypher missing row.props merge: %s", call.Cypher)
 		}
 	}
 
-	var classRows []map[string]any
+	var classProperties map[string]any
 	for _, call := range entityCalls {
 		if strings.Contains(call.Cypher, "MERGE (n:Class") {
-			classRows = call.Parameters["rows"].([]map[string]any)
+			rows, ok := call.Parameters["rows"].([]map[string]any)
+			if !ok {
+				t.Fatalf("class rows type = %T, want []map[string]any", call.Parameters["rows"])
+			}
+			if got, want := len(rows), 1; got != want {
+				t.Fatalf("class row count = %d, want %d", got, want)
+			}
+			props, ok := rows[0]["props"].(map[string]any)
+			if !ok {
+				t.Fatalf("class props type = %T, want map[string]any", rows[0]["props"])
+			}
+			classProperties = props
 			break
 		}
 	}
-	if len(classRows) == 0 {
-		t.Fatal("missing Class rows in TS class-family entity calls")
+	if len(classProperties) == 0 {
+		t.Fatal("missing Class properties in TS class-family entity calls")
 	}
-	decorators, ok := classRows[0]["decorators"].([]string)
+	decorators, ok := classProperties["decorators"].([]string)
 	if !ok {
-		t.Fatalf("class rows[0][decorators] type = %T, want []string", classRows[0]["decorators"])
+		t.Fatalf("class properties[decorators] type = %T, want []string", classProperties["decorators"])
 	}
 	if got, want := len(decorators), 1; got != want || decorators[0] != "@sealed" {
-		t.Fatalf("class rows[0][decorators] = %#v, want [@sealed]", decorators)
+		t.Fatalf("class properties[decorators] = %#v, want [@sealed]", decorators)
 	}
-	typeParameters, ok := classRows[0]["type_parameters"].([]string)
+	typeParameters, ok := classProperties["type_parameters"].([]string)
 	if !ok {
-		t.Fatalf("class rows[0][type_parameters] type = %T, want []string", classRows[0]["type_parameters"])
+		t.Fatalf("class properties[type_parameters] type = %T, want []string", classProperties["type_parameters"])
 	}
 	if got, want := len(typeParameters), 1; got != want || typeParameters[0] != "T" {
-		t.Fatalf("class rows[0][type_parameters] = %#v, want [T]", typeParameters)
+		t.Fatalf("class properties[type_parameters] = %#v, want [T]", typeParameters)
+	}
+}
+
+func TestCanonicalNodeWriterProjectsInfrastructureIdentityMetadata(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-infra-1",
+		GenerationID: "gen-infra-1",
+		RepoID:       "repo-infra-1",
+		RepoPath:     "/repos/infra",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-infra-1",
+			Name:   "infra-repo",
+			Path:   "/repos/infra",
+		},
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "claim-1",
+				Label:        "CrossplaneClaim",
+				EntityName:   "database",
+				FilePath:     "/repos/infra/control-plane/claim.yaml",
+				RelativePath: "control-plane/claim.yaml",
+				StartLine:    7,
+				EndLine:      20,
+				Language:     "yaml",
+				RepoID:       "repo-infra-1",
+				Metadata: map[string]any{
+					"kind":        "SQLInstance",
+					"api_version": "database.example.org/v1alpha1",
+					"namespace":   "platform",
+				},
+			},
+			{
+				EntityID:     "deployment-1",
+				Label:        "K8sResource",
+				EntityName:   "api",
+				FilePath:     "/repos/infra/deploy/deployment.yaml",
+				RelativePath: "deploy/deployment.yaml",
+				StartLine:    3,
+				EndLine:      40,
+				Language:     "yaml",
+				RepoID:       "repo-infra-1",
+				Metadata: map[string]any{
+					"kind":           "Deployment",
+					"api_version":    "apps/v1",
+					"namespace":      "prod",
+					"qualified_name": "prod/Deployment/api",
+				},
+			},
+			{
+				EntityID:     "terraform-rds-1",
+				Label:        "TerraformResource",
+				EntityName:   "aws_rds_cluster.primary",
+				FilePath:     "/repos/infra/terraform/rds.tf",
+				RelativePath: "terraform/rds.tf",
+				StartLine:    1,
+				EndLine:      12,
+				Language:     "hcl",
+				RepoID:       "repo-infra-1",
+				Metadata: map[string]any{
+					"provider":          "aws",
+					"resource_type":     "aws_rds_cluster",
+					"resource_service":  "rds",
+					"resource_category": "data",
+				},
+			},
+		},
+	}
+
+	err := writer.Write(context.Background(), mat)
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	propsByLabel := map[string]map[string]any{}
+	for _, call := range exec.calls {
+		if call.Operation != OperationCanonicalUpsert {
+			continue
+		}
+		for _, label := range []string{"CrossplaneClaim", "K8sResource", "TerraformResource"} {
+			if !strings.Contains(call.Cypher, "MERGE (n:"+label) {
+				continue
+			}
+			rows, ok := call.Parameters["rows"].([]map[string]any)
+			if !ok {
+				t.Fatalf("%s rows type = %T, want []map[string]any", label, call.Parameters["rows"])
+			}
+			if got, want := len(rows), 1; got != want {
+				t.Fatalf("%s row count = %d, want %d", label, got, want)
+			}
+			props, ok := rows[0]["props"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s props type = %T, want map[string]any", label, rows[0]["props"])
+			}
+			propsByLabel[label] = props
+		}
+	}
+
+	claimProps := propsByLabel["CrossplaneClaim"]
+	if len(claimProps) == 0 {
+		t.Fatal("missing CrossplaneClaim properties")
+	}
+	if got, want := claimProps["kind"], "SQLInstance"; got != want {
+		t.Fatalf("CrossplaneClaim kind = %#v, want %#v", got, want)
+	}
+	if got, want := claimProps["api_version"], "database.example.org/v1alpha1"; got != want {
+		t.Fatalf("CrossplaneClaim api_version = %#v, want %#v", got, want)
+	}
+	if got, want := claimProps["namespace"], "platform"; got != want {
+		t.Fatalf("CrossplaneClaim namespace = %#v, want %#v", got, want)
+	}
+
+	resourceProps := propsByLabel["K8sResource"]
+	if len(resourceProps) == 0 {
+		t.Fatal("missing K8sResource properties")
+	}
+	if got, want := resourceProps["kind"], "Deployment"; got != want {
+		t.Fatalf("K8sResource kind = %#v, want %#v", got, want)
+	}
+	if got, want := resourceProps["qualified_name"], "prod/Deployment/api"; got != want {
+		t.Fatalf("K8sResource qualified_name = %#v, want %#v", got, want)
+	}
+
+	terraformProps := propsByLabel["TerraformResource"]
+	if len(terraformProps) == 0 {
+		t.Fatal("missing TerraformResource properties")
+	}
+	for key, want := range map[string]any{
+		"provider":          "aws",
+		"resource_type":     "aws_rds_cluster",
+		"resource_service":  "rds",
+		"resource_category": "data",
+	} {
+		if got := terraformProps[key]; got != want {
+			t.Fatalf("TerraformResource %s = %#v, want %#v", key, got, want)
+		}
 	}
 }
 
@@ -432,6 +658,67 @@ func TestCanonicalNodeWriterBatching(t *testing.T) {
 	}
 	if len(batch2Rows) != 1 {
 		t.Fatalf("batch 2 rows = %d, want 1", len(batch2Rows))
+	}
+	if got, want := fileCalls[0].Parameters[StatementMetadataPhaseKey], CanonicalPhaseFiles; got != want {
+		t.Fatalf("file statement phase = %#v, want %#v", got, want)
+	}
+	if summary, _ := fileCalls[0].Parameters[StatementMetadataSummaryKey].(string); !strings.Contains(summary, "phase=files rows=2") {
+		t.Fatalf("file statement summary = %q, want row count", summary)
+	}
+}
+
+func TestCanonicalNodeWriterFileBatchSizeOverride(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil).WithFileBatchSize(3)
+
+	files := make([]projector.FileRow, 0, 7)
+	for i := range 7 {
+		name := fmt.Sprintf("file-%d.go", i)
+		files = append(files, projector.FileRow{
+			Path:         "/repo/" + name,
+			RelativePath: name,
+			Name:         name,
+			Language:     "go",
+			RepoID:       "repo-1",
+			DirPath:      "/repo",
+		})
+	}
+
+	err := writer.Write(context.Background(), projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "repo",
+			Path:   "/repo",
+		},
+		Files: files,
+	})
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var fileCalls []Statement
+	for _, call := range exec.calls {
+		if call.Operation == OperationCanonicalUpsert && strings.Contains(call.Cypher, "MERGE (f:File") {
+			fileCalls = append(fileCalls, call)
+		}
+	}
+	if len(fileCalls) != 3 {
+		t.Fatalf("file batches = %d, want 3", len(fileCalls))
+	}
+	for i, wantRows := range []int{3, 3, 1} {
+		rows := fileCalls[i].Parameters["rows"].([]map[string]any)
+		if len(rows) != wantRows {
+			t.Fatalf("file batch %d rows = %d, want %d", i, len(rows), wantRows)
+		}
+		if got, want := fileCalls[i].Parameters[StatementMetadataPhaseKey], CanonicalPhaseFiles; got != want {
+			t.Fatalf("file batch %d phase = %#v, want %#v", i, got, want)
+		}
 	}
 }
 
@@ -488,20 +775,508 @@ func TestCanonicalNodeWriterRetraction(t *testing.T) {
 		t.Fatalf("retraction call at index %d came after upsert at index %d", lastRetractIdx, firstUpsertIdx)
 	}
 
-	// Verify retraction uses repo_id and generation_id filters
+	// Verify retraction deletes stale nodes or refreshes current structural
+	// edges and carries the identity parameters needed for its scope.
 	for i, call := range retractCalls {
-		if !strings.Contains(call.Cypher, "DETACH DELETE") {
-			t.Fatalf("retract call[%d] missing DETACH DELETE: %s", i, call.Cypher)
+		if !strings.Contains(call.Cypher, "DELETE") {
+			t.Fatalf("retract call[%d] missing DELETE: %s", i, call.Cypher)
 		}
 		params := call.Parameters
-		// All retraction calls should reference repo_id
 		if _, ok := params["repo_id"]; !ok {
-			// Some retractions use file_paths param instead
 			if _, ok := params["file_paths"]; !ok {
-				t.Fatalf("retract call[%d] missing repo_id or file_paths param", i)
+				if _, ok := params["entity_ids"]; !ok {
+					t.Fatalf("retract call[%d] missing repo_id, file_paths, or entity_ids param", i)
+				}
 			}
 		}
 	}
+}
+
+func TestCanonicalNodeWriterSkipsRetractionForFirstGeneration(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&recordingExecutor{}, 0, nil)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:         "scope-first",
+		GenerationID:    "gen-first",
+		RepoID:          "repo-first",
+		FirstGeneration: true,
+		Files: []projector.FileRow{{
+			Path:   "/repo/main.go",
+			RepoID: "repo-first",
+		}},
+		Entities: []projector.EntityRow{{
+			EntityID: "content-entity:first",
+			Label:    "Function",
+			RepoID:   "repo-first",
+		}},
+	}
+
+	if got := writer.buildRetractStatements(mat); len(got) != 0 {
+		t.Fatalf("buildRetractStatements() count = %d, want 0 for first generation", len(got))
+	}
+}
+
+func TestCanonicalNodeWriterFileRetractPreservesCurrentFilePaths(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/main.go"},
+			{Path: "/repos/my-repo/internal/graph.go"},
+		},
+	}
+
+	var fileRetract Statement
+	for _, stmt := range writer.buildRetractStatements(mat) {
+		if stmt.Operation == OperationCanonicalRetract && strings.Contains(stmt.Cypher, "MATCH (f:File)") {
+			fileRetract = stmt
+			break
+		}
+	}
+	if fileRetract.Cypher == "" {
+		t.Fatal("missing File retract statement")
+	}
+	if !strings.Contains(fileRetract.Cypher, "NOT (f.path IN $file_paths)") {
+		t.Fatalf("File retract cypher = %q, want current path exclusion", fileRetract.Cypher)
+	}
+
+	gotPaths, ok := fileRetract.Parameters["file_paths"].([]string)
+	if !ok {
+		t.Fatalf("file_paths parameter type = %T, want []string", fileRetract.Parameters["file_paths"])
+	}
+	wantPaths := []string{"/repos/my-repo/main.go", "/repos/my-repo/internal/graph.go"}
+	if strings.Join(gotPaths, "\n") != strings.Join(wantPaths, "\n") {
+		t.Fatalf("file_paths = %v, want %v", gotPaths, wantPaths)
+	}
+}
+
+func TestCanonicalNodeWriterRetractPreservesCurrentEntityAndDirectoryIdentities(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		Directories: []projector.DirectoryRow{
+			{Path: "/repos/my-repo/internal"},
+			{Path: "/repos/my-repo/cmd"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "entity-function-1", Label: "Function"},
+			{EntityID: "entity-struct-1", Label: "Struct"},
+			{EntityID: "entity-k8s-1", Label: "K8sResource"},
+		},
+	}
+
+	var codeRetract Statement
+	var infraRetract Statement
+	var directoryRetract Statement
+	for _, stmt := range writer.buildRetractStatements(mat) {
+		switch {
+		case strings.Contains(stmt.Cypher, "n:Function OR n:Class"):
+			codeRetract = stmt
+		case strings.Contains(stmt.Cypher, "n:K8sResource OR n:ArgoCDApplication"):
+			infraRetract = stmt
+		case strings.Contains(stmt.Cypher, "MATCH (d:Directory)"):
+			directoryRetract = stmt
+		}
+	}
+	if codeRetract.Cypher == "" {
+		t.Fatal("missing code entity retract statement")
+	}
+	if !strings.Contains(codeRetract.Cypher, "NOT (n.uid IN $entity_ids)") {
+		t.Fatalf("code entity retract cypher = %q, want current entity exclusion", codeRetract.Cypher)
+	}
+	gotEntityIDs, ok := codeRetract.Parameters["entity_ids"].([]string)
+	if !ok {
+		t.Fatalf("entity_ids parameter type = %T, want []string", codeRetract.Parameters["entity_ids"])
+	}
+	wantEntityIDs := []string{"entity-function-1", "entity-struct-1"}
+	if strings.Join(gotEntityIDs, "\n") != strings.Join(wantEntityIDs, "\n") {
+		t.Fatalf("entity_ids = %v, want %v", gotEntityIDs, wantEntityIDs)
+	}
+	if infraRetract.Cypher == "" {
+		t.Fatal("missing infra entity retract statement")
+	}
+	gotInfraEntityIDs, ok := infraRetract.Parameters["entity_ids"].([]string)
+	if !ok {
+		t.Fatalf("infra entity_ids parameter type = %T, want []string", infraRetract.Parameters["entity_ids"])
+	}
+	if strings.Join(gotInfraEntityIDs, "\n") != "entity-k8s-1" {
+		t.Fatalf("infra entity_ids = %v, want [entity-k8s-1]", gotInfraEntityIDs)
+	}
+
+	if directoryRetract.Cypher == "" {
+		t.Fatal("missing Directory retract statement")
+	}
+	if !strings.Contains(directoryRetract.Cypher, "NOT (d.path IN $directory_paths)") {
+		t.Fatalf("Directory retract cypher = %q, want current path exclusion", directoryRetract.Cypher)
+	}
+	gotDirectoryPaths, ok := directoryRetract.Parameters["directory_paths"].([]string)
+	if !ok {
+		t.Fatalf("directory_paths parameter type = %T, want []string", directoryRetract.Parameters["directory_paths"])
+	}
+	wantDirectoryPaths := []string{"/repos/my-repo/internal", "/repos/my-repo/cmd"}
+	if strings.Join(gotDirectoryPaths, "\n") != strings.Join(wantDirectoryPaths, "\n") {
+		t.Fatalf("directory_paths = %v, want %v", gotDirectoryPaths, wantDirectoryPaths)
+	}
+}
+
+func TestCanonicalNodeWriterRetractLeavesRemovedIdentitiesEligibleForDeletion(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-2",
+		RepoID:       "repo-1",
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/readded.go"},
+		},
+		Directories: []projector.DirectoryRow{
+			{Path: "/repos/my-repo"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "content-entity:readded", Label: "Function"},
+		},
+	}
+
+	var fileRetract Statement
+	var codeRetract Statement
+	var directoryRetract Statement
+	for _, stmt := range writer.buildRetractStatements(mat) {
+		switch {
+		case strings.Contains(stmt.Cypher, "MATCH (f:File)"):
+			fileRetract = stmt
+		case strings.Contains(stmt.Cypher, "n:Function OR n:Class"):
+			codeRetract = stmt
+		case strings.Contains(stmt.Cypher, "MATCH (d:Directory)"):
+			directoryRetract = stmt
+		}
+	}
+
+	for _, tt := range []struct {
+		name      string
+		stmt      Statement
+		paramName string
+		current   string
+		removed   string
+	}{
+		{name: "file", stmt: fileRetract, paramName: "file_paths", current: "/repos/my-repo/readded.go", removed: "/repos/my-repo/deleted.go"},
+		{name: "code entity", stmt: codeRetract, paramName: "entity_ids", current: "content-entity:readded", removed: "content-entity:deleted"},
+		{name: "directory", stmt: directoryRetract, paramName: "directory_paths", current: "/repos/my-repo", removed: "/repos/old"},
+	} {
+		values, ok := tt.stmt.Parameters[tt.paramName].([]string)
+		if !ok {
+			t.Fatalf("%s %s parameter type = %T, want []string", tt.name, tt.paramName, tt.stmt.Parameters[tt.paramName])
+		}
+		if !stringSliceContains(values, tt.current) {
+			t.Fatalf("%s %s = %v, want current identity %q preserved", tt.name, tt.paramName, values, tt.current)
+		}
+		if stringSliceContains(values, tt.removed) {
+			t.Fatalf("%s %s = %v, removed identity %q should remain retractable", tt.name, tt.paramName, values, tt.removed)
+		}
+	}
+}
+
+func TestCanonicalNodeWriterRetractRefreshesCurrentStructuralEdges(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-2",
+		RepoID:       "repo-1",
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/main.go"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "content-entity:function", Label: "Function", EntityName: "ServeHTTP", FilePath: "/repos/my-repo/main.go", StartLine: 10},
+			{EntityID: "content-entity:class", Label: "Class", EntityName: "Handler", FilePath: "/repos/my-repo/main.go"},
+		},
+		ClassMembers: []projector.ClassMemberRow{
+			{ClassName: "Handler", FunctionName: "ServeHTTP", FilePath: "/repos/my-repo/main.go", FunctionLine: 10},
+		},
+	}
+
+	var importRefresh Statement
+	var directoryFileRefresh Statement
+	var fileEntityRefresh Statement
+	var entityContainmentRefreshes []Statement
+	for _, stmt := range writer.buildRetractStatements(mat) {
+		switch {
+		case strings.Contains(stmt.Cypher, "-[r:IMPORTS]->"):
+			importRefresh = stmt
+		case strings.Contains(stmt.Cypher, "]->(f:File)"):
+			directoryFileRefresh = stmt
+		case strings.Contains(stmt.Cypher, "[r:CONTAINS]->(n)"):
+			fileEntityRefresh = stmt
+		case strings.Contains(stmt.Cypher, "(n {uid: row.parent_entity_id})-[r:CONTAINS]->(m)"):
+			entityContainmentRefreshes = append(entityContainmentRefreshes, stmt)
+		}
+	}
+
+	for _, tt := range []struct {
+		name      string
+		stmt      Statement
+		paramName string
+		want      string
+	}{
+		{name: "imports", stmt: importRefresh, paramName: "file_paths", want: "/repos/my-repo/main.go"},
+		{name: "directory file contains", stmt: directoryFileRefresh, paramName: "file_paths", want: "/repos/my-repo/main.go"},
+	} {
+		if tt.stmt.Cypher == "" {
+			t.Fatalf("missing %s refresh statement", tt.name)
+		}
+		values, ok := tt.stmt.Parameters[tt.paramName].([]string)
+		if !ok {
+			t.Fatalf("%s %s parameter type = %T, want []string", tt.name, tt.paramName, tt.stmt.Parameters[tt.paramName])
+		}
+		if !stringSliceContains(values, tt.want) {
+			t.Fatalf("%s %s = %v, want %q", tt.name, tt.paramName, values, tt.want)
+		}
+	}
+	if got, want := fileEntityRefresh.Parameters["file_path"], "/repos/my-repo/main.go"; got != want {
+		t.Fatalf("file entity contains file_path = %#v, want %#v", got, want)
+	}
+	entityIDs, ok := fileEntityRefresh.Parameters["entity_ids"].([]string)
+	if !ok {
+		t.Fatalf("file entity contains entity_ids type = %T, want []string", fileEntityRefresh.Parameters["entity_ids"])
+	}
+	if !stringSliceContains(entityIDs, "content-entity:function") {
+		t.Fatalf("file entity contains entity_ids = %v, want current entity", entityIDs)
+	}
+	var foundClassRefresh bool
+	for _, stmt := range entityContainmentRefreshes {
+		rows, ok := stmt.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("entity contains rows type = %T, want []map[string]any", stmt.Parameters["rows"])
+		}
+		for _, row := range rows {
+			if row["parent_entity_id"] != "content-entity:class" {
+				continue
+			}
+			foundClassRefresh = true
+			childIDs, ok := row["child_entity_ids"].([]string)
+			if !ok {
+				t.Fatalf("entity contains child_entity_ids type = %T, want []string", row["child_entity_ids"])
+			}
+			if !stringSliceContains(childIDs, "content-entity:function") {
+				t.Fatalf("entity contains child_entity_ids = %v, want current child entity", childIDs)
+			}
+		}
+	}
+	if !foundClassRefresh {
+		t.Fatal("missing class containment refresh statement")
+	}
+}
+
+func TestCanonicalNodeWriterRefreshesStructuralEdgesBeforeEntityRetract(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-2",
+		RepoID:       "repo-1",
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/main.go"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "content-entity:function", Label: "Function"},
+		},
+	}
+
+	fileEntityRefreshIdx := -1
+	codeEntityRetractIdx := -1
+	for i, stmt := range writer.buildRetractStatements(mat) {
+		switch {
+		case strings.Contains(stmt.Cypher, "[r:CONTAINS]->(n)"):
+			fileEntityRefreshIdx = i
+		case strings.Contains(stmt.Cypher, "n:Function OR n:Class"):
+			codeEntityRetractIdx = i
+		}
+	}
+
+	if fileEntityRefreshIdx < 0 {
+		t.Fatal("missing file/entity refresh statement")
+	}
+	if codeEntityRetractIdx < 0 {
+		t.Fatal("missing code entity retract statement")
+	}
+	if fileEntityRefreshIdx > codeEntityRetractIdx {
+		t.Fatalf("file/entity refresh index = %d, code entity retract index = %d; refresh must run first",
+			fileEntityRefreshIdx, codeEntityRetractIdx)
+	}
+}
+
+func TestCanonicalNodeWriterRefreshesOnlyStaleFileEntityEdges(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-2",
+		RepoID:       "repo-1",
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/current.go"},
+			{Path: "/repos/my-repo/empty.go"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "function-current", Label: "Function", FilePath: "/repos/my-repo/current.go"},
+			{EntityID: "struct-current", Label: "Struct", FilePath: "/repos/my-repo/current.go"},
+		},
+	}
+
+	var fileEntityRefreshes []Statement
+	for _, stmt := range writer.buildRetractStatements(mat) {
+		if strings.Contains(stmt.Cypher, "[r:CONTAINS]->(n)") {
+			fileEntityRefreshes = append(fileEntityRefreshes, stmt)
+		}
+	}
+	if got, want := len(fileEntityRefreshes), 2; got != want {
+		t.Fatalf("file/entity refresh statement count = %d, want %d", got, want)
+	}
+	for _, stmt := range fileEntityRefreshes {
+		if !strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})-[r:CONTAINS]->(n)") {
+			t.Fatalf("refresh Cypher = %q, want single file_path anchor", stmt.Cypher)
+		}
+		if strings.Contains(stmt.Cypher, "f.path IN $file_paths") {
+			t.Fatalf("refresh Cypher = %q, must not prune multiple files in one statement", stmt.Cypher)
+		}
+		filePath, ok := stmt.Parameters["file_path"].(string)
+		if !ok {
+			t.Fatalf("refresh file_path type = %T, want string", stmt.Parameters["file_path"])
+		}
+		entityIDs, ok := stmt.Parameters["entity_ids"].([]string)
+		if !ok {
+			t.Fatalf("refresh[%s] entity_ids type = %T, want []string", filePath, stmt.Parameters["entity_ids"])
+		}
+		switch filePath {
+		case "/repos/my-repo/current.go":
+			if got, want := strings.Join(entityIDs, ","), "function-current,struct-current"; got != want {
+				t.Fatalf("refresh[%s] entity_ids = %q, want %q", filePath, got, want)
+			}
+		case "/repos/my-repo/empty.go":
+			if len(entityIDs) != 0 {
+				t.Fatalf("refresh[%s] entity_ids = %#v, want empty", filePath, entityIDs)
+			}
+		default:
+			t.Fatalf("unexpected refresh file_path %q", filePath)
+		}
+	}
+}
+
+func TestCanonicalNodeWriterRefreshesOnlyStaleEntityContainmentEdges(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		GenerationID: "gen-2",
+		RepoID:       "repo-1",
+		Entities: []projector.EntityRow{
+			{EntityID: "class-current", Label: "Class", EntityName: "Handler", FilePath: "/repos/my-repo/current.go"},
+			{EntityID: "method-current", Label: "Function", EntityName: "ServeHTTP", FilePath: "/repos/my-repo/current.go", StartLine: 10},
+			{EntityID: "function-empty", Label: "Function", EntityName: "topLevel", FilePath: "/repos/my-repo/current.go", StartLine: 30},
+		},
+		ClassMembers: []projector.ClassMemberRow{
+			{ClassName: "Handler", FunctionName: "ServeHTTP", FilePath: "/repos/my-repo/current.go", FunctionLine: 10},
+		},
+	}
+
+	var containmentRefreshes []Statement
+	for _, stmt := range writer.buildRetractStatements(mat) {
+		if strings.Contains(stmt.Cypher, "(n {uid: row.parent_entity_id})-[r:CONTAINS]->(m)") {
+			containmentRefreshes = append(containmentRefreshes, stmt)
+		}
+	}
+	if got, want := len(containmentRefreshes), 1; got != want {
+		t.Fatalf("entity containment refresh statement count = %d, want %d", got, want)
+	}
+	rows, ok := containmentRefreshes[0].Parameters["rows"].([]map[string]any)
+	if !ok {
+		t.Fatalf("rows type = %T, want []map[string]any", containmentRefreshes[0].Parameters["rows"])
+	}
+	if got, want := len(rows), 3; got != want {
+		t.Fatalf("rows count = %d, want %d", got, want)
+	}
+	for _, row := range rows {
+		parentID, ok := row["parent_entity_id"].(string)
+		if !ok {
+			t.Fatalf("parent_entity_id type = %T, want string", row["parent_entity_id"])
+		}
+		childIDs, ok := row["child_entity_ids"].([]string)
+		if !ok {
+			t.Fatalf("child_entity_ids type = %T, want []string", row["child_entity_ids"])
+		}
+		switch parentID {
+		case "class-current":
+			if got, want := strings.Join(childIDs, ","), "method-current"; got != want {
+				t.Fatalf("refresh[%s] child_entity_ids = %q, want %q", parentID, got, want)
+			}
+		case "method-current":
+			if len(childIDs) != 0 {
+				t.Fatalf("refresh[%s] child_entity_ids = %#v, want empty", parentID, childIDs)
+			}
+		case "function-empty":
+			if len(childIDs) != 0 {
+				t.Fatalf("refresh[%s] child_entity_ids = %#v, want empty", parentID, childIDs)
+			}
+		default:
+			t.Fatalf("unexpected parent_entity_id %q", parentID)
+		}
+	}
+}
+
+func TestCanonicalNodeWriterRetractCoversProjectableEntityLabels(t *testing.T) {
+	t.Parallel()
+
+	covered := make(map[string]string)
+	for _, family := range []struct {
+		name   string
+		labels map[string]struct{}
+		cypher string
+	}{
+		{name: "code", labels: canonicalNodeRetractCodeEntityLabels, cypher: canonicalNodeRetractCodeEntitiesCypher},
+		{name: "infra", labels: canonicalNodeRetractInfraEntityLabels, cypher: canonicalNodeRetractInfraEntitiesCypher},
+		{name: "terraform", labels: canonicalNodeRetractTerraformEntityLabels, cypher: canonicalNodeRetractTerraformEntitiesCypher},
+		{name: "cloudformation", labels: canonicalNodeRetractCloudFormationEntityLabels, cypher: canonicalNodeRetractCloudFormationEntitiesCypher},
+		{name: "sql", labels: canonicalNodeRetractSQLEntityLabels, cypher: canonicalNodeRetractSQLEntitiesCypher},
+		{name: "data", labels: canonicalNodeRetractDataEntityLabels, cypher: canonicalNodeRetractDataEntitiesCypher},
+	} {
+		for label := range family.labels {
+			if previous, exists := covered[label]; exists {
+				t.Fatalf("label %s covered by both %s and %s retract families", label, previous, family.name)
+			}
+			covered[label] = family.name
+			if !strings.Contains(family.cypher, "n:"+label) {
+				t.Fatalf("%s label set includes %s but cypher does not", family.name, label)
+			}
+		}
+	}
+
+	var missing []string
+	for _, label := range projector.EntityTypeLabelMap() {
+		if label == "Module" || label == "Parameter" {
+			continue
+		}
+		if _, ok := covered[label]; !ok {
+			missing = append(missing, label)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Fatalf("retract families missing projectable labels: %s", strings.Join(missing, ", "))
+	}
+}
+
+func stringSliceContains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCanonicalNodeWriterEmptyMaterialization(t *testing.T) {
@@ -832,6 +1607,287 @@ func TestCanonicalNodeWriterFallsBackToSequential(t *testing.T) {
 	// Sequential path: all calls go through Execute()
 	if len(exec.calls) == 0 {
 		t.Fatal("expected Execute() calls for sequential fallback, got 0")
+	}
+}
+
+func TestCanonicalNodeWriterUsesPhaseGroupExecutor(t *testing.T) {
+	t.Parallel()
+
+	exec := &mockPhaseGroupExecutor{}
+	writer := NewCanonicalNodeWriter(exec, 500, nil)
+
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "my-repo",
+			Path:   "/repos/my-repo",
+		},
+		Files: []projector.FileRow{
+			{Path: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", Name: "main.go", Language: "go", RepoID: "repo-1", DirPath: "/repos/my-repo/src"},
+		},
+		Entities: []projector.EntityRow{
+			{EntityID: "e1", Label: "Function", EntityName: "main", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 5, EndLine: 10, Language: "go", RepoID: "repo-1"},
+		},
+	}
+
+	if err := writer.Write(context.Background(), mat); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	if got := len(exec.executeCalls); got != 0 {
+		t.Fatalf("Execute calls = %d, want 0 for phase-group path", got)
+	}
+	if got := exec.phaseGroupCalls; got == 0 {
+		t.Fatal("phaseGroupCalls = 0, want at least one phase group")
+	}
+	if got := len(exec.phaseGroups); got < 4 {
+		t.Fatalf("phase group count = %d, want multiple ordered phases", got)
+	}
+	if got, want := exec.phaseGroups[0][0].Operation, OperationCanonicalRetract; got != want {
+		t.Fatalf("first phase first operation = %q, want %q", got, want)
+	}
+}
+
+func TestCanonicalNodeWriterEntityStatementsIncludePhaseDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "e1",
+				Label:        "Function",
+				EntityName:   "main",
+				FilePath:     "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				StartLine:    5,
+				EndLine:      10,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if len(stmts) == 0 {
+		t.Fatal("buildEntityStatements() returned no statements")
+	}
+	for _, stmt := range stmts {
+		if got, want := stmt.Parameters["_pcg_phase"], "entities"; got != want {
+			t.Fatalf("entity statement _pcg_phase = %#v, want %#v", got, want)
+		}
+	}
+}
+
+func TestCanonicalNodeWriterSingletonFallbackMarksExecuteOnlyMode(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "e-shortest",
+				Label:        "Function",
+				EntityName:   "TestHandleCallChainReturnsShortestPath",
+				FilePath:     "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				StartLine:    5,
+				EndLine:      10,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if len(stmts) != 1 {
+		t.Fatalf("buildEntityStatements() count = %d, want 1", len(stmts))
+	}
+	if got, want := stmts[0].Parameters["_pcg_phase_group_mode"], "execute_only"; got != want {
+		t.Fatalf("singleton fallback _pcg_phase_group_mode = %#v, want %#v", got, want)
+	}
+}
+
+func TestCanonicalNodeWriterEntityBatchSizeOverride(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).WithEntityBatchSize(2)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{EntityID: "e1", Label: "Function", EntityName: "one", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 1, EndLine: 2, Language: "go", RepoID: "repo-1"},
+			{EntityID: "e2", Label: "Function", EntityName: "two", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 3, EndLine: 4, Language: "go", RepoID: "repo-1"},
+			{EntityID: "e3", Label: "Function", EntityName: "three", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 5, EndLine: 6, Language: "go", RepoID: "repo-1"},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 2; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+	firstRows, _ := stmts[0].Parameters["rows"].([]map[string]any)
+	secondRows, _ := stmts[1].Parameters["rows"].([]map[string]any)
+	if got, want := len(firstRows), 2; got != want {
+		t.Fatalf("first entity batch rows = %d, want %d", got, want)
+	}
+	if got, want := len(secondRows), 1; got != want {
+		t.Fatalf("second entity batch rows = %d, want %d", got, want)
+	}
+}
+
+func TestCanonicalNodeWriterEntityLabelBatchSizeOverride(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
+		WithEntityBatchSize(100).
+		WithEntityLabelBatchSize("Function", 2)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{EntityID: "c1", Label: "Class", EntityName: "One", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 1, EndLine: 2, Language: "go", RepoID: "repo-1"},
+			{EntityID: "c2", Label: "Class", EntityName: "Two", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 3, EndLine: 4, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f1", Label: "Function", EntityName: "one", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 5, EndLine: 6, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f2", Label: "Function", EntityName: "two", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 7, EndLine: 8, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f3", Label: "Function", EntityName: "three", FilePath: "/repos/my-repo/src/main.go", RelativePath: "src/main.go", StartLine: 9, EndLine: 10, Language: "go", RepoID: "repo-1"},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 3; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+
+	var classRows []int
+	var functionRows []int
+	for _, stmt := range stmts {
+		rows, _ := stmt.Parameters["rows"].([]map[string]any)
+		summary, _ := stmt.Parameters["_pcg_statement_summary"].(string)
+		switch {
+		case strings.Contains(summary, "label=Class"):
+			classRows = append(classRows, len(rows))
+		case strings.Contains(summary, "label=Function"):
+			functionRows = append(functionRows, len(rows))
+		}
+	}
+
+	if got, want := len(classRows), 1; got != want {
+		t.Fatalf("class batch count = %d, want %d", got, want)
+	}
+	if got, want := classRows[0], 2; got != want {
+		t.Fatalf("class batch rows = %d, want %d", got, want)
+	}
+	if got, want := stmts[0].Parameters[StatementMetadataEntityLabelKey], "Class"; got != want {
+		t.Fatalf("class statement entity label = %#v, want %#v", got, want)
+	}
+	if got, want := stmts[1].Parameters[StatementMetadataEntityLabelKey], "Function"; got != want {
+		t.Fatalf("function statement entity label = %#v, want %#v", got, want)
+	}
+	if got, want := len(functionRows), 2; got != want {
+		t.Fatalf("function batch count = %d, want %d", got, want)
+	}
+	if got, want := functionRows[0], 2; got != want {
+		t.Fatalf("first function batch rows = %d, want %d", got, want)
+	}
+	if got, want := functionRows[1], 1; got != want {
+		t.Fatalf("second function batch rows = %d, want %d", got, want)
+	}
+}
+
+func TestCanonicalNodeWriterFileScopedContainmentHonorsLabelBatchSizeWithinFile(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).
+		WithEntityContainmentInEntityUpsert().
+		WithEntityLabelBatchSize("K8sResource", 5)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+	}
+	for i := 0; i < 12; i++ {
+		mat.Entities = append(mat.Entities, projector.EntityRow{
+			EntityID:     fmt.Sprintf("k8s-%02d", i),
+			Label:        "K8sResource",
+			EntityName:   fmt.Sprintf("route-%02d", i),
+			FilePath:     "/repos/my-repo/charts/routes.yaml",
+			RelativePath: "charts/routes.yaml",
+			StartLine:    i + 1,
+			EndLine:      i + 1,
+			Language:     "yaml",
+			RepoID:       "repo-1",
+		})
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 3; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+	wantRows := []int{5, 5, 2}
+	for i, stmt := range stmts {
+		rows, ok := stmt.Parameters["rows"].([]map[string]any)
+		if !ok {
+			t.Fatalf("statement %d rows type = %T, want []map[string]any", i, stmt.Parameters["rows"])
+		}
+		if got := len(rows); got != wantRows[i] {
+			t.Fatalf("statement %d rows = %d, want %d", i, got, wantRows[i])
+		}
+		if got, want := stmt.Parameters["file_path"], "/repos/my-repo/charts/routes.yaml"; got != want {
+			t.Fatalf("statement %d file_path = %#v, want %#v", i, got, want)
+		}
+	}
+}
+
+func TestCanonicalNodeWriterEntityBatchesCrossFileBoundaries(t *testing.T) {
+	t.Parallel()
+
+	writer := NewCanonicalNodeWriter(&mockExecutor{}, 500, nil).WithEntityBatchSize(10)
+	mat := projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Entities: []projector.EntityRow{
+			{EntityID: "f1", Label: "Function", EntityName: "one", FilePath: "/repos/my-repo/src/a.go", RelativePath: "src/a.go", StartLine: 1, EndLine: 2, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f2", Label: "Function", EntityName: "two", FilePath: "/repos/my-repo/src/b.go", RelativePath: "src/b.go", StartLine: 3, EndLine: 4, Language: "go", RepoID: "repo-1"},
+			{EntityID: "f3", Label: "Function", EntityName: "three", FilePath: "/repos/my-repo/src/a.go", RelativePath: "src/a.go", StartLine: 5, EndLine: 6, Language: "go", RepoID: "repo-1"},
+		},
+	}
+
+	stmts := writer.buildEntityStatements(mat)
+	if got, want := len(stmts), 1; got != want {
+		t.Fatalf("buildEntityStatements() count = %d, want %d", got, want)
+	}
+
+	rows, _ := stmts[0].Parameters["rows"].([]map[string]any)
+	if _, ok := stmts[0].Parameters["file_path"]; ok {
+		t.Fatalf("entity batch unexpectedly has statement-level file_path: %#v", stmts[0].Parameters)
+	}
+	if got, want := len(rows), 3; got != want {
+		t.Fatalf("entity batch rows = %d, want %d", got, want)
+	}
+	for _, row := range rows {
+		if _, ok := row["file_path"]; ok {
+			t.Fatalf("entity row unexpectedly contains file_path: %#v", row)
+		}
 	}
 }
 

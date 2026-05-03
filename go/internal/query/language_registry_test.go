@@ -4,8 +4,8 @@ import "testing"
 
 func TestSupportedLanguages(t *testing.T) {
 	langs := SupportedLanguages()
-	if len(langs) != 21 {
-		t.Errorf("expected 21 supported languages, got %d: %v", len(langs), langs)
+	if len(langs) != 22 {
+		t.Errorf("expected 22 supported languages, got %d: %v", len(langs), langs)
 	}
 	for i := 1; i < len(langs); i++ {
 		if langs[i] < langs[i-1] {
@@ -16,6 +16,7 @@ func TestSupportedLanguages(t *testing.T) {
 	expected := map[string]bool{
 		"go": true, "python": true, "rust": true, "typescript": true, "tsx": true,
 		"javascript": true, "jsx": true, "hcl": true, "kotlin": true, "php": true, "elixir": true,
+		"sql": true,
 	}
 	langSet := make(map[string]bool, len(langs))
 	for _, lang := range langs {
@@ -30,8 +31,8 @@ func TestSupportedLanguages(t *testing.T) {
 
 func TestSupportedEntityTypes(t *testing.T) {
 	types := SupportedEntityTypes()
-	if len(types) != 26 {
-		t.Errorf("expected 26 supported entity types, got %d: %v", len(types), types)
+	if len(types) != 32 {
+		t.Errorf("expected 32 supported entity types, got %d: %v", len(types), types)
 	}
 	expected := map[string]bool{
 		"repository": true, "directory": true, "file": true,
@@ -41,6 +42,8 @@ func TestSupportedEntityTypes(t *testing.T) {
 		"guard": true, "protocol_implementation": true, "module_attribute": true,
 		"terraform_module": true, "terragrunt_config": true,
 		"terragrunt_dependency": true, "terragrunt_local": true, "terragrunt_input": true,
+		"sql_table": true, "sql_view": true, "sql_function": true,
+		"sql_trigger": true, "sql_index": true, "sql_column": true,
 	}
 	typeSet := make(map[string]bool, len(types))
 	for _, typ := range types {

@@ -2,7 +2,11 @@ package neo4j
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/metric"
@@ -22,6 +26,7 @@ type EdgeWriter struct {
 	InheritanceGroupBatchSize     int
 	SQLRelationshipGroupBatchSize int
 	Instruments                   *telemetry.Instruments
+	Logger                        *slog.Logger
 }
 
 // NewEdgeWriter returns an EdgeWriter backed by the given Executor.
@@ -94,6 +99,8 @@ func (w *EdgeWriter) WriteEdges(
 
 	routedRows := make(map[string][]map[string]any)
 	routeOrder := make([]string, 0, 2)
+	artifactRows := make(map[string][]map[string]any)
+	artifactRouteOrder := make([]string, 0, 2)
 	for _, row := range rows {
 		cypher, rowMap, ok := buildRowMap(domain, row, evidenceSource)
 		if !ok {
@@ -103,10 +110,26 @@ func (w *EdgeWriter) WriteEdges(
 			routeOrder = append(routeOrder, cypher)
 		}
 		routedRows[cypher] = append(routedRows[cypher], rowMap)
+		if domain == reducer.DomainRepoDependency {
+			for _, artifactRow := range repoEvidenceArtifactRowsFromIntent(row, evidenceSource) {
+				artifactCypher := batchCanonicalRepoEvidenceArtifactUpsertCypher
+				if payloadString(artifactRow, "environment") != "" {
+					artifactCypher = batchCanonicalRepoEvidenceArtifactWithEnvironmentUpsertCypher
+				}
+				if _, seen := artifactRows[artifactCypher]; !seen {
+					artifactRouteOrder = append(artifactRouteOrder, artifactCypher)
+				}
+				artifactRows[artifactCypher] = append(artifactRows[artifactCypher], artifactRow)
+			}
+		}
 	}
 
 	if len(routedRows) == 0 {
 		return nil
+	}
+	writtenRows := 0
+	for _, cypher := range routeOrder {
+		writtenRows += len(routedRows[cypher])
 	}
 
 	// Collect all batches as statements.
@@ -114,6 +137,9 @@ func (w *EdgeWriter) WriteEdges(
 	bs := w.batchSizeForDomain(domain)
 	for _, cypher := range routeOrder {
 		stmts = append(stmts, buildBatchedStatements(cypher, routedRows[cypher], bs)...)
+	}
+	for _, cypher := range artifactRouteOrder {
+		stmts = append(stmts, buildBatchedStatements(cypher, artifactRows[cypher], bs)...)
 	}
 
 	// Prefer atomic grouped execution; fall back to sequential.
@@ -130,6 +156,7 @@ func (w *EdgeWriter) WriteEdges(
 				}
 				duration := time.Since(start).Seconds()
 				w.recordGroupedWrite(ctx, domain, duration, stmts[i:end])
+				w.logSharedEdgeWrite(domain, evidenceSource, "group", len(rows), writtenRows, len(routeOrder), bs, groupSize, duration, stmts[i:end])
 				if domain == reducer.DomainCodeCalls {
 					w.recordCodeCallBatch(ctx, duration)
 				}
@@ -140,7 +167,9 @@ func (w *EdgeWriter) WriteEdges(
 		if err := ge.ExecuteGroup(ctx, stmts); err != nil {
 			return WrapRetryableNeo4jError(err)
 		}
-		w.recordGroupedWrite(ctx, domain, time.Since(start).Seconds(), stmts)
+		duration := time.Since(start).Seconds()
+		w.recordGroupedWrite(ctx, domain, duration, stmts)
+		w.logSharedEdgeWrite(domain, evidenceSource, "group", len(rows), writtenRows, len(routeOrder), bs, 0, duration, stmts)
 		return nil
 	}
 
@@ -149,8 +178,10 @@ func (w *EdgeWriter) WriteEdges(
 		if err := w.executor.Execute(ctx, stmt); err != nil {
 			return WrapRetryableNeo4jError(err)
 		}
+		duration := time.Since(start).Seconds()
+		w.logSharedEdgeWrite(domain, evidenceSource, "single", len(rows), writtenRows, len(routeOrder), bs, 0, duration, []Statement{stmt})
 		if domain == reducer.DomainCodeCalls {
-			w.recordCodeCallBatch(ctx, time.Since(start).Seconds())
+			w.recordCodeCallBatch(ctx, duration)
 		}
 	}
 	return nil
@@ -268,6 +299,7 @@ func buildRowMap(
 			if evidenceType := payloadString(row.Payload, "evidence_type"); evidenceType != "" {
 				rowMap["evidence_type"] = evidenceType
 			}
+			copyRepoRelationshipMetadata(rowMap, row.Payload, row.GenerationID)
 			return batchCanonicalRepoDependencyUpsertCypher, rowMap, true
 		}
 		rowMap := map[string]any{
@@ -279,7 +311,12 @@ func buildRowMap(
 		if evidenceType := payloadString(row.Payload, "evidence_type"); evidenceType != "" {
 			rowMap["evidence_type"] = evidenceType
 		}
-		return batchCanonicalTypedRepoRelationshipUpsertCypher, rowMap, true
+		copyRepoRelationshipMetadata(rowMap, row.Payload, row.GenerationID)
+		cypher, ok := batchCanonicalTypedRepoRelationshipUpsertCypher(relationshipType)
+		if !ok {
+			return "", nil, false
+		}
+		return cypher, rowMap, true
 
 	case reducer.DomainWorkloadDependency:
 		workloadID := payloadString(row.Payload, "workload_id")
@@ -300,7 +337,7 @@ func buildRowMap(
 			if sourceEntityID == "" || targetEntityID == "" {
 				return "", nil, false
 			}
-			return batchCanonicalCodeCallUpsertCypher, map[string]any{
+			return batchCanonicalMetaclassUpsertCypher, map[string]any{
 				"source_entity_id":  sourceEntityID,
 				"target_entity_id":  targetEntityID,
 				"relationship_type": relationshipType,
@@ -321,6 +358,9 @@ func buildRowMap(
 		if callKind := payloadString(row.Payload, "call_kind"); callKind != "" {
 			rowMap["call_kind"] = callKind
 		}
+		if rowMap["call_kind"] == "jsx_component" {
+			return batchCanonicalJSXComponentReferenceUpsertCypher, rowMap, true
+		}
 		return batchCanonicalCodeCallUpsertCypher, rowMap, true
 
 	case reducer.DomainInheritanceEdges:
@@ -329,25 +369,25 @@ func buildRowMap(
 		if childEntityID == "" || parentEntityID == "" {
 			return "", nil, false
 		}
-		return batchCanonicalInheritanceEdgeUpsertCypher, map[string]any{
+		rowMap := map[string]any{
 			"child_entity_id":   childEntityID,
 			"parent_entity_id":  parentEntityID,
 			"relationship_type": payloadString(row.Payload, "relationship_type"),
 			"evidence_source":   evidenceSource,
-		}, true
-
-	case reducer.DomainSQLRelationships:
-		sourceEntityID := payloadString(row.Payload, "source_entity_id")
-		targetEntityID := payloadString(row.Payload, "target_entity_id")
-		if sourceEntityID == "" || targetEntityID == "" {
+		}
+		switch rowMap["relationship_type"] {
+		case "OVERRIDES":
+			return batchCanonicalInheritanceOverrideUpsertCypher, rowMap, true
+		case "ALIASES":
+			return batchCanonicalInheritanceAliasUpsertCypher, rowMap, true
+		case "", "INHERITS":
+			return batchCanonicalInheritanceEdgeUpsertCypher, rowMap, true
+		default:
 			return "", nil, false
 		}
-		return batchCanonicalSQLRelationshipUpsertCypher, map[string]any{
-			"source_entity_id":  sourceEntityID,
-			"target_entity_id":  targetEntityID,
-			"relationship_type": payloadString(row.Payload, "relationship_type"),
-			"evidence_source":   evidenceSource,
-		}, true
+
+	case reducer.DomainSQLRelationships:
+		return buildSQLRelationshipRowMap(row.Payload, evidenceSource)
 
 	default:
 		return "", nil, false
@@ -370,6 +410,42 @@ func (w *EdgeWriter) RetractEdges(
 	}
 
 	repoIDs := collectRepoIDs(rows)
+	if domain == reducer.DomainSQLRelationships {
+		if ge, ok := w.executor.(GroupExecutor); ok {
+			stmts := BuildRetractSQLRelationshipEdgeStatements(repoIDs, evidenceSource)
+			return WrapRetryableNeo4jError(ge.ExecuteGroup(ctx, stmts))
+		}
+	}
+	if domain == reducer.DomainRepoDependency {
+		stmts := []Statement{
+			{
+				Operation: OperationCanonicalRetract,
+				Cypher:    retractRepoRelationshipAndRunsOnEdgesCypher,
+				Parameters: map[string]any{
+					"repo_ids":        repoIDs,
+					"evidence_source": evidenceSource,
+				},
+			},
+			{
+				Operation: OperationCanonicalRetract,
+				Cypher:    retractRepoEvidenceArtifactsCypher,
+				Parameters: map[string]any{
+					"repo_ids":        repoIDs,
+					"evidence_source": evidenceSource,
+				},
+			},
+		}
+		if ge, ok := w.executor.(GroupExecutor); ok {
+			return WrapRetryableNeo4jError(ge.ExecuteGroup(ctx, stmts))
+		}
+		for _, stmt := range stmts {
+			if err := w.executor.Execute(ctx, stmt); err != nil {
+				return WrapRetryableNeo4jError(err)
+			}
+		}
+		return nil
+	}
+
 	stmt, err := buildRetractStatement(domain, repoIDs, evidenceSource)
 	if err != nil {
 		return err
@@ -441,4 +517,165 @@ func payloadString(payload map[string]any, key string) string {
 		return ""
 	}
 	return s
+}
+
+// copyRepoRelationshipMetadata preserves durable evidence pointers on graph
+// edge writes while keeping the full evidence payload in Postgres.
+func copyRepoRelationshipMetadata(rowMap map[string]any, payload map[string]any, rowGenerationID string) {
+	rowMap["resolved_id"] = payloadString(payload, "resolved_id")
+	generationID := payloadString(payload, "generation_id")
+	if generationID == "" {
+		generationID = rowGenerationID
+	}
+	rowMap["generation_id"] = generationID
+	rowMap["evidence_count"] = payloadInt(payload, "evidence_count")
+	rowMap["evidence_kinds"] = payloadStringSlice(payload, "evidence_kinds")
+	rowMap["resolution_source"] = payloadString(payload, "resolution_source")
+	rowMap["confidence"] = repoRelationshipConfidence(payloadFloat(payload, "confidence"))
+	rowMap["rationale"] = payloadString(payload, "rationale")
+}
+
+// repoEvidenceArtifactRowsFromIntent builds bounded graph nodes from reducer
+// evidence summaries while preserving raw detail ownership in Postgres.
+func repoEvidenceArtifactRowsFromIntent(
+	row reducer.SharedProjectionIntentRow,
+	evidenceSource string,
+) []map[string]any {
+	payload := row.Payload
+	repoID := payloadString(payload, "repo_id")
+	targetRepoID := payloadString(payload, "target_repo_id")
+	if repoID == "" || targetRepoID == "" {
+		return nil
+	}
+	artifacts := payloadMapSlice(payload, "evidence_artifacts")
+	if len(artifacts) == 0 {
+		return nil
+	}
+
+	relationshipType := payloadString(payload, "relationship_type")
+	resolvedID := payloadString(payload, "resolved_id")
+	generationID := payloadString(payload, "generation_id")
+	if generationID == "" {
+		generationID = row.GenerationID
+	}
+	rows := make([]map[string]any, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		evidenceKind := payloadString(artifact, "evidence_kind")
+		path := payloadString(artifact, "path")
+		matchedValue := payloadString(artifact, "matched_value")
+		name := path
+		if name == "" {
+			name = evidenceKind
+		}
+		artifactID := repoEvidenceArtifactID(resolvedID, evidenceKind, path, matchedValue)
+		rows = append(rows, map[string]any{
+			"artifact_id":           artifactID,
+			"name":                  name,
+			"repo_id":               repoID,
+			"target_repo_id":        targetRepoID,
+			"relationship_type":     relationshipType,
+			"resolved_id":           resolvedID,
+			"generation_id":         generationID,
+			"evidence_kind":         evidenceKind,
+			"artifact_family":       payloadString(artifact, "artifact_family"),
+			"path":                  path,
+			"extractor":             payloadString(artifact, "extractor"),
+			"environment":           payloadString(artifact, "environment"),
+			"runtime_platform_kind": payloadString(artifact, "runtime_platform_kind"),
+			"matched_alias":         payloadString(artifact, "matched_alias"),
+			"matched_value":         matchedValue,
+			"confidence":            payloadFloat(artifact, "confidence"),
+			"evidence_source":       evidenceSource,
+		})
+	}
+	return rows
+}
+
+func repoEvidenceArtifactID(resolvedID string, evidenceKind string, path string, matchedValue string) string {
+	hash := sha1.Sum([]byte(strings.Join([]string{resolvedID, evidenceKind, path, matchedValue}, "\x00")))
+	return "evidence-artifact:" + hex.EncodeToString(hash[:8])
+}
+
+// payloadInt accepts numeric shapes produced by Go maps, JSON decoding, and
+// database drivers.
+func payloadInt(payload map[string]any, key string) int {
+	if payload == nil {
+		return 0
+	}
+	switch value := payload[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
+}
+
+// payloadFloat accepts numeric shapes produced by Go maps, JSON decoding, and
+// database drivers.
+func payloadFloat(payload map[string]any, key string) float64 {
+	if payload == nil {
+		return 0
+	}
+	switch value := payload[key].(type) {
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	default:
+		return 0
+	}
+}
+
+// payloadMapSlice normalizes graph-story evidence summaries after JSON
+// decoding or direct Go construction in reducer tests.
+func payloadMapSlice(payload map[string]any, key string) []map[string]any {
+	if payload == nil {
+		return nil
+	}
+	switch value := payload[key].(type) {
+	case []map[string]any:
+		return value
+	case []any:
+		out := make([]map[string]any, 0, len(value))
+		for _, item := range value {
+			if mapped, ok := item.(map[string]any); ok {
+				out = append(out, mapped)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// payloadStringSlice normalizes evidence-kind arrays before passing them to
+// graph drivers.
+func payloadStringSlice(payload map[string]any, key string) []string {
+	if payload == nil {
+		return nil
+	}
+	switch value := payload[key].(type) {
+	case []string:
+		return value
+	case []any:
+		out := make([]string, 0, len(value))
+		for _, item := range value {
+			text := strings.TrimSpace(fmt.Sprint(item))
+			if text == "" || text == "<nil>" {
+				continue
+			}
+			out = append(out, text)
+		}
+		return out
+	default:
+		return nil
+	}
 }

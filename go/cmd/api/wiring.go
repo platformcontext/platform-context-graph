@@ -19,55 +19,58 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
+var (
+	_ query.GraphQuery   = (*query.Neo4jReader)(nil)
+	_ query.ContentStore = (*query.ContentReader)(nil)
+)
+
 func wireAPI(
 	ctx context.Context,
 	getenv func(string) string,
 	logger *slog.Logger,
 	prometheusHandler http.Handler,
 ) (http.Handler, func(), error) {
+	queryProfile, err := loadQueryProfile(getenv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load query profile: %w", err)
+	}
+	graphBackend, err := loadGraphBackend(getenv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load graph backend: %w", err)
+	}
+
 	apiKey, err := internalruntime.ResolveAPIKey(getenv)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve api key: %w", err)
 	}
 
-	// Open Neo4j
-	neo4jURI := envOrDefault(getenv, "NEO4J_URI", "bolt://localhost:7687")
-	neo4jUser := envOrDefault(getenv, "NEO4J_USERNAME", "neo4j")
-	neo4jPass := envOrDefault(getenv, "NEO4J_PASSWORD", "")
-	neo4jDB := envOrDefault(getenv, "DEFAULT_DATABASE", "neo4j")
-
-	driver, err := neo4jdriver.NewDriverWithContext(
-		neo4jURI,
-		neo4jdriver.BasicAuth(neo4jUser, neo4jPass, ""),
-	)
+	driver, neo4jDB, err := openQueryGraph(ctx, getenv, queryProfile, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("open neo4j: %w", err)
-	}
-
-	if err := driver.VerifyConnectivity(ctx); err != nil {
-		_ = driver.Close(ctx)
-		return nil, nil, fmt.Errorf("verify neo4j: %w", err)
-	}
-	if logger != nil {
-		logger.Info("neo4j connected", telemetry.EventAttr("runtime.neo4j.connected"), slog.String("neo4j_uri", neo4jURI))
+		return nil, nil, err
 	}
 
 	// Open Postgres using pgx driver
 	pgDSN := envOrDefault(getenv, "PCG_POSTGRES_DSN",
 		envOrDefault(getenv, "PCG_CONTENT_STORE_DSN", ""))
 	if pgDSN == "" {
-		_ = driver.Close(ctx)
+		if driver != nil {
+			_ = driver.Close(ctx)
+		}
 		return nil, nil, fmt.Errorf("PCG_POSTGRES_DSN or PCG_CONTENT_STORE_DSN is required")
 	}
 
 	db, err := sql.Open("pgx", pgDSN)
 	if err != nil {
-		_ = driver.Close(ctx)
+		if driver != nil {
+			_ = driver.Close(ctx)
+		}
 		return nil, nil, fmt.Errorf("open postgres: %w", err)
 	}
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
-		_ = driver.Close(ctx)
+		if driver != nil {
+			_ = driver.Close(ctx)
+		}
 		return nil, nil, fmt.Errorf("ping postgres: %w", err)
 	}
 	if logger != nil {
@@ -78,10 +81,12 @@ func wireAPI(
 	neo4jReader := query.NewNeo4jReader(driver, neo4jDB)
 	contentReader := query.NewContentReader(db)
 	statusReader := pgstatus.NewStatusStore(pgstatus.SQLQueryer{DB: db})
-	router, err := newRouter(db, neo4jReader, contentReader)
+	router, err := newRouter(db, neo4jReader, contentReader, queryProfile, graphBackend, logger)
 	if err != nil {
 		_ = db.Close()
-		_ = driver.Close(ctx)
+		if driver != nil {
+			_ = driver.Close(ctx)
+		}
 		return nil, nil, fmt.Errorf("new router: %w", err)
 	}
 
@@ -91,7 +96,9 @@ func wireAPI(
 	mux, err := mountRuntimeSurface(apiMux, "platform-context-graph-api", statusReader, prometheusHandler)
 	if err != nil {
 		_ = db.Close()
-		_ = driver.Close(ctx)
+		if driver != nil {
+			_ = driver.Close(ctx)
+		}
 		return nil, nil, fmt.Errorf("mount runtime surface: %w", err)
 	}
 
@@ -100,10 +107,33 @@ func wireAPI(
 
 	cleanup := func() {
 		_ = db.Close()
-		_ = driver.Close(context.Background())
+		if driver != nil {
+			_ = driver.Close(context.Background())
+		}
 	}
 
 	return authedMux, cleanup, nil
+}
+
+func openQueryGraph(
+	ctx context.Context,
+	getenv func(string) string,
+	queryProfile query.QueryProfile,
+	logger *slog.Logger,
+) (neo4jdriver.DriverWithContext, string, error) {
+	neo4jDB := envOrDefault(getenv, "DEFAULT_DATABASE", "neo4j")
+	if queryProfile == query.ProfileLocalLightweight || strings.EqualFold(envOrDefault(getenv, "PCG_DISABLE_NEO4J", ""), "true") {
+		return nil, neo4jDB, nil
+	}
+
+	driver, cfg, err := internalruntime.OpenNeo4jDriver(ctx, getenv)
+	if err != nil {
+		return nil, "", err
+	}
+	if logger != nil {
+		logger.Info("neo4j connected", telemetry.EventAttr("runtime.neo4j.connected"), slog.String("neo4j_uri", cfg.URI))
+	}
+	return driver, cfg.DatabaseName, nil
 }
 
 func envOrDefault(getenv func(string) string, key, fallback string) string {
@@ -114,29 +144,70 @@ func envOrDefault(getenv func(string) string, key, fallback string) string {
 	return v
 }
 
-func newRouter(db *sql.DB, neo4jReader *query.Neo4jReader, contentReader *query.ContentReader) (*query.APIRouter, error) {
+func loadQueryProfile(getenv func(string) string) (query.QueryProfile, error) {
+	raw := strings.TrimSpace(getenv("PCG_QUERY_PROFILE"))
+	if raw == "" {
+		return query.ProfileProduction, nil
+	}
+	profile, err := query.ParseQueryProfile(raw)
+	if err != nil {
+		return "", err
+	}
+	return profile, nil
+}
+
+func loadGraphBackend(getenv func(string) string) (query.GraphBackend, error) {
+	return query.ParseGraphBackend(strings.TrimSpace(getenv("PCG_GRAPH_BACKEND")))
+}
+
+func newRouter(
+	db *sql.DB,
+	neo4jReader query.GraphQuery,
+	contentReader query.ContentStore,
+	queryProfile query.QueryProfile,
+	graphBackend query.GraphBackend,
+	logger *slog.Logger,
+) (*query.APIRouter, error) {
 	router := &query.APIRouter{
 		Repositories: &query.RepositoryHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
+			Logger:  logger,
 		},
 		Entities: &query.EntityHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
+			Logger:  logger,
 		},
 		Code: &query.CodeHandler{
-			Neo4j:   neo4jReader,
-			Content: contentReader,
+			GraphBackend: graphBackend,
+			Neo4j:        neo4jReader,
+			Content:      contentReader,
+			Profile:      queryProfile,
 		},
 		Content: &query.ContentHandler{
 			Content: contentReader,
 		},
 		Infra: &query.InfraHandler{
-			Neo4j: neo4jReader,
+			Neo4j:   neo4jReader,
+			Profile: queryProfile,
+		},
+		IaC: &query.IaCHandler{
+			Content:      contentReader,
+			Reachability: query.NewPostgresIaCReachabilityStore(db),
+			Profile:      queryProfile,
 		},
 		Impact: &query.ImpactHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
+			Logger:  logger,
+		},
+		Evidence: &query.EvidenceHandler{
+			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Status: &query.StatusHandler{
 			Neo4j:        neo4jReader,
@@ -146,6 +217,7 @@ func newRouter(db *sql.DB, neo4jReader *query.Neo4jReader, contentReader *query.
 		Compare: &query.CompareHandler{
 			Neo4j:   neo4jReader,
 			Content: contentReader,
+			Profile: queryProfile,
 		},
 		Admin: &query.AdminHandler{
 			Store: query.NewPostgresAdminStore(db),

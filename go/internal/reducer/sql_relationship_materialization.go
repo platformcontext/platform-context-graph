@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
@@ -17,8 +18,9 @@ const (
 // SQLRelationshipMaterializationHandler reduces one SQL relationship follow-up
 // into canonical SQL edge writes (REFERENCES_TABLE, HAS_COLUMN, TRIGGERS).
 type SQLRelationshipMaterializationHandler struct {
-	FactLoader FactLoader
-	EdgeWriter SharedProjectionEdgeWriter
+	FactLoader           FactLoader
+	EdgeWriter           SharedProjectionEdgeWriter
+	PriorGenerationCheck PriorGenerationCheck
 }
 
 // Handle executes the SQL relationship materialization path.
@@ -26,6 +28,7 @@ func (h SQLRelationshipMaterializationHandler) Handle(
 	ctx context.Context,
 	intent Intent,
 ) (Result, error) {
+	totalStart := time.Now()
 	if intent.Domain != DomainSQLRelationshipMaterialization {
 		return Result{}, fmt.Errorf(
 			"sql relationship materialization handler does not accept domain %q",
@@ -45,13 +48,33 @@ func (h SQLRelationshipMaterializationHandler) Handle(
 		slog.String(telemetry.LogKeyDomain, string(intent.Domain)),
 	)
 
-	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	loadStart := time.Now()
+	envelopes, err := loadFactsForKinds(
+		ctx,
+		h.FactLoader,
+		intent.ScopeID,
+		intent.GenerationID,
+		[]string{factKindContentEntity},
+	)
 	if err != nil {
 		return Result{}, fmt.Errorf("load facts for sql relationship materialization: %w", err)
 	}
+	loadDuration := time.Since(loadStart)
 
+	extractStart := time.Now()
 	repositoryIDs, edgeRows := ExtractSQLRelationshipRows(envelopes)
+	extractDuration := time.Since(extractStart)
 	if len(repositoryIDs) == 0 {
+		logSQLRelationshipMaterializationCompleted(ctx, sqlRelationshipMaterializationTiming{
+			intent:          intent,
+			factCount:       len(envelopes),
+			repoCount:       0,
+			edgeCount:       0,
+			writeRowCount:   0,
+			loadDuration:    loadDuration,
+			extractDuration: extractDuration,
+			totalDuration:   time.Since(totalStart),
+		})
 		return Result{
 			IntentID:        intent.IntentID,
 			Domain:          DomainSQLRelationshipMaterialization,
@@ -61,17 +84,36 @@ func (h SQLRelationshipMaterializationHandler) Handle(
 	}
 
 	retractRows := buildSQLRelRetractRows(repositoryIDs)
-	if err := h.EdgeWriter.RetractEdges(
-		ctx,
-		DomainSQLRelationships,
-		retractRows,
-		sqlRelationshipEvidenceSource,
-	); err != nil {
-		return Result{}, fmt.Errorf("retract canonical sql relationships: %w", err)
+	skipRetract, err := h.shouldSkipSQLRelationshipRetract(ctx, intent)
+	if err != nil {
+		return Result{}, err
+	}
+	var retractDuration time.Duration
+	if skipRetract {
+		slog.InfoContext(ctx, "sql relationship materialization skipped first-generation retract",
+			slog.String(telemetry.LogKeyScopeID, intent.ScopeID),
+			slog.String(telemetry.LogKeyGenerationID, intent.GenerationID),
+			slog.String(telemetry.LogKeyDomain, string(intent.Domain)),
+		)
+	} else {
+		retractStart := time.Now()
+		if err := h.EdgeWriter.RetractEdges(
+			ctx,
+			DomainSQLRelationships,
+			retractRows,
+			sqlRelationshipEvidenceSource,
+		); err != nil {
+			return Result{}, fmt.Errorf("retract canonical sql relationships: %w", err)
+		}
+		retractDuration = time.Since(retractStart)
 	}
 
+	buildWriteStart := time.Now()
 	writeRows := buildSQLRelIntentRows(edgeRows)
+	buildWriteRowsDuration := time.Since(buildWriteStart)
+	var graphWriteDuration time.Duration
 	if len(writeRows) > 0 {
+		graphWriteStart := time.Now()
 		if err := h.EdgeWriter.WriteEdges(
 			ctx,
 			DomainSQLRelationships,
@@ -80,14 +122,23 @@ func (h SQLRelationshipMaterializationHandler) Handle(
 		); err != nil {
 			return Result{}, fmt.Errorf("write canonical sql relationships: %w", err)
 		}
+		graphWriteDuration = time.Since(graphWriteStart)
 	}
 
-	slog.InfoContext(ctx, "sql relationship materialization completed",
-		slog.String(telemetry.LogKeyScopeID, intent.ScopeID),
-		slog.String(telemetry.LogKeyGenerationID, intent.GenerationID),
-		slog.Int("edge_count", len(writeRows)),
-		slog.Int("repo_count", len(repositoryIDs)),
-	)
+	logSQLRelationshipMaterializationCompleted(ctx, sqlRelationshipMaterializationTiming{
+		intent:                 intent,
+		factCount:              len(envelopes),
+		repoCount:              len(repositoryIDs),
+		edgeCount:              len(edgeRows),
+		writeRowCount:          len(writeRows),
+		skipRetract:            skipRetract,
+		loadDuration:           loadDuration,
+		extractDuration:        extractDuration,
+		retractDuration:        retractDuration,
+		buildWriteRowsDuration: buildWriteRowsDuration,
+		graphWriteDuration:     graphWriteDuration,
+		totalDuration:          time.Since(totalStart),
+	})
 
 	return Result{
 		IntentID: intent.IntentID,
@@ -100,6 +151,57 @@ func (h SQLRelationshipMaterializationHandler) Handle(
 		),
 		CanonicalWrites: len(writeRows),
 	}, nil
+}
+
+// sqlRelationshipMaterializationTiming groups stage durations so the
+// completion log can identify whether SQL work is fact loading, extraction,
+// retract, write-row shaping, or graph backend time.
+type sqlRelationshipMaterializationTiming struct {
+	intent                 Intent
+	factCount              int
+	repoCount              int
+	edgeCount              int
+	writeRowCount          int
+	skipRetract            bool
+	loadDuration           time.Duration
+	extractDuration        time.Duration
+	retractDuration        time.Duration
+	buildWriteRowsDuration time.Duration
+	graphWriteDuration     time.Duration
+	totalDuration          time.Duration
+}
+
+func logSQLRelationshipMaterializationCompleted(
+	ctx context.Context,
+	timing sqlRelationshipMaterializationTiming,
+) {
+	slog.InfoContext(ctx, "sql relationship materialization completed",
+		slog.String(telemetry.LogKeyScopeID, timing.intent.ScopeID),
+		slog.String(telemetry.LogKeyGenerationID, timing.intent.GenerationID),
+		slog.String(telemetry.LogKeyDomain, string(timing.intent.Domain)),
+		slog.Int("fact_count", timing.factCount),
+		slog.Int("repo_count", timing.repoCount),
+		slog.Int("edge_count", timing.edgeCount),
+		slog.Int("write_row_count", timing.writeRowCount),
+		slog.Bool("skip_retract", timing.skipRetract),
+		slog.Float64("load_facts_duration_seconds", timing.loadDuration.Seconds()),
+		slog.Float64("extract_duration_seconds", timing.extractDuration.Seconds()),
+		slog.Float64("retract_duration_seconds", timing.retractDuration.Seconds()),
+		slog.Float64("build_write_rows_duration_seconds", timing.buildWriteRowsDuration.Seconds()),
+		slog.Float64("graph_write_duration_seconds", timing.graphWriteDuration.Seconds()),
+		slog.Float64("total_duration_seconds", timing.totalDuration.Seconds()),
+	)
+}
+
+func (h SQLRelationshipMaterializationHandler) shouldSkipSQLRelationshipRetract(ctx context.Context, intent Intent) (bool, error) {
+	if h.PriorGenerationCheck == nil || intent.AttemptCount > 1 {
+		return false, nil
+	}
+	hasPrior, err := h.PriorGenerationCheck(ctx, intent.ScopeID, intent.GenerationID)
+	if err != nil {
+		return false, fmt.Errorf("check prior generation for sql relationship retract: %w", err)
+	}
+	return !hasPrior, nil
 }
 
 // isSQLEntityType reports whether the entity type is a known SQL entity.
@@ -197,10 +299,12 @@ func ExtractSQLRelationshipRows(envelopes []facts.Envelope) ([]string, []map[str
 				}
 				seenEdges[edgeKey] = struct{}{}
 				rows = append(rows, map[string]any{
-					"source_entity_id":  entityID,
-					"target_entity_id":  target.entityID,
-					"repo_id":           repoID,
-					"relationship_type": "REFERENCES_TABLE",
+					"source_entity_id":   entityID,
+					"target_entity_id":   target.entityID,
+					"source_entity_type": entityType,
+					"target_entity_type": target.entityType,
+					"repo_id":            repoID,
+					"relationship_type":  "REFERENCES_TABLE",
 				})
 			}
 
@@ -220,10 +324,12 @@ func ExtractSQLRelationshipRows(envelopes []facts.Envelope) ([]string, []map[str
 			}
 			seenEdges[edgeKey] = struct{}{}
 			rows = append(rows, map[string]any{
-				"source_entity_id":  entityID,
-				"target_entity_id":  target.entityID,
-				"repo_id":           repoID,
-				"relationship_type": "TRIGGERS",
+				"source_entity_id":   entityID,
+				"target_entity_id":   target.entityID,
+				"source_entity_type": entityType,
+				"target_entity_type": target.entityType,
+				"repo_id":            repoID,
+				"relationship_type":  "TRIGGERS",
 			})
 
 		case "SqlColumn":
@@ -242,10 +348,12 @@ func ExtractSQLRelationshipRows(envelopes []facts.Envelope) ([]string, []map[str
 			}
 			seenEdges[edgeKey] = struct{}{}
 			rows = append(rows, map[string]any{
-				"source_entity_id":  source.entityID,
-				"target_entity_id":  entityID,
-				"repo_id":           repoID,
-				"relationship_type": "HAS_COLUMN",
+				"source_entity_id":   source.entityID,
+				"target_entity_id":   entityID,
+				"source_entity_type": source.entityType,
+				"target_entity_type": entityType,
+				"repo_id":            repoID,
+				"relationship_type":  "HAS_COLUMN",
 			})
 		}
 	}

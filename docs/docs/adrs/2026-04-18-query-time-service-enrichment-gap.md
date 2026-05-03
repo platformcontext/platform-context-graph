@@ -136,7 +136,7 @@ The key distinction is:
 **Go E2E currently produces repository consumers from repo-context evidence:**
 ```
 terraform-stack-conversation, terraform-stack-external-search,
-terraform-stack-myboats, terraform-stack-poc-nlp-search,
+terraform-stack-service-a, terraform-stack-poc-nlp-search,
 terraform-stack-provisioning, terraform-stack-sitemaps, terraform-stack-wordsmith
 ```
 
@@ -186,7 +186,7 @@ This means the current gap is not "the deployment evidence does not exist." The 
 is that E2E does not yet assemble or surface that evidence through the same service
 investigation contract that QA does.
 
-## Live QA vs E2E Validation: api-node-boats (2026-04-18, Post-Token Refresh)
+## Live QA vs E2E Validation: node-service-a (2026-04-18, Post-Token Refresh)
 
 After refreshing the Codex MCP token and re-running the comparison against the live
 QA and E2E MCPs, the parity picture is clearer:
@@ -201,19 +201,19 @@ QA and E2E MCPs, the parity picture is clearer:
 
 | Probe | QA MCP (`mcp__pcg__`) | Go E2E MCP (`mcp__pcg_e2e__`) | Finding |
 |---|---|---|---|
-| `resolve_entity("api-node-boats")` | Ranked `matches` with canonical workload/repository refs and confidence | Flat `entities` list with mixed directories, repo, workload, K8s, and ArgoCD entities | E2E now resolves, but contract shape still differs from QA |
-| `get_service_story("workload:api-node-boats")` | 2 instances (`qa`, `production`), 2 public hostnames, 21 API endpoints, docs route `/_specs`, structured sections | Service story still says `No materialized workload instances found` and returns only minimal deployment summary | Core service-query gap remains live on E2E |
-| `get_repo_summary("api-node-boats")` | Rich service-facing summary with consumer evidence, hostnames, API surface, framework summary, deployment facts, and topology story | Richer raw deployment/config artifact dump, but still skewed toward provisioning stacks and lacks service-correct runtime story | Mixed: E2E is artifact-rich, QA is more accurate for service investigation |
-| `search_file_content(pattern="api-node-boats")` | Cross-repo `matches` with snippets, repo IDs, language, source backend | Cross-repo `results` now return, but with older shape (`count/results`) and empty `content` instead of snippets | E2E request path works now, but contract parity is still incomplete |
-| `trace_deployment_chain("api-node-boats")` | Returns ArgoCD ApplicationSets, K8s resources, hostname/API surface, consumer repos, and capped story | Returns a very large mixed payload, still no materialized instances, many false-positive hostnames, and an oversized delivery/artifact dump | E2E trace is alive, but precision and service accuracy are still behind QA |
+| `resolve_entity("node-service-a")` | Ranked `matches` with canonical workload/repository refs and confidence | Flat `entities` list with mixed directories, repo, workload, K8s, and ArgoCD entities | E2E now resolves, but contract shape still differs from QA |
+| `get_service_story("workload:node-service-a")` | 2 instances (`qa`, `production`), 2 public hostnames, 21 API endpoints, docs route `/_specs`, structured sections | Service story still says `No materialized workload instances found` and returns only minimal deployment summary | Core service-query gap remains live on E2E |
+| `get_repo_summary("node-service-a")` | Rich service-facing summary with consumer evidence, hostnames, API surface, framework summary, deployment facts, and topology story | Richer raw deployment/config artifact dump, but still skewed toward provisioning stacks and lacks service-correct runtime story | Mixed: E2E is artifact-rich, QA is more accurate for service investigation |
+| `search_file_content(pattern="node-service-a")` | Cross-repo `matches` with snippets, repo IDs, language, source backend | Cross-repo `results` now return, but with older shape (`count/results`) and empty `content` instead of snippets | E2E request path works now, but contract parity is still incomplete |
+| `trace_deployment_chain("node-service-a")` | Returns ArgoCD ApplicationSets, K8s resources, hostname/API surface, consumer repos, and capped story | Returns a very large mixed payload, still no materialized instances, many false-positive hostnames, and an oversized delivery/artifact dump | E2E trace is alive, but precision and service accuracy are still behind QA |
 
 ### What Improved
 
-- `resolve_entity("api-node-boats")` on E2E no longer fails with the old malformed
+- `resolve_entity("node-service-a")` on E2E no longer fails with the old malformed
   Cypher error.
-- `search_file_content(pattern="api-node-boats")` on E2E no longer fails with the
+- `search_file_content(pattern="node-service-a")` on E2E no longer fails with the
   old `repo_id is required` behavior. It now performs cross-repo search.
-- `trace_deployment_chain("api-node-boats")` on E2E no longer times out in this
+- `trace_deployment_chain("node-service-a")` on E2E no longer times out in this
   run. It returns a response.
 
 These are real wins, and they mean the transport and several P0 request paths are
@@ -223,16 +223,16 @@ healthier than they were earlier in the day.
 
 #### 1. Service-story accuracy is still not at QA level
 
-The live QA `get_service_story("workload:api-node-boats")` returns:
+The live QA `get_service_story("workload:node-service-a")` returns:
 
 - 2 workload instances (`qa`, `production`)
-- public entrypoints `api-node-boats.qa.bgrp.io` and
-  `api-node-boats.prod.bgrp.io`
+- public entrypoints `node-service-a.qa.bgrp.io` and
+  `node-service-a.prod.bgrp.io`
 - docs route `/_specs`
 - 21 structured API endpoints with methods and operation IDs
 - service-facing documentation and support sections
 
-The live E2E `get_service_story("workload:api-node-boats")` still returns:
+The live E2E `get_service_story("workload:node-service-a")` still returns:
 
 - `No materialized workload instances found`
 - empty deployment environments/platforms
@@ -243,10 +243,10 @@ QA even though the repository and content stores contain enough evidence.
 
 #### 2. E2E still over-classifies hostname evidence
 
-The live E2E `trace_deployment_chain("api-node-boats")` now returns many obvious
+The live E2E `trace_deployment_chain("node-service-a")` now returns many obvious
 false-positive "hostnames", including values like:
 
-- `api-node-boats.ts`
+- `node-service-a.ts`
 - `build-elasticsearch.js`
 - `console.log`
 - `module.exports`
@@ -811,7 +811,7 @@ correct, evidence-backed semantics.
 
 ### Risks
 - Cross-repo trigram search at 896 repos may hit performance limits for common patterns
-- False positive consumer detection (e.g., "boats" matching unrelated repos)
+- False positive consumer detection (e.g., "catalog" matching unrelated repos)
 - OpenAPI spec parsing complexity (multiple formats, $ref resolution)
 
 ### Mitigations
@@ -910,7 +910,7 @@ correct, evidence-backed semantics.
   "consumer_repositories": [
     "terraform-stack-conversation",
     "terraform-stack-external-search",
-    "terraform-stack-myboats",
+    "terraform-stack-service-a",
     "terraform-stack-poc-nlp-search",
     "terraform-stack-provisioning",
     "terraform-stack-sitemaps",
@@ -1012,7 +1012,7 @@ Clean start: `docker compose down -v && docker compose up --build -d`.
 | 1 | `resolve_entity` contract/Cypher | HTTP 500 Neo4j syntax error (trailing comma) | **200** — 14 entities returned (Repository, Workload, K8sResource, ArgoCDApplicationSet across 3 repos) | **FIXED** |
 | 2 | `get_service_story` / `get_service_context` qualified-ID | HTTP 404 → fixed to 200 in prior commit | 200 — story + dependencies + infra | **Fixed** (prior commit) |
 | 3 | `search_file_content` cross-repo | HTTP 400 "repo_id is required" | **200** — 10 cross-repo results across multiple repos | **FIXED** |
-| 4a | `find_code` without repo_id | HTTP 400 "repo_id is required" | **200** — 10 results including `@dmm/api-node-boats-client` package refs in 6 consumer repos | **FIXED** |
+| 4a | `find_code` without repo_id | HTTP 400 "repo_id is required" | **200** — 10 results including `@dmm/node-service-a-client` package refs in 6 consumer repos | **FIXED** |
 | 4b | `analyze_code_relationships` Cypher | HTTP 500 Neo4j syntax error | HTTP 404 "entity not found" — Cypher fixed, but entity lookup by unqualified name still fails | Partial |
 | 5 | `find_infra_resources` semantics | 1 workload stub → fixed to 4 infra entities in prior commit | 4 results (3 K8sResource + 1 ArgoCDApplicationSet) | **Fixed** (prior commit) |
 | 6 | `get_repo_summary` name lookup | HTTP 404 → fixed in prior commit | 200 — 537 files, 7 consumers, deployment artifacts | **Fixed** (prior commit) |
@@ -1029,9 +1029,9 @@ Previously timed out. Now returns a 440KB structured response with:
 
 ```json
 [
-  {"hostname": "api-node-boats.prod.bgrp.io", "environment": "prod",
+  {"hostname": "node-service-a.prod.bgrp.io", "environment": "prod",
    "reason": "content_hostname_reference", "relative_path": "config/production.json"},
-  {"hostname": "api-node-boats.qa.bgrp.io", "environment": "qa",
+  {"hostname": "node-service-a.qa.bgrp.io", "environment": "qa",
    "reason": "content_hostname_reference", "relative_path": "config/qa.json"}
 ]
 ```
@@ -1051,34 +1051,34 @@ analysis — these were completely absent before.
 
 ### Cross-Repo Search Now Works
 
-`search_file_content(pattern="api-node-boats")` returns matches across repos
+`search_file_content(pattern="node-service-a")` returns matches across repos
 without requiring `repo_id`:
 
 | Repo ID | File | Language |
 |---|---|---|
-| `repository:r_02414fbe` | `src/utils/urlHelpers/boats.js` | javascript |
+| `repository:r_02414fbe` | `src/utils/urlHelpers/catalog.js` | javascript |
 | `repository:r_02586545` | `api-node-salesforce-sync.ts` | typescript |
 | `repository:r_02586545` | `server/handlers/party/{id}/listings.js` | javascript |
-| `repository:r_0e3f1089` | `api-node-myboats.ts` | typescript |
+| `repository:r_0e3f1089` | `node-service-c.ts` | typescript |
 | `repository:r_0e3f1089` | `server/resources/listing/listing-util.js` | javascript |
 
 ### `find_code` Cross-Repo Entity Search Now Works
 
-`find_code(query="api-node-boats")` returns code entities across repos:
+`find_code(query="node-service-a")` returns code entities across repos:
 
 | Entity | Repo | Labels |
 |---|---|---|
-| `@dmm/api-node-boats-client` | api-node-boats | Variable (package.json) |
-| `@dmm/api-node-boats-client` | api-node-conversation | Variable |
-| `@dmm/api-node-boats-client` | api-node-boattrader | Variable |
-| `@dmm/api-node-boats-client` | api-node-external-search | Variable |
-| `@dmm/api-node-boats-client` | api-node-provisioning-indexer | Variable |
-| `@dmm/api-node-boats-client` | api-node-platform | Variable |
-| `api-node-boats` | helm-charts | K8sResource (xirsarole) |
-| `api-node-boats` | iac-eks-argocd | ArgoCDApplicationSet |
+| `@dmm/node-service-a-client` | node-service-a | Variable (package.json) |
+| `@dmm/node-service-a-client` | api-node-conversation | Variable |
+| `@dmm/node-service-a-client` | node-service-b | Variable |
+| `@dmm/node-service-a-client` | api-node-external-search | Variable |
+| `@dmm/node-service-a-client` | api-node-provisioning-indexer | Variable |
+| `@dmm/node-service-a-client` | api-node-platform | Variable |
+| `node-service-a` | helm-charts | K8sResource (xirsarole) |
+| `node-service-a` | iac-eks-argocd | ArgoCDApplicationSet |
 
 This is service-consumer evidence via package dependency — 6 repos depend on
-the `@dmm/api-node-boats-client` package. This is a different consumer signal
+the `@dmm/node-service-a-client` package. This is a different consumer signal
 than QA's hostname-matching consumers, but equally valid for dependency mapping.
 
 ### Comparison: Pre vs Post Implementation
@@ -1107,10 +1107,10 @@ than QA's hostname-matching consumers, but equally valid for dependency mapping.
 3. **Service instances** — `instances: []` in all service paths. Workload
    instance materialization not yet implemented (P1 scope).
 4. **Hostname consumers** — Cross-repo search works, but hostname-aware consumer
-   discovery (finding repos that reference `api-node-boats.qa.bgrp.io`) is not
+   discovery (finding repos that reference `node-service-a.qa.bgrp.io`) is not
    yet wired into the service consumer path (P2 scope).
 5. **`trace_deployment_chain` hostname noise** — Returns some false-positive
-   hostnames (e.g., `api-node-boats.ts` from `tsup.config.ts`). Hostname
+   hostnames (e.g., `node-service-a.ts` from `tsup.config.ts`). Hostname
    extraction needs filtering for actual network endpoints vs file references.
 
 ---
@@ -1131,7 +1131,7 @@ Clean start: `docker compose down -v && docker compose up --build -d`.
 | Deadlocks | 0 |
 | EntityNotFound errors | 0 |
 | Bootstrap wall time | 30.3 minutes |
-| Largest repo | `websites-php-youboat` — 534,573 facts, 483s projection |
+| Largest repo | `php-large-repo-b` — 534,573 facts, 483s projection |
 | Overall status | healthy, queue fully drained |
 | Cross-repo resolutions completed | 383 |
 | Code call projection cycles | 322 |

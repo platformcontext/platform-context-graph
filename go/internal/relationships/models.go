@@ -2,6 +2,13 @@
 // for cross-repository and cross-entity dependency discovery.
 package relationships
 
+import (
+	"crypto/sha1"
+	"encoding/hex"
+	"fmt"
+	"strings"
+)
+
 // EvidenceKind classifies the origin of one piece of relationship evidence.
 type EvidenceKind string
 
@@ -16,6 +23,8 @@ const (
 	EvidenceKindTerraformGitHubActions EvidenceKind = "TERRAFORM_GITHUB_ACTIONS_REPOSITORY"
 	// EvidenceKindTerraformConfigPath is a Terraform config path reference.
 	EvidenceKindTerraformConfigPath EvidenceKind = "TERRAFORM_CONFIG_PATH"
+	// EvidenceKindTerraformIAMPermission is a Terraform IAM permission reference.
+	EvidenceKindTerraformIAMPermission EvidenceKind = "TERRAFORM_IAM_PERMISSION"
 	// EvidenceKindTerraformModuleSource is a Terraform or Terragrunt module source reference.
 	EvidenceKindTerraformModuleSource EvidenceKind = "TERRAFORM_MODULE_SOURCE"
 	// EvidenceKindTerragruntDependencyConfigPath is a Terragrunt dependency config_path reference.
@@ -82,6 +91,8 @@ const (
 	RelDependsOn RelationshipType = "DEPENDS_ON"
 	// RelUsesModule indicates the source consumes a target module repository.
 	RelUsesModule RelationshipType = "USES_MODULE"
+	// RelReadsConfigFrom indicates the source is granted read access to target config.
+	RelReadsConfigFrom RelationshipType = "READS_CONFIG_FROM"
 )
 
 // ResolutionSource classifies how a resolved relationship was determined.
@@ -146,6 +157,16 @@ type ResolvedRelationship struct {
 	Details          map[string]any
 }
 
+// ResolvedRelationshipID builds the durable Postgres identity for a resolved
+// relationship in a generation. The ordinal preserves the current storage
+// contract while still giving graph edges a stable pointer back to Postgres.
+func ResolvedRelationshipID(generationID string, r ResolvedRelationship, ordinal int) string {
+	return relationshipDigest("resolved", generationID,
+		r.SourceEntityID, r.TargetEntityID,
+		string(r.RelationshipType), fmt.Sprintf("%d", ordinal),
+	)
+}
+
 // Generation tracks one resolution generation lifecycle.
 type Generation struct {
 	GenerationID string
@@ -160,4 +181,21 @@ func entityIdentity(entityID, repoID string) string {
 		return entityID
 	}
 	return repoID
+}
+
+// relationshipDigest mirrors the storage-layer digest contract for relationship
+// identifiers that need to be generated before persistence.
+func relationshipDigest(prefix string, parts ...string) string {
+	normalized := make([]string, len(parts))
+	for i, part := range parts {
+		if part == "" {
+			normalized[i] = "<none>"
+		} else {
+			normalized[i] = part
+		}
+	}
+	h := sha1.New()
+	h.Write([]byte(strings.Join(normalized, "\n")))
+	digest := hex.EncodeToString(h.Sum(nil))[:16]
+	return fmt.Sprintf("%s_%s", prefix, digest)
 }

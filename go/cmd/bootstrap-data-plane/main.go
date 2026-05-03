@@ -34,7 +34,7 @@ type neo4jDeps struct {
 type openBootstrapDBFn func(context.Context, func(string) string) (bootstrapDB, error)
 type applyPostgresFn func(context.Context, bootstrapExecutor) error
 type openNeo4jFn func(context.Context, func(string) string) (neo4jDeps, error)
-type applyNeo4jFn func(context.Context, graph.CypherExecutor, *slog.Logger) error
+type applyNeo4jFn func(context.Context, graph.CypherExecutor, *slog.Logger, graph.SchemaBackend) error
 
 func main() {
 	bootstrap, err := telemetry.NewBootstrap("platform-context-graph-bootstrap-data-plane")
@@ -53,7 +53,7 @@ func main() {
 			return postgres.ApplyBootstrap(ctx, exec)
 		},
 		openNeo4j,
-		graph.EnsureSchema,
+		graph.EnsureSchemaWithBackend,
 	); err != nil {
 		logger.Error("bootstrap-data-plane failed", telemetry.EventAttr("runtime.startup.failed"), "error", err)
 		os.Exit(1)
@@ -102,12 +102,31 @@ func run(
 		}
 	}()
 
-	if err = applyNeo4jFn(ctx, nd.executor, logger); err != nil {
+	backend, err := schemaBackendFromEnv(getenv)
+	if err != nil {
 		return err
 	}
-	logger.Info("neo4j schema applied", telemetry.EventAttr("bootstrap.neo4j.applied"))
+	if err = applyNeo4jFn(ctx, nd.executor, logger, backend); err != nil {
+		return err
+	}
+	logger.Info("graph schema applied", telemetry.EventAttr("bootstrap.graph.applied"), "graph_backend", backend)
 
 	return nil
+}
+
+func schemaBackendFromEnv(getenv func(string) string) (graph.SchemaBackend, error) {
+	backend, err := runtimecfg.LoadGraphBackend(getenv)
+	if err != nil {
+		return "", err
+	}
+	switch backend {
+	case runtimecfg.GraphBackendNeo4j:
+		return graph.SchemaBackendNeo4j, nil
+	case runtimecfg.GraphBackendNornicDB:
+		return graph.SchemaBackendNornicDB, nil
+	default:
+		return "", errors.New("unsupported graph backend for schema")
+	}
 }
 
 func openBootstrapDB(ctx context.Context, getenv func(string) string) (bootstrapDB, error) {

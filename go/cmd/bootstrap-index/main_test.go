@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -54,7 +57,7 @@ func TestRunAppliesSchemaAndDrainsCollectorAndProjector(t *testing.T) {
 				committer: &fakeCommitter{},
 			}, nil
 		},
-		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
+		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (projectorDeps, error) {
 			return projectorDeps{
 				workSource: &fakeWorkSource{
 					items: []projector.ScopeGenerationWork{
@@ -101,7 +104,7 @@ func TestRunReturnsSchemaError(t *testing.T) {
 			t.Fatal("collector builder should not be called after schema error")
 			return collectorDeps{}, nil
 		},
-		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
+		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (projectorDeps, error) {
 			t.Fatal("projector builder should not be called after schema error")
 			return projectorDeps{}, nil
 		},
@@ -135,7 +138,7 @@ func TestRunReturnsCollectorError(t *testing.T) {
 		func(ctx context.Context, database bootstrapDB, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (collectorDeps, error) {
 			return collectorDeps{}, collectorErr
 		},
-		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments) (projectorDeps, error) {
+		func(ctx context.Context, database bootstrapDB, graphWriter projector.CanonicalWriter, getenv func(string) string, _ trace.Tracer, _ *telemetry.Instruments, _ *slog.Logger) (projectorDeps, error) {
 			t.Fatal("projector builder should not be called after collector error")
 			return projectorDeps{}, nil
 		},
@@ -173,6 +176,31 @@ func TestBuildBootstrapCollectorUsesNativeSnapshotter(t *testing.T) {
 	}
 }
 
+func TestBuildBootstrapCollectorWiresDiscoveryPathGlobOverlay(t *testing.T) {
+	t.Parallel()
+
+	deps, err := buildBootstrapCollector(
+		context.Background(),
+		&fakeBootstrapSQLDB{},
+		func(key string) string {
+			if key == "PCG_DISCOVERY_IGNORED_PATH_GLOBS" {
+				return "generated/**=generated-template"
+			}
+			return ""
+		},
+		nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("buildBootstrapCollector() error = %v, want nil", err)
+	}
+
+	source := deps.source.(*collector.GitSource)
+	snapshotter := source.Snapshotter.(collector.NativeRepositorySnapshotter)
+	if got, want := len(snapshotter.DiscoveryOptions.IgnoredPathGlobs), 1; got != want {
+		t.Fatalf("IgnoredPathGlobs length = %d, want %d", got, want)
+	}
+}
+
 func TestBuildBootstrapProjectorWiresPhasePublisherAndRepairQueue(t *testing.T) {
 	t.Parallel()
 
@@ -181,6 +209,7 @@ func TestBuildBootstrapProjectorWiresPhasePublisherAndRepairQueue(t *testing.T) 
 		&fakeBootstrapSQLDB{},
 		&noopCanonicalWriter{},
 		func(string) string { return "" },
+		nil,
 		nil,
 		nil,
 	)
@@ -239,8 +268,10 @@ type fakeCommitter struct {
 	mu            sync.Mutex
 	calls         []string
 	backfillCalls int
+	iacCalls      int
 	reopenCalls   int
 	backfillErr   error
+	iacErr        error
 	reopenErr     error
 }
 
@@ -267,6 +298,18 @@ func (f *fakeCommitter) BackfillAllRelationshipEvidence(
 	f.calls = append(f.calls, "backfill")
 	f.backfillCalls++
 	return f.backfillErr
+}
+
+func (f *fakeCommitter) MaterializeIaCReachability(
+	_ context.Context,
+	_ trace.Tracer,
+	_ *telemetry.Instruments,
+) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "iac_reachability")
+	f.iacCalls++
+	return f.iacErr
 }
 
 func (f *fakeCommitter) ReopenDeploymentMappingWorkItems(
@@ -349,6 +392,7 @@ func TestDrainProjectorConcurrentMultipleItems(t *testing.T) {
 	err := drainProjector(
 		context.Background(),
 		ws, &fakeFactStore{}, &fakeProjectionRunner{}, sink,
+		nil, 0,
 		4, nil, nil, nil,
 	)
 	if err != nil {
@@ -373,6 +417,7 @@ func TestDrainProjectorSequentialFallback(t *testing.T) {
 	err := drainProjector(
 		context.Background(),
 		ws, &fakeFactStore{}, &fakeProjectionRunner{}, sink,
+		nil, 0,
 		1, nil, nil, nil,
 	)
 	if err != nil {
@@ -400,6 +445,7 @@ func TestDrainProjectorErrorCancelsWorkers(t *testing.T) {
 	err := drainProjector(
 		context.Background(),
 		ws, &fakeFactStore{}, runner, &concurrentWorkSink{},
+		nil, 0,
 		4, nil, nil, nil,
 	)
 	if err == nil {
@@ -606,6 +652,73 @@ func TestPipelinedBootstrapDrainsQueueAfterCollectorExits(t *testing.T) {
 	}
 }
 
+func TestDrainCollectorCollectsDiscoveryAdvisoryReports(t *testing.T) {
+	t.Parallel()
+
+	source := &fakeSource{generations: []collector.CollectedGeneration{{
+		Scope: scope.IngestionScope{ScopeID: "scope-1"},
+		Generation: scope.ScopeGeneration{
+			GenerationID: "generation-1",
+		},
+		FactCount: 0,
+		DiscoveryAdvisory: &collector.DiscoveryAdvisoryReport{
+			SchemaVersion: "discovery_advisory.v1",
+			Run: collector.DiscoveryAdvisoryRun{
+				RepoPath: "/repo",
+			},
+		},
+	}}}
+	var reports []collector.DiscoveryAdvisoryReport
+
+	err := drainCollector(context.Background(), source, &fakeCommitter{}, nil, nil, nil, func(report collector.DiscoveryAdvisoryReport) error {
+		reports = append(reports, report)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("drainCollector() error = %v, want nil", err)
+	}
+
+	if got, want := len(reports), 1; got != want {
+		t.Fatalf("report count = %d, want %d", got, want)
+	}
+	if got, want := reports[0].Run.ScopeID, "scope-1"; got != want {
+		t.Fatalf("report Run.ScopeID = %q, want %q", got, want)
+	}
+	if got, want := reports[0].Run.GenerationID, "generation-1"; got != want {
+		t.Fatalf("report Run.GenerationID = %q, want %q", got, want)
+	}
+}
+
+func TestWriteDiscoveryAdvisoryReportsWritesJSON(t *testing.T) {
+	t.Parallel()
+
+	reportPath := filepath.Join(t.TempDir(), "advisory.json")
+	generatedAt := time.Date(2026, time.April, 26, 10, 30, 0, 0, time.UTC)
+	reports := []collector.DiscoveryAdvisoryReport{{
+		SchemaVersion: "discovery_advisory.v1",
+		GeneratedAt:   generatedAt,
+		Run: collector.DiscoveryAdvisoryRun{
+			RepoPath: "/repo",
+			ScopeID:  "scope-1",
+		},
+	}}
+
+	if err := writeDiscoveryAdvisoryReports(reportPath, reports); err != nil {
+		t.Fatalf("writeDiscoveryAdvisoryReports() error = %v, want nil", err)
+	}
+
+	contents, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	if !strings.Contains(string(contents), `"schema_version": "discovery_advisory.v1"`) {
+		t.Fatalf("report contents missing schema version:\n%s", contents)
+	}
+	if !strings.Contains(string(contents), `"scope_id": "scope-1"`) {
+		t.Fatalf("report contents missing scope id:\n%s", contents)
+	}
+}
+
 func TestPipelinedBootstrapExitsCleanlyWhenQueueEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -684,7 +797,7 @@ func TestPipelinedBootstrapRunsDeferredBackfillWorkflow(t *testing.T) {
 		t.Fatalf("runPipelined() error = %v, want nil", err)
 	}
 
-	if got, want := committer.snapshotCalls(), []string{"backfill", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
+	if got, want := committer.snapshotCalls(), []string{"backfill", "iac_reachability", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("workflow calls = %v, want %v", got, want)
 	}
 	if got := sink.acked.Load(); got != 0 {
@@ -723,6 +836,37 @@ func TestPipelinedBootstrapBackfillFailureIsFatal(t *testing.T) {
 	}
 }
 
+func TestPipelinedBootstrapIaCReachabilityFailureIsFatal(t *testing.T) {
+	t.Parallel()
+
+	iacErr := errors.New("iac reachability failed")
+	committer := &fakeCommitter{iacErr: iacErr}
+
+	err := runPipelined(
+		context.Background(),
+		collectorDeps{source: &fakeSource{generations: nil}, committer: committer},
+		projectorDeps{
+			workSource: &concurrentWorkSource{items: nil},
+			factStore:  &fakeFactStore{},
+			runner:     &fakeProjectionRunner{},
+			workSink:   &concurrentWorkSink{},
+		},
+		2,
+		nil,
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("runPipelined() error = nil, want non-nil")
+	}
+	if !errors.Is(err, iacErr) {
+		t.Fatalf("runPipelined() error = %v, want wrapping %v", err, iacErr)
+	}
+	if got, want := committer.snapshotCalls(), []string{"backfill", "iac_reachability"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("workflow calls = %v, want %v", got, want)
+	}
+}
+
 func TestPipelinedBootstrapReopenFailureIsFatal(t *testing.T) {
 	t.Parallel()
 
@@ -749,7 +893,7 @@ func TestPipelinedBootstrapReopenFailureIsFatal(t *testing.T) {
 	if !errors.Is(err, reopenErr) {
 		t.Fatalf("runPipelined() error = %v, want wrapping %v", err, reopenErr)
 	}
-	if got, want := committer.snapshotCalls(), []string{"backfill", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
+	if got, want := committer.snapshotCalls(), []string{"backfill", "iac_reachability", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("workflow calls = %v, want %v", got, want)
 	}
 }
@@ -785,8 +929,91 @@ func TestPipelinedBootstrapWaitsForProjectorDrainBeforeReopen(t *testing.T) {
 	if got := sink.acked.Load(); got != 1 {
 		t.Fatalf("projector not drained before reopen: acked=%d, want 1", got)
 	}
-	if got, want := committer.snapshotCalls(), []string{"backfill", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
+	if got, want := committer.snapshotCalls(), []string{"backfill", "iac_reachability", "reopen"}; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("workflow calls = %v, want %v", got, want)
+	}
+}
+
+func TestPipelinedBootstrapHeartbeatsLongProjectorWork(t *testing.T) {
+	t.Parallel()
+
+	heartbeater := &recordingProjectorHeartbeater{}
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- runPipelined(
+			context.Background(),
+			collectorDeps{source: &fakeSource{generations: nil}, committer: &fakeCommitter{}},
+			projectorDeps{
+				workSource: &concurrentWorkSource{
+					items: []projector.ScopeGenerationWork{{
+						Scope:      scope.IngestionScope{ScopeID: "scope-long"},
+						Generation: scope.ScopeGeneration{GenerationID: "generation-long"},
+					}},
+				},
+				factStore:         &fakeFactStore{},
+				runner:            &blockingProjectionRunner{started: started, release: release},
+				workSink:          &concurrentWorkSink{},
+				heartbeater:       heartbeater,
+				heartbeatInterval: time.Millisecond,
+			},
+			1,
+			nil,
+			nil,
+			nil,
+		)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("projection did not start")
+	}
+	if !heartbeater.waitForHeartbeats(1, time.Second) {
+		t.Fatalf("heartbeat count = %d, want at least 1 before projection completes", heartbeater.count())
+	}
+	close(release)
+
+	select {
+	case err := <-errc:
+		if err != nil {
+			t.Fatalf("runPipelined() error = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runPipelined() did not return")
+	}
+}
+
+func TestBootstrapProjectorHeartbeatStopIgnoresStopContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	heartbeater := &contextCanceledProjectorHeartbeater{
+		entered: make(chan struct{}),
+	}
+	work := projector.ScopeGenerationWork{
+		Scope:      scope.IngestionScope{ScopeID: "scope-heartbeat"},
+		Generation: scope.ScopeGeneration{GenerationID: "generation-heartbeat"},
+	}
+
+	_, stopHeartbeat := startBootstrapProjectorHeartbeat(
+		context.Background(),
+		work,
+		heartbeater,
+		time.Millisecond,
+		0,
+		nil,
+	)
+
+	select {
+	case <-heartbeater.entered:
+	case <-time.After(time.Second):
+		t.Fatal("heartbeat did not start")
+	}
+
+	if err := stopHeartbeat(); err != nil {
+		t.Fatalf("stopHeartbeat() error = %v, want nil", err)
 	}
 }
 
@@ -888,6 +1115,62 @@ func (d *delayedProjectionRunner) Project(
 	case <-time.After(d.delay):
 	}
 	return projector.Result{}, nil
+}
+
+type blockingProjectionRunner struct {
+	started chan<- struct{}
+	release <-chan struct{}
+	once    sync.Once
+}
+
+func (r *blockingProjectionRunner) Project(
+	ctx context.Context,
+	_ scope.IngestionScope,
+	_ scope.ScopeGeneration,
+	_ []facts.Envelope,
+) (projector.Result, error) {
+	r.once.Do(func() { close(r.started) })
+	select {
+	case <-ctx.Done():
+		return projector.Result{}, ctx.Err()
+	case <-r.release:
+		return projector.Result{}, nil
+	}
+}
+
+type recordingProjectorHeartbeater struct {
+	countValue atomic.Int64
+}
+
+func (r *recordingProjectorHeartbeater) Heartbeat(context.Context, projector.ScopeGenerationWork) error {
+	r.countValue.Add(1)
+	return nil
+}
+
+func (r *recordingProjectorHeartbeater) count() int64 {
+	return r.countValue.Load()
+}
+
+func (r *recordingProjectorHeartbeater) waitForHeartbeats(want int64, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if r.count() >= want {
+			return true
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return r.count() >= want
+}
+
+type contextCanceledProjectorHeartbeater struct {
+	entered chan struct{}
+	once    sync.Once
+}
+
+func (c *contextCanceledProjectorHeartbeater) Heartbeat(ctx context.Context, _ projector.ScopeGenerationWork) error {
+	c.once.Do(func() { close(c.entered) })
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 type noopCanonicalWriter struct{}

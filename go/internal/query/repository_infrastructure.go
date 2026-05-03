@@ -9,30 +9,30 @@ const repositoryInfrastructureEntityLimit = 5000
 
 func queryRepoInfrastructureRows(
 	ctx context.Context,
-	reader GraphReader,
-	content *ContentReader,
+	reader GraphQuery,
+	content ContentStore,
 	params map[string]any,
 ) []map[string]any {
-	result := queryRepoInfrastructureFromGraph(ctx, reader, params)
-	if content == nil {
-		return result
-	}
-
 	repoID := StringVal(params, "repo_id")
-	if repoID == "" {
-		return result
+	if content != nil && repoID != "" {
+		if rows := queryRepoInfrastructureFromContent(ctx, content, repoID); len(rows) > 0 {
+			return rows
+		}
 	}
 
+	return queryRepoInfrastructureFromGraph(ctx, reader, params)
+}
+
+// queryRepoInfrastructureFromContent uses the content read model as the
+// preferred source when parsed infrastructure entities are present.
+func queryRepoInfrastructureFromContent(ctx context.Context, content ContentStore, repoID string) []map[string]any {
 	entities, err := content.ListRepoEntities(ctx, repoID, repositoryInfrastructureEntityLimit)
 	if err != nil || len(entities) == 0 {
-		return result
+		return nil
 	}
 
-	seen := make(map[string]struct{}, len(result))
-	for _, row := range result {
-		seen[repositoryInfrastructureEntryKey(row)] = struct{}{}
-	}
-
+	result := make([]map[string]any, 0, len(entities))
+	seen := make(map[string]struct{}, len(entities))
 	for _, entity := range entities {
 		entry, ok := repositoryInfrastructureEntryFromContent(entity)
 		if !ok {
@@ -63,10 +63,11 @@ func queryRepoInfrastructureRows(
 	return result
 }
 
-func queryRepoInfrastructureFromGraph(ctx context.Context, reader GraphReader, params map[string]any) []map[string]any {
+func queryRepoInfrastructureFromGraph(ctx context.Context, reader GraphQuery, params map[string]any) []map[string]any {
 	rows, err := reader.Run(ctx, `
 		MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(infra)
 		WHERE infra:K8sResource OR infra:TerraformResource OR infra:TerraformModule
+		      OR infra:TerraformDataSource
 		      OR infra:TerragruntConfig OR infra:TerragruntDependency
 		      OR infra:ArgoCDApplication OR infra:ArgoCDApplicationSet
 		      OR infra:HelmChart OR infra:HelmValues
@@ -77,6 +78,10 @@ func queryRepoInfrastructureFromGraph(ctx context.Context, reader GraphReader, p
 		       infra.kind AS kind, infra.source AS source,
 		       infra.terraform_source AS terraform_source,
 		       infra.config_path AS config_path,
+		       infra.provider AS provider,
+		       coalesce(infra.resource_type, infra.data_type, '') AS resource_type,
+		       infra.resource_service AS resource_service,
+		       infra.resource_category AS resource_category,
 		       f.relative_path AS file_path
 		ORDER BY type, name
 	`, params)
@@ -86,7 +91,11 @@ func queryRepoInfrastructureFromGraph(ctx context.Context, reader GraphReader, p
 
 	result := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, repositoryInfrastructureEntryFromRow(row))
+		entry := repositoryInfrastructureEntryFromRow(row)
+		if !isRepositoryInfrastructureType(StringVal(entry, "type")) {
+			continue
+		}
+		result = append(result, entry)
 	}
 	return result
 }
@@ -109,6 +118,7 @@ func repositoryInfrastructureEntryFromRow(row map[string]any) map[string]any {
 	if configPath := StringVal(row, "config_path"); configPath != "" {
 		entry["config_path"] = configPath
 	}
+	copyInfrastructureClassification(entry, row)
 	return entry
 }
 
@@ -146,17 +156,42 @@ func repositoryInfrastructureEntryFromContent(entity EntityContent) (map[string]
 		}
 	case "ArgoCDApplication", "ArgoCDApplicationSet", "KustomizeOverlay", "HelmChart",
 		"HelmValues", "CrossplaneXRD", "CrossplaneComposition", "CrossplaneClaim",
-		"CloudFormationResource", "K8sResource", "TerraformResource":
+		"CloudFormationResource", "K8sResource", "TerraformResource", "TerraformDataSource":
 		if source, ok := metadataNonEmptyString(entity.Metadata, "source"); ok {
 			entry["source"] = source
 		}
 		if kind, ok := metadataNonEmptyString(entity.Metadata, "kind"); ok {
 			entry["kind"] = kind
 		}
+		copyInfrastructureClassification(entry, entity.Metadata)
 	default:
 		return nil, false
 	}
 	return entry, true
+}
+
+// isRepositoryInfrastructureType is a defensive response gate for backends that
+// may over-return rows for OR-heavy label predicates.
+func isRepositoryInfrastructureType(entityType string) bool {
+	switch entityType {
+	case "K8sResource", "TerraformResource", "TerraformModule", "TerraformDataSource",
+		"TerragruntConfig", "TerragruntDependency",
+		"ArgoCDApplication", "ArgoCDApplicationSet",
+		"HelmChart", "HelmValues", "KustomizeOverlay",
+		"CrossplaneXRD", "CrossplaneComposition", "CrossplaneClaim",
+		"CloudFormationResource":
+		return true
+	default:
+		return false
+	}
+}
+
+func copyInfrastructureClassification(entry map[string]any, source map[string]any) {
+	for _, key := range []string{"provider", "resource_type", "resource_service", "resource_category"} {
+		if value := StringVal(source, key); value != "" {
+			entry[key] = value
+		}
+	}
 }
 
 func repositoryInfrastructureEntryKey(entry map[string]any) string {

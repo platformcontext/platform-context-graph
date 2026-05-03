@@ -15,6 +15,117 @@ in `docs/openapi/runtime-admin-v1.yaml`. That contract is separate from the
 public `/api/v0` schema because it belongs to the long-running runtime admin
 endpoints, not the public query API.
 
+## Response Envelope Contract
+
+Responses use a canonical envelope when the client opts in by sending:
+
+```http
+Accept: application/pcg.envelope+json
+```
+
+Without that header, handlers keep emitting the legacy payload shape for
+backwards compatibility. The envelope is the canonical contract for programmatic
+clients, MCP, and CLI `--json` mode.
+
+### Envelope shape
+
+```json
+{
+  "data": { ... },
+  "truth": {
+    "level": "derived",
+    "capability": "code_search.exact_symbol",
+    "profile": "local_lightweight",
+    "basis": "content_index",
+    "freshness": { "state": "fresh" },
+    "reason": "resolved from indexed entity and content tables"
+  },
+  "error": null
+}
+```
+
+- `data` carries the response payload. `null` on error responses.
+- `truth` carries the truth label for the response. `null` on error responses.
+- `error` is `null` on success. On failure it carries a structured error
+  envelope (see below).
+
+### Truth levels
+
+| Level | Meaning |
+| --- | --- |
+| `exact` | Authoritative graph or durable semantic truth. |
+| `derived` | Deterministic result computed from indexed entities, content, or other structured relational state. |
+| `fallback` | Exploratory result — useful but not strong enough to claim full authority for the requested capability. |
+
+High-authority capabilities (transitive callers/callees, call-chain paths,
+dead-code, cross-repo impact) do not silently downgrade to `fallback` in a
+profile that cannot answer them correctly. They return a structured
+`unsupported_capability` error instead.
+
+### Freshness states
+
+| State | Meaning |
+| --- | --- |
+| `fresh` | Answer reflects current indexed truth for the requested scope. |
+| `stale` | Previously indexed truth exists but backlog or lag means the answer may be behind source. |
+| `building` | Initial or replacement indexing is still in progress; authoritative data is not ready. |
+| `unavailable` | Required backend or authoritative source is currently unavailable. |
+
+Clients that cache responses MUST invalidate on changes to `truth.level` or
+`truth.freshness.state`. ETags or cache keys should vary on both fields.
+
+### Runtime profiles
+
+`truth.profile` is one of:
+
+- `local_lightweight` — single-binary `pcg` host with embedded Postgres, no
+  authoritative Neo4j graph.
+- `local_full_stack` — full Docker Compose stack, authoritative graph available.
+- `production` — deployed multi-runtime platform.
+
+Set the runtime profile via the `PCG_QUERY_PROFILE` environment variable at
+process start. Invalid values are rejected at startup; there is no silent
+default.
+
+### Capability IDs
+
+`truth.capability` references the capability matrix at
+`specs/capability-matrix.v1.yaml`. Full semantics live in
+`reference/capability-conformance-spec.md` and
+`reference/truth-label-protocol.md`.
+
+### Structured error codes
+
+On failure, `error` carries a structured envelope:
+
+```json
+{
+  "error": {
+    "code": "unsupported_capability",
+    "message": "transitive callers require authoritative graph mode",
+    "capability": "call_graph.transitive_callers",
+    "profiles": {
+      "current": "local_lightweight",
+      "required": "local_full_stack"
+    }
+  }
+}
+```
+
+Initial error code set:
+
+| Code | When |
+| --- | --- |
+| `unsupported_capability` | Capability not supported in the current runtime profile. Returned as HTTP 501. |
+| `backend_unavailable` | Authoritative backend (Neo4j / Postgres) is unreachable. |
+| `index_building` | Initial indexing is in progress; authoritative data not ready. |
+| `scope_not_found` | Requested entity, repo, or workspace scope does not exist. |
+| `capability_degraded` | Capability supported but running under reduced fidelity (e.g. reducer lag). |
+| `overloaded` | Runtime is saturated; request rejected rather than queued unboundedly. |
+
+Details, freshness semantics, and MCP embedding live in
+`reference/truth-label-protocol.md`.
+
 ## Scope
 
 The public HTTP API exposes three operator-relevant surfaces:
@@ -85,7 +196,36 @@ whether the latest published Go checkpoint is finished.
 - file-bearing query results should be interpreted using `repo_id + relative_path`, not an absolute server path.
 - `repo_access` indicates whether the caller may need to ask the user for a local checkout path or clone decision.
 - documentation-oriented clients should resolve canonical graph identity first, then use `repo_id + relative_path` or `entity_id` for exact evidence reads.
-- repository-oriented context, summary, story, stats, and file routes use canonical `repo_id` at the public boundary.
+- repository-oriented context, summary, story, stats, and file routes accept a repository selector at the public boundary and normalize it to the canonical `repo_id` server-side.
+
+### Deployment Evidence Pointers
+
+Repository, workload, service, and deployment-trace responses may include
+`deployment_evidence`. This object is intentionally compact: it returns counts
+and grouped pointers instead of embedding full Postgres evidence payloads.
+
+- `artifacts[]` carries the inspectable evidence pointer for one deployment,
+  CI, IaC, or config signal.
+- `artifacts[].resolved_id` is the durable lookup key for the
+  `resolved_relationships` row in Postgres.
+- `artifacts[].generation_id` identifies the relationship generation that
+  produced the row.
+- `artifacts[].source_location` identifies where the signal came from with
+  `repo_id`, `repo_name`, `path`, and `start_line` / `end_line` when the
+  extractor produced line data.
+- `evidence_index.lookup_basis` is `resolved_id`.
+- `evidence_index.relationship_types`, `evidence_index.artifact_families`, and
+  `evidence_index.evidence_kinds` group artifact counts with the unique
+  `resolved_ids` and `generation_ids` needed for drilldown.
+
+`GET /api/v0/evidence/relationships/{resolved_id}` dereferences one pointer
+into the durable relationship evidence row. The response includes
+`lookup_basis: "resolved_id"`, source and target repo metadata, relationship
+type, confidence, evidence count, evidence kinds, rationale, resolution source,
+generation metadata, `evidence_preview`, and the decoded `details` JSON stored
+with the resolved relationship. Use this endpoint when an API or MCP client
+needs to explain why an edge exists without embedding the full evidence payload
+in every graph-facing response.
 
 ## Context API
 
@@ -142,6 +282,14 @@ This is an alias route. It still accepts a canonical workload ID:
 - `GET /api/v0/services/workload:payments-api/context?environment=prod`
 
 Service alias responses include `requested_as=service`.
+
+When a repository has workload identity facts but no materialized `Workload`
+node yet, service context can fall back to the repository read model. Those
+responses use `materialization_status=identity_only`,
+`query_basis=repository_read_model`, an empty `instances` array, and a
+`limitations` entry of `workload_identity_not_materialized`. Deployment
+evidence and delivery-family paths may still be present when parser or
+relationship evidence proves them.
 
 ## Story API
 
@@ -346,14 +494,33 @@ Use these routes when you only need code relationships and do not need the full 
 - `POST /api/v0/code/dead-code`
 - `POST /api/v0/code/complexity`
 
-Public code-query requests use canonical `repo_id` whenever a repository scope
-is part of the request. Results should be interpreted using `repo_id +
-relative_path`, not absolute server-local paths.
+Public code-query requests accept a repository selector in the `repo_id` field
+when a repository scope is part of the request. The selector may be the
+canonical repository ID, repository name, repo slug, or indexed path. The
+server resolves that selector to the canonical repository ID before querying.
+Results should still be interpreted using canonical `repo_id + relative_path`,
+not absolute server-local paths.
 
 `POST /api/v0/code/relationships` prefers `entity_id` when the caller already
 has a canonical entity. It also accepts `name` for fallback lookup, plus
 optional `direction` (`incoming` or `outgoing`) and `relationship_type`
-filters when the caller only needs one edge class.
+filters when the caller only needs one edge class. Set `transitive=true` with
+`relationship_type=CALLS` to ask for indirect callers or callees, and use
+`max_depth` to cap the traversal. Lightweight mode refuses those transitive
+graph traversals with a structured `unsupported_capability` envelope instead
+of returning degraded call-graph guesses.
+
+Example transitive-caller workflow:
+
+```json
+{
+  "name": "process_payment",
+  "direction": "incoming",
+  "relationship_type": "CALLS",
+  "transitive": true,
+  "max_depth": 7
+}
+```
 
 Example code-only workflow:
 
@@ -362,7 +529,7 @@ Example code-only workflow:
 ```json
 {
   "query": "process_payment",
-  "repo_id": "repository:r_ab12cd34",
+  "repo_id": "payments",
   "exact": false,
   "limit": 10
 }
@@ -374,14 +541,69 @@ Example dead-code workflow:
 
 ```json
 {
-  "repo_id": "repository:r_ab12cd34",
+  "repo_id": "payments",
+  "limit": 200,
   "exclude_decorated_with": ["@route", "@app.route"]
 }
 ```
 
 `repo_id` is optional. When omitted, the Go API returns the first page of
-dead-code candidates across indexed repositories and uses content metadata to
-filter any decorator exclusions.
+dead-code candidates across indexed repositories, applies the current default
+Go entrypoint/test/generated exclusions plus direct Go Cobra, stdlib HTTP, and
+controller-runtime framework-root signatures and Go exported public-package
+roots, and uses content metadata to filter any decorator exclusions. Exported
+Go symbols under `internal/`, `cmd/`, and `vendor/` remain candidates; only
+public-package exports are treated as default roots. The current dead-code
+response is intentionally `derived`, not `exact`, until the broader framework,
+public-API, reflection, and user-configured root registry from the
+reachability spec is implemented. The response body now also includes an
+`analysis` object that reports the root categories currently modeled, the
+specific Go framework-root signatures currently recognized, and whether
+tests/generated code were excluded. `analysis.roots_skipped_missing_source`
+counts Go candidates where the framework-root checks could not run because the
+content store did not have source cached. `analysis.framework_roots_from_parser_metadata`
+and `analysis.framework_roots_from_source_fallback` show whether the excluded
+Go framework roots came from parser-emitted metadata or the legacy query-time
+source heuristic path. `limit` defaults to `100` and is capped at `500`. The
+response also includes `truncated=true` when the bounded dead-code scan found
+more candidates than were returned.
+
+## IaC Quality API
+
+Use these routes when you need infrastructure-as-code cleanup candidates:
+
+- `POST /api/v0/iac/dead`
+
+The dead-IaC route requires an explicit `repo_id` or bounded `repo_ids` scope.
+When reducer-materialized reachability rows exist, the route returns those rows
+with `analysis_status=materialized_reachability`; bootstrap and
+`local_authoritative` graph runs materialize these rows after source-local
+content projection drains. Otherwise it falls back to bounded indexed-content
+analysis for Terraform modules, Helm charts, Kustomize bases/overlays, Ansible
+roles/playbooks, and Docker Compose services. Used artifacts are omitted from
+cleanup findings; unreferenced artifacts are returned as `candidate_dead_iac`,
+and variable or template-selected artifacts are returned as
+`ambiguous_dynamic_reference` when `include_ambiguous=true`.
+Findings expose the canonical `repo_id` plus `repo_name` when the repository
+catalog can resolve it. `findings_count` reports the number of rows returned
+on the current page; `total_findings_count`, `truncated`, and `next_offset`
+report whether more materialized or derived findings are available.
+
+Example dead-IaC workflow:
+
+```json
+{
+  "repo_ids": ["terraform-stack", "terraform-modules", "helm-controller", "helm-charts", "kustomize-controller", "kustomize-config", "compose-controller", "compose-app"],
+  "families": ["terraform", "helm", "kustomize", "compose"],
+  "include_ambiguous": true,
+  "limit": 100,
+  "offset": 0
+}
+```
+
+The content fallback is intentionally bounded and derived. Exact cleanup
+support should prefer reducer-materialized IaC usage rows so operators can
+explain every finding from persisted evidence instead of broad graph anti-joins.
 
 ## Content API
 
@@ -396,6 +618,7 @@ Use these routes when a caller needs source text or indexed content search witho
 Rules:
 
 - portable file lookup uses `repo_id + relative_path`
+- content routes accept repository selectors in `repo_id` and `repo_ids`: canonical IDs, repository names, repo slugs, or indexed paths
 - portable entity lookup uses `entity_id`
 - deployed API runtimes are PostgreSQL-first and PostgreSQL-only for direct content reads
 - if PostgreSQL is disabled or missing a cached row, deployed HTTP reads return `source_backend=unavailable` instead of reading from a server workspace checkout
@@ -409,7 +632,7 @@ Example file read:
 
 ```json
 {
-  "repo_id": "repository:r_ab12cd34",
+  "repo_id": "payments",
   "relative_path": "src/payments.py"
 }
 ```
@@ -427,7 +650,7 @@ Example file-content search:
 ```json
 {
   "pattern": "shared-payments-prod",
-  "repo_ids": ["repository:r_ab12cd34"]
+  "repo_ids": ["payments", "platformcontext/platform-context-graph"]
 }
 ```
 
@@ -443,6 +666,30 @@ Example file-content search:
 
 These routes are for tracing shared infrastructure, blast radius, dependency explanation, and environment drift.
 
+`POST /api/v0/infra/resources/search` accepts `query`, `category`, `kind`,
+`provider`, `resource_service`, `resource_category`, and `limit`. Terraform AWS
+resource and data-source nodes preserve provider classification in both graph
+and content-backed responses, so callers can narrow a search to families such
+as `provider=aws`, `resource_service=s3`, or `resource_category=storage`.
+Free-text `query` also checks typed resource identifiers such as Terraform
+resource types and CloudFormation/SAM `resource_type` values. CloudFormation
+type identifiers such as `AWS::Serverless::Function` use an exact
+resource-type predicate so graph backends do not have to scan broad text fields
+to answer a typed resource lookup.
+
+Example infrastructure search:
+
+```json
+{
+  "query": "aws_s3",
+  "category": "terraform",
+  "provider": "aws",
+  "resource_service": "s3",
+  "resource_category": "storage",
+  "limit": 10
+}
+```
+
 ## Repository API
 
 - `GET /api/v0/repositories`
@@ -450,7 +697,10 @@ These routes are for tracing shared infrastructure, blast radius, dependency exp
 - `GET /api/v0/repositories/{id}/story`
 - `GET /api/v0/repositories/{id}/stats`
 
-Repository routes also require canonical repository IDs.
+Repository routes accept a repository selector in the `{id}` path segment. The
+selector may be the canonical repository ID, repository name, repo slug, or
+indexed path. The server resolves that selector to the canonical repository ID
+before querying.
 
 Repository responses should be treated as:
 

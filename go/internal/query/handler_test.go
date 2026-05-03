@@ -45,6 +45,72 @@ func TestWriteError(t *testing.T) {
 	}
 }
 
+func TestWriteSuccessEnvelopeNegotiation(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept", EnvelopeMIMEType)
+	w := httptest.NewRecorder()
+
+	WriteSuccess(w, req, http.StatusOK, map[string]any{"matches": []any{}}, &TruthEnvelope{
+		Level:      TruthLevelDerived,
+		Capability: "code_search.fuzzy_symbol",
+		Profile:    ProfileLocalLightweight,
+		Basis:      TruthBasisContentIndex,
+		Freshness:  TruthFreshness{State: FreshnessFresh},
+		Reason:     "resolved from content index",
+	})
+
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := got["data"]; !ok {
+		t.Fatalf("data missing from envelope: %#v", got)
+	}
+	if _, ok := got["truth"]; !ok {
+		t.Fatalf("truth missing from envelope: %#v", got)
+	}
+	if got["error"] != nil {
+		t.Fatalf("error = %#v, want nil", got["error"])
+	}
+}
+
+func TestWriteContractErrorEnvelopeNegotiation(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept", EnvelopeMIMEType)
+	w := httptest.NewRecorder()
+
+	WriteContractError(
+		w,
+		req,
+		http.StatusNotImplemented,
+		"call-chain analysis requires authoritative graph mode",
+		"unsupported_capability",
+		"call_graph.call_chain_path",
+		ProfileLocalLightweight,
+		ProfileLocalFullStack,
+	)
+
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got["data"] != nil {
+		t.Fatalf("data = %#v, want nil", got["data"])
+	}
+	if truth, ok := got["truth"]; !ok {
+		t.Fatalf("truth missing from envelope: %#v", got)
+	} else if truth != nil {
+		t.Fatalf("truth = %#v, want nil", truth)
+	}
+	errBody, ok := got["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error = %#v, want map[string]any", got["error"])
+	}
+	if errBody["code"] != "unsupported_capability" {
+		t.Fatalf("error.code = %#v, want unsupported_capability", errBody["code"])
+	}
+}
+
 func TestReadJSON(t *testing.T) {
 	body := bytes.NewBufferString(`{"name":"test","count":42}`)
 	r := httptest.NewRequest(http.MethodPost, "/", body)

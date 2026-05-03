@@ -87,6 +87,62 @@ func TestRetryingExecutorDoesNotRetryPermanentErrors(t *testing.T) {
 	}
 }
 
+func TestRetryingExecutorRetriesNornicDBMergeUniqueConflict(t *testing.T) {
+	t.Parallel()
+
+	inner := &failingExecutor{
+		failFor: 1,
+		errMsg: "Neo4jError: Neo.ClientError.Statement.SyntaxError " +
+			"(failed to commit implicit transaction: constraint violation: " +
+			"Constraint violation (UNIQUE on Platform.[id]): Node with id=platform:kubernetes:none:prod:prod:none already exists)",
+	}
+
+	r := &RetryingExecutor{
+		Inner:      inner,
+		MaxRetries: 3,
+		BaseDelay:  1 * time.Millisecond,
+	}
+
+	err := r.Execute(context.Background(), Statement{
+		Operation: OperationCanonicalUpsert,
+		Cypher:    "UNWIND $rows AS row MERGE (p:Platform {id: row.platform_id}) SET p.name = row.platform_name",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil after retry", err)
+	}
+	if got, want := int(inner.calls.Load()), 2; got != want {
+		t.Fatalf("calls = %d, want %d", got, want)
+	}
+}
+
+func TestRetryingExecutorDoesNotRetryNornicDBUniqueConflictWithoutMerge(t *testing.T) {
+	t.Parallel()
+
+	inner := &failingExecutor{
+		failFor: 10,
+		errMsg: "Neo4jError: Neo.ClientError.Statement.SyntaxError " +
+			"(failed to commit implicit transaction: constraint violation: " +
+			"Constraint violation (UNIQUE on Platform.[id]): Node with id=platform:kubernetes:none:prod:prod:none already exists)",
+	}
+
+	r := &RetryingExecutor{
+		Inner:      inner,
+		MaxRetries: 3,
+		BaseDelay:  1 * time.Millisecond,
+	}
+
+	err := r.Execute(context.Background(), Statement{
+		Operation: OperationCanonicalUpsert,
+		Cypher:    "CREATE (p:Platform {id: $platform_id})",
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want non-nil")
+	}
+	if got, want := int(inner.calls.Load()), 1; got != want {
+		t.Fatalf("calls = %d, want %d", got, want)
+	}
+}
+
 func TestRetryingExecutorExhaustsRetries(t *testing.T) {
 	t.Parallel()
 
@@ -104,6 +160,10 @@ func TestRetryingExecutorExhaustsRetries(t *testing.T) {
 	err := r.Execute(context.Background(), Statement{Operation: OperationCanonicalUpsert})
 	if err == nil {
 		t.Fatal("expected error after exhausting retries")
+	}
+	var retryable interface{ Retryable() bool }
+	if !errors.As(err, &retryable) || !retryable.Retryable() {
+		t.Fatalf("error retryable = false, want true")
 	}
 	// 1 initial + 2 retries = 3 calls
 	if got := int(inner.calls.Load()); got != 3 {
@@ -213,6 +273,8 @@ func TestIsTransientNeo4jError(t *testing.T) {
 		{"deadlock", errors.New("Neo.TransientError.Transaction.DeadlockDetected"), true},
 		{"transient generic", errors.New("something TransientError something"), true},
 		{"lock client", errors.New("LockClient timeout"), true},
+		{"nornicdb optimistic edge conflict", errors.New("failed to commit implicit transaction: conflict: edge nornic:abc changed after transaction start"), true},
+		{"nornicdb optimistic node conflict", errors.New("failed to commit implicit transaction: conflict: node nornic:abc changed after transaction start"), true},
 		{"constraint violation", errors.New("Neo.ClientError.Schema.ConstraintValidationFailed"), false},
 		{"generic error", errors.New("connection refused"), false},
 	}

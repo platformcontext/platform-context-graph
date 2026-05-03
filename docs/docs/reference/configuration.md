@@ -45,7 +45,9 @@ pcg config db neo4j
 
 ## Configuration Reference
 
-Here are the available settings you can configure.
+Here are the common settings you can configure. For the complete operator
+catalog, including defaults, owner runtime, and when to tune each knob, use the
+[Environment Variables](environment-variables.md) reference.
 
 ### Core Settings
 
@@ -84,12 +86,15 @@ bootstrap, reducer, and watch flows.
 | **`PCG_STREAM_BUFFER`** | `0` | Optional buffer for streaming collected generations. `0` means use the worker-count-derived default. |
 | **`PCG_LARGE_REPO_FILE_THRESHOLD`** | `1000` | File-count threshold above which a repository is treated as “large” for concurrency limiting. |
 | **`PCG_LARGE_REPO_MAX_CONCURRENT`** | `2` | Maximum number of large repositories that may be snapshotted concurrently. |
-| **`PCG_PROJECTOR_WORKERS`** | `min(NumCPU, 8)` | Concurrent source-local projection workers in the ingester runtime. |
+| **`PCG_PROJECTOR_WORKERS`** | Default: `min(NumCPU, 8)`; NornicDB local-authoritative: `1` | Concurrent source-local projection workers in the ingester runtime. |
 | **`PCG_LARGE_GEN_THRESHOLD`** | `10000` | Fact-count threshold above which a projector generation is treated as “large”. |
-| **`PCG_LARGE_GEN_MAX_CONCURRENT`** | `2` | Maximum number of large projector generations processed concurrently. |
+| **`PCG_LARGE_GEN_MAX_CONCURRENT`** | Default: `2`; local-authoritative: `4` | Maximum number of large projector generations processed concurrently. |
 | **`PCG_PROJECTION_WORKERS`** | `min(NumCPU, 8)` | Concurrent bootstrap-index projection workers. |
-| **`PCG_REDUCER_WORKERS`** | `min(NumCPU, 4)` | Concurrent reducer intent workers in the resolution engine. |
-| **`PCG_REDUCER_BATCH_CLAIM_SIZE`** | `workers * 4` (min 4, max 64) | Number of reducer intents claimed per polling cycle. |
+| **`PCG_REDUCER_WORKERS`** | Neo4j: `min(NumCPU, 4)`; NornicDB: `min(NumCPU, 8)` | Concurrent reducer intent workers in the resolution engine. |
+| **`PCG_REDUCER_BATCH_CLAIM_SIZE`** | Neo4j: `workers * 4` (min 4, max 64); NornicDB: `workers` | Number of reducer intents claimed per polling cycle. |
+| **`PCG_REDUCER_SEMANTIC_ENTITY_CLAIM_LIMIT`** | NornicDB: `1`; otherwise disabled | Concurrent semantic entity materialization claims after source-local drain. |
+| **`PCG_REDUCER_CLAIM_DOMAIN`** | unset | Optional domain filter for split-reducer diagnostics, for example `sql_relationship_materialization` or `deployment_mapping`. Leave unset for the normal all-domain reducer. |
+| **`PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT`** | `250000` | Maximum pending code-call shared intents the reducer may scan or load for one accepted repo/run before failing safely instead of rewriting CALLS edges from a partial slice. |
 | **`PCG_SHARED_PROJECTION_WORKERS`** | `1` | Concurrent shared-projection partition workers. |
 | **`PCG_SHARED_PROJECTION_PARTITION_COUNT`** | `8` | Number of shared-projection partitions per domain. |
 | **`PCG_SHARED_PROJECTION_BATCH_LIMIT`** | `100` | Maximum intents processed per shared-projection partition batch. |
@@ -104,19 +109,55 @@ Unsupported runtime controls:
 - `PCG_INDEX_QUEUE_DEPTH`
 - `PCG_WATCH_DEBOUNCE_SECONDS`
 
+Raise `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` only for the explicit
+code-call acceptance-cap failure. It is not a generic queue-throughput or
+graph-timeout knob; capture a discovery advisory first and prefer filtering
+generated/vendor/archive source when that is what inflated the code-call slice.
+
 `pcg index` launches the Go `bootstrap-index` runtime in direct filesystem
 mode, and `pcg watch` hands off to the Go ingester runtime. Neither command
 uses these unsupported controls.
 
 ### Indexing Scope
 
-The current Go runtime does not expose public environment variables for file-size
-limits, hidden-directory skipping, or dependency-root pruning. Those defaults
-are built into the discovery and parser pipeline.
+The current Go runtime does not expose public environment variables for
+file-size limits, hidden-directory skipping, or dependency-root pruning. Those
+defaults are built into the discovery and parser pipeline.
 
-Use `.pcgignore` for repo-specific exclusions, and use the repository-source
-settings below when you need to switch between GitHub discovery, explicit repo
-lists, and direct filesystem mode.
+Use `.pcg/discovery.json` for repo-specific, reasoned exclusions that should be
+visible in discovery logs and metrics. PCG still accepts the older
+`.pcg/vendor-roots.json` shape as a compatibility alias, but new repo-specific
+tuning should use `.pcg/discovery.json`.
+When deciding whether to add a rule, capture a discovery advisory report first
+and validate the after-run with the
+[Local Testing — Discovery Advisory Playbook](local-testing.md#discovery-advisory-playbook).
+
+Example:
+
+```json
+{
+  "ignored_path_globs": [
+    {"path": "src/wp-content/plugins/wordpress-seo/**", "reason": "wordpress-seo"}
+  ],
+  "preserved_path_globs": [
+    {"path": "src/wp-content/plugins/custom-authored/**"}
+  ]
+}
+```
+
+`ignored_path_globs[].path` and `preserved_path_globs[].path` are
+repository-relative globs. Patterns ending in `/**` prune a subtree. `reason`
+is emitted in discovery logs and metrics as `user:<reason>` so operators can
+verify that a noisy repo became cheaper for the intended reason. Prefer exact
+third-party roots over broad ecosystem parents such as `wp-content/plugins/**`
+unless a preserve rule keeps the authored subtrees you need.
+
+The legacy `.pcg/vendor-roots.json` file uses `vendor_roots` and `keep_roots`
+with the same path and reason semantics. If both files are present, PCG merges
+both configurations and de-duplicates identical rules.
+
+Use the repository-source settings below when you need to switch between GitHub
+discovery, explicit repo lists, and direct filesystem mode.
 
 ### Database Connection (Neo4j)
 
@@ -191,7 +232,8 @@ The repository ingester re-discovers repositories on each cycle, applies these r
 
 PlatformContextGraph uses the following hierarchy:
 
-1.  **Project Level:** `.pcgignore` in your project root (files to exclude).
+1.  **Project Level:** `.pcgignore` and `.pcg/discovery.json` in your project
+    root (repo-local indexing exclusions).
 2.  **User Level:** `~/.platform-context-graph/.env` (global settings).
 3.  **Defaults:** Built-in application defaults.
 
@@ -199,9 +241,10 @@ That user-level `.env` file is for CLI configuration. It is not the local API
 bearer-token store; the Go API and MCP runtimes read `PCG_API_KEY` from their
 own process environment when bearer auth is enabled.
 
-Use `.pcgignore` for project-specific exclusions. Use
-the built-in dependency-root pruning plus repository-source settings for
-global indexing behavior.
+Use `.pcgignore` for plain gitignore-style project exclusions. Use
+`.pcg/discovery.json` when you need reasoned pruning with `user:<reason>`
+telemetry. Use the built-in dependency-root pruning plus repository-source
+settings for global indexing behavior.
 
 For logging, the rule is simpler: the current Go runtimes always emit JSON to
 stderr, so deployment tuning should focus on OTLP export and log shipping

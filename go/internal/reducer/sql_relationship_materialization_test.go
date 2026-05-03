@@ -1,7 +1,10 @@
 package reducer
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,6 +152,12 @@ func TestExtractSQLRelationshipRowsFromViewReferencingTable(t *testing.T) {
 	if got, want := rows[0]["relationship_type"], "REFERENCES_TABLE"; got != want {
 		t.Fatalf("relationship_type = %v, want %v", got, want)
 	}
+	if got, want := rows[0]["source_entity_type"], "SqlView"; got != want {
+		t.Fatalf("source_entity_type = %v, want %v", got, want)
+	}
+	if got, want := rows[0]["target_entity_type"], "SqlTable"; got != want {
+		t.Fatalf("target_entity_type = %v, want %v", got, want)
+	}
 	if got, want := rows[0]["repo_id"], "repo-123"; got != want {
 		t.Fatalf("repo_id = %v, want %v", got, want)
 	}
@@ -198,6 +207,12 @@ func TestExtractSQLRelationshipRowsFromTableWithColumn(t *testing.T) {
 	if got, want := rows[0]["relationship_type"], "HAS_COLUMN"; got != want {
 		t.Fatalf("relationship_type = %v, want %v", got, want)
 	}
+	if got, want := rows[0]["source_entity_type"], "SqlTable"; got != want {
+		t.Fatalf("source_entity_type = %v, want %v", got, want)
+	}
+	if got, want := rows[0]["target_entity_type"], "SqlColumn"; got != want {
+		t.Fatalf("target_entity_type = %v, want %v", got, want)
+	}
 }
 
 func TestExtractSQLRelationshipRowsFromTriggerOnTable(t *testing.T) {
@@ -243,6 +258,12 @@ func TestExtractSQLRelationshipRowsFromTriggerOnTable(t *testing.T) {
 	}
 	if got, want := rows[0]["relationship_type"], "TRIGGERS"; got != want {
 		t.Fatalf("relationship_type = %v, want %v", got, want)
+	}
+	if got, want := rows[0]["source_entity_type"], "SqlTrigger"; got != want {
+		t.Fatalf("source_entity_type = %v, want %v", got, want)
+	}
+	if got, want := rows[0]["target_entity_type"], "SqlTable"; got != want {
+		t.Fatalf("target_entity_type = %v, want %v", got, want)
 	}
 }
 
@@ -394,7 +415,169 @@ func TestSQLRelationshipHandlerWritesEdges(t *testing.T) {
 	}
 }
 
+func TestSQLRelationshipHandlerLogsStageTiming(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	defer slog.SetDefault(previous)
+
+	now := time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC)
+	handler := SQLRelationshipMaterializationHandler{
+		FactLoader: &stubFactLoader{
+			envelopes: []facts.Envelope{
+				{
+					FactKind: "content_entity",
+					Payload: map[string]any{
+						"repo_id":     "repo-123",
+						"entity_id":   "content-entity:e_tbl1",
+						"entity_type": "SqlTable",
+						"entity_name": "public.users",
+					},
+				},
+				{
+					FactKind: "content_entity",
+					Payload: map[string]any{
+						"repo_id":     "repo-123",
+						"entity_id":   "content-entity:e_view1",
+						"entity_type": "SqlView",
+						"entity_name": "public.active_users",
+						"entity_metadata": map[string]any{
+							"source_tables": []any{"public.users"},
+						},
+					},
+				},
+			},
+		},
+		EdgeWriter: &recordingSQLRelEdgeWriter{},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-sql-rel-1",
+		ScopeID:      "scope-db",
+		GenerationID: "gen-1",
+		SourceSystem: "git",
+		Domain:       DomainSQLRelationshipMaterialization,
+		EnqueuedAt:   now,
+		AvailableAt:  now,
+		Status:       IntentStatusPending,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+
+	logText := logs.String()
+	for _, want := range []string{
+		`"msg":"sql relationship materialization completed"`,
+		`"fact_count":2`,
+		`"repo_count":1`,
+		`"edge_count":1`,
+		`"write_row_count":1`,
+		`"load_facts_duration_seconds":`,
+		`"extract_duration_seconds":`,
+		`"retract_duration_seconds":`,
+		`"build_write_rows_duration_seconds":`,
+		`"graph_write_duration_seconds":`,
+		`"total_duration_seconds":`,
+	} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("logs missing %s:\n%s", want, logText)
+		}
+	}
+}
+
+func TestSQLRelationshipHandlerSkipsFirstGenerationRetract(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingSQLRelEdgeWriter{}
+	handler := SQLRelationshipMaterializationHandler{
+		FactLoader: &stubFactLoader{envelopes: sqlRelationshipEntityFacts()},
+		EdgeWriter: writer,
+		PriorGenerationCheck: func(_ context.Context, scopeID, generationID string) (bool, error) {
+			if scopeID != "scope-db" || generationID != "gen-1" {
+				t.Fatalf("PriorGenerationCheck(%q, %q), want scope-db/gen-1", scopeID, generationID)
+			}
+			return false, nil
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-sql-rel-1",
+		ScopeID:      "scope-db",
+		GenerationID: "gen-1",
+		SourceSystem: "git",
+		Domain:       DomainSQLRelationshipMaterialization,
+		EnqueuedAt:   time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		Status:       IntentStatusPending,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if writer.retractDomain != "" || len(writer.retractRows) != 0 {
+		t.Fatalf("retract = domain %q rows %d, want skipped", writer.retractDomain, len(writer.retractRows))
+	}
+	if len(writer.writeRows) == 0 {
+		t.Fatal("writeRows is empty, want SQL edges still written")
+	}
+}
+
+func TestSQLRelationshipHandlerRetractsWhenPriorGenerationExists(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingSQLRelEdgeWriter{}
+	handler := SQLRelationshipMaterializationHandler{
+		FactLoader: &stubFactLoader{envelopes: sqlRelationshipEntityFacts()},
+		EdgeWriter: writer,
+		PriorGenerationCheck: func(context.Context, string, string) (bool, error) {
+			return true, nil
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-sql-rel-1",
+		ScopeID:      "scope-db",
+		GenerationID: "gen-1",
+		SourceSystem: "git",
+		Domain:       DomainSQLRelationshipMaterialization,
+		EnqueuedAt:   time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		Status:       IntentStatusPending,
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if writer.retractDomain != DomainSQLRelationships {
+		t.Fatalf("retractDomain = %q, want %q", writer.retractDomain, DomainSQLRelationships)
+	}
+}
+
 // --- test stubs ---
+
+func sqlRelationshipEntityFacts() []facts.Envelope {
+	return []facts.Envelope{
+		{
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"repo_id":     "repo-123",
+				"entity_id":   "content-entity:e_tbl1",
+				"entity_type": "SqlTable",
+				"entity_name": "public.users",
+			},
+		},
+		{
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"repo_id":     "repo-123",
+				"entity_id":   "content-entity:e_view1",
+				"entity_type": "SqlView",
+				"entity_name": "public.active_users",
+				"entity_metadata": map[string]any{
+					"source_tables": []any{"public.users"},
+				},
+			},
+		},
+	}
+}
 
 type recordingSQLRelEdgeWriter struct {
 	retractDomain         string

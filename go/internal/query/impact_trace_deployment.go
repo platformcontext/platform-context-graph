@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -29,33 +30,24 @@ func traceEnrichmentOptions(req traceDeploymentChainRequest) traceEnrichmentConf
 		maxDepth:                  req.MaxDepth,
 	}
 }
-func boundedIndirectEvidenceHostnames(hostnames []string) []string {
-	if len(hostnames) == 0 {
-		return nil
-	}
-	seen := map[string]struct{}{}
-	bounded := make([]string, 0, len(hostnames))
-	for _, hostname := range hostnames {
-		hostname = strings.TrimSpace(hostname)
-		if hostname == "" {
-			continue
-		}
-		if _, ok := seen[hostname]; ok {
-			continue
-		}
-		seen[hostname] = struct{}{}
-		bounded = append(bounded, hostname)
-		if len(bounded) == 4 {
-			break
-		}
-	}
-	sort.Strings(bounded)
-	return bounded
-}
 
 // traceDeploymentChain returns a story-first deployment trace for a service.
 // POST /api/v0/impact/trace-deployment-chain
 func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.deployment_chain") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"deployment-chain tracing requires full platform truth",
+			"unsupported_capability",
+			"platform_impact.deployment_chain",
+			h.profile(),
+			requiredProfile("platform_impact.deployment_chain"),
+		)
+		return
+	}
+
 	var req traceDeploymentChainRequest
 	if err := ReadJSON(r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
@@ -67,7 +59,7 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 	}
 
 	traceOptions := traceEnrichmentOptions(req)
-	ctx, err := fetchServiceTraceContext(r.Context(), h.Neo4j, h.Content, req.ServiceName, traceOptions)
+	ctx, err := fetchServiceTraceContext(r.Context(), h.Neo4j, h.Content, h.Logger, req.ServiceName, traceOptions)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -110,22 +102,19 @@ func (h *ImpactHandler) traceDeploymentChain(w http.ResponseWriter, r *http.Requ
 		ctx["controller_entities"] = controllerEntities
 	}
 
-	WriteJSON(w, http.StatusOK, buildDeploymentTraceResponse(req.ServiceName, ctx))
+	WriteSuccess(w, r, http.StatusOK, buildDeploymentTraceResponse(req.ServiceName, ctx), BuildTruthEnvelope(h.profile(), "platform_impact.deployment_chain", TruthBasisHybrid, "resolved from deployment topology and service evidence"))
 }
 
 func fetchServiceTraceContext(
 	ctx context.Context,
-	graph GraphReader,
-	content *ContentReader,
+	graph GraphQuery,
+	content ContentStore,
+	logger *slog.Logger,
 	serviceName string,
 	traceOptions traceEnrichmentConfig,
 ) (map[string]any, error) {
-	entityHandler := &EntityHandler{Neo4j: graph, Content: content}
-	workloadContext, err := entityHandler.fetchWorkloadContext(
-		ctx,
-		serviceLookupWhereClause,
-		map[string]any{"service_name": serviceName},
-	)
+	entityHandler := &EntityHandler{Neo4j: graph, Content: content, Logger: logger}
+	workloadContext, err := entityHandler.fetchServiceWorkloadContext(ctx, serviceName, "deployment_trace")
 	if err != nil || workloadContext == nil {
 		return workloadContext, err
 	}
@@ -134,6 +123,8 @@ func fetchServiceTraceContext(
 		DirectOnly:                !traceOptions.includeConsumers,
 		IncludeRelatedModuleUsage: traceOptions.includeProvisioningChains,
 		MaxDepth:                  traceOptions.maxDepth,
+		Logger:                    logger,
+		Operation:                 "deployment_trace",
 	}); err != nil {
 		return nil, fmt.Errorf("enrich service trace context: %w", err)
 	}
@@ -245,13 +236,13 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		"image_refs":              imageRefs,
 		"k8s_relationships":       k8sRelationships,
 		"deployment_facts":        deploymentFacts,
-		"controller_driven_paths": buildControllerDrivenPaths(platforms, platformKinds),
+		"controller_driven_paths": buildControllerDrivenPaths(instances),
 		"delivery_paths":          deliveryPaths,
 		"story":                   story,
 		"story_sections":          buildStorySections(platforms, platformKinds, materializedEnvironments),
 		"deployment_overview":     deploymentOverview,
-		"controller_overview":     buildControllerOverview(platforms, platformKinds, controllerEntities),
-		"gitops_overview":         buildGitOpsOverview(platforms, platformKinds),
+		"controller_overview":     buildControllerOverview(platforms, platformKinds, controllerEntities, deploymentSources, deploymentEvidence),
+		"gitops_overview":         buildGitOpsOverview(platforms, platformKinds, deploymentSources, deploymentEvidence, controllerEntities),
 		"runtime_overview":        buildRuntimeOverview(materializedEnvironments),
 		"deployment_fact_summary": deploymentFactSummary,
 		"drilldowns":              buildDeploymentDrilldowns(serviceName, safeStr(workloadContext, "id")),
@@ -368,7 +359,7 @@ func (h *ImpactHandler) fetchDeploymentSources(
 
 func fetchDeploymentSourcesFromGraph(
 	ctx context.Context,
-	reader GraphReader,
+	reader GraphQuery,
 	workloadID string,
 	repoID string,
 ) ([]map[string]any, error) {
@@ -607,6 +598,16 @@ func (h *ImpactHandler) fetchK8sResources(
 func distinctSortedInstanceField(instances []map[string]any, key string) []string {
 	values := make(map[string]struct{}, len(instances))
 	for _, instance := range instances {
+		if key == "platform_name" || key == "platform_kind" {
+			for _, platform := range platformTargets(instance) {
+				value := safeStr(platform, key)
+				if value == "" {
+					continue
+				}
+				values[value] = struct{}{}
+			}
+			continue
+		}
 		value := safeStr(instance, key)
 		if value == "" {
 			continue

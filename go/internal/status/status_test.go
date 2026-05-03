@@ -119,6 +119,16 @@ func TestBuildReportClassifiesProgressingQueue(t *testing.T) {
 					OldestAge:   2 * time.Minute,
 				},
 			},
+			QueueBlockages: []status.QueueBlockage{
+				{
+					Stage:          "reducer",
+					Domain:         "semantic_entity_materialization",
+					ConflictDomain: "code_graph",
+					ConflictKey:    "scope-1:gen-1:code",
+					Blocked:        2,
+					OldestAge:      75 * time.Second,
+				},
+			},
 		},
 		status.DefaultOptions(),
 	)
@@ -137,6 +147,12 @@ func TestBuildReportClassifiesProgressingQueue(t *testing.T) {
 	}
 	if got := report.StageSummaries[1].Claimed; got != 1 {
 		t.Fatalf("BuildReport().StageSummaries[1].Claimed = %d, want 1", got)
+	}
+	if got, want := len(report.QueueBlockages), 1; got != want {
+		t.Fatalf("BuildReport().QueueBlockages len = %d, want %d", got, want)
+	}
+	if got := report.QueueBlockages[0].ConflictKey; got != "scope-1:gen-1:code" {
+		t.Fatalf("BuildReport().QueueBlockages[0].ConflictKey = %q, want conflict key", got)
 	}
 }
 
@@ -317,6 +333,14 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 				DeadLetter:           1,
 				OldestOutstandingAge: 90 * time.Second,
 			},
+			LatestQueueFailure: &status.QueueFailureSnapshot{
+				Stage:          "reducer",
+				Domain:         "code_call_materialization",
+				Status:         "retrying",
+				FailureClass:   "graph_write_timeout",
+				FailureMessage: "neo4j execute group timed out after 2s",
+				FailureDetails: "phase=semantic label=Variable rows=500",
+			},
 			StageCounts: []status.StageStatusCount{
 				{Stage: "projector", Status: "running", Count: 1},
 				{Stage: "projector", Status: "retrying", Count: 1},
@@ -330,6 +354,16 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 					OldestAge:   90 * time.Second,
 				},
 			},
+			QueueBlockages: []status.QueueBlockage{
+				{
+					Stage:          "reducer",
+					Domain:         "semantic_entity_materialization",
+					ConflictDomain: "code_graph",
+					ConflictKey:    "scope-1:gen-1:code",
+					Blocked:        2,
+					OldestAge:      75 * time.Second,
+				},
+			},
 		},
 		status.DefaultOptions(),
 	)
@@ -341,6 +375,10 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 		"Scope activity: active=2 changed=1 unchanged=1",
 		"Scope statuses: active=3",
 		"Generation history: active=1 pending=0 completed=2 superseded=1 failed=0 other=0",
+		"Latest queue failure: stage=reducer domain=code_call_materialization status=retrying class=graph_write_timeout",
+		"message=\"neo4j execute group timed out after 2s\" details=\"phase=semantic label=Variable rows=500\"",
+		"Blocked queue work:",
+		"reducer domain=semantic_entity_materialization conflict_domain=code_graph conflict_key=scope-1:gen-1:code blocked=2 oldest=1m15s",
 		"projector pending=0 claimed=0 running=1 retrying=1 succeeded=0 dead_letter=0 failed=0",
 		"repository outstanding=2 retrying=1 dead_letter=0 failed=0 oldest=1m30s",
 	} {
@@ -474,6 +512,14 @@ func TestRenderJSONIncludesFlowSummaries(t *testing.T) {
 			Queue: status.QueueSnapshot{
 				Outstanding: 1,
 			},
+			LatestQueueFailure: &status.QueueFailureSnapshot{
+				Stage:          "reducer",
+				Domain:         "workload_materialization",
+				Status:         "dead_letter",
+				FailureClass:   "graph_write_timeout",
+				FailureMessage: "neo4j execute timed out after 2s",
+				FailureDetails: "phase=files rows=100 chunk=21/24",
+			},
 			StageCounts: []status.StageStatusCount{
 				{Stage: "projector", Status: "pending", Count: 1},
 			},
@@ -490,6 +536,15 @@ func TestRenderJSONIncludesFlowSummaries(t *testing.T) {
 	}
 	if !strings.Contains(string(payload), "\"generation_history\"") {
 		t.Fatalf("RenderJSON() = %s, want generation history", payload)
+	}
+	if !strings.Contains(string(payload), "\"latest_failure\"") {
+		t.Fatalf("RenderJSON() = %s, want latest queue failure", payload)
+	}
+	if !strings.Contains(string(payload), "\"queue_blockages\"") {
+		t.Fatalf("RenderJSON() = %s, want queue blockage diagnostics", payload)
+	}
+	if !strings.Contains(string(payload), "\"failure_class\": \"graph_write_timeout\"") {
+		t.Fatalf("RenderJSON() = %s, want latest failure class", payload)
 	}
 	if !strings.Contains(string(payload), "\"unchanged\": 2") {
 		t.Fatalf("RenderJSON() = %s, want unchanged scope activity", payload)

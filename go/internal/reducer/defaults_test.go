@@ -335,10 +335,10 @@ func TestNewDefaultRegistryWiresCrossRepoReadinessDependencies(t *testing.T) {
 
 	registry, err := NewDefaultRegistry(DefaultHandlers{
 		PlatformMaterializationWriter: &recordingPlatformMaterializationWriter{},
-		EvidenceFactLoader:         &fakeEvidenceFactLoader{},
-		RepoDependencyIntentWriter: &recordingRepoDependencyIntentWriter{},
-		ReadinessLookup:            readinessLookup,
-		ReadinessPrefetch:          readinessPrefetch,
+		EvidenceFactLoader:            &fakeEvidenceFactLoader{},
+		RepoDependencyIntentWriter:    &recordingRepoDependencyIntentWriter{},
+		ReadinessLookup:               readinessLookup,
+		ReadinessPrefetch:             readinessPrefetch,
 	})
 	if err != nil {
 		t.Fatalf("NewDefaultRegistry() error = %v", err)
@@ -407,11 +407,13 @@ func TestNewDefaultRegistryWiresWorkloadProjectionInputLoader(t *testing.T) {
 	t.Parallel()
 
 	inputLoader := &stubWorkloadProjectionInputLoader{}
+	platformLookup := &stubInfrastructurePlatformLookup{}
 
 	registry, err := NewDefaultRegistry(DefaultHandlers{
 		FactLoader:                    &stubFactLoader{},
 		WorkloadMaterializer:          NewWorkloadMaterializer(&recordingCypherExecutor{}),
 		WorkloadProjectionInputLoader: inputLoader,
+		InfrastructurePlatformLookup:  platformLookup,
 	})
 	if err != nil {
 		t.Fatalf("NewDefaultRegistry() error = %v", err)
@@ -427,5 +429,12 @@ func TestNewDefaultRegistryWiresWorkloadProjectionInputLoader(t *testing.T) {
 	}
 	if handler.InputLoader != inputLoader {
 		t.Fatalf("InputLoader = %T, want %T", handler.InputLoader, inputLoader)
+	}
+	if handler.InfrastructurePlatformLookup != platformLookup {
+		t.Fatalf(
+			"InfrastructurePlatformLookup = %T, want %T",
+			handler.InfrastructurePlatformLookup,
+			platformLookup,
+		)
 	}
 }

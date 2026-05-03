@@ -110,6 +110,114 @@ func TestExtractInfrastructurePlatformRowsECSCluster(t *testing.T) {
 	}
 }
 
+func TestExtractInfrastructurePlatformRowsIgnoresServiceResourceNamesForPlatformName(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo-1",
+			ScopeID:  "scope-infra-ecs",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id":   "repo:infra-ecs",
+				"repo_name": "infra-ecs",
+			},
+		},
+		{
+			FactID:   "fact-file-1",
+			ScopeID:  "scope-infra-ecs",
+			FactKind: "parsed_file_data",
+			Payload: map[string]any{
+				"terraform_resources": []any{
+					map[string]any{
+						"resource_type": "aws_ecs_cluster",
+						"resource_name": "default",
+					},
+					map[string]any{
+						"resource_type": "aws_lb_listener_rule",
+						"resource_name": "forward_http80_service_requests",
+					},
+				},
+				"terraform_locals": []any{
+					map[string]any{
+						"name":  "cluster",
+						"value": `"runtime-main"`,
+					},
+				},
+				"terraform_modules": []any{
+					map[string]any{
+						"name":   "service_api",
+						"source": "registry.example.com/platform/ecs-application/aws",
+					},
+				},
+				"terraform_data_sources": []any{
+					map[string]any{
+						"data_type": "aws_iam_policy_document",
+						"data_name": "service_api",
+					},
+				},
+			},
+		},
+	}
+
+	rows := ExtractInfrastructurePlatformRows(envelopes)
+
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0].PlatformName, "runtime-main"; got != want {
+		t.Fatalf("PlatformName = %q, want %q", got, want)
+	}
+}
+
+func TestExtractInfrastructurePlatformRowsFromServiceModuleClusterDataSource(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "fact-repo-1",
+			ScopeID:  "scope-service-stack",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id":   "repo:service-stack",
+				"repo_name": "service-stack",
+			},
+		},
+		{
+			FactID:   "fact-file-1",
+			ScopeID:  "scope-service-stack",
+			FactKind: "parsed_file_data",
+			Payload: map[string]any{
+				"terraform_modules": []any{
+					map[string]any{
+						"name":         "api_service",
+						"source":       "registry.example.com/platform/ecs-application/aws",
+						"cluster_name": "data.aws_ecs_cluster.runtime-main.cluster_name",
+					},
+				},
+				"terraform_data_sources": []any{
+					map[string]any{
+						"data_type": "aws_ecs_cluster",
+						"data_name": "runtime-main",
+					},
+				},
+			},
+		},
+	}
+
+	rows := ExtractInfrastructurePlatformRows(envelopes)
+
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if rows[0].PlatformKind != "ecs" {
+		t.Fatalf("PlatformKind = %q, want ecs", rows[0].PlatformKind)
+	}
+	if got, want := rows[0].PlatformName, "runtime-main"; got != want {
+		t.Fatalf("PlatformName = %q, want %q", got, want)
+	}
+}
+
 func TestExtractInfrastructurePlatformRowsSkipsNonTerraformFacts(t *testing.T) {
 	t.Parallel()
 

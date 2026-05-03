@@ -17,12 +17,24 @@ The repository includes a Docker Compose stack that mirrors the deployable-servi
 Compose files:
 - `docker-compose.yaml`
 - `docker-compose.template.yml`
+- `docker-compose.nornicdb.yml`
 
 Run it with:
 
 ```bash
 docker compose up --build
 ```
+
+To run the same service stack against NornicDB instead of Neo4j, add the
+NornicDB override:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.nornicdb.yml up --build
+```
+
+That override keeps the `neo4j` service name for network compatibility while
+setting PCG graph runtimes to `PCG_GRAPH_BACKEND=nornicdb` and database
+`nornic`.
 
 ## Index One Repo Or Multiple Repos From Your Machine
 
@@ -142,6 +154,17 @@ That script:
 The runtime verification wrappers under `scripts/verify_*_compose.sh` are
 shell-native Go-runtime checks.
 
+For authoritative graph-backed code analysis specifically, use:
+
+```bash
+./scripts/verify_graph_analysis_compose.sh
+```
+
+That wrapper starts the stack against the dedicated
+`tests/fixtures/graph_analysis_compose` corpus and proves direct callers,
+transitive callers, shortest call-chain path, dead-code results, and the
+expected canonical `CALLS` edges in Neo4j after a fresh bootstrap run.
+
 Run one wrapper at a time. They share the same Compose project name, so
 parallel wrapper runs can collide even when each script chooses different host
 ports.
@@ -166,6 +189,16 @@ Local auth stays at the Go API boundary too:
   `PCG_HOME/.env` contract before issuing authenticated requests.
 - If neither source contains a token, the local stack runs without bearer auth.
 - There is no separate auth service, login flow, or OAuth dependency in this stack.
+
+Neo4j is also bounded intentionally in local Compose so laptop-shaped runs do
+not inherit whatever heap/page-cache sizing the JVM would otherwise choose:
+
+- `PCG_NEO4J_HEAP_INITIAL_SIZE` defaults to `512m`
+- `PCG_NEO4J_HEAP_MAX_SIZE` defaults to `512m`
+- `PCG_NEO4J_PAGECACHE_SIZE` defaults to `512m`
+
+Raise those explicitly when you run larger real-repository sets and have enough
+Docker memory available.
 
 For direct runtime scraping, Compose also enables per-runtime Prometheus endpoints:
 
@@ -300,6 +333,7 @@ It also exercises the content-store contract:
 
 - `PCG_CONTENT_STORE_DSN` and `PCG_POSTGRES_DSN` are wired by default
 - host-side e2e runs can reach the bundled Postgres content store through `PCG_POSTGRES_PORT` (default `15432`)
+- the bundled Postgres 18 service mounts its named volume at `/var/lib/postgresql`, allowing the image to manage its versioned data directory internally
 - file and entity content reads prefer Postgres and fall back to the server workspace
 - `PCG_REPOSITORY_RULES_JSON` can be set to structured exact or regex include rules for Git-backed sync, and Compose passes that override through to every Go runtime in the stack
 - `PCG_COLLECTOR_INSTANCES_JSON` configures the workflow-coordinator desired collector set in local Compose; the optional coordinator profile defaults it to one Git collector instance so dark-mode status has a concrete control-plane row to reconcile

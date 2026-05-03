@@ -41,20 +41,21 @@ func (e *Engine) parseJavaScriptLike(
 	scope := options.normalizedVariableScope()
 	root := tree.RootNode()
 	reactAliases := javaScriptReactAliases(root, source, outputLanguage)
+	registeredRootKinds := javaScriptRegisteredDeadCodeRootKinds(root, source)
 
 	walkNamed(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
 		case "function_declaration":
 			nameNode := node.ChildByFieldName("name")
-			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
+			appendFunctionDeclaration(payload, path, node, nameNode, source, outputLanguage, options, registeredRootKinds)
 			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage, reactAliases)
 		case "generator_function_declaration":
 			nameNode := node.ChildByFieldName("name")
-			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
+			appendFunctionDeclaration(payload, path, node, nameNode, source, outputLanguage, options, registeredRootKinds)
 			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage, reactAliases)
 		case "method_definition", "method_signature":
 			nameNode := node.ChildByFieldName("name")
-			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
+			appendFunctionDeclaration(payload, path, node, nameNode, source, outputLanguage, options, registeredRootKinds)
 		case "class_declaration", "abstract_class_declaration":
 			nameNode := node.ChildByFieldName("name")
 			name := nodeText(nameNode, source)
@@ -125,7 +126,7 @@ func (e *Engine) parseJavaScriptLike(
 			}
 			valueNode := node.ChildByFieldName("value")
 			if isJavaScriptFunctionValue(valueNode) {
-				appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
+				appendFunctionDeclaration(payload, path, node, nameNode, source, outputLanguage, options, registeredRootKinds)
 				maybeAppendJavaScriptComponent(payload, valueNode, nameNode, source, outputLanguage, reactAliases)
 				return
 			}
@@ -239,11 +240,13 @@ func (e *Engine) preScanJavaScriptLike(
 
 func appendFunctionDeclaration(
 	payload map[string]any,
+	path string,
 	node *tree_sitter.Node,
 	nameNode *tree_sitter.Node,
 	source []byte,
 	lang string,
 	options Options,
+	registeredRootKinds map[string][]string,
 ) {
 	name := javaScriptFunctionName(nameNode, source)
 	if strings.TrimSpace(name) == "" {
@@ -264,6 +267,9 @@ func appendFunctionDeclaration(
 		"decorators":      javaScriptDecorators(declarationNode, source),
 		"type_parameters": javaScriptTypeParameters(declarationNode, source),
 		"lang":            lang,
+	}
+	if rootKinds := javaScriptDeadCodeRootKinds(path, node, name, registeredRootKinds); len(rootKinds) > 0 {
+		item["dead_code_root_kinds"] = rootKinds
 	}
 	if functionType := javaScriptFunctionKind(declarationNode, source); functionType != "" {
 		item["type"] = functionType

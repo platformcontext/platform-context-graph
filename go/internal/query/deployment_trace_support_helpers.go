@@ -29,8 +29,8 @@ type traceEvidenceAccumulator struct {
 
 func loadProvisioningSourceChains(
 	ctx context.Context,
-	graph GraphReader,
-	content *ContentReader,
+	graph GraphQuery,
+	content ContentStore,
 	serviceRepoID string,
 ) ([]map[string]any, error) {
 	return loadProvisioningSourceChainsWithLimit(ctx, graph, content, serviceRepoID, 0)
@@ -38,8 +38,8 @@ func loadProvisioningSourceChains(
 
 func loadProvisioningSourceChainsWithLimit(
 	ctx context.Context,
-	graph GraphReader,
-	content *ContentReader,
+	graph GraphQuery,
+	content ContentStore,
 	serviceRepoID string,
 	limit int,
 ) ([]map[string]any, error) {
@@ -92,8 +92,8 @@ func loadProvisioningSourceChainsWithLimit(
 
 func loadConsumerRepositoryEnrichment(
 	ctx context.Context,
-	graph GraphReader,
-	content *ContentReader,
+	graph GraphQuery,
+	content ContentStore,
 	serviceRepoID string,
 	serviceName string,
 	hostnames []string,
@@ -111,8 +111,8 @@ func loadConsumerRepositoryEnrichment(
 
 func loadConsumerRepositoryEnrichmentWithLimit(
 	ctx context.Context,
-	graph GraphReader,
-	content *ContentReader,
+	graph GraphQuery,
+	content ContentStore,
 	serviceRepoID string,
 	serviceName string,
 	hostnames []string,
@@ -125,7 +125,7 @@ func loadConsumerRepositoryEnrichmentWithLimit(
 
 	trimmedHostnames := normalizedIndirectEvidenceHostnames(hostnames)
 	if limit > 0 {
-		trimmedHostnames = boundedIndirectEvidenceHostnames(trimmedHostnames)
+		trimmedHostnames = boundedIndirectEvidenceHostnamesForService(trimmedHostnames, serviceName)
 		if len(trimmedHostnames) > limit {
 			trimmedHostnames = trimmedHostnames[:limit]
 		}
@@ -188,7 +188,7 @@ func loadConsumerRepositoryEnrichmentWithLimit(
 
 func backfillConsumerRepositoryDisplayNames(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	consumersByRepo map[string]map[string]any,
 ) error {
 	if graph == nil || len(consumersByRepo) == 0 {
@@ -226,7 +226,7 @@ func backfillConsumerRepositoryDisplayNames(
 
 func queryProvisioningRepositoryCandidates(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	serviceRepoID string,
 	limit int,
 ) ([]provisioningRepositoryCandidate, error) {
@@ -235,7 +235,7 @@ func queryProvisioningRepositoryCandidates(
 	}
 
 	query := `
-		MATCH (target:Repository {id: $repo_id})<-[rel:PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN]-(repo:Repository)
+		MATCH (target:Repository {id: $repo_id})<-[rel:PROVISIONS_DEPENDENCY_FOR|DEPLOYS_FROM|USES_MODULE|DISCOVERS_CONFIG_IN|READS_CONFIG_FROM]-(repo:Repository)
 		RETURN repo.id AS repo_id,
 		       repo.name AS repo_name,
 		       type(rel) AS relationship_type,
@@ -312,162 +312,14 @@ func collectProvisioningChainEvidence(entities []EntityContent) traceEvidenceAcc
 				if targetName != "" {
 					evidence.configPaths[targetName] = struct{}{}
 				}
+			case "READS_CONFIG_FROM":
+				if targetName != "" {
+					evidence.configPaths[targetName] = struct{}{}
+				}
 			}
 		}
 	}
 	return evidence
-}
-
-func searchConsumerEvidenceAnyRepo(
-	ctx context.Context,
-	content *ContentReader,
-	serviceRepoID string,
-	serviceName string,
-	hostnames []string,
-	limit int,
-) (map[string]traceEvidenceAccumulator, error) {
-	evidenceByRepo := map[string]traceEvidenceAccumulator{}
-	if content == nil {
-		return evidenceByRepo, nil
-	}
-	if limit <= 0 {
-		limit = defaultIndirectEvidenceSearchLimit
-	}
-
-	if serviceName = strings.TrimSpace(serviceName); serviceName != "" {
-		rows, err := content.SearchFileContentAnyRepo(ctx, serviceName, limit)
-		if err != nil {
-			return evidenceByRepo, fmt.Errorf("search consumer evidence for service name: %w", err)
-		}
-		collectSearchRowsByRepo(evidenceByRepo, rows, serviceRepoID, "repository_reference", serviceName)
-	}
-	for _, hostname := range hostnames {
-		rows, err := content.SearchFileContentAnyRepo(ctx, hostname, limit)
-		if err != nil {
-			return evidenceByRepo, fmt.Errorf("search consumer evidence for hostname %q: %w", hostname, err)
-		}
-		collectSearchRowsByRepo(evidenceByRepo, rows, serviceRepoID, "hostname_reference", hostname)
-	}
-	return evidenceByRepo, nil
-}
-
-func collectSearchRowsByRepo(
-	evidenceByRepo map[string]traceEvidenceAccumulator,
-	rows []FileContent,
-	serviceRepoID string,
-	evidenceKind string,
-	matchedValue string,
-) {
-	if len(rows) == 0 {
-		return
-	}
-	for _, row := range rows {
-		repoID := strings.TrimSpace(row.RepoID)
-		if repoID == "" || repoID == strings.TrimSpace(serviceRepoID) {
-			continue
-		}
-		evidence, ok := evidenceByRepo[repoID]
-		if !ok {
-			evidence = newTraceEvidenceAccumulator()
-		}
-		evidence.evidenceKinds[evidenceKind] = struct{}{}
-		if matchedValue != "" {
-			evidence.matchedValues[matchedValue] = struct{}{}
-		}
-		if relativePath := strings.TrimSpace(row.RelativePath); relativePath != "" {
-			evidence.samplePaths[relativePath] = struct{}{}
-		}
-		evidenceByRepo[repoID] = evidence
-	}
-}
-
-func appendConsumerEvidence(entry map[string]any, evidence traceEvidenceAccumulator) {
-	evidenceKinds := sortedAccumulatorValues(evidence.evidenceKinds)
-	if len(evidenceKinds) > 0 {
-		entry["evidence_kinds"] = evidenceKinds
-	}
-	matchedValues := sortedAccumulatorValues(evidence.matchedValues)
-	if len(matchedValues) > 0 {
-		entry["matched_values"] = matchedValues
-	}
-	samplePaths := sortedAccumulatorValues(evidence.samplePaths)
-	if len(samplePaths) > 0 {
-		entry["sample_paths"] = samplePaths
-	}
-
-	consumerKinds := StringSliceVal(entry, "consumer_kinds")
-	if containsString(evidenceKinds, "repository_reference") {
-		appendUniqueString(&consumerKinds, "service_reference_consumer")
-	}
-	if containsString(evidenceKinds, "hostname_reference") {
-		appendUniqueString(&consumerKinds, "hostname_reference_consumer")
-	}
-	sort.Strings(consumerKinds)
-	entry["consumer_kinds"] = consumerKinds
-}
-
-func consumerRepositorySortScore(entry map[string]any) int {
-	score := 0
-	for _, kind := range StringSliceVal(entry, "consumer_kinds") {
-		switch kind {
-		case "graph_provisioning_consumer":
-			score += 100
-		case "service_reference_consumer", "hostname_reference_consumer":
-			score += 15
-		default:
-			score += 5
-		}
-	}
-	score += len(StringSliceVal(entry, "graph_relationship_types")) * 10
-	score += len(StringSliceVal(entry, "evidence_kinds")) * 5
-	score += len(StringSliceVal(entry, "matched_values")) * 3
-	score += len(StringSliceVal(entry, "sample_paths"))
-	return score
-}
-
-func newTraceEvidenceAccumulator() traceEvidenceAccumulator {
-	return traceEvidenceAccumulator{
-		samplePaths:   map[string]struct{}{},
-		evidenceKinds: map[string]struct{}{},
-		modules:       map[string]struct{}{},
-		configPaths:   map[string]struct{}{},
-		matchedValues: map[string]struct{}{},
-	}
-}
-
-func sortedAccumulatorValues(values map[string]struct{}) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	items := make([]string, 0, len(values))
-	for value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			items = append(items, trimmed)
-		}
-	}
-	sort.Strings(items)
-	return items
-}
-
-func appendUniqueString(values *[]string, candidate string) {
-	if candidate = strings.TrimSpace(candidate); candidate == "" {
-		return
-	}
-	for _, existing := range *values {
-		if existing == candidate {
-			return
-		}
-	}
-	*values = append(*values, candidate)
-}
-
-func containsString(values []string, candidate string) bool {
-	for _, value := range values {
-		if value == candidate {
-			return true
-		}
-	}
-	return false
 }
 
 func boundedTraceEnrichmentLimit(maxDepth int) int {
@@ -518,17 +370,21 @@ func buildStorySections(platforms, platformKinds, environments []string) []map[s
 	return sections
 }
 
-func buildGitOpsOverview(platforms, platformKinds []string) map[string]any {
-	enabled := false
-	for _, kind := range platformKinds {
-		if kind == "argocd_application" || kind == "argocd_applicationset" {
-			enabled = true
-			break
-		}
+func buildGitOpsOverview(
+	platforms []string,
+	platformKinds []string,
+	deploymentSources []map[string]any,
+	deploymentEvidence map[string]any,
+	controllerEntities []map[string]any,
+) map[string]any {
+	toolFamilies := deploymentTraceGitOpsToolFamilies(platformKinds, deploymentSources, deploymentEvidence, controllerEntities)
+	enabled := len(toolFamilies) > 0
+	if len(toolFamilies) == 0 {
+		toolFamilies = platformKinds
 	}
 	return map[string]any{
 		"enabled":          enabled,
-		"tool_families":    platformKinds,
+		"tool_families":    toolFamilies,
 		"observed_targets": platforms,
 	}
 }
@@ -546,25 +402,27 @@ func buildDeploymentFacts(
 ) []map[string]any {
 	facts := make([]map[string]any, 0, len(instances)*2+len(deploymentSources))
 	for _, instance := range instances {
-		platform := StringVal(instance, "platform_name")
-		if platform == "" {
-			continue
+		for _, platform := range platformTargets(instance) {
+			platformName := StringVal(platform, "platform_name")
+			if platformName == "" {
+				continue
+			}
+			fact := map[string]any{
+				"type":   "RUNS_ON_PLATFORM",
+				"target": platformName,
+				"confidence": firstPositiveFloat(
+					floatVal(platform, "platform_confidence"),
+					floatVal(instance, "materialization_confidence"),
+				),
+			}
+			if kind := StringVal(platform, "platform_kind"); kind != "" {
+				fact["kind"] = kind
+			}
+			if reason := StringVal(platform, "platform_reason"); reason != "" {
+				fact["reason"] = reason
+			}
+			facts = append(facts, fact)
 		}
-		fact := map[string]any{
-			"type":   "RUNS_ON_PLATFORM",
-			"target": platform,
-			"confidence": firstPositiveFloat(
-				floatVal(instance, "platform_confidence"),
-				floatVal(instance, "materialization_confidence"),
-			),
-		}
-		if kind := StringVal(instance, "platform_kind"); kind != "" {
-			fact["kind"] = kind
-		}
-		if reason := StringVal(instance, "platform_reason"); reason != "" {
-			fact["reason"] = reason
-		}
-		facts = append(facts, fact)
 	}
 	for _, environment := range distinctSortedInstanceField(instances, "environment") {
 		facts = append(facts, map[string]any{
@@ -615,21 +473,104 @@ func firstPositiveFloat(candidates ...float64) float64 {
 	return 0
 }
 
-func buildControllerDrivenPaths(platforms, platformKinds []string) []map[string]any {
-	paths := make([]map[string]any, 0, max(len(platforms), len(platformKinds)))
-	limit := max(len(platforms), len(platformKinds))
-	for i := range limit {
-		path := map[string]any{}
-		if i < len(platformKinds) && platformKinds[i] != "" {
-			path["controller_kind"] = platformKinds[i]
+func buildControllerDrivenPaths(instances []map[string]any) []map[string]any {
+	seen := make(map[string]struct{}, len(instances))
+	paths := make([]map[string]any, 0, len(instances))
+	for _, instance := range instances {
+		for _, platform := range platformTargets(instance) {
+			platformName := StringVal(platform, "platform_name")
+			platformKind := StringVal(platform, "platform_kind")
+			if platformName == "" && platformKind == "" {
+				continue
+			}
+			key := platformName + "|" + platformKind
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			path := map[string]any{}
+			if platformKind != "" {
+				path["controller_kind"] = platformKind
+			}
+			if platformName != "" {
+				path["observed_target"] = platformName
+			}
+			paths = append(paths, path)
 		}
-		if i < len(platforms) && platforms[i] != "" {
-			path["observed_target"] = platforms[i]
-		}
-		if len(path) == 0 {
-			continue
-		}
-		paths = append(paths, path)
 	}
+	sortDeploymentTraceMaps(paths)
 	return paths
+}
+
+// deploymentTraceGitOpsToolFamilies returns GitOps tool families backed by
+// controller entities, platform kinds, or relationship evidence.
+func deploymentTraceGitOpsToolFamilies(
+	platformKinds []string,
+	deploymentSources []map[string]any,
+	deploymentEvidence map[string]any,
+	controllerEntities []map[string]any,
+) []string {
+	families := deploymentTraceEvidenceControllerFamilies(deploymentSources, deploymentEvidence, controllerEntities)
+	for _, kind := range platformKinds {
+		switch strings.TrimSpace(strings.ToLower(kind)) {
+		case "argocd", "argocd_application", "argocd_applicationset":
+			families = append(families, "argocd")
+		case "flux", "flux_kustomization", "flux_helmrelease":
+			families = append(families, "flux")
+		}
+	}
+	return uniqueSortedStrings(families)
+}
+
+// deploymentTraceEvidenceControllerFamilies lifts controller families out of
+// provenance evidence so read surfaces do not lose GitOps truth when runtime
+// platform kinds are generic values like kubernetes or ecs.
+func deploymentTraceEvidenceControllerFamilies(
+	deploymentSources []map[string]any,
+	deploymentEvidence map[string]any,
+	controllerEntities []map[string]any,
+) []string {
+	families := make([]string, 0, len(controllerEntities)+len(deploymentSources))
+	for _, entity := range controllerEntities {
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(entity, "controller_kind")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(entity, "entity_type")))
+	}
+	for _, source := range deploymentSources {
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(source, "reason")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(source, "evidence_type")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(source, "evidence_kind")))
+	}
+	for _, family := range stringSliceMapValue(deploymentEvidence, "tool_families") {
+		families = append(families, deploymentTraceControllerFamilyFromText(family))
+	}
+	for _, artifact := range mapSliceValue(deploymentEvidence, "artifacts") {
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(artifact, "family")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(artifact, "tool_family")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(artifact, "evidence_type")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(artifact, "evidence_kind")))
+		for _, kind := range StringSliceVal(artifact, "evidence_kinds") {
+			families = append(families, deploymentTraceControllerFamilyFromText(kind))
+		}
+	}
+	for _, path := range mapSliceValue(deploymentEvidence, "delivery_paths") {
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(path, "family")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(path, "tool_family")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(path, "kind")))
+		families = append(families, deploymentTraceControllerFamilyFromText(StringVal(path, "evidence_type")))
+	}
+	return uniqueSortedStrings(families)
+}
+
+func deploymentTraceControllerFamilyFromText(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch {
+	case normalized == "":
+		return ""
+	case strings.Contains(normalized, "argocd"):
+		return "argocd"
+	case strings.Contains(normalized, "flux"):
+		return "flux"
+	default:
+		return ""
+	}
 }

@@ -319,12 +319,13 @@ func buildResolvedEdgeIntentRows(
 	rows := make([]SharedProjectionIntentRow, 0, len(resolved))
 	routeCounts := make(map[string]int)
 
-	for _, r := range resolved {
+	for i, r := range resolved {
 		row, routeType, ok := buildResolvedEdgeIntentRow(
 			r,
 			scopeID,
 			sourceRunID,
 			generationID,
+			i,
 			now,
 		)
 		if !ok {
@@ -342,6 +343,7 @@ func buildResolvedEdgeIntentRow(
 	scopeID string,
 	sourceRunID string,
 	generationID string,
+	ordinal int,
 	createdAt time.Time,
 ) (SharedProjectionIntentRow, string, bool) {
 	if r.SourceRepoID == "" {
@@ -351,12 +353,19 @@ func buildResolvedEdgeIntentRow(
 	payload := map[string]any{
 		"repo_id":           r.SourceRepoID,
 		"evidence_source":   crossRepoEvidenceSource,
+		"resolved_id":       relationships.ResolvedRelationshipID(generationID, r, ordinal),
+		"generation_id":     generationID,
 		"confidence":        r.Confidence,
 		"evidence_count":    r.EvidenceCount,
+		"evidence_kinds":    toStringSlice(r.Details["evidence_kinds"]),
+		"rationale":         r.Rationale,
 		"resolution_source": string(r.ResolutionSource),
 	}
 	if evidenceType := resolvedRelationshipEvidenceType(r); evidenceType != "" {
 		payload["evidence_type"] = evidenceType
+	}
+	if artifacts := resolvedRelationshipEvidenceArtifacts(r); len(artifacts) > 0 {
+		payload["evidence_artifacts"] = artifacts
 	}
 
 	partitionKey := ""

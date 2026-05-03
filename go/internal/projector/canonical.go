@@ -7,19 +7,20 @@ package projector
 // repository projection. Built from the same facts that produce content store
 // writes. Written to Neo4j in strict phase order by CanonicalNodeWriter.
 type CanonicalMaterialization struct {
-	ScopeID      string
-	GenerationID string
-	RepoID       string
-	RepoPath     string // repository path used as Directory chain root
-	Repository   *RepositoryRow
-	Directories  []DirectoryRow
-	Files        []FileRow
-	Entities     []EntityRow
-	Modules      []ModuleRow
-	Imports      []ImportRow
-	Parameters   []ParameterRow
-	ClassMembers []ClassMemberRow
-	NestedFuncs  []NestedFunctionRow
+	ScopeID         string
+	GenerationID    string
+	RepoID          string
+	RepoPath        string // repository path used as Directory chain root
+	FirstGeneration bool   // true when the scope has no prior active generation
+	Repository      *RepositoryRow
+	Directories     []DirectoryRow
+	Files           []FileRow
+	Entities        []EntityRow
+	Modules         []ModuleRow
+	Imports         []ImportRow
+	Parameters      []ParameterRow
+	ClassMembers    []ClassMemberRow
+	NestedFuncs     []NestedFunctionRow
 }
 
 // IsEmpty reports whether the materialization carries no projectable data.
@@ -122,23 +123,26 @@ type NestedFunctionRow struct {
 // support in graph/schema.go, either a constraint or an intentional index.
 var entityTypeLabelMap = map[string]string{
 	// Code entities
-	"function":   "Function",
-	"class":      "Class",
-	"interface":  "Interface",
-	"variable":   "Variable",
-	"trait":      "Trait",
-	"struct":     "Struct",
-	"enum":       "Enum",
-	"macro":      "Macro",
-	"union":      "Union",
-	"record":     "Record",
-	"property":   "Property",
-	"module":     "Module",
-	"parameter":  "Parameter",
-	"annotation": "Annotation",
-	"typedef":    "Typedef",
-	"type_alias": "TypeAlias",
-	"component":  "Component",
+	"function":                "Function",
+	"class":                   "Class",
+	"interface":               "Interface",
+	"variable":                "Variable",
+	"trait":                   "Trait",
+	"struct":                  "Struct",
+	"enum":                    "Enum",
+	"macro":                   "Macro",
+	"union":                   "Union",
+	"record":                  "Record",
+	"property":                "Property",
+	"module":                  "Module",
+	"parameter":               "Parameter",
+	"annotation":              "Annotation",
+	"typedef":                 "Typedef",
+	"type_alias":              "TypeAlias",
+	"component":               "Component",
+	"impl_block":              "ImplBlock",
+	"protocol":                "Protocol",
+	"protocol_implementation": "ProtocolImplementation",
 
 	// Infrastructure entities
 	"k8s_resource":           "K8sResource",

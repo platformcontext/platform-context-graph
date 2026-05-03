@@ -385,6 +385,32 @@ components:
           type: string
         oldest_age_seconds:
           type: number
+    QueueBlockage:
+      type: object
+      additionalProperties: false
+      required:
+        - stage
+        - domain
+        - conflict_domain
+        - conflict_key
+        - blocked
+        - oldest_age
+        - oldest_age_seconds
+      properties:
+        stage:
+          type: string
+        domain:
+          type: string
+        conflict_domain:
+          type: string
+        conflict_key:
+          type: string
+        blocked:
+          type: integer
+        oldest_age:
+          type: string
+        oldest_age_seconds:
+          type: number
     StatusReport:
       type: object
       additionalProperties: false
@@ -401,6 +427,7 @@ components:
         - generations
         - stages
         - domains
+        - queue_blockages
       properties:
         as_of:
           type: string
@@ -441,3 +468,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DomainBacklog"
+        queue_blockages:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueBlockage"

@@ -1,6 +1,8 @@
 package query
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -122,25 +124,36 @@ func TestFetchDeploymentSourcesDedupesCanonicalAndRepositoryOverlap(t *testing.T
 func TestFetchServiceTraceContextAcceptsQualifiedWorkloadID(t *testing.T) {
 	t.Parallel()
 
+	seenBroadServiceLookup := false
 	ctx, err := fetchServiceTraceContext(
 		t.Context(),
 		fakeWorkloadGraphReader{
-			runSingleByMatch: map[string]map[string]any{
-				"w.name = $service_name OR w.id = $service_name": {
-					"id":        "workload:service-edge-api",
-					"name":      "service-edge-api",
-					"kind":      "service",
-					"repo_id":   "repo-service-edge-api",
-					"repo_name": "service-edge-api",
-					"instances": []any{
-						map[string]any{
-							"instance_id":   "instance:service-edge-api:modern",
-							"platform_name": "modern-cluster",
-							"platform_kind": "kubernetes",
-							"environment":   "modern",
+			runSingle: func(ctx context.Context, cypher string, params map[string]any) (map[string]any, error) {
+				if strings.Contains(cypher, " OR ") {
+					seenBroadServiceLookup = true
+					return nil, errors.New("broad service lookup should not run")
+				}
+				if strings.Contains(cypher, "w.name = $service_name") {
+					return nil, nil
+				}
+				if strings.Contains(cypher, "w.id = $service_name") {
+					return map[string]any{
+						"id":        "workload:service-edge-api",
+						"name":      "service-edge-api",
+						"kind":      "service",
+						"repo_id":   "repo-service-edge-api",
+						"repo_name": "service-edge-api",
+						"instances": []any{
+							map[string]any{
+								"instance_id":   "instance:service-edge-api:modern",
+								"platform_name": "modern-cluster",
+								"platform_kind": "kubernetes",
+								"environment":   "modern",
+							},
 						},
-					},
-				},
+					}, nil
+				}
+				return nil, nil
 			},
 			runByMatch: map[string][]map[string]any{
 				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {},
@@ -149,17 +162,99 @@ func TestFetchServiceTraceContextAcceptsQualifiedWorkloadID(t *testing.T) {
 			},
 		},
 		nil,
+		nil,
 		"workload:service-edge-api",
 		traceEnrichmentOptions(traceDeploymentChainRequest{ServiceName: "workload:service-edge-api"}),
 	)
 	if err != nil {
 		t.Fatalf("fetchServiceTraceContext() error = %v, want nil", err)
 	}
+	if seenBroadServiceLookup {
+		t.Fatal("fetchServiceTraceContext used broad service OR lookup")
+	}
 	if got, want := safeStr(ctx, "id"), "workload:service-edge-api"; got != want {
 		t.Fatalf("context.id = %#v, want %#v", got, want)
 	}
 	if got, want := safeStr(ctx, "name"), "service-edge-api"; got != want {
 		t.Fatalf("context.name = %#v, want %#v", got, want)
+	}
+}
+
+func TestFetchServiceTraceContextIncludesGraphDeploymentEvidenceWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	ctx, err := fetchServiceTraceContext(
+		t.Context(),
+		fakeWorkloadGraphReader{
+			runSingleByMatch: map[string]map[string]any{
+				"w.name = $service_name": {
+					"id":        "workload:checkout-service",
+					"name":      "checkout-service",
+					"kind":      "service",
+					"repo_id":   "repo-service",
+					"repo_name": "checkout-service",
+					"instances": []any{},
+				},
+			},
+			runByMatch: map[string][]map[string]any{
+				"DEPENDS_ON|USES_MODULE|DEPLOYS_FROM": {},
+				"K8sResource OR":                      {},
+				"fn.name IN":                          {},
+				"EVIDENCES_REPOSITORY_RELATIONSHIP]->(r:Repository": {
+					{
+						"direction":         "incoming",
+						"artifact_id":       "evidence-artifact:kustomize:1",
+						"name":              "apps/checkout/kustomization.yaml",
+						"domain":            "deployment",
+						"path":              "apps/checkout/kustomization.yaml",
+						"evidence_kind":     "KUSTOMIZE_RESOURCE_REFERENCE",
+						"artifact_family":   "kustomize",
+						"extractor":         "kustomize",
+						"relationship_type": "DEPLOYS_FROM",
+						"resolved_id":       "resolved-kustomize",
+						"generation_id":     "gen-deploy",
+						"confidence":        0.9,
+						"environment":       "prod",
+						"matched_alias":     "checkout-service",
+						"matched_value":     "checkout-service",
+						"evidence_source":   "resolver/cross-repo",
+						"source_repo_id":    "repo-deploy",
+						"source_repo_name":  "deployment-configs",
+						"target_repo_id":    "repo-service",
+						"target_repo_name":  "checkout-service",
+					},
+				},
+				"(r:Repository {id: $repo_id})-[source_rel:HAS_DEPLOYMENT_EVIDENCE]->": {},
+			},
+		},
+		nil,
+		nil,
+		"checkout-service",
+		traceEnrichmentOptions(traceDeploymentChainRequest{ServiceName: "checkout-service"}),
+	)
+	if err != nil {
+		t.Fatalf("fetchServiceTraceContext() error = %v, want nil", err)
+	}
+
+	evidence := mapValue(ctx, "deployment_evidence")
+	if len(evidence) == 0 {
+		t.Fatal("deployment_evidence = nil, want graph-backed deployment evidence")
+	}
+	if got, want := evidence["truth_basis"], "graph"; got != want {
+		t.Fatalf("deployment_evidence.truth_basis = %#v, want %#v", got, want)
+	}
+	if got, want := evidence["artifact_count"], 1; got != want {
+		t.Fatalf("deployment_evidence.artifact_count = %#v, want %#v", got, want)
+	}
+
+	response := buildDeploymentTraceResponse("checkout-service", ctx)
+	traceEvidence := mapValue(response, "deployment_evidence")
+	if got, want := traceEvidence["artifact_count"], 1; got != want {
+		t.Fatalf("trace deployment_evidence.artifact_count = %#v, want %#v", got, want)
+	}
+	deploymentOverview := mapValue(response, "deployment_overview")
+	if !slices.Contains(stringSliceValue(deploymentOverview, "deployment_tool_families"), "kustomize") {
+		t.Fatalf("deployment_overview.deployment_tool_families = %#v, want kustomize", deploymentOverview["deployment_tool_families"])
 	}
 }
 
@@ -423,6 +518,42 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	}
 }
 
+func TestBuildDeploymentFactsIncludesEveryRuntimePlatformTarget(t *testing.T) {
+	t.Parallel()
+
+	facts := buildDeploymentFacts([]map[string]any{
+		{
+			"instance_id":                "instance:sample-service:production",
+			"environment":                "production",
+			"materialization_confidence": 0.92,
+			"platforms": []map[string]any{
+				{
+					"platform_name":       "production-eks",
+					"platform_kind":       "kubernetes",
+					"platform_confidence": 0.95,
+				},
+				{
+					"platform_name":       "production-ecs",
+					"platform_kind":       "ecs",
+					"platform_confidence": 0.91,
+				},
+			},
+		},
+	}, nil)
+
+	targets := map[string]bool{}
+	for _, fact := range facts {
+		if StringVal(fact, "type") == "RUNS_ON_PLATFORM" {
+			targets[StringVal(fact, "target")] = true
+		}
+	}
+	for _, want := range []string{"production-ecs", "production-eks"} {
+		if !targets[want] {
+			t.Fatalf("RUNS_ON_PLATFORM targets = %#v, want %q", targets, want)
+		}
+	}
+}
+
 func TestBuildDeploymentTraceResponseUsesCanonicalServiceNameAndDrilldowns(t *testing.T) {
 	t.Parallel()
 
@@ -486,7 +617,7 @@ func TestTraceEnrichmentOptionsHonorsRelatedModuleUsageFlag(t *testing.T) {
 func TestBoundedIndirectEvidenceHostnamesTrimsDeduplicatesAndCaps(t *testing.T) {
 	t.Parallel()
 
-	got := boundedIndirectEvidenceHostnames([]string{
+	got := boundedIndirectEvidenceHostnamesForService([]string{
 		"",
 		"api.qa.example.test",
 		" api.qa.example.test ",
@@ -494,7 +625,7 @@ func TestBoundedIndirectEvidenceHostnamesTrimsDeduplicatesAndCaps(t *testing.T) 
 		"api.stage.example.test",
 		"api.dev.example.test",
 		"api.extra.example.test",
-	})
+	}, "")
 
 	want := []string{
 		"api.dev.example.test",
@@ -503,7 +634,27 @@ func TestBoundedIndirectEvidenceHostnamesTrimsDeduplicatesAndCaps(t *testing.T) 
 		"api.stage.example.test",
 	}
 	if !slices.Equal(got, want) {
-		t.Fatalf("boundedIndirectEvidenceHostnames() = %#v, want %#v", got, want)
+		t.Fatalf("boundedIndirectEvidenceHostnamesForService() = %#v, want %#v", got, want)
+	}
+}
+
+func TestBoundedIndirectEvidenceHostnamesPrefersServiceOwnedHosts(t *testing.T) {
+	t.Parallel()
+
+	got := boundedIndirectEvidenceHostnamesForService([]string{
+		"api.vendor.example.test",
+		"docs.vendor.example.test",
+		"checkout.qa.example.test",
+		"metrics.vendor.example.test",
+		"checkout.prod.example.test",
+	}, "sample-checkout-api")
+
+	want := []string{
+		"checkout.prod.example.test",
+		"checkout.qa.example.test",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("boundedIndirectEvidenceHostnamesForService() = %#v, want %#v", got, want)
 	}
 }
 
@@ -671,6 +822,93 @@ func TestBuildDeploymentTraceResponseIncludesServiceEvidenceConsumersAndProvisio
 	}
 	if _, ok := got["support_overview"]; !ok {
 		t.Fatal("support_overview missing, want service support summary")
+	}
+}
+
+func TestBuildDeploymentTraceResponseRecognizesGitOpsFromReadModelEvidence(t *testing.T) {
+	t.Parallel()
+
+	ctx := map[string]any{
+		"id":        "workload:sample-service-api",
+		"name":      "sample-service-api",
+		"kind":      "service",
+		"repo_id":   "repo-sample-service-api",
+		"repo_name": "sample-service-api",
+		"instances": []map[string]any{
+			{
+				"instance_id":   "workload-instance:sample-service-api:prod",
+				"platform_name": "prod",
+				"platform_kind": "kubernetes",
+				"environment":   "prod",
+				"platforms": []map[string]any{
+					{
+						"platform_name": "prod",
+						"platform_kind": "kubernetes",
+					},
+					{
+						"platform_name": "runtime-ecs",
+						"platform_kind": "ecs",
+					},
+				},
+			},
+		},
+		"deployment_sources": []map[string]any{
+			{
+				"repo_id":    "repo-gitops",
+				"repo_name":  "delivery-gitops",
+				"confidence": 0.99,
+				"reason":     "argocd_applicationset_deploy_source",
+			},
+		},
+		"deployment_evidence": map[string]any{
+			"tool_families": []string{"argocd", "github_actions", "helm", "kustomize"},
+			"artifacts": []map[string]any{
+				{
+					"family":        "argocd",
+					"evidence_type": "argocd_applicationset_deploy_source",
+					"resolved_id":   "resolved-gitops",
+				},
+			},
+		},
+	}
+
+	got := buildDeploymentTraceResponse("sample-service-api", ctx)
+
+	gitopsOverview, ok := got["gitops_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("gitops_overview type = %T, want map[string]any", got["gitops_overview"])
+	}
+	if gitopsOverview["enabled"] != true {
+		t.Fatalf("gitops_overview.enabled = %#v, want true", gitopsOverview["enabled"])
+	}
+	if !slices.Contains(StringSliceVal(gitopsOverview, "tool_families"), "argocd") {
+		t.Fatalf("gitops_overview.tool_families = %#v, want argocd", gitopsOverview["tool_families"])
+	}
+
+	controllerOverview, ok := got["controller_overview"].(map[string]any)
+	if !ok {
+		t.Fatalf("controller_overview type = %T, want map[string]any", got["controller_overview"])
+	}
+	if !slices.Contains(StringSliceVal(controllerOverview, "controller_kinds"), "argocd") {
+		t.Fatalf("controller_overview.controller_kinds = %#v, want argocd", controllerOverview["controller_kinds"])
+	}
+
+	controllerDrivenPaths, ok := got["controller_driven_paths"].([]map[string]any)
+	if !ok {
+		t.Fatalf("controller_driven_paths type = %T, want []map[string]any", got["controller_driven_paths"])
+	}
+	if len(controllerDrivenPaths) != 2 {
+		t.Fatalf("len(controller_driven_paths) = %d, want 2", len(controllerDrivenPaths))
+	}
+	pathsByTarget := make(map[string]map[string]any, len(controllerDrivenPaths))
+	for _, path := range controllerDrivenPaths {
+		pathsByTarget[StringVal(path, "observed_target")] = path
+	}
+	if gotKind, wantKind := StringVal(pathsByTarget["prod"], "controller_kind"), "kubernetes"; gotKind != wantKind {
+		t.Fatalf("controller_driven_paths[prod].controller_kind = %q, want %q", gotKind, wantKind)
+	}
+	if gotKind, wantKind := StringVal(pathsByTarget["runtime-ecs"], "controller_kind"), "ecs"; gotKind != wantKind {
+		t.Fatalf("controller_driven_paths[runtime-ecs].controller_kind = %q, want %q", gotKind, wantKind)
 	}
 }
 

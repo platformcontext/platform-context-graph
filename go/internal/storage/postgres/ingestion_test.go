@@ -1,9 +1,11 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +83,65 @@ func TestIngestionStoreCommitScopeGenerationPersistsProjectionInput(t *testing.T
 	}
 	if got, want := db.tx.execs[3].args[3], "source_local"; got != want {
 		t.Fatalf("projector domain arg = %v, want %v", got, want)
+	}
+}
+
+func TestIngestionStoreCommitScopeGenerationLogsCommitStages(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC)
+	db := &fakeTransactionalDB{tx: &fakeTx{}}
+	var logs bytes.Buffer
+	store := NewIngestionStore(db)
+	store.Now = func() time.Time { return now }
+	store.SkipRelationshipBackfill = true
+	store.Logger = slog.New(slog.NewJSONHandler(&logs, nil))
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+	}
+	generation := scope.ScopeGeneration{
+		GenerationID: "generation-456",
+		ScopeID:      "scope-123",
+		ObservedAt:   time.Date(2026, time.April, 12, 11, 59, 0, 0, time.UTC),
+		IngestedAt:   now,
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+	envelopes := []facts.Envelope{{
+		FactID:        "fact-1",
+		ScopeID:       "scope-123",
+		GenerationID:  "generation-456",
+		FactKind:      "repository",
+		StableFactKey: "repository:repo-123",
+		ObservedAt:    generation.ObservedAt,
+		Payload:       map[string]any{"graph_id": "repo-123"},
+		SourceRef: facts.Ref{
+			SourceSystem: "git",
+			FactKey:      "fact-key",
+		},
+	}}
+
+	if err := store.CommitScopeGeneration(context.Background(), scopeValue, generation, testFactChannel(envelopes)); err != nil {
+		t.Fatalf("CommitScopeGeneration() error = %v, want nil", err)
+	}
+
+	output := logs.String()
+	for _, want := range []string{
+		`"msg":"ingestion commit stage completed"`,
+		`"stage":"begin_transaction"`,
+		`"stage":"upsert_facts"`,
+		`"fact_count":1`,
+		`"batch_count":1`,
+		`"stage":"commit_transaction"`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("commit stage logs missing %s:\n%s", want, output)
+		}
 	}
 }
 
@@ -358,6 +419,65 @@ func TestIngestionStoreBackfillAllRelationshipEvidenceSkipsUnknownTargetGenerati
 	}
 	if !foundPhasePublish {
 		t.Fatal("expected backward evidence readiness publish")
+	}
+}
+
+func TestIngestionStoreBackfillAllRelationshipEvidencePersistsBySourceGeneration(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 18, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{
+				rows: [][]any{
+					{[]byte(`{"repo_id":"repo-infra","name":"infra-repo"}`)},
+					{[]byte(`{"repo_id":"repo-app","name":"app-repo"}`)},
+				},
+			},
+			{
+				rows: [][]any{
+					{"repo-infra", "scope-infra", "gen-infra"},
+					{"repo-app", "scope-app", "gen-app"},
+				},
+			},
+			{
+				rows: [][]any{
+					{
+						"fact-1",
+						"scope-infra",
+						"gen-infra",
+						"content",
+						"content:1",
+						"git",
+						"source-fact-1",
+						"",
+						"",
+						now,
+						false,
+						[]byte(`{"repo_id":"repo-infra","artifact_type":"terraform","relative_path":"main.tf","content":"app_repo = \"app-repo\""}`),
+					},
+				},
+			},
+		},
+	}
+	store := NewIngestionStore(db)
+	store.Now = func() time.Time { return now }
+
+	if err := store.BackfillAllRelationshipEvidence(context.Background(), nil, nil); err != nil {
+		t.Fatalf("BackfillAllRelationshipEvidence() error = %v, want nil", err)
+	}
+
+	var evidenceInserts []fakeExecCall
+	for _, execCall := range db.execs {
+		if strings.Contains(execCall.query, "INSERT INTO relationship_evidence_facts") {
+			evidenceInserts = append(evidenceInserts, execCall)
+		}
+	}
+	if len(evidenceInserts) != 1 {
+		t.Fatalf("relationship evidence inserts = %d, want 1", len(evidenceInserts))
+	}
+	if got, want := evidenceInserts[0].args[1], "gen-infra"; got != want {
+		t.Fatalf("evidence generation_id = %v, want source generation %q", got, want)
 	}
 }
 

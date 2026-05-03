@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -31,8 +32,13 @@ type Runtime struct {
 	PhasePublisher  reducer.GraphProjectionPhasePublisher
 	RepairQueue     reducer.GraphProjectionPhaseRepairQueue
 	RetryInjector   RetryInjector
-	Tracer          trace.Tracer           // optional
-	Instruments     *telemetry.Instruments // optional
+	// ContentBeforeCanonical writes the content index before graph projection.
+	// This is reserved for local profiles that must keep code search usable
+	// while an evaluation graph backend is degraded.
+	ContentBeforeCanonical bool
+	Tracer                 trace.Tracer           // optional
+	Instruments            *telemetry.Instruments // optional
+	Logger                 *slog.Logger           // optional
 }
 
 type ReducerIntent struct {
@@ -96,6 +102,12 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 			attribute.String("stage", "build_projection"),
 		))
 	}
+	r.logRuntimeStage(ctx, scopeValue, generation.GenerationID, "build_projection", buildStart,
+		"fact_count", len(inputFacts),
+		"content_record_count", len(projection.contentMaterialization.Records),
+		"content_entity_count", len(projection.contentMaterialization.Entities),
+		"reducer_intent_count", len(projection.reducerIntents),
+	)
 
 	result := Result{
 		ScopeID:      scopeValue.ScopeID,
@@ -108,58 +120,23 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 		}
 	}
 
-	// Stage: Canonical graph projection (replaces SourceLocalRecord)
-	if !projection.canonical.IsEmpty() {
-		if r.CanonicalWriter == nil {
-			return Result{}, errors.New("canonical writer is required when canonical data is present")
+	if r.ContentBeforeCanonical {
+		contentResult, err := r.writeContentProjection(ctx, scopeValue, projection.contentMaterialization)
+		if err != nil {
+			return Result{}, err
 		}
-
-		canonicalStart := time.Now()
-		if r.Tracer != nil {
-			var canonicalSpan trace.Span
-			ctx, canonicalSpan = r.Tracer.Start(ctx, telemetry.SpanCanonicalProjection)
-			defer canonicalSpan.End()
-		}
-
-		if err := r.CanonicalWriter.Write(ctx, projection.canonical); err != nil {
-			return Result{}, fmt.Errorf("write canonical projection: %w", err)
-		}
-		if err := r.publishCanonicalGraphPhases(ctx, generation.GenerationID, inputFacts); err != nil {
-			return Result{}, fmt.Errorf("publish canonical graph phases: %w", err)
-		}
-
-		if r.Instruments != nil {
-			canonicalDur := time.Since(canonicalStart).Seconds()
-			r.Instruments.CanonicalProjectionDuration.Record(ctx, canonicalDur, metric.WithAttributes(
-				telemetry.AttrScopeID(scopeValue.ScopeID),
-			))
-			r.Instruments.CanonicalWrites.Add(ctx, 1, metric.WithAttributes(
-				telemetry.AttrScopeID(scopeValue.ScopeID),
-			))
-			r.Instruments.ProjectorStageDuration.Record(ctx, canonicalDur, metric.WithAttributes(
-				telemetry.AttrScopeID(scopeValue.ScopeID),
-				attribute.String("stage", "canonical_write"),
-			))
-		}
+		result.Content = contentResult
 	}
 
-	if len(projection.contentMaterialization.Records) > 0 || len(projection.contentMaterialization.Entities) > 0 {
-		if r.ContentWriter == nil {
-			return Result{}, errors.New("content writer is required when content rows are present")
-		}
+	if err := r.writeCanonicalProjection(ctx, scopeValue, generation.GenerationID, inputFacts, projection.canonical); err != nil {
+		return Result{}, err
+	}
 
-		contentStart := time.Now()
-		contentResult, err := r.ContentWriter.Write(ctx, projection.contentMaterialization)
+	if !r.ContentBeforeCanonical {
+		contentResult, err := r.writeContentProjection(ctx, scopeValue, projection.contentMaterialization)
 		if err != nil {
-			return Result{}, fmt.Errorf("write content materialization: %w", err)
+			return Result{}, err
 		}
-		if r.Instruments != nil {
-			r.Instruments.ProjectorStageDuration.Record(ctx, time.Since(contentStart).Seconds(), metric.WithAttributes(
-				telemetry.AttrScopeID(scopeValue.ScopeID),
-				attribute.String("stage", "content_write"),
-			))
-		}
-
 		result.Content = contentResult
 	}
 
@@ -190,6 +167,10 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 				telemetry.AttrScopeID(scopeValue.ScopeID),
 			))
 		}
+		r.logRuntimeStage(ctx, scopeValue, generation.GenerationID, "intent_enqueue", enqueueStart,
+			"reducer_intent_count", len(projection.reducerIntents),
+			"enqueued_count", intentResult.Count,
+		)
 
 		result.Intents = intentResult
 	}
@@ -256,6 +237,37 @@ func canonicalGraphPhaseStates(generationID string, inputFacts []facts.Envelope)
 	}
 
 	return rows
+}
+
+// logRuntimeStage records human-readable stage timings that mirror the
+// low-cardinality projector metrics. Dogfood runs rely on these logs to split
+// source-local time between build, graph, content-store, and intent enqueue
+// work without requiring an OTEL backend.
+func (r Runtime) logRuntimeStage(
+	ctx context.Context,
+	scopeValue scope.IngestionScope,
+	generationID string,
+	stage string,
+	start time.Time,
+	attrs ...any,
+) {
+	if r.Logger == nil {
+		return
+	}
+
+	scopeAttrs := telemetry.ScopeAttrs(scopeValue.ScopeID, generationID, scopeValue.SourceSystem)
+	logAttrs := make([]any, 0, len(scopeAttrs)+len(attrs)+3)
+	for _, attr := range scopeAttrs {
+		logAttrs = append(logAttrs, attr)
+	}
+	logAttrs = append(logAttrs,
+		slog.String("stage", stage),
+		slog.Float64("duration_seconds", time.Since(start).Seconds()),
+		telemetry.PhaseAttr(telemetry.PhaseProjection),
+	)
+	logAttrs = append(logAttrs, attrs...)
+
+	r.Logger.InfoContext(ctx, "projector runtime stage completed", logAttrs...)
 }
 
 type projection struct {

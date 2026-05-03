@@ -53,6 +53,23 @@ func TestResolveRouteMapsQualifiedServiceIDToServicePath(t *testing.T) {
 	}
 }
 
+func TestResolveRouteMapsRelationshipEvidenceToDrilldownPath(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("get_relationship_evidence", map[string]any{
+		"resolved_id": "resolved/example id",
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if got, want := route.method, "GET"; got != want {
+		t.Fatalf("route.method = %q, want %q", got, want)
+	}
+	if got, want := route.path, "/api/v0/evidence/relationships/resolved%2Fexample%20id"; got != want {
+		t.Fatalf("route.path = %q, want %q", got, want)
+	}
+}
+
 func TestResolveRouteMapsSearchFileContentPatternAndRepoIDs(t *testing.T) {
 	t.Parallel()
 
@@ -199,6 +216,76 @@ func TestResolveRouteMapsAnalyzeCodeRelationshipsCallers(t *testing.T) {
 	}
 }
 
+func TestResolveRouteMapsAnalyzeCodeRelationshipsAllCallers(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("analyze_code_relationships", map[string]any{
+		"query_type": "find_all_callers",
+		"target":     "helper",
+		"context":    "7",
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if route.path != "/api/v0/code/relationships" {
+		t.Fatalf("route.path = %q, want /api/v0/code/relationships", route.path)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["name"], "helper"; got != want {
+		t.Fatalf("body[name] = %#v, want %#v", got, want)
+	}
+	if got, want := body["direction"], "incoming"; got != want {
+		t.Fatalf("body[direction] = %#v, want %#v", got, want)
+	}
+	if got, want := body["relationship_type"], "CALLS"; got != want {
+		t.Fatalf("body[relationship_type] = %#v, want %#v", got, want)
+	}
+	if got, want := body["transitive"], true; got != want {
+		t.Fatalf("body[transitive] = %#v, want %#v", got, want)
+	}
+	if got, want := body["max_depth"], 7; got != want {
+		t.Fatalf("body[max_depth] = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveRouteMapsAnalyzeCodeRelationshipsAllCallees(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("analyze_code_relationships", map[string]any{
+		"query_type": "find_all_callees",
+		"target":     "wrapper",
+		"context":    "6",
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if route.path != "/api/v0/code/relationships" {
+		t.Fatalf("route.path = %q, want /api/v0/code/relationships", route.path)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["name"], "wrapper"; got != want {
+		t.Fatalf("body[name] = %#v, want %#v", got, want)
+	}
+	if got, want := body["direction"], "outgoing"; got != want {
+		t.Fatalf("body[direction] = %#v, want %#v", got, want)
+	}
+	if got, want := body["relationship_type"], "CALLS"; got != want {
+		t.Fatalf("body[relationship_type] = %#v, want %#v", got, want)
+	}
+	if got, want := body["transitive"], true; got != want {
+		t.Fatalf("body[transitive] = %#v, want %#v", got, want)
+	}
+	if got, want := body["max_depth"], 6; got != want {
+		t.Fatalf("body[max_depth] = %#v, want %#v", got, want)
+	}
+}
+
 func TestResolveRouteMapsAnalyzeCodeRelationshipsImporters(t *testing.T) {
 	t.Parallel()
 
@@ -280,6 +367,7 @@ func TestResolveRouteMapsFindDeadCodeExclusions(t *testing.T) {
 
 	route, err := resolveRoute("find_dead_code", map[string]any{
 		"repo_id":                "repo-1",
+		"limit":                  float64(25),
 		"exclude_decorated_with": []any{"@route", "@app.route"},
 	})
 	if err != nil {
@@ -295,12 +383,77 @@ func TestResolveRouteMapsFindDeadCodeExclusions(t *testing.T) {
 	if got, want := body["repo_id"], "repo-1"; got != want {
 		t.Fatalf("body[repo_id] = %#v, want %#v", got, want)
 	}
+	if got, want := body["limit"], 25; got != want {
+		t.Fatalf("body[limit] = %#v, want %#v", got, want)
+	}
 	exclusions, ok := body["exclude_decorated_with"].([]any)
 	if !ok {
 		t.Fatalf("body[exclude_decorated_with] type = %T, want []any", body["exclude_decorated_with"])
 	}
 	if len(exclusions) != 2 {
 		t.Fatalf("len(body[exclude_decorated_with]) = %d, want 2", len(exclusions))
+	}
+}
+
+func TestResolveRouteMapsFindDeadIaC(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("find_dead_iac", map[string]any{
+		"repo_ids":          []any{"terraform-stack", "terraform-modules"},
+		"families":          []any{"terraform"},
+		"include_ambiguous": true,
+		"limit":             float64(25),
+		"offset":            float64(50),
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if route.path != "/api/v0/iac/dead" {
+		t.Fatalf("route.path = %q, want /api/v0/iac/dead", route.path)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["limit"], 25; got != want {
+		t.Fatalf("body[limit] = %#v, want %#v", got, want)
+	}
+	if got, want := body["offset"], 50; got != want {
+		t.Fatalf("body[offset] = %#v, want %#v", got, want)
+	}
+	if got, want := body["include_ambiguous"], true; got != want {
+		t.Fatalf("body[include_ambiguous] = %#v, want %#v", got, want)
+	}
+	repoIDs := body["repo_ids"].([]any)
+	if len(repoIDs) != 2 {
+		t.Fatalf("len(repo_ids) = %d, want 2", len(repoIDs))
+	}
+	families := body["families"].([]any)
+	if len(families) != 1 || families[0] != "terraform" {
+		t.Fatalf("families = %#v, want terraform", families)
+	}
+}
+
+func TestResolveRouteMapsAnalyzeDeadCodeLimit(t *testing.T) {
+	t.Parallel()
+
+	route, err := resolveRoute("analyze_code_relationships", map[string]any{
+		"query_type": "dead_code",
+		"repo_id":    "repo-1",
+		"limit":      12,
+	})
+	if err != nil {
+		t.Fatalf("resolveRoute() error = %v, want nil", err)
+	}
+	if route.path != "/api/v0/code/dead-code" {
+		t.Fatalf("route.path = %q, want /api/v0/code/dead-code", route.path)
+	}
+	body, ok := route.body.(map[string]any)
+	if !ok {
+		t.Fatalf("route.body type = %T, want map[string]any", route.body)
+	}
+	if got, want := body["limit"], 12; got != want {
+		t.Fatalf("body[limit] = %#v, want %#v", got, want)
 	}
 }
 

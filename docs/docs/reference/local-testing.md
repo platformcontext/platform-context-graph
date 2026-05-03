@@ -67,6 +67,96 @@ absolute path to a real directory.
 - If you copied repositories for Compose testing, copy them into a real
   directory under your home folder and point `PCG_FILESYSTEM_HOST_ROOT` there.
 
+## Repo-Local Discovery Rules
+
+Some legacy or CMS repositories check in third-party source under authored
+paths, for example WordPress plugins or framework libraries outside `vendor/`.
+Do not lower graph-write timeouts or global batch sizes just because one such
+repo is noisy. First add a narrow repo-local `.pcg/discovery.json` map and
+rerun the focused lane:
+
+```json
+{
+  "ignored_path_globs": [
+    {"path": "src/wp-content/plugins/wordpress-seo/**", "reason": "wordpress-seo"}
+  ],
+  "preserved_path_globs": [
+    {"path": "src/wp-content/plugins/custom-authored/**"}
+  ]
+}
+```
+
+Discovery reports these as `dirs_skipped.user.<reason>` in logs and
+`skip_reason=user:<reason>` in metrics. Broad roots such as
+`wp-content/plugins/**` are safe only when `preserved_path_globs` keeps authored
+subtrees. PCG still accepts `.pcg/vendor-roots.json` with `vendor_roots` and
+`keep_roots` for older repo configs.
+
+When a repo is noisy but the right exclusion is not obvious, run a focused
+index with a discovery advisory report before changing defaults:
+
+```bash
+pcg index /path/to/repo --discovery-report /tmp/pcg-discovery-advisory.json
+```
+
+The report is a JSON array with one advisory per collected repository. Each
+advisory includes a `schema_version` field so scripts can detect future shape
+changes. It captures discovered, parsed, skipped, and materialized counts; top
+noisy directories/files by content-entity count; entity counts by type/language;
+and skip breakdowns. Treat it as local diagnostic evidence for
+`.pcg/discovery.json` or `.pcgignore`, not as a stable API contract.
+
+For focused performance proofs where modifying the source repo is not
+appropriate, the collector runtimes also accept a process-local overlay:
+
+```bash
+export PCG_DISCOVERY_IGNORED_PATH_GLOBS='generated/**=generated-template'
+export PCG_DISCOVERY_PRESERVED_PATH_GLOBS='generated/handwritten/**'
+```
+
+Use this only as an evidence-gathering or deployment-owned override. Prefer a
+repo-local `.pcg/discovery.json` once the rule is proven and should travel with
+the source.
+
+### Discovery Advisory Playbook
+
+Use this loop when a repo is slow, timeout-heavy, or unexpectedly large.
+
+1. Capture evidence before changing defaults:
+
+    ```bash
+    pcg index /path/to/repo --discovery-report /tmp/pcg-discovery-before.json
+    ```
+
+2. Inspect the advisory for the same repo. Start with `summary.content_files`,
+   `summary.content_entities`, `top_noisy_directories`, `top_noisy_files`,
+   `entity_counts.by_type`, and `skip_breakdown`.
+
+3. Choose the narrowest config. Use `.pcg/discovery.json` for
+   vendored/generated/archive roots where the reason should be auditable through
+   `user:<reason>` skip telemetry. Use `preserved_path_globs` when a broad
+   ignored root may contain authored code. Use `.pcgignore` only when a plain
+   silent ignore is enough. Do not change graph-write timeouts or global
+   NornicDB batch sizes until the report proves the input shape is already
+   correct.
+
+4. Rerun with a second report:
+
+    ```bash
+    pcg index /path/to/repo --discovery-report /tmp/pcg-discovery-after.json
+    ```
+
+5. Accept the config only when the after-report shows the intended skip reason
+   and the repo became cheaper for the intended reason. Compare
+   `summary.content_files`, `summary.content_entities`,
+   `skip_breakdown.dirs_by_user`, `skip_breakdown.files_by_user`, and queue
+   health / latest failure from the runtime status panel when running
+   `local_authoritative`.
+
+Commit `.pcg/discovery.json` with the repo when the rule represents stable repo
+knowledge, such as archived site copies or checked-in third-party browser
+libraries.
+
 ## Quick Verification Matrix
 
 | If you touched | Minimum verification |
@@ -77,8 +167,11 @@ absolute path to a real directory.
 | Parser platform or collector snapshot flow | `cd go && go test ./internal/parser ./internal/collector/discovery ./internal/collector -count=1` |
 | Terraform provider-schema evidence or relationship extraction | `cd go && go test ./internal/terraformschema ./internal/relationships ./internal/storage/postgres -count=1` |
 | Compose, Helm, or deployable runtime shape | `cd go && go test ./cmd/api ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer -count=1` and `helm lint deploy/helm/platform-context-graph` |
+| Product-truth fixture registry or expected feature ownership | `./scripts/verify_product_truth_fixtures.sh` |
 | Correlation DSL fixture corpus or compose verification lane | `./scripts/verify_correlation_dsl_compose.sh` |
+| Graph-backed call-chain, caller/callee, or dead-code compose contract | `./scripts/verify_graph_analysis_compose.sh` |
 | Facts-first indexing, queue, or resolution flow | `cd go && go test ./internal/projector ./internal/reducer ./internal/storage/postgres -count=1` |
+| Local-authoritative graph backend or MCP local coding flow | `cd go && go test ./cmd/ingester ./internal/projector ./internal/storage/neo4j -count=1`; then run the manual NornicDB MCP smoke below if a local NornicDB binary is available |
 | Queue ack visibility or lease diagnosis | `cd go && go test ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry -count=1` and `cd go && go vet ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry` |
 | Recovery, replay, or repair controls | `cd go && go test ./internal/recovery ./internal/runtime ./internal/status -count=1` |
 | Facts-first telemetry or queue scaling | `cd go && go test ./internal/telemetry ./internal/runtime ./internal/projector ./internal/reducer -count=1` |
@@ -112,6 +205,439 @@ go test ./internal/parser ./internal/collector/discovery ./internal/content/shap
   ./internal/storage/neo4j ./internal/storage/postgres \
   ./internal/projector ./internal/reducer ./cmd/reducer -count=1
 ```
+
+## Local-Authoritative MCP Smoke
+
+Use this smoke when touching the NornicDB sidecar, graph-backend selection,
+projector stage ordering, or local MCP code-search behavior. It requires a
+local NornicDB binary such as `/tmp/nornicdb-headless`.
+For the consolidated list of NornicDB environment variables and when to use
+each one, see [NornicDB Tuning](nornicdb-tuning.md).
+
+Until `https://github.com/orneryd/NornicDB/pull/120` is merged, released, and
+published as a pinned PCG install asset, use a headless binary built from the
+combined `#119 + #120` evaluation branch for repo-scale `local_authoritative`
+dogfood and graph-query validation. PR `#119` is already merged; PR `#120`
+adds Bolt transient conflict mapping, shares the transaction-clone node-lookup
+cache lock, and keeps PCG's named-relationship entity-containment shape on
+NornicDB's generalized `UNWIND/MATCH/MERGE` hot path.
+On the remote 16-vCPU dogfood host, the current validated binary path is:
+
+```bash
+export PCG_NORNICDB_BINARY=/home/ubuntu/os-repos/NornicDB/bin/nornicdb-headless-pcg-119-120-combined
+```
+
+Before every local-authoritative dogfood run, rebuild the owner and child
+binaries and put `go/bin` on `PATH`; otherwise `pcg graph start` can launch a
+fresh owner from current source but fail when it tries to discover
+`pcg-reducer` or `pcg-ingester`.
+
+```bash
+cd go
+go build -o ./bin/pcg ./cmd/pcg
+go build -o ./bin/pcg-api ./cmd/api
+go build -o ./bin/pcg-ingester ./cmd/ingester
+go build -o ./bin/pcg-reducer ./cmd/reducer
+export PATH="$PWD/bin:$PATH"
+```
+
+On a local workstation, rebuild from the combined branch with the no-local-LLM tags
+before setting `PCG_NORNICDB_BINARY`:
+
+```bash
+cd /Users/allen/os-repos/NornicDB
+git switch pcg-119-120-combined
+go build -tags 'noui nolocalllm' -o ./bin/nornicdb-headless-pcg-119-120-combined ./cmd/nornicdb
+export PCG_NORNICDB_BINARY=/Users/allen/os-repos/NornicDB/bin/nornicdb-headless-pcg-119-120-combined
+```
+
+```bash
+export PCG_HOME=/tmp/pcg-local-authoritative-smoke
+export PCG_CANONICAL_WRITE_TIMEOUT=2s
+export PCG_NORNICDB_PHASE_GROUP_STATEMENTS=500
+export PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS=5
+export PCG_NORNICDB_FILE_BATCH_SIZE=100
+export PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS=25
+export PCG_NORNICDB_ENTITY_BATCH_SIZE=100
+export PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=100,K8sResource=1
+export PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=1
+export PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Annotation=5,Function=10,Variable=10,Module=10,ImplBlock=10,TypeAlias=5,TypeAnnotation=50
+./go/bin/pcg install nornicdb --from /tmp/nornicdb-headless
+./go/bin/pcg graph start --workspace-root "$PWD"
+./go/bin/pcg mcp start --workspace-root "$PWD"
+```
+
+`pcg graph start` applies both local Postgres schema and the NornicDB graph
+schema before it publishes the owner record or starts reducer/ingester
+children. This ordering is required for NornicDB's schema-backed `MERGE` hot
+paths; if the graph schema bootstrap fails, do not continue into projection.
+
+`pcg graph start` now renders a live terminal progress panel while the local
+host indexes and projects: owner/profile/backend header, collector/projector/
+reducer flow lanes, and queue pressure from the shared status store. Treat
+that panel as truthful runtime status, not as a percentage-complete contract.
+For first-generation scopes, canonical graph projection skips stale-generation
+retraction because no prior generation exists yet; refresh runs and follow-up
+generations after a failed first attempt still perform scoped retraction before
+upserting the new generation.
+On NornicDB `local_authoritative` runs, reducer claims intentionally wait while
+source-local projector work is still outstanding. The status panel can therefore
+show reducer backlog while projector lanes are active; that is expected and
+prevents first-generation canonical writes and reducer graph writes from
+contending on the embedded graph sidecar.
+After the same drain condition is met, the local host materializes IaC
+reachability rows so `POST /api/v0/iac/dead` can return
+`analysis_status=materialized_reachability` instead of the bounded derived
+fallback for supported IaC families.
+
+From an MCP client, call:
+
+- `search_file_content` with a symbol or unique string from the repo
+- `find_code` with the same symbol
+- `get_index_status`
+
+The smoke passes when content-index-backed tools return real repo results with
+`truth.profile=local_authoritative` and `truth.basis=content_index`, even if
+`get_index_status` reports degraded graph projection while NornicDB remains
+under evaluation. Always finish with `pcg graph stop --workspace-root "$PWD"`
+and verify `pcg graph status` reports `owner_present=false`.
+
+Do not set `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` for this everyday MCP
+smoke. That switch is reserved for adapter conformance runs that intentionally
+exercise NornicDB's Bolt explicit transaction path and verify rollback,
+timeout, and no-partial-write behavior. If repo-scale projection is the thing
+you are validating, tune `PCG_NORNICDB_PHASE_GROUP_STATEMENTS` before you reach
+for grouped conformance mode so the everyday local-authoritative path stays the
+thing under test. Use `PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS` when the
+repo-scale hotspot is specifically the canonical `entities` phase and you need
+smaller entity-only grouped transactions without shrinking every other phase.
+Use `PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS` when the hotspot is the
+canonical `files` phase on repos with thousands of files; this narrows only
+file-upsert grouped transactions and leaves repository, directory, module, and
+structural-edge phases on the broader phase-group default.
+Use `PCG_NORNICDB_FILE_BATCH_SIZE` when a file-phase group is already narrow
+but one `File` upsert statement still carries too many rows. This controls the
+row count inside each `phase=files` statement, while
+`PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS` controls how many such statements
+share one grouped Bolt transaction.
+Use `PCG_NORNICDB_ENTITY_BATCH_SIZE` when the problem is the number of rows
+inside each normal batched entity upsert statement rather than the number of
+statements in a grouped transaction.
+The current NornicDB writer also keeps `Function` entity upserts on a narrower
+internal row batch than the broader entity default because repo-scale dogfood
+showed `Function` rows remain the heaviest entity shape on this repository.
+Use `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=100,K8sResource=1`
+when you need to tune specific heavy entity families without recompiling or
+lowering the row cap for the entire entity phase. `K8sResource` needs both a
+row cap and a grouped-statement cap: Helm/Kustomize manifests can contain many
+resources in one file, and full-corpus timing showed even five same-file rows
+can exceed the bounded write budget under concurrent K8s-heavy projection.
+If those row caps are already narrow but the grouped entity chunks are still
+too large, use
+`PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,K8sResource=1`
+to shrink only the grouped transaction size for those heavier families without
+forcing the same statement cap onto every other entity label.
+Reducer-owned semantic entity materialization has its own high-cardinality
+label caps because it runs after source-local canonical projection and writes
+parser-enriched semantic labels such as `Function` and `Variable`. Use
+`PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES=Annotation=5,Function=10,TypeAlias=5,TypeAnnotation=50,Variable=10`
+when that reducer domain times out. NornicDB semantic writes intentionally use
+a merge-first explicit row shape (`UNWIND ... MERGE node ... SET field
+assignments ... MATCH File ... MERGE CONTAINS`), because trace probes showed
+the earlier `MATCH File` before `MERGE node` row-map shape was indexed but
+missed NornicDB's generalized `UNWIND/MERGE` batch hot path. Timeout errors
+include the semantic label and row count that tripped the deadline.
+Semantic retract is a separate reducer-owned cleanup step. First-generation
+semantic materialization skips it entirely because there is no prior semantic
+graph state to clean up. Refreshes and retries still retract; Neo4j keeps the
+single broad multi-label retract, while NornicDB uses one label-scoped retract
+per semantic label because repo-scale timing showed the broad shape can scan
+and timeout even when the write rows are otherwise bounded.
+Use `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` only for the explicit
+`code call acceptance scan reached cap` or
+`code call acceptance intent scan reached cap` reducer failure. Code-call
+projection retracts repo-wide `CALLS` edges before rewriting the accepted
+repo/run, so the runner must load the whole acceptance unit rather than a
+partial page. Before raising the default `250000`, capture a
+`--discovery-report` and verify the extra code-call volume is authored source
+that should remain indexed; if the report points at generated bundles,
+archives, or vendored libraries, add `.pcg/discovery.json` rules instead.
+When you are tuning repo-scale entity projection, do not decide from one scary
+chunk log alone. NornicDB currently uses a file-scoped combined entity write
+because its current binary does not correctly preserve row-bound identity in
+the standalone node-only batch shape. Backends that support that node-only
+shape can still split entity node upsert from `phase=entity_containment`. If
+you are testing a patched NornicDB binary with row-safe `SET += row.props`
+support in the generalized `UNWIND/MERGE` hot path and unique-constraint-backed
+`MERGE` lookup, set `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` to try the
+faster MERGE-first combined shape that batches entity rows across files. Leave
+that switch off for the pinned release-backed binary.
+Normal one-row file-scoped entity batches still use the `UNWIND $rows` shape;
+only rows containing the known NornicDB `shortestPath` / `allShortestPaths`
+parser hazard use the execute-only singleton fallback. If a run shows many
+`singleton_parameterized containment=inline` lines for ordinary symbols, treat
+that as a writer regression before changing batch-size or timeout knobs.
+Use the emitted `nornicdb entity label summary` lines to compare cumulative
+rows, statements, executions, grouped chunks, and total/max duration per
+`phase` and label before changing another default. Long-running labels emit
+rolling summaries every 10 executions and a final summary at label completion,
+so you do not need to wait for an hour-scale phase to finish before you can
+see whether the cumulative cost is node row width, containment edges, grouped
+transaction size, or label ordering.
+For `pcg watch` / `pcg graph start` dogfood, judge completion from the status
+panel queue drain, not from the ingester process exiting. In watch mode the
+owner may keep `pcg-ingester` alive to observe future changes after the first
+batch is fully indexed. A clean first-generation run is the status snapshot
+that shows `Queue: pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`
+with projector and reducer successes, followed by an explicit
+`pcg graph stop --workspace-root <repo>` when the experiment is complete.
+Content-aware discovery skips generated JavaScript bundles before parsing.
+Large Webpack, Rollup, esbuild, and Parcel bundles are reported as
+`files_skipped.content.generated-webpack`, `files_skipped.content.generated-rollup`,
+`files_skipped.content.generated-esbuild`, or
+`files_skipped.content.generated-parcel`. Treat those counters as source-shape
+evidence before tuning NornicDB row caps: generated bundles can emit tens of
+thousands of low-value symbols while authored source files remain indexed.
+Legacy vendored-library filters also emit content skip counters such as
+`files_skipped.content.vendored-zend-framework`,
+`files_skipped.content.vendored-browser-library`,
+`files_skipped.content.vendored-fpdf`, and
+`files_skipped.content.vendored-pear`.
+If a run is still progressing linearly after schema-backed `MERGE` lookup is
+confirmed, stop treating batch size as the only control knob. Use a
+pprof-enabled NornicDB binary with `NORNICDB_ENABLE_PPROF=true` and capture CPU
+and heap profiles during the hot label before changing another default.
+
+### Local-Authoritative Resource Monitoring
+
+Before another full-corpus NornicDB burn, rerun the representative 20-repo lane
+with queue, CPU, process, and disk samples captured every 30 seconds:
+
+```bash
+scripts/monitor_local_authoritative_run.sh \
+  --run-dir /home/ubuntu/pcg-remote-runs/subset-20-<timestamp> \
+  --interval 30 \
+  > /home/ubuntu/pcg-remote-runs/subset-20-<timestamp>/resource-monitor.log
+```
+
+If the run directory contains the local owner record, the monitor discovers the
+embedded Postgres port automatically. Otherwise pass
+`--postgres-dsn postgresql://pcg:change-me@127.0.0.1:<port>/postgres?sslmode=disable`.
+
+Treat low CPU and idle disk while the queue still has only a few in-flight
+graph writes as contention evidence, not as a reason to blindly lower batch
+caps or worker count. Reducer claims now use durable conflict-domain keys:
+code-graph reducer domains for a repo serialize with one another, platform
+graph reducer domains for that repo serialize with one another, and unrelated
+families can still run concurrently after source-local projection drains. If a
+tail persists with that routing enabled, the next design step is exact
+semantic/relationship Cypher shape analysis or a NornicDB hot-path patch.
+Capture the monitor log beside `graph-start.log` so the ADR can tie queue
+state, slow statement summaries, process utilization, and disk pressure to the
+same timestamps.
+
+For a slow single-repo run, also inspect `collector snapshot stage completed`
+records before designing new worker topology. Those records split the
+ingester front-half into `discovery`, `pre_scan`, `parse`, and `materialize`.
+If those stages are the long pole, tune or redesign the repo snapshot pipeline;
+if they are small and queue age grows later, focus on fact commit,
+source-local projection, reducer conflict domains, or graph Cypher shape.
+Repository-bounded pre-scan now uses the configured parser worker count and
+logs `pre_scan_workers`, so compare `pre_scan` and `parse` durations before
+raising `PCG_PARSE_WORKERS` or proposing a deeper chunked-generation workflow.
+If the snapshot front-half is no longer dominant, inspect
+`ingestion commit stage completed`, `projector work stage completed`, and
+`projector runtime stage completed` records next. They split Postgres fact
+commit, fact reload, canonical graph write, content-store write, and reducer
+intent enqueue so the next optimization targets the actual long pole.
+
+### Local-Authoritative Startup Envelope Smoke
+
+Use this gate when touching local-host startup ordering, embedded Postgres
+boot, NornicDB sidecar boot, or owner-record readiness for
+`local_authoritative`.
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeStartupEnvelope -count=1 -v
+```
+
+The smoke passes when:
+
+- the first startup reaches the owner-record plus ingester handoff in under
+  15 seconds
+- the second startup against the same workspace data root reaches the same
+  readiness point in under 5 seconds
+- the owner record proves `profile=local_authoritative` and
+  `graph_backend=nornicdb` before the ingester is launched
+
+Recorded sample on 2026-04-23 against the pinned bare-install binary at
+`/tmp/pcg-bare-install-smoke/bin/nornicdb-headless`:
+
+- cold start: `9.045253708s`
+- warm restart: `490.996625ms`
+
+### Local-Authoritative Call-Chain Query Perf Smoke
+
+Use this gate when touching graph-backed call-chain analysis, NornicDB query
+compatibility routing, or the `local_authoritative` call-chain handler path.
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeCallChainSyntheticEnvelope -count=1 -v
+```
+
+The smoke passes when:
+
+- the real `local_authoritative` host boots successfully
+- the synthetic four-function `CALLS` chain is written through the shared Bolt
+  driver path
+- `/api/v0/code/call-chain` returns non-empty path nodes with
+  `truth.profile=local_authoritative` and
+  `truth.basis=authoritative_graph`
+- the synthetic call-chain p95 remains under 2 seconds
+
+Recorded sample on 2026-04-23 against the pinned bare-install binary at
+`/tmp/pcg-bare-install-smoke/bin/nornicdb-headless`:
+
+- synthetic call-chain p95: `736.25µs`
+
+This gate is intentionally narrower than the full active-repo performance
+envelope. It proves the backend-routed NornicDB call-chain query shape and
+live handler path before broader repo-scale perf work continues.
+
+### Local-Authoritative Transitive-Caller Query Perf Smoke
+
+Use this gate when touching graph-backed transitive callers/callees,
+NornicDB traversal compatibility routing, or the `local_authoritative`
+`/api/v0/code/relationships` handler path.
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeTransitiveCallersSyntheticEnvelope -count=1 -v
+```
+
+The smoke passes when:
+
+- the real `local_authoritative` host boots successfully
+- the synthetic four-function `CALLS` chain is written through the shared Bolt
+  driver path
+- `/api/v0/code/relationships` returns three indirect callers for the seeded
+  terminal function with `truth.capability=call_graph.transitive_callers`
+- the farthest synthetic caller is reported at depth `3`
+- the synthetic transitive-caller p95 remains under 2 seconds
+
+Recorded sample on 2026-04-23 against the pinned bare-install binary at
+`/tmp/pcg-bare-install-smoke/bin/nornicdb-headless`:
+
+- synthetic transitive-caller p95: `1.917916ms`
+
+### Local-Authoritative Dead-Code Query Perf Smoke
+
+Use this gate when touching graph-backed dead-code analysis, NornicDB
+candidate-query compatibility routing, or the `local_authoritative`
+`/api/v0/code/dead-code` handler path.
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
+PCG_LOCAL_AUTHORITATIVE_PERF=true \
+  go test ./cmd/pcg -run TestLocalAuthoritativeDeadCodeSyntheticEnvelope -count=1 -v
+```
+
+The smoke passes when:
+
+- the real `local_authoritative` host boots successfully
+- a synthetic repository/file/function containment graph is written through the
+  shared Bolt driver path
+- `/api/v0/code/dead-code` returns the two intentionally uncalled functions
+  with `truth.capability=code_quality.dead_code`
+- the synthetic dead-code p95 remains under 10 seconds
+
+Recorded sample on 2026-04-23 against the pinned bare-install binary at
+`/tmp/pcg-bare-install-smoke/bin/nornicdb-headless`:
+
+- synthetic dead-code p95: `3.174125ms`
+
+This gate is intentionally narrower than the full active-repo performance
+envelope. It proves the backend-routed NornicDB dead-code candidate query and
+derived-policy filter path before broader repo-scale perf work continues.
+
+## Compose Graph-Analysis Verification
+
+Use this gate when touching authoritative graph-backed code analysis that must
+work end to end through the full Compose stack.
+
+```bash
+./scripts/verify_graph_analysis_compose.sh
+```
+
+The wrapper starts a clean Compose stack against the dedicated
+`tests/fixtures/graph_analysis_compose` corpus and proves:
+
+- direct callers resolve from canonical `CALLS` edges
+- transitive callers return the expected depth-aware chain
+- call-chain path search returns the expected shortest path
+- dead-code analysis returns only the intentionally unused functions with
+  derived truth metadata
+- the canonical Neo4j graph contains the expected `CALLS` edges after the
+  fresh bootstrap run
+
+## Product-Truth Fixture Registry
+
+Use this gate when adding or changing a feature PCG claims as product truth
+across graph, evidence, API, MCP, CLI, or cleanup workflows:
+
+```bash
+./scripts/verify_product_truth_fixtures.sh
+```
+
+The registry lives under `tests/fixtures/product_truth/` and lists each owned
+fixture suite, the verifier that proves it, and the expected truth files that
+describe the product claim. The fast check is intentionally static: it verifies
+that owned capabilities have a fixture root, executable verifier, and expected
+truth contract before a slower Compose proof runs.
+
+Dead-IaC is tracked there as an owned runtime capability. The checked verifier
+copies fixture repos into a real Git corpus, runs the NornicDB-backed stack,
+and validates materialized Terraform module, Helm chart, Ansible role/playbook,
+Kustomize, and Docker Compose positive, negative, and ambiguous cases through
+API, MCP, and persisted reachability evidence.
+
+### NornicDB Grouped-Write Safety Probe
+
+Use this opt-in gate when touching NornicDB grouped canonical writes or the
+`PCG_NORNICDB_CANONICAL_GROUPED_WRITES` conformance switch:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
+  go test ./cmd/pcg -run TestNornicDBGroupedWriteSafetyProbe -count=1 -v
+```
+
+As of the 2026-04-23 evaluation, the probe proves these facts against the
+rebuilt linuxdynasty-fork headless binary
+`/tmp/nornicdb-headless-pcg-rollback` (`v1.0.42-hotfix`):
+
+- PCG canonical grouped writes can commit the basic repository/file/function
+  node shape.
+- Client-side grouped write timeout prevents the timeout probe from partially
+  committing.
+- Grouped rollback, clean explicit rollback, and failed-statement explicit
+  rollback all report marker count `0` on the PCG Neo4j-driver path.
+
+The promotion gate is intentionally stricter than the observable safety probe:
+
+```bash
+PCG_NORNICDB_BINARY=/tmp/nornicdb-headless-pcg-rollback \
+PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true \
+  go test ./cmd/pcg -run TestNornicDBGroupedWriteRollbackConformance -count=1 -v
+```
+
+Normal laptop runs still leave `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` unset
+until a fixed NornicDB binary is release-backed and the broader adapter matrix
+passes.
 
 ## Terraform Provider-Schema Gate
 
@@ -240,7 +766,10 @@ Set any variable to `1` to force sequential processing (useful for debugging).
 | --- | --- | --- | --- |
 | `PCG_PROJECTION_WORKERS` | `min(NumCPU, 8)` | Bootstrap-Index | Concurrent bootstrap projection goroutines |
 | `PCG_SNAPSHOT_WORKERS` | `min(NumCPU, 4)` | Ingester / Bootstrap | Concurrent repository snapshot goroutines |
-| `PCG_REDUCER_WORKERS` | 1 (sequential) | Reducer | Concurrent reducer intent execution goroutines |
+| `PCG_REDUCER_WORKERS` | Neo4j: `min(NumCPU, 4)`; NornicDB: `min(NumCPU, 8)` | Reducer | Concurrent reducer intent execution goroutines |
+| `PCG_REDUCER_BATCH_CLAIM_SIZE` | Neo4j: `workers * 4` capped at `64`; NornicDB: `workers` | Reducer | Reducer intents leased per claim cycle |
+| `PCG_REDUCER_SEMANTIC_ENTITY_CLAIM_LIMIT` | NornicDB: `1`; otherwise disabled | Reducer | Concurrent semantic entity materialization claims after source-local drain |
+| `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | `250000` | Reducer | Maximum code-call shared intents scanned or loaded for one accepted repo/run before failing safely instead of projecting partial CALLS truth |
 | `PCG_SHARED_PROJECTION_WORKERS` | 1 (sequential) | Reducer | Concurrent shared projection partition goroutines |
 | `PCG_SHARED_PROJECTION_PARTITION_COUNT` | 8 | Reducer | Number of partitions per shared projection domain |
 | `PCG_SHARED_PROJECTION_BATCH_LIMIT` | 100 | Reducer | Max intents processed per partition batch |
@@ -334,7 +863,18 @@ docker compose up --build
 To test against real Git repositories from a local directory, set
 `PCG_FILESYSTEM_HOST_ROOT` to an absolute path containing one or more
 cloned repositories. Each subdirectory with a `.git` folder is
-discovered automatically.
+discovered automatically. The collector prunes dependency and generated
+artifact directories such as `.git`, `node_modules`, `vendor`, and `.yarn`,
+plus Yarn Berry Plug'n'Play loader files such as `.pnp.cjs` and
+`.pnp.loader.mjs`, before parsing so checked-in package-manager bundles do not
+dominate the graph. It also prunes large Webpack, Rollup, esbuild, and Parcel
+bundles detected by content signature, because compiled `public/js/app.js`-style
+artifacts can produce tens of thousands of generated JavaScript variables while
+contributing little repo-authored code truth. Legacy repos that check
+third-party packages outside a conventional `vendor/` directory are also pruned
+for known library families such as Zend Framework,
+jQuery/Galleria/Shadowbox/Sizzle/SWFObject/JWPlayer/FilePond, FPDF, and PEAR
+packages such as Phing.
 
 ```bash
 PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos docker compose up --build
@@ -354,6 +894,17 @@ PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos \
   docker compose up --build
 ```
 
+Local full-stack runs now also cap the Neo4j Docker heap and page cache by
+default so single-repo dogfood runs do not depend on the container choosing an
+unbounded JVM profile. Override them when you need a larger local graph store:
+
+```bash
+PCG_NEO4J_HEAP_INITIAL_SIZE=768m \
+PCG_NEO4J_HEAP_MAX_SIZE=768m \
+PCG_NEO4J_PAGECACHE_SIZE=768m \
+docker compose up --build
+```
+
 **Important notes for real repo testing:**
 
 - The path must be a real directory (not a symlink). On macOS, `/tmp`
@@ -364,6 +915,10 @@ PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos \
   memory. The bootstrap-index process holds all parsed facts in memory
   during the commit phase. For large repo sets, use a machine with at
   least 16 GB of RAM allocated to Docker.
+- The Compose stack bounds Neo4j to `512m` heap and `512m` page cache by
+  default through `PCG_NEO4J_HEAP_INITIAL_SIZE`,
+  `PCG_NEO4J_HEAP_MAX_SIZE`, and `PCG_NEO4J_PAGECACHE_SIZE`. Increase them
+  explicitly if a larger real-repo graph run needs more headroom.
 - Symlinks inside repositories are skipped during the filesystem copy
   phase. This is intentional — symlinks cannot be reliably resolved
   inside the container.

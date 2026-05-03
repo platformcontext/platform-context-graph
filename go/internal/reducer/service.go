@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -33,6 +34,11 @@ type WorkSink interface {
 	Fail(context.Context, Intent, error) error
 }
 
+// WorkHeartbeater extends the claim on one long-running reducer intent.
+type WorkHeartbeater interface {
+	Heartbeat(context.Context, Intent) error
+}
+
 // BatchWorkSource claims up to N reducer intents in a single Postgres
 // round-trip. Implementations MUST use FOR UPDATE SKIP LOCKED semantics.
 type BatchWorkSource interface {
@@ -46,11 +52,13 @@ type BatchWorkSink interface {
 
 // Service coordinates reducer polling and one-intent-at-a-time execution.
 type Service struct {
-	PollInterval time.Duration
-	WorkSource   WorkSource
-	Executor     Executor
-	WorkSink     WorkSink
-	Wait         func(context.Context, time.Duration) error
+	PollInterval      time.Duration
+	WorkSource        WorkSource
+	Executor          Executor
+	WorkSink          WorkSink
+	Heartbeater       WorkHeartbeater
+	HeartbeatInterval time.Duration
+	Wait              func(context.Context, time.Duration) error
 
 	// SharedProjectionEdgeWriter is the Neo4j edge writer used by the shared
 	// projection worker loop (ProcessPartitionOnce). Nil until Neo4j is wired.
@@ -291,46 +299,9 @@ func (s Service) validate() error {
 	return nil
 }
 
-func (s Service) batchClaimSize() int {
-	if s.BatchClaimSize > 0 {
-		return s.BatchClaimSize
-	}
-	n := s.Workers * 4
-	if n > 64 {
-		n = 64
-	}
-	if n < 4 {
-		n = 4
-	}
-	return n
-}
-
-func (s Service) pollInterval() time.Duration {
-	if s.PollInterval <= 0 {
-		return defaultPollInterval
-	}
-
-	return s.PollInterval
-}
-
-func (s Service) wait(ctx context.Context, interval time.Duration) error {
-	if s.Wait != nil {
-		return s.Wait(ctx, interval)
-	}
-
-	timer := time.NewTimer(interval)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
 func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, workerID int) error {
 	start := time.Now()
+	queueWait := reducerQueueWaitSeconds(start, intent.AvailableAt)
 
 	if s.Tracer != nil {
 		var span trace.Span
@@ -338,13 +309,21 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 		defer span.End()
 	}
 
-	result, err := s.Executor.Execute(ctx, intent)
+	execCtx, stopHeartbeat := s.startHeartbeat(ctx, intent, workerID)
+	defer func() {
+		_ = stopHeartbeat()
+	}()
+
+	result, err := s.Executor.Execute(execCtx, intent)
 	duration := time.Since(start).Seconds()
 	status := "succeeded"
 
 	if err != nil {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+			err = errors.Join(err, heartbeatErr)
+		}
 		status = "failed"
-		s.recordReducerResult(ctx, intent, duration, status, workerID, err)
+		s.recordReducerResult(ctx, intent, duration, queueWait, status, workerID, err)
 		if failErr := s.WorkSink.Fail(ctx, intent, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail reducer work: %w", failErr))
 		}
@@ -355,16 +334,21 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, worker
 		status = "superseded"
 	}
 
+	if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+		s.recordReducerResult(ctx, intent, duration, queueWait, "ack_failed", workerID, heartbeatErr)
+		return fmt.Errorf("heartbeat reducer work: %w", heartbeatErr)
+	}
+
 	if err := s.WorkSink.Ack(ctx, intent, result); err != nil {
-		s.recordReducerResult(ctx, intent, duration, "ack_failed", workerID, err)
+		s.recordReducerResult(ctx, intent, duration, queueWait, "ack_failed", workerID, err)
 		return fmt.Errorf("ack reducer work: %w", err)
 	}
 
-	s.recordReducerResult(ctx, intent, duration, status, workerID, nil)
+	s.recordReducerResult(ctx, intent, duration, queueWait, status, workerID, nil)
 	return nil
 }
 
-func (s Service) recordReducerResult(ctx context.Context, intent Intent, duration float64, status string, workerID int, execErr error) {
+func (s Service) recordReducerResult(ctx context.Context, intent Intent, duration float64, queueWait float64, status string, workerID int, execErr error) {
 	if s.Instruments != nil {
 		attrs := metric.WithAttributes(
 			telemetry.AttrDomain(string(intent.Domain)),
@@ -372,6 +356,9 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 			attribute.String("status", status),
 		)
 		s.Instruments.ReducerRunDuration.Record(ctx, duration, metric.WithAttributes(
+			telemetry.AttrDomain(string(intent.Domain)),
+		))
+		s.Instruments.ReducerQueueWaitDuration.Record(ctx, queueWait, metric.WithAttributes(
 			telemetry.AttrDomain(string(intent.Domain)),
 		))
 		s.Instruments.ReducerExecutions.Add(ctx, 1, attrs)
@@ -391,6 +378,8 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 		logAttrs = append(logAttrs, slog.String("intent_id", intent.IntentID))
 		logAttrs = append(logAttrs, slog.String("status", status))
 		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
+		logAttrs = append(logAttrs, slog.Float64("handler_duration_seconds", duration))
+		logAttrs = append(logAttrs, slog.Float64("queue_wait_seconds", queueWait))
 		logAttrs = append(logAttrs, slog.Int("worker_id", workerID))
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseReduction))
 		switch status {
@@ -413,4 +402,69 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 			s.Logger.InfoContext(ctx, "reducer execution succeeded", logAttrs...)
 		}
 	}
+}
+
+type reducerHeartbeatStop func() error
+
+func (s Service) startHeartbeat(ctx context.Context, intent Intent, workerID int) (context.Context, reducerHeartbeatStop) {
+	if s.Heartbeater == nil || s.HeartbeatInterval <= 0 {
+		return ctx, func() error { return nil }
+	}
+
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		ticker := time.NewTicker(s.HeartbeatInterval)
+		defer ticker.Stop()
+
+		var heartbeatErr error
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				done <- heartbeatErr
+				return
+			case <-ticker.C:
+				if err := s.Heartbeater.Heartbeat(heartbeatCtx, intent); err != nil {
+					heartbeatErr = fmt.Errorf("heartbeat reducer work: %w", err)
+					if s.Logger != nil {
+						domainAttrs := telemetry.DomainAttrs(string(intent.Domain), firstReducerPartitionKey(intent))
+						logAttrs := make([]any, 0, len(domainAttrs)+5)
+						for _, a := range domainAttrs {
+							logAttrs = append(logAttrs, a)
+						}
+						logAttrs = append(logAttrs,
+							slog.String("queue", "reducer"),
+							slog.String("intent_id", intent.IntentID),
+							slog.Int("worker_id", workerID),
+							slog.Duration("heartbeat_interval", s.HeartbeatInterval),
+							telemetry.PhaseAttr(telemetry.PhaseReduction),
+							telemetry.FailureClassAttr("lease_heartbeat_failure"),
+							slog.String("error", heartbeatErr.Error()),
+						)
+						s.Logger.ErrorContext(heartbeatCtx, "reducer lease heartbeat failed", logAttrs...)
+					}
+					cancel()
+				}
+			}
+		}
+	}()
+
+	var once sync.Once
+	return heartbeatCtx, func() error {
+		var heartbeatErr error
+		once.Do(func() {
+			cancel()
+			heartbeatErr = <-done
+		})
+		return heartbeatErr
+	}
+}
+
+func firstReducerPartitionKey(intent Intent) string {
+	if len(intent.EntityKeys) == 0 {
+		return ""
+	}
+	keys := append([]string(nil), intent.EntityKeys...)
+	slices.Sort(keys)
+	return keys[0]
 }

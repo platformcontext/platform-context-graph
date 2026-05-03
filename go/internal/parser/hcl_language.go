@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/terraformschema"
+
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -104,6 +106,7 @@ func parseTerraformBlocks(payload map[string]any, body *hclsyntax.Body, source [
 				"path":          path,
 				"lang":          "hcl",
 			}
+			addTerraformTypeClassification(row, block.Labels[0])
 			if countAttr := block.Body.Attributes["count"]; countAttr != nil {
 				count := strings.TrimSpace(sourceRange(source, countAttr.Expr.Range()))
 				if count != "" {
@@ -167,14 +170,16 @@ func parseTerraformBlocks(payload map[string]any, body *hclsyntax.Body, source [
 			if len(block.Labels) < 2 {
 				continue
 			}
-			appendBucket(payload, "terraform_data_sources", map[string]any{
+			row := map[string]any{
 				"name":        block.Labels[0] + "." + block.Labels[1],
 				"line_number": block.TypeRange.Start.Line,
 				"data_type":   block.Labels[0],
 				"data_name":   block.Labels[1],
 				"path":        path,
 				"lang":        "hcl",
-			})
+			}
+			addTerraformTypeClassification(row, block.Labels[0])
+			appendBucket(payload, "terraform_data_sources", row)
 		case "provider":
 			if len(block.Labels) == 0 {
 				continue
@@ -215,6 +220,18 @@ func parseTerraformBlocks(payload map[string]any, body *hclsyntax.Body, source [
 			})
 		}
 	}
+}
+
+func addTerraformTypeClassification(row map[string]any, terraformType string) {
+	provider, _, ok := strings.Cut(strings.TrimSpace(terraformType), "_")
+	if !ok || provider == "" {
+		return
+	}
+	row["provider"] = provider
+	if service := terraformschema.ClassifyResourceService(terraformType); service != "" {
+		row["resource_service"] = service
+	}
+	row["resource_category"] = terraformschema.ClassifyResourceCategory(terraformType)
 }
 
 func collectRequiredProviders(body *hclsyntax.Body, source []byte) map[string]map[string]string {

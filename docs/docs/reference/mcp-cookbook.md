@@ -105,8 +105,12 @@ This now maps to the Go `code/relationships` route using `name=foo`,
 **Tool:** `analyze_code_relationships`
 
 ```json
-{ "query_type": "find_all_callers", "target": "helper" }
+{ "query_type": "find_all_callers", "target": "helper", "max_depth": 7 }
 ```
+
+This now maps to the Go `code/relationships` route using `name=helper`,
+`direction=incoming`, `relationship_type=CALLS`, `transitive=true`, and the
+provided `max_depth`.
 
 ### Find indirect callees
 
@@ -115,8 +119,11 @@ This now maps to the Go `code/relationships` route using `name=foo`,
 **Tool:** `analyze_code_relationships`
 
 ```json
-{ "query_type": "find_all_callees", "target": "foo" }
+{ "query_type": "find_all_callees", "target": "foo", "max_depth": 7 }
 ```
+
+This maps to the same route with `direction=outgoing`,
+`relationship_type=CALLS`, `transitive=true`, and the provided `max_depth`.
 
 ### Find the call chain between two functions
 
@@ -197,8 +204,24 @@ This now maps to the Go `code/relationships` route using `name=foo`,
 **Tool:** `find_dead_code`
 
 ```json
-{ "repo_id": "repository:r_ab12cd34", "exclude_decorated_with": ["@app.route"] }
+{ "repo_id": "payments", "limit": 200, "exclude_decorated_with": ["@app.route"] }
 ```
+
+This returns derived dead-code candidates today: the handler starts from the
+graph candidate set, applies the current default entrypoint/test/generated
+exclusions plus direct Go Cobra, stdlib HTTP, controller-runtime signature
+roots and Go exported public-package roots, and reports its modeled root
+categories in the response envelope's `data.analysis` field. The `repo_id`
+argument may be a canonical repository ID, repository name, repo slug, or
+indexed path; the server resolves it before querying. The response also
+includes `data.truncated` when the bounded dead-code result window cut off
+additional candidates and `data.analysis.roots_skipped_missing_source` when Go
+framework-root checks could not run because entity source text was unavailable.
+The same `data.analysis` object now reports
+`framework_roots_from_parser_metadata` versus
+`framework_roots_from_source_fallback` so local validation can tell whether the
+reindex-backed metadata path is taking over from the legacy query-time
+heuristic path.
 
 ### Find dead code (Cypher)
 
@@ -308,6 +331,16 @@ The response includes a list of methods and child classes.
 
 ```json
 {}
+```
+
+### Explain a relationship evidence pointer
+
+> "Why does this deployment edge exist?"
+
+**Tool:** `get_relationship_evidence`
+
+```json
+{ "resolved_id": "resolved_abc123" }
 ```
 
 ### Check job status

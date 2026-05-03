@@ -160,20 +160,47 @@ func InferIdentityKeys(attributes map[string]AttributeSchema) []string {
 	return fallback
 }
 
+// ClassifyResourceCategory returns a broad infrastructure category for a
+// Terraform provider resource or data-source type.
 func ClassifyResourceCategory(resourceType string) string {
-	_, servicePart, ok := strings.Cut(resourceType, "_")
-	if !ok || servicePart == "" {
+	servicePart := terraformResourceServicePart(resourceType)
+	if servicePart == "" {
 		return "infrastructure"
 	}
 
-	tokens := strings.Split(servicePart, "_")
-	for length := len(tokens); length > 0; length-- {
-		prefix := strings.Join(tokens[:length], "_")
-		if category, ok := serviceCategories[prefix]; ok {
+	if service := ClassifyResourceService(resourceType); service != "" {
+		if category, ok := serviceCategories[service]; ok {
 			return category
 		}
 	}
 	return "infrastructure"
+}
+
+// ClassifyResourceService returns the provider service family for a Terraform
+// resource type, using the longest known category prefix when one exists.
+func ClassifyResourceService(resourceType string) string {
+	servicePart := terraformResourceServicePart(resourceType)
+	if servicePart == "" {
+		return ""
+	}
+	tokens := strings.Split(servicePart, "_")
+	for length := len(tokens); length > 0; length-- {
+		prefix := strings.Join(tokens[:length], "_")
+		if _, ok := serviceCategories[prefix]; ok {
+			return prefix
+		}
+	}
+	return tokens[0]
+}
+
+// terraformResourceServicePart strips the provider prefix from a Terraform type
+// such as aws_rds_cluster so service-prefix matching can stay provider-neutral.
+func terraformResourceServicePart(resourceType string) string {
+	_, servicePart, ok := strings.Cut(strings.TrimSpace(resourceType), "_")
+	if !ok || servicePart == "" {
+		return ""
+	}
+	return servicePart
 }
 
 func readSchemaDocument(schemaPath string) (*schemaDocument, error) {

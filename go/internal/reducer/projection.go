@@ -1,9 +1,13 @@
 package reducer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
 // Evidence source constant for workload finalization.
@@ -28,9 +32,29 @@ type WorkloadCandidate struct {
 	ResourceKinds    []string
 	Namespaces       []string
 	DeploymentRepoID string
-	Classification   string
-	Confidence       float64
-	Provenance       []string
+	// DeploymentRepoIDs preserves all deployment/config repositories that
+	// source this workload. DeploymentRepoID remains the compatibility primary.
+	DeploymentRepoIDs   []string
+	ProvisioningRepoIDs []string
+	// ProvisioningEvidenceKinds keeps per-provisioning-repo evidence so
+	// dependency infrastructure does not become runtime truth by default.
+	ProvisioningEvidenceKinds map[string][]string
+	Classification            string
+	Confidence                float64
+	Provenance                []string
+	APIEndpoints              []APIEndpointSignal
+}
+
+// APIEndpointSignal is source evidence for one externally visible API route
+// detected from parsed framework semantics or API specification files.
+type APIEndpointSignal struct {
+	Path         string
+	Methods      []string
+	OperationIDs []string
+	SourceKinds  []string
+	SourcePaths  []string
+	SpecVersions []string
+	APIVersions  []string
 }
 
 // ProjectionStats tracks counts produced during projection row building.
@@ -38,6 +62,7 @@ type ProjectionStats struct {
 	Workloads         int
 	Instances         int
 	DeploymentSources int
+	Endpoints         int
 }
 
 // WorkloadRow is one canonical workload upsert payload.
@@ -88,6 +113,21 @@ type RuntimePlatformRow struct {
 	RepoID           string
 }
 
+// APIEndpointRow is one canonical Endpoint graph upsert payload.
+type APIEndpointRow struct {
+	EndpointID   string
+	RepoID       string
+	WorkloadID   string
+	WorkloadName string
+	Path         string
+	Methods      []string
+	OperationIDs []string
+	SourceKinds  []string
+	SourcePaths  []string
+	SpecVersions []string
+	APIVersions  []string
+}
+
 // RepoDescriptor maps a repository to its inferred workload identity.
 type RepoDescriptor struct {
 	RepoID     string
@@ -102,6 +142,7 @@ type ProjectionResult struct {
 	InstanceRows         []InstanceRow
 	DeploymentSourceRows []DeploymentSourceRow
 	RuntimePlatformRows  []RuntimePlatformRow
+	EndpointRows         []APIEndpointRow
 	RepoDescriptors      []RepoDescriptor
 }
 
@@ -192,11 +233,23 @@ func BuildProjectionRows(
 	candidates []WorkloadCandidate,
 	deploymentEnvironments map[string][]string,
 ) *ProjectionResult {
+	return BuildProjectionRowsWithInfrastructurePlatforms(candidates, deploymentEnvironments, nil)
+}
+
+// BuildProjectionRowsWithInfrastructurePlatforms builds batched projection
+// payloads and augments workload instances with provisioned infrastructure
+// platforms when resolved infrastructure evidence is unambiguous.
+func BuildProjectionRowsWithInfrastructurePlatforms(
+	candidates []WorkloadCandidate,
+	deploymentEnvironments map[string][]string,
+	infrastructurePlatforms map[string][]InfrastructurePlatformRow,
+) *ProjectionResult {
 	result := &ProjectionResult{}
 	seenWorkloads := make(map[string]struct{})
 	seenInstances := make(map[string]struct{})
 	seenDeploymentSources := make(map[string]struct{})
 	seenRuntimePlatforms := make(map[string]struct{})
+	seenEndpoints := make(map[string]int)
 
 	for _, candidate := range candidates {
 		if candidate.RepoID == "" || candidate.RepoName == "" {
@@ -241,13 +294,18 @@ func BuildProjectionRows(
 			})
 			result.Stats.Workloads++
 		}
+		addAPIEndpointRows(result, candidate, workloadID, workloadName, seenEndpoints)
 
 		// Resolve environments: deployment overlay environments first (by
 		// deployment repo when linked, otherwise source repo), then namespace
 		// fallback.
+		deploymentRepoIDs := candidateDeploymentRepoIDs(candidate)
 		var environments []string
-		if candidate.DeploymentRepoID != "" {
-			environments = deploymentEnvironments[candidate.DeploymentRepoID]
+		if len(deploymentRepoIDs) > 0 {
+			for _, deploymentRepoID := range deploymentRepoIDs {
+				environments = append(environments, deploymentEnvironments[deploymentRepoID]...)
+			}
+			environments = uniqueSortedStrings(environments)
 		} else {
 			environments = deploymentEnvironments[candidate.RepoID]
 		}
@@ -258,7 +316,7 @@ func BuildProjectionRows(
 				}
 			}
 		}
-		platformKind := InferRuntimePlatformKind(candidate.ResourceKinds)
+		platformKind := inferCandidateRuntimePlatformKind(candidate)
 
 		for _, environment := range environments {
 			instanceID := fmt.Sprintf("workload-instance:%s:%s", workloadName, environment)
@@ -279,20 +337,24 @@ func BuildProjectionRows(
 				result.Stats.Instances++
 			}
 
-			if candidate.DeploymentRepoID != "" {
-				dsKey := instanceID + "|" + candidate.DeploymentRepoID
-				if _, ok := seenDeploymentSources[dsKey]; !ok {
-					seenDeploymentSources[dsKey] = struct{}{}
-					result.DeploymentSourceRows = append(result.DeploymentSourceRows, DeploymentSourceRow{
-						DeploymentRepoID: candidate.DeploymentRepoID,
-						Environment:      environment,
-						InstanceID:       instanceID,
-						WorkloadName:     workloadName,
-						Confidence:       confidence,
-						Provenance:       provenance,
-					})
-					result.Stats.DeploymentSources++
+			for _, deploymentRepoID := range deploymentRepoIDs {
+				if !deploymentRepoHasEnvironment(deploymentEnvironments, deploymentRepoID, environment) {
+					continue
 				}
+				dsKey := instanceID + "|" + deploymentRepoID
+				if _, ok := seenDeploymentSources[dsKey]; ok {
+					continue
+				}
+				seenDeploymentSources[dsKey] = struct{}{}
+				result.DeploymentSourceRows = append(result.DeploymentSourceRows, DeploymentSourceRow{
+					DeploymentRepoID: deploymentRepoID,
+					Environment:      environment,
+					InstanceID:       instanceID,
+					WorkloadName:     workloadName,
+					Confidence:       confidence,
+					Provenance:       provenance,
+				})
+				result.Stats.DeploymentSources++
 			}
 
 			if platformKind == "" {
@@ -321,9 +383,175 @@ func BuildProjectionRows(
 				RepoID:       candidate.RepoID,
 			})
 		}
+		for _, row := range provisionedRuntimePlatformRows(
+			candidate,
+			workloadName,
+			confidence,
+			deploymentEnvironments,
+			infrastructurePlatforms,
+		) {
+			if _, ok := seenInstances[row.InstanceID]; !ok {
+				seenInstances[row.InstanceID] = struct{}{}
+				result.InstanceRows = append(result.InstanceRows, InstanceRow{
+					Environment:    row.Environment,
+					InstanceID:     row.InstanceID,
+					RepoID:         candidate.RepoID,
+					WorkloadID:     workloadID,
+					WorkloadKind:   workloadKind,
+					WorkloadName:   workloadName,
+					Classification: classification,
+					Confidence:     confidence,
+					Provenance:     provenance,
+				})
+				result.Stats.Instances++
+			}
+			rpKey := row.InstanceID + "|" + row.PlatformID
+			if _, ok := seenRuntimePlatforms[rpKey]; ok {
+				continue
+			}
+			seenRuntimePlatforms[rpKey] = struct{}{}
+			result.RuntimePlatformRows = append(result.RuntimePlatformRows, row)
+		}
 	}
 
 	return result
+}
+
+func addAPIEndpointRows(
+	result *ProjectionResult,
+	candidate WorkloadCandidate,
+	workloadID string,
+	workloadName string,
+	seen map[string]int,
+) {
+	for _, endpoint := range candidate.APIEndpoints {
+		path := strings.TrimSpace(endpoint.Path)
+		if path == "" {
+			continue
+		}
+		endpointID := stableAPIEndpointID(candidate.RepoID, workloadID, path)
+		if index, ok := seen[endpointID]; ok {
+			existing := result.EndpointRows[index]
+			existing.Methods = uniqueSortedStrings(append(existing.Methods, endpoint.Methods...))
+			existing.OperationIDs = uniqueSortedStrings(append(existing.OperationIDs, endpoint.OperationIDs...))
+			existing.SourceKinds = uniqueSortedStrings(append(existing.SourceKinds, endpoint.SourceKinds...))
+			existing.SourcePaths = uniqueSortedStrings(append(existing.SourcePaths, endpoint.SourcePaths...))
+			existing.SpecVersions = uniqueSortedStrings(append(existing.SpecVersions, endpoint.SpecVersions...))
+			existing.APIVersions = uniqueSortedStrings(append(existing.APIVersions, endpoint.APIVersions...))
+			result.EndpointRows[index] = existing
+			continue
+		}
+		seen[endpointID] = len(result.EndpointRows)
+		result.EndpointRows = append(result.EndpointRows, APIEndpointRow{
+			EndpointID:   endpointID,
+			RepoID:       candidate.RepoID,
+			WorkloadID:   workloadID,
+			WorkloadName: workloadName,
+			Path:         path,
+			Methods:      uniqueSortedStrings(endpoint.Methods),
+			OperationIDs: uniqueSortedStrings(endpoint.OperationIDs),
+			SourceKinds:  uniqueSortedStrings(endpoint.SourceKinds),
+			SourcePaths:  uniqueSortedStrings(endpoint.SourcePaths),
+			SpecVersions: uniqueSortedStrings(endpoint.SpecVersions),
+			APIVersions:  uniqueSortedStrings(endpoint.APIVersions),
+		})
+		result.Stats.Endpoints++
+	}
+}
+
+func stableAPIEndpointID(repoID, workloadID, path string) string {
+	digest := sha256.Sum256([]byte(repoID + "|" + workloadID + "|" + path))
+	return "endpoint:" + hex.EncodeToString(digest[:12])
+}
+
+func candidateDeploymentRepoIDs(candidate WorkloadCandidate) []string {
+	repoIDs := make([]string, 0, 1+len(candidate.DeploymentRepoIDs))
+	repoIDs = appendUniqueString(repoIDs, strings.TrimSpace(candidate.DeploymentRepoID))
+	for _, repoID := range candidate.DeploymentRepoIDs {
+		repoIDs = appendUniqueString(repoIDs, strings.TrimSpace(repoID))
+	}
+	return repoIDs
+}
+
+func deploymentRepoHasEnvironment(deploymentEnvironments map[string][]string, repoID string, environment string) bool {
+	environments := deploymentEnvironments[repoID]
+	if len(environments) == 0 {
+		return true
+	}
+	for _, candidate := range environments {
+		if candidate == environment {
+			return true
+		}
+	}
+	return false
+}
+
+func provisionedRuntimePlatformRows(
+	candidate WorkloadCandidate,
+	workloadName string,
+	confidence float64,
+	deploymentEnvironments map[string][]string,
+	infrastructurePlatforms map[string][]InfrastructurePlatformRow,
+) []RuntimePlatformRow {
+	if len(candidate.ProvisioningRepoIDs) == 0 || len(infrastructurePlatforms) == 0 {
+		return nil
+	}
+	var rows []RuntimePlatformRow
+	for _, repoID := range candidate.ProvisioningRepoIDs {
+		platforms := infrastructurePlatforms[repoID]
+		if !hasRuntimeProvisioningEvidence(candidate.ProvisioningEvidenceKinds[repoID]) {
+			continue
+		}
+		environments := deploymentEnvironments[repoID]
+		if len(environments) == 0 {
+			continue
+		}
+		for _, platform := range platforms {
+			if platform.PlatformID == "" || platform.PlatformKind == "" {
+				continue
+			}
+			for _, environment := range environments {
+				instanceID := fmt.Sprintf("workload-instance:%s:%s", workloadName, environment)
+				rows = append(rows, RuntimePlatformRow{
+					Environment:      environment,
+					Confidence:       confidence,
+					InstanceID:       instanceID,
+					PlatformID:       platform.PlatformID,
+					PlatformKind:     platform.PlatformKind,
+					PlatformName:     platform.PlatformName,
+					PlatformProvider: platform.PlatformProvider,
+					PlatformRegion:   platform.PlatformRegion,
+					PlatformLocator:  platform.PlatformLocator,
+					RepoID:           candidate.RepoID,
+				})
+			}
+		}
+	}
+	return rows
+}
+
+func hasRuntimeProvisioningEvidence(kinds []string) bool {
+	for _, kind := range kinds {
+		normalized := strings.ToUpper(strings.TrimSpace(kind))
+		if normalized == "" {
+			continue
+		}
+		if !strings.HasPrefix(normalized, "TERRAFORM_") {
+			continue
+		}
+		switch relationships.EvidenceKind(normalized) {
+		case relationships.EvidenceKindTerraformAppRepo,
+			relationships.EvidenceKindTerraformAppName,
+			relationships.EvidenceKindTerraformGitHubRepo,
+			relationships.EvidenceKindTerraformGitHubActions,
+			relationships.EvidenceKindTerraformConfigPath,
+			relationships.EvidenceKindTerraformModuleSource:
+			continue
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func isMaterializableWorkloadClassification(classification string) bool {
@@ -333,6 +561,24 @@ func isMaterializableWorkloadClassification(classification string) bool {
 	default:
 		return false
 	}
+}
+
+func inferCandidateRuntimePlatformKind(candidate WorkloadCandidate) string {
+	if kind := InferRuntimePlatformKind(candidate.ResourceKinds); kind != "" {
+		return kind
+	}
+	if len(candidateDeploymentRepoIDs(candidate)) == 0 {
+		return ""
+	}
+	if hasProvenance(candidate.Provenance,
+		"argocd_application_source",
+		"argocd_applicationset_deploy_source",
+		"kustomize_resource",
+		"helm_deployment",
+	) {
+		return "kubernetes"
+	}
+	return ""
 }
 
 func normalizedCandidateConfidence(confidence float64) float64 {

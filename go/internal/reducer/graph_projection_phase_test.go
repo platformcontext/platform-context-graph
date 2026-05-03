@@ -125,3 +125,35 @@ func TestGraphProjectionPhaseRepairValidateRejectsBlankPhase(t *testing.T) {
 		t.Fatal("Validate() error = nil, want non-nil")
 	}
 }
+
+func TestSharedProjectionReadinessPhaseUsesCanonicalNodesForCodeCalls(t *testing.T) {
+	t.Parallel()
+
+	phase, gated := sharedProjectionReadinessPhase(DomainCodeCalls)
+	if !gated {
+		t.Fatal("gated = false, want true")
+	}
+	if got, want := phase, GraphProjectionPhaseCanonicalNodesCommitted; got != want {
+		t.Fatalf("phase = %q, want %q", got, want)
+	}
+}
+
+func TestSharedProjectionReadinessPhaseUsesSemanticNodesForSemanticEdgeDomains(t *testing.T) {
+	t.Parallel()
+
+	tests := []string{DomainSQLRelationships, DomainInheritanceEdges}
+	for _, domain := range tests {
+		domain := domain
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+
+			phase, gated := sharedProjectionReadinessPhase(domain)
+			if !gated {
+				t.Fatal("gated = false, want true")
+			}
+			if got, want := phase, GraphProjectionPhaseSemanticNodesCommitted; got != want {
+				t.Fatalf("phase = %q, want %q", got, want)
+			}
+		})
+	}
+}

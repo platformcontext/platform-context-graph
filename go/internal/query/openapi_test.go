@@ -56,12 +56,15 @@ func TestServeOpenAPI(t *testing.T) {
 	expectedPaths := []string{
 		"/health",
 		"/api/v0/repositories",
+		"/api/v0/repositories/{repo_id}/context",
 		"/api/v0/entities/resolve",
+		"/api/v0/evidence/relationships/{resolved_id}",
 		"/api/v0/code/search",
 		"/api/v0/code/call-chain",
 		"/api/v0/code/language-query",
 		"/api/v0/content/files/read",
 		"/api/v0/infra/resources/search",
+		"/api/v0/iac/dead",
 		"/api/v0/impact/trace-deployment-chain",
 		"/api/v0/impact/blast-radius",
 		"/api/v0/status/pipeline",
@@ -91,6 +94,23 @@ func TestServeOpenAPI(t *testing.T) {
 	for _, schema := range expectedSchemas {
 		if _, exists := schemas[schema]; !exists {
 			t.Errorf("expected schema %s not found", schema)
+		}
+	}
+
+	repositoryContextPath := mustMapField(t, paths, "/api/v0/repositories/{repo_id}/context")
+	repositoryContextGet := mustMapField(t, repositoryContextPath, "get")
+	repositoryContextResponses := mustMapField(t, repositoryContextGet, "responses")
+	repositoryContextOK := mustMapField(t, repositoryContextResponses, "200")
+	repositoryContextContent := mustMapField(t, mustMapField(t, repositoryContextOK, "content"), "application/json")
+	repositoryContextSchema := mustMapField(t, mustMapField(t, repositoryContextContent, "schema"), "properties")
+	for _, field := range []string{
+		"relationships",
+		"relationship_overview",
+		"api_surface",
+		"consumers",
+	} {
+		if _, ok := repositoryContextSchema[field]; !ok {
+			t.Fatalf("repositories/{repo_id}/context response schema missing %s", field)
 		}
 	}
 }
@@ -253,8 +273,59 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if _, ok := deadCodeSchema["repo_id"]; !ok {
 		t.Fatal("code/dead-code request schema missing repo_id")
 	}
+	if _, ok := deadCodeSchema["limit"]; !ok {
+		t.Fatal("code/dead-code request schema missing limit")
+	}
 	if _, ok := deadCodeSchema["exclude_decorated_with"]; !ok {
 		t.Fatal("code/dead-code request schema missing exclude_decorated_with")
+	}
+	deadCodeResponses := mustMapField(t, deadCodePost, "responses")
+	deadCodeOK := mustMapField(t, deadCodeResponses, "200")
+	deadCodeContent := mustMapField(t, mustMapField(t, deadCodeOK, "content"), "application/json")
+	deadCodeResponse := mustMapField(t, mustMapField(t, deadCodeContent, "schema"), "properties")
+	if _, ok := deadCodeResponse["analysis"]; !ok {
+		t.Fatal("code/dead-code response schema missing analysis")
+	}
+	if _, ok := deadCodeResponse["truncated"]; !ok {
+		t.Fatal("code/dead-code response schema missing truncated")
+	}
+	deadCodeAnalysis := mustMapField(t, mustMapField(t, deadCodeResponse, "analysis"), "properties")
+	if _, ok := deadCodeAnalysis["modeled_public_api"]; !ok {
+		t.Fatal("code/dead-code analysis schema missing modeled_public_api")
+	}
+
+	deadIaCPath := mustMapField(t, paths, "/api/v0/iac/dead")
+	deadIaCPost := mustMapField(t, deadIaCPath, "post")
+	deadIaCBody := mustMapField(t, mustMapField(t, deadIaCPost, "requestBody"), "content")
+	deadIaCJSON := mustMapField(t, deadIaCBody, "application/json")
+	deadIaCSchema := mustMapField(t, mustMapField(t, deadIaCJSON, "schema"), "properties")
+	if _, ok := deadIaCSchema["repo_ids"]; !ok {
+		t.Fatal("iac/dead request schema missing repo_ids")
+	}
+	if _, ok := deadIaCSchema["include_ambiguous"]; !ok {
+		t.Fatal("iac/dead request schema missing include_ambiguous")
+	}
+	if _, ok := deadIaCSchema["offset"]; !ok {
+		t.Fatal("iac/dead request schema missing offset")
+	}
+	deadIaCResponses := mustMapField(t, deadIaCPost, "responses")
+	deadIaCOK := mustMapField(t, deadIaCResponses, "200")
+	deadIaCContent := mustMapField(t, mustMapField(t, deadIaCOK, "content"), "application/json")
+	deadIaCResponse := mustMapField(t, mustMapField(t, deadIaCContent, "schema"), "properties")
+	if _, ok := deadIaCResponse["findings"]; !ok {
+		t.Fatal("iac/dead response schema missing findings")
+	}
+	if _, ok := deadIaCResponse["total_findings_count"]; !ok {
+		t.Fatal("iac/dead response schema missing total_findings_count")
+	}
+	if _, ok := deadIaCResponse["truncated"]; !ok {
+		t.Fatal("iac/dead response schema missing truncated")
+	}
+	if _, ok := deadIaCResponse["next_offset"]; !ok {
+		t.Fatal("iac/dead response schema missing next_offset")
+	}
+	if _, ok := deadIaCResponse["limitations"]; !ok {
+		t.Fatal("iac/dead response schema missing limitations")
 	}
 
 	relationshipsPath := mustMapField(t, paths, "/api/v0/code/relationships")
@@ -273,6 +344,12 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	}
 	if _, ok := relationshipsSchema["relationship_type"]; !ok {
 		t.Fatal("code/relationships request schema missing relationship_type")
+	}
+	if _, ok := relationshipsSchema["transitive"]; !ok {
+		t.Fatal("code/relationships request schema missing transitive")
+	}
+	if _, ok := relationshipsSchema["max_depth"]; !ok {
+		t.Fatal("code/relationships request schema missing max_depth")
 	}
 
 	traceDeploymentPath := mustMapField(t, paths, "/api/v0/impact/trace-deployment-chain")
@@ -415,7 +492,13 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		!containsValue(enumValues, "terragrunt_config") ||
 		!containsValue(enumValues, "terragrunt_dependency") ||
 		!containsValue(enumValues, "terragrunt_local") ||
-		!containsValue(enumValues, "terragrunt_input") {
+		!containsValue(enumValues, "terragrunt_input") ||
+		!containsValue(enumValues, "sql_table") ||
+		!containsValue(enumValues, "sql_view") ||
+		!containsValue(enumValues, "sql_function") ||
+		!containsValue(enumValues, "sql_trigger") ||
+		!containsValue(enumValues, "sql_index") ||
+		!containsValue(enumValues, "sql_column") {
 		t.Fatalf("language-query entity_type enum = %#v, want content-backed entity types", enumValues)
 	}
 }

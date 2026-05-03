@@ -1,8 +1,11 @@
 package projector
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,6 +122,96 @@ func TestRuntimeProjectMaterializesSourceLocalTruthAndReducerIntents(t *testing.
 	}
 	if got, want := result.Intents.Count, 1; got != want {
 		t.Fatalf("result.Intents.Count = %d, want %d", got, want)
+	}
+}
+
+func TestRuntimeProjectLogsRuntimeStageTimings(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	runtime := Runtime{
+		CanonicalWriter: &recordingCanonicalWriter{},
+		ContentWriter:   &recordingContentWriter{result: content.Result{RecordCount: 1, EntityCount: 1}},
+		IntentWriter:    &recordingIntentWriter{result: IntentResult{Count: 1}},
+		Logger:          slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+		Metadata:      map[string]string{"repo_id": "repo-123"},
+	}
+	generationValue := scope.ScopeGeneration{
+		GenerationID: "generation-456",
+		ScopeID:      "scope-123",
+		ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+		IngestedAt:   time.Date(2026, time.April, 12, 11, 35, 0, 0, time.UTC),
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+
+	_, err := runtime.Project(context.Background(), scopeValue, generationValue, []facts.Envelope{
+		{
+			FactID:       "fact-0",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "repository",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"repo_id": "repo-123",
+				"name":    "platform-context-graph",
+				"path":    "org/platform-context-graph",
+			},
+		},
+		{
+			FactID:       "fact-1",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_content",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"content_path":   "README.md",
+				"content_body":   "# PCG",
+				"content_digest": "digest-1",
+				"entity_kind":    "Function",
+				"entity_name":    "main",
+				"start_line":     1,
+			},
+		},
+		{
+			FactID:       "fact-2",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_relation",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 32, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"reducer_domain": "workload_identity",
+				"entity_key":     "repo-123",
+				"reason":         "shared identity follow-up required",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Project() error = %v, want nil", err)
+	}
+
+	output := logs.String()
+	for _, want := range []string{
+		`"msg":"projector runtime stage completed"`,
+		`"stage":"build_projection"`,
+		`"stage":"canonical_write"`,
+		`"stage":"content_write"`,
+		`"stage":"intent_enqueue"`,
+		`"content_record_count":1`,
+		`"content_entity_count":2`,
+		`"reducer_intent_count":1`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("runtime stage logs missing %s:\n%s", want, output)
+		}
 	}
 }
 

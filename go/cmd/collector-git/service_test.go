@@ -114,6 +114,32 @@ func TestBuildCollectorServiceWiresSCIPEnvironment(t *testing.T) {
 	}
 }
 
+func TestBuildCollectorServiceWiresDiscoveryPathGlobOverlay(t *testing.T) {
+	t.Parallel()
+
+	service, err := buildCollectorService(
+		postgres.SQLDB{},
+		func(key string) string {
+			if key == "PCG_DISCOVERY_IGNORED_PATH_GLOBS" {
+				return "generated/**=generated-template"
+			}
+			return ""
+		},
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildCollectorService() error = %v, want nil", err)
+	}
+
+	source := service.Source.(*collector.GitSource)
+	snapshotter := source.Snapshotter.(collector.NativeRepositorySnapshotter)
+	if got, want := len(snapshotter.DiscoveryOptions.IgnoredPathGlobs), 1; got != want {
+		t.Fatalf("IgnoredPathGlobs length = %d, want %d", got, want)
+	}
+}
+
 func TestBuildCollectorServiceWiresTelemetryIntoSourceAndService(t *testing.T) {
 	t.Parallel()
 

@@ -16,8 +16,8 @@ type repositoryArtifactSource struct {
 
 func loadSharedRepositoryConfigArtifacts(
 	ctx context.Context,
-	graph GraphReader,
-	reader *ContentReader,
+	graph GraphQuery,
+	reader ContentStore,
 	repoID string,
 	repoName string,
 	files []FileContent,
@@ -55,7 +55,7 @@ func loadSharedRepositoryConfigArtifacts(
 
 func loadRepositoryControllerArtifacts(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	repoID string,
 	repoName string,
 	files []FileContent,
@@ -95,14 +95,14 @@ func loadRepositoryControllerArtifacts(
 
 func queryRelatedRepositoryArtifactSources(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	repoID string,
 ) ([]repositoryArtifactSource, error) {
 	rows, err := graph.Run(ctx, `
-		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(related:Repository)
+		MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(related:Repository)
 		RETURN related.id AS repo_id, related.name AS repo_name
 		UNION
-		MATCH (related:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(r:Repository {id: $repo_id})
+		MATCH (related:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(r:Repository {id: $repo_id})
 		RETURN related.id AS repo_id, related.name AS repo_name
 	`, map[string]any{"repo_id": repoID})
 	if err != nil {
@@ -131,7 +131,7 @@ func queryRelatedRepositoryArtifactSources(
 
 func loadRepositoryConfigArtifactsForSources(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	sources []repositoryArtifactSource,
 ) (map[string]any, error) {
 	if reader == nil || len(sources) == 0 {

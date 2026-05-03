@@ -14,6 +14,30 @@ pcg mcp setup
 
 The wizard writes or updates configuration for supported clients (Claude, Cursor, VS Code) and gives you a config snippet for manual wiring.
 
+## Structured Results With Truth Labels
+
+MCP tool results now include two content blocks:
+
+1. A human-readable `text` block with a short summary.
+2. An `embedded_resource` block whose `mimeType` is
+   `application/pcg.envelope+json` and whose `text` is the canonical PCG
+   response envelope — `{data, truth, error}`.
+
+The envelope is the canonical client contract. Programmatic clients should
+prefer the structured `resource` block over the summary `text`. The envelope
+exposes:
+
+- `truth.level` — `exact`, `derived`, or `fallback`.
+- `truth.capability` — the capability ID from
+  [capability-matrix.v1.yaml](../reference/capability-conformance-spec.md).
+- `truth.profile` — `local_lightweight`, `local_full_stack`, or `production`.
+- `truth.freshness.state` — `fresh`, `stale`, `building`, or `unavailable`.
+
+On unsupported capabilities (for example `call_graph.transitive_callers` in
+`local_lightweight`), the tool call returns a structured
+`unsupported_capability` error rather than a degraded fallback. See
+[Truth Label Protocol — MCP Contract](../reference/truth-label-protocol.md).
+
 ## Use The Local Compose MCP With Codex Or Claude
 
 For local graph-backed testing, the easiest path is the Compose stack plus the
@@ -97,6 +121,13 @@ Use the canonical query and status surfaces first:
 - `index-status` when you need checkpointed completeness
 - runtime health or `/admin/status` when you need live service state
 
+For the `local_authoritative` NornicDB evaluation profile, code-search tools
+may answer from the embedded-Postgres content index while canonical graph
+projection is degraded. Programmatic clients should read the PCG envelope:
+`truth.profile=local_authoritative` and `truth.basis=content_index` mean the
+answer is intentionally content-index-backed, not silently pretending to be a
+fully converged graph answer.
+
 Treat repair surfaces as repair surfaces:
 
 - `pcg finalize` has been removed
@@ -128,6 +159,7 @@ assumptions from a partial code snapshot.
 | "What provisions this database?" | `trace_resource_to_code` |
 | "Compare prod and staging" | `compare_environments` |
 | "What does this repo contain?" | `get_repo_context` |
+| "Why does this deployment or dependency edge exist?" | `get_relationship_evidence` with the `resolved_id` from `deployment_evidence` |
 | "Tell me the Internet-to-cloud-to-code story for this repo" | `get_repo_story` |
 | "Tell me the deployment story for this workload or service" | `get_workload_story`, `get_service_story` |
 | "Explain this service, then cite the relevant files and docs" | `get_service_story` followed by `get_file_content`, `get_file_lines`, `search_file_content` |
@@ -136,6 +168,7 @@ assumptions from a partial code snapshot.
 | "Search across indexed code" | `search_file_content` |
 | "Find complex functions" | `find_most_complex_functions` |
 | "What's dead code?" | `find_dead_code` |
+| "Which IaC artifacts look unused?" | `find_dead_iac` |
 
 ## Story-first responses
 
@@ -151,7 +184,7 @@ Use it this way:
 2. for deployment questions, use `trace_deployment_chain` and then read `story_sections` for grouped supporting context
 3. use `deployment_overview`, `gitops_overview`, `controller_overview`, or `deployment_fact_summary` for structured deployment evidence
 4. if the answer needs exact file or docs evidence, follow with Postgres-backed content reads or search
-5. use `drilldowns` to move into `get_repo_context`, `get_workload_context`, `get_service_context`, `trace_deployment_chain`, content reads, or lower-level relationship tools
+5. use `drilldowns` to move into `get_repo_context`, `get_workload_context`, `get_service_context`, `trace_deployment_chain`, content reads, `get_relationship_evidence`, or lower-level relationship tools
 
 This keeps answers concise without hiding the underlying evidence.
 
@@ -227,8 +260,9 @@ For programming prompts, keep using the code-query tools directly:
 - `calculate_cyclomatic_complexity`
 - `find_most_complex_functions`
 - `find_dead_code`
+- `find_dead_iac`
 
-Those remain the primary public contract for callers/callees/class hierarchy/import/complexity/dead-code questions. The story tools are for end-to-end narratives, not a replacement for the code tools.
+Those remain the primary public contract for callers/callees/class hierarchy/import/complexity/dead-code and dead-IaC questions. The story tools are for end-to-end narratives, not a replacement for the code tools.
 
 ## Repository access handoff
 

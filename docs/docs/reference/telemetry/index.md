@@ -20,7 +20,7 @@ the reported state is live or inferred.
 | API is slow or erroring | API metrics | API traces and logs |
 | backlog is growing | queue depth and queue age metrics | resolution-engine traces and queue logs |
 | shared follow-up looks stuck | shared-projection backlog metrics | resolution-engine traces and shared-projection logs |
-| one repository is slow | ingester metrics | ingester traces and resolution-engine stage timings |
+| one repository is slow | ingester metrics | `collector snapshot stage completed` logs, ingester traces, and resolution-engine stage timings |
 | graph writes are slow | resolution metrics | Neo4j traces and graph persistence logs |
 | content reads are missing or slow | API metrics and content metrics | content traces and logs |
 | replay or dead-letter behavior looks wrong | recovery metrics | recovery traces and admin recovery logs |
@@ -67,6 +67,9 @@ flowchart LR
 - Use **logs** when you need exact repository, run, or work-item context.
 - Use the shared admin/status report when you want a quick read on stage,
   backlog, live-versus-inferred state, and failure classification.
+- Use `pcg index --discovery-report <file>` when you need path-level noisy-repo
+  evidence. Discovery advisory reports may include repository paths and top
+  files/directories, so they deliberately stay out of metric labels.
 
 ## Incremental Refresh And Reconciliation Signals
 
@@ -120,7 +123,10 @@ For shared-write debugging specifically:
 - Traces show parse, fact emission, inline projection timing, and parser
   selection.
 - Logs explain discovery choices, slow files, parser snapshot collection, and
-  per-repo progress.
+  per-repo progress. For a slow single repository, start with
+  `collector snapshot stage completed` records for `discovery`, `pre_scan`,
+  `parse`, and `materialize` before changing parser workers, NornicDB batch
+  sizes, or graph-write timeouts.
 
 ### Facts Layer
 
@@ -131,31 +137,87 @@ For shared-write debugging specifically:
   work-item lifecycle breadcrumbs as structured JSON. On the Go path,
   `event_name` is optional; phase-scoped `slog` fields such as
   `pipeline_phase`, `scope_id`, and `failure_class` are the stable filters.
+- Ingestion commits also emit `ingestion commit stage completed` records for
+  transaction begin, scope/generation upsert, repository-catalog load,
+  streaming fact upsert, relationship backfill, projector enqueue, and
+  transaction commit. Use `fact_count`, `batch_count`, and
+  `duration_seconds` to distinguish slow fact persistence from queue or
+  commit latency.
 
 ### Resolution Engine
 
 - Metrics answer claim latency, worker activity, stage duration, stage output
   volume, stage failures, dead-letter pressure, and shared authoritative
   follow-up backlog.
+- `pcg_dp_reducer_queue_wait_seconds` separates time spent visible in the
+  reducer queue from `pcg_dp_reducer_run_duration_seconds`, which measures the
+  handler execution window after a worker starts the work item.
+- `/admin/status` includes `queue_blockages` when reducer work is eligible but
+  held back by an in-flight conflict domain/key, so operators can distinguish
+  conflict routing from graph backend slowness.
 - The shared-edge bounded-group path also exposes
+  `pcg_dp_shared_projection_intent_wait_seconds`,
+  `pcg_dp_shared_projection_processing_seconds`,
+  `pcg_dp_shared_projection_step_seconds`,
   `pcg_dp_shared_edge_write_groups_total`,
   `pcg_dp_shared_edge_write_group_duration_seconds`, and
   `pcg_dp_shared_edge_write_group_statement_count` with `domain` attributes so
-  operators can distinguish one monster grouped write from many bounded groups
-  during reducer convergence.
+  operators can distinguish selected-intent wait, readiness blocking, actual
+  shared graph-write processing, retract/write/completion-mark substeps, and
+  one monster grouped write from many bounded groups during reducer convergence.
+- The dedicated `code_calls` projection runner emits the same shared
+  projection wait and processing histograms, and its completed-cycle logs add
+  `intent_wait_seconds`, `blocked_intent_wait_seconds`,
+  `selection_duration_seconds`, `lease_claim_duration_seconds`, and
+  `processing_duration_seconds`, split further into
+  `retract_duration_seconds`, `write_duration_seconds`, and
+  `mark_completed_duration_seconds`. Use these fields to separate
+  canonical-node readiness delay, polling, graph mutation time, and Postgres
+  completion marking.
+- The dedicated `repo_dependency` projection runner logs the source-repo-owned
+  cycle shape with `processed_intents`, `active_intents`, `stale_intents`,
+  `acceptance_unit_rows`, `replay_requests`,
+  `selection_duration_seconds`, `load_all_duration_seconds`,
+  `acceptance_prefetch_duration_seconds`, `retract_duration_seconds`,
+  `write_duration_seconds`, `replay_duration_seconds`, and
+  `mark_completed_duration_seconds`. It also records
+  `pcg_dp_shared_projection_step_seconds` with
+  `write_phase=selection|load_all|acceptance_prefetch|retract|write|replay|mark_completed`
+  so operators can separate Postgres scan/load, accepted-generation prefetch,
+  graph backend mutation, replay enqueue, and completion marking before changing
+  worker counts or partitioning.
 - The `code_call` deadlock-elimination path also exposes
   `pcg_dp_code_call_edge_batches_total` and
   `pcg_dp_code_call_edge_batch_duration_seconds` so operators can measure the
   isolated Neo4j batch transactions directly instead of inferring their
-  behavior from generic Neo4j timings.
+  behavior from generic Neo4j timings. The code-call edge writer defaults
+  `PCG_CODE_CALL_EDGE_BATCH_SIZE` to `1000`; lowering that value increases the
+  number of grouped graph-write transactions, while raising it should be proven
+  with these metrics and the code-call completion log's `write_duration_seconds`.
 - Traces show one projection attempt from claim to graph write.
 - Logs capture work-item completion, retry, dead-letter, and per-stage failure
   context.
+- Source-local projector runs emit `projector work stage completed` for fact
+  loading versus projection execution and `projector runtime stage completed`
+  for build, canonical graph write, content-store write, and reducer-intent
+  enqueue. When content-store write is the hot stage, Postgres-backed content
+  writers also emit `content writer stage completed` for file/entity
+  preparation and upsert stages with row and batch counts. Use these before
+  changing NornicDB row caps or worker counts.
+- NornicDB canonical entity phases emit `nornicdb entity label summary` with
+  `scope_id`, `generation_id`, label, rows, statements, grouped executions, and
+  duration so large-corpus runs can attribute high-cardinality `Variable` or
+  `Function` costs to the exact repository generation without relying on log
+  adjacency.
 
 ### Admin / CLI Status
 
 - The admin/status report answers stage, backlog, health, and live-versus-
   inferred questions in one place.
+- When queue failures exist, the report includes the latest persisted
+  `failure_class`, message, and details so operators can spot cases such as
+  `graph_write_timeout` without adding repository- or work-item-level metric
+  labels.
 - It should mirror the service runtime shape so operators do not need a
   different mental model for collector, projector, reducer, or future Go
   services.
@@ -170,6 +232,17 @@ Shared-write-specific counters:
 
 - `pcg_dp_shared_projection_cycles_total` reports shared projection partition
   cycles by domain and partition key.
+- `pcg_dp_shared_projection_intent_wait_seconds` reports the maximum selected
+  intent age for a partition cycle, including the dedicated `code_calls`
+  projection runner, labeled by `outcome=processed` or
+  `outcome=readiness_blocked`.
+- `pcg_dp_shared_projection_processing_seconds` reports the graph-write and
+  completion duration after partition selection. For `domain=code_calls`, this
+  covers the code-call runner's retract, write, and completion-mark window.
+- `pcg_dp_shared_projection_step_seconds` reports shared projection substeps.
+  Generic partitioned runners and `code_calls` use
+  `write_phase=retract|write|mark_completed`; `repo_dependency` also uses
+  `write_phase=selection|load_all|acceptance_prefetch|replay`.
 - `pcg_dp_shared_projection_stale_intents_total` reports stale shared
   projection intents filtered during reducer processing.
 
@@ -182,6 +255,8 @@ When validating shared-write runtime changes in staging or production:
 
 1. Start with `pcg_dp_queue_depth`, `pcg_dp_queue_oldest_age_seconds`,
    `pcg_dp_shared_projection_cycles_total`,
+   `pcg_dp_shared_projection_intent_wait_seconds`,
+   `pcg_dp_shared_projection_processing_seconds`,
    `pcg_dp_shared_projection_stale_intents_total`,
    `pcg_dp_shared_edge_write_groups_total`,
    `pcg_dp_shared_edge_write_group_duration_seconds`,
@@ -256,6 +331,7 @@ log streams.
 | `pcg_dp_reducer_executions_total` | Total reducer intent executions | `domain`, status (`succeeded`/`failed`) |
 | `pcg_dp_canonical_writes_total` | Total canonical graph write batches | `domain` |
 | `pcg_dp_shared_projection_cycles_total` | Total shared projection partition cycles | `domain`, `partition_key` |
+| `pcg_dp_iac_reachability_rows_total` | Total IaC reachability rows materialized after source-local projection | `outcome` (`used`/`unused`/`ambiguous`) |
 | `pcg_dp_repos_snapshotted_total` | Total repositories snapshotted | status (`succeeded`/`failed`/`skipped`) |
 | `pcg_dp_files_parsed_total` | Total files parsed | status (`succeeded`/`failed`/`skipped`) |
 | `pcg_dp_fact_batches_committed_total` | Total fact batches committed to Postgres during streaming ingestion | `scope_id`, `source_system` |
@@ -270,6 +346,11 @@ log streams.
 | `pcg_dp_projector_run_duration_seconds` | Projector run cycle duration | s | 0.1 .. 120 |
 | `pcg_dp_projector_stage_duration_seconds` | Projector stage duration | s | default |
 | `pcg_dp_reducer_run_duration_seconds` | Reducer intent execution duration | s | default |
+| `pcg_dp_reducer_queue_wait_seconds` | Reducer time from queue visibility to handler start | s | 0.001 .. 21600 |
+| `pcg_dp_shared_projection_intent_wait_seconds` | Shared projection intent age when a partition processes or blocks it | s | 0.001 .. 21600 |
+| `pcg_dp_shared_projection_processing_seconds` | Shared projection graph-write and completion duration after partition selection | s | 0.001 .. 60 |
+| `pcg_dp_shared_projection_step_seconds` | Shared projection substep duration | s | 0.001 .. 60 |
+| `pcg_dp_iac_reachability_materialization_duration_seconds` | Corpus-wide IaC reachability materialization duration after source-local projection drains | s | 0.1 .. 300 |
 | `pcg_dp_canonical_write_duration_seconds` | Canonical graph write duration | s | default |
 | `pcg_dp_queue_claim_duration_seconds` | Queue work item claim duration | s | default |
 | `pcg_dp_postgres_query_duration_seconds` | Postgres query duration | s | 0.001 .. 2.5 |
@@ -309,6 +390,7 @@ The `pcg_dp_projector_stage_duration_seconds` histogram carries a `stage` attrib
 | `collector_kind` | Collector type (e.g. git) |
 | `domain` | Reducer or projection domain |
 | `partition_key` | Shared projection partition |
+| `outcome` | Timing outcome such as processed, completed, or readiness_blocked |
 | `stage` | Projector stage (build_projection, graph_write, content_write, intent_enqueue) |
 | `status` | Operation outcome (succeeded/failed) |
 | `queue` | Queue name for claim duration (projector/reducer) |
@@ -326,7 +408,16 @@ The `pcg_dp_projector_stage_duration_seconds` histogram carries a `stage` attrib
 | `projector.run` | Ingester projector loop | One claim + project + ack cycle |
 | `reducer_intent.enqueue` | Projector runtime | Enqueuing reducer intents after projection |
 | `reducer.run` | Reducer main loop | One claim + execute + ack cycle |
+| `iac_reachability.materialize` | Bootstrap finalization | Corpus-wide active-generation IaC usage classification and Postgres row upsert |
 | `canonical.write` | Projector runtime / Reducer shared projection | Graph and content writes to Neo4j |
+
+#### Query handler spans
+
+| Span | Where | Description |
+| --- | --- | --- |
+| `query.relationship_evidence` | HTTP relationship evidence drilldown | Resolves compact `resolved_id` graph pointers to durable Postgres evidence |
+| `query.dead_iac` | HTTP dead-IaC read surface | Reads reducer-materialized IaC cleanup findings |
+| `query.infra_resource_search` | HTTP infrastructure resource search | Searches graph-backed infrastructure resources |
 
 #### Dependency service spans
 

@@ -8,7 +8,7 @@ import (
 )
 
 type neo4jWorkloadDependencyLookup struct {
-	reader query.GraphReader
+	reader query.GraphQuery
 }
 
 func (l neo4jWorkloadDependencyLookup) ListRepoDependencyEdges(
@@ -20,8 +20,12 @@ func (l neo4jWorkloadDependencyLookup) ListRepoDependencyEdges(
 	}
 
 	rows, err := l.reader.Run(ctx, `
-		MATCH (source:Repository)-[:DEPENDS_ON]->(target:Repository)
-		WHERE source.id IN $repo_ids OR target.id IN $repo_ids
+		UNWIND $repo_ids AS repo_id
+		MATCH (source:Repository {id: repo_id})-[:DEPENDS_ON]->(target:Repository)
+		RETURN DISTINCT source.id AS source_repo_id, target.id AS target_repo_id
+		UNION
+		UNWIND $repo_ids AS repo_id
+		MATCH (source:Repository)-[:DEPENDS_ON]->(target:Repository {id: repo_id})
 		RETURN DISTINCT source.id AS source_repo_id, target.id AS target_repo_id
 	`, map[string]any{"repo_ids": repoIDs})
 	if err != nil {
@@ -73,4 +77,41 @@ func (l neo4jWorkloadDependencyLookup) ListRepoWorkloads(
 		})
 	}
 	return workloads, nil
+}
+
+// ListWorkloadDependencyEdges checks whether the workload dependency retract
+// path has any current graph truth to remove for the requested repositories.
+func (l neo4jWorkloadDependencyLookup) ListWorkloadDependencyEdges(
+	ctx context.Context,
+	repoIDs []string,
+	evidenceSource string,
+) ([]reducer.ExistingWorkloadDependencyEdge, error) {
+	if l.reader == nil || len(repoIDs) == 0 {
+		return nil, nil
+	}
+
+	rows, err := l.reader.Run(ctx, `
+		MATCH (source:Workload)-[rel:DEPENDS_ON]->(target:Workload)
+		WHERE source.repo_id IN $repo_ids
+		  AND rel.evidence_source = $evidence_source
+		RETURN DISTINCT source.repo_id AS repo_id
+	`, map[string]any{
+		"repo_ids":        repoIDs,
+		"evidence_source": evidenceSource,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	edges := make([]reducer.ExistingWorkloadDependencyEdge, 0, len(rows))
+	for _, row := range rows {
+		repoID := query.StringVal(row, "repo_id")
+		if repoID == "" {
+			continue
+		}
+		edges = append(edges, reducer.ExistingWorkloadDependencyEdge{
+			RepoID: repoID,
+		})
+	}
+	return edges, nil
 }

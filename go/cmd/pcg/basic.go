@@ -2,12 +2,25 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
+)
+
+var (
+	watchLookPath = exec.LookPath
+	watchExec     = func(binary string, args []string, env []string) error { return syscall.Exec(binary, args, env) }
+	watchSetenv   = os.Setenv
+	watchEnviron  = os.Environ
+	indexLookPath = exec.LookPath
+	indexExec     = func(binary string, args []string, env []string) error { return syscall.Exec(binary, args, env) }
 )
 
 func init() {
@@ -19,6 +32,7 @@ func init() {
 		RunE:  runIndex,
 	}
 	indexCmd.Flags().BoolP("force", "f", false, "Force re-index")
+	indexCmd.Flags().String("discovery-report", "", "Write a discovery advisory JSON report to this path")
 	rootCmd.AddCommand(indexCmd)
 
 	// index-status
@@ -83,6 +97,7 @@ func init() {
 		RunE:  runWatch,
 	}
 	watchCmd.Flags().String("scope", "auto", "Watch scope: auto, repo, or workspace")
+	watchCmd.Flags().String("workspace-root", "", "Explicit workspace root for local host ownership")
 	rootCmd.AddCommand(watchCmd)
 
 	// unwatch
@@ -128,12 +143,15 @@ func init() {
 	rootCmd.AddCommand(finalizeCmd)
 
 	// Shortcuts
-	rootCmd.AddCommand(&cobra.Command{
+	indexShortcutCmd := &cobra.Command{
 		Use:   "i [path]",
 		Short: "Shortcut for 'pcg index'",
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runIndex,
-	})
+	}
+	indexShortcutCmd.Flags().BoolP("force", "f", false, "Force re-index")
+	indexShortcutCmd.Flags().String("discovery-report", "", "Write a discovery advisory JSON report to this path")
+	rootCmd.AddCommand(indexShortcutCmd)
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "ls",
 		Short: "Shortcut for 'pcg list'",
@@ -166,8 +184,9 @@ func runIndex(cmd *cobra.Command, args []string) error {
 	}
 
 	force, _ := cmd.Flags().GetBool("force")
+	discoveryReport, _ := cmd.Flags().GetString("discovery-report")
 
-	binary, err := exec.LookPath("pcg-bootstrap-index")
+	binary, err := indexLookPath("pcg-bootstrap-index")
 	if err != nil {
 		printError("pcg-bootstrap-index binary not found in PATH.")
 		fmt.Println("Build with: cd go && go build -o bin/ ./cmd/bootstrap-index/")
@@ -178,9 +197,17 @@ func runIndex(cmd *cobra.Command, args []string) error {
 	if force {
 		cmdArgs = append(cmdArgs, "--force")
 	}
+	env := os.Environ()
+	if strings.TrimSpace(discoveryReport) != "" {
+		reportPath, err := filepath.Abs(discoveryReport)
+		if err != nil {
+			return fmt.Errorf("resolve discovery report path %q: %w", discoveryReport, err)
+		}
+		env = append(env, "PCG_DISCOVERY_REPORT="+reportPath)
+	}
 
 	fmt.Printf("Indexing %s...\n", absPath)
-	return syscall.Exec(binary, cmdArgs, os.Environ())
+	return indexExec(binary, cmdArgs, env)
 }
 
 func runIndexStatus(cmd *cobra.Command, args []string) error {
@@ -205,18 +232,17 @@ func runList(cmd *cobra.Command, args []string) error {
 
 func runStats(cmd *cobra.Command, args []string) error {
 	client := NewAPIClient("", "", "")
-	path := ""
+	repoSelector := ""
 	if len(args) > 0 {
 		var err error
-		path, err = filepath.Abs(args[0])
+		repoSelector, err = normalizeRepositoryStatsSelector(args[0])
 		if err != nil {
 			return err
 		}
 	}
-	if path != "" {
+	if repoSelector != "" {
 		var result any
-		// Use repository stats endpoint with encoded path
-		if err := client.Get(fmt.Sprintf("/api/v0/repositories/%s/stats", path), &result); err != nil {
+		if err := client.Get(fmt.Sprintf("/api/v0/repositories/%s/stats", url.PathEscape(repoSelector)), &result); err != nil {
 			return err
 		}
 		printJSON(result)
@@ -229,6 +255,18 @@ func runStats(cmd *cobra.Command, args []string) error {
 		printJSON(result)
 	}
 	return nil
+}
+
+func normalizeRepositoryStatsSelector(arg string) (string, error) {
+	if arg == "" {
+		return "", nil
+	}
+	if _, err := os.Stat(arg); err == nil {
+		return filepath.Abs(arg)
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	return arg, nil
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
@@ -274,19 +312,24 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		path = args[0]
 	}
-	absPath, _ := filepath.Abs(path)
 
-	binary, err := exec.LookPath("pcg-ingester")
+	explicitRoot, err := cmd.Flags().GetString("workspace-root")
 	if err != nil {
-		printError("pcg-ingester binary not found in PATH.")
-		return fmt.Errorf("pcg-ingester not found")
-	}
-
-	fmt.Printf("Watching %s for changes...\n", absPath)
-	if err := os.Setenv("PCG_WATCH_PATH", absPath); err != nil {
 		return err
 	}
-	return syscall.Exec(binary, []string{"pcg-ingester", "--watch", absPath}, os.Environ())
+	workspaceRoot, err := pcglocal.ResolveWorkspaceRoot(path, explicitRoot)
+	if err != nil {
+		return err
+	}
+
+	binary, err := pcgExecutable()
+	if err != nil {
+		printError("pcg executable not found.")
+		return fmt.Errorf("pcg executable not found")
+	}
+
+	fmt.Printf("Watching %s for changes...\n", workspaceRoot)
+	return pcgExec(binary, []string{cleanExecutableArg0(binary), "local-host", "watch", workspaceRoot}, pcgEnviron())
 }
 
 func runUnwatch(cmd *cobra.Command, args []string) error {

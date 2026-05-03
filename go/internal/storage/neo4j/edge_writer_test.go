@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,10 @@ func TestEdgeWriterWriteEdgesRepoDependencyDispatch(t *testing.T) {
 				"repo_id":        "repo-a",
 				"target_repo_id": "repo-b",
 				"evidence_type":  "docker_compose_depends_on",
+				"resolved_id":    "resolved-depends-on-1",
+				"generation_id":  "gen-1",
+				"evidence_count": 2,
+				"evidence_kinds": []string{"DOCKER_COMPOSE_DEPENDS_ON"},
 			},
 		},
 	}
@@ -92,6 +97,18 @@ func TestEdgeWriterWriteEdgesRepoDependencyDispatch(t *testing.T) {
 	}
 	if got, want := rowsOut[0]["evidence_type"], "docker_compose_depends_on"; got != want {
 		t.Fatalf("row evidence_type = %v, want %v", got, want)
+	}
+	if got, want := rowsOut[0]["resolved_id"], "resolved-depends-on-1"; got != want {
+		t.Fatalf("row resolved_id = %v, want %v", got, want)
+	}
+	if got, want := rowsOut[0]["generation_id"], "gen-1"; got != want {
+		t.Fatalf("row generation_id = %v, want %v", got, want)
+	}
+	if got, want := rowsOut[0]["evidence_count"], 2; got != want {
+		t.Fatalf("row evidence_count = %v, want %v", got, want)
+	}
+	if got, want := rowsOut[0]["evidence_kinds"], []string{"DOCKER_COMPOSE_DEPENDS_ON"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("row evidence_kinds = %#v, want %#v", got, want)
 	}
 }
 
@@ -154,10 +171,10 @@ func TestEdgeWriterWriteEdgesCodeCallDispatch(t *testing.T) {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "REFERENCES") {
-		t.Fatalf("cypher missing REFERENCES branch: %s", executor.calls[0].Cypher)
+		t.Fatalf("cypher missing REFERENCES edge: %s", executor.calls[0].Cypher)
 	}
-	if !strings.Contains(executor.calls[0].Cypher, "CALLS") {
-		t.Fatalf("cypher missing CALLS branch: %s", executor.calls[0].Cypher)
+	if strings.Contains(executor.calls[0].Cypher, "CALLS") {
+		t.Fatalf("cypher unexpectedly included CALLS edge: %s", executor.calls[0].Cypher)
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "UNWIND") {
 		t.Fatalf("cypher missing UNWIND: %s", executor.calls[0].Cypher)
@@ -171,6 +188,39 @@ func TestEdgeWriterWriteEdgesCodeCallDispatch(t *testing.T) {
 	}
 	if got, want := batchRows[0]["call_kind"], "jsx_component"; got != want {
 		t.Fatalf("call_kind = %v, want %v", got, want)
+	}
+}
+
+func TestEdgeWriterWriteEdgesDirectCodeCallDispatch(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewEdgeWriter(executor, 0)
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:     "i1",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"repo_id":          "repo-a",
+				"caller_entity_id": "entity:function:caller",
+				"callee_entity_id": "entity:function:callee",
+			},
+		},
+	}
+
+	err := writer.WriteEdges(context.Background(), reducer.DomainCodeCalls, rows, "parser/code-calls")
+	if err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.calls), 1; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "CALLS") {
+		t.Fatalf("cypher missing CALLS edge: %s", executor.calls[0].Cypher)
+	}
+	if strings.Contains(executor.calls[0].Cypher, "REFERENCES") {
+		t.Fatalf("cypher unexpectedly included REFERENCES edge: %s", executor.calls[0].Cypher)
 	}
 }
 
@@ -201,7 +251,7 @@ func TestEdgeWriterWriteEdgesPythonMetaclassDispatch(t *testing.T) {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "USES_METACLASS") {
-		t.Fatalf("cypher missing USES_METACLASS branch: %s", executor.calls[0].Cypher)
+		t.Fatalf("cypher missing USES_METACLASS edge: %s", executor.calls[0].Cypher)
 	}
 	batchRows, ok := executor.calls[0].Parameters["rows"].([]map[string]any)
 	if !ok || len(batchRows) != 1 {
@@ -338,11 +388,26 @@ func TestEdgeWriterRetractEdgesRepoDependencyDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RetractEdges() error = %v", err)
 	}
-	if got, want := len(executor.calls), 1; got != want {
+	if got, want := len(executor.calls), 2; got != want {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "source_repo:Repository") {
 		t.Fatalf("cypher missing Repository match: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "UNWIND $repo_ids AS repo_id") {
+		t.Fatalf("cypher missing per-repo unwind anchor: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source_repo:Repository {id: repo_id})") {
+		t.Fatalf("cypher missing indexed source Repository anchor: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (repo:Repository {id: repo_id})") {
+		t.Fatalf("cypher missing indexed RUNS_ON Repository anchor: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[1].Cypher, "HAS_DEPLOYMENT_EVIDENCE") {
+		t.Fatalf("artifact retract cypher missing evidence edge: %s", executor.calls[1].Cypher)
+	}
+	if !strings.Contains(executor.calls[1].Cypher, "DETACH DELETE artifact") {
+		t.Fatalf("artifact retract cypher missing DETACH DELETE: %s", executor.calls[1].Cypher)
 	}
 }
 
@@ -943,10 +1008,12 @@ func TestEdgeWriterWriteEdgesSQLRelationshipDispatch(t *testing.T) {
 			IntentID:     "i1",
 			RepositoryID: "repo-a",
 			Payload: map[string]any{
-				"source_entity_id":  "entity:sql_view:my_view",
-				"target_entity_id":  "entity:sql_table:users",
-				"repo_id":           "repo-a",
-				"relationship_type": "REFERENCES_TABLE",
+				"source_entity_id":   "entity:sql_view:my_view",
+				"target_entity_id":   "entity:sql_table:users",
+				"source_entity_type": "SqlView",
+				"target_entity_type": "SqlTable",
+				"repo_id":            "repo-a",
+				"relationship_type":  "REFERENCES_TABLE",
 			},
 		},
 	}
@@ -961,17 +1028,17 @@ func TestEdgeWriterWriteEdgesSQLRelationshipDispatch(t *testing.T) {
 	if !strings.Contains(executor.calls[0].Cypher, "REFERENCES_TABLE") {
 		t.Fatalf("cypher missing REFERENCES_TABLE: %s", executor.calls[0].Cypher)
 	}
-	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.source_entity_id})") {
-		t.Fatalf("cypher missing labeled source match: %s", executor.calls[0].Cypher)
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source:SqlView {uid: row.source_entity_id})") {
+		t.Fatalf("cypher missing exact source label match: %s", executor.calls[0].Cypher)
 	}
-	if !strings.Contains(executor.calls[0].Cypher, "MATCH (target:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.target_entity_id})") {
-		t.Fatalf("cypher missing labeled target match: %s", executor.calls[0].Cypher)
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (target:SqlTable {uid: row.target_entity_id})") {
+		t.Fatalf("cypher missing exact target label match: %s", executor.calls[0].Cypher)
 	}
-	if !strings.Contains(executor.calls[0].Cypher, "HAS_COLUMN") {
-		t.Fatalf("cypher missing HAS_COLUMN branch: %s", executor.calls[0].Cypher)
+	if strings.Contains(executor.calls[0].Cypher, "HAS_COLUMN") {
+		t.Fatalf("cypher unexpectedly included HAS_COLUMN edge: %s", executor.calls[0].Cypher)
 	}
-	if !strings.Contains(executor.calls[0].Cypher, "TRIGGERS") {
-		t.Fatalf("cypher missing TRIGGERS branch: %s", executor.calls[0].Cypher)
+	if strings.Contains(executor.calls[0].Cypher, "TRIGGERS") {
+		t.Fatalf("cypher unexpectedly included TRIGGERS edge: %s", executor.calls[0].Cypher)
 	}
 	batchRows, ok := executor.calls[0].Parameters["rows"].([]map[string]any)
 	if !ok || len(batchRows) != 1 {
@@ -982,6 +1049,84 @@ func TestEdgeWriterWriteEdgesSQLRelationshipDispatch(t *testing.T) {
 	}
 	if got, want := batchRows[0]["relationship_type"], "REFERENCES_TABLE"; got != want {
 		t.Fatalf("relationship_type = %v, want %v", got, want)
+	}
+}
+
+func TestEdgeWriterWriteEdgesSQLRelationshipFallsBackForRowsWithoutEntityTypes(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewEdgeWriter(executor, 0)
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:     "i1",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"source_entity_id":  "entity:sql_view:my_view",
+				"target_entity_id":  "entity:sql_table:users",
+				"repo_id":           "repo-a",
+				"relationship_type": "REFERENCES_TABLE",
+			},
+		},
+	}
+
+	if err := writer.WriteEdges(context.Background(), reducer.DomainSQLRelationships, rows, "reducer/sql-relationships"); err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.calls), 1; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "MATCH (source:SqlTable|SqlView|SqlFunction|SqlTrigger|SqlIndex|SqlColumn {uid: row.source_entity_id})") {
+		t.Fatalf("cypher missing compatibility source match: %s", executor.calls[0].Cypher)
+	}
+}
+
+func TestEdgeWriterWriteEdgesSQLRelationshipDispatchesRelationshipTypes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		relationshipType string
+		expectedEdge     string
+	}{
+		{name: "has column", relationshipType: "HAS_COLUMN", expectedEdge: "HAS_COLUMN"},
+		{name: "triggers", relationshipType: "TRIGGERS", expectedEdge: "TRIGGERS"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			executor := &recordingExecutor{}
+			writer := NewEdgeWriter(executor, 0)
+
+			rows := []reducer.SharedProjectionIntentRow{
+				{
+					IntentID:     "i1",
+					RepositoryID: "repo-a",
+					Payload: map[string]any{
+						"source_entity_id":  "entity:sql_view:my_view",
+						"target_entity_id":  "entity:sql_table:users",
+						"repo_id":           "repo-a",
+						"relationship_type": tt.relationshipType,
+					},
+				},
+			}
+
+			if err := writer.WriteEdges(context.Background(), reducer.DomainSQLRelationships, rows, "reducer/sql-relationships"); err != nil {
+				t.Fatalf("WriteEdges() error = %v", err)
+			}
+			if got, want := len(executor.calls), 1; got != want {
+				t.Fatalf("executor calls = %d, want %d", got, want)
+			}
+			if !strings.Contains(executor.calls[0].Cypher, tt.expectedEdge) {
+				t.Fatalf("cypher missing %s edge: %s", tt.expectedEdge, executor.calls[0].Cypher)
+			}
+			if rowsOut, ok := executor.calls[0].Parameters["rows"].([]map[string]any); !ok || len(rowsOut) != 1 {
+				t.Fatalf("expected 1 row in batch, got %v", executor.calls[0].Parameters["rows"])
+			}
+		})
 	}
 }
 
@@ -1076,7 +1221,7 @@ func TestBatchedWriteEdgesUsesUNWINDCypherIncludesNewDomains(t *testing.T) {
 		},
 		{
 			domain:   reducer.DomainSQLRelationships,
-			payload:  map[string]any{"source_entity_id": "s1", "target_entity_id": "t1"},
+			payload:  map[string]any{"source_entity_id": "s1", "target_entity_id": "t1", "relationship_type": "REFERENCES_TABLE"},
 			contains: "UNWIND $rows AS row",
 		},
 	}

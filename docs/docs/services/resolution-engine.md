@@ -90,11 +90,20 @@ Processing model:
 |---------|---------|---------|
 | `PCG_REDUCER_RETRY_DELAY` | 30s | Retry delay for failed intents |
 | `PCG_REDUCER_MAX_ATTEMPTS` | 3 | Max retry attempts |
+| `PCG_REDUCER_WORKERS` | Neo4j: `min(NumCPU, 4)`; NornicDB: `1` | Concurrent reducer intent workers |
+| `PCG_REDUCER_BATCH_CLAIM_SIZE` | Neo4j: `workers * 4`; NornicDB: `1` | Reducer intents leased per claim cycle |
 | `PCG_SHARED_PROJECTION_WORKERS` | 1 | Concurrent shared projection workers |
 | `PCG_SHARED_PROJECTION_PARTITION_COUNT` | 8 | Number of partitions |
 | `PCG_SHARED_PROJECTION_POLL_INTERVAL` | 5s | Poll interval when idle |
 | `PCG_SHARED_PROJECTION_LEASE_TTL` | 60s | Partition lease duration |
 | `PCG_SHARED_PROJECTION_BATCH_LIMIT` | 100 | Max intents per partition read |
+| `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | 250000 | Max code-call shared intents scanned or loaded for one accepted repo/run before failing safely instead of projecting partial CALLS truth |
+
+Increase `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` only after a reducer
+cycle reports the explicit acceptance-cap failure and discovery evidence shows
+the repo is dominated by authored source that should remain indexed. Do not use
+it for graph write deadlines, slow canonical phases, or ordinary queue backlog;
+those indicate different reducer, discovery, or graph-write bottlenecks.
 
 ## Telemetry
 

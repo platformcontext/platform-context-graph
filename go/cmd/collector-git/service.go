@@ -23,17 +23,25 @@ func buildCollectorService(
 	if err != nil {
 		return collector.Service{}, err
 	}
+	discoveryOptions, err := collector.LoadDiscoveryOptionsFromEnv(getenv)
+	if err != nil {
+		return collector.Service{}, err
+	}
+
+	committer := postgres.NewIngestionStore(database)
+	committer.Logger = logger
 
 	return collector.Service{
 		Source: &collector.GitSource{
 			Component: "collector-git",
 			Selector:  collector.NativeRepositorySelector{Config: config},
 			Snapshotter: collector.NativeRepositorySnapshotter{
-				SCIP:         collector.LoadSnapshotSCIPConfig(getenv),
-				ParseWorkers: config.ParseWorkers,
-				Tracer:       tracer,
-				Instruments:  instruments,
-				Logger:       logger,
+				SCIP:             collector.LoadSnapshotSCIPConfig(getenv),
+				ParseWorkers:     config.ParseWorkers,
+				DiscoveryOptions: discoveryOptions,
+				Tracer:           tracer,
+				Instruments:      instruments,
+				Logger:           logger,
 			},
 			SnapshotWorkers:        config.SnapshotWorkers,
 			LargeRepoThreshold:     config.LargeRepoThreshold,
@@ -43,7 +51,7 @@ func buildCollectorService(
 			Instruments:            instruments,
 			Logger:                 logger,
 		},
-		Committer:    postgres.NewIngestionStore(database),
+		Committer:    committer,
 		PollInterval: defaultCollectorPollInterval,
 		Tracer:       tracer,
 		Instruments:  instruments,

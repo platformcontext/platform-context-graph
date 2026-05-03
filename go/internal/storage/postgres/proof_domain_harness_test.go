@@ -135,7 +135,7 @@ func (db *proofDomainDB) ExecContext(_ context.Context, query string, args ...an
 		if _, exists := db.state.workItems[workItemID]; exists {
 			return proofResult{}, nil
 		}
-		payload, err := unmarshalPayload(args[5].([]byte))
+		payload, err := unmarshalPayload(args[7].([]byte))
 		if err != nil {
 			return nil, err
 		}
@@ -146,13 +146,13 @@ func (db *proofDomainDB) ExecContext(_ context.Context, query string, args ...an
 			status:       "pending",
 			scopeID:      args[1].(string),
 			generationID: args[2].(string),
-			visibleAt:    args[4].(time.Time).UTC(),
-			createdAt:    args[4].(time.Time).UTC(),
-			updatedAt:    args[4].(time.Time).UTC(),
-			payload:      args[5].([]byte),
+			visibleAt:    args[6].(time.Time).UTC(),
+			createdAt:    args[6].(time.Time).UTC(),
+			updatedAt:    args[6].(time.Time).UTC(),
+			payload:      args[7].([]byte),
 		}
 		if len(payload) > 0 {
-			workItem.payload = args[5].([]byte)
+			workItem.payload = args[7].([]byte)
 		}
 		db.state.workItems[workItem.workItemID] = workItem
 		return proofResult{}, nil
@@ -204,6 +204,10 @@ func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...a
 		return newProofRows([][]any{
 			proofQueueSnapshotRow(db.state.workItems, args[0].(time.Time)),
 		}), nil
+	case strings.Contains(query, "oldest_blocked_age_seconds"):
+		return newProofRows(nil), nil
+	case strings.Contains(query, "COALESCE(failure_details, '') AS failure_details"):
+		return newProofRows(nil), nil
 	case strings.Contains(query, "FROM fact_records"):
 		if len(args) != 2 {
 			return nil, fmt.Errorf("list facts args = %d, want 2", len(args))
@@ -211,22 +215,39 @@ func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...a
 		scopeID, _ := args[0].(string)
 		generationID, _ := args[1].(string)
 		return newProofRows(proofFactRows(db.state.facts, scopeID, generationID)), nil
+	case strings.Contains(query, "stage = 'reducer'"):
+		if len(args) != 7 {
+			return nil, fmt.Errorf("reducer claim args = %d, want 7", len(args))
+		}
+		waitForProjectorDrain, _ := args[4].(bool)
+		if waitForProjectorDrain && proofProjectorWorkOutstanding(db.state.workItems) {
+			return newProofRows(nil), nil
+		}
+		return db.claimReducerWork(args[0].(time.Time), args[2].(string), args[3].(time.Time))
 	case strings.Contains(query, "stage = 'projector'"):
 		if len(args) != 3 {
 			return nil, fmt.Errorf("projector claim args = %d, want 3", len(args))
 		}
 		return db.claimProjectorWork(args[0].(time.Time), args[1].(string), args[2].(time.Time))
-	case strings.Contains(query, "stage = 'reducer'"):
-		if len(args) != 4 {
-			return nil, fmt.Errorf("reducer claim args = %d, want 4", len(args))
-		}
-		return db.claimReducerWork(args[0].(time.Time), args[2].(string), args[3].(time.Time))
 	default:
 		if isWorkflowCoordinatorStatusQuery(query) {
 			return newProofRows(nil), nil
 		}
 		return nil, fmt.Errorf("unexpected query: %s", query)
 	}
+}
+
+func proofProjectorWorkOutstanding(items map[string]proofWorkItem) bool {
+	for _, item := range items {
+		if item.stage != "projector" {
+			continue
+		}
+		switch item.status {
+		case "pending", "retrying", "claimed", "running":
+			return true
+		}
+	}
+	return false
 }
 
 func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, claimUntil time.Time) (Rows, error) {
@@ -258,6 +279,8 @@ func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, cl
 			scopeRow.SourceSystem,
 			string(scopeRow.ScopeKind),
 			scopeRow.ParentScopeID,
+			db.state.activeGenerations[scopeRow.ScopeID],
+			proofPreviousGenerationExists(db.state.generations, scopeRow.ScopeID, generationRow.GenerationID),
 			string(scopeRow.CollectorKind),
 			scopeRow.PartitionKey,
 			generationRow.GenerationID,
@@ -272,6 +295,19 @@ func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, cl
 	}
 
 	return newProofRows(nil), nil
+}
+
+func proofPreviousGenerationExists(
+	generations map[string]scope.ScopeGeneration,
+	scopeID string,
+	currentGenerationID string,
+) bool {
+	for generationID, generation := range generations {
+		if generationID != currentGenerationID && generation.ScopeID == scopeID {
+			return true
+		}
+	}
+	return false
 }
 
 func (db *proofDomainDB) claimReducerWork(now time.Time, leaseOwner string, claimUntil time.Time) (Rows, error) {

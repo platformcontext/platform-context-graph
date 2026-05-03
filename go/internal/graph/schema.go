@@ -10,6 +10,18 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
+)
+
+// SchemaBackend identifies the graph database dialect used for schema DDL.
+type SchemaBackend string
+
+const (
+	// SchemaBackendNeo4j preserves PCG's shared production schema contract.
+	SchemaBackendNeo4j SchemaBackend = "neo4j"
+	// SchemaBackendNornicDB applies the narrow compatibility dialect proven by
+	// the opt-in NornicDB syntax gate.
+	SchemaBackendNornicDB SchemaBackend = "nornicdb"
 )
 
 // schemaConstraints lists uniqueness and node-key constraints that must exist
@@ -25,6 +37,10 @@ var schemaConstraints = []string{
 
 	// Directory identity
 	"CREATE CONSTRAINT directory_path IF NOT EXISTS FOR (d:Directory) REQUIRE d.path IS UNIQUE",
+
+	// Evidence story identity
+	"CREATE CONSTRAINT evidence_artifact_id IF NOT EXISTS FOR (a:EvidenceArtifact) REQUIRE a.id IS UNIQUE",
+	"CREATE CONSTRAINT environment_name IF NOT EXISTS FOR (e:Environment) REQUIRE e.name IS UNIQUE",
 
 	// Code entity node-key constraints
 	"CREATE CONSTRAINT function_unique IF NOT EXISTS FOR (f:Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE",
@@ -83,6 +99,7 @@ var schemaConstraints = []string{
 	"CREATE CONSTRAINT tier_name IF NOT EXISTS FOR (t:Tier) REQUIRE t.name IS UNIQUE",
 	"CREATE CONSTRAINT workload_id IF NOT EXISTS FOR (w:Workload) REQUIRE w.id IS UNIQUE",
 	"CREATE CONSTRAINT workload_instance_id IF NOT EXISTS FOR (i:WorkloadInstance) REQUIRE i.id IS UNIQUE",
+	"CREATE CONSTRAINT endpoint_id IF NOT EXISTS FOR (e:Endpoint) REQUIRE e.id IS UNIQUE",
 
 	// Platform identity
 	"CREATE CONSTRAINT platform_id IF NOT EXISTS FOR (p:Platform) REQUIRE p.id IS UNIQUE",
@@ -120,10 +137,15 @@ var uidConstraintLabels = []string{
 	"Function",
 	"HelmChart",
 	"HelmValues",
+	"ImplBlock",
 	"Interface",
+	"K8sResource",
 	"KustomizeOverlay",
 	"Macro",
+	"Module",
 	"Property",
+	"Protocol",
+	"ProtocolImplementation",
 	"QueryExecution",
 	"Record",
 	"SqlColumn",
@@ -165,8 +187,37 @@ var schemaPerformanceIndexes = []string{
 	"CREATE INDEX workload_name IF NOT EXISTS FOR (w:Workload) ON (w.name)",
 	"CREATE INDEX workload_repo_id IF NOT EXISTS FOR (w:Workload) ON (w.repo_id)",
 	"CREATE INDEX workload_instance_environment IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.environment)",
+	"CREATE INDEX workload_instance_workload_id IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.workload_id)",
+	"CREATE INDEX workload_instance_repo_id IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.repo_id)",
 	"CREATE INDEX function_name IF NOT EXISTS FOR (f:Function) ON (f.name)",
 	"CREATE INDEX class_name IF NOT EXISTS FOR (c:Class) ON (c.name)",
+}
+
+// nornicDBMergeLookupIndexes are explicit property indexes required for
+// NornicDB's schema-backed MERGE lookup path. Neo4j uniqueness constraints
+// already create backing indexes for these schemas; keep this NornicDB-only to
+// avoid duplicate-index warnings on Neo4j.
+var nornicDBMergeLookupIndexes = []string{
+	"CREATE INDEX nornicdb_repository_id_lookup IF NOT EXISTS FOR (r:Repository) ON (r.id)",
+	"CREATE INDEX nornicdb_directory_path_lookup IF NOT EXISTS FOR (d:Directory) ON (d.path)",
+	"CREATE INDEX nornicdb_file_path_lookup IF NOT EXISTS FOR (f:File) ON (f.path)",
+	"CREATE INDEX nornicdb_workload_id_lookup IF NOT EXISTS FOR (w:Workload) ON (w.id)",
+	"CREATE INDEX nornicdb_workload_instance_id_lookup IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.id)",
+	"CREATE INDEX nornicdb_platform_id_lookup IF NOT EXISTS FOR (p:Platform) ON (p.id)",
+	"CREATE INDEX nornicdb_endpoint_id_lookup IF NOT EXISTS FOR (e:Endpoint) ON (e.id)",
+	"CREATE INDEX nornicdb_evidence_artifact_id_lookup IF NOT EXISTS FOR (a:EvidenceArtifact) ON (a.id)",
+	"CREATE INDEX nornicdb_environment_name_lookup IF NOT EXISTS FOR (e:Environment) ON (e.name)",
+}
+
+func nornicDBUIDLookupIndexes() []string {
+	indexes := make([]string, 0, len(uidConstraintLabels))
+	for _, label := range uidConstraintLabels {
+		indexes = append(indexes, fmt.Sprintf(
+			"CREATE INDEX nornicdb_%s_uid_lookup IF NOT EXISTS FOR (n:%s) ON (n.uid)",
+			labelToSnake(label), label,
+		))
+	}
+	return indexes
 }
 
 // schemaFulltextIndexes lists Neo4j full-text index creation statements.
@@ -211,13 +262,34 @@ type fulltextIndex struct {
 // SchemaStatements returns the complete ordered list of Cypher statements
 // that EnsureSchema would execute. Useful for inspection and testing.
 func SchemaStatements() []string {
+	// The Neo4j backend is the default branch and cannot fail normalization.
+	stmts, _ := SchemaStatementsForBackend(SchemaBackendNeo4j)
+	return stmts
+}
+
+// SchemaStatementsForBackend returns the ordered Cypher schema statements for
+// a specific graph backend without executing them.
+func SchemaStatementsForBackend(backend SchemaBackend) ([]string, error) {
+	dialect, err := schemaDialectForBackend(backend)
+	if err != nil {
+		return nil, err
+	}
+
 	stmts := make([]string, 0,
 		len(schemaConstraints)+
 			len(uidConstraintLabels)+
 			len(schemaPerformanceIndexes)+
 			len(schemaFulltextIndexes))
-	stmts = append(stmts, schemaConstraints...)
+	for _, cypher := range schemaConstraints {
+		if cypher = dialect.constraint(cypher); cypher != "" {
+			stmts = append(stmts, cypher)
+		}
+	}
 	stmts = append(stmts, schemaPerformanceIndexes...)
+	if dialect.includeMergeLookupIndexes {
+		stmts = append(stmts, nornicDBMergeLookupIndexes...)
+		stmts = append(stmts, nornicDBUIDLookupIndexes()...)
+	}
 	for _, label := range uidConstraintLabels {
 		stmts = append(stmts, fmt.Sprintf(
 			"CREATE CONSTRAINT %s_uid_unique IF NOT EXISTS FOR (n:%s) REQUIRE n.uid IS UNIQUE",
@@ -227,7 +299,7 @@ func SchemaStatements() []string {
 	for _, ft := range schemaFulltextIndexes {
 		stmts = append(stmts, ft.primary)
 	}
-	return stmts
+	return stmts, nil
 }
 
 // EnsureSchema creates all constraints and indexes required by the platform
@@ -236,20 +308,38 @@ func SchemaStatements() []string {
 // creation automatically falls back to modern syntax when the procedure-based
 // API is unavailable.
 func EnsureSchema(ctx context.Context, executor CypherExecutor, logger *slog.Logger) error {
+	return EnsureSchemaWithBackend(ctx, executor, logger, SchemaBackendNeo4j)
+}
+
+// EnsureSchemaWithBackend creates all constraints and indexes required by the
+// selected graph backend. Neo4j remains the default production dialect;
+// NornicDB uses only syntax translations proven by compatibility tests.
+func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logger *slog.Logger, backend SchemaBackend) error {
 	if executor == nil {
 		return fmt.Errorf("schema executor is required")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
+	dialect, err := schemaDialectForBackend(backend)
+	if err != nil {
+		return err
+	}
 
 	var failed int
 
 	// Constraints
 	for _, cypher := range schemaConstraints {
+		cypher = dialect.constraint(cypher)
+		if cypher == "" {
+			continue
+		}
 		if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
 			failed++
-			logger.Warn("schema statement warning", "error", err, "cypher", cypher)
+			logger.Warn("schema statement warning",
+				"error", err,
+				"cypher", cypher,
+				"graph_backend", dialect.backend)
 		}
 	}
 
@@ -257,7 +347,30 @@ func EnsureSchema(ctx context.Context, executor CypherExecutor, logger *slog.Log
 	for _, cypher := range schemaPerformanceIndexes {
 		if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
 			failed++
-			logger.Warn("schema statement warning", "error", err, "cypher", cypher)
+			logger.Warn("schema statement warning",
+				"error", err,
+				"cypher", cypher,
+				"graph_backend", dialect.backend)
+		}
+	}
+	if dialect.includeMergeLookupIndexes {
+		for _, cypher := range nornicDBMergeLookupIndexes {
+			if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
+				failed++
+				logger.Warn("schema statement warning",
+					"error", err,
+					"cypher", cypher,
+					"graph_backend", dialect.backend)
+			}
+		}
+		for _, cypher := range nornicDBUIDLookupIndexes() {
+			if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
+				failed++
+				logger.Warn("schema statement warning",
+					"error", err,
+					"cypher", cypher,
+					"graph_backend", dialect.backend)
+			}
 		}
 	}
 
@@ -269,29 +382,98 @@ func EnsureSchema(ctx context.Context, executor CypherExecutor, logger *slog.Log
 		)
 		if err := executeSchemaStatement(ctx, executor, cypher); err != nil {
 			failed++
-			logger.Warn("schema statement warning", "error", err, "cypher", cypher)
+			logger.Warn("schema statement warning",
+				"error", err,
+				"cypher", cypher,
+				"graph_backend", dialect.backend)
 		}
 	}
 
 	// Full-text indexes with fallback
 	for _, ft := range schemaFulltextIndexes {
 		if err := executeSchemaStatement(ctx, executor, ft.primary); err != nil {
+			if dialect.skipFulltextFallback {
+				failed++
+				logger.Warn("fulltext index warning",
+					"primary_error", err,
+					"primary", ft.primary,
+					"graph_backend", dialect.backend)
+				continue
+			}
 			if err2 := executeSchemaStatement(ctx, executor, ft.fallback); err2 != nil {
 				failed++
 				logger.Warn("fulltext index warning",
 					"primary_error", err, "fallback_error", err2,
-					"primary", ft.primary, "fallback", ft.fallback)
+					"primary", ft.primary, "fallback", ft.fallback,
+					"graph_backend", dialect.backend)
 			}
 		}
 	}
 
 	if failed > 0 {
-		logger.Warn("schema creation completed with warnings", "failed", failed)
+		logger.Warn("schema creation completed with warnings", "failed", failed, "graph_backend", dialect.backend)
 	} else {
-		logger.Info("database schema verified/created successfully")
+		logger.Info("database schema verified/created successfully", "graph_backend", dialect.backend)
 	}
 
 	return nil
+}
+
+type schemaDialect struct {
+	backend                   SchemaBackend
+	constraint                func(string) string
+	skipFulltextFallback      bool
+	includeMergeLookupIndexes bool
+}
+
+func schemaDialectForBackend(backend SchemaBackend) (schemaDialect, error) {
+	normalized, err := normalizeSchemaBackend(backend)
+	if err != nil {
+		return schemaDialect{}, err
+	}
+	switch normalized {
+	case SchemaBackendNeo4j:
+		return schemaDialect{backend: normalized, constraint: neo4jSchemaConstraint}, nil
+	case SchemaBackendNornicDB:
+		return schemaDialect{
+			backend:                   normalized,
+			constraint:                nornicDBSchemaConstraint,
+			skipFulltextFallback:      true,
+			includeMergeLookupIndexes: true,
+		}, nil
+	}
+	return schemaDialect{}, fmt.Errorf("unsupported schema backend %q", backend)
+}
+
+func normalizeSchemaBackend(backend SchemaBackend) (SchemaBackend, error) {
+	switch backend {
+	case "", SchemaBackendNeo4j:
+		return SchemaBackendNeo4j, nil
+	case SchemaBackendNornicDB:
+		return SchemaBackendNornicDB, nil
+	default:
+		return "", fmt.Errorf("unsupported schema backend %q", backend)
+	}
+}
+
+func neo4jSchemaConstraint(cypher string) string {
+	return cypher
+}
+
+func nornicDBSchemaConstraint(cypher string) string {
+	if isCompositeUniqueConstraint(cypher) {
+		// NornicDB's current parser accepts NODE KEY but rejects Neo4j's
+		// composite IS UNIQUE form. Do not translate these constraints to
+		// NODE KEY: node keys require every participating property to be
+		// present, while several PCG semantic labels are intentionally sparse.
+		// Canonical writes use separate uid uniqueness constraints instead.
+		return ""
+	}
+	return cypher
+}
+
+func isCompositeUniqueConstraint(cypher string) bool {
+	return strings.Contains(cypher, " REQUIRE (") && strings.Contains(cypher, ") IS UNIQUE")
 }
 
 // executeSchemaStatement runs one DDL statement through the executor.
@@ -303,7 +485,7 @@ func executeSchemaStatement(ctx context.Context, executor CypherExecutor, cypher
 }
 
 // labelToSnake converts a PascalCase label to lower_snake_case for use in
-// constraint names (e.g., "CrossplaneXRD" -> "crossplanexrd").
+// constraint names (e.g., "CrossplaneXRD" -> "crossplane_x_r_d").
 func labelToSnake(label string) string {
 	result := make([]byte, 0, len(label)+4)
 	for i, b := range []byte(label) {

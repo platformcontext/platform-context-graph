@@ -31,7 +31,7 @@ func buildRepositoryWorkflowArtifacts(files []FileContent) map[string]any {
 
 func loadRepositoryWorkflowArtifacts(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	repoID string,
 	files []FileContent,
 ) (map[string]any, error) {

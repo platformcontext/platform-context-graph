@@ -42,6 +42,10 @@ async def predict(_request: Request):
 	assertFrameworksEqual(t, got, "fastapi")
 	assertNestedStringSliceEqual(t, got, "fastapi", "route_methods", []string{"GET", "POST"})
 	assertNestedStringSliceEqual(t, got, "fastapi", "route_paths", []string{"/health", "/api/predict"})
+	assertNestedRouteEntriesEqual(t, got, "fastapi", []map[string]string{
+		{"method": "GET", "path": "/health"},
+		{"method": "POST", "path": "/api/predict"},
+	})
 	assertNestedStringSliceEqual(t, got, "fastapi", "server_symbols", []string{"app", "router"})
 }
 
@@ -80,6 +84,11 @@ def proxy():
 	assertFrameworksEqual(t, got, "flask")
 	assertNestedStringSliceEqual(t, got, "flask", "route_methods", []string{"GET", "POST"})
 	assertNestedStringSliceEqual(t, got, "flask", "route_paths", []string{"/health", "/proxy"})
+	assertNestedRouteEntriesEqual(t, got, "flask", []map[string]string{
+		{"method": "GET", "path": "/health"},
+		{"method": "GET", "path": "/proxy"},
+		{"method": "POST", "path": "/proxy"},
+	})
 	assertNestedStringSliceEqual(t, got, "flask", "server_symbols", []string{"app"})
 }
 

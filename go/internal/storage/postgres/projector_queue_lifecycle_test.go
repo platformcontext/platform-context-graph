@@ -3,12 +3,15 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
+	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 )
 
 func TestProjectorQueueAckPromotesGenerationAndSupersedesPriorActive(t *testing.T) {
@@ -170,6 +173,81 @@ func TestProjectorQueueFailRetriesRetryableErrorWithinAttemptBudget(t *testing.T
 	}
 }
 
+func TestProjectorQueueFailSanitizesFailureTextForPostgres(t *testing.T) {
+	t.Parallel()
+
+	db := &recordingExecQueryer{}
+	queue := NewProjectorQueue(db, "projector-1", 30*time.Second)
+	work := projector.ScopeGenerationWork{
+		Scope: scope.IngestionScope{ScopeID: "scope-123"},
+		Generation: scope.ScopeGeneration{
+			GenerationID: "generation-456",
+		},
+	}
+
+	raw := "bad\x00" + string([]byte{0xff}) + "message"
+	if err := queue.Fail(context.Background(), work, errors.New(raw)); err != nil {
+		t.Fatalf("Fail() error = %v, want nil", err)
+	}
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+
+	for _, idx := range []int{2, 3} {
+		got, _ := db.execs[0].args[idx].(string)
+		if strings.Contains(got, "\x00") {
+			t.Fatalf("failure arg[%d] contains NUL: %q", idx, got)
+		}
+		if !utf8.ValidString(got) {
+			t.Fatalf("failure arg[%d] is not valid UTF-8: %q", idx, got)
+		}
+		if got != "badmessage" {
+			t.Fatalf("failure arg[%d] = %q, want %q", idx, got, "badmessage")
+		}
+	}
+}
+
+func TestProjectorQueueFailLifecycleRetriesGraphWriteTimeoutWithinAttemptBudget(t *testing.T) {
+	t.Parallel()
+
+	db := &recordingExecQueryer{}
+	queue := NewProjectorQueue(db, "projector-1", 30*time.Second)
+	queue.Now = func() time.Time {
+		return time.Date(2026, time.April, 12, 14, 30, 0, 0, time.UTC)
+	}
+	work := projector.ScopeGenerationWork{
+		Scope: scope.IngestionScope{ScopeID: "scope-123"},
+		Generation: scope.ScopeGeneration{
+			GenerationID: "generation-456",
+		},
+		AttemptCount: 1,
+	}
+	cause := sourceneo4j.GraphWriteTimeoutError{
+		Operation:   "neo4j execute group timed out",
+		Timeout:     30 * time.Second,
+		TimeoutHint: "PCG_CANONICAL_WRITE_TIMEOUT",
+		Summary:     "phase=files rows=100 chunk=21/24",
+		Cause:       context.DeadlineExceeded,
+	}
+
+	if err := queue.Fail(context.Background(), work, cause); err != nil {
+		t.Fatalf("Fail() error = %v, want nil", err)
+	}
+
+	if !strings.Contains(db.execs[0].query, "status = 'retrying'") {
+		t.Fatalf("timeout should retry within attempt budget, query:\n%s", db.execs[0].query)
+	}
+	if got, want := db.execs[0].args[1], "projection_retryable"; got != want {
+		t.Fatalf("failure class = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[3], "phase=files rows=100 chunk=21/24"; got != want {
+		t.Fatalf("failure details = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[4], queue.Now().Add(30*time.Second); got != want {
+		t.Fatalf("next attempt = %v, want %v", got, want)
+	}
+}
+
 func TestProjectorQueueFailMarksRetryableErrorTerminalWhenAttemptBudgetExhausted(t *testing.T) {
 	t.Parallel()
 
@@ -209,6 +287,66 @@ func TestProjectorQueueFailMarksRetryableErrorTerminalWhenAttemptBudgetExhausted
 	}
 }
 
+func TestProjectorQueueHeartbeatRenewsClaim(t *testing.T) {
+	t.Parallel()
+
+	db := &recordingExecQueryer{}
+	queue := NewProjectorQueue(db, "projector-1", 30*time.Second)
+	queue.Now = func() time.Time {
+		return time.Date(2026, time.April, 12, 14, 30, 0, 0, time.UTC)
+	}
+
+	work := projector.ScopeGenerationWork{
+		Scope: scope.IngestionScope{ScopeID: "scope-123"},
+		Generation: scope.ScopeGeneration{
+			GenerationID: "generation-456",
+		},
+	}
+
+	if err := queue.Heartbeat(context.Background(), work); err != nil {
+		t.Fatalf("Heartbeat() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+	query := db.execs[0].query
+	for _, want := range []string{
+		"UPDATE fact_work_items",
+		"status = 'running'",
+		"claim_until = $1",
+		"lease_owner = $5",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("Heartbeat() query missing %q:\n%s", want, query)
+		}
+	}
+	if got, want := db.execs[0].args[0], queue.Now().Add(queue.LeaseDuration); got != want {
+		t.Fatalf("claim_until arg = %v, want %v", got, want)
+	}
+}
+
+func TestProjectorQueueHeartbeatRejectsStaleClaim(t *testing.T) {
+	t.Parallel()
+
+	db := &recordingExecQueryer{result: projectorRowsAffectedResult{rowsAffected: 0}}
+	queue := NewProjectorQueue(db, "projector-1", 30*time.Second)
+	work := projector.ScopeGenerationWork{
+		Scope: scope.IngestionScope{ScopeID: "scope-123"},
+		Generation: scope.ScopeGeneration{
+			GenerationID: "generation-456",
+		},
+	}
+
+	err := queue.Heartbeat(context.Background(), work)
+	if err == nil {
+		t.Fatal("Heartbeat() error = nil, want non-nil")
+	}
+	if !errors.Is(err, ErrProjectorClaimRejected) {
+		t.Fatalf("Heartbeat() error = %v, want %v", err, ErrProjectorClaimRejected)
+	}
+}
+
 var errProjectionFailed = &testError{message: "projection failed"}
 
 type testError struct {
@@ -234,6 +372,7 @@ func (e *retryableTestError) Retryable() bool {
 type recordingExecQueryer struct {
 	beginCalls int
 	execs      []recordedExecCall
+	result     sql.Result
 }
 
 type recordedExecCall struct {
@@ -246,6 +385,9 @@ func (r *recordingExecQueryer) ExecContext(_ context.Context, query string, args
 		query: query,
 		args:  append([]any(nil), args...),
 	})
+	if r.result != nil {
+		return r.result, nil
+	}
 	return proofResult{}, nil
 }
 
@@ -257,6 +399,13 @@ func (r *recordingExecQueryer) Begin(context.Context) (Transaction, error) {
 	r.beginCalls++
 	return recordingTransaction{parent: r}, nil
 }
+
+type projectorRowsAffectedResult struct {
+	rowsAffected int64
+}
+
+func (r projectorRowsAffectedResult) LastInsertId() (int64, error) { return 0, nil }
+func (r projectorRowsAffectedResult) RowsAffected() (int64, error) { return r.rowsAffected, nil }
 
 type recordingTransaction struct {
 	parent *recordingExecQueryer

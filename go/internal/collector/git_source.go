@@ -58,6 +58,9 @@ type RepositorySnapshot struct {
 	FileData        []map[string]any        `json:"file_data"`
 	ContentFiles    []ContentFileSnapshot   `json:"content_files"`
 	ContentEntities []ContentEntitySnapshot `json:"content_entities"`
+	// DiscoveryAdvisory summarizes noisy repo discovery and materialization
+	// shapes for focused operator tuning.
+	DiscoveryAdvisory *DiscoveryAdvisoryReport `json:"discovery_advisory,omitempty"`
 	// ContentFileMetas holds body-free file metadata for two-phase snapshots.
 	// When populated, streamFacts re-reads bodies from AbsolutePath at emit time
 	// instead of carrying all bodies in memory.
@@ -209,7 +212,7 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	}
 	if len(batch.Repositories) == 0 {
 		if s.Logger != nil {
-			s.Logger.InfoContext(ctx, "collector stream: no repositories discovered",
+			s.Logger.DebugContext(ctx, "collector stream: no repositories discovered",
 				slog.String("collector_kind", "git"),
 				slog.String("component", s.componentName()),
 				telemetry.PhaseAttr(telemetry.PhaseDiscovery),
@@ -568,7 +571,11 @@ func (s *GitSource) discoverRepositories(ctx context.Context) (SelectionBatch, e
 		}
 
 		if s.Logger != nil && err == nil {
-			s.Logger.InfoContext(ctx, "collector discovery completed",
+			logFn := s.Logger.InfoContext
+			if len(batch.Repositories) == 0 {
+				logFn = s.Logger.DebugContext
+			}
+			logFn(ctx, "collector discovery completed",
 				slog.String("collector_kind", "git"),
 				slog.Int("repository_count", len(batch.Repositories)),
 			)
@@ -711,6 +718,14 @@ func (s *GitSource) snapshotOneRepository(
 		observedAt,
 		snapshot,
 		repository.IsDependency,
+	)
+	enrichDiscoveryAdvisoryRun(
+		generation.DiscoveryAdvisory,
+		s.componentName(),
+		metadata.ID,
+		sourceRunID,
+		generation.Scope.ScopeID,
+		generation.Generation.GenerationID,
 	)
 
 	duration := time.Since(start).Seconds()

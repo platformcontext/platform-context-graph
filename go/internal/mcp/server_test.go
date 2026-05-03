@@ -88,8 +88,8 @@ func TestHandleHTTPMessage_ToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("missing tools array")
 	}
-	if len(tools) != 39 {
-		t.Errorf("expected 39 tools, got %d", len(tools))
+	if len(tools) != 41 {
+		t.Errorf("expected 41 tools, got %d", len(tools))
 	}
 }
 
@@ -186,6 +186,69 @@ func TestHandleHTTPMessage_ToolCall(t *testing.T) {
 	}
 	if len(content) == 0 {
 		t.Fatal("expected at least one content entry")
+	}
+	if len(content) != 1 {
+		t.Fatalf("expected 1 content entry, got %d", len(content))
+	}
+}
+
+func TestHandleHTTPMessage_ToolCallStructuredEnvelopeError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v0/code/call-chain", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data":  nil,
+			"truth": nil,
+			"error": map[string]any{
+				"code":       "unsupported_capability",
+				"message":    "call-chain analysis requires authoritative graph mode",
+				"capability": "call_graph.call_chain_path",
+				"profiles": map[string]any{
+					"current":  "local_lightweight",
+					"required": "local_full_stack",
+				},
+			},
+		})
+	})
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	s := NewServer(mux, logger)
+
+	body := `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"find_function_call_chain","arguments":{"start":"a","end":"b"}}}`
+	req := httptest.NewRequest("POST", "/mcp/message", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	s.handleHTTPMessage(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatal("missing result")
+	}
+	if isError, _ := result["isError"].(bool); !isError {
+		t.Fatalf("result.isError = %#v, want true", result["isError"])
+	}
+	content, ok := result["content"].([]any)
+	if !ok || len(content) != 2 {
+		t.Fatalf("content = %#v, want 2 entries", result["content"])
+	}
+	resource, ok := content[1].(map[string]any)
+	if !ok {
+		t.Fatalf("content[1] type = %T, want map[string]any", content[1])
+	}
+	resourcePayload, ok := resource["resource"].(map[string]any)
+	if !ok {
+		t.Fatalf("resource payload = %#v, want map[string]any", resource["resource"])
+	}
+	if !strings.Contains(resourcePayload["text"].(string), `"unsupported_capability"`) {
+		t.Fatalf("resource text = %q, want canonical unsupported_capability envelope", resourcePayload["text"])
 	}
 }
 

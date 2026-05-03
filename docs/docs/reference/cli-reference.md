@@ -44,8 +44,126 @@ These options apply at the root command level.
 | :--- | :--- |
 | `--database`, `-db` | Temporarily switch the database backend for one command. |
 | `--visual`, `--viz`, `-V` | Ask supported local `find` and `analyze` commands to open graph-style visualization output. |
+| `--workspace-root` | Pin the workspace-root directory explicitly. Overrides the resolution order described in [Workspace root and profiles](#workspace-root-and-profiles). Applies to `pcg watch` and `pcg workspace watch`. |
 | `--version`, `-v` | Show the installed PCG version and exit. |
 | `--help`, `-h` | Show help and exit. |
+
+### Runtime profile
+
+The CLI, MCP server, and HTTP API all accept the same runtime-profile axis via
+the `PCG_QUERY_PROFILE` environment variable. Allowed values:
+`local_lightweight`, `local_authoritative`, `local_full_stack`, `production`.
+Invalid values are rejected at startup. Local-host entrypoints choose their
+profile explicitly from command context, while hosted API and MCP runtimes
+default to `production` when `PCG_QUERY_PROFILE` is unset.
+Truth-level behavior per profile is defined by
+[Capability Conformance Spec](capability-conformance-spec.md) and
+[Truth Label Protocol](truth-label-protocol.md).
+
+### Graph backend
+
+Separately from profile, PCG selects a graph adapter via
+`PCG_GRAPH_BACKEND`. Allowed values: `neo4j` (default), `nornicdb`.
+Invalid values are rejected at startup. See
+[Graph Backend Installation](graph-backend-installation.md) and
+[ADR 2026-04-22](../adrs/2026-04-22-nornicdb-graph-backend-candidate.md)
+for the evaluation path.
+
+Today, `local_authoritative` auto-manages NornicDB when a verified NornicDB
+binary is available. The laptop default is the headless artifact; the full
+binary remains an explicit opt-in. PCG resolves it in this order:
+
+1. `PCG_NORNICDB_BINARY`
+2. `${PCG_HOME}/bin/nornicdb-headless` installed by
+   `pcg install nornicdb` or `pcg install nornicdb --from <source>`
+3. `nornicdb-headless` in `PATH`
+4. `nornicdb` in `PATH`
+
+During NornicDB evaluation, local-authoritative canonical graph writes use
+bounded phase-group transactions and are still bounded by
+`PCG_CANONICAL_WRITE_TIMEOUT` (`30s` by default). The default phase-group size
+is `500` statements and can be tuned with
+`PCG_NORNICDB_PHASE_GROUP_STATEMENTS=<positive integer>` when repo-scale
+dogfood runs need a larger or smaller transaction window. This protects local
+MCP/CLI coding workflows from an indefinitely stuck graph write while keeping
+content-index-backed code search available even when graph projection is
+degraded.
+For the full NornicDB tuning matrix, including file/entity row caps and
+conformance-only switches, see [NornicDB Tuning](nornicdb-tuning.md).
+
+`PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` is reserved for NornicDB adapter
+conformance runs. It enables the same grouped canonical write surface used by
+Neo4j so PCG can prove NornicDB rollback, timeout, and no-partial-write
+behavior before promotion. The 2026-04-23 safety probe against the rebuilt
+linuxdynasty-fork headless binary `/tmp/nornicdb-headless-pcg-rollback`
+(`v1.0.42-hotfix`) reports rollback marker count `0` across grouped,
+clean-explicit, and failed-explicit rollback surfaces. Keep the switch unset
+for normal laptop coding until that fixed binary is release-backed and broader
+adapter conformance passes. Manual conformance runs must use a disposable
+`PCG_HOME` / workspace data root.
+
+### Graph backend commands
+
+The `local_authoritative` profile runs a graph-backend sidecar alongside the
+lightweight host. PCG exposes:
+
+| Command | Purpose |
+| :--- | :--- |
+| `pcg graph status` | Available now. Report workspace graph-owner metadata, backend, PID, binary path, ports, log path, and current running state when present. |
+| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force] [--full]` | Available now. Without `--from`, install from the pinned embedded release manifest when the host platform is covered. The current `dev` pin is the rollback-fixed linuxdynasty fork headless tarball for macOS arm64, so headless remains the laptop default. `--full` only succeeds when the manifest includes a matching fixed full published artifact for the current host. With `--from`, verify and copy a NornicDB binary from a local path, tar archive, macOS package, or URL to `${PCG_HOME}/bin/nornicdb-headless`. Remote downloads honor `Ctrl-C` and default to `30s`; override with `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` when slower links need more time. Signature verification remains future work. |
+| `pcg graph logs [--workspace-root <path>]` | Available now. Print the current workspace `graph-nornicdb.log` file if present. |
+| `pcg graph stop [--workspace-root <path>]` | Available now. Request the workspace owner to shut down so the managed graph sidecar stops through the normal lifecycle; stale owner graph processes are stopped directly. |
+| `pcg graph start [--workspace-root <path>]` | Available now. Foreground shortcut for starting the `local_authoritative` workspace owner, equivalent to `PCG_QUERY_PROFILE=local_authoritative pcg watch .`. During startup and indexing it prints a live progress panel sourced from the shared status store: owner/profile/backend header, collector/projector/reducer flow lanes, and queue pressure. |
+| `pcg graph upgrade --from <source> [--sha256 <hex>] [--workspace-root <path>]` | Available now. Replace the managed NornicDB binary from a verified local binary, tar archive, macOS package, or URL; requires the workspace graph to be stopped first. |
+
+Full operator contract: [Graph Backend Operations](graph-backend-operations.md).
+
+## Workspace root and profiles
+
+The lightweight local host treats each workspace as a single-owner filesystem.
+A workspace has one data root at `${PCG_HOME}/local/workspaces/<workspace_id>/`.
+
+### Resolution order
+
+When you run `pcg watch .`, `pcg mcp stdio`, or any command that needs a
+workspace, PCG picks the workspace root in this order:
+
+1. `--workspace-root <path>` explicit flag
+2. Nearest ancestor directory containing `.pcg.yaml`
+3. Nearest ancestor directory containing `.git`
+4. The current working directory
+
+The resolved path is passed through `realpath`, normalized, and hashed
+(SHA-256, first 20 bytes hex) to derive a stable `workspace_id`. Two symlinked
+paths that resolve to the same real path converge to the same `workspace_id`.
+
+### PCG_HOME defaults
+
+`PCG_HOME` controls where local host state lives. Override with the
+`PCG_HOME` environment variable. Defaults:
+
+| OS | Default |
+| --- | --- |
+| macOS | `~/Library/Application Support/pcg` |
+| Linux | `${XDG_DATA_HOME:-~/.local/share}/pcg` |
+| Windows | `%LOCALAPPDATA%\pcg` (ownership + transport deferred) |
+
+### Data-root layout
+
+Each workspace owns one directory tree under `${PCG_HOME}/local/workspaces/<workspace_id>/`:
+
+```text
+VERSION            # layout schema version
+owner.lock         # flock sentinel for single-owner invariant
+owner.json         # current owner metadata (PID, postgres state, optional graph state)
+graph/             # optional authoritative graph backend data root
+postgres/          # embedded Postgres data directory
+logs/              # local-host lifecycle and recovery logs
+cache/             # derived local caches (rebuildable)
+```
+
+See [Local Data Root Spec](local-data-root-spec.md) and
+[Local Host Lifecycle](local-host-lifecycle.md) for the full contract.
 
 ## Public command map
 
@@ -56,20 +174,27 @@ These options apply at the root command level.
 | `pcg help` | Show the full root help screen. | No |
 | `pcg version` | Print the installed version. | No |
 | `pcg doctor` | Run local diagnostics. | No |
-| `pcg index [path]` | Index a local path by launching the Go `bootstrap-index` runtime. | No |
+| `pcg index [path] [--discovery-report <file>]` | Index a local path by launching the Go `bootstrap-index` runtime. The optional discovery report writes a JSON advisory artifact for noisy-repo tuning. | No |
 | `pcg index-status` | Show the latest checkpointed index status. This is the completeness signal, not process health. | Yes |
 | `pcg finalize` | Compatibility stub. Prints the current ingester recovery endpoints and exits non-zero. | No |
 | `pcg clean` | Compatibility stub. Prints cleanup guidance and exits non-zero. | No |
-| `pcg stats [path]` | Show indexing statistics. | No |
+| `pcg stats [repo-or-path]` | Show indexing statistics. Existing local paths are normalized to absolute indexed paths; other arguments are treated as repository selectors such as name or repo slug. | No |
 | `pcg delete <path>` | Compatibility stub. Prints deletion guidance and exits non-zero. | No |
 | `pcg delete --all` | Compatibility stub. Prints deletion guidance and exits non-zero. | No |
 | `pcg list` | List indexed repositories. | No |
 | `pcg add-package` | Compatibility stub. Prints package-indexing guidance and exits non-zero. | No |
-| `pcg watch [path]` | Watch a local path and keep the graph updated. | No |
+| `pcg watch [path]` | Watch a local path and keep the graph updated. In local-host mode it now prints a live progress panel for indexing and projection instead of a fake percentage bar. | No |
 | `pcg unwatch <path>` | Compatibility stub. Prints watcher-lifecycle guidance and exits non-zero. | No |
 | `pcg watching` | Compatibility stub. Prints watcher-lifecycle guidance and exits non-zero. | No |
 | `pcg query "<query>"` | Run a language-query search against indexed code. | No |
 | `pcg start` | Deprecated root alias for `pcg mcp start`. | No |
+
+`pcg index --discovery-report <file>` is intentionally file-based instead of
+metric-based: it can include repository paths, top noisy directories/files,
+entity counts, and skip breakdowns without putting those high-cardinality
+values into Prometheus labels. Use it after a timeout-heavy or unexpectedly
+large run to decide whether a repo-local `.pcg/discovery.json` map is the right
+fix.
 
 ### Workspace commands
 
@@ -103,13 +228,13 @@ These options apply at the root command level.
 
 | Command | Purpose | Remote-aware |
 | :--- | :--- | :--- |
-| `pcg analyze calls <function>` | Show what a function calls. | Yes |
-| `pcg analyze callers <function>` | Show what calls a function. | Yes |
-| `pcg analyze chain <from> <to>` | Show the call chain between two functions. Supports `--depth`. | Yes |
+| `pcg analyze calls <function>` | Show what a function calls. Supports `--transitive` and `--depth`. | Yes |
+| `pcg analyze callers <function>` | Show what calls a function. Supports `--transitive` and `--depth`. | Yes |
+| `pcg analyze chain <from> <to>` | Show the call chain between two functions. Supports `--repo`, `--repo-id`, and `--depth`; repo-scoped names are resolved to entity IDs, and if a name is ambiguous the API uses graph reachability as the tie-breaker when exactly one candidate pair is reachable. | Yes |
 | `pcg analyze deps <module>` | Show import and dependency relationships. | Yes |
 | `pcg analyze tree <class>` | Show inheritance hierarchy. | Yes |
 | `pcg analyze complexity` | Show relationship-based complexity metrics for one entity. | Yes |
-| `pcg analyze dead-code` | Find potentially unused entities, with optional `--repo-id`, `--exclude`, and `--fail-on-found`. | Yes |
+| `pcg analyze dead-code` | Find derived dead-code candidates after default entrypoint, direct Go Cobra/stdlib-HTTP/controller-runtime signature, Go public-API, test, and generated-code exclusions, with optional `--repo` (ID, name, slug, or path), `--repo-id`, `--limit`, `--exclude`, and `--fail-on-found`. | Yes |
 | `pcg analyze overrides <name>` | Find implementations across classes. | Yes |
 | `pcg analyze variable <name>` | Show variable definitions and usage. | Yes |
 
@@ -131,6 +256,12 @@ These options apply at the root command level.
 
 | Command | Purpose |
 | :--- | :--- |
+| `pcg graph status` | Show the current workspace graph-backend owner metadata and runtime state. |
+| `pcg graph logs [--workspace-root <path>]` | Print the current workspace graph-backend log file if present. |
+| `pcg graph stop [--workspace-root <path>]` | Request graph shutdown through the workspace owner, or stop a stale recorded graph process when the owner is already dead. |
+| `pcg graph start [--workspace-root <path>]` | Start the `local_authoritative` workspace owner in the foreground. |
+| `pcg graph upgrade --from <source> [--sha256 <hex>] [--workspace-root <path>]` | Replace the managed local graph binary from a binary path, tar archive, macOS package, or URL after the workspace graph is stopped. |
+| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force] [--full]` | Install a verified NornicDB binary into the managed PCG home from the pinned manifest or from a binary path, tar archive, macOS package, or URL. |
 | `pcg mcp setup` | Configure IDE and CLI MCP integrations. |
 | `pcg mcp start` | Start the MCP server. |
 | `pcg mcp tools` | List MCP tools. |
@@ -315,6 +446,12 @@ Inspect callers before a refactor:
 
 ```bash
 pcg analyze callers process_payment
+```
+
+Inspect indirect callers with an explicit depth bound:
+
+```bash
+pcg analyze callers process_payment --transitive --depth 7
 ```
 
 Search by exact name:

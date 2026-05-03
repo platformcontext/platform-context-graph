@@ -262,6 +262,50 @@ func TestExtractSemanticEntityRowsIncludesPythonDecoratedAsyncFunctionFacts(t *t
 	}
 }
 
+func TestExtractSemanticEntityRowsIncludesGoMethodFunctions(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "content_entity",
+			SourceRef: facts.Ref{
+				SourceURI: "/repo/go/internal/query/code_relationships.go",
+			},
+			Payload: map[string]any{
+				"repo_id":       "repo-1",
+				"entity_id":     "function-go-1",
+				"relative_path": "go/internal/query/code_relationships.go",
+				"entity_type":   "Function",
+				"entity_name":   "handleRelationships",
+				"language":      "go",
+				"start_line":    22,
+				"end_line":      178,
+				"docstring":     "handleRelationships returns incoming and outgoing relationships for an entity.",
+				"class_context": "CodeHandler",
+			},
+		},
+	}
+
+	repoIDs, rows := ExtractSemanticEntityRows(envelopes)
+	if got, want := repoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("ExtractSemanticEntityRows() repoIDs = %v, want %v", got, want)
+	}
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("ExtractSemanticEntityRows() rows = %d, want %d", got, want)
+	}
+
+	row := rows[0]
+	if got, want := row.EntityType, "Function"; got != want {
+		t.Fatalf("row.EntityType = %q, want %q", got, want)
+	}
+	if got, want := row.Metadata["docstring"], "handleRelationships returns incoming and outgoing relationships for an entity."; got != want {
+		t.Fatalf("row.Metadata[docstring] = %#v, want %#v", got, want)
+	}
+	if got, want := row.Metadata["class_context"], "CodeHandler"; got != want {
+		t.Fatalf("row.Metadata[class_context] = %#v, want %#v", got, want)
+	}
+}
+
 func TestExtractSemanticEntityRowsIncludesPythonFunctionTypeAnnotationFacts(t *testing.T) {
 	t.Parallel()
 
@@ -488,6 +532,183 @@ func TestSemanticEntityMaterializationHandlerWritesAndRetracts(t *testing.T) {
 	}
 	if got, want := len(writer.writes[0].Rows), 5; got != want {
 		t.Fatalf("writer Rows = %d, want %d", got, want)
+	}
+}
+
+func TestSemanticEntityMaterializationHandlerSkipsRetractForFirstGeneration(t *testing.T) {
+	t.Parallel()
+
+	loader := &fakeSemanticEntityFactLoader{
+		envelopes: []facts.Envelope{
+			{
+				FactKind: "repository",
+				Payload: map[string]any{
+					"repo_id": "repo-1",
+				},
+			},
+			{
+				FactKind:  "content_entity",
+				SourceRef: facts.Ref{SourceURI: "/repo/main.go"},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "function-1",
+					"relative_path": "main.go",
+					"entity_type":   "Function",
+					"entity_name":   "main",
+					"language":      "go",
+					"start_line":    1,
+					"end_line":      3,
+				},
+			},
+		},
+	}
+	writer := &recordingSemanticEntityWriter{}
+	handler := SemanticEntityMaterializationHandler{
+		FactLoader: loader,
+		Writer:     writer,
+		PriorGenerationCheck: func(_ context.Context, scopeID, generationID string) (bool, error) {
+			if scopeID != "scope-1" || generationID != "generation-1" {
+				t.Fatalf("PriorGenerationCheck(%q, %q), want scope-1/generation-1", scopeID, generationID)
+			}
+			return false, nil
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-1",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		SourceSystem: "git",
+		Domain:       DomainSemanticEntityMaterialization,
+		Status:       IntentStatusClaimed,
+		AttemptCount: 1,
+		EnqueuedAt:   time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(writer.writes), 1; got != want {
+		t.Fatalf("writer writes = %d, want %d", got, want)
+	}
+	if !writer.writes[0].SkipRetract {
+		t.Fatal("writer SkipRetract = false, want true for first generation")
+	}
+}
+
+func TestSemanticEntityMaterializationHandlerRetractsWhenPriorGenerationExists(t *testing.T) {
+	t.Parallel()
+
+	loader := &fakeSemanticEntityFactLoader{
+		envelopes: []facts.Envelope{
+			{FactKind: "repository", Payload: map[string]any{"repo_id": "repo-1"}},
+			{
+				FactKind:  "content_entity",
+				SourceRef: facts.Ref{SourceURI: "/repo/main.go"},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "function-1",
+					"relative_path": "main.go",
+					"entity_type":   "Function",
+					"entity_name":   "main",
+					"language":      "go",
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		attemptCount int
+		prior        bool
+	}{
+		{name: "first attempt", attemptCount: 1, prior: true},
+		{name: "retry", attemptCount: 2, prior: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			writer := &recordingSemanticEntityWriter{}
+			handler := SemanticEntityMaterializationHandler{
+				FactLoader: loader,
+				Writer:     writer,
+				PriorGenerationCheck: func(context.Context, string, string) (bool, error) {
+					return tt.prior, nil
+				},
+			}
+			_, err := handler.Handle(context.Background(), Intent{
+				IntentID:     "intent-1",
+				ScopeID:      "scope-1",
+				GenerationID: "generation-1",
+				SourceSystem: "git",
+				Domain:       DomainSemanticEntityMaterialization,
+				Status:       IntentStatusClaimed,
+				AttemptCount: tt.attemptCount,
+				EnqueuedAt:   time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+				AvailableAt:  time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+			})
+			if err != nil {
+				t.Fatalf("Handle() error = %v, want nil", err)
+			}
+			if got, want := len(writer.writes), 1; got != want {
+				t.Fatalf("writer writes = %d, want %d", got, want)
+			}
+			if writer.writes[0].SkipRetract {
+				t.Fatal("writer SkipRetract = true, want false for prior or retried generation")
+			}
+		})
+	}
+}
+
+func TestSemanticEntityMaterializationHandlerSkipsRetractForRetriedFirstGeneration(t *testing.T) {
+	t.Parallel()
+
+	loader := &fakeSemanticEntityFactLoader{
+		envelopes: []facts.Envelope{
+			{FactKind: "repository", Payload: map[string]any{"repo_id": "repo-1"}},
+			{
+				FactKind:  "content_entity",
+				SourceRef: facts.Ref{SourceURI: "/repo/main.go"},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "function-1",
+					"relative_path": "main.go",
+					"entity_type":   "Function",
+					"entity_name":   "main",
+					"language":      "go",
+				},
+			},
+		},
+	}
+	writer := &recordingSemanticEntityWriter{}
+	handler := SemanticEntityMaterializationHandler{
+		FactLoader: loader,
+		Writer:     writer,
+		PriorGenerationCheck: func(context.Context, string, string) (bool, error) {
+			return false, nil
+		},
+	}
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-1",
+		ScopeID:      "scope-1",
+		GenerationID: "generation-1",
+		SourceSystem: "git",
+		Domain:       DomainSemanticEntityMaterialization,
+		Status:       IntentStatusClaimed,
+		AttemptCount: 2,
+		EnqueuedAt:   time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+		AvailableAt:  time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if got, want := len(writer.writes), 1; got != want {
+		t.Fatalf("writer writes = %d, want %d", got, want)
+	}
+	if !writer.writes[0].SkipRetract {
+		t.Fatal("writer SkipRetract = false, want true for retried first generation")
 	}
 }
 

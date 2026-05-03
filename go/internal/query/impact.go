@@ -2,14 +2,17 @@ package query
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 )
 
 // ImpactHandler serves HTTP endpoints for impact analysis queries including
 // blast radius, change surface, resource-to-code tracing, and dependency paths.
 type ImpactHandler struct {
-	Neo4j   *Neo4jReader
-	Content *ContentReader
+	Neo4j   GraphQuery
+	Content ContentStore
+	Profile QueryProfile
+	Logger  *slog.Logger
 }
 
 // Mount registers impact analysis routes on the given mux.
@@ -21,10 +24,31 @@ func (h *ImpactHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v0/impact/explain-dependency-path", h.explainDependencyPath)
 }
 
+func (h *ImpactHandler) profile() QueryProfile {
+	if h == nil {
+		return ProfileProduction
+	}
+	return NormalizeQueryProfile(string(h.Profile))
+}
+
 // findBlastRadius analyzes the blast radius for a target entity.
 // POST /api/v0/impact/blast-radius
 // Body: {"target": "repo-name", "target_type": "repository"}
 func (h *ImpactHandler) findBlastRadius(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.blast_radius") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"blast radius analysis requires full platform truth",
+			"unsupported_capability",
+			"platform_impact.blast_radius",
+			h.profile(),
+			requiredProfile("platform_impact.blast_radius"),
+		)
+		return
+	}
+
 	var req struct {
 		Target     string `json:"target"`
 		TargetType string `json:"target_type"`
@@ -114,13 +138,27 @@ func (h *ImpactHandler) findBlastRadius(w http.ResponseWriter, r *http.Request) 
 		}
 		affected = append(affected, entry)
 	}
-	WriteJSON(w, http.StatusOK, map[string]any{"target": req.Target, "target_type": req.TargetType, "affected": affected, "affected_count": len(affected)})
+	WriteSuccess(w, r, http.StatusOK, map[string]any{"target": req.Target, "target_type": req.TargetType, "affected": affected, "affected_count": len(affected)}, BuildTruthEnvelope(h.profile(), "platform_impact.blast_radius", TruthBasisHybrid, "resolved from platform graph impact analysis"))
 }
 
 // findChangeSurface analyzes the change surface for a target entity.
 // POST /api/v0/impact/change-surface
 // Body: {"target": "entity-id", "environment": "production"}
 func (h *ImpactHandler) findChangeSurface(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.change_surface") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"change surface analysis requires full platform truth",
+			"unsupported_capability",
+			"platform_impact.change_surface",
+			h.profile(),
+			requiredProfile("platform_impact.change_surface"),
+		)
+		return
+	}
+
 	var req struct {
 		Target      string `json:"target"`
 		Environment string `json:"environment"`
@@ -179,13 +217,27 @@ func (h *ImpactHandler) findChangeSurface(w http.ResponseWriter, r *http.Request
 	if req.Environment != "" {
 		resp["environment"] = req.Environment
 	}
-	WriteJSON(w, http.StatusOK, resp)
+	WriteSuccess(w, r, http.StatusOK, resp, BuildTruthEnvelope(h.profile(), "platform_impact.change_surface", TruthBasisHybrid, "resolved from graph and impact relationships"))
 }
 
 // traceResourceToCode traces a resource back to its code repository.
 // POST /api/v0/impact/trace-resource-to-code
 // Body: {"start": "entity-id", "environment": "production", "max_depth": 8}
 func (h *ImpactHandler) traceResourceToCode(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.resource_to_code") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"resource-to-code tracing requires full platform truth",
+			"unsupported_capability",
+			"platform_impact.resource_to_code",
+			h.profile(),
+			requiredProfile("platform_impact.resource_to_code"),
+		)
+		return
+	}
+
 	var req struct {
 		Start       string `json:"start"`
 		Environment string `json:"environment"`
@@ -267,13 +319,27 @@ func (h *ImpactHandler) traceResourceToCode(w http.ResponseWriter, r *http.Reque
 	if req.Environment != "" {
 		resp["environment"] = req.Environment
 	}
-	WriteJSON(w, http.StatusOK, resp)
+	WriteSuccess(w, r, http.StatusOK, resp, BuildTruthEnvelope(h.profile(), "platform_impact.resource_to_code", TruthBasisHybrid, "resolved from resource-to-code graph traversal"))
 }
 
 // explainDependencyPath finds and explains the shortest path between two entities.
 // POST /api/v0/impact/explain-dependency-path
 // Body: {"source": "entity-id", "target": "entity-id", "environment": "production"}
 func (h *ImpactHandler) explainDependencyPath(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.dependency_path") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"dependency path analysis requires full dependency graph truth",
+			"unsupported_capability",
+			"platform_impact.dependency_path",
+			h.profile(),
+			requiredProfile("platform_impact.dependency_path"),
+		)
+		return
+	}
+
 	var req struct {
 		Source      string `json:"source"`
 		Target      string `json:"target"`
@@ -399,5 +465,5 @@ func (h *ImpactHandler) explainDependencyPath(w http.ResponseWriter, r *http.Req
 		resp["reason"] = overallReason
 	}
 
-	WriteJSON(w, http.StatusOK, resp)
+	WriteSuccess(w, r, http.StatusOK, resp, BuildTruthEnvelope(h.profile(), "platform_impact.dependency_path", TruthBasisHybrid, "resolved from shortest-path dependency traversal"))
 }

@@ -18,6 +18,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Coordinator           *coordinatorSnapshotJSON   `json:"coordinator,omitempty"`
 		Flow                  []flowSummaryJSON          `json:"flow"`
 		Queue                 queueJSON                  `json:"queue"`
+		LatestFailure         *queueFailureJSON          `json:"latest_failure,omitempty"`
 		RetryPolicies         []retryPolicyJSON          `json:"retry_policies"`
 		ScopeActivity         scopeActivityJSON          `json:"scope_activity"`
 		GenerationHistory     generationHistoryJSON      `json:"generation_history"`
@@ -26,6 +27,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Generations           map[string]int             `json:"generations"`
 		Stages                []StageSummary             `json:"stages"`
 		Domains               []domainBacklogJSON        `json:"domains"`
+		QueueBlockages        []queueBlockageJSON        `json:"queue_blockages"`
 	}{
 		Version:               buildinfo.AppVersion(),
 		AsOf:                  report.AsOf.UTC().Format(time.RFC3339),
@@ -33,6 +35,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Coordinator:           coordinatorJSON(report.Coordinator),
 		Flow:                  flowSummariesJSON(report.FlowSummaries),
 		Queue:                 queueJSONFromReport(report.Queue),
+		LatestFailure:         queueFailureJSONFromReport(report.LatestQueueFailure),
 		RetryPolicies:         retryPoliciesJSON(report.RetryPolicies),
 		ScopeActivity:         scopeActivityJSONFromReport(report.ScopeActivity),
 		GenerationHistory:     generationHistoryJSONFromReport(report.GenerationHistory),
@@ -41,6 +44,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Generations:           cloneCounts(report.GenerationTotals),
 		Stages:                slices.Clone(report.StageSummaries),
 		Domains:               domainBacklogsJSON(report.DomainBacklogs),
+		QueueBlockages:        queueBlockagesJSON(report.QueueBlockages),
 	}
 
 	return json.MarshalIndent(payload, "", "  ")
@@ -58,6 +62,19 @@ type queueJSON struct {
 	OverdueClaims               int     `json:"overdue_claims"`
 	OldestOutstandingAge        string  `json:"oldest_outstanding_age"`
 	OldestOutstandingAgeSeconds float64 `json:"oldest_outstanding_age_seconds"`
+}
+
+type queueFailureJSON struct {
+	Stage          string `json:"stage"`
+	Domain         string `json:"domain"`
+	Status         string `json:"status"`
+	WorkItemID     string `json:"work_item_id,omitempty"`
+	ScopeID        string `json:"scope_id,omitempty"`
+	GenerationID   string `json:"generation_id,omitempty"`
+	FailureClass   string `json:"failure_class"`
+	FailureMessage string `json:"failure_message,omitempty"`
+	FailureDetails string `json:"failure_details,omitempty"`
+	UpdatedAt      string `json:"updated_at,omitempty"`
 }
 
 type scopeActivityJSON struct {
@@ -114,6 +131,16 @@ type domainBacklogJSON struct {
 	OldestAgeSeconds float64 `json:"oldest_age_seconds"`
 }
 
+type queueBlockageJSON struct {
+	Stage            string  `json:"stage"`
+	Domain           string  `json:"domain"`
+	ConflictDomain   string  `json:"conflict_domain"`
+	ConflictKey      string  `json:"conflict_key"`
+	Blocked          int     `json:"blocked"`
+	OldestAge        string  `json:"oldest_age"`
+	OldestAgeSeconds float64 `json:"oldest_age_seconds"`
+}
+
 func queueJSONFromReport(queue QueueSnapshot) queueJSON {
 	return queueJSON{
 		Total:                       queue.Total,
@@ -130,6 +157,25 @@ func queueJSONFromReport(queue QueueSnapshot) queueJSON {
 	}
 }
 
+func queueFailureJSONFromReport(snapshot *QueueFailureSnapshot) *queueFailureJSON {
+	if snapshot == nil {
+		return nil
+	}
+
+	return &queueFailureJSON{
+		Stage:          snapshot.Stage,
+		Domain:         snapshot.Domain,
+		Status:         snapshot.Status,
+		WorkItemID:     snapshot.WorkItemID,
+		ScopeID:        snapshot.ScopeID,
+		GenerationID:   snapshot.GenerationID,
+		FailureClass:   snapshot.FailureClass,
+		FailureMessage: snapshot.FailureMessage,
+		FailureDetails: snapshot.FailureDetails,
+		UpdatedAt:      nullableRFC3339Value(snapshot.UpdatedAt),
+	}
+}
+
 func scopeActivityJSONFromReport(scopeActivity ScopeActivitySnapshot) scopeActivityJSON {
 	return scopeActivityJSON(scopeActivity)
 }
@@ -143,6 +189,23 @@ func domainBacklogsJSON(rows []DomainBacklog) []domainBacklogJSON {
 			Retrying:         row.Retrying,
 			Failed:           row.Failed,
 			DeadLetter:       row.DeadLetter,
+			OldestAge:        row.OldestAge.String(),
+			OldestAgeSeconds: row.OldestAge.Seconds(),
+		})
+	}
+
+	return projected
+}
+
+func queueBlockagesJSON(rows []QueueBlockage) []queueBlockageJSON {
+	projected := make([]queueBlockageJSON, 0, len(rows))
+	for _, row := range rows {
+		projected = append(projected, queueBlockageJSON{
+			Stage:            row.Stage,
+			Domain:           row.Domain,
+			ConflictDomain:   row.ConflictDomain,
+			ConflictKey:      row.ConflictKey,
+			Blocked:          row.Blocked,
 			OldestAge:        row.OldestAge.String(),
 			OldestAgeSeconds: row.OldestAge.Seconds(),
 		})
@@ -201,4 +264,11 @@ func nullableRFC3339String(value time.Time) *string {
 	}
 	formatted := value.UTC().Format(time.RFC3339)
 	return &formatted
+}
+
+func nullableRFC3339Value(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }

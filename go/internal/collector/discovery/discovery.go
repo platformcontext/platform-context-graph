@@ -31,6 +31,21 @@ type Options struct {
 	PreservedHiddenPrefixes []string
 	// HonorGitignore enables repo-local .gitignore filtering.
 	HonorGitignore bool
+	// HonorPCGIgnore enables repo-local .pcgignore filtering.
+	HonorPCGIgnore bool
+	// IgnoredPathGlobs lists repo-relative path globs that should be skipped
+	// before parser matching. Patterns may end in "/**" to prune a subtree.
+	IgnoredPathGlobs []PathGlobRule
+	// PreservedPathGlobs lists repo-relative path globs that remain indexable
+	// even when a broader ignored path glob covers an ancestor.
+	PreservedPathGlobs []string
+}
+
+// PathGlobRule describes a repo-relative path glob and the operator-facing
+// skip reason to report when discovery prunes a matching path.
+type PathGlobRule struct {
+	Pattern string
+	Reason  string
 }
 
 // DiscoveryStats tracks how many files and directories were skipped during
@@ -44,10 +59,20 @@ type DiscoveryStats struct {
 	// FilesSkippedByExtension maps each ignored extension (e.g. ".min.js",
 	// ".pyc") to the number of files skipped.
 	FilesSkippedByExtension map[string]int
+	// FilesSkippedByContent maps content-based skip reasons (e.g.
+	// "generated-webpack") to the number of files skipped.
+	FilesSkippedByContent map[string]int
+	// DirsSkippedByUser maps user-configured skip reasons to pruned
+	// directories.
+	DirsSkippedByUser map[string]int
+	// FilesSkippedByUser maps user-configured skip reasons to skipped files.
+	FilesSkippedByUser map[string]int
 	// FilesSkippedHidden counts files skipped because they are hidden (dot-prefixed).
 	FilesSkippedHidden int
 	// FilesSkippedGitignore counts files filtered by repo-local .gitignore rules.
 	FilesSkippedGitignore int
+	// FilesSkippedPCGIgnore counts files filtered by repo-local .pcgignore rules.
+	FilesSkippedPCGIgnore int
 }
 
 // TotalDirsSkipped returns the aggregate count of pruned directories.
@@ -56,14 +81,23 @@ func (s DiscoveryStats) TotalDirsSkipped() int {
 	for _, n := range s.DirsSkippedByName {
 		total += n
 	}
+	for _, n := range s.DirsSkippedByUser {
+		total += n
+	}
 	return total
 }
 
 // TotalFilesSkipped returns the aggregate count of skipped files across all
 // skip reasons.
 func (s DiscoveryStats) TotalFilesSkipped() int {
-	total := s.FilesSkippedHidden + s.FilesSkippedGitignore
+	total := s.FilesSkippedHidden + s.FilesSkippedGitignore + s.FilesSkippedPCGIgnore
 	for _, n := range s.FilesSkippedByExtension {
+		total += n
+	}
+	for _, n := range s.FilesSkippedByContent {
+		total += n
+	}
+	for _, n := range s.FilesSkippedByUser {
 		total += n
 	}
 	return total
@@ -78,7 +112,8 @@ type RepoFileSet struct {
 }
 
 // ResolveRepositoryFileSets discovers supported files beneath root, groups them
-// by the nearest repo root, and applies repo-local .gitignore filtering.
+// by the nearest repo root, and applies repo-local .gitignore/.pcgignore
+// filtering.
 func ResolveRepositoryFileSets(
 	root string,
 	supported SupportedFileMatcher,
@@ -127,6 +162,11 @@ func ResolveRepositoryFileSetsWithStats(
 			files = filterRepoFilesByGitignore(repoRoot, files)
 			stats.FilesSkippedGitignore += before - len(files)
 		}
+		if opts.HonorPCGIgnore {
+			before := len(files)
+			files = filterRepoFilesByPCGIgnore(repoRoot, files)
+			stats.FilesSkippedPCGIgnore += before - len(files)
+		}
 		result = append(result, RepoFileSet{
 			RepoRoot: repoRoot,
 			Files:    files,
@@ -167,10 +207,15 @@ func collectSupportedFiles(
 	ignoredDirs := normalizeIgnoredDirs(opts.IgnoredDirs)
 	ignoredExts := normalizeExtensions(opts.IgnoredExtensions)
 	preservedHidden := normalizePrefixes(opts.PreservedHiddenPrefixes)
+	ignoredPathGlobs := normalizePathGlobRules(opts.IgnoredPathGlobs)
+	preservedPathGlobs := normalizePathGlobPatterns(opts.PreservedPathGlobs)
 
 	stats := DiscoveryStats{
 		DirsSkippedByName:       make(map[string]int),
 		FilesSkippedByExtension: make(map[string]int),
+		FilesSkippedByContent:   make(map[string]int),
+		DirsSkippedByUser:       make(map[string]int),
+		FilesSkippedByUser:      make(map[string]int),
 	}
 	files := make([]string, 0)
 	if err := filepath.WalkDir(scanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -202,6 +247,10 @@ func collectSupportedFiles(
 				stats.DirsSkippedByName[".hidden"]++
 				return filepath.SkipDir
 			}
+			if reason, ok := matchedIgnoredPathGlob(rel, true, ignoredPathGlobs, preservedPathGlobs); ok {
+				stats.DirsSkippedByUser[reason]++
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -214,6 +263,10 @@ func collectSupportedFiles(
 			return nil
 		}
 		if !supported(path) {
+			return nil
+		}
+		if reason, ok := matchedIgnoredPathGlob(rel, false, ignoredPathGlobs, preservedPathGlobs); ok {
+			stats.FilesSkippedByUser[reason]++
 			return nil
 		}
 		if isExternalSymlink(scanRoot, path) {

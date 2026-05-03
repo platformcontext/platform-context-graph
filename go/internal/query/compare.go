@@ -8,20 +8,23 @@ import (
 	"sort"
 )
 
-type compareGraphReader interface {
-	Run(context.Context, string, map[string]any) ([]map[string]any, error)
-	RunSingle(context.Context, string, map[string]any) (map[string]any, error)
-}
-
 // CompareHandler provides environment comparison endpoints.
 type CompareHandler struct {
-	Neo4j   compareGraphReader
+	Neo4j   GraphQuery
 	Content serviceEvidenceReader
+	Profile QueryProfile
 }
 
 // Mount registers comparison routes on the given mux.
 func (h *CompareHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v0/compare/environments", h.compareEnvironments)
+}
+
+func (h *CompareHandler) profile() QueryProfile {
+	if h == nil {
+		return ProfileProduction
+	}
+	return NormalizeQueryProfile(string(h.Profile))
 }
 
 // compareEnvironmentsRequest is the JSON request body.
@@ -33,6 +36,20 @@ type compareEnvironmentsRequest struct {
 
 // compareEnvironments handles POST /api/v0/compare/environments.
 func (h *CompareHandler) compareEnvironments(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.environment_compare") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"environment comparison requires deployed environment truth",
+			"unsupported_capability",
+			"platform_impact.environment_compare",
+			h.profile(),
+			requiredProfile("platform_impact.environment_compare"),
+		)
+		return
+	}
+
 	var req compareEnvironmentsRequest
 	if err := readCompareJSON(r, &req); err != nil {
 		writeCompareError(w, http.StatusBadRequest, err.Error())
@@ -83,7 +100,7 @@ func (h *CompareHandler) compareEnvironments(w http.ResponseWriter, r *http.Requ
 			"confidence": 0.0,
 			"reason":     "Workload '" + req.WorkloadID + "' not found",
 		}
-		writeCompareJSON(w, http.StatusOK, resp)
+		WriteSuccess(w, r, http.StatusOK, resp, BuildTruthEnvelope(h.profile(), "platform_impact.environment_compare", TruthBasisHybrid, "compared environment state from workload and cloud-resource evidence"))
 		return
 	}
 
@@ -127,7 +144,7 @@ func (h *CompareHandler) compareEnvironments(w http.ResponseWriter, r *http.Requ
 		"reason":     reason,
 	}
 
-	writeCompareJSON(w, http.StatusOK, resp)
+	WriteSuccess(w, r, http.StatusOK, resp, BuildTruthEnvelope(h.profile(), "platform_impact.environment_compare", TruthBasisHybrid, "compared environment state from workload and cloud-resource evidence"))
 }
 
 // fetchWorkload queries Neo4j for the workload by ID.

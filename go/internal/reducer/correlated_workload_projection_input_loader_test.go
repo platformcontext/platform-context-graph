@@ -3,6 +3,7 @@ package reducer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -344,13 +345,14 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironmen
 		},
 	}
 
-	loader := CorrelatedWorkloadProjectionInputLoader{
-		FactLoader: &scopedFactLoader{
-			envelopesByScope: map[string][]facts.Envelope{
-				"scope-app":    sourceEnvelopes,
-				"scope-deploy": deployEnvelopes,
-			},
+	factLoader := &scopedFactLoader{
+		envelopesByScope: map[string][]facts.Envelope{
+			"scope-app":    sourceEnvelopes,
+			"scope-deploy": deployEnvelopes,
 		},
+	}
+	loader := CorrelatedWorkloadProjectionInputLoader{
+		FactLoader: factLoader,
 		ResolvedLoader: &stubResolvedRelationshipLoader{
 			resolved: []relationships.ResolvedRelationship{
 				{
@@ -404,6 +406,271 @@ func TestCorrelatedWorkloadProjectionInputLoaderEnrichesDeploymentRepoEnvironmen
 	}
 	if envs[0] != "production" || envs[1] != "qa" {
 		t.Fatalf("deploymentEnvs[repo-deploy] = %v, want [production qa]", envs)
+	}
+	if got, want := factLoader.kindCalls[0].scopeID, "scope-app"; got != want {
+		t.Fatalf("kindCalls[0].scopeID = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(factLoader.kindCalls[0].kinds, ","), "repository,file"; got != want {
+		t.Fatalf("kindCalls[0].kinds = %q, want %q", got, want)
+	}
+	if got, want := factLoader.kindCalls[1].scopeID, "scope-deploy"; got != want {
+		t.Fatalf("kindCalls[1].scopeID = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(factLoader.kindCalls[1].kinds, ","), "file"; got != want {
+		t.Fatalf("kindCalls[1].kinds = %q, want %q", got, want)
+	}
+}
+
+func TestCorrelatedWorkloadProjectionInputLoaderEnrichesProvisioningRepoEnvironments(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	platformEvidenceKind := TerraformPlatformEvidenceKind("ecs", "cluster")
+
+	sourceEnvelopes := []facts.Envelope{
+		{
+			FactID:     "fact-repo",
+			ScopeID:    "scope-app",
+			FactKind:   "repository",
+			Payload:    map[string]any{"graph_id": "repo-app", "name": "my-service"},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-runtime",
+			ScopeID:  "scope-app",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-app",
+				"language":      "dockerfile",
+				"relative_path": "Dockerfile",
+				"parsed_file_data": map[string]any{
+					"dockerfile_stages": []any{map[string]any{"name": "runtime"}},
+				},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-workflow",
+			ScopeID:  "scope-app",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-app",
+				"language":      "yaml",
+				"relative_path": ".github/workflows/build.yaml",
+				"parsed_file_data": map[string]any{
+					"artifact_type": "github_actions_workflow",
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+	infraEnvelopes := []facts.Envelope{
+		{
+			FactID:     "fact-infra-repo",
+			ScopeID:    "scope-infra",
+			FactKind:   "repository",
+			Payload:    map[string]any{"graph_id": "repo-infra", "name": "runtime-infra"},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-infra-env",
+			ScopeID:  "scope-infra",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":          "repo-infra",
+				"language":         "hcl",
+				"relative_path":    "environments/prod/terraform.tfvars",
+				"parsed_file_data": map[string]any{},
+			},
+			ObservedAt: now,
+		},
+	}
+
+	factLoader := &scopedFactLoader{
+		envelopesByScope: map[string][]facts.Envelope{
+			"scope-app":   sourceEnvelopes,
+			"scope-infra": infraEnvelopes,
+		},
+	}
+	loader := CorrelatedWorkloadProjectionInputLoader{
+		FactLoader: factLoader,
+		ResolvedLoader: &stubResolvedRelationshipLoader{
+			resolved: []relationships.ResolvedRelationship{
+				{
+					SourceRepoID:     "repo-deploy",
+					TargetRepoID:     "repo-app",
+					RelationshipType: relationships.RelDeploysFrom,
+					Confidence:       0.96,
+					Details: map[string]any{
+						"evidence_kinds": []any{string(relationships.EvidenceKindKustomizeResource)},
+					},
+				},
+				{
+					SourceRepoID:     "repo-infra",
+					TargetRepoID:     "repo-app",
+					RelationshipType: relationships.RelProvisionsDependencyFor,
+					Confidence:       0.94,
+					Details: map[string]any{
+						"evidence_kinds": []any{platformEvidenceKind},
+					},
+				},
+			},
+		},
+		ScopeResolver: &stubScopeResolver{
+			generations: map[string]RepoScopeIdentity{
+				"repo-infra": {ScopeID: "scope-infra", GenerationID: "gen-infra-1"},
+			},
+		},
+	}
+
+	intent := Intent{
+		IntentID:        "intent-provisioning-env",
+		ScopeID:         "scope-app",
+		GenerationID:    "gen-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "test",
+		EntityKeys:      []string{"repo-app"},
+		RelatedScopeIDs: []string{"scope-app"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	candidates, deploymentEnvs, err := loader.LoadWorkloadProjectionInputs(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("LoadWorkloadProjectionInputs() error = %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+	if got, want := candidates[0].ProvisioningRepoIDs, []string{"repo-infra"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("ProvisioningRepoIDs = %v, want %v", got, want)
+	}
+	if got := candidates[0].ProvisioningEvidenceKinds["repo-infra"]; len(got) != 1 || got[0] != platformEvidenceKind {
+		t.Fatalf("ProvisioningEvidenceKinds[repo-infra] = %v, want [%s]", got, platformEvidenceKind)
+	}
+	if got, want := deploymentEnvs["repo-infra"], []string{"prod"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("deploymentEnvs[repo-infra] = %v, want %v", got, want)
+	}
+}
+
+func TestCorrelatedWorkloadProjectionInputLoaderUsesRepoScopedIncomingProvisioning(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	platformEvidenceKind := TerraformPlatformEvidenceKind("ecs", "service")
+
+	sourceEnvelopes := []facts.Envelope{
+		{
+			FactID:     "fact-repo",
+			ScopeID:    "scope-app",
+			FactKind:   "repository",
+			Payload:    map[string]any{"graph_id": "repo-app", "name": "my-service"},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-runtime",
+			ScopeID:  "scope-app",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-app",
+				"language":      "dockerfile",
+				"relative_path": "Dockerfile",
+				"parsed_file_data": map[string]any{
+					"dockerfile_stages": []any{map[string]any{"name": "runtime"}},
+				},
+			},
+			ObservedAt: now,
+		},
+		{
+			FactID:   "fact-file-workflow",
+			ScopeID:  "scope-app",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-app",
+				"language":      "yaml",
+				"relative_path": ".github/workflows/build.yaml",
+				"parsed_file_data": map[string]any{
+					"artifact_type": "github_actions_workflow",
+				},
+			},
+			ObservedAt: now,
+		},
+	}
+	infraEnvelopes := []facts.Envelope{
+		{
+			FactID:   "fact-infra-env",
+			ScopeID:  "scope-infra",
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-infra",
+				"relative_path": "environments/prod/terraform.tfvars",
+			},
+			ObservedAt: now,
+		},
+	}
+
+	relationshipLoader := &stubResolvedRelationshipLoader{
+		repoResolved: []relationships.ResolvedRelationship{
+			{
+				SourceRepoID:     "repo-infra",
+				TargetRepoID:     "repo-app",
+				RelationshipType: relationships.RelProvisionsDependencyFor,
+				Confidence:       0.94,
+				Details: map[string]any{
+					"evidence_kinds": []any{platformEvidenceKind},
+				},
+			},
+		},
+	}
+	loader := CorrelatedWorkloadProjectionInputLoader{
+		FactLoader: &scopedFactLoader{
+			envelopesByScope: map[string][]facts.Envelope{
+				"scope-app":   sourceEnvelopes,
+				"scope-infra": infraEnvelopes,
+			},
+		},
+		ResolvedLoader: relationshipLoader,
+		ScopeResolver: &stubScopeResolver{
+			generations: map[string]RepoScopeIdentity{
+				"repo-infra": {ScopeID: "scope-infra", GenerationID: "gen-infra-1"},
+			},
+		},
+	}
+
+	intent := Intent{
+		IntentID:        "intent-incoming-provisioning",
+		ScopeID:         "scope-app",
+		GenerationID:    "gen-app-1",
+		SourceSystem:    "git",
+		Domain:          DomainWorkloadMaterialization,
+		Cause:           "test",
+		EntityKeys:      []string{"repo-app"},
+		RelatedScopeIDs: []string{"scope-app"},
+		EnqueuedAt:      now,
+		AvailableAt:     now,
+		Status:          IntentStatusPending,
+	}
+
+	candidates, deploymentEnvs, err := loader.LoadWorkloadProjectionInputs(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("LoadWorkloadProjectionInputs() error = %v", err)
+	}
+	if got, want := relationshipLoader.repoIDs, []string{"repo-app"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("repo-scoped relationship lookup repoIDs = %v, want %v", got, want)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+	if got, want := candidates[0].ProvisioningRepoIDs, []string{"repo-infra"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("ProvisioningRepoIDs = %v, want %v", got, want)
+	}
+	if got := candidates[0].ProvisioningEvidenceKinds["repo-infra"]; len(got) != 1 || got[0] != platformEvidenceKind {
+		t.Fatalf("ProvisioningEvidenceKinds[repo-infra] = %v, want [%s]", got, platformEvidenceKind)
+	}
+	if got, want := deploymentEnvs["repo-infra"], []string{"prod"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("deploymentEnvs[repo-infra] = %v, want %v", got, want)
 	}
 }
 
@@ -562,6 +829,12 @@ func TestCorrelatedWorkloadProjectionInputLoaderSkipsSameRepoDeployment(t *testi
 type scopedFactLoader struct {
 	envelopesByScope map[string][]facts.Envelope
 	calls            int
+	kindCalls        []scopedFactKindCall
+}
+
+type scopedFactKindCall struct {
+	scopeID string
+	kinds   []string
 }
 
 func (f *scopedFactLoader) ListFacts(_ context.Context, scopeID, _ string) ([]facts.Envelope, error) {
@@ -571,6 +844,33 @@ func (f *scopedFactLoader) ListFacts(_ context.Context, scopeID, _ string) ([]fa
 		return nil, fmt.Errorf("no envelopes for scope %q", scopeID)
 	}
 	return envelopes, nil
+}
+
+func (f *scopedFactLoader) ListFactsByKind(
+	_ context.Context,
+	scopeID string,
+	_ string,
+	factKinds []string,
+) ([]facts.Envelope, error) {
+	f.kindCalls = append(f.kindCalls, scopedFactKindCall{
+		scopeID: scopeID,
+		kinds:   append([]string(nil), factKinds...),
+	})
+	envelopes, ok := f.envelopesByScope[scopeID]
+	if !ok {
+		return nil, fmt.Errorf("no envelopes for scope %q", scopeID)
+	}
+	allowed := make(map[string]struct{}, len(factKinds))
+	for _, factKind := range factKinds {
+		allowed[factKind] = struct{}{}
+	}
+	filtered := make([]facts.Envelope, 0, len(envelopes))
+	for _, envelope := range envelopes {
+		if _, ok := allowed[envelope.FactKind]; ok {
+			filtered = append(filtered, envelope)
+		}
+	}
+	return filtered, nil
 }
 
 type stubScopeResolver struct {

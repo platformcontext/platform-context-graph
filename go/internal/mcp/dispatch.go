@@ -12,10 +12,12 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/query"
 )
 
 // dispatchTool routes an MCP tool call to the appropriate internal HTTP endpoint.
-func dispatchTool(ctx context.Context, handler http.Handler, toolName string, args map[string]any, authHeader string, logger *slog.Logger) (any, error) {
+func dispatchTool(ctx context.Context, handler http.Handler, toolName string, args map[string]any, authHeader string, logger *slog.Logger) (*dispatchResult, error) {
 	route, err := resolveRoute(toolName, args)
 	if err != nil {
 		return nil, err
@@ -39,6 +41,7 @@ func dispatchTool(ctx context.Context, handler http.Handler, toolName string, ar
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("Accept", "application/pcg.envelope+json")
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}
@@ -54,15 +57,51 @@ func dispatchTool(ctx context.Context, handler http.Handler, toolName string, ar
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
+	if envelope, ok := parseCanonicalEnvelope(rec.Body.Bytes()); ok {
+		return &dispatchResult{
+			Value:    envelope,
+			Envelope: envelope,
+			IsError:  rec.Code >= 400,
+		}, nil
+	}
+
 	if rec.Code >= 400 {
 		return nil, fmt.Errorf("HTTP %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var result any
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
-		return rec.Body.String(), nil
+		return &dispatchResult{Value: rec.Body.String()}, nil
 	}
-	return result, nil
+	return &dispatchResult{Value: result}, nil
+}
+
+type dispatchResult struct {
+	Value    any
+	Envelope *query.ResponseEnvelope
+	IsError  bool
+}
+
+func parseCanonicalEnvelope(body []byte) (*query.ResponseEnvelope, bool) {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(body, &top); err != nil {
+		return nil, false
+	}
+	if _, ok := top["data"]; !ok {
+		return nil, false
+	}
+	if _, ok := top["truth"]; !ok {
+		return nil, false
+	}
+	if _, ok := top["error"]; !ok {
+		return nil, false
+	}
+
+	var envelope query.ResponseEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, false
+	}
+	return &envelope, true
 }
 
 type route struct {
@@ -78,11 +117,16 @@ func str(args map[string]any, key string) string {
 }
 
 func intOr(args map[string]any, key string, def int) int {
-	v, ok := args[key].(float64)
-	if !ok {
+	switch v := args[key].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
 		return def
 	}
-	return int(v)
 }
 
 func boolOr(args map[string]any, key string, def bool) bool {
@@ -216,6 +260,22 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 				"direction":         "outgoing",
 				"relationship_type": "CALLS",
 			}
+		case "find_all_callers":
+			body = map[string]any{
+				"name":              str(args, "target"),
+				"direction":         "incoming",
+				"relationship_type": "CALLS",
+				"transitive":        true,
+				"max_depth":         parseMaxDepth(args, 5),
+			}
+		case "find_all_callees":
+			body = map[string]any{
+				"name":              str(args, "target"),
+				"direction":         "outgoing",
+				"relationship_type": "CALLS",
+				"transitive":        true,
+				"max_depth":         parseMaxDepth(args, 5),
+			}
 		case "find_importers":
 			body = map[string]any{
 				"name":              str(args, "target"),
@@ -235,6 +295,7 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 		case "dead_code":
 			return &route{method: "POST", path: "/api/v0/code/dead-code", body: map[string]any{
 				"repo_id":                str(args, "repo_id"),
+				"limit":                  intOr(args, "limit", 100),
 				"exclude_decorated_with": stringSlice(args, "exclude_decorated_with"),
 			}}, nil
 		}
@@ -242,7 +303,17 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 	case "find_dead_code":
 		return &route{method: "POST", path: "/api/v0/code/dead-code", body: map[string]any{
 			"repo_id":                str(args, "repo_id"),
+			"limit":                  intOr(args, "limit", 100),
 			"exclude_decorated_with": stringSlice(args, "exclude_decorated_with"),
+		}}, nil
+	case "find_dead_iac":
+		return &route{method: "POST", path: "/api/v0/iac/dead", body: map[string]any{
+			"repo_id":           str(args, "repo_id"),
+			"repo_ids":          stringSlice(args, "repo_ids"),
+			"families":          stringSlice(args, "families"),
+			"include_ambiguous": boolOr(args, "include_ambiguous", false),
+			"limit":             intOr(args, "limit", 100),
+			"offset":            intOr(args, "offset", 0),
 		}}, nil
 	case "calculate_cyclomatic_complexity":
 		return &route{method: "POST", path: "/api/v0/code/complexity", body: map[string]any{
@@ -288,6 +359,8 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(repoID) + "/stats"}, nil
 	case "get_repo_context":
 		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(str(args, "repo_id")) + "/context"}, nil
+	case "get_relationship_evidence":
+		return &route{method: "GET", path: "/api/v0/evidence/relationships/" + url.PathEscape(str(args, "resolved_id"))}, nil
 	case "get_repo_story":
 		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(str(args, "repo_id")) + "/story"}, nil
 	case "get_repo_summary":

@@ -3,21 +3,16 @@ package query
 import (
 	"context"
 	"net/http"
-	"slices"
 	"strings"
 )
-
-// GraphReader is the read-only graph surface shared by query handlers.
-type GraphReader interface {
-	Run(context.Context, string, map[string]any) ([]map[string]any, error)
-	RunSingle(context.Context, string, map[string]any) (map[string]any, error)
-}
 
 // CodeHandler provides HTTP routes for code-level queries: search, relationships,
 // dead code detection, and complexity metrics.
 type CodeHandler struct {
-	Neo4j   GraphReader
-	Content *ContentReader
+	GraphBackend GraphBackend
+	Neo4j        GraphQuery
+	Content      ContentStore
+	Profile      QueryProfile
 }
 
 // Mount registers all /api/v0/code/* routes on the given mux.
@@ -34,17 +29,37 @@ func (h *CodeHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v0/code/bundles", h.handleSearchBundles)
 
 	// Language-specific queries.
-	lq := &LanguageQueryHandler{Neo4j: h.Neo4j, Content: h.Content}
+	lq := &LanguageQueryHandler{Neo4j: h.Neo4j, Content: h.Content, Profile: h.profile()}
 	lq.Mount(mux)
+}
+
+func (h *CodeHandler) profile() QueryProfile {
+	if h == nil {
+		return ProfileProduction
+	}
+	return NormalizeQueryProfile(string(h.Profile))
+}
+
+func (h *CodeHandler) graphBackend() GraphBackend {
+	if h == nil {
+		return GraphBackendNeo4j
+	}
+	backend, err := ParseGraphBackend(string(h.GraphBackend))
+	if err != nil {
+		panic(err)
+	}
+	return backend
 }
 
 // handleSearch searches code entities by name pattern or content.
 func (h *CodeHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Query    string `json:"query"`
-		RepoID   string `json:"repo_id"`
-		Language string `json:"language"`
-		Limit    int    `json:"limit"`
+		Query      string `json:"query"`
+		RepoID     string `json:"repo_id"`
+		Language   string `json:"language"`
+		Limit      int    `json:"limit"`
+		Exact      bool   `json:"exact"`
+		SearchType string `json:"search_type"`
 	}
 	if err := ReadJSON(r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, err.Error())
@@ -55,14 +70,23 @@ func (h *CodeHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "query is required")
 		return
 	}
+	if !h.applyRepositorySelector(w, r, &req.RepoID) {
+		return
+	}
 	if req.Limit <= 0 {
 		req.Limit = 50
 	}
 
 	ctx := r.Context()
+	capability := "code_search.fuzzy_symbol"
+	if strings.EqualFold(strings.TrimSpace(req.SearchType), "variable") {
+		capability = "code_search.variable_lookup"
+	} else if req.Exact {
+		capability = "code_search.exact_symbol"
+	}
 
 	// Search graph entities by name pattern
-	graphResults, err := h.searchGraphEntities(ctx, req.RepoID, req.Query, req.Language, req.Limit)
+	graphResults, err := h.searchGraphEntitiesWithExact(ctx, req.RepoID, req.Query, req.Language, req.Limit, req.Exact)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -70,47 +94,55 @@ func (h *CodeHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	// If graph search returns results, return them
 	if len(graphResults) > 0 {
-		WriteJSON(w, http.StatusOK, map[string]any{
+		WriteSuccess(w, r, http.StatusOK, map[string]any{
 			"source":         "graph",
 			"source_backend": "graph",
 			"query":          req.Query,
 			"repo_id":        req.RepoID,
 			"results":        graphResults,
 			"matches":        graphResults,
-		})
+		}, BuildTruthEnvelope(h.profile(), capability, TruthBasisAuthoritativeGraph, "resolved from graph-backed entity search"))
 		return
 	}
 
 	// Fall back to content-based search if no graph results
-	contentResults, err := h.searchEntityContent(ctx, req.RepoID, req.Query, req.Language, req.Limit)
+	contentResults, err := h.searchEntityContentWithExact(ctx, req.RepoID, req.Query, req.Language, req.Limit, req.Exact)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]any{
+	WriteSuccess(w, r, http.StatusOK, map[string]any{
 		"source":         "content",
 		"source_backend": "postgres_content_store",
 		"query":          req.Query,
 		"repo_id":        req.RepoID,
 		"results":        contentResults,
 		"matches":        contentResults,
-	})
+	}, BuildTruthEnvelope(h.profile(), capability, TruthBasisContentIndex, "resolved from content index fallback"))
 }
 
 // searchGraphEntities finds entities by name pattern in the Neo4j graph.
 func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, language string, limit int) ([]map[string]any, error) {
+	return h.searchGraphEntitiesWithExact(ctx, repoID, query, language, limit, false)
+}
+
+func (h *CodeHandler) searchGraphEntitiesWithExact(ctx context.Context, repoID, query, language string, limit int, exact bool) ([]map[string]any, error) {
 	if h == nil || h.Neo4j == nil {
-		return h.searchEntityContent(ctx, repoID, query, language, limit)
+		return h.searchEntityContentWithExact(ctx, repoID, query, language, limit, exact)
 	}
 
 	cypher := `
 		MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
-		WHERE e.name CONTAINS $query
 	`
 	params := map[string]any{
 		"query": query,
 		"limit": limit,
+	}
+	if exact {
+		cypher += " WHERE e.name = $query"
+	} else {
+		cypher += " WHERE e.name CONTAINS $query"
 	}
 	if repoID != "" {
 		cypher += " AND r.id = $repo_id"
@@ -164,6 +196,10 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 
 // searchEntityContent searches entity source code in the content store.
 func (h *CodeHandler) searchEntityContent(ctx context.Context, repoID, pattern, language string, limit int) ([]map[string]any, error) {
+	return h.searchEntityContentWithExact(ctx, repoID, pattern, language, limit, false)
+}
+
+func (h *CodeHandler) searchEntityContentWithExact(ctx context.Context, repoID, pattern, language string, limit int, exact bool) ([]map[string]any, error) {
 	var (
 		nameMatches   []EntityContent
 		sourceMatches []EntityContent
@@ -227,141 +263,19 @@ func (h *CodeHandler) searchEntityContent(ctx context.Context, repoID, pattern, 
 	}
 
 	for _, entity := range nameMatches {
+		if exact && entity.EntityName != pattern {
+			continue
+		}
 		appendResult(entity)
 	}
 	for _, entity := range sourceMatches {
+		if exact && entity.EntityName != pattern {
+			continue
+		}
 		appendResult(entity)
 	}
 
 	return results, nil
-}
-
-// handleDeadCode finds entities with no incoming references.
-func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		RepoID               string   `json:"repo_id"`
-		ExcludeDecoratedWith []string `json:"exclude_decorated_with"`
-	}
-	if err := ReadJSON(r, &req); err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	ctx := r.Context()
-
-	cypher := `
-		MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
-		WHERE NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)
-	`
-	params := map[string]any{}
-	if req.RepoID != "" {
-		cypher += ` AND r.id = $repo_id`
-		params["repo_id"] = req.RepoID
-	}
-	cypher += `
-		RETURN e.id as entity_id, e.name as name, labels(e) as labels,
-		       f.relative_path as file_path,
-		       r.id as repo_id, r.name as repo_name,
-		       coalesce(e.language, f.language) as language,
-		       e.start_line as start_line,
-		       e.end_line as end_line,
-` + graphSemanticMetadataProjection() + `
-		ORDER BY f.relative_path, e.name
-		LIMIT 100
-	`
-
-	rows, err := h.Neo4j.Run(ctx, cypher, params)
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	results := make([]map[string]any, 0, len(rows))
-	for _, row := range rows {
-		result := map[string]any{
-			"entity_id":  StringVal(row, "entity_id"),
-			"name":       StringVal(row, "name"),
-			"labels":     StringSliceVal(row, "labels"),
-			"file_path":  StringVal(row, "file_path"),
-			"repo_id":    StringVal(row, "repo_id"),
-			"repo_name":  StringVal(row, "repo_name"),
-			"language":   StringVal(row, "language"),
-			"start_line": IntVal(row, "start_line"),
-			"end_line":   IntVal(row, "end_line"),
-		}
-		if metadata := graphResultMetadata(row); len(metadata) > 0 {
-			result["metadata"] = metadata
-		}
-		results = append(results, result)
-	}
-	results, err = h.enrichGraphResultsWithContentMetadataByEntityID(ctx, results)
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	results = filterResultsByDecoratorExclusions(results, req.ExcludeDecoratedWith)
-
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"repo_id": req.RepoID,
-		"results": results,
-	})
-}
-
-func filterResultsByDecoratorExclusions(results []map[string]any, excluded []string) []map[string]any {
-	if len(results) == 0 || len(excluded) == 0 {
-		return results
-	}
-
-	normalizedExcluded := make([]string, 0, len(excluded))
-	for _, decorator := range excluded {
-		if normalized := normalizeDecoratorName(decorator); normalized != "" {
-			normalizedExcluded = append(normalizedExcluded, normalized)
-		}
-	}
-	if len(normalizedExcluded) == 0 {
-		return results
-	}
-
-	filtered := make([]map[string]any, 0, len(results))
-	for _, result := range results {
-		metadata, ok := result["metadata"].(map[string]any)
-		if !ok {
-			filtered = append(filtered, result)
-			continue
-		}
-		if !resultMatchesDecoratorExclusion(metadata, normalizedExcluded) {
-			filtered = append(filtered, result)
-		}
-	}
-
-	return filtered
-}
-
-func resultMatchesDecoratorExclusion(metadata map[string]any, excluded []string) bool {
-	rawDecorators, ok := metadata["decorators"].([]any)
-	if !ok {
-		return false
-	}
-
-	for _, raw := range rawDecorators {
-		decorator, ok := raw.(string)
-		if !ok {
-			continue
-		}
-		if slices.Contains(excluded, normalizeDecoratorName(decorator)) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func normalizeDecoratorName(value string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return ""
-	}
-	return strings.TrimPrefix(trimmed, "@")
 }
 
 // handleComplexity returns relationship-based complexity metrics for an entity.
@@ -377,13 +291,16 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	if !h.applyRepositorySelector(w, r, &req.RepoID) {
+		return
+	}
 	if req.EntityID == "" && req.FunctionName == "" {
 		results, err := h.listMostComplexFunctions(ctx, req.RepoID, req.Limit)
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"repo_id": req.RepoID, "results": results})
+		WriteSuccess(w, r, http.StatusOK, map[string]any{"repo_id": req.RepoID, "results": results}, BuildTruthEnvelope(h.profile(), "code_quality.complexity", TruthBasisHybrid, "resolved from graph-derived complexity metrics"))
 		return
 	}
 
@@ -427,7 +344,7 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, enriched[0])
+	WriteSuccess(w, r, http.StatusOK, enriched[0], BuildTruthEnvelope(h.profile(), "code_quality.complexity", TruthBasisHybrid, "resolved from graph-derived complexity metrics"))
 }
 
 func (h *CodeHandler) lookupComplexityRow(ctx context.Context, entityID, functionName, repoID string) (map[string]any, error) {

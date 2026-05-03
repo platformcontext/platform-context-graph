@@ -1,10 +1,12 @@
 package projector
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -85,6 +87,62 @@ func TestServiceRunClaimsLoadsProjectsAndAcknowledges(t *testing.T) {
 	}
 }
 
+func TestServiceRunLogsFactLoadAndProjectionStages(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+	var logs bytes.Buffer
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource:   &stubProjectorWorkSource{workItems: []ScopeGenerationWork{work}},
+		FactStore: &stubFactStore{facts: []facts.Envelope{{
+			FactID:       "fact-1",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_node",
+		}}},
+		Runner: &stubProjectionRunner{result: Result{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+		}},
+		WorkSink: &stubProjectorWorkSink{},
+		Wait:     func(context.Context, time.Duration) error { return context.Canceled },
+		Logger:   slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	output := logs.String()
+	for _, want := range []string{
+		`"msg":"projector work stage completed"`,
+		`"stage":"load_facts"`,
+		`"stage":"project_generation"`,
+		`"fact_count":1`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("projector stage logs missing %s:\n%s", want, output)
+		}
+	}
+}
+
 func TestServiceRunMarksFailureWhenProjectionFails(t *testing.T) {
 	t.Parallel()
 
@@ -133,6 +191,215 @@ func TestServiceRunMarksFailureWhenProjectionFails(t *testing.T) {
 	}
 }
 
+func TestServiceRunHeartbeatsLongRunningProjection(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+
+	runner := &stubProjectionRunner{
+		result: Result{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+		},
+		blockFor: 35 * time.Millisecond,
+	}
+	heartbeater := &stubProjectorWorkHeartbeater{}
+	sink := &stubProjectorWorkSink{}
+
+	service := Service{
+		PollInterval:      10 * time.Millisecond,
+		WorkSource:        &stubProjectorWorkSource{workItems: []ScopeGenerationWork{work}},
+		FactStore:         &stubFactStore{},
+		Runner:            runner,
+		WorkSink:          sink,
+		Heartbeater:       heartbeater,
+		HeartbeatInterval: 5 * time.Millisecond,
+		Wait:              func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	if got := heartbeater.calls; got < 2 {
+		t.Fatalf("heartbeat calls = %d, want at least 2", got)
+	}
+	if got, want := sink.ackCalls, 1; got != want {
+		t.Fatalf("ack calls = %d, want %d", got, want)
+	}
+	if got, want := sink.failCalls, 0; got != want {
+		t.Fatalf("fail calls = %d, want %d", got, want)
+	}
+}
+
+func TestServiceRunStopsWhenHeartbeatLosesLease(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+
+	wantErr := errors.New("lease lost")
+	runner := &stubProjectionRunner{
+		waitForContextCancellation: true,
+	}
+	heartbeater := &stubProjectorWorkHeartbeater{
+		failAfter: 1,
+		err:       wantErr,
+	}
+	sink := &stubProjectorWorkSink{}
+
+	service := Service{
+		PollInterval:      10 * time.Millisecond,
+		WorkSource:        &stubProjectorWorkSource{workItems: []ScopeGenerationWork{work}},
+		FactStore:         &stubFactStore{},
+		Runner:            runner,
+		WorkSink:          sink,
+		Heartbeater:       heartbeater,
+		HeartbeatInterval: 5 * time.Millisecond,
+		Wait:              func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	err := service.Run(context.Background())
+	if err == nil {
+		t.Fatal("Run() error = nil, want non-nil")
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Run() error = %v, want error containing %v", err, wantErr)
+	}
+	if got, want := sink.ackCalls, 0; got != want {
+		t.Fatalf("ack calls = %d, want %d", got, want)
+	}
+	if got, want := sink.failCalls, 0; got != want {
+		t.Fatalf("fail calls = %d, want %d", got, want)
+	}
+}
+
+func TestServiceRunAcksWithLiveContextAfterHeartbeatStops(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+
+	runner := &stubProjectionRunner{
+		result: Result{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+		},
+		blockFor: 15 * time.Millisecond,
+	}
+	heartbeater := &stubProjectorWorkHeartbeater{}
+	sink := &stubProjectorWorkSink{}
+
+	service := Service{
+		PollInterval:      10 * time.Millisecond,
+		WorkSource:        &stubProjectorWorkSource{workItems: []ScopeGenerationWork{work}},
+		FactStore:         &stubFactStore{},
+		Runner:            runner,
+		WorkSink:          sink,
+		Heartbeater:       heartbeater,
+		HeartbeatInterval: 5 * time.Millisecond,
+		Wait:              func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	if got, want := sink.ackCalls, 1; got != want {
+		t.Fatalf("ack calls = %d, want %d", got, want)
+	}
+	if sink.ackCtxErr != nil {
+		t.Fatalf("ack context error = %v, want nil", sink.ackCtxErr)
+	}
+}
+
+func TestServiceHeartbeatStopIgnoresStopContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	work := ScopeGenerationWork{
+		Scope: scope.IngestionScope{
+			ScopeID:       "scope-123",
+			SourceSystem:  "git",
+			ScopeKind:     scope.KindRepository,
+			CollectorKind: scope.CollectorGit,
+			PartitionKey:  "repo-123",
+		},
+		Generation: scope.ScopeGeneration{
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+			IngestedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Status:       scope.GenerationStatusPending,
+			TriggerKind:  scope.TriggerKindSnapshot,
+		},
+	}
+	heartbeater := &contextCanceledProjectorWorkHeartbeater{
+		entered: make(chan struct{}),
+	}
+
+	service := Service{
+		Heartbeater:       heartbeater,
+		HeartbeatInterval: time.Millisecond,
+	}
+	_, stopHeartbeat := service.startHeartbeat(context.Background(), work, 0)
+
+	select {
+	case <-heartbeater.entered:
+	case <-time.After(time.Second):
+		t.Fatal("heartbeat did not start")
+	}
+
+	if err := stopHeartbeat(); err != nil {
+		t.Fatalf("stopHeartbeat() error = %v, want nil", err)
+	}
+}
+
 type stubProjectorWorkSource struct {
 	mu         sync.Mutex
 	claimCalls int
@@ -153,51 +420,82 @@ func (s *stubProjectorWorkSource) Claim(context.Context) (ScopeGenerationWork, b
 }
 
 type stubFactStore struct {
-	mu        sync.Mutex
-	loadCalls int
-	facts     []facts.Envelope
+	mu               sync.Mutex
+	loadCalls        int
+	facts            []facts.Envelope
+	returnContextErr bool
 }
 
-func (s *stubFactStore) LoadFacts(context.Context, ScopeGenerationWork) ([]facts.Envelope, error) {
+func (s *stubFactStore) LoadFacts(ctx context.Context, _ ScopeGenerationWork) ([]facts.Envelope, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.loadCalls++
+	if s.returnContextErr {
+		return nil, fmt.Errorf("list facts: %w", ctx.Err())
+	}
 	cloned := make([]facts.Envelope, len(s.facts))
 	copy(cloned, s.facts)
 	return cloned, nil
 }
 
 type stubProjectionRunner struct {
-	mu         sync.Mutex
-	runCalls   int
-	result     Result
-	runErr     error
-	failAfter int
+	mu                         sync.Mutex
+	runCalls                   int
+	result                     Result
+	runErr                     error
+	failAfter                  int
+	blockFor                   time.Duration
+	waitForContextCancellation bool
 }
 
 func (s *stubProjectionRunner) Project(ctx context.Context, scopeValue scope.IngestionScope, generation scope.ScopeGeneration, inputFacts []facts.Envelope) (Result, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.runCalls++
-	if s.failAfter > 0 && s.runCalls > s.failAfter {
+	runCalls := s.runCalls
+	blockFor := s.blockFor
+	waitForContextCancellation := s.waitForContextCancellation
+	result := s.result
+	runErr := s.runErr
+	failAfter := s.failAfter
+	s.mu.Unlock()
+
+	if failAfter > 0 && runCalls > failAfter {
 		return Result{}, errors.New("executor failed after threshold")
 	}
-	return s.result, s.runErr
+	if waitForContextCancellation {
+		<-ctx.Done()
+		return Result{}, ctx.Err()
+	}
+	if blockFor > 0 {
+		timer := time.NewTimer(blockFor)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return Result{}, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	if failAfter > 0 && runCalls > failAfter {
+		return Result{}, errors.New("executor failed after threshold")
+	}
+	return result, runErr
 }
 
 type stubProjectorWorkSink struct {
 	mu         sync.Mutex
 	ackCalls   int
+	ackCtxErr  error
 	failCalls  int
 	failedWith error
 	ackErr     error
 	failAfter  int
 }
 
-func (s *stubProjectorWorkSink) Ack(context.Context, ScopeGenerationWork, Result) error {
+func (s *stubProjectorWorkSink) Ack(ctx context.Context, _ ScopeGenerationWork, _ Result) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ackCalls++
+	s.ackCtxErr = ctx.Err()
 	if s.failAfter > 0 && s.ackCalls > s.failAfter {
 		return errors.New("ack failed after threshold")
 	}
@@ -210,6 +508,34 @@ func (s *stubProjectorWorkSink) Fail(_ context.Context, _ ScopeGenerationWork, e
 	s.failCalls++
 	s.failedWith = err
 	return nil
+}
+
+type stubProjectorWorkHeartbeater struct {
+	mu        sync.Mutex
+	calls     int
+	failAfter int
+	err       error
+}
+
+func (s *stubProjectorWorkHeartbeater) Heartbeat(context.Context, ScopeGenerationWork) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	if s.failAfter > 0 && s.calls >= s.failAfter {
+		return s.err
+	}
+	return nil
+}
+
+type contextCanceledProjectorWorkHeartbeater struct {
+	entered chan struct{}
+	once    sync.Once
+}
+
+func (s *contextCanceledProjectorWorkHeartbeater) Heartbeat(ctx context.Context, _ ScopeGenerationWork) error {
+	s.once.Do(func() { close(s.entered) })
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func TestServiceRunWithTelemetry(t *testing.T) {

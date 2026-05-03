@@ -626,6 +626,21 @@ func TestCrossRepoResolutionPreservesGitHubActionsTypedRelationships(t *testing.
 		if got := stringValue(row.Payload["target_repo_id"]); got != "repo-automation" {
 			t.Fatalf("row target_repo_id = %q, want %q", got, "repo-automation")
 		}
+		if got := stringValue(row.Payload["generation_id"]); got != "gen-gha" {
+			t.Fatalf("row generation_id = %q, want %q", got, "gen-gha")
+		}
+		if got := stringValue(row.Payload["resolved_id"]); got == "" {
+			t.Fatalf("row missing resolved_id: %#v", row.Payload)
+		}
+		if got := stringValue(row.Payload["resolution_source"]); got != string(relationships.ResolutionSourceInferred) {
+			t.Fatalf("row resolution_source = %q, want %q", got, relationships.ResolutionSourceInferred)
+		}
+		if got := intValue(row.Payload["evidence_count"]); got != 1 {
+			t.Fatalf("row evidence_count = %d, want 1", got)
+		}
+		if got := stringSliceValue(row.Payload["evidence_kinds"]); len(got) != 1 {
+			t.Fatalf("row evidence_kinds = %#v, want one kind", got)
+		}
 	}
 	for _, want := range []string{string(relationships.RelDeploysFrom), string(relationships.RelDiscoversConfigIn)} {
 		if _, ok := gotTypes[want]; !ok {
@@ -670,5 +685,127 @@ func TestCrossRepoResolutionDeduplicatesEvidence(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("Resolve() = %d, want 1 (deduped)", count)
+	}
+}
+
+func TestBuildResolvedEdgeIntentRowsCarriesEvidenceArtifactsForGraphStory(t *testing.T) {
+	t.Parallel()
+
+	resolved := []relationships.ResolvedRelationship{
+		{
+			SourceRepoID:     "repo-deploy",
+			TargetRepoID:     "repo-service",
+			RelationshipType: relationships.RelDeploysFrom,
+			Confidence:       0.9,
+			EvidenceCount:    2,
+			Rationale:        "deployment config references service repository",
+			ResolutionSource: relationships.ResolutionSourceInferred,
+			Details: map[string]any{
+				"evidence_kinds": []string{
+					string(relationships.EvidenceKindHelmValues),
+					string(relationships.EvidenceKindKustomizeResource),
+				},
+				"evidence_preview": []map[string]any{
+					{
+						"kind":       string(relationships.EvidenceKindHelmValues),
+						"confidence": 0.84,
+						"details": map[string]any{
+							"path":          "argocd/service-api/overlays/prod/values.yaml",
+							"extractor":     "helm",
+							"matched_alias": "service-api",
+							"matched_value": "registry.example.test/service-api",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	rows, _ := buildResolvedEdgeIntentRows(resolved, "scope-1", "source-run-1", "gen-1")
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("len(rows) = %d, want %d", got, want)
+	}
+	artifacts := mapSliceValueForTest(rows[0].Payload["evidence_artifacts"])
+	if got, want := len(artifacts), 1; got != want {
+		t.Fatalf("len(evidence_artifacts) = %d, want %d: %#v", got, want, rows[0].Payload)
+	}
+	artifact := artifacts[0]
+	for key, want := range map[string]string{
+		"evidence_kind":   string(relationships.EvidenceKindHelmValues),
+		"artifact_family": "helm",
+		"path":            "argocd/service-api/overlays/prod/values.yaml",
+		"extractor":       "helm",
+		"environment":     "prod",
+		"matched_alias":   "service-api",
+		"matched_value":   "registry.example.test/service-api",
+	} {
+		if got := stringValue(artifact[key]); got != want {
+			t.Fatalf("artifact[%s] = %q, want %q; artifact=%#v", key, got, want, artifact)
+		}
+	}
+	if got := floatValueForTest(artifact["confidence"]); got != 0.84 {
+		t.Fatalf("artifact confidence = %v, want 0.84", got)
+	}
+}
+
+func intValue(v any) int {
+	switch value := v.(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
+}
+
+func floatValueForTest(v any) float64 {
+	switch value := v.(type) {
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	default:
+		return 0
+	}
+}
+
+func mapSliceValueForTest(v any) []map[string]any {
+	switch value := v.(type) {
+	case []map[string]any:
+		return value
+	case []any:
+		out := make([]map[string]any, 0, len(value))
+		for _, item := range value {
+			if mapped, ok := item.(map[string]any); ok {
+				out = append(out, mapped)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func stringSliceValue(v any) []string {
+	switch value := v.(type) {
+	case []string:
+		return value
+	case []any:
+		out := make([]string, 0, len(value))
+		for _, item := range value {
+			if str, ok := item.(string); ok {
+				out = append(out, str)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }

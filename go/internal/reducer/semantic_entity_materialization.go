@@ -3,11 +3,13 @@ package reducer
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 // SemanticEntityRow holds one canonical semantic-entity materialization row.
@@ -26,8 +28,9 @@ type SemanticEntityRow struct {
 
 // SemanticEntityWrite captures one canonical semantic-entity write request.
 type SemanticEntityWrite struct {
-	RepoIDs []string
-	Rows    []SemanticEntityRow
+	RepoIDs     []string
+	Rows        []SemanticEntityRow
+	SkipRetract bool
 }
 
 // SemanticEntityWriteResult captures the canonical semantic-entity write outcome.
@@ -47,10 +50,11 @@ type SemanticEntityWriter interface {
 // into canonical graph writes. It loads parser facts, extracts canonical
 // semantic rows, and writes them through the Neo4j adapter.
 type SemanticEntityMaterializationHandler struct {
-	FactLoader     FactLoader
-	Writer         SemanticEntityWriter
-	PhasePublisher GraphProjectionPhasePublisher
-	RepairQueue    GraphProjectionPhaseRepairQueue
+	FactLoader           FactLoader
+	Writer               SemanticEntityWriter
+	PriorGenerationCheck PriorGenerationCheck
+	PhasePublisher       GraphProjectionPhasePublisher
+	RepairQueue          GraphProjectionPhaseRepairQueue
 }
 
 // Handle executes the semantic-entity materialization path.
@@ -71,14 +75,34 @@ func (h SemanticEntityMaterializationHandler) Handle(
 		return Result{}, fmt.Errorf("semantic entity materialization writer is required")
 	}
 
-	envelopes, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	totalStart := time.Now()
+	loadStart := time.Now()
+	envelopes, err := loadFactsForKinds(
+		ctx,
+		h.FactLoader,
+		intent.ScopeID,
+		intent.GenerationID,
+		[]string{factKindRepository, factKindContentEntity},
+	)
 	if err != nil {
 		return Result{}, fmt.Errorf("load facts for semantic entity materialization: %w", err)
 	}
+	loadDuration := time.Since(loadStart)
 
+	extractStart := time.Now()
 	targetRepoID := semanticTargetRepoID(intent, envelopes)
 	repoIDs, rows := ExtractSemanticEntityRowsForRepo(envelopes, targetRepoID)
+	extractDuration := time.Since(extractStart)
 	if len(repoIDs) == 0 && len(rows) == 0 {
+		logSemanticEntityMaterializationCompleted(ctx, semanticEntityMaterializationTiming{
+			intent:          intent,
+			factCount:       len(envelopes),
+			repoCount:       0,
+			rowCount:        0,
+			loadDuration:    loadDuration,
+			extractDuration: extractDuration,
+			totalDuration:   time.Since(totalStart),
+		})
 		return Result{
 			IntentID:        intent.IntentID,
 			Domain:          DomainSemanticEntityMaterialization,
@@ -87,21 +111,47 @@ func (h SemanticEntityMaterializationHandler) Handle(
 		}, nil
 	}
 
+	retractDecisionStart := time.Now()
+	skipRetract, err := h.shouldSkipSemanticRetract(ctx, intent)
+	if err != nil {
+		return Result{}, err
+	}
+	retractDecisionDuration := time.Since(retractDecisionStart)
+
+	graphWriteStart := time.Now()
 	writeResult, err := h.Writer.WriteSemanticEntities(ctx, SemanticEntityWrite{
-		RepoIDs: repoIDs,
-		Rows:    rows,
+		RepoIDs:     repoIDs,
+		Rows:        rows,
+		SkipRetract: skipRetract,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("write semantic entities: %w", err)
 	}
+	graphWriteDuration := time.Since(graphWriteStart)
+	phasePublishStart := time.Now()
 	if err := h.publishSemanticGraphPhases(ctx, intent.GenerationID, envelopes, repoIDs, len(rows)); err != nil {
 		return Result{}, fmt.Errorf("publish semantic graph phases: %w", err)
 	}
+	phasePublishDuration := time.Since(phasePublishStart)
 
 	summary := fmt.Sprintf("materialized %d semantic entities across %d repositories", len(rows), len(repoIDs))
 	if len(rows) == 0 {
 		summary = fmt.Sprintf("retracted semantic entities across %d repositories", len(repoIDs))
 	}
+
+	logSemanticEntityMaterializationCompleted(ctx, semanticEntityMaterializationTiming{
+		intent:                  intent,
+		factCount:               len(envelopes),
+		repoCount:               len(repoIDs),
+		rowCount:                len(rows),
+		skipRetract:             skipRetract,
+		loadDuration:            loadDuration,
+		extractDuration:         extractDuration,
+		retractDecisionDuration: retractDecisionDuration,
+		graphWriteDuration:      graphWriteDuration,
+		phasePublishDuration:    phasePublishDuration,
+		totalDuration:           time.Since(totalStart),
+	})
 
 	return Result{
 		IntentID:        intent.IntentID,
@@ -110,6 +160,56 @@ func (h SemanticEntityMaterializationHandler) Handle(
 		EvidenceSummary: summary,
 		CanonicalWrites: writeResult.CanonicalWrites,
 	}, nil
+}
+
+// semanticEntityMaterializationTiming keeps stage durations together so the
+// completion log cannot accidentally mix timings from different intents.
+type semanticEntityMaterializationTiming struct {
+	intent                  Intent
+	factCount               int
+	repoCount               int
+	rowCount                int
+	skipRetract             bool
+	loadDuration            time.Duration
+	extractDuration         time.Duration
+	retractDecisionDuration time.Duration
+	graphWriteDuration      time.Duration
+	phasePublishDuration    time.Duration
+	totalDuration           time.Duration
+}
+
+// logSemanticEntityMaterializationCompleted emits one low-cardinality summary
+// that separates handler CPU work from graph backend and readiness publication.
+func logSemanticEntityMaterializationCompleted(
+	ctx context.Context,
+	timing semanticEntityMaterializationTiming,
+) {
+	slog.InfoContext(ctx, "semantic entity materialization completed",
+		slog.String(telemetry.LogKeyScopeID, timing.intent.ScopeID),
+		slog.String(telemetry.LogKeyGenerationID, timing.intent.GenerationID),
+		slog.String(telemetry.LogKeyDomain, string(timing.intent.Domain)),
+		slog.Int("fact_count", timing.factCount),
+		slog.Int("repo_count", timing.repoCount),
+		slog.Int("row_count", timing.rowCount),
+		slog.Bool("skip_retract", timing.skipRetract),
+		slog.Float64("load_facts_duration_seconds", timing.loadDuration.Seconds()),
+		slog.Float64("extract_duration_seconds", timing.extractDuration.Seconds()),
+		slog.Float64("retract_decision_duration_seconds", timing.retractDecisionDuration.Seconds()),
+		slog.Float64("graph_write_duration_seconds", timing.graphWriteDuration.Seconds()),
+		slog.Float64("phase_publish_duration_seconds", timing.phasePublishDuration.Seconds()),
+		slog.Float64("total_duration_seconds", timing.totalDuration.Seconds()),
+	)
+}
+
+func (h SemanticEntityMaterializationHandler) shouldSkipSemanticRetract(ctx context.Context, intent Intent) (bool, error) {
+	if h.PriorGenerationCheck == nil {
+		return false, nil
+	}
+	hasPrior, err := h.PriorGenerationCheck(ctx, intent.ScopeID, intent.GenerationID)
+	if err != nil {
+		return false, fmt.Errorf("check prior generation for semantic retract: %w", err)
+	}
+	return !hasPrior, nil
 }
 
 func (h SemanticEntityMaterializationHandler) publishSemanticGraphPhases(

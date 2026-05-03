@@ -59,10 +59,11 @@ func buildStreamingGeneration(
 	)
 
 	return CollectedGeneration{
-		Scope:      scopeValue,
-		Generation: generation,
-		Facts:      factCh,
-		FactCount:  factCount,
+		Scope:             scopeValue,
+		Generation:        generation,
+		Facts:             factCh,
+		FactCount:         factCount,
+		DiscoveryAdvisory: snapshot.DiscoveryAdvisory,
 	}
 }
 

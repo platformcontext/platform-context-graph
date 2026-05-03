@@ -1,6 +1,7 @@
 package neo4j
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -100,16 +101,26 @@ func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
 		TargetRepoID:     "repo-b",
 		RelationshipType: "DEPLOYS_FROM",
 		EvidenceType:     "argocd_application_source",
+		ResolvedID:       "resolved-1",
+		GenerationID:     "gen-1",
+		EvidenceCount:    3,
+		EvidenceKinds:    []string{"ARGOCD_APPLICATION_SOURCE", "HELM_VALUES_REFERENCE"},
+		ResolutionSource: "inferred",
+		Confidence:       0.93,
+		Rationale:        "deployment config references service repository",
 	}, "resolver/cross-repo")
 
 	if stmt.Operation != OperationCanonicalUpsert {
 		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
 	}
-	if !strings.Contains(stmt.Cypher, "MERGE (source_repo:Repository {id: row.repo_id})") {
+	if !strings.Contains(stmt.Cypher, "MERGE (source_repo:Repository {id: $repo_id})") {
 		t.Fatalf("Cypher missing source Repository MERGE: %s", stmt.Cypher)
 	}
-	if !strings.Contains(stmt.Cypher, "MERGE (target_repo:Repository {id: row.target_repo_id})") {
+	if !strings.Contains(stmt.Cypher, "MERGE (target_repo:Repository {id: $target_repo_id})") {
 		t.Fatalf("Cypher missing target Repository MERGE: %s", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "FOREACH") {
+		t.Fatalf("Cypher must not rely on FOREACH typed routing: %s", stmt.Cypher)
 	}
 	if !strings.Contains(stmt.Cypher, "MERGE (source_repo)-[rel:DEPLOYS_FROM]->(target_repo)") {
 		t.Fatalf("Cypher missing DEPLOYS_FROM edge: %s", stmt.Cypher)
@@ -120,8 +131,36 @@ func TestBuildCanonicalRepoRelationshipUpsertStatement(t *testing.T) {
 	if stmt.Parameters["evidence_type"] != "argocd_application_source" {
 		t.Fatalf("evidence_type = %v", stmt.Parameters["evidence_type"])
 	}
-	if !strings.Contains(stmt.Cypher, "rel.evidence_type = row.evidence_type") {
+	if !strings.Contains(stmt.Cypher, "rel.evidence_type = $evidence_type") {
 		t.Fatalf("Cypher missing evidence_type write: %s", stmt.Cypher)
+	}
+	for _, fragment := range []string{
+		"rel.resolved_id = $resolved_id",
+		"rel.generation_id = $generation_id",
+		"rel.evidence_count = $evidence_count",
+		"rel.evidence_kinds = $evidence_kinds",
+		"rel.resolution_source = $resolution_source",
+		"rel.rationale = $rationale",
+		"rel.confidence = $confidence",
+	} {
+		if !strings.Contains(stmt.Cypher, fragment) {
+			t.Fatalf("Cypher missing evidence metadata write %q: %s", fragment, stmt.Cypher)
+		}
+	}
+	for key, want := range map[string]any{
+		"resolved_id":       "resolved-1",
+		"generation_id":     "gen-1",
+		"evidence_count":    3,
+		"resolution_source": "inferred",
+		"confidence":        0.93,
+		"rationale":         "deployment config references service repository",
+	} {
+		if got := stmt.Parameters[key]; got != want {
+			t.Fatalf("%s = %#v, want %#v", key, got, want)
+		}
+	}
+	if got, want := stmt.Parameters["evidence_kinds"], []string{"ARGOCD_APPLICATION_SOURCE", "HELM_VALUES_REFERENCE"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("evidence_kinds = %#v, want %#v", got, want)
 	}
 }
 
@@ -391,6 +430,34 @@ func TestBuildRetractCodeCallEdgesStatement(t *testing.T) {
 	}
 	if !strings.Contains(stmt.Cypher, "CALLS") {
 		t.Fatalf("Cypher missing CALLS: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "REFERENCES") {
+		t.Fatalf("Cypher missing REFERENCES: %s", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "USES_METACLASS") {
+		t.Fatalf("Cypher unexpectedly includes USES_METACLASS: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "source.repo_id IN $repo_ids") {
+		t.Fatalf("Cypher missing repo_id filter: %s", stmt.Cypher)
+	}
+}
+
+func TestBuildRetractCodeCallEdgesMetaclassStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildRetractCodeCallEdges([]string{"repo-1"}, "parser/python-metaclass")
+
+	if stmt.Operation != OperationCanonicalRetract {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalRetract)
+	}
+	if !strings.Contains(stmt.Cypher, "USES_METACLASS") {
+		t.Fatalf("Cypher missing USES_METACLASS: %s", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "CALLS") {
+		t.Fatalf("Cypher unexpectedly includes CALLS: %s", stmt.Cypher)
+	}
+	if strings.Contains(stmt.Cypher, "REFERENCES") {
+		t.Fatalf("Cypher unexpectedly includes REFERENCES: %s", stmt.Cypher)
 	}
 	if !strings.Contains(stmt.Cypher, "source.repo_id IN $repo_ids") {
 		t.Fatalf("Cypher missing repo_id filter: %s", stmt.Cypher)

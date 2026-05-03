@@ -196,7 +196,10 @@ const openAPIPathsEntities = `
                     "dependents": {"type": "array", "items": {"type": "object"}},
                     "consumer_repositories": {"type": "array", "items": {"type": "object"}},
                     "provisioning_source_chains": {"type": "array", "items": {"type": "object"}},
-                    "deployment_evidence": {"type": "object"},
+                    "deployment_evidence": {
+                      "type": "object",
+                      "description": "Deployment, CI, and environment evidence pointers. Artifacts include source_location plus resolved_id/generation_id for Postgres evidence drilldown; evidence_index groups those pointers by relationship type, artifact family, and evidence kind."
+                    },
                     "documentation_overview": {"type": "object"},
                     "support_overview": {"type": "object"}
                   }

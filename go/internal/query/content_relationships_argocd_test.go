@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"database/sql/driver"
+	"reflect"
 	"testing"
 )
 
@@ -221,6 +222,20 @@ func TestMetadataStringSliceSupportsCommaSeparatedStrings(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("metadataStringSlice()[%d] = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func TestMetadataStringSliceFiltersNilSentinelValues(t *testing.T) {
+	t.Parallel()
+
+	metadata := map[string]any{
+		"template_source_paths": []any{"<nil>", "", "overlays/prod"},
+	}
+
+	got := metadataStringSlice(metadata, "template_source_paths")
+	want := []string{"overlays/prod"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("metadataStringSlice() = %#v, want %#v", got, want)
 	}
 }
 

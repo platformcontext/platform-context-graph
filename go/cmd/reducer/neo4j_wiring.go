@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -16,7 +17,13 @@ import (
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 )
 
-const reducerNeo4jCloseTimeout = 10 * time.Second
+const (
+	reducerNeo4jCloseTimeout             = 10 * time.Second
+	defaultNornicDBCanonicalWriteTimeout = 30 * time.Second
+	canonicalWriteTimeoutEnv             = "PCG_CANONICAL_WRITE_TIMEOUT"
+	nornicDBCanonicalGroupedWritesEnv    = "PCG_NORNICDB_CANONICAL_GROUPED_WRITES"
+	nornicDBSemanticEntityLabelBatchEnv  = "PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES"
+)
 
 // cypherRunner is the narrow interface shared by both executor adapters.
 type cypherRunner interface {
@@ -62,6 +69,82 @@ func (e cypherRunnerStatementExecutor) Execute(ctx context.Context, stmt sourcen
 	return e.runner.RunCypher(ctx, stmt.Cypher, stmt.Parameters)
 }
 
+type nornicDBSemanticObservedExecutor struct {
+	inner sourceneo4j.Executor
+}
+
+func (e nornicDBSemanticObservedExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
+	if e.inner == nil {
+		return nil
+	}
+	start := time.Now()
+	err := e.inner.Execute(ctx, stmt)
+	duration := time.Since(start)
+	attrs := []any{
+		"graph_backend", string(runtimecfg.GraphBackendNornicDB),
+		"label", semanticStatementLabel(stmt),
+		"rows", semanticStatementRows(stmt),
+		"duration_s", duration.Seconds(),
+		"operation", string(stmt.Operation),
+		"statement", semanticStatementSummary(stmt),
+	}
+	if err != nil {
+		attrs = append(attrs, "error", err.Error())
+		slog.Warn("nornicdb semantic statement failed", attrs...)
+		return err
+	}
+	slog.Info("nornicdb semantic statement completed", attrs...)
+	return nil
+}
+
+func semanticStatementLabel(stmt sourceneo4j.Statement) string {
+	label, _ := stmt.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+	label = strings.TrimSpace(label)
+	if label != "" {
+		return label
+	}
+	if stmt.Operation == sourceneo4j.OperationCanonicalRetract {
+		return "semantic_retract"
+	}
+	return "unknown"
+}
+
+func semanticStatementRows(stmt sourceneo4j.Statement) int {
+	if rows, ok := stmt.Parameters["rows"].([]map[string]any); ok {
+		return len(rows)
+	}
+	if rows, ok := stmt.Parameters["rows"].([]any); ok {
+		return len(rows)
+	}
+	if repoIDs, ok := stmt.Parameters["repo_ids"].([]string); ok {
+		return len(repoIDs)
+	}
+	if _, ok := stmt.Parameters["entity_id"]; ok {
+		return 1
+	}
+	return 0
+}
+
+func semanticStatementSummary(stmt sourceneo4j.Statement) string {
+	if summary, ok := stmt.Parameters[sourceneo4j.StatementMetadataSummaryKey].(string); ok {
+		if summary = strings.TrimSpace(summary); summary != "" {
+			return summary
+		}
+	}
+	return summarizeReducerCypher(stmt.Cypher)
+}
+
+func summarizeReducerCypher(cypher string) string {
+	fields := strings.Fields(cypher)
+	if len(fields) == 0 {
+		return ""
+	}
+	if len(fields) > 16 {
+		fields = fields[:16]
+	}
+	return strings.Join(fields, " ")
+}
+
 func executeReducerCypherWithRetry(
 	ctx context.Context,
 	runner cypherRunner,
@@ -78,6 +161,7 @@ func executeReducerCypherWithRetry(
 type neo4jSessionRunner struct {
 	Driver       neo4jdriver.DriverWithContext
 	DatabaseName string
+	TxTimeout    time.Duration
 }
 
 func (r neo4jSessionRunner) RunCypher(ctx context.Context, cypher string, params map[string]any) error {
@@ -91,7 +175,7 @@ func (r neo4jSessionRunner) RunCypher(ctx context.Context, cypher string, params
 	})
 	defer func() { _ = session.Close(ctx) }()
 
-	result, err := session.Run(ctx, cypher, params)
+	result, err := session.Run(ctx, cypher, params, r.transactionConfigurers()...)
 	if err != nil {
 		return err
 	}
@@ -128,8 +212,15 @@ func (r neo4jSessionRunner) RunCypherGroup(ctx context.Context, stmts []sourcene
 			}
 		}
 		return nil, nil
-	})
+	}, r.transactionConfigurers()...)
 	return err
+}
+
+func (r neo4jSessionRunner) transactionConfigurers() []func(*neo4jdriver.TransactionConfig) {
+	if r.TxTimeout <= 0 {
+		return nil
+	}
+	return []func(*neo4jdriver.TransactionConfig){neo4jdriver.WithTxTimeout(r.TxTimeout)}
 }
 
 // QueryCypherExists runs a read-only Cypher query and returns true if at
@@ -158,7 +249,7 @@ func (r neo4jSessionRunner) QueryCypherExists(ctx context.Context, cypher string
 }
 
 // Run executes a read-only Cypher query and returns row maps. This implements
-// query.GraphReader for reducer-local graph lookups.
+// query.GraphQuery for reducer-local graph lookups.
 func (r neo4jSessionRunner) Run(ctx context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
 	if r.Driver == nil {
 		return nil, fmt.Errorf("neo4j driver is required")
@@ -223,7 +314,11 @@ func (c reducerNeo4jDriverCloser) Close() error {
 func openReducerNeo4jAdapters(
 	parent context.Context,
 	getenv func(string) string,
-) (sourceneo4j.Executor, reducer.CypherExecutor, sourceneo4j.CypherReader, query.GraphReader, io.Closer, error) {
+) (sourceneo4j.Executor, reducer.CypherExecutor, sourceneo4j.CypherReader, query.GraphQuery, io.Closer, error) {
+	graphBackend, err := runtimecfg.LoadGraphBackend(getenv)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
@@ -232,6 +327,7 @@ func openReducerNeo4jAdapters(
 	runner := neo4jSessionRunner{
 		Driver:       driver,
 		DatabaseName: cfg.DatabaseName,
+		TxTimeout:    reducerTransactionTimeout(graphBackend, getenv),
 	}
 
 	return reducerNeo4jExecutor{session: runner},
@@ -240,6 +336,83 @@ func openReducerNeo4jAdapters(
 		runner,
 		reducerNeo4jDriverCloser{Driver: driver},
 		nil
+}
+
+func reducerTransactionTimeout(graphBackend runtimecfg.GraphBackend, getenv func(string) string) time.Duration {
+	if graphBackend != runtimecfg.GraphBackendNornicDB {
+		return 0
+	}
+	return nornicDBCanonicalWriteTimeout(getenv)
+}
+
+func semanticEntityExecutorForGraphBackend(
+	rawExecutor sourceneo4j.Executor,
+	graphBackend runtimecfg.GraphBackend,
+	nornicDBTimeout time.Duration,
+	nornicDBGroupedWrites bool,
+) sourceneo4j.Executor {
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		bounded := sourceneo4j.TimeoutExecutor{
+			Inner:       rawExecutor,
+			Timeout:     nornicDBTimeout,
+			TimeoutHint: canonicalWriteTimeoutEnv,
+		}
+		if nornicDBGroupedWrites {
+			return bounded
+		}
+		return sourceneo4j.ExecuteOnlyExecutor{Inner: nornicDBSemanticObservedExecutor{inner: bounded}}
+	}
+	return rawExecutor
+}
+
+func semanticEntityWriterForGraphBackend(
+	executor sourceneo4j.Executor,
+	batchSize int,
+	graphBackend runtimecfg.GraphBackend,
+	getenv func(string) string,
+) (*sourceneo4j.SemanticEntityWriter, error) {
+	writer := sourceneo4j.NewSemanticEntityWriter(executor, batchSize)
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		// NornicDB's batch executor is template-sensitive: putting MATCH before
+		// MERGE is indexed but misses the generalized UNWIND/MERGE hot path.
+		// Use merge-first explicit row templates, but let source-local canonical
+		// projection retain ownership of File CONTAINS edges for canonical entity
+		// labels. That avoids repeated relationship-existence checks as the graph
+		// grows while still preserving Module's semantic-owned uid nodes.
+		writer = sourceneo4j.NewSemanticEntityWriterWithCanonicalNodeRows(executor, batchSize).WithLabelScopedRetract()
+		labelBatchSizes, err := nornicDBSemanticEntityLabelBatchSizes(getenv, effectiveNeo4jBatchSize(batchSize))
+		if err != nil {
+			return nil, err
+		}
+		for label, size := range labelBatchSizes {
+			writer = writer.WithEntityLabelBatchSize(label, size)
+		}
+	}
+	return writer, nil
+}
+
+func nornicDBCanonicalWriteTimeout(getenv func(string) string) time.Duration {
+	raw := strings.TrimSpace(getenv(canonicalWriteTimeoutEnv))
+	if raw == "" {
+		return defaultNornicDBCanonicalWriteTimeout
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		return defaultNornicDBCanonicalWriteTimeout
+	}
+	return parsed
+}
+
+func nornicDBCanonicalGroupedWrites(getenv func(string) string) (bool, error) {
+	raw := strings.TrimSpace(getenv(nornicDBCanonicalGroupedWritesEnv))
+	if raw == "" {
+		return false, nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("parse %s=%q: %w", nornicDBCanonicalGroupedWritesEnv, raw, err)
+	}
+	return enabled, nil
 }
 
 func neo4jBatchSize(getenv func(string) string) int {
@@ -252,4 +425,68 @@ func neo4jBatchSize(getenv func(string) string) int {
 		return 0
 	}
 	return n
+}
+
+func effectiveNeo4jBatchSize(batchSize int) int {
+	if batchSize <= 0 {
+		return sourceneo4j.DefaultBatchSize
+	}
+	return batchSize
+}
+
+func defaultNornicDBSemanticEntityLabelBatchSizes(batchSize int) map[string]int {
+	return map[string]int{
+		// Full-corpus timing showed small Annotation and TypeAlias batches can
+		// consume most of the bounded NornicDB write budget, so keep them below
+		// the broader semantic default until the backend path is faster.
+		"Annotation": minPositiveInt(batchSize, 5),
+		"Function":   minPositiveInt(batchSize, 10),
+		"Variable":   minPositiveInt(batchSize, 10),
+		// Module rows can carry declaration-merge metadata, and the self-repo
+		// dogfood run showed the 45-row statement exceeds NornicDB's bounded
+		// semantic write timeout. Keep this family narrow by default.
+		"Module": minPositiveInt(batchSize, 10),
+		// Rust impl blocks carry trait/receiver context; the self-repo run
+		// showed the 103-row family needs the same narrow default.
+		"ImplBlock":      minPositiveInt(batchSize, 10),
+		"TypeAlias":      minPositiveInt(batchSize, 5),
+		"TypeAnnotation": minPositiveInt(batchSize, 50),
+	}
+}
+
+func nornicDBSemanticEntityLabelBatchSizes(getenv func(string) string, batchSize int) (map[string]int, error) {
+	labelBatchSizes := defaultNornicDBSemanticEntityLabelBatchSizes(batchSize)
+	raw := strings.TrimSpace(getenv(nornicDBSemanticEntityLabelBatchEnv))
+	if raw == "" {
+		return labelBatchSizes, nil
+	}
+	for _, entry := range strings.Split(raw, ",") {
+		parts := strings.Split(strings.TrimSpace(entry), "=")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("parse %s=%q: entries must be Label=size", nornicDBSemanticEntityLabelBatchEnv, raw)
+		}
+		label := strings.TrimSpace(parts[0])
+		if label == "" {
+			return nil, fmt.Errorf("parse %s=%q: label must be non-empty", nornicDBSemanticEntityLabelBatchEnv, raw)
+		}
+		size, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil || size <= 0 {
+			return nil, fmt.Errorf("parse %s=%q: label %q must have a positive integer size", nornicDBSemanticEntityLabelBatchEnv, raw, label)
+		}
+		labelBatchSizes[label] = minPositiveInt(batchSize, size)
+	}
+	return labelBatchSizes, nil
+}
+
+func minPositiveInt(left, right int) int {
+	if left <= 0 {
+		return right
+	}
+	if right <= 0 {
+		return left
+	}
+	if left < right {
+		return left
+	}
+	return right
 }

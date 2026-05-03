@@ -25,6 +25,46 @@ func WriteError(w http.ResponseWriter, status int, message string) {
 	})
 }
 
+func WriteSuccess(w http.ResponseWriter, r *http.Request, status int, data any, truth *TruthEnvelope) {
+	if acceptsEnvelope(r) {
+		WriteJSON(w, status, ResponseEnvelope{
+			Data:  data,
+			Truth: truth,
+			Error: nil,
+		})
+		return
+	}
+	WriteJSON(w, status, data)
+}
+
+func WriteContractError(
+	w http.ResponseWriter,
+	r *http.Request,
+	status int,
+	message string,
+	errCode ErrorCode,
+	capability string,
+	currentProfile QueryProfile,
+	requiredProfile QueryProfile,
+) {
+	if acceptsEnvelope(r) {
+		WriteJSON(w, status, ResponseEnvelope{
+			Data: nil,
+			Error: &ErrorEnvelope{
+				Code:       errCode,
+				Message:    message,
+				Capability: capability,
+				Profiles: &ErrorProfiles{
+					Current:  currentProfile,
+					Required: requiredProfile,
+				},
+			},
+		})
+		return
+	}
+	WriteError(w, status, message)
+}
+
 // ReadJSON decodes a JSON request body into v.
 func ReadJSON(r *http.Request, v any) error {
 	if r.Body == nil {
@@ -62,6 +102,10 @@ func PathParam(r *http.Request, name string) string {
 	return strings.TrimSpace(r.PathValue(name))
 }
 
+func capabilityUnsupported(profile QueryProfile, capability string) bool {
+	return maxTruthLevel(capability, profile) == nil
+}
+
 // APIRouter builds the top-level /api/v0 mux for all query endpoints.
 type APIRouter struct {
 	Repositories *RepositoryHandler
@@ -69,7 +113,9 @@ type APIRouter struct {
 	Code         *CodeHandler
 	Content      *ContentHandler
 	Infra        *InfraHandler
+	IaC          *IaCHandler
 	Impact       *ImpactHandler
+	Evidence     *EvidenceHandler
 	Status       *StatusHandler
 	Compare      *CompareHandler
 	Admin        *AdminHandler
@@ -110,9 +156,19 @@ func (a *APIRouter) Mount(mux *http.ServeMux) {
 		a.Infra.Mount(mux)
 	}
 
+	// IaC
+	if a.IaC != nil {
+		a.IaC.Mount(mux)
+	}
+
 	// Impact
 	if a.Impact != nil {
 		a.Impact.Mount(mux)
+	}
+
+	// Evidence
+	if a.Evidence != nil {
+		a.Evidence.Mount(mux)
 	}
 
 	// Status

@@ -7,11 +7,12 @@ import (
 
 func loadDeploymentArtifactOverview(
 	ctx context.Context,
-	graph GraphReader,
-	content *ContentReader,
+	graph GraphQuery,
+	content ContentStore,
 	repoID string,
 	repoName string,
 	files []FileContent,
+	infrastructure []map[string]any,
 	overview map[string]any,
 ) (map[string]any, error) {
 	merged := overview
@@ -41,6 +42,9 @@ func loadDeploymentArtifactOverview(
 		merged = mergeArtifactOverview(merged, configArtifacts)
 	}
 
+	cloudFormationArtifacts := buildRepositoryCloudFormationRuntimeArtifacts(infrastructure)
+	merged = mergeArtifactOverview(merged, cloudFormationArtifacts)
+
 	runtimeArtifacts, err := loadRepositoryRuntimeArtifacts(ctx, content, repoID, artifactFiles)
 	if err != nil && firstErr == nil {
 		firstErr = err
@@ -60,7 +64,7 @@ func loadDeploymentArtifactOverview(
 
 func hydrateRepositoryArtifactFiles(
 	ctx context.Context,
-	content *ContentReader,
+	content ContentStore,
 	repoID string,
 	files []FileContent,
 ) ([]FileContent, error) {

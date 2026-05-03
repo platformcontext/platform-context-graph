@@ -22,6 +22,9 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 			metadata[key] = value
 		}
 	}
+	if classContext := semanticPayloadMetadataString(payload, "class_context"); classContext != "" {
+		metadata["class_context"] = classContext
+	}
 	if jsxFragment := semanticPayloadMetadataBool(payload, "jsx_fragment_shorthand"); jsxFragment {
 		metadata["jsx_fragment_shorthand"] = true
 	}
@@ -246,6 +249,7 @@ func isSemanticEntityType(payload map[string]any, entityType string) bool {
 			isTypeScriptJSXComponentTypeAssertionSemanticEntity(payload)
 	case "Function":
 		return isJavaScriptCallableSemanticEntity(payload) ||
+			isGoSemanticFunction(payload) ||
 			isPythonSemanticFunction(payload) ||
 			isElixirSemanticFunction(payload) ||
 			isRustSemanticFunction(payload) ||
@@ -281,6 +285,13 @@ func isPythonSemanticFunction(payload map[string]any) bool {
 	}
 	count, kinds := semanticPayloadTypeAnnotationSummary(payload)
 	return count > 0 || len(kinds) > 0
+}
+
+func isGoSemanticFunction(payload map[string]any) bool {
+	if semanticPayloadString(payload, "language") != "go" {
+		return false
+	}
+	return hasSemanticFunctionMetadata(payload)
 }
 
 func isElixirSemanticFunction(payload map[string]any) bool {
@@ -326,6 +337,34 @@ func isRustSemanticFunction(payload map[string]any) bool {
 	return semanticPayloadMetadataString(payload, "impl_context") != "" ||
 		semanticPayloadMetadataString(payload, "trait") != "" ||
 		semanticPayloadMetadataString(payload, "target") != ""
+}
+
+func hasSemanticFunctionMetadata(payload map[string]any) bool {
+	for _, key := range []string{
+		"docstring",
+		"class_context",
+		"method_kind",
+		"constructor_kind",
+		"annotation_kind",
+		"context",
+		"impl_context",
+	} {
+		if semanticPayloadMetadataString(payload, key) != "" {
+			return true
+		}
+	}
+	if len(semanticPayloadMetadataStringSlice(payload, "decorators")) > 0 {
+		return true
+	}
+	if len(semanticPayloadMetadataStringSlice(payload, "type_parameters")) > 0 {
+		return true
+	}
+	if semanticPayloadMetadataBool(payload, "async") ||
+		semanticPayloadMetadataBool(payload, "jsx_fragment_shorthand") {
+		return true
+	}
+	count, kinds := semanticPayloadTypeAnnotationSummary(payload)
+	return count > 0 || len(kinds) > 0
 }
 
 func semanticPayloadInt(payload map[string]any, key string) int {

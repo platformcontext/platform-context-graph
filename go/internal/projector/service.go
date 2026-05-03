@@ -49,6 +49,12 @@ type ProjectorWorkSink interface {
 	Fail(context.Context, ScopeGenerationWork, error) error
 }
 
+// ProjectorWorkHeartbeater renews a claimed projector work item while a worker
+// is still actively loading facts or projecting the generation.
+type ProjectorWorkHeartbeater interface {
+	Heartbeat(context.Context, ScopeGenerationWork) error
+}
+
 // FactCounter returns the fact count for a scope generation without loading data.
 // Used by the large-generation semaphore to classify repos before loading.
 type FactCounter interface {
@@ -62,11 +68,15 @@ type Service struct {
 	FactStore    FactStore
 	Runner       ProjectionRunner
 	WorkSink     ProjectorWorkSink
-	Wait         func(context.Context, time.Duration) error
-	Tracer       trace.Tracer           // optional
-	Instruments  *telemetry.Instruments // optional
-	Logger       *slog.Logger           // optional
-	Workers      int                    // concurrent worker count; 0 or 1 means sequential
+	Heartbeater  ProjectorWorkHeartbeater
+	// HeartbeatInterval controls how often a claimed projector work item renews
+	// its lease while projection is still running. Zero means no heartbeats.
+	HeartbeatInterval time.Duration
+	Wait              func(context.Context, time.Duration) error
+	Tracer            trace.Tracer           // optional
+	Instruments       *telemetry.Instruments // optional
+	Logger            *slog.Logger           // optional
+	Workers           int                    // concurrent worker count; 0 or 1 means sequential
 
 	// Large-generation semaphore: limits how many large repos can be
 	// projected concurrently while letting small/medium repos proceed
@@ -191,44 +201,93 @@ func (s Service) runConcurrent(ctx context.Context) error {
 
 func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, workerID int) error {
 	start := time.Now()
+	workCtx := ctx
 
 	if s.Tracer != nil {
 		var span trace.Span
-		ctx, span = s.Tracer.Start(ctx, telemetry.SpanProjectorRun)
+		workCtx, span = s.Tracer.Start(workCtx, telemetry.SpanProjectorRun)
 		defer span.End()
 	}
 
+	projectCtx, stopHeartbeat := s.startHeartbeat(workCtx, work, workerID)
+	defer func() {
+		_ = stopHeartbeat()
+	}()
+
 	// Large-generation semaphore: count facts first, acquire sem if large.
-	releaseSem := s.acquireLargeGenSem(ctx, work, workerID)
+	releaseSem := s.acquireLargeGenSem(projectCtx, work, workerID)
 	if releaseSem != nil {
 		defer releaseSem()
 	}
 
-	factsForGeneration, err := s.FactStore.LoadFacts(ctx, work)
+	loadStart := time.Now()
+	factsForGeneration, err := s.FactStore.LoadFacts(projectCtx, work)
 	if err != nil {
-		s.recordProjectionResult(ctx, work, start, "failed", 0, err, workerID)
-		if failErr := s.WorkSink.Fail(ctx, work, err); failErr != nil {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+			return errors.Join(err, heartbeatErr)
+		}
+		if projectorShutdownCanceled(workCtx, err) {
+			s.recordProjectionShutdownCanceled(workCtx, work, start, 0, err, workerID)
+			return nil
+		}
+		s.recordProjectionResult(workCtx, work, start, "failed", 0, err, workerID)
+		if failErr := s.WorkSink.Fail(workCtx, work, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail projector work: %w", failErr))
 		}
 		return nil
 	}
+	s.recordWorkStage(projectCtx, work, "load_facts", loadStart, len(factsForGeneration), workerID)
 
-	result, err := s.Runner.Project(ctx, work.Scope, work.Generation, factsForGeneration)
+	projectStart := time.Now()
+	result, err := s.Runner.Project(projectCtx, work.Scope, work.Generation, factsForGeneration)
 	if err != nil {
-		s.recordProjectionResult(ctx, work, start, "failed", len(factsForGeneration), err, workerID)
-		if failErr := s.WorkSink.Fail(ctx, work, err); failErr != nil {
+		if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+			return errors.Join(err, heartbeatErr)
+		}
+		if projectorShutdownCanceled(workCtx, err) {
+			s.recordProjectionShutdownCanceled(workCtx, work, start, len(factsForGeneration), err, workerID)
+			return nil
+		}
+		s.recordProjectionResult(workCtx, work, start, "failed", len(factsForGeneration), err, workerID)
+		if failErr := s.WorkSink.Fail(workCtx, work, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail projector work: %w", failErr))
 		}
 		return nil
 	}
+	s.recordWorkStage(projectCtx, work, "project_generation", projectStart, len(factsForGeneration), workerID)
+	if heartbeatErr := stopHeartbeat(); heartbeatErr != nil {
+		return heartbeatErr
+	}
 
-	if err := s.WorkSink.Ack(ctx, work, result); err != nil {
-		s.recordProjectionResult(ctx, work, start, "ack_failed", len(factsForGeneration), err, workerID)
+	if err := s.WorkSink.Ack(workCtx, work, result); err != nil {
+		s.recordProjectionResult(workCtx, work, start, "ack_failed", len(factsForGeneration), err, workerID)
 		return fmt.Errorf("ack projector work: %w", err)
 	}
 
-	s.recordProjectionResult(ctx, work, start, "succeeded", len(factsForGeneration), nil, workerID)
+	s.recordProjectionResult(workCtx, work, start, "succeeded", len(factsForGeneration), nil, workerID)
 	return nil
+}
+
+// recordWorkStage logs coarse projector service stages that are outside the
+// Runtime's ownership, especially fact loading before graph/content writes.
+func (s Service) recordWorkStage(ctx context.Context, work ScopeGenerationWork, stage string, start time.Time, factCount int, workerID int) {
+	if s.Logger == nil {
+		return
+	}
+	scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
+	logAttrs := make([]any, 0, len(scopeAttrs)+5)
+	for _, attr := range scopeAttrs {
+		logAttrs = append(logAttrs, attr)
+	}
+	logAttrs = append(logAttrs,
+		slog.String("queue", "projector"),
+		slog.String("stage", stage),
+		slog.Int("fact_count", factCount),
+		slog.Float64("duration_seconds", time.Since(start).Seconds()),
+		slog.Int("worker_id", workerID),
+		telemetry.PhaseAttr(telemetry.PhaseProjection),
+	)
+	s.Logger.InfoContext(ctx, "projector work stage completed", logAttrs...)
 }
 
 func (s Service) recordProjectionResult(ctx context.Context, work ScopeGenerationWork, start time.Time, status string, factCount int, err error, workerID int) {
@@ -270,6 +329,93 @@ func (s Service) recordProjectionResult(ctx context.Context, work ScopeGeneratio
 		} else {
 			s.Logger.InfoContext(ctx, "projection succeeded", logAttrs...)
 		}
+	}
+}
+
+func projectorShutdownCanceled(ctx context.Context, err error) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func (s Service) recordProjectionShutdownCanceled(ctx context.Context, work ScopeGenerationWork, start time.Time, factCount int, err error, workerID int) {
+	if s.Logger == nil {
+		return
+	}
+	scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
+	logAttrs := make([]any, 0, len(scopeAttrs)+8)
+	for _, a := range scopeAttrs {
+		logAttrs = append(logAttrs, a)
+	}
+	logAttrs = append(logAttrs,
+		slog.String("queue", "projector"),
+		slog.String("status", "shutdown_canceled"),
+		slog.Int("fact_count", factCount),
+		slog.Float64("duration_seconds", time.Since(start).Seconds()),
+		slog.Int("worker_id", workerID),
+		telemetry.PhaseAttr(telemetry.PhaseProjection),
+		telemetry.FailureClassAttr("shutdown_canceled"),
+	)
+	if err != nil {
+		logAttrs = append(logAttrs, slog.String("error", err.Error()))
+	}
+	s.Logger.InfoContext(ctx, "projector work canceled during shutdown", logAttrs...)
+}
+
+type projectorHeartbeatStop func() error
+
+func (s Service) startHeartbeat(ctx context.Context, work ScopeGenerationWork, workerID int) (context.Context, projectorHeartbeatStop) {
+	if s.Heartbeater == nil || s.HeartbeatInterval <= 0 {
+		return ctx, func() error { return nil }
+	}
+
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		ticker := time.NewTicker(s.HeartbeatInterval)
+		defer ticker.Stop()
+
+		var heartbeatErr error
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				done <- heartbeatErr
+				return
+			case <-ticker.C:
+				if err := s.Heartbeater.Heartbeat(heartbeatCtx, work); err != nil {
+					if heartbeatCtx.Err() != nil && errors.Is(err, heartbeatCtx.Err()) {
+						done <- nil
+						return
+					}
+					heartbeatErr = fmt.Errorf("heartbeat projector work: %w", err)
+					if s.Logger != nil {
+						scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
+						logAttrs := make([]any, 0, len(scopeAttrs)+4)
+						for _, a := range scopeAttrs {
+							logAttrs = append(logAttrs, a)
+						}
+						logAttrs = append(logAttrs, slog.Int("worker_id", workerID))
+						logAttrs = append(logAttrs, slog.Duration("heartbeat_interval", s.HeartbeatInterval))
+						logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseProjection))
+						logAttrs = append(logAttrs, telemetry.FailureClassAttr("lease_heartbeat_failure"))
+						logAttrs = append(logAttrs, slog.String("error", heartbeatErr.Error()))
+						s.Logger.ErrorContext(heartbeatCtx, "projector lease heartbeat failed", logAttrs...)
+					}
+					cancel()
+				}
+			}
+		}
+	}()
+
+	var once sync.Once
+	return heartbeatCtx, func() error {
+		var heartbeatErr error
+		once.Do(func() {
+			cancel()
+			heartbeatErr = <-done
+		})
+		return heartbeatErr
 	}
 }
 

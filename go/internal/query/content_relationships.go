@@ -15,7 +15,7 @@ type contentRelationshipSet struct {
 
 func buildContentRelationshipSet(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) (contentRelationshipSet, error) {
 	outgoing, err := buildOutgoingContentRelationships(ctx, reader, entity)
@@ -33,7 +33,7 @@ func buildContentRelationshipSet(
 
 func buildOutgoingContentRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, error) {
 	if relationships, ok, err := buildOutgoingArgoCDRelationships(entity); ok || err != nil {
@@ -105,7 +105,7 @@ func buildOutgoingContentRelationships(
 
 func buildIncomingContentRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, error) {
 	if relationships, ok, err := buildIncomingK8sSelectRelationships(ctx, reader, entity); ok || err != nil {
@@ -236,7 +236,7 @@ func buildOutgoingArgoCDApplicationSetRelationships(entity EntityContent) []map[
 
 func buildOutgoingK8sSelectRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, bool, error) {
 	if !isK8sResourceKind(entity, "Service") || entity.EntityName == "" {
@@ -277,7 +277,7 @@ func buildOutgoingK8sSelectRelationships(
 
 func buildOutgoingKustomizeRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, bool, error) {
 	if entity.EntityType != "KustomizeOverlay" {
@@ -343,7 +343,7 @@ func buildOutgoingKustomizeRelationships(
 
 func buildIncomingK8sSelectRelationships(
 	ctx context.Context,
-	reader *ContentReader,
+	reader ContentStore,
 	entity EntityContent,
 ) ([]map[string]any, bool, error) {
 	if !isK8sResourceKind(entity, "Deployment") || entity.EntityName == "" {
@@ -420,26 +420,32 @@ func metadataStringSlice(metadata map[string]any, key string) []string {
 
 	switch typed := values.(type) {
 	case []string:
-		return append([]string(nil), typed...)
+		items := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if value := cleanMetadataString(item); value != "" {
+				items = append(items, value)
+			}
+		}
+		return items
 	case []any:
 		items := make([]string, 0, len(typed))
 		for _, item := range typed {
-			value, ok := item.(string)
-			if !ok || value == "" {
+			raw, ok := item.(string)
+			if !ok {
 				continue
 			}
-			items = append(items, value)
+			if value := cleanMetadataString(raw); value != "" {
+				items = append(items, value)
+			}
 		}
 		return items
 	case string:
 		items := strings.Split(typed, ",")
 		result := make([]string, 0, len(items))
 		for _, item := range items {
-			value := strings.TrimSpace(item)
-			if value == "" {
-				continue
+			if value := cleanMetadataString(item); value != "" {
+				result = append(result, value)
 			}
-			result = append(result, value)
 		}
 		return result
 	default:
@@ -447,12 +453,20 @@ func metadataStringSlice(metadata map[string]any, key string) []string {
 	}
 }
 
+func cleanMetadataString(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "<nil>" {
+		return ""
+	}
+	return value
+}
+
 func metadataNonEmptyString(metadata map[string]any, key string) (string, bool) {
 	value, ok := metadata[key].(string)
 	if !ok {
 		return "", false
 	}
-	value = strings.TrimSpace(value)
+	value = cleanMetadataString(value)
 	if value == "" {
 		return "", false
 	}

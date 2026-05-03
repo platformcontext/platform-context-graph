@@ -77,6 +77,12 @@ func TestWorkloadMaterializerWritesWorkloads(t *testing.T) {
 	if !containsCypher(executor.calls, "MERGE (w:Workload {id: row.workload_id})") {
 		t.Fatal("missing Workload MERGE cypher")
 	}
+	if !containsCypher(executor.calls, "MATCH (w:Workload {id: row.workload_id})") {
+		t.Fatal("missing indexed Workload MATCH for DEFINES edge")
+	}
+	if containsCypher(executor.calls[:1], "MATCH (repo:Repository") {
+		t.Fatal("workload node upsert should not also match repository")
+	}
 	rows := executor.calls[0].Parameters["rows"].([]map[string]any)
 	if got, want := rows[0]["classification"], "service"; got != want {
 		t.Fatalf("classification = %#v, want %#v", got, want)
@@ -120,6 +126,9 @@ func TestWorkloadMaterializerWritesInstances(t *testing.T) {
 	}
 	if !containsCypher(executor.calls, "MERGE (i:WorkloadInstance {id: row.instance_id})") {
 		t.Fatal("missing WorkloadInstance MERGE cypher")
+	}
+	if !containsCypher(executor.calls, "MATCH (i:WorkloadInstance {id: row.instance_id})") {
+		t.Fatal("missing indexed WorkloadInstance MATCH for INSTANCE_OF edge")
 	}
 }
 
@@ -222,6 +231,69 @@ func TestWorkloadMaterializerWritesRuntimePlatforms(t *testing.T) {
 	if !containsCypher(executor.calls, "MERGE (i)-[rel:RUNS_ON]->(p)") {
 		t.Fatal("missing RUNS_ON MERGE cypher")
 	}
+	if containsCypher(executor.calls, "CASE") {
+		t.Fatal("runtime platform writes should precompute confidence in Go, not Cypher CASE")
+	}
+	if got := len(executor.calls); got != 2 {
+		t.Fatalf("executor calls = %d, want 2 split runtime platform statements", got)
+	}
+	rows := executor.calls[1].Parameters["rows"].([]map[string]any)
+	if got, want := rows[0]["platform_confidence"], 0.9; got != want {
+		t.Fatalf("platform_confidence = %#v, want %#v", got, want)
+	}
+}
+
+func TestWorkloadMaterializerWritesAPIEndpoints(t *testing.T) {
+	t.Parallel()
+
+	executor := &fakeNeo4jExecutor{}
+	m := NewWorkloadMaterializer(executor)
+
+	projection := &ProjectionResult{
+		EndpointRows: []APIEndpointRow{
+			{
+				EndpointID:   "endpoint:repo-service-api:1234",
+				RepoID:       "repo-service-api",
+				WorkloadID:   "workload:service-api",
+				WorkloadName: "service-api",
+				Path:         "/widgets",
+				Methods:      []string{"get", "post"},
+				OperationIDs: []string{"createWidget", "listWidgets"},
+				SourceKinds:  []string{"openapi"},
+				SourcePaths:  []string{"specs/index.yaml"},
+				SpecVersions: []string{"3.1.0"},
+				APIVersions:  []string{"v3"},
+			},
+		},
+	}
+
+	result, err := m.Materialize(context.Background(), projection)
+	if err != nil {
+		t.Fatalf("Materialize() error = %v", err)
+	}
+	if result.EndpointsWritten != 1 {
+		t.Fatalf("EndpointsWritten = %d, want 1", result.EndpointsWritten)
+	}
+	if !containsCypher(executor.calls, "MERGE (endpoint:Endpoint {id: row.endpoint_id})") {
+		t.Fatal("missing Endpoint MERGE cypher")
+	}
+	if !containsCypher(executor.calls, "MERGE (repo)-[repo_rel:EXPOSES_ENDPOINT]->(endpoint)") {
+		t.Fatal("missing Repository EXPOSES_ENDPOINT MERGE cypher")
+	}
+	if !containsCypher(executor.calls, "MERGE (workload)-[workload_rel:EXPOSES_ENDPOINT]->(endpoint)") {
+		t.Fatal("missing Workload EXPOSES_ENDPOINT MERGE cypher")
+	}
+	if got := len(executor.calls); got != 3 {
+		t.Fatalf("executor calls = %d, want 3 split endpoint statements", got)
+	}
+	if containsCypher([]fakeExecutorCall{executor.calls[0]}, "MATCH (repo:Repository") ||
+		containsCypher([]fakeExecutorCall{executor.calls[0]}, "MATCH (workload:Workload") {
+		t.Fatal("endpoint node upsert should not also match repo or workload")
+	}
+	rows := executor.calls[0].Parameters["rows"].([]map[string]any)
+	if got, want := rows[0]["path"], "/widgets"; got != want {
+		t.Fatalf("path = %#v, want %#v", got, want)
+	}
 }
 
 func TestWorkloadMaterializerFullPipeline(t *testing.T) {
@@ -262,9 +334,9 @@ func TestWorkloadMaterializerFullPipeline(t *testing.T) {
 	if result.RuntimePlatformsWritten != 1 {
 		t.Fatalf("RuntimePlatformsWritten = %d, want 1", result.RuntimePlatformsWritten)
 	}
-	// 4 statements total: 1 workload + 1 instance + 1 deployment source + 1 runtime platform.
-	if len(executor.calls) != 4 {
-		t.Fatalf("executor calls = %d, want 4", len(executor.calls))
+	// Split write phases keep node upserts separate from relationship writes.
+	if len(executor.calls) != 7 {
+		t.Fatalf("executor calls = %d, want 7", len(executor.calls))
 	}
 }
 

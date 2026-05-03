@@ -25,6 +25,20 @@ func TestIngestionScopeValidate(t *testing.T) {
 	}
 }
 
+func TestIngestionScopeHasPriorGenerationDoesNotInferFromActiveGenerationID(t *testing.T) {
+	t.Parallel()
+
+	scope := IngestionScope{ActiveGenerationID: "generation-active"}
+	if scope.HasPriorGeneration() {
+		t.Fatal("HasPriorGeneration() = true, want false without explicit PreviousGenerationExists")
+	}
+
+	scope.PreviousGenerationExists = true
+	if !scope.HasPriorGeneration() {
+		t.Fatal("HasPriorGeneration() = false, want true from explicit PreviousGenerationExists")
+	}
+}
+
 func TestIngestionScopeValidateAllowsAdditionalCollectorKinds(t *testing.T) {
 	t.Parallel()
 

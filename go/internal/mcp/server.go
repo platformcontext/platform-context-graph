@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
+	"github.com/platformcontext/platform-context-graph/go/internal/query"
 )
 
 // JSON-RPC 2.0 message types
@@ -73,8 +74,15 @@ type mcpToolResult struct {
 }
 
 type mcpContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string       `json:"type"`
+	Text     string       `json:"text,omitempty"`
+	Resource *mcpResource `json:"resource,omitempty"`
+}
+
+type mcpResource struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType,omitempty"`
+	Text     string `json:"text,omitempty"`
 }
 
 // sseSession holds the response channel for one SSE client.
@@ -366,7 +374,29 @@ func (s *Server) handleMessage(ctx context.Context, req *jsonrpcRequest, authHea
 				},
 			}
 		}
-		resultJSON, _ := json.Marshal(result)
+		if result.Envelope != nil {
+			resourceText, _ := json.Marshal(result.Envelope)
+			return &jsonrpcResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Result: mcpToolResult{
+					Content: []mcpContent{
+						{Type: "text", Text: summarizeEnvelope(result.Envelope)},
+						{
+							Type: "resource",
+							Resource: &mcpResource{
+								URI:      "pcg://tool-result/envelope",
+								MimeType: query.EnvelopeMIMEType,
+								Text:     string(resourceText),
+							},
+						},
+					},
+					IsError: result.IsError,
+				},
+			}
+		}
+
+		resultJSON, _ := json.Marshal(result.Value)
 		return &jsonrpcResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
@@ -381,6 +411,24 @@ func (s *Server) handleMessage(ctx context.Context, req *jsonrpcRequest, authHea
 	default:
 		return s.errorResponse(req.ID, -32601, fmt.Sprintf("method not found: %s", req.Method))
 	}
+}
+
+func summarizeEnvelope(envelope *query.ResponseEnvelope) string {
+	if envelope == nil {
+		return "PCG query completed."
+	}
+	if envelope.Error != nil {
+		return envelope.Error.Message
+	}
+	if dataMap, ok := envelope.Data.(map[string]any); ok {
+		if count, ok := dataMap["count"]; ok {
+			return fmt.Sprintf("Returned %v result(s).", count)
+		}
+		if count, ok := dataMap["affected_count"]; ok {
+			return fmt.Sprintf("Found %v affected result(s).", count)
+		}
+	}
+	return "PCG query completed."
 }
 
 func (s *Server) errorResponse(id any, code int, msg string) *jsonrpcResponse {

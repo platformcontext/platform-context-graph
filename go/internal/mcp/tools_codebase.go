@@ -104,10 +104,54 @@ func codebaseTools() []ToolDefinition {
 						"type":        "string",
 						"description": "Optional canonical repository identifier",
 					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "Maximum dead-code candidates to return",
+						"default":     100,
+					},
 					"scope": map[string]any{
 						"type":        "string",
 						"description": "Search scope",
 						"default":     "auto",
+					},
+				},
+				"required": []string{},
+			},
+		},
+		{
+			Name:        "find_dead_iac",
+			Description: "Find unused or ambiguous Terraform modules, Helm charts, Kustomize paths, Ansible roles, and Docker Compose services across an explicit set of canonical repository identifiers.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"repo_id": map[string]any{
+						"type":        "string",
+						"description": "Optional single canonical repository identifier",
+					},
+					"repo_ids": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "string"},
+						"description": "Canonical repository identifiers to include in the IaC reachability scope",
+					},
+					"families": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "string"},
+						"description": "Optional IaC families to include: terraform, helm, kustomize, ansible, compose",
+					},
+					"include_ambiguous": map[string]any{
+						"type":        "boolean",
+						"description": "Whether to include dynamically referenced artifacts that need stronger evidence",
+						"default":     false,
+					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "Maximum IaC cleanup findings to return",
+						"default":     100,
+					},
+					"offset": map[string]any{
+						"type":        "integer",
+						"description": "Zero-based result offset for paging materialized or derived findings",
+						"default":     0,
 					},
 				},
 				"required": []string{},
@@ -222,13 +266,13 @@ func codebaseTools() []ToolDefinition {
 		},
 		{
 			Name:        "get_repository_stats",
-			Description: "Get graph-derived statistics about indexed repositories.",
+			Description: "Get graph-derived statistics about indexed repositories, optionally scoped by repository selector.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"repo_id": map[string]any{
 						"type":        "string",
-						"description": "Optional canonical repository identifier",
+						"description": "Optional repository selector: canonical ID, name, repo slug, or indexed path",
 					},
 				},
 				"required": []string{},

@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 )
@@ -11,38 +12,65 @@ type serviceQueryEnrichmentOptions struct {
 	DirectOnly                bool
 	IncludeRelatedModuleUsage bool
 	MaxDepth                  int
+	Logger                    *slog.Logger
+	Operation                 string
 }
 
 func enrichServiceQueryContext(
 	ctx context.Context,
-	graph GraphReader,
-	content *ContentReader,
+	graph GraphQuery,
+	content ContentStore,
 	workloadContext map[string]any,
 ) error {
 	return enrichServiceQueryContextWithOptions(ctx, graph, content, workloadContext, serviceQueryEnrichmentOptions{
 		IncludeRelatedModuleUsage: true,
+		Operation:                 "service_context",
 	})
 }
 
 func enrichServiceQueryContextWithOptions(
 	ctx context.Context,
-	graph GraphReader,
-	content *ContentReader,
+	graph GraphQuery,
+	content ContentStore,
 	workloadContext map[string]any,
 	opts serviceQueryEnrichmentOptions,
 ) error {
 	delete(workloadContext, "entry_points")
-	if len(workloadContext) == 0 || content == nil {
+	if len(workloadContext) == 0 {
 		return nil
 	}
 
 	repoID := safeStr(workloadContext, "repo_id")
 	serviceName := safeStr(workloadContext, "name")
-	if repoID == "" || serviceName == "" {
+	operation := opts.Operation
+	if operation == "" {
+		operation = "service_context"
+	}
+	timer := startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "graph_api_surface")
+	if graphAPISurface := queryServiceGraphAPISurface(ctx, graph, repoID); len(graphAPISurface) > 0 {
+		workloadContext["api_surface"] = graphAPISurface
+	}
+	timer.Done(ctx, slog.Bool("has_result", len(mapValue(workloadContext, "api_surface")) > 0))
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "graph_deployment_evidence")
+	graphEvidence, err := queryServiceGraphDeploymentEvidence(ctx, graph, content, repoID)
+	if err != nil {
+		timer.Done(ctx, slog.Bool("error", true))
+		return fmt.Errorf("load graph deployment evidence: %w", err)
+	}
+	if len(graphEvidence) > 0 {
+		workloadContext["deployment_evidence"] = graphEvidence
+	}
+	timer.Done(ctx, slog.Bool("has_result", len(mapValue(workloadContext, "deployment_evidence")) > 0))
+	if repoID == "" || serviceName == "" || content == nil {
 		return nil
 	}
 
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "service_evidence_content")
 	evidence, err := loadServiceQueryEvidence(ctx, content, repoID, serviceName)
+	timer.Done(ctx,
+		slog.Int("hostname_count", len(evidence.Hostnames)),
+		slog.Int("environment_count", len(evidence.Environments)),
+	)
 	if err != nil {
 		return fmt.Errorf("load service query evidence: %w", err)
 	}
@@ -50,7 +78,9 @@ func enrichServiceQueryContextWithOptions(
 	// Load framework-detected routes from fact_records when ContentReader
 	// is available (it has access to the same Postgres database).
 	if content != nil {
+		timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "framework_routes")
 		frameworkRoutes, err := content.ListFrameworkRoutes(ctx, repoID)
+		timer.Done(ctx, slog.Int("row_count", len(frameworkRoutes)))
 		if err != nil {
 			return fmt.Errorf("load framework routes: %w", err)
 		}
@@ -73,7 +103,7 @@ func enrichServiceQueryContextWithOptions(
 		workloadContext["observed_config_environments"] = observedEnvironments
 	}
 
-	if apiSurface := buildServiceAPISurface(evidence); len(apiSurface) > 0 {
+	if apiSurface := buildServiceAPISurface(evidence); len(apiSurface) > 0 && len(mapValue(workloadContext, "api_surface")) == 0 {
 		workloadContext["api_surface"] = apiSurface
 	}
 	if networkPaths := buildServiceNetworkPaths(workloadContext, mapSliceValue(workloadContext, "entrypoints")); len(networkPaths) > 0 {
@@ -84,7 +114,9 @@ func enrichServiceQueryContextWithOptions(
 		hostnames := serviceEvidenceHostnames(evidence)
 		traceLimit := boundedTraceEnrichmentLimit(opts.MaxDepth)
 		if !opts.DirectOnly {
+			timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "graph_dependents")
 			dependentCandidates, err := queryProvisioningRepositoryCandidates(ctx, graph, repoID, traceLimit)
+			timer.Done(ctx, slog.Int("row_count", len(dependentCandidates)))
 			if err != nil {
 				return fmt.Errorf("load graph dependents: %w", err)
 			}
@@ -92,7 +124,9 @@ func enrichServiceQueryContextWithOptions(
 				workloadContext["dependents"] = dependents
 			}
 
+			timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "consumer_repository_enrichment")
 			consumers, err := loadConsumerRepositoryEnrichmentWithLimit(ctx, graph, content, repoID, serviceName, hostnames, traceLimit)
+			timer.Done(ctx, slog.Int("row_count", len(consumers)))
 			if err != nil {
 				return fmt.Errorf("load consumer repository enrichment: %w", err)
 			}
@@ -102,7 +136,9 @@ func enrichServiceQueryContextWithOptions(
 		}
 
 		if opts.IncludeRelatedModuleUsage {
+			timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "provisioning_source_chains")
 			provisioningChains, err := loadProvisioningSourceChainsWithLimit(ctx, graph, content, repoID, traceLimit)
+			timer.Done(ctx, slog.Int("row_count", len(provisioningChains)))
 			if err != nil {
 				return fmt.Errorf("load provisioning source chains: %w", err)
 			}
@@ -112,21 +148,30 @@ func enrichServiceQueryContextWithOptions(
 		}
 	}
 
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "documentation_overview")
 	if documentationOverview := buildServiceDocumentationOverview(ctx, graph, workloadContext, evidence); len(documentationOverview) > 0 {
 		workloadContext["documentation_overview"] = documentationOverview
 	}
+	timer.Done(ctx, slog.Bool("has_result", len(mapValue(workloadContext, "documentation_overview")) > 0))
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "deployment_evidence")
 	deploymentEvidence, err := loadServiceDeploymentEvidence(ctx, graph, content, workloadContext)
+	timer.Done(ctx, slog.Bool("has_result", len(deploymentEvidence) > 0))
 	if err != nil {
 		return fmt.Errorf("load service deployment evidence: %w", err)
 	}
 	if len(deploymentEvidence) > 0 {
+		if graphEvidence := mapValue(workloadContext, "deployment_evidence"); len(graphEvidence) > 0 {
+			deploymentEvidence = mergeServiceDeploymentEvidence(deploymentEvidence, graphEvidence)
+		}
 		workloadContext["deployment_evidence"] = deploymentEvidence
 	}
 	if supportOverview := buildServiceSupportOverview(workloadContext); len(supportOverview) > 0 {
 		workloadContext["support_overview"] = supportOverview
 	}
+	timer = startServiceQueryStage(ctx, opts.Logger, operation, serviceName, repoID, "overview_assembly")
 	workloadContext["deployment_overview"] = buildServiceDeploymentOverview(workloadContext)
 	workloadContext["story_sections"] = buildServiceStorySections(workloadContext)
+	timer.Done(ctx)
 
 	return nil
 }
@@ -197,8 +242,11 @@ func buildServiceDeploymentOverview(workloadContext map[string]any) map[string]a
 		overview["provisioning_source_chain_count"] = len(provisioningChains)
 	}
 	if deploymentEvidence := mapValue(workloadContext, "deployment_evidence"); len(deploymentEvidence) > 0 {
-		if toolFamilies := stringSliceValue(deploymentEvidence, "tool_families"); len(toolFamilies) > 0 {
+		if toolFamilies := serviceDeploymentToolFamilies(deploymentEvidence); len(toolFamilies) > 0 {
 			overview["deployment_tool_families"] = toolFamilies
+		}
+		if artifactCount := IntVal(deploymentEvidence, "artifact_count"); artifactCount > 0 {
+			overview["deployment_evidence_artifact_count"] = artifactCount
 		}
 		if deliveryPaths := mapSliceValue(deploymentEvidence, "delivery_paths"); len(deliveryPaths) > 0 {
 			overview["delivery_path_count"] = len(deliveryPaths)
@@ -269,21 +317,33 @@ func buildServiceStorySections(workloadContext map[string]any) []map[string]any 
 		})
 	}
 	if deploymentEvidence := mapValue(workloadContext, "deployment_evidence"); len(deploymentEvidence) > 0 {
+		toolFamilies := serviceDeploymentToolFamilies(deploymentEvidence)
+		deliveryPathCount := len(mapSliceValue(deploymentEvidence, "delivery_paths"))
+		if deliveryPathCount == 0 {
+			deliveryPathCount = IntVal(deploymentEvidence, "artifact_count")
+		}
 		sections = append(sections, map[string]any{
 			"title": "delivery",
 			"summary": fmt.Sprintf(
-				"%d delivery path(s) across tool families %s",
-				len(mapSliceValue(deploymentEvidence, "delivery_paths")),
-				joinOrNone(stringSliceValue(deploymentEvidence, "tool_families")),
+				"%d delivery evidence item(s) across tool families %s",
+				deliveryPathCount,
+				joinOrNone(toolFamilies),
 			),
 		})
 	}
 	return sections
 }
 
+func serviceDeploymentToolFamilies(deploymentEvidence map[string]any) []string {
+	if toolFamilies := stringSliceValue(deploymentEvidence, "tool_families"); len(toolFamilies) > 0 {
+		return toolFamilies
+	}
+	return stringSliceValue(deploymentEvidence, "artifact_families")
+}
+
 func buildServiceDocumentationOverview(
 	ctx context.Context,
-	graph GraphReader,
+	graph GraphQuery,
 	workloadContext map[string]any,
 	evidence ServiceQueryEvidence,
 ) map[string]any {
@@ -435,10 +495,11 @@ func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
 	frameworkSet := map[string]struct{}{}
 	for _, fr := range evidence.FrameworkRoutes {
 		frameworkSet[fr.Framework] = struct{}{}
-		for _, routePath := range fr.RoutePaths {
+		frameworkEndpoints := frameworkRouteEndpoints(fr)
+		for _, endpoint := range frameworkEndpoints {
 			endpoints = append(endpoints, map[string]any{
-				"path":      routePath,
-				"methods":   lowerStrings(fr.RouteMethods),
+				"path":      endpoint.Path,
+				"methods":   lowerStrings(endpoint.Methods),
 				"source":    "framework",
 				"framework": fr.Framework,
 				"spec_path": fr.RelativePath,
@@ -478,6 +539,50 @@ func buildServiceAPISurface(evidence ServiceQueryEvidence) map[string]any {
 		result["frameworks"] = frameworks
 	}
 	return result
+}
+
+type frameworkRouteEndpoint struct {
+	Path    string
+	Methods []string
+}
+
+// frameworkRouteEndpoints uses paired parser evidence when available so method
+// lists stay attached to the route path where they were declared.
+func frameworkRouteEndpoints(fr FrameworkRouteEvidence) []frameworkRouteEndpoint {
+	if len(fr.RouteEntries) == 0 {
+		endpoints := make([]frameworkRouteEndpoint, 0, len(fr.RoutePaths))
+		for _, routePath := range fr.RoutePaths {
+			endpoints = append(endpoints, frameworkRouteEndpoint{
+				Path:    routePath,
+				Methods: fr.RouteMethods,
+			})
+		}
+		return endpoints
+	}
+
+	methodsByPath := make(map[string][]string, len(fr.RouteEntries))
+	for _, entry := range fr.RouteEntries {
+		path := strings.TrimSpace(entry.Path)
+		method := strings.TrimSpace(entry.Method)
+		if path == "" || method == "" {
+			continue
+		}
+		methodsByPath[path] = append(methodsByPath[path], method)
+	}
+	paths := make([]string, 0, len(methodsByPath))
+	for path := range methodsByPath {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	endpoints := make([]frameworkRouteEndpoint, 0, len(paths))
+	for _, path := range paths {
+		endpoints = append(endpoints, frameworkRouteEndpoint{
+			Path:    path,
+			Methods: uniqueSortedStrings(methodsByPath[path]),
+		})
+	}
+	return endpoints
 }
 
 func serviceEvidenceHostnames(evidence ServiceQueryEvidence) []string {

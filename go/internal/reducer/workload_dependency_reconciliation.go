@@ -14,8 +14,8 @@ type RepoDependencyEdge struct {
 
 // RepoWorkload captures one workload currently defined by a repository.
 type RepoWorkload struct {
-	RepoID      string
-	WorkloadID  string
+	RepoID     string
+	WorkloadID string
 }
 
 // WorkloadDependencyEdgeRow is one canonical workload dependency edge payload.
@@ -31,6 +31,9 @@ type WorkloadDependencyEdgeRow struct {
 type WorkloadDependencyGraphLookup interface {
 	ListRepoDependencyEdges(ctx context.Context, repoIDs []string) ([]RepoDependencyEdge, error)
 	ListRepoWorkloads(ctx context.Context, repoIDs []string) ([]RepoWorkload, error)
+	// ListWorkloadDependencyEdges returns existing workload dependency edges
+	// owned by the given repositories for the specified evidence source.
+	ListWorkloadDependencyEdges(ctx context.Context, repoIDs []string, evidenceSource string) ([]ExistingWorkloadDependencyEdge, error)
 }
 
 // ReconcileWorkloadDependencyEdges builds workload dependency edges for the
@@ -68,13 +71,15 @@ func ReconcileWorkloadDependencyEdges(
 	}
 	slices.Sort(currentRepoIDs)
 
-	retractRows := buildWorkloadDependencyRetractRows(currentRepoIDs)
-
 	repoEdges, err := lookup.ListRepoDependencyEdges(ctx, currentRepoIDs)
 	if err != nil {
 		return nil, nil, err
 	}
 	if len(repoEdges) == 0 {
+		retractRows, err := buildExistingWorkloadDependencyRetractRows(ctx, lookup, currentRepoIDs)
+		if err != nil {
+			return nil, nil, err
+		}
 		return nil, retractRows, nil
 	}
 
@@ -161,6 +166,10 @@ func ReconcileWorkloadDependencyEdges(
 		return strings.Compare(left.TargetWorkloadID, right.TargetWorkloadID)
 	})
 
+	retractRows, err := buildExistingWorkloadDependencyRetractRows(ctx, lookup, currentRepoIDs)
+	if err != nil {
+		return nil, nil, err
+	}
 	return rows, retractRows, nil
 }
 
@@ -204,6 +213,54 @@ func buildWorkloadDependencyRetractRows(repoIDs []string) []SharedProjectionInte
 		})
 	}
 	return rows
+}
+
+func buildExistingWorkloadDependencyRetractRows(
+	ctx context.Context,
+	lookup WorkloadDependencyGraphLookup,
+	repoIDs []string,
+) ([]SharedProjectionIntentRow, error) {
+	existingRows, err := lookup.ListWorkloadDependencyEdges(ctx, repoIDs, EvidenceSourceWorkloads)
+	if err != nil {
+		return nil, err
+	}
+	if len(existingRows) == 0 {
+		return nil, nil
+	}
+	return buildWorkloadDependencyRetractRows(currentWorkloadDependencyRepoIDs(repoIDs, existingRows)), nil
+}
+
+// currentWorkloadDependencyRepoIDs narrows retract ownership to current
+// repositories that actually have workload dependency edges in the graph.
+func currentWorkloadDependencyRepoIDs(
+	currentRepoIDs []string,
+	existingRows []ExistingWorkloadDependencyEdge,
+) []string {
+	current := make(map[string]struct{}, len(currentRepoIDs))
+	for _, repoID := range currentRepoIDs {
+		repoID = strings.TrimSpace(repoID)
+		if repoID != "" {
+			current[repoID] = struct{}{}
+		}
+	}
+	seen := make(map[string]struct{}, len(currentRepoIDs))
+	repoIDs := make([]string, 0, len(currentRepoIDs))
+	for _, row := range existingRows {
+		repoID := strings.TrimSpace(row.RepoID)
+		if repoID == "" {
+			continue
+		}
+		if _, ok := current[repoID]; !ok {
+			continue
+		}
+		if _, ok := seen[repoID]; ok {
+			continue
+		}
+		seen[repoID] = struct{}{}
+		repoIDs = append(repoIDs, repoID)
+	}
+	slices.Sort(repoIDs)
+	return repoIDs
 }
 
 func appendUniqueWorkloadString(values []string, value string) []string {

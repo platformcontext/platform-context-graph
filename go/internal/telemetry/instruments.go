@@ -51,19 +51,23 @@ type Instruments struct {
 	SharedProjectionStaleIntents metric.Int64Counter
 
 	// Histograms track distributions
-	CollectorObserveDuration       metric.Float64Histogram
-	ScopeAssignDuration            metric.Float64Histogram
-	FactEmitDuration               metric.Float64Histogram
-	ProjectorRunDuration           metric.Float64Histogram
-	ProjectorStageDuration         metric.Float64Histogram
-	ReducerRunDuration             metric.Float64Histogram
-	CanonicalWriteDuration         metric.Float64Histogram
-	QueueClaimDuration             metric.Float64Histogram
-	PostgresQueryDuration          metric.Float64Histogram
-	Neo4jQueryDuration             metric.Float64Histogram
-	SharedAcceptanceUpsertDuration metric.Float64Histogram
-	SharedAcceptanceLookupDuration metric.Float64Histogram
-	SharedAcceptancePrefetchSize   metric.Int64Histogram
+	CollectorObserveDuration           metric.Float64Histogram
+	ScopeAssignDuration                metric.Float64Histogram
+	FactEmitDuration                   metric.Float64Histogram
+	ProjectorRunDuration               metric.Float64Histogram
+	ProjectorStageDuration             metric.Float64Histogram
+	ReducerRunDuration                 metric.Float64Histogram
+	ReducerQueueWaitDuration           metric.Float64Histogram
+	CanonicalWriteDuration             metric.Float64Histogram
+	QueueClaimDuration                 metric.Float64Histogram
+	PostgresQueryDuration              metric.Float64Histogram
+	Neo4jQueryDuration                 metric.Float64Histogram
+	SharedAcceptanceUpsertDuration     metric.Float64Histogram
+	SharedAcceptanceLookupDuration     metric.Float64Histogram
+	SharedAcceptancePrefetchSize       metric.Int64Histogram
+	SharedProjectionIntentWaitDuration metric.Float64Histogram
+	SharedProjectionProcessingDuration metric.Float64Histogram
+	SharedProjectionStepDuration       metric.Float64Histogram
 
 	// Collector concurrency histograms and counters
 	RepoSnapshotDuration metric.Float64Histogram
@@ -116,9 +120,11 @@ type Instruments struct {
 	EvidenceFactsDiscovered metric.Int64Counter
 
 	// Deferred bootstrap backfill and reopen metrics
-	DeferredBackfillDuration  metric.Float64Histogram
-	DeferredBackfillEvidence  metric.Int64Counter
-	DeploymentMappingReopened metric.Int64Counter
+	DeferredBackfillDuration               metric.Float64Histogram
+	DeferredBackfillEvidence               metric.Int64Counter
+	DeploymentMappingReopened              metric.Int64Counter
+	IaCReachabilityMaterializationDuration metric.Float64Histogram
+	IaCReachabilityRows                    metric.Int64Counter
 
 	// Cross-repo resolution metrics
 	CrossRepoResolutionDuration metric.Float64Histogram
@@ -286,6 +292,17 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 		return nil, fmt.Errorf("register ReducerRunDuration histogram: %w", err)
 	}
 
+	reducerWaitBuckets := []float64{0.001, 0.01, 0.1, 1, 5, 10, 30, 60, 300, 900, 1800, 3600, 21600}
+	inst.ReducerQueueWaitDuration, err = meter.Float64Histogram(
+		"pcg_dp_reducer_queue_wait_seconds",
+		metric.WithDescription("Reducer work item time from queue visibility to handler start"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(reducerWaitBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register ReducerQueueWaitDuration histogram: %w", err)
+	}
+
 	canonicalWriteBuckets := []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
 	inst.CanonicalWriteDuration, err = meter.Float64Histogram(
 		"pcg_dp_canonical_write_duration_seconds",
@@ -354,6 +371,38 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register SharedAcceptancePrefetchSize histogram: %w", err)
+	}
+
+	sharedProjectionWaitBuckets := []float64{0.001, 0.01, 0.1, 1, 5, 10, 30, 60, 300, 900, 1800, 3600, 21600}
+	inst.SharedProjectionIntentWaitDuration, err = meter.Float64Histogram(
+		"pcg_dp_shared_projection_intent_wait_seconds",
+		metric.WithDescription("Shared projection intent age when a partition processes or blocks it"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(sharedProjectionWaitBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedProjectionIntentWaitDuration histogram: %w", err)
+	}
+
+	sharedProjectionProcessingBuckets := []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
+	inst.SharedProjectionProcessingDuration, err = meter.Float64Histogram(
+		"pcg_dp_shared_projection_processing_seconds",
+		metric.WithDescription("Shared projection graph-write and completion duration after partition selection"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(sharedProjectionProcessingBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedProjectionProcessingDuration histogram: %w", err)
+	}
+
+	inst.SharedProjectionStepDuration, err = meter.Float64Histogram(
+		"pcg_dp_shared_projection_step_seconds",
+		metric.WithDescription("Shared projection substep duration by write phase"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(sharedProjectionProcessingBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register SharedProjectionStepDuration histogram: %w", err)
 	}
 
 	// Collector concurrency instruments
@@ -662,6 +711,24 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 		return nil, fmt.Errorf("register DeploymentMappingReopened counter: %w", err)
 	}
 
+	inst.IaCReachabilityMaterializationDuration, err = meter.Float64Histogram(
+		"pcg_dp_iac_reachability_materialization_duration_seconds",
+		metric.WithDescription("Duration of corpus-wide IaC reachability materialization"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(backfillBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register IaCReachabilityMaterializationDuration histogram: %w", err)
+	}
+
+	inst.IaCReachabilityRows, err = meter.Int64Counter(
+		"pcg_dp_iac_reachability_rows_total",
+		metric.WithDescription("Total IaC reachability rows materialized by reachability outcome"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register IaCReachabilityRows counter: %w", err)
+	}
+
 	// Cross-repo resolution instruments
 	crossRepoBuckets := []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
 	inst.CrossRepoResolutionDuration, err = meter.Float64Histogram(
@@ -905,6 +972,11 @@ func AttrEdgeType(v string) attribute.KeyValue {
 // AttrWritePhase returns a write_phase attribute for canonical phase metrics.
 func AttrWritePhase(v string) attribute.KeyValue {
 	return attribute.String(MetricDimensionWritePhase, v)
+}
+
+// AttrOutcome returns an outcome attribute for metric recording.
+func AttrOutcome(v string) attribute.KeyValue {
+	return attribute.String(MetricDimensionOutcome, v)
 }
 
 // RecordGOMEMLIMIT registers and records the applied GOMEMLIMIT as a gauge.

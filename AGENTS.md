@@ -1,89 +1,510 @@
-# PlatformContextGraph Agent Notes
+# PlatformContextGraph Development Guide For AI Agents
 
-Read these first before changing runtime, deployment, or observability behavior:
+PlatformContextGraph (PCG) is a code-to-cloud context graph for CLI, MCP, and
+HTTP API workflows. Treat it as a production data platform, not a script
+collection.
 
-- `docs/docs/deployment/service-runtimes.md`
+The current branch is a Go-owned runtime:
+
+- **API** serves HTTP reads and admin/query surfaces.
+- **MCP Server** serves tool-facing read workflows.
+- **Ingester** owns repo sync, discovery, parsing, and fact emission.
+- **Reducer / Resolution Engine** owns queued projection, repair, and shared
+  materialization.
+- **Bootstrap Index** owns one-shot local or deployment seeding.
+
+There is no Python runtime on the normal platform path. Python remains only in
+fixture corpora used to validate parser behavior.
+
+## Mandatory Repo Rules
+
+- MUST use `rg` for all text/content searches. NEVER use `grep`.
+- MUST use `rg --files` or globbing for file discovery. NEVER use `find`.
+- MUST use the Grep tool, backed by `rg`, instead of shell `grep`.
+- MUST read local repo docs before searching code or the web.
+- MUST ask when intent, architecture, risk, or active ADR ownership is unclear.
+- MUST apply TDD when writing or modifying code.
+- MUST keep files under 500 lines; split modules before they approach the limit.
+- MUST NEVER add AI attribution to commits, PRs, or docs.
+- MUST NEVER push to `main` or `master`.
+- MUST ALWAYS create git worktrees before executing plans or PRDs.
+- MUST follow the Google Python Style Guide for any Python fixtures or tools.
+- MUST follow Effective Go and the official Go style guide for all Go code.
+- MUST use strict mode and proper typing for TypeScript; no `any` without an
+  explicit justification.
+- MUST follow HashiCorp best practices for Terraform.
+- MUST follow Helm chart best practices, including helpers, `NOTES.txt`, and
+  values schema.
+
+## Priority Order
+
+Every technical decision follows this order:
+
+1. **Accuracy** - wrong graph truth, query truth, or deployment truth is a
+   product failure.
+2. **Performance** - prove the correct path can scale to repo-scale inputs.
+3. **Reliability** - preserve correctness and measured performance while making
+   the system recoverable and operable.
+
+Do not optimize a behavior you have not proven correct. Do not make a system
+more reliable by hiding wrong results, swallowing failures, or inventing silent
+fallbacks.
+
+## Read These First
+
+Before changing runtime, deployment, ingestion, parsing, graph, queue, or
+observability behavior, read these pages in order:
+
+1. `docs/docs/deployment/service-runtimes.md`
+2. `docs/docs/reference/local-testing.md`
+3. `docs/docs/reference/telemetry/index.md`
+4. `docs/docs/architecture.md`
+
+If a change affects Docker Compose, also read:
+
 - `docs/docs/deployment/docker-compose.md`
-- `docs/docs/reference/local-testing.md`
-- `docs/docs/reference/telemetry/index.md`
+
+If a change affects NornicDB knobs or compatibility, also read:
+
+- `docs/docs/reference/nornicdb-tuning.md`
+- `docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`
+- `docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md`
+
+## Skill Routing
+
+For PCG runtime diagnostics, reducer throughput, graph backend performance,
+queue behavior, remote proof runs, and ADR evidence updates, start with the
+`pcg-diagnostic-rigor` skill.
+
+Add specialized skills only when the change touches that surface:
+
+- `golang-engineering` for Go code edits and Go tests.
+- `cypher-query-rigor` for graph query/write/index or backend dialect work.
+- `concurrency-deadlock-rigor` for workers, leases, conflict keys, retries, or
+  queue ordering.
+- `pcg-correlation-truth` for correlation, materialization truth, or query
+  truth.
+- `skill-creator` for creating or updating skills.
+
+## Golden Rules
+
+### 1. Understand The Flow Before Touching Code
+
+Do not modify code until you can explain the relevant path end to end:
+
+```text
+sync -> discover -> parse -> emit facts -> enqueue work -> reducer -> graph/content projection -> query surface
+```
+
+For non-trivial changes, map:
+
+- where data enters
+- how it is transformed
+- where it is persisted
+- who consumes it
+- transaction boundaries
+- async boundaries and retries
+- ownership boundaries
+- invariants assumed by each step
+
+If the flow is unclear, research first. If intent or active architecture is
+still unclear after local research, ask.
+
+### 2. Prove Value Before Calling Work Ready
+
+Every change needs evidence appropriate to its risk:
+
+- bug fixes need a failing regression test first
+- performance work needs before/after benchmarks or runtime measurements
+- queue/concurrency work needs contention, retry, idempotency, and ordering
+  proof
+- graph truth work needs fixture intent, graph truth, and API/query truth
+  agreement
+- runtime changes need telemetry and operator diagnosis paths
+- doc-only changes need the docs build gate when they affect docs navigation or
+  project guidance
+
+Do not say work is ready without listing the commands or runtime proof actually
+run.
+
+### 3. Root Cause Beats Patches
+
+Do not paper over symptoms with shallow workarounds, silent fallbacks, or
+speculative "good enough" fixes.
+
+Required debugging shape:
+
+1. Gather evidence.
+2. Form hypotheses.
+3. Prove or disprove each likely cause.
+4. Fix the actual failure mode.
+5. Add regression coverage and telemetry when runtime behavior changed.
+
+Small diffs are welcome only when they fix the right design.
+
+### 4. Edge Cases Are Mandatory
+
+Before implementing any bug fix or design change, account for:
+
+- invalid input
+- empty state
+- stale state
+- partial failure
+- duplicate delivery
+- retries
+- ordering issues
+- idempotency
+- concurrency
+- rollback behavior
+
+For correlation or materialization changes, include one positive case, one
+negative case, and one ambiguous case before claiming the design is understood.
+
+### 5. Preserve Service Boundaries
+
+Do not collapse ownership boundaries casually.
+
+| Area | Owns |
+| --- | --- |
+| `go/internal/collector/` | Git collection, discovery, snapshotting, parsing inputs |
+| `go/internal/parser/` | parser registry, adapters, language behavior, SCIP support |
+| `go/internal/facts/` | durable fact models and queue contracts |
+| `go/internal/storage/postgres/` | facts, queue, status, content, recovery, decisions |
+| `go/internal/storage/neo4j/` | graph adapters |
+| `go/internal/projector/` | source-local projection stages |
+| `go/internal/reducer/` | cross-domain materialization and shared projection |
+| `go/internal/relationships/` | Terraform, Helm, Kustomize, Argo extraction |
+| `go/internal/query/` | HTTP handlers, OpenAPI, query/read surfaces |
+| `go/internal/runtime/` | admin, status, probes, retry policy, lifecycle |
+| `go/internal/status/` | pipeline and request lifecycle reporting |
+| `go/internal/telemetry/` | OTEL tracing, metrics, structured logs |
+| `go/internal/truth/` | canonical truth contracts |
+
+Handlers depend on ports such as `GraphQuery` and `GraphWrite`, not concrete
+backend implementations. Backend dialect differences belong only in documented
+narrow seams.
+
+### 6. Observability Is Part Of The Feature
+
+Every runtime-affecting code change must include telemetry operators can use at
+3 AM.
+
+Ask:
+
+- Is it stuck?
+- Is it slow?
+- Is it failing?
+- Is it using too much memory?
+- Did it finish?
+
+If metrics, traces, logs, and status surfaces cannot answer those questions,
+the design is incomplete.
+
+### 7. Compatibility Without Hidden Branches
+
+PCG supports `PCG_GRAPH_BACKEND={neo4j,nornicdb}` behind graph ports.
+
+- `neo4j` is the default backend used in Compose and production.
+- `nornicdb` is the pure-Go evaluation candidate.
+
+Invalid backend values must fail at startup. Backend selection must surface in
+telemetry as `graph_backend` and optionally in response truth metadata as
+`truth.backend`.
+
+Do not add `if backend == nornicdb` branches outside documented narrow seams
+such as schema dialects, canonical-write executors, and Cypher builders.
 
 ## Runtime Contract
 
-The deployed platform has five long-running runtimes plus two one-shot bootstrap helpers:
+| Runtime | Responsibility | Command | Kubernetes shape |
+| --- | --- | --- | --- |
+| API | HTTP API, admin/query reads | `pcg api start --host 0.0.0.0 --port 8080` | `Deployment` |
+| MCP Server | MCP tool server | `pcg mcp start` | `Deployment` or sidecar |
+| Ingester | Repo sync, parse, fact emission | `/usr/local/bin/pcg-ingester` | `StatefulSet` + PVC |
+| Reducer | Queue drain, graph projection, repair flows | `/usr/local/bin/pcg-reducer` | `Deployment` |
+| Bootstrap Index | One-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | job / init step |
 
-- **API**: `pcg api start --host 0.0.0.0 --port 8080`
-- **MCP Server**: `pcg mcp start`
-- **Ingester**: `/usr/local/bin/pcg-ingester`
-- **Workflow Coordinator**: `/usr/local/bin/pcg-workflow-coordinator`
-- **Resolution Engine**: `/usr/local/bin/pcg-reducer`
-- **DB Migrate**: `/usr/local/bin/pcg-bootstrap-data-plane`
-- **Bootstrap Index**: `/usr/local/bin/pcg-bootstrap-index`
+Shared backing stores:
 
-Build once, run many:
+- **Neo4j** for the canonical graph
+- **Postgres** for facts, queue state, content store, status, and recovery data
+
+## Local Development
+
+Full stack:
 
 ```bash
-docker build -t platform-context-graph:dev -f Dockerfile .
+docker compose up --build
 ```
 
-All runtime shapes reuse the same image. Compose, Helm, and Argo CD only change
-the command, env, and workload shape.
+## Runtime Repro Hygiene
 
-## Verification Defaults
+Before any dogfood, local-authoritative, Compose, or runtime validation that
+executes local PCG binaries, rebuild them first:
 
-- Docs or instruction changes: strict MkDocs build
-- CLI/runtime/deployment changes: CLI integration tests plus deployment asset tests
-- Facts/resolution changes: facts end-to-end and projection parity tests
-- Observability changes: facts-first telemetry and logging suites
-- Compose/Helm changes: deployment asset tests plus `helm lint`
+```bash
+cd go
+go build -o ./bin/pcg ./cmd/pcg
+go build -o ./bin/pcg-api ./cmd/api
+go build -o ./bin/pcg-ingester ./cmd/ingester
+go build -o ./bin/pcg-reducer ./cmd/reducer
+export PATH="$PWD/bin:$PATH"
+```
 
-Use `docs/docs/reference/local-testing.md` as the source of truth for the exact
-commands.
+`pcg graph start` discovers `pcg-reducer` and `pcg-ingester` through `PATH`, so
+fresh owner runs need `go/bin` on `PATH`.
 
-If a change affects Docker Compose, also read
-`docs/docs/deployment/docker-compose.md`. Compose host mounts must use absolute
-real directories, not symlinks. On macOS, `/tmp` resolves through a symlink and
-is not a safe default bind root.
+When building or testing NornicDB binaries from the local reference repos, use
+the no-local-LLM tags first:
+
+```bash
+go test -tags 'noui nolocalllm' ./...
+go build -tags 'noui nolocalllm' ...
+```
+
+### NornicDB Maintainer Patch Bar
+
+PCG maintainers are allowed to patch NornicDB, but only when the change is
+evidence-backed:
+
+- a correctness fix for NornicDB itself,
+- a measured NornicDB performance win that generalizes beyond one PCG symptom,
+  or
+- a measured PCG runtime win proven by focused and corpus-level evidence.
+
+Do not keep NornicDB patches for speculative PCG throughput hypotheses. If a
+patch does not produce a real backend or PCG win, revert it and continue testing
+against upstream `main` or the latest owner-merged build.
+
+## TDD And Bug Fix Workflow
+
+For bugs, use this mandatory sequence:
+
+1. Write a failing test that reproduces the exact bug condition.
+2. Run the focused test and verify it fails for the expected reason.
+3. Implement the smallest correct fix at the right ownership boundary.
+4. Re-run the focused test and verify it passes.
+5. Add regression variations for edge cases, retries, ordering, or concurrency
+   when relevant.
+6. Run the smallest package or integration gate that proves the touched
+   contract.
+
+For new features, write the contract or behavioral test first unless the work
+is pure documentation.
+
+## Performance Workflow
+
+Performance work must show measurable value:
+
+1. Capture a baseline with a benchmark, trace, metric sample, runtime status
+   report, or focused compose proof.
+2. Identify whether the bottleneck is algorithmic, allocation-heavy,
+   concurrency-related, graph I/O, Postgres I/O, parser behavior, or input
+   shape.
+3. Change the narrowest layer that owns the bottleneck.
+4. Capture after-data with the same measurement.
+5. Document material trade-offs, including memory, queue depth, and failure
+   behavior.
+
+Do not lower graph-write timeouts, global batch sizes, or worker counts because
+one repository is noisy. First use `pcg index --discovery-report` and consider a
+repo-local `.pcg/discovery.json` or process-local discovery overlay.
+
+## Concurrency Workflow
+
+Before changing workers, leases, retries, queues, transactions, or shared graph
+writes, describe:
+
+- shared state
+- lock or claim ordering
+- transaction scope and duration
+- retry boundaries
+- idempotency keys
+- conflict domains
+- starvation and contention risks
+- write amplification
+- dead-letter behavior
+
+Research the actual locking and consistency behavior of Postgres, Neo4j,
+NornicDB, or the Go runtime path in use. Never rely on intuition alone.
+
+## Facts-First Bootstrap Ordering
+
+The bootstrap-index orchestrator in `go/cmd/bootstrap-index/main.go` runs a
+multi-pass pipeline. Editing reducer or projector domains without understanding
+this ordering creates E2E-only bugs.
+
+```text
+Phase 1 - Collection + First-Pass Reduction
+  bootstrap-index collects repos and emits facts.
+  resolution-engine drains first-pass domains.
+  deployment_mapping can remain pending because resolved_relationships do not
+  exist yet.
+
+Phase 2 - Backfill
+  BackfillAllRelationshipEvidence() populates relationship_evidence_facts and
+  publishes readiness rows.
+
+Phase 3 - Deployment Mapping Reopen
+  ReopenDeploymentMappingWorkItems() reopens deployment_mapping so the reducer
+  can create resolved_relationships.
+
+Phase 4 - Second-Pass Consumers
+  Any domain that consumes resolved_relationships must have a re-trigger
+  mechanism after Phase 3.
+```
+
+Key rule: any domain that consumes `resolved_relationships` must have a
+post-Phase-3 reopen or re-trigger mechanism.
 
 ## Correlation Truth Gates
 
-Use the `pcg-correlation-truth` skill whenever a change touches workload
-admission, deployable-unit correlation, materialization, deployment tracing, or
-query truth in `go/internal/reducer`, `go/internal/query`, `go/internal/graph`,
-`go/internal/relationships`, or correlation verification fixtures.
+Use `pcg-correlation-truth` whenever a change touches workload admission,
+deployable-unit correlation, materialization, deployment tracing, or query truth
+in `go/internal/reducer`, `go/internal/query`, `go/internal/graph`,
+`go/internal/relationships`, or correlation fixtures.
 
-- Do not change correlation logic until you can explain the full path from raw
-  evidence -> candidate -> admission -> projection row -> graph write -> query
-  surface.
-- Every correlation or materialization change MUST include one positive case,
-  one negative case, and one ambiguous case. If one of those classes is missing,
-  stop and add it before claiming the design is understood.
-- Prove both sides of the contract: what SHOULD materialize and what MUST remain
-  provenance-only. Utility repos, controller repos, deployment repos, and
-  ambiguous multi-unit repos are mandatory edge-case categories.
-- Namespace, folder, or repo-name heuristics MUST NOT invent environment or
-  platform truth unless the value matches an explicit environment alias or is
-  backed by stronger deployment evidence.
-- Reducer completion timing is not valid proof. After the final logic patch, run
-  a fresh rebuild/restart path and re-check the graph before concluding a miss
-  is timing-related.
-- Validation MUST compare fixture intent, reducer graph truth, and API/query
-  truth. If any of the three disagree, do not wave it through as "close enough";
-  explain the mismatch or keep digging.
-- Required proof for correlation-changing work:
-  focused Go tests for the touched packages, a fresh compose correlation run, a
-  direct graph inspection of the canonical nodes/edges, and the affected
-  query/API surfaces.
-- Deployment-story or service-story changes MUST validate repo context, service
-  context, and deployment trace together because one surface can look healthy
-  while another still lies.
+Required proof:
 
-## Service Ownership
+- explain raw evidence -> candidate -> admission -> projection row -> graph
+  write -> query surface
+- include positive, negative, and ambiguous cases
+- prove what materializes and what remains provenance-only
+- validate utility repos, controller repos, deployment repos, and ambiguous
+  multi-unit repos
+- run a fresh rebuild/restart path before blaming timing
+- compare fixture intent, reducer graph truth, and API/query truth
 
-- `app/` chooses the runtime role
-- `collectors/` owns Git collection
-- `facts/` owns durable facts and the work queue
-- `resolution/` owns projection
-- `graph/` owns canonical graph writes
-- `query/` owns read surfaces
+Namespace, folder, or repo-name heuristics must not invent environment or
+platform truth unless backed by explicit environment aliases or stronger
+deployment evidence.
 
-Do not move runtime behavior back into one giant combined service by accident.
+## Observability Contract
+
+Every runtime-affecting code change must include telemetry.
+
+| Change type | Required telemetry |
+| --- | --- |
+| New pipeline stage or worker | OTEL span, duration histogram, success/failure counter |
+| New Postgres or Neo4j query | Duration histogram via `InstrumentedDB`, error counter |
+| New queue consumer | Claim duration histogram, processing duration histogram, depth gauge |
+| New retry/skip path | Counter with reason label, structured log with `failure_class` |
+| Memory or resource tuning | Observable gauge reporting configured limit |
+| Batch processing | Batch size histogram, batches committed counter |
+
+Implementation rules:
+
+- Metrics live in `go/internal/telemetry/instruments.go`.
+- Metric names use the `pcg_dp_` prefix.
+- New metric dimensions go in `go/internal/telemetry/contract.go`.
+- Spans use `tracer.Start(ctx, telemetry.SpanXxx)`.
+- New span names go in `contract.go`.
+- Structured logs use `slog` with `telemetry.ScopeAttrs()`,
+  `telemetry.PhaseAttr()`, and `telemetry.FailureClassAttr()`.
+- Log keys are frozen in `contract.go`; reuse existing keys before adding new
+  ones.
+- High-cardinality values such as file paths and fact IDs belong in spans or
+  logs, not metric labels.
+
+## NornicDB Compatibility Workflow
+
+When PCG hits a NornicDB incompatibility such as Cypher parse rejection,
+rollback behavior, driver shape mismatch, or a missing procedure:
+
+1. Check upstream source before guessing:
+   - `/Users/allen/os-repos/NornicDB/`
+   - `/Users/allen/os-repos/NornicDB-pcg-bolt-rollback/`
+2. Decide from evidence:
+   - if NornicDB supports it, fix PCG
+   - if NornicDB has a workaround, use a documented backend-dialect seam
+   - if NornicDB must be patched, land the fix in the PCG-maintained fork,
+     rebuild, and pin the binary until upstream absorbs it
+3. Record the decision in the NornicDB ADR adapter evidence row and the active
+   embedded-local-backends chunk status row.
+
+When adding or changing any `PCG_NORNICDB_*` tuning knob, update the tuning
+reference, active ADR, and local testing runbook in the same PR.
+
+## Documentation Discipline
+
+Every code PR that touches user-visible wire contracts, CLI flags, environment
+variables, runtime profiles, capability ports, collector plugin contracts, or
+chunk boundaries must include:
+
+1. Update the active ADR `## Chunk Status` table or equivalent tracker. If you
+   are unsure which ADR is active, ask.
+2. Update affected user-facing docs:
+   - `docs/docs/reference/http-api.md`
+   - `docs/docs/reference/cli-reference.md`
+   - `docs/docs/guides/mcp-guide.md`
+   - `docs/docs/why-pcg.md`
+   - `docs/docs/architecture.md`
+   - `docs/docs/getting-started/*`
+3. Add `doc.go` for any new Go package, with a package-level comment naming
+   the spec it implements.
+4. Document new extensibility seams in `docs/docs/architecture.md`,
+   `docs/docs/why-pcg.md`, and a dedicated reference page.
+
+`AGENTS.md` mirrors `CLAUDE.md`. Any edit to one must be mirrored in the other
+in the same PR.
+
+## Verification Defaults
+
+Use `docs/docs/reference/local-testing.md` as the source of truth.
+
+Common gates:
+
+```bash
+cd go && go test ./cmd/pcg ./cmd/api ./cmd/mcp-server ./internal/query ./internal/mcp -count=1
+cd go && go test ./internal/parser ./internal/collector/discovery ./internal/content/shape ./internal/collector -count=1
+cd go && go test ./internal/terraformschema ./internal/relationships -count=1
+cd go && go test ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer ./internal/runtime ./internal/status ./internal/storage/postgres -count=1
+uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
+  mkdocs build --strict --clean --config-file docs/mkdocs.yml
+git diff --check
+```
+
+Docs, `CLAUDE.md`, `AGENTS.md`, or README changes require the docs build plus
+`git diff --check`:
+
+```bash
+uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
+  mkdocs build --strict --clean --config-file docs/mkdocs.yml
+```
+
+## Git Auth Switching
+
+Switch GitHub auth before any `git push` or `gh pr create`:
+
+| Repo path | Auth user | Command |
+| --- | --- | --- |
+| `~/personal-repos/*` | `linuxdynasty` | `gh auth switch --user linuxdynasty` |
+| `~/repos/*` | configured work account | `gh auth switch --user <work-account>` |
+
+When working across both paths in one workflow, switch at each repo boundary.
+
+## Remote Build Hygiene
+
+When rebuilding Go projects over non-interactive SSH:
+
+- do not assume the remote shell loads the same `PATH`
+- check `command -v go` and common absolute paths such as `/usr/local/go/bin/go`
+- if Go exists only at an absolute path, use that path for remote `go build`
+  and `go test`
+- keep hostnames, IPs, private key paths, and machine-specific repo paths out of
+  open-source docs
+
+## Pre-Ready Checklist
+
+Before saying work is complete:
+
+- repo docs read for the touched surface
+- relevant skill used
+- data/control flow understood end to end
+- tests written first for code changes
+- edge cases considered
+- telemetry added for runtime behavior
+- docs and active ADRs updated for contract changes
+- `AGENTS.md` and `CLAUDE.md` kept in lockstep if either changed
+- focused verification run and cited
+- `git diff --check` clean

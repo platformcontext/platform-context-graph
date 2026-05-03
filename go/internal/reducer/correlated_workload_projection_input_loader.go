@@ -8,6 +8,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/correlation/engine"
 	correlationmodel "github.com/platformcontext/platform-context-graph/go/internal/correlation/model"
+	"github.com/platformcontext/platform-context-graph/go/internal/relationships"
 )
 
 // CorrelatedWorkloadProjectionInputLoader reuses deployable-unit correlation
@@ -28,18 +29,25 @@ func (l CorrelatedWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
 		return nil, nil, fmt.Errorf("correlated workload projection fact loader is required")
 	}
 
-	envelopes, err := l.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+	envelopes, err := loadFactsForKinds(
+		ctx,
+		l.FactLoader,
+		intent.ScopeID,
+		intent.GenerationID,
+		[]string{factKindRepository, factKindFile},
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load facts for correlated workload projection: %w", err)
 	}
 
 	candidates, deploymentEnvironments := ExtractWorkloadCandidates(envelopes)
 	if l.ResolvedLoader != nil {
-		resolved, err := loadResolvedRelationshipsForIntent(ctx, l.ResolvedLoader, intent)
+		resolved, err := loadWorkloadResolvedRelationships(ctx, l.ResolvedLoader, intent, candidates)
 		if err != nil {
 			return nil, nil, fmt.Errorf("load resolved relationships for correlated workload projection: %w", err)
 		}
 		candidates = applyResolvedDeploymentSources(candidates, resolved)
+		candidates = applyResolvedProvisioningSources(candidates, resolved)
 	}
 
 	if l.ScopeResolver != nil {
@@ -61,6 +69,70 @@ func (l CorrelatedWorkloadProjectionInputLoader) LoadWorkloadProjectionInputs(
 		return nil, nil, err
 	}
 	return admitted, deploymentEnvironments, nil
+}
+
+func loadWorkloadResolvedRelationships(
+	ctx context.Context,
+	loader ResolvedRelationshipLoader,
+	intent Intent,
+	candidates []WorkloadCandidate,
+) ([]relationships.ResolvedRelationship, error) {
+	resolved, err := loadResolvedRelationshipsForIntent(ctx, loader, intent)
+	if err != nil {
+		return nil, err
+	}
+
+	repoScoped, ok := loader.(RepositoryScopedResolvedRelationshipLoader)
+	if !ok {
+		return resolved, nil
+	}
+	repoIDs := workloadCandidateRepoIDs(candidates)
+	if len(repoIDs) == 0 {
+		return resolved, nil
+	}
+	repoResolved, err := repoScoped.GetResolvedRelationshipsForRepos(ctx, repoIDs)
+	if err != nil {
+		return nil, err
+	}
+	return mergeResolvedRelationships(resolved, repoResolved), nil
+}
+
+func workloadCandidateRepoIDs(candidates []WorkloadCandidate) []string {
+	repoIDs := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		repoIDs = appendUniqueString(repoIDs, candidate.RepoID)
+	}
+	return uniqueSortedStrings(repoIDs)
+}
+
+func mergeResolvedRelationships(
+	base []relationships.ResolvedRelationship,
+	extra []relationships.ResolvedRelationship,
+) []relationships.ResolvedRelationship {
+	if len(extra) == 0 {
+		return base
+	}
+	merged := make([]relationships.ResolvedRelationship, 0, len(base)+len(extra))
+	seen := make(map[string]struct{}, len(base)+len(extra))
+	for _, relationship := range append(base, extra...) {
+		key := resolvedRelationshipMergeKey(relationship)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		merged = append(merged, relationship)
+	}
+	return merged
+}
+
+func resolvedRelationshipMergeKey(relationship relationships.ResolvedRelationship) string {
+	return fmt.Sprintf("%s|%s|%s|%s|%s",
+		relationship.SourceRepoID,
+		relationship.TargetRepoID,
+		relationship.SourceEntityID,
+		relationship.TargetEntityID,
+		relationship.RelationshipType,
+	)
 }
 
 func admittedCorrelatedWorkloadCandidates(
@@ -115,16 +187,19 @@ func (l CorrelatedWorkloadProjectionInputLoader) enrichDeploymentRepoEnvironment
 		sourceRepos[c.RepoID] = struct{}{}
 	}
 	for _, c := range candidates {
-		if c.DeploymentRepoID == "" {
+		deploymentRepoIDs := candidateDeploymentRepoIDs(c)
+		if len(deploymentRepoIDs) == 0 {
+			for _, repoID := range c.ProvisioningRepoIDs {
+				markEnvironmentRepoNeeded(repoID, sourceRepos, deploymentEnvironments, needed)
+			}
 			continue
 		}
-		if _, isSameRepo := sourceRepos[c.DeploymentRepoID]; isSameRepo {
-			continue
+		for _, repoID := range deploymentRepoIDs {
+			markEnvironmentRepoNeeded(repoID, sourceRepos, deploymentEnvironments, needed)
 		}
-		if _, hasEnvs := deploymentEnvironments[c.DeploymentRepoID]; hasEnvs {
-			continue
+		for _, repoID := range c.ProvisioningRepoIDs {
+			markEnvironmentRepoNeeded(repoID, sourceRepos, deploymentEnvironments, needed)
 		}
-		needed[c.DeploymentRepoID] = struct{}{}
 	}
 	if len(needed) == 0 {
 		return deploymentEnvironments
@@ -143,7 +218,13 @@ func (l CorrelatedWorkloadProjectionInputLoader) enrichDeploymentRepoEnvironment
 	}
 
 	for repoID, identity := range identities {
-		envelopes, err := l.FactLoader.ListFacts(ctx, identity.ScopeID, identity.GenerationID)
+		envelopes, err := loadFactsForKinds(
+			ctx,
+			l.FactLoader,
+			identity.ScopeID,
+			identity.GenerationID,
+			[]string{factKindFile},
+		)
 		if err != nil {
 			slog.Warn("load deployment repo facts for environment extraction",
 				"error", err, "repo_id", repoID,
@@ -159,6 +240,24 @@ func (l CorrelatedWorkloadProjectionInputLoader) enrichDeploymentRepoEnvironment
 	}
 
 	return deploymentEnvironments
+}
+
+func markEnvironmentRepoNeeded(
+	repoID string,
+	sourceRepos map[string]struct{},
+	deploymentEnvironments map[string][]string,
+	needed map[string]struct{},
+) {
+	if repoID == "" {
+		return
+	}
+	if _, isSameRepo := sourceRepos[repoID]; isSameRepo {
+		return
+	}
+	if _, hasEnvs := deploymentEnvironments[repoID]; hasEnvs {
+		return
+	}
+	needed[repoID] = struct{}{}
 }
 
 func correlatedWorkloadName(

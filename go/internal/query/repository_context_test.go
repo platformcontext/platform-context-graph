@@ -1,9 +1,11 @@
 package query
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,9 +20,14 @@ type fakeRepoGraphReader struct {
 	runSingleByMatch map[string]map[string]any
 	// runByMatch maps a Cypher fragment to multiple result rows.
 	runByMatch map[string][]map[string]any
+	run        func(context.Context, string, map[string]any) ([]map[string]any, error)
+	runSingle  func(context.Context, string, map[string]any) (map[string]any, error)
 }
 
 func (f fakeRepoGraphReader) Run(ctx context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+	if f.run != nil {
+		return f.run(ctx, cypher, params)
+	}
 	var (
 		bestRows []map[string]any
 		bestLen  int
@@ -35,6 +42,9 @@ func (f fakeRepoGraphReader) Run(ctx context.Context, cypher string, params map[
 }
 
 func (f fakeRepoGraphReader) RunSingle(ctx context.Context, cypher string, params map[string]any) (map[string]any, error) {
+	if f.runSingle != nil {
+		return f.runSingle(ctx, cypher, params)
+	}
 	var (
 		bestRow map[string]any
 		bestLen int
@@ -45,7 +55,343 @@ func (f fakeRepoGraphReader) RunSingle(ctx context.Context, cypher string, param
 			bestLen = len(fragment)
 		}
 	}
+	if bestRow == nil && strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})") && len(f.runSingleByMatch) == 1 {
+		for _, row := range f.runSingleByMatch {
+			return row, nil
+		}
+	}
 	return bestRow, nil
+}
+
+func TestGetRepositoryContextUsesNarrowRepositoryLookupAndLogsStages(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	var runSingleCyphers []string
+	reader := fakeRepoGraphReader{
+		runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+			runSingleCyphers = append(runSingleCyphers, cypher)
+			if got, want := params["repo_id"], "repo-observed"; got != want {
+				t.Fatalf("repo_id param = %#v, want %#v", got, want)
+			}
+			return map[string]any{
+				"id":         "repo-observed",
+				"name":       "observed-service",
+				"path":       "/repos/observed-service",
+				"local_path": "/repos/observed-service",
+				"has_remote": false,
+			}, nil
+		},
+		run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+			if got, want := params["repo_id"], "repo-observed"; got != want {
+				t.Fatalf("repo_id param = %#v, want %#v", got, want)
+			}
+			switch {
+			case strings.Contains(cypher, "RETURN count(DISTINCT f) AS count"):
+				return []map[string]any{{"count": int64(2)}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT w) AS count"):
+				return []map[string]any{{"count": int64(1)}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT p) AS count"):
+				return []map[string]any{{"count": int64(1)}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT dep) AS count"):
+				return []map[string]any{{"count": int64(0)}}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+	handler := &RepositoryHandler{
+		Neo4j:  reader,
+		Logger: slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-observed/context", nil)
+	req.SetPathValue("repo_id", "repo-observed")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	if len(runSingleCyphers) != 1 {
+		t.Fatalf("RunSingle calls = %d, want 1", len(runSingleCyphers))
+	}
+	baseLookup := runSingleCyphers[0]
+	if !strings.Contains(baseLookup, "MATCH (r:Repository {id: $repo_id})") {
+		t.Fatalf("base lookup = %s, want repository-id anchor", baseLookup)
+	}
+	if strings.Contains(baseLookup, "OPTIONAL MATCH") || strings.Contains(baseLookup, "INSTANCE_OF") {
+		t.Fatalf("base lookup still uses broad aggregation shape:\n%s", baseLookup)
+	}
+
+	logText := logs.String()
+	for _, want := range []string{
+		`"event_name":"repository_query.stage_started"`,
+		`"event_name":"repository_query.stage_completed"`,
+		`"operation":"repository_context"`,
+		`"stage":"repository_lookup"`,
+		`"stage":"summary_counts"`,
+		`"duration_seconds"`,
+	} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("logs missing %s; logs = %s", want, logText)
+		}
+	}
+}
+
+func TestGetRepositoryStoryUsesNarrowRepositoryLookupAndLogsStages(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	var runSingleCyphers []string
+	reader := fakeRepoGraphReader{
+		runSingle: func(_ context.Context, cypher string, params map[string]any) (map[string]any, error) {
+			runSingleCyphers = append(runSingleCyphers, cypher)
+			if got, want := params["repo_id"], "repo-story"; got != want {
+				t.Fatalf("repo_id param = %#v, want %#v", got, want)
+			}
+			return map[string]any{
+				"id":         "repo-story",
+				"name":       "story-service",
+				"path":       "/repos/story-service",
+				"local_path": "/repos/story-service",
+				"has_remote": false,
+			}, nil
+		},
+		run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+			if got, want := params["repo_id"], "repo-story"; got != want {
+				t.Fatalf("repo_id param = %#v, want %#v", got, want)
+			}
+			switch {
+			case strings.Contains(cypher, "RETURN count(DISTINCT f) AS count"):
+				return []map[string]any{{"count": int64(7)}}, nil
+			case strings.Contains(cypher, "RETURN f.language AS language, count(DISTINCT f) AS file_count"):
+				return []map[string]any{{"language": "go", "file_count": int64(7)}}, nil
+			case strings.Contains(cypher, "RETURN w.name AS workload_name"):
+				return []map[string]any{{"workload_name": "story-service"}}, nil
+			case strings.Contains(cypher, "RETURN p.type AS platform_type"):
+				return []map[string]any{{"platform_type": "ecs"}}, nil
+			case strings.Contains(cypher, "RETURN count(DISTINCT dep) AS count"):
+				return []map[string]any{{"count": int64(1)}}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+	handler := &RepositoryHandler{
+		Neo4j:  reader,
+		Logger: slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-story/story", nil)
+	req.SetPathValue("repo_id", "repo-story")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	if len(runSingleCyphers) != 1 {
+		t.Fatalf("RunSingle calls = %d, want 1", len(runSingleCyphers))
+	}
+	baseLookup := runSingleCyphers[0]
+	if !strings.Contains(baseLookup, "MATCH (r:Repository {id: $repo_id})") {
+		t.Fatalf("base lookup = %s, want repository-id anchor", baseLookup)
+	}
+	if strings.Contains(baseLookup, "OPTIONAL MATCH") || strings.Contains(baseLookup, "INSTANCE_OF") {
+		t.Fatalf("base lookup still uses broad aggregation shape:\n%s", baseLookup)
+	}
+
+	logText := logs.String()
+	for _, want := range []string{
+		`"event_name":"repository_query.stage_started"`,
+		`"event_name":"repository_query.stage_completed"`,
+		`"operation":"repository_story"`,
+		`"stage":"repository_lookup"`,
+		`"stage":"graph_summary"`,
+		`"duration_seconds"`,
+	} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("logs missing %s; logs = %s", want, logText)
+		}
+	}
+}
+
+func TestGetRepositoryContextUsesContentCoverageForFileCountsAndLanguages(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeRepoGraphReader{
+		runSingle: func(_ context.Context, cypher string, _ map[string]any) (map[string]any, error) {
+			if !strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})") {
+				t.Fatalf("RunSingle cypher = %q, want repository base lookup", cypher)
+			}
+			return map[string]any{
+				"id":         "repo-coverage",
+				"name":       "coverage-service",
+				"path":       "/repos/coverage-service",
+				"local_path": "/repos/coverage-service",
+				"has_remote": false,
+			}, nil
+		},
+		run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+			for _, forbidden := range []string{
+				"RETURN count(DISTINCT f) AS count",
+				"RETURN count(DISTINCT w) AS count",
+				"RETURN count(DISTINCT p) AS count",
+				"RETURN count(DISTINCT dep) AS count",
+				"f.language IS NOT NULL",
+			} {
+				if strings.Contains(cypher, forbidden) {
+					t.Fatalf("cypher = %q, want read-model summary instead of graph summary fanout", cypher)
+				}
+			}
+			return nil, nil
+		},
+	}
+	handler := &RepositoryHandler{
+		Neo4j: reader,
+		Content: fakePortContentStore{
+			coverage: RepositoryContentCoverage{
+				Available: true,
+				FileCount: 456,
+				Languages: []RepositoryLanguageCount{
+					{Language: "go", FileCount: 300},
+					{Language: "yaml", FileCount: 156},
+				},
+			},
+			summary: repositoryReadModelSummary{
+				Available:       true,
+				WorkloadNames:   []string{"coverage-service"},
+				PlatformCount:   1,
+				DependencyCount: 2,
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-coverage/context", nil)
+	req.SetPathValue("repo_id", "repo-coverage")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got, want := resp["file_count"], float64(456); got != want {
+		t.Fatalf("file_count = %#v, want %#v", got, want)
+	}
+	if got, want := resp["workload_count"], float64(1); got != want {
+		t.Fatalf("workload_count = %#v, want %#v", got, want)
+	}
+	if got, want := resp["platform_count"], float64(1); got != want {
+		t.Fatalf("platform_count = %#v, want %#v", got, want)
+	}
+	if got, want := resp["dependency_count"], float64(2); got != want {
+		t.Fatalf("dependency_count = %#v, want %#v", got, want)
+	}
+	languages, ok := resp["languages"].([]any)
+	if !ok || len(languages) != 2 {
+		t.Fatalf("languages = %#v, want two content coverage rows", resp["languages"])
+	}
+	first, ok := languages[0].(map[string]any)
+	if !ok {
+		t.Fatalf("languages[0] = %#v, want map", languages[0])
+	}
+	if got, want := first["language"], "go"; got != want {
+		t.Fatalf("languages[0].language = %#v, want %#v", got, want)
+	}
+}
+
+func TestGetRepositoryStoryUsesContentCoverageForFileCountsAndLanguages(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeRepoGraphReader{
+		runSingle: func(_ context.Context, cypher string, _ map[string]any) (map[string]any, error) {
+			if !strings.Contains(cypher, "MATCH (r:Repository {id: $repo_id})") {
+				t.Fatalf("RunSingle cypher = %q, want repository base lookup", cypher)
+			}
+			return map[string]any{
+				"id":         "repo-story-coverage",
+				"name":       "story-coverage-service",
+				"path":       "/repos/story-coverage-service",
+				"local_path": "/repos/story-coverage-service",
+				"has_remote": false,
+			}, nil
+		},
+		run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+			for _, forbidden := range []string{
+				"RETURN count(DISTINCT f) AS count",
+				"RETURN f.language AS language",
+				"RETURN w.name AS workload_name",
+				"RETURN p.type AS platform_type",
+				"RETURN count(DISTINCT dep) AS count",
+			} {
+				if strings.Contains(cypher, forbidden) {
+					t.Fatalf("cypher = %q, want read-model summary instead of graph summary fanout", cypher)
+				}
+			}
+			return nil, nil
+		},
+	}
+	handler := &RepositoryHandler{
+		Neo4j: reader,
+		Content: fakePortContentStore{
+			coverage: RepositoryContentCoverage{
+				Available: true,
+				FileCount: 789,
+				Languages: []RepositoryLanguageCount{
+					{Language: "typescript", FileCount: 500},
+					{Language: "yaml", FileCount: 289},
+				},
+			},
+			summary: repositoryReadModelSummary{
+				Available:       true,
+				WorkloadNames:   []string{"story-coverage-service"},
+				PlatformTypes:   []string{"ecs"},
+				PlatformCount:   1,
+				DependencyCount: 2,
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v0/repositories/repo-story-coverage/story", nil)
+	req.SetPathValue("repo_id", "repo-story-coverage")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	story := StringVal(resp, "story")
+	for _, want := range []string{
+		"Repository story-coverage-service contains 789 indexed files.",
+		"Languages: typescript, yaml.",
+		"Defines 1 workload(s): story-coverage-service.",
+		"Runs on platform signal(s): ecs.",
+	} {
+		if !strings.Contains(story, want) {
+			t.Fatalf("story = %q, want fragment %q", story, want)
+		}
+	}
 }
 
 func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
@@ -108,7 +454,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 					},
 				},
 				// Cross-repo relationships (outgoing)
-				"MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(target:Repository)": {
+				"MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(target:Repository)": {
 					{
 						"type":          "DEPENDS_ON",
 						"target_name":   "auth-service",
@@ -141,7 +487,7 @@ func TestGetRepositoryContextReturnsEnrichedResponse(t *testing.T) {
 					},
 				},
 				// Consumer repositories (incoming)
-				"MATCH (consumer:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(r:Repository {id: $repo_id})": {
+				"MATCH (consumer:Repository)-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(r:Repository {id: $repo_id})": {
 					{
 						"consumer_name": "checkout-service",
 						"consumer_id":   "repo-4",
@@ -527,7 +873,7 @@ func TestGetRepositoryContextPartitionsControllerWorkflowAndIaCRelationships(t *
 				},
 			},
 			runByMatch: map[string][]map[string]any{
-				"MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|RUNS_ON]->(target:Repository)": {
+				"MATCH (r:Repository {id: $repo_id})-[rel:DEPENDS_ON|USES_MODULE|DEPLOYS_FROM|DISCOVERS_CONFIG_IN|PROVISIONS_DEPENDENCY_FOR|READS_CONFIG_FROM|RUNS_ON]->(target:Repository)": {
 					{
 						"type":          "DEPLOYS_FROM",
 						"target_name":   "infra-configs",

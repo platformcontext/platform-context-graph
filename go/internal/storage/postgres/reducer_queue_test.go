@@ -44,6 +44,76 @@ func TestReducerWorkItemIDSanitizesSpecialChars(t *testing.T) {
 	}
 }
 
+func TestReducerConflictDomainKeySplitsCodeAndPlatformGraphFamilies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		domain     reducer.Domain
+		wantDomain string
+		wantKey    string
+	}{
+		{
+			name:       "semantic entities use code graph conflict family",
+			domain:     reducer.DomainSemanticEntityMaterialization,
+			wantDomain: reducerConflictDomainCodeGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "code call edges use code graph conflict family",
+			domain:     reducer.DomainCodeCallMaterialization,
+			wantDomain: reducerConflictDomainCodeGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "sql edges use code graph conflict family",
+			domain:     reducer.DomainSQLRelationshipMaterialization,
+			wantDomain: reducerConflictDomainCodeGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "inheritance edges use code graph conflict family",
+			domain:     reducer.DomainInheritanceMaterialization,
+			wantDomain: reducerConflictDomainCodeGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "workload identity uses platform graph conflict family",
+			domain:     reducer.DomainWorkloadIdentity,
+			wantDomain: reducerConflictDomainPlatformGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "deployment mapping uses platform graph conflict family",
+			domain:     reducer.DomainDeploymentMapping,
+			wantDomain: reducerConflictDomainPlatformGraph,
+			wantKey:    "scope-1",
+		},
+		{
+			name:       "unknown future domains fall back to scope serialization",
+			domain:     reducer.DomainOwnership,
+			wantDomain: reducerConflictDomainScope,
+			wantKey:    "scope-1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotDomain, gotKey := reducerConflictDomainKey(projector.ReducerIntent{
+				ScopeID: " scope-1 ",
+				Domain:  tt.domain,
+			})
+			if gotDomain != tt.wantDomain {
+				t.Fatalf("conflict domain = %q, want %q", gotDomain, tt.wantDomain)
+			}
+			if gotKey != tt.wantKey {
+				t.Fatalf("conflict key = %q, want %q", gotKey, tt.wantKey)
+			}
+		})
+	}
+}
+
 func TestReducerQueueBatchEnqueue(t *testing.T) {
 	t.Parallel()
 
@@ -96,6 +166,197 @@ func TestReducerQueueBatchEnqueue(t *testing.T) {
 		if valueCount != expectedSize {
 			t.Errorf("exec[%d] has %d value tuples, expected %d", i, valueCount, expectedSize)
 		}
+	}
+}
+
+func TestReducerQueueClaimCanWaitForProjectorDrain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	queue := ReducerQueue{
+		db:                               db,
+		LeaseOwner:                       "test-owner",
+		LeaseDuration:                    30 * time.Second,
+		Now:                              func() time.Time { return now },
+		RequireProjectorDrainBeforeClaim: true,
+	}
+
+	_, claimed, err := queue.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if claimed {
+		t.Fatal("Claim() claimed = true, want false from empty rows")
+	}
+
+	query := db.queries[0].query
+	for _, want := range []string{
+		"$5 = false OR NOT EXISTS",
+		"projector_work.stage = 'projector'",
+		"projector_work.scope_id = fact_work_items.scope_id",
+		"projector_work.status IN ('pending', 'retrying', 'claimed', 'running')",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("claim query missing projector drain predicate %q:\n%s", want, query)
+		}
+	}
+	if got, want := db.queries[0].args[4], true; got != want {
+		t.Fatalf("projector drain arg = %v, want %v", got, want)
+	}
+}
+
+func TestReducerQueueClaimGatesSemanticEntitiesOnGlobalProjectorDrain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	queue := ReducerQueue{
+		db:                               db,
+		LeaseOwner:                       "test-owner",
+		LeaseDuration:                    30 * time.Second,
+		Now:                              func() time.Time { return now },
+		RequireProjectorDrainBeforeClaim: true,
+	}
+
+	_, claimed, err := queue.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if claimed {
+		t.Fatal("Claim() claimed = true, want false from empty rows")
+	}
+
+	query := db.queries[0].query
+	for _, want := range []string{
+		"domain <> 'semantic_entity_materialization'",
+		"projector_any.stage = 'projector'",
+		"projector_any.domain = 'source_local'",
+		"projector_any.status IN ('pending', 'retrying', 'claimed', 'running')",
+		"projector_done.domain = 'source_local'",
+		"projector_done.status = 'succeeded'",
+		">= $6",
+		"semantic_inflight.domain = 'semantic_entity_materialization'",
+		"semantic_inflight.status IN ('claimed', 'running')",
+		"semantic_inflight.claim_until > $1",
+		"< $7",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("claim query missing semantic global projector gate %q:\n%s", want, query)
+		}
+	}
+	if got, want := db.queries[0].args[6], 1; got != want {
+		t.Fatalf("semantic claim limit arg = %v, want %v", got, want)
+	}
+}
+
+func TestReducerQueueClaimPassesExpectedSourceLocalProjectors(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.May, 2, 4, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	queue := ReducerQueue{
+		db:                            db,
+		LeaseOwner:                    "test-owner",
+		LeaseDuration:                 30 * time.Second,
+		Now:                           func() time.Time { return now },
+		ExpectedSourceLocalProjectors: 878,
+	}
+
+	_, _, err := queue.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if got, want := db.queries[0].args[5], 878; got != want {
+		t.Fatalf("expected source-local projector arg = %v, want %v", got, want)
+	}
+}
+
+func TestReducerQueueClaimPassesSemanticEntityClaimLimit(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.May, 2, 15, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	queue := ReducerQueue{
+		db:                               db,
+		LeaseOwner:                       "test-owner",
+		LeaseDuration:                    30 * time.Second,
+		Now:                              func() time.Time { return now },
+		RequireProjectorDrainBeforeClaim: true,
+		SemanticEntityClaimLimit:         4,
+	}
+
+	_, _, err := queue.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if got, want := db.queries[0].args[6], 4; got != want {
+		t.Fatalf("semantic claim limit arg = %v, want %v", got, want)
+	}
+}
+
+func TestReducerQueueClaimCanFilterByDomain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 28, 14, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{rows: nil},
+		},
+	}
+	queue := ReducerQueue{
+		db:            db,
+		LeaseOwner:    "sql-lane",
+		LeaseDuration: time.Minute,
+		Now:           func() time.Time { return now },
+		ClaimDomain:   reducer.DomainSQLRelationshipMaterialization,
+	}
+
+	_, claimed, err := queue.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if claimed {
+		t.Fatal("Claim() claimed = true, want false from empty rows")
+	}
+
+	if got, want := db.queries[0].args[1], string(reducer.DomainSQLRelationshipMaterialization); got != want {
+		t.Fatalf("domain filter arg = %v, want %v", got, want)
+	}
+}
+
+func TestReducerQueueClaimRejectsUnknownDomainFilter(t *testing.T) {
+	t.Parallel()
+
+	queue := ReducerQueue{
+		db:            &fakeExecQueryer{},
+		LeaseOwner:    "bad-lane",
+		LeaseDuration: time.Minute,
+		ClaimDomain:   reducer.Domain("not_a_domain"),
+	}
+
+	_, _, err := queue.Claim(context.Background())
+	if err == nil {
+		t.Fatal("Claim() error = nil, want validation error")
+	}
+	if !strings.Contains(err.Error(), "unknown reducer domain") {
+		t.Fatalf("Claim() error = %v, want unknown domain validation", err)
 	}
 }
 
@@ -291,9 +552,9 @@ func TestReducerQueueReplayWorkloadMaterializationEnqueuesReplayWhenNoSucceededR
 	if got, want := db.execs[1].args[3], string(reducer.DomainWorkloadMaterialization); got != want {
 		t.Fatalf("enqueue domain arg = %v, want %v", got, want)
 	}
-	payload, ok := db.execs[1].args[5].([]byte)
+	payload, ok := db.execs[1].args[7].([]byte)
 	if !ok {
-		t.Fatalf("enqueue payload type = %T, want []byte", db.execs[1].args[5])
+		t.Fatalf("enqueue payload type = %T, want []byte", db.execs[1].args[7])
 	}
 	if !strings.Contains(string(payload), "deployment mapping resolved stronger evidence") {
 		t.Fatalf("enqueue payload = %s, want replay reason", payload)

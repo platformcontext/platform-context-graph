@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -259,6 +260,42 @@ func TestEnrichServiceQueryContextAddsServiceAndRelationshipSignals(t *testing.T
 	}
 }
 
+func TestLoadServiceDeploymentEvidenceUsesGraphEvidenceWithoutContentHydration(t *testing.T) {
+	t.Parallel()
+
+	content := failListRepoFilesContentStore{t: t}
+	workloadContext := map[string]any{
+		"repo_id":   "repo-service",
+		"repo_name": "service-edge-api",
+		"deployment_evidence": map[string]any{
+			"truth_basis":       "graph",
+			"artifact_count":    2,
+			"artifact_families": []string{"github_actions", "helm"},
+		},
+	}
+
+	got, err := loadServiceDeploymentEvidence(context.Background(), nil, content, workloadContext)
+	if err != nil {
+		t.Fatalf("loadServiceDeploymentEvidence() error = %v, want nil", err)
+	}
+	if got["truth_basis"] != "graph" {
+		t.Fatalf("truth_basis = %#v, want graph", got["truth_basis"])
+	}
+	if got["artifact_count"] != 2 {
+		t.Fatalf("artifact_count = %#v, want 2", got["artifact_count"])
+	}
+}
+
+type failListRepoFilesContentStore struct {
+	fakePortContentStore
+	t *testing.T
+}
+
+func (s failListRepoFilesContentStore) ListRepoFiles(context.Context, string, int) ([]FileContent, error) {
+	s.t.Fatal("ListRepoFiles should not run when graph deployment evidence already exists")
+	return nil, nil
+}
+
 func TestBuildServiceStoryResponseKeepsStoryFirstShape(t *testing.T) {
 	t.Parallel()
 
@@ -378,12 +415,19 @@ func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitUsesBoundedDefaultSear
 
 	gotSearchTerms := make([]string, 0, len(recorder.args))
 	for i, query := range recorder.queries {
-		if !strings.Contains(query, "content ILIKE '%' || $1 || '%'") || len(recorder.args[i]) < 2 {
+		if !(strings.Contains(query, "content ILIKE '%' || $1 || '%'") ||
+			strings.Contains(query, "content LIKE '%' || $1 || '%'")) || len(recorder.args[i]) < 2 {
 			continue
 		}
 		term, ok := recorder.args[i][0].(string)
 		if !ok {
 			t.Fatalf("recorder.args[%d][0] type = %T, want string", i, recorder.args[i][0])
+		}
+		if term == "sample-service-api" && !strings.Contains(query, "content LIKE '%' || $1 || '%'") {
+			t.Fatalf("service-name query = %q, want exact-case LIKE for lower-case service token", query)
+		}
+		if term != "sample-service-api" && !strings.Contains(query, "content LIKE '%' || $1 || '%'") {
+			t.Fatalf("hostname query for %q = %q, want case-sensitive LIKE", term, query)
 		}
 		gotSearchTerms = append(gotSearchTerms, term)
 		if got, want := numericDriverValue(t, recorder.args[i][1]), int64(25); got != want {
@@ -398,8 +442,62 @@ func TestLoadConsumerRepositoryEnrichmentWithoutTraceLimitUsesBoundedDefaultSear
 		"sample-service.prod.example.test",
 		"sample-service.qa.example.test",
 	}
+	sort.Strings(gotSearchTerms)
 	if !reflect.DeepEqual(gotSearchTerms, wantSearchTerms) {
 		t.Fatalf("search terms = %#v, want %#v", gotSearchTerms, wantSearchTerms)
+	}
+}
+
+func TestQueryServiceDeploymentEvidenceUsesReadModelBeforeGraphFallback(t *testing.T) {
+	t.Parallel()
+
+	graph := fakeGraphReader{
+		run: func(_ context.Context, cypher string, _ map[string]any) ([]map[string]any, error) {
+			if strings.Contains(cypher, "EvidenceArtifact") {
+				t.Fatalf("cypher = %q, want service deployment evidence read model before graph fallback", cypher)
+			}
+			return nil, nil
+		},
+	}
+	content := fakePortContentStore{
+		deploymentEvidence: repositoryDeploymentEvidenceReadModel{
+			Available: true,
+			Rows: []map[string]any{
+				{
+					"direction":         "incoming",
+					"artifact_id":       "evidence-artifact:terraform:1",
+					"name":              "environments/prod/ecs.tf",
+					"domain":            "deployment",
+					"path":              "environments/prod/ecs.tf",
+					"evidence_kind":     "TERRAFORM_ECS_SERVICE",
+					"artifact_family":   "terraform",
+					"extractor":         "terraform-runtime-service-module",
+					"relationship_type": "PROVISIONS_DEPENDENCY_FOR",
+					"resolved_id":       "resolved-runtime",
+					"generation_id":     "gen-runtime",
+					"confidence":        0.96,
+					"source_repo_id":    "repo-platform",
+					"source_repo_name":  "runtime-platform",
+					"target_repo_id":    "repo-service",
+					"target_repo_name":  "checkout-service",
+				},
+			},
+		},
+	}
+
+	got, err := queryServiceGraphDeploymentEvidence(context.Background(), graph, content, "repo-service")
+	if err != nil {
+		t.Fatalf("queryServiceGraphDeploymentEvidence() error = %v, want nil", err)
+	}
+	if got == nil {
+		t.Fatal("queryServiceGraphDeploymentEvidence() = nil, want read-model evidence")
+	}
+	artifacts := mapSliceValue(got, "artifacts")
+	if len(artifacts) != 1 {
+		t.Fatalf("len(artifacts) = %d, want 1", len(artifacts))
+	}
+	if got, want := StringVal(artifacts[0], "source_repo_id"), "repo-platform"; got != want {
+		t.Fatalf("source_repo_id = %#v, want %#v", got, want)
 	}
 }
 
@@ -596,7 +694,8 @@ func TestTraceDeploymentChainBoundsCrossRepoSearchByMaxDepth(t *testing.T) {
 	var searchLimit int64
 	foundAnyRepoSearch := false
 	for i, query := range recorder.queries {
-		if !strings.Contains(query, "content ILIKE '%' || $1 || '%'") {
+		if !(strings.Contains(query, "content ILIKE '%' || $1 || '%'") ||
+			strings.Contains(query, "content LIKE '%' || $1 || '%'")) {
 			continue
 		}
 		if strings.Contains(query, "repo_id = $1") {

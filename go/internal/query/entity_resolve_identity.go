@@ -3,15 +3,16 @@ package query
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
-func hydrateResolvedEntityRepoIdentity(ctx context.Context, graph GraphReader, entities []map[string]any) error {
+func hydrateResolvedEntityRepoIdentity(ctx context.Context, graph GraphQuery, content ContentStore, entities []map[string]any) error {
 	if len(entities) == 0 {
 		return nil
 	}
 
-	entityIDs := make([]string, 0, len(entities))
 	for _, entity := range entities {
+		clearResolvedEntityRepoProjectionPlaceholders(entity)
 		if resolvedEntityIsRepository(entity) {
 			if entityString(entity, "repo_id") == "" {
 				entity["repo_id"] = entityString(entity, "id")
@@ -21,17 +22,12 @@ func hydrateResolvedEntityRepoIdentity(ctx context.Context, graph GraphReader, e
 			}
 			continue
 		}
-		if entityString(entity, "repo_id") != "" && entityString(entity, "repo_name") != "" {
-			continue
-		}
-		if !resolvedEntityNeedsWorkloadRepoBackfill(entity) {
-			continue
-		}
-		if entityID := entityString(entity, "id"); entityID != "" {
-			entityIDs = append(entityIDs, entityID)
-		}
 	}
 
+	if err := hydrateResolvedEntityRepoIdentityFromContent(ctx, content, entities); err != nil {
+		return err
+	}
+	entityIDs := workloadEntityIDsNeedingRepoBackfill(entities)
 	if graph == nil || len(entityIDs) == 0 {
 		return nil
 	}
@@ -75,6 +71,127 @@ func hydrateResolvedEntityRepoIdentity(ctx context.Context, graph GraphReader, e
 		}
 	}
 	return nil
+}
+
+func hydrateResolvedEntityRepoIdentityFromContent(
+	ctx context.Context,
+	content ContentStore,
+	entities []map[string]any,
+) error {
+	if content == nil {
+		return nil
+	}
+
+	repoIDsNeedingName := make([]string, 0, len(entities))
+	for _, entity := range entities {
+		if repoID := entityString(entity, "repo_id"); repoID != "" && entityString(entity, "repo_name") == "" {
+			repoIDsNeedingName = append(repoIDsNeedingName, repoID)
+		}
+		if entityString(entity, "repo_id") != "" && entityString(entity, "repo_name") != "" {
+			continue
+		}
+		entityID := entityString(entity, "id")
+		if entityID == "" || resolvedEntityIsRepository(entity) {
+			continue
+		}
+		row, err := content.GetEntityContent(ctx, entityID)
+		if err != nil {
+			return fmt.Errorf("hydrate resolved entity repo identity from content: %w", err)
+		}
+		if row == nil || strings.TrimSpace(row.RepoID) == "" {
+			continue
+		}
+		if entityString(entity, "repo_id") == "" {
+			entity["repo_id"] = row.RepoID
+		}
+		if entityString(entity, "repo_name") == "" {
+			repoIDsNeedingName = append(repoIDsNeedingName, row.RepoID)
+		}
+	}
+
+	repoNames, err := contentRepositoryNamesByID(ctx, content, repoIDsNeedingName)
+	if err != nil {
+		return err
+	}
+	for _, entity := range entities {
+		if entityString(entity, "repo_name") != "" {
+			continue
+		}
+		repoName := repoNames[entityString(entity, "repo_id")]
+		if repoName != "" {
+			entity["repo_name"] = repoName
+		}
+	}
+	return nil
+}
+
+func contentRepositoryNamesByID(
+	ctx context.Context,
+	content ContentStore,
+	repoIDs []string,
+) (map[string]string, error) {
+	repoIDs = sortedUniqueStrings(repoIDs)
+	if content == nil || len(repoIDs) == 0 {
+		return nil, nil
+	}
+
+	entries, err := content.ListRepositories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("hydrate resolved entity repository names from content catalog: %w", err)
+	}
+	want := make(map[string]struct{}, len(repoIDs))
+	for _, repoID := range repoIDs {
+		want[repoID] = struct{}{}
+	}
+	names := make(map[string]string, len(repoIDs))
+	for _, entry := range entries {
+		if _, ok := want[strings.TrimSpace(entry.ID)]; !ok {
+			continue
+		}
+		if name := strings.TrimSpace(entry.Name); name != "" {
+			names[strings.TrimSpace(entry.ID)] = name
+		}
+	}
+	return names, nil
+}
+
+func workloadEntityIDsNeedingRepoBackfill(entities []map[string]any) []string {
+	entityIDs := make([]string, 0, len(entities))
+	for _, entity := range entities {
+		if entityString(entity, "repo_id") != "" && entityString(entity, "repo_name") != "" {
+			continue
+		}
+		if !resolvedEntityNeedsWorkloadRepoBackfill(entity) {
+			continue
+		}
+		if entityID := entityString(entity, "id"); entityID != "" {
+			entityIDs = append(entityIDs, entityID)
+		}
+	}
+	return entityIDs
+}
+
+func clearResolvedEntityRepoProjectionPlaceholders(entity map[string]any) {
+	if resolvedEntityRepoProjectionPlaceholder(entityString(entity, "repo_id"), "id") {
+		entity["repo_id"] = ""
+	}
+	if resolvedEntityRepoProjectionPlaceholder(entityString(entity, "repo_name"), "name") {
+		entity["repo_name"] = ""
+	}
+}
+
+func resolvedEntityRepoProjectionPlaceholder(value string, property string) bool {
+	value = strings.TrimSpace(value)
+	property = strings.TrimSpace(property)
+	switch value {
+	case "r." + property,
+		"repo." + property,
+		"repoViaInstance." + property,
+		"coalesce(repo." + property + ", repoViaInstance." + property + ")":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolvedEntityIsRepository(entity map[string]any) bool {

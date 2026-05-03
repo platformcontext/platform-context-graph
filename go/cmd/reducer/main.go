@@ -123,7 +123,7 @@ func buildReducerService(
 	cypherExec reducer.CypherExecutor,
 	intentStore *postgres.SharedIntentStore,
 	neo4jReader sourceneo4j.CypherReader,
-	graphReader query.GraphReader,
+	graphReader query.GraphQuery,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
@@ -135,9 +135,27 @@ func buildReducerService(
 	repairCfg := loadGraphProjectionPhaseRepairConfig(getenv)
 	codeCallEdgeBatchSize, codeCallEdgeGroupBatchSize := loadCodeCallEdgeWriterTuning(getenv)
 	inheritanceEdgeGroupBatchSize, sqlRelationshipEdgeGroupBatchSize := loadSharedEdgeWriterGroupTuning(getenv)
+	graphBackend, err := runtimecfg.LoadGraphBackend(getenv)
+	if err != nil {
+		return reducer.Service{}, err
+	}
+	nornicDBGroupedWrites := false
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		nornicDBGroupedWrites, err = nornicDBCanonicalGroupedWrites(getenv)
+		if err != nil {
+			return reducer.Service{}, err
+		}
+		if nornicDBGroupedWrites {
+			logger.Warn("NornicDB semantic grouped writes enabled for conformance",
+				"graph_backend", string(graphBackend),
+				"grouped_writes", true,
+				"env_var", nornicDBCanonicalGroupedWritesEnv)
+		}
+	}
 
 	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	edgeWriterForHandlers.Instruments = instruments
+	edgeWriterForHandlers.Logger = logger
 	edgeWriterForHandlers.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize
 	edgeWriterForHandlers.SQLRelationshipGroupBatchSize = sqlRelationshipEdgeGroupBatchSize
 	relationshipStore := postgres.NewRelationshipStore(database)
@@ -149,13 +167,56 @@ func buildReducerService(
 	graphProjectionRepairQueue := postgres.NewGraphProjectionPhaseRepairQueueStore(database)
 	graphProjectionReadinessLookup := postgres.NewGraphProjectionReadinessLookup(database)
 	graphProjectionReadinessPrefetch := postgres.NewGraphProjectionReadinessPrefetch(database)
+	semanticEntityExecutor := semanticEntityExecutorForGraphBackend(
+		neo4jExec,
+		graphBackend,
+		nornicDBCanonicalWriteTimeout(getenv),
+		nornicDBGroupedWrites,
+	)
+	semanticEntityWriter, err := semanticEntityWriterForGraphBackend(semanticEntityExecutor, neo4jBatchSize(getenv), graphBackend, getenv)
+	if err != nil {
+		return reducer.Service{}, err
+	}
 	retryCfg, err := loadReducerQueueConfig(getenv)
 	if err != nil {
 		return reducer.Service{}, err
 	}
+	projectorDrainGate, err := loadReducerProjectorDrainGate(getenv, graphBackend)
+	if err != nil {
+		return reducer.Service{}, fmt.Errorf("load reducer projector drain gate: %w", err)
+	}
+	if projectorDrainGate && logger != nil {
+		logger.Info("reducer claims will wait for source-local projection drain",
+			"graph_backend", string(graphBackend),
+			"query_profile", string(query.ProfileLocalAuthoritative),
+		)
+	}
+	claimDomain, err := loadReducerClaimDomain(getenv)
+	if err != nil {
+		return reducer.Service{}, fmt.Errorf("load reducer claim domain: %w", err)
+	}
+	if claimDomain != "" && logger != nil {
+		logger.Info("reducer claims restricted to domain",
+			"domain", string(claimDomain),
+		)
+	}
 	workQueue := postgres.NewReducerQueue(database, "reducer", time.Minute)
 	workQueue.RetryDelay = retryCfg.RetryDelay
 	workQueue.MaxAttempts = retryCfg.MaxAttempts
+	workQueue.ClaimDomain = claimDomain
+	workQueue.RequireProjectorDrainBeforeClaim = projectorDrainGate
+	workQueue.ExpectedSourceLocalProjectors = loadReducerExpectedSourceLocalProjectors(getenv)
+	workQueue.SemanticEntityClaimLimit = loadReducerSemanticEntityClaimLimit(getenv, graphBackend)
+	if workQueue.ExpectedSourceLocalProjectors > 0 && logger != nil {
+		logger.Info("semantic reducers will wait for expected source-local projectors",
+			"expected_source_local_projectors", workQueue.ExpectedSourceLocalProjectors,
+		)
+	}
+	if projectorDrainGate && logger != nil {
+		logger.Info("semantic reducer claim limit configured",
+			"semantic_entity_claim_limit", workQueue.SemanticEntityClaimLimit,
+		)
+	}
 
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
 		DeployableUnitCorrelationHandler: reducer.DeployableUnitCorrelationHandler{
@@ -175,13 +236,14 @@ func buildReducerService(
 		WorkloadMaterializationReplayer:    workQueue,
 		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
+		InfrastructurePlatformLookup:       reducer.GraphInfrastructurePlatformLookup{Graph: graphReader},
 		FactLoader:                         factStore,
 		CodeCallIntentWriter:               codeCallIntentWriter,
 		GraphProjectionPhasePublisher:      graphProjectionStateStore,
 		GraphProjectionRepairQueue:         graphProjectionRepairQueue,
 		ReadinessLookup:                    graphProjectionReadinessLookup,
 		ReadinessPrefetch:                  graphProjectionReadinessPrefetch,
-		SemanticEntityWriter:               sourceneo4j.NewSemanticEntityWriter(neo4jExec, neo4jBatchSize(getenv)),
+		SemanticEntityWriter:               semanticEntityWriter,
 		SQLRelationshipEdgeWriter:          edgeWriterForHandlers,
 		InheritanceEdgeWriter:              edgeWriterForHandlers,
 		EvidenceFactLoader:                 relationshipStore,
@@ -192,6 +254,7 @@ func buildReducerService(
 		RepoDependencyEdgeWriter:           edgeWriterForHandlers,
 		WorkloadDependencyEdgeWriter:       edgeWriterForHandlers,
 		GenerationCheck:                    postgres.NewGenerationFreshnessCheck(database),
+		PriorGenerationCheck:               postgres.NewPriorGenerationCheck(database),
 		Tracer:                             tracer,
 		Instruments:                        instruments,
 	})
@@ -201,17 +264,20 @@ func buildReducerService(
 
 	edgeWriter := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	edgeWriter.Instruments = instruments
+	edgeWriter.Logger = logger
 	edgeWriter.CodeCallBatchSize = codeCallEdgeBatchSize
 	edgeWriter.CodeCallGroupBatchSize = codeCallEdgeGroupBatchSize
 	edgeWriter.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize
 	edgeWriter.SQLRelationshipGroupBatchSize = sqlRelationshipEdgeGroupBatchSize
 
-	workers := loadReducerWorkerCount(getenv)
+	workers := loadReducerWorkerCount(getenv, graphBackend)
 	return reducer.Service{
 		PollInterval:               time.Second,
 		WorkSource:                 workQueue,
 		Executor:                   executor,
 		WorkSink:                   workQueue,
+		Heartbeater:                workQueue,
+		HeartbeatInterval:          workQueue.LeaseDuration / 2,
 		SharedProjectionEdgeWriter: edgeWriter,
 		SharedProjectionRunner: &reducer.SharedProjectionRunner{
 			IntentReader:        intentStore,
@@ -261,7 +327,7 @@ func buildReducerService(
 			Logger:      logger,
 		},
 		Workers:        workers,
-		BatchClaimSize: loadReducerBatchClaimSize(getenv, workers),
+		BatchClaimSize: loadReducerBatchClaimSize(getenv, workers, graphBackend),
 		Tracer:         tracer,
 		Instruments:    instruments,
 		Logger:         logger,

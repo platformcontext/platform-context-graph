@@ -7,10 +7,12 @@ import (
 )
 
 type fakeWorkloadDependencyGraphLookup struct {
-	repoEdges          []RepoDependencyEdge
-	workloads          []RepoWorkload
-	repoEdgeRepoIDs    []string
-	repoWorkloadRepoIDs []string
+	repoEdges               []RepoDependencyEdge
+	workloads               []RepoWorkload
+	workloadDependencyRows  []ExistingWorkloadDependencyEdge
+	repoEdgeRepoIDs         []string
+	repoWorkloadRepoIDs     []string
+	existingDependencyRepos []string
 }
 
 func (f *fakeWorkloadDependencyGraphLookup) ListRepoDependencyEdges(
@@ -29,6 +31,15 @@ func (f *fakeWorkloadDependencyGraphLookup) ListRepoWorkloads(
 	return append([]RepoWorkload(nil), f.workloads...), nil
 }
 
+func (f *fakeWorkloadDependencyGraphLookup) ListWorkloadDependencyEdges(
+	_ context.Context,
+	repoIDs []string,
+	_ string,
+) ([]ExistingWorkloadDependencyEdge, error) {
+	f.existingDependencyRepos = append([]string(nil), repoIDs...)
+	return append([]ExistingWorkloadDependencyEdge(nil), f.workloadDependencyRows...), nil
+}
+
 func TestReconcileWorkloadDependencyEdgesBuildsAuthoritativeAndIncomingRows(t *testing.T) {
 	t.Parallel()
 
@@ -41,6 +52,9 @@ func TestReconcileWorkloadDependencyEdgesBuildsAuthoritativeAndIncomingRows(t *t
 			{RepoID: "repo-a", WorkloadID: "workload:svc-a"},
 			{RepoID: "repo-b", WorkloadID: "workload:svc-b"},
 			{RepoID: "repo-c", WorkloadID: "workload:svc-c"},
+		},
+		workloadDependencyRows: []ExistingWorkloadDependencyEdge{
+			{RepoID: "repo-a", WorkloadID: "workload:svc-a", TargetWorkloadID: "workload:old"},
 		},
 	}
 
@@ -83,6 +97,9 @@ func TestReconcileWorkloadDependencyEdgesBuildsAuthoritativeAndIncomingRows(t *t
 	if !reflect.DeepEqual(lookup.repoWorkloadRepoIDs, []string{"repo-a", "repo-b", "repo-c"}) {
 		t.Fatalf("repoWorkloadRepoIDs = %#v, want %#v", lookup.repoWorkloadRepoIDs, []string{"repo-a", "repo-b", "repo-c"})
 	}
+	if !reflect.DeepEqual(lookup.existingDependencyRepos, []string{"repo-a"}) {
+		t.Fatalf("existingDependencyRepos = %#v, want %#v", lookup.existingDependencyRepos, []string{"repo-a"})
+	}
 }
 
 func TestReconcileWorkloadDependencyEdgesSkipsAmbiguousRepos(t *testing.T) {
@@ -98,6 +115,9 @@ func TestReconcileWorkloadDependencyEdgesSkipsAmbiguousRepos(t *testing.T) {
 			{RepoID: "repo-a", WorkloadID: "workload:svc-a-worker"},
 			{RepoID: "repo-b", WorkloadID: "workload:svc-b"},
 			{RepoID: "repo-c", WorkloadID: "workload:svc-c"},
+		},
+		workloadDependencyRows: []ExistingWorkloadDependencyEdge{
+			{RepoID: "repo-a", WorkloadID: "workload:svc-a", TargetWorkloadID: "workload:old"},
 		},
 	}
 
@@ -118,6 +138,95 @@ func TestReconcileWorkloadDependencyEdgesSkipsAmbiguousRepos(t *testing.T) {
 	}
 	if got, want := len(retractRows), 1; got != want {
 		t.Fatalf("len(retractRows) = %d, want %d", got, want)
+	}
+}
+
+func TestReconcileWorkloadDependencyEdgesSkipsRetractWhenNoExistingEdges(t *testing.T) {
+	t.Parallel()
+
+	lookup := &fakeWorkloadDependencyGraphLookup{}
+
+	rows, retractRows, err := ReconcileWorkloadDependencyEdges(
+		context.Background(),
+		[]RepoDescriptor{{RepoID: "repo-a", RepoName: "svc-a", WorkloadID: "workload:svc-a"}},
+		lookup,
+	)
+	if err != nil {
+		t.Fatalf("ReconcileWorkloadDependencyEdges() error = %v", err)
+	}
+
+	if len(rows) != 0 {
+		t.Fatalf("rows = %#v, want none without repo dependency edges", rows)
+	}
+	if len(retractRows) != 0 {
+		t.Fatalf("retractRows = %#v, want none when no existing workload dependencies exist", retractRows)
+	}
+	if !reflect.DeepEqual(lookup.repoEdgeRepoIDs, []string{"repo-a"}) {
+		t.Fatalf("repoEdgeRepoIDs = %#v, want %#v", lookup.repoEdgeRepoIDs, []string{"repo-a"})
+	}
+	if !reflect.DeepEqual(lookup.existingDependencyRepos, []string{"repo-a"}) {
+		t.Fatalf("existingDependencyRepos = %#v, want %#v", lookup.existingDependencyRepos, []string{"repo-a"})
+	}
+	if len(lookup.repoWorkloadRepoIDs) != 0 {
+		t.Fatalf("repoWorkloadRepoIDs = %#v, want no workload lookup without repo dependency edges", lookup.repoWorkloadRepoIDs)
+	}
+}
+
+func TestReconcileWorkloadDependencyEdgesRetractsExistingEdgesWithoutCurrentRows(t *testing.T) {
+	t.Parallel()
+
+	lookup := &fakeWorkloadDependencyGraphLookup{
+		workloadDependencyRows: []ExistingWorkloadDependencyEdge{
+			{RepoID: "repo-a", WorkloadID: "workload:svc-a", TargetWorkloadID: "workload:old"},
+		},
+	}
+
+	rows, retractRows, err := ReconcileWorkloadDependencyEdges(
+		context.Background(),
+		[]RepoDescriptor{{RepoID: "repo-a", RepoName: "svc-a", WorkloadID: "workload:svc-a"}},
+		lookup,
+	)
+	if err != nil {
+		t.Fatalf("ReconcileWorkloadDependencyEdges() error = %v", err)
+	}
+
+	if len(rows) != 0 {
+		t.Fatalf("rows = %#v, want no writes without repo dependency edges", rows)
+	}
+	if got, want := len(retractRows), 1; got != want {
+		t.Fatalf("len(retractRows) = %d, want %d", got, want)
+	}
+	if got, want := retractRows[0].RepositoryID, "repo-a"; got != want {
+		t.Fatalf("retractRows[0].RepositoryID = %q, want %q", got, want)
+	}
+}
+
+func TestReconcileWorkloadDependencyEdgesWritesWithoutRetractWhenNoExistingEdges(t *testing.T) {
+	t.Parallel()
+
+	lookup := &fakeWorkloadDependencyGraphLookup{
+		repoEdges: []RepoDependencyEdge{
+			{SourceRepoID: "repo-a", TargetRepoID: "repo-b"},
+		},
+		workloads: []RepoWorkload{
+			{RepoID: "repo-b", WorkloadID: "workload:svc-b"},
+		},
+	}
+
+	rows, retractRows, err := ReconcileWorkloadDependencyEdges(
+		context.Background(),
+		[]RepoDescriptor{{RepoID: "repo-a", RepoName: "svc-a", WorkloadID: "workload:svc-a"}},
+		lookup,
+	)
+	if err != nil {
+		t.Fatalf("ReconcileWorkloadDependencyEdges() error = %v", err)
+	}
+
+	if got, want := len(rows), 1; got != want {
+		t.Fatalf("len(rows) = %d, want %d", got, want)
+	}
+	if len(retractRows) != 0 {
+		t.Fatalf("retractRows = %#v, want none before first workload dependency write", retractRows)
 	}
 }
 

@@ -7,6 +7,9 @@ services:
     environment:
       NEO4J_AUTH: neo4j/${PCG_NEO4J_PASSWORD:-change-me}
       NEO4J_PLUGINS: '[]'
+      NEO4J_server_memory_heap_initial__size: ${PCG_NEO4J_HEAP_INITIAL_SIZE:-512m}
+      NEO4J_server_memory_heap_max__size: ${PCG_NEO4J_HEAP_MAX_SIZE:-512m}
+      NEO4J_server_memory_pagecache_size: ${PCG_NEO4J_PAGECACHE_SIZE:-512m}
     volumes:
       - neo4j_data:/data
     healthcheck:
@@ -65,7 +68,7 @@ services:
       - "-c"
       - "random_page_cost=1.1"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pcg -d platform_context_graph"]
       interval: 5s
@@ -179,7 +182,8 @@ services:
     command: ["/usr/local/bin/pcg-api"]
     ports:
       - "${PCG_HTTP_PORT:-8080}:8080"
-      - "${PCG_API_METRICS_PORT:-19464}:9464"
+      # API mounts /metrics on the main HTTP listener.
+      - "${PCG_API_METRICS_PORT:-19464}:8080"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -234,7 +238,8 @@ services:
     command: ["/usr/local/bin/pcg-mcp-server"]
     ports:
       - "${PCG_MCP_PORT:-8081}:8080"
-      - "${PCG_MCP_METRICS_PORT:-19468}:9464"
+      # MCP mounts /metrics on the main HTTP listener.
+      - "${PCG_MCP_METRICS_PORT:-19468}:8080"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687

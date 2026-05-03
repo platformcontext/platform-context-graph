@@ -12,6 +12,7 @@ var evidenceKindToType = map[relationships.EvidenceKind]string{
 	relationships.EvidenceKindTerraformGitHubRepo:                  "terraform_github_repository",
 	relationships.EvidenceKindTerraformGitHubActions:               "terraform_github_actions_repository",
 	relationships.EvidenceKindTerraformConfigPath:                  "terraform_config_path",
+	relationships.EvidenceKindTerraformIAMPermission:               "terraform_iam_permission",
 	relationships.EvidenceKindTerraformModuleSource:                "terraform_module_source",
 	relationships.EvidenceKindTerragruntDependencyConfigPath:       "terragrunt_dependency_config_path",
 	relationships.EvidenceKindTerragruntConfigAssetPath:            "terragrunt_config_asset_path",

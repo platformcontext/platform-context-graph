@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
+	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -41,15 +42,20 @@ func buildBootstrapCollector(
 	if err != nil {
 		return collectorDeps{}, err
 	}
+	discoveryOptions, err := collector.LoadDiscoveryOptionsFromEnv(getenv)
+	if err != nil {
+		return collectorDeps{}, err
+	}
 
 	source := &collector.GitSource{
 		Component: "bootstrap-index",
 		Selector:  collector.NativeRepositorySelector{Config: config},
 		Snapshotter: collector.NativeRepositorySnapshotter{
-			ParseWorkers: config.ParseWorkers,
-			Tracer:       tracer,
-			Instruments:  instruments,
-			Logger:       logger,
+			ParseWorkers:     config.ParseWorkers,
+			DiscoveryOptions: discoveryOptions,
+			Tracer:           tracer,
+			Instruments:      instruments,
+			Logger:           logger,
 		},
 		SnapshotWorkers:        config.SnapshotWorkers,
 		LargeRepoThreshold:     config.LargeRepoThreshold,
@@ -62,6 +68,7 @@ func buildBootstrapCollector(
 
 	committer := postgres.NewIngestionStore(instrumentedDB)
 	committer.SkipRelationshipBackfill = true
+	committer.Logger = logger
 
 	return collectorDeps{
 		source:    source,
@@ -76,6 +83,7 @@ func buildBootstrapProjector(
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
+	logger *slog.Logger,
 ) (projectorDeps, error) {
 	instrumentedDB := &postgres.InstrumentedDB{
 		Inner:       database,
@@ -86,22 +94,47 @@ func buildBootstrapProjector(
 
 	projectorQueue := postgres.NewProjectorQueue(instrumentedDB, "bootstrap-index", time.Minute)
 	reducerQueue := postgres.NewReducerQueue(instrumentedDB, "bootstrap-index", time.Minute)
+	contentConfig, err := content.LoadWriterConfig(getenv)
+	if err != nil {
+		return projectorDeps{}, err
+	}
 	runtime := projector.Runtime{
 		CanonicalWriter: canonicalWriter,
-		ContentWriter:   postgres.NewContentWriter(instrumentedDB),
-		IntentWriter:    reducerQueue,
-		PhasePublisher:  postgres.NewGraphProjectionPhaseStateStore(instrumentedDB),
-		RepairQueue:     postgres.NewGraphProjectionPhaseRepairQueueStore(instrumentedDB),
-		Tracer:          tracer,
-		Instruments:     instruments,
+		ContentWriter: postgres.NewContentWriter(instrumentedDB).
+			WithLogger(logger).
+			WithEntityBatchSize(contentConfig.EntityBatchSize),
+		IntentWriter:   reducerQueue,
+		PhasePublisher: postgres.NewGraphProjectionPhaseStateStore(instrumentedDB),
+		RepairQueue:    postgres.NewGraphProjectionPhaseRepairQueueStore(instrumentedDB),
+		Tracer:         tracer,
+		Instruments:    instruments,
+		Logger:         logger,
 	}
 
 	return projectorDeps{
-		workSource: projectorQueue,
-		factStore:  postgres.NewFactStore(instrumentedDB),
-		runner:     runtime,
-		workSink:   projectorQueue,
+		workSource:        projectorQueue,
+		factStore:         postgres.NewFactStore(instrumentedDB),
+		runner:            runtime,
+		workSink:          projectorQueue,
+		heartbeater:       projectorQueue,
+		heartbeatInterval: bootstrapProjectorHeartbeatInterval(projectorQueue.LeaseDuration),
 	}, nil
+}
+
+// bootstrapProjectorHeartbeatInterval renews leases well before expiry while
+// avoiding excessive wakeups for long lease durations.
+func bootstrapProjectorHeartbeatInterval(leaseDuration time.Duration) time.Duration {
+	if leaseDuration <= 0 {
+		return time.Minute
+	}
+	interval := leaseDuration / 3
+	if interval <= 0 {
+		return time.Second
+	}
+	if interval > time.Minute {
+		return time.Minute
+	}
+	return interval
 }
 
 // neo4jBatchSize reads PCG_NEO4J_BATCH_SIZE from the environment.
@@ -124,6 +157,10 @@ func openBootstrapCanonicalWriter(
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) (projector.CanonicalWriter, io.Closer, error) {
+	graphBackend, err := runtimecfg.LoadGraphBackend(getenv)
+	if err != nil {
+		return nil, nil, err
+	}
 	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
 	if err != nil {
 		return nil, nil, err
@@ -132,21 +169,50 @@ func openBootstrapCanonicalWriter(
 	rawExecutor := bootstrapNeo4jExecutor{
 		Driver:       driver,
 		DatabaseName: cfg.DatabaseName,
+		TxTimeout:    bootstrapCanonicalTransactionTimeout(graphBackend, getenv),
+	}
+
+	executor, err := bootstrapCanonicalExecutorForGraphBackend(
+		rawExecutor,
+		graphBackend,
+		getenv,
+		tracer,
+		instruments,
+	)
+	if err != nil {
+		_ = closeBootstrapNeo4jDriver(driver)
+		return nil, nil, err
 	}
 
 	writer := sourceneo4j.NewCanonicalNodeWriter(
-		&sourceneo4j.InstrumentedExecutor{
-			Inner: &sourceneo4j.RetryingExecutor{
-				Inner:       rawExecutor,
-				MaxRetries:  3,
-				Instruments: instruments,
-			},
-			Tracer:      tracer,
-			Instruments: instruments,
-		},
+		executor,
 		neo4jBatchSize(getenv),
 		instruments,
 	)
+	if graphBackend == runtimecfg.GraphBackendNornicDB {
+		fileBatchSize, err := nornicDBPositiveIntEnv(getenv, nornicDBFileBatchSizeEnv, defaultNornicDBFileBatchSize)
+		if err != nil {
+			_ = closeBootstrapNeo4jDriver(driver)
+			return nil, nil, err
+		}
+		entityBatchSize, err := nornicDBPositiveIntEnv(getenv, nornicDBEntityBatchSizeEnv, defaultNornicDBEntityBatchSize)
+		if err != nil {
+			_ = closeBootstrapNeo4jDriver(driver)
+			return nil, nil, err
+		}
+		labelBatchSizes, err := nornicDBEntityLabelBatchSizes(getenv, entityBatchSize)
+		if err != nil {
+			_ = closeBootstrapNeo4jDriver(driver)
+			return nil, nil, err
+		}
+		writer = writer.
+			WithFileBatchSize(fileBatchSize).
+			WithEntityBatchSize(entityBatchSize).
+			WithEntityContainmentInEntityUpsert()
+		for label, batchSize := range labelBatchSizes {
+			writer = writer.WithEntityLabelBatchSize(label, batchSize)
+		}
+	}
 
 	return writer, bootstrapNeo4jDriverCloser{Driver: driver}, nil
 }
@@ -154,6 +220,7 @@ func openBootstrapCanonicalWriter(
 type bootstrapNeo4jExecutor struct {
 	Driver       neo4jdriver.DriverWithContext
 	DatabaseName string
+	TxTimeout    time.Duration
 }
 
 func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
@@ -183,7 +250,7 @@ func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []source
 			}
 		}
 		return nil, nil
-	})
+	}, e.transactionConfigurers()...)
 	return err
 }
 
@@ -200,12 +267,26 @@ func (e bootstrapNeo4jExecutor) Execute(ctx context.Context, statement sourceneo
 		_ = session.Close(ctx)
 	}()
 
-	result, err := session.Run(ctx, statement.Cypher, statement.Parameters)
+	result, err := session.Run(ctx, statement.Cypher, statement.Parameters, e.transactionConfigurers()...)
 	if err != nil {
 		return err
 	}
 	_, err = result.Consume(ctx)
 	return err
+}
+
+func (e bootstrapNeo4jExecutor) transactionConfigurers() []func(*neo4jdriver.TransactionConfig) {
+	if e.TxTimeout <= 0 {
+		return nil
+	}
+	return []func(*neo4jdriver.TransactionConfig){neo4jdriver.WithTxTimeout(e.TxTimeout)}
+}
+
+func bootstrapCanonicalTransactionTimeout(graphBackend runtimecfg.GraphBackend, getenv func(string) string) time.Duration {
+	if graphBackend != runtimecfg.GraphBackendNornicDB {
+		return 0
+	}
+	return nornicDBCanonicalWriteTimeout(getenv)
 }
 
 type bootstrapNeo4jDriverCloser struct {

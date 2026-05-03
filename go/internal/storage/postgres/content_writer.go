@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -135,13 +136,29 @@ WHERE repo_id = $1
 
 // ContentWriter persists repo-local content rows into the canonical content store.
 type ContentWriter struct {
-	db  ExecQueryer
-	Now func() time.Time
+	db              ExecQueryer
+	entityBatchSize int
+	Now             func() time.Time
+	Logger          *slog.Logger
 }
 
 // NewContentWriter constructs a Postgres-backed canonical content writer.
 func NewContentWriter(db ExecQueryer) ContentWriter {
 	return ContentWriter{db: db}
+}
+
+// WithLogger returns a copy that emits per-stage write timings to logger.
+func (w ContentWriter) WithLogger(logger *slog.Logger) ContentWriter {
+	w.Logger = logger
+	return w
+}
+
+// WithEntityBatchSize returns a copy that uses size for content-entity upsert batches.
+func (w ContentWriter) WithEntityBatchSize(size int) ContentWriter {
+	if size > 0 {
+		w.entityBatchSize = size
+	}
+	return w
 }
 
 // preparedFileRow holds prepared file record values for batched insertion.
@@ -189,6 +206,7 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 	}
 
 	indexedAt := w.now()
+	filePrepareStart := time.Now()
 	result := content.Result{
 		ScopeID:      cloned.ScopeID,
 		GenerationID: cloned.GenerationID,
@@ -206,6 +224,9 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 		if record.Deleted {
 			if _, err := w.db.ExecContext(ctx, deleteContentEntityQuery, cloned.RepoID, record.Path); err != nil {
 				return content.Result{}, fmt.Errorf("delete content_entities for %q: %w", record.Path, err)
+			}
+			if err := w.deleteContentReferences(ctx, cloned.RepoID, record.Path); err != nil {
+				return content.Result{}, fmt.Errorf("delete content_file_references for %q: %w", record.Path, err)
 			}
 			if _, err := w.db.ExecContext(ctx, deleteContentFileQuery, cloned.RepoID, record.Path); err != nil {
 				return content.Result{}, fmt.Errorf("delete content_files for %q: %w", record.Path, err)
@@ -254,13 +275,23 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 			iacRelevant:     iacRelevant,
 		})
 	}
+	w.logStage(ctx, cloned, "prepare_files", filePrepareStart,
+		"row_count", len(fileUpserts),
+		"deleted_count", result.DeletedCount,
+	)
 
 	// Batch upsert file records
+	fileUpsertStart := time.Now()
 	if err := w.upsertContentFileBatches(ctx, fileUpserts, indexedAt); err != nil {
 		return content.Result{}, err
 	}
+	w.logStage(ctx, cloned, "upsert_files", fileUpsertStart,
+		"row_count", len(fileUpserts),
+		"batch_count", contentBatchCount(len(fileUpserts), contentFileBatchSize),
+	)
 
 	// Process entity records: handle deletes first, then batch upserts
+	entityPrepareStart := time.Now()
 	var entityUpserts []preparedEntityRow
 	for _, entity := range cloned.Entities {
 		if strings.TrimSpace(entity.EntityID) == "" {
@@ -322,11 +353,20 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 			metadataJSON:    metadataJSON,
 		})
 	}
+	w.logStage(ctx, cloned, "prepare_entities", entityPrepareStart,
+		"row_count", len(entityUpserts),
+		"deleted_count", result.DeletedCount,
+	)
 
 	// Batch upsert entity records
+	entityUpsertStart := time.Now()
 	if err := w.upsertContentEntityBatches(ctx, entityUpserts, indexedAt); err != nil {
 		return content.Result{}, err
 	}
+	w.logStage(ctx, cloned, "upsert_entities", entityUpsertStart,
+		"row_count", len(entityUpserts),
+		"batch_count", contentBatchCount(len(entityUpserts), w.effectiveEntityBatchSize()),
+	)
 
 	return result, nil
 }
@@ -336,6 +376,44 @@ func (w ContentWriter) now() time.Time {
 		return w.Now().UTC()
 	}
 	return time.Now().UTC()
+}
+
+// effectiveEntityBatchSize returns the configured entity batch size or the safe default.
+func (w ContentWriter) effectiveEntityBatchSize() int {
+	if w.entityBatchSize > 0 {
+		return w.entityBatchSize
+	}
+	return contentEntityBatchSize
+}
+
+// logStage records the coarse write-stage ledger for repo-scale content-store diagnosis.
+func (w ContentWriter) logStage(
+	ctx context.Context,
+	materialization content.Materialization,
+	stage string,
+	start time.Time,
+	attrs ...any,
+) {
+	if w.Logger == nil {
+		return
+	}
+	logAttrs := []any{
+		"stage", stage,
+		"scope_id", materialization.ScopeID,
+		"generation_id", materialization.GenerationID,
+		"repo_id", materialization.RepoID,
+		"duration_seconds", time.Since(start).Seconds(),
+	}
+	logAttrs = append(logAttrs, attrs...)
+	w.Logger.InfoContext(ctx, "content writer stage completed", logAttrs...)
+}
+
+// contentBatchCount returns how many bounded INSERT statements a row set needs.
+func contentBatchCount(rowCount, batchSize int) int {
+	if rowCount <= 0 || batchSize <= 0 {
+		return 0
+	}
+	return (rowCount + batchSize - 1) / batchSize
 }
 
 // upsertContentFileBatches persists file records using batched multi-row INSERT statements.
@@ -356,6 +434,10 @@ func (w ContentWriter) upsertContentFileBatches(ctx context.Context, rows []prep
 func (w ContentWriter) upsertContentFileBatch(ctx context.Context, batch []preparedFileRow, indexedAt time.Time) error {
 	if len(batch) == 0 {
 		return nil
+	}
+
+	if err := w.deleteContentReferenceBatch(ctx, batch); err != nil {
+		return err
 	}
 
 	args := make([]any, 0, len(batch)*columnsPerContentFile)
@@ -393,13 +475,18 @@ func (w ContentWriter) upsertContentFileBatch(ctx context.Context, batch []prepa
 		return fmt.Errorf("upsert content_files batch (%d files): %w", len(batch), err)
 	}
 
+	if err := w.upsertContentReferenceBatch(ctx, batch, indexedAt); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // upsertContentEntityBatches persists entity records using batched multi-row INSERT statements.
 func (w ContentWriter) upsertContentEntityBatches(ctx context.Context, rows []preparedEntityRow, indexedAt time.Time) error {
-	for i := 0; i < len(rows); i += contentEntityBatchSize {
-		end := i + contentEntityBatchSize
+	batchSize := w.effectiveEntityBatchSize()
+	for i := 0; i < len(rows); i += batchSize {
+		end := i + batchSize
 		if end > len(rows) {
 			end = len(rows)
 		}

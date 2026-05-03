@@ -13,8 +13,8 @@ func TestBootstrapDefinitionsAreOrderedAndComplete(t *testing.T) {
 	t.Parallel()
 
 	defs := BootstrapDefinitions()
-	if len(defs) != 15 {
-		t.Fatalf("BootstrapDefinitions() len = %d, want 15", len(defs))
+	if len(defs) != 16 {
+		t.Fatalf("BootstrapDefinitions() len = %d, want 16", len(defs))
 	}
 
 	wantNames := []string{
@@ -33,6 +33,7 @@ func TestBootstrapDefinitionsAreOrderedAndComplete(t *testing.T) {
 		"graph_projection_phase_repair_queue",
 		"workflow_control_plane",
 		"workflow_coordinator_state",
+		"iac_reachability",
 	}
 	for i, want := range wantNames {
 		if defs[i].Name != want {
@@ -69,8 +70,97 @@ func TestBootstrapDefinitionsIncludeContentStoreTables(t *testing.T) {
 	if !strings.Contains(contentStore.SQL, "CREATE TABLE IF NOT EXISTS content_entities") {
 		t.Fatal("content_store SQL missing content_entities table")
 	}
+	if !strings.Contains(contentStore.SQL, "CREATE TABLE IF NOT EXISTS content_file_references") {
+		t.Fatal("content_store SQL missing content_file_references table")
+	}
+	if !strings.Contains(contentStore.SQL, "content_file_references_lookup_idx") {
+		t.Fatal("content_store SQL missing content file reference lookup index")
+	}
 	if !strings.Contains(contentStore.SQL, "metadata JSONB NOT NULL DEFAULT '{}'::jsonb") {
 		t.Fatal("content_store SQL missing content_entities metadata jsonb column")
+	}
+	if !strings.Contains(contentStore.SQL, "content_files_content_trgm_idx") {
+		t.Fatal("content_store SQL missing content_files trigram index")
+	}
+	if !strings.Contains(contentStore.SQL, "content_entities_source_trgm_idx") {
+		t.Fatal("content_store SQL missing content_entities trigram index")
+	}
+}
+
+func TestBootstrapDefinitionsIncludeFrameworkRouteFactIndex(t *testing.T) {
+	t.Parallel()
+
+	var facts Definition
+	for _, def := range BootstrapDefinitions() {
+		if def.Name == "fact_records" {
+			facts = def
+			break
+		}
+	}
+	if facts.Name == "" {
+		t.Fatal("fact_records definition missing")
+	}
+	for _, want := range []string{
+		"fact_records_framework_routes_repo_path_idx",
+		"(payload->>'repo_id')",
+		"(payload->>'relative_path')",
+		"payload->'parsed_file_data'->'framework_semantics' IS NOT NULL",
+	} {
+		if !strings.Contains(facts.SQL, want) {
+			t.Fatalf("fact_records SQL missing %q", want)
+		}
+	}
+}
+
+func TestBootstrapDefinitionsWithoutContentSearchIndexesKeepsLookupIndexes(t *testing.T) {
+	t.Parallel()
+
+	var contentStore Definition
+	for _, def := range BootstrapDefinitionsWithoutContentSearchIndexes() {
+		if def.Name == "content_store" {
+			contentStore = def
+			break
+		}
+	}
+	if contentStore.Name == "" {
+		t.Fatal("content_store definition missing")
+	}
+	if !strings.Contains(contentStore.SQL, "CREATE TABLE IF NOT EXISTS content_entities") {
+		t.Fatal("content_store SQL missing content_entities table")
+	}
+	if !strings.Contains(contentStore.SQL, "content_entities_repo_idx") {
+		t.Fatal("content_store SQL missing content entity lookup index")
+	}
+	if !strings.Contains(contentStore.SQL, "content_file_references_lookup_idx") {
+		t.Fatal("content_store SQL missing content file reference lookup index")
+	}
+	if strings.Contains(contentStore.SQL, "content_files_content_trgm_idx") {
+		t.Fatal("content_store SQL includes content_files trigram index")
+	}
+	if strings.Contains(contentStore.SQL, "content_entities_source_trgm_idx") {
+		t.Fatal("content_store SQL includes content_entities trigram index")
+	}
+}
+
+func TestEnsureContentSearchIndexesAppliesOnlyTrigramIndexes(t *testing.T) {
+	t.Parallel()
+
+	exec := &recordingExecutor{}
+	if err := EnsureContentSearchIndexes(context.Background(), exec); err != nil {
+		t.Fatalf("EnsureContentSearchIndexes() error = %v, want nil", err)
+	}
+	if len(exec.statements) != 1 {
+		t.Fatalf("EnsureContentSearchIndexes() statements = %d, want 1", len(exec.statements))
+	}
+	statement := exec.statements[0]
+	if !strings.Contains(statement, "content_files_content_trgm_idx") {
+		t.Fatal("content search index SQL missing file trigram index")
+	}
+	if !strings.Contains(statement, "content_entities_source_trgm_idx") {
+		t.Fatal("content search index SQL missing entity trigram index")
+	}
+	if strings.Contains(statement, "CREATE TABLE") {
+		t.Fatal("content search index SQL unexpectedly creates tables")
 	}
 }
 

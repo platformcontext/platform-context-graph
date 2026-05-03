@@ -19,6 +19,8 @@ func TestProjectorQueueClaimIncludesExpiredLeaseReclaimPredicates(t *testing.T) 
 					"git",
 					"repository",
 					"",
+					"",
+					false,
 					"git",
 					"repo-123",
 					"generation-456",
@@ -49,9 +51,14 @@ func TestProjectorQueueClaimIncludesExpiredLeaseReclaimPredicates(t *testing.T) 
 
 	query := db.queries[0].query
 	for _, want := range []string{
-		"status IN ('pending', 'retrying')",
-		"claim_until IS NULL OR claim_until <= $1",
-		"visible_at IS NULL OR visible_at <= $1",
+		"status IN ('pending', 'retrying', 'claimed', 'running')",
+		"work.claim_until IS NULL OR work.claim_until <= $1",
+		"work.visible_at IS NULL OR work.visible_at <= $1",
+		"NOT EXISTS (",
+		"inflight.scope_id = work.scope_id",
+		"inflight.status IN ('claimed', 'running')",
+		"inflight.claim_until > $1",
+		"prior_generation.generation_id <> claimed.generation_id",
 		"FOR UPDATE SKIP LOCKED",
 	} {
 		if !strings.Contains(query, want) {
@@ -96,9 +103,15 @@ func TestReducerQueueClaimIncludesExpiredLeaseReclaimPredicates(t *testing.T) {
 
 	query := db.queries[0].query
 	for _, want := range []string{
-		"status IN ('pending', 'retrying')",
+		"status IN ('pending', 'retrying', 'claimed', 'running')",
 		"claim_until IS NULL OR claim_until <= $1",
 		"visible_at IS NULL OR visible_at <= $1",
+		"NOT EXISTS (",
+		"inflight.conflict_domain = fact_work_items.conflict_domain",
+		"COALESCE(inflight.conflict_key, inflight.scope_id) = COALESCE(fact_work_items.conflict_key, fact_work_items.scope_id)",
+		"inflight.work_item_id <> fact_work_items.work_item_id",
+		"inflight.status IN ('claimed', 'running')",
+		"inflight.claim_until > $1",
 		"FOR UPDATE SKIP LOCKED",
 	} {
 		if !strings.Contains(query, want) {

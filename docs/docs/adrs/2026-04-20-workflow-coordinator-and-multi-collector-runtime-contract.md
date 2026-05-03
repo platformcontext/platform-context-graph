@@ -436,7 +436,7 @@ Illustrative shape:
 
 ```yaml
 collectors:
-  - id: git-boatsgroup
+  - id: git-private-org
     kind: git
     provider: github
     enabled: true
@@ -444,7 +444,7 @@ collectors:
     mode: continuous
     config:
       orgs:
-        - boatsgroup
+        - private-org
 
   - id: aws-prod
     kind: aws

@@ -8,12 +8,15 @@ import (
 
 func loadServiceDeploymentEvidence(
 	ctx context.Context,
-	graph GraphReader,
-	content *ContentReader,
+	graph GraphQuery,
+	content ContentStore,
 	workloadContext map[string]any,
 ) (map[string]any, error) {
 	if content == nil || len(workloadContext) == 0 {
 		return nil, nil
+	}
+	if graphEvidence := mapValue(workloadContext, "deployment_evidence"); len(graphEvidence) > 0 {
+		return graphEvidence, nil
 	}
 
 	repoID := safeStr(workloadContext, "repo_id")
@@ -41,6 +44,7 @@ func loadServiceDeploymentEvidence(
 		repoID,
 		repoName,
 		files,
+		mapSliceValue(workloadContext, "infrastructure"),
 		overview,
 	)
 	if err != nil {
@@ -53,6 +57,34 @@ func loadServiceDeploymentEvidence(
 		overview["relationship_overview"] = relationshipOverview
 	}
 	return buildServiceDeploymentEvidenceFromOverview(overview), nil
+}
+
+func queryServiceGraphDeploymentEvidence(ctx context.Context, graph GraphQuery, content ContentStore, repoID string) (map[string]any, error) {
+	if graph == nil || strings.TrimSpace(repoID) == "" {
+		return nil, nil
+	}
+	return queryRepoDeploymentEvidence(ctx, graph, content, map[string]any{"repo_id": repoID})
+}
+
+func queryServiceGraphAPISurface(ctx context.Context, graph GraphQuery, repoID string) map[string]any {
+	if graph == nil || strings.TrimSpace(repoID) == "" {
+		return nil
+	}
+	return queryRepoAPISurface(ctx, graph, map[string]any{"repo_id": repoID})
+}
+
+func mergeServiceDeploymentEvidence(contentEvidence map[string]any, graphEvidence map[string]any) map[string]any {
+	if len(contentEvidence) == 0 {
+		return graphEvidence
+	}
+	if len(graphEvidence) == 0 {
+		return contentEvidence
+	}
+	merged := cloneAnyMap(contentEvidence)
+	for key, value := range graphEvidence {
+		merged[key] = value
+	}
+	return merged
 }
 
 func buildServiceDeploymentEvidenceFromOverview(overview map[string]any) map[string]any {

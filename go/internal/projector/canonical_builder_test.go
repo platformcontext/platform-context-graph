@@ -98,6 +98,51 @@ func TestBuildCanonicalMaterializationExtractsRepository(t *testing.T) {
 	}
 }
 
+func TestBuildCanonicalMaterializationMarksFirstGenerationFromScope(t *testing.T) {
+	t.Parallel()
+
+	sc := testScope()
+	gen := testGeneration()
+
+	result := buildCanonicalMaterialization(sc, gen, nil)
+	if !result.FirstGeneration {
+		t.Fatal("FirstGeneration = false, want true when scope has no previous generation")
+	}
+
+	sc.ActiveGenerationID = "gen-previous"
+	sc.PreviousGenerationExists = true
+	result = buildCanonicalMaterialization(sc, gen, nil)
+	if result.FirstGeneration {
+		t.Fatal("FirstGeneration = true, want false when scope has a prior generation")
+	}
+}
+
+func TestBuildCanonicalMaterializationDoesNotInferPriorGenerationFromActiveGenerationID(t *testing.T) {
+	t.Parallel()
+
+	sc := testScope()
+	sc.ActiveGenerationID = "gen-active-from-fixture"
+	gen := testGeneration()
+
+	result := buildCanonicalMaterialization(sc, gen, nil)
+	if !result.FirstGeneration {
+		t.Fatal("FirstGeneration = false, want true unless PreviousGenerationExists is explicit")
+	}
+}
+
+func TestBuildCanonicalMaterializationDoesNotTreatFailedPriorGenerationAsFirst(t *testing.T) {
+	t.Parallel()
+
+	sc := testScope()
+	sc.PreviousGenerationExists = true
+	gen := testGeneration()
+
+	result := buildCanonicalMaterialization(sc, gen, nil)
+	if result.FirstGeneration {
+		t.Fatal("FirstGeneration = true, want false when a failed prior generation exists without an active generation")
+	}
+}
+
 func TestBuildCanonicalMaterializationExtractsFiles(t *testing.T) {
 	t.Parallel()
 
@@ -1339,6 +1384,67 @@ func TestExtractEntitiesHandlesPascalCaseEntityTypes(t *testing.T) {
 	for i, want := range expectedLabels {
 		if result.Entities[i].Label != want {
 			t.Errorf("Entities[%d].Label = %q, want %q", i, result.Entities[i].Label, want)
+		}
+	}
+}
+
+func TestCanonicalMaterializationOwnsSemanticEntityLabelsExceptModule(t *testing.T) {
+	t.Parallel()
+
+	sc := testScope()
+	gen := testGeneration()
+	envelopes := []facts.Envelope{
+		{
+			FactID:   "r-1",
+			ScopeID:  "scope-1",
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-abc",
+				"path":    "/repos/my-project",
+			},
+		},
+	}
+	canonicalOwnedSemanticLabels := []string{
+		"Annotation",
+		"Typedef",
+		"TypeAlias",
+		"TypeAnnotation",
+		"Component",
+		"ImplBlock",
+		"Protocol",
+		"ProtocolImplementation",
+		"Variable",
+		"Function",
+	}
+	for i, label := range canonicalOwnedSemanticLabels {
+		envelopes = append(envelopes, facts.Envelope{
+			FactID:   fmt.Sprintf("e-%02d", i),
+			ScopeID:  "scope-1",
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"entity_id":     fmt.Sprintf("entity-%02d", i),
+				"entity_type":   label,
+				"entity_name":   fmt.Sprintf("Entity%d", i),
+				"relative_path": "src/semantic.go",
+				"start_line":    i + 1,
+				"end_line":      i + 1,
+				"language":      "go",
+				"repo_id":       "repo-abc",
+			},
+		})
+	}
+
+	result := buildCanonicalMaterialization(sc, gen, envelopes)
+	gotLabels := make(map[string]bool, len(result.Entities))
+	for _, entity := range result.Entities {
+		gotLabels[entity.Label] = true
+		if entity.FilePath == "" {
+			t.Fatalf("entity %q has empty FilePath; source-local must own File containment", entity.EntityID)
+		}
+	}
+	for _, label := range canonicalOwnedSemanticLabels {
+		if !gotLabels[label] {
+			t.Fatalf("canonical materialization did not emit source-local entity label %q; labels=%v", label, gotLabels)
 		}
 	}
 }

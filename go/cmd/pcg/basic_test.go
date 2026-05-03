@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -38,6 +40,107 @@ func TestRunQueryPostsLanguageQueryRequest(t *testing.T) {
 	}
 	if got, want := gotBody["query"], "Service"; got != want {
 		t.Fatalf("body[query] = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunStatsPreservesRepositorySelector(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		_, _ = w.Write([]byte(`{"repository":{}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("PCG_SERVICE_URL", server.URL)
+
+	if err := runStats(&cobra.Command{}, []string{"acme/payments"}); err != nil {
+		t.Fatalf("runStats() error = %v, want nil", err)
+	}
+	if got, want := gotPath, "/api/v0/repositories/"+url.PathEscape("acme/payments")+"/stats"; got != want {
+		t.Fatalf("request path = %q, want %q", got, want)
+	}
+}
+
+func TestRunIndexPassesDiscoveryReportEnvToBootstrap(t *testing.T) {
+	originalLookPath := indexLookPath
+	originalExec := indexExec
+	t.Cleanup(func() {
+		indexLookPath = originalLookPath
+		indexExec = originalExec
+	})
+
+	indexLookPath = func(file string) (string, error) {
+		if file != "pcg-bootstrap-index" {
+			t.Fatalf("indexLookPath(%q), want pcg-bootstrap-index", file)
+		}
+		return "/bin/pcg-bootstrap-index", nil
+	}
+
+	repoPath := t.TempDir()
+	reportPath := filepath.Join(t.TempDir(), "reports", "advisory.json")
+	var gotArgs []string
+	var gotEnv []string
+	indexExec = func(binary string, args []string, env []string) error {
+		if binary != "/bin/pcg-bootstrap-index" {
+			t.Fatalf("binary = %q, want /bin/pcg-bootstrap-index", binary)
+		}
+		gotArgs = append([]string(nil), args...)
+		gotEnv = append([]string(nil), env...)
+		return nil
+	}
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("force", false, "")
+	cmd.Flags().String("discovery-report", "", "")
+	if err := cmd.Flags().Set("discovery-report", reportPath); err != nil {
+		t.Fatalf("Set(discovery-report) error = %v, want nil", err)
+	}
+
+	if err := runIndex(cmd, []string{repoPath}); err != nil {
+		t.Fatalf("runIndex() error = %v, want nil", err)
+	}
+
+	if got, want := strings.Join(gotArgs, " "), "pcg-bootstrap-index --path "+repoPath; got != want {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+	wantReportPath, err := filepath.Abs(reportPath)
+	if err != nil {
+		t.Fatalf("Abs(reportPath) error = %v, want nil", err)
+	}
+	if !envContains(gotEnv, "PCG_DISCOVERY_REPORT="+wantReportPath) {
+		t.Fatalf("env missing PCG_DISCOVERY_REPORT=%q; env=%v", wantReportPath, gotEnv)
+	}
+}
+
+func envContains(env []string, want string) bool {
+	for _, item := range env {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRunStatsCanonicalizesExistingPathSelector(t *testing.T) {
+	absolutePath, err := filepath.Abs(t.TempDir())
+	if err != nil {
+		t.Fatalf("filepath.Abs() error = %v, want nil", err)
+	}
+
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		_, _ = w.Write([]byte(`{"repository":{}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("PCG_SERVICE_URL", server.URL)
+
+	if err := runStats(&cobra.Command{}, []string{absolutePath}); err != nil {
+		t.Fatalf("runStats() error = %v, want nil", err)
+	}
+	if got, want := gotPath, "/api/v0/repositories/"+url.PathEscape(absolutePath)+"/stats"; got != want {
+		t.Fatalf("request path = %q, want %q", got, want)
 	}
 }
 

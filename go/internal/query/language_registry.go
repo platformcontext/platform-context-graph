@@ -13,7 +13,7 @@ var supportedLanguages = map[string]bool{
 	"elixir": true, "go": true, "haskell": true, "java": true,
 	"javascript": true, "jsx": true, "hcl": true, "kotlin": true,
 	"perl": true, "php": true, "python": true, "ruby": true,
-	"rust": true, "scala": true, "swift": true,
+	"rust": true, "scala": true, "sql": true, "swift": true,
 	"typescript": true, "tsx": true,
 }
 
@@ -37,6 +37,7 @@ var languageFileExtensions = map[string][]string{
 	"ruby":       {".rb"},
 	"rust":       {".rs"},
 	"scala":      {".scala", ".sc"},
+	"sql":        {".sql"},
 	"swift":      {".swift"},
 	"typescript": {".ts", ".tsx"},
 }

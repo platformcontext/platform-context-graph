@@ -3,14 +3,16 @@ package query
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
-	"strings"
 )
 
 // EntityHandler exposes HTTP routes for entity queries.
 type EntityHandler struct {
-	Neo4j   GraphReader
-	Content *ContentReader
+	Neo4j   GraphQuery
+	Content ContentStore
+	Profile QueryProfile
+	Logger  *slog.Logger
 }
 
 // Mount registers all entity routes on the given mux.
@@ -21,6 +23,13 @@ func (h *EntityHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v0/workloads/{workload_id}/story", h.getWorkloadStory)
 	mux.HandleFunc("GET /api/v0/services/{service_name}/context", h.getServiceContext)
 	mux.HandleFunc("GET /api/v0/services/{service_name}/story", h.getServiceStory)
+}
+
+func (h *EntityHandler) profile() QueryProfile {
+	if h == nil {
+		return ProfileProduction
+	}
+	return NormalizeQueryProfile(string(h.Profile))
 }
 
 // resolveEntityRequest is the request body for entity resolution.
@@ -43,6 +52,14 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 	if req.Name == "" {
 		WriteError(w, http.StatusBadRequest, "name is required")
 		return
+	}
+	if req.RepoID != "" {
+		resolvedRepoID, err := resolveRepositorySelectorExact(r.Context(), h.Neo4j, h.Content, req.RepoID)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.RepoID = resolvedRepoID
 	}
 
 	cypher := `MATCH (e) WHERE e.name = $name`
@@ -119,7 +136,7 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 	for i := range entities {
 		attachSemanticSummary(entities[i])
 	}
-	if err := hydrateResolvedEntityRepoIdentity(r.Context(), h.Neo4j, entities); err != nil {
+	if err := hydrateResolvedEntityRepoIdentity(r.Context(), h.Neo4j, h.Content, entities); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("hydrate entity repo identity: %v", err))
 		return
 	}
@@ -201,7 +218,11 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 	if metadata := graphResultMetadata(row); len(metadata) > 0 {
 		response["metadata"] = metadata
 	}
-	enriched, err := h.enrichEntityResultsWithContentMetadata(r.Context(), []map[string]any{response}, StringVal(row, "repo_id"), StringVal(row, "name"), 1)
+	if err := hydrateResolvedEntityRepoIdentity(r.Context(), h.Neo4j, h.Content, []map[string]any{response}); err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("hydrate entity repo identity: %v", err))
+		return
+	}
+	enriched, err := h.enrichEntityResultsWithContentMetadata(r.Context(), []map[string]any{response}, StringVal(response, "repo_id"), StringVal(row, "name"), 1)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich entity context: %v", err))
 		return
@@ -364,7 +385,11 @@ func (h *EntityHandler) getWorkloadContext(w http.ResponseWriter, r *http.Reques
 		WriteError(w, http.StatusNotFound, "workload not found")
 		return
 	}
-	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
+		IncludeRelatedModuleUsage: true,
+		Logger:                    h.Logger,
+		Operation:                 "workload_context",
+	}); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich workload context: %v", err))
 		return
 	}
@@ -390,7 +415,11 @@ func (h *EntityHandler) getWorkloadStory(w http.ResponseWriter, r *http.Request)
 		WriteError(w, http.StatusNotFound, "workload not found")
 		return
 	}
-	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
+		IncludeRelatedModuleUsage: true,
+		Logger:                    h.Logger,
+		Operation:                 "workload_story",
+	}); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich workload story: %v", err))
 		return
 	}
@@ -405,17 +434,27 @@ func (h *EntityHandler) getWorkloadStory(w http.ResponseWriter, r *http.Request)
 
 // getServiceContext retrieves the context for a service by name.
 func (h *EntityHandler) getServiceContext(w http.ResponseWriter, r *http.Request) {
+	if capabilityUnsupported(h.profile(), "platform_impact.context_overview") {
+		WriteContractError(
+			w,
+			r,
+			http.StatusNotImplemented,
+			"service context requires full platform context truth",
+			"unsupported_capability",
+			"platform_impact.context_overview",
+			h.profile(),
+			requiredProfile("platform_impact.context_overview"),
+		)
+		return
+	}
+
 	serviceName := PathParam(r, "service_name")
 	if serviceName == "" {
 		WriteError(w, http.StatusBadRequest, "service_name is required")
 		return
 	}
 
-	ctx, err := h.fetchWorkloadContext(
-		r.Context(),
-		serviceLookupWhereClause,
-		map[string]any{"service_name": serviceName},
-	)
+	ctx, err := h.fetchServiceWorkloadContext(r.Context(), serviceName, "service_context")
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -425,12 +464,16 @@ func (h *EntityHandler) getServiceContext(w http.ResponseWriter, r *http.Request
 		WriteError(w, http.StatusNotFound, "service not found")
 		return
 	}
-	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
+		IncludeRelatedModuleUsage: true,
+		Logger:                    h.Logger,
+		Operation:                 "service_context",
+	}); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich service context: %v", err))
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, ctx)
+	WriteSuccess(w, r, http.StatusOK, ctx, BuildTruthEnvelope(h.profile(), "platform_impact.context_overview", TruthBasisHybrid, "resolved from service context and platform evidence"))
 }
 
 // getServiceStory retrieves a narrative summary for a service.
@@ -441,11 +484,7 @@ func (h *EntityHandler) getServiceStory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ctx, err := h.fetchWorkloadContext(
-		r.Context(),
-		serviceLookupWhereClause,
-		map[string]any{"service_name": serviceName},
-	)
+	ctx, err := h.fetchServiceWorkloadContext(r.Context(), serviceName, "service_story")
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
 		return
@@ -455,197 +494,14 @@ func (h *EntityHandler) getServiceStory(w http.ResponseWriter, r *http.Request) 
 		WriteError(w, http.StatusNotFound, "service not found")
 		return
 	}
-	if err := enrichServiceQueryContext(r.Context(), h.Neo4j, h.Content, ctx); err != nil {
+	if err := enrichServiceQueryContextWithOptions(r.Context(), h.Neo4j, h.Content, ctx, serviceQueryEnrichmentOptions{
+		IncludeRelatedModuleUsage: true,
+		Logger:                    h.Logger,
+		Operation:                 "service_story",
+	}); err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich service story: %v", err))
 		return
 	}
 
 	WriteJSON(w, http.StatusOK, buildServiceStoryResponse(serviceName, ctx))
-}
-
-// fetchWorkloadContext queries Neo4j for workload context with a custom WHERE
-// clause. When the workload is linked to a repository, the response is enriched
-// with repository-level context: dependencies, infrastructure, and entry points.
-func (h *EntityHandler) fetchWorkloadContext(ctx context.Context, whereClause string, params map[string]any) (map[string]any, error) {
-	cypher := fmt.Sprintf(`
-		MATCH (w:Workload) WHERE %s
-		OPTIONAL MATCH (r:Repository)-[:DEFINES]->(w)
-		OPTIONAL MATCH (w)<-[:INSTANCE_OF]-(i:WorkloadInstance)
-		OPTIONAL MATCH (i)-[runsOn:RUNS_ON]->(p:Platform)
-		RETURN w.id as id, w.name as name, w.kind as kind,
-		       r.id as repo_id, r.name as repo_name,
-		       collect(DISTINCT {
-		           instance_id: i.id,
-		           platform_name: p.name,
-		           platform_kind: p.kind,
-		           environment: i.environment,
-		           materialization_confidence: i.materialization_confidence,
-		           materialization_provenance: i.materialization_provenance,
-		           platform_confidence: runsOn.confidence,
-		           platform_reason: runsOn.reason
-		       }) as instances
-	`, whereClause)
-
-	row, err := h.Neo4j.RunSingle(ctx, cypher, params)
-	if err != nil {
-		return nil, err
-	}
-
-	if row == nil {
-		return nil, nil
-	}
-
-	result := map[string]any{
-		"id":        StringVal(row, "id"),
-		"name":      StringVal(row, "name"),
-		"kind":      StringVal(row, "kind"),
-		"repo_id":   StringVal(row, "repo_id"),
-		"repo_name": StringVal(row, "repo_name"),
-		"instances": extractInstances(row),
-	}
-
-	// Enrich with repository-level context when the workload has a linked repo.
-	repoID := StringVal(row, "repo_id")
-	if repoID != "" {
-		repoParams := map[string]any{"repo_id": repoID}
-		result["dependencies"] = queryRepoDependencies(ctx, h.Neo4j, repoParams)
-		result["infrastructure"] = queryRepoInfrastructure(ctx, h.Neo4j, h.Content, repoParams)
-		result["entry_points"] = queryRepoEntryPoints(ctx, h.Neo4j, repoParams)
-	}
-
-	return result, nil
-}
-
-// extractRelationships converts the Neo4j relationships collection to typed structs.
-func extractRelationships(row map[string]any) []map[string]any {
-	return extractCollection(row, "relationships", func(m map[string]any) (map[string]any, bool) {
-		if relType := StringVal(m, "type"); relType != "" {
-			return map[string]any{
-				"type":        relType,
-				"target_name": StringVal(m, "target_name"),
-				"target_id":   StringVal(m, "target_id"),
-			}, true
-		}
-		return nil, false
-	})
-}
-
-// extractInstances converts the Neo4j instances collection to typed structs.
-func extractInstances(row map[string]any) []map[string]any {
-	return extractCollection(row, "instances", func(m map[string]any) (map[string]any, bool) {
-		if instID := StringVal(m, "instance_id"); instID != "" {
-			return map[string]any{
-				"instance_id":                instID,
-				"platform_name":              StringVal(m, "platform_name"),
-				"platform_kind":              StringVal(m, "platform_kind"),
-				"environment":                StringVal(m, "environment"),
-				"materialization_confidence": floatVal(m, "materialization_confidence"),
-				"materialization_provenance": StringSliceVal(m, "materialization_provenance"),
-				"platform_confidence":        floatVal(m, "platform_confidence"),
-				"platform_reason":            StringVal(m, "platform_reason"),
-			}, true
-		}
-		return nil, false
-	})
-}
-
-// extractCollection is a generic helper for extracting Neo4j collections.
-func extractCollection(row map[string]any, key string, transform func(map[string]any) (map[string]any, bool)) []map[string]any {
-	raw, ok := row[key]
-	if !ok || raw == nil {
-		return []map[string]any{}
-	}
-	items, ok := raw.([]any)
-	if !ok {
-		return []map[string]any{}
-	}
-	result := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		if m, ok := item.(map[string]any); ok {
-			if transformed, valid := transform(m); valid {
-				result = append(result, transformed)
-			}
-		}
-	}
-	return result
-}
-
-// buildWorkloadStory creates a narrative summary of a workload's deployment.
-func buildWorkloadStory(ctx map[string]any) string {
-	if ctx == nil {
-		return ""
-	}
-	name, kind, repoName := safeStr(ctx, "name"), safeStr(ctx, "kind"), safeStr(ctx, "repo_name")
-	story := "Workload " + name
-	if kind != "" {
-		story += " (kind: " + kind + ")"
-	}
-	if repoName != "" {
-		story += " is defined in repository " + repoName + "."
-	} else {
-		story += " has no linked repository."
-	}
-	instances, ok := ctx["instances"].([]map[string]any)
-	if !ok || len(instances) == 0 {
-		story += " No materialized workload instances found."
-		if observedEnvironments := StringSliceVal(ctx, "observed_config_environments"); len(observedEnvironments) > 0 {
-			story += " Observed config environments: " + strings.Join(observedEnvironments, ", ") + "."
-		}
-		if hostnames := hostnameLabels(mapSliceValue(ctx, "hostnames")); len(hostnames) > 0 {
-			story += " Public entrypoints: " + strings.Join(hostnames, ", ") + "."
-		}
-		if apiSurface := mapValue(ctx, "api_surface"); len(apiSurface) > 0 {
-			story += fmt.Sprintf(
-				" API surface exposes %d endpoint(s) across %d spec file(s).",
-				IntVal(apiSurface, "endpoint_count"),
-				IntVal(apiSurface, "spec_count"),
-			)
-			if docsRoutes := StringSliceVal(apiSurface, "docs_routes"); len(docsRoutes) > 0 {
-				story += " Docs routes: " + strings.Join(docsRoutes, ", ") + "."
-			}
-		}
-		return story
-	}
-	instCount := "1 instance"
-	if len(instances) > 1 {
-		instCount = fmt.Sprintf("%d instances", len(instances))
-	}
-	story += " It is deployed as " + instCount + ":"
-	for _, inst := range instances {
-		env, platform, platformKind := safeStr(inst, "environment"), safeStr(inst, "platform_name"), safeStr(inst, "platform_kind")
-		story += " " + env + " on " + platform
-		if platformKind != "" {
-			story += " (" + platformKind + ")"
-		}
-		story += ";"
-	}
-	if hostnames := hostnameLabels(mapSliceValue(ctx, "hostnames")); len(hostnames) > 0 {
-		story += " Public entrypoints: " + strings.Join(hostnames, ", ") + "."
-	}
-	if apiSurface := mapValue(ctx, "api_surface"); len(apiSurface) > 0 {
-		story += fmt.Sprintf(
-			" API surface exposes %d endpoint(s) across %d spec file(s).",
-			IntVal(apiSurface, "endpoint_count"),
-			IntVal(apiSurface, "spec_count"),
-		)
-		if docsRoutes := StringSliceVal(apiSurface, "docs_routes"); len(docsRoutes) > 0 {
-			story += " Docs routes: " + strings.Join(docsRoutes, ", ") + "."
-		}
-	}
-	if consumers := mapSliceValue(ctx, "consumer_repositories"); len(consumers) > 0 {
-		story += fmt.Sprintf(" Observed %d consumer repos from graph and content evidence.", len(consumers))
-	}
-	if provisioningChains := mapSliceValue(ctx, "provisioning_source_chains"); len(provisioningChains) > 0 {
-		story += fmt.Sprintf(" Provisioning chains span %d repo(s).", len(provisioningChains))
-	}
-	return story
-}
-
-// safeStr extracts a string from a map, filtering out empty and nil values.
-func safeStr(m map[string]any, key string) string {
-	v := fmt.Sprintf("%v", m[key])
-	if v == "" || v == "<nil>" {
-		return ""
-	}
-	return v
 }

@@ -83,7 +83,9 @@ func selectGitHubRepositoryIDs(
 	}
 }
 
-func discoverFilesystemRepositoryIDs(filesystemRoot string) ([]string, error) {
+// DiscoverFilesystemRepositoryIDs returns repository IDs discovered under a
+// filesystem source root using the same rules as the filesystem collector.
+func DiscoverFilesystemRepositoryIDs(filesystemRoot string) ([]string, error) {
 	root, err := filepath.Abs(strings.TrimSpace(filesystemRoot))
 	if err != nil {
 		return nil, fmt.Errorf("resolve filesystem root %q: %w", filesystemRoot, err)
@@ -121,28 +123,47 @@ func discoverFilesystemRepositoryIDs(filesystemRoot string) ([]string, error) {
 	return repoIDs, nil
 }
 
-func discoverRepoRoots(root string) ([]string, error) {
-	if repositoryRootLike(root) {
-		return []string{root}, nil
-	}
+func discoverFilesystemRepositoryIDs(filesystemRoot string) ([]string, error) {
+	return DiscoverFilesystemRepositoryIDs(filesystemRoot)
+}
 
+func discoverRepoRoots(root string) ([]string, error) {
+	repoRoots, _, err := discoverRepoRootsWithGitPriority(root)
+	return repoRoots, err
+}
+
+func discoverRepoRootsWithGitPriority(root string) ([]string, bool, error) {
+	if hasGitMarker(root) {
+		return []string{root}, true, nil
+	}
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return nil, fmt.Errorf("read filesystem root %q: %w", root, err)
+		return nil, false, fmt.Errorf("read filesystem root %q: %w", root, err)
 	}
 	repoRoots := make([]string, 0)
+	foundGitBackedChild := false
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		child := filepath.Join(root, entry.Name())
-		discovered, err := discoverRepoRoots(child)
-		if err != nil {
-			return nil, err
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
 		}
+		child := filepath.Join(root, entry.Name())
+		discovered, childGitBacked, err := discoverRepoRootsWithGitPriority(child)
+		if err != nil {
+			return nil, false, err
+		}
+		foundGitBackedChild = foundGitBackedChild || childGitBacked
 		repoRoots = append(repoRoots, discovered...)
 	}
-	return repoRoots, nil
+	if foundGitBackedChild {
+		return repoRoots, true, nil
+	}
+	if repositoryRootLikeFromEntries(entries) {
+		return []string{root}, false, nil
+	}
+	return repoRoots, false, nil
 }
 
 func repositoryRootLike(path string) bool {
@@ -150,11 +171,15 @@ func repositoryRootLike(path string) bool {
 		return true
 	}
 
-	childDirectories := 0
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return false
 	}
+	return repositoryRootLikeFromEntries(entries)
+}
+
+func repositoryRootLikeFromEntries(entries []os.DirEntry) bool {
+	childDirectories := 0
 	for _, entry := range entries {
 		if entry.IsDir() {
 			childDirectories++

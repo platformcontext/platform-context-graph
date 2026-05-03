@@ -15,6 +15,12 @@ understand who depends on it. Under the hood this routes to
 pcg analyze callers process_payment
 ```
 
+Add `--transitive` to walk indirect callers and `--depth` to cap the traversal:
+
+```bash
+pcg analyze callers process_payment --transitive --depth 7
+```
+
 ### `analyze calls`
 
 The reverse — show what a function calls (its callees). Under the hood this
@@ -23,6 +29,12 @@ routes to `POST /api/v0/code/relationships` with `direction=outgoing` and
 
 ```bash
 pcg analyze calls process_payment
+```
+
+Use the same flags for indirect callees:
+
+```bash
+pcg analyze calls process_payment --transitive --depth 7
 ```
 
 ### `analyze chain`
@@ -63,13 +75,22 @@ pcg analyze complexity
 
 ### `analyze dead-code`
 
-Find entities with zero incoming `CALLS`, `IMPORTS`, or `REFERENCES` edges.
-Use `--repo-id` to scope the scan to one canonical repository, `--exclude` to
-skip decorator-owned entry points such as route handlers, and `--fail-on-found`
-to turn the command into a CI gate.
+Find graph-backed dead-code candidates after the current default exclusions for
+Go entrypoints, direct Go Cobra/stdlib-HTTP/controller-runtime framework roots,
+Go exported public-package symbols, test files, and obvious generated code are
+applied. Exported Go symbols remain candidates under `internal/`, `cmd/`, and
+`vendor/`; only public-package exports are treated as default roots. The result
+is intentionally `derived` today until broader framework, public-API, and
+reflection root models land. Use `--repo` to scope the scan to one repository
+by ID, name, slug, or path. `--repo-id` remains as a compatibility alias for
+canonical IDs. Use `--exclude` to skip decorator-owned entry points such as
+route handlers, `--limit` to raise or lower the bounded result window, and
+`--fail-on-found` to turn the command into a CI gate. The response includes
+`truncated=true` when more dead-code candidates existed than the bounded result
+set returned.
 
 ```bash
-pcg analyze dead-code --repo-id repository:r_ab12cd34 --exclude "@route" --fail-on-found
+pcg analyze dead-code --repo payments --limit 200 --exclude "@route" --fail-on-found
 ```
 
 ### `analyze overrides`

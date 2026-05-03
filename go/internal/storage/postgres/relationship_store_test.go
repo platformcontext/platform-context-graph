@@ -263,6 +263,72 @@ func TestRelationshipStoreGetResolvedRelationshipsForGeneration(t *testing.T) {
 	}
 }
 
+func TestRelationshipStoreGetResolvedRelationshipsForRepos(t *testing.T) {
+	t.Parallel()
+
+	db := newRelationshipTestDB()
+	store := NewRelationshipStore(db)
+	ctx := context.Background()
+
+	if err := store.ActivateResolutionGeneration(ctx, "gen-infra", "scope-infra"); err != nil {
+		t.Fatalf("ActivateResolutionGeneration(infra): %v", err)
+	}
+	if err := store.UpsertResolved(ctx, "gen-infra", []relationships.ResolvedRelationship{
+		{
+			SourceRepoID:     "repo-infra",
+			TargetRepoID:     "repo-api",
+			RelationshipType: relationships.RelProvisionsDependencyFor,
+			Confidence:       0.94,
+			EvidenceCount:    1,
+			Rationale:        "infra provisions api",
+			ResolutionSource: relationships.ResolutionSourceInferred,
+			Details:          map[string]any{"evidence_kinds": []any{"TERRAFORM_ECS_SERVICE"}},
+		},
+		{
+			SourceRepoID:     "repo-infra",
+			TargetRepoID:     "repo-other",
+			RelationshipType: relationships.RelProvisionsDependencyFor,
+			Confidence:       0.90,
+			EvidenceCount:    1,
+			Rationale:        "unrelated",
+			ResolutionSource: relationships.ResolutionSourceInferred,
+		},
+	}); err != nil {
+		t.Fatalf("UpsertResolved(infra): %v", err)
+	}
+
+	if err := store.ActivateResolutionGeneration(ctx, "gen-delivery", "scope-delivery"); err != nil {
+		t.Fatalf("ActivateResolutionGeneration(delivery): %v", err)
+	}
+	if err := store.UpsertResolved(ctx, "gen-delivery", []relationships.ResolvedRelationship{
+		{
+			SourceRepoID:     "repo-api",
+			TargetRepoID:     "repo-delivery",
+			RelationshipType: relationships.RelDeploysFrom,
+			Confidence:       0.96,
+			EvidenceCount:    1,
+			Rationale:        "api uses delivery workflow",
+			ResolutionSource: relationships.ResolutionSourceInferred,
+		},
+	}); err != nil {
+		t.Fatalf("UpsertResolved(delivery): %v", err)
+	}
+
+	result, err := store.GetResolvedRelationshipsForRepos(ctx, []string{"repo-api"})
+	if err != nil {
+		t.Fatalf("GetResolvedRelationshipsForRepos: %v", err)
+	}
+	if got, want := len(result), 2; got != want {
+		t.Fatalf("len = %d, want %d", got, want)
+	}
+	if !hasResolvedRelationship(result, "repo-infra", "repo-api", relationships.RelProvisionsDependencyFor) {
+		t.Fatalf("missing incoming provisioning relationship: %#v", result)
+	}
+	if !hasResolvedRelationship(result, "repo-api", "repo-delivery", relationships.RelDeploysFrom) {
+		t.Fatalf("missing outgoing deploys-from relationship: %#v", result)
+	}
+}
+
 func TestRelationshipStoreUpsertEvidenceFacts(t *testing.T) {
 	t.Parallel()
 
@@ -335,6 +401,45 @@ func TestRelationshipStoreUpsertEvidenceFactsUsesStableContentIdentity(t *testin
 
 	if got, want := len(db.evidenceFacts), 2; got != want {
 		t.Fatalf("evidence count after reordered replay = %d, want %d", got, want)
+	}
+}
+
+func TestRelationshipStoreUpsertEvidenceFactsDedupesRepeatedInput(t *testing.T) {
+	t.Parallel()
+
+	db := newRelationshipTestDB()
+	store := NewRelationshipStore(db)
+	ctx := context.Background()
+
+	genID, err := store.CreateGeneration(ctx, "repo_deps", "run-003c")
+	if err != nil {
+		t.Fatalf("CreateGeneration: %v", err)
+	}
+
+	evidence := relationships.EvidenceFact{
+		EvidenceKind:     relationships.EvidenceKindKustomizeResource,
+		RelationshipType: relationships.RelDeploysFrom,
+		SourceRepoID:     "repo-kustomize",
+		TargetRepoID:     "repo-api",
+		Confidence:       0.90,
+		Rationale:        "Kustomize resources source deployment config from the target repository",
+		Details: map[string]any{
+			"path":          "overlays/prod/kustomization.yaml",
+			"matched_alias": "api",
+			"matched_value": "../../base/api",
+			"extractor":     "kustomize",
+		},
+	}
+
+	if err := store.UpsertEvidenceFacts(ctx, genID, []relationships.EvidenceFact{evidence, evidence}); err != nil {
+		t.Fatalf("UpsertEvidenceFacts: %v", err)
+	}
+
+	if got, want := len(db.evidenceFacts), 1; got != want {
+		t.Fatalf("evidence count = %d, want %d", got, want)
+	}
+	if got, want := db.insertCounts["relationship_evidence_facts"], 1; got != want {
+		t.Fatalf("relationship evidence insert count = %d, want %d", got, want)
 	}
 }
 
@@ -476,6 +581,7 @@ type relationshipTestDB struct {
 	evidenceFacts map[string]evidenceRecord
 	candidates    map[string]candidateRecord
 	resolved      map[string]resolvedRecord
+	insertCounts  map[string]int
 }
 
 func newRelationshipTestDB() *relationshipTestDB {
@@ -485,12 +591,14 @@ func newRelationshipTestDB() *relationshipTestDB {
 		evidenceFacts: make(map[string]evidenceRecord),
 		candidates:    make(map[string]candidateRecord),
 		resolved:      make(map[string]resolvedRecord),
+		insertCounts:  make(map[string]int),
 	}
 }
 
 func (db *relationshipTestDB) ExecContext(_ context.Context, query string, args ...any) (sql.Result, error) {
 	switch {
 	case strings.Contains(query, "INSERT INTO relationship_assertions"):
+		db.insertCounts["relationship_assertions"]++
 		now := args[9].(time.Time)
 		srcEntity := nullableToString(args[3])
 		tgtEntity := nullableToString(args[4])
@@ -508,6 +616,7 @@ func (db *relationshipTestDB) ExecContext(_ context.Context, query string, args 
 		return proofResult{}, nil
 
 	case strings.Contains(query, "INSERT INTO relationship_generations"):
+		db.insertCounts["relationship_generations"]++
 		if strings.Contains(query, "run_id") {
 			runID := ""
 			if args[2] != nil {
@@ -553,6 +662,7 @@ func (db *relationshipTestDB) ExecContext(_ context.Context, query string, args 
 		return proofResult{}, nil
 
 	case strings.Contains(query, "INSERT INTO relationship_evidence_facts"):
+		db.insertCounts["relationship_evidence_facts"]++
 		details := parseJSONBytes(args[10])
 		db.evidenceFacts[args[0].(string)] = evidenceRecord{
 			generationID:   args[1].(string),
@@ -569,6 +679,7 @@ func (db *relationshipTestDB) ExecContext(_ context.Context, query string, args 
 		return proofResult{}, nil
 
 	case strings.Contains(query, "INSERT INTO relationship_candidates"):
+		db.insertCounts["relationship_candidates"]++
 		details := parseJSONBytes(args[10])
 		db.candidates[args[0].(string)] = candidateRecord{
 			generationID:   args[1].(string),
@@ -616,6 +727,15 @@ func (db *relationshipTestDB) QueryContext(_ context.Context, query string, args
 
 	case strings.Contains(query, "FROM relationship_assertions"):
 		return db.queryAssertions(func(_ assertionRecord) bool { return true }), nil
+
+	case strings.Contains(query, "FROM resolved_relationships") && strings.Contains(query, "r.source_repo_id IN"):
+		repoIDs := make(map[string]struct{}, len(args))
+		for _, arg := range args {
+			if repoID, ok := arg.(string); ok {
+				repoIDs[repoID] = struct{}{}
+			}
+		}
+		return db.queryResolvedForRepos(repoIDs), nil
 
 	case strings.Contains(query, "FROM resolved_relationships") && strings.Contains(query, "g.generation_id = $2"):
 		scopeID := args[0].(string)
@@ -701,23 +821,56 @@ func (db *relationshipTestDB) queryResolved(scopeID string, generationID string)
 		if r.generationID != activeGenID {
 			continue
 		}
-		srcEntity := r.sourceEntityID
-		if srcEntity == "" {
-			srcEntity = r.sourceRepoID
-		}
-		tgtEntity := r.targetEntityID
-		if tgtEntity == "" {
-			tgtEntity = r.targetRepoID
-		}
-		detailsBytes, _ := json.Marshal(r.details)
-		rows = append(rows, []any{
-			r.sourceRepoID, r.targetRepoID,
-			srcEntity, tgtEntity,
-			r.relType, r.confidence, r.evidenceCount,
-			r.rationale, r.resolutionSource, detailsBytes,
-		})
+		rows = append(rows, resolvedRecordRow(r))
 	}
 	return newRelationshipRows(rows)
+}
+
+func (db *relationshipTestDB) queryResolvedForRepos(repoIDs map[string]struct{}) *relationshipRows {
+	var rows [][]any
+	type kv struct {
+		key string
+		val resolvedRecord
+	}
+	sorted := make([]kv, 0, len(db.resolved))
+	for k, v := range db.resolved {
+		sorted = append(sorted, kv{k, v})
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].key < sorted[j].key
+	})
+	for _, item := range sorted {
+		r := item.val
+		gen, ok := db.generations[r.generationID]
+		if !ok || gen.status != "active" {
+			continue
+		}
+		if _, sourceMatch := repoIDs[r.sourceRepoID]; !sourceMatch {
+			if _, targetMatch := repoIDs[r.targetRepoID]; !targetMatch {
+				continue
+			}
+		}
+		rows = append(rows, resolvedRecordRow(r))
+	}
+	return newRelationshipRows(rows)
+}
+
+func resolvedRecordRow(r resolvedRecord) []any {
+	srcEntity := r.sourceEntityID
+	if srcEntity == "" {
+		srcEntity = r.sourceRepoID
+	}
+	tgtEntity := r.targetEntityID
+	if tgtEntity == "" {
+		tgtEntity = r.targetRepoID
+	}
+	detailsBytes, _ := json.Marshal(r.details)
+	return []any{
+		r.sourceRepoID, r.targetRepoID,
+		srcEntity, tgtEntity,
+		r.relType, r.confidence, r.evidenceCount,
+		r.rationale, r.resolutionSource, detailsBytes,
+	}
 }
 
 func nullableToString(v any) string {
@@ -741,6 +894,22 @@ func parseJSONBytes(v any) map[string]any {
 		return nil
 	}
 	return m
+}
+
+func hasResolvedRelationship(
+	values []relationships.ResolvedRelationship,
+	sourceRepoID string,
+	targetRepoID string,
+	relationshipType relationships.RelationshipType,
+) bool {
+	for _, value := range values {
+		if value.SourceRepoID == sourceRepoID &&
+			value.TargetRepoID == targetRepoID &&
+			value.RelationshipType == relationshipType {
+			return true
+		}
+	}
+	return false
 }
 
 // relationshipRows implements the Rows interface for relationship test queries.

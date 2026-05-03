@@ -40,6 +40,7 @@ type AcceptedGenerationPrefetch func(ctx context.Context, intents []SharedProjec
 // PartitionBatchResult holds the result of selecting one partition batch.
 type PartitionBatchResult struct {
 	LatestRows    []SharedProjectionIntentRow
+	BlockedRows   []SharedProjectionIntentRow
 	StaleIDs      []string
 	StaleCount    int
 	SupersededIDs []string
@@ -61,12 +62,26 @@ type PartitionProcessorConfig struct {
 // PartitionProcessResult captures the outcome of one partition processing
 // cycle.
 type PartitionProcessResult struct {
-	LeaseAcquired    bool
-	ProcessedIntents int
-	UpsertedRows     int
-	RetractedRows    int
-	StaleIntents     int
-	BlockedReadiness int
+	LeaseAcquired                     bool
+	ProcessedIntents                  int
+	UpsertedRows                      int
+	RetractedRows                     int
+	StaleIntents                      int
+	BlockedReadiness                  int
+	MaxIntentWaitSeconds              float64
+	MaxBlockedIntentWaitSeconds       float64
+	LeaseClaimDurationSeconds         float64
+	SelectionDurationSeconds          float64
+	LoadAllDurationSeconds            float64
+	AcceptancePrefetchDurationSeconds float64
+	ProcessingDurationSeconds         float64
+	RetractDurationSeconds            float64
+	WriteDurationSeconds              float64
+	ReplayDurationSeconds             float64
+	MarkCompletedDurationSeconds      float64
+	ActiveIntents                     int
+	AcceptanceUnitRows                int
+	ReplayRequests                    int
 }
 
 // LatestIntentsByRepoAndPartition deduplicates intents to the most recent per
@@ -219,7 +234,7 @@ func SelectPartitionBatch(
 
 		active, staleIDs := FilterAuthoritativeIntents(partitionRows, lookup)
 		latest, supersededIDs := LatestIntentsByRepoAndPartition(active)
-		readyRows, blockedCount, err := filterRowsByReadiness(
+		readyRows, blockedRows, err := filterRowsByReadiness(
 			ctx,
 			domain,
 			latest,
@@ -236,10 +251,11 @@ func SelectPartitionBatch(
 			}
 			return PartitionBatchResult{
 				LatestRows:    readyRows,
+				BlockedRows:   blockedRows,
 				StaleIDs:      staleIDs,
 				StaleCount:    len(staleIDs),
 				SupersededIDs: supersededIDs,
-				BlockedCount:  blockedCount,
+				BlockedCount:  len(blockedRows),
 			}, nil
 		}
 
@@ -276,15 +292,17 @@ func ProcessPartitionOnce(
 	readinessLookup GraphProjectionReadinessLookup,
 	readinessPrefetch GraphProjectionReadinessPrefetch,
 ) (PartitionProcessResult, error) {
+	leaseStart := time.Now()
 	claimed, err := leaseManager.ClaimPartitionLease(
 		ctx, cfg.Domain, cfg.PartitionID, cfg.PartitionCount,
 		cfg.LeaseOwner, cfg.LeaseTTL,
 	)
+	leaseDuration := time.Since(leaseStart).Seconds()
 	if err != nil {
 		return PartitionProcessResult{}, fmt.Errorf("claim lease: %w", err)
 	}
 	if !claimed {
-		return PartitionProcessResult{LeaseAcquired: false}, nil
+		return PartitionProcessResult{LeaseAcquired: false, LeaseClaimDurationSeconds: leaseDuration}, nil
 	}
 
 	defer func() {
@@ -298,20 +316,29 @@ func ProcessPartitionOnce(
 		batchLimit = 100
 	}
 
+	selectionStart := time.Now()
 	batch, err := SelectPartitionBatch(
 		ctx, reader, cfg.Domain,
 		cfg.PartitionID, cfg.PartitionCount,
 		batchLimit, acceptedGen, prefetch,
 		readinessLookup, readinessPrefetch,
 	)
+	selectionDuration := time.Since(selectionStart).Seconds()
 	if err != nil {
-		return PartitionProcessResult{LeaseAcquired: true}, fmt.Errorf("select batch: %w", err)
+		return PartitionProcessResult{
+			LeaseAcquired:             true,
+			LeaseClaimDurationSeconds: leaseDuration,
+			SelectionDurationSeconds:  selectionDuration,
+		}, fmt.Errorf("select batch: %w", err)
 	}
 
 	if len(batch.LatestRows) == 0 && len(batch.StaleIDs) == 0 && len(batch.SupersededIDs) == 0 {
 		return PartitionProcessResult{
-			LeaseAcquired:    true,
-			BlockedReadiness: batch.BlockedCount,
+			LeaseAcquired:               true,
+			BlockedReadiness:            batch.BlockedCount,
+			MaxBlockedIntentWaitSeconds: maxSharedIntentWaitSeconds(now, batch.BlockedRows),
+			LeaseClaimDurationSeconds:   leaseDuration,
+			SelectionDurationSeconds:    selectionDuration,
 		}, nil
 	}
 
@@ -320,14 +347,27 @@ func ProcessPartitionOnce(
 		evidenceSource = "finalization/workloads"
 	}
 
+	processingStart := time.Now()
+	retractStart := time.Now()
 	if err := edgeWriter.RetractEdges(ctx, cfg.Domain, batch.LatestRows, evidenceSource); err != nil {
-		return PartitionProcessResult{LeaseAcquired: true}, fmt.Errorf("retract edges: %w", err)
+		return PartitionProcessResult{
+			LeaseAcquired:             true,
+			LeaseClaimDurationSeconds: leaseDuration,
+			SelectionDurationSeconds:  selectionDuration,
+		}, fmt.Errorf("retract edges: %w", err)
 	}
+	retractDuration := time.Since(retractStart).Seconds()
 
 	upsertRows := filterUpsertRows(batch.LatestRows)
+	writeStart := time.Now()
 	if err := edgeWriter.WriteEdges(ctx, cfg.Domain, upsertRows, evidenceSource); err != nil {
-		return PartitionProcessResult{LeaseAcquired: true}, fmt.Errorf("write edges: %w", err)
+		return PartitionProcessResult{
+			LeaseAcquired:             true,
+			LeaseClaimDurationSeconds: leaseDuration,
+			SelectionDurationSeconds:  selectionDuration,
+		}, fmt.Errorf("write edges: %w", err)
 	}
+	writeDuration := time.Since(writeStart).Seconds()
 
 	var processedIDs []string
 	processedIDs = append(processedIDs, batch.StaleIDs...)
@@ -336,19 +376,35 @@ func ProcessPartitionOnce(
 		processedIDs = append(processedIDs, row.IntentID)
 	}
 
+	var markCompletedDuration float64
 	if len(processedIDs) > 0 {
+		markStart := time.Now()
 		if err := reader.MarkIntentsCompleted(ctx, processedIDs, now); err != nil {
-			return PartitionProcessResult{LeaseAcquired: true}, fmt.Errorf("mark completed: %w", err)
+			return PartitionProcessResult{
+				LeaseAcquired:             true,
+				LeaseClaimDurationSeconds: leaseDuration,
+				SelectionDurationSeconds:  selectionDuration,
+			}, fmt.Errorf("mark completed: %w", err)
 		}
+		markCompletedDuration = time.Since(markStart).Seconds()
 	}
+	processingDuration := time.Since(processingStart).Seconds()
 
 	return PartitionProcessResult{
-		LeaseAcquired:    true,
-		ProcessedIntents: len(processedIDs),
-		UpsertedRows:     len(upsertRows),
-		RetractedRows:    len(batch.LatestRows),
-		StaleIntents:     len(batch.StaleIDs),
-		BlockedReadiness: batch.BlockedCount,
+		LeaseAcquired:                true,
+		ProcessedIntents:             len(processedIDs),
+		UpsertedRows:                 len(upsertRows),
+		RetractedRows:                len(batch.LatestRows),
+		StaleIntents:                 len(batch.StaleIDs),
+		BlockedReadiness:             batch.BlockedCount,
+		MaxIntentWaitSeconds:         maxSharedIntentWaitSeconds(now, batch.LatestRows),
+		MaxBlockedIntentWaitSeconds:  maxSharedIntentWaitSeconds(now, batch.BlockedRows),
+		LeaseClaimDurationSeconds:    leaseDuration,
+		SelectionDurationSeconds:     selectionDuration,
+		ProcessingDurationSeconds:    processingDuration,
+		RetractDurationSeconds:       retractDuration,
+		WriteDurationSeconds:         writeDuration,
+		MarkCompletedDurationSeconds: markCompletedDuration,
 	}, nil
 }
 
@@ -358,10 +414,10 @@ func filterRowsByReadiness(
 	rows []SharedProjectionIntentRow,
 	readinessLookup GraphProjectionReadinessLookup,
 	readinessPrefetch GraphProjectionReadinessPrefetch,
-) ([]SharedProjectionIntentRow, int, error) {
-	phase, gated := semanticNodeReadinessPhase(domain)
+) ([]SharedProjectionIntentRow, []SharedProjectionIntentRow, error) {
+	phase, gated := sharedProjectionReadinessPhase(domain)
 	if !gated || len(rows) == 0 {
-		return rows, 0, nil
+		return rows, nil, nil
 	}
 
 	lookup := readinessLookup
@@ -381,17 +437,17 @@ func filterRowsByReadiness(
 		}
 		resolvedLookup, err := readinessPrefetch(ctx, keys, phase)
 		if err != nil {
-			return nil, 0, fmt.Errorf("prefetch graph projection readiness: %w", err)
+			return nil, nil, fmt.Errorf("prefetch graph projection readiness: %w", err)
 		}
 		lookup = resolvedLookup
 	}
 
 	if lookup == nil {
-		return rows, 0, nil
+		return rows, nil, nil
 	}
 
 	readyRows := make([]SharedProjectionIntentRow, 0, len(rows))
-	blockedCount := 0
+	blockedRows := make([]SharedProjectionIntentRow, 0)
 	for _, row := range rows {
 		key, ok := graphProjectionPhaseKeyForIntent(row, row.GenerationID, GraphProjectionKeyspaceCodeEntitiesUID)
 		if !ok {
@@ -399,12 +455,29 @@ func filterRowsByReadiness(
 		}
 		ready, found := lookup(key, phase)
 		if !found || !ready {
-			blockedCount++
+			blockedRows = append(blockedRows, row)
 			continue
 		}
 		readyRows = append(readyRows, row)
 	}
-	return readyRows, blockedCount, nil
+	return readyRows, blockedRows, nil
+}
+
+func maxSharedIntentWaitSeconds(now time.Time, rows []SharedProjectionIntentRow) float64 {
+	var maxWait float64
+	for _, row := range rows {
+		if row.CreatedAt.IsZero() {
+			continue
+		}
+		wait := now.Sub(row.CreatedAt).Seconds()
+		if wait < 0 {
+			wait = 0
+		}
+		if wait > maxWait {
+			maxWait = wait
+		}
+	}
+	return maxWait
 }
 
 // filterUpsertRows returns rows whose payload action is "upsert" or absent.

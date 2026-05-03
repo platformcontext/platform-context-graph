@@ -105,6 +105,123 @@ func TestDiscoverTerraformGitHubEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverTerraformRuntimeServiceModuleEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-infra",
+			Payload: map[string]any{
+				"artifact_type": "terraform_hcl",
+				"relative_path": "shared/resources.tf",
+				"content": `module "api_service" {
+  source = "registry.example.com/platform/ecs-application/aws"
+
+  name = "payments-service"
+}`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+	if !hasEvidenceKind(evidence, EvidenceKind("TERRAFORM_ECS_SERVICE")) {
+		t.Fatal("missing TERRAFORM_ECS_SERVICE evidence")
+	}
+	if !hasRelationshipType(evidence, RelProvisionsDependencyFor) {
+		t.Fatalf("missing %q relationship evidence", RelProvisionsDependencyFor)
+	}
+}
+
+func TestDiscoverTerraformIAMSSMConfigReadEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-terraform-stack",
+			Payload: map[string]any{
+				"artifact_type": "terraform_hcl",
+				"relative_path": "shared/resources.tf",
+				"content": `data "aws_iam_policy_document" "consumer" {
+  statement {
+    sid = "AllowReadSSMParameters"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath",
+    ]
+    resources = [
+      "arn:aws:ssm:us-east-1:123456789012:parameter/configd/payments-service/client/*",
+    ]
+  }
+}`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	var configRead *EvidenceFact
+	for i := range evidence {
+		item := evidence[i]
+		if item.TargetRepoID == "repo-payments" && item.RelationshipType == RelReadsConfigFrom {
+			configRead = &item
+		}
+		if item.TargetRepoID == "repo-payments" &&
+			item.EvidenceKind == EvidenceKindTerraformConfigPath &&
+			item.RelationshipType == RelProvisionsDependencyFor {
+			t.Fatalf("IAM SSM config read must not emit provisioning evidence: %#v", item)
+		}
+	}
+	if configRead == nil {
+		t.Fatalf("missing %q evidence in %#v", RelReadsConfigFrom, evidence)
+	}
+	if configRead.EvidenceKind != EvidenceKindTerraformIAMPermission {
+		t.Fatalf("kind = %q, want %q", configRead.EvidenceKind, EvidenceKindTerraformIAMPermission)
+	}
+	if got, want := configRead.Details["permission_family"], "ssm_config_read"; got != want {
+		t.Fatalf("permission_family = %#v, want %#v", got, want)
+	}
+	if got, want := configRead.Details["matched_resource"], "/configd/payments-service/client/*"; got != want {
+		t.Fatalf("matched_resource = %#v, want %#v", got, want)
+	}
+}
+
+func TestDiscoverTerraformConfigPathWithoutIAMReadStillProvisions(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-terraform-stack",
+			Payload: map[string]any{
+				"artifact_type": "terraform_hcl",
+				"relative_path": "shared/resources.tf",
+				"content":       `config_path = "/configd/payments-service/runtime.yaml"`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if !hasEvidenceKind(evidence, EvidenceKindTerraformConfigPath) {
+		t.Fatal("missing Terraform config path evidence")
+	}
+	if !hasRelationshipType(evidence, RelProvisionsDependencyFor) {
+		t.Fatalf("missing %q relationship evidence", RelProvisionsDependencyFor)
+	}
+	if hasRelationshipType(evidence, RelReadsConfigFrom) {
+		t.Fatalf("unexpected %q relationship evidence for a non-IAM config path", RelReadsConfigFrom)
+	}
+}
+
 func TestDiscoverTerraformModuleSourceEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -1264,6 +1381,298 @@ spec:
 	}
 	if !hasRelationshipType(evidence, RelDiscoversConfigIn) {
 		t.Fatal("missing DISCOVERS_CONFIG_IN relationship evidence")
+	}
+}
+
+func TestDiscoverArgoCDApplicationSetEvaluatesGitFileGeneratorYAML(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"artifact_type": "argocd",
+				"relative_path": "applicationsets/services.yaml",
+				"content": `apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/myorg/platform-config.git
+        files:
+          - path: services/**/service.yaml
+  template:
+    spec:
+      sources:
+        - repoURL: "{{ .service.repoURL }}"
+          path: "{{ .service.overlayPath }}"
+        - repoURL: https://charts.example.invalid
+          chart: "{{ .helm.chart }}"
+`,
+			},
+		},
+		{
+			ScopeID: "repo-config",
+			Payload: map[string]any{
+				"artifact_type": "yaml",
+				"relative_path": "services/prod/payments/service.yaml",
+				"content": `service:
+  repoURL: https://github.com/myorg/payments-service.git
+  overlayPath: deploy/overlays/prod
+helm:
+  chart: payments
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-config", Aliases: []string{"platform-config"}},
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	discovery, ok := findEvidenceByKind(evidence, EvidenceKindArgoCDApplicationSetDiscovery)
+	if !ok {
+		t.Fatal("missing ApplicationSet discovery evidence")
+	}
+	if got, want := discovery.TargetRepoID, "repo-config"; got != want {
+		t.Fatalf("discovery target = %q, want %q", got, want)
+	}
+
+	deploySource, ok := findEvidenceByKind(evidence, EvidenceKindArgoCDApplicationSetDeploySource)
+	if !ok {
+		t.Fatal("missing evaluated ApplicationSet deploy-source evidence")
+	}
+	if got, want := deploySource.SourceRepoID, "repo-payments"; got != want {
+		t.Fatalf("deploy source = %q, want %q", got, want)
+	}
+	if got, want := deploySource.TargetRepoID, "repo-config"; got != want {
+		t.Fatalf("deploy target = %q, want %q", got, want)
+	}
+	if got, want := deploySource.Details["deploy_repo_url"], "https://github.com/myorg/payments-service.git"; got != want {
+		t.Fatalf("deploy repo url = %#v, want %#v", got, want)
+	}
+}
+
+func TestDiscoverArgoCDApplicationSetSharedChartConfigDoesNotInventDeploySource(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"artifact_type": "argocd",
+				"relative_path": "applicationsets/platform.yaml",
+				"content": `apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/myorg/platform-config.git
+        files:
+          - path: platform/*/settings.yaml
+  template:
+    spec:
+      sources:
+        - repoURL: "{{ .helm.repoURL }}"
+          chart: "{{ .helm.chart }}"
+        - repoURL: "{{ .git.repoURL }}"
+          path: platform/{{ .environment }}
+`,
+			},
+		},
+		{
+			ScopeID: "repo-config",
+			Payload: map[string]any{
+				"artifact_type": "yaml",
+				"relative_path": "platform/prod/settings.yaml",
+				"content": `environment: prod
+helm:
+  repoURL: https://charts.example.invalid
+  chart: shared-platform
+git:
+  repoURL: https://github.com/myorg/platform-config.git
+client:
+  repository: payments-service
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-config", Aliases: []string{"platform-config"}},
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if !hasEvidenceKind(evidence, EvidenceKindArgoCDApplicationSetDiscovery) {
+		t.Fatal("missing ApplicationSet discovery evidence")
+	}
+	if hasEvidenceKind(evidence, EvidenceKindArgoCDApplicationSetDeploySource) {
+		t.Fatalf("unexpected deploy-source evidence: %#v", evidence)
+	}
+}
+
+func TestDiscoverArgoCDApplicationSetDeploySourceFromConfigServiceIdentity(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"artifact_type": "argocd",
+				"relative_path": "applicationsets/services.yaml",
+				"content": `apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/myorg/platform-config.git
+        files:
+          - path: services/*/config.yaml
+  template:
+    spec:
+      sources:
+        - repoURL: "{{ .helm.repoURL }}"
+          chart: "{{ .helm.chart }}"
+        - repoURL: "{{ .git.repoURL }}"
+          path: "{{ .git.overlayPath }}"
+`,
+			},
+		},
+		{
+			ScopeID: "repo-config",
+			Payload: map[string]any{
+				"artifact_type": "yaml",
+				"relative_path": "services/prod/config.yaml",
+				"content": `addon: payments-service
+environment: prod
+git:
+  repoURL: https://github.com/myorg/platform-config.git
+  overlayPath: services/prod
+helm:
+  repoURL: https://charts.example.invalid
+  chart: shared-service
+  releaseName: payments-service
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-config", Aliases: []string{"platform-config"}},
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	deploySource, ok := findEvidenceByKind(evidence, EvidenceKindArgoCDApplicationSetDeploySource)
+	if !ok {
+		t.Fatalf("missing service-identity deploy-source evidence: %#v", evidence)
+	}
+	if got, want := deploySource.SourceRepoID, "repo-payments"; got != want {
+		t.Fatalf("deploy source = %q, want %q", got, want)
+	}
+	if got, want := deploySource.TargetRepoID, "repo-config"; got != want {
+		t.Fatalf("deploy target = %q, want %q", got, want)
+	}
+}
+
+func TestDiscoverArgoCDApplicationSetUnsupportedTemplateStaysDiscoveryOnly(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"artifact_type": "argocd",
+				"relative_path": "applicationsets/services.yaml",
+				"content": `apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/myorg/platform-config.git
+        files:
+          - path: services/*/service.yaml
+  template:
+    spec:
+      source:
+        repoURL: "{{ index .service \"repoURL\" }}"
+`,
+			},
+		},
+		{
+			ScopeID: "repo-config",
+			Payload: map[string]any{
+				"artifact_type": "yaml",
+				"relative_path": "services/payments/service.yaml",
+				"content": `service:
+  repoURL: https://github.com/myorg/payments-service.git
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-config", Aliases: []string{"platform-config"}},
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if !hasEvidenceKind(evidence, EvidenceKindArgoCDApplicationSetDiscovery) {
+		t.Fatal("missing ApplicationSet discovery evidence")
+	}
+	if hasEvidenceKind(evidence, EvidenceKindArgoCDApplicationSetDeploySource) {
+		t.Fatalf("unexpected deploy-source evidence: %#v", evidence)
+	}
+}
+
+func TestDiscoverArgoCDApplicationSetTemplateLiteralDoesNotMatchBroadAlias(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"artifact_type": "argocd",
+				"relative_path": "applicationsets/services.yaml",
+				"content": `apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/myorg/platform-config.git
+        files:
+          - path: services/*/service.yaml
+  template:
+    spec:
+      source:
+        repoURL: "{{ .service.repoURL }}"
+`,
+			},
+		},
+		{
+			ScopeID: "repo-config",
+			Payload: map[string]any{
+				"artifact_type": "yaml",
+				"relative_path": "services/payments/service.yaml",
+				"content":       `service: {}`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-config", Aliases: []string{"platform-config"}},
+		{RepoID: "repo-service", Aliases: []string{"service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if !hasEvidenceKind(evidence, EvidenceKindArgoCDApplicationSetDiscovery) {
+		t.Fatal("missing ApplicationSet discovery evidence")
+	}
+	if hasEvidenceKind(evidence, EvidenceKindArgoCDApplicationSetDeploySource) {
+		t.Fatalf("unexpected deploy-source evidence: %#v", evidence)
 	}
 }
 

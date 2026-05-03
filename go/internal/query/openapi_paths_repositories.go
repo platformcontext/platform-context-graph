@@ -73,7 +73,29 @@ const openAPIPathsRepositories = `
                     "file_count": {"type": "integer"},
                     "workload_count": {"type": "integer"},
                     "platform_count": {"type": "integer"},
-                    "dependency_count": {"type": "integer"}
+                    "dependency_count": {"type": "integer"},
+                    "relationships": {
+                      "type": "array",
+                      "description": "Outgoing repository relationships.",
+                      "items": {"type": "object"}
+                    },
+                    "relationship_overview": {
+                      "type": "object",
+                      "description": "Incoming and outgoing typed repository relationships with lightweight evidence pointers."
+                    },
+                    "api_surface": {
+                      "type": "object",
+                      "description": "Graph-backed API endpoint surface exposed by this repository."
+                    },
+                    "deployment_evidence": {
+                      "type": "object",
+                      "description": "Deployment, CI, and environment evidence pointers. Artifacts include source_location plus resolved_id/generation_id for Postgres evidence drilldown; evidence_index groups those pointers by relationship type, artifact family, and evidence kind."
+                    },
+                    "consumers": {
+                      "type": "array",
+                      "description": "Repositories with incoming relationships to this repository.",
+                      "items": {"type": "object"}
+                    }
                   }
                 }
               }

@@ -149,22 +149,32 @@ collector/projector/reducer path.
 ### `pcg_dp_reducer_intents_enqueued_total`
 ### `pcg_dp_reducer_executions_total`
 ### `pcg_dp_reducer_run_duration_seconds`
+### `pcg_dp_reducer_queue_wait_seconds`
 ### `pcg_dp_reducer_batch_claim_size`
 
-- Type: Counters, histogram, gauge
-- Meaning: Reducer enqueue, execution, latency, and claim-size behavior.
+- Type: Counters and histograms
+- Meaning: Reducer enqueue, execution, queue wait, and claim-size behavior.
 - Use them for: Tuning reducer concurrency and validating that shared follow-up
-  is not starving the main reducer path.
+  is not starving the main reducer path. Compare queue wait with reducer run
+  duration before changing worker counts.
 
 ## Shared Follow-Up And Acceptance
 
 ### `pcg_dp_shared_projection_cycles_total`
+### `pcg_dp_shared_projection_intent_wait_seconds`
+### `pcg_dp_shared_projection_processing_seconds`
 ### `pcg_dp_shared_projection_stale_intents_total`
 
-- Type: Counters
-- Meaning: Shared-projection loop cycles and stale-intent cleanup activity.
+- Type: Counters and histograms
+- Meaning: Shared-projection loop cycles, selected-intent age, processing time,
+  readiness-blocked wait, and stale-intent cleanup activity.
+- Notes: `domain=code_calls` also includes the dedicated code-call projection
+  runner, whose logs add selected-intent wait, readiness-blocked wait,
+  selection duration, lease-claim duration, and processing duration for each
+  completed graph-write cycle.
 - Use them for: Detecting whether follow-up work is running but constantly
-  finding stale or superseded intents.
+  finding stale or superseded intents, waiting on semantic readiness, or spending
+  time inside graph writes after partition selection.
 
 ### `pcg_dp_shared_acceptance_lookup_duration_seconds`
 ### `pcg_dp_shared_acceptance_lookup_errors_total`
@@ -236,6 +246,22 @@ collector/projector/reducer path.
 - Meaning: Filesystem entries pruned during discovery.
 - Use them for: Verifying ignore policy behavior and explaining why a repo scan
   is cheaper than a raw file count might suggest.
+- Content-aware skip reasons use the `content:` prefix. Generated JavaScript
+  bundle filters currently emit `content:generated-webpack`,
+  `content:generated-rollup`, `content:generated-esbuild`, and
+  `content:generated-parcel`; legacy vendored-library filters emit
+  `content:vendored-zend-framework`, `content:vendored-browser-library`, and
+  `content:vendored-fpdf`; legacy PEAR libraries, including Phing, emit
+  `content:vendored-pear`.
+- Repo-local `.pcg/discovery.json` rules use the `user:` prefix. The legacy
+  `.pcg/vendor-roots.json` compatibility file emits the same prefix. Directory
+  pruning appears on `pcg_dp_discovery_dirs_skipped_total`; file-level user
+  skips, when a file glob matches directly, appear on
+  `pcg_dp_discovery_files_skipped_total`.
+- Repo-local `.pcgignore` file matches emit `skip_reason=pcgignore` on
+  `pcg_dp_discovery_files_skipped_total`. Use `.pcg/discovery.json` instead
+  when the operator needs a more specific reason such as
+  `user:archived-site-copy`.
 
 ### `pcg_dp_large_repo_classifications_total`
 ### `pcg_dp_large_repo_semaphore_wait_seconds`
@@ -287,6 +313,8 @@ collector/projector/reducer path.
 ### Shared Follow-Up
 
 - `pcg_dp_shared_projection_cycles_total`
+- `pcg_dp_shared_projection_intent_wait_seconds`
+- `pcg_dp_shared_projection_processing_seconds`
 - `pcg_dp_shared_projection_stale_intents_total`
 - `pcg_dp_shared_acceptance_lookup_duration_seconds`
 - `pcg_dp_shared_acceptance_lookup_errors_total`

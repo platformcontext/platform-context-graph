@@ -152,3 +152,6 @@ coverage/
 *.tmp
 *.temp
 *.bak
+
+*.omc
+tests/

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
@@ -38,13 +39,22 @@ ON CONFLICT (work_item_id) DO NOTHING
 
 const claimProjectorWorkQuery = `
 WITH candidate AS (
-    SELECT work_item_id
-    FROM fact_work_items
+    SELECT work.work_item_id
+    FROM fact_work_items AS work
     WHERE stage = 'projector'
-      AND status IN ('pending', 'retrying')
-      AND (visible_at IS NULL OR visible_at <= $1)
-      AND (claim_until IS NULL OR claim_until <= $1)
-    ORDER BY updated_at ASC, work_item_id ASC
+      AND work.status IN ('pending', 'retrying', 'claimed', 'running')
+      AND (work.visible_at IS NULL OR work.visible_at <= $1)
+      AND (work.claim_until IS NULL OR work.claim_until <= $1)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM fact_work_items AS inflight
+          WHERE inflight.stage = 'projector'
+            AND inflight.scope_id = work.scope_id
+            AND inflight.work_item_id <> work.work_item_id
+            AND inflight.status IN ('claimed', 'running')
+            AND inflight.claim_until > $1
+      )
+    ORDER BY work.updated_at ASC, work.work_item_id ASC
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 ),
@@ -65,6 +75,13 @@ SELECT
     scope.source_system,
     scope.scope_kind,
     COALESCE(scope.parent_scope_id, ''),
+    COALESCE(scope.active_generation_id, ''),
+    EXISTS (
+        SELECT 1
+        FROM scope_generations AS prior_generation
+        WHERE prior_generation.scope_id = scope.scope_id
+          AND prior_generation.generation_id <> claimed.generation_id
+    ),
     scope.collector_kind,
     scope.partition_key,
     generation.generation_id,
@@ -122,6 +139,18 @@ WHERE stage = 'projector'
   AND scope_id = $2
   AND generation_id = $3
   AND lease_owner = $4
+  AND status IN ('claimed', 'running')
+`
+
+const heartbeatProjectorWorkQuery = `
+UPDATE fact_work_items
+SET status = 'running',
+    claim_until = $1,
+    updated_at = $2
+WHERE stage = 'projector'
+  AND scope_id = $3
+  AND generation_id = $4
+  AND lease_owner = $5
   AND status IN ('claimed', 'running')
 `
 
@@ -191,6 +220,10 @@ type ProjectorQueue struct {
 	MaxAttempts   int
 	Now           func() time.Time
 }
+
+// ErrProjectorClaimRejected means the claimed projector work item no longer
+// belongs to the current lease owner, so heartbeat/ack/fail must stop.
+var ErrProjectorClaimRejected = errors.New("projector work claim rejected")
 
 // NewProjectorQueue constructs a Postgres-backed projector work queue.
 func NewProjectorQueue(
@@ -335,6 +368,36 @@ func (q ProjectorQueue) Ack(
 	return nil
 }
 
+// Heartbeat renews one claimed projector work item so long-running projection
+// work keeps exclusive ownership until Ack or Fail completes.
+func (q ProjectorQueue) Heartbeat(ctx context.Context, work projector.ScopeGenerationWork) error {
+	if err := q.validate(); err != nil {
+		return err
+	}
+
+	now := q.now()
+	result, err := q.db.ExecContext(
+		ctx,
+		heartbeatProjectorWorkQuery,
+		now.Add(q.LeaseDuration),
+		now,
+		work.Scope.ScopeID,
+		work.Generation.GenerationID,
+		q.LeaseOwner,
+	)
+	if err != nil {
+		return fmt.Errorf("heartbeat projector work: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("heartbeat projector work: rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrProjectorClaimRejected
+	}
+	return nil
+}
+
 // Fail marks one claimed projector work item as failed.
 func (q ProjectorQueue) Fail(
 	ctx context.Context,
@@ -349,12 +412,12 @@ func (q ProjectorQueue) Fail(
 	}
 
 	query := failProjectorWorkQuery
-	failureClass := "projection_failed"
+	failureClass, failureMessage, failureDetails := queueFailureMetadata(cause, "projection_failed")
 	args := []any{
 		q.now(),
 		failureClass,
-		cause.Error(),
-		cause.Error(),
+		failureMessage,
+		failureDetails,
 		work.Scope.ScopeID,
 		work.Generation.GenerationID,
 		q.LeaseOwner,
@@ -366,8 +429,8 @@ func (q ProjectorQueue) Fail(
 		args = []any{
 			q.now(),
 			failureClass,
-			cause.Error(),
-			cause.Error(),
+			failureMessage,
+			failureDetails,
 			q.now().Add(q.retryDelay()),
 			work.Scope.ScopeID,
 			work.Generation.GenerationID,
@@ -381,6 +444,14 @@ func (q ProjectorQueue) Fail(
 	}
 
 	return nil
+}
+
+func sanitizeFailureText(text string) string {
+	if text == "" {
+		return text
+	}
+	sanitized := strings.ToValidUTF8(text, "")
+	return strings.ReplaceAll(sanitized, "\x00", "")
 }
 
 func (q ProjectorQueue) validate() error {
@@ -434,6 +505,8 @@ func scanProjectorWork(rows Rows) (projector.ScopeGenerationWork, error) {
 		&work.Scope.SourceSystem,
 		&scopeKind,
 		&work.Scope.ParentScopeID,
+		&work.Scope.ActiveGenerationID,
+		&work.Scope.PreviousGenerationExists,
 		&collectorKind,
 		&work.Scope.PartitionKey,
 		&work.Generation.GenerationID,

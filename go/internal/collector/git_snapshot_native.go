@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -116,6 +117,7 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		return RepositorySnapshot{}, err
 	}
 	registry := s.registry()
+	discoveryStartedAt := time.Now()
 	fileSet, discoveryStats, err := resolveNativeSnapshotFileSet(repoPath, registry, s.discoveryOptions())
 	if len(repository.FileTargets) > 0 {
 		fileSet, err = resolveNativeSnapshotFileSetForTargets(repoPath, repository.FileTargets, registry)
@@ -124,6 +126,10 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		return RepositorySnapshot{}, err
 	}
 	s.logDiscoveryStats(ctx, repoPath, discoveryStats)
+	s.logSnapshotStageTiming(ctx, repoPath, "discovery", discoveryStartedAt,
+		slog.Int("file_count", len(fileSet.Files)),
+		slog.Int("file_target_count", len(repository.FileTargets)),
+	)
 	s.recordDiscoveryMetrics(ctx, discoveryStats)
 
 	snapshot := RepositorySnapshot{
@@ -135,15 +141,35 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		ContentFiles:    []ContentFileSnapshot{},
 		ContentEntities: []ContentEntitySnapshot{},
 	}
+	commitSHA := gitCommitSHA(ctx, repoPath)
 	if len(fileSet.Files) == 0 {
+		snapshot.DiscoveryAdvisory = buildDiscoveryAdvisoryReport(
+			repoPath,
+			s.now(),
+			discoveryStats,
+			fileSet.Files,
+			nil,
+			nil,
+			commitSHA,
+		)
 		return snapshot, nil
 	}
 
-	importsMap, err := engine.PreScanRepositoryPaths(repoPath, fileSet.Files)
+	preScanStartedAt := time.Now()
+	importsMap, err := engine.PreScanRepositoryPathsWithWorkers(
+		repoPath,
+		fileSet.Files,
+		effectiveSnapshotParseWorkers(s.ParseWorkers),
+	)
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("pre-scan repository imports for %q: %w", repoPath, err)
 	}
 	snapshot.ImportsMap = importsMap
+	s.logSnapshotStageTiming(ctx, repoPath, "pre_scan", preScanStartedAt,
+		slog.Int("file_count", len(fileSet.Files)),
+		slog.Int("import_symbol_count", len(importsMap)),
+		slog.Int("pre_scan_workers", effectiveSnapshotParseWorkers(s.ParseWorkers)),
+	)
 
 	repoMetadata, err := repositoryidentity.MetadataFor(
 		filepath.Base(repoPath),
@@ -153,7 +179,7 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("repository metadata for %q: %w", repoPath, err)
 	}
-	commitSHA := gitCommitSHA(ctx, repoPath)
+	parseStartedAt := time.Now()
 	shapeFiles, parsedFiles, err := s.buildParsedRepositoryFiles(
 		ctx,
 		repoPath,
@@ -165,7 +191,14 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("build parsed repository files for %q: %w", repoPath, err)
 	}
+	s.logSnapshotStageTiming(ctx, repoPath, "parse", parseStartedAt,
+		slog.Int("file_count", len(fileSet.Files)),
+		slog.Int("parsed_file_count", len(parsedFiles)),
+		slog.Int("skipped_file_count", len(fileSet.Files)-len(parsedFiles)),
+		slog.Int("parse_workers", effectiveSnapshotParseWorkers(s.ParseWorkers)),
+	)
 
+	materializeStartedAt := time.Now()
 	materialization, err := shape.Materialize(shape.Input{
 		RepoID:       repoMetadata.ID,
 		SourceSystem: "git",
@@ -174,11 +207,25 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("materialize repository content: %w", err)
 	}
+	s.logSnapshotStageTiming(ctx, repoPath, "materialize", materializeStartedAt,
+		slog.Int("parsed_file_count", len(parsedFiles)),
+		slog.Int("content_file_count", len(materialization.Records)),
+		slog.Int("content_entity_count", len(materialization.Entities)),
+	)
 
 	annotateParsedFilesWithEntityIDs(repoPath, parsedFiles, materialization.Entities)
 	snapshot.FileData = parsedFiles
 	snapshot.ContentFileMetas = materializationRecordsToMetas(materialization.Records)
 	snapshot.ContentEntities = materializationEntitiesToSnapshots(materialization.Entities, s.now())
+	snapshot.DiscoveryAdvisory = buildDiscoveryAdvisoryReport(
+		repoPath,
+		s.now(),
+		discoveryStats,
+		fileSet.Files,
+		snapshot.ContentFileMetas,
+		snapshot.ContentEntities,
+		commitSHA,
+	)
 
 	// Release body references — bodies are no longer needed in the snapshot.
 	// streamFacts will re-read each file from disk when building content facts.
@@ -189,6 +236,38 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	materialization = content.Materialization{}
 
 	return snapshot, nil
+}
+
+// logSnapshotStageTiming emits coarse repository snapshot phase timings so
+// operators can distinguish parser, materialization, and commit bottlenecks
+// before changing concurrency or graph-write tuning.
+func (s NativeRepositorySnapshotter) logSnapshotStageTiming(
+	ctx context.Context,
+	repoPath string,
+	stage string,
+	startedAt time.Time,
+	attrs ...any,
+) {
+	if s.Logger == nil {
+		return
+	}
+	logAttrs := []any{
+		slog.String("collector_kind", "git"),
+		slog.String("repo_path", repoPath),
+		slog.String("stage", stage),
+		slog.Float64("duration_seconds", time.Since(startedAt).Seconds()),
+	}
+	logAttrs = append(logAttrs, attrs...)
+	s.Logger.InfoContext(ctx, "collector snapshot stage completed", logAttrs...)
+}
+
+// effectiveSnapshotParseWorkers reports the actual parser worker cardinality
+// when the zero-value configuration falls back to the sequential parser path.
+func effectiveSnapshotParseWorkers(configured int) int {
+	if configured <= 1 {
+		return 1
+	}
+	return configured
 }
 
 func (s NativeRepositorySnapshotter) engine() (*parser.Engine, error) {
@@ -213,6 +292,8 @@ var defaultIgnoredDirs = []string{
 	".git",
 	".svn",
 	".hg",
+	// PCG repo-local configuration is operator metadata, not source input.
+	".pcg",
 	// Infrastructure / IaC caches
 	".terraform",
 	".terragrunt-cache",
@@ -226,6 +307,9 @@ var defaultIgnoredDirs = []string{
 	"node_modules",
 	"bower_components",
 	"jspm_packages",
+	// Yarn Berry stores package-manager bundles and caches under .yarn.
+	// These generated artifacts can dwarf real application source.
+	".yarn",
 	".next",
 	".nuxt",
 	// Python
@@ -238,6 +322,8 @@ var defaultIgnoredDirs = []string{
 	".eggs",
 	// PHP
 	"vendor",
+	"wp-admin",
+	"wp-includes",
 	// Go
 	// (vendor already listed under PHP)
 	// Ruby
@@ -294,12 +380,16 @@ var defaultIgnoredExtensions = []string{
 	".out",
 	// Minified and bundled assets
 	".min.js",
+	".min.mjs",
 	".min.css",
 	".bundle.js",
 	".chunk.js",
 	".min.map",
 	// Source maps
 	".map",
+	// Yarn Berry Plug'n'Play loader files are generated dependency metadata.
+	".pnp.cjs",
+	".pnp.loader.mjs",
 	// Compiled / binary artifacts commonly checked in
 	".pyc",
 	".pyo",
@@ -314,17 +404,24 @@ var defaultIgnoredExtensions = []string{
 }
 
 func (s NativeRepositorySnapshotter) discoveryOptions() discovery.Options {
-	if len(s.DiscoveryOptions.IgnoredDirs) > 0 ||
-		len(s.DiscoveryOptions.IgnoredExtensions) > 0 ||
-		s.DiscoveryOptions.IgnoreHidden ||
-		len(s.DiscoveryOptions.PreservedHiddenPrefixes) > 0 ||
-		s.DiscoveryOptions.HonorGitignore {
-		return s.DiscoveryOptions
-	}
+	opts := defaultNativeDiscoveryOptions()
+	opts.IgnoredDirs = append(opts.IgnoredDirs, s.DiscoveryOptions.IgnoredDirs...)
+	opts.IgnoredExtensions = append(opts.IgnoredExtensions, s.DiscoveryOptions.IgnoredExtensions...)
+	opts.IgnoreHidden = s.DiscoveryOptions.IgnoreHidden
+	opts.PreservedHiddenPrefixes = append(opts.PreservedHiddenPrefixes, s.DiscoveryOptions.PreservedHiddenPrefixes...)
+	opts.HonorGitignore = true
+	opts.HonorPCGIgnore = true
+	opts.IgnoredPathGlobs = append(opts.IgnoredPathGlobs, s.DiscoveryOptions.IgnoredPathGlobs...)
+	opts.PreservedPathGlobs = append(opts.PreservedPathGlobs, s.DiscoveryOptions.PreservedPathGlobs...)
+	return opts
+}
+
+func defaultNativeDiscoveryOptions() discovery.Options {
 	return discovery.Options{
 		IgnoredDirs:       defaultIgnoredDirs,
 		IgnoredExtensions: defaultIgnoredExtensions,
 		HonorGitignore:    true,
+		HonorPCGIgnore:    true,
 	}
 }
 
@@ -347,11 +444,23 @@ func (s NativeRepositorySnapshotter) logDiscoveryStats(ctx context.Context, repo
 	for ext, count := range stats.FilesSkippedByExtension {
 		attrs = append(attrs, slog.Int("files_skipped.ext"+ext, count))
 	}
+	for reason, count := range stats.FilesSkippedByContent {
+		attrs = append(attrs, slog.Int("files_skipped.content."+reason, count))
+	}
+	for reason, count := range stats.DirsSkippedByUser {
+		attrs = append(attrs, slog.Int("dirs_skipped.user."+reason, count))
+	}
+	for reason, count := range stats.FilesSkippedByUser {
+		attrs = append(attrs, slog.Int("files_skipped.user."+reason, count))
+	}
 	if stats.FilesSkippedHidden > 0 {
 		attrs = append(attrs, slog.Int("files_skipped.hidden", stats.FilesSkippedHidden))
 	}
 	if stats.FilesSkippedGitignore > 0 {
 		attrs = append(attrs, slog.Int("files_skipped.gitignore", stats.FilesSkippedGitignore))
+	}
+	if stats.FilesSkippedPCGIgnore > 0 {
+		attrs = append(attrs, slog.Int("files_skipped.pcgignore", stats.FilesSkippedPCGIgnore))
 	}
 
 	logger.InfoContext(ctx, "discovery stats", attrs...)
@@ -372,6 +481,21 @@ func (s NativeRepositorySnapshotter) recordDiscoveryMetrics(ctx context.Context,
 			metric.WithAttributes(telemetry.AttrSkipReason("ext:"+ext)),
 		)
 	}
+	for reason, count := range stats.FilesSkippedByContent {
+		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(count),
+			metric.WithAttributes(telemetry.AttrSkipReason("content:"+reason)),
+		)
+	}
+	for reason, count := range stats.DirsSkippedByUser {
+		s.Instruments.DiscoveryDirsSkipped.Add(ctx, int64(count),
+			metric.WithAttributes(telemetry.AttrSkipReason("user:"+reason)),
+		)
+	}
+	for reason, count := range stats.FilesSkippedByUser {
+		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(count),
+			metric.WithAttributes(telemetry.AttrSkipReason("user:"+reason)),
+		)
+	}
 	if stats.FilesSkippedHidden > 0 {
 		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(stats.FilesSkippedHidden),
 			metric.WithAttributes(telemetry.AttrSkipReason("hidden")),
@@ -380,6 +504,11 @@ func (s NativeRepositorySnapshotter) recordDiscoveryMetrics(ctx context.Context,
 	if stats.FilesSkippedGitignore > 0 {
 		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(stats.FilesSkippedGitignore),
 			metric.WithAttributes(telemetry.AttrSkipReason("gitignore")),
+		)
+	}
+	if stats.FilesSkippedPCGIgnore > 0 {
+		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(stats.FilesSkippedPCGIgnore),
+			metric.WithAttributes(telemetry.AttrSkipReason("pcgignore")),
 		)
 	}
 }
@@ -396,6 +525,10 @@ func resolveNativeSnapshotFileSet(
 	registry parser.Registry,
 	opts discovery.Options,
 ) (discovery.RepoFileSet, discovery.DiscoveryStats, error) {
+	opts, err := discoveryOptionsWithRepoDiscoveryConfig(repoPath, opts)
+	if err != nil {
+		return discovery.RepoFileSet{}, discovery.DiscoveryStats{}, err
+	}
 	stats, fileSets, err := discovery.ResolveRepositoryFileSetsWithStats(
 		repoPath,
 		func(path string) bool {
@@ -409,10 +542,221 @@ func resolveNativeSnapshotFileSet(
 	}
 	for _, fileSet := range fileSets {
 		if fileSet.RepoRoot == repoPath {
+			fileSet.Files = filterGeneratedNativeSnapshotFiles(fileSet.Files, &stats)
 			return fileSet, stats, nil
 		}
 	}
 	return discovery.RepoFileSet{RepoRoot: repoPath}, stats, nil
+}
+
+const generatedJavaScriptBundleMinBytes = 256 * 1024
+const vendoredBrowserLibraryPrefixBytes = 16 * 1024
+
+func filterGeneratedNativeSnapshotFiles(files []string, stats *discovery.DiscoveryStats) []string {
+	filtered := files[:0]
+	for _, path := range files {
+		if reason, ok := generatedNativeSnapshotSkipReason(path); ok {
+			if stats.FilesSkippedByContent == nil {
+				stats.FilesSkippedByContent = make(map[string]int)
+			}
+			stats.FilesSkippedByContent[reason]++
+			continue
+		}
+		filtered = append(filtered, path)
+	}
+	return filtered
+}
+
+func generatedNativeSnapshotSkipReason(path string) (string, bool) {
+	if isVendoredZendFrameworkFile(path) {
+		return "vendored-zend-framework", true
+	}
+	if isVendoredBrowserLibraryFile(path) {
+		return "vendored-browser-library", true
+	}
+	if isVendoredFPDFFile(path) {
+		return "vendored-fpdf", true
+	}
+	if isVendoredPEARFile(path) {
+		return "vendored-pear", true
+	}
+	prefix, ok := largeJavaScriptBundlePrefix(path)
+	if !ok {
+		return "", false
+	}
+	switch {
+	case isWebpackBootstrapPrefix(prefix):
+		return "generated-webpack", true
+	case isRollupBootstrapPrefix(prefix):
+		return "generated-rollup", true
+	case isESBuildBootstrapPrefix(prefix):
+		return "generated-esbuild", true
+	case isParcelBootstrapPrefix(prefix):
+		return "generated-parcel", true
+	}
+	return "", false
+}
+
+func largeJavaScriptBundlePrefix(path string) (string, bool) {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext != ".js" && ext != ".cjs" && ext != ".mjs" {
+		return "", false
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Size() < generatedJavaScriptBundleMinBytes {
+		return "", false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = file.Close() }()
+
+	buf := make([]byte, 8192)
+	n, err := file.Read(buf)
+	if err != nil && n == 0 {
+		return "", false
+	}
+	return string(buf[:n]), true
+}
+
+func isWebpackBootstrapPrefix(prefix string) bool {
+	return strings.Contains(prefix, "webpackBootstrap") &&
+		strings.Contains(prefix, "/******/") &&
+		(strings.Contains(prefix, "installedModules") ||
+			(strings.Contains(prefix, "__webpack_modules__") &&
+				strings.Contains(prefix, "__webpack_module_cache__") &&
+				strings.Contains(prefix, "function __webpack_require__")))
+}
+
+func isRollupBootstrapPrefix(prefix string) bool {
+	return strings.Contains(prefix, "var commonjsGlobal = typeof globalThis") &&
+		strings.Contains(prefix, "function getDefaultExportFromCjs") &&
+		strings.Contains(prefix, "function getAugmentedNamespace") &&
+		strings.Contains(prefix, "Object.defineProperty(a, '__esModule'")
+}
+
+func isESBuildBootstrapPrefix(prefix string) bool {
+	return strings.Contains(prefix, "var __defProp = Object.defineProperty") &&
+		strings.Contains(prefix, "var __getOwnPropNames = Object.getOwnPropertyNames") &&
+		strings.Contains(prefix, "var __commonJS =") &&
+		strings.Contains(prefix, "var __copyProps =") &&
+		(strings.Contains(prefix, "var __toESM =") || strings.Contains(prefix, "var __toCommonJS ="))
+}
+
+func isParcelBootstrapPrefix(prefix string) bool {
+	return strings.Contains(prefix, "$parcel$global") &&
+		strings.Contains(prefix, "parcelRequire") &&
+		strings.Contains(prefix, "newRequire.isParcelRequire = true") &&
+		strings.Contains(prefix, "newRequire.Module = Module")
+}
+
+func isVendoredZendFrameworkFile(path string) bool {
+	normalized := filepath.ToSlash(path)
+	if !strings.Contains(normalized, "/library/Zend/") && !strings.Contains(normalized, "/Zend/") {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".php"
+}
+
+func isVendoredBrowserLibraryFile(path string) bool {
+	if ext := strings.ToLower(filepath.Ext(path)); ext != ".js" && ext != ".mjs" && ext != ".cjs" {
+		return false
+	}
+	name := strings.ToLower(filepath.Base(path))
+	switch {
+	case name == "jquery.js" || name == "jquery-ui.js":
+		return true
+	case strings.HasPrefix(name, "jquery.") || strings.HasPrefix(name, "jquery-"):
+		return true
+	case strings.HasPrefix(name, "galleria") && strings.HasSuffix(name, ".js"):
+		return true
+	case strings.HasPrefix(name, "shadowbox") && strings.HasSuffix(name, ".js"):
+		return true
+	case strings.HasPrefix(name, "sizzle") && strings.HasSuffix(name, ".js"):
+		return true
+	case strings.HasPrefix(name, "swfobject") && strings.HasSuffix(name, ".js"):
+		return true
+	case strings.Contains("/"+filepath.ToSlash(path)+"/", "/jwplayer/"):
+		return true
+	default:
+		return hasVendoredBrowserLibrarySignature(path)
+	}
+}
+
+func hasVendoredBrowserLibrarySignature(path string) bool {
+	prefix, ok := javascriptFilePrefix(path, vendoredBrowserLibraryPrefixBytes)
+	if !ok {
+		return false
+	}
+	normalized := strings.ToLower(prefix)
+	switch {
+	case strings.Contains(normalized, "jquery foundation") &&
+		strings.Contains(normalized, "jquery.org/license"):
+		return true
+	case strings.Contains(normalized, "bootstrap v") &&
+		strings.Contains(normalized, "getbootstrap.com"):
+		return true
+	case strings.Contains(normalized, "fullcalendar v") &&
+		strings.Contains(normalized, "fullcalendar.io"):
+		return true
+	case strings.Contains(normalized, "fotorama") &&
+		strings.Contains(normalized, "fotorama.io/license"):
+		return true
+	case strings.Contains(normalized, "gmaps.js") &&
+		strings.Contains(normalized, "hpneo.github.com/gmaps"):
+		return true
+	case strings.Contains(normalized, "masonry packaged") &&
+		strings.Contains(normalized, "masonry.desandro.com"):
+		return true
+	case strings.Contains(normalized, "jwplayer.version") ||
+		(strings.Contains(normalized, "d.html5.version") &&
+			strings.Contains(normalized, "jwplayer")):
+		return true
+	case strings.Contains(normalized, "filepond") &&
+		strings.Contains(normalized, "pqina.nl/filepond"):
+		return true
+	case strings.Contains(normalized, "prototype javascript framework") &&
+		strings.Contains(normalized, "prototypejs.org"):
+		return true
+	case strings.Contains(normalized, "reveal.js") &&
+		strings.Contains(normalized, "lab.hakim.se/reveal-js"):
+		return true
+	default:
+		return false
+	}
+}
+
+func javascriptFilePrefix(path string, limit int) (string, bool) {
+	if limit <= 0 {
+		return "", false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = file.Close() }()
+
+	buf := make([]byte, limit)
+	n, err := file.Read(buf)
+	if err != nil && n == 0 {
+		return "", false
+	}
+	return string(buf[:n]), true
+}
+
+func isVendoredFPDFFile(path string) bool {
+	name := strings.ToLower(filepath.Base(path))
+	return name == "fpdf.php"
+}
+
+func isVendoredPEARFile(path string) bool {
+	if ext := strings.ToLower(filepath.Ext(path)); ext != ".php" {
+		return false
+	}
+	normalized := strings.ToLower(filepath.ToSlash(path))
+	return strings.Contains(normalized, "/pear/php/")
 }
 
 func resolveNativeSnapshotFileSetForTargets(

@@ -614,7 +614,7 @@ func decodeEntityMetadata(raw []byte) (map[string]any, error) {
 }
 
 // ListFrameworkRoutes queries fact_records for files with framework_semantics
-// (Express, Hapi, FastAPI, Flask route detection) for a given repo_id.
+// route detection for a given repo_id.
 func (cr *ContentReader) ListFrameworkRoutes(ctx context.Context, repoID string) ([]FrameworkRouteEvidence, error) {
 	ctx, span := cr.tracer.Start(ctx, "postgres.query",
 		trace.WithAttributes(
@@ -692,6 +692,12 @@ func parseFrameworkSemantics(relativePath string, raw []byte) []FrameworkRouteEv
 		if fwData == nil {
 			continue
 		}
+		if fw == "nextjs" {
+			if route, ok := nextJSFrameworkRoute(relativePath, fwData); ok {
+				results = append(results, route)
+			}
+			continue
+		}
 		routePaths := anySliceToStrings(fwData["route_paths"])
 		if len(routePaths) == 0 {
 			continue
@@ -701,9 +707,50 @@ func parseFrameworkSemantics(relativePath string, raw []byte) []FrameworkRouteEv
 			RelativePath: relativePath,
 			RoutePaths:   routePaths,
 			RouteMethods: anySliceToStrings(fwData["route_methods"]),
+			RouteEntries: frameworkRouteEntries(fwData["route_entries"]),
 		})
 	}
 	return results
+}
+
+// nextJSFrameworkRoute translates parser-owned Next.js route module metadata
+// into the generic framework route shape used by service evidence.
+func nextJSFrameworkRoute(relativePath string, frameworkData map[string]any) (FrameworkRouteEvidence, bool) {
+	if stringValue(frameworkData["module_kind"]) != "route" {
+		return FrameworkRouteEvidence{}, false
+	}
+	routePath := nextJSRoutePath(anySliceToStrings(frameworkData["route_segments"]))
+	if routePath == "" {
+		return FrameworkRouteEvidence{}, false
+	}
+	return FrameworkRouteEvidence{
+		Framework:    "nextjs",
+		RelativePath: relativePath,
+		RoutePaths:   []string{routePath},
+		RouteMethods: anySliceToStrings(frameworkData["route_verbs"]),
+	}, true
+}
+
+// nextJSRoutePath preserves parser-emitted route segment names while removing
+// Next.js route-group folders that are not part of the public URL.
+func nextJSRoutePath(segments []string) string {
+	pathSegments := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		segment = strings.TrimSpace(segment)
+		if segment == "" || (strings.HasPrefix(segment, "(") && strings.HasSuffix(segment, ")")) {
+			continue
+		}
+		pathSegments = append(pathSegments, segment)
+	}
+	if len(pathSegments) == 0 {
+		return ""
+	}
+	return "/" + strings.Join(pathSegments, "/")
+}
+
+func stringValue(raw any) string {
+	value, _ := raw.(string)
+	return strings.TrimSpace(value)
 }
 
 func anySliceToStrings(raw any) []string {
@@ -716,6 +763,31 @@ func anySliceToStrings(raw any) []string {
 		if s, ok := item.(string); ok && s != "" {
 			result = append(result, s)
 		}
+	}
+	return result
+}
+
+// frameworkRouteEntries decodes the parser's paired route evidence while
+// tolerating older facts that only carry route_paths and route_methods.
+func frameworkRouteEntries(raw any) []FrameworkRouteEntryEvidence {
+	slice, _ := raw.([]any)
+	if len(slice) == 0 {
+		return nil
+	}
+	result := make([]FrameworkRouteEntryEvidence, 0, len(slice))
+	for _, item := range slice {
+		row, _ := item.(map[string]any)
+		if len(row) == 0 {
+			continue
+		}
+		entry := FrameworkRouteEntryEvidence{
+			Method: strings.TrimSpace(stringValue(row["method"])),
+			Path:   strings.TrimSpace(stringValue(row["path"])),
+		}
+		if entry.Method == "" || entry.Path == "" {
+			continue
+		}
+		result = append(result, entry)
 	}
 	return result
 }

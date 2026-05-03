@@ -11,8 +11,9 @@ import (
 // graph and content store. Graph-backed entity types use Neo4j. Content-only
 // entity types use the Postgres content store.
 type LanguageQueryHandler struct {
-	Neo4j   GraphReader
-	Content *ContentReader
+	Neo4j   GraphQuery
+	Content ContentStore
+	Profile QueryProfile
 }
 
 // Mount registers the language query endpoint on the given mux.

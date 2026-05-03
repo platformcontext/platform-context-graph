@@ -135,9 +135,17 @@ CREATE INDEX IF NOT EXISTS fact_records_scope_generation_idx
 
 CREATE INDEX IF NOT EXISTS fact_records_stable_key_idx
     ON fact_records (stable_fact_key, generation_id);
+
+CREATE INDEX IF NOT EXISTS fact_records_framework_routes_repo_path_idx
+    ON fact_records ((payload->>'repo_id'), (payload->>'relative_path'))
+    WHERE fact_kind = 'file'
+      AND payload->'parsed_file_data'->'framework_semantics' IS NOT NULL
+      AND jsonb_array_length(
+          COALESCE(payload->'parsed_file_data'->'framework_semantics'->'frameworks', '[]'::jsonb)
+      ) > 0;
 `
 
-const contentStoreSchemaSQL = `
+const contentStoreBaseSchemaSQL = `
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE IF NOT EXISTS content_files (
@@ -174,6 +182,15 @@ CREATE TABLE IF NOT EXISTS content_entities (
     iac_relevant BOOLEAN NULL
 );
 
+CREATE TABLE IF NOT EXISTS content_file_references (
+    repo_id TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
+    reference_kind TEXT NOT NULL,
+    reference_value TEXT NOT NULL,
+    indexed_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (repo_id, relative_path, reference_kind, reference_value)
+);
+
 CREATE INDEX IF NOT EXISTS content_files_repo_path_idx
     ON content_files (repo_id, relative_path);
 CREATE INDEX IF NOT EXISTS content_entities_repo_idx
@@ -182,11 +199,19 @@ CREATE INDEX IF NOT EXISTS content_entities_type_idx
     ON content_entities (entity_type);
 CREATE INDEX IF NOT EXISTS content_entities_path_idx
     ON content_entities (relative_path);
-CREATE INDEX IF NOT EXISTS content_files_content_trgm_idx
+CREATE INDEX IF NOT EXISTS content_file_references_lookup_idx
+    ON content_file_references (reference_kind, reference_value, repo_id);
+CREATE INDEX IF NOT EXISTS content_file_references_repo_path_idx
+    ON content_file_references (repo_id, relative_path);
+`
+
+const contentStoreSearchIndexSchemaSQL = `CREATE INDEX IF NOT EXISTS content_files_content_trgm_idx
     ON content_files USING gin (content gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS content_entities_source_trgm_idx
     ON content_entities USING gin (source_cache gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS content_files_artifact_type_idx
+`
+
+const contentStoreFilterIndexSchemaSQL = `CREATE INDEX IF NOT EXISTS content_files_artifact_type_idx
     ON content_files (artifact_type);
 CREATE INDEX IF NOT EXISTS content_files_template_dialect_idx
     ON content_files (template_dialect);
@@ -200,6 +225,10 @@ CREATE INDEX IF NOT EXISTS content_entities_iac_relevant_idx
     ON content_entities (iac_relevant);
 `
 
+const contentStoreSchemaSQL = contentStoreBaseSchemaSQL + contentStoreSearchIndexSchemaSQL + contentStoreFilterIndexSchemaSQL
+
+const contentStoreSchemaWithoutSearchIndexesSQL = contentStoreBaseSchemaSQL + contentStoreFilterIndexSchemaSQL
+
 const workItemSchemaSQL = `
 CREATE TABLE IF NOT EXISTS fact_work_items (
     work_item_id TEXT PRIMARY KEY,
@@ -207,6 +236,8 @@ CREATE TABLE IF NOT EXISTS fact_work_items (
     generation_id TEXT NOT NULL REFERENCES scope_generations(generation_id) ON DELETE CASCADE,
     stage TEXT NOT NULL,
     domain TEXT NOT NULL,
+    conflict_domain TEXT NOT NULL DEFAULT 'scope',
+    conflict_key TEXT NULL,
     status TEXT NOT NULL,
     attempt_count INTEGER NOT NULL DEFAULT 0,
     lease_owner TEXT NULL,
@@ -222,6 +253,12 @@ CREATE TABLE IF NOT EXISTS fact_work_items (
     updated_at TIMESTAMPTZ NOT NULL
 );
 
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS conflict_domain TEXT NOT NULL DEFAULT 'scope';
+
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS conflict_key TEXT NULL;
+
 CREATE INDEX IF NOT EXISTS fact_work_items_scope_generation_idx
     ON fact_work_items (scope_id, generation_id, status, updated_at DESC);
 
@@ -234,6 +271,10 @@ CREATE INDEX IF NOT EXISTS fact_work_items_stage_domain_status_idx
 CREATE INDEX IF NOT EXISTS fact_work_items_claim_until_idx
     ON fact_work_items (claim_until)
     WHERE claim_until IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS fact_work_items_reducer_conflict_claim_idx
+    ON fact_work_items (stage, conflict_domain, COALESCE(conflict_key, scope_id), status, claim_until, updated_at DESC)
+    WHERE stage = 'reducer';
 `
 
 const workItemAuditSchemaSQL = `
@@ -268,6 +309,21 @@ func BootstrapDefinitions() []Definition {
 	sort.SliceStable(defs, func(i, j int) bool {
 		return defs[i].Path < defs[j].Path
 	})
+	return defs
+}
+
+// BootstrapDefinitionsWithoutContentSearchIndexes returns the bootstrap layout
+// without the expensive content trigram indexes. It is intended for
+// local-authoritative bulk-load flows that call EnsureContentSearchIndexes
+// after the initial write-heavy drain completes.
+func BootstrapDefinitionsWithoutContentSearchIndexes() []Definition {
+	defs := BootstrapDefinitions()
+	for i := range defs {
+		if defs[i].Name == "content_store" {
+			defs[i].SQL = contentStoreSchemaWithoutSearchIndexesSQL
+			break
+		}
+	}
 	return defs
 }
 
@@ -326,4 +382,22 @@ func ApplyDefinitions(ctx context.Context, exec Executor, defs []Definition) err
 // ApplyBootstrap applies the Wave 2 schema bootstrap layout.
 func ApplyBootstrap(ctx context.Context, exec Executor) error {
 	return ApplyDefinitions(ctx, exec, BootstrapDefinitions())
+}
+
+// ApplyBootstrapWithoutContentSearchIndexes applies the bootstrap layout while
+// deferring content trigram indexes for a later bulk index build.
+func ApplyBootstrapWithoutContentSearchIndexes(ctx context.Context, exec Executor) error {
+	return ApplyDefinitions(ctx, exec, BootstrapDefinitionsWithoutContentSearchIndexes())
+}
+
+// EnsureContentSearchIndexes creates the trigram indexes that accelerate
+// content file and entity source search.
+func EnsureContentSearchIndexes(ctx context.Context, exec Executor) error {
+	if exec == nil {
+		return fmt.Errorf("executor is required")
+	}
+	if _, err := exec.ExecContext(ctx, contentStoreSearchIndexSchemaSQL); err != nil {
+		return fmt.Errorf("ensure content search indexes: %w", err)
+	}
+	return nil
 }

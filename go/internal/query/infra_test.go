@@ -63,16 +63,16 @@ func TestSearchInfraResourcesUsesInfrastructureLabelsForCategory(t *testing.T) {
 	if strings.Contains(reader.lastCypher, "Platform") || strings.Contains(reader.lastCypher, "Workload") {
 		t.Fatalf("cypher = %q, want infrastructure-only label search", reader.lastCypher)
 	}
-
-	labels, ok := reader.lastParams["labels"].([]string)
-	if !ok {
-		t.Fatalf("params[labels] type = %T, want []string", reader.lastParams["labels"])
+	if strings.Contains(reader.lastCypher, "any(label IN labels(n)") {
+		t.Fatalf("cypher = %q, want direct label predicates for NornicDB compatibility", reader.lastCypher)
 	}
-	if got, want := len(labels), 2; got != want {
-		t.Fatalf("len(params[labels]) = %d, want %d", got, want)
+	for _, fragment := range []string{"n:K8sResource", "n:KustomizeOverlay"} {
+		if !strings.Contains(reader.lastCypher, fragment) {
+			t.Fatalf("cypher = %q, want fragment %q", reader.lastCypher, fragment)
+		}
 	}
-	if got, want := labels[0], "K8sResource"; got != want {
-		t.Fatalf("labels[0] = %q, want %q", got, want)
+	if _, ok := reader.lastParams["labels"]; ok {
+		t.Fatalf("params[labels] = %#v, want no dynamic label parameter", reader.lastParams["labels"])
 	}
 
 	var resp map[string]any
@@ -81,6 +81,123 @@ func TestSearchInfraResourcesUsesInfrastructureLabelsForCategory(t *testing.T) {
 	}
 	if got, want := int(resp["count"].(float64)), 1; got != want {
 		t.Fatalf("count = %d, want %d", got, want)
+	}
+}
+
+func TestSearchInfraResourcesFiltersTerraformClassification(t *testing.T) {
+	t.Parallel()
+
+	reader := &recordingInfraGraphReader{
+		runRows: []map[string]any{
+			{
+				"id":                "terraform:aws_s3_bucket.logs",
+				"name":              "aws_s3_bucket.logs",
+				"labels":            []any{"TerraformResource"},
+				"kind":              "aws_s3_bucket",
+				"provider":          "aws",
+				"resource_type":     "aws_s3_bucket",
+				"resource_service":  "s3",
+				"resource_category": "storage",
+			},
+		},
+	}
+	handler := &InfraHandler{Neo4j: reader}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/infra/resources/search",
+		bytes.NewBufferString(`{"query":"aws_s3","category":"terraform","kind":" aws_s3_bucket ","provider":" aws ","resource_category":" storage ","resource_service":" s3 ","limit":5}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	for _, fragment := range []string{"n:TerraformResource", "n:TerraformDataSource", "coalesce(n.resource_type, n.data_type, '')", "n.provider", "n.resource_service", "n.resource_category"} {
+		if !strings.Contains(reader.lastCypher, fragment) {
+			t.Fatalf("cypher = %q, want fragment %q", reader.lastCypher, fragment)
+		}
+	}
+	for key, want := range map[string]any{
+		"kind":              "aws_s3_bucket",
+		"provider":          "aws",
+		"resource_category": "storage",
+		"resource_service":  "s3",
+	} {
+		if got := reader.lastParams[key]; got != want {
+			t.Fatalf("params[%s] = %#v, want %#v", key, got, want)
+		}
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got, want := int(resp["count"].(float64)), 1; got != want {
+		t.Fatalf("count = %d, want %d", got, want)
+	}
+	results := resp["results"].([]any)
+	terraform, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0] type = %T, want map[string]any", results[0])
+	}
+	if got, want := terraform["resource_type"], "aws_s3_bucket"; got != want {
+		t.Fatalf("resource_type = %#v, want %#v", got, want)
+	}
+	if got, want := terraform["resource_service"], "s3"; got != want {
+		t.Fatalf("resource_service = %#v, want %#v", got, want)
+	}
+	if got, want := terraform["resource_category"], "storage"; got != want {
+		t.Fatalf("resource_category = %#v, want %#v", got, want)
+	}
+}
+
+func TestSearchInfraResourcesMatchesResourceTypeAsFreeText(t *testing.T) {
+	t.Parallel()
+
+	reader := &recordingInfraGraphReader{
+		runRows: []map[string]any{
+			{
+				"id":            "cloudformation:sample-function",
+				"name":          "SampleFunction",
+				"labels":        []any{"CloudFormationResource"},
+				"resource_type": "AWS::Serverless::Function",
+			},
+		},
+	}
+	handler := &InfraHandler{Neo4j: reader}
+
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/infra/resources/search",
+		bytes.NewBufferString(`{"query":"AWS::Serverless::Function","category":"terraform","limit":5}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body = %s", got, want, w.Body.String())
+	}
+	if !strings.Contains(reader.lastCypher, "coalesce(n.resource_type, n.data_type, '') = $resource_type_query") {
+		t.Fatalf("cypher = %q, want exact resource type identifier predicate", reader.lastCypher)
+	}
+	if strings.Contains(reader.lastCypher, "n.name CONTAINS $query") {
+		t.Fatalf("cypher = %q, want exact resource type query outside generic free-text predicate", reader.lastCypher)
+	}
+	if got := reader.lastParams["query"]; got != "AWS::Serverless::Function" {
+		t.Fatalf("params[query] = %#v, want resource type query", got)
+	}
+	if got := reader.lastParams["resource_type_query"]; got != "AWS::Serverless::Function" {
+		t.Fatalf("params[resource_type_query] = %#v, want resource type query", got)
 	}
 }
 

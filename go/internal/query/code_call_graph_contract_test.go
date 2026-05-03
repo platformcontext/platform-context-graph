@@ -415,6 +415,7 @@ func TestHandleCallChainReturnsShortestPath(t *testing.T) {
 	t.Parallel()
 
 	handler := &CodeHandler{
+		GraphBackend: GraphBackendNeo4j,
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
 				if !strings.Contains(cypher, "shortestPath") {
@@ -425,6 +426,9 @@ func TestHandleCallChainReturnsShortestPath(t *testing.T) {
 				}
 				if !strings.Contains(cypher, "[:CALLS*1..6]") {
 					t.Fatalf("cypher = %q, want bounded CALLS traversal", cypher)
+				}
+				if !strings.Contains(cypher, "RETURN [node IN nodes(path)") {
+					t.Fatalf("cypher = %q, want projected node maps on the Neo4j path", cypher)
 				}
 				if !strings.Contains(cypher, "start.name = $start") {
 					t.Fatalf("cypher = %q, want exact start-name predicate", cypher)
@@ -479,17 +483,87 @@ func TestHandleCallChainReturnsShortestPath(t *testing.T) {
 	}
 }
 
+func TestHandleCallChainUsesNornicDBBFSForNameAnchors(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "shortestPath") || strings.Contains(cypher, "CALLS*") {
+					t.Fatalf("cypher = %q, must not use NornicDB shortestPath for call-chain", cypher)
+				}
+				if strings.Contains(cypher, "CALLS_FUNCTION") {
+					t.Fatalf("cypher = %q, want canonical CALLS edges only", cypher)
+				}
+				if strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)") {
+					switch params["name"] {
+					case "wrapper":
+						return []map[string]any{{"id": "fn-1", "name": "wrapper", "labels": []any{"Function"}}}, nil
+					case "helper":
+						return []map[string]any{{"id": "fn-3", "name": "helper", "labels": []any{"Function"}}}, nil
+					default:
+						t.Fatalf("params[name] = %#v, want wrapper or helper", params["name"])
+					}
+				}
+				if !strings.Contains(cypher, "MATCH (source:Function {uid: $source_id})-[:CALLS]->(target)") {
+					t.Fatalf("cypher = %q, want one-hop CALLS traversal", cypher)
+				}
+				switch params["source_id"] {
+				case "fn-1":
+					return []map[string]any{{"id": "fn-2", "name": "delegate", "labels": []any{"Function"}}}, nil
+				case "fn-2":
+					return []map[string]any{{"id": "fn-3", "name": "helper", "labels": []any{"Function"}}}, nil
+				default:
+					return []map[string]any{}, nil
+				}
+				return nil, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/call-chain",
+		bytes.NewBufferString(`{"start":"wrapper","end":"helper","max_depth":6}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	chains, ok := resp["chains"].([]any)
+	if !ok || len(chains) != 1 {
+		t.Fatalf("resp[chains] = %#v, want one chain", resp["chains"])
+	}
+	chainResp, ok := chains[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[chains][0] type = %T, want map[string]any", chains[0])
+	}
+	chain, ok := chainResp["chain"].([]any)
+	if !ok || len(chain) != 3 {
+		t.Fatalf("resp[chains][0][chain] = %#v, want three nodes", chainResp["chain"])
+	}
+}
+
 func TestHandleCallChainSupportsEntityIDAndRepoScopedLookup(t *testing.T) {
 	t.Parallel()
 
 	handler := &CodeHandler{
 		Neo4j: fakeGraphReader{
 			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
-				if !strings.Contains(cypher, "start.id = $start_entity_id") {
-					t.Fatalf("cypher = %q, want start entity-id predicate", cypher)
+				if !strings.Contains(cypher, graphEntityIDPredicate("start", "$start_entity_id")) {
+					t.Fatalf("cypher = %q, want bridged start entity-id predicate", cypher)
 				}
-				if !strings.Contains(cypher, "end.id = $end_entity_id") {
-					t.Fatalf("cypher = %q, want end entity-id predicate", cypher)
+				if !strings.Contains(cypher, graphEntityIDPredicate("end", "$end_entity_id")) {
+					t.Fatalf("cypher = %q, want bridged end entity-id predicate", cypher)
 				}
 				if !strings.Contains(cypher, "start.repo_id = $repo_id") ||
 					!strings.Contains(cypher, "end.repo_id = $repo_id") {
@@ -539,6 +613,234 @@ func TestHandleCallChainSupportsEntityIDAndRepoScopedLookup(t *testing.T) {
 	}
 }
 
+func TestHandleCallChainSupportsEntityIDAndRepoScopedLookupForNornicDB(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "shortestPath") || strings.Contains(cypher, "CALLS*") {
+					t.Fatalf("cypher = %q, must not use NornicDB shortestPath for call-chain", cypher)
+				}
+				if strings.Contains(cypher, "MATCH (e") {
+					if got, want := params["repo_id"], "repo-1"; got != want {
+						t.Fatalf("params[repo_id] = %#v, want %#v", got, want)
+					}
+					switch params["entity_id"] {
+					case "fn-1":
+						return []map[string]any{{"id": "fn-1", "name": "wrapper", "labels": []any{"Function"}}}, nil
+					case "fn-3":
+						return []map[string]any{{"id": "fn-3", "name": "helper", "labels": []any{"Function"}}}, nil
+					default:
+						t.Fatalf("params[entity_id] = %#v, want fn-1 or fn-3", params["entity_id"])
+					}
+				}
+				if !strings.Contains(cypher, "MATCH (source:Function {uid: $source_id})-[:CALLS]->(target)") {
+					t.Fatalf("cypher = %q, want one-hop CALLS traversal", cypher)
+				}
+				switch params["source_id"] {
+				case "fn-1":
+					return []map[string]any{{"id": "fn-2", "name": "delegate", "labels": []any{"Function"}}}, nil
+				case "fn-2":
+					return []map[string]any{{"id": "fn-3", "name": "helper", "labels": []any{"Function"}}}, nil
+				default:
+					return []map[string]any{}, nil
+				}
+				return nil, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/call-chain",
+		bytes.NewBufferString(`{"start_entity_id":"fn-1","end_entity_id":"fn-3","repo_id":"repo-1","max_depth":4}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+}
+
+func TestHandleRelationshipsReturnsTransitiveCallers(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNeo4j,
+		Profile:      ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)") {
+					return []map[string]any{{
+						"id":         "fn-helper",
+						"name":       "helper",
+						"labels":     []any{"Function"},
+						"file_path":  "src/helper.go",
+						"repo_id":    "repo-1",
+						"repo_name":  "payments",
+						"language":   "go",
+						"start_line": int64(20),
+						"end_line":   int64(42),
+					}}, nil
+				}
+				if !strings.Contains(cypher, "MATCH (e)") {
+					t.Fatalf("cypher = %q, want explicit entity match", cypher)
+				}
+				if !strings.Contains(cypher, graphEntityIDPredicate("e", "$entity_id")) {
+					t.Fatalf("cypher = %q, want bridged entity-id predicate", cypher)
+				}
+				if !strings.Contains(cypher, "MATCH path = (e)<-[:CALLS*1..7]-(source)") {
+					t.Fatalf("cypher = %q, want transitive incoming CALLS traversal", cypher)
+				}
+				if !strings.Contains(cypher, "source.name as source_name") {
+					t.Fatalf("cypher = %q, want source metadata projection", cypher)
+				}
+				if !strings.Contains(cypher, "length(path) as depth") {
+					t.Fatalf("cypher = %q, want explicit depth projection", cypher)
+				}
+				if got, want := params["entity_id"], "fn-helper"; got != want {
+					t.Fatalf("params[entity_id] = %#v, want %#v", got, want)
+				}
+				return []map[string]any{{
+					"id":          "fn-helper",
+					"name":        "helper",
+					"labels":      []any{"Function"},
+					"file_path":   "src/helper.go",
+					"repo_id":     "repo-1",
+					"repo_name":   "payments",
+					"language":    "go",
+					"start_line":  int64(20),
+					"end_line":    int64(42),
+					"source_name": "delegate",
+					"source_id":   "fn-delegate",
+					"depth":       int64(1),
+				}, {
+					"id":          "fn-helper",
+					"name":        "helper",
+					"labels":      []any{"Function"},
+					"file_path":   "src/helper.go",
+					"repo_id":     "repo-1",
+					"repo_name":   "payments",
+					"language":    "go",
+					"start_line":  int64(20),
+					"end_line":    int64(42),
+					"source_name": "wrapper",
+					"source_id":   "fn-wrapper",
+					"depth":       int64(2),
+				}}, nil
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"name":"helper","direction":"incoming","relationship_type":"CALLS","transitive":true,"max_depth":7}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	incoming, ok := resp["incoming"].([]any)
+	if !ok || len(incoming) != 2 {
+		t.Fatalf("resp[incoming] = %#v, want two transitive callers", resp["incoming"])
+	}
+	first, ok := incoming[0].(map[string]any)
+	if !ok {
+		t.Fatalf("resp[incoming][0] type = %T, want map[string]any", incoming[0])
+	}
+	if got, want := first["depth"], float64(1); got != want {
+		t.Fatalf("resp[incoming][0][depth] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleRelationshipsReturnsTransitiveCallersForNornicDB(t *testing.T) {
+	t.Parallel()
+
+	handler := &CodeHandler{
+		GraphBackend: GraphBackendNornicDB,
+		Profile:      ProfileLocalAuthoritative,
+		Neo4j: fakeGraphReader{
+			run: func(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+				if strings.Contains(cypher, "MATCH (e)<-[:CONTAINS]-(f:File)") {
+					return []map[string]any{{
+						"id":         "fn-helper",
+						"name":       "helper",
+						"labels":     []any{"Function"},
+						"file_path":  "src/helper.go",
+						"repo_id":    "repo-1",
+						"repo_name":  "payments",
+						"language":   "go",
+						"start_line": int64(20),
+						"end_line":   int64(42),
+					}}, nil
+				}
+				if strings.Contains(cypher, "CALLS*") || strings.Contains(cypher, "length(path)") {
+					t.Fatalf("cypher = %q, must not depend on NornicDB variable-path length", cypher)
+				}
+				if !strings.Contains(cypher, "MATCH (source)-[:CALLS]->(target)") {
+					t.Fatalf("cypher = %q, want one-hop CALLS traversal for NornicDB", cypher)
+				}
+				switch params["entity_id"] {
+				case "fn-helper":
+					return []map[string]any{{
+						"source_name": "delegate",
+						"source_id":   "fn-delegate",
+						"target_name": "helper",
+						"target_id":   "fn-helper",
+					}}, nil
+				case "fn-delegate":
+					return []map[string]any{{
+						"source_name": "wrapper",
+						"source_id":   "fn-wrapper",
+						"target_name": "delegate",
+						"target_id":   "fn-delegate",
+					}}, nil
+				default:
+					return []map[string]any{}, nil
+				}
+			},
+		},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"name":"helper","direction":"incoming","relationship_type":"CALLS","transitive":true}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d body=%s", got, want, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	incoming, ok := resp["incoming"].([]any)
+	if !ok || len(incoming) != 2 {
+		t.Fatalf("resp[incoming] = %#v, want two transitive callers", resp["incoming"])
+	}
+}
+
 func TestHandleCallChainSupportsRustImplContextQualifiedLookup(t *testing.T) {
 	t.Parallel()
 
@@ -554,11 +856,11 @@ func TestHandleCallChainSupportsRustImplContextQualifiedLookup(t *testing.T) {
 				if !strings.Contains(cypher, "[:CALLS*1..3]") {
 					t.Fatalf("cypher = %q, want bounded CALLS traversal", cypher)
 				}
-				if !strings.Contains(cypher, "start.id = $start_entity_id") {
-					t.Fatalf("cypher = %q, want exact start entity-id predicate", cypher)
+				if !strings.Contains(cypher, graphEntityIDPredicate("start", "$start_entity_id")) {
+					t.Fatalf("cypher = %q, want bridged start entity-id predicate", cypher)
 				}
-				if !strings.Contains(cypher, "end.id = $end_entity_id") {
-					t.Fatalf("cypher = %q, want exact end entity-id predicate", cypher)
+				if !strings.Contains(cypher, graphEntityIDPredicate("end", "$end_entity_id")) {
+					t.Fatalf("cypher = %q, want bridged end entity-id predicate", cypher)
 				}
 				if got, want := params["start_entity_id"], "fn-new"; got != want {
 					t.Fatalf("params[start_entity_id] = %#v, want %#v", got, want)

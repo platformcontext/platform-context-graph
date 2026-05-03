@@ -20,6 +20,8 @@ func TestSchemaStatementsContainsExpectedConstraints(t *testing.T) {
 		"CREATE CONSTRAINT repository_path IF NOT EXISTS",
 		"CREATE CONSTRAINT path IF NOT EXISTS FOR (f:File)",
 		"CREATE CONSTRAINT directory_path IF NOT EXISTS",
+		"CREATE CONSTRAINT evidence_artifact_id IF NOT EXISTS",
+		"CREATE CONSTRAINT environment_name IF NOT EXISTS",
 		"CREATE CONSTRAINT function_unique IF NOT EXISTS",
 		"CREATE CONSTRAINT class_unique IF NOT EXISTS",
 		"CREATE CONSTRAINT parameter_unique IF NOT EXISTS",
@@ -40,6 +42,118 @@ func TestSchemaStatementsContainsExpectedConstraints(t *testing.T) {
 	}
 }
 
+func TestSchemaStatementsForBackendPreservesNeo4jCompositeUniqueness(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNeo4j)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNeo4j, err)
+	}
+
+	assertContainsStatement(t, stmts, "CREATE CONSTRAINT function_unique IF NOT EXISTS FOR (f:Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+	assertNoStatementContains(t, stmts, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
+}
+
+func TestSchemaStatementsForBackendSkipsNornicDBCompositeUniqueness(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNornicDB, err)
+	}
+
+	assertNoStatementContains(t, stmts, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+	assertNoStatementContains(t, stmts, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
+	assertContainsStatement(t, stmts, "CREATE CONSTRAINT function_uid_unique IF NOT EXISTS FOR (n:Function) REQUIRE n.uid IS UNIQUE")
+}
+
+func TestSchemaStatementsForBackendAddsNornicDBMergeLookupIndexes(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNornicDB, err)
+	}
+
+	expected := []string{
+		"CREATE INDEX nornicdb_repository_id_lookup IF NOT EXISTS FOR (r:Repository) ON (r.id)",
+		"CREATE INDEX nornicdb_directory_path_lookup IF NOT EXISTS FOR (d:Directory) ON (d.path)",
+		"CREATE INDEX nornicdb_file_path_lookup IF NOT EXISTS FOR (f:File) ON (f.path)",
+		"CREATE INDEX nornicdb_workload_id_lookup IF NOT EXISTS FOR (w:Workload) ON (w.id)",
+		"CREATE INDEX nornicdb_workload_instance_id_lookup IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.id)",
+		"CREATE INDEX nornicdb_platform_id_lookup IF NOT EXISTS FOR (p:Platform) ON (p.id)",
+		"CREATE INDEX nornicdb_endpoint_id_lookup IF NOT EXISTS FOR (e:Endpoint) ON (e.id)",
+		"CREATE INDEX nornicdb_evidence_artifact_id_lookup IF NOT EXISTS FOR (a:EvidenceArtifact) ON (a.id)",
+		"CREATE INDEX nornicdb_environment_name_lookup IF NOT EXISTS FOR (e:Environment) ON (e.name)",
+	}
+	for _, want := range expected {
+		assertContainsStatement(t, stmts, want)
+	}
+}
+
+func TestSchemaStatementsForBackendAddsNornicDBUIDLookupIndexes(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNornicDB, err)
+	}
+
+	expected := []string{
+		"CREATE INDEX nornicdb_function_uid_lookup IF NOT EXISTS FOR (n:Function) ON (n.uid)",
+		"CREATE INDEX nornicdb_type_alias_uid_lookup IF NOT EXISTS FOR (n:TypeAlias) ON (n.uid)",
+		"CREATE INDEX nornicdb_variable_uid_lookup IF NOT EXISTS FOR (n:Variable) ON (n.uid)",
+	}
+	for _, want := range expected {
+		assertContainsStatement(t, stmts, want)
+	}
+}
+
+func TestSchemaStatementsForBackendKeepsUIDLookupIndexesNornicDBOnly(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNeo4j)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNeo4j, err)
+	}
+
+	assertNoStatementContains(t, stmts, "nornicdb_function_uid_lookup")
+	assertNoStatementContains(t, stmts, "nornicdb_type_alias_uid_lookup")
+	assertNoStatementContains(t, stmts, "nornicdb_workload_id_lookup")
+}
+
+func TestNornicDBSchemaSkipsEveryCompositeUniqueConstraint(t *testing.T) {
+	t.Parallel()
+
+	stmts, err := SchemaStatementsForBackend(SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("SchemaStatementsForBackend(%q) error = %v, want nil", SchemaBackendNornicDB, err)
+	}
+
+	for _, constraint := range schemaConstraints {
+		if !isCompositeUniqueConstraint(constraint) {
+			continue
+		}
+		translated := nornicDBSchemaConstraint(constraint)
+		if translated != "" {
+			t.Fatalf("NornicDB constraint = %q, want skipped for %q", translated, constraint)
+		}
+		assertNoStatementContains(t, stmts, constraint)
+	}
+}
+
+func TestSchemaStatementsForBackendRejectsUnknownBackend(t *testing.T) {
+	t.Parallel()
+
+	_, err := SchemaStatementsForBackend(SchemaBackend("falkordb"))
+	if err == nil {
+		t.Fatal("SchemaStatementsForBackend() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported schema backend") {
+		t.Fatalf("error = %q, want unsupported schema backend", err.Error())
+	}
+}
+
 func TestSchemaStatementsContainsPerformanceIndexes(t *testing.T) {
 	t.Parallel()
 
@@ -51,6 +165,8 @@ func TestSchemaStatementsContainsPerformanceIndexes(t *testing.T) {
 		"CREATE INDEX function_name IF NOT EXISTS",
 		"CREATE INDEX class_name IF NOT EXISTS",
 		"CREATE INDEX workload_name IF NOT EXISTS",
+		"CREATE INDEX workload_instance_workload_id IF NOT EXISTS",
+		"CREATE INDEX workload_instance_repo_id IF NOT EXISTS",
 	}
 	for _, want := range expected {
 		found := false
@@ -72,25 +188,21 @@ func TestSchemaStatementsContainsUIDConstraints(t *testing.T) {
 	stmts := SchemaStatements()
 
 	expected := []string{
-		"function_uid_unique",
-		"class_uid_unique",
-		"variable_uid_unique",
-		"typedef_uid_unique",
-		"type_alias_uid_unique",
-		"component_uid_unique",
-		"terraform_resource_uid_unique",
+		"CREATE CONSTRAINT function_uid_unique IF NOT EXISTS FOR (n:Function) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT class_uid_unique IF NOT EXISTS FOR (n:Class) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT variable_uid_unique IF NOT EXISTS FOR (n:Variable) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT typedef_uid_unique IF NOT EXISTS FOR (n:Typedef) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT type_alias_uid_unique IF NOT EXISTS FOR (n:TypeAlias) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT component_uid_unique IF NOT EXISTS FOR (n:Component) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT module_uid_unique IF NOT EXISTS FOR (n:Module) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT impl_block_uid_unique IF NOT EXISTS FOR (n:ImplBlock) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT protocol_uid_unique IF NOT EXISTS FOR (n:Protocol) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT protocol_implementation_uid_unique IF NOT EXISTS FOR (n:ProtocolImplementation) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT k8s_resource_uid_unique IF NOT EXISTS FOR (n:K8sResource) REQUIRE n.uid IS UNIQUE",
+		"CREATE CONSTRAINT terraform_resource_uid_unique IF NOT EXISTS FOR (n:TerraformResource) REQUIRE n.uid IS UNIQUE",
 	}
 	for _, want := range expected {
-		found := false
-		for _, stmt := range stmts {
-			if strings.Contains(stmt, want) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("SchemaStatements() missing UID constraint containing %q", want)
-		}
+		assertContainsStatement(t, stmts, want)
 	}
 }
 
@@ -137,6 +249,25 @@ func TestEnsureSchemaExecutesAllStatements(t *testing.T) {
 	}
 }
 
+func TestEnsureSchemaWithBackendExecutesNornicDBStatements(t *testing.T) {
+	t.Parallel()
+
+	executor := &schemaRecordingExecutor{}
+	err := EnsureSchemaWithBackend(context.Background(), executor, nil, SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("EnsureSchemaWithBackend() error = %v, want nil", err)
+	}
+
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT function_uid_unique IF NOT EXISTS FOR (n:Function) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT module_uid_unique IF NOT EXISTS FOR (n:Module) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT impl_block_uid_unique IF NOT EXISTS FOR (n:ImplBlock) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT protocol_uid_unique IF NOT EXISTS FOR (n:Protocol) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT protocol_implementation_uid_unique IF NOT EXISTS FOR (n:ProtocolImplementation) REQUIRE n.uid IS UNIQUE")
+	assertContainsExecutedStatement(t, executor.calls, "CREATE CONSTRAINT k8s_resource_uid_unique IF NOT EXISTS FOR (n:K8sResource) REQUIRE n.uid IS UNIQUE")
+	assertNoExecutedStatementContains(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS UNIQUE")
+	assertNoExecutedStatementContains(t, executor.calls, "Function) REQUIRE (f.name, f.path, f.line_number) IS NODE KEY")
+}
+
 func TestEnsureSchemaRequiresExecutor(t *testing.T) {
 	t.Parallel()
 
@@ -174,6 +305,27 @@ func TestEnsureSchemaFulltextFallback(t *testing.T) {
 	}
 	if fallbackCount != len(schemaFulltextIndexes) {
 		t.Fatalf("fallback fulltext calls = %d, want %d", fallbackCount, len(schemaFulltextIndexes))
+	}
+}
+
+func TestEnsureSchemaWithBackendSkipsFulltextFallbackForNornicDB(t *testing.T) {
+	t.Parallel()
+
+	executor := &schemaRecordingExecutor{
+		failOn: func(cypher string) bool {
+			return strings.Contains(cypher, "db.index.fulltext.createNodeIndex")
+		},
+	}
+
+	err := EnsureSchemaWithBackend(context.Background(), executor, nil, SchemaBackendNornicDB)
+	if err != nil {
+		t.Fatalf("EnsureSchemaWithBackend() error = %v, want nil", err)
+	}
+
+	for _, call := range executor.calls {
+		if strings.Contains(call.Cypher, "CREATE FULLTEXT INDEX") {
+			t.Fatalf("NornicDB schema attempted unsupported fulltext fallback %q", call.Cypher)
+		}
 	}
 }
 
@@ -228,4 +380,46 @@ func (r *schemaRecordingExecutor) ExecuteCypher(_ context.Context, stmt CypherSt
 		return errors.New("simulated schema error")
 	}
 	return nil
+}
+
+func assertContainsStatement(t *testing.T, stmts []string, want string) {
+	t.Helper()
+
+	for _, stmt := range stmts {
+		if stmt == want {
+			return
+		}
+	}
+	t.Fatalf("statements missing %q", want)
+}
+
+func assertNoStatementContains(t *testing.T, stmts []string, disallowed string) {
+	t.Helper()
+
+	for _, stmt := range stmts {
+		if strings.Contains(stmt, disallowed) {
+			t.Fatalf("statement %q contains disallowed fragment %q", stmt, disallowed)
+		}
+	}
+}
+
+func assertContainsExecutedStatement(t *testing.T, calls []CypherStatement, wantFragment string) {
+	t.Helper()
+
+	for _, call := range calls {
+		if strings.Contains(call.Cypher, wantFragment) {
+			return
+		}
+	}
+	t.Fatalf("executed statements missing fragment %q", wantFragment)
+}
+
+func assertNoExecutedStatementContains(t *testing.T, calls []CypherStatement, disallowed string) {
+	t.Helper()
+
+	for _, call := range calls {
+		if strings.Contains(call.Cypher, disallowed) {
+			t.Fatalf("executed statement %q contains disallowed fragment %q", call.Cypher, disallowed)
+		}
+	}
 }

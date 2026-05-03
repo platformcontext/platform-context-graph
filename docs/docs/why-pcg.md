@@ -4,7 +4,7 @@
 
 When you refactor a service, your AI assistant sees the code in front of it. It does not see the Terraform module that provisions the database, the ArgoCD application that deploys the workload, the Kubernetes manifest that configures replicas and secrets, or the three other services whose queue consumers break if you change the API contract.
 
-That context exists. It is spread across your repositories, Helm charts, Terraform state, ArgoCD apps, cloud consoles, and the heads of your senior engineers. But nothing connects it into a single queryable model — so engineers stitch it together by hand, every time, or skip the investigation and discover the blast radius in production.
+That context exists. It is spread across your repositories, Helm charts, Terraform modules, ArgoCD apps, cloud consoles, and the heads of your senior engineers. But nothing connects it into a single queryable model — so engineers stitch it together by hand, every time, or skip the investigation and discover the blast radius in production.
 
 Code search tools index code. IaC tools manage infrastructure. Service catalogs track ownership. None of them answer the question that actually matters during feature work, refactors, and incidents: **what connects to what, and what breaks if I change it?**
 
@@ -14,12 +14,48 @@ PlatformContextGraph builds a graph that connects source code, infrastructure de
 
 It indexes:
 
-- **Source code** — functions, classes, imports, call graphs across 30+ languages (tree-sitter)
+- **Source code** — functions, classes, imports, and call graphs across many languages (tree-sitter and native parsers)
 - **Infrastructure-as-code** — Terraform/HCL, Kubernetes manifests, Helm charts, Kustomize overlays, CloudFormation
 - **Deployment topology** — ArgoCD Applications and ApplicationSets, Crossplane XRDs and Claims
 - **Cross-repo relationships** — module sources, image references, repo URLs, shared resources
 
 The result is a graph you can query from the CLI, through MCP in your AI assistant, or via HTTP API. Same capabilities, same query model, three interfaces.
+
+## Code Intelligence Query Surface
+
+For software engineers, PCG is not just "search plus infrastructure." It is a
+code-intelligence surface designed to help AI assistants and humans trace
+execution, understand structure, and scope change safely across large
+codebases.
+
+That means PCG should answer code questions like:
+
+- **Definitions and symbol lookup** — where a function, class, module, method,
+  or variable is defined
+- **Fuzzy code search** — exact-name, prefix, substring, and content search
+  across indexed repositories
+- **Structural code understanding** — methods on a class, inheritance trees,
+  implementations, decorators, argument names, imports, and references
+- **Execution tracing** — direct callers, direct callees, transitive callers,
+  transitive callees, and full call-chain paths across files and repositories
+- **Impact analysis** — what breaks if a function, service, or module changes
+- **Code quality** — dead code detection, cyclomatic complexity, and hotspot
+  discovery for the most complex functions
+
+Typical code questions PCG should support include:
+
+- "Where is `process_payment` defined?"
+- "Find the `User` class for me."
+- "Show me any code related to database connection."
+- "What other functions call `get_user_by_id`?"
+- "Show me the full call chain from `main` to `process_data`."
+- "Find all functions that directly or indirectly call `validate_input`."
+- "What methods does the `Order` class have?"
+- "Show me the inheritance hierarchy for `BaseController`."
+- "Which files import the `requests` library?"
+- "Find all implementations of the `render` method."
+- "Is there any dead or unused code in this project?"
+- "Find the 5 most complex functions in the codebase."
 
 ## What Makes PCG Different
 
@@ -34,11 +70,116 @@ Key capabilities no other open source tool combines:
 - **`find_change_surface`** — see what is impacted before you merge
 - **`explain_dependency_path`** — understand why two entities are connected, with evidence for each hop
 
+## A Framework For Extensibility
+
+PCG is not a monolith. The query model, the storage layer, the collection
+pipeline, and the runtime profiles are all defined by explicit contracts so
+they can evolve independently.
+
+### Backend-agnostic capability ports
+
+Every HTTP handler, MCP tool, and CLI command reads data through narrow
+interfaces such as `GraphQuery` and `ContentStore` — not through concrete
+database drivers. Neo4j is the default graph adapter today. NornicDB is a
+pure-Go candidate under evaluation with the goal of unifying the graph
+backend across laptop, Compose, and production — details in
+[ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
+Capability ports are why swapping a backend is a wiring concern plus a
+conformance-matrix run, not a handler rewrite. We explicitly rejected an
+ORM as the central abstraction because graph traversal and transitive
+semantics are not well represented by row-level ORMs. Details:
+[Architecture — Capability Ports](architecture.md) and
+[Capability Conformance Spec](reference/capability-conformance-spec.md).
+
+Schema bootstrap follows the same adapter rule. Neo4j receives the shared
+production DDL unchanged; NornicDB receives a narrow schema-dialect rendering
+for compatibility gaps such as composite node identity. That route is
+deliberately limited to DDL so reducers, handlers, CLI, HTTP, and MCP tools
+do not fork into separate backend-specific codepaths.
+
+### Conformance before "supported"
+
+No backend is advertised as supported because it "speaks Cypher." A backend is
+supported only after it passes the machine-readable capability matrix at
+`specs/capability-matrix.v1.yaml` for the intended runtime profile. That matrix
+lists every capability (exact symbol lookup, transitive callers, dead-code,
+blast-radius, etc.) with per-profile status, max truth level, p95 latency
+budget, and verification gates. See
+[Capability Conformance Spec](reference/capability-conformance-spec.md).
+
+### OCI-packaged collector plugins
+
+Collectors observe source truth (git repos, Terraform state, Kubernetes
+manifests, Helm, ArgoCD, Crossplane) and emit versioned facts. They do not
+write graph truth directly — that stays owned by the reducer and canonical
+graph writers. Adding a new collector family does not require patching the
+core runtime. Plugins distribute as OCI artifacts with signed provenance
+(Sigstore/Cosign), allowlist-based activation, and hard failure on incompatible
+fact-schema versions. See
+[Fact Envelope Reference](reference/fact-envelope-reference.md),
+[Fact Schema Versioning](reference/fact-schema-versioning.md), and
+[Plugin Trust Model](reference/plugin-trust-model.md).
+
+### Language Query DSL
+
+For structured semantic queries over indexed code — "list all decorators on
+this class," "which files import this module," "show method signatures with
+argument names" — PCG exposes the `execute_language_query` MCP tool and the
+matching `/api/v0/code/language-query` HTTP route. The query payload is a
+small structured DSL that maps onto capability IDs such as
+`symbol_graph.class_methods` and `symbol_graph.decorators`. See
+[Language Query DSL Reference](reference/language-query-dsl.md).
+
+## One Query Model, Multiple Truth Levels
+
+PCG exposes one query model through CLI, MCP, and HTTP API, but not every
+runtime shape has the same backing truth available at all times.
+
+The intended operating model is:
+
+- **Lightweight local mode** should excel at code lookup and code comprehension:
+  exact symbol lookup, fuzzy search, variable lookup, content search, decorator
+  and argument-name search, import discovery, class-method listing,
+  inheritance-aware structure where available, and complexity analysis
+- **Authoritative graph mode** should add full execution and impact truth:
+  direct callers and callees, transitive callers and callees, path tracing,
+  dead-code detection, cross-repo blast radius, and code-plus-infrastructure
+  dependency analysis
+- **Full local stack and production** should expose the authoritative surface so
+  engineers can ask the same high-value questions locally before they merge or
+  in a deployed environment during incidents
+
+The architecture contract is that PCG surfaces a structured truth label across
+CLI, MCP, and HTTP responses as this work lands. See
+`2026-04-20-embedded-local-backends-desktop-mode.md`. See
+`truth-label-protocol.md` for the wire contract and freshness semantics.
+
+### Example: what the same question returns per profile
+
+Example query: "who are the transitive callers of `process_payment`?"
+
+| Profile | Capability: `call_graph.transitive_callers` | Response |
+| --- | --- | --- |
+| `local_lightweight` | `unsupported` | Structured `unsupported_capability` error — run against full stack or production. |
+| `local_full_stack` | `exact` | Full transitive call graph from the reduced authoritative graph. |
+| `production` | `exact` | Full transitive call graph across all indexed repos. |
+
+Example query: "find `process_payment` in this repo."
+
+| Profile | Capability: `code_search.exact_symbol` | Response |
+| --- | --- | --- |
+| `local_lightweight` | `exact` | Indexed-entity lookup from embedded Postgres. |
+| `local_full_stack` | `exact` | Indexed-entity lookup from full-stack Postgres. |
+| `production` | `exact` | Indexed-entity lookup from production Postgres. |
+
+The full per-capability matrix lives in `specs/capability-matrix.v1.yaml` and
+is mirrored in [Capability Conformance Spec](reference/capability-conformance-spec.md).
+
 ## Who It's For
 
 ### Software engineers
 
-Before modifying a service, you need to understand callers, callees, dependencies, downstream consumers, and likely blast radius. PCG answers these questions from the graph instead of requiring manual investigation across repos and IaC. `analyze_code_relationships` traces who calls what. `find_code` locates implementations across indexed repos. `find_dead_code` flags definitions with no callers. `find_most_complex_functions` surfaces complexity hotspots before they become incidents. `find_blast_radius` shows transitive impacts across repos and infrastructure boundaries.
+Before modifying a service, you need to understand callers, callees, dependencies, downstream consumers, and likely blast radius. PCG answers these questions from the graph instead of requiring manual investigation across repos and IaC. `analyze_code_relationships` traces who calls what. `find_code` locates implementations across indexed repos. `find_dead_code` returns derived dead-code candidates after default entrypoint, Go public-API, test, and generated-code exclusions. `find_dead_iac` surfaces unused or ambiguous Terraform modules, Helm charts, Kustomize bases/overlays, Ansible roles, and Docker Compose services from indexed IaC reachability evidence. `find_most_complex_functions` surfaces complexity hotspots before they become incidents. `find_blast_radius` shows transitive impacts across repos and infrastructure boundaries.
 
 ### Platform / DevOps / SRE
 
@@ -64,7 +205,7 @@ Without MCP, you have a useful graph with a CLI and API. With MCP, that graph be
 
 The difference: your AI assistant stops guessing from a single file and starts querying the actual dependency graph. It can answer "what breaks if I change this?" with evidence from the graph, not hallucinated assumptions from a partial code snapshot.
 
-Questions that work today:
+Examples of questions PCG is designed to answer:
 
 - "Who calls this function across all indexed repos?"
 - "What implements this interface?"
@@ -78,19 +219,24 @@ Questions that work today:
 
 ## A Real Workflow
 
-**Scenario:** You need to refactor the payment service's API contract.
+**Scenario:** In an authoritative full-stack or deployed environment, you need
+to refactor the payment service's API contract.
 
-1. **Scope the change** — `find_blast_radius payment-service` shows 4 downstream repos, 2 shared Terraform modules, and a Crossplane claim.
-2. **Understand the deployment** — `trace_deployment_chain payment-service` shows the controller/platform evidence, deployment-source repositories, and backing resources currently linked to that workload.
-3. **Check environment differences** — `compare_environments payment-service prod staging` reveals a config divergence in the SQS queue policy.
-4. **Trace a shared resource** — `trace_resource_to_code payment-db` shows the RDS module in `terraform-modules/rds` is also used by `billing-service` and `analytics-pipeline`.
+1. **Scope the change** — use the MCP tool `find_blast_radius` for `payment-service` to see downstream repos, shared Terraform modules, and Crossplane claims.
+2. **Understand the deployment** — use `trace_deployment_chain` to follow controller/platform evidence, deployment-source repositories, and backing resources.
+3. **Check environment differences** — use `compare_environments` to inspect drift between prod and staging.
+4. **Trace a shared resource** — use `trace_resource_to_code` to follow an RDS instance back to its Terraform module and consuming repositories.
 5. **Ship with confidence** — you know the blast radius before you open the PR, not after the page.
 
 ## Open Source
 
-PCG is Apache 2.0 licensed, self-hosted, and does not phone home. The graph
-runs on Neo4j (production), FalkorDB, or KuzuDB (local). Language parsing is
-owned by native Go packages backed by tree-sitter, HCL, YAML/JSON, SCIP, and
+PCG is Apache 2.0 licensed, self-hosted, and does not phone home. The
+authoritative graph path runs on Neo4j in full-stack local and production
+deployments. Lightweight local mode is being built around embedded Postgres and
+relational code-intelligence tables. NornicDB is an opt-in evaluation backend
+for authoritative local mode, not a supported production replacement until it
+passes the conformance and performance gates. Language parsing is owned by
+native Go packages backed by tree-sitter, HCL, YAML/JSON, SCIP, and
 schema-aware extractors. Add parser capability by extending the Go parser or
 relationship packages with fixtures and focused tests.
 

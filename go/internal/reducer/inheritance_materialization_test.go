@@ -88,14 +88,14 @@ func TestExtractInheritanceRowsNoBasesReturnsEmpty(t *testing.T) {
 		{
 			FactKind: "content_entity",
 			Payload: map[string]any{
-				"repo_id":     "repo-1",
-				"entity_id":   "content-entity:e_child",
-				"entity_type": "Class",
-				"entity_name": "ChildClass",
-				"file_path":   "/src/child.py",
-				"language":    "python",
-				"start_line":  10,
-				"end_line":    50,
+				"repo_id":         "repo-1",
+				"entity_id":       "content-entity:e_child",
+				"entity_type":     "Class",
+				"entity_name":     "ChildClass",
+				"file_path":       "/src/child.py",
+				"language":        "python",
+				"start_line":      10,
+				"end_line":        50,
 				"entity_metadata": map[string]any{
 					// no bases key
 				},
@@ -405,6 +405,103 @@ func TestInheritanceMaterializationHandlerWritesEdges(t *testing.T) {
 	}
 }
 
+func TestInheritanceMaterializationHandlerSkipsRetractOnFirstGeneration(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingInheritanceEdgeWriter{}
+	handler := InheritanceMaterializationHandler{
+		FactLoader: &stubFactLoader{envelopes: inheritanceEntityFacts()},
+		EdgeWriter: writer,
+		PriorGenerationCheck: func(_ context.Context, scopeID, generationID string) (bool, error) {
+			if scopeID != "scope-1" || generationID != "gen-1" {
+				t.Fatalf("PriorGenerationCheck(%q, %q), want scope-1/gen-1", scopeID, generationID)
+			}
+			return false, nil
+		},
+	}
+
+	result, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-inheritance-first",
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		Domain:       DomainInheritanceMaterialization,
+		EnqueuedAt:   time.Now(),
+		AvailableAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if result.CanonicalWrites != 1 {
+		t.Fatalf("result.CanonicalWrites = %d, want 1", result.CanonicalWrites)
+	}
+	if writer.retractDomain != "" || len(writer.retractRows) != 0 {
+		t.Fatalf("retract = domain %q rows %d, want skipped", writer.retractDomain, len(writer.retractRows))
+	}
+	if len(writer.writeRows) != 1 {
+		t.Fatalf("len(writeRows) = %d, want 1", len(writer.writeRows))
+	}
+}
+
+func TestInheritanceMaterializationHandlerRetractsWhenPriorGenerationExists(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingInheritanceEdgeWriter{}
+	handler := InheritanceMaterializationHandler{
+		FactLoader: &stubFactLoader{envelopes: inheritanceEntityFacts()},
+		EdgeWriter: writer,
+		PriorGenerationCheck: func(context.Context, string, string) (bool, error) {
+			return true, nil
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-inheritance-prior",
+		ScopeID:      "scope-1",
+		GenerationID: "gen-2",
+		Domain:       DomainInheritanceMaterialization,
+		EnqueuedAt:   time.Now(),
+		AvailableAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if writer.retractDomain != DomainInheritanceEdges {
+		t.Fatalf("retractDomain = %q, want %q", writer.retractDomain, DomainInheritanceEdges)
+	}
+	if len(writer.retractRows) != 1 {
+		t.Fatalf("len(retractRows) = %d, want 1", len(writer.retractRows))
+	}
+}
+
+func TestInheritanceMaterializationHandlerRetractsOnRetryEvenForFirstGeneration(t *testing.T) {
+	t.Parallel()
+
+	writer := &recordingInheritanceEdgeWriter{}
+	handler := InheritanceMaterializationHandler{
+		FactLoader: &stubFactLoader{envelopes: inheritanceEntityFacts()},
+		EdgeWriter: writer,
+		PriorGenerationCheck: func(context.Context, string, string) (bool, error) {
+			return false, nil
+		},
+	}
+
+	_, err := handler.Handle(context.Background(), Intent{
+		IntentID:     "intent-inheritance-retry",
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		Domain:       DomainInheritanceMaterialization,
+		AttemptCount: 2,
+		EnqueuedAt:   time.Now(),
+		AvailableAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if writer.retractDomain != DomainInheritanceEdges {
+		t.Fatalf("retractDomain = %q, want %q", writer.retractDomain, DomainInheritanceEdges)
+	}
+}
+
 func TestInheritanceMaterializationHandlerNoEntitiesSucceeds(t *testing.T) {
 	t.Parallel()
 
@@ -435,6 +532,32 @@ func TestInheritanceMaterializationHandlerNoEntitiesSucceeds(t *testing.T) {
 }
 
 // --- test doubles ---
+
+func inheritanceEntityFacts() []facts.Envelope {
+	return []facts.Envelope{
+		{
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"repo_id":     "repo-1",
+				"entity_id":   "content-entity:e_parent",
+				"entity_type": "Class",
+				"entity_name": "ParentClass",
+			},
+		},
+		{
+			FactKind: "content_entity",
+			Payload: map[string]any{
+				"repo_id":     "repo-1",
+				"entity_id":   "content-entity:e_child",
+				"entity_type": "Class",
+				"entity_name": "ChildClass",
+				"entity_metadata": map[string]any{
+					"bases": []any{"ParentClass"},
+				},
+			},
+		},
+	}
+}
 
 type recordingInheritanceEdgeWriter struct {
 	retractDomain         string

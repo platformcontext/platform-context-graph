@@ -55,19 +55,23 @@ func detectPythonFastAPISemantics(source string) map[string]any {
 
 	methods := make([]string, 0, len(decorators))
 	paths := make([]string, 0, len(decorators))
+	entries := make([]map[string]string, 0, len(decorators))
 	for _, match := range decorators {
 		symbol := match[1]
 		path := match[3]
 		if prefix := routerPrefixes[symbol]; prefix != "" {
 			path = prefix + path
 		}
-		methods = appendUniqueString(methods, strings.ToUpper(match[2]))
+		method := strings.ToUpper(match[2])
+		methods = appendUniqueString(methods, method)
 		paths = appendUniqueString(paths, path)
+		entries = append(entries, routeEntry(method, path))
 	}
 
 	return map[string]any{
 		"route_methods":  methods,
 		"route_paths":    paths,
+		"route_entries":  entries,
 		"server_symbols": serverSymbols,
 	}
 }
@@ -85,6 +89,7 @@ func detectPythonFlaskSemantics(source string) map[string]any {
 
 	methods := make([]string, 0, len(routes))
 	paths := make([]string, 0, len(routes))
+	entries := make([]map[string]string, 0, len(routes))
 	allowed := make(map[string]struct{}, len(serverSymbols))
 	for _, symbol := range serverSymbols {
 		allowed[symbol] = struct{}{}
@@ -102,6 +107,7 @@ func detectPythonFlaskSemantics(source string) map[string]any {
 		}
 		for _, method := range routeMethods {
 			methods = appendUniqueString(methods, method)
+			entries = append(entries, routeEntry(method, match[2]))
 		}
 	}
 	if len(paths) == 0 {
@@ -111,6 +117,7 @@ func detectPythonFlaskSemantics(source string) map[string]any {
 	return map[string]any{
 		"route_methods":  methods,
 		"route_paths":    paths,
+		"route_entries":  entries,
 		"server_symbols": serverSymbols,
 	}
 }

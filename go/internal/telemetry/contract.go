@@ -59,11 +59,15 @@ const (
 	SpanCanonicalRetract     = "canonical.retract"
 
 	SpanEvidenceDiscovery              = "ingestion.evidence_discovery"
+	SpanIaCReachabilityMaterialization = "iac_reachability.materialize"
 	SpanSQLRelationshipMaterialization = "reducer.sql_relationship_materialization"
 	SpanInheritanceMaterialization     = "reducer.inheritance_materialization"
 	SpanCrossRepoResolution            = "reducer.cross_repo_resolution"
 	SpanSharedAcceptanceLookup         = "shared_acceptance.lookup"
 	SpanSharedAcceptanceUpsert         = "shared_acceptance.upsert"
+	SpanQueryRelationshipEvidence      = "query.relationship_evidence"
+	SpanQueryDeadIaC                   = "query.dead_iac"
+	SpanQueryInfraResourceSearch       = "query.infra_resource_search"
 
 	// Dependency service spans — track external call performance.
 	SpanPostgresExec  = "postgres.exec"
@@ -124,11 +128,15 @@ var spanNames = []string{
 	SpanCanonicalProjection,
 	SpanCanonicalRetract,
 	SpanEvidenceDiscovery,
+	SpanIaCReachabilityMaterialization,
 	SpanSQLRelationshipMaterialization,
 	SpanInheritanceMaterialization,
 	SpanCrossRepoResolution,
 	SpanSharedAcceptanceLookup,
 	SpanSharedAcceptanceUpsert,
+	SpanQueryRelationshipEvidence,
+	SpanQueryDeadIaC,
+	SpanQueryInfraResourceSearch,
 	SpanPostgresExec,
 	SpanPostgresQuery,
 	SpanNeo4jExecute,
