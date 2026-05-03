@@ -12,6 +12,7 @@ func loadDeploymentArtifactOverview(
 	repoID string,
 	repoName string,
 	files []FileContent,
+	infrastructure []map[string]any,
 	overview map[string]any,
 ) (map[string]any, error) {
 	merged := overview
@@ -40,6 +41,9 @@ func loadDeploymentArtifactOverview(
 	} else {
 		merged = mergeArtifactOverview(merged, configArtifacts)
 	}
+
+	cloudFormationArtifacts := buildRepositoryCloudFormationRuntimeArtifacts(infrastructure)
+	merged = mergeArtifactOverview(merged, cloudFormationArtifacts)
 
 	runtimeArtifacts, err := loadRepositoryRuntimeArtifacts(ctx, content, repoID, artifactFiles)
 	if err != nil && firstErr == nil {

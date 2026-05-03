@@ -44,6 +44,7 @@ func loadServiceDeploymentEvidence(
 		repoID,
 		repoName,
 		files,
+		mapSliceValue(workloadContext, "infrastructure"),
 		overview,
 	)
 	if err != nil {

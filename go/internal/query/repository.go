@@ -230,6 +230,7 @@ func (h *RepositoryHandler) getRepositoryContext(w http.ResponseWriter, r *http.
 				repoID,
 				StringVal(baseRow, "name"),
 				files,
+				result["infrastructure"].([]map[string]any),
 				overview,
 			)
 			if deploymentOverview != nil {
@@ -515,6 +516,7 @@ func (h *RepositoryHandler) getRepositoryStory(w http.ResponseWriter, r *http.Re
 			repoID,
 			repo.Name,
 			files,
+			infrastructure,
 			infrastructureOverview,
 		)
 		if deploymentOverview != nil {
