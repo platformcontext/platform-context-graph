@@ -283,6 +283,14 @@ This is an alias route. It still accepts a canonical workload ID:
 
 Service alias responses include `requested_as=service`.
 
+When a repository has workload identity facts but no materialized `Workload`
+node yet, service context can fall back to the repository read model. Those
+responses use `materialization_status=identity_only`,
+`query_basis=repository_read_model`, an empty `instances` array, and a
+`limitations` entry of `workload_identity_not_materialized`. Deployment
+evidence and delivery-family paths may still be present when parser or
+relationship evidence proves them.
+
 ## Story API
 
 Use the story routes when the caller wants a structured narrative first and

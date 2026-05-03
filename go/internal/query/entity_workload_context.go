@@ -29,12 +29,16 @@ func (h *EntityHandler) fetchServiceWorkloadContext(ctx context.Context, service
 	if err != nil || result != nil {
 		return result, err
 	}
-	return h.fetchWorkloadContextForOperation(
+	result, err = h.fetchWorkloadContextForOperation(
 		ctx,
 		"w.id = $service_name",
 		map[string]any{"service_name": serviceName},
 		operation,
 	)
+	if err != nil || result != nil {
+		return result, err
+	}
+	return h.fetchServiceReadModelWorkloadContext(ctx, serviceName)
 }
 
 // fetchWorkloadContextForOperation queries workload context and tags timing
@@ -117,6 +121,74 @@ func (h *EntityHandler) fetchWorkloadContextForOperation(ctx context.Context, wh
 	}
 
 	return result, nil
+}
+
+// fetchServiceReadModelWorkloadContext exposes repositories with workload
+// identity facts even when no graph Workload node has been materialized yet.
+func (h *EntityHandler) fetchServiceReadModelWorkloadContext(ctx context.Context, serviceName string) (map[string]any, error) {
+	if h.Content == nil {
+		return nil, nil
+	}
+	repo, err := h.Content.ResolveRepository(ctx, serviceName)
+	if err != nil || repo == nil {
+		return nil, err
+	}
+
+	summary := loadRepositoryReadModelSummary(ctx, h.Content, repo.ID)
+	if summary == nil {
+		return nil, nil
+	}
+	workloadName := matchingRepositoryWorkloadIdentity(serviceName, *repo, summary.WorkloadNames)
+	if workloadName == "" {
+		return nil, nil
+	}
+
+	repoParams := map[string]any{"repo_id": repo.ID}
+	infrastructure := queryRepoInfrastructureFromContent(ctx, h.Content, repo.ID)
+	if len(infrastructure) == 0 && h.Neo4j != nil {
+		infrastructure = queryRepoInfrastructureFromGraph(ctx, h.Neo4j, repoParams)
+	}
+	dependencies := []map[string]any{}
+	if h.Neo4j != nil {
+		dependencies = queryRepoDependencies(ctx, h.Neo4j, repoParams)
+	}
+	return map[string]any{
+		"id":                     "workload:" + workloadName,
+		"name":                   workloadName,
+		"kind":                   "service",
+		"repo_id":                repo.ID,
+		"repo_name":              repo.Name,
+		"instances":              []map[string]any{},
+		"dependencies":           dependencies,
+		"infrastructure":         infrastructure,
+		"materialization_status": "identity_only",
+		"query_basis":            "repository_read_model",
+		"limitations":            []string{"workload_identity_not_materialized"},
+	}, nil
+}
+
+func matchingRepositoryWorkloadIdentity(serviceName string, repo RepositoryCatalogEntry, workloadNames []string) string {
+	selector := strings.TrimSpace(serviceName)
+	if selector == "" {
+		return ""
+	}
+	plainSelector := strings.TrimPrefix(selector, "workload:")
+	for _, workloadName := range workloadNames {
+		normalized := strings.TrimSpace(workloadName)
+		if normalized == "" {
+			continue
+		}
+		if selector == normalized || plainSelector == normalized || selector == "workload:"+normalized {
+			return normalized
+		}
+	}
+	if selector != repo.Name && plainSelector != repo.Name {
+		return ""
+	}
+	if len(workloadNames) != 1 {
+		return ""
+	}
+	return strings.TrimSpace(workloadNames[0])
 }
 
 // fetchRepositoryNameByID uses the workload repo_id property as the selective

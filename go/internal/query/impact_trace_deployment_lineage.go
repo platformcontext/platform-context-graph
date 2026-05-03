@@ -125,6 +125,7 @@ func buildDeploymentTraceProvenanceOverview(
 	families := make([]string, 0, len(lineage)*2)
 	workflowCount := 0
 	controllerCount := 0
+	runtimeCount := 0
 	for _, row := range traceMapSlice(deploymentEvidence, "delivery_paths") {
 		switch traceString(row, "kind") {
 		case "workflow_artifact":
@@ -143,6 +144,11 @@ func buildDeploymentTraceProvenanceOverview(
 			default:
 				families = append(families, controllerKind)
 			}
+		case "runtime_artifact":
+			runtimeCount++
+			if family := deploymentTraceRuntimeArtifactFamily(traceString(row, "artifact_type")); family != "" {
+				families = append(families, family)
+			}
 		}
 	}
 	for _, row := range lineage {
@@ -158,6 +164,7 @@ func buildDeploymentTraceProvenanceOverview(
 		"artifact_lineage_count":    len(lineage),
 		"workflow_artifact_count":   workflowCount,
 		"controller_artifact_count": controllerCount,
+		"runtime_artifact_count":    runtimeCount,
 		"delivery_path_count":       len(traceMapSlice(deploymentEvidence, "delivery_paths")),
 	}
 }
@@ -165,12 +172,15 @@ func buildDeploymentTraceProvenanceOverview(
 func buildDeploymentTraceWorkflowProvenanceStory(deploymentEvidence map[string]any) string {
 	workflowSources := make([]string, 0)
 	controllerSources := make([]string, 0)
+	runtimeSources := make([]string, 0)
 	for _, row := range traceMapSlice(deploymentEvidence, "delivery_paths") {
 		switch traceString(row, "kind") {
 		case "workflow_artifact":
 			workflowSources = append(workflowSources, traceString(row, "path"))
 		case "controller_artifact":
 			controllerSources = append(controllerSources, traceString(row, "path"))
+		case "runtime_artifact":
+			runtimeSources = append(runtimeSources, traceString(row, "path"))
 		}
 	}
 
@@ -181,7 +191,23 @@ func buildDeploymentTraceWorkflowProvenanceStory(deploymentEvidence map[string]a
 	if values := traceUniqueSortedStrings(controllerSources); len(values) > 0 {
 		parts = append(parts, "Controller provenance: "+strings.Join(values, ", ")+".")
 	}
+	if values := traceUniqueSortedStrings(runtimeSources); len(values) > 0 {
+		parts = append(parts, "Runtime provenance: "+strings.Join(values, ", ")+".")
+	}
 	return strings.Join(parts, " ")
+}
+
+func deploymentTraceRuntimeArtifactFamily(artifactType string) string {
+	switch strings.TrimSpace(artifactType) {
+	case "cloudformation_serverless":
+		return "cloudformation"
+	case "docker_compose":
+		return "docker_compose"
+	case "dockerfile":
+		return "docker"
+	default:
+		return strings.TrimSpace(artifactType)
+	}
 }
 
 func newDeploymentTraceLineageRow(
