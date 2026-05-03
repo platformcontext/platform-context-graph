@@ -268,9 +268,9 @@ The source of truth is:
 | Symptom | Start here | Then check |
 | --- | --- | --- |
 | No new repository data | ingester `/admin/status` and ingester logs | repository selection, sync errors, parse failures |
-| Facts written but no graph update | projector queue metrics and reducer status | projector claim latency, Neo4j writes, content writes |
+| Facts written but no graph update | projector queue metrics and reducer status | projector claim latency, graph backend writes, content writes |
 | Shared infra or deployment traces missing | shared projection backlog and reducer logs | relationship evidence facts, reducer normalization, canonical edge writes |
-| API answers stale or incomplete | API status plus reducer backlog | Neo4j/content-store state, repository coverage/status |
+| API answers stale or incomplete | API status plus reducer backlog | graph backend/content-store state, repository coverage/status |
 | Replay did not recover work | recovery metrics and status | dead-letter rows, failure class, replay selection |
 
 ## Related Docs

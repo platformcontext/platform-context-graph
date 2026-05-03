@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-// CypherExecutor executes one parameterised Cypher statement against Neo4j.
+// CypherExecutor executes one parameterised Cypher statement against the canonical graph backend.
 // This is the reducer-local interface — adapters bridge it to the storage
-// layer's neo4j.Executor.
+// layer's cypher.Executor.
 type CypherExecutor interface {
 	ExecuteCypher(ctx context.Context, cypher string, params map[string]any) error
 }
@@ -32,7 +32,7 @@ type MaterializeResult struct {
 	EndpointWriteDuration       time.Duration
 }
 
-// WorkloadMaterializer converts projection results into canonical Neo4j graph
+// WorkloadMaterializer converts projection results into canonical graph
 // writes. It is the Go equivalent of Python's materialize_workloads orchestrator.
 type WorkloadMaterializer struct {
 	executor  CypherExecutor

@@ -14,7 +14,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 )
 
 const (
@@ -28,22 +28,22 @@ const (
 // cypherRunner is the narrow interface shared by both executor adapters.
 type cypherRunner interface {
 	RunCypher(ctx context.Context, cypher string, params map[string]any) error
-	RunCypherGroup(ctx context.Context, stmts []sourceneo4j.Statement) error
+	RunCypherGroup(ctx context.Context, stmts []sourcecypher.Statement) error
 }
 
-// reducerNeo4jExecutor adapts a cypherRunner to the sourceneo4j.Executor
+// reducerNeo4jExecutor adapts a cypherRunner to the sourcecypher.Executor
 // interface used by EdgeWriter.
 type reducerNeo4jExecutor struct {
 	session cypherRunner
 }
 
-func (e reducerNeo4jExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
+func (e reducerNeo4jExecutor) Execute(ctx context.Context, stmt sourcecypher.Statement) error {
 	return executeReducerCypherWithRetry(ctx, e.session, stmt)
 }
 
 // ExecuteGroup runs all statements in a single Neo4j transaction with
 // automatic retry on transient errors (deadlocks, leader switches).
-func (e reducerNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+func (e reducerNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourcecypher.Statement) error {
 	return e.session.RunCypherGroup(ctx, stmts)
 }
 
@@ -54,8 +54,8 @@ type reducerCypherExecutor struct {
 }
 
 func (e reducerCypherExecutor) ExecuteCypher(ctx context.Context, cypher string, params map[string]any) error {
-	return executeReducerCypherWithRetry(ctx, e.session, sourceneo4j.Statement{
-		Operation:  sourceneo4j.OperationCanonicalUpsert,
+	return executeReducerCypherWithRetry(ctx, e.session, sourcecypher.Statement{
+		Operation:  sourcecypher.OperationCanonicalUpsert,
 		Cypher:     cypher,
 		Parameters: params,
 	})
@@ -65,15 +65,15 @@ type cypherRunnerStatementExecutor struct {
 	runner cypherRunner
 }
 
-func (e cypherRunnerStatementExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
+func (e cypherRunnerStatementExecutor) Execute(ctx context.Context, stmt sourcecypher.Statement) error {
 	return e.runner.RunCypher(ctx, stmt.Cypher, stmt.Parameters)
 }
 
 type nornicDBSemanticObservedExecutor struct {
-	inner sourceneo4j.Executor
+	inner sourcecypher.Executor
 }
 
-func (e nornicDBSemanticObservedExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
+func (e nornicDBSemanticObservedExecutor) Execute(ctx context.Context, stmt sourcecypher.Statement) error {
 	if e.inner == nil {
 		return nil
 	}
@@ -97,19 +97,19 @@ func (e nornicDBSemanticObservedExecutor) Execute(ctx context.Context, stmt sour
 	return nil
 }
 
-func semanticStatementLabel(stmt sourceneo4j.Statement) string {
-	label, _ := stmt.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+func semanticStatementLabel(stmt sourcecypher.Statement) string {
+	label, _ := stmt.Parameters[sourcecypher.StatementMetadataEntityLabelKey].(string)
 	label = strings.TrimSpace(label)
 	if label != "" {
 		return label
 	}
-	if stmt.Operation == sourceneo4j.OperationCanonicalRetract {
+	if stmt.Operation == sourcecypher.OperationCanonicalRetract {
 		return "semantic_retract"
 	}
 	return "unknown"
 }
 
-func semanticStatementRows(stmt sourceneo4j.Statement) int {
+func semanticStatementRows(stmt sourcecypher.Statement) int {
 	if rows, ok := stmt.Parameters["rows"].([]map[string]any); ok {
 		return len(rows)
 	}
@@ -125,8 +125,8 @@ func semanticStatementRows(stmt sourceneo4j.Statement) int {
 	return 0
 }
 
-func semanticStatementSummary(stmt sourceneo4j.Statement) string {
-	if summary, ok := stmt.Parameters[sourceneo4j.StatementMetadataSummaryKey].(string); ok {
+func semanticStatementSummary(stmt sourcecypher.Statement) string {
+	if summary, ok := stmt.Parameters[sourcecypher.StatementMetadataSummaryKey].(string); ok {
 		if summary = strings.TrimSpace(summary); summary != "" {
 			return summary
 		}
@@ -148,9 +148,9 @@ func summarizeReducerCypher(cypher string) string {
 func executeReducerCypherWithRetry(
 	ctx context.Context,
 	runner cypherRunner,
-	stmt sourceneo4j.Statement,
+	stmt sourcecypher.Statement,
 ) error {
-	retrying := sourceneo4j.RetryingExecutor{
+	retrying := sourcecypher.RetryingExecutor{
 		Inner: cypherRunnerStatementExecutor{runner: runner},
 	}
 	return retrying.Execute(ctx, stmt)
@@ -187,7 +187,7 @@ func (r neo4jSessionRunner) RunCypher(ctx context.Context, cypher string, params
 // transaction. session.ExecuteWrite automatically retries the entire function
 // on transient errors (deadlocks, leader switches), giving us atomic
 // retract+upsert with built-in resilience.
-func (r neo4jSessionRunner) RunCypherGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+func (r neo4jSessionRunner) RunCypherGroup(ctx context.Context, stmts []sourcecypher.Statement) error {
 	if r.Driver == nil {
 		return fmt.Errorf("neo4j driver is required")
 	}
@@ -308,13 +308,13 @@ func (c reducerNeo4jDriverCloser) Close() error {
 }
 
 // openReducerNeo4jAdapters opens a Neo4j driver and returns the executor
-// adapters needed by the reducer: one for EdgeWriter (sourceneo4j.Executor),
+// adapters needed by the reducer: one for EdgeWriter (sourcecypher.Executor),
 // one for WorkloadMaterializer (reducer.CypherExecutor), and one for
-// pre-flight canonical node checks (sourceneo4j.CypherReader).
+// pre-flight canonical node checks (sourcecypher.CypherReader).
 func openReducerNeo4jAdapters(
 	parent context.Context,
 	getenv func(string) string,
-) (sourceneo4j.Executor, reducer.CypherExecutor, sourceneo4j.CypherReader, query.GraphQuery, io.Closer, error) {
+) (sourcecypher.Executor, reducer.CypherExecutor, sourcecypher.CypherReader, query.GraphQuery, io.Closer, error) {
 	graphBackend, err := runtimecfg.LoadGraphBackend(getenv)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
@@ -346,13 +346,13 @@ func reducerTransactionTimeout(graphBackend runtimecfg.GraphBackend, getenv func
 }
 
 func semanticEntityExecutorForGraphBackend(
-	rawExecutor sourceneo4j.Executor,
+	rawExecutor sourcecypher.Executor,
 	graphBackend runtimecfg.GraphBackend,
 	nornicDBTimeout time.Duration,
 	nornicDBGroupedWrites bool,
-) sourceneo4j.Executor {
+) sourcecypher.Executor {
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		bounded := sourceneo4j.TimeoutExecutor{
+		bounded := sourcecypher.TimeoutExecutor{
 			Inner:       rawExecutor,
 			Timeout:     nornicDBTimeout,
 			TimeoutHint: canonicalWriteTimeoutEnv,
@@ -360,18 +360,18 @@ func semanticEntityExecutorForGraphBackend(
 		if nornicDBGroupedWrites {
 			return bounded
 		}
-		return sourceneo4j.ExecuteOnlyExecutor{Inner: nornicDBSemanticObservedExecutor{inner: bounded}}
+		return sourcecypher.ExecuteOnlyExecutor{Inner: nornicDBSemanticObservedExecutor{inner: bounded}}
 	}
 	return rawExecutor
 }
 
 func semanticEntityWriterForGraphBackend(
-	executor sourceneo4j.Executor,
+	executor sourcecypher.Executor,
 	batchSize int,
 	graphBackend runtimecfg.GraphBackend,
 	getenv func(string) string,
-) (*sourceneo4j.SemanticEntityWriter, error) {
-	writer := sourceneo4j.NewSemanticEntityWriter(executor, batchSize)
+) (*sourcecypher.SemanticEntityWriter, error) {
+	writer := sourcecypher.NewSemanticEntityWriter(executor, batchSize)
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		// NornicDB's batch executor is template-sensitive: putting MATCH before
 		// MERGE is indexed but misses the generalized UNWIND/MERGE hot path.
@@ -379,7 +379,7 @@ func semanticEntityWriterForGraphBackend(
 		// projection retain ownership of File CONTAINS edges for canonical entity
 		// labels. That avoids repeated relationship-existence checks as the graph
 		// grows while still preserving Module's semantic-owned uid nodes.
-		writer = sourceneo4j.NewSemanticEntityWriterWithCanonicalNodeRows(executor, batchSize).WithLabelScopedRetract()
+		writer = sourcecypher.NewSemanticEntityWriterWithCanonicalNodeRows(executor, batchSize).WithLabelScopedRetract()
 		labelBatchSizes, err := nornicDBSemanticEntityLabelBatchSizes(getenv, effectiveNeo4jBatchSize(batchSize))
 		if err != nil {
 			return nil, err
@@ -429,7 +429,7 @@ func neo4jBatchSize(getenv func(string) string) int {
 
 func effectiveNeo4jBatchSize(batchSize int) int {
 	if batchSize <= 0 {
-		return sourceneo4j.DefaultBatchSize
+		return sourcecypher.DefaultBatchSize
 	}
 	return batchSize
 }

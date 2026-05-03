@@ -12,16 +12,16 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
-// stubNeo4jExecutor is a no-op executor for tests that don't exercise Neo4j.
-type stubNeo4jExecutor struct{}
+// stubGraphExecutor is a no-op executor for tests that do not exercise graph writes.
+type stubGraphExecutor struct{}
 
-func (stubNeo4jExecutor) Execute(_ context.Context, _ sourceneo4j.Statement) error { return nil }
+func (stubGraphExecutor) Execute(_ context.Context, _ sourcecypher.Statement) error { return nil }
 
-// stubCypherExecutor is a no-op CypherExecutor for tests that don't exercise Neo4j.
+// stubCypherExecutor is a no-op CypherExecutor for tests that do not exercise graph writes.
 type stubCypherExecutor struct{}
 
 func (stubCypherExecutor) ExecuteCypher(_ context.Context, _ string, _ map[string]any) error {
@@ -47,7 +47,7 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(string) string { return "" }, nil, nil, nil)
+	service, err := buildReducerService(db, stubGraphExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(string) string { return "" }, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -108,9 +108,9 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	if got := service.RepoDependencyProjectionRunner.Config.BatchLimit; got <= 0 {
 		t.Fatalf("buildReducerService() repo dependency batch limit = %d, want positive", got)
 	}
-	codeCallEdgeWriter, ok := service.CodeCallProjectionRunner.EdgeWriter.(*sourceneo4j.EdgeWriter)
+	codeCallEdgeWriter, ok := service.CodeCallProjectionRunner.EdgeWriter.(*sourcecypher.EdgeWriter)
 	if !ok {
-		t.Fatalf("code call edge writer type = %T, want *neo4j.EdgeWriter", service.CodeCallProjectionRunner.EdgeWriter)
+		t.Fatalf("code call edge writer type = %T, want *cypher.EdgeWriter", service.CodeCallProjectionRunner.EdgeWriter)
 	}
 	if got, want := codeCallEdgeWriter.CodeCallBatchSize, defaultCodeCallEdgeBatchSize; got != want {
 		t.Fatalf("code call edge batch size = %d, want %d", got, want)
@@ -159,7 +159,7 @@ func TestBuildReducerServiceWiresSharedEdgeGroupBatchOverrides(t *testing.T) {
 	db := &fakeReducerDB{}
 	service, err := buildReducerService(
 		db,
-		stubNeo4jExecutor{},
+		stubGraphExecutor{},
 		stubCypherExecutor{},
 		postgres.NewSharedIntentStore(db),
 		stubCypherReader{},
@@ -173,9 +173,9 @@ func TestBuildReducerServiceWiresSharedEdgeGroupBatchOverrides(t *testing.T) {
 		t.Fatalf("buildReducerService() error = %v", err)
 	}
 
-	edgeWriter, ok := service.SharedProjectionRunner.EdgeWriter.(*sourceneo4j.EdgeWriter)
+	edgeWriter, ok := service.SharedProjectionRunner.EdgeWriter.(*sourcecypher.EdgeWriter)
 	if !ok {
-		t.Fatalf("shared projection edge writer type = %T, want *neo4j.EdgeWriter", service.SharedProjectionRunner.EdgeWriter)
+		t.Fatalf("shared projection edge writer type = %T, want *cypher.EdgeWriter", service.SharedProjectionRunner.EdgeWriter)
 	}
 	if got, want := edgeWriter.InheritanceGroupBatchSize, 3; got != want {
 		t.Fatalf("inheritance edge group batch size = %d, want %d", got, want)
@@ -189,7 +189,7 @@ func TestBuildReducerServiceWiresPostgresWorkloadIdentityWriter(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(string) string { return "" }, nil, nil, nil)
+	service, err := buildReducerService(db, stubGraphExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(string) string { return "" }, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -230,7 +230,7 @@ func TestBuildReducerServiceWiresPostgresCloudAssetResolutionWriter(t *testing.T
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(string) string { return "" }, nil, nil, nil)
+	service, err := buildReducerService(db, stubGraphExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(string) string { return "" }, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -271,7 +271,7 @@ func TestBuildReducerServiceWiresRetryConfigFromEnv(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(name string) string {
+	service, err := buildReducerService(db, stubGraphExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(name string) string {
 		switch name {
 		case reducerRetryDelayEnv:
 			return "2m"
@@ -301,7 +301,7 @@ func TestBuildReducerServiceWiresNornicDBProjectorDrainGate(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(name string) string {
+	service, err := buildReducerService(db, stubGraphExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(name string) string {
 		switch name {
 		case "PCG_GRAPH_BACKEND":
 			return string(runtimecfg.GraphBackendNornicDB)
@@ -328,7 +328,7 @@ func TestBuildReducerServiceWiresExpectedSourceLocalProjectors(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(name string) string {
+	service, err := buildReducerService(db, stubGraphExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(name string) string {
 		switch name {
 		case "PCG_GRAPH_BACKEND":
 			return string(runtimecfg.GraphBackendNornicDB)
@@ -357,7 +357,7 @@ func TestBuildReducerServiceWiresSemanticEntityClaimLimit(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(name string) string {
+	service, err := buildReducerService(db, stubGraphExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), stubCypherReader{}, stubCypherReader{}, func(name string) string {
 		switch name {
 		case "PCG_GRAPH_BACKEND":
 			return string(runtimecfg.GraphBackendNornicDB)

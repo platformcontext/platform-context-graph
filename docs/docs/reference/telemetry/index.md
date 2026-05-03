@@ -44,7 +44,7 @@ flowchart LR
   A["Ingester"] --> B["Postgres fact store"]
   B --> C["Fact work queue"]
   C --> D["Resolution Engine"]
-  D --> E["Neo4j graph"]
+  D --> E["Graph backend"]
   D --> F["Postgres content store"]
   D --> G["Projection decisions"]
   C --> H["Failure and replay state"]

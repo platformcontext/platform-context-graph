@@ -7,7 +7,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 )
 
 func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBAnnotationCap(t *testing.T) {
@@ -38,10 +38,10 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBAnnotationCap(
 
 	var annotationBatches []int
 	for _, call := range executor.calls {
-		if call.Operation != sourceneo4j.OperationCanonicalUpsert {
+		if call.Operation != sourcecypher.OperationCanonicalUpsert {
 			continue
 		}
-		label, _ := call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+		label, _ := call.Parameters[sourcecypher.StatementMetadataEntityLabelKey].(string)
 		if label != "Annotation" {
 			continue
 		}
@@ -81,10 +81,10 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBTypeAliasCap(t
 
 	var typeAliasBatches []int
 	for _, call := range executor.calls {
-		if call.Operation != sourceneo4j.OperationCanonicalUpsert {
+		if call.Operation != sourcecypher.OperationCanonicalUpsert {
 			continue
 		}
-		label, _ := call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+		label, _ := call.Parameters[sourcecypher.StatementMetadataEntityLabelKey].(string)
 		if label != "TypeAlias" {
 			continue
 		}
@@ -124,10 +124,10 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBTypeAnnotation
 
 	var typeAnnotationBatches []int
 	for _, call := range executor.calls {
-		if call.Operation != sourceneo4j.OperationCanonicalUpsert {
+		if call.Operation != sourcecypher.OperationCanonicalUpsert {
 			continue
 		}
-		label, _ := call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+		label, _ := call.Parameters[sourcecypher.StatementMetadataEntityLabelKey].(string)
 		if label != "TypeAnnotation" {
 			continue
 		}
@@ -167,10 +167,10 @@ func TestSemanticEntityWriterForGraphBackendAppliesDefaultNornicDBFunctionCap(t 
 
 	var functionBatches []int
 	for _, call := range executor.calls {
-		if call.Operation != sourceneo4j.OperationCanonicalUpsert {
+		if call.Operation != sourcecypher.OperationCanonicalUpsert {
 			continue
 		}
-		label, _ := call.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+		label, _ := call.Parameters[sourcecypher.StatementMetadataEntityLabelKey].(string)
 		if label != "Function" {
 			continue
 		}

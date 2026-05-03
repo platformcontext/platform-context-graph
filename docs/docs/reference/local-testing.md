@@ -171,7 +171,7 @@ libraries.
 | Correlation DSL fixture corpus or compose verification lane | `./scripts/verify_correlation_dsl_compose.sh` |
 | Graph-backed call-chain, caller/callee, or dead-code compose contract | `./scripts/verify_graph_analysis_compose.sh` |
 | Facts-first indexing, queue, or resolution flow | `cd go && go test ./internal/projector ./internal/reducer ./internal/storage/postgres -count=1` |
-| Local-authoritative graph backend or MCP local coding flow | `cd go && go test ./cmd/ingester ./internal/projector ./internal/storage/neo4j -count=1`; then run the manual NornicDB MCP smoke below if a local NornicDB binary is available |
+| Local-authoritative graph backend or MCP local coding flow | `cd go && go test ./cmd/ingester ./internal/projector ./internal/storage/cypher ./internal/storage/neo4j -count=1`; then run the manual NornicDB MCP smoke below if a local NornicDB binary is available |
 | Queue ack visibility or lease diagnosis | `cd go && go test ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry -count=1` and `cd go && go vet ./internal/projector ./internal/reducer ./internal/status ./internal/storage/postgres ./internal/telemetry` |
 | Recovery, replay, or repair controls | `cd go && go test ./internal/recovery ./internal/runtime ./internal/status -count=1` |
 | Facts-first telemetry or queue scaling | `cd go && go test ./internal/telemetry ./internal/runtime ./internal/projector ./internal/reducer -count=1` |
@@ -202,7 +202,7 @@ cd go
 go test ./internal/parser ./internal/collector/discovery ./internal/content/shape \
   ./internal/collector ./cmd/collector-git ./cmd/ingester ./cmd/bootstrap-index \
   ./internal/runtime ./internal/app ./internal/telemetry \
-  ./internal/storage/neo4j ./internal/storage/postgres \
+  ./internal/storage/cypher ./internal/storage/neo4j ./internal/storage/postgres \
   ./internal/projector ./internal/reducer ./cmd/reducer -count=1
 ```
 
@@ -582,7 +582,7 @@ The wrapper starts a clean Compose stack against the dedicated
 - call-chain path search returns the expected shortest path
 - dead-code analysis returns only the intentionally unused functions with
   derived truth metadata
-- the canonical Neo4j graph contains the expected `CALLS` edges after the
+- the canonical graph backend contains the expected `CALLS` edges after the
   fresh bootstrap run
 
 ## Product-Truth Fixture Registry

@@ -21,10 +21,8 @@ func TestNornicDBSyntaxVerification(t *testing.T) {
 			name   string
 			cypher string
 		}{
-			{
-				name:   "fulltext index",
-				cypher: "CREATE FULLTEXT INDEX pcg_syntax_fulltext IF NOT EXISTS FOR (n:PCGSyntaxFunction|PCGSyntaxClass|PCGSyntaxVariable) ON EACH [n.name, n.source, n.docstring]",
-			},
+			// Keep this list to syntax PCG sends to NornicDB directly. The
+			// schema adapter verifies the backend-specific fulltext fallback.
 			{
 				name:   "fulltext procedure fallback",
 				cypher: "CALL db.index.fulltext.createNodeIndex('pcg_syntax_fulltext_proc', ['PCGSyntaxFunction', 'PCGSyntaxClass', 'PCGSyntaxVariable'], ['name', 'source', 'docstring'])",

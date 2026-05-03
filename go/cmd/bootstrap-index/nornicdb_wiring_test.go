@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/runtime"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 )
 
 func TestBootstrapCanonicalExecutorUsesNornicDBPhaseGroupsByDefault(t *testing.T) {
@@ -30,15 +30,15 @@ func TestBootstrapCanonicalExecutorUsesNornicDBPhaseGroupsByDefault(t *testing.T
 	if err != nil {
 		t.Fatalf("bootstrapCanonicalExecutorForGraphBackend() error = %v, want nil", err)
 	}
-	if _, ok := executor.(sourceneo4j.GroupExecutor); ok {
+	if _, ok := executor.(sourcecypher.GroupExecutor); ok {
 		t.Fatal("NornicDB bootstrap executor exposes GroupExecutor, want bounded PhaseGroupExecutor only")
 	}
-	phaseExecutor, ok := executor.(sourceneo4j.PhaseGroupExecutor)
+	phaseExecutor, ok := executor.(sourcecypher.PhaseGroupExecutor)
 	if !ok {
 		t.Fatal("NornicDB bootstrap executor does not implement PhaseGroupExecutor")
 	}
 
-	stmts := []sourceneo4j.Statement{
+	stmts := []sourcecypher.Statement{
 		bootstrapTestStatement("phase=files rows=1 chunk=1/6"),
 		bootstrapTestStatement("phase=files rows=1 chunk=2/6"),
 		bootstrapTestStatement("phase=files rows=1 chunk=3/6"),
@@ -66,7 +66,7 @@ func TestBootstrapNornicDBPhaseGroupExecutorWrapsChunkFailure(t *testing.T) {
 		fileMaxStatements: 2,
 	}
 
-	err := executor.ExecutePhaseGroup(context.Background(), []sourceneo4j.Statement{
+	err := executor.ExecutePhaseGroup(context.Background(), []sourcecypher.Statement{
 		bootstrapTestStatement("phase=files rows=1 chunk=1/3"),
 		bootstrapTestStatement("phase=files rows=1 chunk=2/3"),
 		bootstrapTestStatement("phase=files rows=1 chunk=3/3"),
@@ -86,13 +86,13 @@ func TestBootstrapNornicDBPhaseGroupExecutorWrapsChunkFailure(t *testing.T) {
 	}
 }
 
-func bootstrapTestStatement(summary string) sourceneo4j.Statement {
-	return sourceneo4j.Statement{
+func bootstrapTestStatement(summary string) sourcecypher.Statement {
+	return sourcecypher.Statement{
 		Cypher: "RETURN $value",
 		Parameters: map[string]any{
-			"value":                                 1,
-			sourceneo4j.StatementMetadataPhaseKey:   sourceneo4j.CanonicalPhaseFiles,
-			sourceneo4j.StatementMetadataSummaryKey: summary,
+			"value":                                  1,
+			sourcecypher.StatementMetadataPhaseKey:   sourcecypher.CanonicalPhaseFiles,
+			sourcecypher.StatementMetadataSummaryKey: summary,
 		},
 	}
 }
@@ -102,11 +102,11 @@ type recordingBootstrapGroupExecutor struct {
 	err        error
 }
 
-func (r *recordingBootstrapGroupExecutor) Execute(context.Context, sourceneo4j.Statement) error {
+func (r *recordingBootstrapGroupExecutor) Execute(context.Context, sourcecypher.Statement) error {
 	return nil
 }
 
-func (r *recordingBootstrapGroupExecutor) ExecuteGroup(_ context.Context, stmts []sourceneo4j.Statement) error {
+func (r *recordingBootstrapGroupExecutor) ExecuteGroup(_ context.Context, stmts []sourcecypher.Statement) error {
 	r.groupSizes = append(r.groupSizes, len(stmts))
 	return r.err
 }

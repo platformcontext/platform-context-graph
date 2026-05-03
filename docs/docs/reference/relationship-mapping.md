@@ -336,7 +336,7 @@ The Go graph needs to keep these distinctions visible:
 
 When the same pair can be described by both a typed relationship and a generic `DEPENDS_ON`, the typed edge wins. The resolver suppresses the weaker generic candidate for the same implied pair, while any compatibility `DEPENDS_ON` view remains a downstream concern rather than a current resolver guarantee.
 
-The Go reducer and canonical Neo4j writer now preserve that typed meaning end
+The Go reducer and canonical Cypher writer now preserve that typed meaning end
 to end for repository-scoped relationship families such as:
 
 - `DEPLOYS_FROM`

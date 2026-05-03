@@ -79,7 +79,7 @@ Clients that cache responses MUST invalidate on changes to `truth.level` or
 `truth.profile` is one of:
 
 - `local_lightweight` — single-binary `pcg` host with embedded Postgres, no
-  authoritative Neo4j graph.
+  authoritative graph backend.
 - `local_full_stack` — full Docker Compose stack, authoritative graph available.
 - `production` — deployed multi-runtime platform.
 

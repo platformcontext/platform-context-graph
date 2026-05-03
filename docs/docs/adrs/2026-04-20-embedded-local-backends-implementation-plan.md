@@ -616,7 +616,9 @@ local stack and production.
 
 - `go/internal/reducer/code_call_*`
 - `go/internal/query/code_*`
-- `go/internal/storage/neo4j/*`
+- `go/internal/storage/cypher/*` for backend-neutral Cypher write contracts
+  and writers
+- `go/internal/storage/neo4j/*` only for Neo4j-specific graph adapter seams
 - `docs/docs/reference/dead-code-reachability-spec.md`
 - compose verification scripts for graph-backed queries
 

@@ -30,7 +30,10 @@ PCG is split into a small number of clear service and storage boundaries:
   owns replay and recovery.
 - **Bootstrap Index** runs the same write path as a one-shot seeding flow.
 - **Postgres** stores facts, queues, status, recovery state, and content.
-- **Neo4j** stores canonical graph nodes and relationships.
+- **Graph backend** stores canonical graph nodes and relationships through the
+  Cypher-compatible `GraphQuery` and `GraphWrite` ports. Neo4j remains the
+  default backend; NornicDB uses the same backend-neutral Cypher writer surface
+  plus narrow backend-dialect seams.
 
 The platform is intentionally facts-first:
 
@@ -48,7 +51,7 @@ flowchart LR
   C --> D["Postgres fact store"]
   D --> E["Projector queue"]
   E --> F["Resolution Engine"]
-  F --> G["Neo4j canonical graph"]
+  F --> G["Canonical graph backend"]
   F --> H["Postgres content store"]
   I["API"] --> G
   I["API"] --> H
@@ -139,6 +142,8 @@ The repository layout mirrors the service boundaries:
 | `go/internal/query/` | HTTP handlers, OpenAPI, query/read surfaces |
 | `go/internal/runtime/` | health, readiness, metrics, admin/status wiring |
 | `go/internal/status/` | lifecycle and coverage/status reporting |
+| `go/internal/storage/cypher/` | backend-neutral Cypher write contracts, canonical graph writers, edge helpers, and write instrumentation |
+| `go/internal/storage/neo4j/` | Neo4j-specific graph storage adapters |
 | `go/internal/telemetry/` | structured JSON logging, tracing, metrics |
 | `go/internal/terraformschema/` | packaged Terraform provider schema assets and loaders |
 
@@ -151,7 +156,8 @@ PCG separates durable state from in-process work:
 - **Postgres facts** hold extracted repository truth and queue state.
 - **Projector/reducer queues** provide durable claim, retry, and dead-letter
   ownership.
-- **Neo4j** holds canonical graph entities and edges.
+- **Graph backend** holds canonical graph entities and edges through
+  backend-neutral Cypher contracts.
 - **Postgres content store** holds entity and file content used by query and
   context APIs.
 
@@ -170,17 +176,17 @@ sequenceDiagram
   participant Ingester
   participant Postgres as Postgres Facts/Queues
   participant Reducer as Resolution Engine
-  participant Neo4j
+  participant Graph as Graph Backend
   participant Content as Postgres Content
 
   Ingester->>Postgres: commit facts
   Ingester->>Postgres: enqueue projector work
   Reducer->>Postgres: claim projector work
-  Reducer->>Neo4j: write source-local graph state
+  Reducer->>Graph: write source-local graph state
   Reducer->>Content: write content entities
   Reducer->>Postgres: enqueue shared projection intents
   Reducer->>Postgres: claim shared projection intents
-  Reducer->>Neo4j: write canonical shared edges
+  Reducer->>Graph: write canonical shared edges
   Reducer->>Postgres: ack or dead-letter work
 ```
 
@@ -190,7 +196,7 @@ sequenceDiagram
 flowchart LR
   A["CLI / HTTP request"] --> B["API / Query layer"]
   F["MCP client"] --> G["MCP Server"]
-  B --> C["Neo4j canonical graph"]
+  B --> C["Canonical graph backend"]
   B --> D["Postgres content store"]
   B --> E["Status and admin readers"]
   G --> C
@@ -253,7 +259,7 @@ can read or write without naming the backend that serves the data.
 Two read ports exist today:
 
 - `GraphQuery` — read-only graph traversal (`Run`, `RunSingle`). Implemented by
-  the Neo4j adapter.
+  the active graph backend adapter.
 - `ContentStore` — relational content-query surface (file, entity, framework
   route, repository coverage). Implemented by the Postgres content adapter.
 
@@ -270,15 +276,16 @@ surface grows; the pattern is unchanged. See
 §5 for the target port list and the explicit rejection of an ORM-centric
 abstraction.
 
-Current graph adapters: Neo4j (default), NornicDB (under evaluation). Both
-satisfy the same `GraphQuery` + `GraphWrite` ports. The active adapter is
-chosen via `PCG_GRAPH_BACKEND={neo4j,nornicdb}` and surfaced in telemetry
-as `graph_backend`. Schema bootstrap routes through the same backend axis:
-Neo4j receives the shared production DDL, while NornicDB receives a narrow
+Current graph adapters: Neo4j (default) and NornicDB. Both satisfy the same
+`GraphQuery` + `GraphWrite` ports and share the backend-neutral
+`go/internal/storage/cypher` writer surface. The active adapter is chosen via
+`PCG_GRAPH_BACKEND={neo4j,nornicdb}` and surfaced in telemetry as
+`graph_backend`. Schema bootstrap routes through the same backend axis: Neo4j
+receives the shared production DDL, while NornicDB receives a narrow
 schema-dialect translation for compatibility gaps such as composite node
 identity constraints. Handler and reducer code do not branch on graph brand.
-If NornicDB passes the full conformance matrix at laptop, Compose, and
-production scale, PCG will deprecate Neo4j on a documented timeline. See
+If NornicDB passes the full promotion gates at laptop, Compose, and production
+scale, PCG will deprecate Neo4j on a documented timeline. See
 [ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
 
 ### Rule
@@ -353,7 +360,7 @@ same capability surface but with different truth levels.
 | `production` | Kubernetes / Helm split runtimes, shared Postgres and graph backend | Yes | Incident, refactor, blast-radius analysis at scale |
 
 The graph backend is a separate axis from profile. Current adapters are
-Neo4j (default) and NornicDB (evaluation candidate). See
+Neo4j (default) and NornicDB. See
 [Graph Backend Installation](reference/graph-backend-installation.md),
 [Graph Backend Operations](reference/graph-backend-operations.md), and
 [ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).

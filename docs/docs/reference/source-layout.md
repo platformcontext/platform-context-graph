@@ -28,7 +28,7 @@ live in the repository today.
 | `go/internal/runtime/` | probes, admin/status surfaces, retry policy, lifecycle hooks |
 | `go/internal/scope/` | repository scope and generation identities |
 | `go/internal/status/` | pipeline lifecycle and request reporting |
-| `go/internal/storage/` | Postgres and Neo4j adapters |
+| `go/internal/storage/` | Postgres adapters plus backend-neutral Cypher graph writers and backend-specific graph adapters |
 | `go/internal/telemetry/` | OTEL tracing, metrics, and structured logging |
 | `go/internal/terraformschema/` | packaged Terraform provider schemas and schema loader |
 | `go/internal/truth/` | canonical truth contracts |
@@ -92,7 +92,9 @@ All durable state is accessed through Go storage adapters:
 
 - `go/internal/storage/postgres/`: facts, queues, content store, recovery,
   decisions, status, and lifecycle metadata
-- `go/internal/storage/neo4j/`: canonical graph writes and edge helpers
+- `go/internal/storage/cypher/`: backend-neutral Cypher write contracts,
+  canonical graph writers, edge helpers, retry wrappers, and write telemetry
+- `go/internal/storage/neo4j/`: Neo4j-specific graph storage adapters
 - `go/internal/content/`: content shaping and persistence helpers layered over
   the Postgres store
 

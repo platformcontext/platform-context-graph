@@ -17,7 +17,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
@@ -76,7 +76,7 @@ func run(parent context.Context) error {
 		Instruments: instruments,
 		StoreName:   "reducer",
 	}
-	instrumentedNeo4j := &sourceneo4j.InstrumentedExecutor{
+	instrumentedNeo4j := &sourcecypher.InstrumentedExecutor{
 		Inner:       neo4jExecutor,
 		Tracer:      tracer,
 		Instruments: instruments,
@@ -119,10 +119,10 @@ func run(parent context.Context) error {
 
 func buildReducerService(
 	database postgres.ExecQueryer,
-	neo4jExec sourceneo4j.Executor,
+	neo4jExec sourcecypher.Executor,
 	cypherExec reducer.CypherExecutor,
 	intentStore *postgres.SharedIntentStore,
-	neo4jReader sourceneo4j.CypherReader,
+	neo4jReader sourcecypher.CypherReader,
 	graphReader query.GraphQuery,
 	getenv func(string) string,
 	tracer trace.Tracer,
@@ -153,7 +153,7 @@ func buildReducerService(
 		}
 	}
 
-	edgeWriterForHandlers := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
+	edgeWriterForHandlers := sourcecypher.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	edgeWriterForHandlers.Instruments = instruments
 	edgeWriterForHandlers.Logger = logger
 	edgeWriterForHandlers.InheritanceGroupBatchSize = inheritanceEdgeGroupBatchSize
@@ -262,7 +262,7 @@ func buildReducerService(
 		return reducer.Service{}, err
 	}
 
-	edgeWriter := sourceneo4j.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
+	edgeWriter := sourcecypher.NewEdgeWriter(neo4jExec, neo4jBatchSize(getenv))
 	edgeWriter.Instruments = instruments
 	edgeWriter.Logger = logger
 	edgeWriter.CodeCallBatchSize = codeCallEdgeBatchSize

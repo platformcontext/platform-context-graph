@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
@@ -45,14 +45,14 @@ const (
 // canonical-write safety path so bootstrap-index cannot send a whole
 // source-local materialization as one oversized grouped transaction.
 func bootstrapCanonicalExecutorForGraphBackend(
-	rawExecutor sourceneo4j.Executor,
+	rawExecutor sourcecypher.Executor,
 	graphBackend runtimecfg.GraphBackend,
 	getenv func(string) string,
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
-) (sourceneo4j.Executor, error) {
-	instrumented := &sourceneo4j.InstrumentedExecutor{
-		Inner: &sourceneo4j.RetryingExecutor{
+) (sourcecypher.Executor, error) {
+	instrumented := &sourcecypher.InstrumentedExecutor{
+		Inner: &sourcecypher.RetryingExecutor{
 			Inner:       rawExecutor,
 			MaxRetries:  3,
 			Instruments: instruments,
@@ -85,7 +85,7 @@ func bootstrapCanonicalExecutorForGraphBackend(
 		return nil, err
 	}
 
-	bounded := sourceneo4j.TimeoutExecutor{
+	bounded := sourcecypher.TimeoutExecutor{
 		Inner:       instrumented,
 		Timeout:     nornicDBCanonicalWriteTimeout(getenv),
 		TimeoutHint: canonicalWriteTimeoutEnv,
@@ -107,28 +107,28 @@ func bootstrapCanonicalExecutorForGraphBackend(
 }
 
 type bootstrapNornicDBPhaseGroupExecutor struct {
-	inner                    sourceneo4j.Executor
+	inner                    sourcecypher.Executor
 	maxStatements            int
 	fileMaxStatements        int
 	entityMaxStatements      int
 	entityLabelMaxStatements map[string]int
 }
 
-func (e bootstrapNornicDBPhaseGroupExecutor) Execute(ctx context.Context, stmt sourceneo4j.Statement) error {
+func (e bootstrapNornicDBPhaseGroupExecutor) Execute(ctx context.Context, stmt sourcecypher.Statement) error {
 	if e.inner == nil {
 		return nil
 	}
 	return e.inner.Execute(ctx, bootstrapSanitizedStatement(stmt))
 }
 
-func (e bootstrapNornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+func (e bootstrapNornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Context, stmts []sourcecypher.Statement) error {
 	if len(stmts) == 0 || e.inner == nil {
 		return nil
 	}
-	if allBootstrapStatementsUseOperation(stmts, sourceneo4j.OperationCanonicalRetract) {
+	if allBootstrapStatementsUseOperation(stmts, sourcecypher.OperationCanonicalRetract) {
 		return e.executeSequentialRetractPhase(ctx, stmts)
 	}
-	ge, ok := e.inner.(sourceneo4j.GroupExecutor)
+	ge, ok := e.inner.(sourcecypher.GroupExecutor)
 	if !ok {
 		for _, stmt := range stmts {
 			if err := e.inner.Execute(ctx, bootstrapSanitizedStatement(stmt)); err != nil {
@@ -140,7 +140,7 @@ func (e bootstrapNornicDBPhaseGroupExecutor) ExecutePhaseGroup(ctx context.Conte
 	return e.executeGroupedByLabel(ctx, ge, stmts)
 }
 
-func (e bootstrapNornicDBPhaseGroupExecutor) executeSequentialRetractPhase(ctx context.Context, stmts []sourceneo4j.Statement) error {
+func (e bootstrapNornicDBPhaseGroupExecutor) executeSequentialRetractPhase(ctx context.Context, stmts []sourcecypher.Statement) error {
 	for i, stmt := range stmts {
 		startedAt := time.Now()
 		if err := e.inner.Execute(ctx, bootstrapSanitizedStatement(stmt)); err != nil {
@@ -159,10 +159,10 @@ func (e bootstrapNornicDBPhaseGroupExecutor) executeSequentialRetractPhase(ctx c
 
 func (e bootstrapNornicDBPhaseGroupExecutor) executeGroupedByLabel(
 	ctx context.Context,
-	ge sourceneo4j.GroupExecutor,
-	stmts []sourceneo4j.Statement,
+	ge sourcecypher.GroupExecutor,
+	stmts []sourcecypher.Statement,
 ) error {
-	grouped := make([]sourceneo4j.Statement, 0, len(stmts))
+	grouped := make([]sourcecypher.Statement, 0, len(stmts))
 	groupedLabel := ""
 	flush := func() error {
 		if len(grouped) == 0 {
@@ -175,7 +175,7 @@ func (e bootstrapNornicDBPhaseGroupExecutor) executeGroupedByLabel(
 	}
 
 	for _, stmt := range stmts {
-		if bootstrapStatementPhaseGroupMode(stmt) == sourceneo4j.PhaseGroupModeExecuteOnly {
+		if bootstrapStatementPhaseGroupMode(stmt) == sourcecypher.PhaseGroupModeExecuteOnly {
 			if err := flush(); err != nil {
 				return err
 			}
@@ -183,7 +183,7 @@ func (e bootstrapNornicDBPhaseGroupExecutor) executeGroupedByLabel(
 			if err := e.inner.Execute(ctx, bootstrapSanitizedStatement(stmt)); err != nil {
 				return fmt.Errorf(
 					"phase-group singleton statement (phase=%s, duration=%s, first_statement=%q): %w",
-					bootstrapStatementPhase([]sourceneo4j.Statement{stmt}),
+					bootstrapStatementPhase([]sourcecypher.Statement{stmt}),
 					time.Since(startedAt),
 					bootstrapStatementSummary(stmt),
 					err,
@@ -212,8 +212,8 @@ func (e bootstrapNornicDBPhaseGroupExecutor) executeGroupedByLabel(
 
 func (e bootstrapNornicDBPhaseGroupExecutor) executeGroupedChunks(
 	ctx context.Context,
-	ge sourceneo4j.GroupExecutor,
-	stmts []sourceneo4j.Statement,
+	ge sourcecypher.GroupExecutor,
+	stmts []sourcecypher.Statement,
 	maxStatements int,
 ) error {
 	totalChunks := (len(stmts) + maxStatements - 1) / maxStatements
@@ -242,11 +242,11 @@ func (e bootstrapNornicDBPhaseGroupExecutor) executeGroupedChunks(
 	return nil
 }
 
-func (e bootstrapNornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourceneo4j.Statement) int {
+func (e bootstrapNornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []sourcecypher.Statement) int {
 	switch bootstrapStatementPhase(stmts) {
-	case sourceneo4j.CanonicalPhaseFiles:
+	case sourcecypher.CanonicalPhaseFiles:
 		return positiveOrDefault(e.fileMaxStatements, defaultNornicDBFilePhaseStatements)
-	case sourceneo4j.CanonicalPhaseEntities, sourceneo4j.CanonicalPhaseEntityContainment:
+	case sourcecypher.CanonicalPhaseEntities, sourcecypher.CanonicalPhaseEntityContainment:
 		if label := bootstrapEntityStatementLabel(stmts[0]); label != "" && e.entityLabelMaxStatements != nil {
 			if limit := e.entityLabelMaxStatements[label]; limit > 0 {
 				return limit
@@ -258,25 +258,25 @@ func (e bootstrapNornicDBPhaseGroupExecutor) phaseGroupStatementLimit(stmts []so
 	}
 }
 
-func bootstrapStatementPhase(stmts []sourceneo4j.Statement) string {
+func bootstrapStatementPhase(stmts []sourcecypher.Statement) string {
 	if len(stmts) == 0 {
 		return ""
 	}
-	phase, _ := stmts[0].Parameters[sourceneo4j.StatementMetadataPhaseKey].(string)
+	phase, _ := stmts[0].Parameters[sourcecypher.StatementMetadataPhaseKey].(string)
 	return strings.TrimSpace(phase)
 }
 
-func bootstrapEntityStatementLabel(stmt sourceneo4j.Statement) string {
-	label, _ := stmt.Parameters[sourceneo4j.StatementMetadataEntityLabelKey].(string)
+func bootstrapEntityStatementLabel(stmt sourcecypher.Statement) string {
+	label, _ := stmt.Parameters[sourcecypher.StatementMetadataEntityLabelKey].(string)
 	return strings.TrimSpace(label)
 }
 
-func bootstrapStatementPhaseGroupMode(stmt sourceneo4j.Statement) string {
-	mode, _ := stmt.Parameters[sourceneo4j.StatementMetadataPhaseGroupModeKey].(string)
+func bootstrapStatementPhaseGroupMode(stmt sourcecypher.Statement) string {
+	mode, _ := stmt.Parameters[sourcecypher.StatementMetadataPhaseGroupModeKey].(string)
 	return strings.TrimSpace(mode)
 }
 
-func allBootstrapStatementsUseOperation(stmts []sourceneo4j.Statement, operation sourceneo4j.Operation) bool {
+func allBootstrapStatementsUseOperation(stmts []sourcecypher.Statement, operation sourcecypher.Operation) bool {
 	for _, stmt := range stmts {
 		if stmt.Operation != operation {
 			return false
@@ -285,15 +285,15 @@ func allBootstrapStatementsUseOperation(stmts []sourceneo4j.Statement, operation
 	return len(stmts) > 0
 }
 
-func bootstrapSanitizedPhaseGroupChunk(stmts []sourceneo4j.Statement) []sourceneo4j.Statement {
-	sanitized := make([]sourceneo4j.Statement, len(stmts))
+func bootstrapSanitizedPhaseGroupChunk(stmts []sourcecypher.Statement) []sourcecypher.Statement {
+	sanitized := make([]sourcecypher.Statement, len(stmts))
 	for i, stmt := range stmts {
 		sanitized[i] = bootstrapSanitizedStatement(stmt)
 	}
 	return sanitized
 }
 
-func bootstrapSanitizedStatement(stmt sourceneo4j.Statement) sourceneo4j.Statement {
+func bootstrapSanitizedStatement(stmt sourcecypher.Statement) sourcecypher.Statement {
 	stmt.Parameters = bootstrapSanitizedParameters(stmt.Parameters)
 	return stmt
 }
@@ -322,8 +322,8 @@ func bootstrapSanitizedParameters(params map[string]any) map[string]any {
 	return sanitized
 }
 
-func bootstrapStatementSummary(stmt sourceneo4j.Statement) string {
-	if summary, ok := stmt.Parameters[sourceneo4j.StatementMetadataSummaryKey].(string); ok && strings.TrimSpace(summary) != "" {
+func bootstrapStatementSummary(stmt sourcecypher.Statement) string {
+	if summary, ok := stmt.Parameters[sourcecypher.StatementMetadataSummaryKey].(string); ok && strings.TrimSpace(summary) != "" {
 		return summary
 	}
 	trimmed := strings.TrimSpace(stmt.Cypher)

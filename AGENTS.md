@@ -170,7 +170,8 @@ Do not collapse ownership boundaries casually.
 | `go/internal/parser/` | parser registry, adapters, language behavior, SCIP support |
 | `go/internal/facts/` | durable fact models and queue contracts |
 | `go/internal/storage/postgres/` | facts, queue, status, content, recovery, decisions |
-| `go/internal/storage/neo4j/` | graph adapters |
+| `go/internal/storage/cypher/` | backend-neutral Cypher write contracts, canonical graph writers, edge helpers, and write instrumentation |
+| `go/internal/storage/neo4j/` | Neo4j-specific graph adapters |
 | `go/internal/projector/` | source-local projection stages |
 | `go/internal/reducer/` | cross-domain materialization and shared projection |
 | `go/internal/relationships/` | Terraform, Helm, Kustomize, Argo extraction |

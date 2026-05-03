@@ -14,7 +14,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
-	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
@@ -93,13 +93,13 @@ func openProjectorCanonicalWriter(
 		DatabaseName: cfg.DatabaseName,
 	}
 
-	instrumentedExecutor := &sourceneo4j.InstrumentedExecutor{
+	instrumentedExecutor := &sourcecypher.InstrumentedExecutor{
 		Inner:       rawExecutor,
 		Tracer:      tracer,
 		Instruments: instruments,
 	}
 
-	return sourceneo4j.NewCanonicalNodeWriter(instrumentedExecutor, neo4jBatchSize(getenv), instruments),
+	return sourcecypher.NewCanonicalNodeWriter(instrumentedExecutor, neo4jBatchSize(getenv), instruments),
 		projectorNeo4jDriverCloser{Driver: driver},
 		nil
 }
@@ -109,7 +109,7 @@ type projectorNeo4jExecutor struct {
 	DatabaseName string
 }
 
-func (e projectorNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourceneo4j.Statement) error {
+func (e projectorNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourcecypher.Statement) error {
 	if e.Driver == nil {
 		return fmt.Errorf("neo4j driver is required")
 	}
@@ -140,7 +140,7 @@ func (e projectorNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []source
 	return err
 }
 
-func (e projectorNeo4jExecutor) Execute(ctx context.Context, statement sourceneo4j.Statement) error {
+func (e projectorNeo4jExecutor) Execute(ctx context.Context, statement sourcecypher.Statement) error {
 	if e.Driver == nil {
 		return fmt.Errorf("neo4j driver is required")
 	}
