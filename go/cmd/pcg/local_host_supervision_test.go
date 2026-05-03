@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -291,8 +292,8 @@ func TestWaitLocalHostChildrenKeepingAllowedCleanExitsKeepsOwnerAlive(t *testing
 		slog.SetDefault(originalLogger)
 	})
 
-	var logs bytes.Buffer
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{})))
+	logs := &lockedBuffer{}
+	slog.SetDefault(slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{})))
 
 	reducerCmd := &exec.Cmd{}
 	ingesterCmd := &exec.Cmd{}
@@ -332,6 +333,25 @@ func TestWaitLocalHostChildrenKeepingAllowedCleanExitsKeepsOwnerAlive(t *testing
 	if err := <-done; err != nil {
 		t.Fatalf("waitLocalHostChildrenKeepingAllowedCleanExits() after cancel error = %v, want nil", err)
 	}
+}
+
+// lockedBuffer lets the supervision race test inspect slog output while child
+// watcher goroutines may still be flushing a log record.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func TestWaitLocalHostChildrenKeepingAllowedCleanExitsRejectsDisallowedCleanExit(t *testing.T) {
