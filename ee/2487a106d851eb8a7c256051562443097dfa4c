@@ -1,0 +1,23 @@
+go/internal/query/infra_test.go
+  4cb501d5d4ff237f 160-203
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ee2487a106d851eb8a7c256051562443097dfa4c",
+  "prompts": {
+    "4cb501d5d4ff237f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd3eb-d67d-7720-b4b6-e1918fb11a2d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 50,
+      "total_deletions": 6,
+      "accepted_lines": 44,
+      "overriden_lines": 0
+    }
+  }
+}
