@@ -14,8 +14,10 @@
 - Chunk 5b matrix runs pass against `local_authoritative`,
   `local_full_stack`, and `production` profiles with recorded perf evidence
 - signature verification policy defined and enforced for installed binaries
-- Neo4j remains the default `PCG_GRAPH_BACKEND` until Chunk 7 deprecation
-  criteria are met
+- NornicDB is now the default `PCG_GRAPH_BACKEND`; Neo4j remains the explicit
+  compatibility backend while the release-backed NornicDB pin and conformance
+  gates continue to be tracked here
+
 **Related:**
 
 - `docs/docs/adrs/2026-04-20-embedded-local-backends-desktop-mode.md`

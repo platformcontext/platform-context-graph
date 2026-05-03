@@ -420,7 +420,7 @@ filler, but keep precise command and contract material.
 Run:
 
 ```bash
-rg 'FalkorDB|falkordb|KuzuDB|kuzudb|docker-compose\.nornicdb|docker-compose\.template|Neo4j is the default|external Neo4j|default Neo4j|Until then, Neo4j remains' \
+rg 'FalkorDB|falkordb|KuzuDB|kuzudb|retired NornicDB compose override|retired compose template|Neo4j is the default|external Neo4j|default Neo4j|Until then, Neo4j remains' \
   -n README.md docs/docs deploy/helm/platform-context-graph go/cmd go/internal docker-compose*.yml
 ```
 

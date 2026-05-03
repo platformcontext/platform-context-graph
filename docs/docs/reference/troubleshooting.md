@@ -76,8 +76,8 @@ If you suspect this is not happening:
 Check these in order:
 
 ```bash
-# Neo4j connectivity
-docker compose logs neo4j | tail -20
+# NornicDB connectivity
+docker compose logs nornicdb | tail -20
 
 # Bootstrap indexing completion
 docker compose logs bootstrap-index | tail -20

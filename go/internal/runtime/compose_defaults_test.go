@@ -1,8 +1,10 @@
 package runtime
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -55,6 +57,35 @@ func TestNeo4jComposeUsesNeo4jBackend(t *testing.T) {
 	}
 }
 
+func TestRepositoryAutomationUsesCurrentComposeFiles(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.Join("..", "..", "..")
+	for _, relativePath := range repositoryAutomationFiles(t, root) {
+		raw, err := os.ReadFile(filepath.Join(root, relativePath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relativePath, err)
+		}
+		content := string(raw)
+		for _, retiredName := range []string{
+			"docker-compose.nornicdb.yml",
+			"docker-compose.template.yml",
+		} {
+			if strings.Contains(content, retiredName) {
+				t.Fatalf("%s references retired compose file %s", relativePath, retiredName)
+			}
+		}
+
+		usesNeo4jService := strings.Contains(content, "exec -T neo4j") ||
+			strings.Contains(content, "port neo4j") ||
+			strings.Contains(content, "up -d postgres neo4j")
+		isSharedHelper := strings.HasPrefix(relativePath, filepath.Join("scripts", "lib")+string(os.PathSeparator))
+		if usesNeo4jService && !isSharedHelper && !strings.Contains(content, "docker-compose.neo4j.yml") {
+			t.Fatalf("%s targets the neo4j Compose service without docker-compose.neo4j.yml", relativePath)
+		}
+	}
+}
+
 func graphRuntimeServices() []string {
 	return []string{
 		"db-migrate",
@@ -64,6 +95,39 @@ func graphRuntimeServices() []string {
 		"ingester",
 		"resolution-engine",
 	}
+}
+
+func repositoryAutomationFiles(t *testing.T, root string) []string {
+	t.Helper()
+
+	var paths []string
+	for _, dir := range []string{".github", "docs", "scripts"} {
+		start := filepath.Join(root, dir)
+		err := filepath.WalkDir(start, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				if filepath.Base(path) == "site" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			switch filepath.Ext(path) {
+			case ".md", ".sh", ".yml", ".yaml":
+				relativePath, err := filepath.Rel(root, path)
+				if err != nil {
+					return err
+				}
+				paths = append(paths, relativePath)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", dir, err)
+		}
+	}
+	return paths
 }
 
 func readComposeDocument(t *testing.T, name string) composeDocument {
