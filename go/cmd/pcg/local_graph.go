@@ -94,7 +94,7 @@ func useProcessLocalNornicDB(getenv func(string) string, embeddedAvailable bool)
 			return false, fmt.Errorf("embedded NornicDB is not available in this PCG build; rebuild with -tags nolocalllm or set %s=process", localNornicDBRuntimeModeEnv)
 		}
 		return false, nil
-	case "process", "sidecar", "binary":
+	case "process":
 		return true, nil
 	default:
 		return false, fmt.Errorf("%s must be embedded or process, got %q", localNornicDBRuntimeModeEnv, mode)

@@ -10,11 +10,13 @@ import (
 	"os"
 	"path/filepath"
 
+	nornicauth "github.com/orneryd/nornicdb/pkg/auth"
 	nornicbolt "github.com/orneryd/nornicdb/pkg/bolt"
 	nornicbuildinfo "github.com/orneryd/nornicdb/pkg/buildinfo"
 	nornicconfig "github.com/orneryd/nornicdb/pkg/config"
 	"github.com/orneryd/nornicdb/pkg/nornicdb"
 	nornicserver "github.com/orneryd/nornicdb/pkg/server"
+	nornicstorage "github.com/orneryd/nornicdb/pkg/storage"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/pcglocal"
 	"github.com/platformcontext/platform-context-graph/go/internal/query"
@@ -55,7 +57,7 @@ func startEmbeddedLocalNornicDB(ctx context.Context, layout pcglocal.Layout) (*m
 	if err != nil {
 		return nil, fmt.Errorf("open graph log file: %w", err)
 	}
-	embedded, err := startEmbeddedNornicDBRuntime(dataDir, localNornicDBBindAddress, boltPort, httpPort, logFile)
+	embedded, err := startEmbeddedNornicDBRuntime(dataDir, localNornicDBBindAddress, boltPort, httpPort, credentials, logFile)
 	if err != nil {
 		_ = logFile.Close()
 		return nil, err
@@ -92,7 +94,14 @@ type embeddedNornicDBRuntime struct {
 // Bolt server APIs into PCG's local graph lifecycle. The runtime disables
 // optional local AI and MCP surfaces so `pcg graph start` only owns graph
 // storage for PCG.
-func startEmbeddedNornicDBRuntime(dataDir string, address string, boltPort int, httpPort int, logs io.Writer) (*embeddedNornicDBRuntime, error) {
+func startEmbeddedNornicDBRuntime(
+	dataDir string,
+	address string,
+	boltPort int,
+	httpPort int,
+	credentials localGraphCredentials,
+	logs io.Writer,
+) (*embeddedNornicDBRuntime, error) {
 	if logs == nil {
 		logs = io.Discard
 	}
@@ -114,6 +123,11 @@ func startEmbeddedNornicDBRuntime(dataDir string, address string, boltPort int, 
 		}
 	}()
 
+	authenticator, err := newEmbeddedNornicDBAuthenticator(db, credentials)
+	if err != nil {
+		return nil, err
+	}
+
 	serverConfig := nornicserver.DefaultConfig()
 	serverConfig.Address = address
 	serverConfig.Port = httpPort
@@ -125,7 +139,7 @@ func startEmbeddedNornicDBRuntime(dataDir string, address string, boltPort int, 
 		QdrantGRPCEnabled:   false,
 		SearchRerankEnabled: false,
 	}
-	httpServer, err := nornicserver.New(db, nil, serverConfig)
+	httpServer, err := nornicserver.New(db, authenticator, serverConfig)
 	if err != nil {
 		return nil, fmt.Errorf("create embedded nornicdb http server: %w", err)
 	}
@@ -137,7 +151,10 @@ func startEmbeddedNornicDBRuntime(dataDir string, address string, boltPort int, 
 	boltConfig := nornicbolt.DefaultConfig()
 	boltConfig.Host = address
 	boltConfig.Port = boltPort
-	boltConfig.RequireAuth = false
+	boltAuth := nornicbolt.NewAuthenticatorAdapter(authenticator)
+	boltAuth.SetGetEffectivePermissions(httpServer.GetEffectivePermissions)
+	boltConfig.Authenticator = boltAuth
+	boltConfig.RequireAuth = true
 	boltServer := nornicbolt.NewWithDatabaseManager(boltConfig, nil, httpServer.GetDatabaseManager())
 	runtime.boltServer = boltServer
 	go func() {
@@ -147,6 +164,30 @@ func startEmbeddedNornicDBRuntime(dataDir string, address string, boltPort int, 
 	}()
 
 	return runtime, nil
+}
+
+// newEmbeddedNornicDBAuthenticator gives embedded Bolt and HTTP the same
+// workspace-scoped admin user that process mode receives through NORNICDB_AUTH.
+func newEmbeddedNornicDBAuthenticator(db *nornicdb.DB, credentials localGraphCredentials) (*nornicauth.Authenticator, error) {
+	if db == nil {
+		return nil, fmt.Errorf("embedded nornicdb authenticator requires an open database")
+	}
+	if credentials.Username == "" || credentials.Password == "" {
+		return nil, fmt.Errorf("embedded nornicdb authenticator requires username and password")
+	}
+	authConfig := nornicauth.DefaultAuthConfig()
+	authConfig.DefaultAdminUsername = credentials.Username
+	authConfig.JWTSecret = []byte(credentials.Password)
+	systemStorage := nornicstorage.NewNamespacedEngine(db.GetBaseStorageForManager(), "system")
+	authenticator, err := nornicauth.NewAuthenticator(authConfig, systemStorage)
+	if err != nil {
+		return nil, fmt.Errorf("create embedded nornicdb authenticator: %w", err)
+	}
+	if _, err := authenticator.CreateUser(credentials.Username, credentials.Password, []nornicauth.Role{nornicauth.RoleAdmin}); err != nil &&
+		!errors.Is(err, nornicauth.ErrUserExists) {
+		return nil, fmt.Errorf("create embedded nornicdb admin user: %w", err)
+	}
+	return authenticator, nil
 }
 
 // stop shuts down the embedded servers before closing storage so pending Bolt

@@ -111,6 +111,25 @@ func TestStartManagedLocalNornicDBCanUseProcessRuntime(t *testing.T) {
 	}
 }
 
+func TestUseProcessLocalNornicDBRejectsUndocumentedRuntimeAliases(t *testing.T) {
+	for _, mode := range []string{"sidecar", "binary"} {
+		t.Run(mode, func(t *testing.T) {
+			_, err := useProcessLocalNornicDB(func(key string) string {
+				if key == localNornicDBRuntimeModeEnv {
+					return mode
+				}
+				return ""
+			}, true)
+			if err == nil {
+				t.Fatal("useProcessLocalNornicDB() error = nil, want invalid runtime mode")
+			}
+			if !strings.Contains(err.Error(), "must be embedded or process") {
+				t.Fatalf("useProcessLocalNornicDB() error = %q, want documented runtime values", err.Error())
+			}
+		})
+	}
+}
+
 func TestStopManagedLocalGraphUsesEmbeddedShutdown(t *testing.T) {
 	shutdownCalled := false
 	graph := &managedLocalGraph{
