@@ -16,9 +16,9 @@ runtime behavior, or work on PCG itself.
 
 ## Storage
 
-The default graph backend is NornicDB. Neo4j is the explicit supported graph
-compatibility path. Postgres stores relational state, facts, queues, status,
-content, and recovery data.
+The default graph backend is NornicDB. Neo4j is the explicit official
+alternative. Postgres stores relational state, facts, queues, status, content,
+and recovery data.
 
 ## Local commands and API commands
 

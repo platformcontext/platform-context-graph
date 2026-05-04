@@ -288,6 +288,71 @@ func TestInstrumentedExecutorForwardsExecuteGroup(t *testing.T) {
 	}
 }
 
+func TestInstrumentedExecutorExecuteGroupRecordsPerStatementBatchMetrics(t *testing.T) {
+	t.Parallel()
+
+	metricReader := metric.NewManualReader()
+	meterProvider := metric.NewMeterProvider(metric.WithReader(metricReader))
+	instruments, err := telemetry.NewInstruments(meterProvider.Meter("test"))
+	if err != nil {
+		t.Fatalf("NewInstruments() error = %v, want nil", err)
+	}
+
+	inner := &groupCapableExecutor{}
+	ie := &InstrumentedExecutor{Inner: inner, Instruments: instruments}
+
+	stmts := []Statement{
+		{
+			Operation: OperationCanonicalUpsert,
+			Cypher:    "UNWIND $rows AS row MERGE (f:File {path: row.path})",
+			Parameters: map[string]any{
+				"rows": []map[string]any{
+					{"path": "/repo/a.go"},
+					{"path": "/repo/b.go"},
+				},
+				StatementMetadataPhaseKey: CanonicalPhaseFiles,
+			},
+		},
+		{
+			Operation: OperationCanonicalUpsert,
+			Cypher:    "UNWIND $rows AS row MERGE (n:Function {uid: row.entity_id})",
+			Parameters: map[string]any{
+				"rows": []map[string]any{
+					{"entity_id": "function-1"},
+				},
+				StatementMetadataPhaseKey:       CanonicalPhaseEntities,
+				StatementMetadataEntityLabelKey: "Function",
+			},
+		},
+	}
+
+	if err := ie.ExecuteGroup(context.Background(), stmts); err != nil {
+		t.Fatalf("ExecuteGroup() error = %v, want nil", err)
+	}
+
+	var rm metricdata.ResourceMetrics
+	if err := metricReader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("Collect() error = %v, want nil", err)
+	}
+
+	assertFloat64HistogramCount(t, rm, "pcg_dp_neo4j_batch_size", map[string]string{
+		"operation":   string(OperationCanonicalUpsert),
+		"write_phase": CanonicalPhaseFiles,
+	}, 1)
+	assertFloat64HistogramCount(t, rm, "pcg_dp_neo4j_batch_size", map[string]string{
+		"operation":   string(OperationCanonicalUpsert),
+		"write_phase": CanonicalPhaseEntities,
+		"node_type":   "Function",
+	}, 1)
+	assertInt64CounterValue(t, rm, "pcg_dp_neo4j_batches_executed_total", map[string]string{
+		"operation":   string(OperationCanonicalUpsert),
+		"write_phase": CanonicalPhaseFiles,
+	}, 1)
+	assertFloat64HistogramCount(t, rm, "pcg_dp_neo4j_query_duration_seconds", map[string]string{
+		"operation": "write_group",
+	}, 1)
+}
+
 func TestInstrumentedExecutorExecuteGroupErrorsWithoutGroupExecutor(t *testing.T) {
 	t.Parallel()
 

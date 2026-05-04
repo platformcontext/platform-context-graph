@@ -89,6 +89,18 @@ See `doc.go` for the full godoc contract.
 - `internal/telemetry` — `NewBootstrap`, `NewProviders`, `EventAttr`,
   `NewLoggerWithWriter`
 
+## Configuration
+
+- `PCG_API_ADDR` — listen address, default `:8080`
+- `PCG_POSTGRES_DSN` (or legacy `PCG_CONTENT_STORE_DSN`) — required
+- `PCG_QUERY_PROFILE` — default `production`
+- `PCG_GRAPH_BACKEND` — `neo4j` or `nornicdb`
+- `PCG_DISABLE_NEO4J` — with the local-lightweight profile, skips the
+  graph driver
+- `DEFAULT_DATABASE` — graph database name, default `nornic`
+- API key resolved via `runtime.ResolveAPIKey`; Bolt details via
+  `runtime.OpenNeo4jDriver`
+
 ## Telemetry
 
 - Bootstrap: `telemetry.NewBootstrap("platform-context-graph-api")` with service

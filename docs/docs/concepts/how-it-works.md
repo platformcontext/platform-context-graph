@@ -35,7 +35,7 @@ The inference layer is what makes PCG different from a code search tool. It conn
 The graph is written to the backing database:
 
 - **NornicDB** — default graph backend for local and deployable service paths
-- **Neo4j** — explicit Bolt-compatible compatibility backend
+- **Neo4j** — explicit Bolt-compatible official alternative
 - **PostgreSQL** — content store for source text retrieval and full-text search
 
 All three query interfaces (CLI, MCP, HTTP) read from the same storage layer.

@@ -88,8 +88,8 @@ binary remains an explicit opt-in. PCG resolves it in this order:
 3. `nornicdb-headless` in `PATH`
 4. `nornicdb` in `PATH`
 
-During NornicDB evaluation, local-authoritative canonical graph writes use
-bounded phase-group transactions and are still bounded by
+With the NornicDB default backend, local-authoritative canonical graph writes
+use bounded phase-group transactions and are still bounded by
 `PCG_CANONICAL_WRITE_TIMEOUT` (`30s` by default). The default phase-group size
 is `500` statements and can be tuned with
 `PCG_NORNICDB_PHASE_GROUP_STATEMENTS=<positive integer>` when repo-scale

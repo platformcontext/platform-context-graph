@@ -2,9 +2,8 @@ package cypher
 
 import (
 	"context"
-	"time"
-
 	"fmt"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
@@ -58,17 +57,7 @@ func (i *InstrumentedExecutor) Execute(ctx context.Context, statement Statement)
 		))
 	}
 
-	// Record batch size if this is a batch operation
-	if i.Instruments != nil {
-		if rows, ok := statement.Parameters["rows"]; ok {
-			if rowSlice, ok := rows.([]map[string]any); ok {
-				i.Instruments.Neo4jBatchSize.Record(ctx, float64(len(rowSlice)))
-				i.Instruments.Neo4jBatchesExecuted.Add(ctx, 1, metric.WithAttributes(
-					attribute.String("operation", string(statement.Operation)),
-				))
-			}
-		}
-	}
+	i.recordStatementBatchMetrics(ctx, statement)
 
 	// Set span status on error
 	if err != nil && span != nil {
@@ -107,10 +96,60 @@ func (i *InstrumentedExecutor) ExecuteGroup(ctx context.Context, stmts []Stateme
 			attribute.String("operation", "write_group"),
 		))
 	}
+	for _, stmt := range stmts {
+		i.recordStatementBatchMetrics(ctx, stmt)
+	}
 
 	if err != nil && span != nil {
 		span.SetStatus(codes.Error, err.Error())
 	}
 
 	return err
+}
+
+// recordStatementBatchMetrics emits one bounded row-count signal per UNWIND
+// statement. Grouped Neo4j writes use this to expose the same phase and label
+// clues available to NornicDB phase-group logs without splitting the transaction.
+func (i *InstrumentedExecutor) recordStatementBatchMetrics(ctx context.Context, statement Statement) {
+	if i.Instruments == nil || i.Instruments.Neo4jBatchSize == nil || i.Instruments.Neo4jBatchesExecuted == nil {
+		return
+	}
+	rowCount, ok := statementRowsCount(statement)
+	if !ok {
+		return
+	}
+	attrs := statementBatchMetricAttributes(statement)
+	i.Instruments.Neo4jBatchSize.Record(ctx, float64(rowCount), metric.WithAttributes(attrs...))
+	i.Instruments.Neo4jBatchesExecuted.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// statementRowsCount returns the row count for common UNWIND parameter shapes.
+func statementRowsCount(statement Statement) (int, bool) {
+	rows, ok := statement.Parameters["rows"]
+	if !ok {
+		return 0, false
+	}
+	switch typed := rows.(type) {
+	case []map[string]any:
+		return len(typed), true
+	case []map[string]string:
+		return len(typed), true
+	case []any:
+		return len(typed), true
+	default:
+		return 0, false
+	}
+}
+
+// statementBatchMetricAttributes keeps grouped-write batch labels bounded to
+// operation, canonical phase, and node type.
+func statementBatchMetricAttributes(statement Statement) []attribute.KeyValue {
+	attrs := []attribute.KeyValue{attribute.String("operation", string(statement.Operation))}
+	if phase, ok := statement.Parameters[StatementMetadataPhaseKey].(string); ok && phase != "" {
+		attrs = append(attrs, telemetry.AttrWritePhase(phase))
+	}
+	if label, ok := statement.Parameters[StatementMetadataEntityLabelKey].(string); ok && label != "" {
+		attrs = append(attrs, telemetry.AttrNodeType(label))
+	}
+	return attrs
 }

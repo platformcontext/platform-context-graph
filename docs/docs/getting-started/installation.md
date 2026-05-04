@@ -12,8 +12,8 @@ server, ingester, reducer, and bootstrap indexer. Add the telemetry overlay
 when you want a local OTEL collector and Jaeger for developer or DevOps
 testing.
 
-NornicDB is the default graph backend. Neo4j remains the explicit supported
-compatibility path.
+NornicDB is the default graph backend. Neo4j remains the explicit official
+alternative.
 
 After installing the binaries, `pcg doctor` checks the local CLI and helper
 binary wiring. Graph checks depend on whether the selected backend is running.

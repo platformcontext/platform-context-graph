@@ -121,7 +121,7 @@ func openQueryGraph(
 	queryProfile query.QueryProfile,
 	logger *slog.Logger,
 ) (neo4jdriver.DriverWithContext, string, error) {
-	neo4jDB := envOrDefault(getenv, "DEFAULT_DATABASE", "neo4j")
+	neo4jDB := envOrDefault(getenv, "DEFAULT_DATABASE", "nornic")
 	if queryProfile == query.ProfileLocalLightweight || strings.EqualFold(envOrDefault(getenv, "PCG_DISABLE_NEO4J", ""), "true") {
 		return nil, neo4jDB, nil
 	}

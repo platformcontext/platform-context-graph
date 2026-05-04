@@ -29,7 +29,7 @@ advisory report.
 | --- | --- | --- | --- | --- |
 | `PCG_HOME` | Platform user-data dir | CLI, local host, API key resolver | Root for user config, local workspaces, managed binaries, and persisted local API keys. | Set to isolate dogfood runs, CI runs, or disposable local-authoritative workspaces. |
 | `PCG_QUERY_PROFILE` | `production` for API/MCP/reducer; local commands set profile explicitly | API, MCP, ingester, reducer, local host | Selects query/runtime profile such as `production`, `local_lightweight`, or `local_authoritative`. | Change only when switching runtime mode. Do not use it as a performance knob. |
-| `PCG_GRAPH_BACKEND` | `nornicdb` | API, MCP, ingester, reducer, local host | Selects graph adapter: `nornicdb` or `neo4j`. | Set to `neo4j` only for the explicit Neo4j compatibility path. |
+| `PCG_GRAPH_BACKEND` | `nornicdb` | API, MCP, ingester, reducer, local host | Selects graph adapter: `nornicdb` or `neo4j`. | Set to `neo4j` for the explicit Neo4j path. |
 | `PCG_LISTEN_ADDR` | `0.0.0.0:8080` | Go service runtimes | HTTP listen address for services using shared runtime config. | Change for deployment port binding, not performance. |
 | `PCG_METRICS_ADDR` | `0.0.0.0:9464` | Go service runtimes | Prometheus metrics listen address. | Change for deployment port binding or sidecar scrape layout. |
 | `PCG_API_ADDR` | unset; CLI wrappers set host/port flags | API CLI service wrapper | API listen address when using `pcg service` helpers. | Use CLI flags first; set only for scripted local service wrappers. |

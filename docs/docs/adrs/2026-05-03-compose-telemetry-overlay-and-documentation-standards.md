@@ -22,7 +22,7 @@ verification gates before merge.
 PCG now has two local full-stack Compose lanes:
 
 - `docker-compose.yaml` for the default NornicDB graph backend
-- `docker-compose.neo4j.yml` for the Neo4j compatibility backend
+- `docker-compose.neo4j.yml` for the explicit Neo4j backend
 
 Those files had grown into a mixed developer, operator, and telemetry story. A
 new user who wanted "run PCG locally" also got Jaeger and an OTEL collector,

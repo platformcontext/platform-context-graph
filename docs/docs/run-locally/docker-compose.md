@@ -27,7 +27,7 @@ It starts:
 
 ## Start the Neo4j stack
 
-Neo4j is the explicit supported compatibility graph backend:
+Neo4j is the explicit official alternative graph backend:
 
 ```bash
 docker compose -f docker-compose.neo4j.yml up --build

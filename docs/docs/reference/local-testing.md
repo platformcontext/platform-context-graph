@@ -177,9 +177,9 @@ PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true \
   go test ./cmd/pcg -run TestNornicDBGroupedWriteRollbackConformance -count=1 -v
 ```
 
-Normal laptop runs should leave `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` unset
-until the latest NornicDB `main` binary under evaluation passes broader
-adapter conformance and the release or accepted-build policy is settled.
+Normal laptop runs should leave `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` unset.
+Use the default phase-group path with the latest accepted NornicDB `main` build
+until release-backed binary policy is settled.
 
 ## Terraform Provider-Schema Gate
 

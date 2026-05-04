@@ -15,7 +15,7 @@ Compose.
 Set the graph backend explicitly via environment variable:
 
 - `PCG_GRAPH_BACKEND=nornicdb` — default
-- `PCG_GRAPH_BACKEND=neo4j` — explicit Neo4j compatibility path
+- `PCG_GRAPH_BACKEND=neo4j` — explicit Neo4j path
 
 Invalid values are rejected at startup. There is no silent default.
 

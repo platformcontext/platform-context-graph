@@ -93,7 +93,7 @@ capabilities:
     tools: [analyze_code_relationships]
     profiles:
       local_lightweight: {status: unsupported, max_truth_level: unsupported, required_runtime: local_host, p95_latency_ms: null, max_scope_size: active_repo, verification: [{integration_test: local-lightweight-unsupported-transitive-callers}], notes: must return structured unsupported-capability}
-      local_authoritative: {status: supported, max_truth_level: exact, required_runtime: local_host_plus_graph, p95_latency_ms: 2000, max_scope_size: active_repo, verification: [{integration_test: local-authoritative-transitive-callers}], notes: graph sidecar (NornicDB candidate) serves authoritative graph at laptop scale}
+      local_authoritative: {status: supported, max_truth_level: exact, required_runtime: local_host_plus_graph, p95_latency_ms: 2000, max_scope_size: active_repo, verification: [{integration_test: local-authoritative-transitive-callers}], notes: NornicDB graph sidecar serves authoritative graph at laptop scale}
       local_full_stack: {status: supported, max_truth_level: exact, required_runtime: full_stack, p95_latency_ms: 3000, max_scope_size: indexed_workspace, verification: [{compose_e2e: transitive-callers}], notes: authoritative graph}
       production: {status: supported, max_truth_level: exact, required_runtime: deployed_services, p95_latency_ms: 5000, max_scope_size: multi_repo_platform, verification: [{remote_validation: prod-transitive-callers}], notes: authoritative graph}
   - capability: call_graph.transitive_callees

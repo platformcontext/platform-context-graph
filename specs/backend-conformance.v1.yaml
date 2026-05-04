@@ -45,7 +45,7 @@ backends:
         verification:
           - remote_validation: latest-main-full-corpus
           - remote_validation: pcg-full-pr138-a2c630af-b68b4ef-20260504T120630Z
-        notes: Latest-main full-corpus evidence is healthy under the current default path; production comparison, install trust, and broader host envelopes remain explicit gates.
+        notes: Latest-main full-corpus evidence is healthy under the current default path; Neo4j parity research, install trust, and broader host envelopes remain explicit gates.
   - id: neo4j
     default: false
     official: true
@@ -82,13 +82,13 @@ backends:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/query
           - compose_e2e: live-backend-conformance
-        notes: Neo4j remains the compatibility backend for graph-backed dead-code candidate scans.
+        notes: Neo4j remains the official alternative for graph-backed dead-code candidate scans.
       performance_envelope:
         status: supported
         verification:
           - compose_e2e: neo4j-compatibility
           - remote_validation: pcg-neo4j-baseline-pr138-a2c630af-20260504T123656Z-slo-snapshot
-        notes: Neo4j remains the compatibility backend and migration fallback for companies that already operate it. The 2026-05-04 remote comparison was stopped before terminal convergence; at 1946s Neo4j had 553/896 source-local items succeeded with zero retrying, failed, or dead-letter rows, while NornicDB had already finished the full corpus in 878s. Continuing production-promoted Neo4j support needs a Neo4j-specific optimization pass over the same adapter seams PCG tuned for NornicDB, without adding handler-level workarounds.
+        notes: Neo4j remains the official alternative for companies that already operate it. The 2026-05-04 remote comparison was stopped before terminal convergence; at 1946s Neo4j had 553/896 source-local items succeeded with zero retrying, failed, or dead-letter rows, while NornicDB had already finished the full corpus in 878s. Continuing production-promoted Neo4j support needs a Neo4j-specific optimization pass over the same adapter seams PCG tuned for NornicDB, without adding handler-level workarounds.
 profile_matrix:
   - backend_id: nornicdb
     profile: local_authoritative
@@ -117,5 +117,5 @@ profile_matrix:
       - remote_validation: pcg-neo4j-baseline-pr138-a2c630af-20260504T123656Z-slo-snapshot
     notes: Latest-main NornicDB production-profile proof drained the full corpus in 878s, reached 8458/8458 succeeded queue rows, passed API/MCP health, and returned relationship evidence through both surfaces. The stopped Neo4j comparison snapshot shows NornicDB completed before Neo4j reached source-local completion, but it is not a terminal Neo4j baseline.
     remaining:
-      - item: decide whether Neo4j support gets a parity optimization pass or remains compatibility-only
-      - item: terminal Neo4j-compatible baseline after that decision, if Neo4j remains production-promoted
+      - item: complete Neo4j parity optimization research and first measured adapter slice
+      - item: terminal Neo4j baseline after the first measured parity slice

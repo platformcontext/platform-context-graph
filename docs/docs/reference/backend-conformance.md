@@ -5,7 +5,7 @@ Backend conformance is the gate that keeps graph adapters honest.
 PCG supports two official graph backends today:
 
 - NornicDB, the default backend
-- Neo4j, the compatibility backend
+- Neo4j, the official alternative backend
 
 Both backends serve the same user-facing API and MCP capabilities. They do not
 get to be called supported just because they accept Cypher. They have to pass
@@ -84,9 +84,9 @@ latest-main full-corpus proof,
 `pcg-full-pr138-a2c630af-b68b4ef-20260504T120630Z`:
 it drained `8458/8458` queue rows in `878s`, kept retrying, failed, and
 dead-letter rows at `0`, and passed API/MCP health plus relationship-evidence
-drilldowns. It stays `evidence_pending` until the Neo4j support decision is
-recorded: either optimize Neo4j and rerun a terminal comparison, or document
-Neo4j as compatibility-only.
+drilldowns. It stays `evidence_pending` while ADR
+`2026-05-04-neo4j-parity-optimization-plan.md` researches what Neo4j needs to
+follow the same optimized adapter path and produce a terminal comparison.
 
 The current comparison evidence favors NornicDB but does not yet close the
 Neo4j baseline gate. The 2026-05-04 Neo4j run
@@ -95,10 +95,9 @@ after `1946s`; it was still clean (`0` retrying, failed, or dead-letter rows)
 but had only `553/896` source-local projector items succeeded. NornicDB had
 already finished the whole corpus at `878s`.
 
-That makes the next decision explicit. If PCG keeps Neo4j as more than a
-compatibility fallback, the Neo4j adapter needs its own pass over the same
-places tuned for NornicDB: canonical write grouping, entity containment shape,
-semantic materialization, traversal builders, and backend-specific batch
+That makes the next work explicit. Neo4j needs its own measured pass over the
+same places tuned for NornicDB: canonical write grouping, entity containment
+shape, semantic materialization, traversal builders, and backend-specific batch
 limits. Those changes should be measured as Neo4j work, not copied blindly from
 NornicDB.
 
@@ -106,8 +105,8 @@ The longer-term support bar is broader than these two databases. PCG should be
 able to support backends that speak the Bolt/Cypher shape, but only through
 narrow, documented adapter seams. A new backend should not force handler-level
 branches or a pile of one-off query workarounds. Neo4j is still useful for
-companies that already pay for and operate Neo4j, but the compatibility path
-cannot remain dramatically slower than the default NornicDB path if we call it
+companies that already pay for and operate Neo4j, but the Neo4j path cannot
+remain dramatically slower than the default NornicDB path if we call it
 production-promoted.
 
 ## Promotion Rule
@@ -122,5 +121,5 @@ adapter check. Chunk 5b records the profile-matrix proof across:
 NornicDB can remain the default while the remaining gate closes. Local and
 Compose profile gates pass against latest `main`; production has strong
 NornicDB evidence plus a stopped Neo4j SLO comparison. Production closure now
-depends on the Neo4j support decision: optimize and rerun a terminal baseline,
-or document Neo4j as compatibility-only while NornicDB carries the fast path.
+depends on the Neo4j parity research: instrument, optimize the first proven
+adapter slice, rerun a terminal baseline, then record the support posture.

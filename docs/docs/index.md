@@ -51,7 +51,7 @@ Kubernetes.
 
 PCG uses Postgres for relational state, facts, queues, status, content, and
 recovery data. It uses NornicDB by default for graph storage, with Neo4j as the
-explicit supported graph compatibility path.
+explicit official alternative.
 
 The shared service shape has an API, MCP server, ingester, reducer, bootstrap
 indexer, Postgres, and a graph backend. The local binary path is smaller: it

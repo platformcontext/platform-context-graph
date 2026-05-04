@@ -59,8 +59,8 @@ managed `${PCG_HOME}/bin/nornicdb-headless` binary created by
 only when users opt in because it is larger. See
 [Graph Backend Installation](graph-backend-installation.md).
 
-While NornicDB is under evaluation, PCG keeps local content search isolated
-from graph projection stalls. The local-authoritative ingester writes the
+With the NornicDB default backend, PCG keeps local content search isolated from
+graph projection stalls. The local-authoritative ingester writes the
 embedded-Postgres content index before attempting canonical graph writes, and
 NornicDB canonical writes now run in bounded phase-group transactions instead
 of one global grouped write. The timeout defaults to `30s` and can be tuned
@@ -132,10 +132,10 @@ PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true \
   go test ./cmd/pcg -run TestNornicDBGroupedWriteRollbackConformance -count=1 -v
 ```
 
-Do not promote NornicDB grouped canonical writes for normal laptop runs until
-the latest-main binary under evaluation passes broader adapter conformance and
-the release or accepted-build policy is settled. Neo4j production grouped
-writes are unaffected.
+Do not use NornicDB grouped canonical writes for normal laptop runs. Use the
+default phase-group path with the latest accepted NornicDB `main` build until
+release-backed binary policy is settled. Neo4j production grouped writes are
+unaffected.
 
 ### `pcg graph status`
 

@@ -29,11 +29,11 @@ neo4j:
   uri: bolt://nornicdb.platform.svc.cluster.local:7687
 ```
 
-That default reflects the current PCG runtime direction. The active ADR still
-tracks final production promotion separately until the Neo4j comparison
-baseline and install-trust policy are recorded.
+That default reflects the current PCG runtime direction. The active ADRs still
+track the Neo4j support decision separately: either Neo4j proves it can run the
+shared PCG Cypher contract fast enough, or it remains compatibility-only.
 
-Neo4j is the explicit supported compatibility backend:
+Neo4j is the explicit official alternative backend:
 
 ```yaml
 env:
