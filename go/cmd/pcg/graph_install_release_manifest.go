@@ -65,14 +65,22 @@ func resolvePinnedNornicDBReleaseSource(preferHeadless bool) (string, string, er
 			}
 		}
 		if preferHeadless {
-			return "", "", fmt.Errorf("no pinned headless NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
+			return "", "", missingPinnedNornicDBReleaseAssetError("headless", pcgVersion, hostOS, hostArch)
 		}
-		return "", "", fmt.Errorf("no pinned full NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
+		return "", "", missingPinnedNornicDBReleaseAssetError("full", pcgVersion, hostOS, hostArch)
 	}
 	if preferHeadless {
-		return "", "", fmt.Errorf("no pinned headless NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
+		return "", "", missingPinnedNornicDBReleaseAssetError("headless", pcgVersion, hostOS, hostArch)
 	}
-	return "", "", fmt.Errorf("no pinned full NornicDB release asset for PCG %s on %s/%s", pcgVersion, hostOS, hostArch)
+	return "", "", missingPinnedNornicDBReleaseAssetError("full", pcgVersion, hostOS, hostArch)
+}
+
+func missingPinnedNornicDBReleaseAssetError(kind, pcgVersion, hostOS, hostArch string) error {
+	sourceHint := "<path-to-nornicdb-headless>"
+	if kind == "full" {
+		sourceHint = "<path-to-nornicdb>"
+	}
+	return fmt.Errorf("no embedded %s NornicDB release asset for PCG %s on %s/%s; PCG currently tracks the latest NornicDB main branch, so build NornicDB from main and run pcg install nornicdb --from %s", kind, pcgVersion, hostOS, hostArch, sourceHint)
 }
 
 func readPinnedNornicDBReleaseManifest() (pinnedNornicDBReleaseManifest, error) {

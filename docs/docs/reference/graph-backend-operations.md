@@ -21,9 +21,10 @@ pcg graph upgrade
 `pcg graph status`, `pcg graph logs`, `pcg graph stop`, and
 `pcg graph start` are wired today. `pcg graph upgrade --from <source>` is also
 wired for explicit-source replacement of the managed binary from a local
-binary path, local tar archive, macOS package, or URL. Bare install now uses
-the pinned embedded release manifest when the host platform is covered.
-Signature verification remains planned.
+binary path, local tar archive, macOS package, or URL. Bare no-argument
+NornicDB install is intentionally unavailable while PCG tracks latest
+NornicDB `main` through explicit `--from` binaries. Signature verification
+remains planned.
 
 `pcg graph stop` is owner-aware. If a healthy local host owns the workspace,
 the command signals that owner process so shutdown follows the documented
@@ -77,18 +78,17 @@ grouped-statement matrix before adding another phase-specific override.
 The current local-authoritative canonical entity path uses the narrowest shape
 that the active backend has proven correct. Backends with correct node-only
 batched `MERGE` support can separate entity node upserts from
-`phase=entity_containment`. The pinned NornicDB release still uses a
-file-scoped combined entity write: each statement matches the `File` anchor
-with `$file_path`, unwinds entity rows for that file, upserts nodes, and
-attaches `CONTAINS` in the same statement. A patched NornicDB binary that
-supports row-safe `SET += row.props` in the generalized `UNWIND/MERGE` hot
-path and uses uniqueness constraints as `MERGE` lookup indexes can opt into
-`PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true`, which batches entity rows across
-files with `MERGE (n {uid: row.entity_id}) ... MATCH (f {path: row.file_path})
-... MERGE (f)-[:CONTAINS]->(n)`. Do not enable that switch with the current
-pinned binary. The `nornicdb entity label summary` log includes `phase` so
-operators can tell which entity-write lane is active and where repo-scale time
-is going.
+`phase=entity_containment`. Older NornicDB builds may still require the
+file-scoped combined entity write where each statement matches the `File`
+anchor with `$file_path`, unwinds entity rows for that file, upserts nodes,
+and attaches `CONTAINS` in the same statement. Builds from latest NornicDB
+`main` that include the row-safe generalized `UNWIND/MERGE` hot path can opt
+into `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true`, which batches entity rows
+across files with `MERGE (n {uid: row.entity_id}) ... MATCH (f {path:
+row.file_path}) ... MERGE (f)-[:CONTAINS]->(n)`. Use that switch only with the
+exact NornicDB binary under evaluation. The `nornicdb entity label summary`
+log includes `phase` so operators can tell which entity-write lane is active
+and where repo-scale time is going.
 
 When patched-binary evaluation still shows steady per-label growth after
 schema-backed `MERGE` lookup is active, do not keep shrinking PCG batches from
@@ -119,12 +119,12 @@ PCG_NORNICDB_BINARY=/tmp/nornicdb-headless \
   go test ./cmd/pcg -run TestNornicDBGroupedWriteSafetyProbe -count=1 -v
 ```
 
-The 2026-04-23 run against the rebuilt linuxdynasty-fork headless binary
-`/tmp/nornicdb-headless-pcg-rollback` (`v1.0.42-hotfix`) proved that grouped
-writes can commit a PCG repository/file/function shape, grouped rollback,
-clean explicit rollback, and failed-statement explicit rollback all report
-marker count `0` on the Neo4j-driver path, and the timeout probe leaves no
-partial write. The stricter rollback promotion gate is:
+The 2026-04-23 run against a rebuilt headless NornicDB binary proved that
+grouped writes can commit a PCG repository/file/function shape, grouped
+rollback, clean explicit rollback, and failed-statement explicit rollback all
+report marker count `0` on the Neo4j-driver path, and the timeout probe leaves
+no partial write. Re-run that proof against the latest NornicDB `main` binary
+you are evaluating. The stricter rollback promotion gate is:
 
 ```bash
 PCG_NORNICDB_BINARY=/tmp/nornicdb-headless-pcg-rollback \
@@ -133,8 +133,9 @@ PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true \
 ```
 
 Do not promote NornicDB grouped canonical writes for normal laptop runs until
-the fixed NornicDB binary is release-backed and broader adapter conformance
-passes. Neo4j production grouped writes are unaffected.
+the latest-main binary under evaluation passes broader adapter conformance and
+the release or accepted-build policy is settled. Neo4j production grouped
+writes are unaffected.
 
 ### `pcg graph status`
 

@@ -322,7 +322,7 @@ profile make the label-scoped shape the safer repo-scale cleanup path.
 | --- | --- | --- | --- |
 | `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` | unset / `false` | canonical writes | Conformance-only switch that exposes Neo4j-style grouped canonical writes on NornicDB. Leave unset for normal laptop runs. |
 | `PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK` | unset / `false` | test gates | Makes rollback conformance mandatory in opt-in NornicDB grouped-write tests. |
-| `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT` | unset / `false` | canonical entity writes | Patched-binary evaluation switch for cross-file batched entity containment. Leave off for the pinned release-backed binary unless the ADR says the binary supports the required row-safe hot path. |
+| `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT` | unset / `false` | canonical entity writes | Evaluation switch for cross-file batched entity containment. Enable it only with a latest-main NornicDB binary that includes the required row-safe hot path and has focused proof for the repo shape under test. |
 
 ## NornicDB Runtime Diagnostics
 

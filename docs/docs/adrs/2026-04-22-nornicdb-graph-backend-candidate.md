@@ -7,17 +7,19 @@
 
 **Acceptance Conditions (must remain true for acceptance to hold):**
 
-- release-backed rollback-safe NornicDB binary, including the accepted
-  relationship-property and `UNWIND MATCH SET` hot paths, published and pinned
-  in `go/cmd/pcg/nornicdb_release_manifest.json`
+- PCG tracks the latest NornicDB `main` branch for now. Local-authoritative
+  installs must use `pcg install nornicdb --from <source>` or
+  `PCG_NORNICDB_BINARY` with an explicitly built or selected NornicDB `main`
+  binary; the embedded release manifest intentionally carries no accepted
+  assets until a later release or accepted-build policy is chosen.
 - Chunk 5 backend conformance suite passes against NornicDB for
   `GraphQuery` and `GraphWrite` adapters
 - Chunk 5b matrix runs pass against `local_authoritative`,
   `local_full_stack`, and `production` profiles with recorded perf evidence
-- signature verification policy defined and enforced for installed binaries
 - NornicDB is now the default `PCG_GRAPH_BACKEND`; Neo4j remains the explicit
   compatibility backend. The default switch is not the same as closing this
-  ADR, and the release/pin/conformance gates continue to be tracked here.
+  ADR, and the latest-main/conformance/profile-matrix gates continue to be
+  tracked here.
 
 **Related:**
 
@@ -33,46 +35,47 @@
 
 ---
 
-## Status Review (2026-05-03)
+## Status Review (2026-05-04)
 
 **Current disposition:** Accepted with conditions; default backend selected,
 promotion incomplete.
 
 NornicDB is now the default graph backend, and Neo4j remains the official
-compatibility backend. The latest full-corpus evidence is strong, but the
-acceptance conditions are not all closed. The embedded installer manifest still
-pins the older `v1.0.42-hotfix` covered asset, while the May 3 full-corpus
-proof used the newer `a9ccd0f` / PR `#136` hot-path binary. Treat that as
-promotion-positive evidence, not a released default dependency.
+compatibility backend. The latest full-corpus evidence is strong, and
+NornicDB PR `#136` has merged upstream. PCG now makes the current dependency
+policy honest: for now, it consumes latest NornicDB `main` through explicit
+`--from` installs or `PCG_NORNICDB_BINARY`, and the embedded release manifest
+has no accepted assets.
 
-**Remaining work:** publish or explicitly pin the accepted NornicDB build,
-finish the relationship-property release handoff, enforce signature policy,
-cover broader hosts, and pass Chunk 5/5b conformance and profile-matrix gates
-before treating this ADR as complete.
+**Remaining work:** keep latest-main validation current, finish broader host
+coverage, and pass Chunk 5/5b conformance and profile-matrix gates before
+treating this ADR as complete. A release-backed or signed accepted-build policy
+can still replace latest-main evaluation later, but it is not the current
+default install contract.
 
-## Promotion Guardrail (2026-05-03)
+## Promotion Guardrail (2026-05-04)
 
 NornicDB remains **accepted with conditions** until all three promotion gates
 are true at the same time:
 
 | Gate | Current state | Blocks |
 | --- | --- | --- |
-| Release / pin | The checked-in manifest still points at the `v1.0.42-hotfix` headless asset for covered hosts. The full-corpus PR `#136` evidence used an evaluated build, not a manifest-pinned release asset. | Declaring the May 3 hot path the released default dependency. |
+| Latest-main dependency policy | The checked-in manifest intentionally has no accepted assets. Users install an explicit latest-main NornicDB binary with `--from` or point `PCG_NORNICDB_BINARY` at one. | Treating no-argument installs as supported or silently falling back to an old forked asset. |
 | Conformance | Chunk 5 backend conformance and Chunk 5b profile matrix are still open in the implementation plan. | Calling NornicDB fully promoted across `local_authoritative`, `local_full_stack`, and `production`. |
-| Install trust | SHA-256 checks exist for install sources, but the binary signature policy is not yet defined and enforced. | Treating installed NornicDB binaries as a closed supply-chain contract. |
+| Install trust | SHA-256 checks exist for explicit install sources, but binary signature policy remains future work. | Treating installed NornicDB binaries as a closed supply-chain contract. |
 
 Default backend selection can stay in place while these gates close. Removing
-the conditions requires a later ADR update with the release or pin, conformance
-run IDs, and signature policy evidence.
+the conditions requires a later ADR update with the accepted NornicDB build
+policy, conformance run IDs, and profile-matrix evidence.
 
 ## Evaluation Status
 
 | Phase | Status | Evidence | Remaining |
 | --- | --- | --- | --- |
-| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB; 2026-04-23 MCP smoke proved content-index-backed `search_file_content` and `find_code` continue to work while canonical graph projection degrades on a bounded NornicDB write timeout; current branch lets `pcg install nornicdb --from <source>` consume local binaries, local tar archives, macOS packages, and URLs; current branch remote installs honor `cmd.Context()` cancellation and use `PCG_NORNICDB_INSTALL_TIMEOUT` (`30s` default) when slower links need a larger budget; 2026-04-23 published fork release `https://github.com/linuxdynasty/NornicDB/releases/tag/v1.0.42-hotfix` with `nornicdb-headless-darwin-arm64.tar.gz` (SHA-256 `61c483c606e039c4be67192252b03420e03cd1985d2005a8ea6614272cbc4af7`), and current branch bare `pcg install nornicdb` now resolves to that rollback-fixed headless asset on covered hosts while bare pinned `--full` remains unavailable until a matching fixed full artefact exists; current branch `TestLocalAuthoritativeStartupEnvelope` measured startup readiness at the owner-record plus ingester handoff with the pinned bare-install binary: cold start `9.045253708s`, warm restart `490.996625ms` | signature policy, broader host coverage, broader query/memory perf |
-| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force] [--full]` installs from the pinned manifest or from a local binary/archive/package/URL, honors `Ctrl-C` on remote downloads, accepts `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` for slower links, and keeps headless as the bare-install default while only allowing `--full` when the manifest publishes a matching fixed full artifact for the current host; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; current branch stopped-owner `pcg graph upgrade --from <source>`; current branch `pcg watch` / `pcg graph start` now render a live local progress panel from the shared status store (owner/profile/backend header, collector/projector/reducer lanes, and queue pressure) instead of a fake percentage bar; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped | signature verification, broader release coverage |
-| Adapter conformance | In progress | current branch routes NornicDB canonical writes through bounded phase-group transactions by default, applies Bolt `tx_timeout` metadata plus client context deadlines, preserves production Neo4j grouped writes, and adds the explicit `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` conformance switch for proving NornicDB grouped writes; current branch also makes the default NornicDB phase-group window explicit via `PCG_NORNICDB_PHASE_GROUP_STATEMENTS` (`500` by default) so repo-scale dogfood runs can tune the safe path without flipping into grouped conformance mode, now adds `PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS` (`25` by default) to shrink only the canonical `entities` hot spot without lowering every other phase-group batch, now adds `PCG_NORNICDB_ENTITY_BATCH_SIZE` (`100` by default) so only normal entity upsert statements get smaller row batches on NornicDB, now exposes `PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES=Function=15,Struct=50,Variable=100,...` so heavier row families can be capped independently without recompiling, and now also exposes `PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS=Function=5,Struct=15,Variable=5,...` so repo-scale reruns can narrow only the grouped transaction size for the heaviest labels instead of lowering the statement cap for every entity family; 2026-04-23 rebuilt linuxdynasty-fork headless binary `/tmp/nornicdb-headless-pcg-rollback` (`v1.0.42-hotfix`) passed `TestNornicDBGroupedWriteSafetyProbe` and strict `TestNornicDBGroupedWriteRollbackConformance`: PCG repository/file/function grouped commit succeeded, grouped rollback marker count `0`, clean explicit rollback marker count `0`, failed-statement explicit rollback marker count `0`, and timeout probe left no partial write; the same fixed binary is now published as a release-backed headless tarball and pinned in `go/cmd/pcg/nornicdb_release_manifest.json`; current branch now routes call-chain path queries through a backend-aware Cypher builder so NornicDB uses anchored `shortestPath` matches plus raw `nodes(path)` projection while Neo4j keeps the existing projected-node-map shape; current branch also routes transitive callers/callees through backend-aware `/api/v0/code/relationships` traversal builders that resolve the canonical entity first and then traverse by anchored entity id on NornicDB; current branch dead-code keeps the graph-backed candidate scan but intentionally returns derived truth plus structured root-model analysis, including Go exported public-package roots, parser-backed Python FastAPI/Flask/Celery decorator roots, and parser-backed JavaScript/TypeScript Next.js/Express route roots, now routes NornicDB through the explicit `NOT EXISTS { MATCH ... }` candidate-query form documented upstream, and exposes an explicit `limit` plus `truncated` signal instead of silent bounded truncation; direct `UNWIND $rows AS row MERGE ...` canonical-entity probes against the release-backed binary remained query-unsafe in live dogfood, and 2026-04-23 source inspection traced the repo-scale failure to NornicDB's substring-based `isShortestPathQuery` router treating substituted entity values like `TestHandleCallChainReturnsShortestPath` as shortest-path Cypher, so the current branch now keeps batched `UNWIND ... MATCH ... MERGE` entity writes for normal rows but peels `shortestPath` / `allShortestPaths`-bearing rows into singleton parameterized fallback statements instead of abandoning the batched writer entirely; the fresh self-repo rerun then showed `Function` entity rows at `100` were still the remaining timeout shape (`25` grouped statements of `rows=100` hit the full `3m` limit), so the current branch first narrowed `Function`, corrected the local-authoritative child-binary rebuild path so `pcg graph start` actually launched the rebuilt `pcg-ingester`, and then used the new success-log `first_statement` telemetry to confirm repeated `Function rows=25` chunks first land in roughly `18-72s` and then degrade to `105s` by chunk `13/21` while still staying under the old timeout wall, which is what motivated the new per-label statement-cap seam; the next clean rerun with the baked-in defaults showed `Function rows=25` / `10` statements still drifting into the high-30s seconds by the 13-minute mark, so the branch narrowed the built-in Function statement cap to `5`; a direct follow-up rerun proved that statement-cap change alone mostly smoothed chunk latency rather than improving per-statement throughput, and the first narrower row experiment at `Function rows=10` with the same `5`-statement grouped cap dropped the early Function chunks into the roughly `1.5s-1.9s` band but over-fragmented the lane, so the current branch now promotes `Function rows=15` into the built-in default after the next clean rerun proved it reaches `Variable rows=25` with stable early chunks around `19.9s-21.4s`; the same earlier reruns then advanced past Function and exposed the next blocking family directly: `Variable rows=100` at `25` grouped statements timed out at the full `3m`, the first follow-up narrowed that to `rows=50` / `10` grouped statements and bought survival up to roughly `168.7s` before timing out again at the full `3m`, the latest 2026-04-24 rerun still spent roughly `20s-27s` per chunk at `Variable rows=25` / `5` statements, and after file-scoped entity batching the 2026-04-27 focused ladder promotes `Variable` to `rows=100` while keeping the `5`-statement cap; the same per-label seams are now applied to `Struct`, and operators can override either row cap or statement cap without another code change; current branch now also groups canonical entity batches by `label + file_path`, matches the file anchor once per statement, and removes `file_path` from every row payload, and the fresh 2026-04-24 rebuilt-binary rerun immediately pushed deep `Function rows=15` chunks into roughly `0.3s-1.9s` instead of the earlier `2s-9s+` band; a second fresh 2026-04-24 overlap-proof rerun then deliberately triggered another repository generation while the first generation was still deep in `Function`, and queue state held at `pending=1, in_flight=1` instead of the old overlapping `in_flight=2` shape | full `GraphQuery`/`GraphWrite` adapter, matrix runs, repo-scale self-repo rerun with the selective singleton fallback plus per-label row and statement caps plus file-scoped entity batching and same-scope projector fencing in place, and the foreground `pcg graph start` dogfood lane still shows a tail `ack projector work: begin: context canceled` after the canonical write completes |
-| Performance + promotion gates | In progress | current branch `TestLocalAuthoritativeStartupEnvelope`; 2026-04-23 run with `PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless` measured `local_authoritative` startup readiness at cold start `9.045253708s` and warm restart `490.996625ms`, both under the documented startup envelope; current branch `TestLocalAuthoritativeCallChainSyntheticEnvelope`; 2026-04-23 run with the same binary measured synthetic call-chain p95 `789.709µs` through the real `local_authoritative` `/api/v0/code/call-chain` handler after the backend-routed NornicDB query rewrite; current branch `TestLocalAuthoritativeTransitiveCallersSyntheticEnvelope`; 2026-04-23 run with the same binary measured synthetic transitive-caller p95 `1.917916ms` through the real `local_authoritative` `/api/v0/code/relationships` handler; current branch `TestLocalAuthoritativeDeadCodeSyntheticEnvelope`; 2026-04-23 run with the same binary measured synthetic dead-code p95 `3.174125ms` through the real `local_authoritative` `/api/v0/code/dead-code` handler after the staged NornicDB-friendly synthetic seed and explicit `NOT EXISTS { MATCH ... }` candidate-query routing; current branch `./scripts/verify_graph_analysis_compose.sh` now adds the required fresh Compose full-stack conformance proof for direct callers, transitive callers, shortest call-chain path, dead-code results, and canonical graph `CALLS` edges over the dedicated `tests/fixtures/graph_analysis_compose` corpus; 2026-04-23 self-repo NornicDB dogfood showed the repo-scale canonical write remains the gating perf problem rather than the read/query contract: sequential mode with `PCG_CANONICAL_WRITE_TIMEOUT=120s` kept the generation in flight for minutes, grouped conformance mode failed cleanly after `125.119083917s` with `canonical atomic write: neo4j execute group timed out after 2m0s`, and current branch projector lease heartbeats now prove the long-running source-local claim itself stays alive past the old 5-minute expiry (`attempt_count=1`, status `running`, renewed `claim_until`) instead of being reclaimed into duplicate projector attempts; 2026-04-23 direct `UNWIND $rows AS row MERGE ...` probes against the release-backed binary were still query-unsafe, so the current branch records the safer bounded-phase-group tuning path and leaves the canonical writer on the proven per-entity semantics; fresh 2026-04-24 self-repo reruns then showed repeated `Function rows=25` grouped chunks still degrading from roughly `18-72s` up to `105s` by chunk `13/21`, which is why the branch first added per-label grouped statement caps before the next full rerun; the next clean rerun then advanced through Function and Struct but still failed at `Variable rows=100` with `25` grouped statements after the full `3m` timeout; the follow-up rerun with the baked-in defaults showed `Function rows=25` / `10` statements still drifting into the high-30s seconds by the 13-minute mark before Variable was reached, so the branch narrowed Function’s grouped statement cap to `5`; the direct row-width experiments that followed then showed the real throughput lever: keeping the same `5`-statement grouped cap but reducing `Function` rows to `10` dropped the first Function chunks into roughly the `1.5s-1.9s` band, but that lane over-fragmented and stayed stuck in Function too long, while the next clean rerun with `Function rows=15` reached `Variable rows=25` and kept the first Variable chunks stable around `19.9s-21.4s`, which is why the current branch now promotes `Function rows=15` into the built-in default before the next clean run; the earlier `Variable rows=50` / `10` rerun already proved that family survives much longer, but still drifts from about `94s` through `168.7s` and eventually times out at the full `3m`, which the 2026-04-27 file-scoped batching ladder later superseded by promoting Variable to `rows=100` / `5` after zero-failure focused large- and small-repo controls | reducer-throughput perf smoke, idle/active memory budgets, production-scale comparison, repo-scale proof for the new phase-group default, entity-containment optimization beyond the current grouped-by-file rewrite, foreground `graph start` ack-cancel tail |
+| Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB; 2026-04-23 MCP smoke proved content-index-backed `search_file_content` and `find_code` continue to work while canonical graph projection degrades on a bounded NornicDB write timeout; current branch lets `pcg install nornicdb --from <source>` consume local binaries, local tar archives, macOS packages, and URLs; current branch remote installs honor `cmd.Context()` cancellation and use `PCG_NORNICDB_INSTALL_TIMEOUT` (`30s` default) when slower links need a larger budget; current branch intentionally leaves the embedded release manifest empty while PCG tracks latest NornicDB `main`, so no-argument installs fail with explicit latest-main `--from` guidance instead of using the old forked asset; current branch `TestLocalAuthoritativeStartupEnvelope` measured startup readiness at the owner-record plus ingester handoff with an explicitly installed binary: cold start `9.045253708s`, warm restart `490.996625ms` | install trust policy, broader host coverage, broader query/memory perf |
+| Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <source> [--sha256 <hex>] [--force]` installs from a local binary/archive/package/URL, honors `Ctrl-C` on remote downloads, accepts `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` for slower links, and keeps headless as the managed laptop binary name; bare no-argument install is reserved for a future accepted manifest policy; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; current branch stopped-owner `pcg graph upgrade --from <source>`; current branch `pcg watch` / `pcg graph start` now render a live local progress panel from the shared status store (owner/profile/backend header, collector/projector/reducer lanes, and queue pressure) instead of a fake percentage bar; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped | signature verification, broader host coverage |
+| Adapter conformance | In progress | current branch routes NornicDB canonical writes through bounded phase-group transactions by default, applies Bolt `tx_timeout` metadata plus client context deadlines, preserves production Neo4j grouped writes, and adds the explicit `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` conformance switch for proving NornicDB grouped writes; current branch exposes NornicDB phase, row, and label tuning knobs; current branch routes call-chain, transitive relationships, and dead-code through backend-aware query builders; current branch preserves the latest-main evaluation switch `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` for binaries that include the required row-safe hot path; the 2026-05-03 full-corpus proof against the NornicDB `#136` latest-main handoff drained cleanly and passed API/MCP drilldowns | full `GraphQuery`/`GraphWrite` adapter conformance, profile matrix runs, broader query/memory perf envelope, and foreground `pcg graph start` dogfood clean finish without the `ack projector work: begin: context canceled` tail |
+| Performance + promotion gates | In progress | current branch `TestLocalAuthoritativeStartupEnvelope`; 2026-04-23 measured local-authoritative cold start `9.045253708s` and warm restart `490.996625ms`; synthetic call-chain, transitive-caller, and dead-code envelopes passed through the real local-authoritative handlers; current branch graph-analysis Compose proof covers direct callers, transitive callers, shortest call-chain path, dead-code results, and canonical graph `CALLS` edges; 2026-05-03 full-corpus proof against latest-main NornicDB `#136` drained in under 15 minutes with no retrying, failed, or dead-lettered rows and passed API/MCP health plus evidence drilldowns | reducer-throughput perf smoke, idle/active memory budgets, production-scale comparison, profile matrix proof, and foreground `graph start` ack-cancel tail |
 
 Latest 2026-05-03 NornicDB dogfood evidence:
 - 2026-05-02 graph evidence-pointer validation found a backend correctness gap:
@@ -107,7 +110,7 @@ Latest 2026-05-03 NornicDB dogfood evidence:
 - the branch now emits rolling and final `nornicdb entity label summary` logs with `phase`, per-label rows, statements, executions, grouped chunks, total duration, max execution duration, and row-width totals so the next tuning slice can compare node-upsert cost against containment-edge cost before changing more defaults
 - the first remote self-repo rerun after the entity/containment split exposed a schema-dialect correctness issue rather than a timeout: translating composite `IS UNIQUE` to `IS NODE KEY` made sparse `Annotation` rows fail on required `name`; the follow-up run also proved the current NornicDB binary still rejects PCG composite `IS UNIQUE`, so current branch skips unsupported composite uniqueness DDL for NornicDB and relies on separate `uid` uniqueness constraints for canonical merge identity
 - the same remote run proved canonical entity node upsert is no longer the main bottleneck: `phase=entities` completed in `25.523448885s` total, including `Function` at `3.10382615s` and `Variable` at `20.695746985s`; `phase=entity_containment` is now dominant, with `Function` containment alone taking `248.58715967s`
-- current branch now keeps the split node-upsert / containment-edge shape only for backends that support node-only batched `MERGE`, and routes the pinned NornicDB release through the proven file-scoped combined shape: match the `File` anchor with `$file_path`, unwind entity rows for that file, upsert nodes, and attach `CONTAINS` in one statement. The opt-in syntax gate records why this is necessary: the current release-backed NornicDB binary collapses the standalone node-only batch shape, while the combined shape preserves row-bound entity identity. The NornicDB branch in `/Users/allen/os-repos/NornicDB-pcg-map-merge-hotpath` now proves the faster MERGE-first row-file shape needs `SET += row.props` support inside the generalized `UNWIND/MERGE` batch hot path and unique-constraint-backed `MERGE` lookups for `File.path` and canonical `uid`; PCG exposes `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` only as a patched-binary evaluation switch until those fixes are release-backed and pinned.
+- current branch now keeps the split node-upsert / containment-edge shape only for backends that support node-only batched `MERGE`, while older NornicDB builds stay on the proven file-scoped combined shape: match the `File` anchor with `$file_path`, unwind entity rows for that file, upsert nodes, and attach `CONTAINS` in one statement. The opt-in syntax gate records why this is necessary: builds without the generalized row-safe hot path can collapse the standalone node-only batch shape, while the combined shape preserves row-bound entity identity. The NornicDB branch in `/Users/allen/os-repos/NornicDB-pcg-map-merge-hotpath` proved the faster MERGE-first row-file shape needed `SET += row.props` support inside the generalized `UNWIND/MERGE` batch hot path and unique-constraint-backed `MERGE` lookups for `File.path` and canonical `uid`; PCG exposes `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` only as a latest-main evaluation switch until broader conformance settles the default.
 - remote self-repo dogfood confirms the tuning target: map-merge alone reduced statement fragmentation but still let `MERGE` chunk time grow with graph size; adding unique-constraint lookup cut `Function` from `40.039s` to `12.589s` at 750 rows and from `158.568s` to `46.566s` at roughly 2.1k rows, while the `files` phase dropped from roughly `26s-28s` to `7.351s`.
 - the follow-up evidence is intentionally not a new PCG tuning claim yet: `Function` completed at `9021` rows in `444.997825518s`, `Struct` completed at `916` rows in `81.059759011s`, and `Variable` was still progressing past `5000` rows in `563.749941325s`. That leaves a linear write-path cost that needs NornicDB CPU/heap profiling before we decide whether the next fix belongs in Badger/index maintenance, Cypher hot-path execution, Bolt transaction handling, or PCG statement shape.
 - after the NornicDB unique-constraint validation patch (`023ec51`) rebuilt on the 16-vCPU remote test host, canonical source-local projection stopped being the bottleneck: `Variable` completed all `40163` rows in `30.375581617s`, the full canonical `entities` phase completed in `42.085095138s`, and source-local projection succeeded with `55295` facts in `49.603476029s`. The same run proves `.git` was not being parsed (`dirs_skipped..git=1`). The next failure moved to reducer `semantic_entity_materialization`, where PCG was still forcing NornicDB through the older scalar compatibility writer and hit the `15s` bounded write timeout.
@@ -381,15 +384,14 @@ unlocks the high-authority graph queries that `local_lightweight` refuses.
 NornicDB runs as a separate process. Laptop installs default to the
 headless `nornicdb-headless` artifact; the full `nornicdb` binary remains
 an explicit opt-in for users who accept the larger UI / local-LLM payload.
-The current installer slice accepts either a pinned bare install or an explicit
-source artefact with `pcg install nornicdb [--from <source>]` and copies the
-verified binary to `${PCG_HOME}/bin/nornicdb-headless`. Supported explicit
-sources are local binaries, local tar archives, macOS packages, and matching
-URLs. The pinned bare install only resolves host platforms that have real
-published assets in the embedded release manifest; today that means upstream
-the rollback-fixed `linuxdynasty/NornicDB` macOS arm64 headless tarball.
-Signature verification and broader
-coverage remain promotion prerequisites. The sidecar is inspectable by
+The current installer slice accepts explicit source artefacts with
+`pcg install nornicdb --from <source>` and copies the verified binary to
+`${PCG_HOME}/bin/nornicdb-headless`. Supported explicit sources are local
+binaries, local tar archives, macOS packages, and matching URLs. Bare
+`pcg install nornicdb` is intentionally unavailable while PCG tracks latest
+NornicDB `main` and the embedded release manifest has no accepted assets.
+Signature verification and broader coverage remain promotion prerequisites.
+The sidecar is inspectable by
 `pcg graph status`, `pcg graph logs`, owner-aware `pcg graph stop`, foreground
 `pcg graph start`, and stopped-owner `pcg graph upgrade --from <source>` today.
 Its runtime lifecycle is tracked in the workspace
@@ -400,7 +402,8 @@ file permissions).
 It does not run embedded in the `pcg` binary. The "lightweight" goal is
 preserved by:
 
-- one-command explicit-source install today, pinned no-arg install before promotion
+- one-command explicit-source install today, no-arg release install only after
+  an accepted manifest policy exists
 - loopback-only ports owned by the workspace lock
 - process ownership tied to the workspace lock
 - clean install / uninstall / upgrade
@@ -588,7 +591,7 @@ local content-search path is isolated from NornicDB graph-write stalls. This
 does not promote NornicDB; it only proves the laptop coding workflow remains
 usable while the backend remains an evaluation candidate.
 
-Startup perf smoke on 2026-04-23 used the pinned bare-install binary at
+Startup perf smoke on 2026-04-23 used an explicitly installed NornicDB binary at
 `/tmp/pcg-bare-install-smoke/bin/nornicdb-headless`:
 
 ```bash
@@ -617,8 +620,8 @@ The stricter PCG sidecar probe uses the exact Neo4j-driver path PCG uses. The
 rebuilt linuxdynasty-fork binary at `/tmp/nornicdb-headless-pcg-rollback`
 passed that probe after fixing transaction-wrapper reuse for recursive
 `UNWIND ... MATCH ... MERGE` execution and database-scoped Bolt rollback.
-Normal NornicDB runs stay sequential until that fixed binary is release-backed
-and the broader adapter matrix passes, while
+Normal NornicDB runs stay sequential until the latest-main binary under
+evaluation and the broader adapter matrix pass, while
 `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` exposes grouped writes for adapter
 conformance only.
 
@@ -653,8 +656,8 @@ MUST follow this workflow before writing a PCG-side workaround:
    - **NornicDB must be patched.** The PCG path is correct and NornicDB is
      wrong. Open a branch in `NornicDB-pcg-bolt-rollback`, reproduce with a
      minimal test that mirrors the PCG workload, land the fix, and pin the
-     rebuilt binary through the installer's pinned manifest or explicit
-     `--from` path until upstream absorbs the change.
+     rebuilt binary through an explicit `--from` path or future accepted
+     manifest policy until upstream absorbs the change.
 
 3. **Record the decision.** Add the incompatibility, workaround route, and
    upstream patch status to:

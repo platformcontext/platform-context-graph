@@ -64,18 +64,14 @@ shared secret.
 
 ## Managed install
 
-Today there are two truthful install paths:
+PCG currently tracks the latest NornicDB `main` branch. For now, that means
+the truthful local install path is explicit: build or choose the NornicDB
+binary you want to evaluate, then install it with `--from`.
 
-- bare `pcg install nornicdb` for host platforms that PCG's embedded release
-  manifest knows how to resolve
-- explicit `--from` install for everything else
-
-The current pinned bare install is intentionally narrow: it resolves only
-real published assets. As of 2026-04-23 that means the rollback-fixed
-linuxdynasty fork release `v1.0.42-hotfix` macOS arm64 headless tarball for
-`dev` builds of PCG. Bare pinned `--full` is not currently available because
-the embedded manifest does not yet publish a matching fixed full-binary
-artifact. The full binary remains an explicit `--from` path.
+Bare `pcg install nornicdb` is intentionally unavailable while the embedded
+release manifest has no accepted assets. It fails with guidance to build from
+NornicDB `main` and install that binary explicitly. This keeps local
+authoritative runs from silently using an older forked asset.
 
 Explicit `--from` installs can consume any of these artefacts:
 
@@ -90,23 +86,19 @@ Set `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` when slower links need a larger
 budget. The value uses Go duration syntax such as `45s`, `2m`, or `2m30s`.
 
 ```bash
-# Bare pinned install when the host platform is covered by the embedded
-# release manifest.
-pcg install nornicdb
-
 pcg install nornicdb --from /absolute/path/to/nornicdb-headless
 
-# Local release archive.
+# Local archive.
 pcg install nornicdb \
   --from /absolute/path/to/nornicdb-headless-darwin-arm64.tar.gz \
   --sha256 <expected-archive-sha256>
 
 # Local or remote macOS package.
 pcg install nornicdb \
-  --from /absolute/path/to/NornicDB-1.0.42-hotfix-arm64-lite.pkg \
+  --from /absolute/path/to/NornicDB-main-arm64-lite.pkg \
   --sha256 <expected-package-sha256>
 
-# Remote release artefact URL.
+# Remote artefact URL.
 pcg install nornicdb \
   --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz \
   --sha256 <expected-archive-sha256>
@@ -117,26 +109,22 @@ pcg install nornicdb --from /absolute/path/to/nornicdb-headless --force
 
 The command performs, in order:
 
-1. If `--from` is omitted, resolves the host OS / architecture against the
-   embedded pinned release manifest and chooses the recorded URL + SHA-256.
-   Headless is the default; `--full` only works when the manifest includes a
-   matching non-headless published artefact for the current host.
-2. Resolves `--from` to a local path or downloads the remote artefact to a
+1. Resolves `--from` to a local path or downloads the remote artefact to a
    temporary file. Remote downloads honor `cmd.Context()` cancellation and use
    `PCG_NORNICDB_INSTALL_TIMEOUT` when set, otherwise `30s`.
-3. If the source is a tar archive, extracts the first usable
+2. If the source is a tar archive, extracts the first usable
    `nornicdb-headless` entry, or falls back to `nornicdb` when the archive
    only contains the full binary.
-4. If the source is a macOS `.pkg`, expands the package and extracts the
+3. If the source is a macOS `.pkg`, expands the package and extracts the
    packaged `usr/local/bin/nornicdb` payload without installing the package
    system-wide.
-5. Verifies the resulting binary by running `<binary> version` and requiring a
+4. Verifies the resulting binary by running `<binary> version` and requiring a
    `NornicDB ...` version string.
-6. Computes the source artefact SHA-256 checksum and compares it with
+5. Computes the source artefact SHA-256 checksum and compares it with
    `--sha256` when provided.
-7. Copies the verified binary to `${PCG_HOME}/bin/nornicdb-headless` with
+6. Copies the verified binary to `${PCG_HOME}/bin/nornicdb-headless` with
    executable permissions.
-8. Writes
+7. Writes
    `${PCG_HOME}/graph-backends/nornicdb/manifest.json` with backend,
    version, installed-binary checksum, source checksum, source kind, source
    locator, install mode, and install timestamp.
@@ -144,11 +132,12 @@ The command performs, in order:
 After installation, `pcg graph status` should report `graph_installed: true`
 and the managed binary path.
 
-When the pinned manifest does not cover the current host platform, bare install
-fails loudly with a structured error and the laptop flow is still either:
+Because managed installs win over `PATH`, a previously installed binary can
+shadow a freshly built `nornicdb-headless` on your shell path. Use one of these
+paths when you want to evaluate a new NornicDB `main` build:
 
-- build `bin/nornicdb-headless` locally and install from that path, or
-- point `--from` at a manually produced archive / hosted artefact URL
+- reinstall it with `pcg install nornicdb --from <path> --force`
+- set `PCG_NORNICDB_BINARY=<path>` for a temporary override
 
 ## Manual source build options
 
@@ -182,36 +171,26 @@ current laptop sidecar launches a local binary:
 docker build --build-arg HEADLESS=true -f docker/Dockerfile.arm64-metal .
 ```
 
-## Current pinned bare install flow
-
-The no-argument installer now reads an embedded release manifest keyed by the
-installed PCG version and host OS / architecture, then downloads and installs
-that pinned artefact under `${PCG_HOME}/bin/`.
+## No-argument install status
 
 ```bash
 pcg install nornicdb
 ```
 
-Current caveats:
+This command is reserved for future release-backed installs. Today it fails
+because PCG tracks latest NornicDB `main` through explicit `--from` binaries
+instead of shipping an embedded release asset. When no-argument installs come
+back, they must be backed by an accepted manifest entry and checksum policy.
 
-- the manifest is embedded in PCG, not yet fetched remotely
-- only platforms with real pinned assets are supported
-- signature verification is not implemented yet
-- the current `dev` manifest entry targets the rollback-fixed
-  `linuxdynasty/NornicDB` `v1.0.42-hotfix` macOS arm64
-  `nornicdb-headless-darwin-arm64.tar.gz`
-- bare pinned `--full` is intentionally unavailable until a matching
-  release-backed fixed full artefact exists
-
-## Planned manifest hardening
+## Planned release-install hardening
 
 Still planned:
 
-- remote or release-synchronized manifest updates
+- accepted release or build manifest entries
+- remote or release-synchronized manifest updates when needed
 - Sigstore / Cosign signature verification
 - explicit unsigned-artifact policy
-- broader Linux / macOS amd64 coverage once those assets are genuinely
-  published
+- broader host coverage once those assets are genuinely published
 
 ### Upgrade
 
@@ -225,11 +204,12 @@ work.
 
 ### Rollback
 
-```bash
-pcg install nornicdb --rollback
-```
+Rollback is not wired yet. For now, keep the prior NornicDB binary somewhere
+local and reinstall it explicitly with:
 
-Restores the `.previous` binary if present.
+```bash
+pcg install nornicdb --from <path> --force
+```
 
 ### Offline archive or package install
 
@@ -242,24 +222,23 @@ artefacts remains future work.
 
 ### Uninstall
 
-```bash
-pcg install nornicdb --uninstall
-```
-
-Removes the binary, the graph backend manifest entry, and (with
-`--purge-data`) the per-workspace `graph/nornicdb/` data directories under
-all local workspaces.
+Uninstall is not wired yet. Remove the managed binary and install manifest
+manually only when the workspace owner is stopped and you no longer need that
+managed backend entry. Workspace graph data directories are separate from the
+binary install and should be preserved unless you are intentionally discarding
+local graph state.
 
 ## Supply chain
 
-The embedded PCG release manifest is the source of truth for:
-
-- pinned graph-backend version per PCG release
-- artifact SHA-256 checksum
-- upstream release URL
+The checked-in release manifest currently has no accepted NornicDB assets.
+Latest-main evaluation is explicit-source only.
 
 Still planned before promotion:
 
+- pinned graph-backend version per PCG release or an equivalent accepted-build
+  policy
+- artifact SHA-256 checksum
+- upstream release URL
 - signing policy (`required`, `preferred`, `disabled`)
 - Sigstore / Cosign verification metadata
 - externalized manifest publication / refresh strategy

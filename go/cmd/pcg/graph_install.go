@@ -88,7 +88,7 @@ func runInstallNornicDB(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if full && strings.TrimSpace(from) != "" {
-		return errors.New("--full only applies to bare pinned installs without --from")
+		return errors.New("--full is reserved for future no-argument release installs; install full NornicDB binaries with --from")
 	}
 
 	result, err := installNornicDB(installNornicDBOptions{

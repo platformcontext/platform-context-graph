@@ -73,21 +73,20 @@ func init() {
 		Long: strings.TrimSpace(`
 Install a verified local NornicDB executable into PCG's managed home.
 
-Current support includes a pinned bare install where PCG already knows a
-host-specific artifact, plus explicit-source installs:
-
-  pcg install nornicdb
+PCG currently tracks the latest NornicDB main branch. Build or download the
+NornicDB binary you want to evaluate, then install it from that explicit
+source:
 
   pcg install nornicdb --from /absolute/path/to/nornicdb-headless
   pcg install nornicdb --from /absolute/path/to/nornicdb-headless-darwin-arm64.tar.gz
-  pcg install nornicdb --from /absolute/path/to/NornicDB-1.0.42-hotfix-arm64-lite.pkg
+  pcg install nornicdb --from /absolute/path/to/NornicDB-main-arm64-lite.pkg
   pcg install nornicdb --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz --sha256 <expected-sha256>
-  pcg install nornicdb --from https://example.com/releases/NornicDB-1.0.42-hotfix-arm64-lite.pkg --sha256 <expected-sha256>
+  pcg install nornicdb --from https://example.com/releases/NornicDB-main-arm64-lite.pkg --sha256 <expected-sha256>
 
-Pinned bare install is only available for platforms recorded in PCG's embedded
-release manifest. Headless remains the default laptop artifact. Use --full
-only when the manifest explicitly publishes a larger full binary for your
-host; otherwise use --from with a verified full-binary artifact.
+The no-argument installer is intentionally unavailable while this policy is in
+effect because PCG is not pinning release assets yet. Headless remains the
+default laptop artifact. Use --from with a verified full-binary artifact when
+you need the larger full binary.
 Signature verification is still future work.
 `),
 		RunE: runInstallNornicDB,
@@ -95,7 +94,7 @@ Signature verification is still future work.
 	installNornicDBCmd.Flags().String("from", "", "Install from a local NornicDB binary, local archive/package, or release URL")
 	installNornicDBCmd.Flags().String("sha256", "", "Expected SHA-256 checksum for the --from artifact")
 	installNornicDBCmd.Flags().Bool("force", false, "Replace an existing managed NornicDB binary")
-	installNornicDBCmd.Flags().Bool("full", false, "For bare pinned installs only, request the full published NornicDB artifact when the manifest includes one for your host")
+	installNornicDBCmd.Flags().Bool("full", false, "Reserved for future no-argument release installs; use --from for full binary artifacts today")
 	installCmd.AddCommand(installNornicDBCmd)
 
 	statusCmd := &cobra.Command{

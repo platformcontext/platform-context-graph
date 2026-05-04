@@ -178,8 +178,8 @@ PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK=true \
 ```
 
 Normal laptop runs should leave `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` unset
-until the fixed binary is release-backed and broader adapter conformance
-passes.
+until the latest NornicDB `main` binary under evaluation passes broader
+adapter conformance and the release or accepted-build policy is settled.
 
 ## Terraform Provider-Schema Gate
 

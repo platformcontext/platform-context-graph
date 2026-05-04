@@ -32,10 +32,10 @@ progress reporting, NornicDB installation, query profile contracts, and
 unsupported-capability tests.
 
 Current runtime docs and Compose defaults now use NornicDB as the default graph
-backend. That default switch does not close the backend ADR: release-backed
-pins for the accepted NornicDB build, signature verification, broader host
-coverage, backend conformance, and profile-matrix gates still live in the
-implementation plan and NornicDB ADR.
+backend. That default switch does not close the backend ADR: PCG tracks latest
+NornicDB `main` through explicit-source installs for now, while install trust,
+broader host coverage, backend conformance, and profile-matrix gates still
+live in the implementation plan and NornicDB ADR.
 
 **Remaining work:** finish those NornicDB promotion gates, then decide whether
 any Neo4j deprecation path should start. Plugin chunks remain separate work.

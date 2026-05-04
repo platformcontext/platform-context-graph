@@ -170,8 +170,8 @@ advisory report.
 | `PCG_SQL_RELATIONSHIP_EDGE_GROUP_BATCH_SIZE` | `1` | reducer shared edge writer | Grouped statements for SQL relationship edges. | Same guidance as inheritance edge grouping. |
 | `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` | `false` | graph writer | Conformance switch for Neo4j-style grouped writes on NornicDB. | Test/conformance only. Leave unset for normal laptop runs. |
 | `PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK` | `false` | NornicDB tests | Makes grouped rollback conformance mandatory. | Test gate only. |
-| `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT` | `false` | graph writer | Patched-binary evaluation switch for cross-file batched containment. | Use only with an ADR-approved patched NornicDB binary. |
-| `PCG_NORNICDB_BINARY` | unset | local host, install, tests | Explicit NornicDB binary path. | Use to test a patched or pinned binary before a managed release asset exists. |
+| `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT` | `false` | graph writer | Evaluation switch for cross-file batched containment. | Use only with a latest-main NornicDB binary that has focused proof for the repo shape under test. |
+| `PCG_NORNICDB_BINARY` | unset | local host, install, tests | Explicit NornicDB binary path. | Use to test a latest-main binary directly or temporarily override an older managed install. |
 | `PCG_NORNICDB_INSTALL_TIMEOUT` | `30s` | `pcg install nornicdb` | Download timeout for installer sources. | Raise for slow artifact downloads. |
 | `NORNICDB_ENABLE_PPROF` | `false` | NornicDB process | Enables NornicDB profiling. | Use after PCG logs show the statement shape is correct but NornicDB runtime cost remains unknown. |
 | `NORNICDB_ADDRESS`, `NORNICDB_BOLT_PORT`, `NORNICDB_HTTP_PORT`, `NORNICDB_DATA_DIR`, `NORNICDB_AUTH`, `NORNICDB_DEFAULT_DATABASE`, `NORNICDB_HEADLESS`, `NORNICDB_MCP_ENABLED` | local host sets these | NornicDB sidecar | Sidecar process configuration. | Internal for `pcg graph start`; set manually only when running `nornicdb serve` outside PCG. |
