@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # .claude/hooks/pcg-doc-staleness.sh
 #
-# Claude Code PostToolUse hook (matcher: Edit|Write).
-# Reads the tool input JSON from stdin, extracts the file_path, and delegates
-# to scripts/check-docs-stale.sh so Claude Code and Codex use the same check.
+# Claude Code PostToolUse hook (matcher: Edit|MultiEdit|Write).
+# Drains the stdin payload (we don't need it) and delegates to
+# scripts/check-docs-stale.sh --all so Claude Code and Codex converge on the
+# same .pcg-doc-state/stale.jsonl snapshot. The script is fast (stat-based)
+# and --all rebuilds the snapshot from scratch each run, so duplicate appends
+# do not accumulate.
 
 set -u
 set -o pipefail

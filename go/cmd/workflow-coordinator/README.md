@@ -2,11 +2,13 @@
 
 ## Purpose
 
-`pcg-workflow-coordinator` normalizes triggers, schedules workflow runs,
-claims fenced work items, and publishes run-state and completeness
-summaries. It exposes the shared admin/status contract during its dark
-rollout so operators can validate the control plane before claim
-ownership is enabled.
+`pcg-workflow-coordinator` reconciles the declarative set of collector
+instances against `WorkflowControlStore` and, in active mode, reaps expired
+work-item claims and recomputes workflow-run state. It exposes the shared
+admin/status contract during its dark rollout so operators can validate
+the control plane before active mode is enabled. Trigger normalization and
+permanent claim ownership are not part of this binary today; the truth they
+will eventually publish is still owned by other components.
 
 ## Ownership boundary
 

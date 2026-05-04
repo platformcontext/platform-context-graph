@@ -80,8 +80,11 @@ not acceptable. This rule is in `CLAUDE.md`.
 
 ## Voice
 
-Invoke the `humanizer` skill before finalizing prose. Concrete nouns, active
-verbs, no inflated significance. The house style is set by
+If the `humanizer` skill is available (it ships at `~/.claude/skills/humanizer`
+for Claude Code and `~/.codex/skills/humanizer` for Codex), invoke it before
+finalizing prose. If it is not installed, apply the same rules manually: the
+checklist below captures the high-impact ones. Concrete nouns, active verbs,
+no inflated significance. The house style is set by
 `go/internal/runtime/README.md` and `go/internal/storage/cypher/README.md` —
 short, technical, factual.
 
@@ -100,10 +103,10 @@ the same drift signal. Two paths feed it:
 - **Claude Code:** the PostToolUse hook at `.claude/hooks/pcg-doc-staleness.sh`
   fires after each `Edit` or `Write` and runs `scripts/check-docs-stale.sh`
   against the changed file.
-- **Codex (and any other tool):** the `AGENTS.md` "Doc-keeper workflow"
-  section instructs the agent to run `scripts/check-docs-stale.sh` after Go
-  edits before wrapping up. The same script powers an optional git
-  pre-commit hook.
+- **Codex (and any other tool):** the `AGENTS.md` / `CLAUDE.md`
+  "Doc-keeper workflow" section instructs the agent to run
+  `scripts/check-docs-stale.sh` after Go edits before wrapping up. The same
+  script powers an optional git pre-commit hook.
 
 Each JSONL line names the directory, which file is missing or stale, what
 changed, and which tool detected it.
@@ -112,14 +115,21 @@ When you are invoked because the marker file has new lines:
 
 1. Read `.pcg-doc-state/stale.jsonl` and group entries by directory.
 2. For each directory:
-   - Run `go doc ./<package-import-path>` to see the current public contract.
-   - Run `rg --files <dir> -g '*.go' -g '!*_test.go'` to enumerate the source.
+   - From the repo root, `cd go` first — `go.mod` lives at `go/`, so all
+     `go vet` and `go doc` calls must run from inside `go/`.
+   - Run `go doc ./<package-import-path>` (e.g. `./internal/runtime`) to see
+     the current public contract.
+   - Run `rg --files --max-depth 1 -g '*.go' -g '!*_test.go' -g '!*/doc.go'
+     <dir>` to enumerate the source files of *that* package only. The
+     `--max-depth 1` flag is critical: without it, `rg` recurses into
+     subpackages (for example `internal/reducer/{aws,dsl,tags,tfstate}`)
+     and the generated README ends up describing the wrong package surface.
    - Diff the current README/doc.go against the surface. Identify the
      specific sections that no longer match.
 3. Rewrite **only** the affected sections. Preserve everything else verbatim
    — humans add value to these files between regenerations.
 4. Run the humanizer pass on the rewritten sections.
-5. Verify:
+5. Verify (still inside `go/`):
    - `go vet ./<package>` passes.
    - `go doc ./<package>` prints the new comment.
    - No section duplicates content between README and doc.go.
@@ -136,14 +146,16 @@ Without a marker, ask which directory or domain to update, then run steps
 
 When creating a `README.md` and `doc.go` for a directory that has neither:
 
-1. Read every `.go` file in the directory to build a faithful summary. Do not
-   guess.
+1. Read every `.go` file in the directory (not its subdirectories) to build a
+   faithful summary. Do not guess.
 2. Determine the actual `package <name>` declaration — `doc.go` must match.
-3. Identify exported identifiers (`rg '^(func|type|var|const) [A-Z]' <dir>`).
-4. Identify telemetry call sites (`rg 'telemetry\.|tracer\.Start' <dir>`).
+3. Identify exported identifiers, scoped to this directory only:
+   `rg --max-depth 1 '^(func|type|var|const) [A-Z]' <dir>`.
+4. Identify telemetry call sites, also scoped to this directory:
+   `rg --max-depth 1 'telemetry\.|tracer\.Start' <dir>`.
 5. Fill the templates from `references/templates.md`.
 6. Run the humanizer pass.
-7. Verify with `go vet` and `go doc`.
+7. From `go/`, verify with `go vet ./<package>` and `go doc ./<package>`.
 
 ## When to push back
 

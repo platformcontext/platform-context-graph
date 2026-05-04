@@ -13,7 +13,8 @@ Internal packages: `internal/correlation`, `internal/correlation/engine`,
 `internal/correlation/model`, `internal/correlation/rules`,
 `internal/facts`, `internal/relationships`, `internal/telemetry`,
 `internal/truth`. Graph writes flow through the canonical writers in
-`internal/storage/cypher` via the `GraphWrite` port.
+`internal/storage/cypher` (`CanonicalNodeWriter`, `EdgeWriter`,
+`BuildCanonical*` statement builders) executed against the `Executor` seam.
 
 ## Telemetry
 

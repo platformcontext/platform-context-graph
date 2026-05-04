@@ -74,9 +74,12 @@ Process-level wiring used by every PCG binary. Does not own domain logic
 
 ## Exported surface
 
-- `Server` — admin HTTP surface
-- `RetryPolicy` — default backoff and jitter
-- `DataStore` — datastore configuration loader
+- `Config`, `LoadConfig` — service-level config loaded from the environment
+- `LoadGraphBackend`, `LoadPostgresConfig`, `LoadNeo4jConfig` — datastore
+  configuration loaders backing every PCG binary
+- `OpenPostgres`, `OpenNeo4jDriver` — datastore openers used at startup
+- `NewStatusAdminServer`, `HTTPServer` — shared `/healthz`, `/readyz`,
+  `/metrics`, `/admin/status` admin surface
 
 See `doc.go` for the full contract.
 
@@ -87,9 +90,12 @@ See `doc.go` for the full contract.
 
 ## Telemetry
 
-- Metrics: `pcg_dp_runtime_*`
-- Spans: `RuntimeAdminRequest`
-- Logs: scope `runtime`
+- Metrics: pcg_dp_* counters and histograms emitted by the admin handlers
+  (see `internal/telemetry/instruments.go` for the canonical names)
+- Spans: started via `tracer.Start(ctx, telemetry.Span*)` from
+  `internal/telemetry/contract.go`
+- Logs: scope and phase attributes from `telemetry.ScopeAttrs()` /
+  `telemetry.PhaseAttr`
 
 ## Gotchas / invariants
 
@@ -137,9 +143,13 @@ Backend-neutral. Dialect-specific behavior belongs in
 
 ## Exported surface
 
-- `GraphWrite` — port implemented by every backend
-- `Statement` — typed Cypher write with metadata
-- canonical writers for nodes, edges, properties
+- `Statement`, `Plan` — typed Cypher write with metadata
+- `Executor` — seam every backend implements; wrapped by
+  `InstrumentedExecutor`, `RetryingExecutor`, `TimeoutExecutor`,
+  `ExecuteOnlyExecutor`
+- `CanonicalNodeWriter`, `EdgeWriter` — canonical node and edge writers
+- `BuildCanonical*` and `BuildRetract*` statement builders for the canonical
+  graph upserts and retractions
 
 See `doc.go` for the contract.
 
@@ -150,9 +160,10 @@ See `doc.go` for the contract.
 
 ## Telemetry
 
-- Metrics: `pcg_dp_cypher_write_duration_seconds`,
-  `pcg_dp_cypher_write_errors_total`
-- Spans: `CypherWrite`
+- Metrics: pcg_dp_canonical_* counters and histograms exposed via
+  `telemetry.Instruments` (`internal/telemetry/instruments.go`)
+- Spans: write phase and domain attributes via `telemetry.AttrWritePhase`,
+  `telemetry.AttrDomain`
 
 ## Gotchas / invariants
 
@@ -172,10 +183,11 @@ See `doc.go` for the contract.
 ```go
 // Package cypher defines the backend-neutral Cypher write contract for PCG.
 //
-// The package exposes GraphWrite, canonical statement builders, edge helpers,
-// and write instrumentation. Backend dialects (Neo4j, NornicDB) implement
-// this contract behind documented narrow seams; callers depend on this
-// package, not on a concrete backend.
+// The package exposes the Executor seam, Statement/Plan metadata, canonical
+// node and edge writers (CanonicalNodeWriter, EdgeWriter), and the
+// BuildCanonical* / BuildRetract* statement builders. Backend dialects
+// (Neo4j, NornicDB) implement Executor behind documented narrow seams;
+// callers depend on this package, not on a concrete backend.
 package cypher
 ```
 

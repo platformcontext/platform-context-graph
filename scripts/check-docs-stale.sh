@@ -52,6 +52,18 @@ check_dir() {
   local readme="$dir/README.md"
   local docgo="$dir/doc.go"
 
+  # If the changed source file no longer exists (deleted or renamed away in
+  # the same edit), treat that as drift directly: a removed export is exactly
+  # the kind of change docs need to reflect. We cannot mtime-compare against
+  # a missing file, so flag the directory unconditionally.
+  if [ ! -e "$changed" ]; then
+    [ -f "$readme" ] && emit "$dir" "stale-readme-source-missing" "$changed" \
+      || emit "$dir" "missing-readme" "$changed"
+    [ -f "$docgo" ]  && emit "$dir" "stale-docgo-source-missing"  "$changed" \
+      || emit "$dir" "missing-docgo" "$changed"
+    return
+  fi
+
   if [ ! -f "$readme" ]; then
     emit "$dir" "missing-readme" "$changed"
   elif [ "$(mtime "$readme")" -lt "$(mtime "$changed")" ]; then
@@ -121,34 +133,32 @@ if [ ! -d "$repo_root/go" ]; then
   exit 0
 fi
 
-while IFS= read -r dir; do
-  # Only directories that actually contain non-test Go source.
-  shopt -s nullglob
-  go_files=("$dir"/*.go)
-  shopt -u nullglob
-  has_source=0
-  for gf in "${go_files[@]}"; do
-    case "$gf" in
-      */doc.go|*_test.go) ;;
-      *) has_source=1; break ;;
-    esac
-  done
-  [ "$has_source" -eq 0 ] && continue
+# Per repo policy (AGENTS.md / CLAUDE.md), use rg, not find. Enumerate every
+# non-test, non-doc.go Go source file under go/ and group by directory. rg
+# already respects .gitignore and .ignore, which keeps vendor/testdata
+# implicitly excluded if they are listed there; we add explicit globs as
+# belt-and-suspenders so the behavior does not depend on ignore-file state.
+declare -A dir_newest=()
+declare -A dir_newest_path=()
 
-  newest=""
-  newest_mtime=0
-  for gf in "${go_files[@]}"; do
-    case "$gf" in
-      */doc.go|*_test.go) continue ;;
-    esac
-    m=$(mtime "$gf")
-    if [ "$m" -gt "$newest_mtime" ]; then
-      newest_mtime=$m
-      newest=$gf
-    fi
-  done
-  [ -n "$newest" ] && check_dir "$dir" "$newest"
-done < <(find "$repo_root/go" -type d \
-  -not -path "*/vendor/*" -not -path "*/testdata/*")
+while IFS= read -r gf; do
+  d=$(dirname "$gf")
+  m=$(mtime "$gf")
+  prev="${dir_newest[$d]:-0}"
+  if [ "$m" -gt "$prev" ]; then
+    dir_newest[$d]=$m
+    dir_newest_path[$d]=$gf
+  fi
+done < <(rg --files \
+  -g '*.go' \
+  -g '!*_test.go' \
+  -g '!**/doc.go' \
+  -g '!**/vendor/**' \
+  -g '!**/testdata/**' \
+  "$repo_root/go" 2>/dev/null)
+
+for d in "${!dir_newest_path[@]}"; do
+  check_dir "$d" "${dir_newest_path[$d]}"
+done
 
 exit 0
