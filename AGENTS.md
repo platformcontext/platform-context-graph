@@ -219,6 +219,12 @@ connection/runtime settings, retry classification, and query builders. A new
 Cypher/Bolt backend must support the raw PCG Cypher calls or require only minor,
 evidence-backed adapter differences.
 
+Schema-first validation is mandatory for graph-backend performance evidence.
+Manual production-profile runs must apply `pcg-bootstrap-data-plane` before
+`pcg-bootstrap-index`; otherwise missing graph indexes or constraints can make
+the shared Cypher path look falsely slow. Treat any backend comparison that
+skips the data-plane schema step as non-acceptance evidence.
+
 ## Runtime Contract
 
 | Runtime | Responsibility | Command | Kubernetes shape |

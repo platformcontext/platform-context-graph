@@ -324,6 +324,12 @@ profile make the label-scoped shape the safer repo-scale cleanup path.
 | `PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK` | unset / `false` | test gates | Makes rollback conformance mandatory in opt-in NornicDB grouped-write tests. |
 | `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT` | unset / `false` | canonical entity writes | Evaluation switch for cross-file batched entity containment. Enable it only with a latest-main NornicDB binary that includes the required row-safe hot path and has focused proof for the repo shape under test. |
 
+Do not enable `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT` just because the Neo4j
+parity path uses row-scoped batched containment. NornicDB's current default
+remains file-scoped inline containment: the latest-main production-profile
+full-corpus proof drained in `878s`, under the 15-minute envelope, so changing
+the default needs fresh NornicDB regression evidence.
+
 ## NornicDB Runtime Diagnostics
 
 | Variable | Default | Scope | Use |

@@ -27,10 +27,10 @@ NornicDB is the default graph backend. Neo4j is the explicit official
 alternative. The chart value names still use `neo4j.*` for the Bolt
 connection because both supported backends use the Neo4j driver shape.
 
-Default backend selection is not the same as closing every production
-promotion gate. NornicDB has latest-main full-corpus evidence, while final
-promotion still tracks Neo4j parity research, a terminal comparison, and the
-install-trust policy in the active ADRs.
+Default backend selection is not the same as closing every promotion gate.
+NornicDB has latest-main full-corpus evidence, and the accepted Neo4j parity
+ADR records the schema-first proof for the official alternative. The remaining
+promotional work is install-trust policy and broader host coverage.
 
 Unsupported graph backends are not official.
 

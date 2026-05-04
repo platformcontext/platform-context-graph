@@ -222,6 +222,7 @@ Failure-class log keys emitted via `telemetry.FailureClassAttr`:
 | `PCG_PROJECTION_WORKERS` | `min(NumCPU, 8)` | Concurrent projection goroutines |
 | `PCG_DISCOVERY_REPORT` | `""` | File path to write discovery advisory JSON; empty disables |
 | `PCG_CANONICAL_WRITE_TIMEOUT` | `30s` (NornicDB) | Graph write transaction timeout |
+| `PCG_NEO4J_PROFILE_GROUP_STATEMENTS` | `false` | Opt-in Neo4j grouped-write statement attempt logs for performance diagnostics |
 | `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` | `false` | Enable NornicDB grouped canonical writes; conformance gate required |
 | `PCG_NORNICDB_PHASE_GROUP_STATEMENTS` | `500` | NornicDB phase group statement cap |
 | `PCG_NORNICDB_FILE_BATCH_SIZE` | `100` | NornicDB file upsert row cap |

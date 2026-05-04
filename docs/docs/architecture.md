@@ -289,9 +289,9 @@ chosen via `PCG_GRAPH_BACKEND={neo4j,nornicdb}` and surfaced in telemetry as
 receives the shared production DDL, while NornicDB receives a narrow
 schema-dialect translation for compatibility gaps such as composite node
 identity constraints. Handler and reducer code should not branch on graph
-brand. The active ADR work is to make Neo4j follow the same optimized adapter
-path as NornicDB where evidence says it should, then decide the final Neo4j
-support posture from a terminal comparison. See
+brand. The accepted Neo4j parity ADR records the schema-first proof that lets
+Neo4j follow the shared optimized adapter path without a separate writer
+stream, while NornicDB stays the default backend. See
 [ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md) and
 [ADR 2026-05-04](adrs/2026-05-04-neo4j-parity-optimization-plan.md).
 

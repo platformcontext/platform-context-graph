@@ -90,6 +90,13 @@ semantics are not well represented by row-level ORMs. Details:
 [Architecture — Capability Ports](architecture.md) and
 [Capability Conformance Spec](reference/capability-conformance-spec.md).
 
+This is a product advantage, not only an implementation detail. PCG treats
+NornicDB as the default first-class graph backend and Neo4j as a first-class
+compatibility path for teams that already rely on Neo4j. Both backends must run
+the same PCG graph model through the shared Cypher/Bolt contract. That keeps the
+platform portable without asking maintainers to own two separate graph-writing
+systems.
+
 Schema bootstrap follows the same adapter rule. Neo4j receives the shared
 production DDL unchanged; NornicDB receives a narrow schema-dialect rendering
 for compatibility gaps such as composite node identity. That route is

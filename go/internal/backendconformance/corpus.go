@@ -84,6 +84,19 @@ LIMIT 25`,
 			Parameters: map[string]any{"repo_id": "repo:backend-conformance"},
 			MinRows:    1,
 		},
+		{
+			Name:       "canonical file entity containment readback",
+			Capability: CapabilityCanonicalWrites,
+			Cypher: `MATCH (f:File {path: $file_path})-[rel:CONTAINS]->(n:Function {uid: $entity_uid})
+WITH count(rel) AS contains_count, count(DISTINCT f) AS file_count, count(DISTINCT n) AS entity_count
+WHERE contains_count = 1 AND file_count = 1 AND entity_count = 1
+RETURN contains_count, file_count, entity_count`,
+			Parameters: map[string]any{
+				"file_path":  "backend-conformance/src/example.go",
+				"entity_uid": "function:backend-conformance:file-entity",
+			},
+			MinRows: 1,
+		},
 	}
 }
 
@@ -144,6 +157,106 @@ MERGE (caller)-[:CALLS]->(callee)`,
 				},
 			},
 		},
+		{
+			Name:                  "canonical file entity containment idempotency",
+			Capability:            CapabilityCanonicalWrites,
+			RequireAtomicGroup:    true,
+			TransactionVisibility: "repository, directory, file, entity, and CONTAINS edge must commit together",
+			Statements: []sourcecypher.Statement{
+				{
+					Operation: sourcecypher.OperationCanonicalUpsert,
+					Cypher: `MERGE (r:Repository {id: $repo_id})
+SET r.name = $repo_name,
+    r.path = $repo_path,
+    r.scope_id = $scope_id,
+    r.generation_id = $generation_id,
+    r.evidence_source = 'projector/canonical'`,
+					Parameters: backendConformanceContainmentParams(),
+				},
+				{
+					Operation: sourcecypher.OperationCanonicalUpsert,
+					Cypher: `MATCH (r:Repository {id: $repo_id})
+MERGE (d:Directory {path: $dir_path})
+SET d.name = $dir_name,
+    d.repo_id = $repo_id,
+    d.scope_id = $scope_id,
+    d.generation_id = $generation_id
+MERGE (r)-[rel:CONTAINS]->(d)
+SET rel.evidence_source = 'projector/canonical',
+    rel.generation_id = $generation_id`,
+					Parameters: backendConformanceContainmentParams(),
+				},
+				{
+					Operation: sourcecypher.OperationCanonicalUpsert,
+					Cypher: `MATCH (r:Repository {id: $repo_id})
+MATCH (d:Directory {path: $dir_path})
+MERGE (f:File {path: $file_path})
+SET f.name = $file_name,
+    f.relative_path = $relative_path,
+    f.language = $language,
+    f.lang = $language,
+    f.repo_id = $repo_id,
+    f.scope_id = $scope_id,
+    f.generation_id = $generation_id,
+    f.evidence_source = 'projector/canonical'
+MERGE (r)-[repoRel:REPO_CONTAINS]->(f)
+SET repoRel.evidence_source = 'projector/canonical',
+    repoRel.generation_id = $generation_id
+MERGE (d)-[dirRel:CONTAINS]->(f)
+SET dirRel.evidence_source = 'projector/canonical',
+    dirRel.generation_id = $generation_id`,
+					Parameters: backendConformanceContainmentParams(),
+				},
+				{
+					Operation: sourcecypher.OperationCanonicalUpsert,
+					Cypher: `MERGE (n:Function {uid: $entity_uid})
+SET n.id = $entity_uid,
+    n.name = $entity_name,
+    n.path = $file_path,
+    n.relative_path = $relative_path,
+    n.line_number = $line_number,
+    n.start_line = $line_number,
+    n.end_line = $line_number,
+    n.repo_id = $repo_id,
+    n.language = $language,
+    n.lang = $language,
+    n.scope_id = $scope_id,
+    n.generation_id = $generation_id,
+    n.evidence_source = 'projector/canonical'`,
+					Parameters: backendConformanceContainmentParams(),
+				},
+				{
+					Operation: sourcecypher.OperationCanonicalUpsert,
+					Cypher: `MATCH (f:File {path: $file_path})
+MATCH (n:Function {uid: $entity_uid})
+MERGE (f)-[rel:CONTAINS]->(n)
+SET rel.evidence_source = 'projector/canonical',
+    rel.generation_id = $generation_id`,
+					Parameters: backendConformanceContainmentParams(),
+				},
+			},
+		},
+	}
+}
+
+// backendConformanceContainmentParams returns the deterministic fixture values
+// shared by the canonical file/entity containment write case.
+func backendConformanceContainmentParams() map[string]any {
+	return map[string]any{
+		"repo_id":       "repo:backend-conformance",
+		"repo_name":     "backend-conformance",
+		"repo_path":     "backend-conformance",
+		"dir_path":      "backend-conformance/src",
+		"dir_name":      "src",
+		"file_path":     "backend-conformance/src/example.go",
+		"file_name":     "example.go",
+		"relative_path": "src/example.go",
+		"entity_uid":    "function:backend-conformance:file-entity",
+		"entity_name":   "ExampleFileEntity",
+		"language":      "go",
+		"line_number":   int64(7),
+		"scope_id":      "scope:backend-conformance",
+		"generation_id": "generation:backend-conformance",
 	}
 }
 

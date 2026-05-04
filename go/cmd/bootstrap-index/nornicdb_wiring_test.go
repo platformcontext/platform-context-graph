@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 )
@@ -86,6 +87,118 @@ func TestBootstrapNornicDBPhaseGroupExecutorWrapsChunkFailure(t *testing.T) {
 	}
 }
 
+func TestConfigureBootstrapCanonicalWriterBatchesContainmentAcrossFilesForNeo4j(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingBootstrapGroupExecutor{}
+	writer := sourcecypher.NewCanonicalNodeWriter(executor, 500, nil)
+	writer = configureBootstrapCanonicalWriter(writer, bootstrapCanonicalWriterConfig{
+		GraphBackend: runtime.GraphBackendNeo4j,
+	})
+
+	if err := writer.Write(context.Background(), bootstrapContainmentMaterialization()); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var inlineEntities int
+	for _, stmt := range executor.groupStatements {
+		if stmt.Parameters[sourcecypher.StatementMetadataPhaseKey] == sourcecypher.CanonicalPhaseEntityContainment {
+			t.Fatalf("Neo4j bootstrap writer emitted separate entity_containment statement: %s", stmt.Cypher)
+		}
+		if stmt.Parameters[sourcecypher.StatementMetadataPhaseKey] != sourcecypher.CanonicalPhaseEntities {
+			continue
+		}
+		if strings.Contains(stmt.Cypher, "MATCH (f:File {path: row.file_path})") &&
+			strings.Contains(stmt.Cypher, "MERGE (f)-[rel:CONTAINS]->(n)") {
+			inlineEntities++
+		}
+	}
+	if inlineEntities != 1 {
+		t.Fatalf("batched entity containment statements = %d, want 1", inlineEntities)
+	}
+}
+
+func TestBootstrapContainmentMaterializationIncludesFileDirectories(t *testing.T) {
+	t.Parallel()
+
+	materialization := bootstrapContainmentMaterialization()
+	directoriesByPath := make(map[string]struct{}, len(materialization.Directories))
+	for _, directory := range materialization.Directories {
+		directoriesByPath[directory.Path] = struct{}{}
+	}
+
+	for _, file := range materialization.Files {
+		if file.DirPath == "" {
+			continue
+		}
+		if _, ok := directoriesByPath[file.DirPath]; !ok {
+			t.Fatalf("file %q references missing directory %q", file.Path, file.DirPath)
+		}
+	}
+}
+
+func TestConfigureBootstrapCanonicalWriterKeepsNornicDBFileScopedContainmentByDefault(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingBootstrapGroupExecutor{}
+	writer := sourcecypher.NewCanonicalNodeWriter(executor, 500, nil)
+	writer = configureBootstrapCanonicalWriter(writer, bootstrapCanonicalWriterConfig{
+		GraphBackend: runtime.GraphBackendNornicDB,
+	})
+
+	if err := writer.Write(context.Background(), bootstrapContainmentMaterialization()); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var fileScopedEntities int
+	for _, stmt := range executor.groupStatements {
+		if stmt.Parameters[sourcecypher.StatementMetadataPhaseKey] != sourcecypher.CanonicalPhaseEntities {
+			continue
+		}
+		if strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") &&
+			strings.Contains(stmt.Cypher, "MERGE (f)-[rel:CONTAINS]->(n)") {
+			fileScopedEntities++
+		}
+	}
+	if fileScopedEntities != 1 {
+		t.Fatalf("NornicDB file-scoped containment statements = %d, want 1", fileScopedEntities)
+	}
+}
+
+func TestBootstrapNeo4jProfileGroupStatementsParsesOptIn(t *testing.T) {
+	t.Parallel()
+
+	enabled, err := bootstrapNeo4jProfileGroupStatements(func(key string) string {
+		if key == "PCG_NEO4J_PROFILE_GROUP_STATEMENTS" {
+			return "true"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("bootstrapNeo4jProfileGroupStatements() error = %v, want nil", err)
+	}
+	if !enabled {
+		t.Fatal("bootstrapNeo4jProfileGroupStatements() = false, want true")
+	}
+}
+
+func TestBootstrapNeo4jProfileGroupStatementsRejectsInvalidBool(t *testing.T) {
+	t.Parallel()
+
+	_, err := bootstrapNeo4jProfileGroupStatements(func(key string) string {
+		if key == "PCG_NEO4J_PROFILE_GROUP_STATEMENTS" {
+			return "sometimes"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("bootstrapNeo4jProfileGroupStatements() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "PCG_NEO4J_PROFILE_GROUP_STATEMENTS") {
+		t.Fatalf("error = %q, want env var name", err.Error())
+	}
+}
+
 func bootstrapTestStatement(summary string) sourcecypher.Statement {
 	return sourcecypher.Statement{
 		Cypher: "RETURN $value",
@@ -98,8 +211,9 @@ func bootstrapTestStatement(summary string) sourcecypher.Statement {
 }
 
 type recordingBootstrapGroupExecutor struct {
-	groupSizes []int
-	err        error
+	groupSizes      []int
+	groupStatements []sourcecypher.Statement
+	err             error
 }
 
 func (r *recordingBootstrapGroupExecutor) Execute(context.Context, sourcecypher.Statement) error {
@@ -108,5 +222,52 @@ func (r *recordingBootstrapGroupExecutor) Execute(context.Context, sourcecypher.
 
 func (r *recordingBootstrapGroupExecutor) ExecuteGroup(_ context.Context, stmts []sourcecypher.Statement) error {
 	r.groupSizes = append(r.groupSizes, len(stmts))
+	r.groupStatements = append(r.groupStatements, stmts...)
 	return r.err
+}
+
+func bootstrapContainmentMaterialization() projector.CanonicalMaterialization {
+	return projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "my-repo",
+			Path:   "/repos/my-repo",
+		},
+		Directories: []projector.DirectoryRow{
+			{
+				Path:       "/repos/my-repo/src",
+				Name:       "src",
+				ParentPath: "/repos/my-repo",
+				RepoID:     "repo-1",
+				Depth:      0,
+			},
+		},
+		Files: []projector.FileRow{
+			{
+				Path:         "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				Name:         "main.go",
+				Language:     "go",
+				RepoID:       "repo-1",
+				DirPath:      "/repos/my-repo/src",
+			},
+		},
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "entity-1",
+				Label:        "Function",
+				EntityName:   "handleRelationships",
+				FilePath:     "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				StartLine:    12,
+				EndLine:      34,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+		},
+	}
 }

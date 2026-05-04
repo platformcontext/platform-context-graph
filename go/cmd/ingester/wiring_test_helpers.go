@@ -82,6 +82,52 @@ func statementsContaining(stmts []sourcecypher.Statement, needle string) []sourc
 	return matches
 }
 
+func canonicalWriterContainmentMaterialization() projector.CanonicalMaterialization {
+	return projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "my-repo",
+			Path:   "/repos/my-repo",
+		},
+		Directories: []projector.DirectoryRow{
+			{
+				Path:       "/repos/my-repo/src",
+				Name:       "src",
+				ParentPath: "/repos/my-repo",
+				RepoID:     "repo-1",
+				Depth:      0,
+			},
+		},
+		Files: []projector.FileRow{
+			{
+				Path:         "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				Name:         "main.go",
+				Language:     "go",
+				RepoID:       "repo-1",
+				DirPath:      "/repos/my-repo/src",
+			},
+		},
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "entity-1",
+				Label:        "Function",
+				EntityName:   "handleRelationships",
+				FilePath:     "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				StartLine:    12,
+				EndLine:      34,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+		},
+	}
+}
+
 func minimalCanonicalMaterialization() projector.CanonicalMaterialization {
 	return projector.CanonicalMaterialization{
 		ScopeID:      "scope-1",

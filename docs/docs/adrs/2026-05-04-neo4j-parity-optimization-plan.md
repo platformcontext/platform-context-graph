@@ -1,7 +1,7 @@
 # ADR: Neo4j Parity Optimization Plan
 
 **Date:** 2026-05-04
-**Status:** In progress
+**Status:** Accepted
 **Authors:** Allen Sanabria
 **Deciders:** Platform Engineering
 
@@ -34,13 +34,13 @@ with NornicDB latest `main` `b68b4ef`, indexed the full corpus, drained
 `8458/8458` queue rows in `878s`, kept retrying, failed, and dead-letter rows
 at `0`, and passed API/MCP relationship-evidence drilldowns.
 
-Neo4j does not yet have a terminal comparison. The stopped run
+The first Neo4j comparison looked much worse, but it later turned out to be a
+manual-run setup bug. Stopped run
 `pcg-neo4j-baseline-pr138-a2c630af-20260504T123656Z` was still clean at
 `1946s` (`0` retrying, failed, or dead-letter rows), but only `553/896`
-source-local projector items had succeeded. That means the first parity target
-is probably source-local canonical projection, not reducer truth or API/MCP
-read correctness. This is an inference from the stopped run, not a proven root
-cause.
+source-local projector items had succeeded. That made source-local canonical
+projection look like the first parity target. It was a useful symptom, but not
+the root cause.
 
 The current branch repeated a bounded Neo4j baseline after adding grouped
 statement metrics: `pcg-neo4j-baseline-pr140-6b44dfe5-20260504T143040Z`
@@ -69,7 +69,7 @@ were still `entity_containment` and `entities`; the largest observed phase was
 Neo4j phase grouping at the `100`-statement cap as the first parity fix, and
 the product code no longer keeps those Neo4j-only knobs.
 
-The first chunk of this ADR is to collect enough Neo4j-specific evidence to
+The original chunk of this ADR was to collect enough Neo4j-specific evidence to
 separate:
 
 - source-local canonical write time
@@ -79,6 +79,28 @@ separate:
 - Neo4j lock/deadlock/retry behavior
 - graph read/query plan costs
 - API/MCP truth after the graph has drained
+
+The key correction came from re-checking the runtime shape, not from another
+Neo4j-only writer fork. Product Compose and Kubernetes run
+`pcg-bootstrap-data-plane` before indexing, which applies both Postgres and
+graph schema. The earlier manual Neo4j comparison runners only let
+`pcg-bootstrap-index` apply Postgres bootstrap DDL, so Neo4j was indexing
+without the graph constraints and indexes that the real service path depends
+on.
+
+Schema-first remote run `pcg-neo4j-schema-profile-20260504T182712Z` rebuilt the
+current branch-local PCG binaries, applied `pcg-bootstrap-data-plane`, indexed
+the same remote corpus, and reached terminal in `577s`. It reported `895`
+workspace Git configs, `896` API repositories, `8458/8458` queue rows
+succeeded, and `0` retrying, failed, or dead-letter rows. API and MCP health
+passed, and the relationship-evidence drilldown returned
+`READS_CONFIG_FROM` evidence with `387` evidence rows through the API and MCP.
+At the 10-minute cutoff, bootstrap projection success count was `896`; the run
+had already finished. The largest canonical atomic write fell from multi-minute
+durations in the no-schema manual runs to `11.009s`, and the slowest profiled
+Neo4j grouped statement attempt was `0.515s` for a `Class` entity batch. This
+reclassifies the main bottleneck as a manual proof-run schema precondition gap,
+not evidence that Neo4j needs a separate writer stream.
 
 ## External Constraints
 
@@ -142,10 +164,10 @@ Current differences:
 | --- | --- | --- | --- |
 | Canonical execution | Bounded phase-group execution with per-phase chunks. | `GroupExecutor` usually runs one atomic canonical group. | Parity candidate: broad phase grouping was tested and rejected as a first fix. Continue only if a narrower shared contract needs bounded execution. |
 | Canonical row caps | File, entity, label, and containment caps are backend-aware. | Mostly generic `PCG_NEO4J_BATCH_SIZE`. | Conformance candidate: prefer shared row-shape improvements; add backend-specific caps only for a proven minor runtime constraint. |
-| Entity containment | NornicDB can use file-scoped inline containment and batched containment switches. | Neo4j uses the separate entity-node and containment phase shape. | Next target: inspect whether the shared containment Cypher contract is portable and well anchored before adding any backend branch. |
+| Entity containment | NornicDB keeps file-scoped inline containment by default and leaves `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` as an explicit latest-main evaluation switch. The 2026-05-04 NornicDB proof already drained the full corpus in `878s`, so the default should not move to row-scoped batching without fresh regression evidence. | Neo4j ingester and bootstrap now use the existing row-scoped batched containment writer, matching `MATCH (f:File {path: row.file_path}) ... MERGE (f)-[:CONTAINS]->(n)`, to reduce canonical statement count without adding a Neo4j-only writer stream. | Accepted as a shared-writer cleanup for Neo4j. Keep the NornicDB default unchanged unless fresh NornicDB evidence proves the row-scoped mode is also better there. |
 | Semantic entities | NornicDB uses canonical-node enrichment and label-scoped retract modes. | Neo4j stays on the legacy semantic writer path. | Parity candidate: test whether the shared canonical-node mode should become the only production path, with backend-specific seams only where required. |
 | Queue/concurrency | NornicDB defaults to tighter claim windows and semantic claim limit `1`. | Neo4j claims up to `workers*4` and has no semantic claim limit by default. | Parity candidate: profile lock waits, retry counts, and queue wait before changing defaults. |
-| Schema/indexes | NornicDB adds explicit hot lookup indexes and schema dialect translations. | Neo4j relies on constraints and its planner. | Research required: confirm hot `MATCH` and `MERGE` anchors use indexes in Neo4j. |
+| Schema/indexes | NornicDB adds explicit hot lookup indexes and schema dialect translations. | Neo4j relies on constraints and its planner. Product runtimes apply those constraints through `pcg-bootstrap-data-plane` before indexing. | Resolved for the full-corpus write bottleneck: schema-first Neo4j proof drained in `577s`; manual proof templates must apply graph schema before timing Neo4j. |
 | Reads | NornicDB has custom call-chain, relationship, and dead-code query builders. | Neo4j keeps the older `shortestPath`, map-collection, and negative-pattern forms. | Mostly a gap only if API/MCP reads are slow after writes drain; measure after baseline. |
 | Timeouts/retries | NornicDB has graph-write transaction deadlines and extra retry classifications. | Neo4j keeps Neo4j transient/deadlock retry behavior without the same write budget. | Design gap only if evidence shows unbounded waits, deadlocks, or transaction slope. |
 | Telemetry | NornicDB has phase, label, chunk, statement, and duration logs. | Neo4j shares generic graph metrics but lacks matching per-phase detail. | First implementation candidate: mirror evidence before tuning behavior. |
@@ -179,8 +201,9 @@ These are hypotheses until measured:
 | 3. Terminal or bounded Neo4j baseline | Complete | Bounded run `pcg-neo4j-baseline-pr140-6b44dfe5-20260504T143040Z` stayed clean but was far off the NornicDB pace: after about twenty minutes, source-local projection was `395` succeeded with `501` still open, while reducer rows were almost caught up. API/MCP proof did not run because the graph did not drain. |
 | 4. Hypothesis ranking | Complete | First target is source-local canonical write shape. The evidence points away from reducer scheduling, API/MCP reads, and host idleness. Broad phase grouping was the first tested hypothesis because it was the closest analogue to the NornicDB fast path. |
 | 5. Focused implementation slice: broad phase grouping | Complete / rejected | Remote run `pcg-neo4j-phasegroups-pr140-d97ad213-20260504T150142Z` proved the experimental path worked but did not improve slope at the `100`-statement cap. The Neo4j-only knobs and executor were removed so PCG does not keep a second product-specific writer stream for a rejected hypothesis. |
-| 6. Focused implementation slice: entity-containment write shape | Next | The next measured target is source-local `entity_containment`, not queue defaults or API reads. Evaluate the shared Cypher shape first: anchors, relationship identity, indexes/constraints, duplicate behavior, and transaction size. Only keep a backend seam if the evidence shows a minor unavoidable difference. |
-| 7. Proof ladder | Not started | Run focused repo, medium corpus, then full corpus. Verify API, MCP, queue truth, graph truth, and evidence truth. |
+| 6. Focused implementation slice: entity-containment write shape | Complete / partial win | Current branch adds file/entity/`CONTAINS` coverage to the shared live backend conformance corpus and runs it twice before readback to prove idempotency. Ingester and bootstrap wiring first put Neo4j on the same file-scoped inline entity containment writer mode already used by NornicDB, while keeping the NornicDB batched-across-files switch as an explicit latest-main experiment. Local unit proof and local live NornicDB/Neo4j conformance passed. Remote Neo4j run `pcg-neo4j-inline-containment-20260504T165156Z` stayed clean but was not acceptance-fast: around the twenty-minute mark it had `549` source-local successes with `339` still pending, and by the stopped sample it had `662` source-local successes with `226` pending. The separate `entity_containment` phase was gone, but large Neo4j canonical atomic transactions remained the wall: top observed writes included `979` statements in `555.484s`, `498` statements in `536.743s`, and `1176` statements in `499.767s`. A follow-up bounded phase-group experiment, `pcg-neo4j-bounded-inline-20260504T172932Z`, was stopped early and not kept because the early slope was slightly worse (`269` source-local successes at the comparable window versus `277` for inline-only). |
+| 7. Focused implementation slice: Neo4j row-scoped batched containment | Complete / shared writer cleanup | Ingester and bootstrap now route Neo4j through the existing row-scoped batched containment writer (`MATCH (f:File {path: row.file_path})`) to reduce canonical statement count without adding a new Neo4j writer stream. NornicDB remains on file-scoped inline containment by default because the latest-main full-corpus proof is already under the 15-minute envelope at `878s`; its cross-file batched containment path stays behind `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true`. Focused tests lock that behavior for ingester and bootstrap. Local proof passed with `go test ./cmd/ingester ./cmd/bootstrap-index ./internal/storage/cypher ./internal/backendconformance -count=1`, plus live NornicDB and Neo4j backend conformance. Remote run `pcg-neo4j-row-scoped-containment-20260504T175437Z` was stopped after the 10-minute decision window by request: at `2026-05-04T18:04:47Z`, it had `345` source-local projection successes by bootstrap log count, queue totals were `3450` total, `2899` succeeded, `543` pending, and `0` retrying, failed, or dead-letter rows. That run still missed the product graph-schema precondition, so it is useful as a no-schema diagnostic but not as production-profile evidence. |
+| 8. Schema-first terminal Neo4j proof | Complete / parity restored | Remote run `pcg-neo4j-schema-profile-20260504T182712Z` inserted `pcg-bootstrap-data-plane` before indexing, matching the Compose and Kubernetes service path. The run finished before the 10-minute decision window: start `2026-05-04T18:27:32Z`, source-local done `2026-05-04T18:36:08Z`, terminal `2026-05-04T18:37:09Z`, wall `577s`, first-queue-to-terminal `562s`, queue `8458/8458` succeeded, and `0` retrying, failed, or dead-letter rows. API and MCP health passed; API repository count was `896`; evidence drilldown returned `READS_CONFIG_FROM` with `387` evidence rows and MCP evidence content count `2`. The largest canonical atomic write was `11.009s`, and the largest profiled grouped statement attempt was `0.515s`. This completes the Neo4j parity research slice: the fix is to keep graph schema bootstrap in every production-profile proof, keep Neo4j on the shared row-scoped containment writer, and avoid a Neo4j-specific writer stream. |
 
 ## Acceptance Bar
 

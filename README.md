@@ -57,6 +57,9 @@ What PCG brings together:
   infrastructure, and environment differences before you merge.
 - **Shared platform memory:** API, MCP, CLI, ingester, reducer, Postgres, and
   graph backend run as one service shape instead of one-off local scripts.
+- **Real graph-backend choice:** NornicDB is the default first-class backend,
+  and Neo4j is supported for teams that already run Neo4j or need its tooling.
+  Both use PCG's shared Cypher/Bolt graph contract.
 - **Operator visibility:** facts-first indexing, queues, status, metrics,
   traces, and logs give platform teams something they can run and debug.
 
@@ -121,8 +124,12 @@ pcg graph start --workspace-root "$PWD"
 ```
 
 PCG officially supports NornicDB and Neo4j for graph storage. NornicDB is the
-default. Postgres stores relational state, facts, queues, status, content, and
-recovery data.
+default first-class backend. Neo4j is the first-class compatibility path for
+teams with existing Neo4j operations, licenses, dashboards, or graph tooling.
+Both backends run the same PCG graph model through the shared Cypher/Bolt
+contract; backend-specific code stays in narrow wiring, schema, retry, and
+dialect seams. Postgres stores relational state, facts, queues, status,
+content, and recovery data.
 
 ## Where PCG Shines
 
@@ -135,6 +142,8 @@ Once PCG is running in-cluster, teams get:
 - one API for internal automation and platform workflows
 - continuous indexing instead of one person's local snapshot
 - shared graph truth for code, deploy paths, workloads, and infrastructure
+- a graph backend choice: run the default NornicDB path or choose Neo4j when
+  your platform already standardizes on it
 - operator-grade health checks, telemetry, and recovery state
 
 That turns PCG from "a useful local graph" into a source of context your whole
