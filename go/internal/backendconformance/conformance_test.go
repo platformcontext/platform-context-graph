@@ -153,6 +153,64 @@ func TestDefaultWriteCorpusSeedsDeadCodeReadinessFixture(t *testing.T) {
 	}
 }
 
+func TestDefaultWriteCorpusCoversCanonicalFileEntityContainment(t *testing.T) {
+	t.Parallel()
+
+	writeCases := DefaultWriteCorpus()
+	var matched bool
+	for _, tc := range writeCases {
+		if tc.Name != "canonical file entity containment idempotency" {
+			continue
+		}
+		matched = true
+		if !tc.RequireAtomicGroup {
+			t.Fatal("containment write case must require atomic visibility")
+		}
+		var sawFile, sawEntity, sawContains bool
+		for _, stmt := range tc.Statements {
+			if strings.Contains(stmt.Cypher, "MERGE (f:File") {
+				sawFile = true
+			}
+			if strings.Contains(stmt.Cypher, "MERGE (n:Function") {
+				sawEntity = true
+			}
+			if strings.Contains(stmt.Cypher, "MERGE (f)-[rel:CONTAINS]->(n)") {
+				sawContains = true
+			}
+		}
+		if !sawFile || !sawEntity || !sawContains {
+			t.Fatalf("containment case file/entity/edge coverage = %v/%v/%v, want all true", sawFile, sawEntity, sawContains)
+		}
+	}
+	if !matched {
+		t.Fatal("DefaultWriteCorpus() missing canonical file entity containment case")
+	}
+}
+
+func TestDefaultReadCorpusVerifiesCanonicalFileEntityContainment(t *testing.T) {
+	t.Parallel()
+
+	var matched bool
+	for _, tc := range DefaultReadCorpus() {
+		if tc.Name != "canonical file entity containment readback" {
+			continue
+		}
+		matched = true
+		if tc.MinRows != 1 {
+			t.Fatalf("containment read MinRows = %d, want 1", tc.MinRows)
+		}
+		if !strings.Contains(tc.Cypher, "contains_count = 1") {
+			t.Fatalf("containment read query does not enforce idempotent relationship count: %s", tc.Cypher)
+		}
+		if !strings.Contains(tc.Cypher, "MATCH (f:File") || !strings.Contains(tc.Cypher, "CONTAINS") {
+			t.Fatalf("containment read query does not verify File CONTAINS entity: %s", tc.Cypher)
+		}
+	}
+	if !matched {
+		t.Fatal("DefaultReadCorpus() missing canonical file entity containment readback")
+	}
+}
+
 func TestDefaultWriteCorpusRunsPhaseGroupedCanonicalCases(t *testing.T) {
 	t.Parallel()
 

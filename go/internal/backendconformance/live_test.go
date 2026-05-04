@@ -61,13 +61,15 @@ func TestLiveBackendConformance(t *testing.T) {
 		}
 	}()
 
-	if backend == runtimecfg.GraphBackendNornicDB {
-		if _, err := RunPhaseWriteCorpus(ctx, executor, DefaultWriteCorpus()); err != nil {
-			t.Fatalf("run %s live write corpus: %v", backend, err)
-		}
-	} else {
-		if _, err := RunWriteCorpus(ctx, executor, DefaultWriteCorpus()); err != nil {
-			t.Fatalf("run %s live write corpus: %v", backend, err)
+	for attempt := 1; attempt <= 2; attempt++ {
+		if backend == runtimecfg.GraphBackendNornicDB {
+			if _, err := RunPhaseWriteCorpus(ctx, executor, DefaultWriteCorpus()); err != nil {
+				t.Fatalf("run %s live write corpus attempt %d: %v", backend, attempt, err)
+			}
+		} else {
+			if _, err := RunWriteCorpus(ctx, executor, DefaultWriteCorpus()); err != nil {
+				t.Fatalf("run %s live write corpus attempt %d: %v", backend, attempt, err)
+			}
 		}
 	}
 
@@ -222,6 +224,21 @@ DELETE rel`,
 		},
 		{
 			Operation:  sourcecypher.OperationCanonicalRetract,
+			Cypher:     `MATCH (n:Function {uid: $entity_uid}) DETACH DELETE n`,
+			Parameters: map[string]any{"entity_uid": "function:backend-conformance:file-entity"},
+		},
+		{
+			Operation:  sourcecypher.OperationCanonicalRetract,
+			Cypher:     `MATCH (f:File {path: $file_path}) DETACH DELETE f`,
+			Parameters: map[string]any{"file_path": "backend-conformance/src/example.go"},
+		},
+		{
+			Operation:  sourcecypher.OperationCanonicalRetract,
+			Cypher:     `MATCH (d:Directory {path: $dir_path}) DETACH DELETE d`,
+			Parameters: map[string]any{"dir_path": "backend-conformance/src"},
+		},
+		{
+			Operation:  sourcecypher.OperationCanonicalRetract,
 			Cypher:     `MATCH (caller:Function {uid: $caller_uid}) DELETE caller`,
 			Parameters: map[string]any{"caller_uid": "function:backend-conformance:caller"},
 		},
@@ -232,7 +249,7 @@ DELETE rel`,
 		},
 		{
 			Operation:  sourcecypher.OperationCanonicalRetract,
-			Cypher:     `MATCH (r:Repository {id: $repo_id}) DELETE r`,
+			Cypher:     `MATCH (r:Repository {id: $repo_id}) DETACH DELETE r`,
 			Parameters: map[string]any{"repo_id": "repo:backend-conformance"},
 		},
 	}

@@ -14,7 +14,7 @@ backends:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/storage/cypher
           - compose_e2e: live-backend-conformance
-        notes: Default backend while PCG tracks latest NornicDB main; profile-matrix and release-backed promotion gates remain open.
+        notes: Default backend while PCG tracks latest NornicDB main; the live corpus now covers repository writes, call edges, canonical File/Function upserts, and idempotent File CONTAINS Function readback. Profile-matrix and release-backed promotion gates remain open.
       direct_graph_reads:
         status: supported
         verification:
@@ -57,7 +57,7 @@ backends:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/storage/cypher
           - compose_e2e: live-backend-conformance
-        notes: Compatibility backend keeps grouped canonical writes through the shared Cypher executor surface.
+        notes: Compatibility backend keeps grouped canonical writes through the shared Cypher executor surface. Neo4j now proves the same file/entity/CONTAINS corpus as NornicDB before Compose bootstrap data is loaded.
       direct_graph_reads:
         status: supported
         verification:

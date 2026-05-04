@@ -189,30 +189,35 @@ func openBootstrapCanonicalWriter(
 		neo4jBatchSize(getenv),
 		instruments,
 	)
+	labelBatchSizes := map[string]int(nil)
+	orderedLabels := []string(nil)
+	fileBatchSize := 0
+	entityBatchSize := 0
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
-		fileBatchSize, err := nornicDBPositiveIntEnv(getenv, nornicDBFileBatchSizeEnv, defaultNornicDBFileBatchSize)
+		fileBatchSize, err = nornicDBPositiveIntEnv(getenv, nornicDBFileBatchSizeEnv, defaultNornicDBFileBatchSize)
 		if err != nil {
 			_ = closeBootstrapNeo4jDriver(driver)
 			return nil, nil, err
 		}
-		entityBatchSize, err := nornicDBPositiveIntEnv(getenv, nornicDBEntityBatchSizeEnv, defaultNornicDBEntityBatchSize)
+		entityBatchSize, err = nornicDBPositiveIntEnv(getenv, nornicDBEntityBatchSizeEnv, defaultNornicDBEntityBatchSize)
 		if err != nil {
 			_ = closeBootstrapNeo4jDriver(driver)
 			return nil, nil, err
 		}
-		labelBatchSizes, err := nornicDBEntityLabelBatchSizes(getenv, entityBatchSize)
+		labelBatchSizes, err = nornicDBEntityLabelBatchSizes(getenv, entityBatchSize)
 		if err != nil {
 			_ = closeBootstrapNeo4jDriver(driver)
 			return nil, nil, err
 		}
-		writer = writer.
-			WithFileBatchSize(fileBatchSize).
-			WithEntityBatchSize(entityBatchSize).
-			WithEntityContainmentInEntityUpsert()
-		for label, batchSize := range labelBatchSizes {
-			writer = writer.WithEntityLabelBatchSize(label, batchSize)
-		}
+		orderedLabels = orderedBootstrapEntityBatchLabels(labelBatchSizes)
 	}
+	writer = configureBootstrapCanonicalWriter(writer, bootstrapCanonicalWriterConfig{
+		GraphBackend:                      graphBackend,
+		FileBatchSize:                     fileBatchSize,
+		EntityBatchSize:                   entityBatchSize,
+		EntityLabelBatchSizes:             labelBatchSizes,
+		OrderedEntityLabelBatchSizeLabels: orderedLabels,
+	})
 
 	return writer, bootstrapNeo4jDriverCloser{Driver: driver}, nil
 }

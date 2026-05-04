@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 )
@@ -86,6 +87,37 @@ func TestBootstrapNornicDBPhaseGroupExecutorWrapsChunkFailure(t *testing.T) {
 	}
 }
 
+func TestConfigureBootstrapCanonicalWriterInlinesContainmentForNeo4j(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingBootstrapGroupExecutor{}
+	writer := sourcecypher.NewCanonicalNodeWriter(executor, 500, nil)
+	writer = configureBootstrapCanonicalWriter(writer, bootstrapCanonicalWriterConfig{
+		GraphBackend: runtime.GraphBackendNeo4j,
+	})
+
+	if err := writer.Write(context.Background(), bootstrapContainmentMaterialization()); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var inlineEntities int
+	for _, stmt := range executor.groupStatements {
+		if stmt.Parameters[sourcecypher.StatementMetadataPhaseKey] == sourcecypher.CanonicalPhaseEntityContainment {
+			t.Fatalf("Neo4j bootstrap writer emitted separate entity_containment statement: %s", stmt.Cypher)
+		}
+		if stmt.Parameters[sourcecypher.StatementMetadataPhaseKey] != sourcecypher.CanonicalPhaseEntities {
+			continue
+		}
+		if strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") &&
+			strings.Contains(stmt.Cypher, "MERGE (f)-[rel:CONTAINS]->(n)") {
+			inlineEntities++
+		}
+	}
+	if inlineEntities != 1 {
+		t.Fatalf("inline entity containment statements = %d, want 1", inlineEntities)
+	}
+}
+
 func bootstrapTestStatement(summary string) sourcecypher.Statement {
 	return sourcecypher.Statement{
 		Cypher: "RETURN $value",
@@ -98,8 +130,9 @@ func bootstrapTestStatement(summary string) sourcecypher.Statement {
 }
 
 type recordingBootstrapGroupExecutor struct {
-	groupSizes []int
-	err        error
+	groupSizes      []int
+	groupStatements []sourcecypher.Statement
+	err             error
 }
 
 func (r *recordingBootstrapGroupExecutor) Execute(context.Context, sourcecypher.Statement) error {
@@ -108,5 +141,43 @@ func (r *recordingBootstrapGroupExecutor) Execute(context.Context, sourcecypher.
 
 func (r *recordingBootstrapGroupExecutor) ExecuteGroup(_ context.Context, stmts []sourcecypher.Statement) error {
 	r.groupSizes = append(r.groupSizes, len(stmts))
+	r.groupStatements = append(r.groupStatements, stmts...)
 	return r.err
+}
+
+func bootstrapContainmentMaterialization() projector.CanonicalMaterialization {
+	return projector.CanonicalMaterialization{
+		ScopeID:      "scope-1",
+		GenerationID: "gen-1",
+		RepoID:       "repo-1",
+		RepoPath:     "/repos/my-repo",
+		Repository: &projector.RepositoryRow{
+			RepoID: "repo-1",
+			Name:   "my-repo",
+			Path:   "/repos/my-repo",
+		},
+		Files: []projector.FileRow{
+			{
+				Path:         "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				Name:         "main.go",
+				Language:     "go",
+				RepoID:       "repo-1",
+				DirPath:      "/repos/my-repo/src",
+			},
+		},
+		Entities: []projector.EntityRow{
+			{
+				EntityID:     "entity-1",
+				Label:        "Function",
+				EntityName:   "handleRelationships",
+				FilePath:     "/repos/my-repo/src/main.go",
+				RelativePath: "src/main.go",
+				StartLine:    12,
+				EndLine:      34,
+				Language:     "go",
+				RepoID:       "repo-1",
+			},
+		},
+	}
 }

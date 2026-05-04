@@ -35,6 +35,12 @@ The write corpus targets the current Cypher executor family:
 - `GroupExecutor`
 - `PhaseGroupExecutor`
 
+The live corpus now includes the source-local canonical containment path:
+repository, directory, file, function, and `File-[:CONTAINS]->Function`. The
+live test runs those writes twice and then reads the relationship back with a
+single-edge assertion. A backend can no longer pass the canonical-write smoke
+test while skipping file/entity containment.
+
 PCG does not currently expose one concrete Go interface named `GraphWrite`.
 When older ADR language says `GraphWrite`, read that as this Cypher write
 executor family unless a later ADR formalizes a narrower interface.
