@@ -76,7 +76,11 @@ func resolvePinnedNornicDBReleaseSource(preferHeadless bool) (string, string, er
 }
 
 func missingPinnedNornicDBReleaseAssetError(kind, pcgVersion, hostOS, hostArch string) error {
-	return fmt.Errorf("no embedded %s NornicDB release asset for PCG %s on %s/%s; PCG currently tracks the latest NornicDB main branch, so build NornicDB from main and run pcg install nornicdb --from <path-to-nornicdb-headless>", kind, pcgVersion, hostOS, hostArch)
+	sourceHint := "<path-to-nornicdb-headless>"
+	if kind == "full" {
+		sourceHint = "<path-to-nornicdb>"
+	}
+	return fmt.Errorf("no embedded %s NornicDB release asset for PCG %s on %s/%s; PCG currently tracks the latest NornicDB main branch, so build NornicDB from main and run pcg install nornicdb --from %s", kind, pcgVersion, hostOS, hostArch, sourceHint)
 }
 
 func readPinnedNornicDBReleaseManifest() (pinnedNornicDBReleaseManifest, error) {

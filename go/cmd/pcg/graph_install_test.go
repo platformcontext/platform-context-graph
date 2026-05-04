@@ -372,8 +372,10 @@ func TestInstallNornicDBWithoutSourceRejectsMissingPinnedFullAsset(t *testing.T)
 	if err == nil {
 		t.Fatal("installNornicDB() error = nil, want missing full-asset error")
 	}
-	if !strings.Contains(err.Error(), "no embedded full NornicDB release asset") {
-		t.Fatalf("installNornicDB() error = %q, want missing full-asset guidance", err.Error())
+	if !strings.Contains(err.Error(), "no embedded full NornicDB release asset") ||
+		!strings.Contains(err.Error(), "<path-to-nornicdb>") ||
+		strings.Contains(err.Error(), "<path-to-nornicdb-headless>") {
+		t.Fatalf("installNornicDB() error = %q, want full-binary guidance", err.Error())
 	}
 }
 
