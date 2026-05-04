@@ -27,15 +27,41 @@ and in telemetry span / metric labels as `graph_backend`.
 | Profile | Graph backend required |
 | --- | --- |
 | `local_lightweight` | None |
-| `local_authoritative` | Yes, installed locally via the steps below |
+| `local_authoritative` | Yes, embedded in the local `pcg` binary when built with `-tags nolocalllm`; external NornicDB process mode is optional |
 | `local_full_stack` | Provided by Compose; NornicDB by default, Neo4j via `docker-compose.neo4j.yml` |
 | `production` | Provided by Helm / Kubernetes as an external Bolt-compatible graph endpoint |
 
-## Current local-authoritative requirement
+## Current local-authoritative runtime
 
-`local_authoritative` requires a verified NornicDB binary. PCG
-defaults to the laptop-friendly headless artifact and discovers binaries in
-this order:
+`local_authoritative` defaults to the embedded NornicDB runtime when the `pcg`
+binary is built with `-tags nolocalllm`. That is the normal local binary path:
+users do not need to install `nornicdb-headless` just to run
+`pcg graph start`.
+
+Plain PCG builds cannot link NornicDB's library-mode runtime today because the
+current NornicDB import path still pulls in optional local-LLM linker inputs
+unless `nolocalllm` is set. Those builds fail by default with rebuild guidance.
+Process mode is available only when selected explicitly.
+
+Process mode remains available for maintainers testing a specific latest-main
+NornicDB binary:
+
+```bash
+PCG_NORNICDB_RUNTIME=process \
+PCG_NORNICDB_BINARY=/absolute/path/to/nornicdb-headless \
+pcg graph start --workspace-root /path/to/repo
+```
+
+PCG chooses the local NornicDB runtime in this order:
+
+1. `PCG_NORNICDB_BINARY` set: run that binary as an external process
+2. `PCG_NORNICDB_RUNTIME=process`: run a discovered external process
+3. embedded runtime available: run NornicDB inside the `pcg` owner process
+4. embedded runtime unavailable: fail with guidance to rebuild with
+   `-tags nolocalllm` or select process mode explicitly
+
+When process mode is used, PCG defaults to the laptop-friendly headless
+artifact and discovers binaries in this order:
 
 1. `PCG_NORNICDB_BINARY`
 2. `${PCG_HOME}/bin/nornicdb-headless` installed by
@@ -43,7 +69,7 @@ this order:
 3. `nornicdb-headless` on `PATH`
 4. `nornicdb` on `PATH`
 
-The environment variable stays first so advanced users can temporarily test a
+The environment variable stays first so maintainers can temporarily test a
 different binary without mutating the managed install.
 
 The full `nornicdb` binary is supported when users opt in with
@@ -55,23 +81,24 @@ not make the full binary smaller. Hosted evaluation and future production
 packaging may use the full deployment artifact when that profile is
 promoted.
 
-PCG verifies candidate binaries by running `<binary> version` and requiring a
-`NornicDB ...` version string. A random admin password is generated once per
-workspace graph data root and stored in
+PCG verifies process-mode candidate binaries by running `<binary> version` and
+requiring a `NornicDB ...` version string. Both runtime modes generate a random
+admin password once per workspace graph data root and store it in
 `graph/nornicdb/pcg-credentials.json` with `0600` permissions. The live owner
 copies it to `owner.json` so attach processes can connect without a hardcoded
 shared secret.
 
 ## Managed install
 
-PCG currently tracks the latest NornicDB `main` branch. For now, that means
-the truthful local install path is explicit: build or choose the NornicDB
-binary you want to evaluate, then install it with `--from`.
+Managed installs are only needed for process mode. PCG currently tracks the
+latest NornicDB `main` branch. For now, that means the truthful process-mode
+install path is explicit: build or choose the NornicDB binary you want to
+evaluate, then install it with `--from`.
 
-Bare `pcg install nornicdb` is intentionally unavailable while the embedded
-release manifest has no accepted assets. It fails with guidance to build from
-NornicDB `main` and install that binary explicitly. This keeps local
-authoritative runs from silently using an older forked asset.
+Bare `pcg install nornicdb` is intentionally unavailable while the
+process-mode release manifest has no accepted assets. It fails with guidance
+to build from NornicDB `main` and install that binary explicitly. This keeps
+explicit process-mode runs from silently using an older forked asset.
 
 Explicit `--from` installs can consume any of these artefacts:
 
@@ -164,8 +191,7 @@ NORNICDB_HEADLESS=true nornicdb serve
 nornicdb serve --headless
 ```
 
-Container builds are useful for hosted or Compose-style experiments, but the
-current laptop sidecar launches a local binary:
+Container builds are useful for hosted or Compose-style experiments:
 
 ```bash
 docker build --build-arg HEADLESS=true -f docker/Dockerfile.arm64-metal .
@@ -177,10 +203,13 @@ docker build --build-arg HEADLESS=true -f docker/Dockerfile.arm64-metal .
 pcg install nornicdb
 ```
 
-This command is reserved for future release-backed installs. Today it fails
-because PCG tracks latest NornicDB `main` through explicit `--from` binaries
-instead of shipping an embedded release asset. When no-argument installs come
-back, they must be backed by an accepted manifest entry and checksum policy.
+This command is reserved for future release-backed process installs. Normal
+local binary users do not need it because embedded NornicDB is part of the
+`pcg` binary built with `-tags nolocalllm`. Today the no-argument installer
+fails because PCG tracks latest NornicDB `main` through explicit `--from`
+binaries instead of shipping a release manifest asset. When no-argument
+installs come back, they must be backed by an accepted manifest entry and
+checksum policy.
 
 ## Planned release-install hardening
 
@@ -282,9 +311,7 @@ pcg graph status
 
 - Installing Neo4j. Neo4j remains an explicit operator-managed compatibility
   path.
-- Running the graph backend as a system service. The sidecar is a
-  user-level process tied to the PCG lightweight host lifecycle.
-- Bundling the graph backend into the `pcg` binary. See the rejection in
-  [ADR 2026-04-20](../adrs/2026-04-20-embedded-local-backends-desktop-mode.md)
-  and the sidecar exception in
-  [ADR 2026-04-22](../adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
+- Running process-mode NornicDB as a system service. Process mode is a
+  maintainer/test path tied to the PCG lightweight host lifecycle.
+- Installing NornicDB for normal local binary mode. The default local path
+  embeds NornicDB in the `pcg` owner process.

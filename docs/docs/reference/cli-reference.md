@@ -78,13 +78,17 @@ Invalid values are rejected at startup. See
 [ADR 2026-04-22](../adrs/2026-04-22-nornicdb-graph-backend-candidate.md)
 for the backend history and compatibility notes.
 
-`local_authoritative` auto-manages NornicDB when a verified NornicDB
-binary is available. The laptop default is the headless artifact; the full
-binary remains an explicit opt-in. PCG resolves it in this order:
+`local_authoritative` auto-manages NornicDB. A `pcg` binary built with
+`-tags nolocalllm` runs NornicDB in-process, which is the normal local binary
+path. Users do not need to install `nornicdb-headless` for that mode.
+
+External process mode remains available when maintainers need to test a
+specific NornicDB build. Set `PCG_NORNICDB_RUNTIME=process`, or set
+`PCG_NORNICDB_BINARY` directly. Process-mode binary discovery uses this order:
 
 1. `PCG_NORNICDB_BINARY`
 2. `${PCG_HOME}/bin/nornicdb-headless` installed by
-   `pcg install nornicdb` or `pcg install nornicdb --from <source>`
+   `pcg install nornicdb --from <source>`
 3. `nornicdb-headless` in `PATH`
 4. `nornicdb` in `PATH`
 
@@ -108,17 +112,17 @@ use a disposable `PCG_HOME` / workspace data root.
 
 ### Graph backend commands
 
-The `local_authoritative` profile runs a graph-backend sidecar alongside the
-lightweight host. PCG exposes:
+The `local_authoritative` profile runs NornicDB inside the local `pcg` owner by
+default. PCG exposes:
 
 | Command | Purpose |
 | :--- | :--- |
 | `pcg graph status` | Available now. Report workspace graph-owner metadata, backend, PID, binary path, ports, log path, and current running state when present. |
-| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force] [--full]` | Available now. PCG currently tracks the latest NornicDB `main` branch, so the working install path is an explicit binary, tar archive, macOS package, or URL that you built or chose from that branch. The command verifies the binary, copies it to `${PCG_HOME}/bin/nornicdb-headless`, and records the source and checksums in the managed install manifest. Bare no-argument installs are accepted by the CLI but fail until an accepted manifest policy exists; `--full` is reserved for that future no-argument release flow. Remote downloads honor `Ctrl-C` and default to `30s`; override with `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` when slower links need more time. Signature verification remains future work. |
+| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force] [--full]` | Available now for process-mode testing. Normal embedded local runs do not require it. PCG currently tracks the latest NornicDB `main` branch, so the working process install path is an explicit binary, tar archive, macOS package, or URL that you built or chose from that branch. The command verifies the binary, copies it to `${PCG_HOME}/bin/nornicdb-headless`, and records the source and checksums in the managed install manifest. Bare no-argument installs are accepted by the CLI but fail until an accepted manifest policy exists; `--full` is reserved for that future no-argument release flow. Remote downloads honor `Ctrl-C` and default to `30s`; override with `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` when slower links need more time. Signature verification remains future work. |
 | `pcg graph logs [--workspace-root <path>]` | Available now. Print the current workspace `graph-nornicdb.log` file if present. |
-| `pcg graph stop [--workspace-root <path>]` | Available now. Request the workspace owner to shut down so the managed graph sidecar stops through the normal lifecycle; stale owner graph processes are stopped directly. |
-| `pcg graph start [--workspace-root <path>]` | Available now. Foreground shortcut for starting the `local_authoritative` workspace owner, equivalent to `PCG_QUERY_PROFILE=local_authoritative pcg watch .`. During startup and indexing it prints a live progress panel sourced from the shared status store: owner/profile/backend header, collector/projector/reducer flow lanes, and queue pressure. |
-| `pcg graph upgrade --from <source> [--sha256 <hex>] [--workspace-root <path>]` | Available now. Replace the managed NornicDB binary from a verified local binary, tar archive, macOS package, or URL; requires the workspace graph to be stopped first. |
+| `pcg graph stop [--workspace-root <path>]` | Available now. Request the workspace owner to shut down so embedded NornicDB, embedded Postgres, and child runtimes stop through the normal lifecycle; stale process-mode graph processes are stopped directly. |
+| `pcg graph start [--workspace-root <path>]` | Available now. Foreground shortcut for starting the `local_authoritative` workspace owner, equivalent to `PCG_QUERY_PROFILE=local_authoritative pcg watch .`. With a `-tags nolocalllm` build, this starts embedded Postgres and embedded NornicDB in the owner process, then starts the ingester and reducer. During startup and indexing it prints a live progress panel sourced from the shared status store: owner/profile/backend header, collector/projector/reducer flow lanes, and queue pressure. |
+| `pcg graph upgrade --from <source> [--sha256 <hex>] [--workspace-root <path>]` | Available now for process-mode testing. Replace the managed NornicDB binary from a verified local binary, tar archive, macOS package, or URL; requires the workspace graph to be stopped first. |
 
 Full operator contract: [Graph Backend Operations](graph-backend-operations.md).
 
@@ -264,8 +268,8 @@ fix.
 | `pcg graph logs [--workspace-root <path>]` | Print the current workspace graph-backend log file if present. |
 | `pcg graph stop [--workspace-root <path>]` | Request graph shutdown through the workspace owner, or stop a stale recorded graph process when the owner is already dead. |
 | `pcg graph start [--workspace-root <path>]` | Start the `local_authoritative` workspace owner in the foreground. |
-| `pcg graph upgrade --from <source> [--sha256 <hex>] [--workspace-root <path>]` | Replace the managed local graph binary from a binary path, tar archive, macOS package, or URL after the workspace graph is stopped. |
-| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force] [--full]` | Install a verified latest-main NornicDB binary into the managed PCG home from a binary path, tar archive, macOS package, or URL. Bare no-argument installs and `--full` are present in the CLI but reserved for a future accepted manifest policy. |
+| `pcg graph upgrade --from <source> [--sha256 <hex>] [--workspace-root <path>]` | Replace the managed process-mode graph binary from a binary path, tar archive, macOS package, or URL after the workspace graph is stopped. |
+| `pcg install nornicdb [--from <source>] [--sha256 <hex>] [--force] [--full]` | Install a verified latest-main NornicDB binary into the managed PCG home for explicit process-mode testing. Normal embedded local mode does not require this command. Bare no-argument installs and `--full` are present in the CLI but reserved for a future accepted manifest policy. |
 | `pcg mcp setup` | Configure IDE and CLI MCP integrations. |
 | `pcg mcp start` | Start the MCP server. |
 | `pcg mcp tools` | List MCP tools. |

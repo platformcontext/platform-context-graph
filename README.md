@@ -106,8 +106,11 @@ docker compose -f docker-compose.yaml -f docker-compose.telemetry.yml up --build
 For the CLI only, use Go's install command:
 
 ```bash
-go install github.com/platformcontext/platform-context-graph/go/cmd/pcg@latest
+go install -tags nolocalllm github.com/platformcontext/platform-context-graph/go/cmd/pcg@latest
 ```
+
+That build tag gives local mode its default embedded NornicDB runtime, so you
+do not need to install `nornicdb-headless` just to run `pcg graph start`.
 
 For local owner development, install the full PCG-prefixed runtime binary set
 from a checkout:
@@ -116,12 +119,19 @@ from a checkout:
 ./scripts/install-local-binaries.sh
 ```
 
-Then install the managed NornicDB sidecar and start a local workspace owner:
+That script builds the local owner `pcg` with embedded NornicDB, while the
+service binaries keep the deployment shape and connect to external graph
+endpoints.
+
+Then start a local workspace owner:
 
 ```bash
-pcg install nornicdb
 pcg graph start --workspace-root "$PWD"
 ```
+
+Keep that process running while you work. It starts embedded Postgres, embedded
+NornicDB, `pcg-ingester`, and `pcg-reducer` for the workspace. Stop it with
+`Ctrl-C` or `pcg graph stop --workspace-root "$PWD"` from another terminal.
 
 PCG officially supports NornicDB and Neo4j for graph storage. NornicDB is the
 default first-class backend. Neo4j is the first-class compatibility path for

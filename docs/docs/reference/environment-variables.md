@@ -172,10 +172,11 @@ advisory report.
 | `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` | `false` | graph writer | Conformance switch for Neo4j-style grouped writes on NornicDB. | Test/conformance only. Leave unset for normal laptop runs. |
 | `PCG_NORNICDB_REQUIRE_GROUPED_ROLLBACK` | `false` | NornicDB tests | Makes grouped rollback conformance mandatory. | Test gate only. |
 | `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT` | `false` | graph writer | Evaluation switch for cross-file batched containment. | Use only with a latest-main NornicDB binary that has focused proof for the repo shape under test. |
-| `PCG_NORNICDB_BINARY` | unset | local host, install, tests | Explicit NornicDB binary path. | Use to test a latest-main binary directly or temporarily override an older managed install. |
+| `PCG_NORNICDB_RUNTIME` | `embedded` | local host | Selects the local NornicDB runtime: `embedded` or `process`. | Leave unset for normal local mode. Set `process` only when testing an external NornicDB binary. |
+| `PCG_NORNICDB_BINARY` | unset | local host, install, tests | Explicit NornicDB binary path. Setting it selects process mode. | Use to test a latest-main binary directly or temporarily override an older managed install. |
 | `PCG_NORNICDB_INSTALL_TIMEOUT` | `30s` | `pcg install nornicdb` | Download timeout for installer sources. | Raise for slow artifact downloads. |
 | `NORNICDB_ENABLE_PPROF` | `false` | NornicDB process | Enables NornicDB profiling. | Use after PCG logs show the statement shape is correct but NornicDB runtime cost remains unknown. |
-| `NORNICDB_ADDRESS`, `NORNICDB_BOLT_PORT`, `NORNICDB_HTTP_PORT`, `NORNICDB_DATA_DIR`, `NORNICDB_AUTH`, `NORNICDB_DEFAULT_DATABASE`, `NORNICDB_HEADLESS`, `NORNICDB_MCP_ENABLED` | local host sets these | NornicDB sidecar | Sidecar process configuration. | Internal for `pcg graph start`; set manually only when running `nornicdb serve` outside PCG. |
+| `NORNICDB_ADDRESS`, `NORNICDB_BOLT_PORT`, `NORNICDB_HTTP_PORT`, `NORNICDB_DATA_DIR`, `NORNICDB_AUTH`, `NORNICDB_DEFAULT_DATABASE`, `NORNICDB_HEADLESS`, `NORNICDB_MCP_ENABLED` | local host sets these in process mode | NornicDB process | External NornicDB process configuration. | Internal for explicit process-mode runs; set manually only when running `nornicdb serve` outside PCG. |
 
 ## Workflow Coordinator
 
@@ -258,7 +259,7 @@ full-corpus validation is complete.
 
 | Variable | Default | Read By | Purpose | Tune When |
 | --- | --- | --- | --- | --- |
-| `PCG_LOCAL_AUTHORITATIVE_PERF` | unset / `false` | opt-in Go tests | Enables local-authoritative startup/query performance smoke tests. | Set only when `PCG_NORNICDB_BINARY` points at a real binary and the host is prepared for sidecar tests. |
+| `PCG_LOCAL_AUTHORITATIVE_PERF` | unset / `false` | opt-in Go tests | Enables local-authoritative startup/query performance smoke tests. | Set only for local-authoritative smoke tests. Use `-tags nolocalllm` for embedded mode, or set `PCG_NORNICDB_RUNTIME=process` plus `PCG_NORNICDB_BINARY` for process-mode tests. |
 
 ## Deprecated Or Unsupported
 

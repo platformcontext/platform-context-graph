@@ -4,7 +4,8 @@ The local setup docs now split the two laptop paths.
 
 If you want one workspace owner from your terminal, use
 [Local binaries](../run-locally/local-binaries.md). That path builds the Go
-binaries, installs NornicDB, and starts `pcg graph start`.
+binaries, embeds NornicDB in the local `pcg` owner, and starts
+`pcg graph start`.
 
 If you want the full local service stack, use
 [Docker Compose](../run-locally/docker-compose.md). That path starts the API,

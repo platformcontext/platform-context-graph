@@ -29,14 +29,18 @@ const (
 	localNornicDBBindAddress     = "127.0.0.1"
 	localNornicDBAdminUsername   = "admin"
 	localNornicDBDefaultDatabase = "nornic"
+	localNornicDBRuntimeModeEnv  = "PCG_NORNICDB_RUNTIME"
 )
 
 var (
-	localGraphLookPath         = exec.LookPath
-	localGraphReadVersion      = readLocalGraphVersion
-	localGraphGeneratePassword = generateLocalGraphPassword
-	localGraphHTTPHealthy      = graphHTTPHealthy
-	localGraphBoltHealthy      = graphBoltHealthy
+	localGraphLookPath          = exec.LookPath
+	localGraphReadVersion       = readLocalGraphVersion
+	localGraphGeneratePassword  = generateLocalGraphPassword
+	localGraphHTTPHealthy       = graphHTTPHealthy
+	localGraphBoltHealthy       = graphBoltHealthy
+	localGraphStartEmbedded     = startEmbeddedLocalNornicDB
+	localGraphStartProcess      = startProcessLocalNornicDB
+	localGraphEmbeddedAvailable = embeddedLocalNornicDBAvailable
 )
 
 type managedLocalGraph struct {
@@ -53,6 +57,7 @@ type managedLocalGraph struct {
 	PID        int
 	Cmd        *exec.Cmd
 	logFile    io.Closer
+	shutdown   func(context.Context) error
 }
 
 func startManagedLocalGraph(ctx context.Context, layout pcglocal.Layout, runtimeConfig localHostRuntimeConfig) (*managedLocalGraph, error) {
@@ -65,143 +70,35 @@ func startManagedLocalGraph(ctx context.Context, layout pcglocal.Layout, runtime
 }
 
 func startManagedLocalNornicDB(ctx context.Context, layout pcglocal.Layout) (*managedLocalGraph, error) {
-	binaryPath, err := resolveNornicDBBinary()
+	useProcess, err := useProcessLocalNornicDB(os.Getenv, localGraphEmbeddedAvailable())
 	if err != nil {
 		return nil, err
 	}
-	version, err := readLocalGraphVersion(binaryPath)
-	if err != nil {
-		return nil, err
+	if useProcess {
+		return localGraphStartProcess(ctx, layout)
 	}
-
-	boltPort, err := reserveLocalGraphPort()
-	if err != nil {
-		return nil, err
-	}
-	httpPort, err := reserveLocalGraphPort()
-	if err != nil {
-		return nil, err
-	}
-
-	dataDir := filepath.Join(layout.GraphDir, "nornicdb")
-	logPath := filepath.Join(layout.LogsDir, "graph-nornicdb.log")
-	if err := os.MkdirAll(dataDir, 0o700); err != nil {
-		return nil, fmt.Errorf("create graph data directory: %w", err)
-	}
-	if err := os.MkdirAll(layout.LogsDir, 0o700); err != nil {
-		return nil, fmt.Errorf("create graph logs directory: %w", err)
-	}
-	credentials, err := loadOrCreateLocalGraphCredentials(filepath.Join(dataDir, "pcg-credentials.json"))
-	if err != nil {
-		return nil, err
-	}
-
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("open graph log file: %w", err)
-	}
-
-	args := []string{
-		"serve",
-		"--headless",
-		"--mcp-enabled=false",
-		"--address=" + localNornicDBBindAddress,
-		fmt.Sprintf("--bolt-port=%d", boltPort),
-		fmt.Sprintf("--http-port=%d", httpPort),
-		"--data-dir=" + dataDir,
-	}
-	cmd := exec.Command(binaryPath, args...)
-	cmd.Args = append([]string{binaryPath}, args...)
-	cmd.Env = mergeEnvironment(pcgEnviron(), map[string]string{
-		"NORNICDB_ADDRESS":          localNornicDBBindAddress,
-		"NORNICDB_BOLT_PORT":        fmt.Sprintf("%d", boltPort),
-		"NORNICDB_HTTP_PORT":        fmt.Sprintf("%d", httpPort),
-		"NORNICDB_DATA_DIR":         dataDir,
-		"NORNICDB_MCP_ENABLED":      "false",
-		"NORNICDB_HEADLESS":         "true",
-		"NORNICDB_AUTH":             credentials.Username + "/" + credentials.Password,
-		"NORNICDB_DEFAULT_DATABASE": localNornicDBDefaultDatabase,
-	})
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	if err := cmd.Start(); err != nil {
-		_ = logFile.Close()
-		return nil, fmt.Errorf("start nornicdb: %w", err)
-	}
-
-	graph := &managedLocalGraph{
-		Backend:    query.GraphBackendNornicDB,
-		Version:    version,
-		BinaryPath: binaryPath,
-		Address:    localNornicDBBindAddress,
-		BoltPort:   boltPort,
-		HTTPPort:   httpPort,
-		DataDir:    dataDir,
-		LogPath:    logPath,
-		Username:   credentials.Username,
-		Password:   credentials.Password,
-		PID:        cmd.Process.Pid,
-		Cmd:        cmd,
-		logFile:    logFile,
-	}
-	if err := waitForManagedLocalGraph(ctx, graph, localGraphStartupTimeout); err != nil {
-		_ = stopManagedLocalGraph(graph, localGraphShutdownTimeout)
-		return nil, err
-	}
-	return graph, nil
+	return localGraphStartEmbedded(ctx, layout)
 }
 
-func resolveNornicDBBinary() (string, error) {
-	if raw := strings.TrimSpace(os.Getenv("PCG_NORNICDB_BINARY")); raw != "" {
-		if _, err := localGraphReadVersion(raw); err != nil {
-			return "", fmt.Errorf("verify nornicdb binary %q: %w", raw, err)
+// useProcessLocalNornicDB decides whether local-authoritative graph ownership
+// should spawn a managed process or use the in-process NornicDB runtime. Empty
+// runtime mode means embedded; process mode is an explicit maintainer escape
+// hatch for testing a patched backend.
+func useProcessLocalNornicDB(getenv func(string) string, embeddedAvailable bool) (bool, error) {
+	if strings.TrimSpace(getenv("PCG_NORNICDB_BINARY")) != "" {
+		return true, nil
+	}
+	switch mode := strings.ToLower(strings.TrimSpace(getenv(localNornicDBRuntimeModeEnv))); mode {
+	case "", "embedded":
+		if !embeddedAvailable {
+			return false, fmt.Errorf("embedded NornicDB is not available in this PCG build; rebuild with -tags nolocalllm or set %s=process", localNornicDBRuntimeModeEnv)
 		}
-		return raw, nil
+		return false, nil
+	case "process":
+		return true, nil
+	default:
+		return false, fmt.Errorf("%s must be embedded or process, got %q", localNornicDBRuntimeModeEnv, mode)
 	}
-	if binaryPath, err := managedNornicDBBinaryIfPresent(); err == nil {
-		return binaryPath, nil
-	} else if !os.IsNotExist(err) {
-		return "", err
-	}
-	var verifyErrs []error
-	for _, name := range []string{"nornicdb-headless", "nornicdb"} {
-		binaryPath, err := localGraphLookPath(name)
-		if err == nil {
-			if _, err := localGraphReadVersion(binaryPath); err != nil {
-				verifyErrs = append(verifyErrs, fmt.Errorf("%s at %q: %w", name, binaryPath, err))
-				continue
-			}
-			return binaryPath, nil
-		}
-	}
-	if len(verifyErrs) > 0 {
-		return "", fmt.Errorf("resolve nornicdb binary: discovered candidate binaries but none passed version verification: %v", verifyErrs)
-	}
-	return "", fmt.Errorf("resolve nornicdb binary: set PCG_NORNICDB_BINARY or place nornicdb-headless in PATH")
-}
-
-func readLocalGraphVersion(binaryPath string) (string, error) {
-	output, err := exec.Command(binaryPath, "version").Output()
-	if err != nil {
-		return "", fmt.Errorf("read nornicdb version: %w", err)
-	}
-	return parseNornicDBVersionOutput(string(output))
-}
-
-func parseNornicDBVersionOutput(output string) (string, error) {
-	version := strings.TrimSpace(output)
-	if version == "" {
-		return "", fmt.Errorf("empty output")
-	}
-	const prefix = "NornicDB "
-	if !strings.HasPrefix(version, prefix) {
-		return "", fmt.Errorf("unexpected output %q", version)
-	}
-	version = strings.TrimSpace(strings.TrimPrefix(version, prefix))
-	if version == "" {
-		return "", fmt.Errorf("missing version in output %q", output)
-	}
-	return version, nil
 }
 
 func generateLocalGraphPassword() (string, error) {
@@ -336,6 +233,12 @@ func stopManagedLocalGraph(graph *managedLocalGraph, timeout time.Duration) erro
 			_ = graph.logFile.Close()
 		}
 	}()
+
+	if graph.shutdown != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		return graph.shutdown(ctx)
+	}
 
 	if graph.Cmd == nil || graph.Cmd.Process == nil {
 		return nil
