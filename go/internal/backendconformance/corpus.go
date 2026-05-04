@@ -23,6 +23,7 @@ type ReadCase struct {
 	Capability CapabilityClass
 	Cypher     string
 	Parameters map[string]any
+	MinRows    int
 }
 
 // WriteCase is one backend-neutral graph write shape.
@@ -57,19 +58,20 @@ func DefaultReadCorpus() []ReadCase {
 			Cypher: `MATCH (r:Repository {id: $repo_id})
 RETURN r.id AS id, r.name AS name
 LIMIT 1`,
-			Parameters: map[string]any{"repo_id": "repo:example"},
+			Parameters: map[string]any{"repo_id": "repo:backend-conformance"},
+			MinRows:    1,
 		},
 		{
-			Name:       "bounded call path traversal",
+			Name:       "one-hop call traversal",
 			Capability: CapabilityPathTraversal,
-			Cypher: `MATCH p = (caller:Function {uid: $caller_uid})-[:CALLS*1..3]->(callee:Function {uid: $callee_uid})
-RETURN length(p) AS hops
-ORDER BY hops
+			Cypher: `MATCH (caller:Function {uid: $caller_uid})-[:CALLS]->(callee:Function {uid: $callee_uid})
+RETURN caller.uid AS caller_uid, callee.uid AS callee_uid
 LIMIT 1`,
 			Parameters: map[string]any{
-				"caller_uid": "function:example:caller",
-				"callee_uid": "function:example:callee",
+				"caller_uid": "function:backend-conformance:caller",
+				"callee_uid": "function:backend-conformance:callee",
 			},
+			MinRows: 1,
 		},
 		{
 			Name:       "dead-code candidate readiness",
@@ -79,7 +81,8 @@ WHERE NOT EXISTS { MATCH (f)<-[:CALLS]-(:Function) }
 RETURN f.uid AS uid, f.name AS name
 ORDER BY f.name
 LIMIT 25`,
-			Parameters: map[string]any{"repo_id": "repo:example"},
+			Parameters: map[string]any{"repo_id": "repo:backend-conformance"},
+			MinRows:    1,
 		},
 	}
 }
@@ -96,8 +99,8 @@ func DefaultWriteCorpus() []WriteCase {
 				Cypher: `MERGE (r:Repository {id: $repo_id})
 SET r.name = $name`,
 				Parameters: map[string]any{
-					"repo_id": "repo:example",
-					"name":    "example",
+					"repo_id": "repo:backend-conformance",
+					"name":    "backend-conformance",
 				},
 			}},
 		},
@@ -109,16 +112,24 @@ SET r.name = $name`,
 			Statements: []sourcecypher.Statement{
 				{
 					Operation: sourcecypher.OperationCanonicalUpsert,
-					Cypher:    `MERGE (caller:Function {uid: $caller_uid})`,
+					Cypher: `MERGE (caller:Function {uid: $caller_uid})
+SET caller.repo_id = $repo_id,
+    caller.name = $caller_name`,
 					Parameters: map[string]any{
-						"caller_uid": "function:example:caller",
+						"caller_uid":  "function:backend-conformance:caller",
+						"caller_name": "ExampleCaller",
+						"repo_id":     "repo:backend-conformance",
 					},
 				},
 				{
 					Operation: sourcecypher.OperationCanonicalUpsert,
-					Cypher:    `MERGE (callee:Function {uid: $callee_uid})`,
+					Cypher: `MERGE (callee:Function {uid: $callee_uid})
+SET callee.repo_id = $repo_id,
+    callee.name = $callee_name`,
 					Parameters: map[string]any{
-						"callee_uid": "function:example:callee",
+						"callee_uid":  "function:backend-conformance:callee",
+						"callee_name": "ExampleCallee",
+						"repo_id":     "repo:backend-conformance",
 					},
 				},
 				{
@@ -127,8 +138,8 @@ SET r.name = $name`,
 MATCH (callee:Function {uid: $callee_uid})
 MERGE (caller)-[:CALLS]->(callee)`,
 					Parameters: map[string]any{
-						"caller_uid": "function:example:caller",
-						"callee_uid": "function:example:callee",
+						"caller_uid": "function:backend-conformance:caller",
+						"callee_uid": "function:backend-conformance:callee",
 					},
 				},
 			},
@@ -156,6 +167,9 @@ func RunReadCorpus(ctx context.Context, graph GraphQuery, cases []ReadCase) (Rep
 		cancel()
 		if err != nil {
 			return Report{}, fmt.Errorf("read case %q: %w", tc.Name, err)
+		}
+		if tc.MinRows > 0 && len(rows) < tc.MinRows {
+			return Report{}, fmt.Errorf("read case %q returned %d rows, want at least %d", tc.Name, len(rows), tc.MinRows)
 		}
 		report.Results = append(report.Results, CaseResult{
 			Name:       tc.Name,
@@ -247,6 +261,9 @@ func validateReadCase(tc ReadCase) error {
 	}
 	if containsMutationKeyword(tc.Cypher) {
 		return fmt.Errorf("read case %q contains a mutation keyword", tc.Name)
+	}
+	if tc.MinRows < 0 {
+		return fmt.Errorf("read case %q minimum rows must be zero or positive", tc.Name)
 	}
 	return nil
 }

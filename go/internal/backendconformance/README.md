@@ -9,5 +9,6 @@ The package keeps two contracts together:
   adapters
 
 Default Go tests validate the matrix and harness without starting Neo4j or
-NornicDB. Live backend runs can reuse the same corpora from integration tests,
-Compose proofs, or remote validation.
+NornicDB. `scripts/verify_backend_conformance_live.sh` turns on the opt-in live
+test and runs the same corpora against a real Bolt endpoint for the NornicDB and
+Neo4j Compose lanes.

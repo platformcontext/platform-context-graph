@@ -13,18 +13,21 @@ backends:
         verification:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/storage/cypher
+          - compose_e2e: live-backend-conformance
         notes: Default backend while PCG tracks latest NornicDB main; profile-matrix and release-backed promotion gates remain open.
       direct_graph_reads:
         status: supported
         verification:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/query
+          - compose_e2e: live-backend-conformance
         notes: Served through the shared Bolt GraphQuery port with backend-aware query builders where needed.
       path_traversal:
         status: supported
         verification:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/query
+          - compose_e2e: live-backend-conformance
         notes: Bounded call-chain and transitive relationship reads use NornicDB-safe query shapes.
       full_text_support:
         status: not_required
@@ -35,6 +38,7 @@ backends:
         verification:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/query
+          - compose_e2e: live-backend-conformance
         notes: Graph-backed dead-code scans work at the current derived truth level; exact promotion still depends on broader root modeling.
       performance_envelope:
         status: experimental
@@ -51,18 +55,21 @@ backends:
         verification:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/storage/cypher
+          - compose_e2e: live-backend-conformance
         notes: Compatibility backend keeps grouped canonical writes through the shared Cypher executor surface.
       direct_graph_reads:
         status: supported
         verification:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/query
+          - compose_e2e: live-backend-conformance
         notes: Served through the same GraphQuery port used by API and reducer lookups.
       path_traversal:
         status: supported
         verification:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/query
+          - compose_e2e: live-backend-conformance
         notes: Bounded traversal and shortest-path query surfaces remain covered by query package contract tests.
       full_text_support:
         status: not_required
@@ -73,6 +80,7 @@ backends:
         verification:
           - go_test: ./internal/backendconformance
           - go_test: ./internal/query
+          - compose_e2e: live-backend-conformance
         notes: Neo4j remains the compatibility backend for graph-backed dead-code candidate scans.
       performance_envelope:
         status: supported

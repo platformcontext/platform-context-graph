@@ -22,10 +22,10 @@ readiness, and performance evidence.
 
 ## What The Harness Covers
 
-The default Go harness is intentionally DB-free. It proves that the matrix is
-valid, that it names the same official backends as the capability matrix, and
-that the shared read/write corpora can run against any adapter that satisfies
-PCG's graph ports.
+The default Go harness is intentionally DB-free. It proves the matrix is valid,
+that it names the same official backends as the capability matrix, and that the
+shared read/write corpora can run against any adapter that satisfies PCG's
+graph ports.
 
 The read corpus targets `GraphQuery`.
 
@@ -39,10 +39,37 @@ PCG does not currently expose one concrete Go interface named `GraphWrite`.
 When older ADR language says `GraphWrite`, read that as this Cypher write
 executor family unless a later ADR formalizes a narrower interface.
 
+## Live Backend Check
+
+The live check runs the same corpus against a real Bolt endpoint. It is opt-in
+so normal unit tests stay fast:
+
+```bash
+PCG_GRAPH_BACKEND=nornicdb ./scripts/verify_backend_conformance_live.sh
+PCG_GRAPH_BACKEND=neo4j ./scripts/verify_backend_conformance_live.sh
+```
+
+The script defaults to the local Compose credentials and database names:
+`nornic` for NornicDB and `neo4j` for Neo4j. Override the usual Bolt variables
+when you are testing a different target:
+
+```bash
+PCG_GRAPH_BACKEND=nornicdb \
+PCG_NEO4J_URI=bolt://localhost:7687 \
+PCG_NEO4J_USERNAME=neo4j \
+PCG_NEO4J_PASSWORD=change-me \
+PCG_NEO4J_DATABASE=nornic \
+./scripts/verify_backend_conformance_live.sh
+```
+
+GitHub Actions runs this live check in the end-to-end matrix before
+`bootstrap-index`, so both official backends prove the shared read/write corpus
+against a clean graph service.
+
 ## Promotion Rule
 
-Chunk 5 adds the deterministic harness and backend matrix. Chunk 5b is still
-the live profile-matrix proof across:
+Chunk 5 adds the deterministic harness, backend matrix, and live Compose-backed
+adapter check. Chunk 5b is still the profile-matrix proof across:
 
 - `local_authoritative`
 - `local_full_stack`

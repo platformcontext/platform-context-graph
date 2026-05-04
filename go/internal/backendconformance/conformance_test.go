@@ -32,6 +32,26 @@ func TestDefaultReadCorpusRunsAgainstGraphQuery(t *testing.T) {
 	}
 }
 
+func TestReadCorpusReportsRowsBelowMinimum(t *testing.T) {
+	t.Parallel()
+
+	readCases := []ReadCase{{
+		Name:       "direct repository read",
+		Capability: CapabilityDirectGraphReads,
+		Cypher:     "MATCH (r:Repository {id: $repo_id}) RETURN r.id AS id",
+		Parameters: map[string]any{"repo_id": "repo:backend-conformance"},
+		MinRows:    1,
+	}}
+
+	_, err := RunReadCorpus(context.Background(), &recordingGraphQuery{}, readCases)
+	if err == nil {
+		t.Fatal("RunReadCorpus() error = nil, want minimum row failure")
+	}
+	if !strings.Contains(err.Error(), "returned 0 rows, want at least 1") {
+		t.Fatalf("RunReadCorpus() error = %v, want minimum row context", err)
+	}
+}
+
 func TestReadCorpusRejectsMutationQueries(t *testing.T) {
 	t.Parallel()
 
@@ -55,7 +75,7 @@ func TestReadCorpusRejectsMutationQueries(t *testing.T) {
 				Name:       tt.name,
 				Capability: CapabilityDirectGraphReads,
 				Cypher:     tt.cypher,
-				Parameters: map[string]any{"repo_id": "repo:example"},
+				Parameters: map[string]any{"repo_id": "repo:backend-conformance"},
 			}}
 
 			_, err := RunReadCorpus(context.Background(), &recordingGraphQuery{}, mutating)
@@ -104,6 +124,32 @@ func TestDefaultWriteCorpusRunsGroupedCanonicalCases(t *testing.T) {
 	}
 	if executor.singleCalls == 0 {
 		t.Fatal("RunWriteCorpus() did not exercise single-statement write case")
+	}
+}
+
+func TestDefaultWriteCorpusSeedsDeadCodeReadinessFixture(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingCypherExecutor{}
+	if _, err := RunWriteCorpus(context.Background(), executor, DefaultWriteCorpus()); err != nil {
+		t.Fatalf("RunWriteCorpus() error = %v", err)
+	}
+
+	var functionStatements int
+	for _, stmt := range executor.groupStatements {
+		if !strings.Contains(stmt.Cypher, "SET ") {
+			continue
+		}
+		if !strings.Contains(stmt.Cypher, ":Function") {
+			continue
+		}
+		functionStatements++
+		if _, ok := stmt.Parameters["repo_id"]; !ok {
+			t.Fatalf("function statement parameters = %#v, want repo_id for dead-code read corpus", stmt.Parameters)
+		}
+	}
+	if functionStatements == 0 {
+		t.Fatal("grouped write corpus did not include function statements")
 	}
 }
 
@@ -157,7 +203,7 @@ func TestWriteCorpusReportsExecutorErrorsWithCaseName(t *testing.T) {
 			Operation: sourcecypher.OperationCanonicalUpsert,
 			Cypher:    "MERGE (r:Repository {id: $repo_id})",
 			Parameters: map[string]any{
-				"repo_id": "repo:example",
+				"repo_id": "repo:backend-conformance",
 			},
 		}},
 	}})
@@ -194,9 +240,10 @@ func (q *recordingGraphQuery) RunSingle(ctx context.Context, cypher string, para
 }
 
 type recordingCypherExecutor struct {
-	singleCalls int
-	groupCalls  int
-	err         error
+	singleCalls     int
+	groupCalls      int
+	groupStatements []sourcecypher.Statement
+	err             error
 }
 
 func (e *recordingCypherExecutor) Execute(context.Context, sourcecypher.Statement) error {
@@ -204,8 +251,9 @@ func (e *recordingCypherExecutor) Execute(context.Context, sourcecypher.Statemen
 	return e.err
 }
 
-func (e *recordingCypherExecutor) ExecuteGroup(_ context.Context, _ []sourcecypher.Statement) error {
+func (e *recordingCypherExecutor) ExecuteGroup(_ context.Context, stmts []sourcecypher.Statement) error {
 	e.groupCalls++
+	e.groupStatements = append(e.groupStatements, stmts...)
 	return e.err
 }
 
