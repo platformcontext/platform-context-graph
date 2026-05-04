@@ -1,4 +1,3 @@
-// Package queue defines the durable Go data-plane work-item contracts.
 package queue
 
 import (

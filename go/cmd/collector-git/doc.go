@@ -1,0 +1,11 @@
+// Package main runs the collector-git binary, the local verification runtime
+// for native Go repository selection, sync, snapshot collection, content
+// shaping, and fact commit into Postgres.
+//
+// The binary opens Postgres through the runtime config helpers, builds a
+// collector.Service backed by NativeRepositorySelector and
+// NativeRepositorySnapshotter, and hosts it through app.NewHostedWithStatusServer
+// so it exposes the shared `/healthz`, `/readyz`, `/metrics`, and
+// `/admin/status` admin surface. It honors SIGINT and SIGTERM for clean
+// shutdown.
+package main
