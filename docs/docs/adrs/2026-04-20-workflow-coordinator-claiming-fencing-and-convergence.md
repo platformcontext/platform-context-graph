@@ -10,17 +10,21 @@
 
 ## Status Review (2026-05-03)
 
-**Current disposition:** Accepted; claim substrate partial.
+**Current disposition:** Accepted; identity and exact reconciliation slice
+implemented.
 
-Claim tables, fencing operations, and claim issuance exist. Production
-convergence is still blocked by narrower identity work: some workflow
-reconciliation still joins readiness on `scope_id + generation_id` while graph
-projection phase state is keyed by `scope_id`, `acceptance_unit_id`,
-`source_run_id`, `generation_id`, keyspace, and phase.
+Claim tables, fencing operations, and claim issuance exist. The current branch
+adds the missing bounded-slice identity to `workflow_work_items`: `source_system`,
+`acceptance_unit_id`, and `source_run_id` now travel with `scope_id` and
+`generation_id`. Workflow reconciliation now joins reducer-published phase
+truth on `scope_id`, `acceptance_unit_id`, `source_run_id`, and
+`generation_id`, matching the identity portion of the
+`graph_projection_phase_state` primary key before counting a phase as
+published for a work item.
 
-**Remaining work:** add the missing acceptance-unit and source-run identity to
-workflow work items and reconciliation before enabling production claim
-ownership.
+**Remaining work:** first-class claim release, weighted family fairness,
+claim-enabled Git collector integration, webhook intake/back-pressure, and
+deployment promotion gates remain before enabling production claim ownership.
 
 ## Context
 
@@ -176,11 +180,11 @@ The reducer-owned phase state remains authoritative for downstream
 convergence. Implementations that compute completeness by joining
 `workflow_work_items` to `graph_projection_phase_state` MUST include
 `acceptance_unit_id` and `source_run_id` in the join predicate.
-Current `listWorkflowCollectorPhaseCountsQuery` in
-`go/internal/storage/postgres/workflow_run_reconciliation.go` joins on
-only `scope_id` + `generation_id`; that query is a blocker for
-correct convergence under concurrent runs and must be tightened before
-the coordinator ships multi-run fencing.
+This branch tightens `listWorkflowCollectorPhaseCountsQuery` in
+`go/internal/storage/postgres/workflow_run_reconciliation.go` so it no longer
+joins on only `scope_id` + `generation_id`. That removes the known
+false-completion path for concurrent runs that share a scope and generation but
+publish reducer truth for different acceptance units or source runs.
 
 ---
 

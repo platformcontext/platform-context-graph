@@ -50,6 +50,8 @@ SELECT
 FROM workflow_work_items AS item
 JOIN graph_projection_phase_state AS phase
   ON phase.scope_id = item.scope_id
+ AND phase.acceptance_unit_id = item.acceptance_unit_id
+ AND phase.source_run_id = item.source_run_id
  AND phase.generation_id = item.generation_id
 WHERE item.run_id = $1
 GROUP BY item.collector_kind, phase.keyspace, phase.phase

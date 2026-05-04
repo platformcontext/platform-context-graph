@@ -157,7 +157,10 @@ type WorkItem struct {
 	RunID               string
 	CollectorKind       scope.CollectorKind
 	CollectorInstanceID string
+	SourceSystem        string
 	ScopeID             string
+	AcceptanceUnitID    string
+	SourceRunID         string
 	GenerationID        string
 	FairnessKey         string
 	Status              WorkItemStatus
@@ -189,7 +192,19 @@ func (w WorkItem) Validate() error {
 	if err := validateIdentifier("collector_instance_id", w.CollectorInstanceID); err != nil {
 		return err
 	}
+	if err := validateIdentifier("source_system", w.SourceSystem); err != nil {
+		return err
+	}
 	if err := validateIdentifier("scope_id", w.ScopeID); err != nil {
+		return err
+	}
+	if err := validateIdentifier("acceptance_unit_id", w.AcceptanceUnitID); err != nil {
+		return err
+	}
+	if err := validateIdentifier("source_run_id", w.SourceRunID); err != nil {
+		return err
+	}
+	if err := validateIdentifier("generation_id", w.GenerationID); err != nil {
 		return err
 	}
 	if err := w.Status.Validate(); err != nil {

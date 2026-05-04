@@ -483,7 +483,7 @@ Run workflow coordinator work in a stricter order:
 1. For Helm and Kustomize reachability, should the next slice be parser-only first or renderer-backed?
 2. For cloud and Terraform-state collector readiness, should we build fixture-only inputs first, or include a live-account proof path?
 3. For correlation materialization, should admitted candidates stay candidate truth for this slice, or should materialized graph truth consume them?
-4. For workflow coordinator identity, is `source_system` required on the work item now, or can the first schema change add `acceptance_unit_id` and `source_run_id` only?
+4. Resolved for workflow coordinator identity: `source_system` belongs on the work item with `acceptance_unit_id` and `source_run_id`.
 
 ## Final Verification Gate
 

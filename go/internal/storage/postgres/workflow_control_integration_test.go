@@ -353,7 +353,10 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsUsesReducerPhaseTru
 		RunID:               run.RunID,
 		CollectorKind:       scope.CollectorGit,
 		CollectorInstanceID: "collector-git-default",
+		SourceSystem:        scopeValue.SourceSystem,
 		ScopeID:             scopeValue.ScopeID,
+		AcceptanceUnitID:    "integration-repo-1",
+		SourceRunID:         generation.GenerationID,
 		GenerationID:        generation.GenerationID,
 		Status:              workflow.WorkItemStatusCompleted,
 		CreatedAt:           now,
@@ -401,7 +404,7 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsUsesReducerPhaseTru
 		{
 			Key: reducer.GraphProjectionPhaseKey{
 				ScopeID:          scopeValue.ScopeID,
-				AcceptanceUnitID: "workload:integration-repo-1",
+				AcceptanceUnitID: "integration-repo-1",
 				SourceRunID:      generation.GenerationID,
 				GenerationID:     generation.GenerationID,
 				Keyspace:         reducer.GraphProjectionKeyspaceServiceUID,
@@ -413,7 +416,7 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsUsesReducerPhaseTru
 		{
 			Key: reducer.GraphProjectionPhaseKey{
 				ScopeID:          scopeValue.ScopeID,
-				AcceptanceUnitID: "workload:integration-repo-1",
+				AcceptanceUnitID: "integration-repo-1",
 				SourceRunID:      generation.GenerationID,
 				GenerationID:     generation.GenerationID,
 				Keyspace:         reducer.GraphProjectionKeyspaceServiceUID,
@@ -425,7 +428,7 @@ func TestWorkflowControlStoreIntegrationReconcileWorkflowRunsUsesReducerPhaseTru
 		{
 			Key: reducer.GraphProjectionPhaseKey{
 				ScopeID:          scopeValue.ScopeID,
-				AcceptanceUnitID: "workload:integration-repo-1",
+				AcceptanceUnitID: "integration-repo-1",
 				SourceRunID:      generation.GenerationID,
 				GenerationID:     generation.GenerationID,
 				Keyspace:         reducer.GraphProjectionKeyspaceServiceUID,
@@ -616,6 +619,18 @@ func mustUpsertScopeBoundary(t *testing.T, db *sql.DB, scopeValue scope.Ingestio
 
 func mustEnqueueWorkItem(t *testing.T, store *WorkflowControlStore, ctx context.Context, item workflow.WorkItem) {
 	t.Helper()
+	if item.SourceSystem == "" {
+		item.SourceSystem = string(item.CollectorKind)
+	}
+	if item.GenerationID == "" {
+		item.GenerationID = item.WorkItemID + "-generation"
+	}
+	if item.SourceRunID == "" {
+		item.SourceRunID = item.GenerationID
+	}
+	if item.AcceptanceUnitID == "" {
+		item.AcceptanceUnitID = item.ScopeID
+	}
 	if err := store.EnqueueWorkItems(ctx, []workflow.WorkItem{item}); err != nil {
 		t.Fatalf("EnqueueWorkItems() error = %v, want nil", err)
 	}

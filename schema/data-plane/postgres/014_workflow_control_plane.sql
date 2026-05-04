@@ -16,7 +16,10 @@ CREATE TABLE IF NOT EXISTS workflow_work_items (
     run_id TEXT NOT NULL REFERENCES workflow_runs(run_id) ON DELETE CASCADE,
     collector_kind TEXT NOT NULL,
     collector_instance_id TEXT NOT NULL,
+    source_system TEXT NOT NULL,
     scope_id TEXT NOT NULL,
+    acceptance_unit_id TEXT NOT NULL,
+    source_run_id TEXT NOT NULL,
     generation_id TEXT NULL,
     fairness_key TEXT NULL,
     status TEXT NOT NULL,
@@ -46,6 +49,18 @@ CREATE INDEX IF NOT EXISTS workflow_work_items_lease_idx
     WHERE lease_expires_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS workflow_work_items_run_idx
     ON workflow_work_items (run_id, status, updated_at DESC);
+
+ALTER TABLE workflow_work_items
+    ADD COLUMN IF NOT EXISTS source_system TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE workflow_work_items
+    ADD COLUMN IF NOT EXISTS acceptance_unit_id TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE workflow_work_items
+    ADD COLUMN IF NOT EXISTS source_run_id TEXT NOT NULL DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS workflow_work_items_phase_tuple_idx
+    ON workflow_work_items (run_id, scope_id, acceptance_unit_id, source_run_id, generation_id);
 
 CREATE TABLE IF NOT EXISTS workflow_claims (
     claim_id TEXT PRIMARY KEY,
