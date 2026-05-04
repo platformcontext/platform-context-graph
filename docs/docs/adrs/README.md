@@ -34,23 +34,23 @@ still needs an owner.
 | `2026-04-20-terraform-state-collector.md` | Design accepted; runtime not implemented | Build the Terraform state collector runtime, readers, redaction, facts, and docs. |
 | `2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md` | Accepted; Git claim proof path implemented | Keep Helm claims dark until remote full-corpus validation and future collector-family gates are ready. |
 | `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md` | Accepted; guarded proof path implemented | Work items carry the full phase-state tuple, reconciliation uses exact downstream truth, release/fairness/Git claim primitives exist, and deployment promotion is blocked behind proof. |
-| `2026-04-22-nornicdb-graph-backend-candidate.md` | Accepted with conditions | Latest-main policy is explicit; backend conformance and profile gates have NornicDB evidence; complete Neo4j parity research, then finish install trust and broader host coverage. |
+| `2026-04-22-nornicdb-graph-backend-candidate.md` | Accepted with conditions | Latest-main policy is explicit; backend conformance and profile gates have NornicDB evidence; Neo4j parity research is now complete and recorded in the accepted 2026-05-04 ADR; finish install trust and broader host coverage. |
 
 ## In Progress
 
 | ADR | Current state | What remains |
 | --- | --- | --- |
 | `2026-04-19-multi-source-correlation-dsl-and-collector-readiness.md` | In progress | DSL/rule-pack substrate and source-kind contracts exist; AWS, Terraform-state, webhook, and full cloud/runtime joins remain. |
-| `2026-04-20-embedded-local-backends-implementation-plan.md` | In progress | Local host, local-authoritative runtime, backend conformance harness, profile matrix, and latest-main NornicDB proof are in place; Neo4j parity research is active, with install trust, host envelope, and plugin work still open. |
+| `2026-04-20-embedded-local-backends-implementation-plan.md` | In progress | Local host, local-authoritative runtime, backend conformance harness, profile matrix, and latest-main NornicDB proof are in place; install trust, host envelope, and plugin work still open. |
 | `2026-04-24-iac-usage-reachability-and-refactor-impact.md` | In progress | Dead-IaC reachability and pagination are proven; shared neighborhood, impact, integrity, and remaining IaC-family coverage remain. |
-| `2026-05-04-neo4j-parity-optimization-plan.md` | In progress | Research what Neo4j needs to follow the same optimized adapter path as NornicDB before deciding parity promotion versus compatibility-only. |
+| `2026-05-04-neo4j-parity-optimization-plan.md` | Accepted | Records the schema-first Neo4j proof, the shared writer cleanup, and the resulting support posture. |
 
 ## Discussion Shortlist
 
 The ADRs that need active planning next are:
 
 1. Workflow coordinator production claim ownership.
-2. Neo4j parity optimization research and baseline.
+2. Neo4j parity support-posture cleanup and residual host-trust work.
 3. NornicDB latest-main default and conformance closure.
 4. AWS cloud scanner and Terraform state collector implementation.
 5. IaC impact/integrity beyond dead-IaC reachability.
