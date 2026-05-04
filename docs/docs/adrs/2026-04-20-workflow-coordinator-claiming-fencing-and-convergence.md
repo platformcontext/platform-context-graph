@@ -20,6 +20,13 @@ collector runner now exist. Work items carry `source_system`,
 Workflow reconciliation joins reducer-published phase truth on that exact tuple
 before counting a phase as published for a work item.
 
+The Postgres workflow-control migration now backfills those identity fields for
+upgraded rows: `source_system` comes from `collector_kind`,
+`acceptance_unit_id` comes from `scope_id`, and `source_run_id` comes from
+`generation_id`. Rows that predate required generation identity are marked
+terminal with `legacy_missing_generation_identity` instead of being claimed
+under an invented active run.
+
 Deployment promotion is still guarded. Compose has an explicit active proof
 path, but Helm remains dark-only until the remote full-corpus proof, API/MCP
 truth checks, and evidence validation are clean. Webhook intake/back-pressure
