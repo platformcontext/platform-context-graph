@@ -169,6 +169,11 @@ adapter seam.
 
 ## Operational notes
 
+- Manual Neo4j or NornicDB production-profile performance runs must apply
+  `pcg-bootstrap-data-plane` before indexing. `pcg-bootstrap-index` applies the
+  Postgres bootstrap schema, but it does not apply graph indexes or constraints;
+  runs that skip the data-plane schema step are setup diagnostics, not backend
+  acceptance evidence.
 - `pcg_dp_neo4j_deadlock_retries_total` rising signals concurrent MERGE
   contention on shared nodes (Repository, Directory, Module); check worker
   concurrency before raising `RetryingExecutor.MaxRetries`.
@@ -222,6 +227,9 @@ adapter seam.
   behavior) belong in documented seams here or in `cmd/` wiring. Do not add
   product-specific branches in callers, and do not create a separate writer
   stream for Neo4j unless a future ADR explicitly rejects the shared contract.
+- Performance work should first improve this package's shared writer/query
+  shape. Only add backend-specific behavior after proving the shared Cypher
+  contract cannot express the needed correctness or performance property.
 
 ## Related docs
 
