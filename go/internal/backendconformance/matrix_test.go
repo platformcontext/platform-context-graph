@@ -58,6 +58,72 @@ func TestBackendConformanceMatrixKeepsNornicDBAsDefault(t *testing.T) {
 	}
 }
 
+func TestBackendConformanceMatrixRejectsEmptyVerificationEntries(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`version: v1
+updated_at: 2026-05-04
+owners: [platform-engineering]
+backends:
+  - id: nornicdb
+    default: true
+    official: true
+    classification: experimental
+    capabilities:
+      canonical_writes:
+        status: experimental
+        verification:
+          - go_test: ""
+        notes: has empty verification value
+      direct_graph_reads: {status: supported, verification: [{go_test: ./internal/query}], notes: ok}
+      path_traversal: {status: supported, verification: [{go_test: ./internal/query}], notes: ok}
+      full_text_support: {status: not_required, verification: [], notes: ok}
+      dead_code_readiness: {status: experimental, verification: [{go_test: ./internal/query}], notes: ok}
+      performance_envelope: {status: experimental, verification: [{remote_validation: proof}], notes: ok}
+`)
+
+	matrix, err := ParseMatrix(raw)
+	if err != nil {
+		t.Fatalf("ParseMatrix() error = %v", err)
+	}
+	if err := matrix.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want invalid verification entry error")
+	}
+}
+
+func TestBackendConformanceMatrixRejectsUnknownVerificationKeys(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`version: v1
+updated_at: 2026-05-04
+owners: [platform-engineering]
+backends:
+  - id: nornicdb
+    default: true
+    official: true
+    classification: experimental
+    capabilities:
+      canonical_writes:
+        status: experimental
+        verification:
+          - typo_gate: ./internal/backendconformance
+        notes: has unknown verification key
+      direct_graph_reads: {status: supported, verification: [{go_test: ./internal/query}], notes: ok}
+      path_traversal: {status: supported, verification: [{go_test: ./internal/query}], notes: ok}
+      full_text_support: {status: not_required, verification: [], notes: ok}
+      dead_code_readiness: {status: experimental, verification: [{go_test: ./internal/query}], notes: ok}
+      performance_envelope: {status: experimental, verification: [{remote_validation: proof}], notes: ok}
+`)
+
+	matrix, err := ParseMatrix(raw)
+	if err != nil {
+		t.Fatalf("ParseMatrix() error = %v", err)
+	}
+	if err := matrix.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want unknown verification key error")
+	}
+}
+
 func loadRepositoryBackendMatrix(t *testing.T) Matrix {
 	t.Helper()
 

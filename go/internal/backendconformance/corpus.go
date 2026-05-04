@@ -276,13 +276,44 @@ func validateWriteCase(tc WriteCase) error {
 // containsMutationKeyword applies a conservative lexical guard to corpus read
 // cases so the suite cannot accidentally mutate a live proof database.
 func containsMutationKeyword(cypher string) bool {
-	upper := strings.ToUpper(cypher)
-	for _, keyword := range []string{
-		"CREATE", "MERGE", "DELETE", "DETACH", "SET ", "REMOVE", "DROP", "FOREACH", "LOAD CSV",
-	} {
-		if strings.Contains(upper, keyword) {
+	tokens := strings.FieldsFunc(cypher, isCypherTokenSeparator)
+	for i, token := range tokens {
+		upper := strings.ToUpper(token)
+		if _, ok := readMutationKeywords[upper]; ok {
+			return true
+		}
+		if upper == "LOAD" && i+1 < len(tokens) && strings.ToUpper(tokens[i+1]) == "CSV" {
 			return true
 		}
 	}
 	return false
+}
+
+var readMutationKeywords = map[string]struct{}{
+	"CREATE":  {},
+	"MERGE":   {},
+	"DELETE":  {},
+	"DETACH":  {},
+	"SET":     {},
+	"REMOVE":  {},
+	"DROP":    {},
+	"FOREACH": {},
+}
+
+// isCypherTokenSeparator splits on non-identifier runes so mutation checks use
+// whole Cypher keywords instead of substring matching.
+func isCypherTokenSeparator(r rune) bool {
+	if r == '_' {
+		return false
+	}
+	if r >= '0' && r <= '9' {
+		return false
+	}
+	if r >= 'A' && r <= 'Z' {
+		return false
+	}
+	if r >= 'a' && r <= 'z' {
+		return false
+	}
+	return true
 }

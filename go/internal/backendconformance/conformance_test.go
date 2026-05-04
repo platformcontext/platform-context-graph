@@ -35,19 +35,56 @@ func TestDefaultReadCorpusRunsAgainstGraphQuery(t *testing.T) {
 func TestReadCorpusRejectsMutationQueries(t *testing.T) {
 	t.Parallel()
 
-	mutating := []ReadCase{{
-		Name:       "bad write",
+	tests := []struct {
+		name   string
+		cypher string
+	}{
+		{name: "merge", cypher: "MERGE (r:Repository {id: $repo_id}) RETURN r"},
+		{name: "set newline", cypher: "MATCH (r:Repository {id: $repo_id}) SET\nr.name = 'bad' RETURN r"},
+		{name: "set tab", cypher: "MATCH (r:Repository {id: $repo_id}) SET\tr.name = 'bad' RETURN r"},
+		{name: "remove", cypher: "MATCH (r:Repository {id: $repo_id}) REMOVE r.name RETURN r"},
+		{name: "load csv", cypher: "LOAD CSV FROM 'file:///bad.csv' AS row RETURN row"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			mutating := []ReadCase{{
+				Name:       tt.name,
+				Capability: CapabilityDirectGraphReads,
+				Cypher:     tt.cypher,
+				Parameters: map[string]any{"repo_id": "repo:example"},
+			}}
+
+			_, err := RunReadCorpus(context.Background(), &recordingGraphQuery{}, mutating)
+			if err == nil {
+				t.Fatal("RunReadCorpus() error = nil, want mutation rejection")
+			}
+			if !strings.Contains(err.Error(), "read case") {
+				t.Fatalf("RunReadCorpus() error = %v, want read case context", err)
+			}
+		})
+	}
+}
+
+func TestReadCorpusAllowsReadTokensContainingMutationSubstrings(t *testing.T) {
+	t.Parallel()
+
+	readCases := []ReadCase{{
+		Name:       "offset pagination",
 		Capability: CapabilityDirectGraphReads,
-		Cypher:     "MERGE (r:Repository {id: $repo_id}) RETURN r",
-		Parameters: map[string]any{"repo_id": "repo:example"},
+		Cypher: `MATCH (r:Repository)
+RETURN r.id AS id
+ORDER BY id
+OFFSET 10
+LIMIT 5`,
 	}}
 
-	_, err := RunReadCorpus(context.Background(), &recordingGraphQuery{}, mutating)
-	if err == nil {
-		t.Fatal("RunReadCorpus() error = nil, want mutation rejection")
-	}
-	if !strings.Contains(err.Error(), "read case") {
-		t.Fatalf("RunReadCorpus() error = %v, want read case context", err)
+	_, err := RunReadCorpus(context.Background(), &recordingGraphQuery{}, readCases)
+	if err != nil {
+		t.Fatalf("RunReadCorpus() error = %v, want nil", err)
 	}
 }
 

@@ -95,6 +95,13 @@ type CapabilityEntry struct {
 // Verification records one proof gate from the backend conformance matrix.
 type Verification map[string]string
 
+var allowedVerificationKeys = map[string]struct{}{
+	"go_test":           {},
+	"integration_test":  {},
+	"compose_e2e":       {},
+	"remote_validation": {},
+}
+
 // ParseMatrix parses a backend conformance matrix YAML document.
 func ParseMatrix(raw []byte) (Matrix, error) {
 	var matrix Matrix
@@ -235,6 +242,32 @@ func validateCapabilityEntry(backend BackendID, capability CapabilityClass, entr
 	}
 	if entry.Status != CapabilityStatusNotRequired && len(entry.Verification) == 0 {
 		return fmt.Errorf("backend %q capability %q verification is required", backend, capability)
+	}
+	for i, verification := range entry.Verification {
+		if err := validateVerification(verification); err != nil {
+			return fmt.Errorf("backend %q capability %q verification %d: %w", backend, capability, i, err)
+		}
+	}
+	return nil
+}
+
+// validateVerification requires each proof gate to name exactly one known
+// verification type and one actionable target.
+func validateVerification(verification Verification) error {
+	if len(verification) != 1 {
+		return fmt.Errorf("must contain exactly one verification key")
+	}
+	for key, value := range verification {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return fmt.Errorf("verification key must not be empty")
+		}
+		if _, ok := allowedVerificationKeys[key]; !ok {
+			return fmt.Errorf("unknown verification key %q", key)
+		}
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("verification value for %q must not be empty", key)
+		}
 	}
 	return nil
 }
