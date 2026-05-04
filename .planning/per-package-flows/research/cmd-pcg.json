@@ -1,0 +1,39 @@
+{
+  "package": "go/cmd/pcg",
+  "role": "Unified Cobra CLI and service launcher. Dispatches to pcg-api, pcg-mcp-server, pcg-bootstrap-index, and local-host subcommands.",
+  "files_count": 28,
+  "key_files": [
+    "main.go", "root.go", "service.go", "basic.go", "graph.go", "graph_install.go",
+    "admin.go", "local_host.go", "local_graph.go", "local_graph_bootstrap.go",
+    "output.go", "client.go", "contract.go", "config.go", "config_cmd.go",
+    "doctor.go", "analyze.go", "find.go", "ecosystem.go", "workspace.go"
+  ],
+  "key_identifiers": {
+    "vars": ["rootCmd", "globalDatabase", "globalVisual", "pcgExecutable", "pcgGetwd", "pcgExec", "pcgEnviron"],
+    "types": ["APIClient", "graphStatusOutput", "localHostMode", "localHostRuntimeConfig"],
+    "functions": [
+      "removedCommandError", "printJSON", "printError", "printSuccess",
+      "NewAPIClient", "apiClient", "apiClientFromCmd",
+      "runIndex", "runList", "runWatch", "runGraphStatus", "runGraphStart", "runGraphStop",
+      "buildCollectorService", "graphLayoutFromCommand", "graphStatusForLayout",
+      "cleanExecutableArg0", "schemaBackendFromEnv"
+    ],
+    "constants": ["localHostShutdownTimeout", "appHomeDirname", "appHomeEnvVar", "defaultFormat"]
+  },
+  "subcommand_groups": [
+    "mcp: start, setup, tools",
+    "api: start",
+    "serve: start",
+    "graph: status, start, stop, logs, upgrade",
+    "install: nornicdb",
+    "admin: reindex, tuning-report, facts list/decisions/replay/dead-letter/skip/backfill/replay-events",
+    "indexing: index, list, stats, delete, clean, query, watch, unwatch, watching, add-package, finalize",
+    "local-host: watch, mcp-stdio (hidden internal supervisor)"
+  ],
+  "invariants": [
+    "SilenceUsage and SilenceErrors on rootCmd (root.go:31-32)",
+    "--database flag mutates process env via os.Setenv PCG_RUNTIME_DB_TYPE (root.go:35)",
+    "pcg mcp start stdio path execs local-host via pcgExec (service.go:133)",
+    "pcg api start and pcg graph start use exec.LookPath to find pcg-api and pcg-bootstrap-index"
+  ]
+}

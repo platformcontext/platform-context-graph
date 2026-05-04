@@ -1,10 +1,36 @@
 # Storage
 
-`storage` contains the concrete persistence adapters for PCG.
+`storage` contains the concrete persistence adapters for PCG. This directory
+is a navigation root, not a Go package — each child has its own rich
+`README.md` and `AGENTS.md`.
 
-Postgres stores facts, queue state, content, status, and recovery data. Cypher
-packages define backend-neutral graph write contracts. Neo4j and NornicDB
-compatibility must stay behind documented graph ports and dialect seams.
+Postgres stores facts, queue state, content, status, and recovery data.
+The Cypher subpackage defines backend-neutral graph write contracts behind
+the `Executor` seam. Neo4j and NornicDB compatibility must stay behind that
+seam and documented dialect adapters.
+
+## Layout
+
+```mermaid
+flowchart TB
+  callers[projector / reducer / query] --> cypher[storage/cypher\n Statement, Plan, Executor seam]
+  cypher --> neo4j_driver[neo4j-go-driver]
+  cypher --> nornicdb_driver[NornicDB driver]
+  callers --> postgres[storage/postgres\n facts, queue, status, content, recovery, decisions]
+  postgres --> pgx[pgx]
+```
+
+| Subdirectory | Owns |
+| --- | --- |
+| `cypher/` | Backend-neutral Cypher write contracts, `Executor` seam, canonical writers, statement builders, instrumentation |
+| `postgres/` | Facts, queue, status, content, recovery, decisions — all Postgres-backed durable state |
+| `neo4j/` | Neo4j-specific driver adapter (currently a thin stub; the active driver path lives in caller-side wiring) |
+
+## Per-package documentation convention
+
+Every Go package directory under `go/internal/storage/` carries three files:
+`doc.go`, `README.md`, and `AGENTS.md`. Open the child READMEs for full
+flow diagrams and operational notes.
 
 ## Dependencies
 

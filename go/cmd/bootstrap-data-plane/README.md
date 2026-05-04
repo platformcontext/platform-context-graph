@@ -24,12 +24,12 @@ The binary writes no application data and does not stay resident.
 Resolved through `runtime.OpenPostgres`, `runtime.OpenNeo4jDriver`, and
 `runtime.LoadGraphBackend`:
 
-- `PCG_POSTGRES_DSN`
-- `PCG_GRAPH_BACKEND` — `neo4j` or `nornicdb`
-- `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`
-- `DEFAULT_DATABASE`
+- PCG_POSTGRES_DSN
+- PCG_GRAPH_BACKEND — `neo4j` or `nornicdb`
+- NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
+- DEFAULT_DATABASE
 
-Invalid `PCG_GRAPH_BACKEND` values fail with `unsupported graph backend for
+Invalid PCG_GRAPH_BACKEND values fail with `unsupported graph backend for
 schema`.
 
 ## Telemetry

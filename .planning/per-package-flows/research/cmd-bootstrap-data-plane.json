@@ -1,0 +1,33 @@
+{
+  "package": "go/cmd/bootstrap-data-plane",
+  "role": "One-shot DDL applier: applies Postgres and graph-backend schema then exits.",
+  "files": ["main.go", "doc.go"],
+  "key_identifiers": {
+    "functions": ["run", "newLogger", "schemaBackendFromEnv", "openBootstrapDB", "openNeo4j"],
+    "types": ["bootstrapExecutor", "bootstrapDB", "neo4jDeps", "neo4jSchemaExecutor"],
+    "type_aliases": ["openBootstrapDBFn", "applyPostgresFn", "openNeo4jFn", "applyNeo4jFn"],
+    "constants": ["neo4jCloseTimeout"],
+    "external_deps": [
+      "postgres.ApplyBootstrap", "postgres.Executor",
+      "graph.EnsureSchemaWithBackend", "graph.CypherExecutor", "graph.SchemaBackend",
+      "graph.SchemaBackendNeo4j", "graph.SchemaBackendNornicDB", "graph.CypherStatement",
+      "runtimecfg.OpenPostgres", "runtimecfg.OpenNeo4jDriver", "runtimecfg.LoadGraphBackend",
+      "runtimecfg.GraphBackendNeo4j", "runtimecfg.GraphBackendNornicDB",
+      "telemetry.NewBootstrap", "telemetry.NewLoggerWithWriter", "telemetry.EventAttr"
+    ]
+  },
+  "invariants": [
+    "Idempotent: all DDL is CREATE IF NOT EXISTS (doc.go)",
+    "Both Postgres and graph DDL must succeed; close errors joined via errors.Join (main.go:85,101)",
+    "Invalid PCG_GRAPH_BACKEND fails with unsupported graph backend for schema (main.go:128)",
+    "neo4jSchemaExecutor runs in write session against configured database name only (main.go:165)"
+  ],
+  "configuration": {
+    "env": ["PCG_POSTGRES_DSN", "PCG_GRAPH_BACKEND", "NEO4J_URI", "NEO4J_USERNAME", "NEO4J_PASSWORD", "DEFAULT_DATABASE"]
+  },
+  "failure_modes": [
+    "Postgres open error: run returns before graph DDL is attempted",
+    "Graph backend open error: postgres is closed cleanly via defer before error propagates",
+    "Invalid PCG_GRAPH_BACKEND: schemaBackendFromEnv returns error before graph DDL runs"
+  ]
+}

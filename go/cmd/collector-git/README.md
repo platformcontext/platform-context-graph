@@ -29,7 +29,7 @@ Repo-sync and discovery configuration is loaded via
 `collector.LoadRepoSyncConfig("collector-git", getenv)` and
 `collector.LoadDiscoveryOptionsFromEnv(getenv)`. The wiring also reads
 `collector.LoadSnapshotSCIPConfig(getenv)`. Postgres is opened through
-`runtime.OpenPostgres` (`PCG_POSTGRES_DSN` and the rest of the standard
+`runtime.OpenPostgres` (PCG_POSTGRES_DSN and the rest of the standard
 Postgres env contract). The poll interval defaults to 1 second
 (`defaultCollectorPollInterval`).
 

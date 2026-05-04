@@ -1,0 +1,34 @@
+{
+  "package": "go/cmd/collector-git",
+  "role": "Local verification runtime for Git collection: repo sync, snapshot, content shaping, fact commit.",
+  "files": ["main.go", "service.go", "doc.go"],
+  "key_identifiers": {
+    "functions": ["run", "buildCollectorService"],
+    "constants": ["defaultCollectorPollInterval"],
+    "external_deps": [
+      "collector.Service", "collector.GitSource", "collector.NativeRepositorySelector",
+      "collector.NativeRepositorySnapshotter", "collector.LoadRepoSyncConfig",
+      "collector.LoadDiscoveryOptionsFromEnv", "collector.LoadSnapshotSCIPConfig",
+      "postgres.NewIngestionStore", "postgres.SQLDB", "postgres.SQLQueryer", "postgres.NewStatusStore",
+      "runtimecfg.OpenPostgres", "runtimecfg.WithPrometheusHandler",
+      "app.NewHostedWithStatusServer",
+      "telemetry.NewBootstrap", "telemetry.NewProviders", "telemetry.NewInstruments",
+      "telemetry.NewLogger", "telemetry.Instruments", "telemetry.DefaultSignalName",
+      "telemetry.EventAttr"
+    ]
+  },
+  "invariants": [
+    "All collection goes through collector.Service; no direct fact writes (doc.go)",
+    "Signal-driven shutdown: signal.NotifyContext watches SIGINT/SIGTERM (main.go:83)",
+    "Admin/metrics surface exposed via app.NewHostedWithStatusServer (main.go:73)",
+    "defaultCollectorPollInterval is 1 second (service.go:13)"
+  ],
+  "configuration": {
+    "env": ["PCG_POSTGRES_DSN", "PCG_REPO_SYNC_* (via LoadRepoSyncConfig)", "discovery env (via LoadDiscoveryOptionsFromEnv)", "SCIP env (via LoadSnapshotSCIPConfig)"]
+  },
+  "failure_modes": [
+    "Telemetry bootstrap failure: binary exits non-zero before Postgres is opened",
+    "Postgres open failure: run returns error before service starts",
+    "buildCollectorService error (e.g. missing repo sync config): returns before app is started"
+  ]
+}
