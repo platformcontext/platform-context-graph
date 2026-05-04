@@ -1,10 +1,3 @@
-// Package recovery provides Go-owned replay and recovery operations for the
-// facts-first write plane. It replaces the Python finalization bridge by
-// operating directly on the durable work queue.
-//
-// In the facts-first model, "refinalization" means replaying projector and
-// reducer work items through the queue rather than running GraphBuilder
-// stages. Recovery is queue replay, not direct graph mutation.
 package recovery
 
 import (

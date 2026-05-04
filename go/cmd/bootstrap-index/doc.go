@@ -1,0 +1,12 @@
+// Package main runs the pcg-bootstrap-index binary, which performs a
+// one-shot end-to-end indexing pass: collection, source-local projection,
+// relationship-evidence backfill, deployment-mapping reopen, and IaC
+// reachability materialization.
+//
+// The binary opens Postgres and the graph backend, runs collector and
+// projector goroutines concurrently against a Postgres FOR UPDATE SKIP
+// LOCKED queue, and then drives the post-collection passes that the
+// facts-first ordering documented in CLAUDE.md requires. It exits when the
+// queue drains; it is not a steady-state runtime and does not mount the
+// shared `/healthz`, `/readyz`, or `/admin/status` admin surface.
+package main
