@@ -53,6 +53,12 @@ PCG uses Postgres for relational state, facts, queues, status, content, and
 recovery data. It uses NornicDB by default for graph storage, with Neo4j as the
 explicit official alternative.
 
+That backend choice is intentional. NornicDB is the default first-class graph
+backend for PCG. Neo4j is also supported as a first-class compatibility path for
+teams that already operate Neo4j or want to keep using Neo4j tooling. Both
+backends run PCG's shared Cypher/Bolt graph contract, so the API, MCP, CLI,
+ingester, and reducer do not fork into separate products.
+
 The shared service shape has an API, MCP server, ingester, reducer, bootstrap
 indexer, Postgres, and a graph backend. The local binary path is smaller: it
 starts one workspace owner with embedded Postgres, managed NornicDB, ingester,
