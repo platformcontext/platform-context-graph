@@ -99,6 +99,79 @@ func TestServiceRunLogsShutdownCancellation(t *testing.T) {
 	}
 }
 
+func TestServiceRunAcksSuccessfulProjectionAfterShutdownCancel(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	sink := &stubProjectorWorkSink{}
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource: &stubProjectorWorkSource{
+			workItems:                    []ScopeGenerationWork{shutdownCanceledWork()},
+			returnContextErrWhenCanceled: true,
+		},
+		FactStore: &stubFactStore{},
+		Runner: &stubProjectionRunner{
+			result: Result{
+				ScopeID:      "scope-123",
+				GenerationID: "generation-456",
+			},
+			beforeReturn: func(context.Context) {
+				cancel()
+			},
+		},
+		WorkSink: sink,
+		Wait:     func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	if err := service.Run(ctx); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got, want := sink.ackCalls, 1; got != want {
+		t.Fatalf("ack calls = %d, want %d", got, want)
+	}
+	if sink.ackCtxErr != nil {
+		t.Fatalf("ack context error = %v, want nil", sink.ackCtxErr)
+	}
+}
+
+func TestServiceRunAcksSuccessfulProjectionWhenShutdownCancelsDuringAck(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	sink := &stubProjectorWorkSink{
+		beforeAck: func(context.Context) {
+			cancel()
+		},
+	}
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource: &stubProjectorWorkSource{
+			workItems:                    []ScopeGenerationWork{shutdownCanceledWork()},
+			returnContextErrWhenCanceled: true,
+		},
+		FactStore: &stubFactStore{},
+		Runner: &stubProjectionRunner{
+			result: Result{
+				ScopeID:      "scope-123",
+				GenerationID: "generation-456",
+			},
+		},
+		WorkSink: sink,
+		Wait:     func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	if err := service.Run(ctx); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got, want := sink.ackCalls, 1; got != want {
+		t.Fatalf("ack calls = %d, want %d", got, want)
+	}
+	if sink.ackCtxErr != nil {
+		t.Fatalf("ack context error = %v, want nil", sink.ackCtxErr)
+	}
+}
+
 func shutdownCanceledWork() ScopeGenerationWork {
 	return ScopeGenerationWork{
 		Scope: scope.IngestionScope{
