@@ -205,15 +205,19 @@ the design is incomplete.
 
 PCG supports `PCG_GRAPH_BACKEND={neo4j,nornicdb}` behind graph ports.
 
-- `neo4j` is the default backend used in Compose and production.
-- `nornicdb` is the pure-Go evaluation candidate.
+- `nornicdb` is the officially supported default backend used in Compose and
+  production.
+- `neo4j` is an alternative backend only when it can run PCG's shared
+  Cypher/Bolt contract without a separate writer stream.
 
 Invalid backend values must fail at startup. Backend selection must surface in
 telemetry as `graph_backend` and optionally in response truth metadata as
 `truth.backend`.
 
-Do not add `if backend == nornicdb` branches outside documented narrow seams
-such as schema dialects, canonical-write executors, and Cypher builders.
+Do not add backend branches outside documented narrow seams such as schema DDL,
+connection/runtime settings, retry classification, and query builders. A new
+Cypher/Bolt backend must support the raw PCG Cypher calls or require only minor,
+evidence-backed adapter differences.
 
 ## Runtime Contract
 
@@ -227,7 +231,8 @@ such as schema dialects, canonical-write executors, and Cypher builders.
 
 Shared backing stores:
 
-- **Neo4j** for the canonical graph
+- **NornicDB** for the canonical graph by default; Neo4j only for explicit
+  compatibility deployments that meet the shared Cypher contract
 - **Postgres** for facts, queue state, content store, status, and recovery data
 
 ## Local Development

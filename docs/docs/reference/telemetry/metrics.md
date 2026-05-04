@@ -208,8 +208,13 @@ collector/projector/reducer path.
 ### `pcg_dp_neo4j_batches_executed_total`
 
 - Type: Histogram and counter
-- Meaning: Neo4j batch sizing and batch execution volume.
+- Meaning: Neo4j batch sizing and batch execution volume. Grouped writes record
+  one point per statement inside the transaction, with bounded labels such as
+  `operation`, `write_phase`, and `node_type` when the writer provided them.
 - Use them for: Tuning write chunking and understanding write amplification.
+  For Neo4j parity runs, compare these with
+  `pcg_dp_neo4j_query_duration_seconds{operation="write_group"}` to separate
+  one slow transaction from a specific canonical phase or semantic label.
 
 ### `pcg_dp_canonical_writes_total`
 ### `pcg_dp_canonical_write_duration_seconds`

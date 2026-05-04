@@ -288,10 +288,12 @@ chosen via `PCG_GRAPH_BACKEND={neo4j,nornicdb}` and surfaced in telemetry as
 `graph_backend`. Schema bootstrap routes through the same backend axis: Neo4j
 receives the shared production DDL, while NornicDB receives a narrow
 schema-dialect translation for compatibility gaps such as composite node
-identity constraints. Handler and reducer code do not branch on graph brand.
-If NornicDB passes the full promotion gates at laptop, Compose, and production
-scale, PCG will deprecate Neo4j on a documented timeline. See
-[ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
+identity constraints. Handler and reducer code should not branch on graph
+brand. The active ADR work is to make Neo4j follow the same optimized adapter
+path as NornicDB where evidence says it should, then decide the final Neo4j
+support posture from a terminal comparison. See
+[ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md) and
+[ADR 2026-05-04](adrs/2026-05-04-neo4j-parity-optimization-plan.md).
 
 ### Rule
 

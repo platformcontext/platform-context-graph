@@ -37,8 +37,9 @@ NornicDB `main` through explicit-source installs for now, while install trust,
 broader host coverage, backend conformance, and profile-matrix gates still
 live in the implementation plan and NornicDB ADR.
 
-**Remaining work:** finish those NornicDB promotion gates, then decide whether
-any Neo4j deprecation path should start. Plugin chunks remain separate work.
+**Remaining work:** finish those NornicDB promotion gates, complete Neo4j parity
+research before deciding its final support posture, and keep plugin chunks as
+separate work.
 
 ## Context
 
@@ -61,7 +62,7 @@ Today, the deployed platform has a clear runtime contract:
 - `reducer` owns queued reduction and authoritative graph convergence
 - `api` and `mcp` are read surfaces
 - the configured graph backend is the authoritative graph store; NornicDB is
-  now the default backend and Neo4j remains the compatibility backend
+  now the default backend and Neo4j remains the official alternative
 - Postgres is the durable control plane, fact store, queue, content store, and
   status store
 
@@ -129,7 +130,7 @@ local mode.
 
 Current implementation note: `PCG_GRAPH_BACKEND=nornicdb` is now the default in
 runtime docs and Compose. Neo4j remains available through the explicit
-compatibility path. NornicDB's default-backend status is still governed by
+backend path. NornicDB's default-backend status is still governed by
 the conditional acceptance and conformance gates in the NornicDB ADR.
 
 Production remains the source of truth for:
@@ -272,9 +273,9 @@ sidecar unlocks transitive callers, call-chain paths, dead-code
 detection, and the hybrid platform-impact capabilities at laptop scale
 without requiring Docker Compose.
 
-NornicDB is the evaluation candidate. Full criteria, promotion gates,
-and deprecation path live in
-`docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`.
+NornicDB is the supported default backend for this profile. The remaining
+Neo4j support-decision path lives in
+`docs/docs/adrs/2026-05-04-neo4j-parity-optimization-plan.md`.
 
 ### 6. Treat Collector Extensibility As A Fact-Emission Plugin Seam
 

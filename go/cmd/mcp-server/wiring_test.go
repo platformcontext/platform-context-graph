@@ -95,6 +95,26 @@ func TestOpenQueryGraphAcceptsNornicDBOnSharedBoltPath(t *testing.T) {
 	}
 }
 
+func TestOpenQueryGraphDefaultsLocalLightweightDatabaseToNornic(t *testing.T) {
+	t.Parallel()
+
+	driver, databaseName, err := openQueryGraph(context.Background(), func(key string) string {
+		if key == "PCG_QUERY_PROFILE" {
+			return "local_lightweight"
+		}
+		return ""
+	}, query.ProfileLocalLightweight, nil)
+	if err != nil {
+		t.Fatalf("openQueryGraph() error = %v, want nil", err)
+	}
+	if driver != nil {
+		t.Fatal("openQueryGraph() driver != nil, want nil for local_lightweight")
+	}
+	if databaseName != "nornic" {
+		t.Fatalf("openQueryGraph() database = %q, want nornic", databaseName)
+	}
+}
+
 func TestLoadGraphBackendDefaultsToNornicDB(t *testing.T) {
 	t.Parallel()
 

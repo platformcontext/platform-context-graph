@@ -19,7 +19,7 @@ Update a setting permanently. This writes to `~/.platform-context-graph/.env`.
 **Syntax:** `pcg config set <KEY> <VALUE>`
 
 ```bash
-# Switch to the explicit Neo4j compatibility backend
+# Switch to the explicit Neo4j backend
 pcg config db neo4j
 
 # Select filesystem discovery for a local workspace
@@ -36,7 +36,7 @@ environment.
 
 ### 3. Quick Switch Database
 A shortcut to toggle between the default NornicDB backend and the explicit
-Neo4j compatibility backend.
+Neo4j backend.
 
 ```bash
 pcg config db nornicdb

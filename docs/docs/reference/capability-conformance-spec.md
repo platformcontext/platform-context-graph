@@ -136,7 +136,7 @@ Allowed values:
 - `neo4j`
 - `nornicdb`
 
-Default today is `nornicdb`. Neo4j remains the explicit compatibility backend.
+Default today is `nornicdb`. Neo4j remains the explicit official alternative.
 Evaluation and release-backed adoption criteria for NornicDB live in
 `docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md`.
 `local_lightweight` does not bind a graph backend because it refuses
@@ -220,7 +220,7 @@ The backend matrix tracks:
 - dead-code readiness
 - performance envelope evidence
 
-NornicDB is the default backend, and Neo4j is the compatibility backend. Both
+NornicDB is the default backend, and Neo4j is the official alternative. Both
 must stay listed in the backend matrix for as long as they are official PCG
 graph backends. The default test harness lives in
 `go/internal/backendconformance`; it validates the backend matrix and runs

@@ -209,6 +209,13 @@ For shared-write debugging specifically:
   duration so large-corpus runs can attribute high-cardinality `Variable` or
   `Function` costs to the exact repository generation without relying on log
   adjacency.
+- Neo4j grouped writes now record `pcg_dp_neo4j_batch_size` and
+  `pcg_dp_neo4j_batches_executed_total` once per statement inside
+  `ExecuteGroup`, including `write_phase` and `node_type` when canonical or
+  semantic writers supplied that metadata. Use those metrics with
+  `pcg_dp_neo4j_query_duration_seconds{operation="write_group"}` to see whether
+  a slow Neo4j transaction is broad overall or concentrated in one phase or
+  semantic label.
 
 ### Admin / CLI Status
 

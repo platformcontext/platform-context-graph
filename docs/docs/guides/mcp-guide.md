@@ -128,8 +128,8 @@ Use the canonical query and status surfaces first:
 - `index-status` when you need checkpointed completeness
 - runtime health or `/admin/status` when you need live service state
 
-For the `local_authoritative` NornicDB evaluation profile, code-search tools
-may answer from the embedded-Postgres content index while canonical graph
+For the `local_authoritative` NornicDB profile, code-search tools may answer
+from the embedded-Postgres content index while canonical graph
 projection is degraded. Programmatic clients should read the PCG envelope:
 `truth.profile=local_authoritative` and `truth.basis=content_index` mean the
 answer is intentionally content-index-backed, not silently pretending to be a
@@ -307,7 +307,7 @@ These rules keep prompt tests from leaking server paths or normalizing unsafe qu
 
 **Slow responses** — check the local-host progress panel, graph-write metrics,
 and the selected graph backend. Use the default NornicDB path or the explicit
-Neo4j compatibility stack for production-scale graphs.
+Neo4j stack for production-scale graphs.
 
 ## Related docs
 

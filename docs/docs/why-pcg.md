@@ -81,7 +81,7 @@ they can evolve independently.
 Every HTTP handler, MCP tool, and CLI command reads data through narrow
 interfaces such as `GraphQuery` and `ContentStore` — not through concrete
 database drivers. NornicDB is the default graph adapter today. Neo4j remains
-an explicit compatibility backend behind the same ports — details in
+an explicit official alternative behind the same ports — details in
 [ADR 2026-04-22](adrs/2026-04-22-nornicdb-graph-backend-candidate.md).
 Capability ports are why swapping a backend is a wiring concern plus a
 conformance-matrix run, not a handler rewrite. We explicitly rejected an
@@ -231,12 +231,13 @@ to refactor the payment service's API contract.
 
 PCG is Apache 2.0 licensed, self-hosted, and does not phone home. The
 authoritative graph path now defaults to NornicDB, with Neo4j kept as the
-official compatibility backend for operators who need that path. Lightweight
+official alternative for operators who need that path. Lightweight
 local mode uses embedded Postgres and relational code-intelligence tables when
 you do not need graph-authoritative reads. NornicDB has full-corpus
-latest-main evidence, but production promotion is still tracked separately from
-the default switch until the Neo4j comparison baseline and install-trust policy
-are recorded. Language parsing is owned by native Go packages backed by
+latest-main evidence; the remaining decision is whether Neo4j can meet the same
+shared Cypher contract fast enough to stay more than compatibility-only, and
+when NornicDB becomes release-backed instead of latest-main-backed. Language
+parsing is owned by native Go packages backed by
 tree-sitter, HCL, YAML/JSON, SCIP, and schema-aware extractors. Add parser
 capability by extending the Go parser or relationship packages with fixtures
 and focused tests.

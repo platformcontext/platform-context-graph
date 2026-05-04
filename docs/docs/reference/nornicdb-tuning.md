@@ -9,10 +9,10 @@ For the complete PCG environment-variable catalog, including non-NornicDB
 collector, queue, database, telemetry, and Compose settings, see
 [Environment Variables](environment-variables.md).
 
-NornicDB is still a candidate graph backend. Tune from evidence: first identify
-the phase, label, row count, grouped statement count, and timeout shape in the
-structured logs, then change the narrowest matching knob. Do not lower broad
-defaults because one chunk looked scary.
+NornicDB is PCG's supported default graph backend. Tune from evidence: first
+identify the phase, label, row count, grouped statement count, and timeout shape
+in the structured logs, then change the narrowest matching knob. Do not lower
+broad defaults because one chunk looked scary.
 
 ## Validation Ladder
 
@@ -39,10 +39,10 @@ Latest checkpoint: the 2026-05-04 latest-main full-corpus proof rebuilt PCG and
 NornicDB `main`, indexed the full corpus, drained `8458/8458` queue rows in
 `878s`, kept pending, in-flight, retrying, failed, and dead-letter rows at `0`,
 and passed API/MCP relationship-evidence drilldowns. Treat earlier focused and
-medium runs as the debugging ladder that led here. The remaining promotion
-decision is what to do with Neo4j: tune it as a first-class alternative or
-document it as compatibility-only. Another NornicDB-only full-corpus proof is
-regression evidence, not a substitute for that decision.
+medium runs as the debugging ladder that led here. The remaining promotion work
+is Neo4j parity research: find the Neo4j bottleneck, tune the smallest proven
+adapter slice, and rerun a terminal comparison. Another NornicDB-only
+full-corpus proof is regression evidence, not a substitute for that decision.
 
 Follow-up checkpoint: PCG `c598000d` then passed a targeted five-repo lane that
 combined the prior small semantic regressions with the two noisy PHP stress
@@ -187,7 +187,7 @@ to tune high-cardinality entity volume from measured label summaries.
 
 | Variable | Default | Scope | Use |
 | --- | --- | --- | --- |
-| `PCG_GRAPH_BACKEND` | `nornicdb` | API, MCP, ingester, reducer, local host | Selects the graph adapter. Set to `neo4j` only for the explicit Neo4j compatibility path. Invalid values fail startup. |
+| `PCG_GRAPH_BACKEND` | `nornicdb` | API, MCP, ingester, reducer, local host | Selects the graph adapter. Set to `neo4j` for the explicit Neo4j path. Invalid values fail startup. |
 | `PCG_NORNICDB_BINARY` | unset | local host / install / tests | Points PCG at an explicit NornicDB binary. This wins over managed `${PCG_HOME}/bin/nornicdb-headless` and `PATH`. |
 | `PCG_NORNICDB_INSTALL_TIMEOUT` | `30s` | `pcg install nornicdb` | Extends remote download timeouts for slow links. |
 

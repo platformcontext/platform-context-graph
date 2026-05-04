@@ -140,14 +140,20 @@ that internally.
 - `internal/telemetry` — `telemetry.Instruments`, span and attribute helpers
 
 Concrete Neo4j/NornicDB driver adapters live in `cmd/` wiring packages, not in
-this package. This package owns the contracts; `cmd/` owns the wiring.
+this package. This package owns the backend-neutral writer contracts; `cmd/`
+owns the wiring. NornicDB owns the promoted runtime path. Any additional
+Cypher/Bolt backend must run these shared statements or use a small, documented
+adapter seam.
 
 ## Telemetry
 
 - `pcg_dp_neo4j_query_duration_seconds` — histogram per statement;
   `operation=write` or `operation=write_group`
-- `pcg_dp_neo4j_batch_size` — batch row count per `UNWIND` statement
-- `pcg_dp_neo4j_batches_executed_total` — counter labeled by `operation`
+- `pcg_dp_neo4j_batch_size` — batch row count per `UNWIND` statement; grouped
+  Neo4j/Bolt execution records one point per statement with bounded
+  `operation`, `write_phase`, and `node_type` labels when metadata is present
+- `pcg_dp_neo4j_batches_executed_total` — counter labeled by `operation` plus
+  bounded statement metadata when available
 - `pcg_dp_neo4j_deadlock_retries_total` — counter in `RetryingExecutor` labeled
   by `write_phase`
 - `pcg_dp_canonical_atomic_writes_total` / `pcg_dp_canonical_atomic_fallbacks_total`
@@ -214,7 +220,8 @@ this package. This package owns the contracts; `cmd/` owns the wiring.
   created the intended node between match and commit (`retrying_executor.go:129`).
 - Backend dialect differences (Cypher syntax, transaction shape, constraint
   behavior) belong in documented seams here or in `cmd/` wiring. Do not add
-  `if backend == "nornicdb"` branches in callers.
+  product-specific branches in callers, and do not create a separate writer
+  stream for Neo4j unless a future ADR explicitly rejects the shared contract.
 
 ## Related docs
 

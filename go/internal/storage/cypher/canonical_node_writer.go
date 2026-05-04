@@ -126,7 +126,7 @@ func (w *CanonicalNodeWriter) Write(ctx context.Context, mat projector.Canonical
 		return nil
 	}
 
-	phases := w.buildPhases(mat)
+	phases := annotateCanonicalWritePhases(w.buildPhases(mat))
 	if mat.FirstGeneration {
 		slog.Info(
 			"canonical retract skipped for first generation",
@@ -233,6 +233,26 @@ func flattenCanonicalWritePhases(phases []canonicalWritePhase) []Statement {
 		allStatements = append(allStatements, phase.statements...)
 	}
 	return allStatements
+}
+
+// annotateCanonicalWritePhases tags statements with their owning phase before
+// execution so grouped backends can report phase-level diagnostics without
+// parsing Cypher text or changing transaction shape.
+func annotateCanonicalWritePhases(phases []canonicalWritePhase) []canonicalWritePhase {
+	for phaseIndex := range phases {
+		phase := &phases[phaseIndex]
+		for statementIndex := range phase.statements {
+			params := phase.statements[statementIndex].Parameters
+			if params == nil {
+				params = make(map[string]any)
+				phase.statements[statementIndex].Parameters = params
+			}
+			if _, ok := params[StatementMetadataPhaseKey]; !ok {
+				params[StatementMetadataPhaseKey] = phase.name
+			}
+		}
+	}
+	return phases
 }
 
 // --- Phase A: Retract stale nodes ---
