@@ -186,8 +186,9 @@ func TestInstallNornicDBRequiresLocalSourcePath(t *testing.T) {
 	if err == nil {
 		t.Fatal("installNornicDB() error = nil, want missing source error")
 	}
-	if !strings.Contains(err.Error(), "no pinned headless NornicDB release asset") {
-		t.Fatalf("installNornicDB() error = %q, want pinned-release guidance", err.Error())
+	if !strings.Contains(err.Error(), "no embedded headless NornicDB release asset") ||
+		!strings.Contains(err.Error(), "latest NornicDB main branch") {
+		t.Fatalf("installNornicDB() error = %q, want latest-main explicit-source guidance", err.Error())
 	}
 }
 
@@ -323,7 +324,7 @@ func TestInstallNornicDBUsesPinnedFullReleaseWhenRequested(t *testing.T) {
 		t.Fatalf("installNornicDB() error = %v, want nil", err)
 	}
 	if result.Headless {
-		t.Fatal("Headless = true, want false for pinned full install")
+		t.Fatal("Headless = true, want false for full release install")
 	}
 	if result.SourceKind != string(nornicDBInstallSourceDownloadedArchive) {
 		t.Fatalf("SourceKind = %q, want %q", result.SourceKind, nornicDBInstallSourceDownloadedArchive)
@@ -371,7 +372,7 @@ func TestInstallNornicDBWithoutSourceRejectsMissingPinnedFullAsset(t *testing.T)
 	if err == nil {
 		t.Fatal("installNornicDB() error = nil, want missing full-asset error")
 	}
-	if !strings.Contains(err.Error(), "no pinned full NornicDB release asset") {
+	if !strings.Contains(err.Error(), "no embedded full NornicDB release asset") {
 		t.Fatalf("installNornicDB() error = %q, want missing full-asset guidance", err.Error())
 	}
 }
@@ -414,7 +415,7 @@ func TestInstallNornicDBWithoutSourceRejectsUnsupportedHost(t *testing.T) {
 	if err == nil {
 		t.Fatal("installNornicDB() error = nil, want unsupported host error")
 	}
-	if !strings.Contains(err.Error(), "no pinned headless NornicDB release asset") {
+	if !strings.Contains(err.Error(), "no embedded headless NornicDB release asset") {
 		t.Fatalf("installNornicDB() error = %q, want unsupported host guidance", err.Error())
 	}
 }
@@ -430,7 +431,7 @@ func TestRunInstallNornicDBRejectsFullWithExplicitSource(t *testing.T) {
 	if err == nil {
 		t.Fatal("runInstallNornicDB() error = nil, want full/source conflict")
 	}
-	if !strings.Contains(err.Error(), "--full only applies to bare pinned installs") {
+	if !strings.Contains(err.Error(), "--full is reserved for future no-argument release installs") {
 		t.Fatalf("runInstallNornicDB() error = %q, want actionable conflict", err.Error())
 	}
 }
