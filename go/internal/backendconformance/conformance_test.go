@@ -1,0 +1,189 @@
+package backendconformance
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
+)
+
+func TestDefaultReadCorpusRunsAgainstGraphQuery(t *testing.T) {
+	t.Parallel()
+
+	query := &recordingGraphQuery{
+		rows: []map[string]any{{"ok": true}},
+	}
+	report, err := RunReadCorpus(context.Background(), query, DefaultReadCorpus())
+	if err != nil {
+		t.Fatalf("RunReadCorpus() error = %v", err)
+	}
+	if got, want := len(report.Results), len(DefaultReadCorpus()); got != want {
+		t.Fatalf("result count = %d, want %d", got, want)
+	}
+	if got, want := len(query.calls), len(DefaultReadCorpus()); got != want {
+		t.Fatalf("query call count = %d, want %d", got, want)
+	}
+	for _, call := range query.calls {
+		if strings.Contains(strings.ToUpper(call.cypher), "MERGE") {
+			t.Fatalf("read corpus issued mutation query: %s", call.cypher)
+		}
+	}
+}
+
+func TestReadCorpusRejectsMutationQueries(t *testing.T) {
+	t.Parallel()
+
+	mutating := []ReadCase{{
+		Name:       "bad write",
+		Capability: CapabilityDirectGraphReads,
+		Cypher:     "MERGE (r:Repository {id: $repo_id}) RETURN r",
+		Parameters: map[string]any{"repo_id": "repo:example"},
+	}}
+
+	_, err := RunReadCorpus(context.Background(), &recordingGraphQuery{}, mutating)
+	if err == nil {
+		t.Fatal("RunReadCorpus() error = nil, want mutation rejection")
+	}
+	if !strings.Contains(err.Error(), "read case") {
+		t.Fatalf("RunReadCorpus() error = %v, want read case context", err)
+	}
+}
+
+func TestDefaultWriteCorpusRunsGroupedCanonicalCases(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingCypherExecutor{}
+	report, err := RunWriteCorpus(context.Background(), executor, DefaultWriteCorpus())
+	if err != nil {
+		t.Fatalf("RunWriteCorpus() error = %v", err)
+	}
+	if got, want := len(report.Results), len(DefaultWriteCorpus()); got != want {
+		t.Fatalf("result count = %d, want %d", got, want)
+	}
+	if executor.groupCalls == 0 {
+		t.Fatal("RunWriteCorpus() did not exercise grouped write case")
+	}
+	if executor.singleCalls == 0 {
+		t.Fatal("RunWriteCorpus() did not exercise single-statement write case")
+	}
+}
+
+func TestDefaultWriteCorpusRunsPhaseGroupedCanonicalCases(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingPhaseCypherExecutor{}
+	report, err := RunPhaseWriteCorpus(context.Background(), executor, DefaultWriteCorpus())
+	if err != nil {
+		t.Fatalf("RunPhaseWriteCorpus() error = %v", err)
+	}
+	if got, want := len(report.Results), len(DefaultWriteCorpus()); got != want {
+		t.Fatalf("result count = %d, want %d", got, want)
+	}
+	if got, want := executor.phaseCalls, len(DefaultWriteCorpus()); got != want {
+		t.Fatalf("phase call count = %d, want %d", got, want)
+	}
+}
+
+func TestWriteCorpusRequiresGroupedExecutorWhenCaseRequiresAtomicVisibility(t *testing.T) {
+	t.Parallel()
+
+	cases := []WriteCase{{
+		Name:                  "atomic relationship upsert",
+		Capability:            CapabilityCanonicalWrites,
+		RequireAtomicGroup:    true,
+		TransactionVisibility: "all statements must commit together",
+		Statements: []sourcecypher.Statement{
+			{Operation: sourcecypher.OperationCanonicalUpsert, Cypher: "MERGE (a:Function {uid: $uid})", Parameters: map[string]any{"uid": "fn:a"}},
+			{Operation: sourcecypher.OperationCanonicalUpsert, Cypher: "MERGE (b:Function {uid: $uid})", Parameters: map[string]any{"uid": "fn:b"}},
+		},
+	}}
+
+	_, err := RunWriteCorpus(context.Background(), executeOnlyRecorder{}, cases)
+	if err == nil {
+		t.Fatal("RunWriteCorpus() error = nil, want missing grouped executor error")
+	}
+	if !strings.Contains(err.Error(), "requires grouped execution") {
+		t.Fatalf("RunWriteCorpus() error = %v, want grouped execution context", err)
+	}
+}
+
+func TestWriteCorpusReportsExecutorErrorsWithCaseName(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("backend unavailable")
+	_, err := RunWriteCorpus(context.Background(), &recordingCypherExecutor{err: wantErr}, []WriteCase{{
+		Name:       "canonical upsert",
+		Capability: CapabilityCanonicalWrites,
+		Statements: []sourcecypher.Statement{{
+			Operation: sourcecypher.OperationCanonicalUpsert,
+			Cypher:    "MERGE (r:Repository {id: $repo_id})",
+			Parameters: map[string]any{
+				"repo_id": "repo:example",
+			},
+		}},
+	}})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("RunWriteCorpus() error = %v, want wrapped backend error", err)
+	}
+	if !strings.Contains(err.Error(), "canonical upsert") {
+		t.Fatalf("RunWriteCorpus() error = %v, want case name", err)
+	}
+}
+
+type recordingGraphQuery struct {
+	calls []recordedGraphQueryCall
+	rows  []map[string]any
+	err   error
+}
+
+type recordedGraphQueryCall struct {
+	cypher     string
+	parameters map[string]any
+}
+
+func (q *recordingGraphQuery) Run(_ context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
+	q.calls = append(q.calls, recordedGraphQueryCall{cypher: cypher, parameters: params})
+	return q.rows, q.err
+}
+
+func (q *recordingGraphQuery) RunSingle(ctx context.Context, cypher string, params map[string]any) (map[string]any, error) {
+	rows, err := q.Run(ctx, cypher, params)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return rows[0], nil
+}
+
+type recordingCypherExecutor struct {
+	singleCalls int
+	groupCalls  int
+	err         error
+}
+
+func (e *recordingCypherExecutor) Execute(context.Context, sourcecypher.Statement) error {
+	e.singleCalls++
+	return e.err
+}
+
+func (e *recordingCypherExecutor) ExecuteGroup(_ context.Context, _ []sourcecypher.Statement) error {
+	e.groupCalls++
+	return e.err
+}
+
+type executeOnlyRecorder struct{}
+
+func (executeOnlyRecorder) Execute(context.Context, sourcecypher.Statement) error {
+	return nil
+}
+
+type recordingPhaseCypherExecutor struct {
+	phaseCalls int
+	err        error
+}
+
+func (e *recordingPhaseCypherExecutor) ExecutePhaseGroup(context.Context, []sourcecypher.Statement) error {
+	e.phaseCalls++
+	return e.err
+}

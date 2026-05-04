@@ -1,0 +1,81 @@
+version: v1
+updated_at: 2026-05-04
+owners:
+  - platform-engineering
+backends:
+  - id: nornicdb
+    default: true
+    official: true
+    classification: experimental
+    capabilities:
+      canonical_writes:
+        status: experimental
+        verification:
+          - go_test: ./internal/backendconformance
+          - go_test: ./internal/storage/cypher
+        notes: Default backend while PCG tracks latest NornicDB main; profile-matrix and release-backed promotion gates remain open.
+      direct_graph_reads:
+        status: supported
+        verification:
+          - go_test: ./internal/backendconformance
+          - go_test: ./internal/query
+        notes: Served through the shared Bolt GraphQuery port with backend-aware query builders where needed.
+      path_traversal:
+        status: supported
+        verification:
+          - go_test: ./internal/backendconformance
+          - go_test: ./internal/query
+        notes: Bounded call-chain and transitive relationship reads use NornicDB-safe query shapes.
+      full_text_support:
+        status: not_required
+        verification: []
+        notes: PCG full-text and content search run through Postgres content indexes, not graph-native full-text.
+      dead_code_readiness:
+        status: experimental
+        verification:
+          - go_test: ./internal/backendconformance
+          - go_test: ./internal/query
+        notes: Graph-backed dead-code scans work at the current derived truth level; exact promotion still depends on broader root modeling.
+      performance_envelope:
+        status: experimental
+        verification:
+          - remote_validation: latest-main-full-corpus
+        notes: Latest-main full-corpus evidence is healthy, but profile-matrix and production comparison gates remain open.
+  - id: neo4j
+    default: false
+    official: true
+    classification: production-capable
+    capabilities:
+      canonical_writes:
+        status: supported
+        verification:
+          - go_test: ./internal/backendconformance
+          - go_test: ./internal/storage/cypher
+        notes: Compatibility backend keeps grouped canonical writes through the shared Cypher executor surface.
+      direct_graph_reads:
+        status: supported
+        verification:
+          - go_test: ./internal/backendconformance
+          - go_test: ./internal/query
+        notes: Served through the same GraphQuery port used by API and reducer lookups.
+      path_traversal:
+        status: supported
+        verification:
+          - go_test: ./internal/backendconformance
+          - go_test: ./internal/query
+        notes: Bounded traversal and shortest-path query surfaces remain covered by query package contract tests.
+      full_text_support:
+        status: not_required
+        verification: []
+        notes: PCG full-text and content search run through Postgres content indexes, not graph-native full-text.
+      dead_code_readiness:
+        status: supported
+        verification:
+          - go_test: ./internal/backendconformance
+          - go_test: ./internal/query
+        notes: Neo4j remains the compatibility backend for graph-backed dead-code candidate scans.
+      performance_envelope:
+        status: supported
+        verification:
+          - compose_e2e: neo4j-compatibility
+        notes: Neo4j remains production-capable while NornicDB profile-matrix evidence is gathered.

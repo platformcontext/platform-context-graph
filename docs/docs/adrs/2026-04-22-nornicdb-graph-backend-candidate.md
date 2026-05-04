@@ -12,8 +12,10 @@
   `PCG_NORNICDB_BINARY` with an explicitly built or selected NornicDB `main`
   binary; the embedded release manifest intentionally carries no accepted
   assets until a later release or accepted-build policy is chosen.
-- Chunk 5 backend conformance suite passes against NornicDB for
-  `GraphQuery` and `GraphWrite` adapters
+- Chunk 5 backend conformance suite passes against NornicDB for `GraphQuery`
+  and the current Cypher write executor family (`Executor`, `GroupExecutor`,
+  and `PhaseGroupExecutor`). Older notes that say `GraphWrite` refer to this
+  write surface unless a later ADR introduces a narrower interface.
 - Chunk 5b matrix runs pass against `local_authoritative`,
   `local_full_stack`, and `production` profiles with recorded perf evidence
 - NornicDB is now the default `PCG_GRAPH_BACKEND`; Neo4j remains the explicit
@@ -26,6 +28,7 @@
 - `docs/docs/adrs/2026-04-20-embedded-local-backends-desktop-mode.md`
 - `docs/docs/adrs/2026-04-20-embedded-local-backends-implementation-plan.md`
 - `docs/docs/reference/capability-conformance-spec.md`
+- `docs/docs/reference/backend-conformance.md`
 - `docs/docs/reference/truth-label-protocol.md`
 - `docs/docs/reference/local-data-root-spec.md`
 - `docs/docs/reference/local-host-lifecycle.md`
@@ -48,10 +51,10 @@ policy honest: for now, it consumes latest NornicDB `main` through explicit
 has no accepted assets.
 
 **Remaining work:** keep latest-main validation current, finish broader host
-coverage, and pass Chunk 5/5b conformance and profile-matrix gates before
-treating this ADR as complete. A release-backed or signed accepted-build policy
-can still replace latest-main evaluation later, but it is not the current
-default install contract.
+coverage, and pass the live Chunk 5/5b conformance and profile-matrix gates
+before treating this ADR as complete. A release-backed or signed accepted-build
+policy can still replace latest-main evaluation later, but it is not the
+current default install contract.
 
 ## Promotion Guardrail (2026-05-04)
 
@@ -61,7 +64,7 @@ are true at the same time:
 | Gate | Current state | Blocks |
 | --- | --- | --- |
 | Latest-main dependency policy | The checked-in manifest intentionally has no accepted assets. Users install an explicit latest-main NornicDB binary with `--from` or point `PCG_NORNICDB_BINARY` at one. | Treating no-argument installs as supported or silently falling back to an old forked asset. |
-| Conformance | Chunk 5 backend conformance and Chunk 5b profile matrix are still open in the implementation plan. | Calling NornicDB fully promoted across `local_authoritative`, `local_full_stack`, and `production`. |
+| Conformance | Chunk 5 now has the DB-free backend matrix and Go harness; live adapter runs and Chunk 5b profile matrix are still open in the implementation plan. | Calling NornicDB fully promoted across `local_authoritative`, `local_full_stack`, and `production`. |
 | Install trust | SHA-256 checks exist for explicit install sources, but binary signature policy remains future work. | Treating installed NornicDB binaries as a closed supply-chain contract. |
 
 Default backend selection can stay in place while these gates close. Removing
@@ -74,7 +77,7 @@ policy, conformance run IDs, and profile-matrix evidence.
 | --- | --- | --- | --- |
 | Profile/backend admission | In progress | `0e4d8a5f`, current branch local-host profile/backend gating, current branch loopback-TCP sidecar lifecycle and shared Bolt-driver path, manual smoke with `/tmp/nornicdb-headless` showing healthy owner + clean Ctrl-C shutdown; `575ca864` added `TestNornicDBSyntaxVerification` and `TestNornicDBCompatibilityWorkarounds`; `5f5a781e` added schema-dialect routing and `TestNornicDBSchemaAdapterVerification`; current branch managed-install discovery prefers `${PCG_HOME}/bin/nornicdb-headless` after explicit env override; 2026-04-22 temporary-home smoke proved local_authoritative start/status/logs/stop with NornicDB; 2026-04-23 MCP smoke proved content-index-backed `search_file_content` and `find_code` continue to work while canonical graph projection degrades on a bounded NornicDB write timeout; current branch lets `pcg install nornicdb --from <source>` consume local binaries, local tar archives, macOS packages, and URLs; current branch remote installs honor `cmd.Context()` cancellation and use `PCG_NORNICDB_INSTALL_TIMEOUT` (`30s` default) when slower links need a larger budget; current branch intentionally leaves the embedded release manifest empty while PCG tracks latest NornicDB `main`, so no-argument installs fail with explicit latest-main `--from` guidance instead of using the old forked asset; current branch `TestLocalAuthoritativeStartupEnvelope` measured startup readiness at the owner-record plus ingester handoff with an explicitly installed binary: cold start `9.045253708s`, warm restart `490.996625ms` | install trust policy, broader host coverage, broader query/memory perf |
 | Operator CLI surface | In progress | `da35d729`, current branch `pcg graph status`; current branch `pcg install nornicdb --from <source> [--sha256 <hex>] [--force]` installs from a local binary/archive/package/URL, honors `Ctrl-C` on remote downloads, accepts `PCG_NORNICDB_INSTALL_TIMEOUT=<duration>` for slower links, and keeps headless as the managed laptop binary name; bare no-argument install is reserved for a future accepted manifest policy; current branch `pcg graph logs`; current branch owner-aware `pcg graph stop`; current branch foreground `pcg graph start`; current branch stopped-owner `pcg graph upgrade --from <source>`; current branch `pcg watch` / `pcg graph start` now render a live local progress panel from the shared status store (owner/profile/backend header, collector/projector/reducer lanes, and queue pressure) instead of a fake percentage bar; 2026-04-22 smoke proved install → start → status running → logs → stop → status stopped | signature verification, broader host coverage |
-| Adapter conformance | In progress | current branch routes NornicDB canonical writes through bounded phase-group transactions by default, applies Bolt `tx_timeout` metadata plus client context deadlines, preserves production Neo4j grouped writes, and adds the explicit `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` conformance switch for proving NornicDB grouped writes; current branch exposes NornicDB phase, row, and label tuning knobs; current branch routes call-chain, transitive relationships, and dead-code through backend-aware query builders; current branch preserves the latest-main evaluation switch `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` for binaries that include the required row-safe hot path; the 2026-05-03 full-corpus proof against the NornicDB `#136` latest-main handoff drained cleanly and passed API/MCP drilldowns; current branch `TestServiceRunAcksSuccessfulProjectionAfterShutdownCancel` proves completed projector work can ack through foreground owner shutdown without the `ack projector work: begin: context canceled` tail | full `GraphQuery`/`GraphWrite` adapter conformance, profile matrix runs, broader query/memory perf envelope |
+| Adapter conformance | In progress | current branch routes NornicDB canonical writes through bounded phase-group transactions by default, applies Bolt `tx_timeout` metadata plus client context deadlines, preserves production Neo4j grouped writes, and adds the explicit `PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true` conformance switch for proving NornicDB grouped writes; current branch exposes NornicDB phase, row, and label tuning knobs; current branch routes call-chain, transitive relationships, and dead-code through backend-aware query builders; current branch preserves the latest-main evaluation switch `PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT=true` for binaries that include the required row-safe hot path; the 2026-05-03 full-corpus proof against the NornicDB `#136` latest-main handoff drained cleanly and passed API/MCP drilldowns; current branch `TestServiceRunAcksSuccessfulProjectionAfterShutdownCancel` proves completed projector work can ack through foreground owner shutdown without the `ack projector work: begin: context canceled` tail; current branch adds `specs/backend-conformance.v1.yaml` plus the `go/internal/backendconformance` DB-free harness and proves the current `GraphQuery` and reducer Cypher write adapter surfaces can consume it | live adapter conformance runs, profile matrix runs, broader query/memory perf envelope |
 | Performance + promotion gates | In progress | current branch `TestLocalAuthoritativeStartupEnvelope`; 2026-04-23 measured local-authoritative cold start `9.045253708s` and warm restart `490.996625ms`; synthetic call-chain, transitive-caller, and dead-code envelopes passed through the real local-authoritative handlers; current branch graph-analysis Compose proof covers direct callers, transitive callers, shortest call-chain path, dead-code results, and canonical graph `CALLS` edges; 2026-05-03 full-corpus proof against latest-main NornicDB `#136` drained in under 15 minutes with no retrying, failed, or dead-lettered rows and passed API/MCP health plus evidence drilldowns; current branch removes the foreground `graph start` ack-cancel tail by giving only the post-success projector ack a bounded shutdown context | reducer-throughput perf smoke, idle/active memory budgets, production-scale comparison, profile matrix proof |
 
 Latest 2026-05-03 NornicDB dogfood evidence:
@@ -487,8 +490,8 @@ matrix.
 
 ## Migration Path Summary
 
-1. Land the `local_authoritative` profile: sidecar installer, adapter
-   behind `GraphQuery` and `GraphWrite` ports, data-root + lifecycle
+1. Land the `local_authoritative` profile: sidecar installer, adapter behind
+   `GraphQuery` and the Cypher write executor family, data-root + lifecycle
    updates, conformance suite run at laptop scale.
 2. If the laptop gate passes, run the conformance suite against Compose
    (`local_full_stack`) with NornicDB in place of Neo4j.
@@ -519,7 +522,7 @@ matrix.
 
 ### Operational guardrails
 
-- Default graph backend stays Neo4j until all three profile gates pass.
+- NornicDB is the default graph backend while promotion gates remain explicit.
 - `PCG_GRAPH_BACKEND` is validated at startup; no silent default drift.
 - Response `truth.backend` field is optional but consistent across CLI /
   HTTP / MCP when surfaced.
@@ -529,7 +532,8 @@ matrix.
 
 Before the sidecar is called "supported" on `local_authoritative`:
 
-1. `GraphQuery` + `GraphWrite` adapters pass PCG's existing handler tests.
+1. `GraphQuery` plus the Cypher write executor family pass PCG's existing
+   handler and adapter tests.
 2. Schema dialect verification passes on a real NornicDB instance:
    `TestNornicDBSchemaAdapterVerification` must execute the complete rendered
    NornicDB schema. The exact-Neo4j syntax probe remains useful evidence for
