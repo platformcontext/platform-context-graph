@@ -1,0 +1,61 @@
+{
+  "package": "cmd/projector",
+  "package_name_decl": "main",
+  "files": [
+    "config.go",
+    "doc.go",
+    "main.go",
+    "runtime_wiring.go"
+  ],
+  "exported_types": [],
+  "exported_funcs": [],
+  "exported_consts": [],
+  "exported_vars": [],
+  "internal_imports": [
+    "github.com/platformcontext/platform-context-graph/go/internal/app",
+    "github.com/platformcontext/platform-context-graph/go/internal/content",
+    "github.com/platformcontext/platform-context-graph/go/internal/projector",
+    "github.com/platformcontext/platform-context-graph/go/internal/runtime",
+    "github.com/platformcontext/platform-context-graph/go/internal/status",
+    "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher",
+    "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres",
+    "github.com/platformcontext/platform-context-graph/go/internal/telemetry"
+  ],
+  "external_imports": [
+    "github.com/jackc/pgx/v5/stdlib",
+    "github.com/neo4j/neo4j-go-driver/v5/neo4j",
+    "go.opentelemetry.io/otel/trace",
+    "log/slog",
+    "os",
+    "os/signal",
+    "syscall"
+  ],
+  "telemetry": {
+    "spans": [],
+    "metrics": [],
+    "log_keys": []
+  },
+  "env_vars": [
+    {"name": "PCG_PROJECTOR_RETRY_ONCE_SCOPE_GENERATION", "file": "config.go", "line": 10},
+    {"name": "PCG_NEO4J_BATCH_SIZE", "file": "runtime_wiring.go", "line": 183},
+    {"name": "PCG_PROJECTOR_MAX_ATTEMPTS", "file": "main_test.go", "line": 0},
+    {"name": "PCG_PROJECTOR_RETRY_DELAY", "file": "main_test.go", "line": 0}
+  ],
+  "state_machines": [],
+  "error_types": [],
+  "test_files": [
+    "main_test.go",
+    "runtime_wiring_test.go"
+  ],
+  "adr_references": [
+    {"path": "docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md", "what_it_says": "Backend selection via PCG_GRAPH_BACKEND; projector wires through runtime.OpenNeo4jDriver which respects this env."}
+  ],
+  "lifecycle_summary": "main() bootstraps telemetry, opens Postgres and the canonical graph writer (Neo4j/NornicDB via runtime.OpenNeo4jDriver), builds projector.Service via buildProjectorService (wiring projectorQueue, reducerQueue, FactStore, Runtime), and hosts the assembled service with app.NewHostedWithStatusServer to expose /healthz, /readyz, /metrics, and /admin/status. Signal context (SIGINT/SIGTERM) cancels the root context, which drains in-flight projection work with a per-ack timeout.",
+  "entry_points": [
+    {"name": "main", "file": "main.go", "line": 20, "role": "binary entry point — telemetry bootstrap and run"},
+    {"name": "run", "file": "main.go", "line": 35, "role": "wire telemetry, Postgres, graph backend, build service, host it"},
+    {"name": "buildProjectorService", "file": "runtime_wiring.go", "line": 26, "role": "construct projector.Service with queue, fact store, and runtime wired"},
+    {"name": "buildProjectorRuntime", "file": "runtime_wiring.go", "line": 58, "role": "construct projector.Runtime with canonical, content, intent, phase, and repair wired"},
+    {"name": "openProjectorCanonicalWriter", "file": "runtime_wiring.go", "line": 80, "role": "open Neo4j driver, wrap with InstrumentedExecutor, return CanonicalNodeWriter"}
+  ]
+}
