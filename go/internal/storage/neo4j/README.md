@@ -1,9 +1,9 @@
 # storage/neo4j
 
 `storage/neo4j` is a reserved package for Neo4j-specific graph storage adapters.
-It currently contains only `doc.go`. The Bolt driver and session adapters that
-implement the `cypher.Executor` seam live in `cmd/` wiring packages while the
-storage boundary is being narrowed.
+Today the only Go source it carries is `doc.go`; the Bolt driver and session
+adapters that implement the `cypher.Executor` seam live in `cmd/` wiring
+packages while the storage boundary is being narrowed.
 
 ## Where this fits in the pipeline
 
@@ -45,10 +45,12 @@ whatever executor is passed in, whether it lives here or in `cmd/`.
 
 ## Operational notes
 
-Neo4j is the default graph backend (env var PCG_GRAPH_BACKEND=neo4j). Bolt
-driver session wiring in `cmd/ingester` and `cmd/reducer` controls connection
-pool size, database name, and transaction timeout. When adapter code moves here,
-those knobs will surface from this package.
+Selecting Neo4j requires setting PCG_GRAPH_BACKEND=neo4j explicitly: when the
+env var is empty, runtime.LoadGraphBackend returns the NornicDB default
+(see `runtime` for the env contract). Bolt driver session wiring in
+`cmd/ingester` and `cmd/reducer` controls connection pool size, database
+name, and transaction timeout. When adapter code moves here, those knobs
+will surface from this package.
 
 ## Extension points
 

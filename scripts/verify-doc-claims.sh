@@ -101,11 +101,13 @@ extract_telemetry_idents() {
 }
 
 extract_file_cites() {
-  # Capture backticked path:line cites like `runtime.go:191` or
-  # `canonical_builder.go:112`. Returns one cite per line.
+  # Capture backticked path:line cites like `runtime.go:191`, `neo4j.go:34`,
+  # or `canonical_builder.go:112`. The character class includes digits so
+  # filenames like `neo4j.go` and `client_v2.go` are not silently skipped.
+  # Returns one cite per line.
   strip_fences "$1" \
     | rg --only-matching --no-line-number \
-        '`[a-z_]+\.go:[0-9]+`' \
+        '`[a-z0-9_]+\.go:[0-9]+`' \
     | tr -d '`' \
     | sort -u
 }

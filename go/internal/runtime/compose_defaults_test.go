@@ -218,7 +218,11 @@ func TestRepositoryDocumentationStandardsAreEnforced(t *testing.T) {
 		if _, isContainer := containerDirs[path]; isContainer {
 			return nil
 		}
-		// Only directories with non-test, non-doc.go Go source are Go packages.
+		// A directory is a Go package if it contains at least one
+		// non-test .go file. doc.go alone counts — packages that ship
+		// only a contract (e.g. a reserved-namespace package) still need
+		// README.md and AGENTS.md so contributors landing there get the
+		// pipeline-position context.
 		entries, readErr := os.ReadDir(path)
 		if readErr != nil {
 			return readErr
@@ -232,7 +236,7 @@ func TestRepositoryDocumentationStandardsAreEnforced(t *testing.T) {
 			if !strings.HasSuffix(name, ".go") {
 				continue
 			}
-			if strings.HasSuffix(name, "_test.go") || name == "doc.go" {
+			if strings.HasSuffix(name, "_test.go") {
 				continue
 			}
 			hasSource = true

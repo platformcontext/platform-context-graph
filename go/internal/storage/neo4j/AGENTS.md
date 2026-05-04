@@ -51,7 +51,8 @@
 Since the package currently has no code, failures today are in `cmd/` wiring:
 
 - Symptom: Neo4j connection failure at startup → check PCG_NEO4J_URI,
-  PCG_NEO4J_USER, PCG_NEO4J_PASSWORD in environment; check that the
+  PCG_NEO4J_USERNAME (legacy NEO4J_USERNAME also accepted), PCG_NEO4J_PASSWORD
+  (legacy NEO4J_PASSWORD also accepted) in environment; check that the
   Neo4j service is healthy in Docker Compose or Kubernetes.
 
 - Symptom: `pcg_dp_neo4j_deadlock_retries_total` rising → MERGE contention on

@@ -232,9 +232,9 @@ dialect differences belong in `internal/storage/cypher` adapters behind the
   `nil` for the current profile; a nil max-truth means the capability is
   explicitly unsupported at that profile level. `APIRouter` and every handler that
   gates on capability call this helper (`handler.go:105`, `contract.go:127`).
-- `Neo4jReader` opens a new session per query via `driver.NewSession`
-  (`neo4j.go:50`); the session is closed in a `defer`. Do not hold sessions
-  across multiple queries in the same handler.
+- `Neo4jReader` opens a new session per query by calling `NewSession` on the
+  driver (`neo4j.go:50`); the session is closed in a `defer`. Do not hold
+  sessions across multiple queries in the same handler.
 - `ContentReader` traces each Postgres call with an OTEL span labeled
   `db.sql.table`; queries that scan multiple tables need per-call spans to avoid
   misleading attribution (`content_reader.go:45`).

@@ -55,7 +55,7 @@ None. This is a pure value-type package with no runtime I/O.
   domain registration time.
 - `SourceLayers` must be non-empty and free of duplicates. `Contract.Validate`
   (`model.go:53`) enforces both checks before returning nil.
-- `Contract.Supports` (`model.go:73`) is a linear scan over the slice. The
+- `Contract.Supports` (`model.go:74`) is a linear scan over the slice. The
   slice is intentionally short; callers should not cache results.
 - Adding a new layer requires updating the `Validate` switch in `model.go`,
   `ParseLayer`, and any downstream materialization that switches on `Layer`

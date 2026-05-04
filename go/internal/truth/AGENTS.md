@@ -11,7 +11,7 @@
 ## Invariants this package enforces
 
 - **`LayerCanonicalAsset` is output-only** — `Contract.Validate` at
-  `model.go:60` explicitly rejects `LayerCanonicalAsset` in `SourceLayers`.
+  `model.go:61` explicitly rejects `LayerCanonicalAsset` in `SourceLayers`.
   Never add it as a source layer in a reducer registration.
 - **Non-empty, duplicate-free `SourceLayers`** — `model.go:53` and `:57`
   enforce both. A `Contract` with an empty or duplicate `SourceLayers` slice
