@@ -26,7 +26,7 @@ Flags (`go/cmd/admin-status/main.go`):
 - `--format` selects the output format. Accepts `text` (default) or `json`.
 
 Postgres connection is resolved through `runtime.OpenPostgres`, which reads
-the standard `PCG_POSTGRES_DSN` environment variable used by the rest of the
+the standard PCG_POSTGRES_DSN environment variable used by the rest of the
 runtime.
 
 ## Telemetry

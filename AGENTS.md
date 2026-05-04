@@ -450,19 +450,30 @@ chunk boundaries must include:
 5. Add comments for new or touched unexported Go helpers when they encode a
    contract, storage/query assumption, concurrency rule, retry rule, or
    regression purpose.
-6. Every Go package directory in `go/` has both `README.md` and `doc.go`.
-   `doc.go` carries the package contract for `go doc` consumers (real
-   exported identifiers, invariants, failure modes); `README.md` carries the
-   architectural and operational lens (ownership boundary, dependencies,
-   telemetry the package emits, gotchas). They are not redundant — different
-   audiences. The `pcg-folder-doc-keeper` skill (in `.agents/skills/`,
-   symlinked into `.claude/skills/` and `.codex/skills/`) plus the
-   PostToolUse hook at `.claude/hooks/pcg-doc-staleness.sh` (Claude Code) and
-   `.codex/hooks/pcg-doc-staleness.sh` (Codex) keep them in sync. When the
-   hook flags a directory in `.pcg-doc-state/stale.jsonl`, run the skill
-   before committing. Container directories without Go source (`go/`,
-   `go/cmd/`, `go/internal/`, `go/internal/storage/`,
-   `go/internal/terraformschema/schemas/`) keep `README.md` only, since they
+6. Every Go package directory in `go/` has three files: `doc.go`,
+   `README.md`, and `AGENTS.md`. `doc.go` carries the package contract for
+   `go doc` consumers (real exported identifiers, invariants, failure
+   modes). `README.md` carries the architectural and operational lens for
+   human contributors — pipeline-position mermaid, internal-flow mermaid,
+   lifecycle prose, exported surface, dependencies, telemetry the package
+   emits, operational runbook notes, extension points, and gotchas with
+   `file.go:line` cites. `AGENTS.md` carries guidance for LLM assistants
+   editing the package — read-first ordered file list, invariants citing
+   file:line, common changes scoped by file, failure modes mapped to
+   metric/log/span, package-specific anti-patterns, and what NOT to change
+   without an ADR. Three audiences, three files, no duplication. The
+   `pcg-folder-doc-keeper` skill (in `.agents/skills/`, symlinked into
+   `.claude/skills/` and `.codex/skills/`) defines the writing standards.
+   The PostToolUse hooks at `.claude/hooks/pcg-doc-staleness.sh` (Claude
+   Code) and `.codex/hooks/pcg-doc-staleness.sh` (Codex) flag drift in
+   `.pcg-doc-state/stale.jsonl`. The slop gate at
+   `scripts/verify-doc-claims.sh` confirms every backticked Go identifier
+   in `README.md` and `AGENTS.md` appears literally in source, every
+   `file.go:NN` cite resolves to a real line, and no marketing words
+   leaked through. Run the verifier on a package before committing
+   doc-only changes there. Container directories without Go source
+   (`go/`, `go/cmd/`, `go/internal/`, `go/internal/storage/`,
+   `go/internal/terraformschema/schemas/`) keep `README.md` only — they
    are not Go packages. Docs directories may use `index.md`; generated,
    vendor, build, cache, and fixture leaf directories are exempt.
 7. Keep OpenAPI changes in lockstep with `go/internal/query/openapi*.go`,
@@ -501,14 +512,17 @@ uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
 
 ## Doc-keeper Workflow
 
-Every Go package directory in `go/` carries both `README.md` and `doc.go`.
-The `pcg-folder-doc-keeper` skill (in `.agents/skills/`, symlinked into
-`.claude/skills/` and `.codex/skills/`) defines the writing standards. A
-PostToolUse hook for Claude Code (`.claude/hooks/pcg-doc-staleness.sh`,
-matcher `Edit|MultiEdit|Write`) and one for Codex (`.codex/hooks/pcg-doc-
-staleness.sh`, matcher `^apply_patch$`) both delegate to a tool-neutral
+Every Go package directory in `go/` carries three files: `doc.go`,
+`README.md`, and `AGENTS.md`. The `pcg-folder-doc-keeper` skill (in
+`.agents/skills/`, symlinked into `.claude/skills/` and `.codex/skills/`)
+defines the writing standards. A PostToolUse hook for Claude Code
+(`.claude/hooks/pcg-doc-staleness.sh`, matcher `Edit|MultiEdit|Write`)
+and one for Codex (`.codex/hooks/pcg-doc-staleness.sh`, matcher
+`^apply_patch$`) both delegate to a tool-neutral
 `scripts/check-docs-stale.sh`, which writes a JSONL drift snapshot to
-`.pcg-doc-state/stale.jsonl` (gitignored).
+`.pcg-doc-state/stale.jsonl` (gitignored). A separate slop gate at
+`scripts/verify-doc-claims.sh` validates that documentation claims are
+grounded in source.
 
 Workflow:
 
@@ -525,20 +539,39 @@ Workflow:
 2. If `.pcg-doc-state/stale.jsonl` is non-empty, invoke the
    `pcg-folder-doc-keeper` skill before committing. The skill reads the
    snapshot, scopes its update to the directories it names, and refreshes
-   only the affected sections of `README.md` and `doc.go`.
+   only the affected sections of `README.md`, `AGENTS.md`, and `doc.go`.
 
-3. The hook is a snapshot, not a log: it overwrites `stale.jsonl` on each
-   `--all` run, so you do not need to clear it manually. If you want to
-   keep history, rotate the file to a `.resolved` sibling before the next
-   tool use.
+3. Before committing doc-only changes to a package, run the slop gate on
+   that package:
 
-4. The same script is suitable as a git `pre-commit` hook for contributors
-   who want commit-time enforcement; install it locally with the CI/CD
-   pre-commit framework or a thin wrapper.
+   ```bash
+   scripts/verify-doc-claims.sh go/internal/<pkg>
+   ```
+
+   The verifier (a) confirms every backticked Go identifier in `README.md`
+   and `AGENTS.md` appears literally in the package's `.go` files (or is
+   in the explicit allowlist of stdlib / project-wide names), (b) checks
+   every `file.go:NN` cite — file exists in the package, line is within
+   EOF, and at least one identifier from the same paragraph appears within
+   ±10 lines of the cited line — to catch citation drift, (c) runs an
+   anti-marketing pass that fails on `leverages, seamlessly, robust,
+   powerful, comprehensive, key role, stands as, serves as, underscores,
+   showcases, facilitates, delves`. Run with `--all` to walk every Go
+   package under `go/`.
+
+4. The drift check hook is a snapshot, not a log: it overwrites
+   `stale.jsonl` on each `--all` run, so you do not need to clear it
+   manually. If you want to keep history, rotate the file to a `.resolved`
+   sibling before the next tool use.
+
+5. Both scripts are suitable as git `pre-commit` hooks; install them
+   locally with the CI/CD pre-commit framework or a thin wrapper.
 
 Container directories without Go source (`go/`, `go/cmd/`, `go/internal/`,
 `go/internal/storage/`, `go/internal/terraformschema/schemas/`) keep
-`README.md` only — they are not Go packages, so `doc.go` would not compile.
+`README.md` only — they are not Go packages, so `doc.go` would not compile
+and the LLM-assistant `AGENTS.md` is not useful where there is no code to
+edit.
 
 ## Git Auth Switching
 

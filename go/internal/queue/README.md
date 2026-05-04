@@ -2,48 +2,89 @@
 
 ## Purpose
 
-Durable work-item contracts for the fact-projection queue. Models the row
-shape, the lifecycle transitions, and the bounded retry and failure metadata
-shared by projector and reducer consumers.
+`queue` defines the durable Go work-item contracts shared by the projector,
+reducer, and replay paths. It models one queue row's lifecycle — pending
+through running to succeeded or dead-letter — along with the bounded retry and
+failure metadata that operators use to diagnose and recover stuck work.
 
 ## Ownership boundary
 
-Owns the work-item value type, status enum, transition methods, retry and
-failure records, and the scope-generation key. Postgres-backed claim, lease,
-and visibility logic lives in `internal/storage/postgres`. This package has
-no I/O.
+Owns the work-item value type, the `WorkItemStatus` enum and its constants,
+the transition methods, and the retry and failure record carriers. The
+Postgres-backed claim, lease, and visibility operations live in
+`internal/storage/postgres`. This package has no I/O.
+
+## Status state machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> pending
+  pending --> claimed : Claim
+  retrying --> claimed : Claim
+  claimed --> running : StartRunning
+  claimed --> succeeded : Succeed
+  claimed --> retrying : Retry
+  claimed --> dead_letter : Fail
+  running --> succeeded : Succeed
+  running --> retrying : Retry
+  running --> dead_letter : Fail
+  dead_letter --> pending : Replay
+  failed --> pending : Replay
+  succeeded --> [*]
+  dead_letter --> [*]
+```
+
+`StatusFailed` (`"failed"`) is a deprecated legacy terminal state retained so
+old rows can still be replayed. New code reaches terminal failure through
+`Fail`, which writes `StatusDeadLetter`.
 
 ## Exported surface
 
-- `WorkItem` value with `ScopeGenerationKey`.
-- Transitions: `Claim`, `StartRunning`, `Retry`, `Fail`, `Succeed`, `Replay`.
-- `WorkItemStatus` constants (`pending`, `claimed`, `running`, `retrying`,
-  `succeeded`, `dead_letter`, and the deprecated `failed`).
-- `RetryState` and `FailureRecord` carriers.
+- `WorkItem` — the durable row shape. Transitions: `Claim`, `StartRunning`,
+  `Retry`, `Fail`, `Succeed`, `Replay`. Also: `ScopeGenerationKey` returns the
+  `scopeID:generationID` boundary string.
+- `WorkItemStatus` — string alias for the status enum.
+- Status constants: `StatusPending`, `StatusClaimed`, `StatusRunning`,
+  `StatusRetrying`, `StatusSucceeded`, `StatusDeadLetter`, `StatusFailed`
+  (deprecated).
+- `RetryState` — bounded retry timing: `AttemptCount`, `LastAttemptAt`,
+  `NextAttemptAt`.
+- `FailureRecord` — durable failure classification: `FailureClass`, `Message`,
+  `Details`.
+
+See `doc.go` for the full godoc contract.
 
 ## Dependencies
 
-Standard library only.
+Standard library only (`errors`, `fmt`, `time`).
 
 ## Telemetry
 
-None directly. Storage adapters and consumer workers add telemetry around
-each transition.
+This package emits no metrics, spans, or logs. Storage adapters and consumer
+workers in `internal/storage/postgres`, `internal/projector`, and
+`internal/reducer` add telemetry around each transition.
 
 ## Gotchas / invariants
 
-- Transitions return new values; the receiver is not mutated. Callers must
-  persist the returned `WorkItem`.
-- `Claim` requires a positive lease duration and a status of `pending` or
-  `retrying`. Other statuses are not claimable.
-- `Retry` requires a `nextAttempt` no earlier than `now`.
-- `StatusFailed` is retained only so legacy rows can be replayed; new code
-  should reach terminal failure via `Fail` (which writes `dead_letter`).
-- `Replay` resets `AttemptCount` to zero. Operators using replay accept that
-  retry budget restarts.
+- Every transition method clones the receiver and returns a new `WorkItem`. The
+  original is not mutated. Callers must persist the returned value.
+- `Claim` requires a positive lease duration and a status of `StatusPending` or
+  `StatusRetrying`. All other statuses return an error.
+- `Retry` requires `nextAttempt` to be at or after `now`; passing an earlier
+  time returns an error.
+- `Replay` resets `AttemptCount` to zero. Operators that invoke replay accept
+  that the retry budget restarts from scratch.
+- `StatusFailed` is retained only so legacy rows can be replayed via `Replay`.
+  Do not produce new rows in this state; use `Fail` instead, which writes
+  `StatusDeadLetter`.
+- `WorkItem.VisibleAt` and `ClaimUntil` are set to `nil` by `StartRunning`,
+  `Succeed`, and `Fail` to prevent stale visibility timestamps from blocking
+  future queue scans.
 
 ## Related docs
 
-- `docs/docs/architecture.md`
-- `docs/docs/deployment/service-runtimes.md`
-- `go/internal/storage/postgres/` for the durable adapter
+- `docs/docs/architecture.md` — pipeline and ownership table
+- `docs/docs/deployment/service-runtimes.md` — projector and reducer runtime
+  lanes
+- `go/internal/storage/postgres/` — Postgres-backed claim, lease, and
+  visibility adapter

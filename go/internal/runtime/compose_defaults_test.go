@@ -179,7 +179,7 @@ func TestRepositoryDocumentationStandardsAreEnforced(t *testing.T) {
 		"golangci-lint run ./...",
 		"Document every new or touched exported Go type",
 		"Keep OpenAPI changes in lockstep",
-		"Every Go package directory in `go/` has both `README.md` and `doc.go`",
+		"Every Go package directory in `go/` has three files: `doc.go`,",
 	} {
 		if !strings.Contains(agents, required) {
 			t.Fatalf("agent standards missing %q", required)
@@ -189,6 +189,72 @@ func TestRepositoryDocumentationStandardsAreEnforced(t *testing.T) {
 	workflow := readRepositoryFile(t, root, ".github/workflows/test.yml")
 	if !strings.Contains(workflow, "golangci-lint run ./...") {
 		t.Fatal(".github/workflows/test.yml must run golangci-lint")
+	}
+
+	// Every Go package directory under go/ must carry README.md and AGENTS.md
+	// alongside its doc.go. This is the new per-package convention; the
+	// pcg-folder-doc-keeper skill plus scripts/verify-doc-claims.sh enforce
+	// the content shape, but presence is enforced here so a contributor
+	// adding a package cannot skip the docs.
+	goDir := filepath.Join(root, "go")
+	containerDirs := map[string]struct{}{
+		filepath.Join(goDir):                                       {},
+		filepath.Join(goDir, "cmd"):                                {},
+		filepath.Join(goDir, "internal"):                           {},
+		filepath.Join(goDir, "internal", "storage"):                {},
+		filepath.Join(goDir, "internal", "terraformschema", "schemas"): {},
+	}
+	err := filepath.WalkDir(goDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		base := d.Name()
+		if base == "vendor" || base == "testdata" || base == "bin" {
+			return filepath.SkipDir
+		}
+		if _, isContainer := containerDirs[path]; isContainer {
+			return nil
+		}
+		// A directory is a Go package if it contains at least one
+		// non-test .go file. doc.go alone counts — packages that ship
+		// only a contract (e.g. a reserved-namespace package) still need
+		// README.md and AGENTS.md so contributors landing there get the
+		// pipeline-position context.
+		entries, readErr := os.ReadDir(path)
+		if readErr != nil {
+			return readErr
+		}
+		hasSource := false
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if !strings.HasSuffix(name, ".go") {
+				continue
+			}
+			if strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			hasSource = true
+			break
+		}
+		if !hasSource {
+			return nil
+		}
+		for _, file := range []string{"README.md", "AGENTS.md", "doc.go"} {
+			if _, statErr := os.Stat(filepath.Join(path, file)); statErr != nil {
+				rel, _ := filepath.Rel(root, path)
+				t.Errorf("Go package %s missing required %s", rel, file)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk go directory: %v", err)
 	}
 }
 
