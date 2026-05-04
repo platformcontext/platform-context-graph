@@ -105,6 +105,22 @@ func TestWorkflowControlStoreReconcileWorkflowRunsUpdatesRunAndCompleteness(t *t
 	}
 }
 
+func TestWorkflowControlStoreReconcileWorkflowRunsJoinsExactPhaseStateTuple(t *testing.T) {
+	t.Parallel()
+
+	query := listWorkflowCollectorPhaseCountsQuery
+	for _, want := range []string{
+		"phase.scope_id = item.scope_id",
+		"phase.acceptance_unit_id = item.acceptance_unit_id",
+		"phase.source_run_id = item.source_run_id",
+		"phase.generation_id = item.generation_id",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("phase-count query missing exact identity predicate %q:\n%s", want, query)
+		}
+	}
+}
+
 func TestWorkflowControlStoreReconcileWorkflowRunsReturnsZeroWhenNoRunsNeedWork(t *testing.T) {
 	t.Parallel()
 

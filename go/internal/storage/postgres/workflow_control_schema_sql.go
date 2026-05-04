@@ -1,3 +1,6 @@
+package postgres
+
+const workflowControlSchemaSQL = `
 CREATE TABLE IF NOT EXISTS workflow_runs (
     run_id TEXT PRIMARY KEY,
     trigger_kind TEXT NOT NULL,
@@ -122,3 +125,4 @@ CREATE INDEX IF NOT EXISTS workflow_claims_active_expiry_idx
     ON workflow_claims (status, lease_expires_at ASC);
 CREATE INDEX IF NOT EXISTS workflow_claims_work_item_idx
     ON workflow_claims (work_item_id, updated_at DESC);
+`

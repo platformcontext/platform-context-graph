@@ -399,10 +399,18 @@ The coordinator ships dark by default in this slice:
 
 - `workflowCoordinator.enabled` defaults to `false`
 - `workflowCoordinator.collectorInstances` defaults to `[]`
+- Helm keeps `workflowCoordinator.deploymentMode=dark` and
+  `workflowCoordinator.claimsEnabled=false`; active claim ownership is blocked
+  in the chart for this branch
 - `PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE=dark`
 - `PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED=false`
 - the shared `/admin/status` surface stays on so operators can validate the
   control plane before ownership is enabled
+
+For proof runs, Compose may run the coordinator in active mode only when the
+operator sets both claim flags and an explicit claim-enabled collector instance.
+That proof path is for fenced claim validation, API/MCP truth checks, and
+remote full-corpus timing; it is not the Kubernetes production default.
 
 ## DB Migrate (Schema Init Container)
 

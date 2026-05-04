@@ -13,15 +13,18 @@
 
 ## Status Review (2026-05-03)
 
-**Current disposition:** Accepted; production ownership incomplete.
+**Current disposition:** Accepted; Git claim proof path implemented, production
+ownership still guarded.
 
 The dark-mode coordinator runtime, config, Compose, Helm, and status wiring
-exist. Claims remain disabled by default while Git collector migration, new
-collector families, webhook intake, and production ownership gates are still
-unfinished.
+exist. Claims remain disabled by default. The claim-aware Git runner, fenced
+release, family fairness scheduler, and active Compose proof guard now exist,
+but Kubernetes still keeps coordinator claims dark until remote full-corpus
+validation proves clean queue state, API/MCP truth, and evidence drilldown.
 
 **Remaining work:** finish claim-enabled production ownership only after the
-collector families and convergence checks are ready.
+remote proof and the future collector families are ready. Webhook intake stays
+as a separate trigger path.
 
 ## Context
 

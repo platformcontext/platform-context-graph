@@ -10,17 +10,28 @@
 
 ## Status Review (2026-05-03)
 
-**Current disposition:** Accepted; claim substrate partial.
+**Current disposition:** Accepted; coordinator claim contract implemented for
+the guarded proof path.
 
-Claim tables, fencing operations, and claim issuance exist. Production
-convergence is still blocked by narrower identity work: some workflow
-reconciliation still joins readiness on `scope_id + generation_id` while graph
-projection phase state is keyed by `scope_id`, `acceptance_unit_id`,
-`source_run_id`, `generation_id`, keyspace, and phase.
+Claim tables, fencing operations, claim issuance, first-class claim release,
+weighted family fairness, exact-tuple reconciliation, and a claim-aware Git
+collector runner now exist. Work items carry `source_system`,
+`acceptance_unit_id`, and `source_run_id` with `scope_id` and `generation_id`.
+Workflow reconciliation joins reducer-published phase truth on that exact tuple
+before counting a phase as published for a work item.
 
-**Remaining work:** add the missing acceptance-unit and source-run identity to
-workflow work items and reconciliation before enabling production claim
-ownership.
+The Postgres workflow-control migration now backfills those identity fields for
+upgraded rows: `source_system` comes from `collector_kind`,
+`acceptance_unit_id` comes from `scope_id`, and `source_run_id` comes from
+`generation_id`. Rows that predate required generation identity are marked
+terminal with `legacy_missing_generation_identity` instead of being claimed
+under an invented active run.
+
+Deployment promotion is still guarded. Compose has an explicit active proof
+path, but Helm remains dark-only until the remote full-corpus proof, API/MCP
+truth checks, and evidence validation are clean. Webhook intake/back-pressure
+remains a separate follow-up because it is trigger intake, not the Git claim
+contract.
 
 ## Context
 
@@ -176,11 +187,11 @@ The reducer-owned phase state remains authoritative for downstream
 convergence. Implementations that compute completeness by joining
 `workflow_work_items` to `graph_projection_phase_state` MUST include
 `acceptance_unit_id` and `source_run_id` in the join predicate.
-Current `listWorkflowCollectorPhaseCountsQuery` in
-`go/internal/storage/postgres/workflow_run_reconciliation.go` joins on
-only `scope_id` + `generation_id`; that query is a blocker for
-correct convergence under concurrent runs and must be tightened before
-the coordinator ships multi-run fencing.
+This branch tightens `listWorkflowCollectorPhaseCountsQuery` in
+`go/internal/storage/postgres/workflow_run_reconciliation.go` so it no longer
+joins on only `scope_id` + `generation_id`. That removes the known
+false-completion path for concurrent runs that share a scope and generation but
+publish reducer truth for different acceptance units or source runs.
 
 ---
 
@@ -275,10 +286,12 @@ The claim epoch lifecycle should be:
 2. heartbeated while the owner is live
 3. either:
    - completed successfully
+   - released without failure
    - failed explicitly
    - expired and reaped
 
-Expired and reaped claims must remain queryable for audit and debugging.
+Released, expired, and reaped claims must remain queryable for audit and
+debugging.
 
 ### Sequence: Normal Claim And Completion
 

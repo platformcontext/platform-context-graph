@@ -96,13 +96,14 @@ func TestClaimStatusValidate(t *testing.T) {
 		ClaimStatusFailedRetryable,
 		ClaimStatusFailedTerminal,
 		ClaimStatusExpired,
+		ClaimStatusReleased,
 	} {
 		if err := status.Validate(); err != nil {
 			t.Fatalf("Validate(%q) error = %v, want nil", status, err)
 		}
 	}
 
-	if err := ClaimStatus("released").Validate(); err == nil {
+	if err := ClaimStatus("stolen").Validate(); err == nil {
 		t.Fatal("Validate(invalid claim status) error = nil, want non-nil")
 	}
 }
@@ -138,7 +139,11 @@ func TestWorkItemValidate(t *testing.T) {
 		RunID:               "run-1",
 		CollectorKind:       scope.CollectorGit,
 		CollectorInstanceID: "collector-git-default",
+		SourceSystem:        "git",
 		ScopeID:             "scope-1",
+		AcceptanceUnitID:    "repository:repo-1",
+		SourceRunID:         "source-run-1",
+		GenerationID:        "generation-1",
 		Status:              WorkItemStatusPending,
 		CreatedAt:           now,
 		UpdatedAt:           now,
@@ -151,6 +156,68 @@ func TestWorkItemValidate(t *testing.T) {
 	item.CollectorKind = ""
 	if err := item.Validate(); err == nil {
 		t.Fatal("Validate(blank collector kind) error = nil, want non-nil")
+	}
+}
+
+func TestWorkItemValidateRequiresPhaseStateIdentity(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 20, 13, 30, 0, 0, time.UTC)
+	valid := WorkItem{
+		WorkItemID:          "item-1",
+		RunID:               "run-1",
+		CollectorKind:       scope.CollectorGit,
+		CollectorInstanceID: "collector-git-default",
+		SourceSystem:        "git",
+		ScopeID:             "scope-1",
+		AcceptanceUnitID:    "repository:repo-1",
+		SourceRunID:         "source-run-1",
+		GenerationID:        "generation-1",
+		Status:              WorkItemStatusPending,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+
+	tests := []struct {
+		name string
+		edit func(*WorkItem)
+	}{
+		{
+			name: "blank source system",
+			edit: func(item *WorkItem) {
+				item.SourceSystem = ""
+			},
+		},
+		{
+			name: "blank acceptance unit",
+			edit: func(item *WorkItem) {
+				item.AcceptanceUnitID = ""
+			},
+		},
+		{
+			name: "blank source run",
+			edit: func(item *WorkItem) {
+				item.SourceRunID = ""
+			},
+		},
+		{
+			name: "blank generation",
+			edit: func(item *WorkItem) {
+				item.GenerationID = ""
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			item := valid
+			tt.edit(&item)
+			if err := item.Validate(); err == nil {
+				t.Fatal("Validate() error = nil, want non-nil")
+			}
+		})
 	}
 }
 

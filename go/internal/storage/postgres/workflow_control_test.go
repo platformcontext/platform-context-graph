@@ -48,7 +48,11 @@ func TestWorkflowControlStoreEnqueueWorkItemsExecutesBatchInsert(t *testing.T) {
 			RunID:               "run-1",
 			CollectorKind:       scope.CollectorGit,
 			CollectorInstanceID: "collector-git-default",
+			SourceSystem:        "git",
 			ScopeID:             "scope-1",
+			AcceptanceUnitID:    "repository:scope-1",
+			SourceRunID:         "source-run-1",
+			GenerationID:        "generation-1",
 			Status:              workflow.WorkItemStatusPending,
 			CreatedAt:           now,
 			UpdatedAt:           now,
@@ -58,7 +62,11 @@ func TestWorkflowControlStoreEnqueueWorkItemsExecutesBatchInsert(t *testing.T) {
 			RunID:               "run-1",
 			CollectorKind:       scope.CollectorGit,
 			CollectorInstanceID: "collector-git-default",
+			SourceSystem:        "git",
 			ScopeID:             "scope-2",
+			AcceptanceUnitID:    "repository:scope-2",
+			SourceRunID:         "source-run-2",
+			GenerationID:        "generation-2",
 			Status:              workflow.WorkItemStatusPending,
 			CreatedAt:           now,
 			UpdatedAt:           now,
@@ -74,6 +82,11 @@ func TestWorkflowControlStoreEnqueueWorkItemsExecutesBatchInsert(t *testing.T) {
 	if !strings.Contains(db.execs[0].query, "INSERT INTO workflow_work_items") {
 		t.Fatalf("query missing workflow_work_items insert: %s", db.execs[0].query)
 	}
+	for _, want := range []string{"source_system", "acceptance_unit_id", "source_run_id"} {
+		if !strings.Contains(db.execs[0].query, want) {
+			t.Fatalf("query missing workflow identity column %q: %s", want, db.execs[0].query)
+		}
+	}
 }
 
 func TestWorkflowControlStoreClaimNextEligibleReturnsClaimAndWorkItem(t *testing.T) {
@@ -88,7 +101,10 @@ func TestWorkflowControlStoreClaimNextEligibleReturnsClaimAndWorkItem(t *testing
 				"run-1",
 				string(scope.CollectorGit),
 				"collector-git-default",
+				"git",
 				"scope-1",
+				"repository:scope-1",
+				"source-run-1",
 				"gen-1",
 				"family:git",
 				"claimed",
@@ -133,6 +149,15 @@ func TestWorkflowControlStoreClaimNextEligibleReturnsClaimAndWorkItem(t *testing
 	if got, want := item.WorkItemID, "item-1"; got != want {
 		t.Fatalf("item.WorkItemID = %q, want %q", got, want)
 	}
+	if got, want := item.SourceSystem, "git"; got != want {
+		t.Fatalf("item.SourceSystem = %q, want %q", got, want)
+	}
+	if got, want := item.AcceptanceUnitID, "repository:scope-1"; got != want {
+		t.Fatalf("item.AcceptanceUnitID = %q, want %q", got, want)
+	}
+	if got, want := item.SourceRunID, "source-run-1"; got != want {
+		t.Fatalf("item.SourceRunID = %q, want %q", got, want)
+	}
 	if got, want := claim.FencingToken, int64(1); got != want {
 		t.Fatalf("claim.FencingToken = %d, want %d", got, want)
 	}
@@ -154,7 +179,10 @@ func TestWorkflowControlStoreClaimNextEligibleUsesDeterministicFifoWithinFamily(
 				"run-1",
 				string(scope.CollectorGit),
 				"collector-git-default",
+				"git",
 				"scope-1",
+				"repository:scope-1",
+				"source-run-1",
 				"gen-1",
 				"",
 				"claimed",
@@ -217,7 +245,10 @@ func TestWorkflowControlStoreClaimNextEligibleUsesDefaultLeaseTTL(t *testing.T) 
 			"run-1",
 			string(scope.CollectorGit),
 			"collector-git-default",
+			"git",
 			"scope-1",
+			"repository:scope-1",
+			"source-run-1",
 			"",
 			"",
 			"claimed",
@@ -443,6 +474,10 @@ func TestWorkflowControlSchemaIncludesExpectedTables(t *testing.T) {
 		"CREATE TABLE IF NOT EXISTS workflow_runs",
 		"CREATE TABLE IF NOT EXISTS workflow_work_items",
 		"CREATE TABLE IF NOT EXISTS workflow_claims",
+		"source_system TEXT NOT NULL",
+		"acceptance_unit_id TEXT NOT NULL",
+		"source_run_id TEXT NOT NULL",
+		"workflow_work_items_phase_tuple_idx",
 		"current_fencing_token BIGINT NOT NULL DEFAULT 0",
 		"UNIQUE (work_item_id, fencing_token)",
 	} {

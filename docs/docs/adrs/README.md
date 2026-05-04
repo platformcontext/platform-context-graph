@@ -32,8 +32,8 @@ still needs an owner.
 | `2026-04-20-embedded-local-backends-desktop-mode.md` | Accepted with follow-up | Local backend path is shipped; finish NornicDB hardening, conformance, release-backed pins, and host coverage. |
 | `2026-04-20-multi-source-reducer-and-consumer-contract.md` | Architecture accepted; implementation partial | Build collector-backed projectors and consumer MCP/HTTP tools. |
 | `2026-04-20-terraform-state-collector.md` | Design accepted; runtime not implemented | Build the Terraform state collector runtime, readers, redaction, facts, and docs. |
-| `2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md` | Accepted; production ownership incomplete | Keep claims dark until collector families and convergence gates are ready. |
-| `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md` | Accepted; claim substrate partial | Add acceptance-unit and source-run identity to work items and reconciliation before production claim ownership. |
+| `2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md` | Accepted; Git claim proof path implemented | Keep Helm claims dark until remote full-corpus validation and future collector-family gates are ready. |
+| `2026-04-20-workflow-coordinator-claiming-fencing-and-convergence.md` | Accepted; guarded proof path implemented | Work items carry the full phase-state tuple, reconciliation uses exact downstream truth, release/fairness/Git claim primitives exist, and deployment promotion is blocked behind proof. |
 | `2026-04-22-nornicdb-graph-backend-candidate.md` | Accepted with conditions | Finish release-backed pinning, signature policy, host coverage, and conformance matrix gates. |
 
 ## In Progress

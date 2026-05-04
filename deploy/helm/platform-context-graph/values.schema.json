@@ -134,7 +134,10 @@
           "type": "string",
           "enum": ["dark"]
         },
-        "claimsEnabled": { "type": "boolean" },
+        "claimsEnabled": {
+          "type": "boolean",
+          "enum": [false]
+        },
         "collectorInstances": {
           "type": "array",
           "items": {
