@@ -179,7 +179,7 @@ func TestRepositoryDocumentationStandardsAreEnforced(t *testing.T) {
 		"golangci-lint run ./...",
 		"Document every new or touched exported Go type",
 		"Keep OpenAPI changes in lockstep",
-		"Keep README coverage at ownership roots",
+		"Every Go package directory in `go/` has both `README.md` and `doc.go`",
 	} {
 		if !strings.Contains(agents, required) {
 			t.Fatalf("agent standards missing %q", required)

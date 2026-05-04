@@ -450,9 +450,21 @@ chunk boundaries must include:
 5. Add comments for new or touched unexported Go helpers when they encode a
    contract, storage/query assumption, concurrency rule, retry rule, or
    regression purpose.
-6. Keep README coverage at ownership roots. Go package leaf directories may use
-   `doc.go`; docs directories may use `index.md`; generated, vendor, build,
-   cache, and fixture leaf directories are exempt.
+6. Every Go package directory in `go/` has both `README.md` and `doc.go`.
+   `doc.go` carries the package contract for `go doc` consumers (real
+   exported identifiers, invariants, failure modes); `README.md` carries the
+   architectural and operational lens (ownership boundary, dependencies,
+   telemetry the package emits, gotchas). They are not redundant — different
+   audiences. The `pcg-folder-doc-keeper` skill (in `.agents/skills/`,
+   symlinked into `.claude/skills/` and `.codex/skills/`) plus the
+   PostToolUse hook at `.claude/hooks/pcg-doc-staleness.sh` (Claude Code) and
+   `.codex/hooks/pcg-doc-staleness.sh` (Codex) keep them in sync. When the
+   hook flags a directory in `.pcg-doc-state/stale.jsonl`, run the skill
+   before committing. Container directories without Go source (`go/`,
+   `go/cmd/`, `go/internal/`, `go/internal/storage/`,
+   `go/internal/terraformschema/schemas/`) keep `README.md` only, since they
+   are not Go packages. Docs directories may use `index.md`; generated,
+   vendor, build, cache, and fixture leaf directories are exempt.
 7. Keep OpenAPI changes in lockstep with `go/internal/query/openapi*.go`,
    handler tests, and `docs/docs/reference/http-api.md`. Do not document
    Swagger UI or ReDoc routes unless the server actually registers them.
