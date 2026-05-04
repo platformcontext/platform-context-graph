@@ -93,6 +93,15 @@ func canonicalWriterContainmentMaterialization() projector.CanonicalMaterializat
 			Name:   "my-repo",
 			Path:   "/repos/my-repo",
 		},
+		Directories: []projector.DirectoryRow{
+			{
+				Path:       "/repos/my-repo/src",
+				Name:       "src",
+				ParentPath: "/repos/my-repo",
+				RepoID:     "repo-1",
+				Depth:      0,
+			},
+		},
 		Files: []projector.FileRow{
 			{
 				Path:         "/repos/my-repo/src/main.go",

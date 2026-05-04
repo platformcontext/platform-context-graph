@@ -118,6 +118,25 @@ func TestConfigureBootstrapCanonicalWriterBatchesContainmentAcrossFilesForNeo4j(
 	}
 }
 
+func TestBootstrapContainmentMaterializationIncludesFileDirectories(t *testing.T) {
+	t.Parallel()
+
+	materialization := bootstrapContainmentMaterialization()
+	directoriesByPath := make(map[string]struct{}, len(materialization.Directories))
+	for _, directory := range materialization.Directories {
+		directoriesByPath[directory.Path] = struct{}{}
+	}
+
+	for _, file := range materialization.Files {
+		if file.DirPath == "" {
+			continue
+		}
+		if _, ok := directoriesByPath[file.DirPath]; !ok {
+			t.Fatalf("file %q references missing directory %q", file.Path, file.DirPath)
+		}
+	}
+}
+
 func TestConfigureBootstrapCanonicalWriterKeepsNornicDBFileScopedContainmentByDefault(t *testing.T) {
 	t.Parallel()
 
@@ -217,6 +236,15 @@ func bootstrapContainmentMaterialization() projector.CanonicalMaterialization {
 			RepoID: "repo-1",
 			Name:   "my-repo",
 			Path:   "/repos/my-repo",
+		},
+		Directories: []projector.DirectoryRow{
+			{
+				Path:       "/repos/my-repo/src",
+				Name:       "src",
+				ParentPath: "/repos/my-repo",
+				RepoID:     "repo-1",
+				Depth:      0,
+			},
 		},
 		Files: []projector.FileRow{
 			{

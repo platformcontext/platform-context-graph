@@ -15,8 +15,11 @@ import (
 )
 
 const (
-	liveConformanceEnv = "PCG_BACKEND_CONFORMANCE_LIVE"
-	liveTestTimeout    = 45 * time.Second
+	liveConformanceEnv      = "PCG_BACKEND_CONFORMANCE_LIVE"
+	liveWriteAttempts       = 2
+	liveWriteAttemptTimeout = 45 * time.Second
+	liveReadTimeout         = 30 * time.Second
+	liveTestTimeout         = time.Duration(liveWriteAttempts)*liveWriteAttemptTimeout + liveReadTimeout
 )
 
 // TestLiveBackendConformance exercises the shared corpus against a real Bolt
@@ -61,19 +64,25 @@ func TestLiveBackendConformance(t *testing.T) {
 		}
 	}()
 
-	for attempt := 1; attempt <= 2; attempt++ {
+	for attempt := 1; attempt <= liveWriteAttempts; attempt++ {
+		attemptCtx, attemptCancel := context.WithTimeout(ctx, liveWriteAttemptTimeout)
 		if backend == runtimecfg.GraphBackendNornicDB {
-			if _, err := RunPhaseWriteCorpus(ctx, executor, DefaultWriteCorpus()); err != nil {
+			if _, err := RunPhaseWriteCorpus(attemptCtx, executor, DefaultWriteCorpus()); err != nil {
+				attemptCancel()
 				t.Fatalf("run %s live write corpus attempt %d: %v", backend, attempt, err)
 			}
 		} else {
-			if _, err := RunWriteCorpus(ctx, executor, DefaultWriteCorpus()); err != nil {
+			if _, err := RunWriteCorpus(attemptCtx, executor, DefaultWriteCorpus()); err != nil {
+				attemptCancel()
 				t.Fatalf("run %s live write corpus attempt %d: %v", backend, attempt, err)
 			}
 		}
+		attemptCancel()
 	}
 
-	if _, err := RunReadCorpus(ctx, executor, DefaultReadCorpus()); err != nil {
+	readCtx, readCancel := context.WithTimeout(ctx, liveReadTimeout)
+	defer readCancel()
+	if _, err := RunReadCorpus(readCtx, executor, DefaultReadCorpus()); err != nil {
 		t.Fatalf("run %s live read corpus: %v", backend, err)
 	}
 }

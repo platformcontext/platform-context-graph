@@ -40,6 +40,25 @@ func TestConfigureIngesterCanonicalWriterBatchesContainmentAcrossFilesForNeo4j(t
 	}
 }
 
+func TestCanonicalWriterContainmentMaterializationIncludesFileDirectories(t *testing.T) {
+	t.Parallel()
+
+	materialization := canonicalWriterContainmentMaterialization()
+	directoriesByPath := make(map[string]struct{}, len(materialization.Directories))
+	for _, directory := range materialization.Directories {
+		directoriesByPath[directory.Path] = struct{}{}
+	}
+
+	for _, file := range materialization.Files {
+		if file.DirPath == "" {
+			continue
+		}
+		if _, ok := directoriesByPath[file.DirPath]; !ok {
+			t.Fatalf("file %q references missing directory %q", file.Path, file.DirPath)
+		}
+	}
+}
+
 func TestConfigureIngesterCanonicalWriterKeepsNornicDBFileScopedContainmentByDefault(t *testing.T) {
 	t.Parallel()
 

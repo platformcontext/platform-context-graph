@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	sourcecypher "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher"
 )
@@ -29,6 +30,15 @@ func TestDefaultReadCorpusRunsAgainstGraphQuery(t *testing.T) {
 		if strings.Contains(strings.ToUpper(call.cypher), "MERGE") {
 			t.Fatalf("read corpus issued mutation query: %s", call.cypher)
 		}
+	}
+}
+
+func TestLiveConformanceTimeoutCoversRepeatedWriteAttempts(t *testing.T) {
+	t.Parallel()
+
+	minimumBudget := time.Duration(liveWriteAttempts) * liveWriteAttemptTimeout
+	if liveTestTimeout < minimumBudget {
+		t.Fatalf("liveTestTimeout = %s, want at least %s for %d write attempts", liveTestTimeout, minimumBudget, liveWriteAttempts)
 	}
 }
 
