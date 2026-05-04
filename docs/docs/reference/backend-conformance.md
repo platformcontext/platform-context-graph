@@ -79,10 +79,36 @@ graph backend:
 The `local_authoritative` gate is backed by the opt-in local-host performance
 tests plus the latest full-corpus API/MCP evidence. The `local_full_stack` gate
 is backed by the NornicDB Compose matrix, now running with
-`PCG_QUERY_PROFILE=local_full_stack`. The `production` gate stays explicit:
-latest-main full-corpus evidence is healthy, but final production promotion
-still needs a recorded comparison against the current Neo4j-compatible
-baseline.
+`PCG_QUERY_PROFILE=local_full_stack`. The `production` gate now has a
+latest-main full-corpus proof,
+`pcg-full-pr138-a2c630af-b68b4ef-20260504T120630Z`:
+it drained `8458/8458` queue rows in `878s`, kept retrying, failed, and
+dead-letter rows at `0`, and passed API/MCP health plus relationship-evidence
+drilldowns. It stays `evidence_pending` until the Neo4j support decision is
+recorded: either optimize Neo4j and rerun a terminal comparison, or document
+Neo4j as compatibility-only.
+
+The current comparison evidence favors NornicDB but does not yet close the
+Neo4j baseline gate. The 2026-05-04 Neo4j run
+`pcg-neo4j-baseline-pr138-a2c630af-20260504T123656Z` was stopped by request
+after `1946s`; it was still clean (`0` retrying, failed, or dead-letter rows)
+but had only `553/896` source-local projector items succeeded. NornicDB had
+already finished the whole corpus at `878s`.
+
+That makes the next decision explicit. If PCG keeps Neo4j as more than a
+compatibility fallback, the Neo4j adapter needs its own pass over the same
+places tuned for NornicDB: canonical write grouping, entity containment shape,
+semantic materialization, traversal builders, and backend-specific batch
+limits. Those changes should be measured as Neo4j work, not copied blindly from
+NornicDB.
+
+The longer-term support bar is broader than these two databases. PCG should be
+able to support backends that speak the Bolt/Cypher shape, but only through
+narrow, documented adapter seams. A new backend should not force handler-level
+branches or a pile of one-off query workarounds. Neo4j is still useful for
+companies that already pay for and operate Neo4j, but the compatibility path
+cannot remain dramatically slower than the default NornicDB path if we call it
+production-promoted.
 
 ## Promotion Rule
 
@@ -93,6 +119,8 @@ adapter check. Chunk 5b records the profile-matrix proof across:
 - `local_full_stack`
 - `production`
 
-NornicDB can remain the default while those gates close, but it is not fully
-promoted until the latest-main policy, backend conformance, and profile-matrix
-evidence all agree.
+NornicDB can remain the default while the remaining gate closes. Local and
+Compose profile gates pass against latest `main`; production has strong
+NornicDB evidence plus a stopped Neo4j SLO comparison. Production closure now
+depends on the Neo4j support decision: optimize and rerun a terminal baseline,
+or document Neo4j as compatibility-only while NornicDB carries the fast path.

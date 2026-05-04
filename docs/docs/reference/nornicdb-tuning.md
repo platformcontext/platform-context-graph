@@ -35,14 +35,14 @@ to prove the graph, queue, and query surfaces finish correctly; it must not be
 treated as the final tuning answer without later phase timing and write-shape
 analysis.
 
-Latest checkpoint: PCG `f72724d6` with NornicDB `86e78f1` passed the 2026-04-27
-focused self-repo lane and the `/home/ubuntu/pcg-test-repos` medium lane after
-switching the NornicDB semantic writer to the merge-first explicit-row shape.
-The medium run covered `23` repos, drained healthy in `316s`, ended with queue
-`pending=0 in_flight=0 retrying=0 dead_letter=0 failed=0`, and logged no
-`graph_write_timeout`, semantic failure, acceptance-cap, panic, fatal, or
-dead-letter lines. Treat that as the current focused/medium correctness proof;
-the next promotion evidence must come from a DB-driven full-corpus drain.
+Latest checkpoint: the 2026-05-04 latest-main full-corpus proof rebuilt PCG and
+NornicDB `main`, indexed the full corpus, drained `8458/8458` queue rows in
+`878s`, kept pending, in-flight, retrying, failed, and dead-letter rows at `0`,
+and passed API/MCP relationship-evidence drilldowns. Treat earlier focused and
+medium runs as the debugging ladder that led here. The remaining promotion
+decision is what to do with Neo4j: tune it as a first-class alternative or
+document it as compatibility-only. Another NornicDB-only full-corpus proof is
+regression evidence, not a substitute for that decision.
 
 Follow-up checkpoint: PCG `c598000d` then passed a targeted five-repo lane that
 combined the prior small semantic regressions with the two noisy PHP stress
@@ -259,10 +259,10 @@ older `MATCH File` before `MERGE node` row-map shape. The older shape can still
 use schema lookup, but trace probes showed it misses NornicDB's generalized
 `UNWIND/MERGE` batch hot path. Treat semantic timeouts as query-shape evidence
 first, then tune label caps only after confirming the statement is already on
-the intended template. The merge-first writer is currently validated through the
-focused and medium lanes above; a full-corpus timeout in this phase should be
-treated as new evidence and narrowed to the label, row count, graph size, and
-query shape before changing caps.
+the intended template. The merge-first writer is now validated through focused,
+medium, and full-corpus latest-main lanes. A future timeout in this phase
+should be treated as regression or comparison evidence and narrowed to the
+label, row count, graph size, and query shape before changing caps.
 
 Code-call projection is also reducer-owned, but its scan limit is a correctness
 guard rather than a graph-write tuning knob. The runner retracts repo-wide
