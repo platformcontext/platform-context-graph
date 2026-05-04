@@ -70,10 +70,11 @@ const (
 
 // Matrix is the machine-readable backend conformance contract.
 type Matrix struct {
-	Version   string    `yaml:"version"`
-	UpdatedAt string    `yaml:"updated_at"`
-	Owners    []string  `yaml:"owners"`
-	Backends  []Backend `yaml:"backends"`
+	Version       string        `yaml:"version"`
+	UpdatedAt     string        `yaml:"updated_at"`
+	Owners        []string      `yaml:"owners"`
+	Backends      []Backend     `yaml:"backends"`
+	ProfileMatrix []ProfileGate `yaml:"profile_matrix"`
 }
 
 // Backend captures conformance status for one graph backend adapter.
@@ -169,6 +170,9 @@ func (m Matrix) Validate() error {
 	}
 	if defaults != 1 {
 		return fmt.Errorf("matrix must define exactly one default backend, got %d", defaults)
+	}
+	if err := m.validateProfileMatrix(); err != nil {
+		return err
 	}
 	return nil
 }

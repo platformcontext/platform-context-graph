@@ -17,7 +17,7 @@ readiness, and performance evidence.
 | File | Purpose |
 | --- | --- |
 | `specs/capability-matrix.v1.yaml` | User-facing capability and truth contract by runtime profile. |
-| `specs/backend-conformance.v1.yaml` | Backend behavior classes and promotion status for official graph adapters. |
+| `specs/backend-conformance.v1.yaml` | Backend behavior classes, profile gates, and promotion status for official graph adapters. |
 | `go/internal/backendconformance/` | Go harness for parsing the backend matrix and running shared read/write corpora. |
 
 ## What The Harness Covers
@@ -66,10 +66,28 @@ GitHub Actions runs this live check in the end-to-end matrix before
 `bootstrap-index`, so both official backends prove the shared read/write corpus
 against a clean graph service.
 
+## Profile Matrix
+
+Chunk 5b is tracked in the same backend matrix under `profile_matrix`.
+NornicDB must carry a gate for each profile that can use an authoritative
+graph backend:
+
+- `local_authoritative`
+- `local_full_stack`
+- `production`
+
+The `local_authoritative` gate is backed by the opt-in local-host performance
+tests plus the latest full-corpus API/MCP evidence. The `local_full_stack` gate
+is backed by the NornicDB Compose matrix, now running with
+`PCG_QUERY_PROFILE=local_full_stack`. The `production` gate stays explicit:
+latest-main full-corpus evidence is healthy, but final production promotion
+still needs a recorded comparison against the current Neo4j-compatible
+baseline.
+
 ## Promotion Rule
 
 Chunk 5 adds the deterministic harness, backend matrix, and live Compose-backed
-adapter check. Chunk 5b is still the profile-matrix proof across:
+adapter check. Chunk 5b records the profile-matrix proof across:
 
 - `local_authoritative`
 - `local_full_stack`

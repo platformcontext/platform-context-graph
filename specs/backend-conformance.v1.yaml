@@ -87,3 +87,29 @@ backends:
         verification:
           - compose_e2e: neo4j-compatibility
         notes: Neo4j remains production-capable while NornicDB profile-matrix evidence is gathered.
+profile_matrix:
+  - backend_id: nornicdb
+    profile: local_authoritative
+    status: passing
+    verification:
+      - go_test: ./cmd/pcg -run TestLocalAuthoritativeStartupEnvelope
+      - go_test: ./cmd/pcg -run TestLocalAuthoritativeCallChainSyntheticEnvelope
+      - go_test: ./cmd/pcg -run TestLocalAuthoritativeTransitiveCallersSyntheticEnvelope
+      - go_test: ./cmd/pcg -run TestLocalAuthoritativeDeadCodeSyntheticEnvelope
+      - remote_validation: latest-main-full-corpus-api-mcp
+    notes: Local host plus managed NornicDB sidecar has startup, graph query, full-corpus drain, API, and MCP evidence.
+  - backend_id: nornicdb
+    profile: local_full_stack
+    status: passing
+    verification:
+      - compose_e2e: live-backend-conformance
+      - compose_e2e: e2e-tests-nornicdb-local-full-stack
+    notes: Default Compose uses NornicDB and the end-to-end matrix now runs with PCG_QUERY_PROFILE=local_full_stack.
+  - backend_id: nornicdb
+    profile: production
+    status: evidence_pending
+    verification:
+      - remote_validation: latest-main-full-corpus-api-mcp
+    notes: Latest-main full-corpus evidence is healthy; final production promotion still needs a recorded production-scale comparison against the Neo4j-compatible baseline.
+    remaining:
+      - item: production-scale comparison against current Neo4j-compatible baseline

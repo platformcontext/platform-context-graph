@@ -58,6 +58,28 @@ func TestBackendConformanceMatrixKeepsNornicDBAsDefault(t *testing.T) {
 	}
 }
 
+func TestBackendConformanceMatrixDefinesNornicDBProfileGates(t *testing.T) {
+	t.Parallel()
+
+	matrix := loadRepositoryBackendMatrix(t)
+	if err := matrix.Validate(); err != nil {
+		t.Fatalf("backend conformance matrix invalid: %v", err)
+	}
+
+	for _, profile := range RequiredProfileMatrixProfiles() {
+		gate, ok := matrix.ProfileGate(BackendNornicDB, profile)
+		if !ok {
+			t.Fatalf("NornicDB profile gate %q missing", profile)
+		}
+		if gate.Status == ProfileGateStatusUnknown {
+			t.Fatalf("NornicDB profile gate %q has unknown status", profile)
+		}
+		if len(gate.Verification) == 0 {
+			t.Fatalf("NornicDB profile gate %q has no verification", profile)
+		}
+	}
+}
+
 func TestBackendConformanceMatrixRejectsEmptyVerificationEntries(t *testing.T) {
 	t.Parallel()
 

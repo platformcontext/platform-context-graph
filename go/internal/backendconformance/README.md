@@ -5,6 +5,8 @@
 The package keeps two contracts together:
 
 - the machine-readable backend matrix in `specs/backend-conformance.v1.yaml`
+- the profile gates that track NornicDB promotion across local and production
+  shapes
 - the read and write corpora used to exercise `GraphQuery` and Cypher executor
   adapters
 
