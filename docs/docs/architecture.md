@@ -36,9 +36,9 @@ PCG is split into a small number of clear service and storage boundaries:
 - **Bootstrap Index** runs the same write path as a one-shot seeding flow.
 - **Postgres** stores facts, queues, status, recovery state, and content.
 - **Graph backend** stores canonical graph nodes and relationships through the
-  Cypher-compatible `GraphQuery` and `GraphWrite` ports. NornicDB is the
-  default backend; Neo4j remains available through the same backend-neutral
-  Cypher writer surface plus narrow backend-dialect seams.
+  Cypher-compatible `GraphQuery` read port and the backend-neutral Cypher write
+  executor family. NornicDB is the default backend; Neo4j remains available
+  through the same writer surface plus narrow backend-dialect seams.
 
 The platform is intentionally facts-first:
 
@@ -281,10 +281,10 @@ surface grows; the pattern is unchanged. See
 §5 for the target port list and the explicit rejection of an ORM-centric
 abstraction.
 
-Current graph adapters: NornicDB (default) and Neo4j. Both satisfy the same
-`GraphQuery` + `GraphWrite` ports and share the backend-neutral
-`go/internal/storage/cypher` writer surface. The active adapter is chosen via
-`PCG_GRAPH_BACKEND={neo4j,nornicdb}` and surfaced in telemetry as
+Current graph adapters: NornicDB (default) and Neo4j. Both serve the same
+`GraphQuery` port and share the `go/internal/storage/cypher` executor family:
+`Executor`, `GroupExecutor`, and `PhaseGroupExecutor`. The active adapter is
+chosen via `PCG_GRAPH_BACKEND={neo4j,nornicdb}` and surfaced in telemetry as
 `graph_backend`. Schema bootstrap routes through the same backend axis: Neo4j
 receives the shared production DDL, while NornicDB receives a narrow
 schema-dialect translation for compatibility gaps such as composite node
@@ -303,7 +303,8 @@ scale, PCG will deprecate Neo4j on a documented timeline. See
 
 No backend is described as supported because it "speaks Cypher." A backend is
 supported only after it passes the machine-readable **capability matrix** at
-`specs/capability-matrix.v1.yaml` for the intended runtime profile.
+`specs/capability-matrix.v1.yaml` for the intended runtime profile and the
+backend-specific conformance matrix at `specs/backend-conformance.v1.yaml`.
 
 The matrix lists every capability — exact symbol lookup, transitive callers,
 dead-code, blast-radius, etc. — with, per profile:
@@ -317,7 +318,10 @@ dead-code, blast-radius, etc. — with, per profile:
   validation)
 
 A Go contract test at `go/internal/query/contract_matrix_test.go` ensures the
-matrix in Go code never drifts from the YAML.
+capability matrix in Go code never drifts from the YAML. The backend
+conformance harness lives in `go/internal/backendconformance`; default tests
+stay DB-free, while integration, Compose, and remote runs can reuse the same
+read/write corpora against live adapters.
 
 See [Capability Conformance Spec](reference/capability-conformance-spec.md).
 

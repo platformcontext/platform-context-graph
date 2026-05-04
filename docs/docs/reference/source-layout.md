@@ -14,6 +14,7 @@ live in the repository today.
 | :--- | :--- |
 | `go/cmd/` | buildable binaries for API, MCP, CLI, ingester, reducer, bootstrap, and local verification runtimes |
 | `go/internal/app/` | runtime composition, configuration, and shared service wiring |
+| `go/internal/backendconformance/` | graph-backend conformance matrix parsing plus reusable `GraphQuery` and Cypher write corpora |
 | `go/internal/collector/` | Git collection, discovery, snapshotting, and fact shaping |
 | `go/internal/content/` | content shaping and content-store persistence |
 | `go/internal/facts/` | durable fact models and queue contracts |

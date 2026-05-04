@@ -114,6 +114,7 @@ nav:
       - Argo CD: deployment/argocd.md
       - Neo4j Setup: guides/neo4j-setup.md
     - Local Host & Capabilities:
+      - Backend Conformance: reference/backend-conformance.md
       - Capability Conformance Spec: reference/capability-conformance-spec.md
       - Truth Label Protocol: reference/truth-label-protocol.md
       - Local Data Root Spec: reference/local-data-root-spec.md

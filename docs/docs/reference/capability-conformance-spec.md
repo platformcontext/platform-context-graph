@@ -201,6 +201,32 @@ Each `profiles.<profile_id>` object must provide:
 `p95_latency_ms: null` means "not applicable because the capability is
 unsupported for that profile."
 
+## Backend Conformance Matrix
+
+Profile capabilities and backend capabilities are related, but they answer
+different questions.
+
+- `specs/capability-matrix.v1.yaml` says what a user-facing capability may
+  claim in each runtime profile.
+- `specs/backend-conformance.v1.yaml` says which graph-backend behavior classes
+  each official adapter currently supports.
+
+The backend matrix tracks:
+
+- canonical writes
+- direct graph reads
+- bounded path traversal
+- graph-native full-text support
+- dead-code readiness
+- performance envelope evidence
+
+NornicDB is the default backend, and Neo4j is the compatibility backend. Both
+must stay listed in the backend matrix for as long as they are official PCG
+graph backends. The default test harness lives in
+`go/internal/backendconformance`; it validates the backend matrix and runs
+DB-free read/write corpora that live integration tests can reuse against
+actual Neo4j or NornicDB instances.
+
 ## Rules
 
 1. If a row is `supported`, the runtime must not exceed `max_truth_level`.
@@ -298,8 +324,8 @@ allowed response behavior for each profile.
 
 ### Chunk 5
 
-Use the matrix as the baseline conformance harness input for any backend under
-evaluation.
+Use the capability matrix and backend matrix as baseline conformance harness
+inputs for any backend under evaluation.
 
 ## Change Policy
 
