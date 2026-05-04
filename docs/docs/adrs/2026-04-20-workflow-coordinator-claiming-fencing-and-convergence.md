@@ -10,21 +10,21 @@
 
 ## Status Review (2026-05-03)
 
-**Current disposition:** Accepted; identity and exact reconciliation slice
-implemented.
+**Current disposition:** Accepted; coordinator claim contract implemented for
+the guarded proof path.
 
-Claim tables, fencing operations, and claim issuance exist. The current branch
-adds the missing bounded-slice identity to `workflow_work_items`: `source_system`,
-`acceptance_unit_id`, and `source_run_id` now travel with `scope_id` and
-`generation_id`. Workflow reconciliation now joins reducer-published phase
-truth on `scope_id`, `acceptance_unit_id`, `source_run_id`, and
-`generation_id`, matching the identity portion of the
-`graph_projection_phase_state` primary key before counting a phase as
-published for a work item.
+Claim tables, fencing operations, claim issuance, first-class claim release,
+weighted family fairness, exact-tuple reconciliation, and a claim-aware Git
+collector runner now exist. Work items carry `source_system`,
+`acceptance_unit_id`, and `source_run_id` with `scope_id` and `generation_id`.
+Workflow reconciliation joins reducer-published phase truth on that exact tuple
+before counting a phase as published for a work item.
 
-**Remaining work:** first-class claim release, weighted family fairness,
-claim-enabled Git collector integration, webhook intake/back-pressure, and
-deployment promotion gates remain before enabling production claim ownership.
+Deployment promotion is still guarded. Compose has an explicit active proof
+path, but Helm remains dark-only until the remote full-corpus proof, API/MCP
+truth checks, and evidence validation are clean. Webhook intake/back-pressure
+remains a separate follow-up because it is trigger intake, not the Git claim
+contract.
 
 ## Context
 
@@ -279,10 +279,12 @@ The claim epoch lifecycle should be:
 2. heartbeated while the owner is live
 3. either:
    - completed successfully
+   - released without failure
    - failed explicitly
    - expired and reaped
 
-Expired and reaped claims must remain queryable for audit and debugging.
+Released, expired, and reaped claims must remain queryable for audit and
+debugging.
 
 ### Sequence: Normal Claim And Completion
 

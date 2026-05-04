@@ -30,6 +30,9 @@ Use this list before a team relies on a Kubernetes deployment.
 - Resolution-engine replica count and Postgres connection limits are sized
   together.
 - API, MCP, logs, metrics, and runtime status are checked during rollout.
+- Workflow coordinator claims remain off in Helm. Do not promote active
+  coordinator claim ownership until the dedicated remote full-corpus proof
+  passes with clean queue state and API/MCP truth checks.
 - OTEL export points at the correct collector.
 - Prometheus metrics and `ServiceMonitor` resources are enabled when your
   platform expects direct scraping.

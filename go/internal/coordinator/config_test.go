@@ -58,7 +58,7 @@ func TestLoadConfigParsesActiveRuntimeControls(t *testing.T) {
 		case "PCG_WORKFLOW_COORDINATOR_EXPIRED_CLAIM_REQUEUE_DELAY":
 			return "7s"
 		case "PCG_COLLECTOR_INSTANCES_JSON":
-			return `[{"instance_id":"collector-git-primary","collector_kind":"git","mode":"continuous","enabled":true,"bootstrap":true,"configuration":{"provider":"github"}}]`
+			return `[{"instance_id":"collector-git-primary","collector_kind":"git","mode":"continuous","enabled":true,"bootstrap":true,"claims_enabled":true,"configuration":{"provider":"github"}}]`
 		default:
 			return ""
 		}
@@ -106,6 +106,46 @@ func TestLoadConfigRejectsInstanceClaimsWhenCoordinatorClaimsDisabled(t *testing
 	}
 }
 
+func TestLoadConfigRejectsActiveModeWithoutClaimsEnabled(t *testing.T) {
+	t.Parallel()
+
+	_, err := LoadConfig(func(key string) string {
+		switch key {
+		case "PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE":
+			return "active"
+		case "PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED":
+			return "false"
+		case "PCG_COLLECTOR_INSTANCES_JSON":
+			return `[{"instance_id":"collector-git-primary","collector_kind":"git","mode":"continuous","enabled":true,"claims_enabled":true}]`
+		default:
+			return ""
+		}
+	})
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want non-nil")
+	}
+}
+
+func TestLoadConfigRejectsActiveModeWithoutClaimEnabledCollectors(t *testing.T) {
+	t.Parallel()
+
+	_, err := LoadConfig(func(key string) string {
+		switch key {
+		case "PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE":
+			return "active"
+		case "PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED":
+			return "true"
+		case "PCG_COLLECTOR_INSTANCES_JSON":
+			return `[{"instance_id":"collector-git-primary","collector_kind":"git","mode":"continuous","enabled":true,"claims_enabled":false}]`
+		default:
+			return ""
+		}
+	})
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want non-nil")
+	}
+}
+
 func TestLoadConfigRejectsHeartbeatAtOrAboveLeaseTTL(t *testing.T) {
 	t.Parallel()
 
@@ -119,6 +159,8 @@ func TestLoadConfigRejectsHeartbeatAtOrAboveLeaseTTL(t *testing.T) {
 			return "20s"
 		case "PCG_WORKFLOW_COORDINATOR_HEARTBEAT_INTERVAL":
 			return "20s"
+		case "PCG_COLLECTOR_INSTANCES_JSON":
+			return `[{"instance_id":"collector-git-primary","collector_kind":"git","mode":"continuous","enabled":true,"claims_enabled":true}]`
 		default:
 			return ""
 		}

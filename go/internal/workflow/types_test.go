@@ -96,13 +96,14 @@ func TestClaimStatusValidate(t *testing.T) {
 		ClaimStatusFailedRetryable,
 		ClaimStatusFailedTerminal,
 		ClaimStatusExpired,
+		ClaimStatusReleased,
 	} {
 		if err := status.Validate(); err != nil {
 			t.Fatalf("Validate(%q) error = %v, want nil", status, err)
 		}
 	}
 
-	if err := ClaimStatus("released").Validate(); err == nil {
+	if err := ClaimStatus("stolen").Validate(); err == nil {
 		t.Fatal("Validate(invalid claim status) error = nil, want non-nil")
 	}
 }

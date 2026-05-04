@@ -191,6 +191,13 @@ advisory report.
 | `PCG_WORKFLOW_COORDINATOR_EXPIRED_CLAIM_REQUEUE_DELAY` | workflow default | workflow coordinator | Delay before requeueing expired work. | Tune to avoid immediate flapping after collector loss. |
 | `PCG_COLLECTOR_INSTANCES_JSON` | unset | workflow coordinator | Desired collector instance list. | Set from deployment config, not ad hoc shell sessions. |
 
+Active coordinator mode is intentionally guarded. The process rejects
+`PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE=active` unless
+`PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED=true` and at least one enabled
+collector instance has `claims_enabled: true`. The Helm chart still permits
+dark mode only; use the Compose profile for active proof runs until the remote
+full-corpus validation is complete.
+
 ## Telemetry, Memory, And Compose
 
 | Variable | Default | Read By | Purpose | Tune When |

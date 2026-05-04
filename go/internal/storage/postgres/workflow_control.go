@@ -188,6 +188,11 @@ func (s *WorkflowControlStore) CompleteClaim(ctx context.Context, mutation workf
 	return s.execClaimMutation(ctx, mutation, completeWorkflowClaimQuery, time.Time{})
 }
 
+// ReleaseClaim gives up an active claim without recording a collector failure.
+func (s *WorkflowControlStore) ReleaseClaim(ctx context.Context, mutation workflow.ClaimMutation) error {
+	return s.execClaimMutation(ctx, mutation, releaseWorkflowClaimQuery, time.Time{})
+}
+
 // FailClaimRetryable marks the current epoch retryable and requeues the work item.
 func (s *WorkflowControlStore) FailClaimRetryable(ctx context.Context, mutation workflow.ClaimMutation) error {
 	if mutation.VisibleAt.IsZero() {

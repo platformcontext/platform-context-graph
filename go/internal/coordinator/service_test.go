@@ -245,6 +245,7 @@ func TestServiceRunActiveModeExecutesReaperAndWorkflowReconciliation(t *testing.
 				CollectorKind: scope.CollectorGit,
 				Mode:          workflow.CollectorModeContinuous,
 				Enabled:       true,
+				ClaimsEnabled: true,
 			}},
 		},
 		Store: store,
@@ -278,6 +279,13 @@ func TestServiceRunActiveModeReturnsReaperError(t *testing.T) {
 			HeartbeatInterval:        20 * time.Second,
 			ExpiredClaimLimit:        10,
 			ExpiredClaimRequeueDelay: 5 * time.Second,
+			CollectorInstances: []workflow.DesiredCollectorInstance{{
+				InstanceID:    "collector-git-primary",
+				CollectorKind: scope.CollectorGit,
+				Mode:          workflow.CollectorModeContinuous,
+				Enabled:       true,
+				ClaimsEnabled: true,
+			}},
 		},
 		Store: &fakeStore{
 			reapErr: errors.New("reaper failed"),
@@ -303,6 +311,13 @@ func TestServiceRunActiveModeReturnsRunReconcileError(t *testing.T) {
 			HeartbeatInterval:        20 * time.Second,
 			ExpiredClaimLimit:        10,
 			ExpiredClaimRequeueDelay: 5 * time.Second,
+			CollectorInstances: []workflow.DesiredCollectorInstance{{
+				InstanceID:    "collector-git-primary",
+				CollectorKind: scope.CollectorGit,
+				Mode:          workflow.CollectorModeContinuous,
+				Enabled:       true,
+				ClaimsEnabled: true,
+			}},
 		},
 		Store: &fakeStore{
 			runReconcileErr: errors.New("workflow reconcile failed"),

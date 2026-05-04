@@ -58,6 +58,31 @@ The overlay adds:
 - Jaeger
 - OTLP trace and metric export settings for the PCG runtimes
 
+## Run the workflow coordinator proof profile
+
+The workflow coordinator profile is off by default. It is useful when you want
+to inspect the control plane or run an active claim proof without changing the
+normal ingester path.
+
+Dark-mode status proof:
+
+```bash
+docker compose --profile workflow-coordinator up --build workflow-coordinator
+```
+
+Active claim proof requires every guard to be explicit:
+
+```bash
+export PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE=active
+export PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED=true
+export PCG_COLLECTOR_INSTANCES_JSON='[{"instance_id":"collector-git-proof","collector_kind":"git","mode":"continuous","enabled":true,"bootstrap":true,"claims_enabled":true,"configuration":{"source":"local-compose","fairness_weight":1}}]'
+docker compose --profile workflow-coordinator up --build workflow-coordinator
+```
+
+Use active mode only for fenced claim validation. The Kubernetes chart remains
+dark-only until the remote full-corpus proof, API checks, MCP checks, and
+evidence truth checks are clean.
+
 ## Point local CLI commands at Compose
 
 The API is available at `http://localhost:8080` by default. For indexing into

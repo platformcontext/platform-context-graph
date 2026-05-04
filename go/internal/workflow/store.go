@@ -60,6 +60,7 @@ type ControlStore interface {
 	ClaimNextEligible(context.Context, ClaimSelector, time.Time, time.Duration) (WorkItem, Claim, bool, error)
 	HeartbeatClaim(context.Context, ClaimMutation) error
 	CompleteClaim(context.Context, ClaimMutation) error
+	ReleaseClaim(context.Context, ClaimMutation) error
 	FailClaimRetryable(context.Context, ClaimMutation) error
 	FailClaimTerminal(context.Context, ClaimMutation) error
 	ReapExpiredClaims(context.Context, time.Time, int, time.Duration) ([]Claim, error)

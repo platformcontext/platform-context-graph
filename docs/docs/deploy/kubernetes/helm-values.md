@@ -14,6 +14,9 @@ The chart lives at `deploy/helm/platform-context-graph`.
 | `ingester.persistence.size` | `100Gi` | Workspace PVC size. |
 | `resolutionEngine.enabled` | `true` | Deploy the reducer runtime. |
 | `workflowCoordinator.enabled` | `false` | Deploy dark-mode workflow coordinator. |
+| `workflowCoordinator.deploymentMode` | `dark` | Keep coordinator claim ownership dark. The chart rejects active mode in this branch. |
+| `workflowCoordinator.claimsEnabled` | `false` | Keep workflow claims off in Helm. Use Compose for active proof runs. |
+| `workflowCoordinator.collectorInstances` | `[]` | Declarative collector instances for dark reconciliation only. |
 | `contentStore.dsn` | empty | Postgres DSN. |
 | `neo4j.uri` | `bolt://neo4j:7687` | Bolt URI for NornicDB or Neo4j. |
 | `env.PCG_GRAPH_BACKEND` | `nornicdb` | Active graph adapter. |
@@ -21,6 +24,10 @@ The chart lives at `deploy/helm/platform-context-graph`.
 
 Each runtime has `resources` and `connectionTuning` blocks. Connection tuning
 supports Postgres pool settings and Bolt driver settings per workload.
+
+The workflow coordinator chart is deliberately dark-only right now. Do not use
+Helm values to promote coordinator-owned claims before the fenced claim,
+fairness, Git collector, and remote full-corpus proof gates pass.
 
 ## Repository sync
 

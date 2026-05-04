@@ -129,12 +129,24 @@ func (c Config) Validate() error {
 	if c.ExpiredClaimRequeueDelay < 0 {
 		return fmt.Errorf("workflow coordinator expired claim requeue delay must not be negative")
 	}
+	activeClaimCollectors := 0
 	for _, instance := range c.CollectorInstances {
 		if err := instance.Validate(); err != nil {
 			return fmt.Errorf("workflow coordinator collector instance: %w", err)
 		}
 		if instance.ClaimsEnabled && !c.ClaimsEnabled {
 			return fmt.Errorf("collector instance %q enables claims while coordinator claims are disabled", instance.InstanceID)
+		}
+		if instance.Enabled && instance.ClaimsEnabled {
+			activeClaimCollectors++
+		}
+	}
+	if c.DeploymentMode == deploymentModeActive {
+		if !c.ClaimsEnabled {
+			return fmt.Errorf("workflow coordinator active mode requires claims enabled")
+		}
+		if activeClaimCollectors == 0 {
+			return fmt.Errorf("workflow coordinator active mode requires at least one enabled claim-capable collector instance")
 		}
 	}
 	return nil

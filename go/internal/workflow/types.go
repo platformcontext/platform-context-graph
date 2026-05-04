@@ -101,12 +101,13 @@ const (
 	ClaimStatusFailedRetryable ClaimStatus = "failed_retryable"
 	ClaimStatusFailedTerminal  ClaimStatus = "failed_terminal"
 	ClaimStatusExpired         ClaimStatus = "expired"
+	ClaimStatusReleased        ClaimStatus = "released"
 )
 
 // Validate checks that the claim status is known.
 func (s ClaimStatus) Validate() error {
 	switch s {
-	case ClaimStatusActive, ClaimStatusCompleted, ClaimStatusFailedRetryable, ClaimStatusFailedTerminal, ClaimStatusExpired:
+	case ClaimStatusActive, ClaimStatusCompleted, ClaimStatusFailedRetryable, ClaimStatusFailedTerminal, ClaimStatusExpired, ClaimStatusReleased:
 		return nil
 	default:
 		return fmt.Errorf("unknown workflow claim status %q", s)
