@@ -3,20 +3,57 @@
 Use this path when you are developing PCG, testing `pcg graph start`, or running
 one workspace with a local owner.
 
-This mode starts embedded Postgres, a managed NornicDB sidecar, the ingester,
-and the reducer. It does not start the full HTTP API unless you run that
-separately.
+This mode starts embedded Postgres, embedded NornicDB, the ingester, and the
+reducer under one workspace owner. It does not start the full HTTP API unless
+you run that separately.
+
+## Full local end-to-end
+
+Use this path from a checkout when you want the local owner to manage the graph,
+Postgres, ingester, reducer, and MCP helper binaries for one workspace:
+
+```bash
+git clone https://github.com/platformcontext/platform-context-graph.git
+cd platform-context-graph
+
+./scripts/install-local-binaries.sh
+export PATH="$(go env GOPATH)/bin:$PATH"
+
+pcg graph start --workspace-root "$PWD"
+```
+
+Leave `pcg graph start` running while you work. It owns the workspace, starts
+embedded Postgres, starts embedded NornicDB inside the `pcg` process, launches
+`pcg-ingester` and `pcg-reducer` from `PATH`, and prints progress in the
+terminal. Stop the owner with `Ctrl-C`, or from another terminal:
+
+```bash
+pcg graph stop --workspace-root "$PWD"
+```
+
+No local NornicDB install is required for this default path. The script builds
+the local owner `pcg` with embedded NornicDB and installs the service binaries
+that the owner needs to supervise.
 
 ## Install the CLI
 
 For the user-facing CLI, use modern Go install syntax:
 
 ```bash
-go install github.com/platformcontext/platform-context-graph/go/cmd/pcg@latest
+go install -tags nolocalllm github.com/platformcontext/platform-context-graph/go/cmd/pcg@latest
 ```
 
 Use a pinned version instead of `latest` when you need repeatable installs.
 Make sure `$(go env GOPATH)/bin` or `GOBIN` is on `PATH`.
+
+The `nolocalllm` tag is intentional. It links the local NornicDB runtime into
+`pcg` without pulling in NornicDB's optional local-LLM pieces, so
+`pcg graph start` can run the default local graph without a separate
+`nornicdb-headless` install.
+
+This installs only the `pcg` binary. For the full local owner workflow, use the
+checkout installer above so `pcg-ingester`, `pcg-reducer`, `pcg-mcp-server`,
+and the other helper binaries are present on `PATH`.
 
 ## Install the full local binary set
 
@@ -34,18 +71,34 @@ By default the script installs to `GOBIN`, or to `$(go env GOPATH)/bin` when
 `pcg-bootstrap-index`, `pcg-ingester`, `pcg-reducer`, and the supporting
 runtime helpers.
 
+The script builds only the local owner `pcg` binary with
+`PCG_LOCAL_OWNER_BUILD_TAGS=nolocalllm` by default. The service binaries
+(`pcg-api`, `pcg-ingester`, `pcg-reducer`, and friends) are plain deployment
+style binaries that connect to an external graph endpoint. Set
+`PCG_LOCAL_OWNER_BUILD_TAGS=` only when you deliberately want a plain local
+owner build for explicit process-mode testing.
+
 `pcg graph start` discovers `pcg-ingester`, `pcg-reducer`, and
 `pcg-mcp-server` through `PATH`, so keep that install directory on `PATH` for
 the shell where you start PCG.
 
-## Install NornicDB
+## NornicDB runtime mode
+
+NornicDB is the default local graph backend. For normal local binary installs,
+there is nothing else to install: `pcg graph start` uses the embedded
+library-mode runtime in the `pcg` process.
+
+Use an external process only when you are testing a specific NornicDB build:
 
 ```bash
-pcg install nornicdb
+PCG_NORNICDB_RUNTIME=process \
+PCG_NORNICDB_BINARY=/absolute/path/to/nornicdb-headless \
+pcg graph start --workspace-root /path/to/repo
 ```
 
-NornicDB is the default local graph backend. The local owner uses Postgres for
-relational state and NornicDB for graph projection.
+`pcg install nornicdb --from <source>` is still available for process-mode
+testing and upgrade workflows. Bare `pcg install nornicdb` remains reserved for
+future release-backed installs.
 
 ## Start a workspace owner
 

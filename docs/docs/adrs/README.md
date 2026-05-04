@@ -29,7 +29,7 @@ still needs an owner.
 | `2026-04-19-ci-cd-relationship-parity-across-delivery-families.md` | Accepted with follow-up | Finish partial delivery-family parity and controller-driven service-story integration. |
 | `2026-04-19-deployable-unit-correlation-and-materialization-framework.md` | Accepted with follow-up | Continue full admission/materialization across multi-source runtime evidence. |
 | `2026-04-20-aws-cloud-scanner-collector.md` | Design accepted; runtime not implemented | Build the AWS collector runtime, fact emission, claim loop, telemetry, and docs. |
-| `2026-04-20-embedded-local-backends-desktop-mode.md` | Accepted with follow-up | Local backend path is shipped; PCG tracks latest NornicDB `main` via explicit installs while conformance, install trust, and host coverage remain open. |
+| `2026-04-20-embedded-local-backends-desktop-mode.md` | Accepted with follow-up | Local backend path is shipped with embedded NornicDB as the default local mode; latest-main process installs remain explicit while release packaging, conformance, and host coverage close out. |
 | `2026-04-20-multi-source-reducer-and-consumer-contract.md` | Architecture accepted; implementation partial | Build collector-backed projectors and consumer MCP/HTTP tools. |
 | `2026-04-20-terraform-state-collector.md` | Design accepted; runtime not implemented | Build the Terraform state collector runtime, readers, redaction, facts, and docs. |
 | `2026-04-20-workflow-coordinator-and-multi-collector-runtime-contract.md` | Accepted; Git claim proof path implemented | Keep Helm claims dark until remote full-corpus validation and future collector-family gates are ready. |
@@ -41,7 +41,7 @@ still needs an owner.
 | ADR | Current state | What remains |
 | --- | --- | --- |
 | `2026-04-19-multi-source-correlation-dsl-and-collector-readiness.md` | In progress | DSL/rule-pack substrate and source-kind contracts exist; AWS, Terraform-state, webhook, and full cloud/runtime joins remain. |
-| `2026-04-20-embedded-local-backends-implementation-plan.md` | In progress | Local host, local-authoritative runtime, backend conformance harness, profile matrix, and latest-main NornicDB proof are in place; install trust, host envelope, and plugin work still open. |
+| `2026-04-20-embedded-local-backends-implementation-plan.md` | In progress | Local host, embedded local-authoritative runtime, backend conformance harness, profile matrix, and latest-main NornicDB proof are in place; release packaging, host envelope, and plugin work still open. |
 | `2026-04-24-iac-usage-reachability-and-refactor-impact.md` | In progress | Dead-IaC reachability and pagination are proven; shared neighborhood, impact, integrity, and remaining IaC-family coverage remain. |
 | `2026-05-04-neo4j-parity-optimization-plan.md` | Accepted | Records the schema-first Neo4j proof, the shared writer cleanup, and the resulting support posture. |
 

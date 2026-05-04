@@ -306,7 +306,7 @@ For `PCG_QUERY_PROFILE=local_authoritative` plus `PCG_GRAPH_BACKEND=nornicdb`,
 reducer claims also wait while source-local projector work is outstanding. This
 is not a row-size tuning knob: it removes the unsafe overlap where
 first-generation canonical projection and reducer graph writes contend for the
-same embedded NornicDB sidecar. Neo4j keeps the existing production concurrency
+same local NornicDB runtime. Neo4j keeps the existing production concurrency
 path, and NornicDB operators should tune worker count only from post-drain
 queue tail, graph-write timeout, CPU, disk, and NornicDB profile evidence.
 

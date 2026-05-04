@@ -65,10 +65,10 @@ workspace ID.
   cache/
 ```
 
-`graph/` is the persistent data directory for the optional graph backend
-sidecar on the `local_authoritative` profile. On `local_lightweight`, this
-directory is absent. When present, its internal layout is owned by the
-installed graph backend (for example `graph/nornicdb/`).
+`graph/` is the persistent data directory for the local graph backend on the
+`local_authoritative` profile. On `local_lightweight`, this directory is
+absent. When present, its internal layout is owned by the graph backend
+(for example `graph/nornicdb/`).
 
 ### Files
 
@@ -103,7 +103,8 @@ installed graph backend (for example `graph/nornicdb/`).
 - `profile` — active PCG query profile
 - `graph_backend` — optional, populated only on `local_authoritative`;
   allowed values enumerated by `capability-conformance-spec.md`
-- `graph_pid` — optional, graph backend PID when the sidecar is running
+- `graph_pid` — optional, graph backend PID. Embedded NornicDB records the
+  workspace owner PID; process mode records the child process PID.
 - `graph_address` — optional, loopback bind address for graph backends that
   use TCP listener ports
 - `graph_bolt_port` — optional, loopback Bolt port for graph backends that

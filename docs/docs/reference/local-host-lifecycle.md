@@ -9,20 +9,20 @@ lightweight local host.
 2. validate `VERSION`
 3. validate or reclaim stale owner record
 4. start embedded Postgres and wait until it accepts local connections
-5. if profile is `local_authoritative`, start the local graph backend
-   sidecar and wait until its recorded loopback health and Bolt endpoints
-   accept connections
+5. if profile is `local_authoritative`, start embedded NornicDB and wait until
+   its recorded loopback health and Bolt endpoints accept connections
 6. start local host socket
 7. start watcher / index pipeline
 8. begin serving CLI and MCP attach traffic
 
-Step 5 is skipped entirely on `local_lightweight`. The graph sidecar is
-configured and installed independently of the PCG binary; see
-`graph-backend-installation.md` and `graph-backend-operations.md`.
+Step 5 is skipped entirely on `local_lightweight`. Embedded NornicDB is the
+default local-authoritative graph runtime; process mode is an explicit testing
+override documented in `graph-backend-installation.md` and
+`graph-backend-operations.md`.
 
 In `local_authoritative`, `pcg-ingester --watch` may exit cleanly after it has
 finished the current collection stream. That is not an owner shutdown signal:
-the local host keeps Postgres, the graph sidecar, and `pcg-reducer` alive so
+the local host keeps Postgres, NornicDB, and `pcg-reducer` alive so
 queued projection/reduction work can drain and attached CLI/MCP reads can keep
 using the workspace owner. The supervisor logs that allowed child exit so
 operators can distinguish intentional collection completion from owner teardown.
@@ -36,7 +36,7 @@ operators can distinguish intentional collection completion from owner teardown.
    later local start can reclaim and retry it once the queue lease expires
 5. if profile is `local_authoritative`, signal the graph backend to stop
    accepting new writes and wait for quiesce
-6. flush and stop the graph backend sidecar (if present)
+6. flush and stop the graph backend runtime (if present)
 7. flush and stop embedded Postgres
 8. remove owner record or mark shutdown complete
 9. release `owner.lock`

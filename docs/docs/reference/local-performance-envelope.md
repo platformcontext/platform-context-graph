@@ -14,8 +14,8 @@ Reference hardware:
 - Apple Silicon laptop with 16 GB RAM
 - or mid-range x86 laptop with 4+ cores and 16 GB RAM
 
-Targets are split by profile because the `local_authoritative` profile runs a
-graph backend sidecar and therefore carries more cold-start cost.
+Targets are split by profile because the `local_authoritative` profile starts
+NornicDB and therefore carries more cold-start cost.
 
 ### `local_lightweight` profile (PCG + embedded Postgres only)
 
@@ -30,7 +30,7 @@ graph backend sidecar and therefore carries more cold-start cost.
 - idle memory budget: document and measure
 - active indexing memory budget: document and measure
 
-### `local_authoritative` profile (PCG + embedded Postgres + graph backend sidecar)
+### `local_authoritative` profile (PCG + embedded Postgres + embedded NornicDB)
 
 - cold start: under 15 seconds (Postgres warmup plus graph-backend warmup)
 - warm restart: under 5 seconds (same workspace data root, graph backend
@@ -68,13 +68,12 @@ processes already attached.
 The `local_authoritative` startup envelope now has a dedicated manual gate:
 
 ```bash
-PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
 PCG_LOCAL_AUTHORITATIVE_PERF=true \
-  go test ./cmd/pcg -run TestLocalAuthoritativeStartupEnvelope -count=1 -v
+  go test -tags nolocalllm ./cmd/pcg -run TestLocalAuthoritativeStartupEnvelope -count=1 -v
 ```
 
 That gate boots the real local host, embedded Postgres, schema bootstrap, and
-managed NornicDB sidecar, then measures readiness at the owner-record and
+embedded NornicDB, then measures readiness at the owner-record and
 ingester handoff. It runs twice against the same workspace data root so the
 first pass captures cold start and the second pass captures warm restart.
 
@@ -92,13 +91,12 @@ until their own perf gates land.
 The `local_authoritative` call-chain path now has a dedicated manual smoke:
 
 ```bash
-PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
 PCG_LOCAL_AUTHORITATIVE_PERF=true \
-  go test ./cmd/pcg -run TestLocalAuthoritativeCallChainSyntheticEnvelope -count=1 -v
+  go test -tags nolocalllm ./cmd/pcg -run TestLocalAuthoritativeCallChainSyntheticEnvelope -count=1 -v
 ```
 
-That gate boots the real local host, embedded Postgres, and managed NornicDB
-sidecar, seeds a synthetic four-function `CALLS` chain through the shared Bolt
+That gate boots the real local host, embedded Postgres, and embedded NornicDB,
+seeds a synthetic four-function `CALLS` chain through the shared Bolt
 driver path, and exercises the real `/api/v0/code/call-chain` handler in
 `local_authoritative`.
 
@@ -115,13 +113,12 @@ The `local_authoritative` transitive-caller path now also has a dedicated
 manual smoke:
 
 ```bash
-PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
 PCG_LOCAL_AUTHORITATIVE_PERF=true \
-  go test ./cmd/pcg -run TestLocalAuthoritativeTransitiveCallersSyntheticEnvelope -count=1 -v
+  go test -tags nolocalllm ./cmd/pcg -run TestLocalAuthoritativeTransitiveCallersSyntheticEnvelope -count=1 -v
 ```
 
-That gate boots the real local host, embedded Postgres, and managed NornicDB
-sidecar, seeds the same synthetic four-function `CALLS` chain through the
+That gate boots the real local host, embedded Postgres, and embedded NornicDB,
+seeds the same synthetic four-function `CALLS` chain through the
 shared Bolt driver path, and exercises the real
 `/api/v0/code/relationships` transitive-callers handler in
 `local_authoritative`.
@@ -139,13 +136,12 @@ The `local_authoritative` dead-code path now also has a dedicated manual
 smoke:
 
 ```bash
-PCG_NORNICDB_BINARY=/tmp/pcg-bare-install-smoke/bin/nornicdb-headless \
 PCG_LOCAL_AUTHORITATIVE_PERF=true \
-  go test ./cmd/pcg -run TestLocalAuthoritativeDeadCodeSyntheticEnvelope -count=1 -v
+  go test -tags nolocalllm ./cmd/pcg -run TestLocalAuthoritativeDeadCodeSyntheticEnvelope -count=1 -v
 ```
 
-That gate boots the real local host, embedded Postgres, and managed NornicDB
-sidecar, seeds a synthetic repository/file/function containment graph plus one
+That gate boots the real local host, embedded Postgres, and embedded NornicDB,
+seeds a synthetic repository/file/function containment graph plus one
 live `CALLS` edge through the shared Bolt driver path, and exercises the real
 `/api/v0/code/dead-code` handler in `local_authoritative`.
 

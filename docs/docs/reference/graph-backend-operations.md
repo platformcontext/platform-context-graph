@@ -1,7 +1,8 @@
 # Graph Backend Operations
 
-This page covers day-two operations for the local graph backend sidecar on
-the `local_authoritative` profile. For install, see
+This page covers day-two operations for the local graph backend on the
+`local_authoritative` profile. Embedded NornicDB is the default local mode;
+process mode is an explicit maintainer/test override. For install, see
 [Graph Backend Installation](graph-backend-installation.md). For the
 lifecycle contract that governs startup / shutdown ordering, see
 [Local Host Lifecycle](local-host-lifecycle.md). For the consolidated
@@ -20,25 +21,26 @@ pcg graph upgrade
 
 `pcg graph status`, `pcg graph logs`, `pcg graph stop`, and
 `pcg graph start` are wired today. `pcg graph upgrade --from <source>` is also
-wired for explicit-source replacement of the managed binary from a local
-binary path, local tar archive, macOS package, or URL. Bare no-argument
-NornicDB install is intentionally unavailable while PCG tracks latest
-NornicDB `main` through explicit `--from` binaries. Signature verification
-remains planned.
+wired for explicit-source replacement of the managed process-mode binary from
+a local binary path, local tar archive, macOS package, or URL. Bare
+no-argument NornicDB install is intentionally unavailable while PCG tracks
+latest NornicDB `main` through explicit `--from` binaries. Signature
+verification remains planned.
 
 `pcg graph stop` is owner-aware. If a healthy local host owns the workspace,
 the command signals that owner process so shutdown follows the documented
-order: child runtimes stop first, then the graph sidecar, then embedded
-Postgres. It only stops the recorded graph process directly when the owner is
-already dead and the graph backend is stale.
+order: child runtimes stop first, then NornicDB, then embedded Postgres. It
+only stops the recorded graph process directly when the owner is already dead
+and an explicit process-mode graph backend is stale.
 
 `pcg graph start` is intentionally foreground. It execs the same local-host
 supervisor used by `PCG_QUERY_PROFILE=local_authoritative pcg watch .` and
 does not create a detached daemon. Use Ctrl-C to stop it from the same terminal
 or `pcg graph stop` from another terminal.
 
-`pcg graph upgrade` refuses to replace the managed binary while the workspace
-owner or graph sidecar is still healthy. Stop the workspace first:
+`pcg graph upgrade` refuses to replace the managed process-mode binary while
+the workspace owner or process-mode graph backend is still healthy. Stop the
+workspace first:
 
 ```bash
 pcg graph stop
@@ -46,17 +48,15 @@ pcg graph upgrade --from /absolute/path/to/nornicdb-headless
 pcg graph upgrade --from https://example.com/releases/nornicdb-headless-darwin-arm64.tar.gz --sha256 <expected-sha256>
 ```
 
-The local-authoritative runtime still manages the sidecar automatically when
-you run a PCG local host entrypoint such as:
+The local-authoritative runtime starts embedded NornicDB automatically when you
+run a PCG local host entrypoint such as:
 
 ```bash
 PCG_QUERY_PROFILE=local_authoritative pcg watch .
 ```
 
-That path requires a discoverable NornicDB binary. Laptop installs prefer the
-managed `${PCG_HOME}/bin/nornicdb-headless` binary created by
-`pcg install nornicdb --from <source>`; the full `nornicdb` binary is supported
-only when users opt in because it is larger. See
+That path requires a `pcg` binary built with `-tags nolocalllm`. A discoverable
+NornicDB binary is required only for explicit process mode. See
 [Graph Backend Installation](graph-backend-installation.md).
 
 With the NornicDB default backend, PCG keeps local content search isolated from
@@ -159,7 +159,7 @@ For the current NornicDB-backed `local_authoritative` path, health means:
 - `GET /health` on the recorded loopback HTTP port succeeds
 - the recorded loopback Bolt port accepts TCP connections
 
-The sidecar writes logs under `${PCG_HOME}/local/workspaces/<workspace_id>/logs/graph-nornicdb.log`.
+NornicDB writes logs under `${PCG_HOME}/local/workspaces/<workspace_id>/logs/graph-nornicdb.log`.
 Use `pcg graph logs [--workspace-root <path>]` to print that file without
 manually deriving the workspace ID.
 
@@ -177,7 +177,7 @@ mismatch, data directory not writable) and returns a non-zero exit code.
 
 ## Troubleshooting
 
-### Backend installed but not starting
+### Process-mode backend installed but not starting
 
 Check, in order:
 
@@ -279,14 +279,15 @@ PCG_NORNICDB_BINARY=/absolute/path/to/nornicdb-headless \
   go test ./cmd/pcg -run TestNornicDBSchemaAdapterVerification -count=1 -v
 ```
 
-That test executes the rendered NornicDB schema against a real sidecar. It is
-not part of the default unit-test suite because it requires an installed graph
-binary.
+That test executes the rendered NornicDB schema against a real process-mode
+NornicDB runtime. It is not part of the default unit-test suite because it
+requires an installed graph binary.
 
 ## Non-goals
 
 - Running multiple graph backends simultaneously on one workspace. The
   workspace lock admits exactly one owner and exactly one graph backend
   at a time.
-- Running the graph backend headless without a PCG owner. The sidecar is
-  owned by the lightweight host, not by the user shell.
+- Running the graph backend without a PCG owner. Embedded mode is owned by the
+  `pcg` process, and process mode is still owned by the lightweight host, not
+  by the user shell.
