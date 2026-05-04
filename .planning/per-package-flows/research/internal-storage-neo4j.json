@@ -1,0 +1,18 @@
+{
+  "package": "internal/storage/neo4j",
+  "package_name_decl": "neo4j",
+  "files": [
+    "doc.go"
+  ],
+  "exported_types": [],
+  "exported_funcs": [],
+  "telemetry": {},
+  "dependencies": [],
+  "notes": [
+    "This package is currently a reservation stub: doc.go declares the package and its future purpose.",
+    "Neo4j-specific driver and session adapters live in cmd/ wiring files (e.g. cmd/ingester/wiring_neo4j_executor.go, cmd/reducer/neo4j_wiring.go).",
+    "The runtime command wiring implements cypher.Executor directly against the neo4j-go-driver; that boundary is being narrowed toward this package.",
+    "No production code currently lives here beyond the doc.go package declaration.",
+    "No callers import this package in non-test, non-cmd code; runtime tests reference the README path via a test fixture."
+  ]
+}

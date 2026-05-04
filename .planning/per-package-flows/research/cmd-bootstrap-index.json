@@ -1,0 +1,192 @@
+{
+  "package": "go/cmd/bootstrap-index",
+  "doc_go_contract": "one-shot end-to-end indexing pass: collection, source-local projection, relationship-evidence backfill, deployment-mapping reopen, and IaC reachability materialization",
+  "binary_name": "pcg-bootstrap-index",
+  "kubernetes_shape": "one-shot local helper / job / init step; NOT a steady-state Kubernetes workload",
+  "entry_point": "main.go:main -> run",
+  "key_files": [
+    "main.go",
+    "wiring.go",
+    "nornicdb_wiring.go",
+    "doc.go"
+  ],
+  "test_files": [
+    "main_test.go",
+    "nornicdb_wiring_test.go"
+  ],
+  "phases": {
+    "phase_1": {
+      "name": "Collection + pipelined first-pass reduction",
+      "description": "drainCollector runs via GitSource.Next + CommitScopeGeneration. Concurrently, drainProjectorPipelined claims projector queue items and runs source-local projection (graph writes + content writes + reducer intent enqueue). deployment_mapping work items may finish or remain pending because backward relationship evidence is not yet committed.",
+      "key_functions": [
+        "runPipelined (main.go:190)",
+        "drainCollector (main.go:391)",
+        "drainProjectorPipelined (main.go:298)",
+        "drainProjector (main.go:548)",
+        "drainProjectorWorkItem (main.go:623)"
+      ],
+      "signal": "collectorDone channel closed when drainCollector returns"
+    },
+    "phase_2": {
+      "name": "Relationship-evidence backfill",
+      "description": "Called on bootstrapCommitter after collector goroutine completes (before projector drains). Populates relationship_evidence_facts and publishes backward_evidence_committed readiness rows. Defined on postgres.IngestionStore; called here as cd.committer.BackfillAllRelationshipEvidence.",
+      "key_function": "cd.committer.BackfillAllRelationshipEvidence (main.go:236)",
+      "interface_method": "bootstrapCommitter.BackfillAllRelationshipEvidence",
+      "failure_log_key": "backfill_deferred_failure"
+    },
+    "phase_3_prereq": {
+      "name": "Wait for projector drain",
+      "description": "runPipelined waits for drainProjectorPipelined to return before issuing the reopen call. This prevents deployment_mapping items emitted after the reopen pass from missing reopening.",
+      "key_line": "projectorErr := <-errc (main.go:251)"
+    },
+    "phase_3_iac": {
+      "name": "IaC reachability materialization",
+      "description": "MaterializeIaCReachability classifies active-generation IaC usage corpus-wide and writes reachability rows. Called after projector drains.",
+      "key_function": "cd.committer.MaterializeIaCReachability (main.go:256)",
+      "interface_method": "bootstrapCommitter.MaterializeIaCReachability",
+      "failure_log_key": "iac_reachability_materialization_failure"
+    },
+    "phase_4": {
+      "name": "Deployment-mapping reopen",
+      "description": "ReopenDeploymentMappingWorkItems reopens succeeded deployment_mapping work items so the reducer can rerun them against the now-committed relationship evidence and create resolved_relationships. Only succeeded items are reopened; in-flight stragglers at reopen time are NOT automatically replayed.",
+      "key_function": "cd.committer.ReopenDeploymentMappingWorkItems (main.go:273)",
+      "interface_method": "bootstrapCommitter.ReopenDeploymentMappingWorkItems",
+      "failure_log_key": "reopen_deployment_mapping_failure",
+      "straggler_note": "A small number of in-flight items may succeed between BackfillAllRelationshipEvidence and the reopen pass. These require manual admin replay or a future automated straggler-replay mechanism."
+    }
+  },
+  "concurrency_model": {
+    "pipeline": "collector and projector run in concurrent goroutines; collectorDone channel coordinates drain-mode transition",
+    "projector_workers": "N goroutines compete via FOR UPDATE SKIP LOCKED; controlled by PCG_PROJECTION_WORKERS",
+    "drain_mode": "drainingWorkSource counts consecutive empty polls after collectorDone is closed; exits after maxEmptyPolls=5",
+    "heartbeat": "startBootstrapProjectorHeartbeat renews projector leases during long graph writes; interval = leaseDuration/3 capped at 1 minute"
+  },
+  "key_types": [
+    {"name": "bootstrapCommitter", "file": "main.go", "line": 41, "kind": "interface", "embeds": "collector.Committer", "extra_methods": ["BackfillAllRelationshipEvidence", "MaterializeIaCReachability", "ReopenDeploymentMappingWorkItems"]},
+    {"name": "collectorDeps", "file": "main.go", "line": 48, "kind": "struct"},
+    {"name": "projectorDeps", "file": "main.go", "line": 52, "kind": "struct"},
+    {"name": "graphDeps", "file": "main.go", "line": 36, "kind": "struct"},
+    {"name": "drainingWorkSource", "file": "main.go", "line": 331, "kind": "struct"},
+    {"name": "bootstrapNeo4jExecutor", "file": "wiring.go", "line": 220, "kind": "struct"},
+    {"name": "bootstrapNornicDBPhaseGroupExecutor", "file": "nornicdb_wiring.go", "line": 109, "kind": "struct"},
+    {"name": "bootstrapSQLDB", "file": "main.go", "line": 881, "kind": "struct"}
+  ],
+  "key_functions": [
+    {"name": "run", "file": "main.go", "line": 84, "role": "wires telemetry, Postgres, graph backend, collector, projector deps then calls runPipelined"},
+    {"name": "runPipelined", "file": "main.go", "line": 190, "role": "four-phase orchestrator: pipelined Phase 1, Phase 2 backfill, IaC materialization, Phase 4 reopen"},
+    {"name": "drainCollector", "file": "main.go", "line": 391, "role": "loops source.Next + committer.CommitScopeGeneration until no more work"},
+    {"name": "drainProjectorPipelined", "file": "main.go", "line": 298, "role": "wraps drainProjector with drain-then-exit via drainingWorkSource"},
+    {"name": "drainProjector", "file": "main.go", "line": 548, "role": "N-worker concurrent projection loop; 1-worker falls back to drainProjectorSequential"},
+    {"name": "drainProjectorWorkItem", "file": "main.go", "line": 623, "role": "claim → load facts → project → ack; full OTEL instrumentation per item"},
+    {"name": "projectionWorkerCount", "file": "main.go", "line": 374, "role": "reads PCG_PROJECTION_WORKERS; defaults to min(NumCPU, 8)"},
+    {"name": "buildBootstrapCollector", "file": "wiring.go", "line": 26, "role": "constructs GitSource + postgres.IngestionStore with SkipRelationshipBackfill=true"},
+    {"name": "buildBootstrapProjector", "file": "wiring.go", "line": 79, "role": "constructs projector.Runtime with PhasePublisher and RepairQueue"},
+    {"name": "openBootstrapDB", "file": "main.go", "line": 888, "role": "calls runtimecfg.OpenPostgres; wraps *sql.DB as bootstrapSQLDB"},
+    {"name": "applySchema", "file": "main.go", "line": 896, "role": "calls postgres.ApplyBootstrap for DDL; idempotent"},
+    {"name": "openBootstrapGraph", "file": "main.go", "line": 900, "role": "calls openBootstrapCanonicalWriter; returns graphDeps{writer, close}"},
+    {"name": "bootstrapCanonicalExecutorForGraphBackend", "file": "nornicdb_wiring.go", "line": 47, "role": "wraps rawExecutor with instrumentation, retry, timeout; NornicDB adds phase-group chunking"},
+    {"name": "startBootstrapProjectorHeartbeat", "file": "main.go", "line": 717, "role": "renews projector lease at interval during long graph writes"},
+    {"name": "writeDiscoveryAdvisoryReports", "file": "main.go", "line": 515, "role": "writes collected discovery advisory reports to PCG_DISCOVERY_REPORT path as JSON"},
+    {"name": "recordBootstrapProjectionResult", "file": "main.go", "line": 782, "role": "records metrics + span + structured log for a single projection work item"}
+  ],
+  "type_aliases": [
+    {"name": "openBootstrapDBFn", "file": "main.go", "line": 62},
+    {"name": "applyBootstrapFn", "file": "main.go", "line": 63},
+    {"name": "openGraphFn", "file": "main.go", "line": 64},
+    {"name": "buildCollectorFn", "file": "main.go", "line": 65},
+    {"name": "buildProjectorFn", "file": "main.go", "line": 66},
+    {"name": "discoveryAdvisorySink", "file": "main.go", "line": 67},
+    {"name": "bootstrapProjectorHeartbeatStop", "file": "main.go", "line": 713}
+  ],
+  "sentinels": [
+    {"name": "errProjectorDrained", "file": "main.go", "line": 619, "meaning": "queue is empty; signals clean exit from drainProjectorWorkItem"}
+  ],
+  "env_vars": {
+    "PCG_POSTGRES_DSN": "Postgres connection string (via runtimecfg.OpenPostgres)",
+    "PCG_GRAPH_BACKEND": "neo4j or nornicdb; default nornicdb; invalid value fails at startup",
+    "NEO4J_URI": "Bolt URI for graph backend",
+    "NEO4J_USERNAME": "Bolt auth username",
+    "NEO4J_PASSWORD": "Bolt auth password",
+    "DEFAULT_DATABASE": "Bolt database name; default nornic",
+    "PCG_NEO4J_BATCH_SIZE": "canonical node batch size (wiring.go:142)",
+    "PCG_PROJECTION_WORKERS": "concurrent projection goroutines; default min(NumCPU, 8) (main.go:374)",
+    "PCG_DISCOVERY_REPORT": "file path to write discovery advisory JSON; empty disables (main.go:163)",
+    "PCG_CANONICAL_WRITE_TIMEOUT": "graph write timeout; default 30s for NornicDB (nornicdb_wiring.go:341)",
+    "PCG_NORNICDB_CANONICAL_GROUPED_WRITES": "enable NornicDB grouped canonical writes; default false; conformance gate required before production use (nornicdb_wiring.go:353)",
+    "PCG_NORNICDB_PHASE_GROUP_STATEMENTS": "NornicDB phase group statement cap; default 500",
+    "PCG_NORNICDB_FILE_PHASE_GROUP_STATEMENTS": "NornicDB file-phase group statement cap; default 5",
+    "PCG_NORNICDB_FILE_BATCH_SIZE": "NornicDB file upsert row cap; default 100",
+    "PCG_NORNICDB_ENTITY_PHASE_GROUP_STATEMENTS": "NornicDB entity-phase group statement cap; default 25",
+    "PCG_NORNICDB_ENTITY_BATCH_SIZE": "NornicDB entity upsert row cap; default 100",
+    "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES": "per-label batch size overrides as Label=size,... entries",
+    "PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS": "per-label phase group statement overrides as Label=size,... entries"
+  },
+  "telemetry": {
+    "bootstrap_name": "bootstrap-index",
+    "logger_scope": "collector",
+    "logger_component": "bootstrap-index",
+    "spans": [
+      {"name": "telemetry.SpanCollectorObserve", "file": "main.go", "line": 408},
+      {"name": "telemetry.SpanProjectorRun", "file": "main.go", "line": 657}
+    ],
+    "metrics": [
+      {"name": "pcg_dp_facts_emitted_total", "field": "instruments.FactsEmitted", "file": "main.go", "line": 438},
+      {"name": "pcg_dp_facts_committed_total", "field": "instruments.FactsCommitted", "file": "main.go", "line": 481},
+      {"name": "pcg_dp_collector_observe_duration_seconds", "field": "instruments.CollectorObserveDuration", "file": "main.go", "line": 483},
+      {"name": "pcg_dp_queue_claim_duration_seconds", "field": "instruments.QueueClaimDuration", "file": "main.go", "line": 646},
+      {"name": "pcg_dp_projector_run_duration_seconds", "field": "instruments.ProjectorRunDuration", "file": "main.go", "line": 797},
+      {"name": "pcg_dp_projections_completed_total", "field": "instruments.ProjectionsCompleted", "file": "main.go", "line": 800},
+      {"name": "pcg_dp_gomemlimit_bytes", "file": "main.go", "line": 115},
+      {"name": "instruments.PipelineOverlapDuration", "note": "records collection+projection overlap; no canonical pcg_dp_ name — check telemetry.Instruments for final name", "file": "main.go", "line": 292}
+    ],
+    "failure_class_log_keys": [
+      "commit_failure",
+      "backfill_deferred_failure",
+      "iac_reachability_materialization_failure",
+      "reopen_deployment_mapping_failure",
+      "projection_failure",
+      "lease_heartbeat_failure"
+    ],
+    "gomemlimit": "telemetry.RecordGOMEMLIMIT called at main.go:115",
+    "no_metrics_http_surface": true,
+    "otel_export_only": true
+  },
+  "signal_handling": "none; pcg-bootstrap-index is a one-shot binary; it exits 0 on success or 1 on error via os.Exit(1)",
+  "exit_codes": {
+    "0": "success",
+    "1": "any non-nil error from run(); logged via slog.Error before exit"
+  },
+  "admin_surface": "none; does NOT mount /healthz, /readyz, /metrics, or /admin/status",
+  "internal_imports": [
+    "github.com/platformcontext/platform-context-graph/go/internal/collector",
+    "github.com/platformcontext/platform-context-graph/go/internal/projector",
+    "github.com/platformcontext/platform-context-graph/go/internal/runtime (alias runtimecfg)",
+    "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres",
+    "github.com/platformcontext/platform-context-graph/go/internal/storage/cypher (alias sourcecypher)",
+    "github.com/platformcontext/platform-context-graph/go/internal/content",
+    "github.com/platformcontext/platform-context-graph/go/internal/telemetry"
+  ],
+  "adr_references": [
+    {
+      "path": "docs/docs/adrs/2026-04-18-bootstrap-relationship-backfill-quadratic-cost.md",
+      "what_it_says": "Adopted deferred bootstrap backfill with SkipRelationshipBackfill + one deferred BackfillAllRelationshipEvidence pass + ReopenDeploymentMappingWorkItems. Status: Implemented; workstream closed."
+    },
+    {
+      "path": "docs/docs/adrs/2026-04-18-e2e-validation-atomic-writes-deferred-backfill.md",
+      "what_it_says": "Atomic write and deferred backfill constraints that bound the ordering of phases in bootstrap-index."
+    },
+    {
+      "path": "docs/docs/adrs/2026-04-22-nornicdb-graph-backend-candidate.md",
+      "what_it_says": "NornicDB backend evaluation; bootstrap-index uses the same backend-neutral CanonicalNodeWriter surface."
+    }
+  ],
+  "gotchas": [
+    "SkipRelationshipBackfill=true on committer — per-commit backfill is suppressed; the single deferred BackfillAllRelationshipEvidence call does all relationship evidence work.",
+    "Phase ordering is strict: backfill must complete before projector drains, projector must drain before reopen, reopen must complete before exit.",
+    "In-flight deployment_mapping items that succeed between BackfillAllRelationshipEvidence and ReopenDeploymentMappingWorkItems are NOT replayed automatically; operator manual replay is required.",
+    "No /metrics HTTP surface; metrics are only exported via OTEL (OTEL_EXPORTER_OTLP_ENDPOINT).",
+    "PCG_NORNICDB_CANONICAL_GROUPED_WRITES defaults to false; enabling it in bootstrap without conformance evidence carries the same rollback/timeout risks as the ingester path.",
+    "drainProjectorPipelined uses maxEmptyPolls=5 with 500ms poll interval to decide the queue is empty; in very slow databases this can cause premature exit.",
+    "collectorDone is a chan struct{} — it is closed (not sent to) when drainCollector returns; drainingWorkSource.Claim uses a select on it."
+  ]
+}

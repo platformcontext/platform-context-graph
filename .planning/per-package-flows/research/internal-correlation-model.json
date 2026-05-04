@@ -1,0 +1,92 @@
+{
+  "package": "internal/correlation/model",
+  "package_name_decl": "model",
+  "files": [
+    "doc.go",
+    "types.go"
+  ],
+  "exported_types": [
+    {
+      "name": "CandidateState",
+      "file": "types.go",
+      "line": 9,
+      "kind": "type string",
+      "constants": [
+        {"name": "CandidateStateRejected", "value": "rejected"},
+        {"name": "CandidateStateProvisional", "value": "provisional"},
+        {"name": "CandidateStateAdmitted", "value": "admitted"}
+      ]
+    },
+    {
+      "name": "RejectionReason",
+      "file": "types.go",
+      "line": 21,
+      "kind": "type string",
+      "constants": [
+        {"name": "RejectionReasonLowConfidence", "value": "low_confidence"},
+        {"name": "RejectionReasonStructuralMismatch", "value": "structural_mismatch"},
+        {"name": "RejectionReasonLostTieBreak", "value": "lost_tie_break"}
+      ]
+    },
+    {
+      "name": "EvidenceAtom",
+      "file": "types.go",
+      "line": 33,
+      "kind": "struct",
+      "fields": [
+        "ID string",
+        "SourceSystem string",
+        "EvidenceType string",
+        "ScopeID string",
+        "Key string",
+        "Value string",
+        "Confidence float64"
+      ]
+    },
+    {
+      "name": "Candidate",
+      "file": "types.go",
+      "line": 44,
+      "kind": "struct",
+      "fields": [
+        "ID string",
+        "Kind string",
+        "CorrelationKey string",
+        "Confidence float64",
+        "State CandidateState",
+        "Evidence []EvidenceAtom",
+        "RejectionReasons []RejectionReason"
+      ]
+    }
+  ],
+  "exported_methods": [
+    {
+      "name": "CandidateState.Validate",
+      "file": "types.go",
+      "line": 55,
+      "signature": "func (s CandidateState) Validate() error"
+    },
+    {
+      "name": "Candidate.Validate",
+      "file": "types.go",
+      "line": 65,
+      "signature": "func (c Candidate) Validate() error",
+      "notes": "Checks ID, Kind, CorrelationKey non-blank; Confidence in [0,1]; State valid; all Evidence atoms valid."
+    },
+    {
+      "name": "EvidenceAtom.Validate",
+      "file": "types.go",
+      "line": 90,
+      "signature": "func (e EvidenceAtom) Validate() error",
+      "notes": "Checks ID, SourceSystem, EvidenceType, ScopeID, Key non-blank; Confidence in [0,1]. Value is optional."
+    }
+  ],
+  "imports": ["fmt", "strings"],
+  "telemetry": "none — pure data types",
+  "notes": [
+    "Confidence must be within [0,1] for both Candidate and EvidenceAtom.",
+    "CandidateStateProvisional is the pre-evaluation state; engine never emits provisional as final.",
+    "RejectionReasons is a slice; a candidate can accumulate multiple reasons.",
+    "Value field on EvidenceAtom has no non-blank constraint — it is an optional qualifier."
+  ]
+}

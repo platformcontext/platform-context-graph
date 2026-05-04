@@ -1,0 +1,49 @@
+{
+  "package": "go/internal/app",
+  "doc_go_summary": "Package app wires the shared runtime config, observability, lifecycle, and runner contract used by every PCG hosted command. Constructors load runtime config, build the lifecycle, and bind a Runner so the binary's main function only needs to call Application.Run. ComposeLifecycles chains start/stop hooks with rollback on partial start; MountStatusServer adds the shared admin and metrics surfaces from internal/runtime to a hosted app.",
+  "source_files": [
+    "app.go",
+    "doc.go",
+    "lifecycle.go",
+    "status_server.go"
+  ],
+  "exported_identifiers": {
+    "types": [
+      {"name": "Application", "file": "app.go", "line": 22, "desc": "Holds Config, Observability, Lifecycle, Runner; Run starts and blocks"},
+      {"name": "Lifecycle", "file": "app.go", "line": 11, "desc": "Interface: Start(context.Context) error, Stop(context.Context) error"},
+      {"name": "Runner", "file": "app.go", "line": 17, "desc": "Interface: Run(context.Context) error"}
+    ],
+    "functions": [
+      {"name": "New", "file": "app.go", "line": 30, "desc": "Constructs bootable Application for the named service with ContextRunner as default runner"},
+      {"name": "NewHosted", "file": "app.go", "line": 35, "desc": "Constructs bootable Application with a supplied Runner; calls LoadConfig and NewLifecycle"},
+      {"name": "ComposeLifecycles", "file": "lifecycle.go", "line": 7, "desc": "Combines lifecycle hooks into one ordered chain; Start rolls back on partial failure; Stop reverses"},
+      {"name": "MountStatusServer", "file": "status_server.go", "line": 12, "desc": "Adds NewStatusAdminServer (and NewStatusMetricsServer when MetricsAddr differs) to Application lifecycle"},
+      {"name": "NewHostedWithStatusServer", "file": "status_server.go", "line": 33, "desc": "Combines NewHosted and MountStatusServer in one constructor"}
+    ]
+  },
+  "internal_imports": [
+    "internal/runtime",
+    "internal/status"
+  ],
+  "caller_pattern": {
+    "description": "Every hosted binary main that uses app follows this shape",
+    "steps": [
+      "app.NewHostedWithStatusServer(serviceName, runner, statusReader, opts...) -> Application",
+      "Application.Run(ctx) -> calls Lifecycle.Start, Runner.Run, deferred Lifecycle.Stop"
+    ],
+    "callers": [
+      "go/cmd/reducer/main.go (app.NewHostedWithStatusServer)",
+      "go/cmd/projector/main.go (app.NewHosted + MountStatusServer)",
+      "go/cmd/ingester/main.go (app.NewHosted + MountStatusServer)",
+      "go/cmd/workflow-coordinator/main.go (app.NewHosted)"
+    ]
+  },
+  "lifecycle_invariants": [
+    "Application.Run requires both Lifecycle and Runner; either nil is a startup error",
+    "ComposeLifecycles rolls back already-started parts on first Start error",
+    "MountStatusServer only adds separate metrics listener when MetricsAddr is set and differs from ListenAddr",
+    "Stop is always called via defer even when Run returns an error"
+  ],
+  "no_telemetry_emitted": true,
+  "telemetry_note": "No metrics, traces, or structured logs are emitted directly from this package; telemetry is owned by the runtime and status servers it composes in"
+}

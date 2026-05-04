@@ -1,0 +1,43 @@
+{
+  "package": "internal/correlation",
+  "package_name_decl": "correlation",
+  "files": [
+    "doc.go",
+    "observability.go"
+  ],
+  "exported_types": [
+    {
+      "name": "Summary",
+      "file": "observability.go",
+      "line": 9,
+      "kind": "struct",
+      "fields": [
+        "EvaluatedRules int",
+        "AdmittedCandidates int",
+        "RejectedCandidates int",
+        "ConflictCount int",
+        "LowConfidenceCount int"
+      ]
+    }
+  ],
+  "exported_functions": [
+    {
+      "name": "BuildSummary",
+      "file": "observability.go",
+      "line": 18,
+      "signature": "func BuildSummary(evaluation engine.Evaluation) Summary",
+      "notes": "EvaluatedRules is len(evaluation.OrderedRuleNames). ConflictCount increments for RejectionReasonLostTieBreak. LowConfidenceCount increments for RejectionReasonLowConfidence. Provisional candidates are not counted in Admitted or Rejected."
+    }
+  ],
+  "imports": [
+    "github.com/platformcontext/platform-context-graph/go/internal/correlation/engine",
+    "github.com/platformcontext/platform-context-graph/go/internal/correlation/model"
+  ],
+  "telemetry": "none — pure data; callers attach telemetry",
+  "notes": [
+    "Root package does NOT orchestrate evaluation. Evaluation entry point is engine.Evaluate.",
+    "BuildSummary counts EvaluatedRules as len(evaluation.OrderedRuleNames), not the raw pack rule count.",
+    "A single candidate can contribute to both LowConfidenceCount and ConflictCount if it carries both rejection reasons.",
+    "CandidateStateProvisional candidates are neither Admitted nor Rejected in summary counters."
+  ]
+}
