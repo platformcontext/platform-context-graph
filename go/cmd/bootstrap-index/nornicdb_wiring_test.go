@@ -87,7 +87,7 @@ func TestBootstrapNornicDBPhaseGroupExecutorWrapsChunkFailure(t *testing.T) {
 	}
 }
 
-func TestConfigureBootstrapCanonicalWriterInlinesContainmentForNeo4j(t *testing.T) {
+func TestConfigureBootstrapCanonicalWriterBatchesContainmentAcrossFilesForNeo4j(t *testing.T) {
 	t.Parallel()
 
 	executor := &recordingBootstrapGroupExecutor{}
@@ -108,13 +108,75 @@ func TestConfigureBootstrapCanonicalWriterInlinesContainmentForNeo4j(t *testing.
 		if stmt.Parameters[sourcecypher.StatementMetadataPhaseKey] != sourcecypher.CanonicalPhaseEntities {
 			continue
 		}
-		if strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") &&
+		if strings.Contains(stmt.Cypher, "MATCH (f:File {path: row.file_path})") &&
 			strings.Contains(stmt.Cypher, "MERGE (f)-[rel:CONTAINS]->(n)") {
 			inlineEntities++
 		}
 	}
 	if inlineEntities != 1 {
-		t.Fatalf("inline entity containment statements = %d, want 1", inlineEntities)
+		t.Fatalf("batched entity containment statements = %d, want 1", inlineEntities)
+	}
+}
+
+func TestConfigureBootstrapCanonicalWriterKeepsNornicDBFileScopedContainmentByDefault(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingBootstrapGroupExecutor{}
+	writer := sourcecypher.NewCanonicalNodeWriter(executor, 500, nil)
+	writer = configureBootstrapCanonicalWriter(writer, bootstrapCanonicalWriterConfig{
+		GraphBackend: runtime.GraphBackendNornicDB,
+	})
+
+	if err := writer.Write(context.Background(), bootstrapContainmentMaterialization()); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var fileScopedEntities int
+	for _, stmt := range executor.groupStatements {
+		if stmt.Parameters[sourcecypher.StatementMetadataPhaseKey] != sourcecypher.CanonicalPhaseEntities {
+			continue
+		}
+		if strings.Contains(stmt.Cypher, "MATCH (f:File {path: $file_path})") &&
+			strings.Contains(stmt.Cypher, "MERGE (f)-[rel:CONTAINS]->(n)") {
+			fileScopedEntities++
+		}
+	}
+	if fileScopedEntities != 1 {
+		t.Fatalf("NornicDB file-scoped containment statements = %d, want 1", fileScopedEntities)
+	}
+}
+
+func TestBootstrapNeo4jProfileGroupStatementsParsesOptIn(t *testing.T) {
+	t.Parallel()
+
+	enabled, err := bootstrapNeo4jProfileGroupStatements(func(key string) string {
+		if key == "PCG_NEO4J_PROFILE_GROUP_STATEMENTS" {
+			return "true"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("bootstrapNeo4jProfileGroupStatements() error = %v, want nil", err)
+	}
+	if !enabled {
+		t.Fatal("bootstrapNeo4jProfileGroupStatements() = false, want true")
+	}
+}
+
+func TestBootstrapNeo4jProfileGroupStatementsRejectsInvalidBool(t *testing.T) {
+	t.Parallel()
+
+	_, err := bootstrapNeo4jProfileGroupStatements(func(key string) string {
+		if key == "PCG_NEO4J_PROFILE_GROUP_STATEMENTS" {
+			return "sometimes"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("bootstrapNeo4jProfileGroupStatements() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "PCG_NEO4J_PROFILE_GROUP_STATEMENTS") {
+		t.Fatalf("error = %q, want env var name", err.Error())
 	}
 }
 

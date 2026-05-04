@@ -18,7 +18,9 @@ type bootstrapCanonicalWriterConfig struct {
 }
 
 // configureBootstrapCanonicalWriter applies the shared canonical writer shape
-// used by official graph backends during one-shot bootstrap indexing.
+// used by official graph backends during one-shot bootstrap indexing. Neo4j
+// uses row-scoped batched containment to reduce statement count, while
+// NornicDB keeps the file-scoped default proven by the full-corpus benchmark.
 func configureBootstrapCanonicalWriter(
 	writer *sourcecypher.CanonicalNodeWriter,
 	config bootstrapCanonicalWriterConfig,
@@ -27,6 +29,9 @@ func configureBootstrapCanonicalWriter(
 		return nil
 	}
 	writer = writer.WithEntityContainmentInEntityUpsert()
+	if config.GraphBackend == runtimecfg.GraphBackendNeo4j {
+		writer = writer.WithBatchedEntityContainmentInEntityUpsert()
+	}
 	if config.GraphBackend == runtimecfg.GraphBackendNornicDB {
 		if config.FileBatchSize > 0 {
 			writer = writer.WithFileBatchSize(config.FileBatchSize)

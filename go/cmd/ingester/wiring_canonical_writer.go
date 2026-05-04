@@ -17,9 +17,9 @@ type ingesterCanonicalWriterConfig struct {
 }
 
 // configureIngesterCanonicalWriter applies the shared canonical writer shape
-// used by official graph backends. NornicDB may opt into the latest-main
-// batched containment experiment; otherwise Neo4j and NornicDB both use the
-// file-scoped inline entity containment contract.
+// used by official graph backends. Neo4j uses row-scoped batched containment to
+// reduce statement count; NornicDB stays on the benchmarked file-scoped default
+// unless the latest-main batched containment knob is enabled explicitly.
 func configureIngesterCanonicalWriter(
 	writer *sourcecypher.CanonicalNodeWriter,
 	config ingesterCanonicalWriterConfig,
@@ -30,6 +30,9 @@ func configureIngesterCanonicalWriter(
 	writer = writer.WithEntityContainmentInEntityUpsert()
 	if config.EntityBatchSize > 0 {
 		writer = writer.WithEntityBatchSize(config.EntityBatchSize)
+	}
+	if config.GraphBackend == runtimecfg.GraphBackendNeo4j {
+		writer = writer.WithBatchedEntityContainmentInEntityUpsert()
 	}
 	if config.GraphBackend == runtimecfg.GraphBackendNornicDB {
 		if config.FileBatchSize > 0 {

@@ -166,10 +166,16 @@ func openBootstrapCanonicalWriter(
 		return nil, nil, err
 	}
 
+	profileGroupStatements, err := bootstrapNeo4jProfileGroupStatements(getenv)
+	if err != nil {
+		_ = closeBootstrapNeo4jDriver(driver)
+		return nil, nil, err
+	}
 	rawExecutor := bootstrapNeo4jExecutor{
-		Driver:       driver,
-		DatabaseName: cfg.DatabaseName,
-		TxTimeout:    bootstrapCanonicalTransactionTimeout(graphBackend, getenv),
+		Driver:                 driver,
+		DatabaseName:           cfg.DatabaseName,
+		TxTimeout:              bootstrapCanonicalTransactionTimeout(graphBackend, getenv),
+		ProfileGroupStatements: profileGroupStatements,
 	}
 
 	executor, err := bootstrapCanonicalExecutorForGraphBackend(
@@ -223,9 +229,10 @@ func openBootstrapCanonicalWriter(
 }
 
 type bootstrapNeo4jExecutor struct {
-	Driver       neo4jdriver.DriverWithContext
-	DatabaseName string
-	TxTimeout    time.Duration
+	Driver                 neo4jdriver.DriverWithContext
+	DatabaseName           string
+	TxTimeout              time.Duration
+	ProfileGroupStatements bool
 }
 
 func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourcecypher.Statement) error {
@@ -245,14 +252,18 @@ func (e bootstrapNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []source
 	}()
 
 	_, err := session.ExecuteWrite(ctx, func(tx neo4jdriver.ManagedTransaction) (any, error) {
-		for _, stmt := range stmts {
+		err := sourcecypher.ExecuteProfiledStatementGroup(ctx, stmts, func(ctx context.Context, stmt sourcecypher.Statement) error {
 			result, runErr := tx.Run(ctx, stmt.Cypher, stmt.Parameters)
 			if runErr != nil {
-				return nil, runErr
+				return runErr
 			}
 			if _, consumeErr := result.Consume(ctx); consumeErr != nil {
-				return nil, consumeErr
+				return consumeErr
 			}
+			return nil
+		}, e.ProfileGroupStatements, nil)
+		if err != nil {
+			return nil, err
 		}
 		return nil, nil
 	}, e.transactionConfigurers()...)
@@ -292,6 +303,18 @@ func bootstrapCanonicalTransactionTimeout(graphBackend runtimecfg.GraphBackend, 
 		return 0
 	}
 	return nornicDBCanonicalWriteTimeout(getenv)
+}
+
+func bootstrapNeo4jProfileGroupStatements(getenv func(string) string) (bool, error) {
+	raw := strings.TrimSpace(getenv("PCG_NEO4J_PROFILE_GROUP_STATEMENTS"))
+	if raw == "" {
+		return false, nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("parse PCG_NEO4J_PROFILE_GROUP_STATEMENTS=%q: %w", raw, err)
+	}
+	return enabled, nil
 }
 
 type bootstrapNeo4jDriverCloser struct {

@@ -88,6 +88,7 @@ HTTP surface listed above.
 | PCG_LARGE_GEN_THRESHOLD | 10000 | Fact-count threshold for large-generation semaphore |
 | PCG_LARGE_GEN_MAX_CONCURRENT | 2 | Max concurrent large-generation projections |
 | PCG_CANONICAL_WRITE_TIMEOUT | 30s | Graph write timeout |
+| PCG_NEO4J_PROFILE_GROUP_STATEMENTS | false | Opt-in Neo4j grouped-write statement attempt logs for performance diagnostics |
 | PCG_NORNICDB_CANONICAL_GROUPED_WRITES | false | Enable NornicDB grouped writes (conformance gated) |
 | PCG_NORNICDB_PHASE_GROUP_STATEMENTS | 500 | NornicDB phase group statement cap |
 | PCG_NORNICDB_ENTITY_BATCH_SIZE | 100 | Entity upsert row cap |

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -12,9 +14,10 @@ import (
 )
 
 type ingesterNeo4jExecutor struct {
-	Driver       neo4jdriver.DriverWithContext
-	DatabaseName string
-	TxTimeout    time.Duration
+	Driver                 neo4jdriver.DriverWithContext
+	DatabaseName           string
+	TxTimeout              time.Duration
+	ProfileGroupStatements bool
 }
 
 func (e ingesterNeo4jExecutor) Execute(ctx context.Context, statement sourcecypher.Statement) error {
@@ -55,14 +58,18 @@ func (e ingesterNeo4jExecutor) ExecuteGroup(ctx context.Context, stmts []sourcec
 	}()
 
 	_, err := session.ExecuteWrite(ctx, func(tx neo4jdriver.ManagedTransaction) (any, error) {
-		for _, stmt := range stmts {
+		err := sourcecypher.ExecuteProfiledStatementGroup(ctx, stmts, func(ctx context.Context, stmt sourcecypher.Statement) error {
 			result, runErr := tx.Run(ctx, stmt.Cypher, stmt.Parameters)
 			if runErr != nil {
-				return nil, runErr
+				return runErr
 			}
 			if _, consumeErr := result.Consume(ctx); consumeErr != nil {
-				return nil, consumeErr
+				return consumeErr
 			}
+			return nil
+		}, e.ProfileGroupStatements, nil)
+		if err != nil {
+			return nil, err
 		}
 		return nil, nil
 	}, e.transactionConfigurers()...)
@@ -81,6 +88,18 @@ func canonicalTransactionTimeout(graphBackend runtimecfg.GraphBackend, getenv fu
 		return 0
 	}
 	return nornicDBCanonicalWriteTimeout(getenv)
+}
+
+func neo4jProfileGroupStatements(getenv func(string) string) (bool, error) {
+	raw := strings.TrimSpace(getenv("PCG_NEO4J_PROFILE_GROUP_STATEMENTS"))
+	if raw == "" {
+		return false, nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("parse PCG_NEO4J_PROFILE_GROUP_STATEMENTS=%q: %w", raw, err)
+	}
+	return enabled, nil
 }
 
 type ingesterNeo4jDriverCloser struct {

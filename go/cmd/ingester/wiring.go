@@ -370,11 +370,20 @@ func openIngesterCanonicalWriter(
 	if err != nil {
 		return nil, nil, err
 	}
+	failAfterDriverOpen := func(err error) (projector.CanonicalWriter, io.Closer, error) {
+		_ = closeIngesterNeo4jDriver(driver)
+		return nil, nil, err
+	}
 
+	profileGroupStatements, err := neo4jProfileGroupStatements(getenv)
+	if err != nil {
+		return failAfterDriverOpen(err)
+	}
 	rawExecutor := ingesterNeo4jExecutor{
-		Driver:       driver,
-		DatabaseName: cfg.DatabaseName,
-		TxTimeout:    canonicalTransactionTimeout(graphBackend, getenv),
+		Driver:                 driver,
+		DatabaseName:           cfg.DatabaseName,
+		TxTimeout:              canonicalTransactionTimeout(graphBackend, getenv),
+		ProfileGroupStatements: profileGroupStatements,
 	}
 
 	nornicDBGroupedWrites := false
@@ -388,35 +397,35 @@ func openIngesterCanonicalWriter(
 	if graphBackend == runtimecfg.GraphBackendNornicDB {
 		nornicDBGroupedWrites, err = nornicDBCanonicalGroupedWrites(getenv)
 		if err != nil {
-			return nil, nil, err
+			return failAfterDriverOpen(err)
 		}
 		phaseGroupStatements, err = nornicDBPhaseGroupStatements(getenv)
 		if err != nil {
-			return nil, nil, err
+			return failAfterDriverOpen(err)
 		}
 		filePhaseStatements, err = nornicDBFilePhaseGroupStatements(getenv)
 		if err != nil {
-			return nil, nil, err
+			return failAfterDriverOpen(err)
 		}
 		fileBatchSize, err = nornicDBFileBatchSize(getenv)
 		if err != nil {
-			return nil, nil, err
+			return failAfterDriverOpen(err)
 		}
 		entityPhaseStatements, err = nornicDBEntityPhaseGroupStatements(getenv)
 		if err != nil {
-			return nil, nil, err
+			return failAfterDriverOpen(err)
 		}
 		entityBatchSize, err = nornicDBEntityBatchSize(getenv)
 		if err != nil {
-			return nil, nil, err
+			return failAfterDriverOpen(err)
 		}
 		entityLabelPhaseStatements, err = nornicDBEntityLabelPhaseGroupStatements(getenv, entityPhaseStatements)
 		if err != nil {
-			return nil, nil, err
+			return failAfterDriverOpen(err)
 		}
 		nornicDBBatchedEntityContainment, err = nornicDBBatchedEntityContainmentEnabled(getenv)
 		if err != nil {
-			return nil, nil, err
+			return failAfterDriverOpen(err)
 		}
 		if nornicDBGroupedWrites {
 			slog.Warn("NornicDB canonical grouped writes enabled for conformance",
@@ -452,7 +461,7 @@ func openIngesterCanonicalWriter(
 		}
 		labelBatchSizes, err = nornicDBEntityLabelBatchSizes(getenv, entityBatchSize)
 		if err != nil {
-			return nil, nil, err
+			return failAfterDriverOpen(err)
 		}
 		orderedLabels = orderedEntityBatchLabels(labelBatchSizes)
 	}
