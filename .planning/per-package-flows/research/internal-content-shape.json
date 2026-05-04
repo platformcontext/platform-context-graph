@@ -1,0 +1,36 @@
+{
+  "package": "internal/content/shape",
+  "package_name_decl": "shape",
+  "source_files": [
+    "materialize.go",
+    "materialize_labels.go",
+    "source_cache.go",
+    "doc.go"
+  ],
+  "exported_types": [
+    {"name": "Input", "file": "materialize.go", "line": 12, "kind": "struct"},
+    {"name": "File", "file": "materialize.go", "line": 19, "kind": "struct"},
+    {"name": "Entity", "file": "materialize.go", "line": 33, "kind": "struct"}
+  ],
+  "exported_funcs": [
+    {"name": "Materialize", "file": "materialize.go", "line": 193, "signature": "Materialize(input Input) (content.Materialization, error)"}
+  ],
+  "unexported_key_funcs": [
+    "entityLabelForBucket — rewrites Module to ProtocolImplementation when module_kind=protocol_implementation (materialize_labels.go:3)",
+    "entitySourceCache — prefers parser Source for code labels, falls back to file-body line range (source_cache.go:22)",
+    "limitEntitySourceCache — truncates Variable snippet at 4096 bytes, writes truncation metadata (source_cache.go:50)",
+    "truncateUTF8ByBytes — byte-safe UTF-8 truncation (source_cache.go:68)"
+  ],
+  "bucket_table_size": 59,
+  "internal_imports": ["github.com/platformcontext/platform-context-graph/go/internal/content"],
+  "external_imports": [],
+  "telemetry": "none — callers (ingester workers) add metrics around the call",
+  "key_invariants": [
+    "contentEntityBuckets order is fixed — reordering changes persisted row order",
+    "entityEndLine falls back to next entity's startLine-1, then startLine+24 cap, then startLine when body is empty",
+    "Variable source_cache capped at 4096 bytes; source_cache_truncated, source_cache_original_bytes, source_cache_limit_bytes written to metadata when truncated",
+    "Entities sorted by line number, then label, then name — deterministic output across runs",
+    "Materialize returns error when RepoID is empty or any file Path is empty"
+  ],
+  "consumers": ["internal/projector (builds content.Materialization from parser facts)", "internal/collector (ingester path)"]
+}

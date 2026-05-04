@@ -1,0 +1,70 @@
+{
+  "package": "graph",
+  "import_path": "github.com/platformcontext/platform-context-graph/go/internal/graph",
+  "directory": "go/internal/graph",
+  "source_files": ["doc.go", "writer.go", "cypher.go", "entity.go", "mutations.go", "batch.go", "schema.go"],
+  "exports": {
+    "types": [
+      {"name": "Record", "kind": "struct", "fields": ["RecordID string", "Kind string", "Attributes map[string]string", "Deleted bool"], "file": "writer.go", "line": 9},
+      {"name": "Materialization", "kind": "struct", "fields": ["ScopeID string", "GenerationID string", "SourceSystem string", "Records []Record"], "file": "writer.go", "line": 27},
+      {"name": "Result", "kind": "struct", "fields": ["ScopeID string", "GenerationID string", "RecordCount int", "DeletedCount int"], "file": "writer.go", "line": 52},
+      {"name": "Writer", "kind": "interface", "methods": ["Write(context.Context, Materialization) (Result, error)"], "file": "writer.go", "line": 60},
+      {"name": "MemoryWriter", "kind": "struct", "fields": ["Writes []Materialization"], "file": "writer.go", "line": 65},
+      {"name": "CypherStatement", "kind": "struct", "fields": ["Cypher string", "Parameters map[string]any"], "file": "cypher.go", "line": 9},
+      {"name": "CypherExecutor", "kind": "interface", "methods": ["ExecuteCypher(context.Context, CypherStatement) error"], "file": "cypher.go", "line": 18},
+      {"name": "EntityProps", "kind": "struct", "fields": ["Label string", "FilePath string", "Name string", "LineNumber int", "UID string", "Extra map[string]any"], "file": "entity.go", "line": 15},
+      {"name": "BatchEntityRow", "kind": "struct", "file": "batch.go", "line": 14},
+      {"name": "BatchFileRow", "kind": "struct", "file": "batch.go", "line": 33},
+      {"name": "BatchRelationshipRow", "kind": "struct", "file": "batch.go", "line": 51},
+      {"name": "SchemaBackend", "kind": "type", "underlying": "string", "file": "schema.go", "line": 18}
+    ],
+    "constants": [
+      {"name": "DefaultBatchSize", "value": 500, "file": "batch.go", "line": 10},
+      {"name": "SchemaBackendNeo4j", "value": "neo4j", "file": "schema.go", "line": 21},
+      {"name": "SchemaBackendNornicDB", "value": "nornicdb", "file": "schema.go", "line": 24}
+    ],
+    "functions": [
+      {"name": "ValidateCypherLabel", "signature": "func ValidateCypherLabel(label string) error", "file": "entity.go", "line": 38},
+      {"name": "ValidateCypherPropertyKeys", "signature": "func ValidateCypherPropertyKeys(keys []string) error", "file": "entity.go", "line": 47},
+      {"name": "BuildEntityMergeStatement", "signature": "func BuildEntityMergeStatement(props EntityProps) (CypherStatement, error)", "file": "entity.go", "line": 60},
+      {"name": "MergeEntity", "signature": "func MergeEntity(ctx context.Context, executor CypherExecutor, props EntityProps) error", "file": "entity.go", "line": 113},
+      {"name": "DeleteFileFromGraph", "signature": "func DeleteFileFromGraph(ctx context.Context, executor CypherExecutor, filePath string) error", "file": "mutations.go", "line": 12},
+      {"name": "DeleteRepositoryFromGraph", "signature": "func DeleteRepositoryFromGraph(ctx context.Context, executor CypherExecutor, repoIdentifier string) (bool, error)", "file": "mutations.go", "line": 58},
+      {"name": "ResetRepositorySubtreeInGraph", "signature": "func ResetRepositorySubtreeInGraph(ctx context.Context, executor CypherExecutor, repoIdentifier string) (bool, error)", "file": "mutations.go", "line": 93},
+      {"name": "BatchMergeEntities", "signature": "func BatchMergeEntities(ctx context.Context, executor CypherExecutor, label string, rows []BatchEntityRow, batchSize int) error", "file": "batch.go", "line": 75},
+      {"name": "BatchMergeFiles", "signature": "func BatchMergeFiles(ctx context.Context, executor CypherExecutor, rows []BatchFileRow, batchSize int) error", "file": "batch.go", "line": 144},
+      {"name": "BatchMergeRelationships", "signature": "func BatchMergeRelationships(ctx context.Context, executor CypherExecutor, rows []BatchRelationshipRow, batchSize int) error", "file": "batch.go", "line": 189},
+      {"name": "SchemaStatements", "signature": "func SchemaStatements() []string", "file": "schema.go", "line": 264},
+      {"name": "SchemaStatementsForBackend", "signature": "func SchemaStatementsForBackend(backend SchemaBackend) ([]string, error)", "file": "schema.go", "line": 273},
+      {"name": "EnsureSchema", "signature": "func EnsureSchema(ctx context.Context, executor CypherExecutor, logger *slog.Logger) error", "file": "schema.go", "line": 311},
+      {"name": "EnsureSchemaWithBackend", "signature": "func EnsureSchemaWithBackend(ctx context.Context, executor CypherExecutor, logger *slog.Logger, backend SchemaBackend) error", "file": "schema.go", "line": 318}
+    ],
+    "methods": [
+      {"receiver": "Record", "name": "Clone", "file": "writer.go", "line": 17},
+      {"receiver": "Materialization", "name": "ScopeGenerationKey", "file": "writer.go", "line": 35},
+      {"receiver": "Materialization", "name": "Clone", "file": "writer.go", "line": 41},
+      {"receiver": "MemoryWriter", "name": "Write", "file": "writer.go", "line": 71}
+    ]
+  },
+  "dependencies": {
+    "internal": [],
+    "stdlib": ["context", "fmt", "log/slog", "regexp", "strings"]
+  },
+  "callers": [
+    "go/internal/storage/cypher/writer.go",
+    "go/internal/projector/canonical_builder_test.go",
+    "go/cmd/bootstrap-data-plane/main.go",
+    "go/cmd/pcg/local_graph_bootstrap.go"
+  ],
+  "telemetry": "EnsureSchema logs warnings via slog when individual DDL statements fail; no metrics or spans registered in this package",
+  "key_invariants": [
+    "cypherSafePattern [a-zA-Z_][a-zA-Z0-9_]* guards all label and property key interpolation",
+    "BatchMergeEntities splits UID-identity and name-identity rows for direct index hits",
+    "BatchMergeRelationships requires all rows to share source label, target label, and rel type",
+    "Module uses an index not a constraint because it is merged by name globally and by uid per-repo",
+    "schema.go line 57: Module uses CREATE INDEX not CONSTRAINT because of shared-name collision risk",
+    "DeleteFileFromGraph runs two Cypher statements: delete file+elements, then prune orphaned directories",
+    "ResetRepositorySubtreeInGraph preserves the Repository node itself; DeleteRepositoryFromGraph removes it",
+    "CypherStatement and CypherExecutor mirror storage/cypher types to avoid import cycles"
+  ]
+}

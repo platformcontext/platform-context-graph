@@ -1,0 +1,74 @@
+{
+  "package": "internal/pcglocal",
+  "package_name_decl": "pcglocal",
+  "source_files": [
+    "layout.go",
+    "owner.go",
+    "owner_lock_unix.go",
+    "owner_lock_windows.go",
+    "postgres_unix.go",
+    "postgres_windows.go",
+    "health_unix.go",
+    "health_windows.go",
+    "reclaim.go",
+    "startup.go",
+    "version.go",
+    "doc.go"
+  ],
+  "platform_split": {
+    "unix_files": ["owner_lock_unix.go (build: !windows)", "postgres_unix.go (build: !windows)", "health_unix.go (build: !windows)"],
+    "windows_files": ["owner_lock_windows.go (build: windows)", "postgres_windows.go (build: windows)", "health_windows.go (build: windows)"],
+    "cross_platform": ["layout.go", "owner.go", "reclaim.go", "startup.go", "version.go", "doc.go"]
+  },
+  "exported_types": [
+    {"name": "Layout", "file": "layout.go", "line": 16, "kind": "struct"},
+    {"name": "OwnerRecord", "file": "owner.go", "line": 11, "kind": "struct"},
+    {"name": "OwnerLock", "file": "owner_lock_unix.go / owner_lock_windows.go", "line": 18, "kind": "struct"},
+    {"name": "ManagedPostgres", "file": "postgres_unix.go / postgres_windows.go", "line": 43, "kind": "struct"},
+    {"name": "ReclaimDeps", "file": "reclaim.go", "line": 21, "kind": "struct"},
+    {"name": "StartupDeps", "file": "startup.go", "line": 6, "kind": "struct"}
+  ],
+  "exported_vars": [
+    {"name": "ErrWorkspaceOwned", "file": "owner_lock_unix.go / owner_lock_windows.go"},
+    {"name": "ErrWorkspaceOwnerActive", "file": "reclaim.go", "line": 11},
+    {"name": "ErrEmbeddedPostgresActive", "file": "reclaim.go", "line": 13},
+    {"name": "ErrGraphBackendActive", "file": "reclaim.go", "line": 15},
+    {"name": "ErrInvalidOwnerRecord", "file": "reclaim.go", "line": 17},
+    {"name": "ErrIncompatibleLayoutVersion", "file": "version.go", "line": 13}
+  ],
+  "exported_funcs": [
+    {"name": "ResolveHomeDir", "file": "layout.go", "line": 31},
+    {"name": "ResolveWorkspaceRoot", "file": "layout.go", "line": 69},
+    {"name": "WorkspaceID", "file": "layout.go", "line": 95},
+    {"name": "BuildLayout", "file": "layout.go", "line": 115},
+    {"name": "ReadOwnerRecord", "file": "owner.go", "line": 37},
+    {"name": "WriteOwnerRecord", "file": "owner.go", "line": 51},
+    {"name": "AcquireOwnerLock", "file": "owner_lock_unix.go / owner_lock_windows.go", "line": 23},
+    {"name": "StartEmbeddedPostgres", "file": "postgres_unix.go (unix) / postgres_windows.go (stub)", "line": 72},
+    {"name": "PostgresDSN", "file": "postgres_unix.go / postgres_windows.go", "line": 163},
+    {"name": "LocalQueryProfile", "file": "postgres_unix.go / postgres_windows.go", "line": 175},
+    {"name": "DefaultReclaimDeps", "file": "health_unix.go / health_windows.go", "line": 25},
+    {"name": "ProcessAlive", "file": "health_unix.go (unix.Kill signal 0) / health_windows.go (stub false)", "line": 34},
+    {"name": "SocketHealthy", "file": "health_unix.go (Unix socket dial) / health_windows.go (stub false)", "line": 43},
+    {"name": "StopEmbeddedPostgres", "file": "health_unix.go (pg_ctl fast stop) / health_windows.go (error)", "line": 56},
+    {"name": "ValidateOrReclaimOwner", "file": "reclaim.go", "line": 29},
+    {"name": "PrepareWorkspace", "file": "startup.go", "line": 16},
+    {"name": "EnsureLayoutVersion", "file": "version.go", "line": 16},
+    {"name": "ReadLayoutVersion", "file": "version.go", "line": 50},
+    {"name": "WriteLayoutVersion", "file": "version.go", "line": 59}
+  ],
+  "internal_imports": [],
+  "external_imports": ["golang.org/x/sys/unix (unix only)", "github.com/fergusstrange/embedded-postgres (unix only)", "github.com/jackc/pgx/v5/stdlib (unix only)"],
+  "telemetry": "none",
+  "key_invariants": [
+    "WorkspaceID hashes the symlink-resolved absolute path (SHA-256, 20 bytes, hex); case-insensitive filesystems (macOS, Windows) lowercase the path before hashing",
+    "AcquireOwnerLock uses unix.Flock LOCK_EX|LOCK_NB; returns ErrWorkspaceOwned immediately if the lock is held",
+    "WriteOwnerRecord and WriteLayoutVersion are atomic: write to temp, fsync, chmod 0600, rename",
+    "PrepareWorkspace admission order: AcquireOwnerLock -> EnsureLayoutVersion -> ValidateOrReclaimOwner; any failure releases the lock",
+    "ValidateOrReclaimOwner assumes caller holds owner.lock; checks pid+socket liveness before removing stale owner.json",
+    "Windows stubs for AcquireOwnerLock, StartEmbeddedPostgres, ProcessAlive, SocketHealthy, StopEmbeddedPostgres all return errors or false — local runtime is Unix-only",
+    "ResolveWorkspaceRoot walks ancestors for .pcg.yaml first, then .git; falls back to startDir",
+    "PCG_HOME overrides the default per-OS home root (darwin: ~/Library/Application Support/pcg, linux: $XDG_DATA_HOME/pcg or ~/.local/share/pcg, windows: %LOCALAPPDATA%/pcg)"
+  ],
+  "consumers": ["cmd/pcg (local mode startup)", "cmd/bootstrap-index (local layout resolution)"]
+}

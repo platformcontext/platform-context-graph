@@ -1,0 +1,95 @@
+{
+  "package": "internal/relationships",
+  "package_name_decl": "relationships",
+  "files": [
+    "ansible_evidence.go",
+    "argocd_template_params.go",
+    "doc.go",
+    "docker_compose_evidence.go",
+    "dockerfile_evidence.go",
+    "evidence_content_index.go",
+    "evidence.go",
+    "first_party_refs.go",
+    "github_actions_evidence.go",
+    "jenkins_evidence.go",
+    "kustomize_yaml_evidence.go",
+    "models.go",
+    "resolver.go",
+    "structured_family_evidence.go",
+    "terraform_iam_evidence.go",
+    "terraform_runtime_service_evidence.go",
+    "terraform_schema.go",
+    "terraform_source_match.go",
+    "terragrunt_helper_evidence.go",
+    "yaml_iac_evidence.go"
+  ],
+  "exported_types": [
+    {"name": "EvidenceKind", "file": "models.go", "line": 13, "kind": "alias"},
+    {"name": "RelationshipType", "file": "models.go", "line": 79, "kind": "alias"},
+    {"name": "ResolutionSource", "file": "models.go", "line": 99, "kind": "alias"},
+    {"name": "EvidenceFact", "file": "models.go", "line": 109, "kind": "struct"},
+    {"name": "Assertion", "file": "models.go", "line": 122, "kind": "struct"},
+    {"name": "Candidate", "file": "models.go", "line": 134, "kind": "struct"},
+    {"name": "ResolvedRelationship", "file": "models.go", "line": 147, "kind": "struct"},
+    {"name": "Generation", "file": "models.go", "line": 171, "kind": "struct"},
+    {"name": "CatalogEntry", "file": "evidence.go", "line": 11, "kind": "struct"}
+  ],
+  "exported_funcs": [
+    {"name": "DiscoverEvidence", "file": "evidence.go", "line": 18, "signature": "func DiscoverEvidence(envelopes []facts.Envelope, catalog []CatalogEntry) []EvidenceFact"},
+    {"name": "DedupeEvidenceFacts", "file": "resolver.go", "line": 16, "signature": "func DedupeEvidenceFacts(facts []EvidenceFact) []EvidenceFact"},
+    {"name": "Resolve", "file": "resolver.go", "line": 62, "signature": "func Resolve(evidenceFacts []EvidenceFact, assertions []Assertion, confidenceThreshold float64) ([]Candidate, []ResolvedRelationship)"},
+    {"name": "ResolvedRelationshipID", "file": "models.go", "line": 163, "signature": "func ResolvedRelationshipID(generationID string, r ResolvedRelationship, ordinal int) string"},
+    {"name": "RegisterSchemaDrivenTerraformExtractors", "file": "terraform_schema.go", "line": 49, "signature": "func RegisterSchemaDrivenTerraformExtractors(schemaDir string) map[string]int"}
+  ],
+  "exported_consts": [
+    {"name": "DefaultConfidenceThreshold", "file": "resolver.go", "line": 12, "value": "0.75"},
+    {"name": "EvidenceKindTerraformAppRepo", "file": "models.go", "line": 17, "value": "TERRAFORM_APP_REPO"},
+    {"name": "EvidenceKindTerraformModuleSource", "file": "models.go", "line": 29, "value": "TERRAFORM_MODULE_SOURCE"},
+    {"name": "EvidenceKindTerragruntDependencyConfigPath", "file": "models.go", "line": 31, "value": "TERRAGRUNT_DEPENDENCY_CONFIG_PATH"},
+    {"name": "EvidenceKindHelmChart", "file": "models.go", "line": 35, "value": "HELM_CHART_REFERENCE"},
+    {"name": "EvidenceKindArgoCDAppSource", "file": "models.go", "line": 39, "value": "ARGOCD_APPLICATION_SOURCE"},
+    {"name": "EvidenceKindGitHubActionsReusableWorkflow", "file": "models.go", "line": 47, "value": "GITHUB_ACTIONS_REUSABLE_WORKFLOW"},
+    {"name": "EvidenceKindJenkinsSharedLibrary", "file": "models.go", "line": 57, "value": "JENKINS_SHARED_LIBRARY"},
+    {"name": "EvidenceKindDockerComposeBuildContext", "file": "models.go", "line": 61, "value": "DOCKER_COMPOSE_BUILD_CONTEXT"},
+    {"name": "EvidenceKindAnsibleRoleReference", "file": "models.go", "line": 75, "value": "ANSIBLE_ROLE_REFERENCE"},
+    {"name": "RelDeploysFrom", "file": "models.go", "line": 83, "value": "DEPLOYS_FROM"},
+    {"name": "RelUsesModule", "file": "models.go", "line": 93, "value": "USES_MODULE"},
+    {"name": "RelProvisionsDependencyFor", "file": "models.go", "line": 89, "value": "PROVISIONS_DEPENDENCY_FOR"},
+    {"name": "ResolutionSourceInferred", "file": "models.go", "line": 102, "value": "inferred"},
+    {"name": "ResolutionSourceAssertion", "file": "models.go", "line": 104, "value": "assertion"}
+  ],
+  "internal_imports": [
+    "github.com/platformcontext/platform-context-graph/go/internal/facts",
+    "github.com/platformcontext/platform-context-graph/go/internal/terraformschema"
+  ],
+  "external_imports": [
+    "gopkg.in/yaml.v3",
+    "regexp",
+    "strings"
+  ],
+  "telemetry": {
+    "spans": [],
+    "metrics": [],
+    "log_keys": []
+  },
+  "env_vars": [],
+  "extractors": [
+    {"name": "terraform", "file": "evidence.go", "kinds": ["module_source", "app_repo", "app_name", "github_repo", "config_path", "iam_permission"]},
+    {"name": "terragrunt", "file": "evidence.go", "kinds": ["dependency_config_path", "config_asset_path"]},
+    {"name": "helm", "file": "evidence.go", "kinds": ["chart", "values"]},
+    {"name": "kustomize", "file": "evidence.go", "kinds": ["resource", "helm_chart", "image"]},
+    {"name": "argocd", "file": "evidence.go", "kinds": ["app_source", "applicationset_discovery", "applicationset_deploy_source", "destination_platform"]},
+    {"name": "github_actions", "file": "github_actions_evidence.go", "kinds": ["reusable_workflow", "checkout_repository", "workflow_input_repository", "action_repository", "local_reusable_workflow"]},
+    {"name": "jenkins", "file": "jenkins_evidence.go", "kinds": ["shared_library", "github_repository"]},
+    {"name": "ansible", "file": "ansible_evidence.go", "kinds": ["role_reference"]},
+    {"name": "dockerfile", "file": "dockerfile_evidence.go", "kinds": ["source_label"]},
+    {"name": "docker_compose", "file": "docker_compose_evidence.go", "kinds": ["build_context", "image", "depends_on"]},
+    {"name": "terraform_schema", "file": "terraform_schema.go", "kinds": ["schema-driven resource identity"]}
+  ],
+  "lifecycle_summary": "DiscoverEvidence iterates over fact envelopes, builds a per-repo content index via buildEvidenceContentIndex, then routes each envelope to the appropriate extractor based on artifact_type and file path. Each extractor calls matchCatalog which checks candidate strings against CatalogEntry.Aliases. Resolved evidence is deduplicated with a seen map. Resolve then groups EvidenceFact values into Candidate buckets, applies Assertion overrides and rejections, filters by confidenceThreshold, and returns both the candidate list and the promoted ResolvedRelationship slice.",
+  "entry_points": [
+    {"name": "DiscoverEvidence", "file": "evidence.go", "line": 18, "role": "scan envelopes for IaC evidence, return EvidenceFact slice"},
+    {"name": "Resolve", "file": "resolver.go", "line": 62, "role": "group evidence into candidates, apply assertions, promote to ResolvedRelationship"},
+    {"name": "RegisterSchemaDrivenTerraformExtractors", "file": "terraform_schema.go", "line": 49, "role": "bootstrap schema-driven Terraform resource extractors from a schema dir"}
+  ]
+}

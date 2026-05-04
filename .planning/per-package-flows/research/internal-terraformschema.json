@@ -1,0 +1,57 @@
+{
+  "package": "internal/terraformschema",
+  "package_name_decl": "terraformschema",
+  "files": [
+    "categories.go",
+    "doc.go",
+    "paths.go",
+    "schema.go"
+  ],
+  "exported_types": [
+    {"name": "AttributeSchema", "file": "schema.go", "line": 41, "kind": "struct"},
+    {"name": "ProviderSchemaInfo", "file": "schema.go", "line": 67, "kind": "struct"}
+  ],
+  "exported_funcs": [
+    {"name": "LoadProviderSchema", "file": "schema.go", "line": 83, "signature": "func LoadProviderSchema(schemaPath string) (*ProviderSchemaInfo, error)"},
+    {"name": "InferIdentityKeys", "file": "schema.go", "line": 138, "signature": "func InferIdentityKeys(attributes map[string]AttributeSchema) []string"},
+    {"name": "ClassifyResourceCategory", "file": "schema.go", "line": 165, "signature": "func ClassifyResourceCategory(resourceType string) string"},
+    {"name": "ClassifyResourceService", "file": "schema.go", "line": 181, "signature": "func ClassifyResourceService(resourceType string) string"},
+    {"name": "DefaultSchemaDir", "file": "paths.go", "line": 12, "signature": "func DefaultSchemaDir() string"}
+  ],
+  "exported_consts": [],
+  "internal_imports": [],
+  "external_imports": [],
+  "telemetry": {
+    "spans": [],
+    "metrics": [],
+    "log_keys": []
+  },
+  "env_vars": ["PCG_TERRAFORM_SCHEMA_DIR"],
+  "schema_files": [
+    "alicloud-1.273.0.json.gz",
+    "archive-2.7.1.json.gz",
+    "aws-5.100.0.json.gz",
+    "azurerm-4.66.0.json.gz",
+    "cloudflare-5.18.0.json.gz",
+    "external-2.3.5.json.gz",
+    "github-6.11.1.json.gz",
+    "google-6.50.0.json.gz",
+    "grafana-3.25.9.json.gz",
+    "helm-2.17.0.json.gz",
+    "http-3.5.0.json.gz",
+    "kubernetes-2.38.0.json.gz",
+    "local-2.7.0.json.gz",
+    "mysql-3.0.91.json.gz",
+    "null-3.2.4.json.gz",
+    "oci-6.37.0.json.gz",
+    "pagerduty-3.32.1.json.gz",
+    "rabbitmq-1.10.1.json.gz",
+    "random-3.8.1.json.gz"
+  ],
+  "lifecycle_summary": "LoadProviderSchema reads a gzipped or plain JSON terraform provider schema file produced by terraform providers schema -json, merges metadata-nested attributes for Kubernetes-style lookups, and returns a ProviderSchemaInfo. InferIdentityKeys walks identityKeyPatterns then falls back to *_name/*_identifier suffix attributes to pick stable name keys per resource. ClassifyResourceService strips the provider prefix and uses the serviceCategories table (longest prefix match) to return a service family. ClassifyResourceService is consulted by ClassifyResourceCategory to return a broad category label. DefaultSchemaDir resolves the packaged schemas directory, preferring the PCG_TERRAFORM_SCHEMA_DIR env override.",
+  "entry_points": [
+    {"name": "LoadProviderSchema", "file": "schema.go", "line": 83, "role": "load and normalize a single provider schema file"},
+    {"name": "InferIdentityKeys", "file": "schema.go", "line": 138, "role": "infer stable resource identity keys from attributes"},
+    {"name": "DefaultSchemaDir", "file": "paths.go", "line": 12, "role": "resolve packaged schemas directory"}
+  ]
+}

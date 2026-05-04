@@ -1,0 +1,88 @@
+{
+  "package": "go/internal/status",
+  "package_name": "status",
+  "source_files": [
+    "status.go",
+    "http.go",
+    "flow.go",
+    "history.go",
+    "queue_blockage.go",
+    "queue_failure.go",
+    "retry_policy.go",
+    "coordinator.go",
+    "generation_lifecycle.go",
+    "json.go",
+    "doc.go"
+  ],
+  "purpose": "Projects raw Go data-plane runtime counts into operator-facing status reports. Owns the shared Report type consumed by CLI and HTTP admin surfaces. Provides the Reader interface that storage backends implement.",
+  "exported_types": [
+    "NamedCount",
+    "StageStatusCount",
+    "ScopeActivitySnapshot",
+    "QueueSnapshot",
+    "QueueFailureSnapshot",
+    "DomainBacklog",
+    "RawSnapshot",
+    "Reader (interface: ReadStatusSnapshot)",
+    "Options",
+    "HealthSummary",
+    "StageSummary",
+    "Report",
+    "FlowSummary",
+    "GenerationHistorySnapshot",
+    "GenerationTransitionSnapshot",
+    "QueueBlockage",
+    "RetryPolicySummary",
+    "CollectorInstanceSummary",
+    "CoordinatorSnapshot",
+    "HTTPHandlerOptions"
+  ],
+  "exported_functions": [
+    "DefaultOptions() Options",
+    "LoadReport(ctx context.Context, reader Reader, asOf time.Time, opts Options) (Report, error)",
+    "BuildReport(raw RawSnapshot, opts Options) Report",
+    "RenderText(report Report) string",
+    "RenderJSON(report Report) ([]byte, error)",
+    "NewHTTPHandler(reader Reader, opts HTTPHandlerOptions) (http.Handler, error)",
+    "DefaultRetryPolicies() []RetryPolicySummary",
+    "WithRetryPolicies(reader Reader, policies ...RetryPolicySummary) Reader",
+    "MergeRetryPolicies(base []RetryPolicySummary, overrides ...RetryPolicySummary) []RetryPolicySummary"
+  ],
+  "health_states": [
+    "healthy — no outstanding queue backlog",
+    "progressing — work remains queued or in flight",
+    "degraded — dead-letter or failed items exist",
+    "stalled — overdue claims or backlog with no in-flight work for StallAfter duration"
+  ],
+  "flow_lanes": [
+    "collector — scopes and generation counts",
+    "projector — projector stage counts and queue pressure",
+    "reducer — reducer stage counts and top domain backlog"
+  ],
+  "json_output_fields": [
+    "version, as_of, health",
+    "coordinator (optional)",
+    "flow, queue, latest_failure (optional)",
+    "retry_policies, scope_activity, generation_history, generation_transitions",
+    "scopes, generations, stages, domains, queue_blockages"
+  ],
+  "dependencies": {
+    "internal": ["internal/buildinfo"],
+    "external": ["encoding/json", "net/http", "sort", "time"]
+  },
+  "consumers": [
+    "internal/query — HTTP admin handler wraps NewHTTPHandler",
+    "internal/runtime — process-level status wiring",
+    "CLI — pcg status command reads RenderText/RenderJSON output"
+  ],
+  "key_invariants": [
+    "JSON shapes are operator contract — changes must be coordinated with CLI reference and runtime admin docs",
+    "QueueFailureSnapshot values are status-payload only — must not be promoted to metric labels",
+    "Report.Health is derived from QueueSnapshot and generationTotals; evaluateHealth encodes the health state machine",
+    "DomainBacklogs are capped at Options.DomainLimit (default 5) to prevent unbounded output",
+    "QueueBlockage rows encode conflict-domain-blocked work without exposing high-cardinality keys in metrics",
+    "CoordinatorSnapshot is additive and optional — nil when the workflow coordinator is not wired",
+    "RetryPolicySummary is attached via WithRetryPolicies decorator; no Postgres persistence",
+    "GenerationTransitionSnapshot is straight from the status store — no derivation"
+  ]
+}

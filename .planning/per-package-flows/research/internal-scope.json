@@ -1,0 +1,65 @@
+{
+  "package": "internal/scope",
+  "package_name_decl": "scope",
+  "files": [
+    "doc.go",
+    "scope.go"
+  ],
+  "exported_types": [
+    {"name": "ScopeKind", "file": "scope.go", "line": 9, "kind": "alias"},
+    {"name": "CollectorKind", "file": "scope.go", "line": 27, "kind": "alias"},
+    {"name": "TriggerKind", "file": "scope.go", "line": 41, "kind": "alias"},
+    {"name": "GenerationStatus", "file": "scope.go", "line": 49, "kind": "alias"},
+    {"name": "IngestionScope", "file": "scope.go", "line": 80, "kind": "struct"},
+    {"name": "ScopeGeneration", "file": "scope.go", "line": 143, "kind": "struct"}
+  ],
+  "exported_consts": [
+    {"name": "KindRepository", "value": "repository", "file": "scope.go", "line": 12},
+    {"name": "KindAccount", "value": "account", "file": "scope.go", "line": 14},
+    {"name": "KindRegion", "value": "region", "file": "scope.go", "line": 16},
+    {"name": "KindCluster", "value": "cluster", "file": "scope.go", "line": 18},
+    {"name": "KindStateSnapshot", "value": "state_snapshot", "file": "scope.go", "line": 20},
+    {"name": "KindEventTrigger", "value": "event_trigger", "file": "scope.go", "line": 22},
+    {"name": "CollectorGit", "value": "git", "file": "scope.go", "line": 30},
+    {"name": "CollectorAWS", "value": "aws", "file": "scope.go", "line": 32},
+    {"name": "CollectorTerraformState", "value": "terraform_state", "file": "scope.go", "line": 34},
+    {"name": "CollectorWebhook", "value": "webhook", "file": "scope.go", "line": 36},
+    {"name": "TriggerKindSnapshot", "value": "snapshot", "file": "scope.go", "line": 44},
+    {"name": "GenerationStatusPending", "value": "pending", "file": "scope.go", "line": 53},
+    {"name": "GenerationStatusActive", "value": "active", "file": "scope.go", "line": 55},
+    {"name": "GenerationStatusSuperseded", "value": "superseded", "file": "scope.go", "line": 57},
+    {"name": "GenerationStatusCompleted", "value": "completed", "file": "scope.go", "line": 59},
+    {"name": "GenerationStatusFailed", "value": "failed", "file": "scope.go", "line": 61}
+  ],
+  "state_machine": {
+    "type": "GenerationStatus",
+    "transitions": {
+      "pending": ["active", "failed"],
+      "active": ["superseded", "completed", "failed"],
+      "superseded": [],
+      "completed": [],
+      "failed": []
+    },
+    "terminal": ["superseded", "completed", "failed"]
+  },
+  "exported_methods": [
+    {"name": "Validate", "receiver": "IngestionScope"},
+    {"name": "HasPriorGeneration", "receiver": "IngestionScope"},
+    {"name": "MetadataCopy", "receiver": "IngestionScope"},
+    {"name": "Validate", "receiver": "ScopeGeneration"},
+    {"name": "ValidateForScope", "receiver": "ScopeGeneration"},
+    {"name": "IsTerminal", "receiver": "ScopeGeneration"},
+    {"name": "CanTransitionTo", "receiver": "ScopeGeneration"},
+    {"name": "TransitionTo", "receiver": "ScopeGeneration"},
+    {"name": "MarkActive", "receiver": "ScopeGeneration"},
+    {"name": "MarkCompleted", "receiver": "ScopeGeneration"},
+    {"name": "MarkSuperseded", "receiver": "ScopeGeneration"},
+    {"name": "MarkFailed", "receiver": "ScopeGeneration"},
+    {"name": "Validate", "receiver": "GenerationStatus"},
+    {"name": "IsTerminal", "receiver": "GenerationStatus"}
+  ],
+  "internal_imports": [],
+  "telemetry": [],
+  "doc_comment": "Package scope defines durable identity and generation lifecycle for source scopes ingested by PCG collectors.",
+  "notes": "allowedGenerationTransitions is the authoritative transition table. PreviousGenerationExists is the reliable prior-generation gate; ActiveGenerationID is not. MetadataCopy returns nil for empty maps. IngestedAt must not precede ObservedAt."
+}

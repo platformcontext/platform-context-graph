@@ -1,0 +1,52 @@
+{
+  "package": "internal/queue",
+  "package_name_decl": "queue",
+  "files": [
+    "doc.go",
+    "models.go"
+  ],
+  "exported_types": [
+    {"name": "WorkItemStatus", "file": "models.go", "line": 10, "kind": "alias"},
+    {"name": "RetryState", "file": "models.go", "line": 31, "kind": "struct"},
+    {"name": "FailureRecord", "file": "models.go", "line": 38, "kind": "struct"},
+    {"name": "WorkItem", "file": "models.go", "line": 44, "kind": "struct"}
+  ],
+  "exported_consts": [
+    {"name": "StatusPending", "value": "pending", "file": "models.go", "line": 13},
+    {"name": "StatusClaimed", "value": "claimed", "file": "models.go", "line": 15},
+    {"name": "StatusRunning", "value": "running", "file": "models.go", "line": 17},
+    {"name": "StatusRetrying", "value": "retrying", "file": "models.go", "line": 19},
+    {"name": "StatusSucceeded", "value": "succeeded", "file": "models.go", "line": 21},
+    {"name": "StatusDeadLetter", "value": "dead_letter", "file": "models.go", "line": 23},
+    {"name": "StatusFailed", "value": "failed", "file": "models.go", "line": 25, "note": "deprecated, retained for legacy row replay"}
+  ],
+  "state_machine": {
+    "type": "WorkItemStatus",
+    "transitions": {
+      "pending": ["claimed"],
+      "retrying": ["claimed"],
+      "claimed": ["running", "succeeded", "retrying", "dead_letter"],
+      "running": ["succeeded", "retrying", "dead_letter"],
+      "retrying": ["claimed"],
+      "succeeded": [],
+      "dead_letter": ["pending"],
+      "failed": ["pending"]
+    },
+    "terminal": ["succeeded", "dead_letter"],
+    "legacy_terminal": ["failed"]
+  },
+  "exported_methods": [
+    {"name": "ScopeGenerationKey", "receiver": "WorkItem"},
+    {"name": "Claim", "receiver": "WorkItem"},
+    {"name": "StartRunning", "receiver": "WorkItem"},
+    {"name": "Retry", "receiver": "WorkItem"},
+    {"name": "Fail", "receiver": "WorkItem"},
+    {"name": "Succeed", "receiver": "WorkItem"},
+    {"name": "Replay", "receiver": "WorkItem"}
+  ],
+  "internal_imports": [],
+  "telemetry": [],
+  "doc_comment": "Package queue defines the durable Go data-plane work-item contracts used by the projector, reducer, and replay paths.",
+  "ownership_table_entry": "go/internal/storage/postgres/ — facts, queue, status, content, recovery, decisions",
+  "notes": "Pure value-type package; no I/O. Transitions clone the WorkItem before mutation. Postgres adapter in internal/storage/postgres owns claim/lease/visibility. StatusFailed is deprecated; Fail() writes StatusDeadLetter."
+}
