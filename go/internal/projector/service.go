@@ -17,7 +17,10 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
-const defaultPollInterval = time.Second
+const (
+	defaultPollInterval                = time.Second
+	defaultProjectorAckShutdownTimeout = 5 * time.Second
+)
 
 // ScopeGenerationWork captures one claimed scope generation for projection.
 type ScopeGenerationWork struct {
@@ -114,6 +117,9 @@ func (s Service) runSequential(ctx context.Context) error {
 			))
 		}
 		if err != nil {
+			if projectorClaimCanceled(ctx, err) {
+				return nil
+			}
 			return fmt.Errorf("claim projector work: %w", err)
 		}
 		if !ok {
@@ -164,6 +170,9 @@ func (s Service) runConcurrent(ctx context.Context) error {
 					))
 				}
 				if err != nil {
+					if projectorClaimCanceled(ctx, err) {
+						return
+					}
 					mu.Lock()
 					errs = append(errs, fmt.Errorf("claim projector work (worker %d): %w", workerID, err))
 					mu.Unlock()
@@ -259,13 +268,25 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, work
 		return heartbeatErr
 	}
 
-	if err := s.WorkSink.Ack(workCtx, work, result); err != nil {
-		s.recordProjectionResult(workCtx, work, start, "ack_failed", len(factsForGeneration), err, workerID)
+	ackCtx, cancelAck := projectorAckContext(workCtx)
+	defer cancelAck()
+	if err := s.WorkSink.Ack(ackCtx, work, result); err != nil {
+		s.recordProjectionResult(ackCtx, work, start, "ack_failed", len(factsForGeneration), err, workerID)
 		return fmt.Errorf("ack projector work: %w", err)
 	}
 
-	s.recordProjectionResult(workCtx, work, start, "succeeded", len(factsForGeneration), nil, workerID)
+	s.recordProjectionResult(ackCtx, work, start, "succeeded", len(factsForGeneration), nil, workerID)
 	return nil
+}
+
+// projectorAckContext lets a completed projection publish its durable queue ack
+// during owner shutdown without inheriting a canceled worker context.
+func projectorAckContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), defaultProjectorAckShutdownTimeout)
+}
+
+func projectorClaimCanceled(ctx context.Context, err error) bool {
+	return ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded))
 }
 
 // recordWorkStage logs coarse projector service stages that are outside the

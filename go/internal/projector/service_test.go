@@ -401,15 +401,19 @@ func TestServiceHeartbeatStopIgnoresStopContextCancellation(t *testing.T) {
 }
 
 type stubProjectorWorkSource struct {
-	mu         sync.Mutex
-	claimCalls int
-	workItems  []ScopeGenerationWork
+	mu                           sync.Mutex
+	claimCalls                   int
+	workItems                    []ScopeGenerationWork
+	returnContextErrWhenCanceled bool
 }
 
-func (s *stubProjectorWorkSource) Claim(context.Context) (ScopeGenerationWork, bool, error) {
+func (s *stubProjectorWorkSource) Claim(ctx context.Context) (ScopeGenerationWork, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.claimCalls++
+	if s.returnContextErrWhenCanceled && ctx.Err() != nil {
+		return ScopeGenerationWork{}, false, ctx.Err()
+	}
 	if len(s.workItems) == 0 {
 		return ScopeGenerationWork{}, false, nil
 	}
@@ -443,6 +447,7 @@ type stubProjectionRunner struct {
 	runCalls                   int
 	result                     Result
 	runErr                     error
+	beforeReturn               func(context.Context)
 	failAfter                  int
 	blockFor                   time.Duration
 	waitForContextCancellation bool
@@ -456,6 +461,7 @@ func (s *stubProjectionRunner) Project(ctx context.Context, scopeValue scope.Ing
 	waitForContextCancellation := s.waitForContextCancellation
 	result := s.result
 	runErr := s.runErr
+	beforeReturn := s.beforeReturn
 	failAfter := s.failAfter
 	s.mu.Unlock()
 
@@ -478,6 +484,9 @@ func (s *stubProjectionRunner) Project(ctx context.Context, scopeValue scope.Ing
 	if failAfter > 0 && runCalls > failAfter {
 		return Result{}, errors.New("executor failed after threshold")
 	}
+	if beforeReturn != nil {
+		beforeReturn(ctx)
+	}
 	return result, runErr
 }
 
@@ -488,10 +497,14 @@ type stubProjectorWorkSink struct {
 	failCalls  int
 	failedWith error
 	ackErr     error
+	beforeAck  func(context.Context)
 	failAfter  int
 }
 
 func (s *stubProjectorWorkSink) Ack(ctx context.Context, _ ScopeGenerationWork, _ Result) error {
+	if s.beforeAck != nil {
+		s.beforeAck(ctx)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ackCalls++
