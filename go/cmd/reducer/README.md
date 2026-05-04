@@ -1,73 +1,207 @@
-# reducer
+# cmd/reducer
 
-## Purpose
+`cmd/reducer` builds the `pcg-reducer` binary — the long-running
+`resolution-engine` runtime that drains the reducer fact-work queue,
+executes domain handlers, materializes cross-domain truth, and writes
+shared edges into the configured graph backend. The deployed service
+identity is `resolution-engine`.
 
-`pcg-reducer` is the resolution-engine runtime: it claims items from
-the reducer fact-work queue, runs domain handlers, materializes
-cross-domain truth (deployable-unit correlation, workload identity,
-infrastructure platform, semantic entities, code-call edges,
-repo-dependency edges), and drives graph-projection-phase repair.
-The deployed service identity is `resolution-engine`.
+## Where this fits in the pipeline
 
-## Ownership boundary
+```mermaid
+flowchart LR
+  Ingester["Ingester\n(fact emission)"] --> ProjQ["Projector\nqueue"]
+  ProjQ --> Projector["internal/projector\n(source-local projection)"]
+  Projector --> ReducerQ["Reducer queue\n(Postgres)"]
+  ReducerQ --> Reducer["pcg-reducer\n(this binary)"]
+  Reducer --> Graph["Graph backend\n(Neo4j / NornicDB)"]
+  Reducer --> PhaseState["graph_projection_phase_state\n(Postgres)"]
+  PhaseState --> SharedRunners["SharedProjectionRunner\nCodeCallProjectionRunner\nRepoDependencyProjectionRunner"]
+  SharedRunners --> Graph
+```
 
-Domain logic lives in `internal/reducer/`; graph-write contracts live
-in `internal/storage/cypher/`. This binary wires the service plus the
-shared-projection, code-call, repo-dependency, and repair runners. It
-does not own repo sync, parsing, fact emission (`ingester`),
-source-local canonical projection, or HTTP read traffic.
+## Internal flow
 
-## Entry points
+```mermaid
+flowchart TB
+  run["run()"] --> Telemetry["telemetry.NewBootstrap\nNewProviders"]
+  run --> DB["runtimecfg.OpenPostgres"]
+  run --> Graph["openReducerNeo4jAdapters"]
+  run --> Build["buildReducerService()"]
+  Build --> Handlers["DefaultHandlers wired\n(all domain handlers)"]
+  Build --> Queue["postgres.NewReducerQueue"]
+  Build --> Runners["SharedProjectionRunner\nCodeCallProjectionRunner\nRepoDependencyProjectionRunner\nGraphProjectionPhaseRepairer"]
+  Build --> SvcObj["reducer.Service"]
+  SvcObj --> AdminSurface["app.NewHostedWithStatusServer\n/healthz /readyz /metrics /admin/status"]
+  AdminSurface --> RunLoop["service.Run(ctx)\nblocks until SIGINT/SIGTERM"]
+```
 
-- `main`, `run`, `buildReducerService` in `go/cmd/reducer/main.go`
-- Neo4j wiring in `go/cmd/reducer/neo4j_wiring.go`
-- workload-dependency lookup and config helpers in
-  `go/cmd/reducer/workload_dependency_lookup.go` and `config.go`
+## Startup sequence
 
-## Configuration
+1. `telemetry.NewBootstrap("reducer")` + `telemetry.NewProviders` — OTEL
+   logger, tracer, meter, Prometheus handler.
+2. `runtimecfg.OpenPostgres` — Postgres connection from PCG_POSTGRES_DSN.
+3. `postgres.NewQueueObserverStore` + `telemetry.RegisterObservableGauges`
+   — queue-depth observable gauges.
+4. `openReducerNeo4jAdapters` — opens graph-backend driver; backend is
+   chosen by PCG_GRAPH_BACKEND (default `nornicdb`). Invalid values fail
+   at startup.
+5. `buildReducerService` — loads all config, wires `DefaultHandlers`,
+   `SharedProjectionRunner`, `CodeCallProjectionRunner`,
+   `RepoDependencyProjectionRunner`, `GraphProjectionPhaseRepairer`, and
+   the `postgres.NewReducerQueue`.
+6. `app.NewHostedWithStatusServer` — mounts the shared admin surface.
+7. `signal.NotifyContext` for `os.Interrupt` / `syscall.SIGTERM`.
+8. `service.Run(ctx)` — blocks until the context is canceled; hosted
+   runtime drains in-flight work before returning.
 
-Defined in `go/cmd/reducer/config.go`:
+## Configuration reference
 
-- queue + retry: `PCG_REDUCER_RETRY_DELAY`, `PCG_REDUCER_MAX_ATTEMPTS`,
-  `PCG_REDUCER_BATCH_CLAIM_SIZE`, `PCG_REDUCER_CLAIM_DOMAIN`,
-  `PCG_REDUCER_WORKERS` (default `min(NumCPU, 8)` on NornicDB,
-  `min(NumCPU, 4)` on Neo4j)
-- gating: `PCG_REDUCER_EXPECTED_SOURCE_LOCAL_PROJECTORS`,
-  `PCG_REDUCER_SEMANTIC_ENTITY_CLAIM_LIMIT`; `PCG_QUERY_PROFILE` with
-  `PCG_GRAPH_BACKEND=nornicdb` enables the projector drain gate
-- shared projection: `PCG_CODE_CALL_PROJECTION_*` and
-  `PCG_REPO_DEPENDENCY_PROJECTION_*` (`POLL_INTERVAL`, `LEASE_TTL`,
-  `BATCH_LIMIT`, `LEASE_OWNER`; code-call also has
-  `ACCEPTANCE_SCAN_LIMIT`)
-- edge writers: `PCG_CODE_CALL_EDGE_BATCH_SIZE`,
-  `PCG_CODE_CALL_EDGE_GROUP_BATCH_SIZE`,
-  `PCG_INHERITANCE_EDGE_GROUP_BATCH_SIZE`,
-  `PCG_SQL_RELATIONSHIP_EDGE_GROUP_BATCH_SIZE`, `PCG_NEO4J_BATCH_SIZE`
-- repair: `PCG_GRAPH_PROJECTION_REPAIR_POLL_INTERVAL`,
-  `..._BATCH_LIMIT`, `..._RETRY_DELAY`
-- `PCG_GRAPH_BACKEND` plus the NornicDB grouped-write and timeout knobs
+All env vars parsed in `config.go` and `neo4j_wiring.go`.
+
+### Queue and retry
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PCG_REDUCER_RETRY_DELAY` | `30s` | Delay before a failed intent becomes re-claimable |
+| `PCG_REDUCER_MAX_ATTEMPTS` | `5` | Terminal failure threshold |
+| `PCG_REDUCER_WORKERS` | `min(NumCPU,8)` NornicDB / `min(NumCPU,4)` Neo4j | Concurrent intent workers |
+| `PCG_REDUCER_BATCH_CLAIM_SIZE` | `workers` NornicDB / `workers×4 (max 64)` Neo4j | Items per claim batch |
+| `PCG_REDUCER_CLAIM_DOMAIN` | `""` (all domains) | Restrict claims to one `Domain` |
+
+### Claim gating
+
+| Variable | Purpose |
+| --- | --- |
+| `PCG_QUERY_PROFILE` | With PCG_GRAPH_BACKEND=nornicdb, `local-authoritative` enables the projector drain gate |
+| `PCG_REDUCER_EXPECTED_SOURCE_LOCAL_PROJECTORS` | Semantic-entity claims wait until this many source-local projectors have published |
+| `PCG_REDUCER_SEMANTIC_ENTITY_CLAIM_LIMIT` | Cap on concurrent semantic-entity claims (default `1` on NornicDB) |
+
+### Shared projection
+
+Parsed by `LoadSharedProjectionConfig` in `internal/reducer`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| PCG_SHARED_PROJECTION_PARTITION_COUNT | `8` | Partitions per domain |
+| PCG_SHARED_PROJECTION_BATCH_LIMIT | `100` | Intents per batch |
+| PCG_SHARED_PROJECTION_POLL_INTERVAL | `500ms` | Base poll interval |
+| PCG_SHARED_PROJECTION_LEASE_TTL | `60s` | Partition lease TTL |
+| PCG_SHARED_PROJECTION_WORKERS | `min(NumCPU,4)` | Concurrent partition workers |
+
+### Code-call projection
+
+| Variable | Default |
+| --- | --- |
+| `PCG_CODE_CALL_PROJECTION_POLL_INTERVAL` | `500ms` |
+| `PCG_CODE_CALL_PROJECTION_LEASE_TTL` | `60s` |
+| `PCG_CODE_CALL_PROJECTION_BATCH_LIMIT` | `100` |
+| `PCG_CODE_CALL_PROJECTION_ACCEPTANCE_SCAN_LIMIT` | `250000` |
+| `PCG_CODE_CALL_PROJECTION_LEASE_OWNER` | `code-call-projection-runner` |
+
+### Repo-dependency projection
+
+| Variable | Default |
+| --- | --- |
+| `PCG_REPO_DEPENDENCY_PROJECTION_POLL_INTERVAL` | `500ms` |
+| `PCG_REPO_DEPENDENCY_PROJECTION_LEASE_TTL` | `60s` |
+| `PCG_REPO_DEPENDENCY_PROJECTION_BATCH_LIMIT` | `100` |
+
+### Edge writers
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PCG_CODE_CALL_EDGE_BATCH_SIZE` | `1000` | Code-call edge rows per graph write |
+| `PCG_CODE_CALL_EDGE_GROUP_BATCH_SIZE` | `1` | Code-call grouped-write batch |
+| `PCG_INHERITANCE_EDGE_GROUP_BATCH_SIZE` | `1` | Inheritance grouped-write batch |
+| `PCG_SQL_RELATIONSHIP_EDGE_GROUP_BATCH_SIZE` | `1` | SQL relationship grouped-write batch |
+
+### Repair runner
+
+| Variable | Default |
+| --- | --- |
+| `PCG_GRAPH_PROJECTION_REPAIR_POLL_INTERVAL` | `1s` |
+| `PCG_GRAPH_PROJECTION_REPAIR_BATCH_LIMIT` | `100` |
+| `PCG_GRAPH_PROJECTION_REPAIR_RETRY_DELAY` | `1m` |
+
+### NornicDB knobs (narrow seam)
+
+| Variable | Purpose |
+| --- | --- |
+| `PCG_CANONICAL_WRITE_TIMEOUT` | Per-write timeout for NornicDB canonical writes (default `30s`) |
+| `PCG_NORNICDB_CANONICAL_GROUPED_WRITES` | Enable NornicDB semantic grouped writes for conformance testing |
+| `PCG_NORNICDB_SEMANTIC_ENTITY_LABEL_BATCH_SIZES` | Override label batch sizes for NornicDB semantic entity writes |
+
+## Exported surface
+
+`buildReducerService` (unexported) returns a `reducer.Service` value. The
+binary itself exports nothing; all domain logic is owned by
+`internal/reducer`. Wiring-level adapters in `neo4j_wiring.go` expose
+unexported executor adapters (`reducerNeo4jExecutor`,
+`reducerCypherExecutor`) used only inside this package.
+
+## Dependencies
+
+- `internal/reducer` — `Service`, `DefaultHandlers`, all domain handler
+  types, `SharedProjectionRunner`, `CodeCallProjectionRunner`,
+  `RepoDependencyProjectionRunner`, `GraphProjectionPhaseRepairer`
+- `internal/storage/postgres` — `NewReducerQueue`, `InstrumentedDB`,
+  `NewSharedIntentStore`, `NewGraphProjectionPhaseStateStore`,
+  `NewGraphProjectionPhaseRepairQueueStore`, all fact/relationship stores
+- `internal/storage/cypher` — `InstrumentedExecutor`, `NewEdgeWriter`
+- `internal/runtime` — `OpenPostgres`, `LoadGraphBackend`, retry policy
+- `internal/query` — `GraphQuery` port, `ParseQueryProfile`
+- `internal/app` — `NewHostedWithStatusServer`
+- `internal/telemetry` — bootstrap, providers, instruments
+
+Graph writes flow through `storage/cypher.EdgeWriter` and
+`storage/cypher.InstrumentedExecutor`, never through a raw driver.
+
+The graph backend is selected via PCG_GRAPH_BACKEND (default `nornicdb`).
+Invalid values fail at startup. The Postgres DSN is configured via
+PCG_POSTGRES_DSN.
 
 ## Telemetry
 
-Uses `telemetry.NewBootstrap("reducer")`, `NewProviders`,
-`NewInstruments`. Logger scope `reducer`/component `reducer`. Postgres
-queries go through `postgres.InstrumentedDB{StoreName: "reducer"}`;
-Cypher executes through `storage/cypher.InstrumentedExecutor`. Queue
-depth via `postgres.NewQueueObserverStore`. The shared `/metrics`,
-`/healthz`, `/readyz`, `/admin/status` admin surface is mounted by
-`app.NewHostedWithStatusServer`; see `internal/runtime/README.md` and
-`internal/storage/cypher/README.md`.
+- Logger scope: `reducer`, component `reducer`.
+- Tracer: `providers.TracerProvider.Tracer(telemetry.DefaultSignalName)`.
+- Postgres instrumentation: `postgres.InstrumentedDB{StoreName: "reducer"}`.
+- Graph instrumentation: `sourcecypher.InstrumentedExecutor`.
+- Queue depth: `postgres.NewQueueObserverStore` → `telemetry.RegisterObservableGauges`.
+- Admin surface: `/healthz`, `/readyz`, `/metrics`, `/admin/status` via
+  `app.NewHostedWithStatusServer`.
+
+## Operational notes
+
+- Scale the `resolution-engine` Deployment when queue age rises and workers
+  remain busy. Do not scale it to fix Postgres saturation — fix database
+  pressure first.
+- In Kubernetes, size the Postgres connection pool to accommodate
+  `PCG_REDUCER_WORKERS × replica_count` concurrent connections.
+- On NornicDB, raise worker counts only with queue and graph-write
+  telemetry in view; long graph writes make lease contention the
+  bottleneck before CPU.
+- Worker leases renew at `LeaseDuration / 2`; a retry delay shorter than
+  the lease TTL causes claims to churn.
+- The projector drain gate (PCG_QUERY_PROFILE=local-authoritative +
+  PCG_GRAPH_BACKEND=nornicdb) delays semantic-entity claims until
+  source-local projectors have finished.
 
 ## Gotchas / invariants
 
-- the projector drain gate is on only with
-  `PCG_GRAPH_BACKEND=nornicdb` and `PCG_QUERY_PROFILE=local-authoritative`
-- worker leases renew at `LeaseDuration / 2`; retry delay shorter than
-  the lease TTL makes claims churn
-- handlers depend on graph-projection readiness published by the projector
+- Invalid PCG_GRAPH_BACKEND values fail at startup via
+  `runtimecfg.LoadGraphBackend`.
+- PCG_NORNICDB_CANONICAL_GROUPED_WRITES=true is only for conformance
+  validation; grouped canonical writes on NornicDB are not promoted to
+  production default.
+- Handler code must not branch on graph backend type directly; backend
+  differences belong in `storage/cypher` narrow seams only.
+- Handlers depend on `graph_projection_phase_state` rows published by the
+  projector; missing phase publications cause edge domains to block.
 
 ## Related docs
 
 - [Service runtimes — Resolution Engine](../../../docs/docs/deployment/service-runtimes.md#resolution-engine)
 - [NornicDB tuning](../../../docs/docs/reference/nornicdb-tuning.md)
-- [Reducer full convergence ADR](../../../docs/docs/adrs/2026-04-18-reducer-full-convergence-optimization.md)
+- [Telemetry overview](../../../docs/docs/reference/telemetry/index.md)
+- `go/internal/reducer/README.md`

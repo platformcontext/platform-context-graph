@@ -1,0 +1,38 @@
+{
+  "package": "go/internal/collector/discovery",
+  "doc_go_contract": "resolves parser-supported files into stable repo-root file sets for the Go collector",
+  "key_types": {
+    "Options": "controls filesystem discovery: IgnoredDirs, IgnoredExtensions, IgnoreHidden, PreservedHiddenPrefixes, HonorGitignore, HonorPCGIgnore, IgnoredPathGlobs, PreservedPathGlobs",
+    "PathGlobRule": "one repo-relative glob rule with Pattern and Reason string",
+    "RepoFileSet": "RepoRoot (absolute) + Files (absolute, sorted)",
+    "DiscoveryStats": "per-run counters: DirsSkippedByName, FilesSkippedByExtension, FilesSkippedByContent, DirsSkippedByUser, FilesSkippedByUser, FilesSkippedHidden, FilesSkippedGitignore, FilesSkippedPCGIgnore",
+    "SupportedFileMatcher": "func(path string) bool; supplied by parser registry"
+  },
+  "entry_points": {
+    "ResolveRepositoryFileSets": "root + SupportedFileMatcher + Options -> []RepoFileSet",
+    "ResolveRepositoryFileSetsWithStats": "root + SupportedFileMatcher + Options -> DiscoveryStats + []RepoFileSet"
+  },
+  "internal_flow": [
+    "normalizeScanRoot: abs + EvalSymlinks + Stat",
+    "collectSupportedFiles: WalkDir with ignoredDirs, ignoredExts, hiddenPath, ignoredPathGlobs, SupportedFileMatcher; symlink check via isExternalSymlink",
+    "groupFilesByRepository: nearestRepositoryRoot walks up to find .git marker; cache for O(1) repeat lookups",
+    "per repo: sort files, optionally filterRepoFilesByGitignore, filterRepoFilesByPCGIgnore",
+    "return sorted []RepoFileSet"
+  ],
+  "path_invariants": {
+    "RepoRoot": "absolute path after filepath.Abs + filepath.EvalSymlinks",
+    "Files": "absolute paths, sorted with sort.Strings",
+    "source": "discovery.go:109-112 (RepoFileSet doc comment) and lines 157-160"
+  },
+  "gitignore_handling": "conservative: ambiguous .gitignore rules include the file; downstream parsers reject what they cannot handle",
+  "pcgignore": ".pcgignore file at repo root, applied after .gitignore when HonorPCGIgnore=true",
+  "external_symlinks": "isExternalSymlink skips symlinks that resolve outside scanRoot",
+  "stats_aggregation": {
+    "TotalDirsSkipped": "sum of DirsSkippedByName + DirsSkippedByUser",
+    "TotalFilesSkipped": "sum of all per-reason file skip counters"
+  },
+  "telemetry": "discovery does not emit metrics or spans directly; DiscoveryStats are returned to the caller (NativeRepositorySnapshotter) which records them via Instruments.DiscoveryFilesSkipped",
+  "dependencies": ["stdlib io/fs", "stdlib path/filepath", "stdlib os"],
+  "consumers": ["go/internal/collector (NativeRepositorySnapshotter calls ResolveRepositoryFileSetsWithStats)", "go/internal/parser supplies SupportedFileMatcher via Registry.LookupByPath"],
+  "files": ["discovery.go", "gitignore.go", "path_globs.go", "doc.go"]
+}

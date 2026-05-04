@@ -1,0 +1,37 @@
+{
+  "package": "internal/reducer/dsl",
+  "package_name_decl": "dsl",
+  "files": ["contract.go", "doc.go", "evaluator.go"],
+  "exported_types": [
+    {"name": "OutputKind", "file": "evaluator.go", "line": 13, "kind": "type alias"},
+    {"name": "Publication", "file": "evaluator.go", "line": 27, "kind": "struct"},
+    {"name": "EvaluationResult", "file": "evaluator.go", "line": 36, "kind": "struct"},
+    {"name": "Evaluator", "file": "evaluator.go", "line": 41, "kind": "interface"},
+    {"name": "DriftEvaluator", "file": "evaluator.go", "line": 46, "kind": "interface"},
+    {"name": "CanonicalView", "file": "evaluator.go", "line": 51, "kind": "struct"},
+    {"name": "PublishedCheckpoint", "file": "contract.go", "line": 13, "kind": "struct"},
+    {"name": "RuntimeContract", "file": "contract.go", "line": 19, "kind": "struct"}
+  ],
+  "exported_funcs": [
+    {"name": "PublishEvaluationResult", "file": "evaluator.go", "line": 155},
+    {"name": "DefaultRuntimeContract", "file": "contract.go", "line": 56},
+    {"name": "RuntimeContractTemplate", "file": "contract.go", "line": 64},
+    {"name": "Validate", "file": "evaluator.go", "line": 59, "on": "Publication"},
+    {"name": "Validate", "file": "evaluator.go", "line": 76, "on": "EvaluationResult"},
+    {"name": "PhaseStates", "file": "evaluator.go", "line": 87, "on": "EvaluationResult"}
+  ],
+  "output_kinds": ["resolved_relationship", "drift_observation"],
+  "scaffold_components": ["evaluator", "drift_evaluator", "deployment_mapping", "workload_materialization"],
+  "scaffold_checkpoints": [
+    {"keyspace": "terraform_resource_uid", "phase": "cross_source_anchor_ready"},
+    {"keyspace": "cloud_resource_uid", "phase": "cross_source_anchor_ready"},
+    {"keyspace": "webhook_event_uid", "phase": "cross_source_anchor_ready"},
+    {"keyspace": "service_uid", "phase": "deployment_mapping"},
+    {"keyspace": "service_uid", "phase": "workload_materialization"}
+  ],
+  "post_phase3_note": "OutputKindResolvedRelationship feeds resolved_relationships row that other reducer domains consume. Any domain consuming resolved_relationships must have post-Phase-3 reopen (CLAUDE.md Facts-First Bootstrap Ordering).",
+  "deduplication": "PhaseStates deduplicates by (AcceptanceUnitID, Keyspace, Phase) for replay stability",
+  "internal_imports": [
+    "github.com/platformcontext/platform-context-graph/go/internal/reducer"
+  ]
+}

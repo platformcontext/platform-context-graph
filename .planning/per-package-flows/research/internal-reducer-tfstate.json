@@ -1,0 +1,24 @@
+{
+  "package": "internal/reducer/tfstate",
+  "package_name_decl": "tfstate",
+  "files": ["contract.go", "doc.go"],
+  "scaffold_status": "scaffold only — no live projection logic",
+  "exported_types": [
+    {"name": "PublishedCheckpoint", "file": "contract.go", "line": 13, "kind": "struct"},
+    {"name": "RuntimeContract", "file": "contract.go", "line": 20, "kind": "struct"}
+  ],
+  "exported_funcs": [
+    {"name": "DefaultRuntimeContract", "file": "contract.go", "line": 43},
+    {"name": "RuntimeContractTemplate", "file": "contract.go", "line": 50},
+    {"name": "Validate", "file": "contract.go", "line": 55, "on": "RuntimeContract"}
+  ],
+  "scaffold_components": ["resource_projector", "module_projector", "output_projector"],
+  "scaffold_checkpoints": [
+    {"keyspace": "terraform_resource_uid", "phase": "canonical_nodes_committed"},
+    {"keyspace": "terraform_module_uid", "phase": "canonical_nodes_committed"}
+  ],
+  "internal_imports": [
+    "github.com/platformcontext/platform-context-graph/go/internal/reducer"
+  ],
+  "notes": "Both checkpoints are Phase 1 (canonical_nodes_committed). Post-Phase-3 reopen for resolved_relationships consumers is owned outside this package."
+}

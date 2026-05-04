@@ -1,0 +1,81 @@
+{
+  "package": "go/cmd/ingester",
+  "doc_go_contract": "long-running runtime that owns repository sync, parsing, fact emission, and source-local projection into the configured graph backend",
+  "binary_name": "pcg-ingester",
+  "kubernetes_shape": "StatefulSet + PVC",
+  "entry_point": "main.go:run",
+  "top_level_flow": [
+    "telemetry.NewBootstrap + telemetry.NewProviders",
+    "runtimecfg.OpenPostgres",
+    "openIngesterCanonicalWriter (Neo4j or NornicDB driver, sourcecypher.CanonicalNodeWriter)",
+    "buildIngesterService -> compositeRunner{collectorSvc, projectorSvc}",
+    "app.NewHostedWithStatusServer -> /healthz /readyz /metrics /admin/status /admin/recovery",
+    "signal.NotifyContext (SIGINT/SIGTERM)",
+    "service.Run(ctx)"
+  ],
+  "composite_runner": {
+    "type": "compositeRunner",
+    "file": "wiring.go",
+    "behavior": "runs collectorSvc and projectorSvc concurrently; first error cancels both"
+  },
+  "collector_service_wiring": {
+    "file": "wiring.go:buildIngesterCollectorService",
+    "source": "collector.GitSource",
+    "selector": "collector.NativeRepositorySelector",
+    "snapshotter": "collector.NativeRepositorySnapshotter",
+    "committer": "postgres.NewIngestionStore (SkipRelationshipBackfill=true)",
+    "after_batch_drained": "ingesterDeferredRelationshipMaintenance (BackfillAllRelationshipEvidence + ReopenDeploymentMappingWorkItems)"
+  },
+  "projector_service_wiring": {
+    "file": "wiring.go:buildIngesterProjectorService",
+    "queue": "postgres.NewProjectorQueue",
+    "fact_store": "postgres.NewFactStore",
+    "runner": "projector.Runtime",
+    "heartbeater": "projectorQueue (lease/3, max 1m)",
+    "workers": "PCG_PROJECTOR_WORKERS or min(NumCPU,8); local_authoritative+nornicdb defaults to 1"
+  },
+  "env_vars": {
+    "PCG_POSTGRES_DSN": "Postgres connection string",
+    "PCG_GRAPH_BACKEND": "neo4j or nornicdb (default nornicdb)",
+    "NEO4J_URI": "Bolt URI",
+    "NEO4J_USERNAME": "Bolt auth username",
+    "NEO4J_PASSWORD": "Bolt auth password",
+    "PCG_SNAPSHOT_WORKERS": "concurrent snapshot goroutines (default min(NumCPU,8))",
+    "PCG_PARSE_WORKERS": "concurrent file-parse workers (default min(NumCPU,8))",
+    "PCG_LARGE_REPO_FILE_THRESHOLD": "file count threshold for large-repo semaphore (default 1000)",
+    "PCG_LARGE_REPO_MAX_CONCURRENT": "max concurrent large-repo snapshots (default 2)",
+    "PCG_STREAM_BUFFER": "stream channel buffer size (default worker count)",
+    "PCG_PROJECTOR_WORKERS": "projector worker count",
+    "PCG_LARGE_GEN_THRESHOLD": "fact count threshold for large-generation semaphore (default 10000)",
+    "PCG_LARGE_GEN_MAX_CONCURRENT": "max concurrent large-generation projections (default 2)",
+    "PCG_CANONICAL_WRITE_TIMEOUT": "graph write timeout (default 30s NornicDB)",
+    "PCG_NORNICDB_CANONICAL_GROUPED_WRITES": "enable NornicDB grouped writes (default false)",
+    "PCG_NORNICDB_PHASE_GROUP_STATEMENTS": "NornicDB phase group statement cap (default 500)",
+    "PCG_NORNICDB_ENTITY_BATCH_SIZE": "entity upsert row cap (default 100)",
+    "PCG_NORNICDB_FILE_BATCH_SIZE": "file upsert row cap",
+    "PCG_NORNICDB_ENTITY_LABEL_BATCH_SIZES": "per-label batch size overrides JSON",
+    "PCG_NORNICDB_ENTITY_LABEL_PHASE_GROUP_STATEMENTS": "per-label phase group statement overrides JSON",
+    "PCG_NORNICDB_BATCHED_ENTITY_CONTAINMENT": "enable batched entity containment (evaluation only)",
+    "PCG_QUERY_PROFILE": "local_lightweight or local_authoritative affects writer and worker defaults",
+    "PCG_DISABLE_NEO4J": "force local_lightweight writer",
+    "PCG_PROJECTOR_RETRY_ONCE_SCOPE_GENERATION": "scope generation ID for fault-injection retry",
+    "PCG_PROJECTOR_MAX_ATTEMPTS": "projector retry max attempts (via runtimecfg.LoadRetryPolicyConfig)",
+    "PCG_PROJECTOR_RETRY_DELAY": "projector retry delay",
+    "SCIP_INDEXER": "enable SCIP external indexer (true/false)",
+    "SCIP_LANGUAGES": "comma-separated SCIP language list"
+  },
+  "signal_handling": "signal.NotifyContext on SIGINT/SIGTERM; cancel propagates through compositeRunner",
+  "admin_surface": ["/healthz", "/readyz", "/metrics", "/admin/status", "/admin/recovery"],
+  "metrics_port_compose": "localhost:19465",
+  "bootstrap_phase": "Phase 1 (collection + first-pass reduction); AfterBatchDrained runs BackfillAllRelationshipEvidence then ReopenDeploymentMappingWorkItems",
+  "key_files": [
+    "main.go",
+    "wiring.go",
+    "wiring_nornicdb_env.go",
+    "wiring_nornicdb_config.go",
+    "wiring_nornicdb_phase_group.go",
+    "local_lightweight.go",
+    "config.go",
+    "doc.go"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "package": "internal/reducer/aws",
+  "package_name_decl": "aws",
+  "files": ["contract.go", "doc.go"],
+  "scaffold_status": "scaffold only — no live projection logic",
+  "exported_types": [
+    {"name": "PublishedCheckpoint", "file": "contract.go", "line": 13, "kind": "struct"},
+    {"name": "RuntimeContract", "file": "contract.go", "line": 19, "kind": "struct"}
+  ],
+  "exported_funcs": [
+    {"name": "DefaultRuntimeContract", "file": "contract.go", "line": 41},
+    {"name": "RuntimeContractTemplate", "file": "contract.go", "line": 48},
+    {"name": "Validate", "file": "contract.go", "line": 52, "on": "RuntimeContract"}
+  ],
+  "scaffold_components": ["resource_projector", "relationship_projector", "dns_projector", "image_projector"],
+  "scaffold_checkpoints": [
+    {"keyspace": "cloud_resource_uid", "phase": "canonical_nodes_committed"}
+  ],
+  "internal_imports": [
+    "github.com/platformcontext/platform-context-graph/go/internal/reducer"
+  ],
+  "notes": "Phase 1 canonical-nodes checkpoint only. Post-Phase-3 reopen for resolved_relationships consumers is owned outside this package."
+}

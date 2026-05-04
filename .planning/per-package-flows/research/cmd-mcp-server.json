@@ -1,0 +1,108 @@
+{
+  "package": "cmd/mcp-server",
+  "package_name_decl": "main",
+  "files": [
+    "doc.go",
+    "main.go",
+    "wiring.go"
+  ],
+  "exported_types": [],
+  "exported_funcs": [],
+  "internal_funcs": [
+    {"name": "main", "file": "main.go", "line": 16, "role": "entry point — boot telemetry, wire API, select transport, run"},
+    {"name": "newLogger", "file": "main.go", "line": 75, "role": "constructs slog.Logger via telemetry.NewLoggerWithWriter"},
+    {"name": "wireAPI", "file": "wiring.go", "line": 26, "role": "opens Postgres and Neo4j, builds query.APIRouter, wraps with auth, mounts admin mux"},
+    {"name": "newMCPQueryRouter", "file": "wiring.go", "line": 111, "role": "constructs query.APIRouter with all handlers for MCP use"},
+    {"name": "openQueryGraph", "file": "wiring.go", "line": 172, "role": "opens Neo4j driver unless PCG_DISABLE_NEO4J or lightweight profile"},
+    {"name": "envOrDefault", "file": "wiring.go", "line": 193, "role": "reads env var with fallback"},
+    {"name": "loadQueryProfile", "file": "wiring.go", "line": 201, "role": "parses PCG_QUERY_PROFILE; defaults to query.ProfileProduction"},
+    {"name": "loadGraphBackend", "file": "wiring.go", "line": 213, "role": "parses PCG_GRAPH_BACKEND via query.ParseGraphBackend"},
+    {"name": "mountRuntimeSurface", "file": "wiring.go", "line": 217, "role": "creates shared admin mux via internalruntime.NewStatusAdminMux"}
+  ],
+  "interface_assertions": [
+    {"iface": "query.GraphQuery", "impl": "query.Neo4jReader", "file": "wiring.go", "line": 22},
+    {"iface": "query.ContentStore", "impl": "query.ContentReader", "file": "wiring.go", "line": 23}
+  ],
+  "internal_imports": [
+    "github.com/platformcontext/platform-context-graph/go/internal/mcp",
+    "github.com/platformcontext/platform-context-graph/go/internal/query",
+    "github.com/platformcontext/platform-context-graph/go/internal/runtime",
+    "github.com/platformcontext/platform-context-graph/go/internal/status",
+    "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres",
+    "github.com/platformcontext/platform-context-graph/go/internal/telemetry"
+  ],
+  "external_imports": [
+    "github.com/jackc/pgx/v5/stdlib",
+    "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+  ],
+  "env_vars": [
+    {"name": "PCG_MCP_TRANSPORT", "file": "main.go", "line": 38, "values": "http (default) | stdio"},
+    {"name": "PCG_MCP_ADDR", "file": "main.go", "line": 61, "default": ":8080"},
+    {"name": "PCG_POSTGRES_DSN", "file": "wiring.go", "line": 52, "note": "falls back to PCG_CONTENT_STORE_DSN"},
+    {"name": "PCG_CONTENT_STORE_DSN", "file": "wiring.go", "line": 53, "note": "fallback for PCG_POSTGRES_DSN"},
+    {"name": "PCG_QUERY_PROFILE", "file": "wiring.go", "line": 202, "note": "defaults to ProfileProduction"},
+    {"name": "PCG_GRAPH_BACKEND", "file": "wiring.go", "line": 214, "note": "parsed via query.ParseGraphBackend"},
+    {"name": "PCG_DISABLE_NEO4J", "file": "wiring.go", "line": 179, "note": "skips Neo4j dial when true"},
+    {"name": "DEFAULT_DATABASE", "file": "wiring.go", "line": 178, "default": "neo4j"}
+  ],
+  "telemetry": {
+    "bootstrap": "telemetry.NewBootstrap(\"mcp-server\")",
+    "logger_scope": "mcp-server / component mcp-server",
+    "events": [
+      {"name": "runtime.startup.failed", "file": "main.go", "lines": [24, 29, 45]},
+      {"name": "runtime.shutdown.failed", "file": "main.go", "line": 34},
+      {"name": "runtime.postgres.connected", "file": "wiring.go", "line": 76},
+      {"name": "runtime.neo4j.connected", "file": "wiring.go", "line": 188}
+    ],
+    "admin_routes": ["/healthz", "/readyz", "/metrics", "/admin/status"],
+    "mcp_routes": ["/sse", "/mcp/message", "/health"],
+    "spans": "none emitted by this package directly; inherited from internal/query handlers",
+    "metrics": "pcg_runtime_info emitted by internalruntime.NewStatusAdminMux; per-query metrics from internal/query"
+  },
+  "query_handlers_mounted": [
+    "query.RepositoryHandler",
+    "query.EntityHandler",
+    "query.CodeHandler",
+    "query.ContentHandler",
+    "query.InfraHandler",
+    "query.IaCHandler",
+    "query.ImpactHandler",
+    "query.EvidenceHandler",
+    "query.StatusHandler",
+    "query.CompareHandler"
+  ],
+  "http_topology": {
+    "http_mode": {
+      "mcp_transport_mux": ["GET /sse", "POST /mcp/message", "GET /health", "/api/ (query handler passthrough)"],
+      "admin_mux": ["/healthz", "/readyz", "/metrics", "/admin/status"]
+    },
+    "stdio_mode": {
+      "note": "no HTTP listener; admin surface not mounted; reads stdin, writes stdout"
+    }
+  },
+  "shutdown": {
+    "signal": "SIGINT or SIGTERM",
+    "mechanism": "signal.NotifyContext cancels root context; server.RunHTTP or server.Run unblocks; telemetry.Providers.Shutdown on fresh background context"
+  },
+  "wiring_test_cases": [
+    "TestWireAPIReturnsResolveAPIKeyErrorBeforeConnectingDatastores",
+    "TestWireAPIReturnsInvalidQueryProfileErrorBeforeConnectingDatastores",
+    "TestWireAPIReturnsInvalidGraphBackendErrorBeforeConnectingDatastores",
+    "TestNewMCPQueryRouterMountsMCPBackedHandlers",
+    "TestOpenQueryGraphAcceptsNornicDBOnSharedBoltPath",
+    "TestLoadGraphBackendDefaultsToNornicDB"
+  ],
+  "invariants": [
+    "Validation errors (bad API key, bad query profile, bad graph backend) fail before any datastore connection is attempted",
+    "PCG_POSTGRES_DSN or PCG_CONTENT_STORE_DSN must be non-empty or wireAPI returns an error",
+    "stdio mode does not mount the HTTP admin surface",
+    "query.AuthMiddleware wraps the query mux protecting /api/v0/* routes",
+    "query.IaCHandler.Reachability is always non-nil (tested in TestNewMCPQueryRouterMountsMCPBackedHandlers)"
+  ],
+  "lifecycle_summary": "main boots telemetry via telemetry.NewBootstrap, constructs an slog.Logger, initializes OTEL providers. wireAPI opens Postgres (sql.Open + PingContext), optionally opens Neo4j via internalruntime.OpenNeo4jDriver, constructs a query.APIRouter via newMCPQueryRouter, wraps it with query.AuthMiddleware, and mounts the shared admin surface. Transport selection reads PCG_MCP_TRANSPORT: stdio calls mcp.Server.Run; http calls mcp.Server.RunHTTP with PCG_MCP_ADDR. Shutdown is driven by context cancellation from signal.NotifyContext.",
+  "entry_points": [
+    {"name": "main", "file": "main.go", "line": 16, "role": "entry point — boot telemetry, wire API, select transport"},
+    {"name": "wireAPI", "file": "wiring.go", "line": 26, "role": "constructs and returns the query handler, admin mux, and cleanup func"}
+  ],
+  "adr_references": []
+}

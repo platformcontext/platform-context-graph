@@ -1,0 +1,129 @@
+{
+  "package": "internal/coordinator",
+  "package_name_decl": "coordinator",
+  "files": [
+    "config.go",
+    "defaults.go",
+    "doc.go",
+    "metrics.go",
+    "service.go"
+  ],
+  "exported_types": [
+    {"name": "Store", "kind": "interface", "file": "service.go", "line": 13,
+     "methods": [
+       "ReconcileCollectorInstances(context.Context, time.Time, []workflow.DesiredCollectorInstance) error",
+       "ListCollectorInstances(context.Context) ([]workflow.CollectorInstance, error)",
+       "ReapExpiredClaims(context.Context, time.Time, int, time.Duration) ([]workflow.Claim, error)",
+       "ReconcileWorkflowRuns(context.Context, time.Time) (int, error)"
+     ],
+     "note": "narrow durable surface for Slice 2 dark coordinator"
+    },
+    {"name": "Service", "kind": "struct", "file": "service.go", "line": 21,
+     "fields": ["Config Config", "Store Store", "Metrics Metrics", "Logger *slog.Logger", "Clock func() time.Time"],
+     "methods": ["Run(ctx context.Context) error"]
+    },
+    {"name": "Config", "kind": "struct", "file": "config.go", "line": 23,
+     "fields": [
+       "DeploymentMode string",
+       "ClaimsEnabled bool",
+       "ReconcileInterval time.Duration",
+       "ReapInterval time.Duration",
+       "ClaimLeaseTTL time.Duration",
+       "HeartbeatInterval time.Duration",
+       "ExpiredClaimLimit int",
+       "ExpiredClaimRequeueDelay time.Duration",
+       "CollectorInstances []workflow.DesiredCollectorInstance"
+     ]
+    },
+    {"name": "LoadConfig", "kind": "func", "file": "config.go", "line": 36,
+     "signature": "LoadConfig(getenv func(string) string) (Config, error)"},
+    {"name": "Metrics", "kind": "interface", "file": "metrics.go", "line": 26,
+     "methods": [
+       "RecordReconcile(context.Context, ReconcileObservation)",
+       "RecordReap(context.Context, ReapObservation)",
+       "RecordRunReconciliation(context.Context, RunReconciliationObservation)"
+     ]
+    },
+    {"name": "NewMetrics", "kind": "func", "file": "metrics.go", "line": 70,
+     "signature": "NewMetrics(meter metric.Meter) (Metrics, error)"},
+    {"name": "ReconcileObservation", "kind": "struct", "file": "metrics.go", "line": 33,
+     "fields": ["Outcome string", "Duration time.Duration", "DesiredCount int", "DurableCount int"]},
+    {"name": "ReapObservation", "kind": "struct", "file": "metrics.go", "line": 41,
+     "fields": ["Outcome string", "Duration time.Duration", "ReapedRows int"]},
+    {"name": "RunReconciliationObservation", "kind": "struct", "file": "metrics.go", "line": 48,
+     "fields": ["Outcome string", "Duration time.Duration", "ReconciledRuns int"]}
+  ],
+  "deployment_modes": {
+    "dark": "runs only runReconcile on reconcile ticker; reap and run-reconcile loops are OFF",
+    "active": "runs runReconcile + runWorkflowReconciliation on reconcile ticker; runs runReapExpiredClaims on reap ticker"
+  },
+  "service_run_flow": {
+    "initial_calls": [
+      "runReconcile (always)",
+      "runReapExpiredClaims (active only)",
+      "runWorkflowReconciliation (active only)"
+    ],
+    "tickers": {
+      "reconcileTicker": "always; fires runReconcile + runWorkflowReconciliation (active only)",
+      "reapTicker": "active only; nil in dark mode; fires runReapExpiredClaims"
+    },
+    "nil_ticker_guard": "tickerChan(nil) returns nil channel, never selected"
+  },
+  "private_methods": [
+    {"name": "runReconcile", "file": "service.go", "line": 102},
+    {"name": "runReapExpiredClaims", "file": "service.go", "line": 155},
+    {"name": "runWorkflowReconciliation", "file": "service.go", "line": 178},
+    {"name": "recordReconcile", "file": "service.go", "line": 148},
+    {"name": "recordReap", "file": "service.go", "line": 196},
+    {"name": "recordRunReconciliation", "file": "service.go", "line": 206},
+    {"name": "tickerChan", "file": "service.go", "line": 216}
+  ],
+  "metric_instruments": {
+    "prefix": "pcg_dp_workflow_coordinator_",
+    "counters": [
+      "reconcile_total",
+      "reap_total",
+      "run_reconcile_total"
+    ],
+    "histograms": [
+      "reconcile_duration_seconds",
+      "reap_duration_seconds",
+      "run_reconcile_duration_seconds"
+    ],
+    "gauges": [
+      "desired_collector_instances",
+      "durable_collector_instances",
+      "collector_instance_drift",
+      "last_reaped_claims",
+      "last_reconciled_runs"
+    ]
+  },
+  "env_vars": {
+    "PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE": {"default": "dark", "values": ["dark", "active"]},
+    "PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED": {"default": "false"},
+    "PCG_WORKFLOW_COORDINATOR_ENABLE_CLAIMS": {"note": "alias for CLAIMS_ENABLED"},
+    "PCG_WORKFLOW_COORDINATOR_RECONCILE_INTERVAL": {"default": "30s"},
+    "PCG_WORKFLOW_COORDINATOR_REAP_INTERVAL": {"default": "workflow.DefaultReapInterval() = 20s"},
+    "PCG_WORKFLOW_COORDINATOR_CLAIM_LEASE_TTL": {"default": "workflow.DefaultClaimLeaseTTL() = 60s"},
+    "PCG_WORKFLOW_COORDINATOR_HEARTBEAT_INTERVAL": {"default": "workflow.DefaultHeartbeatInterval() = 20s"},
+    "PCG_WORKFLOW_COORDINATOR_EXPIRED_CLAIM_LIMIT": {"default": "workflow.DefaultExpiredClaimLimit() = 100"},
+    "PCG_WORKFLOW_COORDINATOR_EXPIRED_CLAIM_REQUEUE_DELAY": {"default": "workflow.DefaultExpiredClaimRequeueDelay() = 5s"},
+    "PCG_COLLECTOR_INSTANCES_JSON": {"note": "JSON array of collectorInstanceConfig objects"}
+  },
+  "validation_invariants": [
+    "active mode requires ClaimsEnabled=true",
+    "active mode requires at least one enabled claim-capable collector instance",
+    "HeartbeatInterval must be strictly less than ClaimLeaseTTL",
+    "collector instance ClaimsEnabled=true requires coordinator ClaimsEnabled=true"
+  ],
+  "imports_first_party": [
+    "internal/workflow",
+    "internal/scope",
+    "internal/telemetry"
+  ],
+  "not_implemented_today": [
+    "trigger normalization",
+    "permanent claim ownership by this binary",
+    "scheduling workflow runs"
+  ]
+}
