@@ -44,7 +44,10 @@ go install -tags nolocalllm github.com/platformcontext/platform-context-graph/go
 ```
 
 Use a pinned version instead of `latest` when you need repeatable installs.
-Make sure `$(go env GOPATH)/bin` or `GOBIN` is on `PATH`.
+Make sure `$(go env GOPATH)/bin` or `GOBIN` is on `PATH`. A binary installed
+with `go install ...@vX.Y.Z` reports that module version through
+`pcg --version`. Local source builds still report `dev` unless a version is
+injected with `-ldflags`.
 
 The `nolocalllm` tag is intentional. It links the local NornicDB runtime into
 `pcg` without pulling in NornicDB's optional local-LLM pieces, so

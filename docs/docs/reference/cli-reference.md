@@ -57,6 +57,10 @@ These options apply at the root command level.
 | `--version`, `-v` | Show the installed PCG version and exit. |
 | `--help`, `-h` | Show help and exit. |
 
+For `pcg`, release and local installer builds report the version injected at
+build time. A plain `go install ...@vX.Y.Z` binary reports Go's embedded module
+version. Local source builds without a version override report `dev`.
+
 ## Service binary version checks
 
 The installed service binaries also accept `--version` and `-v` as a single

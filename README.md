@@ -111,6 +111,8 @@ go install -tags nolocalllm github.com/platformcontext/platform-context-graph/go
 
 That build tag gives local mode its default embedded NornicDB runtime, so you
 do not need to install `nornicdb-headless` just to run `pcg graph start`.
+Pinned installs such as `go install .../cmd/pcg@vX.Y.Z` report that module
+version through `pcg --version`.
 
 For local owner development, install the full PCG-prefixed runtime binary set
 from a checkout:
