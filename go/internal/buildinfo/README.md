@@ -5,7 +5,8 @@
 `buildinfo` is the single source for the application version string reported
 by the API, MCP server, ingester, reducer, CLI root command, and admin
 surfaces. All version-bearing code paths call `AppVersion()` from here rather
-than keeping local version constants.
+than keeping local version constants. Direct service binaries also use this
+package for their `--version` and `-v` early-exit path.
 
 ## Where this fits
 
@@ -14,13 +15,15 @@ flowchart LR
   A["Release build\n-ldflags -X buildinfo.Version=..."] --> B["buildinfo.Version"]
   B --> C["buildinfo.AppVersion()"]
   C --> D["internal/status\ninternal/runtime\ninternal/query\ninternal/mcp\ncmd/pcg"]
+  C --> E["buildinfo.PrintVersionFlag()\nservice binaries"]
 ```
 
 ## Ownership boundary
 
-Owns `Version` and `AppVersion`. Nothing else in the codebase may declare its
-own version constant. Setting `Version` to anything other than the default
-`"dev"` is done exclusively via `-ldflags` at build time.
+Owns `Version`, `AppVersion`, and the small service-binary version flag helper.
+Nothing else in the codebase may declare its own version constant. Setting
+`Version` to anything other than the default `"dev"` is done exclusively via
+`-ldflags` at build time.
 
 ## Exported surface
 
@@ -28,12 +31,15 @@ own version constant. Setting `Version` to anything other than the default
   time via `-ldflags "-X .../buildinfo.Version=<value>"`.
 - `AppVersion() string` — trims whitespace from `Version` and returns `"dev"`
   when the result is empty.
+- `PrintVersionFlag(args []string, stdout io.Writer, applicationName string) (bool, error)` —
+  prints `<applicationName> <version>` for a single `--version` or `-v`
+  argument and returns `handled=false` for normal runtime arguments.
 
 See `doc.go` for the godoc contract.
 
 ## Dependencies
 
-Standard library only (`strings`). No internal packages.
+Standard library only (`fmt`, `io`, `strings`). No internal packages.
 
 ## Telemetry
 
@@ -50,6 +56,9 @@ metric label sets, and status response payloads.
   dashboards and alerts.
 - The `ldflags` path is `-X github.com/platformcontext/platform-context-graph/go/internal/buildinfo.Version=<value>`.
   An incorrect module path prefix silently leaves `Version` at `"dev"`.
+- `PrintVersionFlag` only handles exactly one argument. Service commands must
+  call it at the top of `main` so version probes do not open Postgres, graph
+  drivers, or telemetry providers.
 
 ## Related docs
 

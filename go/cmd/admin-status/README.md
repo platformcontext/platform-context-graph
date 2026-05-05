@@ -18,6 +18,8 @@ through the same `status.LoadReport` path.
 
 - `main` and `run` in `go/cmd/admin-status/main.go`
 - single-process binary; no subcommands
+- `pcg-admin-status --version` and `pcg-admin-status -v` print the build-time
+  version through `buildinfo.PrintVersionFlag` before opening Postgres
 
 ## Configuration
 
@@ -38,6 +40,9 @@ error. Use the long-running runtime `/metrics` endpoints for live telemetry.
 ## Gotchas / invariants
 
 - one-shot lifecycle: the process exits immediately after printing the report
+- version probes are pre-startup checks; keep `buildinfo.PrintVersionFlag` at
+  the top of `main` so status scripts can inspect the binary without database
+  credentials
 - exits non-zero if the Postgres connection cannot be opened or the report
   cannot be loaded
 - unknown `--format` values fail with `unsupported format`

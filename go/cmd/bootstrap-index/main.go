@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
@@ -67,6 +68,14 @@ type buildProjectorFn func(context.Context, bootstrapDB, projector.CanonicalWrit
 type discoveryAdvisorySink func(collector.DiscoveryAdvisoryReport) error
 
 func main() {
+	if handled, err := buildinfo.PrintVersionFlag(os.Args[1:], os.Stdout, "pcg-bootstrap-index"); handled {
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(
 		context.Background(),
 		os.Getenv,

@@ -11,6 +11,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/recovery"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
@@ -19,6 +20,14 @@ import (
 )
 
 func main() {
+	if handled, err := buildinfo.PrintVersionFlag(os.Args[1:], os.Stdout, "pcg-ingester"); handled {
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(context.Background()); err != nil {
 		slog.Error("ingester failed", "error", err)
 		os.Exit(1)

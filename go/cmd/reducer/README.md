@@ -140,6 +140,10 @@ binary itself exports nothing; all domain logic is owned by
 unexported executor adapters (`reducerNeo4jExecutor`,
 `reducerCypherExecutor`) used only inside this package.
 
+The direct process contract includes `pcg-reducer --version` and
+`pcg-reducer -v`. Both flags print the build-time version through
+`buildinfo.PrintVersionFlag` before telemetry, Postgres, or graph setup begins.
+
 ## Dependencies
 
 - `internal/reducer` — `Service`, `DefaultHandlers`, all domain handler
@@ -176,6 +180,9 @@ PCG_POSTGRES_DSN.
 - Scale the `resolution-engine` Deployment when queue age rises and workers
   remain busy. Do not scale it to fix Postgres saturation — fix database
   pressure first.
+- Version probes are pre-startup checks. Keep `buildinfo.PrintVersionFlag` at
+  the top of `main` so operators can inspect the reducer binary without opening
+  queues or graph drivers.
 - In Kubernetes, size the Postgres connection pool to accommodate
   `PCG_REDUCER_WORKERS × replica_count` concurrent connections.
 - On NornicDB, raise worker counts only with queue and graph-write

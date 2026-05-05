@@ -2,7 +2,9 @@
 // for native Go repository selection, sync, snapshot collection, content
 // shaping, and fact commit into Postgres.
 //
-// The binary opens Postgres through the runtime config helpers, builds a
+// When invoked with --version or -v, it prints the embedded application
+// version and exits before runtime setup. Otherwise the binary opens Postgres
+// through the runtime config helpers, builds a
 // collector.Service backed by NativeRepositorySelector and
 // NativeRepositorySnapshotter, and hosts it through app.NewHostedWithStatusServer
 // so it exposes the shared `/healthz`, `/readyz`, `/metrics`, and

@@ -3,7 +3,9 @@
 // cross-domain truth, and writes shared edges into the configured graph
 // backend.
 //
-// The binary boots OTEL telemetry, opens Postgres and the graph backend,
+// When invoked with --version or -v, it prints the embedded application
+// version and exits before runtime setup. Otherwise the binary boots OTEL
+// telemetry, opens Postgres and the graph backend,
 // wires the reducer service with shared-projection, code-call,
 // repo-dependency, and graph-projection-phase repair runners, and hosts it
 // through app.NewHostedWithStatusServer so it exposes the shared `/healthz`,

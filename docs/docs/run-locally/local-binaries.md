@@ -71,6 +71,20 @@ By default the script installs to `GOBIN`, or to `$(go env GOPATH)/bin` when
 `pcg-bootstrap-index`, `pcg-ingester`, `pcg-reducer`, and the supporting
 runtime helpers.
 
+Set `PCG_VERSION=<version>` before running the script when you want the
+installed binaries to report a specific build version. The default is `dev`.
+Every installed PCG binary supports a safe version probe:
+
+```bash
+pcg --version
+pcg-api --version
+pcg-ingester -v
+pcg-reducer -v
+```
+
+The service binaries answer those probes before opening telemetry, Postgres,
+the graph backend, queues, or HTTP listeners.
+
 The script builds only the local owner `pcg` binary with
 `PCG_LOCAL_OWNER_BUILD_TAGS=nolocalllm` by default. The service binaries
 (`pcg-api`, `pcg-ingester`, `pcg-reducer`, and friends) are plain deployment

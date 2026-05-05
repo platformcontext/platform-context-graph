@@ -23,7 +23,7 @@ The four phases in `runPipelined` (`main.go:190`) must execute in order:
 1. `drainCollector` + `drainProjectorPipelined` run concurrently.
    `BackfillAllRelationshipEvidence` is called after `drainCollector` returns,
    before the projector goroutine drains.
-2. `cd.committer.BackfillAllRelationshipEvidence` populates
+2. `cd.committer.BackfillAllRelationshipEvidence` (`main.go:245`) populates
    `relationship_evidence_facts` and publishes `backward_evidence_committed`.
 3. `projectorErr := <-errc` waits for `drainProjectorPipelined` to exit before
    the reopen call. This prevents `deployment_mapping` items emitted after
@@ -87,7 +87,7 @@ concurrency reference table in `docs/docs/reference/local-testing.md` and
   `CommitScopeGeneration` call runs a full per-repo backfill. On 800+ repos
   this is quadratically expensive and defeats the deferred-backfill design.
 - **Do not call `ReopenDeploymentMappingWorkItems` before the projector drains.**
-  The comment at `main.go:248` explains why; `MaterializeIaCReachability` must
+  The comment at `main.go:257` explains why; `MaterializeIaCReachability` must
   also not run before the drain. Any refactor that merges or reorders these
   calls requires re-reading the ADR at
   `docs/docs/adrs/2026-04-18-bootstrap-relationship-backfill-quadratic-cost.md`.

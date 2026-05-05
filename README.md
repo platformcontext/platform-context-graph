@@ -121,7 +121,8 @@ from a checkout:
 
 That script builds the local owner `pcg` with embedded NornicDB, while the
 service binaries keep the deployment shape and connect to external graph
-endpoints.
+endpoints. Set `PCG_VERSION=<version>` before running the script to embed a
+specific version; every installed PCG binary accepts `--version` and `-v`.
 
 Then start a local workspace owner:
 

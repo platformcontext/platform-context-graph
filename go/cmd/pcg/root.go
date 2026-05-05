@@ -15,8 +15,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "pcg",
-	Short: "PlatformContextGraph -- code-to-cloud context graph",
+	Use:     "pcg",
+	Short:   "PlatformContextGraph -- code-to-cloud context graph",
+	Version: buildinfo.AppVersion(),
 	Long: `PlatformContextGraph is both an MCP server and a CLI toolkit for code analysis.
 
 For MCP Server Mode (AI assistants):
@@ -43,6 +44,8 @@ Run 'pcg help' to see all available commands.`,
 func init() {
 	rootCmd.PersistentFlags().StringVar(&globalDatabase, "database", "", "Temporarily override database backend")
 	rootCmd.PersistentFlags().BoolVarP(&globalVisual, "visual", "V", false, "Show results as interactive graph visualization")
+	rootCmd.Flags().BoolP("version", "v", false, "Show the installed application version")
+	rootCmd.SetVersionTemplate("PlatformContextGraph {{.Version}}\n")
 
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(helpCmd)
@@ -52,9 +55,14 @@ func init() {
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show the installed application version",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("PlatformContextGraph %s\n", buildinfo.AppVersion())
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return printVersion(cmd)
 	},
+}
+
+func printVersion(cmd *cobra.Command) error {
+	_, err := fmt.Fprintf(cmd.OutOrStdout(), "PlatformContextGraph %s\n", buildinfo.AppVersion())
+	return err
 }
 
 var helpCmd = &cobra.Command{

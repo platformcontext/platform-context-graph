@@ -35,7 +35,7 @@
   `main.go:54` does not call `NewServer` with an admin mux, so those routes
   are not mounted.
 - **Telemetry shutdown on background context** — `telemetry.NewProviders`
-  (`main.go:27`) returns a providers value whose `Shutdown` is called with
+  (`main.go:37`) returns a providers value whose `Shutdown` is called with
   `context.Background()`, not with the cancelled root context, so traces
   flushed during shutdown complete.
 

@@ -4,8 +4,10 @@
 
 1. `go/internal/buildinfo/README.md` — purpose, exported surface, invariants
 2. `go/internal/buildinfo/buildinfo.go` — `Version` var and `AppVersion()`; the
-   entire surface fits in one file
-3. Dockerfile — how the release version is injected via `-ldflags`
+   normalized accessor
+3. `go/internal/buildinfo/cli.go` — shared `--version` / `-v` helper for
+   service binaries
+4. Dockerfile — how the release version is injected via `-ldflags`
 
 ## Invariants this package enforces
 
@@ -17,6 +19,10 @@
   when `strings.TrimSpace(Version)` is empty. All callers must use
   `AppVersion()`, not `Version` directly, so whitespace-only ldflags overrides
   are handled uniformly.
+- **Version probes are pre-startup only** — service binaries call
+  `PrintVersionFlag` before telemetry, Postgres, or graph setup. Keep that
+  call at the top of `main` so `pcg-api --version` and sibling probes are safe
+  in containers and install checks.
 
 ## Common changes and how to scope them
 
@@ -28,6 +34,9 @@
   `var` and a second accessor following the same ldflags pattern. Do not embed
   the SHA into `Version`; keep them separate so operators can query each
   independently.
+- **Add a new service binary** — call `PrintVersionFlag(os.Args[1:], os.Stdout, "<binary-name>")`
+  before any runtime setup, add a smoke test or build-run proof for
+  `--version` and `-v`, and update that package's README/doc.go.
 
 ## Failure modes and how to debug
 
@@ -39,6 +48,9 @@
 - Symptom: version string contains leading or trailing whitespace in the
   status response → cause: caller reading `Version` directly instead of
   `AppVersion()` → fix: replace `buildinfo.Version` with `buildinfo.AppVersion()`.
+- Symptom: `<service> --version` tries to connect to Postgres → cause: the
+  service entrypoint moved `PrintVersionFlag` below runtime setup → fix: put
+  the guard back at the top of `main`.
 
 ## Anti-patterns specific to this package
 

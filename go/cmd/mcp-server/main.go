@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -9,11 +10,20 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/mcp"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func main() {
+	if handled, err := buildinfo.PrintVersionFlag(os.Args[1:], os.Stdout, "pcg-mcp-server"); handled {
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 

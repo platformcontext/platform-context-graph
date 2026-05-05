@@ -66,6 +66,11 @@ Current platform reality:
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `/usr/local/bin/pcg-reducer` | Postgres + graph backend | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + graph backend | OTEL export only; no mounted runtime `/metrics` endpoint | one-shot local helper |
 
+Every direct service binary accepts `--version` and `-v` as a single argument.
+That path prints the embedded application version and exits before telemetry,
+datastore, graph, queue, or HTTP setup. Use it for container image checks,
+support bundles, and install verification.
+
 Deployment binaries do not embed NornicDB. Kubernetes, Helm, and Compose
 service profiles connect to NornicDB or Neo4j as external Bolt-compatible graph
 endpoints. Embedded NornicDB is only the local owner path for `pcg graph start`.

@@ -22,6 +22,8 @@ in Kubernetes is `ingester`, not `collector-git`.
 - `main` and `run` in `go/cmd/collector-git/main.go`
 - `buildCollectorService` in `go/cmd/collector-git/service.go`
 - run via `go run ./cmd/collector-git` in the local verification lane
+- `pcg-collector-git --version` and `pcg-collector-git -v` print the build-time
+  version through `buildinfo.PrintVersionFlag` before runtime setup begins
 
 ## Configuration
 
@@ -47,6 +49,9 @@ for the shared admin/metrics contract.
 
 - shutdown is signal-driven: `signal.NotifyContext` watches `os.Interrupt`
   and `SIGTERM` and the hosted runtime drains in-flight cycles before exit
+- version probes are pre-startup checks; keep `buildinfo.PrintVersionFlag` at
+  the top of `main` so local verification scripts can inspect the binary
+  without Postgres credentials
 - there is no separate workspace-PVC contract here; this runtime is intended
   for local verification, not as a Kubernetes-deployed collector
 - collector cycles are observed under the shared collector span and metrics;
