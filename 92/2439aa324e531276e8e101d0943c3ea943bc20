@@ -1,0 +1,27 @@
+deploy/helm/platform-context-graph/templates/deployment-nornicdb.yaml
+  4bd117be5263f01c 50-53,57,60,84,88-91
+deploy/helm/platform-context-graph/templates/service-nornicdb.yaml
+  4bd117be5263f01c 15,19
+deploy/helm/platform-context-graph/values.yaml
+  4bd117be5263f01c 253-256,261,264-269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "922439aa324e531276e8e101d0943c3ea943bc20",
+  "prompts": {
+    "4bd117be5263f01c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "100042ec-550d-4306-b59f-599eb36689fe",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 24,
+      "total_deletions": 7,
+      "accepted_lines": 24,
+      "overriden_lines": 0
+    }
+  }
+}
