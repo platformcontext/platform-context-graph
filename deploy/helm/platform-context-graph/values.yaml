@@ -250,18 +250,26 @@ neo4j:
     usernameKey: username
     passwordKey: password
 
-# NornicDB graph backend deployment — disabled by default; enable per overlay
+# NornicDB graph backend deployment — disabled by default; enable per overlay.
+# When enabling, also set:
+#   neo4j.uri: bolt://<release>-platform-context-graph-nornicdb:{{ nornicdb.ports.bolt }}
+#   neo4j.auth.secretName: ""   # NornicDB runs with NORNICDB_NO_AUTH=true
 nornicdb:
   enabled: false
   image:
     repository: timothyswt/nornicdb-amd64-cpu
+    # Pin to a specific tag in your overlay — "latest" is non-reproducible
     tag: latest
     pullPolicy: IfNotPresent
+  # HTTP and Bolt listen ports — must match NORNICDB_HTTP_PORT / NORNICDB_BOLT_PORT
+  # and are used for containerPorts, probes, and the Service. Change both here and
+  # in env if you need non-default ports.
+  ports:
+    http: 7474
+    bolt: 7687
   env:
     NORNICDB_NO_AUTH: "true"
     NORNICDB_DATA_DIR: /data
-    NORNICDB_HTTP_PORT: "7474"
-    NORNICDB_BOLT_PORT: "7687"
     NORNICDB_ASYNC_WRITES_ENABLED: "false"
     NORNICDB_HEIMDALL_ENABLED: "false"
     NORNICDB_QDRANT_GRPC_ENABLED: "false"

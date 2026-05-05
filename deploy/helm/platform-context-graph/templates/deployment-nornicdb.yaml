@@ -47,13 +47,17 @@ spec:
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:
+            - name: NORNICDB_HTTP_PORT
+              value: {{ .Values.nornicdb.ports.http | quote }}
+            - name: NORNICDB_BOLT_PORT
+              value: {{ .Values.nornicdb.ports.bolt | quote }}
             {{- include "pcg.renderEnvMap" .Values.nornicdb.env | nindent 12 }}
           ports:
             - name: http
-              containerPort: 7474
+              containerPort: {{ .Values.nornicdb.ports.http }}
               protocol: TCP
             - name: bolt
-              containerPort: 7687
+              containerPort: {{ .Values.nornicdb.ports.bolt }}
               protocol: TCP
           livenessProbe:
             httpGet:
@@ -77,7 +81,12 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if .Values.nornicdb.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "pcg.nornicdbFullname" . }}-data
+        {{- else }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
 {{- end }}
