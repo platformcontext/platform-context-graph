@@ -61,16 +61,7 @@ spec:
             {{- include "pcg.renderConnectionTuningEnv" .Values.resolutionEngine.connectionTuning | nindent 12 }}
             {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "resolution-engine") | nindent 12 }}
             {{- include "pcg.renderPrometheusEnv" . | nindent 12 }}
-            - name: NEO4J_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.neo4j.auth.secretName }}
-                  key: {{ .Values.neo4j.auth.usernameKey }}
-            - name: NEO4J_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.neo4j.auth.secretName }}
-                  key: {{ .Values.neo4j.auth.passwordKey }}
+            {{- include "pcg.renderNeo4jAuthEnv" . | nindent 12 }}
             {{- include "pcg.renderEnvMap" .Values.env | nindent 12 }}
           ports:
             {{- if .Values.observability.prometheus.enabled }}

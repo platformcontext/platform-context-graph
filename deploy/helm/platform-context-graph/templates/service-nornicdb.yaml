@@ -1,0 +1,22 @@
+{{- if .Values.nornicdb.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pcg.nornicdbFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nornicdb
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "pcg.nornicdbSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 7474
+      targetPort: http
+      protocol: TCP
+    - name: bolt
+      port: 7687
+      targetPort: bolt
+      protocol: TCP
+{{- end }}

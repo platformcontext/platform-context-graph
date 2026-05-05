@@ -198,20 +198,36 @@ app.kubernetes.io/component: workflow-coordinator
     - name: NEO4J_URI
       value: {{ .Values.neo4j.uri | quote }}
     {{- include "pcg.renderContentStoreEnv" . | nindent 4 }}
-    - name: NEO4J_USERNAME
-      valueFrom:
-        secretKeyRef:
-          name: {{ .Values.neo4j.auth.secretName }}
-          key: {{ .Values.neo4j.auth.usernameKey }}
-    - name: NEO4J_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: {{ .Values.neo4j.auth.secretName }}
-          key: {{ .Values.neo4j.auth.passwordKey }}
+    {{- include "pcg.renderNeo4jAuthEnv" . | nindent 4 }}
     {{- include "pcg.renderEnvMap" .Values.env | nindent 4 }}
   volumeMounts:
     - name: tmp
       mountPath: /tmp
+{{- end -}}
+
+{{/* Conditional NEO4J_USERNAME / NEO4J_PASSWORD — skipped when secretName is empty (NornicDB no-auth) */}}
+{{- define "pcg.renderNeo4jAuthEnv" -}}
+{{- if .Values.neo4j.auth.secretName }}
+- name: NEO4J_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.neo4j.auth.secretName }}
+      key: {{ .Values.neo4j.auth.usernameKey }}
+- name: NEO4J_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.neo4j.auth.secretName }}
+      key: {{ .Values.neo4j.auth.passwordKey }}
+{{- end }}
+{{- end -}}
+
+{{- define "pcg.nornicdbFullname" -}}
+{{- printf "%s-nornicdb" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "pcg.nornicdbSelectorLabels" -}}
+{{- include "pcg.selectorLabels" . }}
+app.kubernetes.io/component: nornicdb
 {{- end -}}
 
 {{- define "pcg.renderConnectionTuningEnv" -}}
