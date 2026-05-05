@@ -236,7 +236,7 @@ to refactor the payment service's API contract.
 
 ## Open Source
 
-PCG is Apache 2.0 licensed, self-hosted, and does not phone home. The
+PCG is MIT licensed, self-hosted, and does not phone home. The
 authoritative graph path now defaults to NornicDB, with Neo4j kept as the
 official alternative for operators who need that path. Lightweight
 local mode uses embedded Postgres and relational code-intelligence tables when
