@@ -66,7 +66,7 @@ same PR.
 
 ### Change projection worker count behavior
 
-`projectionWorkerCount` (`main.go:374`) reads `PCG_PROJECTION_WORKERS` and
+`projectionWorkerCount` (`main.go:388`) reads `PCG_PROJECTION_WORKERS` and
 defaults to `min(NumCPU, 8)`. If you change the cap or the default, update the
 concurrency reference table in `docs/docs/reference/local-testing.md` and
 `docs/docs/deployment/service-runtimes.md`.
@@ -87,7 +87,7 @@ concurrency reference table in `docs/docs/reference/local-testing.md` and
   `CommitScopeGeneration` call runs a full per-repo backfill. On 800+ repos
   this is quadratically expensive and defeats the deferred-backfill design.
 - **Do not call `ReopenDeploymentMappingWorkItems` before the projector drains.**
-  The comment at `main.go:257` explains why; `MaterializeIaCReachability` must
+  The comment at `main.go:262` explains why; `MaterializeIaCReachability` must
   also not run before the drain. Any refactor that merges or reorders these
   calls requires re-reading the ADR at
   `docs/docs/adrs/2026-04-18-bootstrap-relationship-backfill-quadratic-cost.md`.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -68,7 +69,7 @@ type buildProjectorFn func(context.Context, bootstrapDB, projector.CanonicalWrit
 type discoveryAdvisorySink func(collector.DiscoveryAdvisoryReport) error
 
 func main() {
-	if handled, err := buildinfo.PrintVersionFlag(os.Args[1:], os.Stdout, "pcg-bootstrap-index"); handled {
+	if handled, err := printBootstrapIndexVersionFlag(os.Args[1:], os.Stdout); handled {
 		if err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -88,6 +89,10 @@ func main() {
 		slog.Error("bootstrap-index failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+func printBootstrapIndexVersionFlag(args []string, stdout io.Writer) (bool, error) {
+	return buildinfo.PrintVersionFlag(args, stdout, "pcg-bootstrap-index")
 }
 
 func run(

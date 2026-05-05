@@ -6,10 +6,23 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPrintAPIVersionFlagReturnsBeforeRuntimeStartup(t *testing.T) {
+	original := buildinfo.Version
+	buildinfo.Version = "v1.2.3-api"
+	t.Cleanup(func() { buildinfo.Version = original })
+
+	var stdout bytes.Buffer
+	handled, err := printAPIVersionFlag([]string{"--version"}, &stdout)
+	require.NoError(t, err)
+	require.True(t, handled)
+	assert.Equal(t, "pcg-api v1.2.3-api\n", stdout.String())
+}
 
 func TestNewLoggerOutputsStructuredJSON(t *testing.T) {
 	t.Parallel()

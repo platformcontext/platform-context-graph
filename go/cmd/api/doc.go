@@ -3,8 +3,8 @@
 // store.
 //
 // When invoked with --version or -v, it prints the embedded application
-// version and exits before runtime setup. Otherwise the binary boots OTEL
-// telemetry, wires the query router and the shared
+// version through the test-covered printAPIVersionFlag helper and exits before
+// runtime setup. Otherwise the binary boots OTEL telemetry, wires the query router and the shared
 // runtime admin mux, and listens on PCG_API_ADDR (default :8080) wrapped in
 // otelhttp instrumentation. On SIGINT or SIGTERM it gives the HTTP server up
 // to five seconds for graceful shutdown before exiting. The runtime serves

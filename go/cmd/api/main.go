@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	if handled, err := buildinfo.PrintVersionFlag(os.Args[1:], os.Stdout, "pcg-api"); handled {
+	if handled, err := printAPIVersionFlag(os.Args[1:], os.Stdout); handled {
 		if err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -84,6 +84,10 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("pcg-api shutdown complete", telemetry.EventAttr("runtime.server.stopped"))
+}
+
+func printAPIVersionFlag(args []string, stdout io.Writer) (bool, error) {
+	return buildinfo.PrintVersionFlag(args, stdout, "pcg-api")
 }
 
 func newLogger(bootstrap telemetry.Bootstrap, writer io.Writer) *slog.Logger {

@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	if handled, err := buildinfo.PrintVersionFlag(os.Args[1:], os.Stdout, "pcg-mcp-server"); handled {
+	if handled, err := printMCPServerVersionFlag(os.Args[1:], os.Stdout); handled {
 		if err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -80,6 +80,10 @@ func main() {
 		logger.Error("unknown transport", "PCG_MCP_TRANSPORT", transport)
 		os.Exit(1)
 	}
+}
+
+func printMCPServerVersionFlag(args []string, stdout io.Writer) (bool, error) {
+	return buildinfo.PrintVersionFlag(args, stdout, "pcg-mcp-server")
 }
 
 func newLogger(bootstrap telemetry.Bootstrap, writer io.Writer) *slog.Logger {

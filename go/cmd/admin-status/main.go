@@ -21,7 +21,7 @@ import (
 const defaultFormat = "text"
 
 func main() {
-	if handled, err := buildinfo.PrintVersionFlag(os.Args[1:], os.Stdout, "pcg-admin-status"); handled {
+	if handled, err := printAdminStatusVersionFlag(os.Args[1:], os.Stdout); handled {
 		if err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -32,6 +32,10 @@ func main() {
 	if err := run(context.Background(), os.Args[1:], os.Stdout, os.Stderr, os.Getenv); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func printAdminStatusVersionFlag(args []string, stdout io.Writer) (bool, error) {
+	return buildinfo.PrintVersionFlag(args, stdout, "pcg-admin-status")
 }
 
 func run(
