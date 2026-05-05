@@ -164,17 +164,14 @@
 5. Commit.
    -> verify: worktree clean after commit.
 
-## Task 7: Move VS Code Dependency Panel To The Shared Route
+## Task 7: Rebuild Editor Dependency Panels From The Shared Route
 
 **Files:**
-- Modify: `vscode-extension/src/pcgManager.ts`
-- Modify: `vscode-extension/src/providers/dependenciesTreeProvider.ts`
-- Create: `vscode-extension/src/providers/dependenciesTreeProvider.test.ts`
-- Create: `vscode-extension/src/pcgManager.test.ts`
-- Modify: `vscode-extension/README.md`
+- Future editor client package
+- Future editor client README
 
 1. Write failing TypeScript tests or mocks proving dependency panels call `/api/v0/graph/neighborhood` instead of raw Cypher/import-only logic.
-   -> verify: extension test command fails before implementation.
+   -> verify: editor client test command fails before implementation.
 2. Implement a typed client response with no `any` unless explicitly justified in a comment.
    -> verify: TypeScript build and focused tests pass.
 3. Preserve existing import display as a subset of the new response.
@@ -191,4 +188,5 @@ cd go && go test ./internal/query ./internal/mcp ./cmd/pcg -count=1
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml
 ```
 
-If the VS Code task changes TypeScript, also run the repo's extension test/build command documented in `vscode-extension/package.json` and report the exact command.
+If a future editor client task changes TypeScript, also run that package's
+documented test/build command and report the exact command.

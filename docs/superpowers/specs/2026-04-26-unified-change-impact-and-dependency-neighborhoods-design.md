@@ -53,9 +53,9 @@ PCG already exposes several pieces of this workflow:
    Dockerfile, and Compose evidence.
 3. Impact and deployment-trace routes connect services, workflows, deploy
    sources, workloads, and runtime context.
-4. The VS Code extension has a dependency panel, but it is currently narrower
-   than the shared graph model and should not remain the canonical product
-   surface.
+4. The previous VS Code extension prototype is removed from the repo; future
+   editor surfaces should be rebuilt from the shared graph model instead of
+   becoming the canonical product surface.
 
 The missing piece is a response shape that composes these signals into one
 selected-entity view and one diff-aware impact workflow.
@@ -215,7 +215,8 @@ not metric labels.
    finding, and impact reader ports.
 4. `go/internal/mcp`: `get_dependency_neighborhood` routing.
 5. `go/cmd/pcg`: CLI wrappers for neighborhood and diff impact.
-6. `vscode-extension`: replace raw dependency logic with the documented route.
+6. Future editor or web UI: consume the documented route instead of raw
+   dependency logic.
 7. Docs: HTTP, MCP, CLI, and UI behavior references.
 
 ## Error Handling

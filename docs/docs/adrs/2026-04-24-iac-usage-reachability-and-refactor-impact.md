@@ -286,7 +286,7 @@ The UI should provide at least these tabs or equivalent panes:
   or runtime resources
 
 This ADR explicitly rejects leaving this workflow as an ad hoc Neo4j Browser
-exercise or a VS Code-only import list. The product requirement is a reusable
+exercise or an editor-only import list. The product requirement is a reusable
 query contract plus a PCG-owned interactive surface that works for code and IaC
 with the same semantics.
 
@@ -678,9 +678,9 @@ The implementation must preserve PCG's existing boundaries:
   relationships.
 - `go/internal/query/` owns HTTP/MCP query surfaces and truth labels.
 - `go/internal/graph/` and graph adapters own backend-neutral graph writes.
-- `vscode-extension/` and future web UI surfaces own interaction state and
-  presentation, but must call documented query surfaces instead of embedding raw
-  Cypher or storage-specific dependency logic.
+- Future editor and web UI surfaces own interaction state and presentation, but
+  must call documented query surfaces instead of embedding raw Cypher or
+  storage-specific dependency logic.
 
 Handlers must depend on graph/query ports, not concrete graph adapter types.
 
@@ -915,5 +915,5 @@ Mitigations:
    or lazily during query?
 5. Should exact dead-IaC answers require every referenced repository to be
    indexed in the same generation set?
-6. Should Dependency Explorer ship first in the VS Code extension, the web UI,
-   or both behind the same `/api/v0/graph/neighborhood` contract?
+6. Should Dependency Explorer ship first in a rebuilt editor client, the web
+   UI, or both behind the same `/api/v0/graph/neighborhood` contract?
