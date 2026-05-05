@@ -245,9 +245,48 @@ observability:
 neo4j:
   uri: bolt://neo4j:7687
   auth:
+    # set secretName to "" to skip NEO4J_USERNAME/PASSWORD secret refs (NornicDB no-auth)
     secretName: pcg-neo4j
     usernameKey: username
     passwordKey: password
+
+# NornicDB graph backend deployment — disabled by default; enable per overlay.
+# When enabling, also set:
+#   neo4j.uri: bolt://<release>-platform-context-graph-nornicdb:{{ nornicdb.ports.bolt }}
+#   neo4j.auth.secretName: ""   # NornicDB runs with NORNICDB_NO_AUTH=true
+nornicdb:
+  enabled: false
+  image:
+    repository: timothyswt/nornicdb-amd64-cpu
+    # Pin to a specific tag in your overlay — "latest" is non-reproducible
+    tag: latest
+    pullPolicy: IfNotPresent
+  # HTTP and Bolt listen ports — must match NORNICDB_HTTP_PORT / NORNICDB_BOLT_PORT
+  # and are used for containerPorts, probes, and the Service. Change both here and
+  # in env if you need non-default ports.
+  ports:
+    http: 7474
+    bolt: 7687
+  env:
+    NORNICDB_NO_AUTH: "true"
+    NORNICDB_DATA_DIR: /data
+    NORNICDB_ASYNC_WRITES_ENABLED: "false"
+    NORNICDB_HEIMDALL_ENABLED: "false"
+    NORNICDB_QDRANT_GRPC_ENABLED: "false"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 4Gi
+    limits:
+      cpu: 1000m
+      memory: 32Gi
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 500Gi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 repoSync:
   enabled: true
