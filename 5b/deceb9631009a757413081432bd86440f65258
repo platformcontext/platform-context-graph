@@ -1,0 +1,41 @@
+deploy/helm/platform-context-graph/templates/deployment-mcp-server.yaml
+  4bd117be5263f01c 64
+deploy/helm/platform-context-graph/Chart.yaml
+  4bd117be5263f01c 5
+deploy/helm/platform-context-graph/templates/service-nornicdb.yaml
+  4bd117be5263f01c 1-22
+deploy/helm/platform-context-graph/values.yaml
+  4bd117be5263f01c 248,253-281
+deploy/helm/platform-context-graph/templates/deployment.yaml
+  4bd117be5263f01c 63
+deploy/helm/platform-context-graph/templates/deployment-resolution-engine.yaml
+  4bd117be5263f01c 64
+deploy/helm/platform-context-graph/templates/pvc-nornicdb.yaml
+  4bd117be5263f01c 1-18
+deploy/helm/platform-context-graph/templates/deployment-nornicdb.yaml
+  4bd117be5263f01c 1-83
+deploy/helm/platform-context-graph/templates/statefulset.yaml
+  4bd117be5263f01c 104
+deploy/helm/platform-context-graph/templates/_helpers.tpl
+  4bd117be5263f01c 201,208-230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "5bdeceb9631009a757413081432bd86440f65258",
+  "prompts": {
+    "4bd117be5263f01c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "100042ec-550d-4306-b59f-599eb36689fe",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 185,
+      "total_deletions": 51,
+      "accepted_lines": 185,
+      "overriden_lines": 0
+    }
+  }
+}
