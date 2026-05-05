@@ -135,7 +135,10 @@ without cleanup.
 
 `package main` — no exported identifiers intended for import by other packages.
 The public contract is the binary's exit code and its side effects on Postgres
-and the graph backend.
+and the graph backend. `pcg-bootstrap-index --version` and
+`pcg-bootstrap-index -v` print the build-time version through
+`printBootstrapIndexVersionFlag`, which wraps `buildinfo.PrintVersionFlag`,
+before opening either store.
 
 Key unexported interfaces and types used to make the binary testable via
 dependency injection:
@@ -147,7 +150,7 @@ dependency injection:
   `run` and `runPipelined`
 - `drainingWorkSource` (`main.go:331`) — wraps `ProjectorWorkSource`
   to add drain-then-exit behavior
-- `bootstrapNeo4jExecutor` (`wiring.go:220`) — `DriverWithContext`-based Bolt
+- `bootstrapNeo4jExecutor` (`wiring.go:231`) — `DriverWithContext`-based Bolt
   session executor for canonical writes
 - `bootstrapNornicDBPhaseGroupExecutor` (`nornicdb_wiring.go:109`) — NornicDB
   phase-group chunking `Executor` wrapper
@@ -236,6 +239,9 @@ Full NornicDB tuning reference: `docs/docs/reference/nornicdb-tuning.md`.
 - **One-shot only.** The binary exits after Phase 4. Running it repeatedly on
   an already-seeded environment re-indexes all repos and replays all
   deployment-mapping work items. Use the ingester's incremental path instead.
+- **Version probes do not touch stores.** Keep `printBootstrapIndexVersionFlag`
+  at the top of `main` so install checks can inspect the binary without a
+  running graph or Postgres instance.
 - **No admin surface.** `/healthz`, `/readyz`, `/metrics`, and `/admin/status`
   are not mounted. Monitor via OTEL traces and structured logs.
 - **Projector lease heartbeat.** Long canonical graph writes can outlast the

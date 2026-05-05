@@ -17,6 +17,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
@@ -24,6 +25,24 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
+
+func TestPrintBootstrapIndexVersionFlagReturnsBeforeBootstrapWorkflow(t *testing.T) {
+	original := buildinfo.Version
+	buildinfo.Version = "v1.2.3-bootstrap"
+	t.Cleanup(func() { buildinfo.Version = original })
+
+	var stdout strings.Builder
+	handled, err := printBootstrapIndexVersionFlag([]string{"--version"}, &stdout)
+	if err != nil {
+		t.Fatalf("printBootstrapIndexVersionFlag() error = %v, want nil", err)
+	}
+	if !handled {
+		t.Fatal("printBootstrapIndexVersionFlag() handled = false, want true")
+	}
+	if got, want := stdout.String(), "pcg-bootstrap-index v1.2.3-bootstrap\n"; got != want {
+		t.Fatalf("printBootstrapIndexVersionFlag() output = %q, want %q", got, want)
+	}
+}
 
 func TestRunAppliesSchemaAndDrainsCollectorAndProjector(t *testing.T) {
 	t.Parallel()

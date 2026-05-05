@@ -1,8 +1,8 @@
 // Package main runs the pcg binary, the unified Cobra-based CLI and
 // MCP/API launcher for PlatformContextGraph.
 //
-// The binary registers root flags (`--database`, `--visual`) and a tree of
-// subcommands covering local indexing (`index`, `list`, `watch`, `query`,
+// The binary registers root flags (`--database`, `--visual`, `--version`,
+// `-v`) and a tree of subcommands covering local indexing (`index`, `list`, `watch`, `query`,
 // `stats`), service launch (`mcp start`, `api start`, `serve`), authenticated
 // local graph ownership (`graph`), backend installation (`install`),
 // admin/operator workflows (`admin ...`), configuration (`config`, `neo4j`),

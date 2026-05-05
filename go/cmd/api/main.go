@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,10 +13,19 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func main() {
+	if handled, err := printAPIVersionFlag(os.Args[1:], os.Stdout); handled {
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -74,6 +84,10 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("pcg-api shutdown complete", telemetry.EventAttr("runtime.server.stopped"))
+}
+
+func printAPIVersionFlag(args []string, stdout io.Writer) (bool, error) {
+	return buildinfo.PrintVersionFlag(args, stdout, "pcg-api")
 }
 
 func newLogger(bootstrap telemetry.Bootstrap, writer io.Writer) *slog.Logger {

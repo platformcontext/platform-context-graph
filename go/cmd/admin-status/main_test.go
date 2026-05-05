@@ -8,8 +8,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 )
+
+func TestPrintAdminStatusVersionFlagReturnsBeforePostgresOpen(t *testing.T) {
+	original := buildinfo.Version
+	buildinfo.Version = "v1.2.3-admin"
+	t.Cleanup(func() { buildinfo.Version = original })
+
+	var stdout bytes.Buffer
+	handled, err := printAdminStatusVersionFlag([]string{"-v"}, &stdout)
+	if err != nil {
+		t.Fatalf("printAdminStatusVersionFlag() error = %v, want nil", err)
+	}
+	if !handled {
+		t.Fatal("printAdminStatusVersionFlag() handled = false, want true")
+	}
+	if got, want := stdout.String(), "pcg-admin-status v1.2.3-admin\n"; got != want {
+		t.Fatalf("printAdminStatusVersionFlag() output = %q, want %q", got, want)
+	}
+}
 
 func TestRenderStatusOutputsTextFromSharedStatusReport(t *testing.T) {
 	t.Parallel()

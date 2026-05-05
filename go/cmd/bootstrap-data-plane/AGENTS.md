@@ -27,7 +27,7 @@
   any DDL runs. Enforced at `main.go:128`.
 - **Write session only** — `neo4jSchemaExecutor` always opens a session with
   `AccessModeWrite`; it must not be pointed at a read replica. Enforced at
-  `main.go:165`.
+  `main.go:176`.
 
 ## Common changes and how to scope them
 

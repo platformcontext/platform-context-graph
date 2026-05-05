@@ -2,7 +2,9 @@
 // owns repository sync, parsing, fact emission, and source-local projection
 // into the configured graph backend.
 //
-// The binary boots OTEL telemetry, opens Postgres and the canonical graph
+// When invoked with --version or -v, it prints the embedded application
+// version and exits before runtime setup. Otherwise the binary boots OTEL
+// telemetry, opens Postgres and the canonical graph
 // writer, registers queue observable gauges, and hosts the collector +
 // projector service through app.NewHostedWithStatusServer so it exposes the
 // shared `/healthz`, `/readyz`, `/metrics`, and `/admin/status` admin

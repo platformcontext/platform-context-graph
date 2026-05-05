@@ -15,6 +15,11 @@ embeds NornicDB in the owner process. The service binaries are built plainly,
 matching deployment mode. Set `PCG_LOCAL_OWNER_BUILD_TAGS=` only when you
 intentionally want a plain local owner for explicit process-mode testing.
 
+Set `PCG_VERSION=<version>` to embed a specific version string. The script
+defaults to `dev`. Every installed PCG binary accepts `--version` and `-v`;
+service binaries answer before opening telemetry, Postgres, graph, queues, or
+listeners, so the check is safe in local scripts and container probes.
+
 The `verify_*_compose.sh` scripts are developer and DevOps proof lanes. They
 start their own Compose project, choose ports, and tear the stack down unless
 `PCG_KEEP_COMPOSE_STACK=true` is set.

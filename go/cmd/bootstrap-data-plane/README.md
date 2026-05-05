@@ -18,6 +18,9 @@ The binary writes no application data and does not stay resident.
 
 - `main` and `run` in `go/cmd/bootstrap-data-plane/main.go`
 - single-process binary; no subcommands
+- `pcg-bootstrap-data-plane --version` and `pcg-bootstrap-data-plane -v` print
+  the build-time version through `buildinfo.PrintVersionFlag` before opening
+  Postgres or the graph backend
 
 ## Configuration
 
@@ -44,6 +47,8 @@ providers are registered. Lifecycle events use `telemetry.EventAttr`:
 ## Gotchas / invariants
 
 - idempotent: every DDL statement is `CREATE ... IF NOT EXISTS`
+- version probes are pre-startup checks; keep `buildinfo.PrintVersionFlag` at
+  the top of `main` so init-container diagnostics do not run DDL
 - graph driver close uses a 10-second timeout; close errors are joined into
   the run result via `errors.Join`
 - exits non-zero if either Postgres or graph DDL fails; no partial apply

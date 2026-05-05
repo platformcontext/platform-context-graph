@@ -19,7 +19,7 @@ before touching any file in this directory.
 ## Invariants (cite file:line)
 
 - **Graph backend selection fails at startup for invalid values** —
-  `main.go:138` calls `runtimecfg.LoadGraphBackend`; when the value is not
+  `main.go:147` calls `runtimecfg.LoadGraphBackend`; when the value is not
   `GraphBackendNornicDB` or the Neo4j equivalent, the error propagates to
   `os.Exit(1)`.
 - **Projector drain gate is NornicDB + local-authoritative only** —

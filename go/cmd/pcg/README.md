@@ -36,9 +36,11 @@ orchestration. It does not own service runtime internals:
 ## Configuration
 
 Persistent flags in `root.go`: `--database` sets `PCG_RUNTIME_DB_TYPE`
-for the process; `-V`, `--visual` toggles interactive graph
-visualization. Subcommands define their own flags. Service launch reads
-the runtime env contract (`PCG_API_ADDR`, `PCG_MCP_TRANSPORT`,
+for the process; `-V`, `--visual` toggles interactive graph visualization.
+Root flags `--version` and `-v`, plus the `pcg version` command, print the
+build-time application version from `internal/buildinfo`. Subcommands define
+their own flags. Service launch reads the runtime env contract (`PCG_API_ADDR`,
+`PCG_MCP_TRANSPORT`,
 `PCG_MCP_ADDR`, `PCG_POSTGRES_DSN`, `PCG_GRAPH_BACKEND`, `NEO4J_*`).
 
 ## Telemetry

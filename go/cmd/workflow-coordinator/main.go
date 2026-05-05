@@ -11,6 +11,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/coordinator"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
@@ -18,6 +19,14 @@ import (
 )
 
 func main() {
+	if handled, err := buildinfo.PrintVersionFlag(os.Args[1:], os.Stdout, "pcg-workflow-coordinator"); handled {
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(context.Background()); err != nil {
 		slog.Error("workflow coordinator failed", "error", err)
 		os.Exit(1)

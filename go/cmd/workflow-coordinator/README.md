@@ -87,6 +87,10 @@ This binary is a thin wiring layer. Its own identifiers are `main` and `run`
 in `main.go`. All coordinator behavior lives in `internal/coordinator` and
 `internal/workflow`.
 
+The direct process contract includes `pcg-workflow-coordinator --version` and
+`pcg-workflow-coordinator -v`. Both flags print the build-time version through
+`buildinfo.PrintVersionFlag` before telemetry or Postgres setup begins.
+
 ## Dependencies
 
 - `internal/coordinator` — `Service`, `LoadConfig`, `NewMetrics`, `Store`;
@@ -115,6 +119,8 @@ in `main.go`. All coordinator behavior lives in `internal/coordinator` and
 - Deployment mode `dark` is the default. The reconcile loop runs; the reap and
   run-reconciliation loops do not. Use the admin surface to confirm the binary
   is live and reconciling before enabling active mode.
+- Version probes are pre-startup checks. Keep `buildinfo.PrintVersionFlag` at
+  the top of `main` so deployment checks do not need database credentials.
 - To enable active mode, set PCG_WORKFLOW_COORDINATOR_DEPLOYMENT_MODE=active,
   PCG_WORKFLOW_COORDINATOR_CLAIMS_ENABLED=true, and supply at least one
   enabled claim-capable collector instance in PCG_COLLECTOR_INSTANCES_JSON.

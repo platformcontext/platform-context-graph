@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
@@ -20,9 +21,21 @@ import (
 const defaultFormat = "text"
 
 func main() {
+	if handled, err := printAdminStatusVersionFlag(os.Args[1:], os.Stdout); handled {
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(context.Background(), os.Args[1:], os.Stdout, os.Stderr, os.Getenv); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func printAdminStatusVersionFlag(args []string, stdout io.Writer) (bool, error) {
+	return buildinfo.PrintVersionFlag(args, stdout, "pcg-admin-status")
 }
 
 func run(

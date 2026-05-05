@@ -68,8 +68,10 @@ filled by the collector. Worker count defaults to `min(NumCPU, 8)`; on
 ## Exported surface
 
 `cmd/ingester` is a `main` package. There is no exported Go API. The contract
-is the process interface: environment variables, signal handling, and the admin
-HTTP surface listed above.
+is the process interface: environment variables, signal handling, direct
+`pcg-ingester --version` / `pcg-ingester -v` probes, and the admin HTTP surface
+listed above. Version probes run through `buildinfo.PrintVersionFlag` before
+telemetry, Postgres, or graph setup begins.
 
 ## Environment variables
 
@@ -138,6 +140,9 @@ The ingester inherits collector and projector telemetry. Key signals:
 
 - The ingester is the only runtime that should hold the workspace PVC in
   Kubernetes. Do not attach the volume to other workloads.
+- Version probes are pre-startup checks. Keep `buildinfo.PrintVersionFlag` at
+  the top of `main` so container images can report their build without
+  requiring database credentials.
 - Align PCG_SNAPSHOT_WORKERS with CPU requests to avoid CPU throttling under
   concurrent parsing load.
 - If the projector queue age (`pcg_dp_queue_oldest_age_seconds{queue="projector"}`)

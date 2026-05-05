@@ -66,6 +66,11 @@ shutdown it waits up to 5 s for in-flight requests before exiting.
 `cmd/api` is a `package main` binary; it exports no Go identifiers. All handler
 and contract types are owned by `internal/query`.
 
+The direct process contract includes `pcg-api --version` and `pcg-api -v`.
+Both flags print the build-time version through `printAPIVersionFlag`, which
+wraps `buildinfo.PrintVersionFlag`, before telemetry, Postgres, or graph setup
+begins.
+
 Two compile-time interface checks in `wiring.go:23–24` assert that
 `*query.Neo4jReader` satisfies `query.GraphQuery` and `*query.ContentReader`
 satisfies `query.ContentStore`. These checks fail the build if either concrete
@@ -146,6 +151,8 @@ See `doc.go` for the full godoc contract.
 
 - Reads only. This binary does not write facts, enqueue projection work, or touch
   the reducer queue. Writes belong to `ingester`, `projector`, or `reducer`.
+- Version probes are pre-startup checks. Keep `printAPIVersionFlag` at the top
+  of `main` so `pcg-api --version` works without database credentials.
 - `PCG_POSTGRES_DSN` is required; startup fails with an explicit error if both
   `PCG_POSTGRES_DSN` and the legacy `PCG_CONTENT_STORE_DSN` are empty
   (`wiring.go:58`).

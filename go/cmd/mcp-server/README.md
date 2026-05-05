@@ -83,6 +83,11 @@ flowchart TB
 ## Exported surface
 
 This package is a binary entry point; it exports no Go identifiers.
+The direct process contract includes `pcg-mcp-server --version` and
+`pcg-mcp-server -v`. Both flags print the build-time version through
+`printMCPServerVersionFlag`, which wraps `buildinfo.PrintVersionFlag`, before
+MCP transport, telemetry, or datastore setup begins.
+
 The compile-time interface assertions confirm that `query.Neo4jReader`
 satisfies `query.GraphQuery` and `query.ContentReader` satisfies
 `query.ContentStore` (`wiring.go:22-23`).
@@ -134,6 +139,8 @@ or spans beyond the startup/connection events.
 - `wireAPI` requires `PCG_POSTGRES_DSN` or `PCG_CONTENT_STORE_DSN` to be
   non-empty; it returns an error before the Neo4j dial if either is missing
   (`wiring.go:55-59`).
+- Version probes are pre-startup checks. Keep `printMCPServerVersionFlag` at
+  the top of `main` so MCP clients and containers can inspect the binary safely.
 - `IaCHandler.Reachability` must be non-nil; `newMCPQueryRouter` always
   sets it to `NewPostgresIaCReachabilityStore` (`wiring.go:146`).
 

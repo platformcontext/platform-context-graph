@@ -54,6 +54,9 @@ clean shutdown with a per-ack timeout on in-flight work.
 
 This package defines `main` only; no exported types or functions. All projection
 logic lives in `internal/projector`. Wiring lives in `runtime_wiring.go`.
+The direct process contract includes `pcg-projector --version` and
+`pcg-projector -v`, handled through `buildinfo.PrintVersionFlag` before runtime
+setup begins.
 
 See `doc.go` for the package comment.
 
@@ -97,6 +100,9 @@ package's telemetry section.
 - Run with `go run ./cmd/projector` from `go/` for local verification. Set the
   Postgres DSN via the standard Postgres env contract and the Neo4j vars before
   starting.
+- Version probes are pre-startup checks. Keep `buildinfo.PrintVersionFlag` at
+  the top of `main` so `pcg-projector --version` does not open queues or graph
+  drivers.
 - `/admin/status` reports live stage, backlog, and failure state through the
   shared admin contract. Check this before restarting the binary.
 - `PCG_NEO4J_BATCH_SIZE` controls how many Cypher statements the canonical node

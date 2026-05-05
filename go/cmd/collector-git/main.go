@@ -11,12 +11,21 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func main() {
+	if handled, err := buildinfo.PrintVersionFlag(os.Args[1:], os.Stdout, "pcg-collector-git"); handled {
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	bootstrap, err := telemetry.NewBootstrap("collector-git")
 	if err != nil {
 		fallback := slog.New(slog.NewJSONHandler(os.Stderr, nil))

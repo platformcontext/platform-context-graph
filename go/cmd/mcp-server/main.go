@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -9,11 +10,20 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/mcp"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func main() {
+	if handled, err := printMCPServerVersionFlag(os.Args[1:], os.Stdout); handled {
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -70,6 +80,10 @@ func main() {
 		logger.Error("unknown transport", "PCG_MCP_TRANSPORT", transport)
 		os.Exit(1)
 	}
+}
+
+func printMCPServerVersionFlag(args []string, stdout io.Writer) (bool, error) {
+	return buildinfo.PrintVersionFlag(args, stdout, "pcg-mcp-server")
 }
 
 func newLogger(bootstrap telemetry.Bootstrap, writer io.Writer) *slog.Logger {

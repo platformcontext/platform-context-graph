@@ -44,7 +44,10 @@ go install -tags nolocalllm github.com/platformcontext/platform-context-graph/go
 ```
 
 Use a pinned version instead of `latest` when you need repeatable installs.
-Make sure `$(go env GOPATH)/bin` or `GOBIN` is on `PATH`.
+Make sure `$(go env GOPATH)/bin` or `GOBIN` is on `PATH`. A binary installed
+with `go install ...@vX.Y.Z` reports that module version through
+`pcg --version`. Local source builds still report `dev` unless a version is
+injected with `-ldflags`.
 
 The `nolocalllm` tag is intentional. It links the local NornicDB runtime into
 `pcg` without pulling in NornicDB's optional local-LLM pieces, so
@@ -70,6 +73,20 @@ By default the script installs to `GOBIN`, or to `$(go env GOPATH)/bin` when
 `GOBIN` is unset. It installs `pcg`, `pcg-api`, `pcg-mcp-server`,
 `pcg-bootstrap-index`, `pcg-ingester`, `pcg-reducer`, and the supporting
 runtime helpers.
+
+Set `PCG_VERSION=<version>` before running the script when you want the
+installed binaries to report a specific build version. The default is `dev`.
+Every installed PCG binary supports a safe version probe:
+
+```bash
+pcg --version
+pcg-api --version
+pcg-ingester -v
+pcg-reducer -v
+```
+
+The service binaries answer those probes before opening telemetry, Postgres,
+the graph backend, queues, or HTTP listeners.
 
 The script builds only the local owner `pcg` binary with
 `PCG_LOCAL_OWNER_BUILD_TAGS=nolocalllm` by default. The service binaries

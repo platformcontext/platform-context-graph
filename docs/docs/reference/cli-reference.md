@@ -57,6 +57,29 @@ These options apply at the root command level.
 | `--version`, `-v` | Show the installed PCG version and exit. |
 | `--help`, `-h` | Show help and exit. |
 
+For `pcg`, release and local installer builds report the version injected at
+build time. A plain `go install ...@vX.Y.Z` binary reports Go's embedded module
+version. Local source builds without a version override report `dev`.
+
+## Service binary version checks
+
+The installed service binaries also accept `--version` and `-v` as a single
+argument. They print their build-time version and exit before telemetry,
+Postgres, graph, queue, or HTTP startup:
+
+```bash
+pcg-api --version
+pcg-mcp-server -v
+pcg-ingester --version
+pcg-reducer --version
+pcg-bootstrap-index --version
+pcg-bootstrap-data-plane --version
+pcg-workflow-coordinator --version
+pcg-projector --version
+pcg-collector-git --version
+pcg-admin-status --version
+```
+
 ### Runtime profile
 
 The CLI, MCP server, and HTTP API all accept the same runtime-profile axis via

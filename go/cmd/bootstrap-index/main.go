@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/buildinfo"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
@@ -67,6 +69,14 @@ type buildProjectorFn func(context.Context, bootstrapDB, projector.CanonicalWrit
 type discoveryAdvisorySink func(collector.DiscoveryAdvisoryReport) error
 
 func main() {
+	if handled, err := printBootstrapIndexVersionFlag(os.Args[1:], os.Stdout); handled {
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(
 		context.Background(),
 		os.Getenv,
@@ -79,6 +89,10 @@ func main() {
 		slog.Error("bootstrap-index failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+func printBootstrapIndexVersionFlag(args []string, stdout io.Writer) (bool, error) {
+	return buildinfo.PrintVersionFlag(args, stdout, "pcg-bootstrap-index")
 }
 
 func run(

@@ -3,7 +3,9 @@
 // relationship-evidence backfill, deployment-mapping reopen, and IaC
 // reachability materialization.
 //
-// The binary opens Postgres and the graph backend, runs collector and
+// When invoked with --version or -v, it prints the embedded application
+// version through the test-covered printBootstrapIndexVersionFlag helper and
+// exits before opening stores. Otherwise the binary opens Postgres and the graph backend, runs collector and
 // projector goroutines concurrently against a Postgres FOR UPDATE SKIP
 // LOCKED queue, and then drives the post-collection passes that the
 // facts-first ordering documented in CLAUDE.md requires. It exits when the
